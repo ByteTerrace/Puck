@@ -286,7 +286,11 @@ near-first mesh demand are implemented. The
 mapped portal demand, byte-bounded eviction, authored areas and terrain units.
 The [engine job system](open-items.md#engine-job-system) owns execution and
 memory ownership; the [rendering decision](../decisions/rendering.md#a-raster-pass-draws-only-what-it-can-show)
-owns the one-display-pixel detail rule.
+owns the one-display-pixel detail rule. How the frame decides what to draw
+and submits it (compaction, instanced buckets, authored motion on the GPU,
+geometry at the source, the early-depth variant and multi-view selection) is
+[the visibility plan](visibility.md), with its build order and the
+measurements that order it.
 
 Remaining observations specific to visibility are:
 
