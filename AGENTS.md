@@ -227,6 +227,12 @@ settles a question, decide by that principle and say why.
    world work is mostly wiring its documents to what exists; new code is for a
    gap you can name after that search. A second implementation is a defect,
    and a skill wrong about its own area is corrected in the same change.
+   Act on the code, never on memory (the owner's ruling): before stating how
+   something works, naming a cause, briefing a lane or changing code, read the
+   current source, document or measurement it rests on, and cite it
+   (`file:line`, the command and its output). A recollection, an earlier
+   session's summary, a skill's prose or a lane's report is a lead to check,
+   not a fact; when in doubt, look it up first.
 8. **Line endings are LF and are never a topic.** `.gitattributes`
    (`* text=auto eol=lf`) and `.editorconfig` hold the contract, with
    `*.bat`/`*.cmd` and `*.slnx` pinned CRLF in both. Never investigate, report,
