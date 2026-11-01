@@ -16,7 +16,7 @@ render {
   // with a faster day or more probes in view raises `relight` and reads the frame time move in `host.frames`.
   indirect {
     budget {
-      relight: 1024
+      relight: 2048
       trace: 2048
       age: 8
     }

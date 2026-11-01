@@ -653,6 +653,8 @@ public sealed class SdfMeshIrradianceLawTests {
         var replacement = Array.Empty<uint>();
 
         _ = new SdfMeshIrradiance().Stage(bakePending: false, frame: changed, tier: SdfIndirectTier.High, write: memory => replacement = memory.ToArray());
+        var tracedBefore = locked.Counters.Read(kind: SdfMeshIrradiance.Traced);
+
         _ = locked.Stage(bakePending: false, frame: changed, tier: SdfIndirectTier.High, write: memory => {
             writes++;
             words = memory.ToArray();
@@ -660,6 +662,8 @@ public sealed class SdfMeshIrradianceLawTests {
         Assert.Equal(actual: writes, expected: 2);
         Assert.Equal(actual: words, expected: replacement);
         Assert.NotEqual(actual: words, expected: landed);
+        // Removing the slab retraces only the probes it reached; the rest keep hits a trace would reproduce.
+        Assert.InRange(actual: (locked.Counters.Read(kind: SdfMeshIrradiance.Traced) - tracedBefore), low: 1L, high: (SdfMeshIrradiance.MaxProbes - 1L));
     }
     /// <summary>A lockstep frame's exposure adapts over its own presentation time since the frame staged before it, never
     /// backward and nothing for the first; any other frame over the host frame's interval.</summary>

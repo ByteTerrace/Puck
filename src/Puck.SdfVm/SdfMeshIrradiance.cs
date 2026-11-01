@@ -203,6 +203,13 @@ public sealed class SdfMeshIrradiance : IDisposable {
     // The most relights a probe takes under one lighting while its bounce converges, and the change a relight may make
     // to an axis's luminance, as a share of it plus a floor in nits, for the bounce to count as converged.
     private const int MaxRelights = 16;
+    // The geometry changes the volume remembers; a probe traced before the oldest traces again.
+    private const int MaxChanges = 16;
+    // The metres a changed draw's box grows by, and a ray's recorded hit extends by at least, so a hit on the draw's
+    // own face always meets its box.
+    private const float BoxMargin = 1.0e-3f;
+    // The lighting versions whose capture times the volume remembers.
+    private const int MaxVersionTimes = 4096;
     private const float ConvergedShare = 0.02f;
     private const float ConvergedFloor = 1.0e-3f;
     // The share of the largest projected sky coefficient a sky change must move one by before the probes are relit.
@@ -297,8 +304,14 @@ public sealed class SdfMeshIrradiance : IDisposable {
     private readonly SdfSkyLayer[] m_skyLayers = new SdfSkyLayer[SdfSky.MaxLayers];
     private readonly SdfSkyDetails m_skyDetails = new();
     // The volume's geometry: advanced by a scene build, a layout change or a change of the rays' reach, so every probe
-    // traced before it traces again.
+    // traced before it that the change may reach traces again; the latest changes, each with the boxes of the static
+    // draws it added or removed, null for every probe.
     private int m_geometry;
+    private readonly List<(int Geometry, Box[]? Boxes)> m_changes = [];
+    // When each recent lighting version was captured, from the version m_versionBase on: a probe's lighting has been
+    // stale since the version after its own was captured.
+    private readonly List<long> m_versionTimes = [];
+    private int m_versionBase = 1;
     private Layout m_layout;
     private SdfMeshIrradianceParameters m_published;
     private SdfIndirectBudget m_budget;
@@ -569,11 +582,120 @@ public sealed class SdfMeshIrradiance : IDisposable {
         m_owed = true;
         m_reported = false;
     }
-    // A new geometry: every probe traces again, keeping its previous measurement for views until its trace lands.
-    private void AdvanceGeometry() {
+    // A new geometry: the probes it may change trace again, each keeping its previous measurement for views until its
+    // trace lands. `changed` holds the world boxes of the static draws the new scene added or removed; null changes
+    // every probe (a layout or reach change, or a draw with no box).
+    private void AdvanceGeometry(Box[]? changed = null) {
         m_geometry++;
+        m_changes.Add(item: (m_geometry, changed));
+        if (m_changes.Count > MaxChanges) { m_changes.RemoveAt(index: 0); }
         Owe();
         m_traceOwed = true;
+    }
+    // Whether a probe traced against an earlier geometry may have other hits or another placement under the current
+    // one: some draw a change since added or removed lies in the region its placement searches, or meets one of its
+    // rays before the hit the ray recorded. A probe no change can reach keeps its hits, which a trace would reproduce.
+    private static bool Affected(in ProbeData probe, (int X, int Y, int Z) cell, float spacing, Layout layout, in Snapshot snapshot) {
+        var changes = snapshot.Changes;
+
+        if ((changes.Length == 0) || (probe.Geometry < (changes[0].Geometry - 1))) { return true; }
+
+        var centre = (new Vector3(x: (cell.X + 0.5f), y: (cell.Y + 0.5f), z: (cell.Z + 0.5f)) * spacing);
+        var placement = new Vector3(value: ((1.5f * spacing) + SdfMeshIrradianceProbe.Clearance));
+        var origin = (centre + probe.Offset);
+        var hits = probe.HitWords;
+        var directions = SdfMeshProbeDepth.RayDirections;
+
+        foreach (var (geometry, boxes) in changes) {
+            if (geometry <= probe.Geometry) { continue; }
+            if (boxes is null) { return true; }
+            foreach (var box in boxes) {
+                if (Vector3.Max(value1: box.Low, value2: (centre - placement)) is var low && Vector3.Min(value1: box.High, value2: (centre + placement)) is var high &&
+                    (low.X <= high.X) && (low.Y <= high.Y) && (low.Z <= high.Z)) { return true; }
+
+                var toward = (((box.Low + box.High) * 0.5f) - origin);
+                var radius = ((box.High - box.Low) * 0.5f).Length();
+                var distance = toward.Length();
+
+                if (distance <= radius) { return true; }
+
+                var axis = (toward / distance);
+                var cone = MathF.Sqrt(x: (1f - ((radius * radius) / (distance * distance))));
+
+                for (var texel = 0; (texel < SdfMeshProbeDepth.HitCount); texel++) {
+                    var direction = directions[texel];
+
+                    if (Vector3.Dot(vector1: direction, vector2: axis) < cone) { continue; }
+
+                    var reach = MathF.Abs(x: BitConverter.UInt32BitsToSingle(value: hits[(2 * texel)]));
+
+                    // A recorded hit on the box's face lies at its entry: the margin keeps rounding from passing it by.
+                    reach = MathF.Min(x: reach, y: layout.Reach);
+                    if (Meets(direction: direction, high: box.High, low: box.Low, origin: origin, reach: (reach + MathF.Max(x: BoxMargin, y: (reach * 1.0e-4f))))) { return true; }
+                }
+            }
+        }
+        return false;
+    }
+    // Whether a ray from an origin meets a box within a reach (slab test).
+    private static bool Meets(Vector3 origin, Vector3 direction, Vector3 low, Vector3 high, float reach) {
+        var inverse = (Vector3.One / direction);
+        var near = ((low - origin) * inverse);
+        var far = ((high - origin) * inverse);
+        var enter = Vector3.Min(value1: near, value2: far);
+        var leave = Vector3.Max(value1: near, value2: far);
+        var start = MathF.Max(x: MathF.Max(x: enter.X, y: enter.Y), y: MathF.Max(x: enter.Z, y: 0f));
+        var end = MathF.Min(x: MathF.Min(x: leave.X, y: leave.Y), y: MathF.Min(x: leave.Z, y: reach));
+
+        return (start <= end);
+    }
+    // The world boxes of the static draws one draw list holds and the other does not, counted as multisets of their
+    // mesh, transform and material; null when one of them has no box.
+    private static Box[]? ChangedBoxes(SdfMeshDraw[] before, SdfMeshDraw[] after) {
+        var counts = new Dictionary<(SdfMesh Mesh, Matrix4x4 ObjectToWorld, int Material), int>(comparer: DrawKeyComparer.Instance);
+
+        foreach (var draw in before) {
+            if (!SdfMeshIrradianceScene.IsStatic(draw: in draw)) { continue; }
+            var key = (draw.Mesh, draw.ObjectToWorld, draw.Material);
+
+            counts[key] = (counts.GetValueOrDefault(key: key) + 1);
+        }
+
+        var changed = new List<Box>();
+
+        foreach (var draw in after) {
+            if (!SdfMeshIrradianceScene.IsStatic(draw: in draw)) { continue; }
+            var key = (draw.Mesh, draw.ObjectToWorld, draw.Material);
+            var count = counts.GetValueOrDefault(key: key);
+
+            if (count > 0) {
+                counts[key] = (count - 1);
+                continue;
+            }
+            if (!TryBox(draw: in draw, box: out var box)) { return null; }
+            changed.Add(item: box);
+        }
+        foreach (var draw in before) {
+            if (!SdfMeshIrradianceScene.IsStatic(draw: in draw)) { continue; }
+            var key = (draw.Mesh, draw.ObjectToWorld, draw.Material);
+
+            if (counts.GetValueOrDefault(key: key) <= 0) { continue; }
+            counts[key]--;
+            if (!TryBox(draw: in draw, box: out var box)) { return null; }
+            changed.Add(item: box);
+        }
+        return [.. changed];
+    }
+    private static bool TryBox(in SdfMeshDraw draw, out Box box) {
+        if (!SdfMeshBox.TryOf(draw: in draw, box: out var oriented)) {
+            box = default;
+            return false;
+        }
+
+        var extent = ((Vector3.Abs(value: oriented.HalfX) + Vector3.Abs(value: oriented.HalfY)) + Vector3.Abs(value: oriented.HalfZ));
+
+        box = new Box(High: ((oriented.Center + extent) + new Vector3(value: BoxMargin)), Low: ((oriented.Center - extent) - new Vector3(value: BoxMargin)));
+        return true;
     }
 
     // Publishes each level whose window has every slot measured: the slots composed since its last publication reach the
@@ -874,6 +996,8 @@ public sealed class SdfMeshIrradiance : IDisposable {
         if (!m_trimListening) { Puck.Hosting.Jobs.MemoryAccount.Shared.TrimRequested += TrimRetained; m_trimListening = true; }
         var snapshot = frame.MeshDraws.ToArray();
         var previous = m_scene?.Acquire();
+        var previousDraws = m_diagnosticDraws;
+        var hadScene = (m_scene is not null);
         var snapshotClaims = new SdfMeshClaims(meshes: snapshot.Select(selector: static draw => draw.Mesh));
 
         m_buildingKey = key;
@@ -883,6 +1007,7 @@ public sealed class SdfMeshIrradiance : IDisposable {
             using var previousBorrow = previous;
             var clock = Stopwatch.StartNew();
             var scene = SdfMeshIrradianceScene.Build(draws: snapshot, previous: previous);
+            var changed = (hadScene ? ChangedBoxes(after: snapshot, before: previousDraws) : null);
 
             Counters.Count(kind: Scenes);
             Counters.Add(amount: scene.GeometriesBuilt, kind: GeometriesBuilt);
@@ -897,7 +1022,7 @@ public sealed class SdfMeshIrradiance : IDisposable {
                 m_diagnosticDraws = snapshot.Where(predicate: d => SdfMeshIrradianceScene.IsStatic(draw: d)).ToArray();
                 m_sceneKey = key;
                 m_buildingKey = 0;
-                AdvanceGeometry();
+                AdvanceGeometry(changed: changed);
             }
             Console.Error.WriteLine(value: $"[sdf.mesh-gi] scene draws={draws} triangles={(scene?.TriangleCount ?? 0)} geometries={(scene?.GeometryCount ?? 0)} built={(scene?.GeometriesBuilt ?? 0)} built-triangles={(scene?.TrianglesBuilt ?? 0)} reused={(scene?.GeometriesReused ?? 0)} retained-triangles={(scene?.TrianglesRetained ?? 0)} seconds={clock.Elapsed.TotalSeconds:0.000}");
         });
@@ -936,6 +1061,11 @@ public sealed class SdfMeshIrradiance : IDisposable {
         if (skyOnly && !frame.TickLocked && captured.SkyMatches(other: m_lighting!)) { return; }
         m_lightingVersion++;
         m_lighting = captured;
+        m_versionTimes.Add(item: captured.CapturedAt);
+        if (m_versionTimes.Count > MaxVersionTimes) {
+            m_versionTimes.RemoveRange(count: (MaxVersionTimes / 2), index: 0);
+            m_versionBase += (MaxVersionTimes / 2);
+        }
         Owe();
     }
     // The part of a program's materials the relight reads (Shade: what each reflects and emits), hashed once per program
@@ -1134,12 +1264,14 @@ public sealed class SdfMeshIrradiance : IDisposable {
         (x.FloorModulo(modulus: dims.X) + (dims.X * (y.FloorModulo(modulus: dims.Y) + (dims.Y * z.FloorModulo(modulus: dims.Z)))));
 
     // The state a worker reads under the gate before it lists or processes probes.
-    private readonly record struct Snapshot(SdfMeshIrradianceScene Scene, Lighting Lighting, Layout Layout, (int X, int Y, int Z)[] Lows, Vector3 Camera, int Geometry, int WindowVersion);
+    private readonly record struct Snapshot(SdfMeshIrradianceScene Scene, Lighting Lighting, Layout Layout, (int X, int Y, int Z)[] Lows, Vector3 Camera, int Geometry, int WindowVersion,
+        (int Geometry, Box[]? Boxes)[] Changes, long[] VersionTimes, int VersionBase);
 
     private Snapshot? TakeSnapshot() {
         lock (m_gate) {
             if (m_disposed || (m_scene is null) || (m_lighting is null)) { return null; }
-            return new Snapshot(Camera: m_camera, Geometry: m_geometry, Layout: m_layout, Lighting: m_lighting, Lows: Lows(), Scene: m_scene.Acquire(), WindowVersion: m_windowVersion);
+            return new Snapshot(Camera: m_camera, Changes: [.. m_changes], Geometry: m_geometry, Layout: m_layout, Lighting: m_lighting, Lows: Lows(), Scene: m_scene.Acquire(),
+                VersionBase: m_versionBase, VersionTimes: [.. m_versionTimes], WindowVersion: m_windowVersion);
         }
     }
     // Whether the windows, the layout and the geometry a worker listed its probes for still stand.
@@ -1288,15 +1420,16 @@ public sealed class SdfMeshIrradiance : IDisposable {
                 for (var y = low.Y; (y < (low.Y + dims.Y)); y++) {
                     for (var x = low.X; (x < (low.X + dims.X)); x++) {
                         var present = cache.TryGetValue(key: (x, y, z), value: out var probe);
-                        var trace = (!present || (probe.Geometry != snapshot.Geometry));
+                        var trace = (!present || ((probe.Geometry != snapshot.Geometry) && Affected(cell: (x, y, z), layout: layout, probe: in probe, snapshot: in snapshot, spacing: spacing)));
+                        var rebase = (present && !trace && (probe.Geometry != snapshot.Geometry));
                         var current = (present && (probe.Lighting == lighting.Version));
                         var center = (new Vector3(x: (x + 0.5f), y: (y + 0.5f), z: (z + 0.5f)) * spacing);
                         var distance = Vector3.DistanceSquared(value1: center, value2: snapshot.Camera);
 
                         if (present) {
-                            ages?.Add(item: (current ? 0f : ((float)Stopwatch.GetElapsedTime(startingTimestamp: probe.LitAt, endingTimestamp: now).TotalSeconds)));
+                            ages?.Add(item: (current ? 0f : ((float)Stopwatch.GetElapsedTime(startingTimestamp: StaleSince(lighting: probe.Lighting, snapshot: in snapshot), endingTimestamp: now).TotalSeconds)));
                         }
-                        if (!all && !trace && current && (probe.Converged || (probe.Passes >= MaxRelights))) { continue; }
+                        if (!all && !trace && !rebase && current && (probe.Converged || (probe.Passes >= MaxRelights))) { continue; }
                         candidates.Add(item: new Candidate(Cell: (x, y, z), Distance: distance, Level: level, LitAt: (present ? probe.LitAt : 0L),
                             Passes: (current ? probe.Passes : 0), Trace: trace));
                     }
@@ -1313,6 +1446,12 @@ public sealed class SdfMeshIrradiance : IDisposable {
             (a.LitAt != b.LitAt) ? a.LitAt.CompareTo(value: b.LitAt) :
             (a.Passes != b.Passes) ? a.Passes.CompareTo(value: b.Passes) :
             (a.Level != b.Level) ? a.Level.CompareTo(value: b.Level) : a.Distance.CompareTo(value: b.Distance));
+    }
+    // When a probe's lighting went stale: the capture of the version after its own, or the oldest capture remembered.
+    private static long StaleSince(int lighting, in Snapshot snapshot) {
+        var index = ((lighting + 1) - snapshot.VersionBase);
+
+        return ((snapshot.VersionTimes.Length == 0) ? Stopwatch.GetTimestamp() : snapshot.VersionTimes[Math.Clamp(value: index, min: 0, max: (snapshot.VersionTimes.Length - 1))]);
     }
     // Records the lighting age a listing found and the relight rate of the cycle it closes, and reports a cycle whose
     // oldest lighting is past the budget's age target; under the gate.
@@ -1480,7 +1619,8 @@ public sealed class SdfMeshIrradiance : IDisposable {
         var passes = ((probe.Lighting == lighting.Version) ? (probe.Passes + 1) : 1);
         var previous = probe;
 
-        probe = (probe with { Converged = true, LightIndex = index, Lighting = lighting.Version, LitAt = lighting.CapturedAt, Passes = passes, Shading = lights });
+        // A listed probe either traced against this geometry or holds hits no change since its own geometry reaches.
+        probe = (probe with { Converged = true, Geometry = geometry, LightIndex = index, Lighting = lighting.Version, LitAt = lighting.CapturedAt, Passes = passes, Shading = lights });
         if (!probe.Invalid) {
             var origin = ((new Vector3(x: (candidate.Cell.X + 0.5f), y: (candidate.Cell.Y + 0.5f), z: (candidate.Cell.Z + 0.5f)) * layout.SpacingOf(level: candidate.Level)) + probe.Offset);
 
@@ -1967,6 +2107,17 @@ public sealed class SdfMeshIrradiance : IDisposable {
         return new Vector3(x: (radius * MathF.Cos(x: angle)), y: z, z: (radius * MathF.Sin(x: angle)));
     }
 
+    // A static draw's mesh by reference, as the scene key counts it, with its transform and material.
+    private sealed class DrawKeyComparer : IEqualityComparer<(SdfMesh Mesh, Matrix4x4 ObjectToWorld, int Material)> {
+        public static DrawKeyComparer Instance { get; } = new();
+
+        public bool Equals((SdfMesh Mesh, Matrix4x4 ObjectToWorld, int Material) x, (SdfMesh Mesh, Matrix4x4 ObjectToWorld, int Material) y) =>
+            (ReferenceEquals(objA: x.Mesh, objB: y.Mesh) && (x.ObjectToWorld == y.ObjectToWorld) && (x.Material == y.Material));
+        public int GetHashCode((SdfMesh Mesh, Matrix4x4 ObjectToWorld, int Material) obj) =>
+            HashCode.Combine(value1: System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(o: obj.Mesh), value2: obj.ObjectToWorld, value3: obj.Material);
+    }
+    // An axis-aligned world box.
+    private readonly record struct Box(Vector3 Low, Vector3 High);
     // A probe the worker lists: its level and cell, whether it lacks a trace against the current geometry, the capture
     // time of the lighting it was last relit under (zero for none), the relights it holds under the current lighting,
     // and its squared distance from the camera.

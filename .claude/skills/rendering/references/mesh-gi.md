@@ -67,18 +67,31 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   The scheduler's separate saved-pose/input-capacity defect has a focused
   boundary test; it is not the established cause of this slow gallery boot.
   See [mesh baking](mesh-bake.md#groups-poses-and-materials).
-- Visibility is a per-probe 12×12 octahedral first-hit surface map. Each texel
-  traces one closest-hit ray, bounded to `1.5 * sqrt(3) * spacing + NormalBias`:
-  full in-window receiver support including relocation. Each word holds an FP16
-  ray distance and two signed octahedral normal bytes. A
-  negative distance explicitly marks a miss and its reach. Receivers beyond
-  that measured support receive nothing. Depth is traced on a probe's first
-  sweep of each lighting generation and reused for that generation's later
-  bounces; sky still uses the full-reach radiance rays. A generation starts
-  every cell at sweep zero (`TraceProbe`'s `sweep > 0` test), so a lighting
-  change alone re-places each probe and re-traces its geometry-only depth rays:
-  moving the held sun at Medium re-traced 4,796,784 depth rays, the count a
-  layout change traces.
+- A probe's geometry is one hit buffer (`SdfMeshProbeDepth.TraceHits`): one
+  closest-hit ray per 12×12 octahedral texel at full reach, each hit an FP32
+  distance (negative for a back face, infinity for a miss), its material and its
+  normal's two signed octahedral bytes. Everything geometric derives from it:
+  the six sky shares (misses, weighted by each texel's solid angle,
+  `SdfMeshProbeDepth.RayWeights`), the inside share (back faces), and the
+  surface map views test receivers against (`SdfMeshProbeDepth.Surfaces`): the
+  hits within `1.5 * sqrt(3) * spacing + NormalBias`, FP16 distance beside the
+  normal bytes, a negative distance marking a miss within that reach. Receivers
+  beyond that measured support receive nothing. There is no second ray set. The
+  hits are traced once per geometry (a scene build, a layout or reach change, or
+  a cell new to a window) and never for a light change.
+- A probe's light is a relight of its hits (`Relight`, `Shade`): the radiance
+  cube and the traced-light bits, shaded under the current lighting. The
+  lighting version advances on a change of the directional or traced lights,
+  the gains, the sources, the bounce switch, the scene's materials or the sky
+  (the packed sky's key, then its projected irradiance against `SkyTolerance`,
+  so a twinkle relights nothing). A relight's bounce reads the volume about
+  each hit as it stands, so bounce converges over successive relights: a probe
+  is relit until one relight moves each axis's luminance by at most
+  `ConvergedShare` (plus `ConvergedFloor` nits), at most `MaxRelights` times a
+  lighting. A switched-off lamp's bounce therefore decays over those relights,
+  under a thousandth of the lit value in the point-light law, rather than
+  vanishing in one. `render.indirect.bounces` zero switches the bounce off; any
+  other value switches it on.
 - Four reflected angular taps reconstruct local surface patches from first-hit
   positions and signed octahedral normal bytes. Join taps only when their normals
   agree and the symmetric point/normal residual is within `DepthSurfaceJoinGap`:
@@ -162,16 +175,17 @@ changing indirect light, probe visibility, the volume boundary or exposure.
 - The exposure meter checks each probe's visibility from the camera through
   the existing scene. A plain trilinear interpolation meters the room across
   a thin partition when the camera approaches it.
-- When none of the eight probes answers, the meter traces radiance at the
-  camera with the same rays, materials, shadow tests and bounce cache as a
-  lattice probe. A small enclosure may contain no lattice centre; searching
-  farther or holding the previous room's exposure cannot measure its light.
-  Cache the six directional values by camera cell and scene/lighting generation,
-  with at most one slot per view. Looking around reweights that measurement;
-  moving within its cell reuses it only when the scene sees the camera from
-  the sample's actual origin. A blocked segment requires a fresh measurement,
-  even within one cell. Refresh once when the volume's bounce sweeps finish.
-  `world.counters sdf.mesh-gi` counts `camera-traces`; steady reads add none.
+- When none of the eight probes answers, the meter traces a hit buffer at the
+  camera with the same rays as a lattice probe and relights it with the same
+  materials, shadow tests and bounce cache. A small enclosure may contain no
+  lattice centre; searching farther or holding the previous room's exposure
+  cannot measure its light. The hits are cached by camera cell and geometry,
+  with at most one slot per view, and relit when the lighting version changes
+  or the volume settles. Looking around reweights that measurement; moving
+  within its cell reuses it only when the scene sees the camera from the
+  sample's actual origin. A blocked segment requires a fresh measurement, even
+  within one cell. `world.counters sdf.mesh-gi` counts `camera-traces` and
+  `camera-relights`; a moving sun adds relights, never traces.
   At a camera cut the meter reads `fresh`: a sample is reused only from the very
   position, so the reading after a teleport depends on where the camera stands,
   not where it stood. `SdfViewExposures` keeps a cut owed until a reading
@@ -185,28 +199,41 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   retraces its probes against open space. Empty is known geometry, distinct from
   a scene not built yet; removing the last draw must discard its occlusion and
   bounce light, even when dynamic or glass draws remain.
-- A lighting change or scene rebuild advances a generation, never clears the
-  cache. The lighting key (`RefreshLighting`) hashes the directional and traced
-  light records, the indirect gains and sources, the tier and the scene's
-  materials, never the sky: a sky-only change keeps the generation, so the sky
-  baked into the radiance cubes stays stale until some other change retraces
-  (a muted sky gradient left an outdoor probe's cube at 10,477 nits until a
-  0.004-degree sun move retraced it to 9,212). A light that changes every frame
-  (a day cycle's sun) advances the generation every frame, and every batch the
-  trace lands is thrown away (the `generation != m_generation` test), so the
-  volume never publishes while the sun moves. The tracer counts only that generation's sweeps; bounce reads use its
-  intermediate samples while viewers keep the previous completed
-  sample until the cell's replacement finishes. An invalid replacement rejects
-  immediately. Clear the CPU cache and staging volume only when the layout
-  changes. On a resize or window move, retain the uploaded GPU table **and its
-  old coordinates** until every new slot has a measured sample. Never publish
-  unwritten cells as darkness or initialize them to unoccluded sky. Until a
-  level first publishes, the parameters are disabled and views light as without
-  the volume (harmonic sky ambient and authored fill).
+- A geometry or lighting change never clears the cache, and no landed batch is
+  thrown away for a lighting change: a batch takes the latest lighting and
+  lands whatever version it relit under. The worker (`Work`) lists the windows'
+  probes that lack a trace against the current geometry (finest level and
+  nearest first), then those whose lighting is stale or whose bounce has not
+  converged (oldest lighting first), and works through the list a batch at a
+  time while the frames' budget (`render.indirect.budget`, `SdfIndirectBudget`)
+  grants relights and traces. A lighting that changes every frame keeps the
+  relight cycling over the window; overload lengthens the lighting's age, not
+  the frame. Each cycle's start records the window's age (median and oldest,
+  `world.budget` and `Describe`); a cycle older than the budget's `age` counts
+  `behind` and prints `[sdf.mesh-gi] behind` (at most every ten seconds) with
+  the relit and needed rates. A re-traced probe keeps drawing its previous
+  measurement until its trace lands. Clear the CPU cache and staging volume
+  only when the layout changes. On a resize or window move, retain the uploaded
+  GPU table **and its old coordinates** until every new slot has a measured
+  sample. Never publish unwritten cells as darkness or initialize them to
+  unoccluded sky. Until a level first publishes, the parameters are disabled
+  and views light as without the volume (harmonic sky ambient and authored
+  fill). `world.probe` answers `unsettled` only while geometry is owed (a scene
+  build, a trace, a refill, a traced probe not yet published); a relight in
+  progress reads as `relighting=1` on its first line.
+- A lockstep frame (`Drain`) relights its whole window from no bounce, each
+  later pass reflecting the one before, until every probe converges or
+  `MaxRelights` passes, whenever its geometry, lighting, windows or layout
+  differ from the last drain or asynchronous work relit since. Its light is a
+  function of those alone, never of bounce asynchronous frames left; the law
+  `ALockstepFrameRendersTheWindowTracedToTheEnd` compares a fresh volume's
+  words with a warmed one's.
 - A record is 235 words (940 bytes): 19 header/cube/light/origin words, 144
   packed first-hit surface words and 72 packed normal-gradient words.
   Medium's three levels hold 36,864 probes in 33.046875 MiB; High's 61,440 in
-  55.078125 MiB.
+  55.078125 MiB. The CPU cache holds each probe's hit buffer beside it: 1,950
+  geometry floats and 22 light floats a probe (`world.budget` prints the
+  bytes), about twice the record.
   The table starts at one inert record and both
   it and CPU staging fit the published tier. Reuse `GpuRegion` grow/shrink and
   existing frame-ring retirement; increment the binding revision when its buffer
@@ -218,15 +245,13 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   and CPU-volume bytes. Cache blocks hold 244 words (976 bytes) per probe.
   Publication compares/uploads changed slots only, coalesced into runs.
 - Each published probe contains its own measured cubes, exactly as the CPU bounce
-  read sees them. Sky and surface radiance use the same full-reach rays, so an
-  opening cannot count as sky in one sample set and a bounced hit in another.
-  Every probe uses the same precomputed spherical Fibonacci quadrature per tier;
-  cell-specific random rotations stamped spatial noise into homogeneous lighting
-  (the uniform-ceiling witness spans 1.256–1.476 before this correction). Sharing
-  directions correlates sampling error without borrowing any neighbour's light.
-  Camera traces use that same quadrature. Depth rays do no sky measurement.
-  Later bounces recompute the two radiance cubes together and reuse only the
-  geometry-only surface map. Placement uses shared short rejection rays bounded to one spacing, never lighting reach.
+  read sees them. Sky, surface radiance and the surface map come from the same
+  hits, so an opening cannot count as sky in one sample set and a bounced hit in
+  another. Every probe uses the same octahedral texel directions, weighted by
+  each texel's solid angle, at both tiers; cell-specific random rotations
+  stamped spatial noise into homogeneous lighting. Sharing directions
+  correlates sampling error without borrowing any neighbour's light. Camera
+  samples use the same quadrature. Placement uses shared short rejection rays bounded to one spacing, never lighting reach.
 - A probe stands in the open (`SdfMeshIrradiance.Place`). A centre inside geometry
   or within `Clearance` (0.1 m) first tries the nearest surface's clear exit, then
   the cell's quarter-spacing lattice nearest-first. Every candidate must stand
