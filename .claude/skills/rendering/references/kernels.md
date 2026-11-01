@@ -267,6 +267,10 @@ rejected slots preserve order. `VulkanIndirectCountLawTests` exercises native,
 fixed multi-draw and single-slot fallback offsets without a driver. First
 instance is zero in every path. Selection dispatches use bounded two-dimensional
 groups so the draw capacity does not depend on the API's single-axis limit.
+The DrawIndex shader requires both device feature `shaderDrawParameters` and
+SPIR-V capability `DrawParameters` (4427) in `VulkanShaderCapabilities.Enabled`.
+Enabling the device feature alone still refuses the module before a pipeline
+can be created.
 
 On Direct3D 12 an indirect argument buffer read by a vertex shader needs both
 `INDIRECT_ARGUMENT` and shader-resource state. Growing the per-draw history
