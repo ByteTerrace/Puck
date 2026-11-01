@@ -1,4 +1,4 @@
-using Puck.Assets;
+using Puck.Abstractions;
 
 namespace Puck.AdvancedGamingBrick;
 

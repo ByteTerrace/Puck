@@ -1,7 +1,7 @@
 using System.Runtime.Versioning;
 using System.Text;
 
-namespace Puck.Assets;
+namespace Puck.Abstractions;
 
 /// <summary>
 /// Replaces files atomically: new content is written to a fresh temporary file beside the destination, flushed to

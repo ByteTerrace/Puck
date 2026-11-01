@@ -77,6 +77,47 @@ graph TD
 | **Lighting** | `ILampArrayDevice`, `LampColor`, `LampInfo`, `LampPurposes` | `Puck.Platform` |
 | **Memory / Pacing** | `IAllocator`, `IPrecisionWaiter`, `IDisplayTimingInfo` | `Puck.Platform` |
 
+## Writing and locking files
+
+Three file-system primitives sit at the bottom of the graph so every project
+reaches them; a second implementation of any of them is a defect.
+
+`AtomicFile` replaces one file so that a reader, or a process that crashes
+mid-write, never finds half of it behind the real name. `WriteAllBytes` and
+`WriteAllText` take the whole content; `Write` hands a stream to a writer that
+produces it incrementally. Each writes a uniquely named temporary file beside the
+destination, flushes it to disk, and renames it over the destination:
+
+```csharp
+AtomicFile.WriteAllText(
+    contents: manifest.Version,
+    path: Path.Combine(cacheRoot, "current"));
+```
+
+A missing parent directory is created. A write that fails at any step, including
+a writer that throws, leaves the old file in place and deletes its temporary
+file. A reader that holds the old file memory-mapped keeps seeing the old bytes
+and does not block the replacement: when Windows refuses the rename over a
+mapped file, `AtomicFile` falls back to `File.Replace`, which moves the old file
+aside. On Unix the replacement keeps the destination's file mode, or takes the
+`unixCreateMode` the caller names, such as owner-only for a private key. A
+destination spelled in another case than the entry a case-insensitive file
+system already holds keeps that entry's name.
+
+`FileLock` is the one exclusive lock file: an open handle the operating system
+releases however its holder ends. `TryAcquire` takes it once and returns `null`
+when another process holds it; `Acquire` and `AcquireAsync` poll with an optional
+deadline and a cancellation token; `TryAcquireShared` takes a shared hold that
+only an exclusive holder refuses. Only a sharing violation (Windows) or
+`EWOULDBLOCK` (Unix) counts as another holder. A path that cannot be created, a
+full disk or a refused permission throws at once, naming the cause, rather than
+waiting out a deadline as if another process held the lock.
+
+`Retry` is the one attempt loop: `Run` blocks between attempts for the
+file-system operations a scanner or reader refuses for a moment, and `RetryAsync`
+serves the CLI verbs that talk to a remote. The last attempt's exception is the
+caller's.
+
 ## Depending on a contract
 
 Machine content admission is also a host-selected contract:

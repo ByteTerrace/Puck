@@ -30,17 +30,33 @@ static const float3 SdfBakeTaps[4] = {
 void CSMain(uint3 id : SV_DispatchThreadID) {
     uint sample = id.x;
     uint lattice = 0xFFFFFFFFu;
-    uint count = min(passGroup.meshBakeCount, 16u);
+    uint count = passGroup.meshBakeCount;
 
     sdfProgramLayout = sdfLoadProgramLayout();
 
-    [loop]
-    for (uint index = 0u; (index < count); index++) {
-        uint4 dims = asuint(passGroup.meshBakeLattices[(index * 4u) + 2u]);
-        uint first = asuint(passGroup.meshBakeLattices[index * 4u].w);
+    // The lattices' samples lie back to back from zero in dispatch order (SdfFrameBlock.WriteMeshBake, which refuses
+    // more lattices than the pass block holds), so the last lattice starting at or before the sample is the one that can
+    // hold it.
+    if (count > 0u) {
+        uint low = 0u;
+        uint high = count;
+
+        [loop]
+        while ((low + 1u) < high) {
+            uint middle = ((low + high) >> 1u);
+
+            if (asuint(passGroup.meshBakeLattices[middle * 4u].w) <= sample) {
+                low = middle;
+            } else {
+                high = middle;
+            }
+        }
+
+        uint4 dims = asuint(passGroup.meshBakeLattices[(low * 4u) + 2u]);
+        uint first = asuint(passGroup.meshBakeLattices[low * 4u].w);
 
         if ((sample >= first) && (sample < (first + (dims.x * dims.y * dims.z)))) {
-            lattice = index;
+            lattice = low;
         }
     }
 
@@ -50,15 +66,18 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         uint4 dims = asuint(passGroup.meshBakeLattices[(lattice * 4u) + 2u]);
         uint4 poses = asuint(passGroup.meshBakeLattices[(lattice * 4u) + 3u]);
         uint local = (sample - asuint(row0.w));
+        // The mode word: the mode in its low two bits, a slab's first plane of its final lattice above them, and the
+        // instance run the mask pass reads in its high half. A slab's origin is its final lattice's, so its samples lie
+        // exactly where the whole lattice's would, however the bake cuts it into slabs.
+        uint mode = (dims.w & 0x3u);
+        uint plane = ((dims.w & 0xFFFFu) >> 2u);
         uint x = (local % dims.x);
         uint y = ((local / dims.x) % dims.y);
-        uint z = (local / (dims.x * dims.y));
+        uint z = ((local / (dims.x * dims.y)) + plane);
         float3 cell = row1.xyz;
         // A points lattice (mode two, or three with gradients) samples the point table's entry at the sample's place in
         // the dispatch: a surface point of a contoured mesh whose material the bake reads, or a corner of a crossed cell
         // of a final lattice whose gradient the contour reads. A grid lattice samples its grid.
-        // The mode word's high half is the instance run the mask pass reads.
-        uint mode = (dims.w & 0xFFFFu);
         bool points = (mode >= 2u);
         float3 position = (points ? sdfMeshBakePoints[sample].xyz : (row0.xyz + (float3(x, y, z) * cell)));
         // The gradient taps lie a sixty-fourth of the contour's finest cell out: a crossing a tap's spacing from a sharp

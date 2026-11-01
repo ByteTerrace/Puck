@@ -178,6 +178,7 @@ lane merges the batch, builds what the merge touched, runs the batch's sweep and
 bisects a red result; the lead fast-forwards the integration branch to the green
 head. "What the merge touched" includes what consumes it:
 - a change to a shader, interface or generated header builds `Puck.slnx`, test projects included;
+- a change that adds a project reference to a packable project (`IsPackable` in its project file) runs `puck nuget pack --output <scratch> --no-build` after a solution build, as CI's artifact job does: a reference to a non-packable project builds cleanly and fails only at packing;
 - a change to a world document runs the shipped-source suites (`Puck.World.Transpiler.Tests`, `Puck.Cli.Worlds.Tests`) and shows itself in the sweep;
 - a change to simulation state, maths or determinism also runs the `worlds/debug/*-tests.puck` files it touches with `--reproduce`;
 - every check runs from a CLI and test binaries rebuilt after the merge, never stale copies.
@@ -639,6 +640,14 @@ not a spiral:
   arrives as its own notification. Lanes launched together in one background
   command report only when the last one ends: a lane that finished first sat
   unseen for an hour and a half that way.
+- A design memo's one review finishes before its first build lane is briefed:
+  a running Codex lane takes no messages, so findings that land mid-build
+  cost a stop and a relaunch (the simulation-thread memo's review found a
+  phase 1 hazard after phase 1 had started). Code reviews still run beside
+  the next work.
+- Stopping a Codex lane means stopping its `codex.exe` process tree and the
+  builds it started; stopping the background task that launched it leaves
+  them running.
 - Findings never bounce between a reviewer and an author: a finding goes into
   its work packet with its owner and is not argued back and forth.
 - Forward progress over review turns (the owner's ruling): the

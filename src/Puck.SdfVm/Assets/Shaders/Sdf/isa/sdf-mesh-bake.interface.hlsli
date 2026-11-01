@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-mesh-bake' (sha256/db36db4e702b8e14c861332ea43ad731b718bfc029aceb751cd88e394fa6d3d1). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-mesh-bake' (sha256/cbc0c52f8337b2123bfa07c9cd46c0f5882ba5c5ff25e0415e1d9f33cf807a32). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_MESH_BAKE
 #define PUCK_SHADER_INTERFACE_SDF_MESH_BAKE
 
@@ -128,9 +128,9 @@ struct SdfMeshBakePass {
     [[vk::offset(0)]] uint2 extent;
     [[vk::offset(8)]] uint instanceMaskWordCount;
     [[vk::offset(12)]] uint meshBakeCount;
-    [[vk::offset(16)]] float4 meshBakeLattices[64];
-    [[vk::offset(1040)]] uint workCounterRow;
-    [[vk::offset(1044)]] uint workCounterRowDetail;
+    [[vk::offset(16)]] float4 meshBakeLattices[960];
+    [[vk::offset(15376)]] uint workCounterRow;
+    [[vk::offset(15380)]] uint workCounterRowDetail;
 };
 [[vk::binding(0, 3)]] ConstantBuffer<SdfMeshBakePass> passGroupIsa0480047F : register(b0, space3);
 #define passGroup passGroupIsa0480047F

@@ -1,6 +1,6 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
-using Puck.Assets;
+using Puck.Abstractions;
 
 namespace Puck.Cli.Format;
 

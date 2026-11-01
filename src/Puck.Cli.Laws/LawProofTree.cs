@@ -66,7 +66,12 @@ public sealed class LawProofTree(string tree, string source, FileStream lease) :
             var path = Path.Combine(path1: directory, path2: "proof.lock");
 
             CliTreeFiles.RequireUnlinkedPath(path: path);
-            var handle = new FileStream(access: FileAccess.ReadWrite, mode: FileMode.OpenOrCreate, path: path, share: FileShare.None);
+            var handle = FileLock.TryAcquire(path: path);
+
+            if (handle is null) {
+                reason = "persistent proof tree is leased by another proof";
+                return null;
+            }
 
             // The lease's last write time is when a proof last used this clone.
             File.SetLastWriteTimeUtc(fileHandle: handle.SafeFileHandle, lastWriteTimeUtc: DateTime.UtcNow);
@@ -102,7 +107,12 @@ public sealed class LawProofTree(string tree, string source, FileStream lease) :
             try {
                 CliTreeFiles.RequireUnlinkedPath(path: eviction.Path);
                 CliTreeFiles.RequireUnlinkedPath(path: lease);
-                using (new FileStream(access: FileAccess.ReadWrite, mode: FileMode.OpenOrCreate, path: lease, share: FileShare.None)) {
+                using (var held = FileLock.TryAcquire(path: lease)) {
+                    if (held is null) {
+                        // Leased by another proof: it stays for a later lease to remove.
+                        continue;
+                    }
+
                     // Removed under the lease, so no proof can lease the clone halfway through its removal.
                     ConfinedDirectory.RemoveTree(path: Path.Combine(path1: eviction.Path, path2: "tree"));
                 }

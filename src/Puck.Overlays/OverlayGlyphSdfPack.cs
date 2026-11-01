@@ -1,5 +1,5 @@
 using System.Buffers.Binary;
-using Puck.Assets;
+using Puck.Abstractions;
 using Puck.Text;
 
 namespace Puck.Overlays;

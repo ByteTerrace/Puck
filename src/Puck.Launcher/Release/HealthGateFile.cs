@@ -1,5 +1,5 @@
 using Microsoft.Extensions.Hosting;
-using Puck.Assets;
+using Puck.Abstractions;
 using Puck.Confinement;
 using System.Text.Json;
 

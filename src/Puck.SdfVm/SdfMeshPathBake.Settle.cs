@@ -68,7 +68,7 @@ public sealed partial class SdfMeshPathBake {
         // The slots ascend, so the last is the highest the frame must hold.
         if ((slots.Length == 0) || (group.Slot >= transforms.Count) || (slots[^1] >= transforms.Count)) { return false; }
 
-        var (ownPosition, ownOrientation) = PoseOf(transform: transforms[group.Slot]);
+        var (ownPosition, ownOrientation) = SdfMeshGeometryBuilder.PoseOf(transform: transforms[group.Slot]);
         var inverse = Quaternion.Inverse(value: ownOrientation);
         // The members' poses as the geometry keys them: in the group's own units.
         var units = SdfMeshGeometryBuilder.UnitsOf(transform: transforms[group.Slot]);
@@ -76,7 +76,7 @@ public sealed partial class SdfMeshPathBake {
 
         moved = !group.Seeded;
         for (var member = 0; (member < slots.Length); member++) {
-            var (position, orientation) = PoseOf(transform: transforms[slots[member]]);
+            var (position, orientation) = SdfMeshGeometryBuilder.PoseOf(transform: transforms[slots[member]]);
             var relative = (Vector3.Transform(rotation: inverse, value: (position - ownPosition)) / units);
             var turn = Quaternion.Normalize(value: (inverse * orientation));
 
@@ -157,9 +157,6 @@ public sealed partial class SdfMeshPathBake {
         }
         m_settleStarts[m_settleStartCount++] = time;
     }
-    // A transform's position and orientation, an unset orientation read as the identity, as the bake reads it.
-    private static (Vector3 Position, Quaternion Orientation) PoseOf(DynamicTransform transform) =>
-        (transform.Position, ((transform.Orientation == default) ? Quaternion.Identity : transform.Orientation));
     // The angle, in radians, one unit quaternion turns from another; q and -q turn alike.
     private static float Angle(Quaternion a, Quaternion b) =>
         (2f * MathF.Acos(x: MathF.Min(x: 1f, y: MathF.Abs(x: Quaternion.Dot(quaternion1: a, quaternion2: b)))));
