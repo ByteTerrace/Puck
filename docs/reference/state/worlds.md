@@ -407,7 +407,8 @@ with the same tick.
 
 ### The chess opponent
 
-The debug world's chess table ([`worlds/debug/chess.puck`](../../../worlds/debug/chess.puck),
+The debug world's chess table ([`worlds/debug/chess.puck`](../../../worlds/debug/chess.puck), over the rules library
+[`worlds/games/chess.puck`](../../../worlds/games/chess.puck),
 [notes](../../../worlds/debug/chess.md)) plays Black against a person by
 default. Its `aiSide` slot chooses the computer's side from the console:
 

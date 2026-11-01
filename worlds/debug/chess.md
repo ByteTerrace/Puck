@@ -7,7 +7,9 @@ board's centre is at (56.5, 9.85, 22.6); the table is 2 m square, its top 0.8 m
 over the floor. White's back rank is on the table's -Z side, toward the south
 windows, and Black's on the +Z side, toward the room's doorway aisle.
 [`chess.puck`](chess.puck) holds it and `debug.puck` imports it whole
-(`import "chess"`).
+(`import "chess"`); the rules it plays by are the shared
+[`../games/chess.puck`](../games/chess.puck) library, whose templates the table
+expands.
 
 The board reads as a real one from each side: from White's seat a1 is the dark
 corner at her left, h1 the light one at her right, and the queen stands on her
@@ -159,7 +161,7 @@ default), `0` gives it White and `-1` leaves both sides to people. The computer
 moves only once the board has rested, the last arrangement was legal (or nothing
 moved), it is its turn and the game has not reached a draw limit. Its search tries only
 the squares each of its pieces could move to (the `chessMoves` patterns in
-`chess.puck`: pawn steps, double steps and captures, knight jumps, slides to
+`../games/chess.puck`: pawn steps, double steps and captures, knight jumps, slides to
 the first piece, king steps and castling), a few dozen candidates, and answers
 within about half a second of its turn starting; the full rules judge each
 candidate as before. It spends a bounded amount of work each tick and restarts
