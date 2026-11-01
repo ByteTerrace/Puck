@@ -20,12 +20,14 @@ public static partial class SdfWorldPackage {
     /// each axis and, as bits, the selector (a dynamic-transform slot whose instances it samples when non-negative, the one
     /// instance <c>-(selector + 1)</c> otherwise); then, as bits, the samples along each axis and whether it measures
     /// gradients; then, as bits, the point table entry the poses its group bakes through start at, their first slot and how
-    /// many slots they cover (<c>float4[64]</c>).</summary>
+    /// many slots they cover (<c>float4</c>, <see cref="MeshBakeLatticeRows"/> per lattice of <see cref="MeshBakeBatch"/>).</summary>
     public const string MeshBakeLattices = "meshBakeLattices";
     /// <summary>The pass-block value holding the lattices in <see cref="MeshBakeLattices"/> (<c>uint</c>).</summary>
     public const string MeshBakeCount = "meshBakeCount";
-    /// <summary>The most lattices one bake dispatch samples: each selects its instances in its own mask words.</summary>
-    public const int MeshBakeBatch = 16;
+    /// <summary>The most lattices one bake dispatch samples: each selects its instances in its own mask words. Every group
+    /// owing a lattice can wait on a dispatch, so this bounds how many groups bake at once; their rows keep the pass block
+    /// within the portable 16 KiB uniform range.</summary>
+    public const int MeshBakeBatch = 240;
     /// <summary>The rows one lattice takes in <see cref="MeshBakeLattices"/>.</summary>
     public const int MeshBakeLatticeRows = 4;
     /// <summary>The near shadow cascade's depth, sampled by the surface pass.</summary>
@@ -39,9 +41,9 @@ public static partial class SdfWorldPackage {
     public const int MeshBakeSampleWords = 5;
     /// <summary>The most samples a bake lattice holds along one axis.</summary>
     public const int MeshBakeMaxSamplesPerAxis = 65;
-    /// <summary>The most samples one bake dispatch writes: a lattice of <see cref="MeshBakeMaxSamplesPerAxis"/> samples a
-    /// side.</summary>
-    public const int MeshBakeMaxSamples = ((MeshBakeMaxSamplesPerAxis * MeshBakeMaxSamplesPerAxis) * MeshBakeMaxSamplesPerAxis);
+    /// <summary>The most samples one bake dispatch writes, at least a lattice of <see cref="MeshBakeMaxSamplesPerAxis"/>
+    /// samples a side: the bake samples buffer and its readback hold this many records.</summary>
+    public const int MeshBakeMaxSamples = (1 << 20);
     /// <summary>The mesh bake's point table, a World-group table of one float4 a point: the surface points a points lattice
     /// samples the field's material at.</summary>
     public const string MeshBakePoints = "sdfMeshBakePoints";

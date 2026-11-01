@@ -23,7 +23,8 @@ public enum HostFramePhase {
 /// <summary>
 /// The windowed or headless host's per-iteration timeline: a ring of the latest iterations, each the interval from its start to
 /// the next one's, split into the loop's phases, with its fixed steps and the garbage collections and pause time that
-/// fell inside it. The <c>host.frames</c> verb reads it. Every write and read runs on the host pump thread.
+/// fell inside it, beside an independent per-step cost ring. The <c>host.frames</c> verb reads both. Phase 1 runs
+/// both on the host pump thread; counters use atomic operations for the future thread split.
 /// </summary>
 /// <remarks>Recording allocates nothing; only a reading formats text.</remarks>
 public sealed class HostFrameTimeline {
@@ -39,6 +40,10 @@ public sealed class HostFrameTimeline {
     private readonly long[] m_late = new long[Capacity];
     private readonly int[] m_collections = new int[(Capacity * 3)];
     private readonly long[] m_open = new long[PhaseCount];
+    private readonly long[] m_tickCosts = new long[Capacity];
+
+    private long m_tickCount;
+    private long m_shedSteps;
 
     private readonly long m_frequency;
 
@@ -113,6 +118,17 @@ public sealed class HostFrameTimeline {
     /// <summary>Records the fixed steps the iteration ran.</summary>
     /// <param name="steps">The step count.</param>
     public void NoteSteps(int steps) => m_openSteps += steps;
+    /// <summary>Records one completed pump step's cost on the independent tick lane.</summary>
+    public void NoteTick(long ticks) {
+        m_tickCosts[((int)(m_tickCount % Capacity))] = ticks;
+        Interlocked.Increment(location: ref m_tickCount);
+    }
+    /// <summary>Counts owed steps discarded after a catch-up burst spent its wall-time budget.</summary>
+    public void NoteShed(ulong steps) => Interlocked.Add(location1: ref m_shedSteps, value: checked((long)steps));
+
+    /// <summary>The total number of shed steps since this host started. Frame-window resets do not reset it.</summary>
+    public long ShedSteps => Interlocked.Read(location: ref m_shedSteps);
+
     /// <summary>Records how far past its deadline the pacer's wait returned, for an iteration whose wait slept.</summary>
     /// <param name="ticks">The overshoot, in the clock's timestamp ticks.</param>
     public void NoteLate(long ticks) => m_openLate = ticks;
@@ -169,6 +185,7 @@ public sealed class HostFrameTimeline {
     public void Reset() {
         m_count = 0L;
         m_iterationStart = 0L;
+        Interlocked.Exchange(location1: ref m_tickCount, value: 0L);
     }
     /// <summary>Describes the latest iterations: the interval's distribution, the count over a budget, the most work an
     /// iteration did, the pacer's greatest lateness, the collections, and the slowest iterations with their phases,
@@ -268,6 +285,22 @@ public sealed class HostFrameTimeline {
             );
         }
 
+        var tickHead = Interlocked.Read(location: ref m_tickCount);
+        var tickCount = ((int)Math.Min(val1: tickHead, val2: Capacity));
+
+        if (tickCount > 0) {
+            var costs = new double[tickCount];
+            var totalCost = 0.0;
+
+            for (var i = 0; (i < tickCount); i++) {
+                costs[i] = Milliseconds(ticks: m_tickCosts[((int)(((tickHead - tickCount) + i) % Capacity))]);
+                totalCost += costs[i];
+            }
+            Array.Sort(array: costs);
+            builder.Append(provider: CultureInfo.InvariantCulture,
+                handler: $"\n  ticks: count={tickCount} avg={(totalCost / tickCount):0.00} p50={Percentile(fraction: 0.5, sorted: costs):0.00} p99={Percentile(fraction: 0.99, sorted: costs):0.00} max={costs[^1]:0.00} ms");
+        }
+        builder.Append(provider: CultureInfo.InvariantCulture, handler: $"\n  steps.shed={ShedSteps}");
         return builder.ToString();
     }
 

@@ -674,7 +674,7 @@ public static class WorldBootComposition {
         services.AddSingleton<ICommandModule, WorldWaitCommandModule>();
 
         // The captures section's tick-scheduled arm, wired beside the wait gate at the SAME publishTick call site
-        // (HeadlessWorldSimulation/WorldSimulation compose the two delegates together). CORE — a headless boot still
+        // (WorldHostStep compose the two delegates together). CORE — a headless boot still
         // visits each scheduled tick; it has no renderer to arm or PNG to manifest, narrated by name rather
         // than a crash.
         services.AddSingleton(implementationFactory: static sp => {
@@ -837,7 +837,8 @@ public static class WorldBootComposition {
                 machineHostFactory: sp.GetRequiredService<Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, WorldOutputHub?, IWorldMachineHost>>(),
                 admitsSpawn: true,
                 catalogFingerprint: MachineCatalogFingerprint(machineCatalog: sp.GetRequiredService<WorldMachineCatalog>()),
-                machineCatalog: sp.GetRequiredService<WorldMachineCatalog>()
+                machineCatalog: sp.GetRequiredService<WorldMachineCatalog>(),
+                pacing: sp.GetRequiredService<HostPacing>()
             );
             var bootOrigin = sp.GetRequiredService<WorldDefinitionSource>();
             var bootServer = sp.GetRequiredService<WorldServer>();
@@ -897,7 +898,6 @@ public static class WorldBootComposition {
         services.AddSingleton(implementationFactory: static sp => new WorldOverlayFacts(
             client: sp.GetRequiredService<WorldClient>(),
             roster: sp.GetRequiredService<PlayerRoster>(),
-            server: sp.GetRequiredService<WorldServer>(),
             seatBindings: sp.GetRequiredService<WorldSeatBindings>(),
             perception: sp.GetRequiredService<WorldPerceptionAnchor>(),
             stamps: sp.GetRequiredService<WorldCreationInstances>(),
@@ -1124,6 +1124,36 @@ public static class WorldBootComposition {
         );
     }
 
+    // Resolve the seat owners once; the returned post-step allocates nothing per tick.
+    private static Action CreateSeatPostStep(IServiceProvider sp) {
+        var seatBindings = sp.GetRequiredService<WorldSeatBindings>();
+        var client = sp.GetRequiredService<WorldClient>();
+        var seatRouter = sp.GetRequiredService<WorldSeatAuthorityRouter>();
+        var server = sp.GetRequiredService<WorldServer>();
+        var anchor = sp.GetRequiredService<WorldPerceptionAnchor>();
+        var composer = sp.GetRequiredService<WorldViewComposer>();
+
+        return () => {
+            for (var slot = 0; (slot < WorldSeatBindings.SeatCount); slot++) {
+                seatBindings.SyncRoute(
+                    client: client,
+                    routes: seatRouter,
+                    slot: slot
+                );
+                // The held-channel fold reads ordinals the bindings lowered through the seat's routed table.
+                client.Roster.Seat(slot: slot)?.Channels = seatBindings.Channels(slot: slot);
+            }
+
+            WorldSeatContextSync.Publish(
+                seatBindings: seatBindings,
+                roster: client.Roster,
+                grants: server.Grants,
+                anchor: anchor,
+                activeLayout: composer.ActiveLayoutName,
+                screens: server.Definition.Screens
+            );
+        };
+    }
     /// <summary>Registers the boot shape the resolved host settings select over the authoritative core: the headless
     /// tick host (<see cref="WorldHostPresentation.None"/>), the offscreen GPU composition
     /// (<see cref="AddWorldOffscreenPresentation"/>), or the windowed presentation (<see cref="AddWorldPresentation"/>),
@@ -1140,6 +1170,20 @@ public static class WorldBootComposition {
         ArgumentNullException.ThrowIfNull(argument: hostSettings);
         ArgumentNullException.ThrowIfNull(argument: seatBindings);
 
+        services.AddSingleton<WorldHostStep>();
+        services.AddSingleton(implementationFactory: sp => {
+            Action postStep;
+
+            if (hostSettings.Headless || hostSettings.Offscreen) {
+                postStep = sp.GetRequiredService<WorldWheelFeed>().TickLogical;
+            } else {
+                // Constructing the runtime mounts the guests for the presented shape.
+                _ = sp.GetRequiredService<WorldAddonRuntime>();
+                postStep = CreateSeatPostStep(sp: sp);
+            }
+            return new WorldSimulation(sp.GetRequiredService<WorldHostStep>(), postStep);
+        });
+
         if (hostSettings.Headless) {
             services.AddSingleton<ICommandModule, HostMemoryCommandModule>();
             // No window, GPU device, swapchain, allocator, backend presenter, or audio device (command pump + tick
@@ -1152,10 +1196,10 @@ public static class WorldBootComposition {
                 services.AddWindowsPrecisionWaiter();
             }
 
-            services.AddFixedStepSimulation<HeadlessWorldSimulation>(bindings: seatBindings);
+            services.AddFixedStepSimulation<WorldSimulation>(bindings: seatBindings);
         } else if (hostSettings.Offscreen) {
             // A real GPU device and the composed-frame render pipeline, with NO window and NO swap chain. The server
-            // steps exactly like the headless shape (HeadlessWorldSimulation); OffscreenTickHostedService steps it one
+            // steps exactly like the headless shape; the shared host loop steps it one
             // tick per produced frame.
             services.AddLauncherOffscreenTerminal();
             if (OperatingSystem.IsWindows()) {
@@ -1163,7 +1207,7 @@ public static class WorldBootComposition {
             }
 
             services.AddWorldOffscreenPresentation(hostsOnDirectX: hostSettings.HostsOnDirectX);
-            services.AddFixedStepSimulation<HeadlessWorldSimulation>(bindings: seatBindings);
+            services.AddFixedStepSimulation<WorldSimulation>(bindings: seatBindings);
         } else {
             // The trimmed GPU host (windowing, allocator, one complete launch-selected backend), the render root,
             // overlays, the audio device, screens/machines verbs, and gamepads. Only the selected backend enters this
@@ -1320,7 +1364,6 @@ public static class WorldBootComposition {
         services.AddSingleton(implementationFactory: sp => new WorldFramePresenter(
             frameRate: sp.GetRequiredService<FrameRateMonitor>(),
             client: sp.GetRequiredService<WorldClient>(),
-            simulation: sp.GetRequiredService<HeadlessWorldSimulation>(),
             settings: sp.GetRequiredService<WorldRenderSettings>(),
             binder: sp.GetRequiredService<IWorldScreenPresenter>(),
             envelope: sp.GetRequiredService<WorldSceneEnvelope>(),
@@ -1708,7 +1751,6 @@ public static class WorldBootComposition {
         services.AddSingleton(implementationFactory: sp => new WorldFramePresenter(
             frameRate: sp.GetRequiredService<FrameRateMonitor>(),
             client: sp.GetRequiredService<WorldClient>(),
-            simulation: sp.GetRequiredService<WorldSimulation>(),
             settings: sp.GetRequiredService<WorldRenderSettings>(),
             binder: sp.GetRequiredService<IWorldScreenPresenter>(),
             envelope: sp.GetRequiredService<WorldSceneEnvelope>(),

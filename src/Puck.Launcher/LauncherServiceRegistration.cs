@@ -276,7 +276,8 @@ public static class LauncherServiceRegistration {
         AddLauncherTerminalShared(services: services);
         services.TryAddSingleton(implementationFactory: static sp => new HostFrameTimeline(time: sp.GetRequiredService<TimeProvider>()));
         services.AddSingleton<ICommandModule, HostFrameCommandModule>();
-        services.AddSingleton(implementationInstance: HostPacing.WallClock);
+        services.AddSingleton(implementationFactory: static sp => (sp.GetRequiredService<LauncherOptions>().Unpaced ? HostPacing.Unpaced : HostPacing.WallClockInline));
+        services.TryAddSingleton<HostLoop>();
         services.AddHostedService<HeadlessTickHostedService>();
 
         if (readStandardInput) {
@@ -297,6 +298,10 @@ public static class LauncherServiceRegistration {
     public static IServiceCollection AddLauncherOffscreenTerminal(this IServiceCollection services) {
         AddLauncherTerminalShared(services: services);
         services.AddSingleton(implementationInstance: HostPacing.OneTickPerFrame);
+        services.TryAddSingleton<HostLoop>();
+        services.TryAddSingleton<OffscreenHostPresentation>();
+        services.TryAddSingleton(implementationFactory: static sp => new HostFrameTimeline(time: sp.GetRequiredService<TimeProvider>()));
+        services.AddSingleton<ICommandModule, HostFrameCommandModule>();
         services.AddHostedService<OffscreenTickHostedService>();
         AddStandardInputReader(services: services);
 
@@ -316,9 +321,11 @@ public static class LauncherServiceRegistration {
         // production and presentation. Register one idle controller for every windowed host so composition roots need
         // only arm it with their chosen ICaptureSink (PNG sequence, recording session, verifier, and so on).
         services.TryAddSingleton<FrameCaptureController>();
-        services.AddSingleton(implementationInstance: HostPacing.WallClock);
+        services.AddSingleton(implementationFactory: static sp => sp.GetRequiredService<PresentPacingControl>().HostPacing);
         services.TryAddSingleton(implementationFactory: static sp => new HostFrameTimeline(time: sp.GetRequiredService<TimeProvider>()));
         services.AddSingleton<ICommandModule, HostFrameCommandModule>();
+        services.TryAddSingleton<HostLoop>();
+        services.TryAddSingleton<WindowHostPresentation>();
         services.AddHostedService<LauncherWindowHostedService>();
         AddStandardInputReader(services: services);
 

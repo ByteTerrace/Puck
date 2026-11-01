@@ -331,7 +331,7 @@ public sealed partial class WorldInstanceHost {
         // Use the source row's authenticated namespace, not a locally invented composite label.
         var sourceAuthority = source.Server.AuthorityIdentity;
 
-        for (var reservationIndex = 0; (transfer.Sent is null) && (reservationIndex < members.Length); reservationIndex++) {
+        for (var reservationIndex = 0; ((transfer.Sent is null) && (reservationIndex < members.Length)); reservationIndex++) {
             var sourceSlot = members[reservationIndex];
             var traveler = source.Server.ExecuteAuthorityOperation(operation: () => {
                 var body = source.Server.Population.EntryBody(index: sourceSlot);
@@ -366,7 +366,7 @@ public sealed partial class WorldInstanceHost {
                 Companion: companion,
                 MemberId: reservationIndex,
                 Principal: MemberTravelPrincipal(
-                    companion: companion is not null,
+                    companion: (companion is not null),
                     server: source.Server,
                     transfer: in transfer,
                     slot: sourceSlot
@@ -384,7 +384,7 @@ public sealed partial class WorldInstanceHost {
         // The wire-facing federation identity is the SOURCE ROW's own authenticated namespace — the value
         // WorldAttestedAuthenticator proves and the receiving door's SourceAuthorityMismatch check compares every
         // subsequent frame against — never a locally-invented composite label the far side never verified.
-        var reservationRequest = transfer.Sent?.Request ?? new WorldTransferReservationRequest(
+        var reservationRequest = (transfer.Sent?.Request ?? new WorldTransferReservationRequest(
             TransferId: transfer.TransferId,
             SourceAuthority: sourceAuthority,
             SourceRateHz: sourceRate,
@@ -400,13 +400,13 @@ public sealed partial class WorldInstanceHost {
                 source: source,
                 transferId: transfer.TransferId
             )
-        );
+        ));
 
         // Allocated durably before any peer can hold the id: a restart of this source mints past it. A crossing that sets
         // out with companions names them in the same record, so a key that never departs is abandoned on record and
         // every title authority is told how its companion's hop settled.
         var destinationAuthority = (targetAuthority.Local?.Server.AuthorityIdentity ?? targetAuthority.Remote!.PeerAuthority);
-        WorldCustodyMintMember[] mintedCompanions = [.. reservationMembers.Where(predicate: static member => (member.Companion is not null) && (member.Mobility is not null)).Select(selector: static member => new WorldCustodyMintMember(Home: member.Companion!.Home, Incarnation: member.Mobility!.Value.Incarnation))];
+        WorldCustodyMintMember[] mintedCompanions = [.. reservationMembers.Where(predicate: static member => ((member.Companion is not null) && (member.Mobility is not null))).Select(selector: static member => new WorldCustodyMintMember(Home: member.Companion!.Home, Incarnation: member.Mobility!.Value.Incarnation))];
         var mintedId = transfer.TransferId;
         var unminted = ((mintedCompanions.Length > 0) && !source.Server.ExecuteAuthorityOperation(operation: () => source.Server.TransferEscrow.Custody.IsMinted(transferId: mintedId)));
 
@@ -590,10 +590,10 @@ public sealed partial class WorldInstanceHost {
         // its travelling principal — BEFORE any member leaves, so a member blocked by a drive gate (a revoked grant
         // today, a combat CC/death gate later) refuses the WHOLE party rather than letting the rest split off while
         // it strands at the source. One blocked member names itself and why.
-        for (var ordinal = 0; ordinal < members.Length; ordinal++) {
+        for (var ordinal = 0; (ordinal < members.Length); ordinal++) {
             var slot = members[ordinal];
             var standingPrincipal = MemberTravelPrincipal(
-                companion: reservationMembers[ordinal].Companion is not null,
+                companion: (reservationMembers[ordinal].Companion is not null),
                 server: source.Server,
                 transfer: in transfer,
                 slot: slot
@@ -695,7 +695,7 @@ public sealed partial class WorldInstanceHost {
             var sourceSlot = members[index];
             var reservedSlot = reservedSlots[index];
             var memberPrincipal = MemberTravelPrincipal(
-                companion: reservationMembers[index].Companion is not null,
+                companion: (reservationMembers[index].Companion is not null),
                 server: source.Server,
                 transfer: in transfer,
                 slot: sourceSlot
@@ -920,6 +920,7 @@ public sealed partial class WorldInstanceHost {
             // A departure already made durable is settled home before the cohort returns, so a restart redoes the
             // return instead of asking the destination again.
             var settled = (!departed || TrySettle(arrived: false, pending: rollback, retired: retired));
+
             if (!settled) {
                 m_inDoubtTransfers.Add(item: rollback);
             }
@@ -1960,7 +1961,7 @@ public sealed partial class WorldInstanceHost {
     }
 
     /// <summary>Drains every queued transfer at this host's one fixed point in its per-tick driving sequence —
-    /// <c>WorldSimulation</c>/<c>HeadlessWorldSimulation</c> call this before stepping the boot instance or any other
+    /// <c>WorldHostStep</c> calls this before stepping the boot instance or any other
     /// instance this tick (mirroring where <c>WorldServer.DrainPendingOps</c> sits relative to the rest of
     /// <c>WorldServer.Step</c>'s own body). An adjacency arrival carries the source step's consumed-through
     /// engine-time fence: destination topology resolves before population advance, and any overlapping destination
@@ -2110,8 +2111,8 @@ public sealed partial class WorldInstanceHost {
             holdSeconds: 2.0,
             partyAllOrNothing: true,
             posed: new PosedTraveller(
-                Pose: arrivalPose,
-                Incarnation: identity
+                Incarnation: identity,
+                Pose: arrivalPose
             ),
             resolvedDestinationRow: null,
             scope: TransferScope.Body,
@@ -2124,6 +2125,7 @@ public sealed partial class WorldInstanceHost {
         reason = string.Empty;
         return true;
     }
+
     private ulong EnqueuePending(string sourceInstance, TransferScope scope, int sourceSlot, TransferDestination destination, Principal actingPrincipal, WorldDestination? resolvedDestinationRow, IReadOnlyList<int>? frozenCohortSlots, string? frozenScopeKey, ulong? frozenGenerationId, int? testForceJoinRefusalOrdinal, WorldPortalArrival arrival, string? counterpart, string? adjacencyCounterpart, FixedVector3 sourceCrossingPoint, WorldFaceFrame? sourceFrame, WorldContinuumTrajectory? continuum, double holdSeconds, WorldTransferFullPolicy fullPolicy, bool partyAllOrNothing, int? borderCapacity, string? border, PosedTraveller? posed, bool companionReturn = false) {
         var source = m_instances.GetValueOrDefault(key: sourceInstance);
         var transferId = ((source is not null)

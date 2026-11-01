@@ -12,7 +12,6 @@ namespace Puck.Launcher;
 /// </summary>
 public sealed class PresentPacingControl {
     private double m_targetHertz;
-    private bool m_tickLocked;
     private uint m_version;
 
     /// <summary>Initializes the control with the boot target rate.</summary>
@@ -38,7 +37,6 @@ public sealed class PresentPacingControl {
     /// <summary>A monotonically increasing counter bumped whenever <see cref="SetTargetHertz"/> changes the target, so the
     /// pump re-resolves its render period only on an actual change.</summary>
     public uint Version => Volatile.Read(location: ref m_version);
-
     /// <summary>Gets whether the window pump runs presentation in lockstep with the simulation: at most one fixed step
     /// a presented frame, independent of its wall interval, holding a tick until its frame renders. Each frame's
     /// presentation interval is exactly the simulation time it advanced (a step, or nothing) with no interpolation
@@ -49,20 +47,13 @@ public sealed class PresentPacingControl {
     /// or the machine's load. A frame that cannot keep up with
     /// the simulation rate slows the simulation rather than skipping ticks; the simulation's own state never depends on
     /// it.</summary>
-    public bool TickLocked => Volatile.Read(location: ref m_tickLocked);
+    public bool TickLocked => HostPacing.StepsOneTickPerFrame;
+    /// <summary>The live policy shared by the window loop and authority replay stepping.</summary>
+    public Puck.Hosting.HostPacing HostPacing { get; } = new();
 
     /// <summary>Turns the lockstep presentation of <see cref="TickLocked"/> on or off.</summary>
     /// <param name="locked">Whether presentation runs in lockstep with the simulation.</param>
-    public void SetTickLocked(bool locked) => Volatile.Write(location: ref m_tickLocked, value: locked);
-
-    /// <summary>Returns the interpolation numerator a frame presents with: none under lockstep, which presents the
-    /// completed tick, and the pump's unconsumed remainder otherwise.</summary>
-    /// <param name="tickLocked">Whether the frame presents in lockstep.</param>
-    /// <param name="accumulatorTicks">The pump's unconsumed engine ticks.</param>
-    /// <returns>The frame context's accumulator ticks.</returns>
-    public static ulong AccumulatorOf(bool tickLocked, ulong accumulatorTicks) => (tickLocked
-        ? 0UL
-        : accumulatorTicks);
+    public void SetTickLocked(bool locked) => HostPacing.SetTickLocked(locked: locked);
     /// <summary>Returns the interval a frame's presentation spans: under lockstep the simulation time the frame stepped
     /// (a step, or nothing), and the sampled wall interval otherwise or when no simulation steps.</summary>
     /// <param name="tickLocked">Whether the frame presents in lockstep.</param>
@@ -84,7 +75,6 @@ public sealed class PresentPacingControl {
     public static double GridOf(bool tickLocked, bool simulates, ulong stepTicks, double displayGridHertz) => ((tickLocked && simulates && (stepTicks > 0UL))
         ? (((double)Puck.Maths.FixedTickConversion.TicksPerSecond) / stepTicks)
         : displayGridHertz);
-
     /// <summary>Retargets the present rate. A no-op (no version bump) when the value is unchanged.</summary>
     /// <param name="targetHertz">The new target in Hz, or 0 for automatic display pacing.</param>
     public void SetTargetHertz(double targetHertz) {

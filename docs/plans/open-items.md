@@ -81,8 +81,8 @@ blocked until it is taken.
     qualify the original temporal-off blink at a quiet refresh cadence;
     reconstruction now converges on both backends.
 16. [Simulation tick off the frame thread](#simulation-tick-off-the-frame-thread):
-    [the memo](simulation-thread.md)'s phases, one host loop first, then the
-    tick record and the step body on a worker.
+    [the memo](simulation-thread.md)'s phase 2, the tick record on one thread,
+    then the produce audit and the step body on a worker.
 
 ## Owner decisions
 
@@ -96,6 +96,10 @@ Each waits on the owner: what the engine should do, how it looks and feels, and 
   client object on the frame thread; the lower-latency shape brings back the
   cross-thread protocols its review found unsafe
   ([simulation thread](simulation-thread.md#latency)).
+- Whether a cold bake pauses the irradiance preview (it re-traces about every
+  4 s on four workers, roughly 800 thread-seconds beside the bake's 1,670), so
+  the meshes land about a quarter sooner and the scene lights later
+  ([cold bake](#cold-bake-under-a-minute)).
 - What the back of a door's glass shows: nothing, the fallback colour, or a
   mirror of the front ([rendering plan](rendering.md#open-items)).
 - Look calls in the rendering plan: whether the far cascade caches its static
@@ -155,14 +159,6 @@ Code that grew a second implementation (AGENTS.md rule 7) or costs velocity:
   builds and boots with `Puck.Confinement` in its closure. `BrowserWorkspace`
   deletes the browser's in-memory mount, where the confined removal refuses by
   design, and keeps its delete.
-- The host loop's duplicates, converged by
-  [the simulation thread](simulation-thread.md#6-duplicated-mechanisms-on-this-path)'s
-  phase 1: three host loops (`LauncherWindowHostedService.cs:395-720`,
-  `HeadlessTickHostedService.cs:151-230`, `OffscreenTickHostedService.cs:236-330`,
-  with the windowed lockstep branch a fourth copy), two step shells
-  (`WorldSimulation.cs:16`, `HeadlessWorldSimulation.cs:17`), two console
-  drains per windowed iteration, three simulation clocks the frame reads and
-  two interpolation fractions.
 - Two mirrors of the boot world's snapshot, both hub subscribers copying every
   entry per tick: `WorldClient` (presentation) and the boot endpoint's
   `WorldSessionMirror` (`WorldAuthorityEndpoint.cs:121`); and three per-sink
@@ -1043,17 +1039,44 @@ windowed checks, then the three developer exhibits.
 
 ### Cold bake under a minute
 
-Owner: specialist (rendering) · high · Next: profile where a cold bake's time
-goes, then cut it to the owner's bar: one minute at most per backend from an
-empty store (AGENTS.md).
+Owner: specialist (rendering) · high · Next: cut the bake's CPU meshing about
+fourfold (collapse, sheet closing, contouring), largest first, to the owner's
+bar: one minute at most per backend from an empty store (AGENTS.md).
 
-- Measured when the owner set the bar (lead machine, RTX 4070, windowed,
-  `--devices none`): Direct3D 12's `world` residency baked 2,090 groups in
-  384.4 s (50,854 dispatches, 1.20 billion samples, 1.64 billion taps, 38.6
-  million triangles); Vulkan had 187 groups pending after 420 s. Every frame
-  during the bake read over 16.7 ms (`host.frames` avg 67 ms, p99 100 ms,
-  126 collections pausing 572 ms over 600 frames), so the bake also starves the
-  frame.
+- Measured on the lead machine (RTX 4070, windowed, `--devices none`, an empty
+  `--cache-dir`, `world.gpu-timing on`): Direct3D 12's `world` residency baked
+  its 2,090 groups in 446 s before the cuts below (384 s when the owner set the
+  bar) and in 215 to 226 s after them (two runs, every stored mesh byte for byte
+  alike); the near groups' ninety percent landed at 73 to 79 s (126 s before). Vulkan baked them in 305.3 s, its near groups' ninety
+  percent at 105.6 s (187 groups still pending at 420 s before), its frames
+  slower than Direct3D 12's (produce 127 ms against 65 ms during the bake), so
+  fewer dispatches answered a second. The GPU is no longer the limit:
+  the bake pass ran 0.2 ms a frame before, and with the larger dispatches the
+  frame had a lattice to dispatch in all but 271 of 2,343 frames.
+- The bake is CPU-bound: the shared pool's workers stay saturated. Thread
+  seconds by stage in the 215 s run: crossings 680 (`SdfSampledLattice.CloseSheets`
+  and the crossing rounds), land 510, contour 250, prepare 95, store 54, answer
+  48. Land is `SdfMeshCollapse` on single-instance static groups of 200,000 to
+  520,000 triangles, 20 to 44 s each on one thread, the bake's long pole; chunked
+  unions already level their chunks in parallel. The `[sdf.mesh-bake] slow`
+  lines name each long stage's group.
+- Next cuts, measured, largest first: chunk large single-instance statics as
+  unions are (`SdfMeshChunks`), so their collapse runs in parallel and their
+  draws cull and pick levels per chunk; make `SdfMeshCollapse`'s passes cheaper;
+  answer `CloseSheets`' and `Refine`'s `Thickens` line scans from a sign bitset of
+  the fine lattice instead of a `FineValue` a step; speed
+  `SdfDualContouring.ExtractRefined`'s corner masks the same way; replace the
+  thirteen bisection rounds a crossing takes (364 million of 1.09 billion
+  samples, and thirteen readback round trips a group) with a bracketed secant
+  search to the same 4,096th of an edge.
+- The irradiance volume's preview trace ran for 201 to 222 s of the bake on its
+  four background workers (about 800 thread seconds beside the bake's 1,670),
+  rebuilding from the landed meshes every four seconds
+  (`SdfMeshIrradiance.PendingSceneInterval`). Pausing or deprioritising it
+  while a cold bake lands is the owner's call: the scene would light later.
+- Every frame during the bake still reads over 16.7 ms (avg 111 ms, p99 716 ms,
+  301 collections pausing 2.9 s over 503 frames) with a worker a processor at
+  normal priority; it eases as the CPU meshing above shrinks.
 - Each backend keeps its own store; a mesh is the same bytes on both when the
   kernels agree, so a shared store would halve the cold cost of using both.
 - The rebakes nobody needed are the [refactoring campaign](#refactoring-campaign)'s
@@ -1071,10 +1094,19 @@ empty store (AGENTS.md).
 
 Owner: principal designs (sparingly, design only), specialist builds · high ·
 Next: build [the simulation step off the frame thread](simulation-thread.md)
-by its phases: phase 1 (one host loop, no thread) is in flight; then phase 2
+by its phases: phase 1 delivered the shared host loop, shell, console operation,
+client clock, arrival interpolation and tick/shed diagnostics; next is phase 2
 (the tick record, still one thread), phase 3 (the produce path reads no
 server state, proven by a rehearsal guard), phase 4 (the worker), phase 5
 (hardening). The owner queued the thread.
+
+- Phase 1's windowed reading still misses the frame-rate bar: frame avg/p99
+  69.47/205.25 ms standing and 25.46/207.07 ms walking, with `simulate` and the
+  tick lane intact. This was not a paired quiet comparison, and mesh GI was
+  still active; attribution is unconfirmed. The
+  [delivery evidence](simulation-thread.md#phase-1-one-host-loop-no-thread-delivered)
+  records the workload and tick/shed readings for the frame-time lane and the
+  later worker comparison.
 
 - Owner decision owed: the design costs one iteration of presentation
   latency for a tick's visible effect (about one frame period at 60 Hz, and
@@ -1082,7 +1114,6 @@ server state, proven by a rehearsal guard), phase 4 (the worker), phase 5
   keeping every client object on one thread
   ([latency](simulation-thread.md#latency)). Under one step per dispatch a
   World whose tick rate exceeds the display's refresh steps inline, as today.
-- [low] The pump now sheds owed steps once a burst spends a step's period of wall time, but nothing counts the shed steps: add a drop counter to `host.frames` (and `world.rate`) so a World running slower than real time says so. Owed in the lead's windowed window: a hall lift ride's `host.frames` with frames near one tick's cost. The memo's phase 1 carries it (the timeline's tick lane). (from: sim-bounds lane)
 - Decided in [the simulation step off the frame thread](simulation-thread.md#decisions),
   after the memo's one cross-family review (its findings and each one's
   resolution are the memo's [review resolution](simulation-thread.md#review-resolution)):

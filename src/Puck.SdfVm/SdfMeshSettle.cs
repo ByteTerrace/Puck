@@ -12,7 +12,7 @@ namespace Puck.SdfVm;
 /// another key one geometry and take its mesh from the library, and baked while the skinned mesh keeps drawing. A pose
 /// still changing never rebakes, and a residency's bake starts at most <see cref="MaxInFlight"/> settle rebakes at once
 /// and <see cref="MaxPerSecond"/> a second.
-/// <para>The thresholds are the bake's own constants beside its cell sizes (<see cref="SdfMeshPathBake.FrameTaps"/>):
+/// <para>The thresholds are the bake's own constants beside its cell sizes (<see cref="SdfMeshPathBake.MinimumCell"/>):
 /// they measure the baked mesh against the field it was sampled from, not anything a world means.</para>
 /// </summary>
 public static class SdfMeshSettle {

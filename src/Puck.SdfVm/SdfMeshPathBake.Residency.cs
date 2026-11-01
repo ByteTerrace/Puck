@@ -26,13 +26,77 @@ public sealed partial class SdfMeshPathBake {
     // Whether the frame thread has seen every group resident since the groups or a mesh last changed.
     private bool m_allResident;
 
-    // The work waiting off the frame's thread (a store load, a contour stage, a landing), each for its group, and the
-    // workers taking it, at most Workers at once.
-    private readonly List<(Group Group, Action Work)> m_work = [];
-    private int m_workers;
+    // The work waiting off the frame's thread (a store load, a contour stage, a landing) for every bake in the process,
+    // each for its group; the lattice answers, which every later stage of their groups waits on, taken first in the
+    // order they arrived; and the workers taking them, at most Workers at once. One pool serves every residency's bake,
+    // so residencies baking together share the processors rather than each taking all of them.
+    private static readonly Lock WorkGate = new();
+    private static readonly List<(Group Group, Action Work)> WorkQueue = [];
+    private static readonly Queue<Action> AnswerQueue = new();
+    private static int RunningWorkers;
 
-    // The workers that run at once: one a processor, as the thread pool ran the work before.
+    // The workers that run at once: one a processor.
     private static int Workers => Math.Max(val1: 1, val2: Environment.ProcessorCount);
+
+    // The bake's CPU stages, whose summed thread time the done line reports (Account).
+    private enum BakeStage {
+        Answer,
+        Prepare,
+        Crossings,
+        Contour,
+        Split,
+        Cut,
+        Land,
+        Store,
+    }
+    // Stopwatch ticks each stage spent, summed over the threads that ran it.
+    private readonly long[] m_stageTicks = new long[8];
+    // The samples answered by the lattices of each kind: coarse and refining grids, final slabs, the final lattice's fine
+    // samples, crossing rounds and gradients, the field check's vertices, material points and skin points.
+    private readonly long[] m_kindSamples = new long[8];
+    private static readonly string[] KindNames = ["refine", "slab", "fine", "crossing", "gradient", "crease", "material", "skin"];
+    // The frames that took lattices while a group still owed one, those that took none, the field evaluations their
+    // shares allowed, and what ended each frame's batch: its share, the dispatch's samples, the batch's lattices, or no
+    // group owing a lattice. The groups waiting on a dispatch, in flight and on the workers, summed over those frames.
+    private long m_bakeFrames;
+    private long m_idleFrames;
+    private long m_shareTaps;
+    private long m_stopShare;
+    private long m_stopSamples;
+    private long m_stopBatch;
+    private long m_stopDrained;
+    private long m_waitingGroups;
+    private long m_flyingGroups;
+    private long m_workingGroups;
+
+    // Adds the time since a timestamp to a stage's account.
+    private void Account(BakeStage stage, long since, Group? group = null, string? detail = null) {
+        var ticks = (Stopwatch.GetTimestamp() - since);
+
+        _ = Interlocked.Add(location1: ref m_stageTicks[(int)stage], value: ticks);
+        // A stage that holds one group's worker for seconds names the group, so the bake's long poles can be found.
+        if ((group is not null) && (ticks > (SlowStageSeconds * Stopwatch.Frequency))) {
+            Console.Error.WriteLine(value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"[sdf.mesh-bake] slow residency={Residency} group={group.Selector} {(group.Dynamic ? "dynamic" : $"instances={group.Instances}")} stage={stage.ToString().ToLowerInvariant()} seconds={(ticks / (double)Stopwatch.Frequency):0.00} {detail}"));
+        }
+    }
+    // The thread seconds past which one group's stage is reported (Account).
+    private const double SlowStageSeconds = 2.0;
+    // Clears the frame and stage accounts for a new bake.
+    private void ClearAccounts() {
+        Array.Clear(array: m_stageTicks);
+        Array.Clear(array: m_kindSamples);
+        m_bakeFrames = m_idleFrames = m_shareTaps = m_stopShare = m_stopSamples = m_stopBatch = m_stopDrained = 0;
+        m_waitingGroups = m_flyingGroups = m_workingGroups = 0;
+    }
+    // The accounts as done-line fields: each stage's thread seconds, then the frames' use of their shares.
+    private string DescribeAccounts() {
+        var stages = string.Join(separator: ",", values: Enum.GetValues<BakeStage>().Select(selector: stage => string.Create(provider: CultureInfo.InvariantCulture, handler: $"{stage.ToString().ToLowerInvariant()}:{(Interlocked.Read(location: ref m_stageTicks[(int)stage]) / (double)Stopwatch.Frequency):0.0}")));
+        var frames = Math.Max(val1: 1L, val2: m_bakeFrames);
+
+        var kinds = string.Join(separator: ",", values: Enumerable.Range(start: 0, count: KindNames.Length).Select(selector: kind => string.Create(provider: CultureInfo.InvariantCulture, handler: $"{KindNames[kind]}:{m_kindSamples[kind]}")));
+
+        return string.Create(provider: CultureInfo.InvariantCulture, handler: $" kinds=[{kinds}] cpu=[{stages}] frames={m_bakeFrames} idle={m_idleFrames} share-use={((m_shareTaps > 0) ? (m_taps / (double)m_shareTaps) : 0d):0.00} stop=[share:{m_stopShare},samples:{m_stopSamples},batch:{m_stopBatch},drained:{m_stopDrained}] per-frame=[waiting:{(m_waitingGroups / (double)frames):0.0},flying:{(m_flyingGroups / (double)frames):0.0},working:{(m_workingGroups / (double)frames):0.0}]");
+    }
 
     // Measures every group still owing a mesh by its demand box at the demand points, under the gate; with none, the
     // priorities stand as they were and the plan's order decides.
@@ -45,47 +109,78 @@ public sealed partial class SdfMeshPathBake {
 
             group.Priority = Demand.Priority(center: center, half: half);
         }
+        // A group baking geometry other groups wait on ranks as the most wanted of them.
+        foreach (var group in m_groups) {
+            if (!group.Done && (group.Leader is { } leader)) { leader.Priority = MathF.Max(x: leader.Priority, y: group.Priority); }
+        }
     }
-    // Queues a group's work off the frame's thread, taken by priority (TakeWork), and starts a worker for it if one is
-    // free. A caller holding the gate, as a restart does, holds every worker back until it releases it, so work queued
-    // together is taken in the priorities it leaves.
-    private void Schedule(Group group, Action work) {
-        lock (m_gate) {
-            m_work.Add(item: (group, work));
-            while ((m_workers < Workers) && (m_workers < m_work.Count)) {
-                m_workers++;
+    // Finishes every group waiting on a group that has finished baking the same geometry (Group.Leader): it takes the
+    // mesh the library now holds, renumbered for its own materials, or the leader's empty outcome; one whose mesh the
+    // library no longer holds bakes it itself. Runs under the gate.
+    private void Follow() {
+        foreach (var group in m_groups) {
+            if (group.Done || (group.Leader is not { Done: true } leader)) { continue; }
+            group.Leader = null;
+            if (leader.Mesh is null) {
+                group.Outcome = leader.Outcome;
+                group.Done = true;
+                continue;
+            }
+            if (Library.TryTake(geometry: group.Sealed, identity: group.Identity, materials: group.MaterialOrder, mesh: out var mesh)) {
+                group.Done = true;
+                group.Stored = true;
+                Draw(group: group, mesh: mesh);
+                continue;
+            }
+            _ = Begin(group: group);
+        }
+    }
+    // Queues a group's work off the frame's thread, taken by priority (TakeWork) or, urgent, before any other in the
+    // order it came, and starts a worker for it if one is free. Work that takes the bake's gate waits while a caller
+    // holds it, as a restart does.
+    private static void Schedule(Group group, Action work, bool urgent = false) {
+        lock (WorkGate) {
+            if (urgent) {
+                AnswerQueue.Enqueue(item: work);
+            } else {
+                WorkQueue.Add(item: (group, work));
+            }
+            while ((RunningWorkers < Workers) && (RunningWorkers < (WorkQueue.Count + AnswerQueue.Count))) {
+                RunningWorkers++;
                 _ = Task.Run(action: Work);
             }
         }
     }
-    // A worker: runs the queued work of highest priority until none is queued.
-    private void Work() {
+    // A worker: runs the queued work, answers first, then the highest priority, until none is queued.
+    private static void Work() {
         try {
             while (TakeWork() is { } work) { work(); }
         } finally {
-            lock (m_gate) {
-                m_workers--;
-                if ((m_work.Count > 0) && (m_workers < Workers)) {
-                    m_workers++;
+            lock (WorkGate) {
+                RunningWorkers--;
+                if (((WorkQueue.Count + AnswerQueue.Count) > 0) && (RunningWorkers < Workers)) {
+                    RunningWorkers++;
                     _ = Task.Run(action: Work);
                 }
             }
         }
     }
-    // Takes the queued work whose group has the highest priority, the earliest queued among equals, or null when none
-    // is queued.
-    private Action? TakeWork() {
-        lock (m_gate) {
+    // Takes the earliest queued answer, else the queued work whose group has the highest priority, the earliest queued
+    // among equals, or null when none is queued. A group's priority is read as the frame thread last left it.
+    private static Action? TakeWork() {
+        lock (WorkGate) {
+            if (AnswerQueue.TryDequeue(result: out var answer)) { return answer; }
+
             var best = -1;
 
-            for (var index = 0; (index < m_work.Count); index++) {
-                if ((best < 0) || (m_work[index].Group.Priority > m_work[best].Group.Priority)) { best = index; }
+            for (var index = 0; (index < WorkQueue.Count); index++) {
+                if ((best < 0) || (WorkQueue[index].Group.Priority > WorkQueue[best].Group.Priority)) { best = index; }
             }
             if (best < 0) { return null; }
 
-            var work = m_work[best].Work;
+            var work = WorkQueue[best].Work;
 
-            m_work.RemoveAt(index: best);
+            WorkQueue.RemoveAt(index: best);
             return work;
         }
     }

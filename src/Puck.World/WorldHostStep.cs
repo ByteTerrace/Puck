@@ -5,15 +5,10 @@ using Puck.World.Server;
 namespace Puck.World;
 
 /// <summary>
-/// The one fixed step every boot shape runs, in the one order — the windowed <see cref="WorldSimulation"/> and the
-/// headless/offscreen <see cref="HeadlessWorldSimulation"/> hold this and contribute nothing to the sequence itself:
-/// deliver the seat route changes published since the last step, decide whether boot is due, submit its seats'
-/// intents, drain the host's pending transfers, step boot through <see cref="WorldServerStepShell"/> (or drain an
-/// administrative mutation and release a stalled console wait when it is paused), step every other instance, run the
-/// shell's post-step, then finish the seat intents. The host-work clock a <c>world.wait</c> counts in lives here. Also
-/// the <see cref="IWorldSimulationClock"/> a frame producer reads, in every shape.
+/// The fixed step every boot shape runs: seat route changes, boot scheduling, authority and instance steps,
+/// the composition's post-step, then seat intent completion. The host-work clock a world.wait counts lives here.
 /// </summary>
-internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTape, WorldConsoleWaitGate waitGate, WorldCaptureScheduler captureScheduler, WorldTestRun scheduleRunner, WorldTickScript tickScript, WorldPeerHost peerHost, WorldInstanceHost instances, WorldServiceExtensions extensions, WorldSeatAuthorityRouter seatRouter, WorldSourceWatch sourceWatch, HostPacing pacing) : IWorldSimulationClock {
+internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTape, WorldConsoleWaitGate waitGate, WorldCaptureScheduler captureScheduler, WorldTestRun scheduleRunner, WorldTickScript tickScript, WorldPeerHost peerHost, WorldInstanceHost instances, WorldServiceExtensions extensions, WorldSeatAuthorityRouter seatRouter, WorldSourceWatch sourceWatch, HostPacing pacing) {
     private readonly WorldCaptureScheduler m_captureScheduler = captureScheduler;
     private readonly WorldServer m_server = server;
     private readonly WorldReplayTape m_replayTape = replayTape;
@@ -47,8 +42,6 @@ internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTa
     /// (<see cref="WorldCaptureScheduler.Drain"/>).</summary>
     public void SettleOwedFrames() => m_captureScheduler.Drain();
 
-    /// <summary>The exact engine time completed on the current authority timeline.</summary>
-    public ulong ElapsedTicks => m_server.CompletedEngineTicks;
     /// <summary>The authored simulation rate the fixed-step pump paces this world at.</summary>
     public uint RatePerSecond => ((uint)m_server.Configuration.SimulationRateHz);
     /// <summary>The number of fixed ticks completed on the current authority timeline.</summary>
@@ -103,7 +96,7 @@ internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTa
     /// <param name="context">The pump's tick context; only its step width reaches the server.</param>
     /// <param name="afterInstances">The shell's own post-step, run after every instance has stepped and before the
     /// seat intents finish — the windowed shell syncs seat bindings and publishes seat context here; a headless
-    /// shell passes <see langword="null"/>.</param>
+    /// shell publishes logical wheel state.</param>
     public void Step(in FixedStepContext context, Action? afterInstances) {
         sourceWatch.Poll();
         // A seat claim can be published off this thread (a federated observer reporting an onward handoff) or by a
