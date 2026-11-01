@@ -91,6 +91,11 @@ Each waits on the owner: what the engine should do, how it looks and feels, and 
 - What the chase camera does with its back to the stair wall: swing the boom,
   rise over the wall, or switch to first person there
   ([motion](#dual-stick-play-and-the-moths-motion)).
+- Whether a tick's visible effect may arrive one frame later (about 16.7 ms
+  at 60 Hz) so the simulation step overlaps present on a worker, keeping every
+  client object on the frame thread; the lower-latency shape brings back the
+  cross-thread protocols its review found unsafe
+  ([simulation thread](simulation-thread.md#latency)).
 - What the back of a door's glass shows: nothing, the fallback colour, or a
   mirror of the front ([rendering plan](rendering.md#open-items)).
 - Look calls in the rendering plan: whether the far cascade caches its static
