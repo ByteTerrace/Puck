@@ -215,7 +215,8 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   and `world.debug-view shadow` show the filtered values, and `world.ao` toggles
   the occlusion live.
 - **Every raster pass culls draws by a host box** (`SdfMeshBox`, `SdfMeshCull`,
-  applied in `SdfWorldPassRecorder.Choose`): a view's frustum, a
+  tested by `frame/sdf-mesh-selection.hlsli` through `SdfMeshOcclusion`): a
+  view's frustum, a
   cascade's light box and the receivers it shadows. A box is the mesh's
   position bounds through the draw's matrix and carry, so a draw whose vertex
   stage moves vertices any other way (members' slots, a displacement) must have
@@ -224,7 +225,10 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   `gpu.vertices` in `world.counters gpu` counts what each pass draws. The same
   box chooses each kept draw's level of detail (`SdfMeshDetail`): the view's by
   its error in display pixels over the box's nearest depth, with the 1.1-pixel
-  band kept per draw in the recorder, a cascade's by its texel. A draw with no
+  band kept per draw in the GPU state, a cascade's by its texel. The residency
+  uploads bounds and level metadata once
+  in each changed mesh record; every raster pass uploads 224 bytes of controls
+  and records one counted indirect draw per phase. A draw with no
   box draws its merged mesh, so a skinned body never coarsens. A shape that
   changes when `world.detail 0` is set is the level's.
 - **The mesh pass also culls by occlusion** (`SdfMeshOcclusion`,
@@ -241,9 +245,16 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   Draws a kernel issues are counted on the GPU past the
   counter rows (`GpuKernelCounters.DrawnWords`), so `gpu.draws` and
   `gpu.vertices` include them. An object `world.cull frustum` brings back is the
-  occlusion's. The vertex stage's draw is pushed index plus `SV_InstanceID`
-  (`sdfMeshRasterDraw`): keep the instance term, Vulkan's indirect draws carry
-  the draw there.
+  occlusion's. The identity is a root constant on Direct3D 12. Vulkan reads it
+  from the
+  argument buffer through its pushed word base plus `DrawIndex`
+  (`sdfMeshRasterIdentity`); first instance stays zero. When
+  `CanDrawIndirectCount` is false, the recorder issues those same initialized
+  slots individually with `vkCmdDrawIndirect`, including empty rejected slots;
+  no raster CPU cull or level path remains. Keep command-to-vertex read barriers and
+  preserve level state when buffers grow. Compute binds the read-only command
+  alias to the dummy, while raster binds its real command buffer; binding it
+  alongside the compute writer would demand conflicting resource states.
 - **Reprojection interpolates displacement.** `sdfPreviousPoint` in
   `frame/sdf-reprojection.hlsli` adds the triangle's weighted vertex movements
   to the current hit. Unchanged vertices return that hit exactly before any
@@ -604,16 +615,17 @@ wrong. The contracts that bite most often:
   vertices, each with its measured error. The region lays a level's indices and
   materials after the merged ones', so its triangles are numbered after them. A
   draw pushes its level above its index (`SdfKernelInterfaces.MeshLevelShift`,
-  in a counted indirect draw's identity too), its record holds each level's
-  first triangle (`SdfMeshRecord.LevelTriangleWord`), and both raster vertex
+  in a counted indirect draw's identity too), its record points at the mesh's
+  shared level table (`SdfMeshRecord.LevelTableWord`), and both raster vertex
   stages add it to the vertex id (`sdfMeshLevelIndex`). Never pass the level as
   a first vertex: Direct3D 12's `SV_VertexID` counts from zero whatever the
   draw's first vertex, so the draw fetches the merged mesh's first triangles and
   objects go missing. The surface pass reads the triangle the pixel names with
   no level of its own. Everything that reads `SdfMesh.Indices` (the
   irradiance trace, the audit, the diagnostics' nearest query) reads the merged
-  mesh, level zero. Each pass's choice is `SdfMeshDetail` beside the box cull, in
-  `SdfWorldPassRecorder.Choose`; `world.detail 0|1|2` forces one level
+  mesh, level zero. Each pass's choice runs beside the box cull in
+  `frame/sdf-mesh-selection.hlsli`, from `SdfMeshDetail`'s packed controls;
+  `world.detail 0|1|2` forces one level
   everywhere, and `world.detail auto` restores the choice.
 - **Large static unions have independently drawn chunks** (`SdfMeshChunks`, before the merge). Their contour edges
   partition the surface, and every seam edge stays fixed at every level. The store holds the pieces; only those pieces

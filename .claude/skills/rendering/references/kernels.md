@@ -179,9 +179,13 @@ the render grid. Each wrapper includes the common head
 include closure holds no other pass's stage; the surface wrapper defines
 `SDF_SURFACE_PASS`, which binds the records read-write, and each kernel
 compiles only its own stage over the pixel the entry gathers
-(`sdfSurfaceStage`, `sdfViewsStage`). The raster passes draw with their own
+(`sdfSurfaceStage`, `sdfViewsStage`). Every raster pass first dispatches
+`sdf-mesh-occlusion.comp` for box culling and level choice from retained mesh
+metadata. Opaque occlusion retains its two phases; shadow cascades and glass
+use one. Per-pass GPU state retains level and mesh identity across frames and
+buffer growth. The raster passes draw with their own
 `sdf-mesh` interface, one set per frame slot from a pool of their own, push the
-draw (`SdfKernelInterfaces.MeshPushedIndex`), and skip a frame with no mesh
+indirect command identity (`SdfKernelInterfaces.MeshPushedIndex`), and skip a frame with no mesh
 draws (`IRenderGraphPackageRecorder.Skips`), recording neither their draws nor
 their target and depth barriers. A view the cadence gate declares unchanged
 records none of its passes, and its latest output stands. Each pass also
@@ -250,6 +254,16 @@ image is already shader-readable from the read that established the alias.
 Transitioning the unused allocation instead produces Vulkan's
 undefined-to-read-only warning at startup; the composition-chain runtime law
 also exercises the return to drawing after all frame slots forwarded inputs.
+
+Vulkan's [DrawIndex](https://docs.vulkan.org/refpages/latest/refpages/source/DrawIndex.html)
+starts at zero per native call. Its vertex stage reads each command's identity
+at the pushed word base plus five times that index, through the
+[`vk::builtin` mapping](https://github.com/microsoft/DirectXShaderCompiler/blob/main/docs/SPIR-V.rst)
+in DXC. These sources agree on the mapping. Without native counted drawing,
+[`vkCmdDrawIndirect`](https://docs.vulkan.org/refpages/latest/refpages/source/vkCmdDrawIndirect.html)
+issues one initialized slot per call and the base advances with it. Empty
+rejected slots preserve order. `VulkanIndirectCountLawTests` exercises native
+and fallback offsets without a driver. First instance is zero in both paths.
 
 ## Registers and bindings
 

@@ -619,11 +619,16 @@ system can take, from `dotnet-trace` thread-time samples of the frame thread
   rendering lane. Extend the same projection/consumer-based rate
   mechanism to placement roots, measure pose packing and draw recording, and
   preserve planted roots, continuous world-phased gusts and independent tip
-  flutter. Triangle detail already exists (`SdfWorldPassRecorder.cs:886`);
-  do not infer that triangle LOD is missing. Draw count is the other cost:
+  flutter. R2 moves raster culling and existing triangle detail into
+  `frame/sdf-mesh-selection.hlsli`, through the same counted indirect path.
+  Draw count is the other cost:
   4,215 draws for 288 unique blade geometries, one draw per blade part. The
   cause fix is one draw per shared geometry with its instances, through the
-  memo's R2 counted indirect path (`SdfMeshOcclusion`), not fewer blades. The
+  memo's R2 counted indirect path (`SdfMeshOcclusion`), not fewer blades.
+  Instancing needs a sparse instance map and per-geometry/per-level ranges
+  while preserving draw identities and depth-tie order; 14.6 draws per
+  geometry is the measured reuse opportunity. It remains open under this
+  packet's rendering owner, beyond R2's constant CPU recording. The
   meadow is R2's and R1's forcing workload: measure produce's draw-recording
   share before and after. The controlled-engine-build
   before/after observations and their machine-load limits are in
