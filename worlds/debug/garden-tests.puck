@@ -8,9 +8,10 @@ schema: "puck.world.definition.v1"
 basis: "garden"
 documentId: "garden-tests"
 
-// The crawl scenario drives a spider.
+// The crawl scenario drives a spider, and the rumour scenario stands a hound behind the hedge.
 grants [
   { capability: Drive, grantee: "seat1", subject: "body:8" }
+  { capability: Drive, grantee: "seat1", subject: "body:17" }
 ]
 
 placements {
@@ -33,6 +34,20 @@ test "the pack follows the visitor to the bone, and a claim spreads trust" {
     eventSeq >= 1
     count(boneHolderTrust) >= 2
     distance(body, 12, body, 0) <= 3
+  }
+}
+
+// Stood behind the hedge while the pack claims the bone, a hound cannot see the holder but stands within six metres of
+// the reporter, so it hears the claim by rumour and marks it heard.
+test "a hound behind the hedge hears the claim by rumour" {
+  when {
+    seat1: body.pose -20 0 -11.6 0 0 0
+    ticks 60
+    seat1: body.pose -19.5 0 -15 0 0 0 17
+    ticks 120
+  }
+  expect {
+    count(boneHolderClaimMark) >= 1
   }
 }
 

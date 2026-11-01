@@ -31,7 +31,10 @@ only schedules ([pond.puck](pond.puck)):
   claim at half a witness's share (`rumor`, once a claim through
   `boneHolderClaimMark`), and the claim expires (`claim-expire`). A hound
   aligns with a pack-mate in proportion to that trust (the pack's
-  `alignmentAffinity`), and follows the one it trusts most.
+  `alignmentAffinity`), and follows the one it trusts most. On open ground
+  every hound sees the holder, so the rumour needs something taller than a
+  hound between them: the hedge south of the bone (the pond's knee-high walls
+  are too low).
 
 ## Where things are
 
@@ -40,6 +43,7 @@ only schedules ([pond.puck](pond.puck)):
 | The pond: knee-high walls round a 9 m basin | centre (-12, -16) |
 | The hounds' yard | (-18, -8) |
 | The bone | (-20, -11), a 1.4 m region beside the yard |
+| The hedge: 5 m long, 1.6 m high, running east to west | (-19.5, -13.8) |
 | The den: back wall, side wall and roof | (-21, -27), open to the north and east |
 | The plot's navigation domain | x -30 to 6, z -34 to -2 |
 
@@ -63,21 +67,37 @@ the plot through its window.
 
 ## Watch it
 
-Headless, from the repository root:
+Boot `worlds/debug/garden-tests.puck` headless (`--devices none --headless`)
+and pipe this script in. It stands the visitor on the bone, within six metres of
+the yard, and hound 17 behind the hedge. `body.targets 12` answers
+`companion=body:0` with the hounds gathered round her; `eventSeq` counts the
+claims, `boneHolderTrust` holds a cell per witness at 0.3 of the way to full
+trust and hound 17's rumour cell at 0.15, and `boneHolderClaimMark` holds the
+claim hound 17 heard. Stood ten metres from the den, the visitor is then
+stalked: spider 8 answers `navigation=arrived` beside her.
 
 ```text
-body.pose -20 0 -11.6 0 0 0    // stand on the bone, within six metres of the yard
-world.wait 90
-body.targets 12                // companion=body:0
+body.pose -20 0 -11.6 0 0 0
+world.wait 60
+body.pose -19.5 0 -15 0 0 0 17
+world.wait 120
+body.targets 12
 body.where 12
-world.wait 150
-world.state boneHolder         // a hound holds the bone
-world.state reporter
-world.state boneHolderTrust    // a cell per witness, 0.3 of the way to full trust
-body.where 8                   // a spider closing on her
-world.decisions
+world.state eventSeq
+world.state boneHolderTrust
+world.state boneHolderClaimMark
+body.pose -18 0 -18 0 0 0
+world.wait 300
+body.where 0
+body.where 8
+body.targets 8
+quit
 ```
 
+`boneHolder` and `reporter` name a hound only while a claim lasts and read -1
+between claims.
+
 `puck test worlds/debug/garden-tests.puck --reproduce` runs the plot's
-scenarios (the pack and the bone, the stalker, the crawl) and replays each bit
-for bit.
+scenarios (the pack and the bone, the rumour behind the hedge, the stalker, the
+crawl) and replays each bit for bit; `puck test worlds/debug/garden-crowd.puck
+--reproduce` does the pack's among the 128.

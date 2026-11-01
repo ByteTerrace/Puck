@@ -121,7 +121,9 @@ Ported into the garden destination's pond plot ([garden.md](../../worlds/debug/g
 flocks round its designated companion (the visitor, or the pack-mate it trusts
 most), the spiders stalk the visitor over the `plot` navigation domain and face
 her, the dragonflies flock over the pond, and the rumour rules run as the
-island wrote them, translated through `puck decompile`. The fish school in air
+island wrote them, translated through `puck decompile`; a hedge beside the bone
+gives a hound something to stand behind, since on open ground every hound sees
+the holder and `rumor` never fires. The fish school in air
 inside the pond's walls on a full-lift hold until lane 3 gives the garden a
 water field. The crawl is the standard's `crawlHold`
 (`worlds/standard/abilities.puck`), which the spiders expand; the Moth can
@@ -131,8 +133,8 @@ decision for the owner). No engine code was needed.
 The body count is one parameter, `pondFlocks(creatures)`, and
 `worlds/debug/garden-crowd.puck` is the garden at 128 creatures, the parallel
 tick's forcing workload. `puck test --reproduce` passes on
-`worlds/debug/garden-tests.puck` (the pack and the bone, the stalker, the
-crawl) and on the crowd's own scenario.
+`worlds/debug/garden-tests.puck` (the pack and the bone, the rumour behind
+the hedge, the stalker, the crawl) and on the crowd's own scenario.
 
 The tick, headless and unpaced on the lead machine while other lanes held the
 CPU at 100 % (so read the ratios over the absolutes), over 900 ticks after a

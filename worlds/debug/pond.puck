@@ -20,9 +20,10 @@ let spiderCount = 4
 let spiderFirst = reserve
 let houndFirst = spiderFirst + spiderCount
 
-// The plot, west of the garden's frames: the pond's centre, the hounds' yard, the bone they claim and the spiders' den.
+// The plot, west of the garden's frames: the hounds' yard, the bone they claim, the hedge beside it and the spiders' den.
 let yardAt = [-18, 0, -8]
 let boneAt = [-20, 0, -11]
+let hedgeAt = [-19.5, 0, -13.8]
 let denAt = [-21, 0, -27]
 
 template pond() {
@@ -495,7 +496,15 @@ template pond() {
       }
     }
 
-    // The den: two walls and a roof 2.5 m up, a ceiling the spiders cross upside down.
+    // A hedge south of the bone, taller than a hound: a hound behind it cannot see the bone's holder, so it hears of
+    // a claim only by rumour.
+    placement "hedge" {
+      prototype: "hedge"
+      position: hedgeAt
+      solid
+    }
+
+    // The den: two walls and a roof 2.6 m up, a ceiling the spiders cross upside down.
     placement "den" {
       prototype: "den"
       position: denAt
@@ -1945,6 +1954,21 @@ template pond() {
           material: 0
           position [0, 0.4, 4.25]
           scale [4.5, 0.9, 0.25]
+        }
+      }
+    }
+
+    prototype "hedge" {
+      document {
+        name: "hedge"
+        palette [
+          { color: "#2F6B3A", roughness: 0.95, specular: 0.03 }
+        ]
+        schema: "puck.creation.v1"
+        shape Box "hedge" {
+          material: 0
+          position [0, 0.8, 0]
+          scale [2.5, 0.8, 0.3]
         }
       }
     }
