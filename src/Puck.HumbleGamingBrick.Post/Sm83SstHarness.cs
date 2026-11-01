@@ -82,29 +82,24 @@ internal sealed class Sm83SstHarness : IDisposable {
             var (address, value, isWrite) = actual[index];
             var want = expectedAccesses[index];
 
-            if (
-                (want.Address is not null) &&
-                (want.Address.Value != address)
-            ) {
-                mismatches.Add(item: $"bus[{index}].addr={address:X4} want {want.Address.Value:X4}");
+            var differences = SstComparison.CompareAccess(actual: actual[index],
+                address: want.Address, value: want.Data, write: want.IsWrite);
+
+            if ((differences & SstAccessMismatch.Address) != 0) {
+                mismatches.Add(item: $"bus[{index}].addr={address:X4} want {want.Address!.Value:X4}");
             }
-            if (
-                (want.Data is not null) &&
-                (want.Data.Value != value)
-            ) {
-                mismatches.Add(item: $"bus[{index}].data={value:X2} want {want.Data.Value:X2}");
+            if ((differences & SstAccessMismatch.Value) != 0) {
+                mismatches.Add(item: $"bus[{index}].data={value:X2} want {want.Data!.Value:X2}");
             }
-            if (isWrite != want.IsWrite) {
+            if ((differences & SstAccessMismatch.Write) != 0) {
                 mismatches.Add(item: $"bus[{index}].write={isWrite} want {want.IsWrite}");
             }
         }
     }
     private void CompareRam(IReadOnlyList<(ushort Address, byte Value)> expected, List<string> mismatches) {
         foreach (var (address, value) in expected) {
-            var actual = m_bus.Peek(address: address);
-
-            if (actual != value) {
-                mismatches.Add(item: $"[{address:X4}]={actual:X2} want {value:X2}");
+            if (SstComparison.CompareRam(address: address, actual: m_bus.Peek(address: address), expected: value) is { } difference) {
+                mismatches.Add(item: $"[{difference.Address:X4}]={difference.Actual:X2} want {difference.Expected:X2}");
             }
         }
     }

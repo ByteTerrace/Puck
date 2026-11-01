@@ -54,7 +54,7 @@ internal sealed class Nes6502SstHarness {
             var actual = m_memory.Accesses[index];
             var expected = new CpuAccess(Address: cycle[0].GetUInt16(), Value: cycle[1].GetByte(), Write: (cycle[2].GetString() == "write"));
 
-            if (actual != expected) {
+            if (SstComparison.CompareAccess(actual: actual, address: expected.Address, value: expected.Value, write: expected.Write) != SstAccessMismatch.None) {
                 return $"cycle {index}: ${actual.Address:X4} ${actual.Value:X2} {(actual.Write ? "write" : "read")}; expected ${expected.Address:X4} ${expected.Value:X2} {(expected.Write ? "write" : "read")}";
             }
             ++index;
@@ -72,10 +72,9 @@ internal sealed class Nes6502SstHarness {
         }
         foreach (var pair in final.GetProperty(propertyName: "ram").EnumerateArray()) {
             var address = pair[0].GetUInt16();
-            var expected = pair[1].GetByte();
 
-            if (m_memory[address] != expected) {
-                return $"RAM[${address:X4}]=${m_memory[address]:X2}, expected ${expected:X2}";
+            if (SstComparison.CompareRam(address: address, actual: m_memory[address], expected: pair[1].GetByte()) is { } difference) {
+                return $"RAM[${difference.Address:X4}]=${difference.Actual:X2}, expected ${difference.Expected:X2}";
             }
         }
 

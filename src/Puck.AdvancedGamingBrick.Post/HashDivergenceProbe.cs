@@ -13,7 +13,7 @@ namespace Puck.AdvancedGamingBrick.Post;
 /// </summary>
 /// <remarks>
 /// Self-check mode (no second ROM, no perturbation) boots two machines from the same ROM+BIOS and asserts they never
-/// diverge — the core's own claim to determinism, the same claim <see cref="DeterminismStage"/> makes at
+/// diverge — the core's own claim to determinism, the same claim the determinism stage makes at
 /// coarser (register+framebuffer) granularity. Supplying a second ROM path, or a perturbation frame, intentionally
 /// diverges machine B — which exercises the localizer itself: it must name the right component at the right frame.
 /// </remarks>
@@ -72,21 +72,6 @@ internal static class HashDivergenceProbe {
             machine.Step();
         }
     }
-    // Snapshot-hashes both machines and, on a mismatch, prints the full localization report. Returns false (and has
-    // already printed the report) on divergence, so the caller can stop the lockstep immediately.
-    private static bool TryCompare(AdvancedGamingBrickMachine machineA, AdvancedGamingBrickMachine machineB, int frame, int? scanline) {
-        var where = ((scanline is not null)
-            ? $"frame {frame} scanline {scanline}"
-            : $"frame {frame}"
-        );
-
-        return HashDivergenceReport.TryCompare<AgbMachineSnapshot, AgbMachineIdentity, long>(
-            snapshotA: machineA.Snapshot(),
-            snapshotB: machineB.Snapshot(),
-            where: where,
-            describeDivergence: DescribeDivergence
-        );
-    }
 
     /// <summary>
     /// Describes the first byte-level difference between two snapshots as a one-line, component-localized detail —
@@ -121,7 +106,7 @@ internal static class HashDivergenceProbe {
     /// <summary>
     /// The fine localizer: full-state diffs two snapshots and prints which component first differs, at what byte
     /// offset, with a short hex window of both sides. Shared by the CLI diagnostic above and by any POST stage that
-    /// wants a precise failure detail instead of a bare "diverged" (see <see cref="DeterminismStage"/>).
+    /// wants a precise failure detail instead of a bare "diverged" (see the determinism stage).
     /// </summary>
     /// <param name="a">The first snapshot.</param>
     /// <param name="b">The second snapshot.</param>
@@ -194,66 +179,13 @@ internal static class HashDivergenceProbe {
         var machineA = hostA.Machine;
         var machineB = hostB.Machine;
 
-        var mode = ((romBLabel is not null)
-            ? $"romA={romALabel} romB={romBLabel}"
-            : ((perturbAtFrame is not null)
-                ? $"rom={romALabel} (self-check + deliberate perturbation @frame {perturbAtFrame})"
-                : $"rom={romALabel} (self-check)"
-        ));
-
-        Console.WriteLine(value: $"== hash-divergence localizer: {mode}, {frames} frames{(fine
-            ? ", --fine (per-scanline)"
-            : "")} ==");
-
-        for (var frame = 0; (frame < frames); ++frame) {
-            if (fine) {
-                for (var scanline = 0; (scanline < ScanlinesPerFrame); ++scanline) {
-                    if (
-                        (perturbAtFrame == frame) &&
-                        (scanline == 0)
-                    ) {
-                        Perturb(machine: machineB);
-                    }
-
-                    RunUntilCycle(
-                        machine: machineA,
-                        target: (machineA.Cycles + ScanlineCycles)
-                    );
-                    RunUntilCycle(
-                        machine: machineB,
-                        target: (machineB.Cycles + ScanlineCycles)
-                    );
-
-                    if (!TryCompare(
-                        frame: frame,
-                        machineA: machineA,
-                        machineB: machineB,
-                        scanline: scanline
-                    )) {
-                        return 1;
-                    }
-                }
-            } else {
-                if (perturbAtFrame == frame) {
-                    Perturb(machine: machineB);
-                }
-
-                _ = machineA.RunFrame();
-                _ = machineB.RunFrame();
-
-                if (!TryCompare(
-                    frame: frame,
-                    machineA: machineA,
-                    machineB: machineB,
-                    scanline: null
-                )) {
-                    return 1;
-                }
-            }
-        }
-
-        Console.WriteLine(value: $"== hash-divergence: NO divergence across {frames} frames ==");
-
-        return 0;
+        return HashDivergenceReport.Run<AdvancedGamingBrickMachine, AgbMachineSnapshot, AgbMachineIdentity, long>(
+            machineA: machineA, machineB: machineB, runTo: RunUntilCycle,
+            snapshot: static machine => machine.Snapshot(), perturb: Perturb,
+            describeDivergence: DescribeDivergence,
+            romALabel: romALabel, romBLabel: romBLabel, modelLabel: "",
+            frames: frames, fine: fine, perturbAtFrame: perturbAtFrame,
+            scanlineCycles: ScanlineCycles, scanlinesPerFrame: ScanlinesPerFrame
+        );
     }
 }

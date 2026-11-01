@@ -5,7 +5,7 @@ namespace Puck.HumbleGamingBrick.Post;
 /// <summary>
 /// Tier-A stage: the Agb costume is a working machine and, for a cartridge that never probes for Advance hardware,
 /// indistinguishable from the Cgb costume at the pixels. Two checks: an Agb machine is deterministic against an
-/// independently built twin (full-snapshot comparison, same discipline as <see cref="DeterminismStage"/>), and an Agb
+/// independently built twin (full-snapshot comparison, same discipline as the <c>determinism</c> stage), and an Agb
 /// machine's framebuffer is bit-identical to a Cgb machine's after the same frames of the same non-detecting ROM —
 /// the carry-forward rule in miniature. The comparison is framebuffer-only because the boot handoff legitimately
 /// differs (the AGB's extra <c>inc b</c>), which a ROM that ignores B never observes.

@@ -172,6 +172,15 @@ Code that grew a second implementation (AGENTS.md rule 7) or costs velocity:
   take them after its phase 4 lands, when the two mirrors sit on their own
   threads and the fold is in one place.
 
+- `puck locks` re-resolves floating packages throughout an affected lock file
+  after a reference change, even without `--update`
+  (`src/Puck.Cli.Gate/Locks/LockFiles.cs:50`). The Post parser reference
+  changed unrelated DI, hashing, test-platform and parser package versions.
+  Owner: tooling implementer. Preserve existing resolved package versions when
+  recording graph changes; reserve upgrades for `--update`. Compare resolved
+  versions before committing a reference change and validate the preserved
+  versions with a locked restore.
+
 The duplicate survey of `src/` (each group below is one lane, ranked by payoff,
 velocity and correctness first; paths are under `src/`). `puck scan --only
 clones` finds few syntactic copies worth merging (91 clusters at 60 tokens,
@@ -259,22 +268,7 @@ file-system primitives, has landed in `Puck.Abstractions` as `AtomicFile`,
    `CanaryCommand.Stub.cs:93`, `OperatorWorlds.cs:478`,
    `Puck.World/WorldTestBatch.cs:79`, the motion run);
    `Puck.Cli.Harness/WorldDevices.cs` starts the one builder they share.
-6. Emulator Post batteries (M, implementer). The AGB and HGB batteries each
-   keep one wrapper file per shared stage (`Throughput`, `Allocation`,
-   `Determinism`, `ForkDeterminism`, `Embedding`, the five `QueuedHost*`
-   stages), differing only in the machine factory, while HGD already folds
-   them into `Puck.HumbleGamingDeck.Post/Stages/HostContractStages.cs`. Make
-   the stage set one table in `Puck.Machines.Post` over a core factory.
-   - `[low]` `HashDivergenceProbe.Run` is written twice
-     (`Puck.AdvancedGamingBrick.Post/HashDivergenceProbe.cs:185`,
-     `Puck.HumbleGamingBrick.Post/HashDivergenceProbe.cs:185`). The AGB loop
-     targets each machine's own `Cycles + ScanlineCycles`, which a perturbation's
-     snapshot and restore can desynchronize; the HGB loop's one absolute
-     cumulative target is correct and survives, in `HashDivergenceReport`.
-   - The runners parse arguments with `CommandLineArguments`
-     (`Puck.Machines.Post/CommandLineArguments.cs`) beside the
-     `System.CommandLine` every other entry point uses.
-7. Small merges (S each; one implementer lane can take them together).
+6. Small merges (S each; one implementer lane can take them together).
    - Fixed-point boxes (specialist, after the tick-cost lane lands):
      `FixedSpatialAabb` (`Puck.World.Schema/WorldPlacementSpatial.cs:81`,
      centre and extent, an `Int128` overlap test that cannot overflow),
@@ -327,16 +321,16 @@ first:
 - Group 3: `GpuRangeAllocator` and `GpuMemoryRanges` share first-fit and
   neighbour coalescing; unify that core (array-backed, `ulong`, aligned) and
   keep each caller's own bookkeeping.
-- Groups 5b, 6b, 7a, 8a and 8b hold for most named sites; the exceptions are
+- Groups 5b, 6b, 8a and 8b hold for most named sites; the exceptions are
   structural: `WorldTestBatch` and `OperatorWorlds` cannot reference
-  `Puck.Cli.Harness`, each `.Post` keeps its core-specific `EmbeddingStage`,
+  `Puck.Cli.Harness`,
   `WorldTabletopFrame.Footprint` stays a class for its `ConditionalWeakTable`,
   and `PuckParser.ParseHexColor` (`Puck.Transpiler/Parsing/PuckParser.cs:1357`)
   accepts `#RGB` and `#RGBA` that `HexColor.TryParse`
   (`Puck.World.Authoring/Authoring/HexColor.cs:107`) refuses `[medium]`.
 
 The audit's blind scan found more, ranked by payoff (the lead confirmed the
-benchmark and AV1 items in the code; the rest are unconfirmed):
+AV1 item in the code; the rest are unconfirmed):
 1. Machine cores and hosts (M): `HumbleGamingBrickCore.RestoreState` and
    `FlushSave` (`Puck.HumbleGamingBrick/Hosting/HumbleGamingBrickCore.cs:120`,
    `245`), `AdvancedGamingBrickCore` (`:114`) and `HumbleGamingDeckCore`
@@ -353,11 +347,6 @@ benchmark and AV1 items in the code; the rest are unconfirmed):
    `CompiledWorld.ComputeEngineBuild` and `CacheRetention.EnforceOnWrite`,
    skipping `CacheRetention.Due`'s one-minute scan throttle on every cache
    write (S) `[low]`.
-3. The machine benchmark harness, written twice
-   (`Puck.AdvancedGamingBrick.Post/BenchDiagnostic.cs`,
-   `Puck.HumbleGamingBrick.Post/BenchDiagnostic.cs`, M); HGB's `determinismHeld`
-   accumulates across rows (`:678-681`), so every row after a broken one prints
-   `<< DETERMINISM BROKEN` `[low]` (confirmed).
 4. Camera plane validation and L8/BGRA packing:
    `Win32FaceAuthenticationPixelGraph`
    (`Puck.Platform.Windows/Win32FaceAuthenticationCameraGraph.cs:204`) beside
@@ -377,9 +366,6 @@ benchmark and AV1 items in the code; the rest are unconfirmed):
    `XInputGamepadConnection` (S).
 8. `BindableDirectionJsonConverter` beside `BindableVector3JsonConverter`
    (`Puck.World.Schema/BindableValue.cs:627-788`) (S).
-9. SingleStepTests bus-trace and RAM harnesses: `Sm83SstHarness` and
-   `Sm83SstBus` (`Puck.HumbleGamingBrick.Post/`) beside `Nes6502SstHarness` and
-   `CpuTestMemory` (`Puck.HumbleGamingDeck.Post/`) (S).
 10. The portal's Node `pathToFileURL` boot helper, in both `workerBoot.ts`
     (`:122`) and `engineBoot.ts` (`:83`) under
     `Puck.Dashboard/src/portal/src/native/` (S).

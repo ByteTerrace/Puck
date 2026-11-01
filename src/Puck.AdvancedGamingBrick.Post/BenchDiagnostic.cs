@@ -1,216 +1,12 @@
-using System.Diagnostics;
 using System.Text;
-using Puck.Abstractions.Counting;
 
 namespace Puck.AdvancedGamingBrick.Post;
 
-/// <summary>
-/// The machine-fleet bench (<c>--bench</c>) — the Advanced-core counterpart to
-/// <c>Puck.HumbleGamingBrick.Post.BenchDiagnostic</c>, mirrored row-for-row so the two cores are measured the same way.
-/// One run reports: the fleet scaling curve in BOTH shapes (independent per-machine input streams and one shared choir
-/// stream), single- and multi-threaded; the burst catch-up rate (the simulate-on-demand dormancy budget); and
-/// <c>Create</c>/<c>Snapshot</c>/<c>Restore</c>/<c>Fork</c> latency and allocation. It is a measurement, not a gate —
-/// but every fleet cell ends with a same-stream snapshot compare and the multi-threaded cell must end bit-identical to
-/// the single-threaded one, so a bench run that breaks determinism exits 1 instead of reporting quietly.
-/// </summary>
+/// <summary>Runs the fleet benchmark over the native Advanced machine.</summary>
 internal static class BenchDiagnostic {
-    private const int BurstFrames = 600;
-    /// <summary>The measured-frame floor per machine; low fleet sizes get more frames (see <see cref="FramesFor"/>)
-    /// so the small-N cells are not noise-dominated. 200 is the repo's aggregate-throughput measurement floor —
-    /// chosen well above the ±4&#160;ms native-channel timing noise a smaller frame count would leave unaveraged.</summary>
     private const int DefaultFramesPerMachine = 200;
-    private const int LatencyReps = 64;
-    /// <summary>Frames a machine runs before its state is considered representative for snapshot/restore/fork
-    /// measurement.</summary>
-    private const int WarmFrames = 120;
 
     private static readonly int[] DefaultFleetSizes = [1, 4, 16, 64];
-
-    private static string Cell(FleetCell cell) =>
-        $"{cell.MachineFramesPerSecond,8:F0} ({(cell.MachineFramesPerSecond / PostMachine.HardwareFps),5:F1} rt)";
-    /// <summary>Small fleets get more frames so their cells are not stopwatch noise; the emulated span per cell
-    /// stays roughly level until the floor takes over.</summary>
-    private static int FramesFor(int count, int frameFloor) =>
-        Math.Max(
-            val1: frameFloor,
-            val2: (960 / count)
-        );
-    /// <summary>A deterministic, edge-rich KEYINPUT script (the trio-lockstep pattern): odd multipliers walk all
-    /// 10 button bits, offset per stream so independent machines genuinely diverge. KEYINPUT is active-low, so the
-    /// walked pattern is inverted before it is written.</summary>
-    private static ushort KeyInputFor(int stream, int frame) {
-        var pressed = ((ushort)(((frame * 37) + (stream * 11)) & 0x3FF));
-
-        return ((ushort)(0x3FF & ~pressed));
-    }
-    private static void MeasureLatencies(ReadOnlyMemory<byte> bios, byte[] rom, StringBuilder report) {
-        BenchDiagnosticFormatting.Line(
-            report: report,
-            text: ""
-        );
-        BenchDiagnosticFormatting.Line(
-            report: report,
-            text: $"per-operation latency (mean over {LatencyReps} reps) + managed allocation:"
-        );
-
-        // Create: a full DI container per machine — the spawn-on-stumble / pooling-lever number.
-        var createTicks = 0L;
-        var createBytes = (AllocationWindow.Total(window: () => {
-            for (var rep = 0; (rep < LatencyReps); ++rep) {
-                var start = Stopwatch.GetTimestamp();
-                var machine = PostMachine.Build(
-                    bios: bios,
-                    rom: rom
-                );
-
-                createTicks += (Stopwatch.GetTimestamp() - start);
-                machine.Dispose();
-            }
-        }) / LatencyReps);
-
-        BenchDiagnosticFormatting.Line(
-            report: report,
-            text: $"  Create   {BenchDiagnosticFormatting.TicksToMicroseconds(ticks: (createTicks / LatencyReps)),10:F1} us  {createBytes,10:N0} B"
-        );
-
-        using var subject = PostMachine.Build(
-            bios: bios,
-            rom: rom
-        );
-
-        subject.RunFrames(frames: WarmFrames);
-
-        // Snapshot: the ghost-echo / bottled-moment / freeze-to-dormant cost.
-        var snapshotTicks = 0L;
-        var snapshot = subject.Machine.Snapshot();
-        var snapshotBytes = (AllocationWindow.Total(window: () => {
-            for (var rep = 0; (rep < LatencyReps); ++rep) {
-                var start = Stopwatch.GetTimestamp();
-
-                snapshot = subject.Machine.Snapshot();
-                snapshotTicks += (Stopwatch.GetTimestamp() - start);
-            }
-        }) / LatencyReps);
-
-        BenchDiagnosticFormatting.Line(
-            report: report,
-            text: $"  Snapshot {BenchDiagnosticFormatting.TicksToMicroseconds(ticks: (snapshotTicks / LatencyReps)),10:F1} us  {snapshotBytes,10:N0} B  (snapshot size {snapshot.Size:N0} B)"
-        );
-
-        // Restore: the wake-from-dormant / promote-demote-arrival cost.
-        var restoreTicks = 0L;
-        var restoreBytes = (AllocationWindow.Total(window: () => {
-            for (var rep = 0; (rep < LatencyReps); ++rep) {
-                var start = Stopwatch.GetTimestamp();
-
-                subject.Machine.Restore(snapshot: snapshot);
-                restoreTicks += (Stopwatch.GetTimestamp() - start);
-            }
-        }) / LatencyReps);
-
-        BenchDiagnosticFormatting.Line(
-            report: report,
-            text: $"  Restore  {BenchDiagnosticFormatting.TicksToMicroseconds(ticks: (restoreTicks / LatencyReps)),10:F1} us  {restoreBytes,10:N0} B"
-        );
-
-        // Fork: Create + Snapshot + Restore in one call — the counterfactual/ghost-spawn cost.
-        var forkTicks = 0L;
-        var forkBytes = (AllocationWindow.Total(window: () => {
-            for (var rep = 0; (rep < LatencyReps); ++rep) {
-                var start = Stopwatch.GetTimestamp();
-                var fork = subject.Fork();
-
-                forkTicks += (Stopwatch.GetTimestamp() - start);
-                fork.Dispose();
-            }
-        }) / LatencyReps);
-
-        BenchDiagnosticFormatting.Line(
-            report: report,
-            text: $"  Fork     {BenchDiagnosticFormatting.TicksToMicroseconds(ticks: (forkTicks / LatencyReps)),10:F1} us  {forkBytes,10:N0} B"
-        );
-    }
-    private static FleetCell RunFleet(ReadOnlyMemory<byte> bios, byte[] rom, int count, int frames, bool choir, bool parallel, AgbMachineSnapshot? initialState = null) {
-        var machines = new PostMachine[count];
-
-        for (var index = 0; (index < count); ++index) {
-            machines[index] = PostMachine.Build(
-                bios: bios,
-                rom: rom
-            );
-
-            if (initialState is not null) {
-                machines[index].Machine.Restore(snapshot: initialState);
-            }
-        }
-
-        var stopwatch = Stopwatch.StartNew();
-
-        if (parallel) {
-            // Task-per-machine, no per-frame barrier: input is a pure function of (stream, frame) and machines share
-            // nothing, so each one can run its whole span straight through.
-            Parallel.For(
-                fromInclusive: 0,
-                toExclusive: count,
-                body: index => {
-                    var machine = machines[index].Machine;
-                    var stream = StreamFor(
-                        choir: choir,
-                        count: count,
-                        index: index
-                    );
-
-                    for (var frame = 0; (frame < frames); ++frame) {
-                        machine.SetKeyInput(keys: KeyInputFor(
-                            frame: frame,
-                            stream: stream
-                        ));
-                        _ = machine.RunFrame();
-                    }
-                }
-            );
-        } else {
-            // Frame-at-a-time round-robin — the shape of today's serial stepping on the render thread.
-            for (var frame = 0; (frame < frames); ++frame) {
-                for (var index = 0; (index < count); ++index) {
-                    var machine = machines[index].Machine;
-
-                    machine.SetKeyInput(keys: KeyInputFor(
-                        stream: StreamFor(
-                            choir: choir,
-                            count: count,
-                            index: index
-                        ),
-                        frame: frame
-                    ));
-                    _ = machine.RunFrame();
-                }
-            }
-        }
-
-        stopwatch.Stop();
-
-        var anchor = machines[0].Machine.Snapshot();
-        var pairMatched = ((count < 2) || anchor.ContentEquals(other: machines[(count - 1)].Machine.Snapshot()));
-
-        foreach (var machine in machines) {
-            machine.Dispose();
-        }
-
-        return new FleetCell(
-            MachineFramesPerSecond: ((((double)count) * frames) / stopwatch.Elapsed.TotalSeconds),
-            Anchor: anchor,
-            PairMatched: pairMatched
-        );
-    }
-    /// <summary>The input stream a machine consumes: the choir shares stream 0; independent machines get their own
-    /// stream, except the LAST machine, which always mirrors stream 0 so every cell carries a same-stream pair for
-    /// the determinism guard.</summary>
-    private static int StreamFor(int index, int count, bool choir) =>
-        ((choir || (index == (count - 1)))
-            ? 0
-            : index
-        );
 
     /// <summary>Runs the bench and writes the report to the console and <c>bench-report.txt</c> in the artifacts
     /// directory.</summary>
@@ -254,13 +50,12 @@ internal static class BenchDiagnostic {
             rom = File.ReadAllBytes(path: romPath);
             romName = Path.GetFileName(path: romPath);
         } else {
-            // No corpus needed: the same zero-asset synthetic cartridge ThroughputStage runs.
+            // No corpus needed: the same zero-asset synthetic cartridge the throughput stage runs.
             rom = SyntheticRom.Create();
             romName = "synthetic";
         }
 
         var report = new StringBuilder();
-        var determinismHeld = true;
         var warmupFrames = CommandLineArguments.Value(
             args: args,
             name: "--bench-warmup-frames"
@@ -297,215 +92,33 @@ internal static class BenchDiagnostic {
             text: $"runtime {Environment.Version}; warm-up {(warmupFrames ?? "0")} frames with keys released before each measured fleet cell; audio output disabled"
         );
 
-        // Discarded warm-up fleets so JIT tiering settles before anything is measured.
-        RunFleet(
-            bios: bios,
-            choir: false,
-            count: 2,
-            frames: 30,
-            parallel: false,
-            rom: rom
-        );
-        RunFleet(
-            bios: bios,
-            choir: false,
-            count: 2,
-            frames: 30,
-            parallel: true,
-            rom: rom
-        );
-
-        BenchDiagnosticFormatting.Line(
+        return MachineBenchmark.Run<BenchmarkSubject, AgbMachineSnapshot>(
+            build: () => new(subject: PostMachine.Build(bios: bios, rom: rom)),
+            fleetSizes: fleetSizes,
+            frameFloor: frameFloor,
+            hardwareFps: PostMachine.HardwareFps,
             report: report,
-            text: ""
-        );
-        BenchDiagnosticFormatting.Line(
-            report: report,
-            text: "fleet scaling, machine-frames/s (rt = machines sustainable at realtime):"
-        );
-        BenchDiagnosticFormatting.Line(
-            report: report,
-            text: $"{"n",5}  {"independent-1t",18}  {"independent-mt",18}  {"choir-1t",18}  {"choir-mt",18}"
-        );
-
-        foreach (var count in fleetSizes) {
-            var frames = FramesFor(
-                count: count,
-                frameFloor: frameFloor
-            );
-
-            // A clean heap per row so one cell's garbage is not another cell's pause.
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-
-            var independentSingle = RunFleet(
-                bios: bios,
-                choir: false,
-                count: count,
-                frames: frames,
-                initialState: initialState,
-                parallel: false,
-                rom: rom
-            );
-            var independentParallel = RunFleet(
-                bios: bios,
-                choir: false,
-                count: count,
-                frames: frames,
-                initialState: initialState,
-                parallel: true,
-                rom: rom
-            );
-            var choirSingle = RunFleet(
-                bios: bios,
-                choir: true,
-                count: count,
-                frames: frames,
-                initialState: initialState,
-                parallel: false,
-                rom: rom
-            );
-            var choirParallel = RunFleet(
-                bios: bios,
-                choir: true,
-                count: count,
-                frames: frames,
-                initialState: initialState,
-                parallel: true,
-                rom: rom
-            );
-
-            // Every cell consumed stream 0 on machine 0, so all four anchors must be byte-identical — this is the
-            // serial-vs-parallel (and shape-vs-shape) bit-lock guard.
-            var pairsMatched = (independentSingle.PairMatched && independentParallel.PairMatched && choirSingle.PairMatched && choirParallel.PairMatched);
-            var serialVsParallel = independentSingle.Anchor.ContentEquals(other: independentParallel.Anchor);
-            var independentVsChoir = independentSingle.Anchor.ContentEquals(other: choirSingle.Anchor);
-            var choirSerialVsParallel = independentSingle.Anchor.ContentEquals(other: choirParallel.Anchor);
-            var cellHeld = (pairsMatched && serialVsParallel && independentVsChoir && choirSerialVsParallel);
-
-            determinismHeld &= cellHeld;
-
-            BenchDiagnosticFormatting.Line(
-                report: report,
-                text: $"{count,5}  {Cell(cell: independentSingle),18}  {Cell(cell: independentParallel),18}  {Cell(cell: choirSingle),18}  {Cell(cell: choirParallel),18}{(cellHeld
-                ? ""
-                : "  << DETERMINISM BROKEN")}"
-            );
-
-            if (!cellHeld) {
-                if (!pairsMatched) {
-                    BenchDiagnosticFormatting.Line(
-                        report: report,
-                        text: $"    !! same-stream pair mismatch (machine 0 vs last machine) at fleet size {count}"
-                    );
-                }
-                if (!serialVsParallel) {
-                    BenchDiagnosticFormatting.Line(
-                        report: report,
-                        text: $"    !! serial vs parallel divergence at fleet size {count} (independent stream)"
-                    );
-                }
-                if (!independentVsChoir) {
-                    BenchDiagnosticFormatting.Line(
-                        report: report,
-                        text: $"    !! independent vs choir divergence at fleet size {count} (serial)"
-                    );
-                }
-                if (!choirSerialVsParallel) {
-                    BenchDiagnosticFormatting.Line(
-                        report: report,
-                        text: $"    !! serial vs parallel divergence at fleet size {count} (choir stream)"
-                    );
-                }
-            }
-        }
-
-        // Burst catch-up: the dormancy model's budget — a frozen machine fast-forwarding its elapsed span. One
-        // machine uncapped, and one machine per logical processor all catching up at once.
-        var burstSingle = RunFleet(
-            bios: bios,
-            choir: false,
-            count: 1,
-            frames: BurstFrames,
+            artifactsDirectory: artifactsDirectory,
             initialState: initialState,
-            parallel: false,
-            rom: rom
-        );
-        var burstFleet = RunFleet(
-            initialState: initialState,
-            bios: bios,
-            rom: rom,
-            count: Environment.ProcessorCount,
-            frames: (BurstFrames / 2),
-            choir: false,
-            parallel: true
-        );
-        var singleMultiple = (burstSingle.MachineFramesPerSecond / PostMachine.HardwareFps);
-        var fleetPerMachineMultiple = ((burstFleet.MachineFramesPerSecond / Environment.ProcessorCount) / PostMachine.HardwareFps);
-
-        BenchDiagnosticFormatting.Line(
-            report: report,
-            text: ""
-        );
-        BenchDiagnosticFormatting.Line(
-            report: report,
-            text: "burst catch-up (simulate-on-demand dormancy):"
-        );
-        BenchDiagnosticFormatting.Line(
-            report: report,
-            text: $"  one machine: {burstSingle.MachineFramesPerSecond:F0} machine-frames/s = {singleMultiple:F1}x realtime; one dormant hour replays in {(3_600.0 / singleMultiple):F1} s"
-        );
-        BenchDiagnosticFormatting.Line(
-            report: report,
-            text: $"  {Environment.ProcessorCount} machines in parallel: {burstFleet.MachineFramesPerSecond:F0} machine-frames/s aggregate = {fleetPerMachineMultiple:F1}x realtime each"
-        );
-
-        if (!burstFleet.PairMatched) {
-            BenchDiagnosticFormatting.Line(
-                report: report,
-                text: "    !! burst-fleet same-stream pair mismatch"
-            );
-        }
-
-        determinismHeld &= burstFleet.PairMatched;
-
-        MeasureLatencies(
-            bios: bios,
-            report: report,
-            rom: rom
-        );
-
-        BenchDiagnosticFormatting.Line(
-            report: report,
-            text: ""
-        );
-        BenchDiagnosticFormatting.Line(
-            report: report,
-            text: (determinismHeld
-            ? "determinism guards: all held (same-stream pairs + serial-vs-parallel anchors byte-identical)"
-            : "determinism guards: FAILED — a same-stream pair or a serial-vs-parallel anchor diverged")
-        );
-
-        Directory.CreateDirectory(path: artifactsDirectory);
-
-        var reportPath = Path.Combine(
-            path1: artifactsDirectory,
-            path2: "bench-report.txt"
-        );
-
-        File.WriteAllText(
-            path: reportPath,
-            contents: report.ToString()
-        );
-        Console.WriteLine(value: $"  bench report -> {reportPath}");
-
-        return (determinismHeld
-            ? 0
-            : 1
+            reportDivergenceDetails: true
         );
     }
 
-    /// <summary>One measured fleet cell. <c>Anchor</c> is machine 0's final snapshot; <c>PairMatched</c> is the
-    /// same-stream honesty check (machine 0 vs the last machine, which always consumes stream 0).</summary>
-    private sealed record FleetCell(double MachineFramesPerSecond, AgbMachineSnapshot Anchor, bool PairMatched);
+    private readonly struct BenchmarkSubject(PostMachine subject) : IMachineBenchmarkSubject<AgbMachineSnapshot> {
+        public void PrepareInput() { }
+        public static bool SnapshotsEqual(AgbMachineSnapshot a, AgbMachineSnapshot b) => a.ContentEquals(other: b);
+        public static int SnapshotSize(AgbMachineSnapshot snapshot) => snapshot.Size;
+        public AgbMachineSnapshot Snapshot() => subject.Machine.Snapshot();
+        public void Restore(AgbMachineSnapshot snapshot) => subject.Machine.Restore(snapshot: snapshot);
+        public IDisposable Fork() => subject.Fork();
+        public void Dispose() => subject.Dispose();
+        public void RunFrames(int frames) => subject.RunFrames(frames: frames);
+        public void RunFrame(int stream, int frame) {
+            // KEYINPUT is active-low; the script walks all ten button bits.
+            var pressed = ((ushort)(((frame * 37) + (stream * 11)) & 0x3FF));
+
+            subject.Machine.SetKeyInput(keys: ((ushort)(0x3FF & ~pressed)));
+            _ = subject.Machine.RunFrame();
+        }
+    }
 }

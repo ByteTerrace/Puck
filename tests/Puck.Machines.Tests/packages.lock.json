@@ -103,6 +103,11 @@
         "resolved": "0.11.6",
         "contentHash": "f33RkDtZO8VlGXCtmQIviOtxgnUdym9xx/b1p9h91CRGOsJFxCFOFK1FDbVt1OCf1aWwYejUFa2MOQyFWTFjbA=="
       },
+      "System.CommandLine": {
+        "type": "Transitive",
+        "resolved": "2.0.14",
+        "contentHash": "15fyVO4aG6poR6IKmhM74zf7PUzaU6FZAGm2d3SQSO9yIyGAeo44e6t9qeKjjaqyMEqYdqcb2G1B0gpLoDU2cA=="
+      },
       "System.IO.Hashing": {
         "type": "Transitive",
         "resolved": "10.0.14",
@@ -231,7 +236,8 @@
         "dependencies": {
           "ByteTerrace.Puck.Confinement": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Machines": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )"
+          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
+          "System.CommandLine": "[2.*, )"
         }
       }
     }

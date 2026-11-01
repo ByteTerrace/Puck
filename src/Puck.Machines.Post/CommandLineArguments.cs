@@ -1,50 +1,24 @@
 namespace Puck.Machines.Post;
 
-/// <summary>Explicit argument lookup and value validation shared by the GamingBrick Post runners.</summary>
+/// <summary>Diagnostic option lookup over the same parser used by the battery entry points.</summary>
 public static class CommandLineArguments {
-    /// <summary>Checks that each supplied flag in a known set has a following non-option value.</summary>
+    /// <summary>Checks that each supplied option in a known set has a following nonblank value.</summary>
     /// <param name="args">The process command-line arguments.</param>
-    /// <param name="names">The value-taking flags to validate, matched case-insensitively.</param>
+    /// <param name="names">The value-taking options, matched case-insensitively.</param>
     /// <param name="error">A diagnostic for a missing value, or an empty string on success.</param>
-    /// <returns>Whether every supplied flag has a value.</returns>
-    public static bool TryValidateValues(string[] args, ReadOnlySpan<string> names, out string error) {
-        for (var index = 0; (index < args.Length); ++index) {
-            foreach (var name in names) {
-                if (
-                    string.Equals(
-                    a: args[index],
-                    b: name,
-                    comparisonType: StringComparison.OrdinalIgnoreCase
-                ) &&
-                    (((index + 1) == args.Length) || string.IsNullOrWhiteSpace(value: args[(index + 1)]) || args[(index + 1)].StartsWith(
-                    comparisonType: StringComparison.Ordinal,
-                    value: "--"
-                ))
-                ) {
-                    error = $"{name} requires a value.";
-                    return false;
-                }
-            }
-        }
-        error = "";
-        return true;
-    }
-    /// <summary>Returns the value following the first occurrence of <paramref name="name"/> in <paramref name="args"/>,
-    /// or <see langword="null"/> when the flag or its following value is absent.</summary>
+    /// <returns>Whether every supplied option has a value.</returns>
+    public static bool TryValidateValues(string[] args, ReadOnlySpan<string> names, out string error) =>
+        new PostCommandLine(args: args, values: names.ToArray(), requiredValues: names.ToArray()).TryValidateValues(error: out error);
+    /// <summary>Returns the first supplied value for one diagnostic option.</summary>
     /// <param name="args">The process command-line arguments.</param>
-    /// <param name="name">The flag to look up (matched case-insensitively).</param>
-    /// <returns>The following argument verbatim, or null. Use <see cref="TryValidateValues"/> to reject missing values.</returns>
-    public static string? Value(string[] args, string name) {
-        for (var index = 0; (index < (args.Length - 1)); ++index) {
-            if (string.Equals(
-                a: args[index],
-                b: name,
-                comparisonType: StringComparison.OrdinalIgnoreCase
-            )) {
-                return args[(index + 1)];
-            }
-        }
-
-        return null;
-    }
+    /// <param name="name">The option name, matched case-insensitively.</param>
+    /// <returns>The first value verbatim, or null.</returns>
+    public static string? Value(string[] args, string name) =>
+        new PostCommandLine(args: args, values: [name]).Value(name: name);
+    /// <summary>Returns every supplied value for one repeatable diagnostic option.</summary>
+    /// <param name="args">The process command-line arguments.</param>
+    /// <param name="name">The option name, matched case-insensitively.</param>
+    /// <returns>The values in occurrence order, without comma splitting.</returns>
+    public static string[] Values(string[] args, string name) =>
+        new PostCommandLine(args: args, values: [name]).Values(name: name);
 }

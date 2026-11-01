@@ -12,12 +12,11 @@ namespace Puck.HumbleGamingBrick.Post;
 /// any new core instrumentation.
 /// </summary>
 internal sealed class Sm83SstBus : ISystemBus {
-    private readonly List<(ushort Address, byte Value, bool IsWrite)> m_accesses = [];
-    private readonly byte[] m_memory = new byte[0x10000];
+    private readonly CpuTestMemory m_memory = new(clearMemoryOnReset: true);
 
     /// <summary>Gets the reads and writes issued since the last <see cref="Reset"/>, in call order.</summary>
-    public IReadOnlyList<(ushort Address, byte Value, bool IsWrite)> Accesses =>
-        m_accesses;
+    public IReadOnlyList<CpuAccess> Accesses =>
+        m_memory.Accesses;
 
     /// <inheritdoc/>
     /// <remarks>No-op: this flat vector bus has no watchpoint machinery to witness.</remarks>
@@ -39,13 +38,8 @@ internal sealed class Sm83SstBus : ISystemBus {
     public void Poke(ushort address, byte value) =>
         m_memory[address] = value;
     /// <inheritdoc/>
-    public byte ReadByte(ushort address) {
-        var value = m_memory[address];
-
-        m_accesses.Add(item: (address, value, false));
-
-        return value;
-    }
+    public byte ReadByte(ushort address) =>
+        m_memory.Read(address: address);
     /// <inheritdoc/>
     /// <remarks>This flat vector bus has no display, so every write commits on the pins' own drive instant and
     /// nothing is ever in transition.</remarks>
@@ -55,14 +49,9 @@ internal sealed class Sm83SstBus : ISystemBus {
         return 0;
     }
     /// <summary>Clears the backing memory and the access log, for the next vector.</summary>
-    public void Reset() {
-        Array.Clear(array: m_memory);
-        m_accesses.Clear();
-    }
+    public void Reset() =>
+        m_memory.Reset();
     /// <inheritdoc/>
-    public void WriteByte(ushort address, byte value) {
-        m_memory[address] = value;
-
-        m_accesses.Add(item: (address, value, true));
-    }
+    public void WriteByte(ushort address, byte value) =>
+        m_memory.Write(address: address, value: value);
 }
