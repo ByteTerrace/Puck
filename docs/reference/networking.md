@@ -213,7 +213,7 @@ link.
   directory) and `UnauthorizedAccessException` through; `Save` lets the same
   two through and refuses a null or empty path as `ArgumentException`. `Save`
   writes the unencrypted private key—possession of the file is the whole
-  identity—through `Puck.Assets`'s `AtomicFile`: a fresh temporary file beside
+  identity—through `Puck.Abstractions`'s `AtomicFile`: a fresh temporary file beside
   the target (owner read/write only on Unix), flushed to disk and moved over
   the target path, replacing whatever was there and creating a missing parent
   directory, so a crash mid-write never leaves a truncated key behind the real

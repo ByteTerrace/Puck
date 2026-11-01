@@ -169,33 +169,28 @@ The duplicate survey of `src/` (each group below is one lane, ranked by payoff,
 velocity and correctness first; paths are under `src/`). `puck scan --only
 clones` finds few syntactic copies worth merging (91 clusters at 60 tokens,
 mostly short emulator `TransferState` bodies); the duplicates that matter are
-second implementations of one mechanism under other names:
+second implementations of one mechanism under other names (group 1, the
+file-system primitives, has landed in `Puck.Abstractions` as `AtomicFile`,
+`FileLock` and `Retry`; its remainder is filed here):
 
-1. File-system primitives (M, implementer). One survivor each: `AtomicFile`
-   (`Puck.Assets/AtomicFile.cs`) for writes, moved down to `Puck.Abstractions`
-   so its lowest caller reaches it; one exclusive file lock beside it; one retry.
-   - `[medium]` Six exclusive lock files, each with its own idea of contention:
-     `CliLease.TryAcquire` (`Puck.Cli.Core/CliLease.cs:308`, HResult low word
-     11/32/33), `ShaderBuild.AcquireLock` (`Puck.Shaders.Model/Compiler/ShaderBuild.Publication.cs:30`,
-     any `IOException` until a deadline), `ShaderPackager.LockPackageAsync`
-     (`Puck.Shaders/Packaging/ShaderPackager.Store.cs:182`, the precise test:
-     sharing violation or the platform's `EWOULDBLOCK` only), `WorldArtifactStore.TryOpen`/`Acquire`
-     (`Puck.Cli.Harness/WorldArtifactStore.cs:65`, any `IOException` or
-     `UnauthorizedAccessException`), `LawProofTree.TryAcquire` and `Prune`
-     (`Puck.Cli.Laws/LawProofTree.cs:55`), `FileReleaseSequenceStore.TryAcquireLease`
-     (`Puck.Launcher/Release/IReleaseSequenceStore.cs:96`). Every one but the
-     packager's treats a missing directory or a full disk as another holder and
-     waits out its deadline. Survivor: the packager's contention test, with a
-     try-once, a deadline and a cancellable wait.
-   - Hand-rolled temp-and-rename writes beside `AtomicFile`:
-     `GpuPipelineCacheFile.Save` (`Puck.Abstractions/Gpu/Pipelines/GpuPipelineCacheFile.cs:161`),
-     `ShaderBuild.Publish` (`ShaderBuild.Publication.cs:67`, with its own
-     `Retry` at 85 beside `CliRetry`), `CountersPipelineCache.Copy`
-     (`Puck.Cli.Runs/Counters/CountersPipelineCache.cs:41`),
-     `ShaderDeclarations` (`Puck.SdfVm.Model/ShaderDeclarations.cs:163`), and
-     `CliLease.Serve` (`CliLease.cs:265`), whose fixed `<path>.tmp` name two
-     writers share `[low]`. None keeps the mapped-file `File.Replace` fallback
-     `AtomicFile` has for Windows.
+1. File-system primitives, remainder (S, implementer). Temp-and-rename writes
+   `AtomicFile` cannot serve yet `[low]`: `ShaderCompiler.Entries.cs:49` publishes
+   a cache entry only if the name is absent (`File.Move` with no overwrite) and
+   wants an `AtomicFile` write that refuses to replace; `Puck.Launcher.Stub/StubHealth.cs:88`
+   and `StubInstall.cs:132` write beside the destination and rename, in a project
+   that references only `Puck.Confinement` and `Puck.Maths`; and
+   `Puck.Storage/DirectoryObjectBlobStoreBackend.cs:189` stages through a
+   confined directory handle. A lock file `FileLock` opens can be pending delete
+   on Windows when a stale-lock sweep (`WorldArtifactStore.PruneLocked`) removes
+   it as `AcquireBuild` opens it; the open then throws `UnauthorizedAccessException`
+   instead of waiting `[low]`. A seventh lock, `ConfinedDirectory.TryAcquireLock`/`AcquireLock`
+   (`Puck.Confinement/ConfinedDirectory.cs:173`, `188`), opens its file relative to
+   a directory handle without following links, with its own contention test
+   (`ConfinedDirectory.Windows.cs:213`, `ConfinedDirectory.Linux.cs:137`, which also
+   counts Windows lock violation 33). It sits in a BCL-only leaf below
+   `Puck.Abstractions` that the launcher stub must stay free of, so `FileLock`
+   cannot replace it; whether the two contention tests should share one
+   definition is open.
 2. The document binding walk (M, specialist). `WorldPresentationManifest`
    (`Puck.World.Protocol/Protocol/WorldPresentationManifest.cs:55-70`,
    `345-418`, its `Builder` from 420) and `WorldKeyedValues`
