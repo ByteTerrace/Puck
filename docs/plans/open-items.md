@@ -144,6 +144,164 @@ Code that grew a second implementation (AGENTS.md rule 7) or costs velocity:
 - Two directory removers: `tests/Shared/TemporaryDirectory.cs` still deletes
   recursively beside the confined removal `RunDirectory.Delete` uses.
 
+The duplicate survey of `src/` (each group below is one lane, ranked by payoff,
+velocity and correctness first; paths are under `src/`). `puck scan --only
+clones` finds few syntactic copies worth merging (91 clusters at 60 tokens,
+mostly short emulator `TransferState` bodies); the duplicates that matter are
+second implementations of one mechanism under other names:
+
+1. File-system primitives (M, implementer). One survivor each: `AtomicFile`
+   (`Puck.Assets/AtomicFile.cs`) for writes, moved down to `Puck.Abstractions`
+   so its lowest caller reaches it; one exclusive file lock beside it; one retry.
+   - `[medium]` Six exclusive lock files, each with its own idea of contention:
+     `CliLease.TryAcquire` (`Puck.Cli.Core/CliLease.cs:308`, HResult low word
+     11/32/33), `ShaderBuild.AcquireLock` (`Puck.Shaders.Model/Compiler/ShaderBuild.Publication.cs:30`,
+     any `IOException` until a deadline), `ShaderPackager.LockPackageAsync`
+     (`Puck.Shaders/Packaging/ShaderPackager.Store.cs:182`, the precise test:
+     sharing violation or the platform's `EWOULDBLOCK` only), `WorldArtifactStore.TryOpen`/`Acquire`
+     (`Puck.Cli.Harness/WorldArtifactStore.cs:65`, any `IOException` or
+     `UnauthorizedAccessException`), `LawProofTree.TryAcquire` and `Prune`
+     (`Puck.Cli.Laws/LawProofTree.cs:55`), `FileReleaseSequenceStore.TryAcquireLease`
+     (`Puck.Launcher/Release/IReleaseSequenceStore.cs:96`). Every one but the
+     packager's treats a missing directory or a full disk as another holder and
+     waits out its deadline. Survivor: the packager's contention test, with a
+     try-once, a deadline and a cancellable wait.
+   - Hand-rolled temp-and-rename writes beside `AtomicFile`:
+     `GpuPipelineCacheFile.Save` (`Puck.Abstractions/Gpu/Pipelines/GpuPipelineCacheFile.cs:161`),
+     `ShaderBuild.Publish` (`ShaderBuild.Publication.cs:67`, with its own
+     `Retry` at 85 beside `CliRetry`), `CountersPipelineCache.Copy`
+     (`Puck.Cli.Runs/Counters/CountersPipelineCache.cs:41`),
+     `ShaderDeclarations` (`Puck.SdfVm.Model/ShaderDeclarations.cs:163`), and
+     `CliLease.Serve` (`CliLease.cs:265`), whose fixed `<path>.tmp` name two
+     writers share `[low]`. None keeps the mapped-file `File.Replace` fallback
+     `AtomicFile` has for Windows.
+2. The document binding walk (M, specialist). `WorldPresentationManifest`
+   (`Puck.World.Protocol/Protocol/WorldPresentationManifest.cs:55-70`,
+   `345-418`, its `Builder` from 420) and `WorldKeyedValues`
+   (`Puck.World.Schema/WorldKeyedValues.cs:47-56`, `128-190`, its `Walk` from
+   192) each carry a reflective walk of the document model with its own
+   `Surfaces`, `ComputeReaching`, `Reaches`, `Walked`, `IsWalked`, `MembersOf`
+   and text-screen placeholder handling, to find the state a document reads.
+   Their surface lists differ: the keyed-values walk handles
+   `BindableDirection`, `BindableVector2` and `BindableVector3`, the manifest
+   does not `[medium, unconfirmed]`: check whether a state-bound vector is ever
+   registered with the mirror. Survivor: one walker in `Puck.World.Schema`
+   (which the protocol references) taking a per-consumer visitor.
+3. GPU memory arenas (M, implementer; a GPU leg with the Vulkan windowed boot).
+   `DirectXHeapArena.Create`/`Return` (`Puck.DirectX/DirectXHeapArena.cs:73`,
+   `166`) and `VulkanMemoryArena.Bind`/`Release`
+   (`Puck.Vulkan/VulkanMemoryArena.cs:58`, `102`) repeat one policy over the
+   shared `GpuMemoryRanges`: 64 MiB blocks per key, first fit across the pool,
+   a block of its own above half a block, keep one empty shared block per pool,
+   retire on `FreeAll`. They differ only in the native calls, in how a resource
+   finds its range (a private-data token on Direct3D 12, a handle map on
+   Vulkan) and in Vulkan mapping host-visible blocks. Survivor: a generic pool
+   in `Puck.Abstractions/Gpu` with backend allocate, free and bind callbacks.
+   Beside it, `GpuRangeAllocator` (`Puck.Abstractions/Gpu/Residency/GpuRangeAllocator.cs`,
+   `uint`, allocation-free, no alignment) and `GpuMemoryRanges`
+   (`Puck.Abstractions/Gpu/Device/GpuMemoryRanges.cs`, `ulong`, aligned,
+   `List`-backed) are two first-fit coalescing range allocators; keep one,
+   aligned and allocation-free.
+4. Surface upload and readback per backend (L, specialist; a GPU leg).
+   `DirectXSurfaceUpload` (`Puck.DirectX/Interop/DirectXSurfaceUpload.cs`, 592
+   lines) and the readback in `DirectXGpuSurfaceTransferFactory.cs:61`, beside
+   `VulkanSurfaceUpload` (367) and `VulkanSurfaceReadback` (283), implement one
+   staging-buffer-to-image mechanism twice, with different pipelining: Vulkan
+   keeps a blocking submit-and-wait path when no frame synchronization is
+   passed, and `Puck.Vulkan.Presentation/SurfaceCompositor.cs:327` builds a
+   `VulkanSurfaceUpload` directly instead of through `IGpuSurfaceUpload`.
+   Written once over `IGpuBufferFactory` and `IGpuRecorder`, which needs
+   buffer-to-image and image-to-buffer copies added to the recorder.
+5. Paths (M, implementer).
+   - About 107 hand-rolled `Replace('\\', '/')` calls in 65 files (the CLI
+     verbs, `CliPaths.cs:28` and `:51`, `GpuPipelineCacheFile.cs:156`), because
+     `PuckPaths.Normalize` (`Puck.Abstractions/PuckPaths.cs:36`) always makes
+     a path full. Add a separator-only form beside it and use it everywhere.
+   - Eight hand-written case-fold choices beside `PuckPaths.Comparison`:
+     `Puck.Mcp/OperatorWorlds.cs:356`, `Puck.Launcher/Release/InstallPruner.cs:59`,
+     `Puck.Confinement/InstallRegistration.cs:134`,
+     `Puck.World.Schema/WorldMachineContentFolder.cs:358`,
+     `Puck.Launcher/Release/HealthGateFile.cs:67`,
+     `Puck.World.Browser/Engine/BrowserWorkspace.cs:121`, `CliPaths.cs:44`,
+     `Puck.Cli.Runs/Sweep/SweepCommand.cs:306`.
+   - `[medium]` Three portable relative path validators that disagree:
+     `WorldDocumentPaths.IsPortableRelativeFilePath`
+     (`Puck.World.Schema/WorldDocumentPaths.cs:17`, admits `..`),
+     `OfficialCanonicalizer.IsWellFormedWorkspaceName`
+     (`Puck.Launcher/Release/OfficialCanonicalizer.cs:19`), and
+     `ReleaseCanonicalizer.IsPortablePath` (`Puck.Launcher/Release/ReleaseManifest.cs:95`),
+     the only one refusing device names (`CON`, `COM1`) and `<>"|?*`. A
+     workspace name lands on a client's disk, so the official one is the
+     weaker where it matters. Survivor: the release rules, with a parent-segment
+     switch for documents.
+6. Child processes and the World boot line (M, implementer).
+   `MotionWorldProcess.Start` (`Puck.Cli.Runs/Motion/MotionWorldProcess.Device.cs:54`),
+   `SweepCommand.ScenarioFile` (`Puck.Cli.Runs/Sweep/SweepCommand.cs:362`) and
+   `OperatorWorlds.Launch` (`Puck.Mcp/OperatorWorlds.cs:461`) build
+   `ProcessStartInfo` by hand beside `ChildProcess` (`Puck.Hosting/ChildProcess.cs`)
+   and `CliProcess` (`Puck.Cli.Core/CliProcess.cs:135`). `[low]` The sweep
+   reads both streams to end with no exit drain grace, the hang
+   `ChildProcess.ExitDrainGrace` exists for (a build server holding the pipe).
+   The World's argument vector (`--world`, `--devices`, `--headless`,
+   `--state-dir`) is spelled in six places (`Puck.Cli.Bench/StartupBenchmarks.cs:64`,
+   `Puck.Cli.Runs/Canary/CanaryCommand.Federation.cs:464`,
+   `CanaryCommand.Stub.cs:93`, `OperatorWorlds.cs:478`,
+   `Puck.World/WorldTestBatch.cs:79`, the motion run);
+   `Puck.Cli.Harness/WorldDevices.cs` starts the one builder they share.
+7. Emulator Post batteries (M, implementer). The AGB and HGB batteries each
+   keep one wrapper file per shared stage (`Throughput`, `Allocation`,
+   `Determinism`, `ForkDeterminism`, `Embedding`, the five `QueuedHost*`
+   stages), differing only in the machine factory, while HGD already folds
+   them into `Puck.HumbleGamingDeck.Post/Stages/HostContractStages.cs`. Make
+   the stage set one table in `Puck.Machines.Post` over a core factory.
+   - `[low]` `HashDivergenceProbe.Run` is written twice
+     (`Puck.AdvancedGamingBrick.Post/HashDivergenceProbe.cs:185`,
+     `Puck.HumbleGamingBrick.Post/HashDivergenceProbe.cs:185`). The AGB loop
+     targets each machine's own `Cycles + ScanlineCycles`, which a perturbation's
+     snapshot and restore can desynchronize; the HGB loop's one absolute
+     cumulative target is correct and survives, in `HashDivergenceReport`.
+   - The runners parse arguments with `CommandLineArguments`
+     (`Puck.Machines.Post/CommandLineArguments.cs`) beside the
+     `System.CommandLine` every other entry point uses.
+8. Small merges (S each; one implementer lane can take them together).
+   - Fixed-point boxes (specialist, after the tick-cost lane lands):
+     `FixedSpatialAabb` (`Puck.World.Schema/WorldPlacementSpatial.cs:81`,
+     centre and extent, an `Int128` overlap test that cannot overflow),
+     `WorldColliderBox` (`Puck.World.Server/WorldColliderBox.cs`, minimum and
+     maximum), the tuple `FixedColliderBounds.WorldBounds` returns
+     (`Puck.Physics/FixedColliderBounds.cs`), `WorldTabletopFrame.Footprint`
+     (`Puck.World.Schema/WorldTabletopFrame.cs:30`) and `SdfBoundsCache.Entry`
+     (`Puck.SignedDistance/Queries/SdfBoundsCache.cs:94`). `Puck.Maths` has no
+     fixed box; add one with the `Int128` test.
+   - Hex colours, three grammars (specialist): `HexColor`
+     (`Puck.World.Authoring/Authoring/HexColor.cs:105`, `#RRGGBB` and
+     `#RRGGBBAA` only), `TextEnrichmentTags.TryParseHexColor`
+     (`Puck.Text/TextEnrichmentTags.cs:382`, 3, 4, 6 or 8 digits, `#`
+     optional), and `PuckParser.ParseHexColor`
+     (`Puck.Transpiler/Parsing/PuckParser.cs:1342`), which lexes `#RGB` and
+     lowers it verbatim for `HexColor` to refuse `[low]`. Decide one grammar.
+   - Probe shaders: `AccumulateScale`, `MaxAccumulateScale` and the group
+     accumulators are copied into each of `Puck.Shaders/Assets/Probes/average.hlsl`,
+     `faerie.hlsl`, `ir-blob.hlsl` and `ir-marker.hlsl`; one shared include.
+   - Fibonacci sphere directions copied exactly:
+     `Puck.Cli.Worlds/Mesh/MeshSceneCommand.cs:212` and
+     `Puck.SdfVm/SdfMeshIrradiance.cs:1592`.
+
+Duplicates the survey left to the lanes that own their areas:
+
+- Tick cost: two frozen perception images, each a population snapshot with
+  lazily built `FixedSpatialNeighborhood`s per cell width and a range, cone and
+  sight test (`Puck.World.Server/WorldRuleHost.DecisionNeighbors.cs:20-135`,
+  `Puck.World.Server/WorldPopulation.Flock.cs:18-30`, `154-280`); and an input
+  image hashed field by field twice (`Puck.World.Server/WorldInputOwner.Checkpoint.cs:110`,
+  `Puck.World.Server/WorldTick.RoutedInput.cs:64`).
+- Cold bake: `sdfGlyphSampleFieldMedian` and `sdfBoxDistance(float2)`
+  (`Puck.SdfVm/Assets/Shaders/Sdf/field/sdf-shapes.hlsli:6`, `413`) repeat
+  `puckMsdfReconstruct` and `puckBoxDistance2` from
+  `Puck.Shaders/Assets/Shaders/Shared/msdf.hlsli`; the merge moves the bake
+  closure, so it lands with that lane's closure change.
+- Simulation thread: none found; `HostPacing` is the one step-pacing contract.
+
 The `.puck` sources (about 42,000 lines outside the cartridges, about 2,500 of
 them verbatim repeats) under-use the language:
 
