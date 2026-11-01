@@ -2835,6 +2835,20 @@ step's completion criteria; C1 to C7 are in.
 Owner: an independent reviewer (Argon) · unconfirmed · Next: the researcher
 brief's priorities ([security review](../development/security-review.md)).
 
+- [high ×7, the disclosure-design lane is designing the structural fix] The
+  disclosure-2 review (Codex) found more doors after the policy check landed:
+  replica resume delivers the raw definition (`WorldSessionSink.cs:188`);
+  batch expectations read hidden cells, in two copies of one guard
+  (`WorldDocument.StateCommands.cs:135`, `WorldDocument.Compose.Batch.cs:82`);
+  transform admission decides by live membership (`StateCommands.cs:97-114`);
+  per-cell upsert receipts differ for hidden and absent (`Compose.Cells.cs:292`);
+  dealt children keep hidden-dependent slots and positions
+  (`WorldStateDisclosure.cs:481,621`); `world.budget` prints raw counts
+  (`WorldPopulationCommandModule.cs:225`); the delta cache's forget reopens a
+  timing oracle (`WorldStateChangeDisclosure.cs:85,97`); [medium] its vector
+  memory aliases the arena. Door-by-door fixes have not converged, so the
+  next step is one chokepoint (`disclosure.md`, being written), not more
+  doors. Full text kept by the lead. (from: disc2-astra)
 - [high, the disclosure-2 lane is fixing] The state-correctness review
   (Claude) found doors that decide "restricted for this reader" from live
   membership instead of declared policy, so a non-operator seat can count or
