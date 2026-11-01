@@ -2751,6 +2751,24 @@ brief's priorities ([security review](../development/security-review.md)).
   is documented to reproduce the live host's draws, so a search over an arena
   holding private (keyed) sites may compute the private outcomes. Confirm
   whether a search can run where the secret is not granted. (from: unbiased-review)
+- [medium] A seat writes a cell under its grants alone, before disclosure
+  (`WorldDocument.Compose.Cells.cs` `ReadsThroughDisclosure` covers addons,
+  peers and sessions only), so a seat holding Edit over a restricted row learns
+  which hidden keys exist: `world.state.cell.remove hand secret0` removes a
+  hidden cell where an absent key is refused "has no cell keyed", and a set over
+  a hidden key keeps its readers where a minted one is readable. Seats write
+  rows they cannot read on purpose (a sealed bid into an authority-only row), so
+  the fix decides what a seat's write to an unreadable or absent key answers,
+  identically for both. (from: disclosure-2)
+- [low] A Text comparison in a gate (`RuleEvaluation.TryReadText`,
+  `RuleEvaluation.cs:285`) reads a Text operand whose live row index or key
+  faults as "not answered" rather than raising `ExpressionFault.Domain`, so a
+  negated Text comparison over it can still open; numeric operands fault.
+  (from: disclosure-2)
+- [low] `world.timeline` withholds a state clock's presented phase from a caller
+  whose policy restricts the clock's row (`WorldTimelineCommandModule.cs`), but
+  only a windowed World carries the local presentation mirror it reads, so the
+  headless probe cannot show it. (from: disclosure-2)
 - [low] `worlds/hosting/granaries.extensions.json` grants its `console` client
   `mutate` over `section:state` to write six feed rows; scope it to those rows if
   the extension grant vocabulary allows. (from: the lead, landing granaries)
