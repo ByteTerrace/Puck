@@ -315,7 +315,8 @@ Duplicates the survey left to the lanes that own their areas:
   `puckMsdfReconstruct` and `puckBoxDistance2` from
   `Puck.Shaders/Assets/Shaders/Shared/msdf.hlsli`; the merge moves the bake
   closure, so it lands with that lane's closure change.
-- Simulation thread: none found; `HostPacing` is the one step-pacing contract.
+- Simulation thread: its host-loop duplicates are filed above; this survey
+  found none beyond them.
 
 The `.puck` sources (about 42,000 lines outside the cartridges, about 2,500 of
 them verbatim repeats) under-use the language:
