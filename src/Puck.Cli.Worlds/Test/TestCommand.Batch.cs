@@ -8,7 +8,7 @@ public static partial class TestCommand {
     private static string WorldDirectory(string runDirectory, int index) => Path.Combine(
         path1: runDirectory, path2: "worlds", path3: index.ToString(format: "D6", provider: CultureInfo.InvariantCulture));
     // A worker process stays alive across its legs and boots each scenario in a fresh native host.
-    private static bool RunBatch(IReadOnlyList<TestWorld> worlds, string artifact, string runDirectory, int chunk, int[] indices, bool reproduce, string? cacheDirectory) {
+    private static bool RunBatch(IReadOnlyList<TestWorld> worlds, string artifact, string runDirectory, int chunk, int[] indices, bool reproduce, string? cacheDirectory, TestLeg leg, bool record) {
         var legs = new List<object>();
 
         foreach (var index in indices) {
@@ -17,7 +17,7 @@ public static partial class TestCommand {
             if (!TryReadSchedule(world: world.Path, schedule: out var schedule, reason: out _)) {
                 continue; // The normal per-world report names this refusal.
             }
-            var legDirectory = Path.Combine(path1: WorldDirectory(index: index, runDirectory: runDirectory), path2: "run1");
+            var legDirectory = Path.Combine(path1: WorldDirectory(index: index, runDirectory: runDirectory), path2: leg.Name);
             // --keep retains evidence, never input state. In particular a crashed worker must not inherit an old
             // successful exit marker or export and turn its missing result into a pass.
             ConfinedDirectory.RemoveTree(path: legDirectory);
@@ -27,9 +27,11 @@ public static partial class TestCommand {
                 CacheDirectory = ((cacheDirectory is null) ? null : Path.GetFullPath(path: cacheDirectory)),
                 Directory = legDirectory,
                 ExitAfterSeconds = ((int)Math.Ceiling(a: LegCeiling(exportTick: schedule!.ExportTick, rateHz: schedule.RateHz).TotalSeconds)),
+                leg.Workers,
+                Record = record,
             });
         }
-        var batch = Path.Combine(path1: runDirectory, path2: $"batch-{chunk}-1.json");
+        var batch = Path.Combine(path1: runDirectory, path2: $"batch-{chunk}-{leg.Name}.json");
 
         File.WriteAllText(path: batch, contents: JsonSerializer.Serialize(value: legs));
         using var watchdog = new CancellationTokenSource(delay: StartupBudget);
