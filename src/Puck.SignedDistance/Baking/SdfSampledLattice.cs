@@ -1,4 +1,5 @@
 using Puck.Abstractions.Memory;
+using System.Buffers;
 using System.Numerics;
 using System.Runtime.InteropServices;
 
@@ -252,7 +253,7 @@ public readonly record struct SdfLatticeRegion(Vector3 Low, Vector3 High);
 /// from the GPU interpreter in floats, so its surface is presentation data that may differ between devices; nothing in it
 /// reaches simulation state.</para>
 /// </summary>
-public sealed class SdfSampledLattice : IDisposable {
+public sealed unsafe class SdfSampledLattice : IDisposable {
     // A refinement that would measure more fine samples than this is not taken: the lattice contours at its own spacing.
     /// <summary>The maximum measured fine samples of one lattice; also bounds its admission workspace.</summary>
     public const int MaxFineSamples = 4_000_000;
@@ -273,13 +274,16 @@ public sealed class SdfSampledLattice : IDisposable {
     private readonly int m_samplesX;
     private readonly int m_samplesY;
     private readonly int m_samplesZ;
-    private readonly ReadOnlyMemory<float> m_valueMemory;
+    // The caller's values and materials, pinned for the lattice's life, so the contour's per-corner reads index a pointer
+    // rather than asking a memory manager for its span at every element.
+    private readonly MemoryHandle m_valueHandle;
+    private readonly MemoryHandle m_materialHandle;
+    private readonly float* m_values;
+    private readonly int* m_materials;
+    private readonly int m_count;
 
-    private ReadOnlySpan<float> Values => m_valueMemory.Span;
-
-    private readonly ReadOnlyMemory<int> m_materialMemory;
-
-    private ReadOnlySpan<int> Materials => m_materialMemory.Span;
+    private ReadOnlySpan<float> Values => new(pointer: m_values, length: m_count);
+    private ReadOnlySpan<int> Materials => new(pointer: m_materials, length: m_count);
 
     private readonly OwnedBuffer<Vector3> m_gradients;
 
@@ -359,8 +363,11 @@ public sealed class SdfSampledLattice : IDisposable {
         m_samplesX = samplesX;
         m_samplesY = samplesY;
         m_samplesZ = samplesZ;
-        m_valueMemory = values;
-        m_materialMemory = materials;
+        m_count = count;
+        m_valueHandle = values.Pin();
+        m_materialHandle = materials.Pin();
+        m_values = ((float*)m_valueHandle.Pointer);
+        m_materials = ((int*)m_materialHandle.Pointer);
         m_gradients = new OwnedBuffer<Vector3>(allocator: allocator, observer: observer);
         m_closedValues = new OwnedBuffer<float>(allocator: allocator, observer: observer);
         m_signKnown = new OwnedBuffer<ulong>(allocator: allocator, observer: observer);
@@ -381,6 +388,7 @@ public sealed class SdfSampledLattice : IDisposable {
 
     /// <summary>Releases the lattice's owned workspaces after its contour and point borrows end.</summary>
     public void Dispose() {
+        m_valueHandle.Dispose(); m_materialHandle.Dispose();
         m_measured.Dispose(); m_thin.Dispose(); m_refined.Dispose(); m_fineKeys.Dispose();
         m_gradientKeys.Dispose(); m_crossingKeys.Dispose(); m_pendingCrossings.Dispose();
         m_gradients.Dispose();
@@ -952,6 +960,29 @@ public sealed class SdfSampledLattice : IDisposable {
             if (Keys.Capacity > limit) { Keys = []; } else { Keys.Clear(); }
             if (Slots.EnsureCapacity(capacity: 0) > limit) { Slots = []; } else { Slots.Clear(); }
         }
+        /// <summary>Releases every retained index, for a worker with no bake left to run.</summary>
+        public void Release() {
+            Keys = [];
+            Slots = [];
+        }
+        /// <summary>Gets the bytes the retained indexes hold: four a key, and a dictionary entry and bucket a slot.</summary>
+        public long RetainedBytes => ((((long)Keys.Capacity) * sizeof(int)) + (((long)Slots.EnsureCapacity(capacity: 0)) * ((4 * sizeof(int)) + sizeof(int))));
+    }
+    /// <summary>Returns the most fine samples <see cref="Refine"/> measures in a lattice: every cell split
+    /// <paramref name="factor"/> times along each axis, less its coarse corners, at most <see cref="MaxFineSamples"/>; zero
+    /// for a factor that refines nothing.</summary>
+    /// <param name="samplesX">The samples along X, at least two.</param>
+    /// <param name="samplesY">The samples along Y, at least two.</param>
+    /// <param name="samplesZ">The samples along Z, at least two.</param>
+    /// <param name="factor">The fine cells along each axis of a coarse cell the refinement asks for.</param>
+    /// <returns>The bound.</returns>
+    public static int FineSampleBound(int samplesX, int samplesY, int samplesZ, int factor) {
+        if (factor < 2) { return 0; }
+
+        var cells = ((((long)Math.Max(val1: 1, val2: (samplesX - 1))) * Math.Max(val1: 1, val2: (samplesY - 1))) * Math.Max(val1: 1, val2: (samplesZ - 1)));
+        var perCell = ((((long)factor + 1) * (factor + 1)) * (factor + 1)) - 8;
+
+        return ((int)Math.Min(val1: MaxFineSamples, val2: (cells * perCell)));
     }
 
     /// <summary>Returns, per sample of a lattice, whether it is one of a pair along an axis that a sheet or gap thinner
