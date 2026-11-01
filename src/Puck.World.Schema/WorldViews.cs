@@ -167,16 +167,21 @@ public sealed record WorldViewLayout(string Name, IReadOnlyList<WorldViewSlot> S
 /// any look input (a deflected look stick, a held orbit/steer) is free-look and the follow yields for as long as
 /// it lasts. Optional; absent is a still camera that goes only where look input sends it. Needs
 /// <see cref="WorldSeatYawReference.World"/> — a body-relative yaw already rides the body.</param>
-/// <param name="ClearanceMode">The author's tight-space behavior; players may override it.</param>
-/// <param name="CharacterFade">The full-size fade distances; absent uses the standard distances.</param>
-/// <param name="ClearanceMaxElevation">The cutaway boom's highest elevation above the seat's level plane, in radians.</param>
-/// <param name="AutoFirstPerson">The optional automatic pull-in policy; absent is off with standard hysteresis.</param>
+/// <param name="ClearanceMode">The author's tight-space behavior, <see cref="WorldCameraClearanceChoice.Fade"/> or
+/// <see cref="WorldCameraClearanceChoice.Cutaway"/>; players may override it.</param>
+/// <param name="ClearanceMaxElevation">The cutaway boom's highest elevation above the seat's level plane, in radians,
+/// within [0, π/2]. Fade never rises, so only cutaway reads it.</param>
+/// <param name="CharacterFade">The full-size fade distances; absent, fade never dissolves the body and holds no
+/// minimum boom.</param>
+/// <param name="AutoFirstPerson">The automatic pull-in policy; absent, automatic pull-in is unavailable whatever a
+/// player or session asks.</param>
 /// <param name="Boom">Optional authored distance limits and input step for the interactive orbit.</param>
 public sealed record WorldSeatViewControl(WorldSeatYawReference YawReference, float MinPitch, float MaxPitch,
+    WorldCameraClearanceChoice ClearanceMode, float ClearanceMaxElevation,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldSeatFollow? Follow = null,
-    WorldCameraClearanceChoice ClearanceMode = WorldCameraClearanceChoice.Cutaway,
-    WorldCameraCharacterFade? CharacterFade = null, float ClearanceMaxElevation = 1.1f,
-    WorldCameraAutoFirstPerson? AutoFirstPerson = null, WorldCameraBoom? Boom = null);
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldCameraCharacterFade? CharacterFade = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldCameraAutoFirstPerson? AutoFirstPerson = null,
+    WorldCameraBoom? Boom = null);
 /// <summary>Authored bounds for a seat's interactive orbit distance, in full-size metres.</summary>
 /// <param name="Minimum">The closest requested orbit distance.</param>
 /// <param name="Maximum">The farthest requested orbit distance.</param>
@@ -189,8 +194,8 @@ public sealed record WorldCameraBoom(float Minimum, float Maximum, float Step);
 /// <param name="EntrySeconds">Continuous constrained time before entry.</param>
 /// <param name="ExitDistance">Minimum open room for exit, greater than entry.</param>
 /// <param name="ExitSeconds">Continuous clear time before exit.</param>
-public sealed record WorldCameraAutoFirstPerson(bool Enabled = false, float EntryDistance = 0.85f,
-    float EntrySeconds = 0.2f, float ExitDistance = 1.35f, float ExitSeconds = 0.15f);
+public sealed record WorldCameraAutoFirstPerson(bool Enabled, float EntryDistance, float EntrySeconds, float ExitDistance,
+    float ExitSeconds);
 /// <summary>The follow camera's shape.</summary>
 /// <param name="Rate">The exponential rate (per second) the camera yaw closes on the heading — about 63% of the
 /// remaining angle per <c>1/rate</c> seconds; larger is a stiffer follow.</param>
@@ -270,6 +275,8 @@ public sealed record WorldViewDefaults(IReadOnlyList<WorldViewLayout>? Layouts =
             ]
         ),
         SeatControlRaw: new WorldSeatViewControl(
+            ClearanceMaxElevation: 0f,
+            ClearanceMode: WorldCameraClearanceChoice.Fade,
             MaxPitch: 0f,
             MinPitch: 0f,
             YawReference: WorldSeatYawReference.World

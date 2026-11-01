@@ -34,46 +34,6 @@
             "$ref": "./common.schema.json#/$defs/CameraBloom",
             "description": "The camera\u0027s optical scatter override; absent inherits the world.",
             "default": null
-          },
-          "anchorOp": {
-            "$ref": "./common.schema.json#/$defs/WorldCameraProgramOpAnchorNullable",
-            "description": "Gets the program\u0027s Anchor op, or null when absent (an absent anchor starts from Reference implicitly)."
-          },
-          "blendOp": {
-            "$ref": "./common.schema.json#/$defs/WorldCameraProgramOpBlendNullable",
-            "description": "Gets the program\u0027s Blend op, or null."
-          },
-          "clampPitchOp": {
-            "$ref": "./common.schema.json#/$defs/WorldCameraProgramOpClampPitchNullable",
-            "description": "Gets the program\u0027s ClampPitch op, or null."
-          },
-          "dynamicsOp": {
-            "$ref": "./common.schema.json#/$defs/WorldCameraProgramOpDynamicsNullable",
-            "description": "Gets the program\u0027s Dynamics op, or null."
-          },
-          "fovOp": {
-            "$ref": "./common.schema.json#/$defs/WorldCameraProgramOpFieldOfViewNullable",
-            "description": "Gets the program\u0027s FieldOfView op, or null."
-          },
-          "lookAtOp": {
-            "$ref": "./common.schema.json#/$defs/WorldCameraProgramOpLookAtNullable",
-            "description": "Gets the program\u0027s LookAt op, or null."
-          },
-          "offsetOp": {
-            "$ref": "./common.schema.json#/$defs/WorldCameraProgramOpOffsetNullable",
-            "description": "Gets the program\u0027s Offset op, or null."
-          },
-          "orbitOp": {
-            "$ref": "./common.schema.json#/$defs/WorldCameraProgramOpOrbitNullable",
-            "description": "Gets the program\u0027s Orbit op, or null."
-          },
-          "pathOp": {
-            "$ref": "./common.schema.json#/$defs/WorldCameraProgramOpPathNullable",
-            "description": "Gets the program\u0027s Path op, or null."
-          },
-          "selectOp": {
-            "$ref": "./common.schema.json#/$defs/WorldCameraProgramOpSelectProgramNullable",
-            "description": "Gets the program\u0027s SelectProgram op, or null."
           }
         },
         "required": [

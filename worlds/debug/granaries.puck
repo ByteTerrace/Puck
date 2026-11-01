@@ -1,4 +1,4 @@
-import "inputs"
+import "../standard/inputs"
 import "shapes"
 
 // The granary board: the deployment's storage accounts as pieces on a tabletop board, at the board game room's

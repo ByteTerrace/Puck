@@ -14,6 +14,7 @@ internal static class EditorPlacementFixtures {
         return HostRow.Build(
             definition: (document with {
                 CreationsRaw = [Crate],
+                EditorRaw = Editor,
                 PlacementsRaw = (document.PlacementsRaw! with {
                     Rows = [new WorldPlacement(
                         Id: "crate1",
@@ -29,4 +30,13 @@ internal static class EditorPlacementFixtures {
     }
 
     internal static WorldPrototype Crate { get; } = CreationFixtures.UnitSphere(id: "crate");
+    // The standard editor's values (worlds/standard/editor.puck), with no bar of its own.
+    internal static WorldEditorDefaults Editor { get; } = new(
+        Bar: WorldBindingBarAuthoring.Absent,
+        Camera: new WorldEditorCamera(FlyRate: 6f, MaxDistance: 14f, MaxPitch: 1.35f, MinDistance: 0.5f, MinPitch: 0.05f, OrbitRate: 2.4f, PanRate: 3f, ZoomRate: 1.2f),
+        Grid: new WorldEditorGrid(LineWidth: 1.5f, Mode: WorldEditorGridMode.Surface, Pitch: new Vector3(value: 0.5f), PlaneY: 0f, Visible: false),
+        ReadOnlyLabel: "Build (read-only)",
+        Snap: new WorldEditorSnap(AngleStepDegrees: 15f, Enabled: false, ObjectPatchRadius: 2.5f, Surface: true),
+        Toggle: new Puck.Commands.BindingPageEntryDefinition(Command: "player.build", Id: "editor.toggle", Sources: ["keyboard.f2", "gamepad.back"])
+    );
 }

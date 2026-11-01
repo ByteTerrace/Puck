@@ -67,13 +67,13 @@ public sealed class WorldEditorSeats {
         ArgumentNullException.ThrowIfNull(argument: document);
 
         var seat = At(slot: slot);
-        var grid = document.ResolvedGrid;
+        var grid = document.Grid;
 
         return (seat.HasGridOverride
             ? new WorldEditorGrid(
                 LineWidth: grid.LineWidth,
                 Mode: (seat.GridMode ?? grid.Mode),
-                Pitch: new DocumentVector3(value: (seat.GridPitch ?? grid.ResolvedPitch)),
+                Pitch: new DocumentVector3(value: (seat.GridPitch ?? grid.Pitch.Value)),
                 PlaneY: (seat.PlaneY ?? grid.PlaneY),
                 Visible: (seat.GridVisible ?? grid.Visible)
             )
@@ -87,7 +87,7 @@ public sealed class WorldEditorSeats {
         ArgumentNullException.ThrowIfNull(argument: document);
 
         var seat = At(slot: slot);
-        var snap = document.ResolvedSnap;
+        var snap = document.Snap;
 
         return (seat.HasSnapOverride
             ? new WorldEditorSnap(
@@ -251,22 +251,20 @@ public sealed class WorldEditorSeats {
         Moved();
     }
     /// <summary>Folds the primary seat's moved grid and snapping values into the document's section: the authored
-    /// section unchanged when the seat moved nothing, otherwise the authored section, or the defaults when absent,
-    /// with the seat's values in place.</summary>
+    /// section unchanged when the seat moved nothing or the document authors none, otherwise the authored section with
+    /// the seat's values in place.</summary>
     /// <param name="authored">The section the document authors, or <see langword="null"/> when it authors none.</param>
     /// <returns>The section to save.</returns>
     public WorldEditorDefaults? Fold(WorldEditorDefaults? authored) {
         var seat = m_seats[0];
 
-        if (!(seat.HasGridOverride || seat.HasSnapOverride)) {
+        if ((authored is null) || !(seat.HasGridOverride || seat.HasSnapOverride)) {
             return authored;
         }
 
-        var basis = (authored ?? WorldEditorDefaults.Default);
-
-        return (basis with {
-            Grid = (seat.HasGridOverride ? GridOf(document: basis, slot: 0) : basis.Grid),
-            Snap = (seat.HasSnapOverride ? SnapOf(document: basis, slot: 0) : basis.Snap),
+        return (authored with {
+            Grid = (seat.HasGridOverride ? GridOf(document: authored, slot: 0) : authored.Grid),
+            Snap = (seat.HasSnapOverride ? SnapOf(document: authored, slot: 0) : authored.Snap),
         });
     }
 

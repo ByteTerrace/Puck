@@ -355,10 +355,10 @@ Rigid creation copies share one local bake and palette. Each live copy owns one 
   while that state condition holds; `SyncSeat` recomposes the seat the tick a
   gated overlay's own condition flips (a per-overlay signature compared
   against the routed definition, never a per-tick poll).
-- `WorldEditorBindings.cs`—the engine's build layer (the build toggle on
-  every resting page, the `build` group and page, its context row) and the
-  build bar a building seat shows when its own bar has no bank for the build
-  page. `WorldEditorSeats.cs` holds each seat's grid and snapping over the
+- `WorldEditorBindings.cs`—the build layer: the `editor` section's authored
+  toggle composed beneath every resting page (the build page, its context row
+  and the build bar are the world's own data, the standard's `editor.puck`).
+  `WorldEditorSeats.cs` holds each seat's grid and snapping over the
   document's `editor` section, its captured reference and current placement,
   and folds seat 1's moved values back for `world.save`;
   `WorldEditorGeometry.cs` turns them into the `GridOverlayState` a building

@@ -98,6 +98,15 @@ internal sealed class WorldBindingBarControl {
 
         return false;
     }
+    private static bool SharesBank(WorldBindingBarAuthoring authoring, WorldBindingBarAuthoring other) {
+        foreach (var bank in other.Banks) {
+            if (HasBank(authoring: authoring, pageId: bank.PageId)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     /// <summary>Gets one seat's resolved policy and current visibility.</summary>
     /// <param name="slot">The 0-based local seat.</param>
@@ -122,13 +131,14 @@ internal sealed class WorldBindingBarControl {
             world: routed
         );
 
-        // A building seat shows what every build control does: its own bar when that has a bank for the build page,
-        // else the engine's build bar.
+        // A building seat shows what every build control does: its own bar when that places a bank for a page the
+        // world's editor bar shows, else the editor bar.
         if (
             m_bindings.IsBuilding(slot: slot) &&
-            !HasBank(authoring: authoring, pageId: WorldEditorBindings.BuildPage)
+            (routed.EditorRaw?.Bar is { } editorBar) &&
+            !SharesBank(authoring: authoring, other: editorBar)
         ) {
-            authoring = WorldEditorBindings.Bar;
+            authoring = editorBar;
             source = "editor";
         }
         var liveOverride = m_visibility.Override(slot: slot);

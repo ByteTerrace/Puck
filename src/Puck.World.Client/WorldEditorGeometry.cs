@@ -79,7 +79,7 @@ public static class WorldEditorGeometry {
             return GridOverlayState.Hidden;
         }
 
-        var pitch = grid.ResolvedPitch;
+        var pitch = grid.Pitch.Value;
         var state = (GridOverlayState.Hidden with {
             Flags = ((grid.Mode == WorldEditorGridMode.Surface)
                 ? GridOverlayFlags.World | GridOverlayFlags.Surface

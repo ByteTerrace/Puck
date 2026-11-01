@@ -26,6 +26,8 @@ public sealed class SeatFollowLawTests {
             YawReference: yawReference,
             MinPitch: -0.5f,
             MaxPitch: 1f,
+            ClearanceMode: WorldCameraClearanceChoice.Cutaway,
+            ClearanceMaxElevation: 1.1f,
             Follow: new WorldSeatFollow(Rate: rate)
         ));
 
