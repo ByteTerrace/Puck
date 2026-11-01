@@ -317,6 +317,7 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_MESH_CARRY_SCALE_WORD", value: SdfMeshRecord.CarryScaleWord);
         declarations.Count(name: "SDF_MESH_CLIP_PLANE_WORD", value: SdfMeshRecord.ClipPlaneWord);
         declarations.Count(name: "SDF_MESH_LEVEL_TRIANGLE_WORD", value: SdfMeshRecord.LevelTriangleWord);
+        declarations.Count(name: "SDF_MESH_SELECTION_WORD", value: SdfMeshRecord.SelectionWord);
         declarations.Count(name: "SDF_MESH_VERTEX_WORDS", value: SdfMeshRecord.VertexWords);
         declarations.Count(name: "SDF_MESH_MEMBER_WORDS", value: SdfMeshRecord.MemberWords);
         declarations.Bits(name: "SDF_MESH_NORMALS_FLAG", value: SdfMeshRecord.NormalsFlag);

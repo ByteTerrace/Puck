@@ -62,6 +62,8 @@ public sealed unsafe class VulkanDeviceCommands {
     public readonly delegate* unmanaged[Cdecl]<nint, nint, ulong, void> CmdDispatchIndirect;
     /// <summary>The <c>vkCmdDraw</c> entry point.</summary>
     public readonly delegate* unmanaged[Cdecl]<nint, uint, uint, uint, uint, void> CmdDraw;
+    /// <summary>The <c>vkCmdDrawIndirect</c> entry point, used by the fixed-record fallback.</summary>
+    public readonly delegate* unmanaged[Cdecl]<nint, nint, ulong, uint, uint, void> CmdDrawIndirect;
     /// <summary>The <c>vkCmdDrawIndexed</c> entry point.</summary>
     public readonly delegate* unmanaged[Cdecl]<nint, uint, uint, uint, int, uint, void> CmdDrawIndexed;
     /// <summary>The device extension counted indirect draws need, <c>VK_KHR_draw_indirect_count</c>.</summary>
@@ -321,6 +323,10 @@ public sealed unsafe class VulkanDeviceCommands {
         CmdDraw = ((delegate* unmanaged[Cdecl]<nint, uint, uint, uint, uint, void>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
             functionName: "vkCmdDraw"u8
+        ));
+        CmdDrawIndirect = ((delegate* unmanaged[Cdecl]<nint, nint, ulong, uint, uint, void>)procedures.ResolveDeviceProc(
+            deviceHandle: deviceHandle,
+            functionName: "vkCmdDrawIndirect"u8
         ));
         CmdDrawIndexed = ((delegate* unmanaged[Cdecl]<nint, uint, uint, uint, int, uint, void>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,

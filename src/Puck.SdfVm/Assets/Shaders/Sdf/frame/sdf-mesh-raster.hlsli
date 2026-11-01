@@ -13,16 +13,27 @@ struct MeshRasterVertex {
     nointerpolation uint draw : MESHDRAW;
 };
 
-// The draw a vertex belongs to: the pushed index's draw plus the instance index. A draw the host records pushes its
-// draw and starts its one instance at zero; a counted indirect draw's record carries the draw as its identity, which
-// Direct3D 12 writes into the pushed index and Vulkan starts the instance at, the host having pushed zero
-// (GpuDrawIndirectCommand), so either way the sum is the draw.
-uint sdfMeshRasterDraw(uint instanceId) {
-    return ((pushedIndex.index + instanceId) & SdfMeshDrawMask);
+// Direct3D 12 ExecuteIndirect pushes the record's identity. Vulkan pushes a word base and reads the same identity
+// through DrawIndex, including when native counting is unavailable and one initialized slot is issued per call.
+uint sdfMeshRasterIdentity(uint drawId) {
+#ifdef __spirv__
+    return sdfMeshIndirectCommands[pushedIndex.index + 5u * drawId];
+#else
+    return pushedIndex.index;
+#endif
 }
 // The level of detail the draw draws, carried from bit SDF_MESH_LEVEL_SHIFT up the same way.
-uint sdfMeshRasterLevel(uint instanceId) {
-    return ((pushedIndex.index + instanceId) >> SDF_MESH_LEVEL_SHIFT);
+uint sdfMeshRasterDraw(uint drawId) {
+    return sdfMeshRasterIdentity(drawId) & SdfMeshDrawMask;
 }
+uint sdfMeshRasterLevel(uint drawId) {
+    return sdfMeshRasterIdentity(drawId) >> SDF_MESH_LEVEL_SHIFT;
+}
+
+#ifdef __spirv__
+#define SDF_MESH_DRAW_INPUT , [[vk::builtin("DrawIndex")]] uint drawId : DRAWID
+#else
+#define SDF_MESH_DRAW_INPUT , uint drawId : SV_InstanceID
+#endif
 
 #endif

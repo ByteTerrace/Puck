@@ -312,6 +312,13 @@ public readonly record struct SdfMeshDraw(SdfMesh Mesh, Matrix4x4 ObjectToWorld,
 /// </para>
 /// </summary>
 public static class SdfMeshRegion {
+    // Reference identity, as the former per-pass level history used, independent of arena relocation. Weak keys do not
+    // extend a geometry's lifetime; assignment order is presentation-only and never enters simulation or stored meshes.
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<SdfMesh, SelectionIdentity> SelectionIdentities = new();
+    private static int SelectionSequence;
+    private sealed class SelectionIdentity {
+        public readonly uint Value = unchecked((uint)Interlocked.Increment(ref SelectionSequence));
+    }
     /// <summary>The bytes of one draw's record (<see cref="SdfMeshRecord.DrawWords"/> words).</summary>
     public const int DrawBytes = (SdfMeshRecord.DrawWords * sizeof(uint));
     /// <summary>The most draws one region holds: the mesh pass pushes a draw's index in the bits below
@@ -576,6 +583,27 @@ public static class SdfMeshRegion {
         record[(SdfMeshRecord.ClipPlaneWord + 3)] = BitConverter.SingleToUInt32Bits(value: clip.W);
         record[SdfMeshRecord.LevelTriangleWord] = ((uint)LevelOf(level: 1, mesh: mesh).FirstTriangle);
         record[(SdfMeshRecord.LevelTriangleWord + 1)] = ((uint)LevelOf(level: 2, mesh: mesh).FirstTriangle);
+        var boxed = SdfMeshBox.TryOf(draw: in draw, box: out var box);
+        var selection = record.Slice(start: SdfMeshRecord.SelectionWord, length: 24);
+        selection.Clear();
+        WriteSelectionVector(words: selection, value: box.Center);
+        selection[3] = (boxed ? 0u : 1u) | (draw.Glass ? 2u : 0u);
+        WriteSelectionVector(words: selection[4..], value: box.HalfX);
+        selection[7] = BitConverter.SingleToUInt32Bits(box.Stretch);
+        WriteSelectionVector(words: selection[8..], value: box.HalfY);
+        selection[11] = SelectionIdentities.GetValue(key: mesh, createValueCallback: static _ => new SelectionIdentity()).Value;
+        WriteSelectionVector(words: selection[12..], value: box.HalfZ);
+        selection[15] = (uint)mesh.Levels.Count;
+        selection[16] = (uint)(3 * LevelOf(mesh: mesh, level: 0).TriangleCount);
+        selection[17] = (uint)(3 * LevelOf(mesh: mesh, level: 1).TriangleCount);
+        selection[18] = (uint)(3 * LevelOf(mesh: mesh, level: 2).TriangleCount);
+        selection[19] = BitConverter.SingleToUInt32Bits(mesh.Levels.Count > 0 ? mesh.Levels[0].Error : 0f);
+        selection[20] = BitConverter.SingleToUInt32Bits(mesh.Levels.Count > 1 ? mesh.Levels[1].Error : 0f);
+    }
+    private static void WriteSelectionVector(Span<uint> words, Vector3 value) {
+        words[0] = BitConverter.SingleToUInt32Bits(value.X);
+        words[1] = BitConverter.SingleToUInt32Bits(value.Y);
+        words[2] = BitConverter.SingleToUInt32Bits(value.Z);
     }
     /// <summary>Writes only the meshes a list of draws names, every word past the draw records, as <see cref="Write"/>
     /// writes them.</summary>

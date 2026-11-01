@@ -14,9 +14,8 @@ namespace Puck.Vulkan.Tests;
 
 /// <summary>Holds <see cref="VulkanGpuRecorder.DrawIndirectCount"/> to the counted indirect draw it records, with no
 /// driver: a command table whose <c>vkCmdDrawIndirectCountKHR</c> records what it is handed. The recorder reports the
-/// capability only when the device enabled <c>VK_KHR_draw_indirect_count</c>, starts each record at its vertex count so
-/// the identity rides the record's first instance, strides by one <see cref="GpuDrawIndirectCommand"/>, and a device
-/// created without the extension refuses the call by name.</summary>
+/// capability only when the device enabled <c>VK_KHR_draw_indirect_count</c>. A device without it issues every initialized
+/// record separately from the same argument buffer, with its word offset pushed for DrawIndex identity lookup.</summary>
 public sealed unsafe class VulkanIndirectCountLawTests {
     private const nint ArgumentBuffer = 0x0A00;
     private const nint CommandBuffer = 0x0C00;
@@ -25,6 +24,8 @@ public sealed unsafe class VulkanIndirectCountLawTests {
 
     [ThreadStatic]
     private static List<(nint CommandBuffer, nint Buffer, ulong Offset, nint CountBuffer, ulong CountOffset, uint MaxDrawCount, uint Stride)>? Draws;
+    [ThreadStatic]
+    private static List<uint>? Bases;
 
     [Fact]
     public void ACountedIndirectDrawStartsAtTheRecordsVertexCountAndStridesByOneCommand() {
@@ -33,6 +34,7 @@ public sealed unsafe class VulkanIndirectCountLawTests {
         Assert.True(condition: recorder.CanDrawIndirectCount);
 
         Draws = [];
+        Bases = [];
 
         try {
             recorder.DrawIndirectCount(
@@ -48,27 +50,36 @@ public sealed unsafe class VulkanIndirectCountLawTests {
                 actual: Draws,
                 expected: [(CommandBuffer, ArgumentBuffer, (64UL + (GpuDrawIndirectCommand.VertexCountWord * sizeof(uint))), CountBuffer, 4UL, 9U, ((uint)GpuDrawIndirectCommand.StrideBytes))]
             );
+            Assert.Equal(expected: [16u], actual: Bases);
         } finally {
             Draws = null;
+            Bases = null;
         }
     }
     [Fact]
-    public void ADeviceCreatedWithoutTheExtensionNeitherReportsNorRecordsIt() {
+    public void ADeviceWithoutNativeCountingDrawsInitializedSlotsWithTheirOwnBases() {
         var recorder = Recorder(drawIndirectCountEnabled: false);
 
         Assert.False(condition: recorder.CanDrawIndirectCount);
-        Assert.Contains(
-            expectedSubstring: VulkanDeviceCommands.DrawIndirectCountExtension,
-            actualString: Assert.Throws<NotSupportedException>(testCode: () => recorder.DrawIndirectCount(
+        Draws = [];
+        Bases = [];
+        try {
+            recorder.DrawIndirectCount(
                 argumentBufferHandle: ArgumentBuffer,
-                argumentBufferOffset: 0UL,
+                argumentBufferOffset: 40UL,
                 commandBufferHandle: CommandBuffer,
                 countBufferHandle: CountBuffer,
                 countBufferOffset: 0UL,
-                maxDrawCount: 1U,
+                maxDrawCount: 3U,
                 pipelineLayoutHandle: 0x7000
-            )).Message
-        );
+            );
+            Assert.Equal(expected: [10u, 15u, 20u], actual: Bases);
+            Assert.Equal(expected: [44UL, 64UL, 84UL], actual: Draws.Select(static draw => draw.Offset));
+            Assert.All(collection: Draws, action: static draw => Assert.Equal(expected: 1u, actual: draw.MaxDrawCount));
+        } finally {
+            Draws = null;
+            Bases = null;
+        }
     }
 
     private static VulkanGpuRecorder Recorder(bool drawIndirectCountEnabled) {
@@ -100,11 +111,19 @@ public sealed unsafe class VulkanIndirectCountLawTests {
     private static nint Resolve(nint handle, byte* name) =>
         Encoding.UTF8.GetString(bytes: MemoryMarshal.CreateReadOnlySpanFromNullTerminated(value: name)) switch {
             "vkCmdDrawIndirectCountKHR" => ((nint)((delegate* unmanaged[Cdecl]<nint, nint, ulong, nint, ulong, uint, uint, void>)&DrawIndirectCount)),
+            "vkCmdDrawIndirect" => ((nint)((delegate* unmanaged[Cdecl]<nint, nint, ulong, uint, uint, void>)&DrawIndirect)),
+            "vkCmdPushConstants" => ((nint)((delegate* unmanaged[Cdecl]<nint, nint, uint, uint, uint, void*, void>)&Push)),
             _ => ((nint)((delegate* unmanaged[Cdecl]<nint, nint, nint, nint, nint>)&Trap)),
         };
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     private static void DrawIndirectCount(nint commandBuffer, nint buffer, ulong offset, nint countBuffer, ulong countOffset, uint maxDrawCount, uint stride) =>
         Draws!.Add(item: (commandBuffer, buffer, offset, countBuffer, countOffset, maxDrawCount, stride));
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    private static void DrawIndirect(nint commandBuffer, nint buffer, ulong offset, uint count, uint stride) =>
+        Draws!.Add((commandBuffer, buffer, offset, 0, 0UL, count, stride));
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    private static void Push(nint commandBuffer, nint layout, uint stages, uint offset, uint bytes, void* data) =>
+        Bases!.Add(*(uint*)data);
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     private static nint Trap(nint first, nint second, nint third, nint fourth) => 0;
 

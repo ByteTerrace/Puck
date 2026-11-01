@@ -13,7 +13,10 @@ namespace Puck.SdfVm;
 /// </summary>
 public static class SdfMeshRecord {
     /// <summary>The words of one draw's record.</summary>
-    public const int DrawWords = 47;
+    public const int DrawWords = 71;
+    /// <summary>The first of six four-word rows used by GPU draw selection: center and flags; half X and stretch;
+    /// half Y and mesh identity; half Z and level count; three vertex counts and first error; second error and padding.</summary>
+    public const int SelectionWord = 47;
     /// <summary>The first of two words: the first triangle of the mesh's first and second coarser levels of detail among
     /// its levelled triangles (<c>SdfMesh.Levels</c>; a level past the mesh's coarsest names the coarsest). A draw of a
     /// level (<see cref="SdfKernelInterfaces.MeshLevelShift"/>) draws its triangles from there, its vertex id counting

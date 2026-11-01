@@ -193,6 +193,13 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
             throw VulkanResultExtensions.Unavailable(reason: "The Vulkan device does not report shaderDemoteToHelperInvocation, which the view-local character fade needs to discard fragments.");
         }
         featureStructureTypes.Add(item: StructureTypePhysicalDeviceShaderDemoteToHelperInvocationFeatures);
+        // Core in Vulkan 1.1; DrawIndex lets every indirect record carry its own identity without requiring the optional
+        // drawIndirectFirstInstance base feature. All supported devices expose shaderDrawParameters.
+        const uint ShaderDrawParameters = 1000063000u;
+        if (!m_physicalDeviceApi.IsExtensionFeatureSupported(instance: instance, physicalDeviceHandle: physicalDeviceHandle, structureType: ShaderDrawParameters)) {
+            throw VulkanResultExtensions.Unavailable(reason: "The Vulkan device does not report shaderDrawParameters, which GPU mesh selection needs to read indirect draw identities.");
+        }
+        featureStructureTypes.Add(item: ShaderDrawParameters);
         var drawIndirectCount = (SupportsIndirectDrawFeatures(support: support) && m_physicalDeviceApi.HasDeviceExtension(
             extensionName: VulkanDeviceCommands.DrawIndirectCountExtension, instance: instance, physicalDeviceHandle: physicalDeviceHandle));
 

@@ -276,19 +276,25 @@ public sealed class VulkanGpuRecorder(IVulkanDeviceContext deviceContext, IVulka
     /// <inheritdoc/>
     public unsafe bool CanDrawIndirectCount => (Device.CmdDrawIndirectCountKhr is not null);
     /// <inheritdoc/>
-    /// <remarks>Vulkan reads each record from its vertex count on (<see cref="GpuDrawIndirectCommand.VertexCountWord"/>):
-    /// the identity reaches the vertex stage through the record's first instance.</remarks>
-    public void DrawIndirectCount(nint commandBufferHandle, nint pipelineLayoutHandle, nint argumentBufferHandle, ulong argumentBufferOffset, nint countBufferHandle, ulong countBufferOffset, uint maxDrawCount) =>
-        recordingApi.DrawIndirectCount(
-            bufferHandle: argumentBufferHandle,
-            commandBufferHandle: commandBufferHandle,
-            countBufferHandle: countBufferHandle,
-            countBufferOffset: countBufferOffset,
-            device: Device,
-            maxDrawCount: maxDrawCount,
-            offset: (argumentBufferOffset + (GpuDrawIndirectCommand.VertexCountWord * sizeof(uint))),
-            stride: GpuDrawIndirectCommand.StrideBytes
-        );
+    /// <remarks>Vulkan reads each record from its vertex count on (<see cref="GpuDrawIndirectCommand.VertexCountWord"/>).
+    /// Vertex pulling reads its identity from the same buffer through the pushed record base plus DrawIndex.</remarks>
+    public void DrawIndirectCount(nint commandBufferHandle, nint pipelineLayoutHandle, nint argumentBufferHandle, ulong argumentBufferOffset, nint countBufferHandle, ulong countBufferOffset, uint maxDrawCount) {
+        // DrawIndex starts at zero for each native call. The pushed base names the first argument record, so vertex
+        // pulling reads that record's identity without drawIndirectFirstInstance, including on the fallback.
+        Span<byte> pushed = stackalloc byte[sizeof(uint)];
+        var calls = CanDrawIndirectCount ? Math.Min(maxDrawCount, 1u) : maxDrawCount;
+        for (var index = 0u; index < calls; index++) {
+            var offset = argumentBufferOffset + ((ulong)index * GpuDrawIndirectCommand.StrideBytes);
+            System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(pushed, (uint)(offset / sizeof(uint)));
+            PushConstants(commandBufferHandle: commandBufferHandle, bindPoint: GpuBindPoint.Graphics,
+                pipelineLayoutHandle: pipelineLayoutHandle, stageFlags: GpuShaderStage.Vertex | GpuShaderStage.Fragment, offset: 0, data: pushed);
+            recordingApi.DrawIndirectCount(
+                bufferHandle: argumentBufferHandle, commandBufferHandle: commandBufferHandle,
+                countBufferHandle: countBufferHandle, countBufferOffset: countBufferOffset, device: Device,
+                maxDrawCount: CanDrawIndirectCount ? maxDrawCount : 1u,
+                offset: offset + (GpuDrawIndirectCommand.VertexCountWord * sizeof(uint)), stride: GpuDrawIndirectCommand.StrideBytes);
+        }
+    }
     /// <inheritdoc/>
     public void DispatchIndirect(nint commandBufferHandle, nint argumentBufferHandle, ulong argumentBufferOffset) =>
         recordingApi.DispatchIndirect(
