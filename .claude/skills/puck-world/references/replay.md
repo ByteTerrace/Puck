@@ -645,7 +645,8 @@ recorded world authored), hash.
   divergent tick (`differing components: RuleLatch`): a recording keeps one
   per-component read per tick beside its trace
   (`WorldStateHashComposition.AuthoritativeComponents`, the tape's
-  `RecordedComponentHashes`, 16 digests per tick), the re-drive reads the
+  `RecordedComponentHashes`, one digest per authoritative component per tick,
+  the same digests the authoritative hash folds), the re-drive reads the
   shadow the same way (`WorldReplayVerdict.DivergentComponents`), and a live
   drive's divergence line names them too. A history branch's draft tape
   records none, and a fork of a tape without them continues without them.

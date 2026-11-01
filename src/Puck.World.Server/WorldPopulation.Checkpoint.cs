@@ -28,7 +28,7 @@ public sealed partial class WorldPopulation {
     /// <param name="bodies">Selected slots, or null for every active slot.</param>
     /// <param name="recompute">Whether every slot encodes afresh; otherwise a resting slot reuses the digest it had
     /// when it came to rest.</param>
-    /// <remarks>A slot's cached digest stands while its body stays at rest (asleep or in a parked rigid island) with
+    /// <remarks>A slot's cached digest stands while its body, carrying no identity, stays at rest (asleep or in a parked rigid island) with
     /// an unmoved rest epoch, generation, admission revision (<see cref="Revision"/>), contact-field version and
     /// action-state lane values. A body changes its continuation while resting only through one of those, so a write
     /// that does not is a missed signal: <c>WorldStateHashComposition.DescribeStaleDigest</c> finds one by comparing
@@ -53,25 +53,27 @@ public sealed partial class WorldPopulation {
             return;
         }
 
-        hash.Add(value: ((uint)Capacity));
-        for (var first = 0; (first < Capacity); first += HashSegmentSlots) {
-            var segment = Fnv1aHash.Create();
-            var end = Math.Min(val1: (first + HashSegmentSlots), val2: Capacity);
+        var digests = ((m_foldDigests.Length == Capacity) ? m_foldDigests : (m_foldDigests = new ulong[Capacity]));
+        var present = ((m_foldPresent.Length == Capacity) ? m_foldPresent : (m_foldPresent = new bool[Capacity]));
 
-            for (var index = first; (index < end); index++) {
-                if (m_entries[index] is { Active: true, Body: { } body } entry) {
-                    segment.Add(value: ((byte)1));
-                    segment.Add(value: SlotDigest(body: body, entry: entry, index: index, recompute: recompute));
-                } else {
-                    segment.Add(value: ((byte)0));
-                }
-            }
-            hash.Add(value: segment.Value);
+        for (var index = 0; (index < Capacity); index++) {
+            var entry = m_entries[index];
+
+            present[index] = (entry is { Active: true, Body: not null });
+            digests[index] = ((entry is { Active: true, Body: { } body })
+                ? SlotDigest(body: body, entry: entry, index: index, recompute: recompute)
+                : 0UL);
         }
+        WorldAuthorityCheckpointCodec.FoldContinuationSegments(digests: digests, hash: ref hash, present: present);
     }
 
+    // The fold's per-slot scratch, reused from one fold to the next.
+    private ulong[] m_foldDigests = [];
+    private bool[] m_foldPresent = [];
+
     // The slot digest cache: per slot, the digest, the body it was taken from and what keys it beside the body's rest
-    // epoch. A change of admission revision or contact-field version drops every slot's.
+    // epoch. A change of admission revision or contact-field version drops every slot's. A body with an identity is
+    // never cached: a fact or record written on the identity moves its continuation without touching the body.
     private ulong[] m_slotDigests = [];
     private WorldBody?[] m_slotDigestBodies = [];
     private ulong[] m_slotDigestRestEpochs = [];
@@ -96,7 +98,7 @@ public sealed partial class WorldPopulation {
         m_slotDigestContactField = contactField;
     }
     private ulong SlotDigest(int index, Entry entry, WorldBody body, bool recompute) {
-        var resting = body.AtRest;
+        var resting = (body.AtRest && (body.Profile is null));
 
         if (
             !recompute &&
@@ -109,22 +111,18 @@ public sealed partial class WorldPopulation {
             return m_slotDigests[index];
         }
 
-        var writer = (m_continuationWriter ??= new WireWriter());
-
-        writer.Reset();
-        WorldAuthorityCheckpointCodec.WriteContinuationEntry(
+        var digest = WorldAuthorityCheckpointCodec.ContinuationDigest(
             entry: EntryCheckpoint(
                 alias: true,
                 body: body,
                 entry: entry,
                 index: index
             ),
-            writer: writer
+            writer: (m_continuationWriter ??= new WireWriter())
         );
-        if (!recompute) { ContinuationFolds++; }
-        var digest = Fnv1aHash.Compute(values: writer.WrittenSpan);
 
         if (!recompute) {
+            ContinuationFolds++;
             m_slotDigestBodies[index] = (resting ? body : null);
             if (resting) {
                 m_slotDigests[index] = digest;

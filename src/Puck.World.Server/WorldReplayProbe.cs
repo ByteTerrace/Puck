@@ -73,6 +73,12 @@ public sealed class WorldReplayProbe : IDisposable {
                 right: WorldStateHashComposition.AuthoritativeComponents(server: m_server, tick: (m_server.NextInputTick - 1)));
 
             if (startDifference.Count != 0) { throw new InvalidOperationException(message: $"restored start differs: {string.Join(separator: ", ", values: startDifference)}"); }
+            var restoredTick = (m_server.NextInputTick - 1);
+
+            if (WorldStateHashComposition.DescribeStaleDigest(hash: WorldStateHashComposition.HashAuthoritative(server: m_server, tick: restoredTick),
+                server: m_server, tick: restoredTick) is { Length: > 0 } restoredStale) {
+                throw new InvalidOperationException(message: $"restored start: {restoredStale}");
+            }
             var outcomes = new Queue<bool>();
             var step = FixedTickConversion.PerRate(ratePerSecond: ((uint)m_server.Configuration.SimulationRateHz));
 

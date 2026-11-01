@@ -410,10 +410,49 @@ its first offset; partitions then write their rows in index order from that
 offset. The delivered sequence is byte-identical to today's at any count.
 
 Serial phases stay serial: the kit bodies and seats, rigid pair contacts,
-`EvaluateWorldRules` whole (below), the scoped replay hash
-(`WorldScopedReplayRuntime.cs:68`; the [test runner](open-items.md#test-runner-and-replay)
-packet's incremental hash designs its digest segments over these same
-partitions), events, addons, machines and the shell.
+`EvaluateWorldRules` whole (below), the authority hash, events, addons,
+machines and the shell.
+
+### The incremental state hash
+
+The per-tick authority hash a recording, `--reproduce` and `--workers` take
+(`WorldStateHashComposition.HashAuthoritative`) is a combination of digests
+whose segments are this section's partitions, so a later step can fold them in
+parallel without changing a value:
+
+- **Components.** Each component of `Authoritative` folds into its own fresh
+  hash and the scope folds those digests in order; `AuthoritativeComponents`
+  returns exactly the digests the scope combines.
+- **Arena.** `StateArena.ComputeHash` folds one digest per segment of
+  `HashSegmentRows` (32) catalog rows, each over its rows' `RowDigest`, then
+  the positions no row owns (the lane roster), the key ledger and the undo
+  history. A row digest is cached by `RowVersion`, which every committed write
+  that changes a row's bytes moves (number, text, vector, visibility and
+  observation columns through one door each; growth, snapshot and scope
+  restore, undo and adoption move it or replace the layout, which drops the
+  cache). Inside an open scope the arena folds afresh. The scoped replay
+  runtime folds its rows through the same `RowDigest`, so there is one cache.
+- **Body continuations.** `WorldPopulation.AppendContinuationHash` folds one
+  digest per segment of `HashSegmentSlots` (32) entity slots, the E1 body
+  partition, which divides E4's 256-row partition evenly. A slot's digest is
+  cached only while its body rests (asleep, or parked in a rigid island) and
+  stands while the body's rest epoch (moved by every wake, park, sleep, pose,
+  restore and transfer), its generation, the population's admission revision,
+  the contact-field version and the body's action-state lane values hold. A
+  moving body encodes every tick, as before; the debug world's 361 Go stones,
+  64 discs and 52 cards rest most of the time.
+- **The recompute check.** A write that changes state without moving the
+  version its digest is keyed by would hide a divergence, so
+  `StateArena.RecomputeHash`, `AppendContinuationHash(recompute: true)` and
+  `WorldStateHashComposition.RecomputeAuthoritative` give the same value with
+  nothing cached, and `DescribeStaleDigest` names the stale component.
+  `puck test --reproduce` checks every replayed tick and the first count of
+  `--workers` every recorded tick; a mismatch fails the leg by name. Plain
+  `--record` legs and later `--workers` counts take only the incremental hash.
+
+A headless host also stops delivering snapshots to its screen-session mirrors
+(`WorldSessionMirror(unread: true)`), which only a presentation reads; the
+destination still runs and discloses.
 
 ### Rule evaluation stays serial
 
