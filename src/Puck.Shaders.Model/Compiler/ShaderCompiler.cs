@@ -493,7 +493,9 @@ public sealed partial class ShaderCompiler {
         } finally {
             try {
                 ConfinedDirectory.RemoveTree(path: buildRoot);
-            } catch (IOException) { }
+            } catch (Exception error) when ((error is IOException or UnauthorizedAccessException or PlatformNotSupportedException)) {
+                // Scratch cleanup is optional: a directory that stays, or a host without confined removal, never replaces the build's outcome or failure.
+            }
         }
     }
     // Collects one stage's closure and the layout its snapshot gives it: every file by its path below the deepest

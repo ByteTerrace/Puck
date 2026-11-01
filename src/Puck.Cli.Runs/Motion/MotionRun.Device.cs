@@ -27,7 +27,7 @@ public static class MotionRun {
         } finally {
             try {
                 ConfinedDirectory.RemoveTree(path: request.StateDirectory);
-            } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+            } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or PlatformNotSupportedException)) {
                 progress.WriteLine(value: $"motion: the World state directory {request.StateDirectory} was not removed: {exception.Message}");
             }
         }

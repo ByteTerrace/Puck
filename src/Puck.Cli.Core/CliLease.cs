@@ -320,7 +320,7 @@ public sealed class CliLease : IDisposable {
                 Serve(lane: lane, rotation: (directory + ".rotation"));
                 return new CliLease(directory: directory, gate: gate);
             } catch {
-                try { ConfinedDirectory.RemoveTree(path: directory); } catch (Exception error) when ((error is IOException or UnauthorizedAccessException)) { }
+                try { ConfinedDirectory.RemoveTree(path: directory); } catch (Exception error) when ((error is IOException or UnauthorizedAccessException or PlatformNotSupportedException)) { }
                 throw;
             }
         } catch {
@@ -345,6 +345,6 @@ public sealed class CliLease : IDisposable {
     public void Dispose() {
         if (m_disposed) { return; }
         m_disposed = true;
-        try { ConfinedDirectory.RemoveTree(path: m_directory); } catch (Exception error) when ((error is IOException or UnauthorizedAccessException)) { } finally { m_gate.Dispose(); }
+        try { ConfinedDirectory.RemoveTree(path: m_directory); } catch (Exception error) when ((error is IOException or UnauthorizedAccessException or PlatformNotSupportedException)) { } finally { m_gate.Dispose(); }
     }
 }

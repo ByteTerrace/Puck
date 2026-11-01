@@ -113,13 +113,10 @@ public sealed class LawProofTree(string tree, string source, FileStream lease) :
                         continue;
                     }
 
-                    // Removed under the lease, so no proof can lease the clone halfway through its removal.
-                    ConfinedDirectory.RemoveTree(path: Path.Combine(path1: eviction.Path, path2: "tree"));
+                    // Removed under the lease, so no proof can lease the clone halfway through its removal. The lock file
+                    // stays: deleting it while a proof opens it would let two proofs lease different files at one path.
+                    RemoveOwnedEntry(path: Path.Combine(path1: eviction.Path, path2: "tree"));
                 }
-
-                // Only the lease and the then-empty directory remain; a proof that leased it since keeps both.
-                File.Delete(path: lease);
-                Directory.Delete(path: eviction.Path);
             } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
                 // Leased by another proof, or a file in it is still open: it stays for a later lease to remove.
             }
@@ -140,7 +137,7 @@ public sealed class LawProofTree(string tree, string source, FileStream lease) :
 
             Console.Error.WriteLine(value: $"laws prove: rebuilding persistent proof tree cold ({reason}): {CliPaths.ToDisplay(fullPath: Tree)}.");
             // Delete only the derived cache entry. A link in the tree refuses the removal, and the proof falls back to a fresh tree.
-            ConfinedDirectory.RemoveTree(path: Tree);
+            RemoveOwnedEntry(path: Tree);
             var clone = git(repository, ["clone", "--shared", "--no-checkout", "--quiet", "--", repository, Tree]);
 
             if (clone.ExitCode != 0) {
@@ -154,6 +151,16 @@ public sealed class LawProofTree(string tree, string source, FileStream lease) :
         }
     }
 
+    // Removes the clone's entry whether damage left a directory or a stray file in its place, through its parent's
+    // handle; a link at the entry or anywhere below it refuses the removal.
+    private static void RemoveOwnedEntry(string path) {
+        var parent = Path.GetDirectoryName(path: Path.GetFullPath(path: path));
+
+        if ((parent is null) || !Directory.Exists(path: parent)) { return; }
+        using var directory = ConfinedDirectory.OpenAnchor(create: false, path: parent);
+
+        _ = directory?.DeleteChild(name: Path.GetFileName(path: path));
+    }
     private bool IsCallerClone(string repository, Func<string, string[], ChildProcessResult> git, out string reason) {
         reason = "invalid clone or clone source";
         if (!Directory.Exists(path: Path.Combine(path1: Tree, path2: ".git")) || (CliTreeFiles.LinkedPath(tree: Tree) is not null)) { return false; }
