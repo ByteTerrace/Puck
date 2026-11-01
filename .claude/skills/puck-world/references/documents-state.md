@@ -577,10 +577,11 @@ ordinary operation (`world.row.remove state` retires a row,
 `UpsertStateRow` adds one), and a positional stream would silently re-point a
 live site while its cursor kept counting.
 
-**The engine SEEKS, never replays.** Fixed advance cost per sample (which is why
-`uniformRange` is a multiply-high map, uniform to within `n/2^32`, not a
-rejection-sampled bounded draw), so resuming at cursor `n` is one `Advance` —
-O(1). There is NO per-tick cadence ceiling.
+**The engine SEEKS, never replays.** Cursors count raw words, including rejected
+words. `uniformRange` uses the shared Maths unbiased rejection mapping; a
+bounded result has a priced 64-word attempt budget and refuses when exhausted.
+Persist `FireResult.Advances` or the batch's reported advances, never its result
+count. Resuming seeks directly to `skip + cursor`.
 
 **A source may declare `extended`** (`GeneratorExtended`): an authored
 `Pcg32Extended` table replacing that generator's own self-seeding — `{"k": 2..4096
@@ -588,14 +589,14 @@ O(1). There is NO per-tick cadence ceiling.
 to k values in the source's own OUTPUT space]}`, compiled at boot resolution
 (word `i` is `wanted_i XOR base_i`; words past the script are the self-seeded
 table's own). Only `streamDraw` and `uniformRange` admit a script — the two
-sources that sample in one fixed-cost draw with no drawn-mask state, so a wanted
+sources whose scripted values map to one accepted raw word with no drawn-mask state, so a wanted
 value maps back to a single raw draw; `markov`/`weightedNumeric`/`symmetryOrbit`
 draw through an alias table whose selection depends on the site's own drawn
 masks, so a script cannot map back. Nothing new persists — the table is a pure
 function of (seed ladder, authored table/script, cursor), so save/reload/undo
 resume exactly as an ordinary site's do. `Draw.skip` (non-negative, default `0`)
-is an authored seek: a rebuild advances `(skip + cursor) * cost` rather than
-`cursor * cost`, and never writes the cursor. `world.state <row>` echoes
+is an authored seek: a rebuild advances `skip + cursor` rather than
+`cursor`, and never writes the cursor. `world.state <row>` echoes
 `extended k=<k> scripted=<n> skip=<s>` on a site carrying the facet.
 
 **A draw site is a state row and is never cleared.** Its facet and cursor

@@ -1,0 +1,76 @@
+// Small running proof: rejected raw words, scripted signed endpoints and continuation all pass through the real host.
+schema: "puck.world.definition.v1"
+documentId: "unbiased-draws-tests"
+
+state {
+  world {
+    slot done = 0
+    row {
+      name: "die"
+      kind: Int
+      draw {
+        timing: Event
+        generator {
+          source: UniformRange
+          rangeMin: -1
+          rangeMax: 1
+          extended {
+            k: 8
+            script [-1, 1, -1]
+          }
+        }
+      }
+    }
+    row {
+      name: "entropy"
+      kind: Int
+      draw {
+        timing: Event
+        generator {
+          source: StreamDraw
+          extended {
+            k: 16
+            script [123, 0, 0, 4294967295, 4294967295, 4294967295, 4294967295]
+          }
+        }
+      }
+    }
+    row {
+      name: "tokens"
+      kind: Int
+      capacity: 3
+      cells [{ key: "a", value: 1 }, { key: "b", value: 2 }, { key: "c", value: 3 }]
+    }
+    pile deck of tokens capacity(3) {
+      a
+      b
+      c
+    }
+    pile hand of tokens capacity(3)
+  }
+}
+
+rule "exercise" {
+  when done == 0
+  mode: Edge
+  shuffle deck with entropy
+  transform transfer(from: deck, to: hand, selector: Random, draw: entropy, count: 2)
+  generate(row: die)
+  done = 1
+}
+
+test "rejected words and scripted values survive reproduction" {
+  when {
+    ticks 3
+  }
+  expect {
+    done == 1
+    die == 1
+    entropy == 4294967295
+    count(deck) == 1
+    count(hand) == 2
+    deck["a"] == 1
+    hand["c"] == 1
+    hand["b"] == 1
+  }
+}
