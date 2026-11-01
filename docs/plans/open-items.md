@@ -2672,9 +2672,9 @@ ordinary · Next: new content and art on the owner's call.
   into an addon that is a pure function of its inputs; start with one committed
   test cartridge with a known win condition.
 
-- The granary board ([granaries.md](../../worlds/debug/granaries.md)): the owner's own
-  run against the live resource group is outstanding (the command is in that guide; the
-  fixture configuration stands in for it everywhere else). A piece's look carries its
+- The granary board ([granaries.md](../../worlds/debug/granaries.md)): the live feed
+  reads the resource group's five partition accounts, all `StorageV2`, so every live
+  piece deals the one `StorageV2` look; only the fixture shows the others. A piece's look carries its
   account's kind only, since a deal's variants read one row; SKU and region are rows the
   lectern reads. The pieces are dealt placements, not bodies, so a seated player inspects
   and cannot yet pick one up; moving a piece (`deal.preserve`, `reflow`) is unused here.

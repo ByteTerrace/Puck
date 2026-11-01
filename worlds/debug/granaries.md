@@ -32,7 +32,7 @@ the file is host approval and never imported world content:
 
 | File | Provider | Use |
 |---|---|---|
-| `granaries.extensions.json` | `azure.resource`, `azureCli` | The resource group `byteterrace`'s storage accounts, read live |
+| `granaries.extensions.json` | `azure.resource`, `azureCli` | The resource group `byteterrace`'s partition storage accounts (`bytrcstp*`, all but `bytrcstp000`), read live |
 | `granaries.fixture.extensions.json` | `observation.fixture` | Six synthetic accounts in four kinds, for tests and headless runs |
 | `granaries.offline.extensions.json` | `observation.fixture` | A provider that fails every read, to show the offline line |
 
@@ -40,13 +40,22 @@ The live configuration commits no credential. It names the resource group by its
 absolute ID, the authored subscription included (the engine never discovers a
 subscription); the provider signs in as the person who runs the World (`azureCli`:
 `az login`) or, in a deployment, as a managed identity. The `observation.fixture`
-provider is built in to every World host.
+provider is built in to every World host; `azure.resource` is not. It comes from
+the `Puck.World.Azure` [extension](../../docs/reference/extensions.md), which no
+host references: install it under `extensions` in the directory the World runs
+from, once and again after the engine's sources change (an installation built
+against older engine assemblies can fail to load against the World's own). Without
+it the boot refuses with `Provider 'azure' selects uninstalled type
+'azure.resource'` and exits 1.
 
 ```text
+dotnet publish src/Puck.World.Azure -c Release -nodeReuse:false -o extensions/Puck.World.Azure
 dotnet run --project src/Puck.World -c Release -- --world worlds/debug --devices all --extensions-config-file worlds/hosting/granaries.extensions.json
 ```
 
-That command reads the signed-in account's storage accounts every 1,800 ticks.
+The World then reads the partition accounts every 1,800 ticks; `world.extensions.catalog`
+lists `Puck.World.Azure: … WorldExtensionProviderType azure.resource` once it is
+installed. `extensions/` is ignored, so the installation is never committed.
 Headless and test runs use the fixture instead:
 
 ```text
