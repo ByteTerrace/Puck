@@ -43,16 +43,18 @@ shortens and raising the target toward the Moth's head. Try these console lines:
 ```text
 gallery.lift 0
 debug.go lift
-player.camera.clearance fade
+camera.clearance Fade
 world.view.camera
-player.camera.clearance cutaway
+camera.clearance Cutaway
 debug.go stairs
-player.camera.clearance
+world.view.camera
 ```
 
-`cutaway` keeps her solid and rises over her while cutting away an obstructing
-wall. No mode argument toggles the two; `auto` restores the identity/world
-preference. The screen-door fade affects only her own seat view; mirrors and
+`Cutaway` keeps her solid and rises over her while cutting away an obstructing
+wall. `camera.clearance` is the standard's authored command: it writes the
+`cameraClearance` preference row, which selects the chase rig's fade or cutaway
+case, and `world.view.camera` reads the parameters that case's `clearance` op
+resolved. The screen-door fade affects only her own seat view; mirrors and
 portals still show her. The camera's full authoring contract is in
 [views](../../.claude/skills/puck-world/references/views.md#chase-eye-clearance).
 
