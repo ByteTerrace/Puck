@@ -66,9 +66,8 @@ experimental worlds have that it lacks is ported into it
    quilt each ahead of the job-system step they prove (the owner's ruling,
    [order](port-experimental.md#lanes-in-order)).
 10. [Edit to running, hot reload and boot](#edit-to-running-hot-reload-and-boot):
-    a source-generated JSON context for `WorldDefinition` (15,786 of a
-    ReadyToRun boot's remaining JIT methods), then a reboot for an edit outside
-    `PuckHotReload`; measure the cold and warm builds.
+    the boot's JSON round trip in `BindLive` (about 0.7 s), then a reboot for
+    an edit outside `PuckHotReload`; measure the cold and warm builds.
 11. [The valley's terrain](#the-valleys-terrain): terrain pass step 1 (the image
     meter), with steps 2, 3, 6 and step 4's bound fix in parallel.
 12. [Refactoring campaign](#refactoring-campaign): `GpuRegion.Grow` as the only
@@ -1224,20 +1223,52 @@ worlds in place is rewritten.
 
 ### Edit to running, hot reload and boot
 
-Owner: hot-reload follow-up (boot and build) · ordinary · Next: the
-source-generated JSON context for `WorldDefinition`, then a reboot for an edit
-outside `PuckHotReload`, then the windowed C# loop timed on a quiet machine and
-the cold and warm builds measured.
+Owner: hot-reload follow-up (boot and build) · ordinary · Next: the boot's
+JSON round trip in `BindLive`, then a reboot for an edit outside
+`PuckHotReload`, then the windowed C# loop timed on a quiet machine and the cold
+and warm builds measured.
 
-- Source-generate the document model's JSON metadata. A headless boot to
-  `world.status` JIT-compiles 43,941 methods from the IL build and 24,248 from
-  a ReadyToRun publish; of those 24,248, 22,401 are generic instantiations and
-  15,786 are `System.Text.Json`'s, built by reflection over the
-  `WorldDefinition` graph, which no precompiler outside the framework reaches.
-  A `JsonSerializerContext` over that graph removes them from both builds
-  (the `dotnet-performance` skill's source-generation rule). Local builds stay
-  IL until then: ReadyToRun leaves this cost in place and adds a precompile to
-  every edited project's build.
+- The boot's `System.Text.Json` JIT is the source-generated context's own
+  generic instantiations, not reflection: the world document already rides one
+  generated context (`WorldJsonSourceContext` behind `WorldJsonContext`) with no
+  reflection fallback, and its metadata instantiates the serializer's generics
+  once per value type in the graph. A headless IL boot of the debug world to
+  `world.status` compiles 43,820 methods first (50,153 with tier-ups;
+  `DOTNET_JitDisasmSummary`), 15,341 of them `System.Text.Json`'s:
+  `JsonPropertyInfoValues<T>` 5,568, `JsonPropertyInfo<T>` 2,462,
+  `JsonConverter<T>` 1,227, `JsonMetadataServices` 1,035, and the enum converter
+  family behind `StrictEnumConverter<T>` (`EnumConverter<T>`, its field info,
+  `JsonStringEnumConverter<T>`, the factory helpers) 1,758. `host.memory` reads
+  42,000 to 43,200 `jit methods` and 3.1 to 4.5 s of `compile` there. A
+  ReadyToRun publish leaves them (15,786 of its 24,248), since its version
+  bubble excludes the framework that defines the generics; only the composite
+  publish decided below, or fewer instantiations, removes them. Configuring
+  that metadata cost the boot's main thread 1,513 ms (892 of it JIT and type
+  loading) before its first parse; `WorldJsonContext.StartPreparing` now runs
+  it on a background thread from the World's first line, the main thread waits
+  912 ms for it under load from other lanes, and a boot with an empty compile
+  cache (the edit loop after a Schema, Transpiler or State edit, which moves
+  the compiler identity) reached `world.status` in 14.8 and 15.0 s against
+  16.2 and 15.8 s.
+- `WorldStateDocumentValues.BindLive` (and `TryRehydrate`) copy the whole
+  definition by serializing and parsing it: 323 ms plus 371 ms of a warm boot's
+  main thread, and the boot's only full serialize, so it pays every write
+  path's JIT too. Copy only the mutable value holders the document walker
+  reaches.
+- A cold compile of the debug world spends 8.6 s of the main thread in the
+  composer's `JsonNode` merge (`WorldDocumentBasis`): `DeepEquals` about
+  840 ms, `OrderedDictionary.IndexOf` 366 ms, `RowIdentity` 259 ms and 1.5 s
+  of GC polls under its clones.
+- A strict enum converter of Puck's own would replace the 1,758 enum-family
+  methods and 142 ms of converter creation; it must keep the schema's `enum`
+  lists (the exporter reads `EnumConverter<T>` natively),
+  `JsonStringEnumMemberName` and flags spellings, and the read side's
+  case rules.
+- Two boot reads still resolve by reflection, a few milliseconds each:
+  `WorldSubmissionCodec` reaches its protocol union records through a
+  `DefaultJsonTypeInfoResolver` combined after the world context, and
+  `WorldAssetRowLoader` parses music, table, tune and patch documents through
+  `DocumentJsonOptions.Shared`.
 - [medium] The seeded `World` Edit grant is lost across a load or a reload. A
   `world.load` from debug into a same-capacity input fixture leaves authored
   state-writing rules refused with `the live edit grant refuses state:blink` (and

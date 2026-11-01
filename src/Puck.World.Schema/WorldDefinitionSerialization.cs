@@ -372,21 +372,26 @@ internal sealed partial class WorldJsonSourceContext : JsonSerializerContext {
 /// context's, resolved through <see cref="Options"/> so every nested shape sees the same extended resolver.</summary>
 public sealed class WorldJsonContext : IJsonTypeInfoResolver {
     /// <summary>Gets the type info for <see cref="BindingProfileDocument"/>.</summary>
-    public JsonTypeInfo<BindingProfileDocument> BindingProfileDocument => Get<BindingProfileDocument>();
+    public JsonTypeInfo<BindingProfileDocument> BindingProfileDocument => For<BindingProfileDocument>();
     /// <summary>Gets the type info for <see cref="BodyMotionProgram"/>.</summary>
-    public JsonTypeInfo<BodyMotionProgram> BodyMotionProgram => Get<BodyMotionProgram>();
+    public JsonTypeInfo<BodyMotionProgram> BodyMotionProgram => For<BodyMotionProgram>();
+
+    /// <summary>Gets the type info for <see cref="Puck.State.CellSetExpression"/>, a <c>sets</c> row's expression.</summary>
+    public JsonTypeInfo<CellSetExpression> CellSetExpression => For<CellSetExpression>();
 
     /// <summary>Gets the one shared instance.</summary>
     public static WorldJsonContext Default { get; } = new(untrusted: false);
 
     /// <summary>Gets the type info for <see cref="Draw"/>.</summary>
-    public JsonTypeInfo<Draw> Draw => Get<Draw>();
+    public JsonTypeInfo<Draw> Draw => For<Draw>();
     /// <summary>Gets the type info for <see cref="DynamicsRow"/>.</summary>
-    public JsonTypeInfo<DynamicsRow> DynamicsRow => Get<DynamicsRow>();
+    public JsonTypeInfo<DynamicsRow> DynamicsRow => For<DynamicsRow>();
     /// <summary>Gets the type info for <see cref="LatticeTopology"/>.</summary>
-    public JsonTypeInfo<LatticeTopology> LatticeTopology => Get<LatticeTopology>();
+    public JsonTypeInfo<LatticeTopology> LatticeTopology => For<LatticeTopology>();
     /// <summary>Gets the read-only options carrying the extended resolver.</summary>
     public JsonSerializerOptions Options { get; }
+    /// <summary>Gets the type info for <see cref="Puck.State.PatternNode"/>, a <c>patterns</c> row's match.</summary>
+    public JsonTypeInfo<PatternNode> PatternNode => For<PatternNode>();
 
     /// <summary>Gets the instance a payload from an untrusted peer is read through: it refuses a duplicated member and
     /// a null where the model declares a non-nullable reference, besides everything <see cref="Default"/> refuses.
@@ -394,120 +399,120 @@ public sealed class WorldJsonContext : IJsonTypeInfoResolver {
     public static WorldJsonContext Untrusted { get; } = new(untrusted: true);
 
     /// <summary>Gets the type info for <see cref="StateAdvance"/>.</summary>
-    public JsonTypeInfo<StateAdvance> StateAdvance => Get<StateAdvance>();
+    public JsonTypeInfo<StateAdvance> StateAdvance => For<StateAdvance>();
     /// <summary>Gets the type info for <see cref="StateCycle"/>.</summary>
-    public JsonTypeInfo<StateCycle> StateCycle => Get<StateCycle>();
+    public JsonTypeInfo<StateCycle> StateCycle => For<StateCycle>();
     /// <summary>Gets the type info for <see cref="StateDomain"/>.</summary>
-    public JsonTypeInfo<StateDomain> StateDomain => Get<StateDomain>();
+    public JsonTypeInfo<StateDomain> StateDomain => For<StateDomain>();
     /// <summary>Gets the type info for <see cref="StateKnowledge"/>.</summary>
-    public JsonTypeInfo<StateKnowledge> StateKnowledge => Get<StateKnowledge>();
+    public JsonTypeInfo<StateKnowledge> StateKnowledge => For<StateKnowledge>();
     /// <summary>Gets the type info for <see cref="StateObservation"/>.</summary>
-    public JsonTypeInfo<StateObservation> StateObservation => Get<StateObservation>();
+    public JsonTypeInfo<StateObservation> StateObservation => For<StateObservation>();
     /// <summary>Gets the type info for <see cref="StatePhase"/>.</summary>
-    public JsonTypeInfo<StatePhase> StatePhase => Get<StatePhase>();
+    public JsonTypeInfo<StatePhase> StatePhase => For<StatePhase>();
     /// <summary>Gets the type info for <see cref="StateTransform"/>.</summary>
-    public JsonTypeInfo<StateTransform> StateTransform => Get<StateTransform>();
+    public JsonTypeInfo<StateTransform> StateTransform => For<StateTransform>();
     /// <summary>Gets the type info for <see cref="StateVisibility"/>.</summary>
-    public JsonTypeInfo<StateVisibility> StateVisibility => Get<StateVisibility>();
+    public JsonTypeInfo<StateVisibility> StateVisibility => For<StateVisibility>();
     /// <summary>Gets the type info for <see cref="ExpressionProgram"/>.</summary>
-    public JsonTypeInfo<ExpressionProgram> ExpressionProgram => Get<ExpressionProgram>();
+    public JsonTypeInfo<ExpressionProgram> ExpressionProgram => For<ExpressionProgram>();
     /// <summary>Gets the type info for <see cref="WorldAddonRow"/>.</summary>
-    public JsonTypeInfo<WorldAddonRow> WorldAddonRow => Get<WorldAddonRow>();
+    public JsonTypeInfo<WorldAddonRow> WorldAddonRow => For<WorldAddonRow>();
     /// <summary>Gets the type info for <see cref="WorldAudioDefaults"/>.</summary>
-    public JsonTypeInfo<WorldAudioDefaults> WorldAudioDefaults => Get<WorldAudioDefaults>();
+    public JsonTypeInfo<WorldAudioDefaults> WorldAudioDefaults => For<WorldAudioDefaults>();
     /// <summary>Gets the type info for <see cref="WorldBindingOverlay"/>.</summary>
-    public JsonTypeInfo<WorldBindingOverlay> WorldBindingOverlay => Get<WorldBindingOverlay>();
+    public JsonTypeInfo<WorldBindingOverlay> WorldBindingOverlay => For<WorldBindingOverlay>();
     /// <summary>Gets the type info for <see cref="WorldCamera"/>.</summary>
-    public JsonTypeInfo<WorldCamera> WorldCamera => Get<WorldCamera>();
+    public JsonTypeInfo<WorldCamera> WorldCamera => For<WorldCamera>();
     /// <summary>Gets the type info for <see cref="WorldCameraProgram"/>.</summary>
-    public JsonTypeInfo<WorldCameraProgram> WorldCameraProgram => Get<WorldCameraProgram>();
+    public JsonTypeInfo<WorldCameraProgram> WorldCameraProgram => For<WorldCameraProgram>();
     /// <summary>Gets the type info for <see cref="WorldCollision"/>.</summary>
-    public JsonTypeInfo<WorldCollision> WorldCollision => Get<WorldCollision>();
+    public JsonTypeInfo<WorldCollision> WorldCollision => For<WorldCollision>();
     /// <summary>Gets the type info for <see cref="WorldCounterpartAttestation"/>.</summary>
-    public JsonTypeInfo<WorldCounterpartAttestation> WorldCounterpartAttestation => Get<WorldCounterpartAttestation>();
+    public JsonTypeInfo<WorldCounterpartAttestation> WorldCounterpartAttestation => For<WorldCounterpartAttestation>();
     /// <summary>Gets the type info for <see cref="WorldCurveRow"/>.</summary>
-    public JsonTypeInfo<WorldCurveRow> WorldCurveRow => Get<WorldCurveRow>();
+    public JsonTypeInfo<WorldCurveRow> WorldCurveRow => For<WorldCurveRow>();
     /// <summary>Gets the type info for <see cref="WorldDefinition"/>.</summary>
-    public JsonTypeInfo<WorldDefinition> WorldDefinition => Get<WorldDefinition>();
+    public JsonTypeInfo<WorldDefinition> WorldDefinition => For<WorldDefinition>();
     /// <summary>Gets the source-generated type info for a complete state declaration and continuation.</summary>
-    public JsonTypeInfo<WorldStateSection> WorldStateSection => Get<WorldStateSection>();
+    public JsonTypeInfo<WorldStateSection> WorldStateSection => For<WorldStateSection>();
     /// <summary>Gets the type info for <see cref="WorldFrameSource"/>.</summary>
-    public JsonTypeInfo<WorldFrameSource> WorldFrameSource => Get<WorldFrameSource>();
+    public JsonTypeInfo<WorldFrameSource> WorldFrameSource => For<WorldFrameSource>();
     /// <summary>Gets the type info for <see cref="WorldGroupKind"/>.</summary>
-    public JsonTypeInfo<WorldGroupKind> WorldGroupKind => Get<WorldGroupKind>();
+    public JsonTypeInfo<WorldGroupKind> WorldGroupKind => For<WorldGroupKind>();
     /// <summary>Gets the type info for <see cref="WorldHostDefaults"/>.</summary>
-    public JsonTypeInfo<WorldHostDefaults> WorldHostDefaults => Get<WorldHostDefaults>();
+    public JsonTypeInfo<WorldHostDefaults> WorldHostDefaults => For<WorldHostDefaults>();
     /// <summary>Gets the type info for <see cref="WorldHudDefaults"/>.</summary>
-    public JsonTypeInfo<WorldHudDefaults> WorldHudDefaults => Get<WorldHudDefaults>();
+    public JsonTypeInfo<WorldHudDefaults> WorldHudDefaults => For<WorldHudDefaults>();
     /// <summary>Gets the type info for <see cref="WorldHudElement"/>.</summary>
-    public JsonTypeInfo<WorldHudElement> WorldHudElement => Get<WorldHudElement>();
+    public JsonTypeInfo<WorldHudElement> WorldHudElement => For<WorldHudElement>();
     /// <summary>Gets the type info for <see cref="WorldHudPanel"/>.</summary>
-    public JsonTypeInfo<WorldHudPanel> WorldHudPanel => Get<WorldHudPanel>();
+    public JsonTypeInfo<WorldHudPanel> WorldHudPanel => For<WorldHudPanel>();
     /// <summary>Gets the type info for <see cref="WorldInputHoldAuthoring"/>.</summary>
-    public JsonTypeInfo<WorldInputHoldAuthoring> WorldInputHoldAuthoring => Get<WorldInputHoldAuthoring>();
+    public JsonTypeInfo<WorldInputHoldAuthoring> WorldInputHoldAuthoring => For<WorldInputHoldAuthoring>();
     /// <summary>Gets the type info for <see cref="WorldInputModes"/>.</summary>
-    public JsonTypeInfo<WorldInputModes> WorldInputModes => Get<WorldInputModes>();
+    public JsonTypeInfo<WorldInputModes> WorldInputModes => For<WorldInputModes>();
     /// <summary>Gets the type info for <see cref="WorldInteraction"/>.</summary>
-    public JsonTypeInfo<WorldInteraction> WorldInteraction => Get<WorldInteraction>();
+    public JsonTypeInfo<WorldInteraction> WorldInteraction => For<WorldInteraction>();
     /// <summary>Gets the type info for <see cref="WorldKit"/>.</summary>
-    public JsonTypeInfo<WorldKit> WorldKit => Get<WorldKit>();
+    public JsonTypeInfo<WorldKit> WorldKit => For<WorldKit>();
     /// <summary>Gets the type info for <see cref="WorldLook"/>.</summary>
-    public JsonTypeInfo<WorldLook> WorldLook => Get<WorldLook>();
+    public JsonTypeInfo<WorldLook> WorldLook => For<WorldLook>();
     /// <summary>Gets the metadata for an independently hosted machine declaration.</summary>
-    public JsonTypeInfo<WorldMachine> WorldMachine => Get<WorldMachine>();
+    public JsonTypeInfo<WorldMachine> WorldMachine => For<WorldMachine>();
     /// <summary>Gets the type info for <see cref="WorldMotionDefaults"/>.</summary>
-    public JsonTypeInfo<WorldMotionDefaults> WorldMotionDefaults => Get<WorldMotionDefaults>();
+    public JsonTypeInfo<WorldMotionDefaults> WorldMotionDefaults => For<WorldMotionDefaults>();
     /// <summary>Gets the type info for <see cref="WorldObservedRow"/> arrays.</summary>
-    public JsonTypeInfo<WorldObservedRow[]> WorldObservedRowArray => Get<WorldObservedRow[]>();
+    public JsonTypeInfo<WorldObservedRow[]> WorldObservedRowArray => For<WorldObservedRow[]>();
     /// <summary>Gets the type info for <see cref="WorldPatch"/>.</summary>
-    public JsonTypeInfo<WorldPatch> WorldPatch => Get<WorldPatch>();
+    public JsonTypeInfo<WorldPatch> WorldPatch => For<WorldPatch>();
     /// <summary>Gets the type info for <see cref="WorldPlacement"/>.</summary>
-    public JsonTypeInfo<WorldPlacement> WorldPlacement => Get<WorldPlacement>();
+    public JsonTypeInfo<WorldPlacement> WorldPlacement => For<WorldPlacement>();
     /// <summary>Gets the type info for <see cref="WorldPlacementPolicyDefaults"/>.</summary>
-    public JsonTypeInfo<WorldPlacementPolicyDefaults> WorldPlacementPolicyDefaults => Get<WorldPlacementPolicyDefaults>();
+    public JsonTypeInfo<WorldPlacementPolicyDefaults> WorldPlacementPolicyDefaults => For<WorldPlacementPolicyDefaults>();
     /// <summary>Gets the type info for <see cref="WorldProjectionDocument"/>.</summary>
-    public JsonTypeInfo<WorldProjectionDocument> WorldProjectionDocument => Get<WorldProjectionDocument>();
+    public JsonTypeInfo<WorldProjectionDocument> WorldProjectionDocument => For<WorldProjectionDocument>();
     /// <summary>Gets the type info for <see cref="WorldPrototype"/>.</summary>
-    public JsonTypeInfo<WorldPrototype> WorldPrototype => Get<WorldPrototype>();
+    public JsonTypeInfo<WorldPrototype> WorldPrototype => For<WorldPrototype>();
     /// <summary>Gets the type info for a referenced prototype body.</summary>
-    public JsonTypeInfo<WorldPrototypeContent> WorldPrototypeContent => Get<WorldPrototypeContent>();
+    public JsonTypeInfo<WorldPrototypeContent> WorldPrototypeContent => For<WorldPrototypeContent>();
     /// <summary>Gets the type info for <see cref="WorldRenderDefaults"/>.</summary>
-    public JsonTypeInfo<WorldRenderDefaults> WorldRenderDefaults => Get<WorldRenderDefaults>();
+    public JsonTypeInfo<WorldRenderDefaults> WorldRenderDefaults => For<WorldRenderDefaults>();
     /// <summary>Gets the type info for <see cref="WorldRule"/>.</summary>
-    public JsonTypeInfo<WorldRule> WorldRule => Get<WorldRule>();
+    public JsonTypeInfo<WorldRule> WorldRule => For<WorldRule>();
     /// <summary>Gets the type info for <see cref="WorldScreen"/>.</summary>
-    public JsonTypeInfo<WorldScreen> WorldScreen => Get<WorldScreen>();
+    public JsonTypeInfo<WorldScreen> WorldScreen => For<WorldScreen>();
     /// <summary>Gets the type info for <see cref="WorldSeatCameraFeel"/>.</summary>
-    public JsonTypeInfo<WorldSeatCameraFeel> WorldSeatCameraFeel => Get<WorldSeatCameraFeel>();
+    public JsonTypeInfo<WorldSeatCameraFeel> WorldSeatCameraFeel => For<WorldSeatCameraFeel>();
     /// <summary>Gets the type info for <see cref="WorldSeatViewControl"/>.</summary>
-    public JsonTypeInfo<WorldSeatViewControl> WorldSeatViewControl => Get<WorldSeatViewControl>();
+    public JsonTypeInfo<WorldSeatViewControl> WorldSeatViewControl => For<WorldSeatViewControl>();
     /// <summary>Gets the type info for <see cref="WorldViewDefaults"/>.</summary>
-    public JsonTypeInfo<WorldViewDefaults> WorldViewDefaults => Get<WorldViewDefaults>();
+    public JsonTypeInfo<WorldViewDefaults> WorldViewDefaults => For<WorldViewDefaults>();
     /// <summary>Gets the type info for <see cref="WorldCountersReport"/>.</summary>
-    public JsonTypeInfo<WorldCountersReport> WorldCountersReport => Get<WorldCountersReport>();
+    public JsonTypeInfo<WorldCountersReport> WorldCountersReport => For<WorldCountersReport>();
     /// <summary>Gets the type info for <see cref="GpuDeviceIdentity"/>, as a counters report and <c>world.counters</c>
     /// spell it.</summary>
-    public JsonTypeInfo<Puck.Abstractions.Gpu.GpuDeviceIdentity> GpuDeviceIdentity => Get<Puck.Abstractions.Gpu.GpuDeviceIdentity>();
+    public JsonTypeInfo<Puck.Abstractions.Gpu.GpuDeviceIdentity> GpuDeviceIdentity => For<Puck.Abstractions.Gpu.GpuDeviceIdentity>();
     /// <summary>Gets the type info for <see cref="WorldSiloDefinition"/>.</summary>
-    public JsonTypeInfo<WorldSiloDefinition> WorldSiloDefinition => Get<WorldSiloDefinition>();
+    public JsonTypeInfo<WorldSiloDefinition> WorldSiloDefinition => For<WorldSiloDefinition>();
     /// <summary>Gets the type info for <see cref="WorldSpawnPoint"/> arrays.</summary>
-    public JsonTypeInfo<WorldSpawnPoint[]> WorldSpawnPointArray => Get<WorldSpawnPoint[]>();
+    public JsonTypeInfo<WorldSpawnPoint[]> WorldSpawnPointArray => For<WorldSpawnPoint[]>();
     /// <summary>Gets the type info for <see cref="WorldSpeaker"/>.</summary>
-    public JsonTypeInfo<WorldSpeaker> WorldSpeaker => Get<WorldSpeaker>();
+    public JsonTypeInfo<WorldSpeaker> WorldSpeaker => For<WorldSpeaker>();
     /// <summary>Gets the type info for <see cref="WorldStateFieldTrait"/>.</summary>
-    public JsonTypeInfo<WorldStateFieldTrait> WorldStateFieldTrait => Get<WorldStateFieldTrait>();
+    public JsonTypeInfo<WorldStateFieldTrait> WorldStateFieldTrait => For<WorldStateFieldTrait>();
     /// <summary>Gets the type info for <see cref="WorldStateRow"/>.</summary>
-    public JsonTypeInfo<WorldStateRow> WorldStateRow => Get<WorldStateRow>();
+    public JsonTypeInfo<WorldStateRow> WorldStateRow => For<WorldStateRow>();
     /// <summary>Gets the type info for <see cref="WorldTimelineSection"/>.</summary>
-    public JsonTypeInfo<WorldTimelineSection> WorldTimelineSection => Get<WorldTimelineSection>();
+    public JsonTypeInfo<WorldTimelineSection> WorldTimelineSection => For<WorldTimelineSection>();
     /// <summary>Gets the type info for <see cref="WorldTune"/>.</summary>
-    public JsonTypeInfo<WorldTune> WorldTune => Get<WorldTune>();
+    public JsonTypeInfo<WorldTune> WorldTune => For<WorldTune>();
     /// <summary>Gets the type info for <see cref="WorldViewGraph"/>.</summary>
-    public JsonTypeInfo<WorldViewGraph> WorldViewGraph => Get<WorldViewGraph>();
+    public JsonTypeInfo<WorldViewGraph> WorldViewGraph => For<WorldViewGraph>();
     /// <summary>Gets the type info for <see cref="WorldViewLayout"/>.</summary>
-    public JsonTypeInfo<WorldViewLayout> WorldViewLayout => Get<WorldViewLayout>();
+    public JsonTypeInfo<WorldViewLayout> WorldViewLayout => For<WorldViewLayout>();
     /// <summary>Gets the type info for the <see cref="WorldViewDefaults.Post"/> list.</summary>
-    public JsonTypeInfo<IReadOnlyList<WorldViewPostPass>> WorldViewPostPassList => Get<IReadOnlyList<WorldViewPostPass>>();
+    public JsonTypeInfo<IReadOnlyList<WorldViewPostPass>> WorldViewPostPassList => For<IReadOnlyList<WorldViewPostPass>>();
 
     private WorldJsonContext(bool untrusted) {
         var options = new JsonSerializerOptions(options: WorldJsonSourceContext.Default.Options) {
@@ -522,7 +527,40 @@ public sealed class WorldJsonContext : IJsonTypeInfoResolver {
         Options = options;
     }
 
-    private JsonTypeInfo<T> Get<T>() => ((JsonTypeInfo<T>)Options.GetTypeInfo(type: typeof(T)));
+    /// <summary>Gets the type info for any type the world document's graph reaches, resolved through
+    /// <see cref="Options"/> like every typed accessor here; a type outside the graph has no metadata and throws.</summary>
+    /// <typeparam name="T">The type.</typeparam>
+    /// <returns>The type info.</returns>
+    /// <exception cref="NotSupportedException"><typeparamref name="T"/> is not in the document's graph.</exception>
+    public JsonTypeInfo<T> For<T>() => ((JsonTypeInfo<T>)Options.GetTypeInfo(type: typeof(T)));
+
+    /// <summary>Starts configuring the metadata a world boot reads first (<see cref="Default"/>'s
+    /// <see cref="WorldDefinition"/> graph and the embedded creation document's), on one background thread at normal
+    /// priority, so the configuration and the compilation of its generic instantiations overlap a boot's work before
+    /// its first parse instead of running on the boot's own thread. A parse that arrives while the thread configures
+    /// waits on the serializer's own lock rather than configuring a second time, so the thread never holds a boot back
+    /// longer than doing the work itself would.</summary>
+    /// <remarks>The configured metadata is the same metadata the first parse would have built, so nothing the thread
+    /// does is visible in a document's bytes. A failure is left to the first parse to report: the serializer caches a
+    /// configuration error and raises it again there.</remarks>
+    /// <returns>The started thread.</returns>
+    public static Thread StartPreparing() {
+        var thread = new Thread(start: static () => {
+            try {
+                _ = Default.WorldDefinition;
+                _ = Puck.World.Authoring.CreationJsonContext.Document.CreationDocument;
+            } catch (Exception) {
+                // The first parse configures again and reports the failure where the boot reads it.
+            }
+        }) {
+            IsBackground = true,
+            Name = "Puck.World Document Metadata",
+        };
+
+        thread.Start();
+
+        return thread;
+    }
 
     /// <inheritdoc/>
     public JsonTypeInfo? GetTypeInfo(Type type, JsonSerializerOptions options) => Options.TypeInfoResolver!.GetTypeInfo(
