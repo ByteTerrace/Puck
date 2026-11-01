@@ -9,9 +9,10 @@ using Puck.World.Protocol;
 namespace Puck.World.Addons;
 
 public sealed partial class WorldAddonRuntime {
-    private string? MachineNameAtScreen(int index) =>
-        (m_server.Configuration.Screens.FirstOrDefault(screen => screen.Index == index)?.Source as WorldScreenSource.Machine)?.Instance;
+    private const int MaxMachineSnapshotBytes = ((4 * 1024) * 1024);
 
+    private string? MachineNameAtScreen(int index) =>
+        (m_server.Configuration.Screens.FirstOrDefault(predicate: screen => (screen.Index == index))?.Source as WorldScreenSource.Machine)?.Instance;
     private bool QueryAuthority(MountedAddon addon, in AddonQuerySubmission query, WorldCapability capability,
         out GrantSubject subject, out AddonVerdict verdict) {
         var grants = m_server.Grants;
@@ -68,7 +69,7 @@ public sealed partial class WorldAddonRuntime {
                     if ((subject.Kind != GrantSubjectKind.State) || (query.C < 0) || (query.C > 4096) ||
                         !TryReadUtf8(addon, query.A, query.B, 128, out var keyName, out _)) { break; }
                     if (!CellName.TryParse(candidate: keyName, name: out var cellKey, reason: out _) ||
-                        !TryReadDisclosed(addon: addon, subject: subject, name: cellKey, value: out var cell)) { break; }
+                        !TryReadDisclosed(addon: addon, name: cellKey, subject: subject, value: out var cell)) { break; }
                     if (cell.Kind == CellKind.Text) {
                         if ((cell.AsText.Length > 4096) || !ChargeHostFuel(addon: addon, cost: (((ulong)cell.AsText.Length) * 3))) { break; }
                         var text = addon.ReadBuffer(length: Encoding.UTF8.GetByteCount(s: cell.AsText));
@@ -134,18 +135,18 @@ public sealed partial class WorldAddonRuntime {
                     if ((subject.Kind != GrantSubjectKind.Screen) || (query.A is < 0 or > 2) || (query.B != 0) || (query.C != 0) ||
                         !ChargeHostFuel(addon: addon, cost: 300000)) { break; }
                     var runtime = m_server.Machines.MachineAt(index: subject.Value);
-                    var snapshotMachine = MachineNameAtScreen(subject.Value);
-                    var incarnation = snapshotMachine is null ? null : m_server.Machines.InstanceState(snapshotMachine);
+                    var snapshotMachine = MachineNameAtScreen(index: subject.Value);
+                    var incarnation = ((snapshotMachine is null) ? null : m_server.Machines.InstanceState(name: snapshotMachine));
                     if (query.A == 2) {
                         addon.MachineSnapshot = null; addon.SnapshotMachine = null; addon.SnapshotGeneration = 0; verdict = AddonVerdict.Applied;
-                    } else if (runtime is IMachineCheckpointRuntime checkpoint && incarnation is { } machineState) {
+                    } else if ((runtime is IMachineCheckpointRuntime checkpoint) && (incarnation is { } machineState)) {
                         if (query.A == 0) {
                             var snapshot = checkpoint.CaptureCheckpoint();
 
-                            if (snapshot.Length > ((4 * 1024) * 1024)) { break; }
+                            if (snapshot.Length > MaxMachineSnapshotBytes) { break; }
                             addon.MachineSnapshot = snapshot; addon.SnapshotMachine = snapshotMachine; addon.SnapshotGeneration = machineState.Generation;
                             a = snapshot.Length; verdict = AddonVerdict.Applied;
-                        } else if (snapshotMachine == addon.SnapshotMachine && machineState.Generation == addon.SnapshotGeneration && (addon.MachineSnapshot is { } saved)) {
+                        } else if ((snapshotMachine == addon.SnapshotMachine) && (machineState.Generation == addon.SnapshotGeneration) && (addon.MachineSnapshot is { } saved)) {
                             checkpoint.RestoreCheckpoint(checkpoint: saved); a = saved.Length; verdict = AddonVerdict.Applied;
                         }
                     }
@@ -156,8 +157,8 @@ public sealed partial class WorldAddonRuntime {
                     // The Control handle over the screen passed QueryAuthority's grant check, and the manifest check below
                     // narrows to the instance the guest requested. The authority over the machine itself is the Control
                     // grant ApplyMachineOperation checks for the addon's principal.
-                    var machineName = MachineNameAtScreen(subject.Value);
-                    if (machineName is null ||
+                    var machineName = MachineNameAtScreen(index: subject.Value);
+                    if ((machineName is null) ||
                         !IsRequested(addon: addon, capability: WorldCapability.Control, subject: GrantSubject.Machine(name: machineName)) ||
                         (m_server.Machines.InstanceState(name: machineName) is not { } state)) { break; }
                     using (var document = JsonDocument.Parse(json)) {

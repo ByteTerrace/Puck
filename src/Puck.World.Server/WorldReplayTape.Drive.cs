@@ -1,4 +1,3 @@
-using Puck.Commands;
 using Puck.World.Protocol;
 using Puck.World.Server;
 
@@ -337,11 +336,8 @@ public sealed partial class WorldReplayTape {
             EndDrive(completed: true);
         }
     }
-    // Installs the tape's starting state into the running server through its own doors: a forced world.load of the
-    // embedded definition (solids, machines, addon plan, document grants, journal, base — the whole rebuild pipeline;
-    // an unchanged machine row keeps its running runtime), then the tape's start checkpoint, or the complete authority
-    // checkpoint a fresh server reaches after the recorded seats join. This resets clocks, memory, decisions, latches,
-    // grants, sessions, held input, screen slots and machine cores as well as the population image.
+    // Live drives and probes share the replay-start checkpoint restore, including staged guest state and any
+    // geometry or machine reconfiguration. A boot-image tape first captures a complete shadow with its seats joined.
     private string? ResetLiveWorldToBootImage(WorldReplaySnapshot source, WorldDefinition definition, string? documentPath) {
         // A tape that starts from a checkpoint carries its whole starting authority state; one that starts from the
         // boot image has it rebuilt here, on a shadow with the recorded seats joined.
@@ -368,6 +364,9 @@ public sealed partial class WorldReplayTape {
                 profiles: m_profiles,
                 server: shadow
             );
+            using var addons = m_addonHostFactory(definition, shadow);
+
+            shadow.AttachAddons(runtime: addons);
             // A population-only reset leaves the old clock, latches, decisions, and held input alive.
             // Reuse the complete authority checkpoint so a live drive starts from the same state as offline replay.
             if (!shadow.TryCaptureCheckpoint(
@@ -381,30 +380,13 @@ public sealed partial class WorldReplayTape {
         return m_liveServer.ExecuteAuthorityOperation<string?>(operation: () => {
             if (m_liveServer.Persistence.ReplayTimelineResetRefusal() is { } refusal) { return refusal; }
             m_liveServer.Extensions.EnterReplay();
-            // Mounted guests restart from their modules' initial state, as the recording's own guests started.
-            m_liveServer.Document.ReinstantiateAddonsOnNextRebuild = true;
-            m_liveServer.EnqueueRebuild(
-                request: new WorldRebuildRequest(
-                    Kind: WorldRebuildKind.Load,
-                    Definition: definition,
-                    Origin: ((documentPath is null)
-                        ? null
-                        : new WorldRebuildOrigin.File(Path: documentPath)),
-                    Force: true,
-                    ContentHash: WorldDefinitionFileSource.ComputeContentHash(content: source.DefinitionJson)
-                ),
-                principal: Principal.Console
-            );
-            _ = m_liveServer.DrainAdministrative();
-            m_liveServer.Document.ReinstantiateAddonsOnNextRebuild = false;
-            if (!ReferenceEquals(
-                objA: m_liveServer.Document.Base,
-                objB: definition
-            )) {
+            try {
+                m_liveServer.Persistence.RestoreReplayStart(checkpoint!, restoreOwnedIdentities: false,
+                    documentDirectory: (definition.DocumentDirectory ?? ((documentPath is null) ? null : Path.GetDirectoryName(path: documentPath))));
+            } catch {
                 m_liveServer.Extensions.CompleteReplay();
-                return "the boot-image rebuild of the tape's embedded definition was refused (the [world.definition rejected: …] line above names why)";
+                throw;
             }
-            m_liveServer.Persistence.RestoreCheckpoint(checkpoint: checkpoint!, restoreOwnedIdentities: false);
             return null;
         });
     }

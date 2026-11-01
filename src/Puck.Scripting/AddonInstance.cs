@@ -76,6 +76,7 @@ public sealed partial class AddonInstance : IDisposable {
         m_name = descriptor.Name;
         m_checkpointGlobals = moduleInfo.CheckpointGlobals;
         m_checkpointRefusal = moduleInfo.CheckpointRefusal;
+        ModuleSource = moduleInfo.Source;
 
         Instantiate();
     }
@@ -101,6 +102,10 @@ public sealed partial class AddonInstance : IDisposable {
     /// <summary>Gets whether <see cref="Admit"/> has run for the current store — the gate <see cref="Tick"/>
     /// requires.</summary>
     public bool Admitted => m_admitted;
+    /// <summary>The pinned source required to restore this guest independently of deployed files.</summary>
+    public ReadOnlyMemory<byte> ModuleSource { get; }
+    /// <summary>A resource preventing durable capture, or null when the guest can be captured.</summary>
+    public string? CheckpointRefusal => m_checkpointRefusal;
     /// <summary>Gets the input channel's resolved channel-name bindings (empty when the guest declares no input
     /// channel), indexed by the guest's own declared ordinal.</summary>
     public ReadOnlySpan<AddonChannelBinding> ChannelBindings => m_channelBindings.AsSpan(
@@ -216,6 +221,7 @@ public sealed partial class AddonInstance : IDisposable {
                 memories: AddonModuleLimits.Memories, memorySize: AddonModuleLimits.MemoryBytes,
                 tableElements: AddonModuleLimits.TableElements, tables: AddonModuleLimits.Tables);
             store.Fuel = ((ulong)m_fuelPerTick);
+            store.SetEpochDeadline(ticksBeyondCurrent: ScriptingEngine.CallDeadlineEpochs);
 
             var instance = new Instance(
                 store: store,
@@ -236,6 +242,7 @@ public sealed partial class AddonInstance : IDisposable {
             m_state = AddonState.Enabled;
             m_store = store;
         } catch (TrapException trap) {
+            if (trap.Type == TrapCode.Interrupt) { store?.Dispose(); throw new TimeoutException(innerException: trap, message: $"Addon '{m_name}' exceeded its execution deadline during instantiation."); }
             var kind = Classify(code: trap.Type);
 
             store?.Dispose();
@@ -535,6 +542,7 @@ public sealed partial class AddonInstance : IDisposable {
         var store = m_store!;
 
         store.Fuel = ((ulong)m_fuelPerTick);
+        store.SetEpochDeadline(ticksBeyondCurrent: ScriptingEngine.CallDeadlineEpochs);
 
         try {
             var init = m_initAction;
@@ -545,6 +553,7 @@ public sealed partial class AddonInstance : IDisposable {
 
             GC.KeepAlive(obj: store);
         } catch (TrapException trap) {
+            if (trap.Type == TrapCode.Interrupt) { throw new TimeoutException(innerException: trap, message: $"Addon '{m_name}' exceeded its execution deadline during initialization."); }
             var kind = Classify(code: trap.Type);
 
             m_lastFuelConsumed = FuelConsumed();
@@ -637,12 +646,14 @@ public sealed partial class AddonInstance : IDisposable {
             length: (m_outCap * AddonAbi.OutCellBytes)
         ).Clear();
         store.Fuel = ((ulong)m_fuelPerTick);
+        store.SetEpochDeadline(ticksBeyondCurrent: ScriptingEngine.CallDeadlineEpochs);
 
         int count;
 
         try {
             count = onTick(arg: input.Length);
         } catch (TrapException trap) {
+            if (trap.Type == TrapCode.Interrupt) { throw new TimeoutException(innerException: trap, message: $"Addon '{m_name}' exceeded its execution deadline during its tick."); }
             var kind = Classify(code: trap.Type);
             var consumed = FuelConsumed();
 

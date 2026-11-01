@@ -363,21 +363,17 @@ is captured and re-executed on replay through the ordinary tape-covered
 mutation leaf (see [replay.md](replay.md)'s mutation-outcome pin) — there is
 no separate lifecycle leaf left to reason about arming against.
 
-A recording explicitly starts fresh guests. A post-boot `replay.record`, including
-one sent over MCP, prepares every mounted guest fresh and captures the
-surrounding authority state at the arm under one authority operation. It
-commits the restart only after capture succeeds, so refusal leaves every live
-store untouched. The recording and its re-drive both start those pinned guests
-from module initialization; guest-private trails, counters and pending answers
-restart, while poses, authored state, grants, sessions and machine cores remain.
-Ordinary checkpoints preserve supported guests through `IWorldAddonCheckpointHost`:
+A post-boot `replay.record`, including one sent over MCP, captures live guest
+memory and host continuations with the surrounding authority state. Arming never
+replaces guests, pending answers or input controllers. Recording, history and
+persistence share `IWorldAddonHost`'s mandatory checkpoint boundary:
 memory, private numeric globals, fault/fuel state and the mount's cross-tick host
 state. The [runtime README](../../../../src/Puck.World.Addons/README.md#durable-guest-state)
 owns its inventory and named unsupported-resource refusals. Silo activations
 mount through the same `WorldAddonRuntime.TryCreate` as World, and restore this
 section before replaying their journal tail. Arming before the first step
 uses the boot image as before. `replay.drive` prepares fresh guests for either
-kind of recorded start.
+kind of recorded start, then restores the captured guest image when present.
 
 When piping the startup script, close stdin after the replay arm. Headless
 startup drains that script before stepping; leaving the pipe open waiting for
