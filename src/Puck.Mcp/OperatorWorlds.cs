@@ -554,7 +554,7 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
 
         try {
             ConfinedDirectory.RemoveTree(path: started.StateDirectory);
-        } catch (Exception error) when ((error is IOException or UnauthorizedAccessException)) { }
+        } catch (Exception error) when ((error is IOException or UnauthorizedAccessException or PlatformNotSupportedException)) { }
 
         return (started.Process.ExitCode, killed, started.Leased);
     }
