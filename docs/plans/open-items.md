@@ -39,8 +39,8 @@ experimental worlds have that it lacks is ported into it
    rated views' and screens' phases and the tick frame's own tick-bound view
    recording, which a tick plus produce still pushes past 16.7 ms.
 2. [Engine job system](#engine-job-system), the garbage-collection cuts on
-   today's runtime [high]: remaining bake readback copies and fine-sample
-   indexes, and steady irradiance blocks and dressed-pick snapshots; measured
+   today's runtime [high]: the bake's managed contour and refinement working
+   memory, and steady irradiance blocks and dressed-pick snapshots; measured
    residuals are in the packet. Native storage uses `IAllocator` and
    `MimallocAllocator`.
 3. [Engine job system](#engine-job-system), the memo [high]: the scheduler, the
@@ -67,9 +67,8 @@ experimental worlds have that it lacks is ported into it
    quilt each ahead of the job-system step they prove (the owner's ruling,
    [order](port-experimental.md#lanes-in-order)).
 10. [Edit to running, hot reload and boot](#edit-to-running-hot-reload-and-boot):
-    a source-generated JSON context for `WorldDefinition` (15,786 of a
-    ReadyToRun boot's remaining JIT methods), then a reboot for an edit outside
-    `PuckHotReload`; measure the cold and warm builds.
+    the boot's JSON round trip in `BindLive` (about 0.7 s), then a reboot for
+    an edit outside `PuckHotReload`; measure the cold and warm builds.
 11. [The valley's terrain](#the-valleys-terrain): terrain pass step 1 (the image
     meter), with steps 2, 3, 6 and step 4's bound fix in parallel.
 12. [Refactoring campaign](#refactoring-campaign): `GpuRegion.Grow` as the only
@@ -214,55 +213,54 @@ One engine-wide job system answers all of it:
     Remaining sampled sites include readback-copy byte arrays, 12,350 MiB
     (`SdfMeshPathBake.cs:691`), fine-key dictionary entries, 14,669 MiB across
     inlined/non-inlined stacks (`SdfSampledLattice.cs:861`), and contour merge
-    doubles, 5,022 MiB (`SdfDualContouring.cs:702`). Answer decoding reuses
-    exclusive bake-owned spans; final lattices reuse point-conversion storage.
-    Worker-slot index retention is bounded to one fine-sample budget across
-    slots: retaining every slot's maximum grew standing LOH to 8,530 MiB;
-    bounded retention reads 5,404 MiB versus the baseline's 6,222 MiB.
+    doubles, 5,022 MiB (`SdfDualContouring.cs:702`). The frame thread decodes
+    each readback once into native answer buffers its group's job owns; final
+    lattices reuse point-conversion storage. Worker-slot index retention is
+    bounded to one fine-sample budget across slots, reported to the account and
+    released when a bake settles: retaining every slot's maximum grew standing
+    LOH to 8,530 MiB; bounded retention reads 5,404 MiB versus the baseline's
+    6,222 MiB.
     Continue with owned storage, through `IAllocator` and `MimallocAllocator`
     where it goes native; a shared cross-thread pool belongs to the memo.
-- The allocation cuts' cross-family review. These are fixed in one batch after
-  the memo's M2a lands, because they touch the same bake files:
-  - [high] `FinalLattice.SetPoints` (`SdfMeshPathBake.cs:2072-2076`) now
-    converts points inside `lock (m_gate)` (`:1381`, `:1444`), the lock the
-    frame thread takes in `Dress` (`:342`), `TryTakeForFrame` (`:488`) and
-    `Stage` (`:622`). Before the cuts, that work ran before the lock. A
-    refinement round of up to 4M points stalls the frame while the lock holder
-    allocates, zeroes and converts, and the allocation can trigger a gen2
-    collection under the lock (estimated about 5 ms per million points). Fix:
-    build the converted buffer on the worker and swap it in under the lock.
-  - [medium] Decode buffers (`SdfMeshPathBake.cs:728-751`) keep up to tens of
-    MB per residency with no trim. They add a per-bake lock that serialises
-    workers' decoding, and they ignore the worker slot's scratch, so bake
-    storage has two owners.
-  - [medium] Static worker-slot refinement scratch
-    (`SdfMeshPathBake.Residency.cs:52`, `SdfSampledLattice.cs:908-913`) lives
-    for the whole process, up to about 96 MB, unreported. Its trim limit is a
-    guess rather than a measured working set. The large refinements that
-    dominate allocation still allocate, so the reuse helps only small ones.
-    It must be reported to M1's account.
-  - [medium] The cold-bake pause comparison needs at least 3 alternating A/B runs
-    on a quiet machine, with GC events read from the trace. Retained large arrays
-    compacted by `ConserveMemory=5` are the likelier cause of the longer
-    suspension.
-  - [low] `SdfProgramBuilder.Clear` leaves `m_openInstanceBakesSeparately` and
-    `m_openInstanceBoundInSlotFrame` set after a thrown emission.
-  - [low] The reused frame builder keeps the last emission's objects alive into
-    gen2.
-  - [low] A cached rigid template matches only on the total material count, so
-    one avatar joining or leaving invalidates every template.
-  - [low] `WorldSeatBindings` checks overlay gates in three places, with two
-    change detectors for one fact.
-  - [low] `WorldSessionSceneEmitter` and `WorldAdjacencySceneEmitter` still
-    allocate the avatar material arrays.
-  - [low] `TemplateScratch` is a second cache of retained emissions beside
-    `WorldPlacementStamper`'s, which is duplication to converge.
+- What remains of the allocation cuts' cross-family review (the gate, decode
+  buffer and worker-scratch items are fixed; see Memory ownership):
+  - [medium] The cold-bake pause comparison needs at least 3 alternating A/B
+    runs on a quiet machine, with GC events read from the trace. No quiet
+    machine was available to `mem-fixes`: four Direct3D 12 cold bakes ran at 86
+    to 100 % CPU from other lanes, and GC pause per collection read 22 ms in
+    one run and 40 to 83 ms in the others with no change between them that
+    explains it. Retained large arrays compacted by `ConserveMemory=5`
+    (`Puck.World.csproj:30`) remain the likelier cause of long suspensions; the
+    settled LOH still reads about 1.5 GB after `host.memory collect`.
+  - [low] `SdfProgramBuilder.Clear` (`SdfProgramBuilder.cs:164-180`) leaves
+    `m_openInstanceBakesSeparately` and `m_openInstanceBoundInSlotFrame` set
+    after a thrown emission.
+  - [low] The reused frame builder (`SdfCompositionFrameSource.cs:230`) keeps
+    the last emission's objects alive into gen2.
+  - [low] A cached rigid template (`WorldRigidAssets.cs:155`) matches only on
+    the total material count, so one avatar joining or leaving invalidates
+    every template.
+  - [low] `WorldSeatBindings` checks overlay gates in three places
+    (`WorldSeatBindings.cs:123-136,176-199,306-323`), with two change detectors
+    for one fact.
+  - [low] `WorldSessionSceneEmitter` (`:293-294`) and
+    `WorldAdjacencySceneEmitter` (`:263-264`) still allocate the avatar
+    material arrays.
+  - [low] `TemplateScratch` (`WorldRigidAssets.cs:24-39`) is a second cache of
+    retained emissions beside `WorldPlacementStamper`'s (`:964`), which is
+    duplication to converge.
 - Decided: the 30 and 15 Hz tiers stay tiers. On a fixed grid a floor's period
   is whole refreshes (`PresentationRate.GridSteps`), and with a 30 Hz tick on a
   60 Hz display only every other refresh is free of a step, so the useful
   periods are two and four refreshes, which the tiers already are; a continuous
   rate would be quantized back to them and adds no placement freedom.
-- [medium] Kit bodies' advance stays serial, so the parallel tick partitions
+- [high] The creature garden, the parallel tick's forcing workload, is all kit
+  bodies. At 128 creatures a tick is about 3.7 ms, and body advance is 80 % of
+  it (motion programs 33 %, their contact sweeps 30 %, producers 17 %). The
+  planned rigid-body step (T2) takes none of that, so this item, not T2,
+  carries the parallel tick's main gain. It follows T1 and T3 in the memo's
+  order. (from: garden, `worlds/debug/garden-crowd.puck`)
+  Kit bodies' advance stays serial, so the parallel tick partitions
   only the snapshot, the crossing scan and the rigid bodies, which is less than
   the measured 70 %. A kit body's advance is one arena transaction on the one
   journal: `BeginKitStep` opens a scope (`WorldInputRuntime.Effects.cs:18-24`),
@@ -282,12 +280,66 @@ together. The work builds on today's runtime through `IAllocator`
 move goes through. The custom no-GC runtime port stays later work, on the
 [memory-pooling page](memory-pooling.md), after the fundamentals.
 
-M1 and M2a are built (`mem-m1`, Release .NET 11, both shader targets).
-`MemoryAccount` owns admission and category totals; the library reserves its
-unused cache allowance and bake groups reserve their simultaneous peaks.
-Published mesh payloads, copied readbacks, lattice storage and point workspaces
-use the injected allocator. Managed contour roots and worker refinement indexes
-keep their existing owners; the allocation-review items above still apply.
+M1 and M2a are built (`mem-m1`), with both cross-family reviews' findings on
+the bake, memory and library files fixed by `mem-fixes`. `MemoryAccount` owns
+admission and category totals. Admission paces and always progresses: a bake
+group's peak is its own final lattice plus the fine samples its refinement
+factor can measure (`SdfSampledLattice.FineSampleBound`), narrowed once
+measured; the first deferred group holds its place; a group with nothing else
+of its bake admitted is admitted alone; free physical memory is read outside
+the account and only paces; and admission waits while the pool's queue holds
+a round of every worker's stages. The library reserves nothing and evicts by
+its meshes' charged storage. Published mesh payloads, decoded readback
+answers, lattice storage and point workspaces use the injected allocator, and
+a chunked mesh stores its attributes once. No array-sized work runs under the
+bake gate the frame thread takes. Managed contour roots and worker refinement
+indexes keep their existing owners; the worker slots report theirs to the
+account and release them when a bake settles.
+
+- `mem-fixes` Direct3D 12 cold bakes of `worlds/debug`, windowed, empty private
+  cache, at 86 to 100 % CPU from other lanes: before the fixes the world bake
+  took 271 s with 962 deferrals and the frame thread waited on the bake gate up
+  to 179 ms, 15.6 s in total, 1,929 times over 1 ms; after, 185 s with 122
+  deferrals and none stalled, gate waits up to 136 ms (a collection while a
+  worker held it), 1.35 s in total, 35 over 1 ms, with identical samples and
+  triangles. Live payload after `host.memory collect` fell from 1,526,790,926
+  to 1,409,528,905 B (chunked attributes stored once). Frame times during the
+  bake (p99 per minute 186 to 307 ms before, 233 to 398 ms after) are not
+  comparable: GC pause per collection read 22 ms in the before run and 40 to
+  83 ms in three after runs as the machine load rose. The after build's Vulkan
+  cold bake settled in 525 s with 346 deferrals, gate waits up to 149 ms and
+  64 over 1 ms, and live payload 1,607,238,606 B after collection; it baked
+  1,101,923,007 samples and 45,044,555 triangles against Direct3D 12's
+  999,550,075 and 38,652,955. No before Vulkan run was taken, so whether that
+  backend difference predates these changes is unconfirmed; the changes are
+  CPU-side and left Direct3D 12's counts identical. Both backends stay far
+  past the one-minute cold-bake ruling on this loaded machine.
+- Still open from the memory review:
+  - [medium] Managed working memory per admitted group (contour lists,
+    refinement masks and `Vector3[]` point rounds: `SdfSampledLattice.cs:439`
+    onward, `SdfMeshPathBake.cs` `ChooseCrossingPoints`) is not in a group's
+    peak, so the account cannot pace the collections it causes; the settled
+    LOH still reads about 1.5 GB after `host.memory collect`. The cure is the
+    next native movers (the contour and the refinement's per-cell masks), not
+    a count cap.
+  - [low] A chunked mesh still stores its triangles' indices twice: the
+    parent's joined indices for whole-group queries and each chunk's own
+    (`SdfMesh.Storage.cs`, `NativeCopy`). Dropping the parent's needs its
+    readers (the irradiance scene, `SdfMeshAudit`, the diagnostics' nearest
+    query) to walk the chunks.
+  - [low] The library releases evicted claims, which frees native payloads,
+    under its own gate (`SdfMeshLibrary.cs` `Retain`), the gate the frame
+    thread takes in `Restart` through `TryTake`.
+  - [low] `HostMemory.AvailablePhysicalBytes` on Linux reads `/proc/meminfo`
+    with LINQ and `string.Split` (`HostMemory.cs:29-39`); the bake reads it at
+    most every 0.25 s.
+  - [low] `GpuRegion` grows its host copy with `NativeMemory.Alloc*`
+    (`GpuRegion.cs:331,760,854,980`), the same allocate/copy/publish growth as
+    `OwnedBuffer`, outside `IAllocator` and the account.
+  - Declined: one claim holder bridging `Dress` to the mesh region. The two
+    claim sets cover the same list at different times (from dressing until the
+    region stages it, and from staging until the next list stages), and both
+    now claim only the meshes entering their list (`SdfMeshClaims.Update`).
 
 - Empty private-cache cold bakes, before/after: Direct3D 12 gen0 increments
   683/481, Vulkan 711/536, from `host.memory` before and after settlement.
@@ -306,9 +358,14 @@ keep their existing owners; the allocation-review items above still apply.
 - On an uncached desk edit in `worlds/debug`, `host.memory budget 1` emitted
   `[sdf.mesh-bake] deferred ... group=-122 ... budget=1`; restoring `auto`
   settled the bake and `quit` exited 0, with no worker failure or bake refusal.
-  A preceding whole-world cold attempt resumed but reached its 600 s wait
-  limit with 260 groups pending under machine pressure (0.2 GB free RAM).
-  The one-group check establishes resumption without that timing confound.
+  A preceding whole-world cold attempt reached its 600 s wait limit with 260
+  groups pending at 0.2 GB free RAM: every group's fixed 384 MB peak and the
+  reserved cache allowance deferred them all, with no progress rule. That is
+  the admission defect `mem-fixes` removed: a whole-world cold bake under
+  `host.memory budget 2000000000` and `world.lockstep on`, at 0.4 to 1.4 GB
+  free, deferred 493 times and settled in 809 s with the unbudgeted bake's
+  999,550,075 samples and 38,652,955 triangles; the lockstep World then
+  stepped 30 ticks and quit with exit 0.
 - A desk extent edit rebuilt exactly one group (23 dispatches, 1,399,082
   samples); GI built one geometry and retained the old 15,368-triangle one.
   `host.memory collect` released 606,352 cached bytes and 536,229,256 reserved
@@ -497,6 +554,19 @@ system can take, from `dotnet-trace` thread-time samples of the frame thread
   (52 %), of which the per-body pose pack (`WorldCreationInstances.PackTransforms`,
   effectors included) is 0.89 / 0.78 ms and partitions by registration; graph
   preparation and scheduling are about 0.5 ms.
+- **The creature garden, the parallel tick's forcing workload**
+  (`worlds/debug/garden-crowd.puck`, 128 flocking, stalking and rumouring kit
+  bodies; [port lane 4](port-experimental.md#4-creature-garden--done)). Headless
+  unpaced, on the lead machine with other lanes holding the CPU at 100 %,
+  `host.frames` tick avg / p50: 12 creatures 1.37 / 1.29 ms, 32 (the garden)
+  1.65 to 1.96 / 1.39 to 1.43, 128 3.72 to 3.83 / 3.20 to 3.49 (about 11 % of a
+  30 Hz period), 256 4.88 / 3.90, 512 5.78 / 5.69. By sampled thread time, as a
+  share of `WorldTick.StepCore` at 32 / 128: body advance 89 / 80 % (motion
+  programs 50 / 33 %, their contact sweeps 48 / 30 %; producers 13 / 17 %,
+  flock steering and navigation under 2 %), `WorldEventFeed.Collect` 2.7 /
+  9.0 %, snapshot 2.5 / 3.8 %, the rule VM 1.7 / 1.1 %, pair contacts under
+  1 %, no crossing scan. None of the bodies is rigid, so E1 partitions none of
+  this; it is the measured case for the kit-body item above.
 
 - [high] Steady 60 FPS is not held where a 30 Hz tick and the 15 Hz rated
   presentation burst land on the same frame. Quiet lead machine (the World the
@@ -609,6 +679,27 @@ system can take, from `dotnet-trace` thread-time samples of the frame thread
 
 #### Other frame-time findings
 
+- [high] The meadow is now a forcing workload in the real debug world
+  (`debug.go meadow`): 1,994 two-part blades add 4,004 dynamic slots and
+  4,215 retained mesh draws. Direct3D 12's 600-iteration standing/walking
+  observations are 46.59/55.21 ms, produce 35.79/40.54 ms. Whole-world
+  cold-bake observations are 209.996 → 306.639 s on Direct3D 12 and
+  321.246 → 499.573 s on Vulkan, all past the 60 s ruling. Animated placement
+  registrations cannot use the existing pose-rate holds:
+  `WorldCreationInstances.Pack.cs:247` requires `BodyIndex`, and
+  `WorldCreationInstances.Rates.cs:193` omits them from readings. Owner:
+  rendering lane. Extend the same projection/consumer-based rate
+  mechanism to placement roots, measure pose packing and draw recording, and
+  preserve planted roots, continuous world-phased gusts and independent tip
+  flutter. Triangle detail already exists (`SdfWorldPassRecorder.cs:886`);
+  do not infer that triangle LOD is missing. Draw count is the other cost:
+  4,215 draws for 288 unique blade geometries, one draw per blade part. The
+  cause fix is one draw per shared geometry with its instances, through the
+  memo's R2 counted indirect path (`SdfMeshOcclusion`), not fewer blades. The
+  meadow is R2's and R1's forcing workload: measure produce's draw-recording
+  share before and after. The controlled-engine-build
+  before/after observations and their machine-load limits are in
+  [port lane 9](port-experimental.md#9-meadow-and-foliage).
 - [medium] `SdfMeshPathBake.Dress` rebuilds every draw of every group whenever
   one dynamic slot moved, and for each dynamic group scans `MeshAssetSlots`
   (`Enumerable.Contains` over an `IReadOnlyList<int>`) and every mesh instance
@@ -806,11 +897,10 @@ store (AGENTS.md), and work proportional to change.
   file's two other failing laws (`ACubicLatticeDispatchesWhenItsPosesExceedTheSampleBudget`,
   `SettleRebakesKeepTheirCapsAndARefusedOneKeepsItsMesh`) are timing-dependent:
   delete them.
-- [medium] Admission (`MaxAdmitted`) counts per residency though the pool is
-  process-wide, and counts groups, not bytes: several cold residencies admit
-  twice the workers each (`SdfMeshPathBake.cs`, `TryTakeForFrame`). The urgent
-  answer queue drops no retired group's answers, and nothing bounds queued
-  answer bytes (`SdfMeshPathBake.Residency.cs`, `Schedule`, `TakeWork`).
+- [low] Each residency's bake guarantees its own progress, so several cold
+  residencies under a too-small budget each admit one group past it
+  (`SdfMeshPathBake.cs`, `TryTakeForFrame`, the "admitted alone" branch); the
+  process-wide pool's progress rule belongs to the job system's J1.
 - [low · unconfirmed] The bake indexes its `static const float3 SdfBakeTaps[4]`
   by the `[loop]` counter (`sdf-mesh-bake.comp.hlsl:22,94,102`), the shape the
   rendering skill's local-array rule forbids; no capture has read the bake
@@ -1106,12 +1196,18 @@ a design built into C# or living only in the debug world.
   `clearanceMaxElevation` for cutaway only (fade never rises,
   `src/Puck.World.Client/WorldCameraClearance.cs`, `Resolve`) and one
   `closeTargetOffset` for both modes, so `chaseCamera` authors the cutaway
-  ceiling (1.1) and the fade close target. Decided (the lead's call): the
-  table is the owner's camera decision and the solver is the mechanism, so the
-  mechanism grows to match. `maxRise` and the close target become per-mode
-  authored values: fade rises up to its own `maxRise` and each mode has its
-  own close target. `chaseCamera` then authors the table's values, and the
-  feel sittings tune them.
+  ceiling (1.1) and the fade close target. Decided: clearance becomes a camera
+  program operation, and the modes leave the engine. The owner's direction is
+  that feel is worked out in Puck expression. The `WorldCameraClearanceChoice`
+  modes (Cutaway, Fade) are behaviours baked into C#, and per-mode C# fields
+  would bake in more. A `Clearance` operation in `WorldCameraProgramOp` is the
+  mechanism. It probes the room (free boom, free rise, intervening walls) and
+  offers wall cutaway and body fade. Every number is an authored, bindable
+  parameter, including the eye radius and skin
+  (`WorldCameraClearance.cs:43,46`). Fade and cutaway are authored cases of
+  `worlds/standard/camera.puck`'s `chaseCamera`, chosen by `SelectProgram`
+  from the player's preference row. The decision table's values are those
+  cases' starting values, tuned in `.puck`. (leaks-2 lane)
 - [low] Flight and fuel are authored only in the Moth
   (`worlds/debug/avatars/moth.puck:1860-1925`). When the assisted-flight pass
   comes it is a standard ability template, with `dashAbility` in
@@ -1164,21 +1260,20 @@ worlds in place is rewritten.
   it (wire, standard or gap), its place in the debug world and its size, plus
   what the debug world already has in another form. Almost every feature is
   already built and tested, so a port is wiring documents to what exists; the
-  gaps it names are a region-scoped pair primitive (the combat yard) and, only
-  if measured, a level of detail for instanced animated geometry (the meadow).
+  gaps it names are a region-scoped pair primitive (the combat yard) and the
+  meadow's measured animated-placement pose cost in the Engine job system packet.
   The lanes, ordered by the engine systems the debug world does not yet
   exercise:
   1. Authored render passes: a state-bound HLSL pass, a compare studio (medium).
   2. Seamless topology and carried identity: the quilt, a closing seam, a pitched
      seam, `border` composition, an identity gate (medium).
   3. Water and fields: a medium pool, flow across basins (medium).
-  4. Creature garden: flocks, a stalker, wall crawling, rumor (large).
+  4. Creature garden: flocks, a stalker, wall crawling, rumor (done).
   5. Second seat and hidden information: two seats, Lineup, hidden ranks, Word
      spy (large).
   6. Traversal course: kart, ledge course, planetoids, grapple (large).
   7. Rules arcade: tetromino as rules, snake, rulepush (large; needs lane 1).
   8. Physical judges: billiards, bowling, dominoes, paddleball (medium).
-  9. Meadow and foliage: the wind meadow, trees and rocks (medium).
   10. Packages as examples: the familiars rules module (large).
   11. Board tables II: Chinese checkers, hex lines, mancala, tic-tac-toe,
       backgammon (large).
@@ -1197,20 +1292,52 @@ worlds in place is rewritten.
 
 ### Edit to running, hot reload and boot
 
-Owner: hot-reload follow-up (boot and build) · ordinary · Next: the
-source-generated JSON context for `WorldDefinition`, then a reboot for an edit
-outside `PuckHotReload`, then the windowed C# loop timed on a quiet machine and
-the cold and warm builds measured.
+Owner: hot-reload follow-up (boot and build) · ordinary · Next: the boot's
+JSON round trip in `BindLive`, then a reboot for an edit outside
+`PuckHotReload`, then the windowed C# loop timed on a quiet machine and the cold
+and warm builds measured.
 
-- Source-generate the document model's JSON metadata. A headless boot to
-  `world.status` JIT-compiles 43,941 methods from the IL build and 24,248 from
-  a ReadyToRun publish; of those 24,248, 22,401 are generic instantiations and
-  15,786 are `System.Text.Json`'s, built by reflection over the
-  `WorldDefinition` graph, which no precompiler outside the framework reaches.
-  A `JsonSerializerContext` over that graph removes them from both builds
-  (the `dotnet-performance` skill's source-generation rule). Local builds stay
-  IL until then: ReadyToRun leaves this cost in place and adds a precompile to
-  every edited project's build.
+- The boot's `System.Text.Json` JIT is the source-generated context's own
+  generic instantiations, not reflection: the world document already rides one
+  generated context (`WorldJsonSourceContext` behind `WorldJsonContext`) with no
+  reflection fallback, and its metadata instantiates the serializer's generics
+  once per value type in the graph. A headless IL boot of the debug world to
+  `world.status` compiles 43,820 methods first (50,153 with tier-ups;
+  `DOTNET_JitDisasmSummary`), 15,341 of them `System.Text.Json`'s:
+  `JsonPropertyInfoValues<T>` 5,568, `JsonPropertyInfo<T>` 2,462,
+  `JsonConverter<T>` 1,227, `JsonMetadataServices` 1,035, and the enum converter
+  family behind `StrictEnumConverter<T>` (`EnumConverter<T>`, its field info,
+  `JsonStringEnumConverter<T>`, the factory helpers) 1,758. `host.memory` reads
+  42,000 to 43,200 `jit methods` and 3.1 to 4.5 s of `compile` there. A
+  ReadyToRun publish leaves them (15,786 of its 24,248), since its version
+  bubble excludes the framework that defines the generics; only the composite
+  publish decided below, or fewer instantiations, removes them. Configuring
+  that metadata cost the boot's main thread 1,513 ms (892 of it JIT and type
+  loading) before its first parse; `WorldJsonContext.StartPreparing` now runs
+  it on a background thread from the World's first line, the main thread waits
+  912 ms for it under load from other lanes, and a boot with an empty compile
+  cache (the edit loop after a Schema, Transpiler or State edit, which moves
+  the compiler identity) reached `world.status` in 14.8 and 15.0 s against
+  16.2 and 15.8 s.
+- `WorldStateDocumentValues.BindLive` (and `TryRehydrate`) copy the whole
+  definition by serializing and parsing it: 323 ms plus 371 ms of a warm boot's
+  main thread, and the boot's only full serialize, so it pays every write
+  path's JIT too. Copy only the mutable value holders the document walker
+  reaches.
+- A cold compile of the debug world spends 8.6 s of the main thread in the
+  composer's `JsonNode` merge (`WorldDocumentBasis`): `DeepEquals` about
+  840 ms, `OrderedDictionary.IndexOf` 366 ms, `RowIdentity` 259 ms and 1.5 s
+  of GC polls under its clones.
+- A strict enum converter of Puck's own would replace the 1,758 enum-family
+  methods and 142 ms of converter creation; it must keep the schema's `enum`
+  lists (the exporter reads `EnumConverter<T>` natively),
+  `JsonStringEnumMemberName` and flags spellings, and the read side's
+  case rules.
+- Two boot reads still resolve by reflection, a few milliseconds each:
+  `WorldSubmissionCodec` reaches its protocol union records through a
+  `DefaultJsonTypeInfoResolver` combined after the world context, and
+  `WorldAssetRowLoader` parses music, table, tune and patch documents through
+  `DocumentJsonOptions.Shared`.
 - [medium] The seeded `World` Edit grant is lost across a load or a reload. A
   `world.load` from debug into a same-capacity input fixture leaves authored
   state-writing rules refused with `the live edit grant refuses state:blink` (and
@@ -1226,7 +1353,21 @@ the cold and warm builds measured.
   then narrates `inhabited '<row>' has no free entity slot — the 559-slot table
   is full` and spawns only what the boot's entity table holds. Decide whether a
   reload grows the live entity table or refuses the raised capacity by name.
-- Decide (the lead's call): The first crossing's 639 first-use JIT methods: a self-contained composite ReadyToRun publish or a rehearsal transfer at boot.
+- A self-contained composite ReadyToRun publish for the published World and
+  the silo (decided by the lead). Composite brings the framework into the
+  version bubble, so it removes the cause of both first-use JIT costs: the
+  first crossing's 639 methods, and the 15,341 `System.Text.Json` generic
+  instantiations of the source-generated `WorldJsonSourceContext`, which a
+  per-assembly ReadyToRun publish cannot precompile. A rehearsal transfer at
+  boot would hide only the first. Local builds stay IL for the edit loop.
+  Measure before and after: JIT count to `world.status` (`host.memory` prints
+  it), the first crossing's frame, boot wall time, publish size and publish
+  time. The silo lane's non-composite ReadyToRun showed no proven gain under
+  load, so composite is the test.
+- [low] The silo activates worlds without calling
+  `WorldJsonContext.StartPreparing()`, which takes the document metadata's
+  configuration off the activation path as `Puck.World`'s `Program.cs` does.
+  (from: json-sourcegen)
 - An edit to a project outside `PuckHotReload` is refused ("can not be edited")
   and `dotnet watch` stops applying changes without rebooting; it should reboot
   as a rude edit does. This reboot is the mechanism [in-world editing](#in-world-editing)
@@ -1587,6 +1728,18 @@ them verbatim repeats) under-use the language:
   27 times).
 
 ### Lighting and GI
+
+- [high · unconfirmed] A sun that moves every frame freezes indirect light.
+  Each direction change starts a new lighting generation
+  (`SdfMeshIrradiance.cs:759-779`), and a trace batch landing after a
+  generation change is discarded (`:1067`), so GI sticks at the last sun that
+  held still. The debug world's sun is static (`worlds/debug/hall.puck:1413`),
+  so nothing has exercised it; the owner's authored day cycle will. Confirm
+  with a run that binds the key light to a clock, then fix it with the
+  illumination research's plan. (from: research-claude)
+- The probe trace casts two ray sets from one origin: 128 for radiance
+  (`SdfMeshIrradiance.cs:1245`) and 144 for depth (`SdfMeshProbeDepth.cs:19`).
+  This is duplication to converge into one hit buffer. (from: research-claude)
 
 Owner: next lighting batch (rendering, principal-grade review) · medium · Next:
 light a cold area from the coarser levels or the sky term the moment a view
@@ -1979,6 +2132,14 @@ no sooner than in plan order (near 4 m: 47 of 135 at 160 s, all at 434 s).
 
 ### Vulkan regressions and GPU robustness
 
+- [low · unconfirmed] The bake's output may differ by backend. One after-run
+  read 1,101,923,007 samples and 45,044,555 triangles on Vulkan against
+  999,550,075 and 38,652,955 on Direct3D 12, but those runs straddled the
+  meadow's merge. The meadow lane read 1,101,618,980 (Direct3D 12) against
+  1,101,543,801 (Vulkan) on one tree. Compare both backends' counts on one
+  tree; a bake whose geometry depends on the backend is a defect. (from:
+  mem-fixes, meadow)
+
 Owner: rendering (GPU leg, lead GPU scheduling) · ordinary · Next: Vulkan's
 crossing frame (52.5 ms of produce) and the pixel-pass gap at locked clocks.
 
@@ -2090,6 +2251,9 @@ The suite target (100 % line coverage plus the keep-list) and CI's `coverage` jo
 are suspended; a red test or coverage job is not a stop, and a refactor rewrites
 or deletes tests freely.
 
+- Four `Puck.SdfVm.Tests` laws fail on the integration head with or without
+  the memory fixes: store repeated load, skinned settle, cubic lattice and
+  static union copy. The settle-cap law fails intermittently. (from: mem-fixes)
 - After the job-system batch's merges, five server tests fail:
   `HistoryRefusalLawTests`, `CellBurstLawTests`, `InhabitCountLawTests`,
   `WorldExtensionLawTests`, and `AddonGuestLawTests` (a 30 s timeout). The
@@ -2426,6 +2590,24 @@ the completed 70-stop comparison manifest.
 
 Owner: language lane (transpiler) · medium · Next: the inline console command
 hang, then the pre-`main` language findings.
+
+- Decide (the language lane's call): whether a rule's effect list merges by
+  `key` when a template is re-expanded over a basis. Today a rule whose effects
+  write one key twice (`claim-expire` in `worlds/debug/pond.puck`) refuses with
+  "the basis list carries it more than once", so the garden's crowd fixture
+  re-expands only `pondFlocks`. Effects are ordered actions, not a keyed set.
+  (from: garden)
+- [low] The rule work-unit ceiling reads 4,250,000 on the port page and
+  4,000,000 in the valley plan. Reconcile both pages against `world.budget`.
+  (from: composition)
+- [medium] A solid creation shape without `position` throws instead of giving
+  an authoring diagnostic. Removing `position [0, 0, 0]` from
+  `worlds/standard/foliage.puck`'s `sceneryPatch` makes both `compile --validate`
+  and a headless debug boot throw `NullReferenceException` at
+  `WorldDefinitionValidator.Placements.cs:1723`, through
+  `DocumentSpatialValues.cs:143`. Owner: language lane. Default or
+  refuse the missing position before the domain-expansion walk. The port
+  authors the explicit position and boots successfully. (from: meadow)
 
 - [low] An imported module named `roles` changes how its importer lints. Add a
   file `worlds/standard/roles.puck` holding only a `roles [ { name: "companion"

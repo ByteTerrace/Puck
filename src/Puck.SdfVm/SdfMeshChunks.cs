@@ -117,8 +117,10 @@ public static class SdfMeshChunks {
     }
 
     /// <summary>Joins chunks' merged surfaces for whole-group queries. Only chunks are stored and drawn; the joined
-    /// arrays are a CPU query view, never another resident GPU mesh.</summary>
-    /// <param name="chunks">The nonempty list of chunks.</param>
+    /// arrays are a CPU query view, never another resident GPU mesh. The joined mesh holds the vertex and triangle
+    /// attributes once: its chunks are views of its positions, normals and triangle materials, in order, each keeping its
+    /// own indices and levels, and a native copy keeps that sharing (<see cref="SdfMesh.StorageBytes"/>).</summary>
+    /// <param name="chunks">The nonempty list of chunks, none of them skinned.</param>
     /// <returns>The whole-group mesh.</returns>
     public static SdfMesh Join(IReadOnlyList<SdfMesh> chunks) {
         ArgumentNullException.ThrowIfNull(chunks);
@@ -140,8 +142,25 @@ public static class SdfMeshChunks {
             vertex += chunk.Positions.Length;
             triangle += chunk.TriangleCount;
         }
-        var joined = new SdfMesh(positions: positions, indices: indices, normals: normals, triangleMaterials: materials) { BakeCell = chunks[0].BakeCell };
+        var views = new SdfMesh[chunks.Count];
 
-        return joined with { Chunks = chunks };
+        vertex = 0;
+        triangle = 0;
+        for (var index = 0; (index < views.Length); index++) {
+            var chunk = chunks[index];
+
+            views[index] = new SdfMesh(
+                positions: positions.AsMemory(start: vertex, length: chunk.Positions.Length),
+                indices: chunk.Indices,
+                normals: ((normals.Length == 0) ? default : normals.AsMemory(start: vertex, length: chunk.Positions.Length)),
+                triangleMaterials: ((materials.Length == 0) ? default : materials.AsMemory(start: triangle, length: chunk.TriangleCount))) {
+                BakeCell = chunk.BakeCell,
+                Levels = chunk.Levels,
+            };
+            vertex += chunk.Positions.Length;
+            triangle += chunk.TriangleCount;
+        }
+
+        return new SdfMesh(positions: positions, indices: indices, normals: normals, triangleMaterials: materials) { BakeCell = chunks[0].BakeCell, Chunks = views };
     }
 }

@@ -10,7 +10,9 @@ endless fall, a painting in the floor under its twin in the ceiling. A canvas
 shows where it leads as a window and ripples like an event horizon, and walking
 through it crosses there with no load. The garden holds two frames of its own
 that lead back, and the far one stands in view through the garden painting, so
-the wing shows a portal seen through a portal.
+the wing shows a portal seen through a portal. West of its frames the garden
+grows a pond plot of hounds, spiders, dragonflies and fish
+([garden.md](garden.md)).
 
 ## Open it
 
@@ -164,6 +166,10 @@ key (`world.rates toggle`, F7). [range.md](range.md) says how to use it.
 
 ## Going places
 
+The [wind meadow](meadow.md), east of the hero studio, is reached with
+`debug.go meadow`. Its 1,994 two-part blades, relieved banks, trees and mossy
+rocks provide the dense animated-geometry workload for bake and frame profiling.
+
 [places.puck](places.puck) names a spot a few metres from each feature and
 authors `debug.go`, a console command composed from existing verbs, that goes
 there from anywhere:
@@ -197,6 +203,7 @@ case, `stage` when omitted:
 | `camera-bays` | (-23.5, 0, 36.8), before the two bays and their partition | +Z |
 | `gallery-level-0` .. `gallery-level-3` | (15.9, 4.5k + 0.05, 34), each level's landing in the hall | +Z, toward the lift door |
 | `hero` | (48, 0, -48), the avatar studio | -Z |
+| `meadow` | (119.5, 0.04, -55.3), in the wind meadow east of the studio ([`meadow.md`](meadow.md)) | -Z |
 | `range` | (-100, 0, 118), the head of the rate range ([`range.md`](range.md)) | -Z, down the lane |
 
 The chase camera keeps its world heading when a body is posed, so a place
