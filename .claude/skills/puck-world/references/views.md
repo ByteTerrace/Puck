@@ -1,7 +1,7 @@
 # Views — authored cameras and seat control
 
 The `views` section owns camera structure. `seatDefaults.seatCameraFeel`
-(`WorldSeatCameraFeel`) owns portable human input preference and the player's clearance choice. The split is
+(`WorldSeatCameraFeel`) owns portable human input preference. The split is
 strict: pitch limits and axis framing belong to `views.seatControl` and the rig,
 and the feel carries neither (strict parse refuses any unmapped member).
 
@@ -23,8 +23,13 @@ Primary code:
 - `Puck.World.Client/WorldSeatViewState.cs` — the one live state per occupied
   seat, including yaw/pitch, the cached compiled rig, and the boom follower.
 - `Puck.World.Client/WorldCameraClearance.cs` and `WorldChaseBody.cs` — where the
-  chase eye stands: a per-seat spring arm out of the static field and out of the
-  framed body's kit collider and drawn shapes (see "Chase eye clearance" below).
+  chase eye stands: a per-seat spring arm, driven by the program's `clearance`
+  op, out of the static field and out of the framed body's kit collider and
+  drawn shapes (see "Chase eye clearance" below).
+- `Puck.World.Schema/WorldCameraPrograms.cs` — the document's camera-program
+  table (`Declared`, `Find`) that the validator, the rig compiler and the
+  reference census share, and the seat's default-path framing
+  (`SeatFraming`, `SeatOrbit`).
 - `Puck.World/WorldSeatViewInput.cs` — the pointer adapter that turns the seat camera; `WorldDragMotion.cs` decides what each pointer event's motion does to a drag (counted from the press, cut at the release).
 - `Puck.World.Client/WorldFramePresenter.cs`, `WorldAdjacencySceneEmitter.cs`, and
   `WorldContinuum.cs` — local and neighbouring-authority render callers of the
@@ -46,19 +51,26 @@ basis's own `views` block:
 ```text
 import "../../standard/camera"
 
-chaseCamera(rig: "moth-camera", pivotOffset: [0, 1, 0], closeTargetOffset: [0, 1.74, 0], eyePoint: [0, 1.75, 0.22])
+chaseCamera(rig: "moth-camera", pivotOffset: [0, 1, 0], fadeCloseTarget: [0, 1.74, 0], cutawayCloseTarget: [0, 1.55, 0], eyePoint: [0, 1.75, 0.22])
 ```
 
-It emits `views.seatControl` (pitch limits, `clearanceMode`,
-`maxRise`, `eyeRadius`, `surfaceSkin`, `characterFade`, `autoFirstPerson`, `boom`),
-`views.seatRig` (orbit, lookAt with the close target, fieldOfView, the
-`camera-boom` dynamics and firstPerson), the `camera-boom` row and
+It emits `views.seatControl` (pitch limits, `autoFirstPerson`, `boom`), two
+case programs in `views.programs` (`<rig>-fade` and `<rig>-cutaway`: orbit,
+lookAt, a `clearance` op, fieldOfView, the `camera-boom` dynamics and
+firstPerson), `views.seatRig` (a `selectProgram` keyed by
+`state.cameraClearance`), the `CameraClearance` enum and its `cameraClearance`
+row, the `camera.clearance` command, the `camera-boom` row and
 `seatDefaults.seatCameraFeel`, every value a template argument defaulting to the
 [chase-camera decision](../../../../docs/decisions/play.md#the-chase-camera)'s
-table. The engine's `WorldSeatViewControl` requires `clearanceMode` and
-`maxRise` (`fade` and `cutaway`), `eyeRadius` and `surfaceSkin`; an absent `characterFade` never fades the body and
-holds no minimum boom, and an absent `autoFirstPerson` makes automatic pull-in
-unavailable.
+table. An absent `autoFirstPerson` makes automatic pull-in unavailable.
+
+`views.programs` holds named camera programs no camera or seat resolves through
+directly: the cases a `selectProgram` or `blend` names. It joins the program
+namespace beside `views.seatRig`, `views.cameraRig` and every `cameras[].rig`.
+A seat rig that selects or blends whole framings steers the orbit its default
+path reaches (a select's `default`, a blend's `a`) among the `views` section's
+own programs (`WorldCameraPrograms.SeatOrbit`); its live pitch clamps about that
+orbit's pitch and its distance is the boom's rest length.
 
 The document members are `views.layouts`, `views.seatControl`, `views.seatRig`
 and `seatDefaults.seatCameraFeel` (C# `WorldDefinition.PlayerDefaults.SeatLook`,
@@ -127,12 +139,11 @@ physical axis independently; the dot products against the full 3D `yaw` and
 `pitch` weight vectors then produce semantic look-right/look-up rates. Thus all
 three axes can participate, be combined, or be remapped without code changes.
 A joined identity's preference travels; otherwise the routed world's default
-applies. Pitch limits and yaw reference remain the routed world's; the feel's
-`clearanceMode: Auto|Fade|Cutaway` may override its clearance choice. `Auto`
-inherits `views.seatControl.clearanceMode` (which admits `Fade` or `Cutaway`).
-`player.camera.clearance fade|cutaway|auto` sets a temporary choice for the issuing
-seat; no argument, or `toggle`, flips fade/cutaway. `auto` restores the document
-or identity preference. It changes no logical yaw, pitch or movement state.
+applies. Pitch limits and yaw reference remain the routed world's. The
+tight-space preference is the world's `cameraClearance` state row, not a feel:
+`camera.clearance Fade|Cutaway` (the standard's authored command) writes it, it
+selects the seat rig's case, and it changes no logical yaw, pitch or movement
+state. The row is world-wide, so every seat in a world shares it.
 
 Motion input is a separate, generic toggled mode: `player.motion.controls`
 toggles it (it stays active after the buttons release) and
@@ -233,22 +244,43 @@ interrupting either dwell resets its timer. `world.view.camera <player> full` ec
 `viewSource`, `transition`, `autoFirstPerson`, `room` and `dwell`, alongside the
 actual presented eye/target, fade and third-person clearance result.
 
-The debug world's default is **fade**, with **cutaway** one toggle away. Both
-share target migration: the camera program's `lookAt.closeTargetOffset` names
-the close target, in the same axes as `targetOffset`. As static geometry reduces
-the authored boom from `closeTargetStartFraction` (0.6) to
-`closeTargetFullFraction` (0.2), a smoothstep blend approaches that target and
-eases on the program's `dynamics`. The Moth authors waist `[0, 1, 0]` and close
-target `[0, 1.74, 0]`. The displacement, boom, collision radii and fade distances
-scale with her live scale. Blend/select programs carry the winning look-at's
-migration. Compression is measured at the rest pivot, independently of the
-migrated target, to avoid a feedback oscillation under lintels.
+### The clearance operation
 
-**Fade keeps the room.** The boom shortens along the requested heading and pitch,
-never rises automatically and never advances the near plane through a wall.
-`seatControl.characterFade` authors `startDistance`, `endDistance` and
-`minimumBoom` (the template authors 1.25, 0.45 and 0.35 m full-size). The preferred minimum
-boom yields to closer geometry. The own body becomes a 4×4 screen-door pattern
+A seat framing its own body places its eye by the camera program's `clearance`
+op (`WorldCameraProgramOp.Clearance`, compiled to `SdfCameraOp.Clearance` and
+resolved per frame as `SdfCameraClearance`). A program without one passes the
+eye through. Every parameter is a literal or a `state.<row>[.<key>]` binding,
+full-size metres scaled by the body's live scale, angles in radians:
+`cutaway` (0 or 1), `eyeRadius`, `surfaceSkin`, `maxRise` (0 to π/2),
+`minimumBoom`, `fadeStart` and `fadeEnd` (no fade where `fadeEnd` is not below
+`fadeStart`), `closeTargetOffset` (optional, in the axes of a preceding `lookAt`
+that names a subject), `closeTargetStartFraction`, `closeTargetFullFraction`,
+`nearMargin`, `retractionSkin` and `obstructedTargetSkin` (zero never skips).
+The validator refuses a parameter outside its field's domain
+(`WorldValueFields.Clearance*`), a full fraction not below the start, a fade end
+past its start, a close target with no aimed `lookAt` before it, and a second
+`clearance` op. A blend lerps both sides' numbers and takes `cutaway` from the
+nearer side; a select carries the chosen case's.
+
+The standard authors the feel as two cases (`chaseCamera`): **fade**, the
+default, with **cutaway** one `camera.clearance Cutaway` away. Both share target
+migration: `closeTargetOffset` names the close target, in the same axes as the
+`lookAt`'s `targetOffset`. As static geometry reduces the authored boom from
+`closeTargetStartFraction` (0.6) to `closeTargetFullFraction` (0.2), a smoothstep
+blend approaches that target and eases on the program's `dynamics`. The Moth
+authors waist `[0, 1, 0]` and close targets `[0, 1.74, 0]` (fade) and
+`[0, 1.55, 0]` (cutaway). The displacement, boom, collision radii and fade
+distances scale with her live scale. Compression is measured at the rest pivot,
+independently of the migrated target, to avoid a feedback oscillation under
+lintels.
+
+**Fade keeps the room** (`cutaway: 0`). The boom shortens along the requested
+heading and never advances the near plane through a wall; it rises, at most
+`maxRise` (the template's 0.35 rad), only when no level boom keeps the eye past
+`minimumBoom`, and where no rise does it stays level as far out as the room and
+the minimum boom allow. The fade case authors `fadeStart`, `fadeEnd` and
+`minimumBoom` (1.25, 0.45 and 0.35 m full-size). The preferred minimum boom
+yields to closer geometry. The own body becomes a 4×4 screen-door pattern
 from solid at the start to hidden at the end. `SdfViewSnapshot.StampFade` carries
 only that body's transform-slot range and opacity; the mesh and glass fragment
 passes discard before writing depth or glass sums. Shared stamp transforms and
@@ -256,15 +288,13 @@ shadows stay intact. Mirrors, portals, named cameras and other seats construct
 independent view snapshots, so they still see the whole Moth. Attached screens
 own separate stamp slots and stay visible.
 
-**Cutaway keeps the body.** The following keep-out/rise/near-plane procedure is
-the cutaway branch. The Moth stays solid even when no room remains behind her.
-`seatControl.maxRise.cutaway` authors its rise ceiling above the rig's elevation
-(the template authors 1.1 rad), and `maxRise.fade` fade's (0.35 rad): one solver
-serves both, and fade rises only when no level boom keeps the eye past its
-character fade's minimum boom. Each treatment migrates to its own close target
-(`lookAt.closeTargetOffset { fade, cutaway }`; the template's `fadeCloseTarget`
-and `cutawayCloseTarget`). The live read-back includes `mode=fade|cutaway` and `fade=0..1` (zero
-means solid) alongside the eye, migrated target, boom, rise, near and clearance.
+**Cutaway keeps the body** (`cutaway: 1`). The following keep-out/rise/near-plane
+procedure is the cutaway branch. The Moth stays solid even when no room remains
+behind her. The cutaway case authors a rise ceiling of 1.1 rad, no fade and no
+minimum boom. The live read-back includes `fade=0..1` (zero means solid)
+alongside the eye, migrated target, boom, rise, near and clearance, then the
+op's parameters as the frame resolved them (`cutaway=`, `eyeRadius=`, …,
+`maxRise=` in degrees).
 
 After the boom ease, a seat framing its own body through `views.seatRig` places
 the eye on its own spring arm (`WorldCameraClearance`, owned by the seat's
@@ -288,7 +318,7 @@ Each frame answers where the eye belongs:
    direction, so long as the shortened eye still clears the body.
 2. When no length of the boom clears both (a body backed into a wall or a
    corner, its boom pointing in), the boom rises toward the seat's up on the
-   same heading: a coarse scan up to `maxRise.cutaway` above the rig's elevation (1.1 rad, never past 1.5 rad, short of an
+   same heading: a coarse scan up to `maxRise` above the rig's elevation (1.1 rad, never past 1.5 rad, short of an
    overhead view that turns her upside down on screen), then bisection, finds
    the lowest rise where it clears.
 3. When no rise clears both (her back against a wall), the answer is up and
@@ -306,17 +336,18 @@ chase rig's own `dynamics` row (the `camera-boom` row in the debug world; no
 dynamics op lands on the answer at once). A pull-in and a rise are therefore
 smoothed, and once the obstruction clears the arm eases back out to the authored
 boom rather than keeping the pulled-in length. Two limits hold on the eased
-value every frame: the eye's centre never comes nearer than `SurfaceSkin`
+value every frame: the eye's centre never comes nearer than `surfaceSkin`
 (0.1 m) to geometry along the boom, so a sudden obstruction cuts the eye in to
 there and the ease carries it the rest of the way, and the eye never comes
 within its radius of the body; the body wins where the two conflict.
 
 The heading never changes: the frame the seat steers in stays the frame it sees.
-A target inside geometry (a portal frame around the pivot) skips a 1.1 m shell
-before sweeping and keeps the authored boom where that shell reaches past it.
-The eye radius, skin and scan are engine constants; the ceiling is authored; the
-body volume is the kit's authored collider and the creation's own shapes; the
-ease is the rig's authored dynamics. `world.view.camera <player> full` echoes the arm's latest
+A target inside geometry (a portal frame around the pivot) skips an
+`obstructedTargetSkin` shell (the cutaway case's 1.1 m) before sweeping and keeps
+the authored boom where that shell reaches past it. Every distance and the
+ceiling are the op's; the scan's step and refinement counts and the 1.5 rad
+elevation limit are the engine's; the body volume is the kit's authored collider
+and the creation's own shapes; the ease is the rig's authored dynamics. `world.view.camera <player> full` echoes the arm's latest
 frame (`eye=`, `target=`, `boom=<placed>/<authored>`, `rise=` in degrees,
 `near=` in metres, `clearance=open|shortened|risen|crowded`). `WorldCameraClearanceLawTests` holds
 the keep-out and the ease back out on the CPU.
@@ -352,7 +383,8 @@ never a new engine type. `version` is `puck.camera.program.v1`
 | `anchor` | sets the current SUBJECT and re-seeds the eye at it. At most one, and it must lead. Subject is `reference` (the pose the caller hands in), `placement` (a stamped placement transform, position only), or `worldPoint`. |
 | `offset` | places the eye at `value` from the subject — in the subject's own axes unless `worldAxes`. `spreadPullback` widens it by the group spread (only meaningful when the caller's reference is a `group` anchor). |
 | `lookAt` | aims. `subject: null` looks along the current subject's forward at `focusDistance`; a subject aims at its pose plus `targetOffset`. |
-| `orbit` | places the eye by orbiting the subject at `distance`/`yaw`/`pitch` about `pivotOffset`. At most one. On `views.seatRig` the seat's live look adds to yaw/pitch; everywhere else the authored angles render unchanged. |
+| `orbit` | places the eye by orbiting the subject at `distance`/`yaw`/`pitch` about `pivotOffset`. At most one. On `views.seatRig`, and every program it selects or blends, the seat's live look adds to yaw/pitch; everywhere else the authored angles render unchanged. |
+| `clearance` | reports how a seat's chase eye keeps clear of the room and the body it frames; the seat places the eye (see "The clearance operation" above). Every parameter bindable. At most one. |
 | `path` | sets the current SUBJECT to a point sampled from a named `curves` row (see documents.md) by arc-length `fraction` (bindable), facing the curve's own tangent, and re-seeds the eye there. `anchor`'s subject-seeding role; at most one, and it must lead (refused together with `anchor`). No `rate` field — a constant-rate dolly binds `fraction` to a `state` row carrying the `advance` trait. |
 | `clampPitch` | bounds the pitch a later `orbit` resolves with, live delta included. At most one, and it must precede the orbit. |
 | `fieldOfView` | the rendered vertical FOV, radians (`fieldOfViewRadians`). Every program needs one (or a `blend`/`selectProgram` that reaches ones that do). Bindable: a literal, or `state.<row>[.<key>]`. |
@@ -360,15 +392,17 @@ never a new engine type. `version` is `puck.camera.program.v1`
 | `blend` | lerps two other programs by NAME (eye, target, field of view, and dynamics — component-wise when both sides are live, otherwise whichever side is live) at `weight`, itself bindable. At most one. |
 | `selectProgram` | evaluates exactly ONE of several other named programs, chosen by a live `key` (a literal, or the intended use, a `state.<row>[.<key>]` binding) rounded to the nearest whole number and matched against `cases` (each a `{value, program}` pair; at most one case per value); `default` names the program used when no case matches. The winning program's eye, target, field of view, and dynamics response pass through unchanged — no lerp, the discrete-switch counterpart of `blend`'s continuous mix: a rule-advanced integer row picks a whole framing outright rather than easing toward one. At most one per program; refused when it would create a reference cycle. |
 
-The blend namespace is the whole document's program table: every
-`cameras[].rig`, plus `views.seatRig` and `views.cameraRig`. `selectProgram`
+The blend namespace is the whole document's program table
+(`WorldCameraPrograms.Declared`): `views.seatRig`, `views.cameraRig`, every
+`views.programs` row and every `cameras[].rig`. `selectProgram`
 resolves its `cases`/`default` names against the SAME namespace. A dangling
 name, a reference cycle (carrying its trail — `blend` and `selectProgram`
 share one cycle check), and a program name declared twice in that namespace
 are all refused by name.
 
-`views.seatRig` must contain an `orbit` op: `seatControl` declares a live
-yaw/pitch band, and only an orbit can express it. `views.cameraRig` — the
+`views.seatRig` must reach an `orbit` op, its own or one its default path reaches
+among the `views` section's programs: `seatControl` declares a live yaw/pitch
+band, and only an orbit can express it. `views.cameraRig` — the
 first-person framing a camera control application resolves through — must author
 none of `orbit`, `offset`, or `path`, because it sits exactly at the possessed
 camera body's own pose.
@@ -534,13 +568,15 @@ Free Cam do not alter the logical movement basis.
 ## Verbs
 
 - `world.view.camera [player] [full|<key>,<key>...]` — by default reads tick,
-  view, eye, target, yaw, pitch, fov, mode, fade and clearance; `full` also
+  view, eye, target, yaw, pitch, fov, fade, clearance and cutaway; `full` also
   reads the routed structure, portable preference, held free-look state,
   motion-control gate/sample, the exact live yaw/pitch state used by
   movement/rendering, and where the chase eye's arm last placed the eye (see
-  "Chase eye clearance"); a key list reads just those fields, in order.
-- `player.camera.clearance [fade|cutaway|auto|toggle]` — changes the issuing
-  seat's temporary clearance preference; no argument toggles the two modes.
+  "Chase eye clearance") with the clearance op's parameters; a key list reads
+  just those fields, in order.
+- `camera.clearance Fade|Cutaway` — the standard's authored command
+  (`worlds/standard/camera.puck`): writes the `cameraClearance` preference row the
+  seat rig selects its case by.
 - `world.view.state` — reads active layout, selection reason, transition, and
   slot occupants; an instance slot prints as `instance:<name>`, or
   `instance:<name>:missing` when the runtime has no such instance.
@@ -739,7 +775,7 @@ world.view.panes 8.5 40.5
 ```
 
 The default `world.view.camera` is compact (tick, view, eye, target, yaw, pitch,
-fov, mode, fade, clearance). Pitch limits (`minPitch`/`maxPitch`), the held-input
+fov, fade, clearance, cutaway). Pitch limits (`minPitch`/`maxPitch`), the held-input
 state (`freeLook`, `orbit`, `steer`) and `cameraApplication` come from `full` or
 explicit keys (`world.view.camera 1 minPitch,maxPitch,orbit,steer`); a key the
 seat does not report is refused by name (`cameraApplication` appears only while

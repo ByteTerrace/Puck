@@ -90,8 +90,8 @@ public sealed class WorldFactEffectFiringLawTests {
         ));
         var before = host.Arena.Keys.Count;
 
-        Assert.False(condition: pair.Resolve(named: out var named, reader: host).IsValid);
-        Assert.True(condition: named);
+        Assert.False(condition: pair.Resolve(naming: out var naming, reader: host).IsValid);
+        Assert.Equal(expected: KeyNaming.Cell, actual: naming);
         Assert.Equal(
             actual: host.Arena.Keys.Count,
             expected: before

@@ -579,16 +579,19 @@
       "title": "WorldRenderExposure"
     },
     "toon": {
-      "description": "Optional cel shading and its tuning. Absent is off.",
+      "description": "The world\u0027s default cel style, which every material that authors no style of its own shades with (ToonStyleDocument), on unless it says enabled: false, and which the live world.toon lever turns on or off. Absent is off.",
       "type": [
         "object",
         "null"
       ],
       "properties": {
         "enabled": {
-          "description": "Whether the world boots with cel shading on; absent is off.",
-          "type": "boolean",
-          "default": false
+          "description": "Whether the style bands; absent is on. False on a palette row keeps that material continuous whatever the world\u0027s default is; false on render.toon boots the world\u0027s default off until the lever turns it on.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
         },
         "threshold": {
           "description": "Diffuse band threshold in [0, 1].",
@@ -639,16 +642,61 @@
           "description": "Hue-preserving highlight compression in [0, 2]; zero disables it.",
           "type": "number",
           "default": 0.65
+        },
+        "band": {
+          "description": "How the band treats a light\u0027s shadow visibility: Visibility (the default) keeps the penumbra, Combined snaps it to the band\u0027s edge.",
+          "enum": [
+            "Visibility",
+            "Combined"
+          ],
+          "default": "Visibility",
+          "title": "SdfToonBand"
         }
       },
       "additionalProperties": false,
       "default": null,
-      "title": "WorldRenderToon"
+      "title": "ToonStyleDocument"
     },
     "bloom": {
       "$ref": "./common.schema.json#/$defs/CameraBloom",
       "description": "Optional camera scatter. Absent is off.",
       "default": null
+    },
+    "shadowCoverage": {
+      "description": "How far the key light\u0027s shadow cascades reach (WorldRenderShadowCoverage). Absent keeps the engine\u0027s 16 m near, 120 m far and 200 m caster reach; world.budget prints the coverage with each cascade\u0027s texel.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "near": {
+          "description": "The depth from the eye the near cascade covers, positive and below the far reach (16 when absent).",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "far": {
+          "description": "The depth from the eye the far cascade covers, at most the far distance it is clipped to (120 when absent).",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "casters": {
+          "description": "How far past a cascade toward the light a caster may stand and still shadow it (200 when absent).",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "additionalProperties": false,
+      "default": null,
+      "title": "WorldRenderShadowCoverage"
     }
   },
   "additionalProperties": false,

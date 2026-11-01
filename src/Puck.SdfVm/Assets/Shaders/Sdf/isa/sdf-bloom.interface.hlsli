@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-bloom' (sha256/6b16d349d44f290be53a6c29744d9ed64816cd8566b95d2b8f16199d3b50abd7). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-bloom' (sha256/3a63a468538d1b8ad63375e32482104577416de7c945725fca9140779e90b5b8). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_BLOOM
 #define PUCK_SHADER_INTERFACE_SDF_BLOOM
 
@@ -24,8 +24,8 @@ struct SdfBloomPass {
     [[vk::offset(24)]] uint workCounterRow;
     [[vk::offset(28)]] uint workCounterRowDetail;
 };
-[[vk::binding(0, 3)]] ConstantBuffer<SdfBloomPass> passGroupIsa557D1234 : register(b0, space3);
-#define passGroup passGroupIsa557D1234
+[[vk::binding(0, 3)]] ConstantBuffer<SdfBloomPass> passGroupIsaAC765653 : register(b0, space3);
+#define passGroup passGroupIsaAC765653
 [[vk::binding(1, 3)]] Texture2D<float4> bloomSource : register(t1, space3);
 [[vk::binding(2, 3)]] Texture2D<float4> bloomFine : register(t2, space3);
 [[vk::binding(3, 3)]] SamplerState bloomSampler : register(s3, space3);

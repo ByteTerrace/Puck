@@ -233,6 +233,9 @@ public sealed record SdfFrame(
     /// carries it as <c>farDistance</c> (<see cref="SdfFrameBlock"/>), which the cadence signature folds, so a change
     /// re-renders.</summary>
     public float FarDistance { get; init; } = DefaultFarDistance;
+    /// <summary>How far the key light's shadow cascades reach (<c>render.shadowCoverage</c>), which
+    /// <see cref="SdfMeshShadowCascades.Fit"/> reads; the default is <see cref="SdfShadowCoverage.Default"/>.</summary>
+    public SdfShadowCoverage ShadowCoverage { get; init; } = SdfShadowCoverage.Default;
     /// <summary>The camera exposure every exposed view of the frame maps the luminance it shades to the display by
     /// (<c>render.exposure</c>). The default is the manual exposure an unauthored world renders at.</summary>
     public SdfExposure Exposure { get; init; } = SdfExposure.Default;

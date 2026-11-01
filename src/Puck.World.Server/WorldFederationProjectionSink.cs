@@ -153,6 +153,7 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
             return;
         }
 
+        m_stateDisclosure.Forget();
         Write(
             WorldFederationResponse.Definition,
             WorldFederationCodec.EncodeDocument(

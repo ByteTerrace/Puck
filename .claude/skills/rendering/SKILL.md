@@ -200,8 +200,12 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   over a 4×4 window (`sdfViewsFilter`, `passes/sdf-views-stage.hlsli`) before
   shading. A wrong occlusion or shadow value (a dark band, a missing crease,
   acne) is the estimate's, so an edit to the views lighting code changes
-  nothing; the window and the pattern's tile are a pair. A side turned from a
-  light is never queried: its slot holds `SDF_SHADOW_UNQUERIED`
+  nothing; the window and the pattern's tile are a pair. A side is queried
+  wherever the light's diffuse response is non-zero, which for a wrapped
+  material reaches past the terminator to `n·l > -wrap` (`sdfMaterialWrap`);
+  such a side lets casters within its own body's depth transmit
+  (`sdfMeshShadowTransmission`), or the wrap would shadow itself away in the
+  open. A side the response does not reach is never queried: its slot holds `SDF_SHADOW_UNQUERIED`
   (`frame/sdf-shadow-visibility.hlsli`), which decodes as fully visible, and
   the window's shadow average takes only queried pixels (`sdfShadowQueried`).
   An unmeasured slot averaged in lights a one-pixel line along every
@@ -309,13 +313,20 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   that feature even when the live opacity is one.
 - **Every light answers through one interface,** `shade/sdf-light.hlsli`; a new
   light kind is a branch there and nowhere else.
-- **Cel shading is an optional material response, not a whole-image filter.**
-  `world.toon` and `render.toon` feed `SdfFrame.Toon` through the generated pass
-  block. `shade/sdf-toon.hlsli` shapes lights; `sdf-toon-outline.hlsli` reads
-  depth/normal edges in views, before temporal resolve. Keep screen pictures,
-  portal pictures, sky and self-emission out of both the banding and ink. Nested
-  worlds take the live enable override but retain their own document tuning.
-  The tuning belongs to the lighting cadence signature, never the bake closure.
+- **Cel shading is a style per material, not a whole-image filter.** A palette
+  row's `toon` (`SdfMaterial.Toon`, material rows 22 to 25) shades that material;
+  every other material inherits the world's default (`render.toon`, which
+  `world.toon` overrides live) through the pass block's toon members. Both are
+  written by `SdfToon.WriteRows` and read by `sdfToonStyle`
+  (`shade/sdf-toon.hlsli`): keep the row layout and the pass block's alike.
+  The band keeps visibility apart (`band(cosine) × visibility`) unless the style
+  says `band: Combined`; rim lights, the environment reflection and ambient
+  occlusion stay in the cel response. `sdf-toon-outline.hlsli` reads
+  depth/normal edges in views, before temporal resolve, at the pixel's own
+  style's width. Keep screen pictures, portal pictures, sky and self-emission
+  out of both the banding and ink. Nested worlds take the live enable override
+  but retain their own document styles. The tuning belongs to the lighting
+  cadence signature, never the bake closure.
 - **The frame shades luminance in nits, and each view's composite applies its
   exposure** (`SdfPhotometry`, `SdfViewExposures`, the pass block's `exposure`).
   A light record carries illuminance or intensity over π; emission, sky layers

@@ -49,14 +49,7 @@ public sealed class WorldSeatViewState {
     private float? RequestedDistance(WorldViewDefaults views) =>
         (((m_distance is { } distance) && (views.SeatControl.Boom is { } boom))
             ? Math.Clamp(distance, boom.Minimum, boom.Maximum) : null);
-    private static float AuthoredDistance(WorldViewDefaults views) {
-        foreach (var operation in views.SeatRig.Operations) {
-            if (operation is WorldCameraProgramOp.Orbit orbit) {
-                return orbit.Distance;
-            }
-        }
-        return 0f;
-    }
+    private static float AuthoredDistance(WorldViewDefaults views) => (WorldCameraPrograms.SeatOrbit(views: views)?.Distance ?? 0f);
 
     /// <summary>Moves the requested distance within the world's bounds; the existing boom follower eases the eye.</summary>
     /// <param name="units">Positive input moves closer.</param>
@@ -94,7 +87,6 @@ public sealed class WorldSeatViewState {
     public float Pitch { get { lock (m_gate) { return m_pitch; } } }
     public float Yaw { get { lock (m_gate) { return m_yaw; } } }
 
-    private WorldCameraClearanceChoice m_clearanceOverride;
     private float m_fieldOfView;
 
     /// <summary>Gets the vertical field of view, in radians, of the seat camera the presenter last framed, or zero
@@ -123,23 +115,9 @@ public sealed class WorldSeatViewState {
     /// <summary>Gets the last clearance frame's opacity for the body's stamp in this seat's own view.</summary>
     public float BodyOpacity { get { lock (m_gate) { return m_clearance.BodyOpacity; } } }
 
-    /// <summary>Resolves the session override, portable preference, then the author's default.</summary>
-    public WorldCameraClearanceChoice ClearanceChoice(WorldSeatViewControl control, WorldSeatCameraFeel feel) {
-        lock (m_gate) {
-            return ((m_clearanceOverride != WorldCameraClearanceChoice.Auto) ? m_clearanceOverride
-                : ((feel.ClearanceMode != WorldCameraClearanceChoice.Auto) ? feel.ClearanceMode : control.ClearanceMode));
-        }
-    }
-    /// <summary>Sets this seat's temporary clearance choice. Auto restores its document/profile preference.</summary>
-    public void SetClearanceChoice(WorldCameraClearanceChoice choice) {
-        lock (m_gate) {
-            m_clearanceOverride = choice;
-        }
-    }
-
     // The rig's authored pitch, for the live-pitch clamp: a BOUND pitch has no single authored value, so the clamp
     // is taken about the rest angle.
-    private static float AuthoredPitch(WorldViewDefaults views) => (views.SeatRig.OrbitOp?.Pitch.Value.Literal ?? 0f);
+    private static float AuthoredPitch(WorldViewDefaults views) => (WorldCameraPrograms.SeatOrbit(views: views)?.Pitch.Value.Literal ?? 0f);
     // min/max pitch bound the TOTAL orbit pitch (the authored rig's pitch plus the live delta), so the live
     // delta is clamped against the bounds shifted by the authored pitch.
     private static float ClampLivePitch(float livePitch, float authoredPitch, WorldSeatViewControl control) => Math.Clamp(
@@ -296,8 +274,9 @@ public sealed class WorldSeatViewState {
         }
     }
     /// <summary>Places the chase eye clear of geometry and of the framed body on this seat's spring arm
-    /// (<see cref="WorldCameraClearance.Resolve"/>), or, when <paramref name="enabled"/> is <see langword="false"/>,
-    /// drops the arm's eased state and passes the eye through.</summary>
+    /// (<see cref="WorldCameraClearance.Resolve"/>) by the program's authored clearance, passes it through where the
+    /// program authors none, or, when <paramref name="enabled"/> is <see langword="false"/>, drops the arm's eased
+    /// state and passes the eye through.</summary>
     /// <param name="enabled">Whether the seat frames its own body through its chase rig in the world it is presented
     /// in this frame.</param>
     /// <param name="field">The static geometry the eye keeps out of, or <see langword="null"/> for none.</param>
@@ -309,16 +288,15 @@ public sealed class WorldSeatViewState {
     /// <param name="deltaSeconds">The frame step, in seconds.</param>
     /// <returns>The near-plane distance, in world units, the eye's image begins at
     /// (<see cref="WorldCameraClearance.Near"/>); zero when <paramref name="enabled"/> is <see langword="false"/>.</returns>
-    /// <param name="targetShift">The compiled program's close-target migration, in world axes and live scale.</param>
-    /// <param name="choice">The resolved clearance preference.</param>
-    /// <param name="control">The world's camera clearance parameters.</param>
+    /// <param name="clearance">The resolved program's clearance, full-size, or <see langword="null"/> for none.</param>
+    /// <param name="control">The world's seat-camera control, whose automatic first-person policy the view reads.</param>
     /// <param name="scale">The perceived body's live scale.</param>
     /// <param name="firstPerson">The resolved program's authored first-person destination.</param>
     /// <param name="feel">The portable automatic pull-in preference.</param>
     /// <param name="viewForward">The rig's look direction before boom smoothing.</param>
     /// <exception cref="ArgumentNullException"><paramref name="control"/> is <see langword="null"/>.</exception>
     public float Clear(bool enabled, SdfFieldEvaluator? field, ref Vector3 eye, ref Vector3 target, in WorldChaseBody subject, Vector3 up, in SdfCameraDynamics dynamics, float deltaSeconds,
-        WorldCameraClearanceChoice choice, WorldSeatViewControl control, SdfCameraTargetShift targetShift = default, float scale = 1f,
+        SdfCameraClearance? clearance, WorldSeatViewControl control, float scale = 1f,
         SdfCameraFirstPerson? firstPerson = null, WorldSeatCameraFeel? feel = null, Vector3? viewForward = null) {
         ArgumentNullException.ThrowIfNull(argument: control);
 
@@ -333,22 +311,25 @@ public sealed class WorldSeatViewState {
             var forward = (viewForward ?? Vector3.Normalize(value: (target - eye)));
             var authoredLength = Vector3.Distance(value1: eye, value2: target);
 
-            eye = m_clearance.Resolve(
-                deltaSeconds: deltaSeconds,
-                desiredEye: eye,
-                dynamics: in dynamics,
-                field: field,
-                subject: in subject,
-                target: target,
-                up: up,
-                targetShift: targetShift,
-                choice: choice,
-                control: control,
-                scale: scale
-            );
+            if (clearance is { } authored) {
+                eye = m_clearance.Resolve(
+                    clearance: in authored,
+                    deltaSeconds: deltaSeconds,
+                    desiredEye: eye,
+                    dynamics: in dynamics,
+                    field: field,
+                    scale: scale,
+                    subject: in subject,
+                    target: target,
+                    up: up
+                );
+            } else {
+                m_clearance.Pass(desiredEye: eye, target: target);
+            }
             if (firstPerson is { } destination) {
                 var head = subject.Point(local: destination.EyePoint);
-                var room = (WorldCameraClearance.AvailableRoom(backward: -forward, eyeRadius: control.EyeRadius, field: field, head: head, length: authoredLength, scale: scale) / scale);
+                var probe = clearance.GetValueOrDefault();
+                var room = (WorldCameraClearance.AvailableRoom(backward: -forward, eyeRadius: probe.EyeRadius, field: field, head: head, length: authoredLength, retractionSkin: probe.RetractionSkin, scale: scale) / scale);
 
                 m_viewTransition.Advance(destination, control.AutoFirstPerson,
                     m_viewTransition.Automatic(control: control, feel: (feel ?? WorldSeatCameraFeel.Default)), room, deltaSeconds);

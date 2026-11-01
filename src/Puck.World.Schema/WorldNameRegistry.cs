@@ -1616,6 +1616,7 @@ public static partial class WorldNameRegistry {
             "a kit or look row name"
         ),
         new(typeof(WorldViewLayout), nameof(WorldViewLayout.Name), "a view layout name"),
+        new(typeof(WorldScreenMaterial), nameof(WorldScreenMaterial.Id), "a screen material id"),
         new(typeof(WorldViewGraph), nameof(WorldViewGraph.Name), "a view graph instance name"),
         new(typeof(WorldViewQuality), nameof(WorldViewQuality.Name), "a render view instance name or the default selector *"),
         new(typeof(WorldViewGraph), nameof(WorldViewGraph.Source), "a view graph's source is a document path"),

@@ -414,14 +414,17 @@ public sealed class PatternOperand : RuleOperand, IStateAddressedOperand {
 
         var ordinal = RowOrdinal;
 
-        if (
-            (RowFrom is { } live) &&
-            !live.TryResolve(
-            reader: reader,
-            rowOrdinal: out ordinal
-        )
-        ) {
-            return RuleFact.Absent(kind: CellKind.Int);
+        if (RowFrom is { } live) {
+            var selected = live.Resolve(
+                reader: reader,
+                rowOrdinal: out ordinal
+            );
+
+            if (selected != KeyNaming.Cell) {
+                return ((selected == KeyNaming.Fault)
+                    ? RuleFact.Faulted(kind: CellKind.Int)
+                    : RuleFact.Absent(kind: CellKind.Int));
+            }
         }
 
         return RuleFact.Finite(

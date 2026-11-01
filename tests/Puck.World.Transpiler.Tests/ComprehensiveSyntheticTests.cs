@@ -163,13 +163,6 @@ public class ComprehensiveSyntheticTests {
                     maxPitch: 0.01
                     minPitch: -0.01
                     yawReference: "World"
-                    clearanceMode: Fade
-                    maxRise {
-                        fade: 0.35
-                        cutaway: 1.1
-                    }
-                    eyeRadius: 0.3
-                    surfaceSkin: 0.1
                 }
 
                 seatRigPreset("pilot", turnAngle, 2.5m)

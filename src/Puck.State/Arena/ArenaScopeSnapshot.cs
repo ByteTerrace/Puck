@@ -36,19 +36,51 @@ public sealed partial class StateArena {
             numbers.ToArray(), text.ToArray(), visibility.ToArray(), observations.ToArray());
     }
 
+    /// <summary>Returns why a set of declared document rows cannot form one replay scope, one reason per refusal. A
+    /// scope holds only plain rows (no vector or timed state) and is closed under derivation: a derived board belongs
+    /// to a scope exactly when both its input rows do, since a restore writes the scope's columns raw and a board left
+    /// outside would keep what the drive derived from inputs the restore put back.</summary>
+    /// <param name="rows">The document's declared rows.</param>
+    /// <param name="scope">The names of the rows the scope selects.</param>
+    /// <returns>The refusals; empty when the rows form a scope as far as their declarations show.</returns>
+    public static IEnumerable<string> ScopeRefusals(IEnumerable<StateRow> rows, IReadOnlySet<string> scope) {
+        ArgumentNullException.ThrowIfNull(argument: rows);
+        ArgumentNullException.ThrowIfNull(argument: scope);
+
+        foreach (var row in rows) {
+            var name = row.Name.Value;
+            var inverse = row.Inverse;
+
+            if (scope.Contains(item: name)) {
+                if ((row.Kind == CellKind.Vector) || (row.Advance is not null) || (row.Cycle is not null) || (row.Dynamics is not null) ||
+                    (row.Cells ?? []).Any(predicate: cell => ((cell.Clock is not null) || (cell.Advance is not null) || (cell.Cycle is not null) || (cell.Dynamics is not null)))) {
+                    yield return $"row '{name}' needs a wider continuation boundary (vector or timed state)";
+                }
+                if ((inverse is not null) && (!scope.Contains(item: inverse.Tokens.Value) || !scope.Contains(item: inverse.Codes.Value))) {
+                    yield return $"derived board '{name}' requires both inverse input rows";
+                }
+            } else if ((inverse is not null) && (scope.Contains(item: inverse.Tokens.Value) || scope.Contains(item: inverse.Codes.Value))) {
+                yield return $"derived board '{name}' must join the scope holding its input rows, or a restore leaves it stale";
+            }
+        }
+    }
+
     private void RequireScopeRows(IReadOnlySet<int> rows) {
+        var names = new HashSet<string>(comparer: StringComparer.Ordinal);
+
         foreach (var ordinal in rows) {
             if ((((uint)ordinal) >= ((uint)m_catalog.Descriptors.Count)) || (m_catalog.Descriptors[ordinal].Lane != StateLane.Document)) {
                 throw new InvalidOperationException(message: "A scope captures only declared document rows.");
             }
             var row = m_rows[m_catalog.Descriptors[ordinal].LaneOrdinal];
 
-            if (m_layout[ordinal].HostOwned ||
-                m_catalog.IsPoolRow(rowOrdinal: ordinal) || (row.Kind == CellKind.Vector) || (row.Advance is not null) ||
-                (row.Cycle is not null) || (row.Dynamics is not null) ||
-                (row.Cells ?? []).Any(predicate: cell => ((cell.Clock is not null) || (cell.Advance is not null) || (cell.Cycle is not null) || (cell.Dynamics is not null)))) {
+            if (m_layout[ordinal].HostOwned || m_catalog.IsPoolRow(rowOrdinal: ordinal)) {
                 throw new InvalidOperationException(message: $"Scope row '{row.Name}' requires unsupported continuation state.");
             }
+            names.Add(item: row.Name.Value);
+        }
+        foreach (var refusal in ScopeRefusals(rows: m_rows, scope: names)) {
+            throw new InvalidOperationException(message: $"Scope {refusal}.");
         }
     }
 

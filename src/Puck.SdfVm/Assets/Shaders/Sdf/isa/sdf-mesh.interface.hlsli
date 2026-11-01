@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-mesh' (sha256/0aeaecf0f1ecfd798a85b4cb78f6b06b3499061006c8bfe94f38ef7c1e442d11). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-mesh' (sha256/ce1adb20b2e893ebc06a0ecdda64cf9fa7f63b818daa8f99289ba9b0236bae70). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_MESH
 #define PUCK_SHADER_INTERFACE_SDF_MESH
 
@@ -88,8 +88,7 @@ struct SdfMeshPass {
     [[vk::offset(808)]] uint _pad808;
     [[vk::offset(812)]] uint _pad812;
     [[vk::offset(816)]] float4 toonBands;
-    [[vk::offset(832)]] float3 toonInk;
-    [[vk::offset(844)]] uint _pad844;
+    [[vk::offset(832)]] float4 toonInk;
     [[vk::offset(848)]] float4 toonOutline;
     [[vk::offset(864)]] float4 toonShadow;
     [[vk::offset(880)]] uint viewBase;

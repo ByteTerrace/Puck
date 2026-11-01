@@ -1954,8 +1954,12 @@ the world is paused.
 
 Each session or federation sink owns a `WorldStateChangeDisclosure` workspace.
 Its filtered cell memory is borrowed until the next delivery; consumers copy what
-they retain. Only the buffers are reused: row, cell, zone and live reader-list
-policies are checked again for every delivery. Public reads do not format a
+they retain. Row, cell, zone and live reader-list policies are checked again for
+every delivery. A row whose declared policy can withhold from the recipient
+(`WorldStateDisclosure.ReadsWholeRow`) is replaced only when the cells the
+recipient reads differ from the replacement it was last sent, so a change to
+hidden cells alone sends nothing; a definition delivery that reseeds the
+recipient's rows forgets those replacements. Public reads do not format a
 principal token.
 
 A remote-admitted body is tagged `WorldPopulation.Entry.IsRemoteHuman`

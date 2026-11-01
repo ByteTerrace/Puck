@@ -1,7 +1,7 @@
 // The valley: the debug world's floor is the flat bottom of a caldera whose walls rise close around it. Eight
 // sectors ring the floor, one creation and one solid placement each, so each is edited and baked on its own: a main
 // mass and two shoulders from the standard terrain library (../standard/terrain.puck), with fBm relief seeded per
-// sector. The floor (debug.puck's "floor") runs on under the walls, so no slab edge shows. An overlook deck stands
+// sector. The floor (lawn.puck's "floor") runs on under the walls, so no slab edge shows. An overlook deck stands
 // near the summit of the south-west sector, and a body that falls out of the world is stood back up on the floor
 // below the sector it fell from, not at one global spawn. docs/plans/valley-and-moons.md records the bake, contact
 // and audit numbers it was measured at.

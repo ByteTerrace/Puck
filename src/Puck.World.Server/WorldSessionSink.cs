@@ -219,6 +219,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
         var disclosed = Disclose(definition: definition)!;
 
         m_replicaState = disclosed.StateRaw;
+        m_stateDisclosure.Forget();
 
         return disclosed;
     }

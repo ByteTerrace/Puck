@@ -84,9 +84,19 @@ public sealed partial class StateArena {
         : null
     );
     /// <summary>Returns whether a row has materialized cell audience restrictions. When false every cell's own
-    /// visibility is null, so a reader need not enumerate the row to discover policy dependencies.</summary>
+    /// visibility is null, so a reader need not enumerate the row to discover policy dependencies. This is a fact
+    /// about current members, an enumeration shortcut only: a disclosure decision reads
+    /// <see cref="DeclaresCellVisibility"/>.</summary>
     /// <param name="rowOrdinal">The row's catalog ordinal.</param>
     public bool HasCellVisibility(int rowOrdinal) => (m_visibilities?.HasRow(row: rowOrdinal) == true);
+    /// <summary>Returns whether a row's declaration lets its cells carry their own audience restriction: the row
+    /// declares a visibility policy, or a seed cell does, so its storage holds the visibility column. A row that does
+    /// not, and a host-owned row, which has no cell slots, can never hold a restricted cell. The answer depends on the
+    /// declaration alone, never on which members are present or restricted now.</summary>
+    /// <param name="rowOrdinal">The row's catalog ordinal.</param>
+    /// <returns><see langword="true"/> when a cell of the row may carry its own audience restriction.</returns>
+    public bool DeclaresCellVisibility(int rowOrdinal) => (m_layout.HasColumn(row: rowOrdinal, column: ArenaColumn.Visibility) &&
+        !m_layout[rowOrdinal].HostOwned);
     /// <summary>Attempts to read one cell's clock without materializing a record.</summary>
     /// <param name="rowOrdinal">The row's catalog ordinal.</param>
     /// <param name="key">The cell key.</param>

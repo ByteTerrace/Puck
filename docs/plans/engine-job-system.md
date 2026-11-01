@@ -740,7 +740,7 @@ as `puck mesh audit` for bake defects.
 | **T3 Crossing scan partitions** | E3 by seat partition with occupancy deltas. | T0 on a fixture of 40 seats where two seats enter one party-travel door on one tick and seats straddle the 32-seat boundary; the crossing log (transfer tick, cohort) identical across counts and against the recording. |
 | **T2 Rigid advance partitions** | E1 for rigid bodies with partition scratch; the rigid share measured first; the one pose-read change re-recorded. | T0 on a fixture of 200 rigid bodies (a rack and a domino line) beside kit bodies whose producers target a rigid body; hashes identical across counts; `puck bench world` at 0 B median a tick; a standing `host.frames` simulate read against 6.3 ms. |
 | **R1 Parallel recording in waves** | Waves, prepare-before-fork with the fence first, residency upload and extent in preparation, in-order submission; the pose pack fork. Direct3D 12 and a windowed Vulkan boot. | `host.frames` produce avg at the lobby against 6.5 ms; a `world.at` script that moves a portal view and changes a screen's source every frame for 120 frames, with stills at three ticks compared as above with the serial build's on both backends (a one-frame-late read or a descriptor overwritten under a slot in flight shows as a localized difference beyond the noise); GPU-based validation clean on Direct3D 12 and the validation layer clean on Vulkan. |
-| **R2 GPU culling in the indirect path — built; hardware checks open** | GPU selection through `SdfMeshOcclusion`'s counted indirect draws for every raster pass, with persistent level history; CPU `Choose` removed. Owned by the rendering plan. | Initial Direct3D 12 produce: lobby CPU 39.40–40.21 / GPU 41.65 ms; meadow CPU 55.95–59.86 / GPU 52.25 ms. These loaded-machine observations do not establish a causal speedup. [R2 observations](#r2-observations) records counts, pass costs and the outstanding Vulkan, image and validation checks. |
+| **R2 GPU culling in the indirect path — built; hardware checks open** | GPU selection through `SdfMeshOcclusion`'s counted indirect draws for every raster pass, with persistent level history; CPU `Choose` removed. Owned by the rendering plan. Ordered compaction, (geometry, level) instance buckets and proportional updates follow in the [visibility plan](visibility.md#the-build-order). | [R2 observations](#r2-observations) records matched Vulkan produce, counts and pass costs, initial Direct3D 12 readings and the outstanding image and validation checks. |
 | **B1 GI proportional to change** | The change-set closure; GI jobs under `Lighting`. | After a `world.reload` that removes a wall and one that moves a draw: the probe tables and a still compared with a full retrace's; `[sdf.mesh-gi]` probes traced against the whole window; the cold bake's GI seconds against 201 to 222. |
 | **M2b Probe block ownership** | Blocks owned by the cache with live-slice counts, native. | A walk into an untraced area for 60 s with `host.memory collect` every 10 s: managed heap flat, native blocks freed as sweeps converge (block count printed by `[sdf.mesh-gi]`); stills before and after compared as above. |
 | **M3 Native movers 4 and 5** | Unmanaged scratch leases, the split journal, numeric columns; the tick's deliveries. | T0 at every count; `puck bench world` unchanged; a scratch world whose rules overwrite text cells and rewind (`world.undo`) reads the restored text. |
@@ -778,10 +778,42 @@ shadow variation, including nearly black interiors in one unchanged CPU run;
 no geometry mismatch has been identified. This is not an image-equivalence
 verdict. Tick-pinned comparisons are pending. The initial cold/incomplete
 baseline legs and the stopped Direct3D 12 validation attempt support no pass
-claim. Vulkan measurements and both final validation legs remain open behind
-the shared GPU lease. Release builds for both backends pass; input allocation
+claim. Final Direct3D 12 validation and tick-pinned image comparisons remain
+open behind the shared GPU lease. Release builds for both backends pass; input allocation
 (two fixtures) and granaries (five) pass `--reproduce` after the integration
 merge. Scratch transcripts and images carry the `r2-cull-` prefix.
+
+The subsequent Vulkan comparison freezes the same debug documents and uses
+matched CPU and GPU controls: both include the integration's memory and camera
+changes, complete shared geometry tables and the motion-copy synchronization
+fix. CPU runs 10 and 11 bound the before observations; GPU run 10 is unlayered.
+These are loaded-machine observations, not the lead's quiet-window ranking.
+
+| Vulkan place | CPU produce avg, ms | GPU produce avg, ms |
+|---|---:|---:|
+| Lobby (`desktop`) | 34.53–40.21 | 38.12 |
+| Rim (`overlook`) | 21.40–24.62 | 26.56 |
+| Gallery interior | 29.68–36.50 | 33.84 |
+| Meadow | 58.41–59.43 | 51.82 |
+
+Root counters: lobby CPU 5,650 draws / 9,090,555–9,090,591 vertices,
+GPU 5,647 / 9,092,643; meadow CPU 11,821–11,890 / 9,596,163–9,641,541,
+GPU 12,069 / 9,762,255. Root near-shadow / far-shadow / opaque / glass
+timestamps (32 samples, ms): lobby CPU `0.369–0.437 / 0.936–1.262 /
+0.399–0.559 / 0.014–0.023`, GPU `0.495 / 1.206 / 0.592 / 0.066`;
+meadow CPU `1.239–1.473 / 1.586–1.798 / 2.907–3.195 / 0.022–0.027`,
+GPU `0.555 / 0.772 / 1.386 / 0.067`. Draw counts vary with animated poses
+and are not an image-equivalence check.
+
+The Vulkan validation layer is clean across all four places after fixing a
+real motion-history copy write-after-write dependency and overlapping upload
+ranges. The unpinned image comparison flags 16 lobby regions, none at the rim,
+54 in the gallery and 122 at the meadow. Inspected lobby/gallery regions show
+lighting differences; meadow regions show grass pose and lighting differences.
+Tick-pinned controls are still required to distinguish these from selection
+changes. Two single-World debug fixtures, `input-clock30-tests.puck` (four
+verdicts) and `unbiased-draws-tests.puck` (six), pass `--reproduce` after the
+same integration merge; presentation selection does not enter simulation state.
 
 ### What becomes of the tick-to-produce memo's phases
 

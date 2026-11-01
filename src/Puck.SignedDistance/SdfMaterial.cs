@@ -59,7 +59,10 @@ namespace Puck.SignedDistance;
 /// <see cref="SdfGlass.Depth"/> of it, and its <paramref name="Roughness"/> is its frost. A shape carrying one bakes
 /// into a group of its own and draws in the glass pass over the opaque image; inside an opaque group (a mixed dynamic
 /// group) it shades opaque with the tint as albedo.</param>
-public readonly record struct SdfMaterial(Vector3 Albedo, float Emissive = 0f, float Specular = 0f, float Roughness = SdfMaterial.DefaultRoughness, float Sheen = 0f, float Metal = 0f, float Coat = 0f, SdfWeathering? Weathering = null, float Wrap = 0f, float Soften = 0f, Vector3 Fill = default, SdfInset? Inset = null, Vector3? Bleed = null, float Receive = 1f, IReadOnlyList<SdfPaint>? Paints = null, int? EmissiveLane = null, SdfGlass? Glass = null) {
+/// <param name="Toon">The material's own cel style, or <see langword="null"/> to shade with the world's default style.
+/// A style whose <see cref="SdfToon.Enabled"/> is false keeps the material continuous whatever the default is.
+/// Presentation only: the irradiance trace and every query ignore it.</param>
+public readonly record struct SdfMaterial(Vector3 Albedo, float Emissive = 0f, float Specular = 0f, float Roughness = SdfMaterial.DefaultRoughness, float Sheen = 0f, float Metal = 0f, float Coat = 0f, SdfWeathering? Weathering = null, float Wrap = 0f, float Soften = 0f, Vector3 Fill = default, SdfInset? Inset = null, Vector3? Bleed = null, float Receive = 1f, IReadOnlyList<SdfPaint>? Paints = null, int? EmissiveLane = null, SdfGlass? Glass = null, SdfToon? Toon = null) {
     /// <summary>Gets whether the material is glass: it carries a <see cref="Glass"/> response.</summary>
     public bool IsGlass => (Glass is not null);
     /// <summary>Gets whether the glass response, when present, is admissible with this material's albedo as its tint

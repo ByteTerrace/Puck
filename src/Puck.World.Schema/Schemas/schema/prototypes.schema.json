@@ -813,6 +813,85 @@
                   "additionalProperties": false,
                   "default": null,
                   "description": "The slot\u0027s glass (PaletteGlassDocument), whose tint is Color and whose frost is Roughness; null keeps the slot opaque."
+                },
+                "toon": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "enabled": {
+                      "type": [
+                        "boolean",
+                        "null"
+                      ],
+                      "default": null,
+                      "description": "Whether the style bands; absent is on. False on a palette row keeps that material continuous whatever the world\u0027s default is; false on render.toon boots the world\u0027s default off until the lever turns it on."
+                    },
+                    "threshold": {
+                      "type": "number",
+                      "default": 0.45,
+                      "description": "Diffuse band threshold in [0, 1]."
+                    },
+                    "softness": {
+                      "type": "number",
+                      "default": 0.08,
+                      "description": "Full terminator width in [0.001, 0.5]."
+                    },
+                    "shadowTint": {
+                      "default": null,
+                      "description": "Shadow-band reflectance, three linear RGB values in [0, 1]."
+                    },
+                    "outlineWidth": {
+                      "type": "number",
+                      "default": 1.5,
+                      "description": "Close outline radius in output pixels, in [0, 4]; zero disables outlines."
+                    },
+                    "outlineDistance": {
+                      "type": "number",
+                      "default": 12,
+                      "description": "Distance in metres at which the outline radius halves, in [0.1, 1000]."
+                    },
+                    "outlineNormal": {
+                      "type": "number",
+                      "default": 0.65,
+                      "description": "Crease normal cosine in [0, 0.95]."
+                    },
+                    "outlineTint": {
+                      "default": null,
+                      "description": "Outline multiplier, three linear RGB values in [0, 1]."
+                    },
+                    "specularSize": {
+                      "type": "number",
+                      "default": 0.025,
+                      "description": "Highlight size as one minus the half-vector cosine, in [0.001, 0.25]."
+                    },
+                    "exposure": {
+                      "type": "number",
+                      "default": 0.5,
+                      "description": "Reflected-light exposure compensation in stops, in [-4, 4]."
+                    },
+                    "shoulder": {
+                      "type": "number",
+                      "default": 0.65,
+                      "description": "Hue-preserving highlight compression in [0, 2]; zero disables it."
+                    },
+                    "band": {
+                      "enum": [
+                        "Visibility",
+                        "Combined"
+                      ],
+                      "default": "Visibility",
+                      "description": "How the band treats a light\u0027s shadow visibility: Visibility (the default) keeps the penumbra, Combined snaps it to the band\u0027s edge.",
+                      "x-enumDescriptions": {
+                        "Visibility": "The band shapes the light\u0027s cosine and the shadow visibility multiplies it after: band(cosine) \u00D7 visibility, so a filtered penumbra keeps its softness and colour.",
+                        "Combined": "The band shapes the cosine and the visibility together: band(cosine \u00D7 visibility), the harder look in which a penumbra snaps to the band\u0027s edge."
+                      }
+                    }
+                  },
+                  "additionalProperties": false,
+                  "default": null,
+                  "description": "The slot\u0027s own cel style (ToonStyleDocument, on unless it says enabled: false, which keeps the slot continuous); null shades the slot with the world\u0027s default style (render.toon)."
                 }
               },
               "required": [
