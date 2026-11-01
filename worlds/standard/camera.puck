@@ -78,7 +78,7 @@ template chaseCamera(rig, pivotOffset = [0, 1, 0], fadeCloseTarget = [0, 1.74, 0
   cameraResponse()
 
   exports {
-    bindings [cameraClearance]
+    bindings [`camera-boom`, cameraClearance]
   }
 
   state {
