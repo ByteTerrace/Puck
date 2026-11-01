@@ -1,6 +1,6 @@
 // What the bar's pages and the play wheel's rings share: the twelve controls of the standard bar by the pad button and the
-// keyboard key that press each, and the rings the garden and the debug world both draw. A library: it emits no document,
-// and the standard controls and the debug world's control refinement import it.
+// keyboard key that press each, and the play wheel's standard rings. A library: it emits no document, and the standard
+// controls and every refinement of them import it.
 //
 //   import "pad-kit"
 //
@@ -40,36 +40,26 @@ let padModifiers = [
 let neverRead = { kind: "Axis1D", raw [0, 0, 0, 0] }
 
 // The shared play-wheel rings. A sector's id names its label and icon (`state.wheelLabels`, `state.wheelIcons`),
-// and it carries no source, since the wheel commits it. The debug refinement adds its Places ring.
-let actRing = {
-  id: "play-acts"
-  label: "Act"
-  entries [
-    { id: "console", command: "console", sources: null }
-    { id: "build", command: "player.build", sources: null }
-    { id: "where", command: "body.where", sources: null }
-    { id: "channels", command: "body.channels", sources: null }
-    { id: "respawn", command: "body.pose", text: "spawn:stage", sources: null }
-    { id: "suit", command: "body.press", text: "suit 1 0.2", sources: null }
-    { id: "stop", command: "body.stop", sources: null }
-    { id: "annotate", command: "view.annotate", text: "toggle", sources: null }
-  ]
-}
+// and it carries no source, since the wheel commits it. Each ring names only what every world importing the standard
+// has: engine verbs, and no spawn point, channel or layout of its own. A refinement builds its rings from these entry
+// lists and adds its own sectors (the debug world's Moth controls add Respawn, Suit and her inspection layouts,
+// ../debug/pad-kit.puck).
+let actEntries = [
+  { id: "console", command: "console", sources: null }
+  { id: "build", command: "player.build", sources: null }
+  { id: "where", command: "body.where", sources: null }
+  { id: "channels", command: "body.channels", sources: null }
+  { id: "stop", command: "body.stop", sources: null }
+  { id: "annotate", command: "view.annotate", text: "toggle", sources: null }
+]
 
-let viewRing = {
-  id: "play-views"
-  label: "View"
-  entries [
-    { id: "play", command: "view.override", text: "layout play", value: neverRead, sources: null }
-    { id: "threeQuarter", command: "view.override", text: "layout three-quarter", value: neverRead, sources: null }
-    { id: "front", command: "view.override", text: "layout front", value: neverRead, sources: null }
-    { id: "rear", command: "view.override", text: "layout rear", value: neverRead, sources: null }
-    { id: "wide", command: "view.override", text: "layout flight-stage", value: neverRead, sources: null }
-    { id: "face", command: "view.override", text: "layout face", value: neverRead, sources: null }
-    { id: "desktop", command: "view.override", text: "layout desktop", value: neverRead, sources: null }
-    { id: "autoCamera", command: "view.override", text: "camera auto", value: neverRead, sources: null }
-  ]
-}
+let actRing = { id: "play-acts", label: "Act", entries: actEntries }
+
+let viewEntries = [
+  { id: "autoCamera", command: "view.override", text: "camera auto", value: neverRead, sources: null }
+]
+
+let viewRing = { id: "play-views", label: "View", entries: viewEntries }
 
 let barRing = {
   id: "play-bars"
@@ -84,4 +74,4 @@ let barRing = {
   ]
 }
 
-let mothRings = [actRing, viewRing, barRing]
+let standardRings = [actRing, viewRing, barRing]

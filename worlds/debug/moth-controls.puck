@@ -1,0 +1,146 @@
+// The Moth's controls beyond the standard's: Backspace back to the debug world's stage, the View page's plates for her
+// inspection layouts (avatars/moth.puck) and the jetpack's isolation, and the play wheel with her Respawn, Suit and
+// layout sectors (pad-kit.puck). It imports the standard and refines its controls by page, wheel and table key, so every
+// world she walks into (the debug world through controls.puck, the garden and the night field) imports it in the
+// standard's place.
+import "../standard/standard"
+import "pad-kit"
+
+bindingOverlays [
+  {
+    id: "moth-controls"
+    document {
+      version: "puck.input.bindings.v1"
+      modifiers: padModifiers
+      chords [
+        {
+          chord []
+          group: "play"
+          page {
+            id: "base"
+            entries [
+              { command: "body.pose", id: "respawn", label: "Respawn", text: "spawn:stage", sources ["keyboard.backspace"] }
+            ]
+          }
+        }
+        {
+          chord ["lt"]
+          group: "play"
+          page {
+            id: "pad-lt"
+            inherits: "base"
+            label: "View"
+            entries [
+              {
+                command: "view.override"
+                id: "viewPlay"
+                label: "Chase"
+                text: "layout play"
+                value: neverRead
+                sources: padUp
+              }
+              {
+                command: "view.override"
+                id: "viewQuarter"
+                label: "Three-quarter"
+                text: "layout three-quarter"
+                value: neverRead
+                sources: padRight
+              }
+              {
+                command: "view.override"
+                id: "viewFront"
+                label: "Front"
+                text: "layout front"
+                value: neverRead
+                sources: padDown
+              }
+              {
+                command: "view.override"
+                id: "viewRear"
+                label: "Rear"
+                text: "layout rear"
+                value: neverRead
+                sources: padLeft
+              }
+              {
+                command: "view.override"
+                id: "viewWide"
+                label: "Wide"
+                text: "layout flight-stage"
+                value: neverRead
+                sources: padLeftShoulder
+              }
+              {
+                command: "view.isolate"
+                id: "viewIsolate"
+                label: "Jetpack alone"
+                text: "toggle moth pod* nozzle*"
+                sources: padWest
+              }
+              {
+                command: "view.override"
+                id: "viewFace"
+                label: "Face"
+                text: "layout face"
+                value: neverRead
+                sources: padSouth
+              }
+            ]
+          }
+        }
+      ]
+      // A later layer's wheel replaces the earlier one whole, so this restates the standard's with her rings.
+      wheels [
+        {
+          id: "play-primary"
+          group: "play"
+          holdPages ["wheel-keys", "wheel-pad"]
+          labelRow: "state.wheelLabels"
+          iconRow: "state.wheelIcons"
+          style {
+            placement: ViewportCenter
+          }
+          rings: mothRings
+        }
+      ]
+    }
+  }
+]
+
+state {
+  world {
+    table barIcons {
+      respawn = "act.respawn"
+      viewPlay = "view.play"
+      viewQuarter = "view.quarter"
+      viewFront = "view.front"
+      viewRear = "view.rear"
+      viewWide = "view.wide"
+      viewIsolate = "act.isolate"
+      viewFace = "view.face"
+      // suit.puck's Debug-page plate.
+      dbgSuit = "dbg.suit"
+    }
+    table wheelLabels {
+      respawn = "Respawn"
+      suit = "Suit"
+      play = "Play"
+      threeQuarter = "Three-quarter"
+      front = "Front"
+      rear = "Rear"
+      wide = "Wide"
+      face = "Face"
+    }
+    table wheelIcons {
+      respawn = "act.respawn"
+      suit = "dbg.suit"
+      play = "act.play"
+      threeQuarter = "view.quarter"
+      front = "view.front"
+      rear = "view.rear"
+      wide = "view.wide"
+      face = "view.face"
+    }
+  }
+}

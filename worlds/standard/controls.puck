@@ -267,7 +267,7 @@ icons {
 
 state {
   world {
-    // The icon each Moth control's plate shows, by its binding entry id.
+    // The icon each control's plate shows, by its binding entry id.
     table barIcons {
       forward = "arrow.up"
       back = "arrow.down"
@@ -298,22 +298,14 @@ state {
       annotate = "act.annotate"
       jetpackAlone = "act.isolate"
       build = "act.build"
-      respawn = "act.respawn"
 
       // A wheel's opener, keyed by the page it opens: a plate whose hold opens that page wears the icon (LB opens the play
       // wheel).
       "wheel-pad" = "act.wheel"
 
       // The View page.
-      viewPlay = "view.play"
-      viewQuarter = "view.quarter"
-      viewFront = "view.front"
-      viewRear = "view.rear"
-      viewWide = "view.wide"
       autorun = "act.autorun"
       viewRecenter = "act.recenter"
-      viewIsolate = "act.isolate"
-      viewFace = "view.face"
       viewFrame = "act.frame"
       viewFreeLook = "act.look"
       autofly = "act.autofly"
@@ -330,7 +322,6 @@ state {
       dbgSplit = "dbg.split"
       dbgClear = "dbg.clear"
       dbgStop = "dbg.stop"
-      dbgSuit = "dbg.suit"
 
     }
 
@@ -346,16 +337,7 @@ state {
       where = "Where"
       channels = "Channels"
       annotate = "Annotate"
-      respawn = "Respawn"
-      desktop = "Desktop"
-      play = "Play"
-      suit = "Suit"
       stop = "Stop"
-      threeQuarter = "Three-quarter"
-      front = "Front"
-      rear = "Rear"
-      wide = "Wide"
-      face = "Face"
       autoCamera = "Chase camera"
       barWings = "Wings"
       barWingsFull = "Full wings"
@@ -372,16 +354,7 @@ state {
       where = "act.where"
       channels = "act.channels"
       annotate = "act.annotate"
-      respawn = "act.respawn"
-      desktop = "act.desktop"
-      play = "act.play"
-      suit = "dbg.suit"
       stop = "dbg.stop"
-      threeQuarter = "view.quarter"
-      front = "view.front"
-      rear = "view.rear"
-      wide = "view.wide"
-      face = "view.face"
       autoCamera = "view.auto"
       barWings = "bar.wings"
       barWingsFull = "bar.wings.full"
@@ -534,10 +507,10 @@ bindingOverlays [
     }
   }
 
-  // The play wheel, held open on Tab or LB over the Moth's resting page so the seat keeps walking while it aims; and
-  // the keyboard's build toggle and respawn, whose pad doors are the wheel's Build and Respawn sectors (the pad's Back is
-  // a device's select, and the left stick's press is run). While it is open the arrow keys (Tab) or the d-pad (LB) step
-  // its ring, Up to the next and Down to the previous, and the mouse wheel steps it too.
+  // The play wheel, held open on Tab or LB over the seat's resting page so the seat keeps walking while it aims; and
+  // the keyboard's build toggle, whose pad door is the wheel's Build sector (the pad's Back is a device's select, and the
+  // left stick's press is run). While it is open the arrow keys (Tab) or the d-pad (LB) step its ring, Up to the next
+  // and Down to the previous, and the mouse wheel steps it too.
   {
     id: "play-wheel"
     document {
@@ -558,14 +531,6 @@ bindingOverlays [
                 id: "build"
                 label: "Build"
                 sources ["keyboard.f2"]
-              }
-              // Back to the spawn from anywhere, a fall or a portal loop included.
-              {
-                command: "body.pose"
-                id: "respawn"
-                label: "Respawn"
-                text: "spawn:stage"
-                sources ["keyboard.backspace"]
               }
             ]
           }
@@ -651,16 +616,17 @@ bindingOverlays [
           style {
             placement: ViewportCenter
           }
-          rings: mothRings
+          rings: standardRings
         }
       ]
     }
   }
 
   // The shared trigger pages: the left trigger (or Z) holds View, the right trigger (or X) holds Debug. The suit toggle joins
-  // Debug (suit.puck), and noclip joins it on the left stick's press in the debug world (noclip.puck). A page inherits `base`, so the sticks and the keyboard's movement keep working while it is held.
-  // Close-ups the View page has no plate for (head, boots, shoulder) are `view.override layout <name>`, and the chase
-  // camera and annotation are the play wheel's.
+  // Debug (suit.puck), and noclip joins it on the left stick's press in the debug world (noclip.puck). A page inherits
+  // `base`, so the sticks and the keyboard's movement keep working while it is held. The View page's free plates are a
+  // refinement's: a world that authors layouts binds them there (the debug world's Moth controls,
+  // ../debug/moth-controls.puck), and the chase camera and annotation are the play wheel's.
   {
     id: "pad-pages"
     document {
@@ -675,65 +641,10 @@ bindingOverlays [
             inherits: "base"
             label: "View"
             entries [
-              {
-                command: "view.override"
-                id: "viewPlay"
-                label: "Chase"
-                text: "layout play"
-                value: neverRead
-                sources: padUp
-              }
-              {
-                command: "view.override"
-                id: "viewQuarter"
-                label: "Three-quarter"
-                text: "layout three-quarter"
-                value: neverRead
-                sources: padRight
-              }
-              {
-                command: "view.override"
-                id: "viewFront"
-                label: "Front"
-                text: "layout front"
-                value: neverRead
-                sources: padDown
-              }
-              {
-                command: "view.override"
-                id: "viewRear"
-                label: "Rear"
-                text: "layout rear"
-                value: neverRead
-                sources: padLeft
-              }
-              {
-                command: "view.override"
-                id: "viewWide"
-                label: "Wide"
-                text: "layout flight-stage"
-                value: neverRead
-                sources: padLeftShoulder
-              }
-              // Autorun and autofly: each press switches her walking forward, or flying (flight mode on and climbing), on or
-              // off, and the latch outlives the page, so she keeps going with the trigger released.
+              // Autorun and autofly: each press switches the seat walking forward, or flying (flight mode on and climbing),
+              // on or off, and the latch outlives the page, so it keeps going with the trigger released.
               { channel: "forward", id: "autorun", label: "Autorun", mode: Toggle, scale: 1, sources: padLeftStick }
               { command: "player.look.recenter", id: "viewRecenter", label: "Recenter", sources: padNorth }
-              {
-                command: "view.isolate"
-                id: "viewIsolate"
-                label: "Jetpack alone"
-                text: "toggle moth pod* nozzle*"
-                sources: padWest
-              }
-              {
-                command: "view.override"
-                id: "viewFace"
-                label: "Face"
-                text: "layout face"
-                value: neverRead
-                sources: padSouth
-              }
               { command: "player.frame", id: "viewFrame", label: "Frame", sources: padEast }
               { command: "player.look.free", id: "viewFreeLook", label: "Free look", sources: padRightShoulder }
               { channel: "rise", id: "autofly", label: "Autofly", mode: Toggle, scale: 1, sources: padRightStick }
