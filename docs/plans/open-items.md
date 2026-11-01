@@ -691,21 +691,36 @@ system can take, from `dotnet-trace` thread-time samples of the frame thread
   rendering lane. Extend the same projection/consumer-based rate
   mechanism to placement roots, measure pose packing and draw recording, and
   preserve planted roots, continuous world-phased gusts and independent tip
-  flutter. Triangle detail already exists (`SdfWorldPassRecorder.cs:886`);
+  flutter (the [visibility plan](visibility.md#v2-instance-updates-proportional-to-change-and-authored-motion-on-the-gpu)'s
+  step V2a). Triangle detail already exists (`SdfWorldPassRecorder.cs:886`);
   do not infer that triangle LOD is missing. Draw count is the other cost:
-  4,215 draws for 288 unique blade geometries, one draw per blade part. The
-  cause fix is one draw per shared geometry with its instances, through the
-  memo's R2 counted indirect path (`SdfMeshOcclusion`), not fewer blades. The
-  meadow is R2's and R1's forcing workload: measure produce's draw-recording
-  share before and after. The controlled-engine-build
+  4,215 draws for 288 unique blade geometries, one draw per blade part. Its
+  cause fix (ordered compaction and (geometry, level) instance buckets on R2's
+  counted indirect path, with every consumer of per-draw identity moved) is
+  the visibility plan's V1, not fewer blades. The meadow is also R1's forcing
+  workload: measure produce's draw-recording share before and after. The
+  controlled-engine-build
   before/after observations and their machine-load limits are in
   [port lane 9](port-experimental.md#9-meadow-and-foliage).
+- [high] Measure the meadow before ordering the visibility work, in the lead's
+  settle window (the [visibility plan](visibility.md#measure-first)). M1:
+  `debug.go meadow` on Direct3D 12 and a windowed Vulkan leg with
+  `world.cadence off`, `host.frames` and `world.gpu-timing timeline` as
+  authored against `meadowWindSpeed` and `meadowFlutterSpeed` at 0, plus a
+  `dotnet-trace` of the frame thread; it orders V1 against V2. M2: mesh-pass
+  and cascade GPU time beside draws and vertices, and triangles per blade
+  part at `world.detail 0`, `1` and `2`, on the RTX 2060 and at the Deck's
+  resolution; it decides whether V3 and V4 come ahead of V2 there. Every
+  frame number taken so far, R2's included, is load-bound and ranks nothing.
+  Owner: the lead.
 - [medium] `SdfMeshPathBake.Dress` rebuilds every draw of every group whenever
   one dynamic slot moved, and for each dynamic group scans `MeshAssetSlots`
   (`Enumerable.Contains` over an `IReadOnlyList<int>`) and every mesh instance
   (`SdfMeshPathBake.cs:375-388`): 0.6 to 1.2 ms a frame at the lobby and the
   rim, `Enumerable.Contains` alone 0.45 to 0.62 ms. Index the frame's instances
-  by slot once and redress only the moved groups. (from: slow-frames)
+  by slot once and redress only the moved groups; this is the first cut of the
+  [visibility plan](visibility.md#the-build-order)'s V2b, which retains the
+  instance table and stops the rebuild. (from: slow-frames)
 - [medium] The portal crossing scan visits every population slot for every
   portal face each tick, with an occupancy dictionary `Observe` or `Forget` per
   pair (`WorldInstanceHost.Adjacency.cs:294-434`): 1.1 to 1.2 ms, 16 to 19 % of
