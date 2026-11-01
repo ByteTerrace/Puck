@@ -159,6 +159,26 @@ public sealed partial class SdfProgramBuilder {
         ));
     }
 
+    /// <summary>Starts another emission in the owned storage. End every scope and finish every build using this builder
+    /// before clearing it. Built programs and retained emissions own their snapshots and remain valid.</summary>
+    public void Clear() {
+        m_instances.Clear();
+        m_instructions.Clear();
+        m_materialRecolorWindows.Clear();
+        m_materialScopes.Clear();
+        m_materials.Clear();
+        m_screenSurfaces.Clear();
+        m_convexPolygonProfiles.Clear();
+        m_paths.Clear();
+        m_sweepCurves.Clear();
+        m_fieldScopes?.Clear();
+        m_reservedPathWords = 0;
+        m_materialRecolor = null;
+        m_positionalFold = null;
+        m_openInstanceFirst = -1;
+        m_shapeCount = 0;
+    }
+
     // Allocated only when a scope opens. Each entry owns its pop parameters and empty-scope admission count.
     private Stack<(SdfBlendOp Blend, float Smooth, int ShapeCountAtOpen, Vector4 Data0, float StepCount)>? m_fieldScopes;
     // The SECOND mirror of the shader's parityMaterialDelta slot, and the one the Build()-time refusal below reads.

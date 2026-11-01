@@ -24,6 +24,16 @@ Take counts first and timings beside them on a quiet machine, as the
 [skill](../SKILL.md) says. A pause time on a loaded machine is an observation,
 not a verdict.
 
+Read allocation ticks and GC suspension/restart events from the raw `.nettrace`
+(for example with TraceEvent's `TraceLog`); a speedscope conversion is a CPU
+stack view, not an allocation or pause report. Separate boot-to-bake-settlement
+from the standing and walking windows, and state whether a collection count
+includes higher generations (`GC.CollectionCount(0)` does). Aggregate suspension
+intervals for pause time, not concurrent collection duration.
+Do not add generation counters together: their counts are inclusive. The
+`HostFrameTimeline.Describe` sum is filed in the engine job-system packet;
+until it changes, use `host.memory`'s gen0 delta for an actual collection total.
+
 ## The steady frame and tick allocate nothing
 
 A frame or tick that runs every 16.7 or 33 ms allocates no managed memory once
@@ -207,10 +217,13 @@ Threads that write the same cache line serialize on it, whether they share a
 variable (true sharing) or neighbouring ones (false sharing). Parallel work
 writes per-worker state and merges once.
 
-- **Done right.** `MeshCpuBake` gives each worker its own evaluator through
+- **Explicit owners.** `MeshCpuBake` gives each worker its own evaluator through
   `localInit` ([`MeshCpuBake.cs:92`](../../../../src/Puck.Cli.Worlds/Mesh/MeshCpuBake.cs));
-  the field evaluator keeps its walk scratch `[ThreadStatic]`
-  ([`SdfFieldEvaluator.PointWalk.cs:12`](../../../../src/Puck.SignedDistance/Queries/SdfFieldEvaluator.PointWalk.cs)).
+  the bake's worker slots retain their own refinement indexes
+  ([`SdfMeshPathBake.Residency.cs`](../../../../src/Puck.SdfVm/SdfMeshPathBake.Residency.cs)).
+  The field evaluator's existing `[ThreadStatic]` walk scratch
+  ([`SdfFieldEvaluator.PointWalk.cs:12`](../../../../src/Puck.SignedDistance/Queries/SdfFieldEvaluator.PointWalk.cs))
+  is a migration in the job-system memo, not a model for new scratch.
 - **Shared counters** (`Interlocked` on one field from every worker) are the
   shape to look for. The ones on hot-looking paths today are per read or per
   node pair (`SdfMeshStore.cs:211-214`, `SdfMeshIrradianceScene.cs:742`) and

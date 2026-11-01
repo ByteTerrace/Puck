@@ -84,7 +84,7 @@ public sealed partial class SdfProgramBuilder {
             m_convexPolygonProfiles.Add(item: ((polygon.InstructionIndex + offset), polygon.Vertices));
         }
         foreach (var path in emission.Paths) {
-            m_paths.Add(item: path with { InstructionIndex = (path.InstructionIndex + offset) });
+            m_paths.Add(item: ((offset == 0) ? path : path with { InstructionIndex = (path.InstructionIndex + offset) }));
         }
         foreach (var curve in emission.Curves) {
             m_sweepCurves.Add(item: curve with { InstructionIndex = (curve.InstructionIndex + offset) });

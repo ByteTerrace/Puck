@@ -73,6 +73,11 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
     private readonly WorldIdentity?[] m_profiles;
     // Per seat: the composed binding document the seat's pages, contexts and wheels were last compiled from.
     private readonly BindingProfileDocument[] m_composed;
+    // Read-back and compilation share the same layer composition; state changes matter only when an overlay gate flips.
+    private readonly ComposedLayers?[] m_composedLayers = new ComposedLayers?[SeatCount];
+
+    private sealed record ComposedLayers(IReadOnlyList<WorldBindingOverlay> Overlays, BindingProfileDocument? Profile, BindingProfileDocument? Session, bool[] Gates, int Code, BindingProfileDocument Document);
+
     private readonly IReadOnlyList<BindingContextDefinition>[] m_seatContexts;
     // Per seat: the reads its composition makes (WorldPresentationManifest.SeatBindings), the mirror they are registered
     // on under the seat's context lease, and that mirror's install they were compiled at.
@@ -163,15 +168,35 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
         ));
     }
     private BindingProfileDocument ComposeSeat(int slot) {
-        return WorldBindingComposer.Compose(BaseLayers(
+        var overlays = m_overlays[slot];
+        var profile = m_profileBindings[slot];
+        var session = m_sessionRebinds[slot];
+        var code = Puck.Abstractions.CodeRevision.Current;
+
+        if ((m_composedLayers[slot] is { } held) && ReferenceEquals(objA: held.Overlays, objB: overlays) && ReferenceEquals(objA: held.Profile, objB: profile) && ReferenceEquals(objA: held.Session, objB: session) && (held.Code == code)) {
+            var same = true;
+
+            for (var index = 0; (index < overlays.Count); index++) {
+                same &= (held.Gates[index] == OverlayActive(slot, overlays[index]));
+            }
+            if (same) { return held.Document; }
+        }
+        var gates = new bool[overlays.Count];
+
+        for (var index = 0; (index < overlays.Count); index++) { gates[index] = OverlayActive(slot, overlays[index]); }
+        var document = WorldBindingComposer.Compose(BaseLayers(
             definition: m_definitions[slot],
-            overlays: m_overlays[slot],
-            profile: m_profileBindings[slot],
-            session: m_sessionRebinds[slot],
+            overlays: overlays,
+            profile: profile,
+            session: session,
             engineTick: m_stateEngineTicks[slot],
             tick: m_stateTicks[slot]
         ));
+
+        m_composedLayers[slot] = new(Code: code, Document: document, Gates: gates, Overlays: overlays, Profile: profile, Session: session);
+        return document;
     }
+    private bool OverlayActive(int slot, WorldBindingOverlay overlay) => (overlay.When?.Holds(definition: m_definitions[slot], tick: m_stateTicks[slot], engineTick: m_stateEngineTicks[slot]) ?? true);
     // The derivation, applied: first matching context row's group (document order) ?? null (the profile default). The
     // apply is the existing pointer-level group switch; a winner row's group is declared by construction
     // (BindingProfile.Compile refuses a contexts row naming an undeclared group).
