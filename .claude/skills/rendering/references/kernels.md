@@ -287,6 +287,18 @@ and [Dawn's buffer state implementation](https://dawn.googlesource.com/dawn/+/c0
 agree on buffer decay and promotion; these are legacy-barrier rules, not
 enhanced-barrier rules. Hardware validation still checks the actual use.
 
+Motion history can be copied twice without a shader reading it in between,
+especially in an unread routed world. `SdfWorldTables.Motion.BeginHistoryCopy`
+orders prior shader writes/reads and transfer writes before copy reads/writes;
+its source/destination transitions use COMMON as Direct3D 12's first state,
+with current-recording states supplied by its tracker. A shader-read-only
+dependency misses the earlier copy. The
+[Vulkan synchronization specification](https://docs.vulkan.org/spec/latest/chapters/synchronization.html)
+and [LunarG's validation guide](https://www.lunarg.com/wp-content/uploads/2024/01/Guide-to-Vulkan-Synchronization-Validation-FINAL-01-18-2024.pdf)
+agree that WAW needs a memory dependency. `GpuUploadRuns` also keeps every
+range disjoint: a bridge absorbs all touched runs so a batch never copies
+the same destination word twice without a barrier.
+
 ## Registers and bindings
 
 No SDF kernel declares a binding or a register by hand. Every per-view kernel
