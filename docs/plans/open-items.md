@@ -965,10 +965,13 @@ then CI's steady state, the shader cache and the GC-hole retirement.
 - [medium] Cold debug-world silo activation still spends most of its time before
   checkpoint decode. Construction leaves the Orleans scheduler explicitly
   (`src/Puck.World.Silo/WorldSiloHost.cs:1196`); both container boots now pass
-  without long-turn warnings. Per-step timers (`WorldSiloHost.cs:1202`) measured
-  a portable fresh boot at 10.865 s: storage/definition admission 8.866 s,
+  without long-turn warnings. Before the standard-authoring merge, per-step timers
+  (`WorldSiloHost.cs:1202`) measured a portable fresh boot at 10.865 s:
+  storage/definition admission 8.866 s,
   checkpoint decode 0.001 s, authority construction 1.876 s, addon wiring 0.122 s.
   A new-process recovery took 14.851 s (10.267 / 1.165 / 3.209 / 0.210 s).
+  Rebuilding with the authored-standard content gave 15.260 / 12.807 s for fresh
+  and new-process recovery; both passed health and authenticated QUIC again.
   The storage phase includes root-qualified definition admission
   (`src/Puck.World.Server/WorldAuthorityBlobStore.cs:1065`); it is not an I/O-only
   measurement. A framework-dependent ReadyToRun experiment took 13.797 / 18.009 s

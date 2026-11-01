@@ -32,7 +32,8 @@ framebuffer on this headless host.
 Activation explicitly leaves the Orleans scheduler before constructing
 the authority and awaits storage without capturing it. `silo.activate.timing`
 reports storage, checkpoint decode, authority construction/restore, and addon wiring
-separately, so cold-process work can be distinguished from recovery work.
+separately, so cold-process work can be distinguished from recovery work. The storage
+phase includes root-qualified definition admission, rather than measuring I/O alone.
 
 ## Hosted test world
 
