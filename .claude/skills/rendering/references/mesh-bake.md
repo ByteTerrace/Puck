@@ -74,7 +74,7 @@ the interpreter, contours the samples on the CPU, and stores the meshes.
   root, its middle, within a 16,384th), in at most eleven rounds. The
   `ACrossingLandsWithinASixteenThousandthOfItsEdgeInAFewRounds` law holds the
   bound and the cost. Each round is a readback round trip of the group, and
-  only `MaxAdmitted` groups hold a final lattice, so a group's rounds bound its
+  only the groups the memory account admits hold a final lattice, so a group's rounds bound its
   latency: a search must not trade fewer samples for more rounds than its worst
   root needs (a one-trial secant search's worst roots took up to 37).
 - **Signs are read once.** `SdfSampledLattice.FineInside` keeps each fine
@@ -184,19 +184,27 @@ laws exercise that boundary.
   order, then the stages by group priority. A pool per residency oversubscribes
   the processors three times over on the debug world, and workers below normal
   priority lose them to the irradiance trace and the machines (526 s against
-  215 s cold). The frame thread only copies a batch's readback; it never
-  decodes one. Only
-  `MaxAdmitted` groups (twice the workers) hold a final lattice at once
-  (admitted at its first slab, whose answer allocates the lattice's values):
-  unadmitted groups keep refining their small coarse lattices, and the meshing's
-  working memory stays a few dozen groups' worth instead of every group's, whose
-  collections pause for seconds. A first slab a frame hands back unanswered (a
-  graph rebuilding) keeps its admission; counting its retry as a new one let
-  returned first slabs fill every admission and stall the bake. A stage that
-  throws is logged (`[sdf.mesh-bake] work failed`), and its group stays
-  unfinished, holding its admission. A group a later program does not keep, or
-  whose residency is released, is retired (`Group.Retired`), and the pool drops
-  its queued work.
+  215 s cold). The frame thread decodes a batch's readback into each group's
+  answer buffers, the one pass the copy of it took, and does nothing else with
+  it. Only the groups the process memory account admits hold a final lattice
+  (admitted at its first slab, whose answer allocates the lattice's values), by
+  each group's own peak (`PeakOf`); the admission rules are in
+  [data and memory](../../dotnet-performance/references/data-and-memory.md#owned-storage-and-byte-admission).
+  Unadmitted groups keep refining their small coarse lattices. A first slab a
+  frame hands back unanswered (a graph rebuilding) keeps its admission;
+  counting its retry as a new one let returned first slabs fill every admission
+  and stall the bake. A stage that throws finishes its group with no new mesh
+  (`[sdf.mesh-bake] ... failed`, `Fail`), releasing its reservation and
+  workspace, and a later program bakes it again. A group a later program does
+  not keep, or whose residency is released, is retired (`Group.Retired`): the
+  pool drops its queued work, an answer arriving for it is dropped, and its
+  workspace is freed when its running job ends; `Retire` never waits.
+- **Nothing array-sized runs under the bake's gate.** The frame thread takes
+  `m_gate` in `Dress`, `TryTakeForFrame` and `Stage`, so a worker fills a
+  group's lattice, points and answers on its own job, which only that group's
+  one running job touches, and takes the gate only to publish the group's next
+  request or stage. The done line's `frame-gate=[max,total,over-1ms]` reads the
+  frame thread's waits on the gate.
 - **A dispatch fills its samples.** A frame takes lattices by priority until
   `MeshBakeMaxSamples`, passing over one too large for what is left and taking
   smaller ones behind it; stopping at the first that did not fit left the debug

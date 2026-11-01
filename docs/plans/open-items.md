@@ -39,8 +39,8 @@ experimental worlds have that it lacks is ported into it
    rated views' and screens' phases and the tick frame's own tick-bound view
    recording, which a tick plus produce still pushes past 16.7 ms.
 2. [Engine job system](#engine-job-system), the garbage-collection cuts on
-   today's runtime [high]: remaining bake readback copies and fine-sample
-   indexes, and steady irradiance blocks and dressed-pick snapshots; measured
+   today's runtime [high]: the bake's managed contour and refinement working
+   memory, and steady irradiance blocks and dressed-pick snapshots; measured
    residuals are in the packet. Native storage uses `IAllocator` and
    `MimallocAllocator`.
 3. [Engine job system](#engine-job-system), the memo [high]: the scheduler, the
@@ -212,49 +212,42 @@ One engine-wide job system answers all of it:
     Remaining sampled sites include readback-copy byte arrays, 12,350 MiB
     (`SdfMeshPathBake.cs:691`), fine-key dictionary entries, 14,669 MiB across
     inlined/non-inlined stacks (`SdfSampledLattice.cs:861`), and contour merge
-    doubles, 5,022 MiB (`SdfDualContouring.cs:702`). Answer decoding reuses
-    exclusive bake-owned spans; final lattices reuse point-conversion storage.
-    Worker-slot index retention is bounded to one fine-sample budget across
-    slots: retaining every slot's maximum grew standing LOH to 8,530 MiB;
-    bounded retention reads 5,404 MiB versus the baseline's 6,222 MiB.
+    doubles, 5,022 MiB (`SdfDualContouring.cs:702`). The frame thread decodes
+    each readback once into native answer buffers its group's job owns; final
+    lattices reuse point-conversion storage. Worker-slot index retention is
+    bounded to one fine-sample budget across slots, reported to the account and
+    released when a bake settles: retaining every slot's maximum grew standing
+    LOH to 8,530 MiB; bounded retention reads 5,404 MiB versus the baseline's
+    6,222 MiB.
     Continue with owned storage, through `IAllocator` and `MimallocAllocator`
     where it goes native; a shared cross-thread pool belongs to the memo.
-- The allocation cuts' cross-family review. These are fixed in one batch after
-  the memo's M2a lands, because they touch the same bake files:
-  - [high] `FinalLattice.SetPoints` (`SdfMeshPathBake.cs:2072-2076`) now
-    converts points inside `lock (m_gate)` (`:1381`, `:1444`), the lock the
-    frame thread takes in `Dress` (`:342`), `TryTakeForFrame` (`:488`) and
-    `Stage` (`:622`). Before the cuts, that work ran before the lock. A
-    refinement round of up to 4M points stalls the frame while the lock holder
-    allocates, zeroes and converts, and the allocation can trigger a gen2
-    collection under the lock (estimated about 5 ms per million points). Fix:
-    build the converted buffer on the worker and swap it in under the lock.
-  - [medium] Decode buffers (`SdfMeshPathBake.cs:728-751`) keep up to tens of
-    MB per residency with no trim. They add a per-bake lock that serialises
-    workers' decoding, and they ignore the worker slot's scratch, so bake
-    storage has two owners.
-  - [medium] Static worker-slot refinement scratch
-    (`SdfMeshPathBake.Residency.cs:52`, `SdfSampledLattice.cs:908-913`) lives
-    for the whole process, up to about 96 MB, unreported. Its trim limit is a
-    guess rather than a measured working set. The large refinements that
-    dominate allocation still allocate, so the reuse helps only small ones.
-    It must be reported to M1's account.
-  - [medium] The cold-bake pause comparison needs at least 3 alternating A/B runs
-    on a quiet machine, with GC events read from the trace. Retained large arrays
-    compacted by `ConserveMemory=5` are the likelier cause of the longer
-    suspension.
-  - [low] `SdfProgramBuilder.Clear` leaves `m_openInstanceBakesSeparately` and
-    `m_openInstanceBoundInSlotFrame` set after a thrown emission.
-  - [low] The reused frame builder keeps the last emission's objects alive into
-    gen2.
-  - [low] A cached rigid template matches only on the total material count, so
-    one avatar joining or leaving invalidates every template.
-  - [low] `WorldSeatBindings` checks overlay gates in three places, with two
-    change detectors for one fact.
-  - [low] `WorldSessionSceneEmitter` and `WorldAdjacencySceneEmitter` still
-    allocate the avatar material arrays.
-  - [low] `TemplateScratch` is a second cache of retained emissions beside
-    `WorldPlacementStamper`'s, which is duplication to converge.
+- What remains of the allocation cuts' cross-family review (the gate, decode
+  buffer and worker-scratch items are fixed; see Memory ownership):
+  - [medium] The cold-bake pause comparison needs at least 3 alternating A/B
+    runs on a quiet machine, with GC events read from the trace. No quiet
+    machine was available to `mem-fixes`: four Direct3D 12 cold bakes ran at 86
+    to 100 % CPU from other lanes, and GC pause per collection read 22 ms in
+    one run and 40 to 83 ms in the others with no change between them that
+    explains it. Retained large arrays compacted by `ConserveMemory=5`
+    (`Puck.World.csproj:30`) remain the likelier cause of long suspensions; the
+    settled LOH still reads about 1.5 GB after `host.memory collect`.
+  - [low] `SdfProgramBuilder.Clear` (`SdfProgramBuilder.cs:164-180`) leaves
+    `m_openInstanceBakesSeparately` and `m_openInstanceBoundInSlotFrame` set
+    after a thrown emission.
+  - [low] The reused frame builder (`SdfCompositionFrameSource.cs:230`) keeps
+    the last emission's objects alive into gen2.
+  - [low] A cached rigid template (`WorldRigidAssets.cs:155`) matches only on
+    the total material count, so one avatar joining or leaving invalidates
+    every template.
+  - [low] `WorldSeatBindings` checks overlay gates in three places
+    (`WorldSeatBindings.cs:123-136,176-199,306-323`), with two change detectors
+    for one fact.
+  - [low] `WorldSessionSceneEmitter` (`:293-294`) and
+    `WorldAdjacencySceneEmitter` (`:263-264`) still allocate the avatar
+    material arrays.
+  - [low] `TemplateScratch` (`WorldRigidAssets.cs:24-39`) is a second cache of
+    retained emissions beside `WorldPlacementStamper`'s (`:964`), which is
+    duplication to converge.
 - Decided: the 30 and 15 Hz tiers stay tiers. On a fixed grid a floor's period
   is whole refreshes (`PresentationRate.GridSteps`), and with a 30 Hz tick on a
   60 Hz display only every other refresh is free of a step, so the useful
@@ -286,12 +279,66 @@ together. The work builds on today's runtime through `IAllocator`
 move goes through. The custom no-GC runtime port stays later work, on the
 [memory-pooling page](memory-pooling.md), after the fundamentals.
 
-M1 and M2a are built (`mem-m1`, Release .NET 11, both shader targets).
-`MemoryAccount` owns admission and category totals; the library reserves its
-unused cache allowance and bake groups reserve their simultaneous peaks.
-Published mesh payloads, copied readbacks, lattice storage and point workspaces
-use the injected allocator. Managed contour roots and worker refinement indexes
-keep their existing owners; the allocation-review items above still apply.
+M1 and M2a are built (`mem-m1`), with both cross-family reviews' findings on
+the bake, memory and library files fixed by `mem-fixes`. `MemoryAccount` owns
+admission and category totals. Admission paces and always progresses: a bake
+group's peak is its own final lattice plus the fine samples its refinement
+factor can measure (`SdfSampledLattice.FineSampleBound`), narrowed once
+measured; the first deferred group holds its place; a group with nothing else
+of its bake admitted is admitted alone; free physical memory is read outside
+the account and only paces; and admission waits while the pool's queue holds
+a round of every worker's stages. The library reserves nothing and evicts by
+its meshes' charged storage. Published mesh payloads, decoded readback
+answers, lattice storage and point workspaces use the injected allocator, and
+a chunked mesh stores its attributes once. No array-sized work runs under the
+bake gate the frame thread takes. Managed contour roots and worker refinement
+indexes keep their existing owners; the worker slots report theirs to the
+account and release them when a bake settles.
+
+- `mem-fixes` Direct3D 12 cold bakes of `worlds/debug`, windowed, empty private
+  cache, at 86 to 100 % CPU from other lanes: before the fixes the world bake
+  took 271 s with 962 deferrals and the frame thread waited on the bake gate up
+  to 179 ms, 15.6 s in total, 1,929 times over 1 ms; after, 185 s with 122
+  deferrals and none stalled, gate waits up to 136 ms (a collection while a
+  worker held it), 1.35 s in total, 35 over 1 ms, with identical samples and
+  triangles. Live payload after `host.memory collect` fell from 1,526,790,926
+  to 1,409,528,905 B (chunked attributes stored once). Frame times during the
+  bake (p99 per minute 186 to 307 ms before, 233 to 398 ms after) are not
+  comparable: GC pause per collection read 22 ms in the before run and 40 to
+  83 ms in three after runs as the machine load rose. The after build's Vulkan
+  cold bake settled in 525 s with 346 deferrals, gate waits up to 149 ms and
+  64 over 1 ms, and live payload 1,607,238,606 B after collection; it baked
+  1,101,923,007 samples and 45,044,555 triangles against Direct3D 12's
+  999,550,075 and 38,652,955. No before Vulkan run was taken, so whether that
+  backend difference predates these changes is unconfirmed; the changes are
+  CPU-side and left Direct3D 12's counts identical. Both backends stay far
+  past the one-minute cold-bake ruling on this loaded machine.
+- Still open from the memory review:
+  - [medium] Managed working memory per admitted group (contour lists,
+    refinement masks and `Vector3[]` point rounds: `SdfSampledLattice.cs:439`
+    onward, `SdfMeshPathBake.cs` `ChooseCrossingPoints`) is not in a group's
+    peak, so the account cannot pace the collections it causes; the settled
+    LOH still reads about 1.5 GB after `host.memory collect`. The cure is the
+    next native movers (the contour and the refinement's per-cell masks), not
+    a count cap.
+  - [low] A chunked mesh still stores its triangles' indices twice: the
+    parent's joined indices for whole-group queries and each chunk's own
+    (`SdfMesh.Storage.cs`, `NativeCopy`). Dropping the parent's needs its
+    readers (the irradiance scene, `SdfMeshAudit`, the diagnostics' nearest
+    query) to walk the chunks.
+  - [low] The library releases evicted claims, which frees native payloads,
+    under its own gate (`SdfMeshLibrary.cs` `Retain`), the gate the frame
+    thread takes in `Restart` through `TryTake`.
+  - [low] `HostMemory.AvailablePhysicalBytes` on Linux reads `/proc/meminfo`
+    with LINQ and `string.Split` (`HostMemory.cs:29-39`); the bake reads it at
+    most every 0.25 s.
+  - [low] `GpuRegion` grows its host copy with `NativeMemory.Alloc*`
+    (`GpuRegion.cs:331,760,854,980`), the same allocate/copy/publish growth as
+    `OwnedBuffer`, outside `IAllocator` and the account.
+  - Declined: one claim holder bridging `Dress` to the mesh region. The two
+    claim sets cover the same list at different times (from dressing until the
+    region stages it, and from staging until the next list stages), and both
+    now claim only the meshes entering their list (`SdfMeshClaims.Update`).
 
 - Empty private-cache cold bakes, before/after: Direct3D 12 gen0 increments
   683/481, Vulkan 711/536, from `host.memory` before and after settlement.
@@ -310,9 +357,14 @@ keep their existing owners; the allocation-review items above still apply.
 - On an uncached desk edit in `worlds/debug`, `host.memory budget 1` emitted
   `[sdf.mesh-bake] deferred ... group=-122 ... budget=1`; restoring `auto`
   settled the bake and `quit` exited 0, with no worker failure or bake refusal.
-  A preceding whole-world cold attempt resumed but reached its 600 s wait
-  limit with 260 groups pending under machine pressure (0.2 GB free RAM).
-  The one-group check establishes resumption without that timing confound.
+  A preceding whole-world cold attempt reached its 600 s wait limit with 260
+  groups pending at 0.2 GB free RAM: every group's fixed 384 MB peak and the
+  reserved cache allowance deferred them all, with no progress rule. That is
+  the admission defect `mem-fixes` removed: a whole-world cold bake under
+  `host.memory budget 2000000000` and `world.lockstep on`, at 0.4 to 1.4 GB
+  free, deferred 493 times and settled in 809 s with the unbudgeted bake's
+  999,550,075 samples and 38,652,955 triangles; the lockstep World then
+  stepped 30 ticks and quit with exit 0.
 - A desk extent edit rebuilt exactly one group (23 dispatches, 1,399,082
   samples); GI built one geometry and retained the old 15,368-triangle one.
   `host.memory collect` released 606,352 cached bytes and 536,229,256 reserved
@@ -844,11 +896,10 @@ store (AGENTS.md), and work proportional to change.
   file's two other failing laws (`ACubicLatticeDispatchesWhenItsPosesExceedTheSampleBudget`,
   `SettleRebakesKeepTheirCapsAndARefusedOneKeepsItsMesh`) are timing-dependent:
   delete them.
-- [medium] Admission (`MaxAdmitted`) counts per residency though the pool is
-  process-wide, and counts groups, not bytes: several cold residencies admit
-  twice the workers each (`SdfMeshPathBake.cs`, `TryTakeForFrame`). The urgent
-  answer queue drops no retired group's answers, and nothing bounds queued
-  answer bytes (`SdfMeshPathBake.Residency.cs`, `Schedule`, `TakeWork`).
+- [low] Each residency's bake guarantees its own progress, so several cold
+  residencies under a too-small budget each admit one group past it
+  (`SdfMeshPathBake.cs`, `TryTakeForFrame`, the "admitted alone" branch); the
+  process-wide pool's progress rule belongs to the job system's J1.
 - [low · unconfirmed] The bake indexes its `static const float3 SdfBakeTaps[4]`
   by the `[loop]` counter (`sdf-mesh-bake.comp.hlsl:22,94,102`), the shape the
   rendering skill's local-array rule forbids; no capture has read the bake
@@ -1679,6 +1730,18 @@ them verbatim repeats) under-use the language:
 
 ### Lighting and GI
 
+- [high · unconfirmed] A sun that moves every frame freezes indirect light.
+  Each direction change starts a new lighting generation
+  (`SdfMeshIrradiance.cs:759-779`), and a trace batch landing after a
+  generation change is discarded (`:1067`), so GI sticks at the last sun that
+  held still. The debug world's sun is static (`worlds/debug/hall.puck:1413`),
+  so nothing has exercised it; the owner's authored day cycle will. Confirm
+  with a run that binds the key light to a clock, then fix it with the
+  illumination research's plan. (from: research-claude)
+- The probe trace casts two ray sets from one origin: 128 for radiance
+  (`SdfMeshIrradiance.cs:1245`) and 144 for depth (`SdfMeshProbeDepth.cs:19`).
+  This is duplication to converge into one hit buffer. (from: research-claude)
+
 Owner: next lighting batch (rendering, principal-grade review) · medium · Next:
 light a cold area from the coarser levels or the sky term the moment a view
 arrives (shading-side, now); the exposure meter is the
@@ -2070,6 +2133,14 @@ no sooner than in plan order (near 4 m: 47 of 135 at 160 s, all at 434 s).
 
 ### Vulkan regressions and GPU robustness
 
+- [low · unconfirmed] The bake's output may differ by backend. One after-run
+  read 1,101,923,007 samples and 45,044,555 triangles on Vulkan against
+  999,550,075 and 38,652,955 on Direct3D 12, but those runs straddled the
+  meadow's merge. The meadow lane read 1,101,618,980 (Direct3D 12) against
+  1,101,543,801 (Vulkan) on one tree. Compare both backends' counts on one
+  tree; a bake whose geometry depends on the backend is a defect. (from:
+  mem-fixes, meadow)
+
 Owner: rendering (GPU leg, lead GPU scheduling) · ordinary · Next: Vulkan's
 crossing frame (52.5 ms of produce) and the pixel-pass gap at locked clocks.
 
@@ -2181,6 +2252,9 @@ The suite target (100 % line coverage plus the keep-list) and CI's `coverage` jo
 are suspended; a red test or coverage job is not a stop, and a refactor rewrites
 or deletes tests freely.
 
+- Four `Puck.SdfVm.Tests` laws fail on the integration head with or without
+  the memory fixes: store repeated load, skinned settle, cubic lattice and
+  static union copy. The settle-cap law fails intermittently. (from: mem-fixes)
 - After the job-system batch's merges, five server tests fail:
   `HistoryRefusalLawTests`, `CellBurstLawTests`, `InhabitCountLawTests`,
   `WorldExtensionLawTests`, and `AddonGuestLawTests` (a 30 s timeout). The

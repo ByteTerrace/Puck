@@ -17,15 +17,15 @@ namespace Puck.SdfVm;
 /// <para>A library over a store (<see cref="Disk"/>) keeps what it bakes between runs: every mesh it stores is written
 /// there under its bake's identity, and a bake takes a geometry the store holds from disk (<see cref="TryLoad"/>) instead
 /// of baking it again.</para>
-/// <para>The library retains meshes within <see cref="ByteBudget"/>, evicting the oldest first. Its members are
+/// <para>The library retains meshes within <see cref="ByteBudget"/>, measured as the storage each retained mesh is
+/// charged to the process account (<see cref="SdfMesh.StorageBytes"/>), evicting the oldest first. Its members are
 /// thread-safe: a group's mesh lands from the thread pool.</para>
 /// </summary>
 /// <param name="store">The store the library keeps its meshes in between runs, or <see langword="null"/> to keep them for
 /// the run alone.</param>
 /// <param name="byteBudget">The retained byte budget, or null for the machine-derived default.</param>
 /// <param name="allocator">The host allocator for published payloads; null keeps an offline library managed.</param>
-/// <param name="account">The process byte account, or null for the shared account.</param>
-public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget = null, IAllocator? allocator = null, MemoryAccount? account = null) : IDisposable {
+public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget = null, IAllocator? allocator = null) : IDisposable {
     /// <summary>Gets the process account's machine-derived retained cache allowance, bounded to 16..512 MiB.</summary>
     public static long DefaultByteBudget => MemoryAccount.Shared.CacheBudget;
     /// <summary>Gets the maximum retained bytes; live residencies retain their own in-use meshes independently.</summary>
@@ -34,9 +34,7 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
     /// <summary>Gets the allocator supplied by the host, or null for a managed-only offline library.</summary>
     public IAllocator? Allocator { get; } = allocator;
     /// <summary>Gets the single process byte-accounting authority.</summary>
-    public MemoryAccount Account { get; } = (account ?? MemoryAccount.Shared);
-
-    private readonly MemoryAccount.Owner m_cacheReservation = (account ?? MemoryAccount.Shared).CreateOwner(category: MemoryCategory.Metadata, name: "mesh-library");
+    public MemoryAccount Account => MemoryAccount.Shared;
 
     private long m_retainedBytes;
     private bool m_listening;
@@ -44,7 +42,7 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
     private readonly LinkedList<(UInt128 Identity, SdfMeshGeometry Geometry)> m_age = new();
     private readonly Dictionary<(UInt128 Identity, SdfMeshGeometry Geometry), (long Bytes, LinkedListNode<(UInt128 Identity, SdfMeshGeometry Geometry)> Node)> m_usage = [];
 
-    /// <summary>Gets the estimated retained geometry, mesh and material bytes.</summary>
+    /// <summary>Gets the storage bytes of the meshes the library retains.</summary>
     public long RetainedBytes { get { lock (m_gate) { return m_retainedBytes; } } }
 
     private readonly Lock m_gate = new();
@@ -129,7 +127,7 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
             if (m_meshes.ContainsKey(key: (identity, geometry))) { return; }
 
             m_meshes.Add(key: (identity, geometry), value: []);
-            Retain(bytes: 256, key: (identity, geometry));
+            Retain(bytes: 0, key: (identity, geometry));
         }
         if (persist) { _ = Disk?.Write(geometry: geometry, identity: identity, materials: [], mesh: null); }
     }
@@ -178,13 +176,18 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
         }
         try {
             if (result.Mesh is null) { StoreEmpty(geometry: geometry, identity: identity); return true; }
-            SdfMesh owned;
+            // The copy runs outside the gate the frame thread takes; the first copy held wins, and a later one is
+            // released.
+            if (!TryTake(geometry, result.Materials, out var owned, identity)) {
+                var copy = result.Mesh.NativeCopy(Allocator, Account);
 
-            lock (m_gate) {
-                if (!TryTake(geometry, result.Materials, out var existing, identity)) {
-                    owned = result.Mesh.NativeCopy(Allocator, Account);
-                    _ = Hold(geometry, identity, owned, result.Materials, form);
-                } else { owned = existing; }
+                if (Hold(geometry, identity, copy, result.Materials, form)) {
+                    owned = copy;
+                } else if (TryTake(geometry, result.Materials, out owned, identity)) {
+                    copy.Release();
+                } else {
+                    owned = copy;
+                }
             }
             if (result.Materials.AsSpan().SequenceEqual(other: materials)) { mesh = owned; return true; }
             try {
@@ -209,6 +212,7 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
         ArgumentNullException.ThrowIfNull(argument: materials);
 
         var key = (identity, geometry);
+        Variant source;
 
         lock (m_gate) {
             if (!m_meshes.TryGetValue(key: key, value: out var variants) || (variants.Count == 0)) {
@@ -222,14 +226,33 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
                     return true;
                 }
             }
-
-            mesh = Renumber(mesh: variants[0].Mesh, from: variants[0].Materials, to: materials);
-            variants.Add(item: new Variant(Materials: materials, Mesh: mesh.Acquire(cached: true)));
-            m_cacheReservation.Change(bytes: (((long)materials.Length) * sizeof(int)));
-            Retain(key, (BytesOf(mesh: mesh) + (materials.LongLength * sizeof(int))));
-
-            return true;
+            source = variants[0];
+            _ = source.Mesh.Acquire();
         }
+
+        // The renumbered copy is made outside the gate the frame thread takes; the first variant held for these ids wins.
+        SdfMesh renumbered;
+
+        try {
+            renumbered = Renumber(mesh: source.Mesh, from: source.Materials, to: materials);
+        } finally {
+            source.Mesh.Release();
+        }
+        lock (m_gate) {
+            if (m_meshes.TryGetValue(key: key, value: out var variants) && (variants.Count > 0)) {
+                foreach (var variant in variants) {
+                    if (variant.Materials.AsSpan().SequenceEqual(other: materials)) {
+                        mesh = variant.Mesh.Acquire();
+                        renumbered.Release();
+                        return true;
+                    }
+                }
+                variants.Add(item: new Variant(Materials: materials, Mesh: renumbered.Acquire(cached: true)));
+                Retain(key, renumbered.StorageBytes);
+            }
+        }
+        mesh = renumbered;
+        return true;
     }
 
     // Holds a geometry's first mesh under a bake identity within the byte budget and makes it its form's latest under
@@ -241,13 +264,11 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
             if (form is { } shapes) { m_forms[(identity, shapes)] = geometry; }
             if (m_meshes.ContainsKey(key: key)) { return false; }
             m_meshes.Add(key: key, value: [new Variant(Materials: materials, Mesh: mesh.Acquire(cached: true))]);
-            m_cacheReservation.Change(bytes: (((long)materials.Length) * sizeof(int)));
-            Retain(key, ((256 + BytesOf(mesh: mesh)) + (materials.LongLength * sizeof(int))));
+            Retain(key, mesh.StorageBytes);
 
             return true;
         }
     }
-    private static long BytesOf(SdfMesh mesh) => checked((((long)SdfMeshRegion.WordsOf(mesh: mesh)) * sizeof(uint)));
     private void Touch((UInt128 Identity, SdfMeshGeometry Geometry) key) {
         if (!m_usage.TryGetValue(key: key, value: out var usage)) { return; }
         m_age.Remove(node: usage.Node);
@@ -267,14 +288,12 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
 
             m_retainedBytes -= m_usage[victim].Bytes;
             m_usage.Remove(key: victim);
-            foreach (var variant in m_meshes[victim]) { variant.Mesh.Release(cached: true); m_cacheReservation.Change(bytes: -(((long)variant.Materials.Length) * sizeof(int))); }
+            foreach (var variant in m_meshes[victim]) { variant.Mesh.Release(cached: true); }
             m_meshes.Remove(key: victim);
             _ = m_reads.TryRemove(key: victim, value: out _);
             m_age.RemoveFirst();
             foreach (var form in m_forms.Where(predicate: entry => ((entry.Key.Identity == victim.Identity) && entry.Value.Equals(other: victim.Geometry))).Select(selector: entry => entry.Key).ToArray()) { m_forms.Remove(key: form); }
         }
-        // Cached payloads already have one physical charge in their mesh owner. Reserve only the unused allowance.
-        if (!m_cacheReservation.TryReserve(peak: Math.Max(val1: 0, val2: (ByteBudget - m_retainedBytes)))) { m_cacheReservation.ReleaseReservation(); }
     }
 
     /// <summary>Evicts cache claims; live residency and scene claims keep their payloads.</summary>
@@ -282,20 +301,20 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
         lock (m_gate) {
             if (m_listening) { Account.TrimRequested -= Trim; m_listening = false; }
             Trim();
-            m_cacheReservation.Dispose();
         }
     }
 
+    // Releases every cache claim the library holds, as the account's trim requests; live residency and scene claims keep
+    // their payloads, and the store keeps its entries.
     private void Trim() {
         lock (m_gate) {
-            foreach (var variants in m_meshes.Values) { foreach (var variant in variants) { variant.Mesh.Release(cached: true); m_cacheReservation.Change(bytes: -(((long)variant.Materials.Length) * sizeof(int))); } }
+            foreach (var variants in m_meshes.Values) { foreach (var variant in variants) { variant.Mesh.Release(cached: true); } }
             m_meshes.Clear();
             m_reads.Clear();
             m_forms.Clear();
             m_usage.Clear();
             m_age.Clear();
             m_retainedBytes = 0;
-            m_cacheReservation.ReleaseReservation();
         }
     }
     // The mesh with each triangle material that `from` holds at a place renumbered to what `to` holds there; one neither
