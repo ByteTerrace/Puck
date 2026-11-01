@@ -134,7 +134,9 @@ jobs:
       (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
       (github.event_name == 'workflow_dispatch' && inputs.deploy && github.ref == 'refs/heads/main')
     name: Deploy and verify Azure production
-    needs: [build, verify, pack, infrastructure, applications, containers, browser]
+    # The test shards (build) sit outside deploy's needs while the owner's refactoring campaign suspends test
+    # requirements (AGENTS.md): they report on every push and hold no release, as coverage does.
+    needs: [verify, pack, infrastructure, applications, containers, browser]
     permissions:
       contents: read
       id-token: write

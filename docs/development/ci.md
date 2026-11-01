@@ -626,7 +626,10 @@ The candidate CLI and browser build use pinned DXC. Both official manifests
 check clean source provenance; a build that changes tracked shader artifacts
 must reconcile those generated files before a release can claim a clean checkout.
 
-A push to `main` deploys after all build and verification jobs succeed. A manual
+A push to `main` deploys after the artifact build and every verification job
+succeed. While the owner's refactoring campaign suspends test requirements
+([AGENTS.md](../../AGENTS.md#puck-is-pre-release)), the **Test .NET artifacts**
+shards report on every push but, like the coverage check, hold no release. A manual
 run exposes one `deploy` switch; setting it to false performs build and validation
 only. Pull requests have no Azure credentials. Trusted infrastructure
 builds authenticate before restoring the pinned `ts/bvm` Template Specs through
