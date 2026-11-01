@@ -1,6 +1,5 @@
 using System.Buffers.Binary;
 using System.Security.Cryptography;
-using Puck.Maths;
 using Puck.Testing;
 using Xunit;
 
@@ -29,7 +28,7 @@ public sealed class UnbiasedDrawLawTests {
         var raw = new StateGenerator(Source: GeneratorSource.StreamDraw, Extended: new GeneratorExtended(128, Script: words));
 
         Assert.True(condition: GeneratorEngine.TryBuildExtendedTable(raw, Seed.State, Seed.Stream, 0, out var table, out var reason), userMessage: reason);
-        return new StateGenerator(Source: source, RangeMin: minimum, RangeMax: maximum, Extended: new GeneratorExtended(128, Table: table));
+        return new StateGenerator(Source: source, RangeMin: source == GeneratorSource.UniformRange ? minimum : null, RangeMax: source == GeneratorSource.UniformRange ? maximum : null, Extended: new GeneratorExtended(128, Table: table));
     }
 
     [Fact]
@@ -65,19 +64,20 @@ public sealed class UnbiasedDrawLawTests {
     public void ExactWordsPinResultsRawCursorsBatchesAndFreshContinuation(long width, int rejected) {
         long minimum = ((width > int.MaxValue) ? int.MinValue : -100);
         var maximum = ((minimum + width) - 1);
-        var words = Enumerable.Repeat(count: rejected, element: 0L).Concat(second: [uint.MaxValue, uint.MaxValue]).ToArray();
+        var words = Enumerable.Repeat(count: rejected, element: 0L).Concat(second: [uint.MaxValue, 1L]).ToArray();
         var source = WithWords(GeneratorSource.UniformRange, minimum, maximum, words);
 
         Assert.True(condition: GeneratorEngine.TryFire(source, CellKind.Int, Seed.State, Seed.Stream, 0, null, out var first, out var reason), userMessage: reason);
         Assert.Equal(maximum, first.Numeric);
         Assert.Equal((rejected + 1L), first.Advances);
         Assert.True(condition: GeneratorEngine.TryFire(source, CellKind.Int, Seed.State, Seed.Stream, first.Advances, null, out var second, out reason), userMessage: reason);
-        Assert.Equal(maximum, second.Numeric);
+        var continuation = minimum + (width == 4294967296L ? 1L : 0L);
+        Assert.Equal(continuation, second.Numeric);
         Assert.Equal(1, second.Advances);
         var values = new long[2];
 
         Assert.True(condition: GeneratorEngine.TryFireBatch(source, CellKind.Int, Seed.State, Seed.Stream, 0, null, values, out _, out var advances, out reason), userMessage: reason);
-        Assert.Equal(actual: values, expected: new[] { maximum, maximum });
+        Assert.Equal(actual: values, expected: new[] { maximum, continuation });
         Assert.Equal(actual: advances, expected: (rejected + 2L));
         Assert.True(condition: GeneratorEngine.TryAdvanceBatch(source, CellKind.Int, Seed.State, Seed.Stream, 0, null, 2, out _, out var skipped, out reason), userMessage: reason);
         Assert.Equal(actual: skipped, expected: advances);
@@ -99,13 +99,16 @@ public sealed class UnbiasedDrawLawTests {
             Assert.Contains(actualString: reason, expectedSubstring: "budget");
             Assert.Equal(0, stream.Cursor);
         }
-        var raw = WithWords(GeneratorSource.StreamDraw, 0, 0, 0, 0, uint.MaxValue);
+        var raw = WithWords(GeneratorSource.StreamDraw, 0, 0, 0, 0, uint.MaxValue, 1);
 
         Assert.True(condition: GeneratorEngine.DrawStream.TryOpen(raw, CellKind.Int, Seed, 0, null, out stream, out reason), userMessage: reason);
         Assert.True(condition: stream.TryNextBounded(exclusiveHigh: 3, reason: out reason, sample: out var last, value: out var index), userMessage: reason);
         Assert.Equal(actual: index, expected: 2U);
         Assert.Equal(actual: last, expected: uint.MaxValue);
         Assert.Equal(3, stream.Cursor);
+        Assert.True(condition: stream.TryNext(value: out var following, reason: out reason), userMessage: reason);
+        Assert.Equal(1, following);
+        Assert.Equal(4, stream.Cursor);
         Assert.True(condition: GeneratorEngine.DrawStream.TryOpen(raw, CellKind.Int, Seed, (long.MaxValue - 1), null, out stream, out reason), userMessage: reason);
         Assert.True(condition: stream.TryNext(reason: out reason, value: out _), userMessage: reason);
         Assert.False(condition: stream.TryNext(reason: out reason, value: out _));
@@ -154,46 +157,35 @@ public sealed class UnbiasedDrawLawTests {
         var key = new ClosedBitset256(Word0: 1, Word1: 2, Word2: 3, Word3: 4);
         var source = new StateGenerator(Source: GeneratorSource.StreamDraw);
 
-        for (ulong seed = 0; (seed < 256); seed++) {
-            var word = PrivateWord(cursor: (long.MaxValue - 1), key: key, seed: seed, stream: 54);
-
-            if (BoundedRandomSampling.TryMap(exclusiveHigh: 2147483649U, value: out _, word: word)) { continue; }
-            Assert.True(condition: GeneratorEngine.DrawStream.TryOpen(source, CellKind.Int, new DrawSeed(State: seed, Stream: 54), (long.MaxValue - 1), null, out var stream, out var reason, key), userMessage: reason);
-            Assert.False(condition: stream.TryNextBounded(exclusiveHigh: 2147483649U, reason: out reason, sample: out _, value: out _));
-            Assert.Contains(actualString: reason, expectedSubstring: "overflow");
-            Assert.Equal((long.MaxValue - 1), stream.Cursor);
-            Assert.True(condition: stream.TryNext(reason: out reason, value: out var again), userMessage: reason);
-            Assert.Equal(actual: again, expected: word);
-            Assert.Equal(long.MaxValue, stream.Cursor);
-            return;
-        }
-        Assert.Fail(message: "fixed seed domain supplied no rejected word");
+        // Independently calculated HMAC word at seed 3, cursor long.MaxValue - 1: its bounded product rejects.
+        Assert.True(condition: GeneratorEngine.DrawStream.TryOpen(source, CellKind.Int, new DrawSeed(State: 3, Stream: 54), long.MaxValue - 1, null, out var stream, out var reason, key), userMessage: reason);
+        Assert.False(condition: stream.TryNextBounded(exclusiveHigh: 2147483649U, reason: out reason, sample: out _, value: out _));
+        Assert.Contains(actualString: reason, expectedSubstring: "overflow");
+        Assert.Equal(long.MaxValue - 1, stream.Cursor);
+        Assert.True(condition: stream.TryNext(reason: out reason, value: out var again), userMessage: reason);
+        Assert.Equal(291535610L, again);
+        Assert.Equal(long.MaxValue, stream.Cursor);
     }
     [Fact]
     public void PrivateBoundedDrawsKeepTheHmacSourceAndResumeAtTheAcceptedWord() {
         var source = new StateGenerator(Source: GeneratorSource.StreamDraw);
         var key = new ClosedBitset256(Word0: 1, Word1: 2, Word2: 3, Word3: 4);
-        // Fixed finite seed domain supplies explicit zero, one and multiple rejection traces at a half-width bound.
-        foreach (var wantedRejections in new[] { 0, 1, 3 }) {
-            var found = false;
-
-            for (ulong seed = 0; ((seed < 256) && !found); seed++) {
-                var words = new List<uint>();
-                uint expected;
-
-                do { words.Add(item: PrivateWord(key, seed, 54, words.Count)); }
-                while (!BoundedRandomSampling.TryMap(words[^1], 2147483649U, out expected));
-                if (words.Count != (wantedRejections + 1)) { continue; }
-                found = true;
-                Assert.True(condition: GeneratorEngine.DrawStream.TryOpen(source, CellKind.Int, new DrawSeed(State: seed, Stream: 54), 0, null, out var stream, out var reason, key), userMessage: reason);
-                Assert.True(condition: stream.TryNextBounded(exclusiveHigh: 2147483649U, reason: out reason, sample: out var last, value: out var actual), userMessage: reason);
-                Assert.Equal(actual: actual, expected: expected);
-                Assert.Equal(words[^1], last);
-                Assert.Equal(words.Count, stream.Cursor);
-                Assert.True(condition: stream.TryNext(reason: out reason, value: out var next), userMessage: reason);
-                Assert.Equal(PrivateWord(key, seed, 54, words.Count), next);
-            }
-            Assert.True(condition: found);
+        // Fixed vectors calculated with an independent HMAC implementation and exact integer products.
+        // Each tuple pins seed, rejected words, accepted index, last raw word and following raw word.
+        var traces = new (ulong Seed, int Rejections, uint Value, uint Last, uint Next)[] {
+            (4UL, 0, 1537625860U, 3075251720U, 2841944015U),
+            (0UL, 1, 702031821U, 1404063643U, 3640344368U),
+            (40UL, 3, 1033391146U, 2066782293U, 2590158592U)
+        };
+        foreach (var trace in traces) {
+            Assert.True(condition: GeneratorEngine.DrawStream.TryOpen(source, CellKind.Int, new DrawSeed(State: trace.Seed, Stream: 54), 0, null, out var stream, out var reason, key), userMessage: reason);
+            Assert.True(condition: stream.TryNextBounded(exclusiveHigh: 2147483649U, reason: out reason, sample: out var last, value: out var actual), userMessage: reason);
+            Assert.Equal(trace.Value, actual);
+            Assert.Equal(trace.Last, last);
+            Assert.Equal(trace.Rejections + 1, stream.Cursor);
+            Assert.True(condition: stream.TryNext(reason: out reason, value: out var next), userMessage: reason);
+            Assert.Equal(trace.Next, next);
+            Assert.Equal(trace.Rejections + 2, stream.Cursor);
         }
     }
 }

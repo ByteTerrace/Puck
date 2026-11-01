@@ -260,7 +260,13 @@ One engine-wide job system answers all of it:
   60 Hz display only every other refresh is free of a step, so the useful
   periods are two and four refreshes, which the tiers already are; a continuous
   rate would be quantized back to them and adds no placement freedom.
-- [medium] Kit bodies' advance stays serial, so the parallel tick partitions
+- [high] The creature garden, the parallel tick's forcing workload, is all kit
+  bodies. At 128 creatures a tick is about 3.7 ms, and body advance is 80 % of
+  it (motion programs 33 %, their contact sweeps 30 %, producers 17 %). The
+  planned rigid-body step (T2) takes none of that, so this item, not T2,
+  carries the parallel tick's main gain. It follows T1 and T3 in the memo's
+  order. (from: garden, `worlds/debug/garden-crowd.puck`)
+  Kit bodies' advance stays serial, so the parallel tick partitions
   only the snapshot, the crossing scan and the rigid bodies, which is less than
   the measured 70 %. A kit body's advance is one arena transaction on the one
   journal: `BeginKitStep` opens a scope (`WorldInputRuntime.Effects.cs:18-24`),
@@ -495,6 +501,19 @@ system can take, from `dotnet-trace` thread-time samples of the frame thread
   (52 %), of which the per-body pose pack (`WorldCreationInstances.PackTransforms`,
   effectors included) is 0.89 / 0.78 ms and partitions by registration; graph
   preparation and scheduling are about 0.5 ms.
+- **The creature garden, the parallel tick's forcing workload**
+  (`worlds/debug/garden-crowd.puck`, 128 flocking, stalking and rumouring kit
+  bodies; [port lane 4](port-experimental.md#4-creature-garden--done)). Headless
+  unpaced, on the lead machine with other lanes holding the CPU at 100 %,
+  `host.frames` tick avg / p50: 12 creatures 1.37 / 1.29 ms, 32 (the garden)
+  1.65 to 1.96 / 1.39 to 1.43, 128 3.72 to 3.83 / 3.20 to 3.49 (about 11 % of a
+  30 Hz period), 256 4.88 / 3.90, 512 5.78 / 5.69. By sampled thread time, as a
+  share of `WorldTick.StepCore` at 32 / 128: body advance 89 / 80 % (motion
+  programs 50 / 33 %, their contact sweeps 48 / 30 %; producers 13 / 17 %,
+  flock steering and navigation under 2 %), `WorldEventFeed.Collect` 2.7 /
+  9.0 %, snapshot 2.5 / 3.8 %, the rule VM 1.7 / 1.1 %, pair contacts under
+  1 %, no crossing scan. None of the bodies is rigid, so E1 partitions none of
+  this; it is the measured case for the kit-body item above.
 
 - [high] Steady 60 FPS is not held where a 30 Hz tick and the 15 Hz rated
   presentation burst land on the same frame. Quiet lead machine (the World the
@@ -1199,7 +1218,7 @@ worlds in place is rewritten.
   2. Seamless topology and carried identity: the quilt, a closing seam, a pitched
      seam, `border` composition, an identity gate (medium).
   3. Water and fields: a medium pool, flow across basins (medium).
-  4. Creature garden: flocks, a stalker, wall crawling, rumor (large).
+  4. Creature garden: flocks, a stalker, wall crawling, rumor (done).
   5. Second seat and hidden information: two seats, Lineup, hidden ranks, Word
      spy (large).
   6. Traversal course: kart, ledge course, planetoids, grapple (large).
@@ -2499,6 +2518,27 @@ the completed 70-stop comparison manifest.
 Owner: language lane (transpiler) · medium · Next: the inline console command
 hang, then the pre-`main` language findings.
 
+- [medium] A literal read from an initially empty ordered pile is refused even
+  when its key belongs to the declared `KeysOf` token domain. `RuleCompileContext.cs:242`
+  admits authored cells and `CellsOf` topology cells only;
+  `RuleCompiler.Operands.cs:365` then reports `StateCellUndeclared`. Reproduce by
+  adding `hand["c"] == 1` to `worlds/debug/unbiased-draws-tests.puck` after its
+  transfer: the real host refuses before running, although the transfer can
+  install that member. Admit literal keys from the declared token domain while
+  retaining refusal of out-of-domain keys; cover absence before transfer and
+  presence afterward. The sampling fixture checks counts and the remaining
+  source member, and its C# transform laws check transferred identities.
+  (from: unbiased-draws)
+
+- Decide (the language lane's call): whether a rule's effect list merges by
+  `key` when a template is re-expanded over a basis. Today a rule whose effects
+  write one key twice (`claim-expire` in `worlds/debug/pond.puck`) refuses with
+  "the basis list carries it more than once", so the garden's crowd fixture
+  re-expands only `pondFlocks`. Effects are ordered actions, not a keyed set.
+  (from: garden)
+- [low] The rule work-unit ceiling reads 4,250,000 on the port page and
+  4,000,000 in the valley plan. Reconcile both pages against `world.budget`.
+  (from: composition)
 - [medium] A solid creation shape without `position` throws instead of giving
   an authoring diagnostic. Removing `position [0, 0, 0]` from
   `worlds/standard/foliage.puck`'s `sceneryPatch` makes both `compile --validate`

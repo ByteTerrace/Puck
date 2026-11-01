@@ -1,0 +1,6 @@
+// The garden's pond plot (pond.puck). Its imports compose ahead of its own rows: the spiders' crawl row ahead of their
+// ground rows, and the flocks' placements ahead of the hounds' and spiders', which keeps those two the lowest numbers.
+import "pond"
+import "pond-crawl"
+import "pond-flocks"
+pond()

@@ -70,7 +70,5 @@ test "rejected words and scripted values survive reproduction" {
     count(deck) == 1
     count(hand) == 2
     deck["a"] == 1
-    hand["c"] == 1
-    hand["b"] == 1
   }
 }

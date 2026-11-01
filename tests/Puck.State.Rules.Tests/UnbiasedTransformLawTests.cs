@@ -62,7 +62,8 @@ public sealed class UnbiasedTransformLawTests {
         var before = host.Arena.ComputeHash();
         var mark = host.Arena.BeginScope();
 
-        Assert.True(condition: host.TryTransform(new ArenaTransform.Transfer(Count: 1, DrawRowOrdinal: site, FromRowOrdinal: deck, InsertFirst: false, Key: default, Selector: ZoneSelector.Random, ToRowOrdinal: deck), ArenaTransformBinding.None, out _, out var refusal), userMessage: refusal.Reason);
+        Assert.True(condition: host.TryTransform(new ArenaTransform.Transfer(Count: 1, DrawRowOrdinal: site, FromRowOrdinal: deck, InsertFirst: true, Key: default, Selector: ZoneSelector.Random, ToRowOrdinal: deck), ArenaTransformBinding.None, out _, out var refusal), userMessage: refusal.Reason);
+        Assert.Equal("c=3,a=1,b=2", TransformFixture.Listing(arena: host.Arena, rowOrdinal: deck));
         Assert.Equal(1, host.Arena.DrawCursor(rowOrdinal: site));
         Assert.False(condition: host.TryTransform(new ArenaTransform.Shuffle(DrawRowOrdinal: site, RowOrdinal: deck), ArenaTransformBinding.None, out _, out refusal));
         Assert.Contains("budget", refusal.Reason);

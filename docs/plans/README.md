@@ -54,6 +54,7 @@ The reference game's remaining engineering, its creatures and scale, the finder 
 The gallery in a deep valley under moons reached by flight, as an inventory of what the engine already has and eight phases to the round trip: the valley, one real moon, exact frames, residency, atmosphere and flight, the handoff, and the measured trip. Phases 2 onward wait for the terrain pass and the job system.
 
 - [The terrain pass](terrain-pass.md)—terrain-scale relief, contact on the drawn relief, slope and altitude materials, the image exposure meter, aerial perspective and far shadows, terrain tiles, and the standard package's alpine and painterly material sets.
+- [The debug world as one valley](debug-world-composition.md)—the composition plan under the selected art direction: where every place and port sits in the valley and why, the whole domain each one forces, the seams where domains compose, and the order of the composition lanes.
 
 ## [Rendering](rendering.md)
 
