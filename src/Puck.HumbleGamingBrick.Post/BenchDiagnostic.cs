@@ -1,27 +1,16 @@
 using System.Diagnostics;
 using System.Text;
-using Puck.Abstractions.Counting;
 using Puck.HumbleGamingBrick.Interfaces;
 
 namespace Puck.HumbleGamingBrick.Post;
 
-/// <summary>
-/// The machine-fleet bench (<c>--bench</c>) — the measurement instrument the fleet-performance plan rests on
-/// (the fleet-scaling method, whose write-up is retired). One run reports: the fleet scaling curve in BOTH shapes (independent
-/// per-machine input streams and one shared choir stream), single- and multi-threaded; the burst catch-up rate (the
-/// simulate-on-demand dormancy budget); <c>Create</c>/<c>Snapshot</c>/<c>Restore</c>/<c>Fork</c> latency and
-/// allocation (the spawn / ghost-echo / promote-demote budgets); the mailbox-check cycle (restore → run → read
-/// cartridge RAM → snapshot); and the per-machine footprint. It is a measurement, not a gate — but every fleet cell
-/// ends with a same-stream snapshot compare and the multi-threaded cell must end bit-identical to the
-/// single-threaded one, so a bench run that breaks determinism exits 1 instead of reporting quietly.
-/// </summary>
+/// <summary>Runs the shared fleet benchmark plus mailbox, footprint, and optional mixed-mapper measurements
+/// over the Humble machine.</summary>
 internal static class BenchDiagnostic {
-    private const int BurstFrames = 600;
-    /// <summary>The measured-frame floor per machine; low fleet sizes get more frames (see <see cref="FramesFor"/>)
+    /// <summary>The measured-frame floor per machine; low fleet sizes get more frames (see <see cref="MachineBenchmark.FramesFor"/>)
     /// so the small-N cells are not noise-dominated.</summary>
     private const int DefaultFramesPerMachine = 60;
     private const int FootprintFleetSize = 64;
-    private const int LatencyReps = 64;
     /// <summary>Emulated frames per mailbox check — a quarter second of machine time, the "did anything arrive"
     /// wake span.</summary>
     private const int MailboxFramesPerCheck = 15;
@@ -32,39 +21,10 @@ internal static class BenchDiagnostic {
 
     private static readonly int[] DefaultFleetSizes = [1, 2, 4, 8, 16, 32, 64, 128, 256];
 
-    /// <summary>Collects every occurrence of a repeatable flag verbatim (one value per occurrence) — the repeated-flag
-    /// half of <c>--bench-fleet</c>'s "multiple values" convention. <c>--bench-rom</c> deliberately does NOT also
-    /// comma-split: GamingBrick ROM filenames routinely carry commas in their own right (region tags like
-    /// <c>"(USA, Europe)"</c>), so a comma-list would misparse a real path on this repo's own dev machine — repetition
-    /// (<c>--bench-rom a.gbc --bench-rom b.gbc</c>) is the only unambiguous multi-value form for this flag.</summary>
-    private static string[] ArgValues(string[] args, string name) {
-        var values = new List<string>();
-
-        for (var index = 0; (index < (args.Length - 1)); ++index) {
-            if (string.Equals(
-                a: args[index],
-                b: name,
-                comparisonType: StringComparison.OrdinalIgnoreCase
-            )) {
-                values.Add(item: args[(index + 1)]);
-            }
-        }
-
-        return [.. values];
-    }
     /// <summary>A deterministic, edge-rich joypad script (the trio-lockstep pattern): odd multipliers walk all 256
     /// button patterns, offset per stream so independent machines genuinely diverge.</summary>
     private static JoypadButtons ButtonsFor(int stream, int frame) =>
         ((JoypadButtons)((byte)((frame * 37) + (stream * 11))));
-    private static string Cell(FleetCell cell) =>
-        $"{cell.MachineFramesPerSecond,8:F0} ({(cell.MachineFramesPerSecond / PostMachine.HardwareFps),5:F1} rt)";
-    /// <summary>Small fleets get more frames so their cells are not stopwatch noise; the emulated span per cell
-    /// stays roughly level until the floor takes over.</summary>
-    private static int FramesFor(int count, int frameFloor) =>
-        Math.Max(
-            val1: frameFloor,
-            val2: (960 / count)
-        );
     private static void MeasureFootprint(byte[] rom, ConsoleModel model, StringBuilder report) {
         GC.Collect();
         GC.WaitForPendingFinalizers();
@@ -101,96 +61,6 @@ internal static class BenchDiagnostic {
         BenchDiagnosticFormatting.Line(
             report: report,
             text: $"resident footprint ({FootprintFleetSize}-machine fleet): {managedPerMachine:N0} B managed / {workingSetPerMachine:N0} B working set per machine"
-        );
-    }
-    private static void MeasureLatencies(byte[] rom, ConsoleModel model, StringBuilder report) {
-        BenchDiagnosticFormatting.Line(
-            report: report,
-            text: ""
-        );
-        BenchDiagnosticFormatting.Line(
-            report: report,
-            text: $"per-operation latency (mean over {LatencyReps} reps) + managed allocation:"
-        );
-
-        // Create: a full DI container per machine — the spawn-on-stumble / pooling-lever number.
-        var createTicks = 0L;
-        var createBytes = (AllocationWindow.Total(window: () => {
-            for (var rep = 0; (rep < LatencyReps); ++rep) {
-                var start = Stopwatch.GetTimestamp();
-                var machine = PostMachine.Build(
-                    model: model,
-                    rom: rom
-                );
-
-                createTicks += (Stopwatch.GetTimestamp() - start);
-                machine.Dispose();
-            }
-        }) / LatencyReps);
-
-        BenchDiagnosticFormatting.Line(
-            report: report,
-            text: $"  Create   {BenchDiagnosticFormatting.TicksToMicroseconds(ticks: (createTicks / LatencyReps)),10:F1} us  {createBytes,10:N0} B"
-        );
-
-        using var subject = PostMachine.Build(
-            model: model,
-            rom: rom
-        );
-
-        PostMachine.RunFrames(
-            frames: WarmFrames,
-            instance: subject
-        );
-
-        // Snapshot: the ghost-echo / bottled-moment / freeze-to-dormant cost.
-        var snapshotTicks = 0L;
-        var snapshot = subject.Machine.Snapshot();
-        var snapshotBytes = (AllocationWindow.Total(window: () => {
-            for (var rep = 0; (rep < LatencyReps); ++rep) {
-                var start = Stopwatch.GetTimestamp();
-
-                snapshot = subject.Machine.Snapshot();
-                snapshotTicks += (Stopwatch.GetTimestamp() - start);
-            }
-        }) / LatencyReps);
-
-        BenchDiagnosticFormatting.Line(
-            report: report,
-            text: $"  Snapshot {BenchDiagnosticFormatting.TicksToMicroseconds(ticks: (snapshotTicks / LatencyReps)),10:F1} us  {snapshotBytes,10:N0} B  (snapshot size {snapshot.Size:N0} B)"
-        );
-
-        // Restore: the wake-from-dormant / promote-demote-arrival cost.
-        var restoreTicks = 0L;
-        var restoreBytes = (AllocationWindow.Total(window: () => {
-            for (var rep = 0; (rep < LatencyReps); ++rep) {
-                var start = Stopwatch.GetTimestamp();
-
-                subject.Machine.Restore(snapshot: snapshot);
-                restoreTicks += (Stopwatch.GetTimestamp() - start);
-            }
-        }) / LatencyReps);
-
-        BenchDiagnosticFormatting.Line(
-            report: report,
-            text: $"  Restore  {BenchDiagnosticFormatting.TicksToMicroseconds(ticks: (restoreTicks / LatencyReps)),10:F1} us  {restoreBytes,10:N0} B"
-        );
-
-        // Fork: Create + Snapshot + Restore in one call — the counterfactual/ghost-spawn cost.
-        var forkTicks = 0L;
-        var forkBytes = (AllocationWindow.Total(window: () => {
-            for (var rep = 0; (rep < LatencyReps); ++rep) {
-                var start = Stopwatch.GetTimestamp();
-                var fork = subject.Fork();
-
-                forkTicks += (Stopwatch.GetTimestamp() - start);
-                fork.Dispose();
-            }
-        }) / LatencyReps);
-
-        BenchDiagnosticFormatting.Line(
-            report: report,
-            text: $"  Fork     {BenchDiagnosticFormatting.TicksToMicroseconds(ticks: (forkTicks / LatencyReps)),10:F1} us  {forkBytes,10:N0} B"
         );
     }
     private static void MeasureMailboxCycle(byte[] rom, ConsoleModel model, StringBuilder report) {
@@ -298,7 +168,7 @@ internal static class BenchDiagnostic {
                 continue;
             }
 
-            var frames = FramesFor(
+            var frames = MachineBenchmark.FramesFor(
                 count: count,
                 frameFloor: frameFloor
             );
@@ -367,139 +237,30 @@ internal static class BenchDiagnostic {
     }
     private static string MixedCell(MixedFleetCell cell) =>
         $"{cell.AggregateMachineFramesPerSecond,8:F0} ({(cell.AggregateMachineFramesPerSecond / PostMachine.HardwareFps),5:F1} rt)";
-    private static FleetCell RunFleet(byte[] rom, ConsoleModel model, int count, int frames, bool choir, bool parallel) {
-        var machines = new MachineInstance[count];
-
-        for (var index = 0; (index < count); ++index) {
-            machines[index] = PostMachine.Build(
-                model: model,
-                rom: rom
-            );
-        }
-
-        var joypads = Array.ConvertAll(
-            array: machines,
-            converter: static machine => machine.GetRequiredService<IJoypad>()
-        );
-        var stopwatch = Stopwatch.StartNew();
-
-        if (parallel) {
-            // Task-per-machine, no per-frame barrier: input is a pure function of (stream, frame) and machines share
-            // nothing, so each one can run its whole span straight through.
-            Parallel.For(
-                fromInclusive: 0,
-                toExclusive: count,
-                body: index => {
-                    var joypad = joypads[index];
-                    var machine = machines[index].Machine;
-                    var stream = StreamFor(
-                        choir: choir,
-                        count: count,
-                        index: index
-                    );
-
-                    for (var frame = 0; (frame < frames); ++frame) {
-                        joypad.SetButtons(pressed: ButtonsFor(
-                            frame: frame,
-                            stream: stream
-                        ));
-                        machine.Run(tCycles: ((ulong)PostMachine.TCyclesPerFrame));
-                    }
-                }
-            );
-        } else {
-            // Frame-at-a-time round-robin — the shape of today's serial stepping on the render thread.
-            for (var frame = 0; (frame < frames); ++frame) {
-                for (var index = 0; (index < count); ++index) {
-                    joypads[index].SetButtons(pressed: ButtonsFor(
-                        stream: StreamFor(
-                            choir: choir,
-                            count: count,
-                            index: index
-                        ),
-                        frame: frame
-                    ));
-                    machines[index].Machine.Run(tCycles: ((ulong)PostMachine.TCyclesPerFrame));
-                }
-            }
-        }
-
-        stopwatch.Stop();
-
-        var anchor = machines[0].Machine.Snapshot();
-        var pairMatched = ((count < 2) || anchor.ContentEquals(other: machines[(count - 1)].Machine.Snapshot()));
-
-        foreach (var machine in machines) {
-            machine.Dispose();
-        }
-
-        return new FleetCell(
-            MachineFramesPerSecond: ((((double)count) * frames) / stopwatch.Elapsed.TotalSeconds),
-            Anchor: anchor,
-            PairMatched: pairMatched
-        );
-    }
     private static MixedFleetCell RunMixedFleet(byte[][] roms, ConsoleModel[] models, int romCount, int count, int frames, bool parallel) {
-        var machines = new MachineInstance[count];
+        var machines = new BenchmarkSubject[count];
 
         for (var index = 0; (index < count); ++index) {
             var romIndex = (index % romCount);
 
-            machines[index] = PostMachine.Build(
+            machines[index] = new(instance: PostMachine.Build(
                 model: models[romIndex],
                 rom: roms[romIndex]
-            );
+            ));
         }
-
-        var joypads = Array.ConvertAll(
-            array: machines,
-            converter: static machine => machine.GetRequiredService<IJoypad>()
-        );
+        for (var index = 0; (index < count); ++index) {
+            machines[index].PrepareInput();
+        }
         // Per-machine elapsed ticks, tracked independently of the fleet's aggregate stopwatch so a per-ROM throughput
         // number can be recovered without a separate run per mapper.
         var perMachineTicks = new long[count];
-        var stopwatch = Stopwatch.StartNew();
-
-        if (parallel) {
-            Parallel.For(
-                fromInclusive: 0,
-                toExclusive: count,
-                body: index => {
-                    var joypad = joypads[index];
-                    var machine = machines[index].Machine;
-                    var start = Stopwatch.GetTimestamp();
-
-                    for (var frame = 0; (frame < frames); ++frame) {
-                        joypad.SetButtons(pressed: ButtonsFor(
-                            frame: frame,
-                            stream: index
-                        ));
-                        machine.Run(tCycles: ((ulong)PostMachine.TCyclesPerFrame));
-                    }
-
-                    perMachineTicks[index] = (Stopwatch.GetTimestamp() - start);
-                }
-            );
-        } else {
-            for (var frame = 0; (frame < frames); ++frame) {
-                for (var index = 0; (index < count); ++index) {
-                    var start = Stopwatch.GetTimestamp();
-
-                    joypads[index].SetButtons(pressed: ButtonsFor(
-                        frame: frame,
-                        stream: index
-                    ));
-                    machines[index].Machine.Run(tCycles: ((ulong)PostMachine.TCyclesPerFrame));
-                    perMachineTicks[index] += (Stopwatch.GetTimestamp() - start);
-                }
-            }
-        }
-
-        stopwatch.Stop();
+        var elapsed = MachineFleetStepper.Run<BenchmarkSubject, MachineSnapshot,
+            MachineFleetStepper.IndependentStreams, MachineFleetStepper.PerMachineTiming>(
+            machines: machines, frames: frames, parallel: parallel, timing: new(ticks: perMachineTicks));
 
         var snapshots = Array.ConvertAll(
             array: machines,
-            converter: static machine => machine.Machine.Snapshot()
+            converter: static machine => machine.Snapshot()
         );
         var perRom = new double[romCount];
         var perRomMachineCount = new int[romCount];
@@ -523,19 +284,11 @@ internal static class BenchDiagnostic {
         }
 
         return new MixedFleetCell(
-            AggregateMachineFramesPerSecond: ((((double)count) * frames) / stopwatch.Elapsed.TotalSeconds),
+            AggregateMachineFramesPerSecond: ((((double)count) * frames) / elapsed.TotalSeconds),
             PerRomMachineFramesPerSecond: perRom,
             Snapshots: snapshots
         );
     }
-    /// <summary>The input stream a machine consumes: the choir shares stream 0; independent machines get their own
-    /// stream, except the LAST machine, which always mirrors stream 0 so every cell carries a same-stream pair for
-    /// the determinism guard.</summary>
-    private static int StreamFor(int index, int count, bool choir) =>
-        ((choir || (index == (count - 1)))
-            ? 0
-            : index
-        );
 
     /// <summary>Runs the bench and writes the report to the console and <c>bench-report.txt</c> in the artifacts
     /// directory.</summary>
@@ -543,10 +296,8 @@ internal static class BenchDiagnostic {
     /// <c>--bench-fleet</c>, <c>--artifacts</c>).</param>
     /// <returns>0 on a clean run; 1 when a determinism guard failed.</returns>
     public static int Run(string[] args) {
-        // --bench-rom accepts more than one path via a repeated flag (--bench-rom a --bench-rom b — see ArgValues for
-        // why not also a comma list): 0 or 1 path runs the original homogeneous-fleet bench unchanged; 2+ additionally
-        // runs the mixed-mapper fleet section (A2/D1's megamorphic payoff case — see MeasureMixedMapperFleet).
-        var romPaths = ArgValues(
+        // Commas belong to cartridge filenames; only repeated --bench-rom options separate paths.
+        var romPaths = CommandLineArguments.Values(
             args: args,
             name: "--bench-rom"
         );
@@ -592,205 +343,56 @@ internal static class BenchDiagnostic {
         }
 
         var report = new StringBuilder();
-        var determinismHeld = true;
 
         BenchDiagnosticFormatting.Line(
             report: report,
             text: $"machine-fleet bench — {romName} ({model}), frame floor {frameFloor}/machine, {Environment.ProcessorCount} logical processors"
         );
 
-        // Discarded warm-up fleets so JIT tiering settles before anything is measured.
-        RunFleet(
-            choir: false,
-            count: 2,
-            frames: 30,
-            model: model,
-            parallel: false,
-            rom: rom
-        );
-        RunFleet(
-            choir: false,
-            count: 2,
-            frames: 30,
-            model: model,
-            parallel: true,
-            rom: rom
-        );
-
-        BenchDiagnosticFormatting.Line(
+        return MachineBenchmark.Run<BenchmarkSubject, MachineSnapshot>(
+            build: () => new(instance: PostMachine.Build(model: model, rom: rom)),
+            fleetSizes: fleetSizes,
+            frameFloor: frameFloor,
+            hardwareFps: PostMachine.HardwareFps,
             report: report,
-            text: ""
-        );
-        BenchDiagnosticFormatting.Line(
-            report: report,
-            text: "fleet scaling, machine-frames/s (rt = machines sustainable at realtime):"
-        );
-        BenchDiagnosticFormatting.Line(
-            report: report,
-            text: $"{"n",5}  {"independent-1t",18}  {"independent-mt",18}  {"choir-1t",18}  {"choir-mt",18}"
-        );
+            artifactsDirectory: artifactsDirectory,
+            extraMeasurements: extraReport => {
+                MeasureMailboxCycle(model: model, report: extraReport, rom: rom);
+                MeasureFootprint(model: model, report: extraReport, rom: rom);
+                var held = true;
 
-        foreach (var count in fleetSizes) {
-            var frames = FramesFor(
-                count: count,
-                frameFloor: frameFloor
-            );
-
-            // A clean heap per row so one cell's garbage is not another cell's pause.
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-
-            var independentSingle = RunFleet(
-                choir: false,
-                count: count,
-                frames: frames,
-                model: model,
-                parallel: false,
-                rom: rom
-            );
-            var independentParallel = RunFleet(
-                choir: false,
-                count: count,
-                frames: frames,
-                model: model,
-                parallel: true,
-                rom: rom
-            );
-            var choirSingle = RunFleet(
-                choir: true,
-                count: count,
-                frames: frames,
-                model: model,
-                parallel: false,
-                rom: rom
-            );
-            var choirParallel = RunFleet(
-                choir: true,
-                count: count,
-                frames: frames,
-                model: model,
-                parallel: true,
-                rom: rom
-            );
-
-            // Every cell consumed stream 0 on machine 0, so all four anchors must be byte-identical — this is the
-            // serial-vs-parallel (and shape-vs-shape) bit-lock guard.
-            determinismHeld &= (independentSingle.PairMatched && independentParallel.PairMatched && choirSingle.PairMatched && choirParallel.PairMatched);
-            determinismHeld &= independentSingle.Anchor.ContentEquals(other: independentParallel.Anchor);
-            determinismHeld &= independentSingle.Anchor.ContentEquals(other: choirSingle.Anchor);
-            determinismHeld &= independentSingle.Anchor.ContentEquals(other: choirParallel.Anchor);
-
-            BenchDiagnosticFormatting.Line(
-                report: report,
-                text: $"{count,5}  {Cell(cell: independentSingle),18}  {Cell(cell: independentParallel),18}  {Cell(cell: choirSingle),18}  {Cell(cell: choirParallel),18}{(determinismHeld
-                ? ""
-                : "  << DETERMINISM BROKEN")}"
-            );
-        }
-
-        // Burst catch-up: the dormancy model's budget — a frozen machine fast-forwarding its elapsed span. One
-        // machine uncapped, and one machine per logical processor all catching up at once.
-        var burstSingle = RunFleet(
-            choir: false,
-            count: 1,
-            frames: BurstFrames,
-            model: model,
-            parallel: false,
-            rom: rom
-        );
-        var burstFleet = RunFleet(
-            rom: rom,
-            model: model,
-            count: Environment.ProcessorCount,
-            frames: (BurstFrames / 2),
-            choir: false,
-            parallel: true
-        );
-        var singleMultiple = (burstSingle.MachineFramesPerSecond / PostMachine.HardwareFps);
-        var fleetPerMachineMultiple = ((burstFleet.MachineFramesPerSecond / Environment.ProcessorCount) / PostMachine.HardwareFps);
-
-        BenchDiagnosticFormatting.Line(
-            report: report,
-            text: ""
-        );
-        BenchDiagnosticFormatting.Line(
-            report: report,
-            text: "burst catch-up (simulate-on-demand dormancy):"
-        );
-        BenchDiagnosticFormatting.Line(
-            report: report,
-            text: $"  one machine: {burstSingle.MachineFramesPerSecond:F0} machine-frames/s = {singleMultiple:F1}x realtime; one dormant hour replays in {(3_600.0 / singleMultiple):F1} s"
-        );
-        BenchDiagnosticFormatting.Line(
-            report: report,
-            text: $"  {Environment.ProcessorCount} machines in parallel: {burstFleet.MachineFramesPerSecond:F0} machine-frames/s aggregate = {fleetPerMachineMultiple:F1}x realtime each"
-        );
-
-        determinismHeld &= burstFleet.PairMatched;
-
-        MeasureLatencies(
-            model: model,
-            report: report,
-            rom: rom
-        );
-        MeasureMailboxCycle(
-            model: model,
-            report: report,
-            rom: rom
-        );
-        MeasureFootprint(
-            model: model,
-            report: report,
-            rom: rom
-        );
-
-        if (romPaths.Length > 1) {
-            MeasureMixedMapperFleet(
-                determinismHeld: ref determinismHeld,
-                fleetSizes: fleetSizes,
-                frameFloor: frameFloor,
-                report: report,
-                romPaths: romPaths
-            );
-        }
-
-        BenchDiagnosticFormatting.Line(
-            report: report,
-            text: ""
-        );
-        BenchDiagnosticFormatting.Line(
-            report: report,
-            text: (determinismHeld
-            ? "determinism guards: all held (same-stream pairs + serial-vs-parallel anchors byte-identical)"
-            : "determinism guards: FAILED — a same-stream pair or a serial-vs-parallel anchor diverged")
-        );
-
-        Directory.CreateDirectory(path: artifactsDirectory);
-
-        var reportPath = Path.Combine(
-            path1: artifactsDirectory,
-            path2: "bench-report.txt"
-        );
-
-        File.WriteAllText(
-            path: reportPath,
-            contents: report.ToString()
-        );
-        Console.WriteLine(value: $"  bench report -> {reportPath}");
-
-        return (determinismHeld
-            ? 0
-            : 1
+                if (romPaths.Length > 1) {
+                    MeasureMixedMapperFleet(determinismHeld: ref held, fleetSizes: fleetSizes,
+                        frameFloor: frameFloor, report: extraReport, romPaths: romPaths);
+                }
+                return held;
+            }
         );
     }
 
-    /// <summary>One measured fleet cell. <c>Anchor</c> is machine 0's final snapshot; <c>PairMatched</c> is the
-    /// same-stream honesty check (machine 0 vs the last machine, which always consumes stream 0).</summary>
-    private sealed record FleetCell(double MachineFramesPerSecond, MachineSnapshot Anchor, bool PairMatched);
-    /// <summary>One measured mixed-mapper fleet cell (one execution shape: serial or parallel). Unlike the homogeneous
-    /// <see cref="FleetCell"/>, every machine's own final snapshot is kept (<see cref="Snapshots"/>) — a mixed fleet has
-    /// no same-stream pair to compare (each machine index is a different cartridge/mapper by construction), so the
-    /// determinism guard instead compares machine[i]'s serial snapshot against machine[i]'s parallel snapshot for every
-    /// i (the "per-machine, same index, across modes" bit-lock the megamorphic A/B needs).</summary>
+    private struct BenchmarkSubject : IMachineBenchmarkSubject<MachineSnapshot> {
+        private readonly MachineInstance m_instance;
+
+        private IJoypad? m_joypad;
+
+        public BenchmarkSubject(MachineInstance instance) {
+            m_instance = instance;
+            m_joypad = null;
+        }
+
+        public void PrepareInput() => m_joypad = m_instance.GetRequiredService<IJoypad>();
+        public static bool SnapshotsEqual(MachineSnapshot a, MachineSnapshot b) => a.ContentEquals(other: b);
+        public static int SnapshotSize(MachineSnapshot snapshot) => snapshot.Size;
+        public MachineSnapshot Snapshot() => m_instance.Machine.Snapshot();
+        public void Restore(MachineSnapshot snapshot) => m_instance.Machine.Restore(snapshot: snapshot);
+        public IDisposable Fork() => m_instance.Fork();
+        public void Dispose() => m_instance.Dispose();
+        public void RunFrames(int frames) => PostMachine.RunFrames(frames: frames, instance: m_instance);
+        public void RunFrame(int stream, int frame) {
+            m_joypad!.SetButtons(pressed: ButtonsFor(frame: frame, stream: stream));
+            m_instance.Machine.Run(tCycles: ((ulong)PostMachine.TCyclesPerFrame));
+        }
+    }
+    /// <summary>A mixed fleet cell retains every machine's snapshot for cross-mode comparisons.</summary>
     private sealed record MixedFleetCell(double AggregateMachineFramesPerSecond, double[] PerRomMachineFramesPerSecond, MachineSnapshot[] Snapshots);
 }

@@ -15,4 +15,10 @@ public static class CommandLineArguments {
     /// <returns>The first value verbatim, or null.</returns>
     public static string? Value(string[] args, string name) =>
         new PostCommandLine(args: args, values: [name]).Value(name: name);
+    /// <summary>Returns every supplied value for one repeatable diagnostic option.</summary>
+    /// <param name="args">The process command-line arguments.</param>
+    /// <param name="name">The option name, matched case-insensitively.</param>
+    /// <returns>The values in occurrence order, without comma splitting.</returns>
+    public static string[] Values(string[] args, string name) =>
+        new PostCommandLine(args: args, values: [name]).Values(name: name);
 }

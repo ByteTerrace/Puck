@@ -67,6 +67,11 @@ public sealed class PostCommandLine {
     /// <returns>The first value verbatim, or null.</returns>
     public string? Value(string name) =>
         ((m_result.GetResult(option: m_values[name])?.Tokens.FirstOrDefault()?.Value is { } value) ? value[1..] : null);
+    /// <summary>Returns every supplied value for a repeatable option, in occurrence order.</summary>
+    /// <param name="name">The registered value option's name.</param>
+    /// <returns>The values verbatim, without comma splitting.</returns>
+    public string[] Values(string name) =>
+        (m_result.GetResult(option: m_values[name])?.Tokens.Select(selector: static token => token.Value[1..]).ToArray() ?? []);
     /// <summary>Reports whether a registered switch was supplied.</summary>
     /// <param name="name">The switch's name.</param>
     /// <returns>Whether the invocation names the switch.</returns>
