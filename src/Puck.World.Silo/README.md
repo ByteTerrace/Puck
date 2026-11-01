@@ -87,6 +87,8 @@ prepared document's `../cartridges/...` reads the image's
 `/app/cartridges`. The first activation, a recovery from a checkpoint and a
 reload of published content all read the same directory. Without
 `documentDirectory`, a relative path in a hosted document is refused by name.
+Checkpoint decoding receives that directory too, before it validates embedded
+definitions; providing it only to the subsequent server constructor is too late.
 
 A `worlds[]` row may add `extensions`, the path of its own host-approved
 extension configuration: the same `puck.world.extensions.v1` document a local
