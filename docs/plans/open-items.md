@@ -58,8 +58,8 @@ experimental worlds have that it lacks is ported into it
    for both contact solvers, R4 to R8 closed in it, re-recorded hashes.
 7. [Delivery](#delivery-launcher-and-ci): CI's steady state, the shader cache
    and the GC-hole retirement.
-8. [Author leaks to the standard](#author-leaks-to-the-standard): the CRT as an
-   authored screen material and the standard pad kit's debug sectors.
+8. [Author leaks to the standard](#author-leaks-to-the-standard): the overlay
+   text advance and the helper templates.
 9. [Port the experimental worlds' missing features](#port-the-experimental-worlds-missing-features):
    the inventory lane first.
 10. [Edit to running, hot reload and boot](#edit-to-running-hot-reload-and-boot):
@@ -1025,51 +1025,50 @@ then CI's steady state, the shader cache and the GC-hole retirement.
 ### Author leaks to the standard
 
 Owner: UI lane, with the play-feel and editor lanes · ordinary, each leak fixed
-when it is found (AGENTS.md) · Next: the CRT as an authored screen material and
-the standard pad kit's debug sectors; then the overlay text advance and the
-helper templates. The engine's neutral default theme
-(`WorldThemeSection.Default`; no phosphor role in `WorldTheme`) and a warp that
-applies only to `WorldScreenMaterial.Crt` are in; [UI step 1](ui.md) is this
-packet's remainder.
+when it is found (AGENTS.md) · Next: the overlay text advance and the helper
+templates. The engine's neutral default theme (`WorldThemeSection.Default`; no
+phosphor role in `WorldTheme`), the CRT as the standard's authored screen
+material, per-treatment chase-camera values, and a standard that boots alone
+(`worlds/minimal`) are in; [UI step 1](ui.md) is this packet's remainder.
 
 The engine provides mechanisms; every concrete design is `.puck` data in
 `worlds/standard/`, which the debug world imports and develops. Each item below is
 a design built into C# or living only in the debug world.
 
-- The CRT look in the engine. `WorldScreenMappings.CrtGlass`
-  (`src/Puck.World.Schema/WorldScreenMappings.cs:17-23`) insets the picture by
-  0.03 of each side and is mirrored by the glass shading, and
-  `WorldScreenMaterial.Crt` (`src/Puck.World.Schema/WorldScreen.cs:509-511`) is
-  documented as a bezel, scanlines, an aperture grille and bloom (`WarpOf` gives
-  every other material none). A CRT device's picture is therefore 94 % of the
-  glass the owner ruled is exactly its picture, with the bezel outside the glass
-  ([decision](../decisions/rendering.md#in-world-devices-and-screens)). Fix: a
-  generic screen-material mechanism (a warp and a shader lane an authored material
-  names) with the CRT authored in `worlds/standard/skin.puck`; delete the enum
-  value and the constant. A CRT's bezel is geometry authored outside the face.
-- The standard pad kit carries debug-world sectors: the play wheel's Act ring
-  binds `body.press suit` (the debug world's suit channel, `suit.puck`) and
-  `body.pose spawn:stage` (`worlds/standard/pad-kit.puck:44-57`,
-  `controls.puck:567`), and its View
-  ring and the View page name the Moth's inspection layouts (`flight-stage`,
-  `face`, `desktop`; `pad-kit.puck:59-70`, `controls.puck:714, 733`). Fix: the
-  standard's rings and pages name only what the standard authors; the debug
-  refinement (`worlds/debug/controls.puck`) adds its sectors by id.
-- The chase-camera decision's table gives `fade` a 0.35 rad `maxRise` and
-  cutaway its own close target (`[0, 1.55, 0]`), but the solver reads one
-  `clearanceMaxElevation` for cutaway only (fade never rises,
-  `src/Puck.World.Client/WorldCameraClearance.cs`, `Resolve`) and one
-  `closeTargetOffset` for both modes, so `chaseCamera` authors the cutaway
-  ceiling (1.1) and the fade close target. Decided (the lead's call): the
-  table is the owner's camera decision and the solver is the mechanism, so the
-  mechanism grows to match. `maxRise` and the close target become per-mode
-  authored values: fade rises up to its own `maxRise` and each mode has its
-  own close target. `chaseCamera` then authors the table's values, and the
-  feel sittings tune them.
 - [low] Flight and fuel are authored only in the Moth
   (`worlds/debug/avatars/moth.puck:1860-1925`). When the assisted-flight pass
   comes it is a standard ability template, with `dashAbility` in
   `worlds/standard/abilities.puck` as the precedent.
+- The chase camera's clearance as a camera-program operation (the lead's
+  decision, replacing the per-treatment fields that landed first). Today the
+  solver (`src/Puck.World.Client/WorldCameraClearance.cs`, `Resolve`) branches
+  on `WorldCameraClearanceChoice` (`src/Puck.World.Schema/WorldCameraClearanceChoice.cs`)
+  and reads its numbers from `WorldSeatViewControl` (`ClearanceMode`, `MaxRise`,
+  `EyeRadius`, `SurfaceSkin`, `CharacterFade`; `src/Puck.World.Schema/WorldViews.cs`)
+  and the look-at's per-treatment `closeTargetOffset { fade, cutaway }`
+  (`WorldCameraProgram.cs`, `LookAt`). Fix: a `clearance` operation in
+  `WorldCameraProgramOp` is the mechanism: it probes the room (free boom
+  distance, free rise, intervening walls) and offers the engine-only
+  capabilities (cutting intervening walls away, fading this view's own body),
+  with every number an authored, bindable parameter (eye radius and skin, max
+  rise, close target and its fractions, fade start, end and minimum boom). Fade
+  and cutaway become authored cases of `chaseCamera` in
+  `worlds/standard/camera.puck`, chosen by a select from the player's preference
+  state row; `ClearanceMode`, `MaxRise`, `CharacterFade`, `EyeRadius` and
+  `SurfaceSkin` leave `WorldSeatViewControl`, and the enum loses its behavioural
+  meaning in the solver (`player.camera.clearance`, `seatCameraFeel.clearanceMode`
+  and `world.view.camera`'s `mode=` move to the state row). The decision table's
+  values (`docs/decisions/play.md`, "The chase camera") are the template's
+  starting values. Verify with the clearance laws (`WorldCameraClearanceLawTests`)
+  and a windowed `world.view.camera` reading near a wall in each case.
+- The chase solver's remaining mechanism constants are engine values, not
+  authored ones: the near plane's margin short of the body (`NearMargin`,
+  0.05 m), the retraction skin (0.05 m) and the obstructed-target shell skip
+  (1.1 m) in `src/Puck.World.Client/WorldCameraClearance.cs`; the eye radius,
+  surface skin, rise ceilings and gyro mapping are authored.
+- The standard's binding bar slot set (`worlds/standard/controls.puck`, the
+  `bare` overlay) still lists keys only the Moth binds (1 to 5 and F4); they
+  show as unbound plates in a world without her controls.
 - Overlay text is spread too wide: each character advances a padded atlas cell,
   not the font's advance. Related: a 12 px mono run's 18 px cell spans the whole
   padded atlas cell (1.729 em), so its em is 10.4 px; decide whether overlay

@@ -291,9 +291,9 @@ the captured screen into `WorldPerceptionAnchor.EngagedScreen` from the same
 `WorldFramePresenter.Dress` hands the row to the seat's `WorldScreenFraming`
 (`src/Puck.World.Client`), refitted from the window's size every frame:
 
-- **The picture, not the slab.** `PictureHalfExtents` is the whole face, or for a
-  screen whose `material` is `Crt` the glass inside its bezel band
-  (`WorldScreenMappings.WarpOf`, `CrtGlass`). A 4:3 glass showing 256×240 carries the
+- **The picture, not the slab.** `PictureHalfExtents` is the whole face: a
+  device's glass is exactly its picture, whatever screen material draws it. A 4:3
+  glass showing 256×240 carries the
   console's 8:7 pixels by its own shape: there is no pixel-aspect field and no
   crop.
 - **The matte.** `Matte` is the rect of the seat's view the picture fills: each

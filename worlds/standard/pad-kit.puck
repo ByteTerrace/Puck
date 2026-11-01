@@ -55,11 +55,12 @@ let actEntries = [
 
 let actRing = { id: "play-acts", label: "Act", entries: actEntries }
 
+// The chase-camera sector: `camera auto` clears a layout or camera override back to the composer's own selection. A
+// ring needs two sectors, so the standard draws no View ring of its own; a refinement that authors layouts builds one
+// from these entries and its own.
 let viewEntries = [
   { id: "autoCamera", command: "view.override", text: "camera auto", value: neverRead, sources: null }
 ]
-
-let viewRing = { id: "play-views", label: "View", entries: viewEntries }
 
 let barRing = {
   id: "play-bars"
@@ -74,4 +75,4 @@ let barRing = {
   ]
 }
 
-let standardRings = [actRing, viewRing, barRing]
+let standardRings = [actRing, barRing]

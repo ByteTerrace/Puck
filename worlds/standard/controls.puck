@@ -51,6 +51,8 @@ hud {
       }
     }
   }
+  // The standard draws no HUD panels; a world adds its own by id.
+  panels []
 }
 
 icons {
@@ -290,13 +292,7 @@ state {
       descend = "act.descend"
       jump = "act.jump"
       interact = "act.interact"
-      camera1 = "act.camera1"
-      camera2 = "act.camera2"
-      camera3 = "act.camera3"
-      camera4 = "act.camera4"
-      camera5 = "act.camera5"
       annotate = "act.annotate"
-      jetpackAlone = "act.isolate"
       build = "act.build"
 
       // A wheel's opener, keyed by the page it opens: a plate whose hold opens that page wears the icon (LB opens the play
@@ -367,9 +363,263 @@ state {
 }
 
 bindingOverlays [
-  // The bar rides the Moth's own overlay: it shows the page that overlay rests on.
+  // The resting page every seat walks, looks, runs, jumps, flies and interacts with, and the bar that shows it: the
+  // Move page, with the trigger pages' View and Debug banks. A world or avatar refines its entries by page id and
+  // source (the debug world's Moth adds her layout keys, ../debug/moth-controls.puck).
   {
     id: "bare"
+    document {
+      chords [
+        {
+          chord []
+          group: "play"
+          page {
+            entries [
+              {
+                channel: "forward"
+                id: "forward"
+                scale: 1
+                sources [
+                  "keyboard.w"
+                  "keyboard.arrowUp"
+                  "gamepad.dpadUp"
+                ]
+              }
+              {
+                channel: "forward"
+                id: "back"
+                scale: -1
+                sources [
+                  "keyboard.s"
+                  "keyboard.arrowDown"
+                  "gamepad.dpadDown"
+                ]
+              }
+              {
+                channel: "strafe"
+                id: "left"
+                scale: -1
+                sources [
+                  "keyboard.a"
+                  "gamepad.dpadLeft"
+                ]
+              }
+              {
+                channel: "strafe"
+                id: "right"
+                scale: 1
+                sources [
+                  "keyboard.d"
+                  "gamepad.dpadRight"
+                ]
+              }
+              {
+                channel: "turn"
+                id: "turnLeft"
+                scale: 1
+                sources [
+                  "keyboard.arrowLeft"
+                ]
+              }
+              {
+                channel: "turn"
+                id: "turnRight"
+                scale: -1
+                sources [
+                  "keyboard.arrowRight"
+                ]
+              }
+              {
+                command: "player.move.strafe"
+                id: "move"
+                sources [
+                  "gamepad.leftStick"
+                ]
+              }
+              {
+                command: "player.look.steer"
+                id: "look"
+                sources [
+                  "gamepad.rightStick"
+                ]
+              }
+              // The pad's recenter is the View page's North (controls.puck): the right stick's press is fly.
+              {
+                command: "player.look.recenter"
+                id: "recenter"
+                label: "Recenter"
+                sources [
+                  "keyboard.r"
+                ]
+              }
+              {
+                command: "player.orbit"
+                id: "orbit"
+                sources [
+                  "mouse.button1"
+                ]
+              }
+              {
+                command: "player.steer"
+                id: "steer"
+                label: "Steer"
+                sources [
+                  "mouse.button2"
+                ]
+              }
+              // Run while held (Left Shift), or switched on and off (N, the left stick's press). The View page's
+              // left stick press (controls.puck) is autorun.
+              {
+                channel: "run"
+                id: "run"
+                label: "Run"
+                scale: 1
+                sources [
+                  "keyboard.shiftLeft"
+                ]
+              }
+              {
+                channel: "dash"
+                id: "dash"
+                label: "Dash"
+                scale: 1
+                sources ["gamepad.buttonWest", "keyboard.j"]
+              }
+              {
+                channel: "run"
+                id: "runToggle"
+                label: "Run on/off"
+                mode: Toggle
+                scale: 1
+                sources [
+                  "keyboard.n"
+                  "gamepad.leftStickPress"
+                ]
+              }
+              {
+                channel: "flight"
+                id: "flight"
+                label: "Flight"
+                scale: 1
+                sources [
+                  "keyboard.f"
+                  "gamepad.buttonNorth"
+                ]
+              }
+              // Fly while held (Left Ctrl, M, the right stick's press): rise without jump, which the `fly-1` rule reads as
+              // switching flight mode on, so she takes off and climbs, and letting go hovers. The View page's right stick
+              // press (controls.puck) is autofly.
+              {
+                channel: "rise"
+                id: "fly"
+                label: "Fly"
+                scale: 1
+                sources [
+                  "keyboard.controlLeft"
+                  "keyboard.m"
+                  "gamepad.rightStickPress"
+                ]
+              }
+              {
+                channel: "rise"
+                id: "rise"
+                scale: 1
+                sources [
+                  "keyboard.space"
+                  "gamepad.buttonSouth"
+                ]
+              }
+              {
+                channel: "jump"
+                id: "jump"
+                scale: 1
+                sources [
+                  "keyboard.space"
+                  "gamepad.buttonSouth"
+                ]
+              }
+              {
+                channel: "rise"
+                id: "descend"
+                label: "Descend"
+                scale: -1
+                sources [
+                  "keyboard.c"
+                  "gamepad.buttonEast"
+                ]
+              }
+              {
+                channel: "start"
+                id: "start"
+                scale: 1
+                sources [
+                  "keyboard.enter"
+                  "gamepad.start"
+                ]
+              }
+              {
+                channel: "select"
+                id: "select"
+                scale: 1
+                sources [
+                  "keyboard.shiftRight"
+                  "gamepad.back"
+                ]
+              }
+              // The context button: engage the device in reach, and leave it again.
+              {
+                channel: "interact"
+                id: "interact"
+                label: "Interact"
+                scale: 1
+                sources [
+                  "keyboard.e"
+                  "gamepad.rightShoulder"
+                ]
+              }
+              // The engaged screen's view: L switches between the framed picture and the other view, which is the held
+              // view of a carried screen and the room for any other. The pad's is the View page's East (controls.puck).
+              {
+                command: "player.frame"
+                id: "frame"
+                label: "Frame"
+                sources [
+                  "keyboard.l"
+                ]
+              }
+              {
+                command: "view.annotate"
+                id: "annotate"
+                label: "Annotate"
+                sources [
+                  "keyboard.f3"
+                ]
+                text: "toggle"
+              }
+            ]
+            id: "base"
+          }
+        }
+        // Both mouse buttons held, in either order, walk her forward until either is released. The chord passes each
+        // press through to the button's own binding, so the right button keeps steering her (steer outranks the left
+        // button's orbit) and a button left held after the other's release keeps its own drag.
+        {
+          held [
+            "mouse.button1"
+            "mouse.button2"
+          ]
+          group: "play"
+          command {
+            channel: "forward"
+            label: "Forward"
+            passThrough: true
+            scale: 1
+          }
+        }
+      ]
+      modifiers []
+      version: "puck.input.bindings.v1"
+    }
     bindingBar {
       slotSet [
         "keyboard.w"
@@ -507,10 +757,10 @@ bindingOverlays [
     }
   }
 
-  // The play wheel, held open on Tab or LB over the seat's resting page so the seat keeps walking while it aims; and
-  // the keyboard's build toggle, whose pad door is the wheel's Build sector (the pad's Back is a device's select, and the
-  // left stick's press is run). While it is open the arrow keys (Tab) or the d-pad (LB) step its ring, Up to the next
-  // and Down to the previous, and the mouse wheel steps it too.
+  // The play wheel, held open on Tab or LB over the seat's resting page so the seat keeps walking while it aims. The
+  // build toggle is the editor's (editor.puck's `build` toggle), and the wheel's Build sector is another door to it.
+  // While it is open the arrow keys (Tab) or the d-pad (LB) step its ring, Up to the next and Down to the previous, and
+  // the mouse wheel steps it too.
   {
     id: "play-wheel"
     document {
@@ -526,12 +776,6 @@ bindingOverlays [
             entries [
               { command: "player.camera.boom", id: "zoom", sources ["mouse.wheel"] }
               { command: "player.camera.reset", id: "cameraReset", activateOn: Started, sources ["mouse.button3"] }
-              {
-                command: "player.build"
-                id: "build"
-                label: "Build"
-                sources ["keyboard.f2"]
-              }
             ]
           }
         }

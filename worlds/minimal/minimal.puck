@@ -1,0 +1,63 @@
+// The minimal world: the standard package (../standard/standard.puck: inputs, controls, skin, editor, camera feel)
+// through its plain walker (../standard/walker.puck, which imports and refines it), on a floor under the engine's
+// default sky. It is the worked example an author starts a world from: everything it seats, frames, binds and builds
+// with comes from the standard, and this document declares only its own ground, where a seat starts, and how many
+// seats it has.
+//
+//   dotnet run --project src/Puck.World -c Release -- --world worlds/minimal
+schema: "puck.world.definition.v1"
+documentId: "minimal"
+
+import "../standard/walker"
+
+metadata {
+  title: "Minimal"
+  description: "The standard package and its plain walker on a floor: the smallest world an author builds from."
+}
+
+bodies {
+  capacity: 1
+  localSeats: 1
+  networkPlayers: 0
+  reconnectGraceSeconds: 0
+  seatSpawns ["start"]
+  sleepAfterSeconds: 0s
+}
+
+spawnPoints [
+  { id: "start", position [0, 0, 0], yawDegrees: 0 }
+]
+
+gravity {
+  attractors []
+  gravitationalConstant: 0
+  isActive: true
+  softeningLength: 0.5
+  solver: Pairwise
+  uniform [0, -18, 0]
+}
+
+placements {
+  placement "floor" {
+    prototype: "floor"
+    position [0, 0, 0]
+    solid
+  }
+}
+
+prototypes {
+  prototype "floor" {
+    document {
+      name: "floor"
+      schema: "puck.creation.v1"
+      palette [
+        { color: "#ADA69F", emissive: 0, specular: 0.02, roughness: 0.85 }
+      ]
+      shape Box {
+        material: 0
+        position [0, -0.2, 0]
+        scale [18, 0.2, 18]
+      }
+    }
+  }
+}
