@@ -91,12 +91,30 @@ public abstract record SdfCameraOp {
     /// own.</param>
     /// <param name="FocusDistance">The finite target distance along the current subject's forward axis, read only for
     /// <see cref="SdfCameraProgram.FacingSubject"/>.</param>
-    /// <param name="CloseTargetOffset">The optional offsets, one per clearance treatment, approached when the caller
-    /// shortens the chase boom, in the axes of <paramref name="TargetOffset"/>.</param>
-    /// <param name="CloseTargetStartFraction">The fraction below which target migration begins.</param>
-    /// <param name="CloseTargetFullFraction">The fraction at which target migration is complete.</param>
-    public sealed record LookAt(int SubjectSlot, Vector3 TargetOffset, bool WorldAxes, SdfCameraScalar FocusDistance,
-        SdfCameraClearanceOffsets? CloseTargetOffset = null, float CloseTargetStartFraction = 0.6f, float CloseTargetFullFraction = 0.2f) : SdfCameraOp;
+    public sealed record LookAt(int SubjectSlot, Vector3 TargetOffset, bool WorldAxes, SdfCameraScalar FocusDistance) : SdfCameraOp;
+    /// <summary>Reports how a chase eye keeps clear of the room and the body it frames, resolved as
+    /// <see cref="SdfCameraPose.Clearance"/>. It never moves the resolved pose: placing the eye is the caller's, which
+    /// alone holds the geometry and the body. Distances are full-size, before the caller's live scale.</summary>
+    /// <param name="Cutaway">Whether the eye keeps the body solid and cuts walls away (at least one half) rather than
+    /// keeping the room.</param>
+    /// <param name="EyeRadius">The radius of the sphere the eye keeps clear.</param>
+    /// <param name="SurfaceSkin">The nearest the eased eye's centre comes to geometry along the boom.</param>
+    /// <param name="MaxRise">The most the boom rises above the rig's own elevation, radians.</param>
+    /// <param name="MinimumBoom">The shortest boom the eye keeps where the room allows it.</param>
+    /// <param name="FadeStart">The boom length at which the framed body starts to fade.</param>
+    /// <param name="FadeEnd">The boom length at which the framed body is hidden.</param>
+    /// <param name="CloseTargetOffset">The close target in the axes of the preceding <see cref="LookAt"/>'s
+    /// <see cref="LookAt.TargetOffset"/>, or <see langword="null"/> for none; read only after a look-at that names a
+    /// subject.</param>
+    /// <param name="CloseTargetStartFraction">The boom fraction below which the target migrates.</param>
+    /// <param name="CloseTargetFullFraction">The boom fraction at which the target reaches the close target.</param>
+    /// <param name="NearMargin">How far short of the body's nearest surface a cutaway's near plane stops.</param>
+    /// <param name="RetractionSkin">How far short of a hit the room is reported.</param>
+    /// <param name="ObstructedTargetSkin">How far out the sweep starts when the target is inside geometry.</param>
+    public sealed record Clearance(SdfCameraScalar Cutaway, SdfCameraScalar EyeRadius, SdfCameraScalar SurfaceSkin, SdfCameraScalar MaxRise,
+        SdfCameraScalar MinimumBoom, SdfCameraScalar FadeStart, SdfCameraScalar FadeEnd, Vector3? CloseTargetOffset,
+        SdfCameraScalar CloseTargetStartFraction, SdfCameraScalar CloseTargetFullFraction, SdfCameraScalar NearMargin,
+        SdfCameraScalar RetractionSkin, SdfCameraScalar ObstructedTargetSkin) : SdfCameraOp;
     /// <summary>Places the eye by orbiting the current subject's pose.</summary>
     /// <param name="Distance">The orbit distance.</param>
     /// <param name="Yaw">The orbit heading in radians.</param>
@@ -206,42 +224,58 @@ public readonly record struct SdfCameraLook(float Yaw, float Pitch) {
 /// <param name="Dynamics">The response the program's <see cref="SdfCameraOp.Dynamics"/> reported, or
 /// <see cref="SdfCameraDynamics.None"/>.</param>
 public readonly record struct SdfCameraPose(Vector3 Eye, Vector3 Target, float FovRadians, SdfCameraDynamics Dynamics) {
-    /// <summary>The close-target displacement and boom fractions reported by the winning look-at operation.</summary>
-    public SdfCameraTargetShift TargetShift { get; init; }
+    /// <summary>The winning program's chase clearance, or <see langword="null"/> when it authors none.</summary>
+    public SdfCameraClearance? Clearance { get; init; }
     /// <summary>The winning program's first-person destination and transition, if authored.</summary>
     public SdfCameraFirstPerson? FirstPerson { get; init; }
 }
 /// <summary>A first-person eye point in the reference body's local axes at full size, with its authored request
 /// and transition parameters. The host applies the body's presented pose and live scale.</summary>
 public readonly record struct SdfCameraFirstPerson(Vector3 EyePoint, bool Active, float TransitionSeconds, float HideRadius);
-/// <summary>A value a chase boom's clearance reads per treatment of a close obstruction: one for a boom that keeps the
-/// room and fades the body, one for a boom that keeps the body and cuts the walls away.</summary>
-/// <param name="Fade">The value the fading treatment reads.</param>
-/// <param name="Cutaway">The value the cutaway treatment reads.</param>
-public readonly record struct SdfCameraClearanceOffsets(Vector3 Fade, Vector3 Cutaway) {
-    /// <summary>Returns the value one treatment reads.</summary>
-    /// <param name="cutaway">Whether the treatment is the cutaway; otherwise the fade.</param>
-    /// <returns><see cref="Cutaway"/> or <see cref="Fade"/>.</returns>
-    public Vector3 Of(bool cutaway) => (cutaway ? Cutaway : Fade);
-    /// <summary>Returns both values multiplied by <paramref name="scale"/>.</summary>
-    /// <param name="scale">The factor, such as a body's live scale.</param>
-    /// <returns>The scaled pair.</returns>
-    public SdfCameraClearanceOffsets Scaled(float scale) => new(Fade: (Fade * scale), Cutaway: (Cutaway * scale));
-    /// <summary>Returns the pair a fraction of the way from <paramref name="from"/> to <paramref name="to"/>.</summary>
-    /// <param name="from">The pair at zero.</param>
-    /// <param name="to">The pair at one.</param>
-    /// <param name="weight">The fraction.</param>
-    /// <returns>The interpolated pair.</returns>
-    public static SdfCameraClearanceOffsets Lerp(SdfCameraClearanceOffsets from, SdfCameraClearanceOffsets to, float weight) => new(
-        Fade: Vector3.Lerp(value1: from.Fade, value2: to.Fade, amount: weight),
-        Cutaway: Vector3.Lerp(value1: from.Cutaway, value2: to.Cutaway, amount: weight)
+/// <summary>One frame's resolved <see cref="SdfCameraOp.Clearance"/>: every parameter a number, distances full-size
+/// before the caller's live scale.</summary>
+/// <param name="Cutaway">Whether the eye keeps the body solid and cuts walls away rather than keeping the room.</param>
+/// <param name="EyeRadius">The radius of the sphere the eye keeps clear.</param>
+/// <param name="SurfaceSkin">The nearest the eased eye's centre comes to geometry along the boom.</param>
+/// <param name="MaxRise">The most the boom rises above the rig's own elevation, radians.</param>
+/// <param name="MinimumBoom">The shortest boom the eye keeps where the room allows it.</param>
+/// <param name="FadeStart">The boom length at which the framed body starts to fade.</param>
+/// <param name="FadeEnd">The boom length at which the framed body is hidden.</param>
+/// <param name="CloseTarget">The displacement, in world axes, from the rest target to the close target.</param>
+/// <param name="CloseTargetStartFraction">The boom fraction below which the target migrates.</param>
+/// <param name="CloseTargetFullFraction">The boom fraction at which the target reaches the close target.</param>
+/// <param name="NearMargin">How far short of the body's nearest surface a cutaway's near plane stops.</param>
+/// <param name="RetractionSkin">How far short of a hit the room is reported.</param>
+/// <param name="ObstructedTargetSkin">How far out the sweep starts when the target is inside geometry; zero never
+/// skips.</param>
+public readonly record struct SdfCameraClearance(bool Cutaway, float EyeRadius, float SurfaceSkin, float MaxRise, float MinimumBoom,
+    float FadeStart, float FadeEnd, Vector3 CloseTarget, float CloseTargetStartFraction, float CloseTargetFullFraction,
+    float NearMargin, float RetractionSkin, float ObstructedTargetSkin) {
+    /// <summary>Gets whether the framed body fades as the boom shortens: a fade start beyond its end.</summary>
+    public bool Fades => (FadeStart > FadeEnd);
+
+    /// <summary>Returns the clearance a fraction of the way from <paramref name="from"/> to <paramref name="to"/>:
+    /// every number interpolated, the cutaway taken from the nearer side.</summary>
+    /// <param name="from">The clearance at zero.</param>
+    /// <param name="to">The clearance at one.</param>
+    /// <param name="weight">The fraction, in <c>[0, 1]</c>.</param>
+    /// <returns>The interpolated clearance.</returns>
+    public static SdfCameraClearance Lerp(in SdfCameraClearance from, in SdfCameraClearance to, float weight) => new(
+        Cutaway: ((weight < 0.5f) ? from.Cutaway : to.Cutaway),
+        EyeRadius: float.Lerp(from.EyeRadius, to.EyeRadius, weight),
+        SurfaceSkin: float.Lerp(from.SurfaceSkin, to.SurfaceSkin, weight),
+        MaxRise: float.Lerp(from.MaxRise, to.MaxRise, weight),
+        MinimumBoom: float.Lerp(from.MinimumBoom, to.MinimumBoom, weight),
+        FadeStart: float.Lerp(from.FadeStart, to.FadeStart, weight),
+        FadeEnd: float.Lerp(from.FadeEnd, to.FadeEnd, weight),
+        CloseTarget: Vector3.Lerp(from.CloseTarget, to.CloseTarget, weight),
+        CloseTargetStartFraction: float.Lerp(from.CloseTargetStartFraction, to.CloseTargetStartFraction, weight),
+        CloseTargetFullFraction: float.Lerp(from.CloseTargetFullFraction, to.CloseTargetFullFraction, weight),
+        NearMargin: float.Lerp(from.NearMargin, to.NearMargin, weight),
+        RetractionSkin: float.Lerp(from.RetractionSkin, to.RetractionSkin, weight),
+        ObstructedTargetSkin: float.Lerp(from.ObstructedTargetSkin, to.ObstructedTargetSkin, weight)
     );
 }
-/// <summary>A collision-driven displacement from the rest target, in world axes before the caller's live scale.</summary>
-/// <param name="Offset">The displacement from the rest target to each treatment's close target.</param>
-/// <param name="StartFraction">The boom fraction below which migration begins.</param>
-/// <param name="FullFraction">The boom fraction at which migration is complete.</param>
-public readonly record struct SdfCameraTargetShift(SdfCameraClearanceOffsets Offset, float StartFraction, float FullFraction);
 /// <summary>The per-frame inputs a program evaluates against — everything that varies while the compiled ops do
 /// not.</summary>
 public readonly ref struct SdfCameraProgramFrame {
@@ -325,8 +359,14 @@ public static class SdfCameraProgramEvaluator {
         var haveTarget = false;
         var fov = OrbitRig.DefaultFieldOfViewRadians;
         var dynamics = SdfCameraDynamics.None;
-        var targetShift = default(SdfCameraTargetShift);
+        SdfCameraClearance? clearance = null;
         SdfCameraFirstPerson? firstPerson = null;
+        // The latest look-at that aimed at a subject: where its subject stood, its target offset and their axes, which a
+        // clearance's close target is placed against.
+        var aimed = false;
+        var aimSubject = reference;
+        var aimOffset = Vector3.Zero;
+        var aimWorldAxes = false;
         var pitchMin = (-MathF.PI / 2f);
         var pitchMax = (MathF.PI / 2f);
         var operations = program.Operations;
@@ -392,8 +432,30 @@ public static class SdfCameraProgramEvaluator {
                     ));
 
                     break;
+                case SdfCameraOp.Clearance clearanceOp:
+                    var restTarget = Place(scale: 1f, subject: in aimSubject, value: aimOffset, worldAxes: aimWorldAxes);
+
+                    clearance = new SdfCameraClearance(
+                        Cutaway: (clearanceOp.Cutaway.Resolve(scalars: scalars) >= 0.5f),
+                        EyeRadius: clearanceOp.EyeRadius.Resolve(scalars: scalars),
+                        SurfaceSkin: clearanceOp.SurfaceSkin.Resolve(scalars: scalars),
+                        MaxRise: clearanceOp.MaxRise.Resolve(scalars: scalars),
+                        MinimumBoom: clearanceOp.MinimumBoom.Resolve(scalars: scalars),
+                        FadeStart: clearanceOp.FadeStart.Resolve(scalars: scalars),
+                        FadeEnd: clearanceOp.FadeEnd.Resolve(scalars: scalars),
+                        CloseTarget: ((aimed && (clearanceOp.CloseTargetOffset is { } close))
+                            ? (Place(scale: 1f, subject: in aimSubject, value: close, worldAxes: aimWorldAxes) - restTarget)
+                            : Vector3.Zero),
+                        CloseTargetStartFraction: clearanceOp.CloseTargetStartFraction.Resolve(scalars: scalars),
+                        CloseTargetFullFraction: clearanceOp.CloseTargetFullFraction.Resolve(scalars: scalars),
+                        NearMargin: clearanceOp.NearMargin.Resolve(scalars: scalars),
+                        RetractionSkin: clearanceOp.RetractionSkin.Resolve(scalars: scalars),
+                        ObstructedTargetSkin: clearanceOp.ObstructedTargetSkin.Resolve(scalars: scalars)
+                    );
+
+                    break;
                 case SdfCameraOp.LookAt lookAt:
-                    targetShift = default;
+                    aimed = false;
                     if (lookAt.SubjectSlot == SdfCameraProgram.FacingSubject) {
                         target = (eye + (Forward(orientation: subject.Orientation) * MathF.Max(
                             x: lookAt.FocusDistance.Resolve(scalars: scalars),
@@ -412,15 +474,7 @@ public static class SdfCameraProgramEvaluator {
                             value: lookAt.TargetOffset,
                             worldAxes: lookAt.WorldAxes
                         );
-                        if (lookAt.CloseTargetOffset is { } closeOffset) {
-                            targetShift = new SdfCameraTargetShift(
-                                Offset: new SdfCameraClearanceOffsets(
-                                    Fade: (Place(subject: in aim, value: closeOffset.Fade, worldAxes: lookAt.WorldAxes, scale: 1f) - target),
-                                    Cutaway: (Place(subject: in aim, value: closeOffset.Cutaway, worldAxes: lookAt.WorldAxes, scale: 1f) - target)
-                                ),
-                                StartFraction: lookAt.CloseTargetStartFraction,
-                                FullFraction: lookAt.CloseTargetFullFraction);
-                        }
+                        (aimed, aimSubject, aimOffset, aimWorldAxes) = (true, aim, lookAt.TargetOffset, lookAt.WorldAxes);
                     }
 
                     haveTarget = true;
@@ -479,10 +533,9 @@ public static class SdfCameraProgramEvaluator {
                         b: resolvedB.Dynamics,
                         weight: weight
                     );
-                    targetShift = new SdfCameraTargetShift(
-                        Offset: SdfCameraClearanceOffsets.Lerp(resolvedA.TargetShift.Offset, resolvedB.TargetShift.Offset, weight),
-                        StartFraction: float.Lerp(resolvedA.TargetShift.StartFraction, resolvedB.TargetShift.StartFraction, weight),
-                        FullFraction: float.Lerp(resolvedA.TargetShift.FullFraction, resolvedB.TargetShift.FullFraction, weight));
+                    clearance = (((resolvedA.Clearance is { } clearanceA) && (resolvedB.Clearance is { } clearanceB))
+                        ? SdfCameraClearance.Lerp(from: in clearanceA, to: in clearanceB, weight: weight)
+                        : (resolvedA.Clearance ?? resolvedB.Clearance));
                     firstPerson = ((weight < 0.5f) ? resolvedA.FirstPerson : resolvedB.FirstPerson);
                     target = Vector3.Lerp(
                         amount: weight,
@@ -521,7 +574,7 @@ public static class SdfCameraProgramEvaluator {
                     target = resolvedSelect.Target;
                     fov = resolvedSelect.FovRadians;
                     dynamics = resolvedSelect.Dynamics;
-                    targetShift = resolvedSelect.TargetShift;
+                    clearance = resolvedSelect.Clearance;
                     firstPerson = resolvedSelect.FirstPerson;
                     haveTarget = true;
 
@@ -536,7 +589,7 @@ public static class SdfCameraProgramEvaluator {
             Target: (haveTarget
             ? target
             : (eye + (Forward(orientation: subject.Orientation) * DefaultFocusDistance)))
-        ) { FirstPerson = firstPerson, TargetShift = targetShift };
+        ) { Clearance = clearance, FirstPerson = firstPerson };
     }
     private static Vector3 Forward(Quaternion orientation) => Vector3.Transform(
         rotation: orientation,
@@ -624,8 +677,8 @@ public sealed class SdfCameraProgramRig : ISdfCameraRig {
 
     /// <summary>Gets the response the last <see cref="Resolve"/> reported (see <see cref="SdfCameraOp.Dynamics"/>).</summary>
     public SdfCameraDynamics Dynamics { get; private set; }
-    /// <summary>Gets the winning look-at operation's close-target migration.</summary>
-    public SdfCameraTargetShift TargetShift { get; private set; }
+    /// <summary>Gets the last resolved program's chase clearance, or <see langword="null"/> when it authors none.</summary>
+    public SdfCameraClearance? Clearance { get; private set; }
     /// <summary>The last resolved program's first-person destination.</summary>
     public SdfCameraFirstPerson? FirstPerson { get; private set; }
     /// <summary>Gets the live look sample added to every <see cref="SdfCameraOp.Orbit"/> that applies it.</summary>
@@ -664,7 +717,7 @@ public sealed class SdfCameraProgramRig : ISdfCameraRig {
         );
 
         Dynamics = pose.Dynamics;
-        TargetShift = pose.TargetShift;
+        Clearance = pose.Clearance;
         FirstPerson = pose.FirstPerson;
 
         return pose;

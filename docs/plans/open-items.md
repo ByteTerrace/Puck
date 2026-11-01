@@ -1171,8 +1171,9 @@ Owner: UI lane, with the play-feel and editor lanes · ordinary, each leak fixed
 when it is found (AGENTS.md) · Next: the overlay text advance and the helper
 templates. The engine's neutral default theme (`WorldThemeSection.Default`; no
 phosphor role in `WorldTheme`), the CRT as the standard's authored screen
-material, per-treatment chase-camera values, and a standard that boots alone
-(`worlds/minimal`) are in; [UI step 1](ui.md) is this packet's remainder.
+material, the chase camera's clearance as an authored camera-program operation,
+and a standard that boots alone (`worlds/minimal`) are in; [UI step 1](ui.md)
+is this packet's remainder.
 
 The engine provides mechanisms; every concrete design is `.puck` data in
 `worlds/standard/`, which the debug world imports and develops. Each item below is
@@ -1192,33 +1193,12 @@ a design built into C# or living only in the debug world.
   (`worlds/debug/avatars/moth.puck:1860-1925`). When the assisted-flight pass
   comes it is a standard ability template, with `dashAbility` in
   `worlds/standard/abilities.puck` as the precedent.
-- The chase camera's clearance as a camera-program operation (the lead's
-  decision, replacing the per-treatment fields that landed first). Today the
-  solver (`src/Puck.World.Client/WorldCameraClearance.cs`, `Resolve`) branches
-  on `WorldCameraClearanceChoice` (`src/Puck.World.Schema/WorldCameraClearanceChoice.cs`)
-  and reads its numbers from `WorldSeatViewControl` (`ClearanceMode`, `MaxRise`,
-  `EyeRadius`, `SurfaceSkin`, `CharacterFade`; `src/Puck.World.Schema/WorldViews.cs`)
-  and the look-at's per-treatment `closeTargetOffset { fade, cutaway }`
-  (`WorldCameraProgram.cs`, `LookAt`). Fix: a `clearance` operation in
-  `WorldCameraProgramOp` is the mechanism: it probes the room (free boom
-  distance, free rise, intervening walls) and offers the engine-only
-  capabilities (cutting intervening walls away, fading this view's own body),
-  with every number an authored, bindable parameter (eye radius and skin, max
-  rise, close target and its fractions, fade start, end and minimum boom). Fade
-  and cutaway become authored cases of `chaseCamera` in
-  `worlds/standard/camera.puck`, chosen by a select from the player's preference
-  state row; `ClearanceMode`, `MaxRise`, `CharacterFade`, `EyeRadius` and
-  `SurfaceSkin` leave `WorldSeatViewControl`, and the enum loses its behavioural
-  meaning in the solver (`player.camera.clearance`, `seatCameraFeel.clearanceMode`
-  and `world.view.camera`'s `mode=` move to the state row). The decision table's
-  values (`docs/decisions/play.md`, "The chase camera") are the template's
-  starting values. Verify with the clearance laws (`WorldCameraClearanceLawTests`)
-  and a windowed `world.view.camera` reading near a wall in each case.
-- The chase solver's remaining mechanism constants are engine values, not
-  authored ones: the near plane's margin short of the body (`NearMargin`,
-  0.05 m), the retraction skin (0.05 m) and the obstructed-target shell skip
-  (1.1 m) in `src/Puck.World.Client/WorldCameraClearance.cs`; the eye radius,
-  surface skin, rise ceilings and gyro mapping are authored.
+- [low] The chase camera's tight-space preference is one world-wide row
+  (`cameraClearance`, `worlds/standard/camera.puck`), so every seat in a world
+  shares it, and it no longer travels with a joined identity. A per-seat
+  preference needs a camera program's `state.<row>.$body` binding to resolve
+  against the framed body (`StateBinding.BodyKey`), which the rig compiler's
+  scalar slots (`WorldCameraRigCompiler`, `CompiledRig.Refresh`) do not do.
 - The standard's binding bar slot set (`worlds/standard/controls.puck`, the
   `bare` overlay) still lists keys only the Moth binds (1 to 5 and F4); they
   show as unbound plates in a world without her controls.
