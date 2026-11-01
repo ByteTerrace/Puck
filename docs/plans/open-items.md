@@ -774,6 +774,17 @@ Still open from the companion build:
   need a completion that waits for a durable image across drains.
 - [low] An explicit stop of a World-process row disposes ordinary travellers it
   embodies (a player who crossed in) with the row; only companions are swept home.
+- [low] A stopping row re-sends a companion return that home refused for good
+  (`Stale`) at every drain. The protocol's `Retire` step (step 6) is what ends
+  that loop; it is not built yet.
+- [low] A frozen row answers a remote reservation or commit by throwing inside
+  the federation handler. The source sees an unanswered call and keeps the
+  crossing in doubt, which is safe but slow to resolve: answer with a typed
+  refusal instead.
+- [low] `FederationTransferLawTests.ReservationWire_RefusesAnUndecodableTravelerIdentityByName`
+  (Presentation tests) builds reservation wire bytes by hand and fails. It
+  predates the custody stop work, and probably fell behind the companion member
+  fields: update it to the current wire or delete it.
 
 - [medium] No law shows the federation correlation of custody steps
   (`WorldRemoteAuthority`: `HopQuery`, `HopRequest`, `CustodyQuery` and
