@@ -45,7 +45,7 @@ public sealed partial class WorldRuleHost {
         into.Reverse();
     }
     private bool FireInteractionPair(CompiledWorldFactsRule rule, CompiledInteraction interaction, RuleLatch latch,
-        Dictionary<LatchKey, bool> bindings, ulong stepTicks, int left, int right) {
+        RuleLatch.RuleState bindings, ulong stepTicks, int left, int right) {
         var leftHandle = ((interaction.LeftPool is null) ? default : m_poolCarrierLeft[left]);
         var rightHandle = ((interaction.RightPool is null) ? default : m_poolCarrierRight[right]);
 
@@ -62,7 +62,7 @@ public sealed partial class WorldRuleHost {
             _ = m_evaluator.TrySetInstanceBinding(register: interaction.RightBinding, handle: rightHandle);
         }
         try {
-            _ = m_evaluator.EvaluateOnce(rule: rule, latch: latch, bindings: bindings,
+            _ = m_evaluator.EvaluateOnce(rule: rule, latch: latch, state: bindings,
                 binding: new LatchKey(Left: left, Right: right, LeftGeneration: leftHandle.Generation, RightGeneration: rightHandle.Generation),
                 stepTicks: stepTicks, applied: out var applied);
             return applied;

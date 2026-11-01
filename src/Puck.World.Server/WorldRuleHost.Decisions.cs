@@ -158,8 +158,7 @@ public sealed partial class WorldRuleHost : IWorldPersistedDecisions {
             step: stepTicks,
             value: state.CommitmentRemaining
         );
-        if (!m_evaluator.EvaluateBindings(rule: rule, latch: m_ruleGateHeld,
-            binding: new LatchKey(Left: BoundEachKey.Ordinal, Right: -1))) { return false; }
+        if (!m_evaluator.EvaluateBindings(rule: rule)) { return false; }
         var interruptOpen = ((policy.Interrupt is { } interrupt) && m_evaluator.GateOpen(
             faulted: out _,
             gate: interrupt,

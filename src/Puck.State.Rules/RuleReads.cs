@@ -456,16 +456,12 @@ public static class RuleReads {
     public static bool TryIndexKey(CellKeyTable keys, long index, out CellKey key) {
         ArgumentNullException.ThrowIfNull(argument: keys);
 
-        key = default;
-
-        return (CellName.TryParse(
-            candidate: IndexKeyCache.Get(index: index),
-            name: out var name,
-            reason: out _
-        ) && keys.TryResolve(
+        // Every interned name is a valid cell name, so resolving the spelling directly finds exactly the keys parsing
+        // it first would.
+        return keys.TryResolve(
             key: out key,
-            name: name
-        ));
+            name: IndexKeyCache.Get(index: index).AsSpan()
+        );
     }
     /// <summary>Returns the integer an interned key's name spells.</summary>
     /// <param name="keys">The runtime key table that resolves the key.</param>

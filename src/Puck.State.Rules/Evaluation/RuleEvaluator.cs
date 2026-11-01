@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 namespace Puck.State.Rules;
@@ -41,6 +40,7 @@ public interface IRuleOwner {
 /// </remarks>
 public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCounterSource {
     private readonly IEffectHost m_host;
+    private readonly IRuleOwner? m_owner;
 
     private Puck.Abstractions.Counting.WorkCount m_evaluations;
     private Puck.Abstractions.Counting.WorkCount m_firings;
@@ -50,7 +50,6 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
     private readonly List<CellKey> m_eachKeyScratch = [];
     private readonly List<StateInstanceHandle>?[] m_poolHandleScratch = new List<StateInstanceHandle>[StateCapacity.MaxInstanceBindings];
     private readonly List<CellAccess> m_readScratch = [];
-    private readonly ConditionalWeakTable<object, RuleSchedule> m_schedules = [];
 
     /// <summary>Initializes a new evaluator over a host.</summary>
     /// <param name="host">The host every read and write goes through.</param>
@@ -58,6 +57,7 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
         ArgumentNullException.ThrowIfNull(argument: host);
 
         m_host = host;
+        m_owner = (host as IRuleOwner);
     }
 
     /// <inheritdoc/>
@@ -122,14 +122,11 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
     /// <see langword="true"/>; a law flips it off to prove the skip changes no observable result.</summary>
     public bool SchedulingEnabled { get; set; } = true;
 
-    // The schedule is a function of the compiled rule and the layout, both of which outlive one tick, so it is
-    // derived once per compiled instance and held weakly beside it.
-    private RuleSchedule Schedule(CompiledRule rule) {
-        if (m_schedules.TryGetValue(
-            key: rule,
-            value: out var cached
-        )) {
-            return cached;
+    // A rule's and its locals' schedules are a function of the compiled rule and the layout, both of which outlive
+    // one tick, so they are derived once per compiled instance and held in the rule's latch state beside it.
+    private RuleSchedule Schedule(CompiledRule rule, RuleLatch.RuleState state) {
+        if (ReferenceEquals(objA: state.ScheduleRule, objB: rule) && ReferenceEquals(objA: state.ScheduleEvaluator, objB: this)) {
+            return state.Schedule!;
         }
 
         m_readScratch.Clear();
@@ -140,22 +137,21 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
             reader: m_host,
             reads: m_readScratch
         );
+        var locals = (rule.Locals ?? []);
+        var localSchedules = new RuleSchedule[locals.Length];
 
-        m_schedules.Add(
-            key: rule,
-            value: schedule
-        );
+        for (var ordinal = 0; (ordinal < locals.Length); ordinal++) {
+            localSchedules[ordinal] = Schedule(binding: locals[ordinal]);
+        }
+
+        state.Schedule = schedule;
+        state.LocalSchedules = localSchedules;
+        state.ScheduleRule = rule;
+        state.ScheduleEvaluator = this;
 
         return schedule;
     }
     private RuleSchedule Schedule(CompiledRuleLocal binding) {
-        if (m_schedules.TryGetValue(
-            key: binding,
-            value: out var cached
-        )) {
-            return cached;
-        }
-
         m_readScratch.Clear();
         RuleDataflow.CollectExpression(
             into: m_readScratch,
@@ -169,18 +165,11 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
             tokens: binding.Expression
         );
 
-        var schedule = RuleSchedule.Build(
+        return RuleSchedule.Build(
             needs: needs.Build(),
             reader: m_host,
             reads: m_readScratch
         );
-
-        m_schedules.Add(
-            key: binding,
-            value: schedule
-        );
-
-        return schedule;
     }
     // Whether every row a schedule reads reports the same version it did when the cache was captured. A mismatch, a
     // volatile schedule, or a row the host cannot answer for all count as unproven, which is the safe default.
@@ -364,7 +353,7 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
         applied = false;
 
         if (
-            (m_host is IRuleOwner owner) &&
+            (m_owner is { } owner) &&
             owner.TryEvaluateOwn(
             applied: out var own,
             evaluator: this,
@@ -381,13 +370,13 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
             );
         }
 
-        var bindings = latch.Bindings(name: rule.Name);
+        var bindings = latch.Rule(name: rule.Name);
 
         if ((rule.ForEachOrdinal < 0) && !rule.ForEachZones && !rule.ForEachBodies && (rule.PoolForEach is null) && (rule.Iteration is null)) {
             return EvaluateOnce(
                 applied: out applied,
                 binding: LatchKey.None,
-                bindings: bindings,
+                state: bindings,
                 latch: latch,
                 rule: rule,
                 stepTicks: stepTicks
@@ -414,11 +403,11 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
                 var poolBinding = new LatchKey(Left: slotKey.Ordinal, Right: -1, LeftGeneration: handle.Generation);
 
                 if ((rule.MaxFirings > 0) && (poolFirings >= rule.MaxFirings)) {
-                    latch.Touch(binding: poolBinding);
+                    latch.Touch(state: bindings, binding: poolBinding);
                     continue;
                 }
                 bindingsSpan[rule.PoolBindingSlot] = handle;
-                var outcome = EvaluateOnce(applied: out var moved, binding: poolBinding, bindings: bindings, latch: latch, rule: rule, stepTicks: stepTicks);
+                var outcome = EvaluateOnce(applied: out var moved, binding: poolBinding, state: bindings, latch: latch, rule: rule, stepTicks: stepTicks);
 
                 applied |= moved;
                 if (outcome != RuleOutcome.Idle) {
@@ -431,7 +420,7 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
             if (((uint)rule.PoolBindingSlot) < ((uint)bindingsSpan.Length)) {
                 bindingsSpan[rule.PoolBindingSlot] = default;
             }
-            latch.EndSweep(bindings: bindings, name: rule.Name);
+            latch.EndSweep(state: bindings);
             return poolAggregate;
         }
 
@@ -451,7 +440,7 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
             // A sweep that has spent its firings leaves its remaining bindings as they stand, so an open edge waits for
             // the tick that reaches it instead of being closed by the sweep's end.
             if ((rule.MaxFirings > 0) && (firings >= rule.MaxFirings)) {
-                latch.Touch(binding: eachBinding);
+                latch.Touch(state: bindings, binding: eachBinding);
                 continue;
             }
             m_host.BoundEachKey = key;
@@ -459,7 +448,7 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
             var outcome = EvaluateOnce(
                 applied: out var moved,
                 binding: eachBinding,
-                bindings: bindings,
+                state: bindings,
                 latch: latch,
                 rule: rule,
                 stepTicks: stepTicks
@@ -478,10 +467,7 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
         }
 
         m_host.BoundEachKey = default;
-        latch.EndSweep(
-            bindings: bindings,
-            name: rule.Name
-        );
+        latch.EndSweep(state: bindings);
 
         return aggregate;
     }
@@ -490,18 +476,18 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
     /// binding, never per rule alone; an entry the enclosing sweep does not touch is closed by the sweep.</summary>
     /// <param name="rule">The compiled rule.</param>
     /// <param name="latch">The family's edge latch.</param>
-    /// <param name="bindings">The rule's latch bindings.</param>
+    /// <param name="state">The rule's latch state (<see cref="RuleLatch.Rule"/>).</param>
     /// <param name="binding">The binding this evaluation runs under.</param>
     /// <param name="stepTicks">How many engine ticks the simulation step spans.</param>
     /// <param name="applied">Whether the firing moved the arena or emitted through the host.</param>
     /// <returns>What the evaluation did.</returns>
-    public RuleOutcome EvaluateOnce(CompiledRule rule, RuleLatch latch, Dictionary<LatchKey, bool> bindings, LatchKey binding, ulong stepTicks, out bool applied) {
+    public RuleOutcome EvaluateOnce(CompiledRule rule, RuleLatch latch, RuleLatch.RuleState state, LatchKey binding, ulong stepTicks, out bool applied) {
         m_host.BeginRuleEvaluation();
-        try { return EvaluateOnceCore(applied: out applied, binding: binding, bindings: bindings, latch: latch, rule: rule, stepTicks: stepTicks); } finally { m_host.EndRuleEvaluation(); }
+        try { return EvaluateOnceCore(applied: out applied, binding: binding, state: state, latch: latch, rule: rule, stepTicks: stepTicks); } finally { m_host.EndRuleEvaluation(); }
     }
 
-    private RuleOutcome EvaluateOnceCore(CompiledRule rule, RuleLatch latch, Dictionary<LatchKey, bool> bindings, LatchKey binding, ulong stepTicks, out bool applied) {
-        ArgumentNullException.ThrowIfNull(argument: bindings);
+    private RuleOutcome EvaluateOnceCore(CompiledRule rule, RuleLatch latch, RuleLatch.RuleState state, LatchKey binding, ulong stepTicks, out bool applied) {
+        ArgumentNullException.ThrowIfNull(argument: state);
         ArgumentNullException.ThrowIfNull(argument: latch);
         ArgumentNullException.ThrowIfNull(argument: rule);
 
@@ -513,13 +499,15 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
             rule: rule,
             tick: tick
         );
-        var existed = bindings.TryGetValue(
+        var held = state.Held;
+        var existed = held.TryGetValue(
             key: binding,
             value: out var wasOpen
         );
+        var scheduling = state.Binding(binding: binding);
         // Scheduling never runs under a trace: a traced evaluation wants every binding and conjunct computed fresh.
         var schedule = ((SchedulingEnabled && (trace is null))
-            ? Schedule(rule: rule)
+            ? Schedule(rule: rule, state: state)
             : null
         );
 
@@ -527,29 +515,25 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
             existed &&
             !wasOpen &&
             (schedule is { Volatile: false } closed) &&
+            ReferenceEquals(objA: scheduling.GateOwner, objB: closed) &&
             VersionsMatch(
-            cached: latch.GateVersions(
-                binding: binding,
-                name: rule.Name,
-                owner: closed
-            ),
+            cached: scheduling.GateVersions,
             schedule: closed
         )
         ) {
             // Nothing this rule reads has changed since it last closed, and it reads no host or tick fact a version
             // cannot see through — the verdict is still closed, so bindings and gate need not run at all.
             m_skips.Increment();
-            latch.Touch(binding: binding);
+            latch.Touch(schedule: scheduling);
             EndTrace(entry: trace);
 
             return RuleOutcome.Idle;
         }
 
         if (!EvaluateBindings(
-            binding: binding,
-            latch: latch,
             rule: rule,
-            schedule: schedule,
+            memos: ((schedule is not null) ? Memos(scheduling: scheduling, count: (rule.Locals?.Length ?? 0)) : null),
+            localSchedules: state.LocalSchedules,
             tick: tick,
             trace: trace
         )) {
@@ -571,35 +555,24 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
         ));
 
         ref var slot = ref CollectionsMarshal.GetValueRefOrAddDefault(
-            dictionary: bindings,
+            dictionary: held,
             exists: out _,
             key: binding
         );
 
         slot = open;
-        latch.Touch(binding: binding);
+        latch.Touch(schedule: scheduling);
 
         if (
             (schedule is { } reads) &&
             !open
         ) {
             // The gate closed again: remember what its reads looked like, so an unchanged read next time skips.
-            var cache = (latch.GateVersions(
-                binding: binding,
-                name: rule.Name,
-                owner: reads
-            ) ?? []);
-
             CaptureVersions(
-                cache: ref cache,
+                cache: ref scheduling.GateVersions,
                 schedule: reads
             );
-            latch.SetGateVersions(
-                binding: binding,
-                name: rule.Name,
-                owner: reads,
-                versions: cache
-            );
+            scheduling.GateOwner = reads;
         }
 
         var fires = (open && ((rule.Mode != ActionTriggerMode.Edge) || !wasOpen));
@@ -669,36 +642,35 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
     /// <summary>Populates locals for a host-owned evaluation under its current binding before any gate or score
     /// reads them. Each value is evaluated afresh so timers cannot retain another binding's locals.</summary>
     /// <param name="rule">The compiled rule whose locals are evaluated in declaration order.</param>
-    /// <param name="latch">The owning family's latch.</param>
-    /// <param name="binding">The current lexical binding.</param>
     /// <returns>Whether every binding evaluated; a fault is reported and closes this evaluation.</returns>
-    public bool EvaluateBindings(CompiledRule rule, RuleLatch latch, LatchKey binding) =>
-        EvaluateBindings(rule: rule, latch: latch, binding: binding, schedule: null, tick: m_host.Tick, trace: null);
+    public bool EvaluateBindings(CompiledRule rule) =>
+        EvaluateBindings(rule: rule, memos: null, localSchedules: [], tick: m_host.Tick, trace: null);
+
+    // One binding's memo array, sized to the rule's current local count; a stale array (a recompile changed the
+    // count) is replaced, discarding its cached values.
+    private static RuleLatch.BindingMemo?[] Memos(RuleLatch.BindingSchedule scheduling, int count) {
+        if ((scheduling.Memos is not { } memos) || (memos.Length != count)) {
+            scheduling.Memos = memos = new RuleLatch.BindingMemo?[count];
+        }
+
+        return memos;
+    }
 
     // Bound values first, in declared order, each visible to the ones after it and to the gate and effects. A
     // binding that cannot evaluate closes the gate for this evaluation and is reported once per category like any
-    // effect's arithmetic refusal.
-    private bool EvaluateBindings(CompiledRule rule, RuleLatch latch, LatchKey binding, RuleSchedule? schedule, ulong tick, RuleTraceEvaluation? trace) {
+    // effect's arithmetic refusal. With memos, localSchedules holds each local's read schedule.
+    private bool EvaluateBindings(CompiledRule rule, RuleLatch.BindingMemo?[]? memos, RuleSchedule[] localSchedules, ulong tick, RuleTraceEvaluation? trace) {
         var declared = (rule.Locals ?? []);
 
         if (declared.Length == 0) {
             return true;
         }
 
-        var memos = ((schedule is not null)
-            ? latch.BindingMemos(
-                binding: binding,
-                count: declared.Length,
-                name: rule.Name
-            )
-            : null
-        );
-
         for (var ordinal = 0; (ordinal < declared.Length); ordinal++) {
             var bound = declared[ordinal];
 
             if (memos is { } cached) {
-                var bindingSchedule = Schedule(binding: bound);
+                var bindingSchedule = localSchedules[ordinal];
 
                 if (
                     !bindingSchedule.Volatile &&
@@ -746,7 +718,7 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
 
             if (memos is { } cache) {
                 var memo = (cache[ordinal] ??= new RuleLatch.BindingMemo());
-                var bindingSchedule = Schedule(binding: bound);
+                var bindingSchedule = localSchedules[ordinal];
                 var versions = memo.Versions;
 
                 CaptureVersions(

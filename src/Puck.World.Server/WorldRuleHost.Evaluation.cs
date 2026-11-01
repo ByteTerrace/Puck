@@ -6,7 +6,7 @@ namespace Puck.World.Server;
 public sealed partial class WorldRuleHost {
     // Every (left carrier, right carrier) pair within range, or every left carrier inside the region, fires the
     // interaction once with left/right bound — the chemistry is evaluated over all carriers, never one argmax pair.
-    private bool EvaluateInteraction(CompiledWorldFactsRule rule, CompiledInteraction interaction, RuleLatch latch, Dictionary<LatchKey, bool> bindings, ulong stepTicks) {
+    private bool EvaluateInteraction(CompiledWorldFactsRule rule, CompiledInteraction interaction, RuleLatch latch, RuleLatch.RuleState bindings, ulong stepTicks) {
         var applied = false;
         var lefts = m_carrierScratchLeft;
 
@@ -110,7 +110,7 @@ public sealed partial class WorldRuleHost {
 
         m_boundLeft = -1;
         m_boundRight = -1;
-        latch.EndSweep(bindings: bindings);
+        latch.EndSweep(state: bindings);
 
         return applied;
     }
