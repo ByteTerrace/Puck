@@ -26,9 +26,15 @@ How the file stays usable:
 Ranked by payoff at the latest batch. Lanes in flight are named; the lead
 resolves their edits to this file at merge.
 
-The [refactoring campaign](#refactoring-campaign) comes first: the owner has
-lifted every test requirement so the next session can seriously improve the
-code (AGENTS.md). The packets below follow it.
+The owner's direction (November 2026): fundamentals first, known or found
+along the way (AGENTS.md). Three lanes lead: the [simulation tick off the frame
+thread](#simulation-tick-off-the-frame-thread) (queued by the owner), a [cold
+bake](#cold-bake-under-a-minute) of one minute at most per backend, and the
+[frame time](#frame-time-on-the-lead-machine) tick costs, toward the RTX 4070's
+steady 60 FPS. The [refactoring campaign](#refactoring-campaign)'s duplicates
+follow; test requirements stay lifted (AGENTS.md). The owner deferred the
+silo's addon refusal ([delivery](#delivery-launcher-and-ci)), so deploys stay
+blocked until it is taken.
 
 1. [The valley's terrain](#the-valleys-terrain): the relief-contact review's
    open highs (clearance certificates, fixed-point scope scaling, composed
@@ -768,18 +774,33 @@ windowed checks, then the three developer exhibits.
   ([rendering plan](rendering.md#open-items)); the slice's GPU far field and a
   live slice view are [E12's](editor.md#open-items).
 
+### Cold bake under a minute
+
+Owner: specialist (rendering) · high · Next: profile where a cold bake's time
+goes, then cut it to the owner's bar: one minute at most per backend from an
+empty store (AGENTS.md).
+
+- Measured at the November 2026 landing (lead machine, RTX 4070, windowed,
+  `--devices none`): Direct3D 12's `world` residency baked 2,090 groups in
+  384.4 s (50,854 dispatches, 1.20 billion samples, 1.64 billion taps, 38.6
+  million triangles); Vulkan had 187 groups pending after 420 s. Every frame
+  during the bake read over 16.7 ms (`host.frames` avg 67 ms, p99 100 ms,
+  126 collections pausing 572 ms over 600 frames), so the bake also starves the
+  frame.
+- Each backend keeps its own store; a mesh is the same bytes on both when the
+  kernels agree, so a shared store would halve the cold cost of using both.
+- The rebakes nobody needed are the [refactoring campaign](#refactoring-campaign)'s
+  first item (`SdfMeshBakeClosure` reaching upload and draw-record code).
+
 ### Simulation tick off the frame thread
 
-Owner: specialist or Astra design lane · ordinary · Next: the thread's design
-consensus, once the owner queues it.
+Owner: principal designs (sparingly, design only), specialist builds · high ·
+Next: the design memo, then its build. The owner queued the thread in November
+2026.
 
 - [low] The pump now sheds owed steps once a burst spends a step's period of wall time, but nothing counts the shed steps: add a drop counter to `host.frames` (and `world.rate`) so a World running slower than real time says so. Owed in the lead's windowed window: a hall lift ride's `host.frames` with frames near one tick's cost. (from: sim-bounds lane)
 
-- The thread itself is an idea discussed with the owner and not yet queued:
-  a design consensus across the families, which the owner's ruling says starts
-  only when the owner reviews it and says so. The input lane it waited on has
-  landed.
-- Decide (the lead's call, for that consensus to confirm): one simulation
+- Decide (the lead's call, for the design memo to confirm or overturn): one simulation
   thread owns the pump, the server and every instance host and publishes
   immutable per-tick snapshots into a small ring the frame thread reads
   latest-complete; input is captured on the frame thread into a per-tick queue;

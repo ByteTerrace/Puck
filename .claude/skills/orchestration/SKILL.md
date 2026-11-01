@@ -635,7 +635,10 @@ not a spiral:
 - "Conserve Fable" means no new principal (Fable) lane without the owner's
   go-ahead, however hard the problem: route it to specialist (Opus) and say so.
   Twice the lead started principal lanes after that instruction, and the owner
-  found Fable past half its usage.
+  found Fable past half its usage. The owner's standing go-ahead (November
+  2026): Fable may design (a design memo, an architecture, a review of a
+  design), sparingly; it never does the hard labor of implementing,
+  measuring or bisecting, which goes to specialist or implementer.
 - A defect the owner can see (a walkthrough, a sweep still, a capture) ranks
   at the top of Next and gets a lane at once, aimed at the root cause, not a
   packet line: the hall stairs' holes sat as "dark patches" in the sweep packet

@@ -85,6 +85,12 @@ agent works in that mode by default, without asking:
 - The owner's velocity rulings:
   - Edit to running: under 30 seconds from changing a C# or HLSL file in the
     engine to seeing it in the running debug world.
+  - Cold bake: the debug world's meshes bake from an empty store in one minute
+    at most per backend on the lead machine (384 s on Direct3D 12 at the
+    November 2026 landing).
+  - Fundamentals first: the work is the engine's fundamental problems, those
+    already known and those found along the way (frame time against the 60 FPS
+    bar, build and bake times, duplicated systems), ahead of new features.
   - No recorded ledgers or fingerprints: format-shape fingerprints, the bake
     derivation fingerprint, the file-length and comment-smell ratchets, canary
     and counters ceilings, test durations, `VerifiedCode` brands, the emulator
