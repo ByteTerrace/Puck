@@ -31,8 +31,10 @@ restated catalog drifts the moment a code is added or reworded.
 | PUCK034 | Warning | A shape's `parent` resolves to no sibling `name` in the same `shapes` array. | Fix the referenced name; this check is local and always runs, even inside a module. |
 | PUCK049–066 | Error | A `table`/`slot`/`pile`/`grid` declaration refusal — outside `state.world`, a mixed array/block section, a duplicate name, an invalid default, a modifier the kind or shape doesn't admit, an inexact `advance` rate, an unknown or wrong-shaped `pile`/`grid` row reference, a `pile` capacity past its token domain, a `grid` kind other than `Int`/`Bool`, an invalid `grid` cell ordinal, `grid` `inverse` combined with authored cells, or a reused topology name. | See `Puck.World.Transpiler/README.md`'s [State declarations](../../../../src/Puck.World.Transpiler/README.md#state-declarations) table for the exact code-by-code list. |
 
-PUCK034, PUCK_LINT_002 (a `let` or `template` redeclaring an earlier one) and
-PUCK_LINT_010 (a vector-mix term whose weight share is below 1/64) are Warning
+PUCK034, PUCK_LINT_002 (a `let` or `template` redeclaring an earlier one),
+PUCK_LINT_010 (a vector-mix term whose weight share is below 1/64), and
+PUCK_LINT_011 (division or remainder by a potentially zero divisor in an eager
+ternary arm) are Warning
 severity; every other `PUCK_LINT_*` check is Information, so `lint --strict`
 (which promotes warnings to failures) does not fail on an Information-level
 finding by itself. A `--strict`/`compile

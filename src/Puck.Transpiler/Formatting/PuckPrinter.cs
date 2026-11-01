@@ -1576,14 +1576,13 @@ public static partial class PuckPrinter {
             switch (predicate) {
                 case ComparisonPredicateNode comparison: {
                         if (comparison.Comparator == "!=" &&
-                            comparison.Right.Syntax is ExpressionSpelling.Literal { Value: 0 }) {
-                            // Print truth operators through the same gate classification the next parse uses.
-                            // Otherwise dropping != 0 leaves an expression that only the second format normalizes.
-                            var truth = comparison.Left.Syntax is null ? null : PuckParser.CreateGate(operand: comparison.Left);
-                            if (truth is NotPredicateNode or AndPredicateNode or OrPredicateNode) {
-                                Predicate(predicate: truth, parenthesize: parenthesize, level: level);
-                                break;
-                            }
+                            comparison.Right.Syntax is ExpressionSpelling.Literal { Value: 0 } &&
+                            comparison.Left.Syntax is { } syntax &&
+                            PuckParser.CreateGate(operand: comparison.Left) is ComparisonPredicateNode {
+                                Comparator: "!=", Right.Syntax: ExpressionSpelling.Literal { Value: 0 }
+                            } truth && truth.Left.Syntax == syntax) {
+                            // Elide only an identical truth test. Compound comparisons and truth operators keep
+                            // their expression boundary: fact comparisons can differ under absence or infinity.
                             var group = comparison.Left.Syntax is ExpressionSpelling.Binary or ExpressionSpelling.Ternary;
                             if (group) { m_builder.Append(value: '('); }
                             OperandText(enclose: !group, level: level, text: comparison.Left.Text);

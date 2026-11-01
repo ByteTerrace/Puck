@@ -515,6 +515,9 @@ disjunction too, through the shared gate evaluator. Ordinary rules, group
 triggers and conditional effects obey the same verdict. Thus `(not (1 / a > 0))
 != 0` and its printed truth condition both stay closed with `a = 0`, reporting
 `Arithmetic`; printing cannot turn a failed comparison into a firing.
+The printer elides a numeric truth test only when its operand reparses as the
+identical test. Explicit compound expression boundaries remain, because fact
+comparisons have special absence and infinity semantics.
 
 From weakest to strongest, operators bind as: conditional `?:`, `??`, `or`,
 `and`, prefix `not`, equality, ordering, `|`, `^`, `&`, shifts, addition and

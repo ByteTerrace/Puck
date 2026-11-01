@@ -12,6 +12,7 @@ public class FormatterSugarTests {
     [InlineData("(not (1 / a > 0)) != 0")]
     [InlineData("not (1 / a > 0)")]
     [InlineData("not (1 / a > 0) or 1")]
+    [InlineData("(1 / a > 0) != 0")]
     [Theory]
     public void FormattingAFaultedGatePreservesItsClosedVerdict(string condition) {
         var source = $$"""
@@ -46,6 +47,7 @@ public class FormatterSugarTests {
             Assert.True(value == 0, $"Effect ran for:\n{text}");
         }
         Assert.Equal(formatted, PuckFormat.Format(source: formatted));
+        PuckFormat.AssertStable(source: source);
     }
 
     private static IEnumerable<string> ExtractDollarTokens(string line) {

@@ -115,7 +115,13 @@ public static partial class PuckLinter {
                 break;
 
             case OperandExpressionNode operand:
-                if (operand.Syntax is { } syntax) { CollectOperandReferences(syntax, operand.Form, references); }
+                if (operand.Syntax is { } syntax && CollectOperandReferences(syntax, operand.Form, references)) {
+                    diagnostics.ReportWarning(
+                        code: PuckDiagnosticCodes.EagerConditionalArithmetic,
+                        message: "A ternary evaluates both arms: division or remainder here can fault even when its arm is unselected. Guard the operation with an if/else effect or a short-circuit gate.",
+                        span: operand.Span
+                    );
+                }
                 break;
 
             // A key is read as its text, which already holds every identifier an atom inside it names.

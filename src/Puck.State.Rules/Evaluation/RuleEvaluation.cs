@@ -141,8 +141,8 @@ public static class RuleEvaluation {
 
             if (raised == ExpressionFault.None) {
                 raised = First(
-                    left: leftRead ? ExpressionFault.None : leftFault,
-                    right: rightRead ? ExpressionFault.None : rightFault
+                    left: leftFault == ExpressionFault.Absent ? ExpressionFault.None : leftFault,
+                    right: rightFault == ExpressionFault.Absent ? ExpressionFault.None : rightFault
                 );
             }
 
