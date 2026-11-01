@@ -191,7 +191,9 @@ Shared geometry instancing remains a separate extension: the meadow has
 per-draw level choice and stable depth-tie ordering require an instance map
 and per-geometry/per-level ranges, rather than changing `instanceCount`
 alone. Preserve draw identity, materials, transforms, carry and clip planes
-through that map, and measure it through this same indirect mechanism.
+through that map, and measure it through this same indirect mechanism. The
+lead's [visibility plan](visibility.md#the-build-order) owns ordered
+compaction and these instance buckets after R2.
 
 - Re-measure RTX 2060 pixel passes at matched clocks before attributing a
   Vulkan/Direct3D 12 gap. Inspect surface and resolve register pressure and

@@ -224,8 +224,11 @@ laws exercise that boundary.
   `SdfMeshChunks.WholeTriangles` (a 500,000-triangle terrain held one worker for its whole collapse), is chunked;
   a smaller single shape stays whole, since locked seams tripled a terrain sector's first level. A mesh that would
   fill more than `SdfMeshChunks.MostChunks` 8 m bins takes bins of twice the side until it fills no more: the world
-  group's far ground cut at 8 m made 160,000 draws, every pass culled and levelled each (`SdfWorldPassRecorder.Choose`),
-  and the frame took 700 ms, starving the bake of dispatches.
+  group's far ground cut at 8 m made 160,000 draws; the former CPU
+  `SdfWorldPassRecorder.Choose` culled and levelled each for every pass, and
+  the frame took 700 ms, starving the bake of dispatches. R2 now selects them
+  in `frame/sdf-mesh-selection.hlsli` through the existing counted indirect
+  path; chunk sizing still controls retained geometry and candidate work.
   `SdfMeshChunks` partitions the finished contour's triangles by their
   centroid into 8 m bins before merging and collapse. It never clips a triangle: each chunk's box includes its whole
   triangles. The merge keeps every open-edge vertex and the collapse locks them, so every level shares the exact seam
