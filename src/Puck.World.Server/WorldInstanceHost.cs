@@ -290,7 +290,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     // authenticated peer namespace is that identity.
     private IWorldCustodyPeer? ResolveCustodyPeer(string authority) {
         if (m_custodyPeers.TryGetValue(key: authority, value: out var home)) {
-            return home;
+            return ((home is WorldServer { IsRetiring: true }) ? null : home);
         }
         foreach (var remote in m_remoteCustodyPeers.Keys) {
             if (string.Equals(a: remote.PeerAuthority, b: authority, comparisonType: StringComparison.Ordinal)) {
@@ -507,7 +507,8 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     /// <see cref="m_retainedInstances"/> — a <c>persistent</c>-lifetime transfer destination stays up through an
     /// occupancy dip to zero, by design), an unknown name, an instance that still holds an active entry, an authority
     /// that still forwards departed travelers, one whose custody still holds (the guard <see cref="Stop"/> applies
-    /// too), or an instance a queued transfer is bound for. Forwarding authorities remain available until explicitly
+    /// too), one an explicit stop is retiring (its stop finishes it, final image included) or that has frozen for
+    /// retirement, or an instance a queued transfer is bound for. Forwarding authorities remain available until explicitly
     /// stopped; an instance spared for its custody or a queued arrival is reaped by the drain after which neither
     /// holds it, if it is still empty then.</summary>
     /// <param name="name">The instance name to reap if now empty.</param>
@@ -521,7 +522,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
             return false;
         }
 
-        if (m_retainedInstances.Contains(item: name)) {
+        if (m_retainedInstances.Contains(item: name) || m_stopping.Contains(item: name)) {
             return false;
         }
 
@@ -530,6 +531,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
             key: name,
             value: out var instance
         ) ||
+            instance.Server.IsRetiring ||
             (instance.Server.Population.ActiveCount() > 0)
         ) {
             return false;
@@ -1397,6 +1399,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
         _ = m_instances.Remove(key: name);
         _ = m_deferredReaps.Remove(item: name);
         _ = m_stopping.Remove(item: name);
+        _ = m_stopNarrated.Remove(key: name);
         ForgetResolvedDocuments();
         _ = m_documentShared.Remove(key: name);
         // A stopped row answers for no transfer. An in-doubt transfer addressed to it waits, by authority, for the
@@ -1704,7 +1707,8 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
                     b: row.Name,
                     comparisonType: StringComparison.Ordinal
                 ))
-                .Select(selector: pair => (pair.Key.Seat, pair.Value))]
+                .Select(selector: pair => (pair.Key.Seat, pair.Value))],
+            Stopping: m_stopping.Contains(item: row.Name)
         );
     }
     /// <summary>Restores this row's own slice of the host engine's cross-instance tables from a previously captured
@@ -1741,6 +1745,9 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
 
         m_freshCounters[row.Name] = slice.FreshCounter;
 
+        if (slice.Stopping) {
+            _ = m_stopping.Add(item: row.Name);
+        }
         if (slice.Retained) {
             _ = m_retainedInstances.Add(item: row.Name);
         }

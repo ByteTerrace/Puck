@@ -755,9 +755,13 @@ Still open from the companion build:
 - [medium] The silo's deactivation (`WorldSiloHost.DeactivateCoreAsync`) writes
   its final checkpoint and retires through `WorldInstanceHost.TryRetire` without
   first sending visiting companions home, so a deactivated custodian keeps them
-  until it is activated again. Route it through `WorldInstanceHost.Stop` with the
-  silo store as `FinalCheckpoints`; the store's upload is asynchronous, so the
-  stop needs a completion that waits for a durable image across drains.
+  until it is activated again, and it freezes without the final custody check
+  under the authority gate (`WorldServer.TryFreezeForRetirement`). The frozen row
+  no longer stops the host's drain while its image uploads: the custody passes and
+  in-doubt reconciliation skip frozen rows (`CompanionStopLawTests`). Route
+  deactivation through `WorldInstanceHost.Stop` with the silo store as
+  `DurableImages`; the store's upload is asynchronous, so the stop's image writes
+  need a completion that waits for a durable image across drains.
 - [low] An explicit stop of a World-process row disposes ordinary travellers it
   embodies (a player who crossed in) with the row; only companions are swept home.
 

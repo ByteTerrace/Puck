@@ -161,15 +161,15 @@ public sealed partial class WorldInstanceHost {
         ArgumentNullException.ThrowIfNull(argument: sourceInstance);
 
         transferId = 0UL;
-        if (!m_instances.TryGetValue(key: sourceInstance, value: out var source)) {
-            reason = $"no instance named '{sourceInstance}'";
+        if (!m_instances.TryGetValue(key: sourceInstance, value: out var source) || source.Server.IsRetiring) {
+            reason = $"no running instance named '{sourceInstance}'";
             return false;
         }
         if (ReturnLeaf(slot: slot, source: source) is not { } leaf) {
             reason = $"body:{slot} in '{sourceInstance}' is no visiting companion that can go home";
             return false;
         }
-        if (m_instances.Values.FirstOrDefault(predicate: row => string.Equals(a: row.Server.AuthorityIdentity, b: leaf.Home, comparisonType: StringComparison.Ordinal)) is not { } home) {
+        if (RunningAuthority(authority: leaf.Home) is not { } home) {
             reason = $"no instance this host runs holds the title of body:{slot} in '{sourceInstance}' ('{leaf.Home}')";
             return false;
         }
@@ -233,7 +233,7 @@ public sealed partial class WorldInstanceHost {
     // Tells each title authority of every hop this custodian settled under its title, until it acknowledges: home
     // settles the hop from the destination's own word and the acknowledgement is recorded here, one record each.
     private void NotifySettledHops() {
-        foreach (var row in m_instances.Values.ToArray()) {
+        foreach (var row in UnfrozenRows()) {
             var owed = row.Server.ExecuteAuthorityOperation(operation: () => row.Server.TransferEscrow.Custody.OwedHopNotices());
 
             foreach (var (key, incarnation, home) in owed) {
@@ -251,7 +251,7 @@ public sealed partial class WorldInstanceHost {
     // key is settled: one record per companion, each its own operation. A key still queued, and a departure in doubt,
     // wait.
     private void SettleOwnHops() {
-        foreach (var row in m_instances.Values.ToArray()) {
+        foreach (var row in UnfrozenRows()) {
             foreach (var transferId in row.Server.ExecuteAuthorityOperation(operation: () => row.Server.TransferEscrow.Custody.UnsettledOwnKeys())) {
                 if (
                     m_pendingTransfers.Any(predicate: pending => string.Equals(a: pending.SourceInstance, b: row.Name, comparisonType: StringComparison.Ordinal) && (pending.TransferId == transferId)) ||
