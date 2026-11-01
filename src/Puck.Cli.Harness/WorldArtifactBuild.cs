@@ -197,6 +197,7 @@ public static class WorldArtifactBuild {
             using var slot = ((leaseRoot is null)
                 ? null
                 : CliLease.AcquireAsync(
+                    ancestor: ProcessInspection.IsAncestor,
                     clock: TimeProvider.System,
                     holder: $"{verb} {key}",
                     lane: CliLease.LaneOf(checkout: repositoryRoot),
