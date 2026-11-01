@@ -1515,7 +1515,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                 Post(action: () => {
                     try {
                         row.Server.FreezeForRetirement();
-                        _ = Instances.TryStop(
+                        _ = Instances.TryRetire(
                             name: row.Name,
                             reason: out _
                         );
@@ -1716,7 +1716,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                     removeTcs.TrySetException(exception: new InvalidOperationException(message: "The activation changed before retirement removal."));
                     return;
                 }
-                _ = Instances.TryStop(
+                _ = Instances.TryRetire(
                     name: worldId,
                     reason: out _
                 );
