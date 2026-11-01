@@ -16,6 +16,7 @@ public sealed class WorldInstance : IDisposable {
     private readonly Func<string> m_origin;
     private readonly IDisposable? m_ownedAdjacencies;
     private readonly WorldPeerNetwork? m_ownedNetwork;
+    private readonly IWorldAddonHost? m_ownedAddons;
 
     private readonly CancellationTokenSource m_retired = new();
 
@@ -36,9 +37,10 @@ public sealed class WorldInstance : IDisposable {
     /// resolve against.</param>
     /// <param name="ownedAdjacencies">The per-instance adjacency resolver this row owns, or null for boot wiring.</param>
     /// <param name="ownedNetwork">The peer network this row owns, or null when shared and externally owned.</param>
+    /// <param name="ownedAddons">The addon runtime this row owns, or null when owned by the host container.</param>
     /// <exception cref="ArgumentException"><paramref name="name"/> is null or whitespace.</exception>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldInstance(string name, Func<string> origin, WorldServer server, IWorldMachineHost? ownedMachines, IServerLink link, WorldFederationIdentity federation, WorldDocumentOrigin documentOrigin, IDisposable? ownedAdjacencies = null, WorldPeerNetwork? ownedNetwork = null) {
+    public WorldInstance(string name, Func<string> origin, WorldServer server, IWorldMachineHost? ownedMachines, IServerLink link, WorldFederationIdentity federation, WorldDocumentOrigin documentOrigin, IDisposable? ownedAdjacencies = null, WorldPeerNetwork? ownedNetwork = null, IWorldAddonHost? ownedAddons = null) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: name);
         ArgumentNullException.ThrowIfNull(argument: origin);
         ArgumentNullException.ThrowIfNull(argument: server);
@@ -55,6 +57,7 @@ public sealed class WorldInstance : IDisposable {
         Origin = documentOrigin;
         m_ownedAdjacencies = ownedAdjacencies;
         m_ownedNetwork = ownedNetwork;
+        m_ownedAddons = ownedAddons;
     }
 
     /// <summary>Whether this row was admitted from a checkpoint restore and is held pending its adjacency mirrors —
@@ -123,9 +126,11 @@ public sealed class WorldInstance : IDisposable {
     /// an id at or above it first writes an allocation record to the row's crossing log, so a restart never mints an id
     /// a peer may already hold.</summary>
     public ulong AllocatedTransferIds { get; set; }
+
     /// <summary>Gets the ids of the transfers this row has sourced and drained — the duplicate check every queued transfer
     /// from this lifetime of the row passes before it touches anything.</summary>
     public WorldDrainedTransferIds DrainedTransfers { get; } = new();
+
     /// <summary>This row's own document origin.</summary>
     public WorldDocumentOrigin Origin { get; set; }
     /// <summary>The machine host this instance owns and disposes, or <see langword="null"/> when the container
@@ -142,6 +147,7 @@ public sealed class WorldInstance : IDisposable {
     public WorldServer Server { get; }
     /// <summary>The document path this instance currently answers for.</summary>
     public string SourcePath => m_origin();
+
     /// <summary>Resolves <see cref="SourcePath"/> as <see cref="WorldFileOrigin.TryResolveCanonicalPath"/> does, probing
     /// the file system once for each path the instance answers for, so a crossing that compares running instances'
     /// documents reads no file for a running one. A file that appears or goes after the first probe does not move the
@@ -170,8 +176,11 @@ public sealed class WorldInstance : IDisposable {
 
     // The source path TryResolveCanonicalSourcePath last probed, and what it resolved to.
     private string? m_canonicalFor;
+
     private string m_canonical = string.Empty;
+
     private bool m_canonicalResolves;
+
     /// <summary>This row's own replay tape, or <see langword="null"/> for a row nothing records (every row but a
     /// desktop's boot instance today).</summary>
     public WorldReplayTape? Tape { get; set; }
@@ -197,6 +206,7 @@ public sealed class WorldInstance : IDisposable {
         }
 
         m_ownedAdjacencies?.Dispose();
+        m_ownedAddons?.Dispose();
         OwnedMachines?.Dispose();
         Door?.Dispose();
         m_ownedNetwork?.Dispose();

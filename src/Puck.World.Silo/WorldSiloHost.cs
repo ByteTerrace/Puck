@@ -5,6 +5,7 @@ using Puck.Storage;
 using Puck.World.Protocol;
 using Puck.World.Machines;
 using Puck.World.Server;
+using Puck.World.Addons;
 
 namespace Puck.World.Silo;
 
@@ -1255,21 +1256,6 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                 return false;
             }
 
-            // The silo genuinely cannot mount an addon guest — refuse an initial candidate that names one enabled BY
-            // NAME, before any server exists to install it, rather than accepting the document and running it addon-
-            // less. WorldNoAddonHost.TryPrepare is the identical door the attached live host below enforces; reusing it
-            // here means this refusal and that one can never disagree.
-            if (!new WorldNoAddonHost().TryPrepare(
-                candidate: definition!,
-                current: null,
-                plan: out _,
-                reason: out var addonReason
-            )) {
-                Console.Error.WriteLine(value: $"[silo.activate: '{RowKey(identity: identity)}' refused (addon {addonReason})]");
-
-                return false;
-            }
-
             var checkpointBlob = recovery.Checkpoint;
             WorldAuthorityCheckpoint? checkpoint = null;
 
@@ -1277,6 +1263,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                 if (!WorldAuthorityCheckpointCodec.TryDecode(
                     bytes: blob.Encoded.Span,
                     checkpoint: out checkpoint,
+                    documentDirectory: m_documentDirectory,
                     reason: out var decodeReason
                 )) {
                     Console.Error.WriteLine(value: $"[silo.activate: '{RowKey(identity: identity)}' refused (checkpoint decode: {decodeReason})]");
@@ -1363,6 +1350,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                 worldRow: worldRow
             )) {
                 Console.Error.WriteLine(value: $"[silo.activate: '{RowKey(identity: identity)}' refused ({federationReason})]");
+                server.Addons?.Dispose();
                 adjacencies.Dispose();
                 machines.Dispose();
 
@@ -1371,7 +1359,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
 
             var link = new LoopbackTransport(server: server);
             var tape = new WorldReplayTape(
-                addonHostFactory: static (_, _) => new WorldNoAddonHost(),
+                addonHostFactory: static (definition, server) => WorldAddonRuntime.Create(definition: definition, server: server),
                 engines: [],
                 liveServer: server,
                 machineHostFactory: MachineHostFactory,
@@ -1392,6 +1380,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                 name: identity.World.Value,
                 origin: () => origin.Identity,
                 ownedAdjacencies: adjacencies,
+                ownedAddons: server.Addons,
                 ownedMachines: machines,
                 ownedNetwork: federation.Network,
                 server: server
