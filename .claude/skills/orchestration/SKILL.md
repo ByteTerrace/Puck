@@ -142,6 +142,13 @@ every lane that received it. When a brief proves wrong, recall every lane workin
 from the same premise before replying to the lane that found it, and say that a
 stop is a stop, not a pause.
 
+A brief also names the existing mechanisms its change must reuse (found with
+`puck references` and `puck declarations` while checking the premise) and
+says no second one may be added. Reviews kept finding duplicates that lanes
+had just written, a second retry loop in a change built to remove one among
+them, so duplicates were created about as fast as they were found; naming the
+mechanism up front is cheaper than the review that catches it.
+
 Before briefing a step that decides how a pipeline works (what the renderer
 draws and submits, how the tick schedules, a camera or physics model), ask
 whether a research round has covered that design, even when the step arrives
