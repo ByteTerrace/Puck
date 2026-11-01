@@ -15,8 +15,9 @@ This skill describes how .NET 11 behaves. It does not govern architecture,
 design or style.
 
 Six sibling domain references carry the full detail (mechanisms, magnitudes,
-caveats, before/after snippets). Read the file for the domain you are touching;
-each is self-contained.
+caveats, before/after snippets), and [data-and-memory.md](data-and-memory.md)
+covers what Puck's own data costs on the CPU. Read the file for the domain you
+are touching.
 
 | You are working on… | Read |
 |---|---|
@@ -26,6 +27,7 @@ each is self-contained.
 | Numeric kernels, SIMD, TensorPrimitives, randomness, threading primitives | [numerics-simd-threading.md](numerics-simd-threading.md) |
 | File/stream I/O, compression, sockets/HTTP, System.Text.Json, crypto | [io-network-json-crypto.md](io-network-json-crypto.md) |
 | Native AOT, reflection/UnsafeAccessor, GC handles, diagnostics, DI, misc runtime | [runtime-aot-reflection-diagnostics.md](runtime-aot-reflection-diagnostics.md) |
+| Frame and tick garbage, gen0 pauses, data layout, copies, zero-fill, scans, false sharing | [data-and-memory.md](data-and-memory.md) |
 
 When reviewing code, scan **Folklore to delete** below — flagging obsolete hand-optimizations is as valuable as finding bugs. When writing new code, follow **Pattern changes**.
 

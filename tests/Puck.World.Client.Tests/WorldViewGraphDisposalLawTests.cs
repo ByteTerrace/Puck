@@ -1,3 +1,4 @@
+using Puck.Confinement;
 using Puck.Hosting;
 using Puck.Shaders;
 using Puck.Testing;
@@ -72,7 +73,7 @@ public sealed class WorldViewGraphDisposalLawTests {
             Assert.Equal(expected: 1, actual: runner.Writes);
             Assert.Empty(collection: Directory.EnumerateDirectories(path: cache, searchPattern: ".build-*"));
             // The final tool write and the compiler's cleanup both precede disposal, so deleting the cache is safe.
-            Directory.Delete(path: cache, recursive: true);
+            ConfinedDirectory.RemoveTree(path: cache);
         } finally {
             runner.Release.TrySetResult();
             if (disposal is not null) {

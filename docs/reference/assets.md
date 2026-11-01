@@ -272,30 +272,10 @@ release store must.
 
 ## Replacing a file atomically
 
-`AtomicFile` replaces one file so that a reader, or a process that crashes
-mid-write, never finds half of it behind the real name. `WriteAllBytes` and
-`WriteAllText` take the whole content; `Write` hands a stream to a writer that
-produces it incrementally. Each writes a temporary file beside the destination,
-flushes it to disk, and renames it over the destination:
-
-```csharp
-AtomicFile.WriteAllText(
-    contents: manifest.Version,
-    path: Path.Combine(cacheRoot, "current"));
-```
-
-A missing parent directory is created. A write that fails at any step, including
-a writer that throws, leaves the old file in place and deletes its temporary
-file. A reader that holds the old file memory-mapped keeps seeing the old bytes
-and does not block the replacement: when Windows refuses the rename over a
-mapped file, `AtomicFile` falls back to `File.Replace`, which moves the old file
-aside. On Unix the replacement keeps the destination's file mode, or takes the
-`unixCreateMode` the caller names, such as owner-only for a private key. A
-destination spelled in another case than the entry a case-insensitive file
-system already holds keeps that entry's name.
-
-The store does not use `AtomicFile` for its own writes. It stages in `tmp/` so
-that `ListRefs` never sees a temporary file beside a ref.
+`AtomicFile` lives in `Puck.Abstractions`, so every layer reaches it; see
+[Writing and locking files](abstractions.md#writing-and-locking-files). The
+store does not use it for its own writes. It stages in `tmp/` so that
+`ListRefs` never sees a temporary file beside a ref.
 
 ## Naming content for people
 
@@ -408,7 +388,6 @@ surface.
 | `AssetContentHash` | Holds the compact 64-bit SHA-256-derived identity used for process-lifetime caching. |
 | `ContentAddressedLruCache<TKey, TValue>` | Retains decoded values by the caller's content identity type under entry and optional weight limits. |
 | `ContentAddressedStore` | Persists immutable objects under full SHA-256 addresses and manages named and derived refs. |
-| `AtomicFile` | Replaces one file atomically through a temporary file beside it, leaving nothing behind on failure. `world.save`, the forge console's cartridge and draft writes, an owned world's synced basis-chain and tip documents, and the `.puck` compile cache's persisted entries all write through it. |
 | `ContentPetname` | Produces a deterministic three-word label from a hexadecimal content hash. |
 | `PngEncoder` / `PngDecoder` | Write and read 8-bit RGBA PNG stills and full-frame APNG animations. |
 | `PngImage` / `PngAnimation` / `PngAnimationFrame` | The decoded still and animation shapes `PngDecoder` returns. |

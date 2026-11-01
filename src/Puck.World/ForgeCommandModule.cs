@@ -1,4 +1,4 @@
-using Puck.Assets;
+using Puck.Abstractions;
 using Puck.Assets.Documents;
 using Puck.Commands;
 using Puck.GamingBricks.Forge;

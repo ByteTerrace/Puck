@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using Puck.Confinement;
 
 namespace Puck.Cli.Motion;
 
@@ -64,12 +65,8 @@ public static partial class MotionCommand {
 
         // A second World that boots after the first's start tick cannot pin to it: both run again from a later start.
         for (var attempt = 0; (attempt < 3); attempt++) {
-            if (Directory.Exists(path: first)) {
-                Directory.Delete(path: first, recursive: true);
-            }
-            if (Directory.Exists(path: second)) {
-                Directory.Delete(path: second, recursive: true);
-            }
+            ConfinedDirectory.RemoveTree(path: first);
+            ConfinedDirectory.RemoveTree(path: second);
 
             a = MotionRun.Execute(progress: Console.Error, request: RequestFor(runDirectory: first, start: start));
 

@@ -72,6 +72,9 @@
           "ByteTerrace.Puck.Attestation": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )"
         }
+      },
+      "puck.confinement": {
+        "type": "Project"
       }
     }
   }

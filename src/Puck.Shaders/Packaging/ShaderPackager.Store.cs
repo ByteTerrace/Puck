@@ -1,7 +1,9 @@
 using System.Text;
 using System.Text.Json;
+using Puck.Abstractions;
 using Puck.Abstractions.Presentation;
 using Puck.Assets;
+using Puck.Confinement;
 
 namespace Puck.Shaders;
 
@@ -153,10 +155,7 @@ public sealed partial class ShaderPackager {
 
             if (Directory.Exists(path: package) && !IsCommitted(package: package)) {
                 m_removingAbandoned?.Invoke(obj: package);
-                Directory.Delete(
-                    path: package,
-                    recursive: true
-                );
+                ConfinedDirectory.RemoveTree(path: package);
             }
 
             var built = await BuildAsync(
@@ -182,33 +181,12 @@ public sealed partial class ShaderPackager {
     public static async Task<IDisposable> LockPackageAsync(string package, CancellationToken cancellationToken = default) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: package);
 
-        var path = (Path.TrimEndingDirectorySeparator(path: Path.GetFullPath(path: package)) + ".lock");
-
-        Directory.CreateDirectory(path: Path.GetDirectoryName(path: path)!);
-
-        while (true) {
-            try {
-                return new FileStream(
-                    access: FileAccess.ReadWrite,
-                    mode: FileMode.OpenOrCreate,
-                    path: path,
-                    share: FileShare.None
-                );
-            } catch (IOException exception) when (IsPackageLockContention(exception: exception)) {
-                await Task.Delay(
-                    cancellationToken: cancellationToken,
-                    delay: TimeSpan.FromMilliseconds(value: 50)
-                ).ConfigureAwait(continueOnCapturedContext: false);
-            }
-        }
+        return (await FileLock.AcquireAsync(
+            cancellationToken: cancellationToken,
+            path: (Path.TrimEndingDirectorySeparator(path: Path.GetFullPath(path: package)) + ".lock")
+        ).ConfigureAwait(continueOnCapturedContext: false))!;
     }
 
-    // Windows reports ERROR_SHARING_VIOLATION as an HRESULT. Unix FileStream reports flock's EWOULDBLOCK as raw
-    // errno: 35 on Darwin and FreeBSD, 11 on Linux. A missing path, full disk or failed device is not another holder.
-    private static bool IsPackageLockContention(IOException exception) =>
-        (OperatingSystem.IsWindows()
-            ? (exception.HResult == unchecked((int)0x80070020))
-            : (exception.HResult == ((OperatingSystem.IsMacOS() || OperatingSystem.IsFreeBSD()) ? 35 : 11)));
     // Whether a store directory holds a published package: its manifest, the commit record a publication writes last.
     private static bool IsCommitted(string package) => File.Exists(path: Path.Combine(
         path1: package,

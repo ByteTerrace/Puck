@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Puck.Abstractions;
 using Puck.Abstractions.Presentation;
+using Puck.Confinement;
 using Puck.Hosting;
 using Puck.Testing;
 
@@ -1151,10 +1152,7 @@ public sealed partial class ShaderPackageLawTests {
                 File.ReadAllText(path: PathOf(logicalPath: logicalPath))
             )]
         );
-        public void DeleteSources() => Directory.Delete(
-            path: Root,
-            recursive: true
-        );
+        public void DeleteSources() => ConfinedDirectory.RemoveTree(path: Root);
         public void Dispose() => m_scratch.Dispose();
         // The interface declarations a load generates for the pass of the fixture's graph that compiles a source, by path; none
         // when no graph pass compiles it.

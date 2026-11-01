@@ -40,6 +40,7 @@ The gallery in a deep valley under moons reached by flight, as an inventory of w
 
 Durable GPU fixtures, per-pass work counters, general graphics attachments, shared mesh-and-SDF visibility, reproducible shader authoring, how authored world data reaches the GPU, and the frame graph that replaces the SDF engine as the host of rendering: nested views, image sources, hit-to-source mapping, temporal reconstruction, HDR output, and assets derived from SDFs, as one page of packages. Its foundation packages share no code with the other programmes; the state mirror that carries bound rows to a pass reads the state substrate and the presentation view, so those packages are scheduled against both. Its decisions are in [the register](../decisions/rendering.md).
 
+- [The simulation step off the frame thread](simulation-thread.md)—the fixed-step body on a worker between a dispatch and a join toward the frame-rate bar: thread ownership, the tick record, determinism, commands, a five-phase build that first converges the host loops into one, and the resolution of its cross-family review.
 
 ## [Editor](editor.md)
 

@@ -1,6 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
-using Puck.Assets;
+using Puck.Abstractions;
 
 namespace Puck.Launcher.Release;
 

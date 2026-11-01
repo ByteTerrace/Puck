@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using Puck.Abstractions.Documents;
+using Puck.Confinement;
 using Puck.Testing;
 using Puck.World;
 using Puck.World.Transpiler.Composition;
@@ -99,7 +100,7 @@ public sealed class WorldStagingFontLawTests {
             Assert.Equal(expected: "font bytes", actual: File.ReadAllText(path: WorldDocumentPaths.Resolve(
                 documentDirectory: Path.GetDirectoryName(path: staged), path: path)));
         } finally {
-            Directory.Delete(path: source, recursive: true);
+            ConfinedDirectory.RemoveTree(path: source);
         }
     }
     [Fact]
@@ -252,7 +253,7 @@ public sealed class WorldStagingFontLawTests {
                 Assert.All(collection: paths, action: path => Assert.False(condition: File.Exists(path: Path.Combine(path1: target, path2: path))));
             }
         } finally {
-            Directory.Delete(path: source, recursive: true);
+            ConfinedDirectory.RemoveTree(path: source);
         }
     }
 }

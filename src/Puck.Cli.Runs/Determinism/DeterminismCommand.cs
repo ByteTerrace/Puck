@@ -2,7 +2,7 @@ using System.CommandLine;
 using System.Diagnostics;
 using System.Globalization;
 using System.Text;
-using Puck.Assets;
+using Puck.Abstractions;
 
 namespace Puck.Cli.Determinism;
 

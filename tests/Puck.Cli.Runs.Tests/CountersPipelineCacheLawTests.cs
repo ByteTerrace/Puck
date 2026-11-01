@@ -1,4 +1,5 @@
 using Puck.Cli.Counters;
+using Puck.Confinement;
 using Xunit;
 
 namespace Puck.Cli.Runs.Tests;
@@ -33,7 +34,7 @@ public sealed class CountersPipelineCacheLawTests {
             Assert.False(condition: File.Exists(path: Path.Combine(path1: root, path2: "vulkan", path3: "device-a/pruned.bin")),
                 userMessage: "A file the leg's World pruned must leave the persisted cache.");
         } finally {
-            scratch.Delete(recursive: true);
+            ConfinedDirectory.RemoveTree(path: scratch.FullName);
         }
     }
 

@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using Puck.Assets;
 using Puck.Cli.Motion;
+using Puck.Confinement;
 
 using Xunit;
 
@@ -67,7 +68,7 @@ public sealed class MotionCollectorLawTests : IDisposable {
         return lines;
     }
 
-    public void Dispose() => m_directory.Delete(recursive: true);
+    public void Dispose() => ConfinedDirectory.RemoveTree(path: m_directory.FullName);
     [Fact]
     public void AHealthyRunHasNoProblemsAndASheetPerCameraAndOneCombined() {
         var plan = PlanOf(root: Root);

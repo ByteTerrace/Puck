@@ -320,7 +320,7 @@ public static partial class AzureCommand {
     // Cloud steps settle at their own pace: every az/docker/puck step this verb drives retries under one policy, its
     // pacing on the verb's clock.
     private static Task RetryAsync(Func<Task> action, TimeProvider clock, int attempts = 12, int seconds = 5) =>
-        CliRetry.RetryAsync(
+        Puck.Abstractions.Retry.RetryAsync(
             action: action,
             attempts: attempts,
             clock: clock,

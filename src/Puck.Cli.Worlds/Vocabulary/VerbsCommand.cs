@@ -1,6 +1,7 @@
 using System.CommandLine;
 using System.Text.Json;
 using Puck.Commands;
+using Puck.Confinement;
 using Puck.World;
 
 namespace Puck.Cli.Vocabulary;
@@ -127,7 +128,7 @@ public static class VerbsCommand {
                 ? 0
                 : 1);
         } finally {
-            Directory.Delete(path: runDirectory, recursive: true);
+            ConfinedDirectory.RemoveTree(path: runDirectory);
         }
     }
 

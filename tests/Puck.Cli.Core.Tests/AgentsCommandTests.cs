@@ -1,4 +1,5 @@
 using Xunit;
+using Puck.Confinement;
 
 namespace Puck.Cli.Core.Tests;
 
@@ -48,6 +49,6 @@ public sealed class AgentsCommandTests : IDisposable {
         Assert.Equal(expected: "kept", actual: File.ReadAllText(path: Path.Combine(path1: source, path2: "marker")));
     }
     public void Dispose() {
-        if (Directory.Exists(path: m_root)) { Directory.Delete(path: m_root, recursive: true); }
+        ConfinedDirectory.RemoveTree(path: m_root);
     }
 }

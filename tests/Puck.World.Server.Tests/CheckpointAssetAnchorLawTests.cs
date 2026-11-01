@@ -1,5 +1,6 @@
 using System.Text;
 using Puck.Abstractions;
+using Puck.Confinement;
 using Puck.Testing;
 using Puck.World.Protocol;
 using Xunit;
@@ -195,7 +196,7 @@ public sealed class CheckpointAssetAnchorLawTests {
             Assert.Equal(expected: LoadedFrom(path: "world.json"), actual: checkpoint.Server.BaseOrigin);
             AssertNamesNoPath(bytes: bytes, directory: Path.GetFullPath(path: relativeDirectory));
         } finally {
-            Directory.Delete(path: relativeDirectory, recursive: true);
+            ConfinedDirectory.RemoveTree(path: relativeDirectory);
         }
     }
     // A journal base read from a hosted world's store names that store, which no machine keeps anywhere: the

@@ -302,7 +302,7 @@ public static class NuGetCommand {
         var uri = $"https://api.nuget.org/v3-flatcontainer/{id.ToLowerInvariant()}/index.json";
 
         // Throttling and a bad gateway are the index catching its breath; every other status is the answer.
-        return await CliRetry.RetryAsync(
+        return await Puck.Abstractions.Retry.RetryAsync(
             action: async Task<string[]> () => {
                 using var response = await http.GetAsync(requestUri: uri);
 

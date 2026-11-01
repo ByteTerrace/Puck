@@ -1,3 +1,4 @@
+using Puck.Confinement;
 using Puck.World.Server;
 
 namespace Puck.World;
@@ -40,10 +41,7 @@ public sealed class WorldHistoryShadow : IDisposable {
         m_machines.Dispose();
 
         try {
-            Directory.Delete(
-                path: m_directory,
-                recursive: true
-            );
+            ConfinedDirectory.RemoveTree(path: m_directory);
         } catch (IOException) {
         } catch (UnauthorizedAccessException) {
         }

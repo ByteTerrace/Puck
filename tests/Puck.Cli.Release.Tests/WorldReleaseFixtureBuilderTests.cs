@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using Microsoft.Extensions.DependencyInjection;
 using Puck.Cli.Automation;
 using Puck.Commands;
+using Puck.Confinement;
 using Puck.Launcher;
 using Puck.Storage;
 using Puck.Testing;
@@ -794,10 +795,7 @@ public sealed class WorldReleaseFixtureBuilderTests {
             );
 
             if (Directory.Exists(path: evidence)) {
-                Directory.Delete(
-                    path: evidence,
-                    recursive: true
-                );
+                ConfinedDirectory.RemoveTree(path: evidence);
             }
 
             var runner = new WorldReleaseQualificationRunner(

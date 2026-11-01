@@ -2,6 +2,7 @@ using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Puck.Confinement;
 
 namespace Puck.Machines.Post;
 
@@ -246,12 +247,7 @@ public sealed partial class CorpusManifest {
             );
             var staging = (versionDirectory + ".partial");
 
-            if (Directory.Exists(path: staging)) {
-                Directory.Delete(
-                    path: staging,
-                    recursive: true
-                );
-            }
+            ConfinedDirectory.RemoveTree(path: staging);
 
             using (var archive = new ZipArchive(
                 mode: ZipArchiveMode.Read,

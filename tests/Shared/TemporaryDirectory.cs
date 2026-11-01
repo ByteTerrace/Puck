@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Reflection;
+using Puck.Confinement;
 
 [assembly: Puck.Testing.TemporaryDirectoryVerdictAttribute]
 
@@ -72,10 +73,7 @@ internal sealed class TemporaryDirectory(string prefix = "puck-test-", TimeSpan?
         failure = null;
 
         try {
-            Directory.Delete(
-                path: path,
-                recursive: true
-            );
+            ConfinedDirectory.RemoveTree(path: path);
         } catch (Exception error) when ((error is (IOException or UnauthorizedAccessException))) {
             // A handle under the directory has not closed yet, or a file is open for deletion.
             failure = error;

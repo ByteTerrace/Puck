@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using System.IO.Hashing;
 using System.Numerics;
+using Puck.Confinement;
 using Puck.Testing;
 using Xunit;
 
@@ -473,7 +474,7 @@ public sealed class SdfMeshStoreLawTests {
 
         var name = Path.GetFileName(path: Directory.GetFiles(path: probe.Directory, searchOption: SearchOption.AllDirectories, searchPattern: "*").Single());
 
-        Directory.Delete(path: probe.Directory, recursive: true);
+        ConfinedDirectory.RemoveTree(path: probe.Directory);
 
         return Path.Combine(path1: store.SetDirectoryOf(identity: Identity), path2: name);
     }

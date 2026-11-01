@@ -252,7 +252,8 @@
           "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Hosting": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Shaders.Model": "[0.1.0-alpha, )"
+          "ByteTerrace.Puck.Shaders.Model": "[0.1.0-alpha, )",
+          "Puck.Confinement": "[1.0.0, )"
         }
       },
       "ByteTerrace.Puck.Shaders.Model": {
@@ -260,7 +261,8 @@
         "dependencies": {
           "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Hosting": "[0.1.0-alpha, )"
+          "ByteTerrace.Puck.Hosting": "[0.1.0-alpha, )",
+          "Puck.Confinement": "[1.0.0, )"
         }
       },
       "ByteTerrace.Puck.Vulkan": {
@@ -269,6 +271,9 @@
           "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Shaders": "[0.1.0-alpha, )"
         }
+      },
+      "puck.confinement": {
+        "type": "Project"
       }
     }
   }
