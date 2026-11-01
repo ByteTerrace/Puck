@@ -183,6 +183,13 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
             provider: CultureInfo.InvariantCulture,
             handler: $"far {farDistance:0.##} unit(s) (reach x{(farDistance / Puck.SdfVm.SdfFrame.DefaultFarDistance):0.##} the {Puck.SdfVm.SdfFrame.DefaultFarDistance:0}-unit default; fog remnant at the far plane {MathF.Exp(x: (-fogDensity * farDistance)):0.###}; atmosphere {atmosphereKinds} kind(s), each at most one composite evaluation a pixel)"
         );
+        // The cascades' texels for a full-resolution 60-degree 16:9 view, the shape a seat's chase camera takes.
+        var shadows = WorldRenderFarDistance.ResolveShadowCoverage(defaults: server.Definition.Render).Describe(
+            aspectRatio: (16f / 9f),
+            farDistance: farDistance,
+            tanHalfFieldOfView: MathF.Tan(x: (MathF.PI / 6f)),
+            texels: Puck.SdfVm.SdfShadowResolutions.Texels(resolution: Puck.SdfVm.SdfShadowResolution.Full)
+        ) + " for a 60-degree 16:9 view";
         var lattice = ((population.FieldRegions.Count > 0)
             ? string.Join(separator: " | ", values: population.FieldRegions.Select(selector: region => ($"region {region.Name}: " + region.Lattice.DescribeCost(
                 activeBodyCount: population.ActiveCount(),
@@ -224,7 +231,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
 
         rules += $" | {population.InputCatalog.DescribeBudget(history: server.Definition.InputHistory)}";
 
-        return $"[world.budget: {render} | {stampPool} | {far} | {lattice} | {gravity} | {placements} | state {(server.Definition.State?.Count ?? 0)} row(s) | {rules} | {curves} | {navigation} | {population.DescribeFlockWork()} | {population.DescribeRigidWork()} | {server.DescribePatternBudget()} | {server.CostReport.Presentation.Describe()} | {DescribeLiveBudget()} | {(renderProbe?.DescribeInfinityBudget() ?? "infinity unavailable: no renderer")}]";
+        return $"[world.budget: {render} | {stampPool} | {far} | {shadows} | {lattice} | {gravity} | {placements} | state {(server.Definition.State?.Count ?? 0)} row(s) | {rules} | {curves} | {navigation} | {population.DescribeFlockWork()} | {population.DescribeRigidWork()} | {server.DescribePatternBudget()} | {server.CostReport.Presentation.Describe()} | {DescribeLiveBudget()} | {(renderProbe?.DescribeInfinityBudget() ?? "infinity unavailable: no renderer")}]";
     }
     private static string DescribeDistribution(WorldDistribution distribution) {
         var region = distribution.Region switch {

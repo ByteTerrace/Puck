@@ -1,6 +1,7 @@
 using Puck.Hosting;
 using Puck.SdfVm;
 using Puck.SignedDistance;
+using Puck.World.Authoring;
 
 namespace Puck.World;
 
@@ -44,7 +45,7 @@ public sealed partial class WorldRenderSettings {
         RenderScale = defaults.RenderScale;
         UpscaleSharpness = defaults.UpscaleSharpness;
         Temporal = defaults.Temporal;
-        m_toonDefault = defaults.Toon?.Enabled ?? false;
+        m_toonDefault = defaults.Toon?.IsOn ?? false;
         SkyQuality = defaults.SkyQuality;
         SkyFieldScale = defaults.SkyFieldScale;
         IndirectTier = (defaults.Indirect?.Tier ?? SdfIndirectTier.Medium);
@@ -143,17 +144,18 @@ public sealed partial class WorldRenderSettings {
     /// one. The world's own views include every layout slot that names a camera; the camera views screens film and session
     /// views never ask for it.</summary>
     public bool Temporal { get => m_temporal; set { m_temporal = value; m_revision++; } }
-    /// <summary>The live cel-shading choice; until written it follows the document on reload.</summary>
+    /// <summary>The live choice of the world's default cel style; until written it follows the document on reload. A
+    /// material with a style of its own keeps it either way.</summary>
     public bool Toon { get => m_toonOverride ?? m_toonDefault; set { m_toonOverride = value; m_revision++; } }
     /// <summary>The session's override for nested worlds; null lets each world use its document default.</summary>
     public bool? ToonOverride => m_toonOverride;
-    /// <summary>Reads reloadable toon tuning and updates the default echoed by the live lever.</summary>
+    /// <summary>Reads the reloadable default cel style and updates the default echoed by the live lever.</summary>
     /// <param name="render">The current world render settings.</param>
-    /// <returns>The current presentation-only look.</returns>
+    /// <returns>The world's default style.</returns>
     public SdfToon ResolveToon(WorldRenderDefaults render) {
         ArgumentNullException.ThrowIfNull(render);
-        m_toonDefault = render.Toon?.Enabled ?? false;
-        return WorldRenderToon.Resolve(render.Toon, m_toonOverride);
+        m_toonDefault = render.Toon?.IsOn ?? false;
+        return ToonStyleDocument.ResolveDefault(toon: render.Toon, enabled: m_toonOverride);
     }
     /// <summary>The sky's quality tier (<c>world.sky-quality</c>): a layer below it writes no entry and counts no work,
     /// and below <see cref="WorldSkyTier.High"/> each kind draws its reduced form. Boots at the definition's

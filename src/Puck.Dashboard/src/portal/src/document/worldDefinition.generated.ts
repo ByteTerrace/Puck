@@ -2026,6 +2026,8 @@ export type SdfExposureMode = "Manual" | "Auto";
 
 export type SdfIndirectTier = "Off" | "Medium" | "High";
 
+export type SdfToonBand = "Visibility" | "Combined";
+
 export type SearchMethod = "Negamax" | "MonteCarlo";
 
 export type SeatActivationPolicy = "Eager" | "OnDemand";
@@ -3083,6 +3085,57 @@ export type TextFontDefinition = {
 };
 
 export type TilingFamily = "Triangular" | "Kagome" | "TruncatedSquare" | "Rhombitrihexagonal" | "TruncatedHexagonal" | "ElongatedTriangular" | "TruncatedTrihexagonal" | "Penrose";
+
+export type ToonStyleDocument = {
+  /**
+   * Whether the style bands; absent is on. False on a palette row keeps that material continuous whatever the world's default is; false on render.toon boots the world's default off until the lever turns it on.
+   */
+  enabled?: boolean | null;
+  /**
+   * Diffuse band threshold in [0, 1].
+   */
+  threshold?: number;
+  /**
+   * Full terminator width in [0.001, 0.5].
+   */
+  softness?: number;
+  /**
+   * Shadow-band reflectance, three linear RGB values in [0, 1].
+   */
+  shadowTint?: DocumentVector3;
+  /**
+   * Close outline radius in output pixels, in [0, 4]; zero disables outlines.
+   */
+  outlineWidth?: number;
+  /**
+   * Distance in metres at which the outline radius halves, in [0.1, 1000].
+   */
+  outlineDistance?: number;
+  /**
+   * Crease normal cosine in [0, 0.95].
+   */
+  outlineNormal?: number;
+  /**
+   * Outline multiplier, three linear RGB values in [0, 1].
+   */
+  outlineTint?: DocumentVector3;
+  /**
+   * Highlight size as one minus the half-vector cosine, in [0.001, 0.25].
+   */
+  specularSize?: number;
+  /**
+   * Reflected-light exposure compensation in stops, in [-4, 4].
+   */
+  exposure?: number;
+  /**
+   * Hue-preserving highlight compression in [0, 2]; zero disables it.
+   */
+  shoulder?: number;
+  /**
+   * How the band treats a light's shadow visibility: Visibility (the default) keeps the penumbra, Combined snaps it to the band's edge.
+   */
+  band?: SdfToonBand;
+};
 
 /**
  * One authored direction of a discrete LatticeTopology: the (X, Y, Z) cell step a neighbour walk, ray, or leaper offset takes, and the case-sensitive token a rule or $board:/$match: channel names it by. X/Y are the topology's own planar axes (a Grid's column/row, a Hex's q/r); Z is a Box's layer step and must be zero on every other kind.
@@ -8389,6 +8442,59 @@ export type WorldPrototype = {
          */
         ior?: number | null;
       } | null;
+      /**
+       * The slot's own cel style (ToonStyleDocument, on unless it says enabled: false, which keeps the slot continuous); null shades the slot with the world's default style (render.toon).
+       */
+      toon?: {
+        /**
+         * Whether the style bands; absent is on. False on a palette row keeps that material continuous whatever the world's default is; false on render.toon boots the world's default off until the lever turns it on.
+         */
+        enabled?: boolean | null;
+        /**
+         * Diffuse band threshold in [0, 1].
+         */
+        threshold?: number;
+        /**
+         * Full terminator width in [0.001, 0.5].
+         */
+        softness?: number;
+        /**
+         * Shadow-band reflectance, three linear RGB values in [0, 1].
+         */
+        shadowTint?: unknown;
+        /**
+         * Close outline radius in output pixels, in [0, 4]; zero disables outlines.
+         */
+        outlineWidth?: number;
+        /**
+         * Distance in metres at which the outline radius halves, in [0.1, 1000].
+         */
+        outlineDistance?: number;
+        /**
+         * Crease normal cosine in [0, 0.95].
+         */
+        outlineNormal?: number;
+        /**
+         * Outline multiplier, three linear RGB values in [0, 1].
+         */
+        outlineTint?: unknown;
+        /**
+         * Highlight size as one minus the half-vector cosine, in [0.001, 0.25].
+         */
+        specularSize?: number;
+        /**
+         * Reflected-light exposure compensation in stops, in [-4, 4].
+         */
+        exposure?: number;
+        /**
+         * Hue-preserving highlight compression in [0, 2]; zero disables it.
+         */
+        shoulder?: number;
+        /**
+         * How the band treats a light's shadow visibility: Visibility (the default) keeps the penumbra, Combined snaps it to the band's edge.
+         */
+        band?: "Visibility" | "Combined";
+      } | null;
     } | null)[] | null;
     /**
      * The authored shapes (null = empty).
@@ -9746,13 +9852,17 @@ export type WorldRenderDefaults = {
    */
   exposure?: WorldRenderExposure | null;
   /**
-   * Optional cel shading and its tuning. Absent is off.
+   * The world's default cel style, which every material that authors no style of its own shades with (ToonStyleDocument), on unless it says enabled: false, and which the live world.toon lever turns on or off. Absent is off.
    */
-  toon?: WorldRenderToon | null;
+  toon?: ToonStyleDocument | null;
   /**
    * Optional camera scatter. Absent is off.
    */
   bloom?: CameraBloom | null;
+  /**
+   * How far the key light's shadow cascades reach (WorldRenderShadowCoverage). Absent keeps the engine's 16 m near, 120 m far and 200 m caster reach; world.budget prints the coverage with each cascade's texel.
+   */
+  shadowCoverage?: WorldRenderShadowCoverage | null;
 };
 
 export type WorldRenderEnvironment = {
@@ -10152,6 +10262,21 @@ export type WorldRenderMedium = {
  * The enumerated world render-scale tiers a player picks at the console and a view's floor names, over the continuous render-scale ceiling a view carries (SdfViewSnapshot.RenderScale). A view's output keeps its rect's extent; below native it traces and shades a grid of that extent times its render scale, rounded up on each axis to a step of the render graph's extent quantization (RenderGraphExtent.Quantize, sixteen steps per power-of-two octave), and its own resolve pass reconstructs the grid into the output at world.upscale-sharpness. A layout transition's dip moves that grid inside the ceiling (SdfViewSnapshot.ResolvedRenderScale); the enumerated set lives only at the user surface. WorldRenderScaleTiers is the one definition of the names and scales, which the quality presets' floors, the console world.render-scale verb and the per-view floors read; a ceiling is a scalar. Each extent below is a lone whole-display view at 1280x800.
  */
 export type WorldRenderScaleTier = "Native" | "ThreeQuarter" | "Half" | "Quarter" | "Eighth";
+
+export type WorldRenderShadowCoverage = {
+  /**
+   * The depth from the eye the near cascade covers, positive and below the far reach (16 when absent).
+   */
+  near?: number | null;
+  /**
+   * The depth from the eye the far cascade covers, at most the far distance it is clipped to (120 when absent).
+   */
+  far?: number | null;
+  /**
+   * How far past a cascade toward the light a caster may stand and still shadow it (200 when absent).
+   */
+  casters?: number | null;
+};
 
 export type WorldRenderSky = {
   /**
@@ -11063,53 +11188,6 @@ export type WorldRenderSkyTwinkle = {
    * The fundamental scintillation rate in hertz. A rate: it keys only on a tick clock, and binds no state row.
    */
   rate?: BindableScalar;
-};
-
-export type WorldRenderToon = {
-  /**
-   * Whether the world boots with cel shading on; absent is off.
-   */
-  enabled?: boolean;
-  /**
-   * Diffuse band threshold in [0, 1].
-   */
-  threshold?: number;
-  /**
-   * Full terminator width in [0.001, 0.5].
-   */
-  softness?: number;
-  /**
-   * Shadow-band reflectance, three linear RGB values in [0, 1].
-   */
-  shadowTint?: DocumentVector3;
-  /**
-   * Close outline radius in output pixels, in [0, 4]; zero disables outlines.
-   */
-  outlineWidth?: number;
-  /**
-   * Distance in metres at which the outline radius halves, in [0.1, 1000].
-   */
-  outlineDistance?: number;
-  /**
-   * Crease normal cosine in [0, 0.95].
-   */
-  outlineNormal?: number;
-  /**
-   * Outline multiplier, three linear RGB values in [0, 1].
-   */
-  outlineTint?: DocumentVector3;
-  /**
-   * Highlight size as one minus the half-vector cosine, in [0.001, 0.25].
-   */
-  specularSize?: number;
-  /**
-   * Reflected-light exposure compensation in stops, in [-4, 4].
-   */
-  exposure?: number;
-  /**
-   * Hue-preserving highlight compression in [0, 2]; zero disables it.
-   */
-  shoulder?: number;
 };
 
 export type WorldRigid = {

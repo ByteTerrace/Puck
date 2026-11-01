@@ -9,6 +9,7 @@ using Puck.SignedDistance;
 using Puck.SignedDistance.Queries;
 using Puck.Text;
 using Puck.World.Protocol;
+using Puck.World.Authoring;
 
 namespace Puck.World.Client;
 
@@ -573,6 +574,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             // The mirrored world's own far plane (its render.farDistance), so the panel frames the same depth its
             // authority renders.
             FarDistance = m_dressedFarDistance,
+            ShadowCoverage = WorldRenderFarDistance.ResolveShadowCoverage(defaults: m_mirror.Definition.Render),
             // The destination's own authored tier: its views read its own irradiance volume, which also meters its
             // exposure and occludes its fixtures, as a seat presented there would.
             IndirectTier = (m_mirror.Definition.Render.Indirect?.Tier ?? SdfIndirectTier.Medium),
@@ -582,7 +584,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             IndirectApply = environment.Indirect.Apply,
             Lights = environment.Lights,
             Exposure = environment.Exposure,
-            Toon = WorldRenderToon.Resolve(m_mirror.Definition.Render.Toon, ToonOverride?.Invoke()),
+            Toon = ToonStyleDocument.ResolveDefault(toon: m_mirror.Definition.Render.Toon, enabled: ToonOverride?.Invoke()),
             Sky = environment.Sky,
             // The mirrored world's static placements' meshes, then its stamp pool's.
             MeshDraws = meshDraws,

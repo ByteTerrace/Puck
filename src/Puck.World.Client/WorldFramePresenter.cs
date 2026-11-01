@@ -2228,6 +2228,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             // The far plane every march ends at: render.farDistance off the LIVE definition (a world.row.set render
             // lands on the next frame, like the lighting below), or the engine's pinned default when unauthored.
             FarDistance = WorldRenderFarDistance.Resolve(defaults: m_client.Definition.Render),
+            ShadowCoverage = WorldRenderFarDistance.ResolveShadowCoverage(defaults: m_client.Definition.Render),
             // The lights and the sky: render.lighting, render.sky and render.environment with every keyed value at its
             // clock's presented phase (a world.row.set render lands on the next frame).
             Lights = lighting.Lights,

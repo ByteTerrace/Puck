@@ -4,6 +4,7 @@ using Xunit;
 using Puck.Launcher;
 using Puck.SdfVm;
 using Puck.World.Client;
+using Puck.World.Authoring;
 using Puck.World.Protocol;
 
 namespace Puck.World.Presentation.Tests;
@@ -26,7 +27,7 @@ public sealed class SessionLeverLawTests {
         Assert.False(condition: settings.Toon);
         Assert.Null(@object: settings.ToonOverride);
 
-        render = render with { Toon = new WorldRenderToon(Enabled: true, OutlineWidth: 2f) };
+        render = render with { Toon = new ToonStyleDocument(Enabled: true, OutlineWidth: 2f) };
         Assert.True(condition: settings.ResolveToon(render: render).Enabled);
         Assert.True(condition: settings.Toon);
 
@@ -46,8 +47,8 @@ public sealed class SessionLeverLawTests {
         Assert.Equal(expected: 3f, actual: resolved.OutlineWidth);
 
         // A nested world keeps its own tuning and document default until the same live override reaches it.
-        Assert.True(condition: WorldRenderToon.Resolve(render.Toon).Enabled);
-        Assert.False(condition: WorldRenderToon.Resolve(render.Toon, settings.ToonOverride).Enabled);
+        Assert.True(condition: ToonStyleDocument.ResolveDefault(toon: render.Toon).Enabled);
+        Assert.False(condition: ToonStyleDocument.ResolveDefault(toon: render.Toon, enabled: settings.ToonOverride).Enabled);
     }
 
     private static WorldSessionLever BarLever(double a, int seat) => new(
