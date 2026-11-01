@@ -920,9 +920,20 @@ Still open from the companion build:
 
 ### Delivery, launcher and CI
 
-Owner: delivery lane · low · Next: CI's steady state, the shader cache and the
-GC-hole retirement.
+Owner: delivery lane · medium · Next: the silo activation's long grain turn,
+then CI's steady state, the shader cache and the GC-hole retirement.
 
+- [medium] A world-silo activation of the debug world runs one synchronous
+  Orleans grain turn of 10.3 to 12.9 s. Orleans warns
+  (`WorkItemGroup[101215]`, "took elapsed time 0:00:10.343"), and the turn ends
+  as the seven addon guests finish mounting. This was measured by
+  `puck azure test-world-container` on a locally built `puck/world-silo` image,
+  where both boots otherwise pass. Nothing else runs on that activation
+  meanwhile, and Orleans' default call timeout is 30 s. Find what the turn spends
+  its time on (document composition, wasm compilation of the guests, the
+  checkpoint) and move it off the turn: precompiled or cached guest modules, and
+  the composition as background work the activation awaits. Never block
+  the scheduler thread.
 - [low] Extend addon checkpoints to table/reference and segment-drop state.
   Capture currently refuses these resources by name
   (`src/Puck.Assets/WasmModuleDeclarations.Checkpoint.cs:15`,
