@@ -38,16 +38,32 @@ public sealed class WorldReplayProbe : IDisposable {
         m_startComponents = WorldStateHashComposition.AuthoritativeComponents(server: server, tick: (server.NextInputTick - 1));
     }
 
+    /// <summary>Gets or sets whether every recorded tick's incremental authority hash is checked against a full
+    /// recompute of the same state (<see cref="WorldStateHashComposition.DescribeStaleDigest"/>), the check that finds a
+    /// write which moved state without moving the version a cached digest is keyed by.</summary>
+    public bool VerifiesIncrementalHash { get; set; }
+    /// <summary>Gets the first stale digest <see cref="VerifiesIncrementalHash"/> found, naming the recorded tick and
+    /// the stale components, or <see langword="null"/> when every checked tick agreed.</summary>
+    public string? StaleDigest { get; private set; }
+
     internal void NoteTick(WorldReplayTickInput input, ulong hash) {
         m_inputs.Add(item: new WorldReplayTickInput(Authority: [.. input.Authority.Skip(count: m_skipAuthority)], Intents: [.. input.Intents.Skip(count: m_skipIntents)]));
         m_skipAuthority = 0;
         m_skipIntents = 0;
         m_hashes.Add(item: hash);
+        if (VerifiesIncrementalHash && (StaleDigest is null) &&
+            (WorldStateHashComposition.DescribeStaleDigest(hash: hash, server: m_server, tick: (m_server.NextInputTick - 1)) is { Length: > 0 } stale)) {
+            StaleDigest = $"recorded tick {(m_hashes.Count - 1)}: {stale}";
+        }
     }
 
-    /// <summary>Restores the start into this authority and feeds its recorded inputs through the ordinary replay doors.</summary>
+    /// <summary>Restores the start into this authority and feeds its recorded inputs through the ordinary replay doors,
+    /// checking every replayed tick's incremental authority hash against a full recompute as well as against the
+    /// recording.</summary>
     /// <param name="progress">Optional completed-tick notification for the worker's progress watchdog.</param>
     /// <returns>The first divergent recorded tick, or -1 when every hash, machine core and final export matches.</returns>
+    /// <exception cref="InvalidOperationException">The start did not restore, a replayed mutation's outcome differs
+    /// from the recording, or an incremental hash differs from its full recompute.</exception>
     public int Verify(Action<int>? progress = null) {
         Dispose();
         m_tape.SuspendCapture();
@@ -71,7 +87,12 @@ public sealed class WorldReplayProbe : IDisposable {
                 m_server.Advance(stepTicks: step);
                 m_server.EnforceJournalDepth();
                 WorldReplaySnapshot.VerifyRecordedMutationOutcomes(expected: expected, replayed: outcomes, tick: tick);
-                if (WorldStateHashComposition.HashAuthoritative(server: m_server, tick: (m_server.NextInputTick - 1)) != m_hashes[tick]) {
+                var replayed = WorldStateHashComposition.HashAuthoritative(server: m_server, tick: (m_server.NextInputTick - 1));
+
+                if (WorldStateHashComposition.DescribeStaleDigest(hash: replayed, server: m_server, tick: (m_server.NextInputTick - 1)) is { Length: > 0 } stale) {
+                    throw new InvalidOperationException(message: $"replayed tick {tick}: {stale}");
+                }
+                if (replayed != m_hashes[tick]) {
                     return tick;
                 }
                 progress?.Invoke((tick + 1));

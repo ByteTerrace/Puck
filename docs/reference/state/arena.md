@@ -421,10 +421,22 @@ rule evaluator; how the scheduler uses it is in
 `ComputeHash` folds the whole arena into one 64-bit FNV-1a value. It's how two
 hosts, or a replay and its recording, prove they hold the same state.
 
+The value is a combination of digests: each row folds into its own digest
+(`RowDigest`, every column's positions the row owns, in column order), each
+segment of `HashSegmentRows` (32) consecutive rows folds its rows' digests, and
+the arena folds the segment digests, then the positions no row owns (the lane
+roster), the key ledger and the undo history. A row's digest is cached by its
+`RowVersion`, so a tick that wrote three rows refolds three; inside an open
+scope, where versions have not settled, the whole arena folds afresh. A write
+that changes a row's bytes without moving its version would leave its digest
+stale, so `RecomputeHash` returns the same value with nothing cached, and a
+verification run (`puck test --reproduce`, the first count of `--workers`)
+compares the two every tick. `RowDigestFolds` counts the row folds.
+
 What the hash covers:
 
-- Every column of every lane, in a fixed column order, with each column's own
-  ordinal folded between runs. The fold reads each position's logical value, so
+- Every column of every lane, with each column's own ordinal folded between
+  runs. The fold reads each position's logical value, so
   a clock that was never written hashes the same as one written back to zero.
 - Member keys by name digest in slot order, independent of intern ordinals. Two
   rows with the same fields fold the same regardless of the order their keys

@@ -6,51 +6,134 @@ using Puck.World.Protocol;
 namespace Puck.World.Server;
 
 public sealed partial class WorldPopulation {
+    /// <summary>The slots one continuation hash segment holds: the population's continuation digest folds one digest per
+    /// segment of this many consecutive entity indices, each over its active slots' own digests.</summary>
+    /// <remarks>It is the parallel tick's body partition, so a partitioned fold takes whole segments.</remarks>
+    public const int HashSegmentSlots = 32;
+
+    /// <summary>Gets how many slot continuations the population encoded and folded afresh since it was built: a
+    /// load-independent count of the work <see cref="AppendContinuationHash"/> did, which a resting slot whose cached
+    /// digest stands never adds to.</summary>
+    public long ContinuationFolds { get; private set; }
+
     /// <summary>Folds every active slot's simulation continuation through the checkpoint's field codecs, excluding
     /// rendered color and rig, so state the pose hash does not read (a velocity, an integration remainder, a channel
     /// timer) still separates two runs. Called where <see cref="Capture"/> may be, between a completed step and the
-    /// next; the authoritative hash takes it on every tick a replay records or a history captures. Each entry is a
-    /// view of the slot's live state encoded into a writer the population reuses, so the fold allocates nothing once
-    /// that scratch has grown to the population's shape, and it folds exactly the bytes
-    /// <see cref="WorldAuthorityCheckpointCodec.AppendPopulationEntries"/> folds for the entries <see cref="Capture"/>
-    /// returns.</summary>
+    /// next; the authoritative hash takes it on every tick a replay records or a history captures. Each slot's digest
+    /// is the bytes <see cref="WorldAuthorityCheckpointCodec.WriteContinuationEntry"/> encodes for the entry
+    /// <see cref="Capture"/> returns, written into a writer the population reuses, so the fold allocates nothing once
+    /// that scratch has grown to the population's shape. Every slot folds into its segment of
+    /// <see cref="HashSegmentSlots"/>, and the segments into the hash.</summary>
     /// <param name="hash">The hash to fold into.</param>
     /// <param name="bodies">Selected slots, or null for every active slot.</param>
+    /// <param name="recompute">Whether every slot encodes afresh; otherwise a resting slot reuses the digest it had
+    /// when it came to rest.</param>
+    /// <remarks>A slot's cached digest stands while its body stays at rest (asleep or in a parked rigid island) with
+    /// an unmoved rest epoch, generation, admission revision (<see cref="Revision"/>), contact-field version and
+    /// action-state lane values. A body changes its continuation while resting only through one of those, so a write
+    /// that does not is a missed signal: <c>WorldStateHashComposition.DescribeStaleDigest</c> finds one by comparing
+    /// against <paramref name="recompute"/>.</remarks>
     /// <exception cref="InvalidOperationException">A pending-output list is non-empty.</exception>
-    public void AppendContinuationHash(ref Fnv1aHash hash, IReadOnlySet<int>? bodies = null) {
+    public void AppendContinuationHash(ref Fnv1aHash hash, IReadOnlySet<int>? bodies = null, bool recompute = false) {
         RequireCapturePoint();
+        PrepareSlotDigests();
+
+        if (bodies is not null) {
+            var count = 0;
+
+            for (var index = 0; (index < Capacity); index++) {
+                if (bodies.Contains(item: index) && (m_entries[index] is { Active: true, Body: not null })) { count++; }
+            }
+            hash.Add(value: ((uint)count));
+            for (var index = 0; (index < Capacity); index++) {
+                if (bodies.Contains(item: index) && (m_entries[index] is { Active: true, Body: { } body } entry)) {
+                    hash.Add(value: SlotDigest(body: body, entry: entry, index: index, recompute: recompute));
+                }
+            }
+            return;
+        }
+
+        hash.Add(value: ((uint)Capacity));
+        for (var first = 0; (first < Capacity); first += HashSegmentSlots) {
+            var segment = Fnv1aHash.Create();
+            var end = Math.Min(val1: (first + HashSegmentSlots), val2: Capacity);
+
+            for (var index = first; (index < end); index++) {
+                if (m_entries[index] is { Active: true, Body: { } body } entry) {
+                    segment.Add(value: ((byte)1));
+                    segment.Add(value: SlotDigest(body: body, entry: entry, index: index, recompute: recompute));
+                } else {
+                    segment.Add(value: ((byte)0));
+                }
+            }
+            hash.Add(value: segment.Value);
+        }
+    }
+
+    // The slot digest cache: per slot, the digest, the body it was taken from and what keys it beside the body's rest
+    // epoch. A change of admission revision or contact-field version drops every slot's.
+    private ulong[] m_slotDigests = [];
+    private WorldBody?[] m_slotDigestBodies = [];
+    private ulong[] m_slotDigestRestEpochs = [];
+    private ulong[] m_slotDigestActionStates = [];
+    private int[] m_slotDigestGenerations = [];
+    private int m_slotDigestRevision = -1;
+    private ulong m_slotDigestContactField;
+
+    private void PrepareSlotDigests() {
+        var contactField = ContactFieldVersion;
+
+        if (m_slotDigests.Length != Capacity) {
+            m_slotDigests = new ulong[Capacity];
+            m_slotDigestBodies = new WorldBody?[Capacity];
+            m_slotDigestRestEpochs = new ulong[Capacity];
+            m_slotDigestActionStates = new ulong[Capacity];
+            m_slotDigestGenerations = new int[Capacity];
+        } else if ((m_slotDigestRevision != m_revision) || (m_slotDigestContactField != contactField)) {
+            Array.Clear(array: m_slotDigestBodies);
+        }
+        m_slotDigestRevision = m_revision;
+        m_slotDigestContactField = contactField;
+    }
+    private ulong SlotDigest(int index, Entry entry, WorldBody body, bool recompute) {
+        var resting = body.AtRest;
+
+        if (
+            !recompute &&
+            resting &&
+            ReferenceEquals(objA: m_slotDigestBodies[index], objB: body) &&
+            (m_slotDigestRestEpochs[index] == body.RestEpoch) &&
+            (m_slotDigestGenerations[index] == entry.Generation) &&
+            (m_slotDigestActionStates[index] == body.ActionStateDigest())
+        ) {
+            return m_slotDigests[index];
+        }
 
         var writer = (m_continuationWriter ??= new WireWriter());
-        var count = 0;
-
-        for (var index = 0; (index < Capacity); index++) {
-            if ((bodies is not null) && !bodies.Contains(item: index)) { continue; }
-            if (m_entries[index] is { Active: true, Body: not null }) {
-                count++;
-            }
-        }
 
         writer.Reset();
-        writer.WriteArrayCount(count: count);
+        WorldAuthorityCheckpointCodec.WriteContinuationEntry(
+            entry: EntryCheckpoint(
+                alias: true,
+                body: body,
+                entry: entry,
+                index: index
+            ),
+            writer: writer
+        );
+        if (!recompute) { ContinuationFolds++; }
+        var digest = Fnv1aHash.Compute(values: writer.WrittenSpan);
 
-        for (var index = 0; (index < Capacity); index++) {
-            if ((bodies is not null) && !bodies.Contains(item: index)) { continue; }
-            var entry = m_entries[index];
-
-            if (entry is { Active: true, Body: { } body }) {
-                WorldAuthorityCheckpointCodec.WriteContinuationEntry(
-                    entry: EntryCheckpoint(
-                        alias: true,
-                        body: body,
-                        entry: entry,
-                        index: index
-                    ),
-                    writer: writer
-                );
+        if (!recompute) {
+            m_slotDigestBodies[index] = (resting ? body : null);
+            if (resting) {
+                m_slotDigests[index] = digest;
+                m_slotDigestRestEpochs[index] = body.RestEpoch;
+                m_slotDigestGenerations[index] = entry.Generation;
+                m_slotDigestActionStates[index] = body.ActionStateDigest();
             }
         }
-
-        hash.Add(values: writer.WrittenSpan);
+        return digest;
     }
     /// <summary>Captures every active slot's simulation state. Asserts the per-tick pending-output lists are empty —
     /// guaranteed by <see cref="WorldServer.TryCaptureCheckpoint"/>'s capture point sitting between a completed
