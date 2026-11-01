@@ -656,7 +656,7 @@ admission, and a constructor handed no receipt settles before admitting for
 itself, so settlement never produces a definition the receipt does not name.
 Reference-cycle evidence remains incomplete,
 so unresolved bounds stay explicit and the current heuristic admission policy
-remains active. See [abstract-machine costing](../../docs/plans/abstract-machine-costing.md).
+remains active. See [abstract-machine costing](../../docs/decisions/state-and-language.md#costing).
 
 File/DSL boot, local instance construction, the hosted activation read and checkpoint restore carry an
 operation-owned local admission result into machine preparation and rule installation. A spawned instance

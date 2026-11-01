@@ -271,7 +271,7 @@ shows the reference model, its evidence digest, the cycle bound, and whether
 that bound is certified. To replay or recapture the instruction evidence, use
 [`puck bench state-evidence`](../cli.md#puck-bench-state-evidence). The evidence
 still needed before admission can move to reference cycles is described in
-[the abstract-machine costing plan](../../plans/abstract-machine-costing.md).
+[the costing decision](../../decisions/state-and-language.md#costing).
 
 ## Skip rules whose inputs haven't changed
 
@@ -384,4 +384,4 @@ ceiling and how they behave.
 ## See also
 
 - [Limits and capacities](limits.md)
-- [The abstract-machine costing plan](../../plans/abstract-machine-costing.md)
+- [The costing decision](../../decisions/state-and-language.md#costing)

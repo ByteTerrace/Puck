@@ -1934,7 +1934,7 @@ without the groups that bind a `rewindGroup`'s price, and search planning takes 
 sheet its caller already measured.
 The report identifies both the model and its evidence digest. Reference costs
 remain unresolved while calibration is incomplete; heuristic work units never
-certify a cycle deadline. See [abstract-machine costing](../../docs/plans/abstract-machine-costing.md).
+certify a cycle deadline. See [abstract-machine costing](../../docs/decisions/state-and-language.md#costing).
 
 `WorldRules.cs` holds the optional `rules` section. A `WorldRule` is
 `Puck.State`'s `Rule` (`Name, Gate, Effects, Mode, ForEach, Bindings`) plus the
@@ -2566,7 +2566,7 @@ first, ties by the lower body index—so the limit bounds the evaluations and ad
 the selection it makes, and never removes a distance test.
 `world.budget.rules --why <interaction>` prints those terms.
 
-The [portable costing brief](../../docs/plans/abstract-machine-costing.md)
+The [portable costing brief](../../docs/decisions/state-and-language.md#costing)
 defines the proposed replacement. Its cycle schedule remains uncalibrated.
 `WorldCostReport` exposes heuristic totals separately and reports unresolved
 cycle bounds, including search work; it cannot yet certify an abstract
