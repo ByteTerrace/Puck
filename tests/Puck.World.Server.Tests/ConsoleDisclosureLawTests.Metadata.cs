@@ -3,6 +3,24 @@ using Xunit;
 namespace Puck.World.Server.Tests;
 
 public sealed partial class ConsoleDisclosureLawTests {
+    [Fact]
+    public void SummariesDoNotExposePrivateGeneratedPoolStorage() {
+        var document = MetadataDocument(0);
+        document = document with { StateRaw = document.StateRaw! with {
+            Records = [new StateRecord(Name: CellName.Parse("memory"), Fields: [new StatePoolField(
+                Name: CellName.Parse("vector"), Kind: CellKind.Vector, Space: CellName.Parse("space"), Dimensions: 8,
+                Default: CellValue.Vector(new sbyte[] { 127, 0, 0, 0, 0, 0, 0, 0 }))])],
+            Pools = [new StatePool(Name: CellName.Parse("memories"), Record: CellName.Parse("memory"), Capacity: 2, Initial: [new StatePoolSeed(Slot: 0)])]
+        } };
+        var generated = document.State.Single(row => row.Generated && row.Kind == CellKind.Vector).Name.Value;
+        using var host = new DisclosureHost(document);
+        Assert.DoesNotContain(generated, host.Seat(slot: 1, line: "world.state").Output, StringComparison.Ordinal);
+        Assert.True(host.Seat(slot: 1, line: $"world.row state {generated}").IsError);
+        Assert.True(host.Seat(slot: 1, line: $"world.state.similar vectors open {generated}").IsError);
+        Assert.True(host.Seat(slot: 1, line: $"world.state.similar {generated} 0 vectors").IsError);
+        Assert.DoesNotContain(generated, host.Console("world.state").Output, StringComparison.Ordinal);
+        Assert.True(host.Console($"world.state.similar vectors open {generated}").IsError);
+    }
     [Theory]
     [InlineData("")]
     [InlineData(" capture")]

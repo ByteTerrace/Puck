@@ -485,7 +485,8 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
         )}]]";
     }
     private static string DescribeState(WorldStateReadView view) {
-        var rows = view.Definition.State;
+        // Named row lookup excludes generated pool storage too; summaries enumerate that same authored surface.
+        var rows = view.Definition.AuthoredState;
         var lines = new List<string>(capacity: (1 + rows.Count)) {
             $"[world.state: rows {rows.Count}/{StateCapacity.MaxRows}{(view.IsOperator ? $", arena {view.ArenaBytes}/{ArenaCapacity.MaxBytes} bytes" : string.Empty)}]",
         };

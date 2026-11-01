@@ -348,7 +348,7 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
         Read: ReadRowByKey(
             info: WorldJsonContext.Default.WorldStateRow,
             keyOf: static row => row.Name.ToString(),
-            select: static definition => definition.State
+            select: static definition => definition.AuthoredState
         )
     ),
         ["rules"] = new RowSection(

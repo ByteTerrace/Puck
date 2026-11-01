@@ -488,6 +488,8 @@ Similarity query lookup and candidate enumeration use that same disclosed view:
 an existing hidden query key answers exactly like a missing key. `Omit` never
 prints a withheld count. Arena byte totals and `world.state.hash` are operator
 diagnostics because they can reveal changes in undisclosed state.
+State summaries enumerate authored rows, as named lookups do; generated pool
+storage remains internal.
 
 ## Hashes, checkpoints, and replay
 
