@@ -1,4 +1,5 @@
 using System.CommandLine;
+using Puck.Confinement;
 
 namespace Puck.Cli.Baselines;
 
@@ -108,12 +109,7 @@ public static class BaselinesCommand {
         Dictionary<string, string>? first = null;
 
         for (var run = 1; (run <= artifact.Runs); run++) {
-            if (Directory.Exists(path: records)) {
-                Directory.Delete(
-                    path: records,
-                    recursive: true
-                );
-            }
+            ConfinedDirectory.RemoveTree(path: records);
 
             Console.Error.WriteLine(value: $"puck {path}: running {artifact.Project} ({run} of {artifact.Runs}).");
 

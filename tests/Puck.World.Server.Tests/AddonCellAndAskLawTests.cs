@@ -1,6 +1,7 @@
 using System.Text;
 using Puck.Assets;
 using Puck.Commands;
+using Puck.Confinement;
 using Puck.Scripting;
 using Puck.World.Addons;
 using Puck.World.Protocol;
@@ -89,7 +90,7 @@ public sealed class AddonCellAndAskLawTests {
             Assert.Equal(6, ask.NameLength);
             Assert.Equal(12288, ask.SubjectIndex);
         } finally {
-            directory.Delete(recursive: true);
+            ConfinedDirectory.RemoveTree(path: directory.FullName);
         }
     }
     [InlineData("{\"row\":\"config\",\"key\":\"seed\",\"kind\":\"set\",\"value\":42}", true)]

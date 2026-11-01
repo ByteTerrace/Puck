@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Globalization;
+using Puck.Confinement;
 using Puck.Testing;
 using Xunit;
 
@@ -259,6 +260,6 @@ public sealed class CliLeaseTests : IDisposable {
     private Task<CliLease> Take(string name = "gpu", TimeSpan wait = default, TimeProvider? clock = null, string holder = "agents-slim") => CliLease.AcquireAsync(root: m_root, name: name, holder: holder, wait: wait, clock: (clock ?? TimeProvider.System), cancellationToken: Token);
 
     public void Dispose() {
-        if (Directory.Exists(path: m_root)) { Directory.Delete(path: m_root, recursive: true); }
+        ConfinedDirectory.RemoveTree(path: m_root);
     }
 }

@@ -1,6 +1,7 @@
 using System.Numerics;
 
 using Puck.Commands;
+using Puck.Confinement;
 using Puck.SdfVm;
 using Puck.SignedDistance;
 using Puck.World.Authoring;
@@ -110,7 +111,7 @@ public sealed class WorldSliceCommandModuleLawTests {
             // A path under a file cannot be written.
             Assert.StartsWith(expectedStartString: "[world.slice] failed to write ", actualString: WorldSliceCommandModule.Write(path: Path.Combine(path1: path, path2: "under.png"), slice: slice), comparisonType: StringComparison.Ordinal);
         } finally {
-            directory.Delete(recursive: true);
+            ConfinedDirectory.RemoveTree(path: directory.FullName);
         }
     }
     [Fact]

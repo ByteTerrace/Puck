@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using Puck.Abstractions;
 using Puck.Cli.WorktreeReport;
+using Puck.Confinement;
 using Xunit;
 
 namespace Puck.Cli.Worktrees.Tests;
@@ -205,7 +206,7 @@ public sealed class WorktreeReportBlockerLawTests : WorktreeReportLaws {
         _ = checkout.Git("branch", "missing");
         var path = checkout.AddWorktree(name: "missing", revision: "missing");
 
-        Directory.Delete(path: path, recursive: true);
+        ConfinedDirectory.RemoveTree(path: path);
         using var report = Report(checkout: checkout);
         var entry = Entry(branch: "missing", report: report);
 

@@ -146,53 +146,6 @@ internal sealed partial class RunDirectory : IDisposable {
 
         return (match.Success ? SweepKinds(age: StaleAge, kind: match.Groups["kind"].Value) : 0);
     }
-    /// <summary>Deletes a directory once, letting the failure propagate: for an owner whose law is that nothing under
-    /// the directory is still open. The removal goes through <c>Puck.Confinement</c>: iterative, so a tree of any depth
-    /// is removed without overflowing the stack, and it never follows a link. A link in the tree, or the directory
-    /// itself being one, refuses the removal there and leaves what is not yet removed in place.</summary>
-    /// <param name="path">The directory to remove recursively.</param>
-    /// <exception cref="IOException">The directory or an entry below it is a link or is held by another process, or
-    /// cannot be removed.</exception>
-    public static void Delete(string path) {
-        if (!Directory.Exists(path: path)) {
-            return;
-        }
-
-        var full = System.IO.Path.TrimEndingDirectorySeparator(path: System.IO.Path.GetFullPath(path: path));
-        var name = System.IO.Path.GetFileName(path: full);
-
-        if ((System.IO.Path.GetDirectoryName(path: full) is not { } parentPath) || (name.Length == 0)) {
-            throw new IOException(message: $"'{full}' is a volume root, which a run never owns.");
-        }
-
-        using var parent = ConfinedDirectory.OpenAnchor(
-            create: false,
-            path: parentPath
-        );
-
-        if (parent is null) {
-            return;
-        }
-
-        ConfinedDirectory? directory;
-
-        try {
-            directory = parent.TryOpenChildForRemoval(name: name);
-        } catch (DirectoryNotFoundException) {
-            return;
-        }
-
-        if (directory is null) {
-            throw new IOException(message: $"'{full}' is held by another process.");
-        }
-
-        using (directory) {
-            directory.DeleteTree(
-                name: name,
-                parent: parent
-            );
-        }
-    }
     /// <summary>Deletes a directory best-effort, retrying for a short while as handles under it close and clearing
     /// read-only attributes through handles. Unsupported platforms leave the directory and return false.</summary>
     /// <param name="path">The directory to remove recursively.</param>
@@ -200,7 +153,7 @@ internal sealed partial class RunDirectory : IDisposable {
     public static bool TryDelete(string path) {
         for (var attempt = 0; (attempt < DeleteAttempts); attempt++) {
             try {
-                Delete(path: path);
+                ConfinedDirectory.RemoveTree(path: path);
 
                 return true;
             } catch (IOException) {
@@ -300,7 +253,7 @@ internal sealed partial class RunDirectory : IDisposable {
     // platform the confined removal does not support) is left in place and named, and never fails the sweep.
     private static bool TryRemove(string path, TextWriter? report) {
         try {
-            Delete(path: path);
+            ConfinedDirectory.RemoveTree(path: path);
 
             return true;
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or PlatformNotSupportedException)) {

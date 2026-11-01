@@ -1,0 +1,267 @@
+# Data layout and memory on the CPU
+
+Read this before changing a frame-thread or tick-path data structure, a cache,
+a scratch buffer or a parallel worker, or when `host.frames` shows a
+collection or a slow iteration. Back to [../SKILL.md](../SKILL.md). Each rule
+names the Puck code that does it right or wrong and the measurement behind it;
+a general claim cites two public sources ([sources](#sources)). The sibling
+references cover what the JIT and the libraries do; this one covers what the
+data costs.
+
+## Measure it here
+
+| Question | Tool | Reads |
+|---|---|---|
+| Did a frame collect, and how long did it pause? | `host.frames [frames] [budget-ms] [worst]` on a windowed World ([`HostFrameCommandModule`](../../../../src/Puck.Launcher/Commands/HostFrameCommandModule.cs)) | Collections by generation and GC pause time inside each worst iteration, beside produce and simulate. |
+| Where does the heap sit? | `host.memory`, `host.memory collect` ([`HostMemoryCommandModule`](../../../../src/Puck.World/HostMemoryCommandModule.cs)) | Working set, private bytes, gen0/gen1/gen2/LOH/POH sizes and collection counts; `collect` compacts the LOH first, so the heap it reads is what is still reachable. |
+| Does the server tick allocate? | `puck bench world` ([CLI reference](../../../../docs/reference/cli.md#puck-bench-world)) | Median and mean bytes a tick, standing and over three gallery walks. |
+| Does this body allocate? | `AllocationWindow.Least`, `.Measure`, `.Total` ([`AllocationWindow`](../../../../src/Puck.Abstractions/Counting/AllocationWindow.cs)) | Least bytes over up to 16 windows, naming the sampled types when every window allocated. |
+| Which stacks allocate in a running World? | `dotnet-trace collect -p <pid> --profile gc-verbose`, then `dotnet-trace convert --format speedscope` | Allocation ticks with stacks and the GC's own events; a commit names types and MiB per window from it. |
+| Which loop costs the frame? | `dotnet-trace collect -p <pid> --profile dotnet-sampled-thread-time` | Sampled frame-thread stacks; charge `Thread.PollGC` samples to the caller's loop ([review discipline](../SKILL.md#review-discipline)). |
+| Is it cache misses or stalls? | `AMDuProfPcm -m ipc,l1,l2,cache_miss -c core=<n> -C -- <program>` on an AMD CPU (`C:/Program Files/AMD/AMDuProf/bin`; metric names from its `-h`) | Per-core IPC and miss counts for a pinned harness; the exact-ladder change read IPC 2.27 to 2.56 this way on Zen 4. |
+
+Take counts first and timings beside them on a quiet machine, as the
+[skill](../SKILL.md) says. A pause time on a loaded machine is an observation,
+not a verdict.
+
+## The steady frame and tick allocate nothing
+
+A frame or tick that runs every 16.7 or 33 ms allocates no managed memory once
+warm. A collection suspends every managed thread for its pause, and the World's
+frame and tick share one thread today.
+
+- **Measured here.** Walking the gallery allocated 1,005.6 MiB in 40 s of
+  presentation garbage, with 11 collections pausing 22 ms over three walks; after
+  the closures, rebuilt catalogs and per-call arrays went, 101.3 MiB in 30 s
+  and 2 collections. The server tick went from 1,672 B to 0 B median a tick
+  (`puck bench world`) once principal labels stopped being formatted on every
+  disclosure check, and a standing World then read zero collections over 600
+  ticks.
+- **Shape of the fix.** Reuse scratch that the owner keeps
+  (`WorldBody.StepScratch`, [`WorldBody.SweepRefusal.cs:60`](../../../../src/Puck.World.Server/WorldBody.SweepRefusal.cs):
+  "a capture writes into the buffers the last one left"); key a cache by what
+  its derivation reads, not by an object a delivery replaces (a face catalog
+  keyed by definition was rederived every tick); build a default on first read
+  rather than in an initializer the producer overwrites.
+- **Check:** zero `gen0` in `host.frames` across a standing and a walking read,
+  and `puck bench world` at 0 B median. A hot allocation law uses
+  `AllocationWindow` on a warmed, active path.
+
+Sources: allocation volume sets how often the GC runs, survival sets what each
+run costs, and a collection suspends the other managed threads ([MS-GC],
+[MEMDOC]).
+
+## A young collection costs what survives and what old objects point at
+
+A gen0 marks from the roots and from every older object whose card says it
+holds a young reference, then copies the survivors. Its pause grows with
+survivors and with old-to-young references, not with the garbage.
+
+- **Measured here.** A gen0 pause on the lead machine is 10 to 12 ms with
+  4 MB promoted: 2.6 ms marking through cards and about 7.7 ms planning and
+  compacting. Server GC with four heaps collected rarely but paused 27 ms, so it
+  was not kept ([simulation tick packet](../../../../docs/plans/open-items.md#simulation-tick-off-the-frame-thread)).
+- **Write fewer young references into old containers.** A long-lived
+  dictionary, list or row table that takes a new object every tick marks a card
+  and promotes that object. The irradiance cache held a record class per probe
+  sweep in a `ConcurrentDictionary`, about 9 MB promoted on a walk into an
+  untraced area; it is now an open-addressed table of `Probe` structs
+  ([`SdfMeshIrradiance.cs:1630-1642`](../../../../src/Puck.SdfVm/SdfMeshIrradiance.cs)).
+  `HostLog` kept a ring of strings, so every line promoted; it now copies lines
+  into one circular `char[]` ([`HostLog.cs:79`](../../../../src/Puck.Hosting/HostLog.cs)).
+- **A finalizable object survives its first collection.** The desktop capture
+  feed made a finalizable WinRT projection a frame; those were the
+  finalization-queue promotions in every gen0 until it read frames through the
+  raw ABI.
+- **Arrays of 85,000 bytes or more go to the LOH**, which only a gen2 collects.
+  Measuring the render envelope by building a whole program per lights change
+  churned a sampled 61.9 GB of LOH (`SdfInstruction[]`, packed `uint[]`) until
+  it measured by emission into reused storage. The World sets
+  `System.GC.ConserveMemory` to 5 ([`Puck.World.csproj`](../../../../src/Puck.World/Puck.World.csproj))
+  because it frees large arrays in bursts.
+
+Sources: cards set by the write barrier and read by ephemeral collections
+([BOTR-GC]); old-generation references keep young objects alive and promote
+them, and finalization resurrects and promotes ([MEMDOC]); the LOH threshold and
+its gen2 collection ([MS-GC], [MS-LOH]). Server GC gives each logical CPU a
+heap and a collecting thread and larger ephemeral budgets ([MS-WKS], [MS-GC]),
+so it collects less often; its measured 27 ms pause here is why the World stays
+on workstation GC.
+
+## Lay hot data out for the loop that reads it
+
+The walk decides the layout: the fields a hot loop reads sit together and in
+the order it reads them, and what it never reads lives elsewhere.
+
+- **Arrays of structs over graphs of objects.** The irradiance scene's hierarchy
+  is a `Node[]` of 28-byte structs whose two children sit side by side
+  ([`SdfMeshIrradianceScene.cs:55`](../../../../src/Puck.SdfVm/SdfMeshIrradianceScene.cs)),
+  walked with a fixed `stackalloc` stack under `[SkipLocalsInit]` (`:299`), so a
+  slab test of both children touches adjacent memory and no object headers.
+- **Split by field when loops read different fields.** The hierarchy build keeps
+  bounds and centroids in separate arrays (`m_lows`, `m_highs`, `m_centroids`,
+  `:725-728`); `SdfMesh` keeps positions, normals, indices and materials apart
+  ([`SdfMesh.cs:139-152`](../../../../src/Puck.SdfVm/SdfMesh.cs)), so the trace
+  reads positions and indices alone and never copies them (a copy of the debug
+  world's meshes is about 1.1 GB).
+- **Keep cold state off the hot path.** A step captures a 45-field
+  `WorldBodyIntegrationResidue` plus transfer state for every body every step
+  ([`WorldBody.SweepRefusal.cs:71-84`](../../../../src/Puck.World.Server/WorldBody.SweepRefusal.cs)),
+  read only when a sweep is refused; that capture is 7 to 8 % of a rigid body's
+  advance (open below).
+
+Sources: a cache line is 64 bytes on current x86, and sequential access within
+lines is what the prefetchers reward ([INTEL-OPT], [DREPPER]); Toub and
+co-authors measure row-major against column-major traversal at almost 2× on the
+same array ([TOUB-FS]).
+
+## Copy less
+
+A struct copy costs its size every time, and a large struct passed or returned
+by value, captured into a snapshot or copied out of a collection repeats it.
+
+- **Measured here.** `SdfMeshIrradiance.TraceProbe` copied its probe record once
+  per neighbour bit (up to 26 a probe): 171 of 289 MiB sampled on a cold walk
+  until it filled its fields and built one record. The previous mesh table now
+  copies changed draws as one range instead of one 64-byte copy per moving draw,
+  657 ms to 13 ms per 20 s of sampled produce.
+- **Read in place.** Pass a large struct by `in` or `ref readonly`, keep it
+  `readonly` so the compiler makes no defensive copy, and iterate with
+  `ref readonly var x = ref array[i]` as the scene walk does (`:307`).
+
+Sources: Microsoft's design guidelines advise a struct only under 16 bytes
+([MS-STRUCT]), while its performance guidance keeps larger structs and avoids
+their copies with `in`, `ref readonly` and `readonly struct` ([MS-REFS]); the two
+disagree on size, and Puck follows the second: large value records are fine
+where they are read in place.
+
+## Zero only what you read
+
+The runtime zeroes every new array and, without `[SkipLocalsInit]`, every
+`stackalloc` and local. A buffer written before it is read pays that fill for
+nothing.
+
+- **Done right.** `WireArgs.Tail` marks itself `[SkipLocalsInit]` because its
+  scratch is written before it is read ([`WireArgs.cs:97`](../../../../src/Puck.Commands/WireArgs.cs));
+  `BatchInverseKernel` sizes its `stackalloc` to the batch, not the threshold,
+  because the assembly zeroes what it reserves
+  ([`BatchInverseKernel.cs:68`](../../../../src/Puck.Maths/FiniteFields/BatchInverseKernel.cs)).
+- **Budget the stack.** A `stackalloc` takes a constant cap or a length checked
+  against a threshold, with an `ArrayPool` or heap fallback above it
+  (`BatchInverseKernel`, `WireArgs.Tail`, `DirectXDebugLabel`'s 64-word cap);
+  never one in a loop.
+- **Zeroed arrays you overwrite** can come from `GC.AllocateUninitializedArray<T>`
+  when the array is large and written whole before any read; check the allocation
+  is the cost first.
+
+Sources: `stackalloc` memory limits, the threshold-and-fallback pattern and
+avoiding it in loops ([MS-STACKALLOC], analyzer [CA2014]); a large array's
+allocation cost is dominated by clearing it ([MS-LOH]), and skipping the fill
+pays only for arrays of several kilobytes or more ([MS-UNINIT],
+[MS-SKIPLOCALS]).
+
+## A scan per item is a quadratic
+
+A linear search inside a per-item or per-frame loop costs items × list. On a
+per-frame path, index it, latch its position, or keep a cursor that moves one
+way.
+
+- **Measured here.** `SdfMeshPathBake.Pending` touched all 2,596 groups on every
+  footprint call until it kept a done-through cursor
+  ([`SdfMeshPathBake.cs:279`](../../../../src/Puck.SdfVm/SdfMeshPathBake.cs));
+  `BindScreens` searched a list for each routed window until the window's index
+  became its latched order (sampled 439 to 134 ms per 20 s).
+- **Hash once, compare once.** The tables' cadence signatures hashed each region
+  byte-wise with FNV twice a frame; they now hash each region once with
+  `XxHash3` ([`SdfWorldTables.Cadence.cs:267`](../../../../src/Puck.SdfVm/SdfWorldTables.Cadence.cs)).
+
+## Touch the bytes once
+
+Memory bandwidth bounds a loop that streams more than the caches hold: the
+debug world's mesh region is 1.78 GB, its meshes about 1.1 GB of managed arrays.
+
+- **Measured here.** A layout that moved placed meshes when one landed rewrote
+  the whole million-triangle region at each landing (45 to 120 ms frames);
+  relocating every mesh to grow the draw reserve wrote and compared 1.78 GB in a
+  970 ms frame. The arena now leaves placed meshes standing and writes only
+  what moved ([mesh bake](../../rendering/references/mesh-bake.md#the-mesh-region)).
+- **Write from the source, keep no shadow copy** of a large table: the mesh
+  region's flush writes from the `SdfMesh` arrays
+  ([`SdfWorldTables.MeshRegion.cs:463`](../../../../src/Puck.SdfVm/SdfWorldTables.MeshRegion.cs)).
+
+Sources: bandwidth and the cost of streaming past the last-level cache
+([DREPPER], [INTEL-OPT]).
+
+## Give each worker its own lines
+
+Threads that write the same cache line serialize on it, whether they share a
+variable (true sharing) or neighbouring ones (false sharing). Parallel work
+writes per-worker state and merges once.
+
+- **Done right.** `MeshCpuBake` gives each worker its own evaluator through
+  `localInit` ([`MeshCpuBake.cs:92`](../../../../src/Puck.Cli.Worlds/Mesh/MeshCpuBake.cs));
+  the field evaluator keeps its walk scratch `[ThreadStatic]`
+  ([`SdfFieldEvaluator.PointWalk.cs:12`](../../../../src/Puck.SignedDistance/Queries/SdfFieldEvaluator.PointWalk.cs)).
+- **Shared counters** (`Interlocked` on one field from every worker) are the
+  shape to look for. The ones on hot-looking paths today are per read or per
+  node pair (`SdfMeshStore.cs:211-214`, `SdfMeshIrradianceScene.cs:742`) and
+  unmeasured; read IPC and misses with `AMDuProfPcm` on a pinned harness before
+  padding anything.
+
+Sources: definition, detection by cache-miss counters and the per-thread fix
+([TOUB-FS], [INTEL-OPT]).
+
+## Branches in hot loops
+
+A branch the predictor misses costs a pipeline refill; a select the JIT turns
+into a conditional move cannot mispredict. RyuJIT if-converts a select only outside
+loops ([jit-and-codegen](jit-and-codegen.md#11-codegen-facts-the-repository-relies-on-in-net-11)),
+so an in-loop `cmov` needs a `NoInlining` leaf.
+
+- **Measured here.** The exact Lucas ladder's final subtraction moved into a
+  `NoInlining` `cmp`/`cmovb` leaf: AMDuProfPcm read 2,472.5 to 2,427.9 cycles a
+  call and IPC 2.27 to 2.56 at 2^63; a ternary in the loop instead cost 63 %
+  ([prime kernels](../../maths-usage/references/prime-kernels.md)).
+- Do not restructure branch order for layout; the JIT's block layout already
+  does ([jit-and-codegen](jit-and-codegen.md#8-block-layout--pgo-plumbing)).
+  Change a branch only with an IPC or cycle count beside it.
+
+Sources: misprediction cost and conditional moves ([INTEL-OPT], [FOG-UARCH]).
+
+## Puck's open cases
+
+Each is a rule above that Puck breaks today; the packet holds the work.
+
+- **Young objects in old containers.** The server's `StateCell`,
+  `WorldStateRow`, `UpsertStateRow` and their strings and the state journal set
+  the gen0 pause ([simulation tick](../../../../docs/plans/open-items.md#simulation-tick-off-the-frame-thread)).
+- **A cold bake allocates.** 126 collections paused 572 ms over 600 frames of a
+  Direct3D 12 cold bake, and 95 paused 3.2 s on Vulkan
+  ([cold bake](../../../../docs/plans/open-items.md#cold-bake-under-a-minute),
+  [parity](../../../../docs/plans/open-items.md#cross-backend-parity-and-gpu-robustness)).
+- **A glass resize allocates;** about 22 resizes on a painting approach end in a
+  12 ms gen2 ([simulation tick](../../../../docs/plans/open-items.md#simulation-tick-off-the-frame-thread)).
+- **Eager cold capture.** `WorldBody.CaptureMotion` zero-fills and fills the
+  refusal snapshot on every rigid advance
+  ([simulation tick](../../../../docs/plans/open-items.md#simulation-tick-off-the-frame-thread)).
+- **Linear scans per body.** `WorldBodyStateReads.TryResolveSlot` searches the
+  declared state by name ([`WorldBodyStateReads.cs:43`](../../../../src/Puck.World.Schema/WorldBodyStateReads.cs))
+  for every body on a one-body register change, and
+  `SdfMeshPathBake.IrradiancePending` walks every group each frame once the bake
+  has settled ([frame time](../../../../docs/plans/open-items.md#frame-time-on-the-lead-machine)).
+
+## Sources
+
+- [MS-GC] Microsoft Learn, [Fundamentals of garbage collection](https://learn.microsoft.com/en-us/dotnet/standard/garbage-collection/fundamentals).
+- [MS-LOH] Microsoft Learn, [The large object heap on Windows systems](https://learn.microsoft.com/en-us/dotnet/standard/garbage-collection/large-object-heap).
+- [MS-WKS] Microsoft Learn, [Workstation and server garbage collection](https://learn.microsoft.com/en-us/dotnet/standard/garbage-collection/workstation-server-gc).
+- [BOTR-GC] .NET runtime, Book of the Runtime: [Garbage collection design](https://github.com/dotnet/runtime/blob/main/docs/design/coreclr/botr/garbage-collection.md) (cards set by JIT helpers on assignment, read by ephemeral collections).
+- [MEMDOC] Maoni Stephens, [.NET memory performance analysis](https://github.com/Maoni0/mem-doc/blob/master/doc/.NETMemoryPerformanceAnalysis.md) (work proportional to survivors; old-generation references and finalization promote).
+- [MS-STRUCT] Microsoft Learn, [Choosing between class and struct](https://learn.microsoft.com/en-us/dotnet/standard/design-guidelines/choosing-between-class-and-struct).
+- [MS-REFS] Microsoft Learn, [Avoid memory allocations and data copies](https://learn.microsoft.com/en-us/dotnet/csharp/advanced-topics/performance/).
+- [MS-STACKALLOC] Microsoft Learn, [stackalloc expression](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/operators/stackalloc); [CA2014] [Do not use stackalloc in loops](https://learn.microsoft.com/en-us/dotnet/fundamentals/code-analysis/quality-rules/ca2014).
+- [MS-SKIPLOCALS] Microsoft Learn, [SkipLocalsInitAttribute](https://learn.microsoft.com/en-us/dotnet/api/system.runtime.compilerservices.skiplocalsinitattribute); [MS-UNINIT] [GC.AllocateUninitializedArray](https://learn.microsoft.com/en-us/dotnet/api/system.gc.allocateuninitializedarray).
+- [TOUB-FS] Stephen Toub, Igor Ostrovsky and Huseyin Yildiz, [.NET Matters: False Sharing](https://learn.microsoft.com/en-us/archive/msdn-magazine/2008/october/net-matters-false-sharing), MSDN Magazine.
+- [INTEL-OPT] Intel, [Intel 64 and IA-32 Architectures Optimization Reference Manual](https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html).
+- [DREPPER] Ulrich Drepper, [What Every Programmer Should Know About Memory](https://people.freebsd.org/~lstewart/articles/cpumemory.pdf).
+- [FOG-UARCH] Agner Fog, [The microarchitecture of Intel, AMD and VIA CPUs](https://www.agner.org/optimize/microarchitecture.pdf).

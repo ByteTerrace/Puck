@@ -1,7 +1,7 @@
 namespace Puck.Cli;
 
-/// <summary>File operations over a tree a verb owns that never follow links, including when removing a damaged cache:
-/// the law prover's proof tree and the reference-assembly recovery's build tree.</summary>
+/// <summary>File operations over a tree a verb owns that never follow links: the law prover's proof tree and the
+/// reference-assembly recovery's build tree. Removing a tree is <c>ConfinedDirectory.RemoveTree</c>.</summary>
 public static class CliTreeFiles {
     public static void RequireUnlinkedPath(string path) {
         for (var current = Path.GetFullPath(path: path); (current is not null); current = Path.GetDirectoryName(path: current)) {
@@ -23,20 +23,6 @@ public static class CliTreeFiles {
             }
         }
         return null;
-    }
-    public static void DeleteTree(string path) {
-        if (!Path.Exists(path: path)) { return; }
-        var attributes = File.GetAttributes(path: path);
-
-        if ((attributes & FileAttributes.Directory) != 0) {
-            if ((attributes & FileAttributes.ReparsePoint) == 0) {
-                foreach (var entry in Directory.EnumerateFileSystemEntries(path: path)) { DeleteTree(path: entry); }
-            }
-            Directory.Delete(path: path);
-        } else {
-            if ((attributes & FileAttributes.ReparsePoint) == 0) { File.SetAttributes(fileAttributes: attributes & ~FileAttributes.ReadOnly, path: path); }
-            File.Delete(path: path);
-        }
     }
     /// <summary>Makes rewritten inputs newer than every file in the tree, including outputs with future timestamps.
     /// Outputs themselves are never retimed. A whole second also separates inputs on coarse timestamp filesystems.</summary>

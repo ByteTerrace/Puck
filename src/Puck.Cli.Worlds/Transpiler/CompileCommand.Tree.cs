@@ -3,6 +3,7 @@ using Puck.Abstractions;
 using Puck.Assets;
 using Puck.Assets.Documents;
 using Puck.Cli.Shaders;
+using Puck.Confinement;
 using Puck.Shaders;
 using Puck.World;
 using Puck.World.Transpiler.Composition;
@@ -369,12 +370,7 @@ public static partial class CompileCommand {
                 // Removal holds the package's lock, as recovery and publication do, so it never removes a package
                 // another writer is publishing.
                 using (ShaderPackager.LockPackageAsync(package: stale).GetAwaiter().GetResult()) {
-                    if (Directory.Exists(path: stale)) {
-                        Directory.Delete(
-                            path: stale,
-                            recursive: true
-                        );
-                    }
+                    ConfinedDirectory.RemoveTree(path: stale);
                 }
             } catch (Exception exception) when ((exception is ShaderClosureRefusedException or IOException or UnauthorizedAccessException)) {
                 Console.Error.WriteLine(value: $"error: the package '{CliPaths.ToDisplay(fullPath: stale)}' has no pipeline in the tree naming it and could not be removed: {exception.Message}");

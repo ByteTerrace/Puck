@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using Puck.Abstractions;
+using Puck.Confinement;
 using Puck.Hosting;
 
 namespace Puck.Cli.Laws;
@@ -103,7 +104,7 @@ public sealed class LawProofTree(string tree, string source, FileStream lease) :
                 CliTreeFiles.RequireUnlinkedPath(path: lease);
                 using (new FileStream(access: FileAccess.ReadWrite, mode: FileMode.OpenOrCreate, path: lease, share: FileShare.None)) {
                     // Removed under the lease, so no proof can lease the clone halfway through its removal.
-                    CliTreeFiles.DeleteTree(path: Path.Combine(path1: eviction.Path, path2: "tree"));
+                    ConfinedDirectory.RemoveTree(path: Path.Combine(path1: eviction.Path, path2: "tree"));
                 }
 
                 // Only the lease and the then-empty directory remain; a proof that leased it since keeps both.
@@ -128,8 +129,8 @@ public sealed class LawProofTree(string tree, string source, FileStream lease) :
             }
 
             Console.Error.WriteLine(value: $"laws prove: rebuilding persistent proof tree cold ({reason}): {CliPaths.ToDisplay(fullPath: Tree)}.");
-            // Delete only the derived cache entry. The walker unlinks reparse points without visiting their targets.
-            CliTreeFiles.DeleteTree(path: Tree);
+            // Delete only the derived cache entry. A link in the tree refuses the removal, and the proof falls back to a fresh tree.
+            ConfinedDirectory.RemoveTree(path: Tree);
             var clone = git(repository, ["clone", "--shared", "--no-checkout", "--quiet", "--", repository, Tree]);
 
             if (clone.ExitCode != 0) {

@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Puck.Confinement;
 using Puck.Testing;
 using Xunit;
 
@@ -470,7 +471,7 @@ public sealed class LawProofCleanupLawTests : LawProofLaws {
         var callerTree = other.PathOf(name: "caller");
 
         _ = checkout.Git("worktree", "add", "--detach", "--quiet", otherTree, "HEAD");
-        Directory.Delete(path: otherTree, recursive: true);
+        ConfinedDirectory.RemoveTree(path: otherTree);
         _ = checkout.Git("config", "gc.worktreePruneExpire", "now");
         checkout.Write(name: FixPath, text: "fixed");
         _ = checkout.Commit(message: "lib: fix");
@@ -581,7 +582,7 @@ public sealed class LawProofCleanupLongPathLawTests : LawProofLaws {
             BeforeBuild = (tree, _) => proofScratch = Path.GetDirectoryName(path: tree),
             Report = content => {
                 if (content == "fixed") {
-                    Directory.Delete(path: proofScratch!, recursive: true);
+                    ConfinedDirectory.RemoveTree(path: proofScratch!);
                 }
                 return new LawRun(
                     Error: null,

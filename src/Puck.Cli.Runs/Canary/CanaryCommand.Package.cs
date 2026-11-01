@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Text;
 using System.Text.Json;
+using Puck.Confinement;
 
 namespace Puck.Cli.Canary;
 
@@ -150,10 +151,7 @@ public static partial class CanaryCommand {
             );
         }
 
-        Directory.Delete(
-            path: copy,
-            recursive: true
-        );
+        ConfinedDirectory.RemoveTree(path: copy);
 
         return new CanaryBuiltPackage(
             Directory: built,

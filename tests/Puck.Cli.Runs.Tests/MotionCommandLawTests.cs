@@ -1,4 +1,5 @@
 using Puck.Cli.Motion;
+using Puck.Confinement;
 
 using Xunit;
 
@@ -14,7 +15,7 @@ public sealed class MotionCommandLawTests : IDisposable {
 
     private static (int ExitCode, string Output, string Error) Invoke(params string[] arguments) => ConsoleCapture.RunSplit(run: () => MotionCommand.Create().Parse(args: arguments).Invoke());
 
-    public void Dispose() => m_directory.Delete(recursive: true);
+    public void Dispose() => ConfinedDirectory.RemoveTree(path: m_directory.FullName);
     [Fact]
     public void ListNamesEveryScenarioOfTheShippedFileAndBootsNothing() {
         var (exit, output, _) = Invoke("--list");

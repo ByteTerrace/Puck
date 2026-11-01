@@ -10,6 +10,7 @@
     <ItemGroup>
         <ProjectReference Include="../Puck.Abstractions/Puck.Abstractions.csproj" />
         <ProjectReference Include="../Puck.Assets/Puck.Assets.csproj" />
+        <ProjectReference Include="../Puck.Confinement/Puck.Confinement.csproj" />
         <ProjectReference Include="../Puck.Hosting/Puck.Hosting.csproj" />
         <ProjectReference Include="../Puck.Shaders.Model/Puck.Shaders.Model.csproj" />
         <!-- Build-only: its build writes the declarations these kernels include that the C# model owns, and it runs their

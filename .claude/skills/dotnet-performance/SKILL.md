@@ -1,6 +1,6 @@
 ---
 name: dotnet-performance
-description: "Tunes Puck .NET 11 performance: allocation, LINQ, Vector<T>, SIMD, tiering, AllocationWindow, puck bench, AOT analysis (IsAotCompatible, IL2026). Simulation-value numerics: maths-usage."
+description: "Tunes Puck .NET 11 performance: allocation, gen0 pauses, data layout, false sharing, stackalloc, LINQ, Vector<T>, tiering, AllocationWindow, puck bench, AOT (IL2026). Numerics: maths-usage."
 ---
 
 # .NET 11 performance
@@ -15,6 +15,7 @@ improvements apart from workload-specific evidence.
 | Area | Read |
 |---|---|
 | Cross-domain mental model, pattern changes, API shortlist, folklore | [references/core-guidance.md](references/core-guidance.md) |
+| What the data costs: steady-state allocation, gen0 pauses and old-to-young references, LOH, layout and hot/cold splitting, struct copies, zero-fill and `stackalloc`, scans, bandwidth, false sharing, branches; measuring them here | [references/data-and-memory.md](references/data-and-memory.md) |
 | JIT, codegen, allocation, inlining, bounds checks, ISA | [references/jit-and-codegen.md](references/jit-and-codegen.md) |
 | Collections, LINQ, Frozen/Immutable, `CollectionsMarshal` | [references/collections-and-linq.md](references/collections-and-linq.md) |
 | Strings, spans, search, regex, UTF-8, encoding | [references/strings-text-search.md](references/strings-text-search.md) |

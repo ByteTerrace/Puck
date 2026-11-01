@@ -273,7 +273,7 @@ process id that a later process reuses is told apart by its start time. The
 it and the directories that are deleted whatever the outcome.
 
 Confined removal supports Windows and Linux x64. On other hosts, direct
-`RunDirectory.Delete` throws `PlatformNotSupportedException`; best-effort
+`ConfinedDirectory.RemoveTree` throws `PlatformNotSupportedException`; best-effort
 `TryDelete` returns false immediately, and a sweep reports the refusal. Optional
 cleanup therefore preserves the run's result. Read-only attributes are handled
 through the remover's held handles, without walking paths outside its tree.
@@ -775,6 +775,14 @@ Compare the same document, camera, resolution, quality settings, backend and
 build configuration before and after the change. Report these conditions with
 the result. See
 [World graphics options](../../src/Puck.World/README.md#graphics-options).
+
+What the data and the kernels cost on the hardware has two agent references:
+[CPU data and memory](../../.claude/skills/dotnet-performance/references/data-and-memory.md)
+(frame and tick allocation, collection pauses, layout, copies, false sharing,
+and the tools that measure them here) and
+[GPU cost](../../.claude/skills/rendering/references/gpu-cost.md) (registers
+and occupancy and how to read them in Nsight Graphics, PIX or RenderDoc,
+groupshared banks, coalescing, dispatch limits, CPU and GPU waits).
 
 ### Browser engine changes (`Puck.World.Browser`)
 

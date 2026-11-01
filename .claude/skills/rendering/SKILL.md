@@ -1,6 +1,6 @@
 ---
 name: rendering
-description: "Maps Puck's SDF renderer and GPU code. Use for mapCore, the mesh bake, HLSL kernels, sdf-isa.hlsli, SdfOp, C#/HLSL layouts, world.shaders.reload, field scopes, GPU cost. Sculpting: sdf-authoring."
+description: "Maps Puck's SDF renderer and GPU code: mapCore, mesh bake, HLSL kernels, sdf-isa.hlsli, SdfOp, C#/HLSL layouts, world.shaders.reload, field scopes, GPU cost and occupancy. Sculpting: sdf-authoring."
 ---
 
 # Rendering
@@ -654,7 +654,9 @@ wrong. The contracts that bite most often:
 
 Judge cost by counted work, code and disassembly; a wall-clock or GPU-timestamp
 reading is evidence beside the counts of the same run on a quiet machine, never
-the verdict alone.
+the verdict alone. What a kernel costs on the hardware (registers, occupancy,
+banks, coalescing, waits) and how to read it is
+[gpu cost](references/gpu-cost.md).
 
 ```text
 world.cadence off      # a still scene otherwise skips frames and reads near zero
@@ -793,6 +795,7 @@ pacer's lateness ([Puck.Launcher](../../../src/Puck.Launcher/README.md)).
 | [references/sync-pairs.md](references/sync-pairs.md) | Every C#↔HLSL coupling and which side is generated |
 | [references/mesh-bake.md](references/mesh-bake.md) | The bake's contouring, groups, mesh region, store and `puck mesh audit` |
 | [references/mesh-gi.md](references/mesh-gi.md) | Probe visibility, the volume boundary, CPU bounce sampling and exposure |
+| [references/gpu-cost.md](references/gpu-cost.md) | A kernel's registers and occupancy (Nsight GPU Trace, PIX, RenderDoc), divergence, coalescing, groupshared banks, wave intrinsics, half precision, dispatch limits, CPU↔GPU waits and GPU allocation |
 | [references/runtime-contracts.md](references/runtime-contracts.md) | The render-graph runtime's invariants, before changing `RenderGraphRuntime`, a recorder, a capture path or pacing |
 
 ## Route adjacent work

@@ -81,7 +81,7 @@ blocked until it is taken.
     qualify the original temporal-off blink at a quiet refresh cadence;
     reconstruction now converges on both backends.
 16. [Simulation tick off the frame thread](#simulation-tick-off-the-frame-thread):
-    the thread itself, a design consensus the owner has yet to queue.
+    [the memo](simulation-thread.md)'s phases, one host loop first.
 
 ## Owner decisions
 
@@ -145,8 +145,188 @@ Code that grew a second implementation (AGENTS.md rule 7) or costs velocity:
 - Two ways to grow a GPU region: `SdfWorldTables.EnsureProgramCapacity` waits
   for the device to idle and rebuilds the program region whole, beside
   `GpuRegion.Grow`, which grows under every residency policy.
-- Two directory removers: `tests/Shared/TemporaryDirectory.cs` still deletes
-  recursively beside the confined removal `RunDirectory.Delete` uses.
+- Recursive `Directory.Delete` remains in the assemblies the browser payload
+  links: `CacheRetention` (`Puck.Abstractions`), `ConsoleControlSession`
+  (`Puck.Hosting`) and `WorldStaging` (`Puck.World.Transpiler`, twice). Route them
+  through `ConfinedDirectory.RemoveTree` by referencing `Puck.Confinement` from
+  `Puck.Abstractions`, after one `browser.yml` AOT publish shows the payload still
+  builds and boots with `Puck.Confinement` in its closure. `BrowserWorkspace`
+  deletes the browser's in-memory mount, where the confined removal refuses by
+  design, and keeps its delete.
+- The host loop's duplicates, converged by
+  [the simulation thread](simulation-thread.md#6-duplicated-mechanisms-on-this-path)'s
+  phase 1: three host loops (`LauncherWindowHostedService.cs:395-720`,
+  `HeadlessTickHostedService.cs:151-230`, `OffscreenTickHostedService.cs:236-330`,
+  with the windowed lockstep branch a fourth copy), two step shells
+  (`WorldSimulation.cs:16`, `HeadlessWorldSimulation.cs:17`), two console
+  drains per windowed iteration, three simulation clocks the frame reads and
+  two interpolation fractions.
+- Two mirrors of the boot world's snapshot, both hub subscribers copying every
+  entry per tick: `WorldClient` (presentation) and the boot endpoint's
+  `WorldSessionMirror` (`WorldAuthorityEndpoint.cs:121`); and three per-sink
+  redaction scratch buffers (`WorldOutputHub.cs:71`, `WorldSessionSink.cs:29`,
+  `WorldFederationProjectionSink.cs:42`). Larger than the thread's packet;
+  take them after its phase 4 lands, when the two mirrors sit on their own
+  threads and the fold is in one place.
+
+The duplicate survey of `src/` (each group below is one lane, ranked by payoff,
+velocity and correctness first; paths are under `src/`). `puck scan --only
+clones` finds few syntactic copies worth merging (91 clusters at 60 tokens,
+mostly short emulator `TransferState` bodies); the duplicates that matter are
+second implementations of one mechanism under other names:
+
+1. File-system primitives (M, implementer). One survivor each: `AtomicFile`
+   (`Puck.Assets/AtomicFile.cs`) for writes, moved down to `Puck.Abstractions`
+   so its lowest caller reaches it; one exclusive file lock beside it; one retry.
+   - `[medium]` Six exclusive lock files, each with its own idea of contention:
+     `CliLease.TryAcquire` (`Puck.Cli.Core/CliLease.cs:308`, HResult low word
+     11/32/33), `ShaderBuild.AcquireLock` (`Puck.Shaders.Model/Compiler/ShaderBuild.Publication.cs:30`,
+     any `IOException` until a deadline), `ShaderPackager.LockPackageAsync`
+     (`Puck.Shaders/Packaging/ShaderPackager.Store.cs:182`, the precise test:
+     sharing violation or the platform's `EWOULDBLOCK` only), `WorldArtifactStore.TryOpen`/`Acquire`
+     (`Puck.Cli.Harness/WorldArtifactStore.cs:65`, any `IOException` or
+     `UnauthorizedAccessException`), `LawProofTree.TryAcquire` and `Prune`
+     (`Puck.Cli.Laws/LawProofTree.cs:55`), `FileReleaseSequenceStore.TryAcquireLease`
+     (`Puck.Launcher/Release/IReleaseSequenceStore.cs:96`). Every one but the
+     packager's treats a missing directory or a full disk as another holder and
+     waits out its deadline. Survivor: the packager's contention test, with a
+     try-once, a deadline and a cancellable wait.
+   - Hand-rolled temp-and-rename writes beside `AtomicFile`:
+     `GpuPipelineCacheFile.Save` (`Puck.Abstractions/Gpu/Pipelines/GpuPipelineCacheFile.cs:161`),
+     `ShaderBuild.Publish` (`ShaderBuild.Publication.cs:67`, with its own
+     `Retry` at 85 beside `CliRetry`), `CountersPipelineCache.Copy`
+     (`Puck.Cli.Runs/Counters/CountersPipelineCache.cs:41`),
+     `ShaderDeclarations` (`Puck.SdfVm.Model/ShaderDeclarations.cs:163`), and
+     `CliLease.Serve` (`CliLease.cs:265`), whose fixed `<path>.tmp` name two
+     writers share `[low]`. None keeps the mapped-file `File.Replace` fallback
+     `AtomicFile` has for Windows.
+2. The document binding walk (M, specialist). `WorldPresentationManifest`
+   (`Puck.World.Protocol/Protocol/WorldPresentationManifest.cs:55-70`,
+   `345-418`, its `Builder` from 420) and `WorldKeyedValues`
+   (`Puck.World.Schema/WorldKeyedValues.cs:47-56`, `128-190`, its `Walk` from
+   192) each carry a reflective walk of the document model with its own
+   `Surfaces`, `ComputeReaching`, `Reaches`, `Walked`, `IsWalked`, `MembersOf`
+   and text-screen placeholder handling, to find the state a document reads.
+   Their surface lists differ: the keyed-values walk handles
+   `BindableDirection`, `BindableVector2` and `BindableVector3`, the manifest
+   does not `[medium, unconfirmed]`: check whether a state-bound vector is ever
+   registered with the mirror. Survivor: one walker in `Puck.World.Schema`
+   (which the protocol references) taking a per-consumer visitor.
+3. GPU memory arenas (M, implementer; a GPU leg with the Vulkan windowed boot).
+   `DirectXHeapArena.Create`/`Return` (`Puck.DirectX/DirectXHeapArena.cs:73`,
+   `166`) and `VulkanMemoryArena.Bind`/`Release`
+   (`Puck.Vulkan/VulkanMemoryArena.cs:58`, `102`) repeat one policy over the
+   shared `GpuMemoryRanges`: 64 MiB blocks per key, first fit across the pool,
+   a block of its own above half a block, keep one empty shared block per pool,
+   retire on `FreeAll`. They differ only in the native calls, in how a resource
+   finds its range (a private-data token on Direct3D 12, a handle map on
+   Vulkan) and in Vulkan mapping host-visible blocks. Survivor: a generic pool
+   in `Puck.Abstractions/Gpu` with backend allocate, free and bind callbacks.
+   Beside it, `GpuRangeAllocator` (`Puck.Abstractions/Gpu/Residency/GpuRangeAllocator.cs`,
+   `uint`, allocation-free, no alignment) and `GpuMemoryRanges`
+   (`Puck.Abstractions/Gpu/Device/GpuMemoryRanges.cs`, `ulong`, aligned,
+   `List`-backed) are two first-fit coalescing range allocators; keep one,
+   aligned and allocation-free.
+4. Surface upload and readback per backend (L, specialist; a GPU leg).
+   `DirectXSurfaceUpload` (`Puck.DirectX/Interop/DirectXSurfaceUpload.cs`, 592
+   lines) and the readback in `DirectXGpuSurfaceTransferFactory.cs:61`, beside
+   `VulkanSurfaceUpload` (367) and `VulkanSurfaceReadback` (283), implement one
+   staging-buffer-to-image mechanism twice, with different pipelining: Vulkan
+   keeps a blocking submit-and-wait path when no frame synchronization is
+   passed, and `Puck.Vulkan.Presentation/SurfaceCompositor.cs:327` builds a
+   `VulkanSurfaceUpload` directly instead of through `IGpuSurfaceUpload`.
+   Written once over `IGpuBufferFactory` and `IGpuRecorder`, which needs
+   buffer-to-image and image-to-buffer copies added to the recorder.
+5. Paths (M, implementer).
+   - About 107 hand-rolled `Replace('\\', '/')` calls in 65 files (the CLI
+     verbs, `CliPaths.cs:28` and `:51`, `GpuPipelineCacheFile.cs:156`), because
+     `PuckPaths.Normalize` (`Puck.Abstractions/PuckPaths.cs:36`) always makes
+     a path full. Add a separator-only form beside it and use it everywhere.
+   - Eight hand-written case-fold choices beside `PuckPaths.Comparison`:
+     `Puck.Mcp/OperatorWorlds.cs:356`, `Puck.Launcher/Release/InstallPruner.cs:59`,
+     `Puck.Confinement/InstallRegistration.cs:134`,
+     `Puck.World.Schema/WorldMachineContentFolder.cs:358`,
+     `Puck.Launcher/Release/HealthGateFile.cs:67`,
+     `Puck.World.Browser/Engine/BrowserWorkspace.cs:121`, `CliPaths.cs:44`,
+     `Puck.Cli.Runs/Sweep/SweepCommand.cs:306`.
+   - `[medium]` Three portable relative path validators that disagree:
+     `WorldDocumentPaths.IsPortableRelativeFilePath`
+     (`Puck.World.Schema/WorldDocumentPaths.cs:17`, admits `..`),
+     `OfficialCanonicalizer.IsWellFormedWorkspaceName`
+     (`Puck.Launcher/Release/OfficialCanonicalizer.cs:19`), and
+     `ReleaseCanonicalizer.IsPortablePath` (`Puck.Launcher/Release/ReleaseManifest.cs:95`),
+     the only one refusing device names (`CON`, `COM1`) and `<>"|?*`. A
+     workspace name lands on a client's disk, so the official one is the
+     weaker where it matters. Survivor: the release rules, with a parent-segment
+     switch for documents.
+6. Child processes and the World boot line (M, implementer).
+   `MotionWorldProcess.Start` (`Puck.Cli.Runs/Motion/MotionWorldProcess.Device.cs:54`),
+   `SweepCommand.ScenarioFile` (`Puck.Cli.Runs/Sweep/SweepCommand.cs:362`) and
+   `OperatorWorlds.Launch` (`Puck.Mcp/OperatorWorlds.cs:461`) build
+   `ProcessStartInfo` by hand beside `ChildProcess` (`Puck.Hosting/ChildProcess.cs`)
+   and `CliProcess` (`Puck.Cli.Core/CliProcess.cs:135`). `[low]` The sweep
+   reads both streams to end with no exit drain grace, the hang
+   `ChildProcess.ExitDrainGrace` exists for (a build server holding the pipe).
+   The World's argument vector (`--world`, `--devices`, `--headless`,
+   `--state-dir`) is spelled in six places (`Puck.Cli.Bench/StartupBenchmarks.cs:64`,
+   `Puck.Cli.Runs/Canary/CanaryCommand.Federation.cs:464`,
+   `CanaryCommand.Stub.cs:93`, `OperatorWorlds.cs:478`,
+   `Puck.World/WorldTestBatch.cs:79`, the motion run);
+   `Puck.Cli.Harness/WorldDevices.cs` starts the one builder they share.
+7. Emulator Post batteries (M, implementer). The AGB and HGB batteries each
+   keep one wrapper file per shared stage (`Throughput`, `Allocation`,
+   `Determinism`, `ForkDeterminism`, `Embedding`, the five `QueuedHost*`
+   stages), differing only in the machine factory, while HGD already folds
+   them into `Puck.HumbleGamingDeck.Post/Stages/HostContractStages.cs`. Make
+   the stage set one table in `Puck.Machines.Post` over a core factory.
+   - `[low]` `HashDivergenceProbe.Run` is written twice
+     (`Puck.AdvancedGamingBrick.Post/HashDivergenceProbe.cs:185`,
+     `Puck.HumbleGamingBrick.Post/HashDivergenceProbe.cs:185`). The AGB loop
+     targets each machine's own `Cycles + ScanlineCycles`, which a perturbation's
+     snapshot and restore can desynchronize; the HGB loop's one absolute
+     cumulative target is correct and survives, in `HashDivergenceReport`.
+   - The runners parse arguments with `CommandLineArguments`
+     (`Puck.Machines.Post/CommandLineArguments.cs`) beside the
+     `System.CommandLine` every other entry point uses.
+8. Small merges (S each; one implementer lane can take them together).
+   - Fixed-point boxes (specialist, after the tick-cost lane lands):
+     `FixedSpatialAabb` (`Puck.World.Schema/WorldPlacementSpatial.cs:81`,
+     centre and extent, an `Int128` overlap test that cannot overflow),
+     `WorldColliderBox` (`Puck.World.Server/WorldColliderBox.cs`, minimum and
+     maximum), the tuple `FixedColliderBounds.WorldBounds` returns
+     (`Puck.Physics/FixedColliderBounds.cs`), `WorldTabletopFrame.Footprint`
+     (`Puck.World.Schema/WorldTabletopFrame.cs:30`) and `SdfBoundsCache.Entry`
+     (`Puck.SignedDistance/Queries/SdfBoundsCache.cs:94`). `Puck.Maths` has no
+     fixed box; add one with the `Int128` test.
+   - Hex colours, three grammars (specialist): `HexColor`
+     (`Puck.World.Authoring/Authoring/HexColor.cs:105`, `#RRGGBB` and
+     `#RRGGBBAA` only), `TextEnrichmentTags.TryParseHexColor`
+     (`Puck.Text/TextEnrichmentTags.cs:382`, 3, 4, 6 or 8 digits, `#`
+     optional), and `PuckParser.ParseHexColor`
+     (`Puck.Transpiler/Parsing/PuckParser.cs:1342`), which lexes `#RGB` and
+     lowers it verbatim for `HexColor` to refuse `[low]`. Decide one grammar.
+   - Probe shaders: `AccumulateScale`, `MaxAccumulateScale` and the group
+     accumulators are copied into each of `Puck.Shaders/Assets/Probes/average.hlsl`,
+     `faerie.hlsl`, `ir-blob.hlsl` and `ir-marker.hlsl`; one shared include.
+   - Fibonacci sphere directions copied exactly:
+     `Puck.Cli.Worlds/Mesh/MeshSceneCommand.cs:212` and
+     `Puck.SdfVm/SdfMeshIrradiance.cs:1592`.
+
+Duplicates the survey left to the lanes that own their areas:
+
+- Tick cost: two frozen perception images, each a population snapshot with
+  lazily built `FixedSpatialNeighborhood`s per cell width and a range, cone and
+  sight test (`Puck.World.Server/WorldRuleHost.DecisionNeighbors.cs:20-135`,
+  `Puck.World.Server/WorldPopulation.Flock.cs:18-30`, `154-280`); and an input
+  image hashed field by field twice (`Puck.World.Server/WorldInputOwner.Checkpoint.cs:110`,
+  `Puck.World.Server/WorldTick.RoutedInput.cs:64`).
+- Cold bake: `sdfGlyphSampleFieldMedian` and `sdfBoxDistance(float2)`
+  (`Puck.SdfVm/Assets/Shaders/Sdf/field/sdf-shapes.hlsli:6`, `413`) repeat
+  `puckMsdfReconstruct` and `puckBoxDistance2` from
+  `Puck.Shaders/Assets/Shaders/Shared/msdf.hlsli`; the merge moves the bake
+  closure, so it lands with that lane's closure change.
+- Simulation thread: its host-loop duplicates are filed above; this survey
+  found none beyond them.
 
 The `.puck` sources (about 42,000 lines outside the cartridges, about 2,500 of
 them verbatim repeats) under-use the language:
@@ -301,9 +481,23 @@ packet), and re-read these stops on a quiet machine.
   reaching its bound, or the queue idle behind the back buffer) would. The
   Linux windows hold no display request (Wayland's idle inhibit, X11's
   screensaver suspend). (from: frame-time)
+- [low · unconfirmed] A windowed Direct3D 12 debug World started with
+  `--exit-after-seconds 840` and a stdin script ran about 25 minutes until it
+  was stopped by PID, through its whole cold bake. Find whether the auto-exit
+  counts wall time, ticks the bake starved, or nothing once stdin closes.
 - [low] `WorldGpuTiming` (`world.gpu-timing` and its `timeline`) has no CPU
   test over a fake runtime, so its lines rely on a live render root.
   (from: frame-time)
+- [low · unmeasured] `SdfMeshPathBake.IrradiancePending` walks every group once
+  a frame per residency after the bake settles (`SdfMeshPathBake.cs:288-294`,
+  called from `SdfWorldResidency.cs:561`), the scan `Pending` dropped for a
+  done-through cursor when it touched all 2,596 groups per call. Give it the
+  same cursor over the opaque static groups. (from: perf-guidance)
+- [low] The sky environment reduction reads `sdfSkyReduce[row][added]` with 28
+  lanes on rows 64 words apart
+  (`sdf-sky-environment-reduce.comp.hlsl:13,49`), a 28-way groupshared bank
+  conflict on each of 64 reads; pad the row to 65 words. It runs one group only
+  when the environment refreshes. (from: perf-guidance)
 - [low] The hall lift ride's `host.frames` (owed by the sim-bounds lane) is still
   unread: `gallery.level 0` stands her before the door, not in the car, so the
   reading taken (`gallery.lift 3`, 300 ticks: 128 ms average, simulate up to 4
@@ -493,13 +687,6 @@ holds the fixed poses and the approaches already rejected.
 Owner: test runner and replay specialist · medium and low ·
 Next: make the per-tick authority hash incremental (measured below).
 
-- [medium] Strict `TemporaryDirectory` teardown still removes its root with
-  recursive `Directory.Delete` (`tests/Shared/TemporaryDirectory.cs:75`), bypassing
-  `RunDirectory.Delete`. A passing law that leaves a 5,000-deep tree can still
-  overflow its host's stack; strict cleanup also deletes links that the shared
-  confined remover refuses. Route strict teardown through the shared remover
-  while preserving its writer-release checks, and migrate link-owning fixtures
-  and unsupported-host teardown behavior together. (from: the sweep-crash review)
 - [low] `Fixtures.FreshServer` (`tests/Shared/World/Fixtures.Server.cs:112`) deserializes without `WorldStateSettlement.SettleBeforeAdmission`, so a boot from a raw document with a seeded responsive placement can show the response's prototype while colliding as the authored one, which the real loader never does. Settle in the fixture as the loader does. (from: the tip-reds lane)
 - [medium] `--reproduce` costs about twice the ordinary run, and the cost is
   per-tick hashing and recording, not host reuse. Recording slows the authored
@@ -748,6 +935,15 @@ windowed checks, then the three developer exhibits.
   derived face (a creation's own screen) does not name the placement it belongs
   to: `WorldStaticSceneEmit` registers no pick target for either. A pick on the
   group of the program's segments no instance owns names nothing.
+- [low] A kernel's registers and local memory are read only through RenderDoc,
+  Nsight or PIX ([gpu cost](../../.claude/skills/rendering/references/gpu-cost.md#read-a-kernels-registers-and-occupancy)),
+  though Vulkan's `VK_KHR_pipeline_executable_properties` is enabled
+  (`VulkanLogicalDeviceFactory.cs:222`) and its entry points bound
+  (`VulkanDeviceCommands.cs:177-180`): no pipeline is created with
+  `VK_PIPELINE_CREATE_CAPTURE_STATISTICS_BIT_KHR` and nothing calls
+  `vkGetPipelineExecutableStatisticsKHR`. Wire a verb that prints each kernel's
+  driver statistics on Vulkan, so a register or spill change reads without a
+  capture. (from: perf-guidance)
 - Restore and inspect the remaining developer exhibits: the rate range (LoD and
   rate tiers), the traversal course's geometry and the kinematics scope
   (position and measurement). Clean bot verdicts do not show that they look or
@@ -800,22 +996,35 @@ empty store (AGENTS.md).
   kernels agree, so a shared store would halve the cold cost of using both.
 - The rebakes nobody needed are the [refactoring campaign](#refactoring-campaign)'s
   first item (`SdfMeshBakeClosure` reaching upload and draw-record code).
+- [low · unconfirmed] The bake indexes its `static const float3 SdfBakeTaps[4]`
+  by the `[loop]` counter (`sdf-mesh-bake.comp.hlsl:22,94,102`), the shape the
+  rendering skill's local-array rule forbids; no capture has read the bake
+  kernel's local memory, since it dispatches only while a bake is pending. Read
+  its "Local Memory Size" in a Vulkan RenderDoc capture of a baking frame; if it
+  spills, pick each tap's signs from bits (x from 0x9, y from 0xC, z from 0xA,
+  bit `tap - 1`). Any edit moves the bake identity, so batch it with the next
+  bake-kernel change. (from: perf-guidance)
 
 ### Simulation tick off the frame thread
 
 Owner: principal designs (sparingly, design only), specialist builds · high ·
-Next: the design memo, then its build. The owner queued the thread.
+Next: build [the simulation thread](simulation-thread.md) by its phases, phase
+1 (one host loop, no thread) first. The owner queued the thread.
 
-- [low] The pump now sheds owed steps once a burst spends a step's period of wall time, but nothing counts the shed steps: add a drop counter to `host.frames` (and `world.rate`) so a World running slower than real time says so. Owed in the lead's windowed window: a hall lift ride's `host.frames` with frames near one tick's cost. (from: sim-bounds lane)
+- [low] The pump now sheds owed steps once a burst spends a step's period of wall time, but nothing counts the shed steps: add a drop counter to `host.frames` (and `world.rate`) so a World running slower than real time says so. Owed in the lead's windowed window: a hall lift ride's `host.frames` with frames near one tick's cost. The memo's phase 1 carries it (the timeline's tick lane). (from: sim-bounds lane)
 
-- Decide (the lead's call, for the design memo to confirm or overturn): one simulation
-  thread owns the pump, the server and every instance host and publishes
-  immutable per-tick snapshots into a small ring the frame thread reads
-  latest-complete; input is captured on the frame thread into a per-tick queue;
-  offscreen and `world.lockstep` run the tick inline under the same pump;
-  console, MCP and live-edit commands marshal through the pump's existing
-  queue; lifetime and bounded backpressure are settled before any lock-free
-  claim, since a collection pauses both threads.
+- Decided in [the simulation thread](simulation-thread.md#decisions): one
+  simulation thread owns the pump, the server, every instance host, the
+  console drain and the seat half of the client; the handoff is a mailbox
+  behind the existing `IClientSink` seam, applied in order on the frame
+  thread, folding a superseded snapshot with `EntityContinuity.Then`; the
+  frame derives its clock and alpha from what it applied; input capture is
+  unchanged (the router's capture gate already crosses threads);
+  presentation verbs declare a routing on the registry's one routing axis;
+  offscreen, `world.lockstep` and unpaced headless step inline through the
+  same pump and loop; the three host loops converge into one before the
+  thread is added. The memo's build plan, duplicates and limits are its
+  sections 6 to 8.
 - The windowed host runs `FixedStepPump.Advance` and the frame on one thread, so
   a frame carrying a tick pays its 4 to 10 ms and the tick sets the frame's p99:
   uncapped on Direct3D 12 a frame without a tick costs about 4 ms and one with a

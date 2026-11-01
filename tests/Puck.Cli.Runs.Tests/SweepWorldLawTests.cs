@@ -1,5 +1,6 @@
 using Puck.Cli.Sweep;
 using Puck.Cli.Motion;
+using Puck.Confinement;
 using System.Text.Json;
 
 using Xunit;
@@ -48,7 +49,7 @@ public sealed class SweepWorldLawTests : IDisposable {
 
     public void Dispose() {
         m_build?.Dispose();
-        Directory.Delete(path: m_directory, recursive: true);
+        ConfinedDirectory.RemoveTree(path: m_directory);
     }
 
     private sealed class Lease : IDisposable {

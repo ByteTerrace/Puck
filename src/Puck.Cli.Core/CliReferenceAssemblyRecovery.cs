@@ -3,6 +3,7 @@ using System.Reflection.Metadata;
 using System.Diagnostics;
 using System.Text.RegularExpressions;
 using Puck.Abstractions;
+using Puck.Confinement;
 
 namespace Puck.Cli;
 
@@ -65,7 +66,7 @@ public static partial class CliReferenceAssemblyRecovery {
                 directories.Add(item: directory);
             }
             if (elapsed.Elapsed >= timeout) { return first; }
-            foreach (var directory in directories) { Directory.Delete(directory, recursive: true); }
+            foreach (var directory in directories) { ConfinedDirectory.RemoveTree(path: directory); }
             Console.Error.WriteLine(value: $"build: removed corrupt reference outputs; retrying once. First failure: {CliPaths.ToDisplay(fullPath: log)}");
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or ArgumentException)) {
             return first with { Stderr = (first.Stderr + $"\nreference recovery refused: {exception.Message}") };

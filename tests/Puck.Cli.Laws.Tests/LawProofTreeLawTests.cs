@@ -1,3 +1,4 @@
+using Puck.Confinement;
 using Puck.Testing;
 using Xunit;
 
@@ -421,7 +422,7 @@ public sealed class LawProofTreeRecloneLawTests : LawProofLaws {
             } else if (damage == "origin") {
                 Assert.Equal(expected: 0, actual: CliGit.Run(repository: tree, arguments: ["config", "remote.origin.url", scratch.RootPath]).ExitCode);
             } else {
-                CliTreeFiles.DeleteTree(path: tree);
+                ConfinedDirectory.RemoveTree(path: tree);
             }
 
             var second = Prove(checkout: checkout, fix: new LawFix(Paths: [], Revision: "HEAD"), runner: runner, scratch: scratch);
