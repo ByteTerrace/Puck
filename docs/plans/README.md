@@ -1,65 +1,71 @@
 # Plans
 
+Puck is an engine that runs authored Puck programs on generic machinery. Worlds, rules, cameras, motion, games, machines and cartridges are `.puck` documents an author owns; the engine's C# compiles, runs, schedules, costs and draws them, and never implements one of them as a feature. Every concrete design, the standard included, is data in `worlds/standard/` that any author imports, overrides by id or replaces; the debug world develops it and holds only its own exhibits. A design written into C#, or living only in the debug world, is built twice and is removed when found.
+
+The goals, in the order a conflict is settled:
+
+1. **Authors rule.** The engine offers mechanisms; a C# default, enum value or constant that encodes a look or a feel is a second implementation. A plan that would build a feature in C# where a program could express it is rewritten to build the mechanism and author the program.
+2. **Quality and performance together, at the slowest frame.** The bars are the worst frame at the highest quality: the RTX 2060 and RTX 4070 at 60 FPS, the Steam Deck at 45 ([the register](../decisions/rendering.md#the-pipeline-foundation)). A cost is removed at its cause. A lower tier, a coarser shadow snap, a frame of latency, fewer octaves of contact or a capped view is never the fix for a missed bar, and no plan keeps such a lever in reserve.
+3. **Determinism pins the mapping.** Fixed-point simulation; the same document and input give bit-identical state on every machine, backend and thread count. A deliberate correction moves hashes and re-records them in the same change. Nothing presentation-side (who looks, what is resident) may change simulation state.
+4. **Velocity.** Edit to running under 30 seconds; a cold bake under 60 seconds per backend; work proportional to change; derived products are caches keyed from the code that derives them, never committed, never compared by a gate.
+5. **One implementation per mechanism.** Find the system before building one; merge the second when found; a plan that would add a second scheduler, selector, overlay writer, costing model or contact solver is redirected to the one that exists.
+6. **Fundamentals first.** Frame time, bake time, build time and duplication rank ahead of features. Feature work that rests on a fundamental about to change (threading, residency, the bake, state storage) waits or is reshaped into an input to it.
+
+**The engine job system is the path for frame time, background work and memory ownership** ([its packet](open-items.md#engine-job-system)). One prioritised scheduler under a frame budget runs frame-critical work, then a deterministic parallel tick over fixed partitions committed in a fixed order, then parallel view recording on both backends, then background bake and GI proportional to what changed. Its first value is scheduling: the quiet machine's slow frames are a 30 Hz tick and a 15 Hz rated presentation burst meeting on one frame, with bodies no view can see still posing and probing, so the scheduler first spreads rated work off tick frames, holds unseen work and makes work proportional to visibility; the parallel tick (about 70 % of a tick partitions) and parallel recording (about 36 % of produce) come second. It owns memory as well: per-job and per-partition scratch ownership, borrowing and handoff; one physical byte-accounting owner that residency, caches and jobs consume; and which storage moves to native memory through the existing allocator (`IAllocator`, `MimallocAllocator`). The immediate garbage-collection cuts are owned-storage reuse on today's runtime and lead the frame-time work; the custom no-GC runtime port is later work. The job system accelerates authored programs generically: it schedules and parallelises rule and motion-program execution, and does not hand-write a feature to make it fast. Everything that schedules work (the mesh bake, the irradiance trace, residency's near-first order, search's spare budget, machine stepping) is a consumer of this scheduler that supplies priority and policy, never a second executor. The memo that designs the scheduler also fixes the state/jobs contract (partitions, read epochs, commit and allocation order, partition-owned scratch), because parallel evaluation changes rule-read semantics and that mapping is chosen, not inherited.
+
+How the programmes serve this. **Rendering** is baked meshes rasterised with shadow cascades and a CPU-traced irradiance volume; the frame walks no field, and its open work is the bake's speed, GI scheduling and view recording under the job system. **The valley and the terrain pass** are the engine's live test of quality at the bar: terrain-scale relief, one certified contact on the drawn rock, an image exposure meter, haze and far shadows, with the two material sets authored in the standard. **State and language** converge on one live store, one write door, one deterministic work allowance and pools of records. **Residency and memory** supply demand, priority, eviction and byte accounting to the scheduler. **Play, machines, runtime and the editor** are the engine's consumers: they prove themselves on the debug world, the one live world, and their feature waves follow the fundamentals. **UI and input** stay generic mechanisms with authored skins and vocabularies.
+
+Where the programmes compete: a feature wave against a fundamental, the fundamental wins and the feature becomes a sizing input to the memo; a quality trade against a cause fix, the cause fix wins; a per-programme scheduler, selector, budget or memory track against the engine's one, the engine's wins and the programme keeps the policy; parallelism against scheduling, the scheduling fix lands first because it removes the slow frames before a thread is added; a forcing world in `experimental/` against the debug world, the debug world wins; a test or recorded artifact against a change, the change wins and the artifact is re-recorded or deleted.
+
 This directory holds the work that remains to be scheduled. Current architecture lives in the owner documents under `docs/architecture/`, and the reasoning behind each choice lives in [the decision registers](../decisions/README.md); a plan here holds packages, each with what it owns, what it delivers, and the check that closes it, and its own open items name what each package still owes. [Open items](open-items.md) holds the work packets ready to schedule, ranked in its Next list, the owner's open decisions, and a pointer to each plan's open items.
 
-The work is six programmes. Each has one forcing artifact, and the artifacts overlap: the forcing world is built by the first programme, shipped by the second, filled by the third, played by the fourth, and laid out by hand in the sixth, so one build proves several plans. Each programme is one page and opens with an implementation status; treat it as evidence about the code it was written against, and recheck the code before scheduling work from it.
+## How to read a plan
+
+Each programme is one page and opens with an implementation status. A status is evidence about the code it was written against; recheck the code before scheduling work from it. Each programme names a forcing artifact, a build that proves several plans at once, and the debug world is where every forcing artifact and check runs. The One World and the quilt return only by the owner's re-admission; what they have that the debug world lacks is ported into it ([the port packet](open-items.md#port-the-experimental-worlds-missing-features)).
 
 ## [State and language](state-and-language.md)
 
-The state system, its ceilings and costs, the authoring language, and the games that prove them, as one page of packages. Forcing artifact: the forcing world, Rulepush, and Go at 19×19. Its decisions are in [the register](../decisions/state-and-language.md).
+The state system, its ceilings and costs, the authoring language, and the games that prove them, as one page of packages. Forcing artifact: the debug world's rules, with Go at 19×19 and the card tables running in it. Its decisions are in [the register](../decisions/state-and-language.md).
 
-- [State system rebuild: the landing](state-rebuild.md)—what is still in flight before the rebuilt substrate lands.
-- [Abstract-machine costing](abstract-machine-costing.md)—the specification of the price schedule, its evidence, composition rules, and bounded search.
+- [Records and pools](records-and-pools.md)—the contract for typed records and bounded pools: MaxLive-sized storage, explicit endpoints and generation-safe handles, and the representation S10 replaces.
 
 ## [Runtime and delivery](runtime-and-delivery.md)
 
-How a world is composed, compiled, packaged, released, and rolled back, and what a client may observe of it, as one page of packages: asset packages, the ROM ledger, compiled worlds, the presentation view, release pairs, and one evidence package. Forcing artifact: the quilt built as an asset package, shipped as compiled worlds inside it, deployed, rolled back, and restored. Its decisions are in [the register](../decisions/runtime-and-delivery.md).
+How a world is composed, compiled, packaged, released, and rolled back, and what a client may observe of it, as one page of packages: asset packages, the ledger, compiled worlds, the presentation view, release pairs, and one evidence package. Forcing artifact: the debug package built as an asset package, shipped as a compiled world inside it, deployed, rolled back, and restored. Its decisions are in [the register](../decisions/runtime-and-delivery.md).
 
-- [Owned memory for Puck's own host](memory-pooling.md)—retained owner storage,
-  mimalloc, selective shared reuse, and a focused allocation/reclamation slice
-  separated from the later State and World runtime ports.
+- [Owned memory for Puck's own host](memory-pooling.md)—memory ownership belongs to the engine job system; the page holds the later custom no-GC runtime port (M1 and R1 to R3), after the fundamentals.
 
 ## [Machines and cartridges](machines-and-cartridges.md)
 
-Hosted machines under screens and the cartridges they run, as one page of packages: the cabinet module, cabinet authoring, optional distribution, firmware and content policy, the program model, asset ingestion, the content library. Forcing artifact: the arcade's cabinet module used twice, with a retail-scale cartridge in one. Its decisions are in [the register](../decisions/machines-and-cartridges.md).
+Hosted machines under screens and the cartridges they run, as one page of packages: the cabinet module, cabinet authoring, optional distribution, firmware and content policy, the program model, asset ingestion, the content library. Forcing artifact: the debug world's device row and cabinets, the cabinet module used twice. Its decisions are in [the register](../decisions/machines-and-cartridges.md).
 
-- [The UI overhaul](ui.md)—one retained UI tree for worlds, the engine's own surfaces, mods and diegetic screens, in six steps.
+- [The UI overhaul](ui.md)—one retained UI tree for worlds, the engine's own surfaces, mods and diegetic screens; step 1's remainder first, the other steps behind the fundamentals.
 - [Humble Gaming Deck](humble-gaming-deck.md)—the NES and Famicom emulator core (hosted in World screens through the `humble-gaming-deck` engine), the shared-layer changes it needs, and its accuracy target.
 
 ## [Play](play.md)
 
-The reference game's remaining engineering, its creatures and scale, the finder that admits a party across authorities, and the MCP adapter, as one page of packages. Forcing artifact: the quilt played by a group the finder admitted, with an agent authoring through MCP. Its decisions are in [the register](../decisions/play.md).
+The reference game's remaining engineering, its creatures and scale, the finder that admits a party across authorities, and the MCP adapter, as one page of packages. Forcing artifact: the debug world played by a party the finder admitted, with an agent authoring through MCP. The seat delivers the standard chase-camera template, the population's workload is a sizing input to the job-system memo, and the One World, content and federation waves are dormant. Its decisions are in [the register](../decisions/play.md).
+
+- [Companion custody protocol](companion-redesign.md)—the specification the companion decision's build follows, and the model that checks it; steps 6 to 10 remain.
 
 ## [The valley, the moons and the flight between](valley-and-moons.md)
 
-The gallery in a deep valley under moons reached by flight, as an inventory of what the engine already has and eight phases to the round trip: the valley, one real moon, exact frames, residency, atmosphere and flight, the handoff, and the measured trip.
+The gallery in a deep valley under moons reached by flight, as an inventory of what the engine already has and eight phases to the round trip: the valley, one real moon, exact frames, residency, atmosphere and flight, the handoff, and the measured trip. Phases 2 onward wait for the terrain pass and the job system.
 
 - [The terrain pass](terrain-pass.md)—terrain-scale relief, contact on the drawn relief, slope and altitude materials, the image exposure meter, aerial perspective and far shadows, terrain tiles, and the standard package's alpine and painterly material sets.
 
 ## [Rendering](rendering.md)
 
-Durable GPU fixtures, per-pass work counters, general graphics attachments, shared mesh-and-SDF visibility, reproducible shader authoring, how authored world data reaches the GPU, and the frame graph that replaces the SDF engine as the host of rendering: nested views, image sources, hit-to-source mapping, temporal reconstruction, HDR output, and assets derived from SDFs, as one page of packages. Its foundation packages share no code with the other programmes; the state mirror that carries bound rows to a pass reads the state substrate and the presentation view, so those packages are scheduled against both. Its decisions are in [the register](../decisions/rendering.md).
+Durable GPU fixtures, per-pass work counters, general graphics attachments, shared mesh-and-SDF visibility, reproducible shader authoring, how authored world data reaches the GPU, and the frame graph that hosts rendering: nested views, image sources, hit-to-source mapping, temporal reconstruction, HDR output, sky and atmosphere, wallpaper-fold bounds, and visibility, areas and residency over baked SDF meshes; the frame walks no field. P17 is withdrawn. Its foundation packages share no code with the other programmes; the state mirror that carries bound rows to a pass reads the state substrate and the presentation view, so those packages are scheduled against both. Its decisions are in [the register](../decisions/rendering.md).
 
-- [The simulation step off the frame thread](simulation-thread.md)—the fixed-step body on a worker between a dispatch and a join toward the frame-rate bar: thread ownership, the tick record, determinism, commands, a five-phase build that first converges the host loops into one, and the resolution of its cross-family review.
+- [The simulation step off the frame thread](simulation-thread.md)—the tick-to-produce handoff design: thread ownership, what produce reads, the record, determinism and commands. It is an input to the engine job system's memo ([the packet](open-items.md#engine-job-system)); phases 2 and 3 stay as work, and the pipelined worker is withdrawn.
 
 ## [Editor](editor.md)
 
-The running World as the editor and debugger a builder needs, as one page of packages: build mode with the grid and snapping, selection and picking, undo and redo, debug views in every view, the inspector, answers to "why is this dark or invisible", gizmos, the editor camera, per-object cost and a GPU timing readout, live reload with before-and-after, saving edits back to source, the shape gallery as a world, and carving. Forcing artifact: a district of the forcing world laid out, lit and debugged in build mode without typing a coordinate.
+The running World as the editor and debugger a builder needs, as one page of packages: build mode with the grid and snapping, selection and picking, undo and redo, debug views in every view, the inspector, answers to "why is this dark or invisible", gizmos, the editor camera, per-object cost and a GPU timing readout, live reload with before-and-after, saving edits back to source, the shape gallery as a world, and carving. Forcing artifact: a gallery wing of the debug world laid out, lit and debugged in build mode without typing a coordinate.
 
 ## [Milestone 1 acceptance laws](acceptance-laws.md)
 
-The six cross-system laws that prove the pipeline foundation holds together on the integration head: a rewind reaching an existing viewer, a crossing that replays to the same traveller, a restored machine under its bindings, a displayed source surviving the screen's changes, a federated commit that keeps private profile data at home, and an unsupported operation that refuses before changing anything. The page also names the gaps found while designing them: G1 to G5 are fixed in code with laws, and G6 and a narrowed G7 remain open.
+The inventory of cross-system invariants that prove the pipeline foundation holds together on the integration head, and the scenarios still uncovered: a rewind reaching an existing viewer, a crossing that replays to the same traveller, a restored machine under its bindings, a displayed source surviving the screen's changes, a federated commit that keeps private profile data at home, and an unsupported operation that refuses before changing anything.
 
 The current world architecture is owned by [Worlds and federation](../architecture/worlds.md). The [Reference game design](../game/design.md) defines the reference game requirements; its implementation work is in [Play](play.md).
-
-S7's engine and language substrate is present, including generation-aware
-single and pair pools, snapshots, lexical claim/release/iteration, and authored
-round trips. Its World integration is present too: logical enum carriers on
-bodies, pair interactions through the World host, identity-owned record transfer,
-and the Paddleball and Arena migrations. It remains an open package until
-remote home adoption of identity records closes
-([records and pools](records-and-pools.md#remote-home-adoption)) and records
-carry the timed row traits they lack today, which
-[S7](state-and-language.md#s7--records-and-pools) names as the condition for
-converting rows that use them. The evidence list stays in the
-[records and pools contract](records-and-pools.md).
