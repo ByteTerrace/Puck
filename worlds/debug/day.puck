@@ -1,0 +1,8 @@
+// The debug world's time of day: the standard's day cycle (skies.puck) on the hall's `key` sun, a 24-minute day that
+// starts at ten in the morning, with the noon sun 46 degrees up toward +x and -z. A 24-minute day turns the sun a
+// quarter of a degree a second, slow enough to watch the shadows creep and fast enough that a session sees a sunset.
+// debug.md's "Time of day" gives the levers: write `day` to move the time, and its advance to hold the sun.
+
+import "../standard/skies"
+
+dayCycle(daySeconds: 1440, start: 10, noonElevation: 46, heading: 37, cloudiness: 0.3)

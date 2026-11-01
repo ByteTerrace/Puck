@@ -1936,6 +1936,19 @@ uses two workers, 96 native container boots and 96 authored scenario runs. The
 default of at most two concurrent workers leaves memory headroom on a 32 GB
 development machine; use `--jobs 1` alongside other heavy work.
 
+A run of more than one world (a directory, or a source with several `test`
+blocks) takes the machine's `heavy` lease, the one `puck lease heavy`, `puck gate`
+and `puck affected` use, once the worlds are collected and the World is built
+and before the first boot. It holds it until the last leg ends, as the lane named
+by the checkout's directory (`puck test <file>` is the holder). A wait prints the
+lease's own `lease: … waiting for heavy lease held by …` line, and holding prints
+`test: holding the heavy lease as lane <lane> for <n> worlds (waited <s> s)`. A
+run under `puck lease heavy` nests as that holder's child lease rather than
+waiting on it. A single world stays unleased, so a quick check never queues.
+`--workers` re-runs the same worlds one worker count after another, never beside
+each other, so a sweep's counts add no concurrency and a one-world `--workers`
+run stays unleased.
+
 Ordinary authoring runs every isolated test world once. `--reproduce` adds the
 determinism qualification pass: the worker captures each authority's starting
 checkpoint and the tape's input stream, restores that checkpoint in place, then

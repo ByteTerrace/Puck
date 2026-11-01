@@ -17,19 +17,14 @@ public readonly record struct SdfMeshShadowCamera(Vector3 Position, Vector3 Righ
 /// <summary>
 /// The baked-mesh path's shadow cascades for one view: two orthographic cameras along the key light (the light in the
 /// frame's first shadow slot), each enclosing a slice of the view's frustum that starts at its eye, the near cascade the
-/// first <see cref="NearSplit"/> metres and the far cascade up to <see cref="FarSplit"/> metres or the frame's far
-/// distance, and one along the second shadow slot's light over the first <see cref="SecondSplit"/> metres. Each cascade is a bounding sphere of its slice, so its
+/// first <see cref="SdfShadowCoverage.Near"/> metres and the far cascade up to <see cref="SdfShadowCoverage.Far"/> metres
+/// or the frame's far distance (the frame's <see cref="SdfFrame.ShadowCoverage"/>), and one along the second shadow
+/// slot's light over the first <see cref="SecondSplit"/> metres. Each cascade is a bounding sphere of its slice, so its
 /// extent does not change as the camera turns, and its plane's center snaps to a whole texel of the view's cascade
 /// resolution (<see cref="SdfViewQuality.ShadowResolution"/>), so a still light's shadow does not crawl as the camera moves. The fit is a pure function of the camera, the light and the far distance, so every
 /// pass of a frame that fits it agrees.
 /// </summary>
 public readonly struct SdfMeshShadowCascades {
-    /// <summary>The depth, in metres from the eye, the near cascade covers.</summary>
-    public const float NearSplit = 16f;
-    /// <summary>The farthest depth, in metres from the eye, the far cascade covers.</summary>
-    public const float FarSplit = 120f;
-    /// <summary>The distance, in metres, past a cascade's sphere toward the light that its casters may lie.</summary>
-    public const float CasterReach = 200f;
     /// <summary>The constant depth bias a receiver subtracts, in metres.</summary>
     public const float ConstantBias = 0.02f;
     /// <summary>The receiver's offset along its triangle's normal, in cascade texels.</summary>
@@ -109,17 +104,18 @@ public readonly struct SdfMeshShadowCascades {
         var forward = -SdfLights.UnitDirection(direction: light.Direction);
         var camera = snapshot.Camera;
         var side = (texels ?? SdfShadowResolutions.Texels(resolution: snapshot.Quality.ShadowResolution));
-        var far = MathF.Min(FarSplit, frame.FarDistance);
+        var coverage = frame.ShadowCoverage;
+        var far = MathF.Min(coverage.Far, frame.FarDistance);
         var secondSlot = ((lights.ShadowSlots.SlotCount > 1) ? lights.ShadowSlots[1] : -1);
         var hasSecond = ((secondSlot >= 0) && (secondSlot < lights.Count) && (lights[secondSlot].Kind == SdfLightKind.Directional));
         var second = (hasSecond
-            ? Cascade(camera: camera, forward: -SdfLights.UnitDirection(direction: lights[secondSlot].Direction), depth: MathF.Min(SecondSplit, far), texels: side)
+            ? Cascade(camera: camera, casters: coverage.Casters, forward: -SdfLights.UnitDirection(direction: lights[secondSlot].Direction), depth: MathF.Min(SecondSplit, far), texels: side)
             : default);
 
         return new SdfMeshShadowCascades(
             count: 2,
-            far: Cascade(camera: camera, forward: forward, depth: far, texels: side),
-            near: Cascade(camera: camera, forward: forward, depth: MathF.Min(NearSplit, far), texels: side),
+            far: Cascade(camera: camera, casters: coverage.Casters, forward: forward, depth: far, texels: side),
+            near: Cascade(camera: camera, casters: coverage.Casters, forward: forward, depth: MathF.Min(coverage.Near, far), texels: side),
             penumbraSlope: MathF.Max(light.Param, 1.0e-3f),
             second: second,
             secondSlope: (hasSecond ? MathF.Max(lights[secondSlot].Param, 1.0e-3f) : 0f),
@@ -128,16 +124,13 @@ public readonly struct SdfMeshShadowCascades {
     }
 
     // The cascade enclosing the frustum slice from the eye to `depth`: the slice's bounding sphere, whose center lies on
-    // the view's forward axis, seen along the light, with its plane's center snapped to a whole one of its texels.
-    private static SdfMeshShadowCamera Cascade(CameraSnapshot camera, Vector3 forward, float depth, int texels) {
+    // the view's forward axis, seen along the light, with its plane's center snapped to a whole one of its texels. The
+    // radius is rounded up to a whole metre (SdfShadowCoverage.RadiusOf), which keeps the extent, and so the texel size,
+    // still while the far distance or the field of view eases.
+    private static SdfMeshShadowCamera Cascade(CameraSnapshot camera, float casters, Vector3 forward, float depth, int texels) {
         var lateral = (camera.TanHalfFieldOfView * camera.TanHalfFieldOfView) * (1f + (camera.AspectRatio * camera.AspectRatio));
         var centerDepth = MathF.Min(depth, ((depth * (1f + lateral)) * 0.5f));
-        var radius = MathF.Sqrt(((depth - centerDepth) * (depth - centerDepth)) + ((depth * depth) * lateral));
-
-        // A radius rounded up to a whole metre keeps the extent, and so the texel size, still while the far distance or
-        // the field of view eases.
-        radius = MathF.Ceiling(radius);
-
+        var radius = SdfShadowCoverage.RadiusOf(aspectRatio: camera.AspectRatio, depth: depth, tanHalfFieldOfView: camera.TanHalfFieldOfView);
         var center = (camera.Position + (camera.Forward * centerDepth));
         var reference = ((MathF.Abs(forward.Y) < 0.99f) ? Vector3.UnitY : Vector3.UnitX);
         // The camera basis keeps the view cameras' handedness (a camera along -Z has +X right and +Y up), so the mesh pass's
@@ -149,7 +142,7 @@ public readonly struct SdfMeshShadowCascades {
         var alongUp = (MathF.Round(Vector3.Dot(center, up) / texel) * texel);
         var alongForward = Vector3.Dot(center, forward);
         var snapped = (((right * alongRight) + (up * alongUp)) + (forward * alongForward));
-        var back = (radius + CasterReach);
+        var back = (radius + casters);
 
         return new SdfMeshShadowCamera(
             Far: (back + radius),

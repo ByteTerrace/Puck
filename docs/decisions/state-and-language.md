@@ -510,6 +510,15 @@ requires matching operand kinds. Both operands must still name declared values
 at compile time. Other arithmetic keeps its existing absence propagation; use `??` to
 provide a missing value or `isAbsent` to test it.
 
+A fault in an evaluated gate conjunct closes the whole gate, under negation and
+disjunction too, through the shared gate evaluator. Ordinary rules, group
+triggers and conditional effects obey the same verdict. Thus `(not (1 / a > 0))
+!= 0` and its printed truth condition both stay closed with `a = 0`, reporting
+`Arithmetic`; printing cannot turn a failed comparison into a firing.
+The printer elides a numeric truth test only when its operand reparses as the
+identical test. Explicit compound expression boundaries remain, because fact
+comparisons have special absence and infinity semantics.
+
 From weakest to strongest, operators bind as: conditional `?:`, `??`, `or`,
 `and`, prefix `not`, equality, ordering, `|`, `^`, `&`, shifts, addition and
 subtraction, multiplication and division, arithmetic prefix operators. Thus
@@ -550,6 +559,11 @@ defect was found; the weaknesses are structural and economic.
   deliveries (sound, network) are named as such. Reads use bound handles, and
   every addon read and change delivery is checked against per-recipient
   disclosure. A bound address never caches authorization.
+- **Readback answers from the reader's projection.** Query existence, candidate
+  counts and row summaries carry only disclosed cells. `Omit` hides counts too;
+  authoritative arena sizes and hashes are operator diagnostics. Pattern
+  readback uses that same projection for its word and attribute dependencies,
+  rather than refusing based on the presence of withheld cells.
 - **Appearance chosen by state is a projection,** never a document edit:
   placement responses and deals derive from state, and only colliders whose
   geometry changes are updated.
@@ -572,6 +586,9 @@ defect was found; the weaknesses are structural and economic.
   latches and progress, draws and an explicit clock policy. Firing scopes stay
   for speculation, gameplay undo is rebuilt on that bundle, document-edit undo
   stays distinct, and `world.history` stays the editor's time travel.
+  Scoped row reservations rewind through the full snapshot relayout mechanism;
+  growth after capture is reversible, including a zero-capacity keyed row.
+  Refusal leaves no active drive or partial first recording behind.
 - **Entities are records in pools**: the one entity noun, with a reference cell
   kind persisting pool, slot and generation, `forEach` over a pool, in-place
   reloads, and native integer-indexed storage instead of string-keyed

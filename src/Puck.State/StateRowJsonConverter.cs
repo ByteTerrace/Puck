@@ -939,13 +939,14 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
             );
         }
 
-        // The one authored shape's two carriers: a slot writes back the same `value` sugar it was authored with, so a
-        // load->save round-trip is byte-identical; every other shape writes its cells keyed. A slot row that has
-        // never been explicitly set carries no cell yet (the first write mints it) — round-trips as an empty
-        // `cells` array, since there is no value to spell as `value` sugar.
+        // Value sugar carries a slot's value and clock alone. Cell-specific metadata must keep the explicit
+        // cell carrier; otherwise a save silently drops its visibility or behavior. An unset slot also writes
+        // cells, since there is no value to abbreviate.
         if (
             value.IsSlot &&
-            (value.Cells is { Count: 1 })
+            (value.Cells is { Count: 1 }) &&
+            (value.Cells[0] is { Advance: null, Dynamics: null, Cycle: null, Behavior: StateCellBehavior.Inherit,
+                Visibility: null, Observation: null })
         ) {
             WriteCellValue(
                 writer: writer,

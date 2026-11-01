@@ -17,4 +17,21 @@ public static class WorldRenderFarDistance {
 
         return (defaults.FarDistance ?? SdfFrame.DefaultFarDistance);
     }
+    /// <summary>Resolves the shadow cascades' reach a frame uploads for <paramref name="defaults"/>: each authored
+    /// member of <c>render.shadowCoverage</c>, and <see cref="SdfShadowCoverage.Default"/>'s for each absent one.</summary>
+    /// <param name="defaults">The definition's render section.</param>
+    /// <returns>The coverage.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="defaults"/> is <see langword="null"/>.</exception>
+    public static SdfShadowCoverage ResolveShadowCoverage(WorldRenderDefaults defaults) {
+        ArgumentNullException.ThrowIfNull(argument: defaults);
+
+        var authored = defaults.ShadowCoverage;
+        var fallback = SdfShadowCoverage.Default;
+
+        return new SdfShadowCoverage(
+            Casters: (authored?.Casters ?? fallback.Casters),
+            Far: (authored?.Far ?? fallback.Far),
+            Near: (authored?.Near ?? fallback.Near)
+        );
+    }
 }

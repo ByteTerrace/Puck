@@ -1,13 +1,10 @@
-using System.Globalization;
 using Puck.Commands;
 using Puck.World.Server;
 
 namespace Puck.World;
 
 /// <summary>
-/// The <c>captures</c> section's read-back surface: <c>world.captures</c> (the authored schedule) and
-/// <c>world.state.hash</c> (a named deterministic state summary, defaulting to the historical capture digest
-/// <see cref="WorldCaptureScheduler"/> stamps into a manifest entry).
+/// The <c>captures</c> section's read-back surface: <c>world.captures</c> (the authored schedule).
 /// </summary>
 internal sealed class WorldCaptureCommandModule(WorldServer server, WorldStateRoot stateRoot, WorldCaptureRoot captureRoot) : ICommandModule {
     private CommandResult Describe() {
@@ -40,45 +37,6 @@ internal sealed class WorldCaptureCommandModule(WorldServer server, WorldStateRo
             values: lines
         ));
     }
-    private CommandResult Hash(WireArgs args) {
-        if (args.Count > 1) {
-            return CommandResult.Error(output: "[world.state.hash: expected [capture|pose|world|authoritative]]");
-        }
-
-        var token = ((args.Count == 0)
-            ? "capture"
-            : args[0].ToString()
-        );
-        var scope = token switch {
-            "capture" => WorldStateHashScope.Capture,
-            "pose" => WorldStateHashScope.Pose,
-            "world" => WorldStateHashScope.World,
-            "authoritative" => WorldStateHashScope.Authoritative,
-            _ => ((WorldStateHashScope?)null),
-        };
-
-        if (scope is null) {
-            return CommandResult.Error(output: $"[world.state.hash: unknown scope '{token}' — expected capture|pose|world|authoritative]");
-        }
-
-        var tick = (server.NextInputTick - 1UL);
-        var hash = WorldStateHashComposition.Hash(
-            scope: scope.Value,
-            server: server,
-            tick: tick
-        );
-
-        return new CommandResult(Output: ((args.Count == 0)
-            ? string.Create(
-                provider: CultureInfo.InvariantCulture,
-                handler: $"[world.state.hash: tick={tick} hash={hash:x16}]"
-            )
-            : string.Create(
-                provider: CultureInfo.InvariantCulture,
-                handler: $"[world.state.hash: scope={token} tick={tick} hash={hash:x16}]"
-            )));
-    }
-
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
@@ -91,12 +49,6 @@ internal sealed class WorldCaptureCommandModule(WorldServer server, WorldStateRo
             ) is { } refusal)
             ? refusal
             : Describe())
-        );
-        yield return CommandDefinition.WithWireArgs(
-            bindability: CommandBindability.Unbindable,
-            name: "world.state.hash",
-            description: "Reads a live deterministic state hash (Immediate): world.state.hash [capture|pose|world|authoritative]. The default capture scope is byte-for-byte compatible with manifests; authoritative additionally covers rule latches, body/identity action state, and field-lattice cells.",
-            handler: (_, args) => Hash(args: args)
         );
     }
 }

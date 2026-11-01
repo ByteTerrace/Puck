@@ -426,15 +426,16 @@ A `StateVisibility` has three parts:
   hand) and narrows it by clearing one. Declaring either list keeps the row
   private.
 - **`Hidden`**: what an allowed reader of the row learns about cells it can't
-  read. `Omit` leaves no trace, `Count` reports how many were hidden, and
+  read. `Omit` hides the cells and their count, `Count` reports how many were hidden, and
   `Placeholder` shows each hidden cell in pile order as an anonymous entry, like a
   card back.
 
 A row policy and a cell policy intersect: a reader must pass both. A row or cell
 can list at most 32 readers of up to 256 characters each. The policy filters
 what Puck.World discloses to ordinary peers and what a non-operator's console
-reads, including the placements a deal draws from the row; a peer admitted at the `replica` tier receives the whole document, hidden
-cells included.
+reads, including the placements a deal draws from the row. A peer admitted at the
+`replica` tier receives declarations with recipient-checked state. Filtered rows
+omit their derived storage reservations, which would otherwise reveal membership.
 [State in Puck.World](worlds.md) describes the disclosure tiers.
 
 ### Remember what was seen

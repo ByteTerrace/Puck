@@ -18,7 +18,7 @@ internal sealed class ProcessGateRunner(TimeProvider clock, CancellationToken ca
     /// <inheritdoc/>
     public GateStepResult Dotnet(string repositoryRoot, IReadOnlyList<string> arguments) {
         var heavy = ((arguments[0] == "test") ? arguments.FirstOrDefault(predicate: static argument => HostProcesses.IsHeavyTestAssembly(assembly: Path.GetFileNameWithoutExtension(path: argument))) : null);
-        using var lease = ((heavy is null) ? null : HostAdmission.AcquireHeavy(cancellationToken: cancellationToken, clock: clock, repositoryRoot: repositoryRoot, step: heavy));
+        using var lease = ((heavy is null) ? null : HeavyLease.Acquire(cancellationToken: cancellationToken, clock: clock, holder: heavy, repositoryRoot: repositoryRoot));
 
         if ((heavy is not null) && !WaitForCapacity(device: true, heavySuite: true, repositoryRoot: repositoryRoot, step: heavy)) {
             return new GateStepResult(ExitCode: CliExit.Refused, Output: "Heavy-suite host capacity did not return while holding the lease.");

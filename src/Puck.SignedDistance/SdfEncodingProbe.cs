@@ -192,7 +192,13 @@ public static class SdfEncodingProbe {
                         new SdfPaint(Color: new Vector3(x: v[77], y: v[78], z: v[79]), Origin: Vector3.Zero, Rotation: Quaternion.Identity, Shape: SdfPaintShape.Of(curve: new SdfSweepParameters(A: new Vector3(x: v[70], y: v[71], z: v[72]), B: new Vector3(x: v[73], y: v[74], z: v[75]), Bulge: 0f, C: new Vector3(x: 0.9f, y: 0.1f, z: 0.2f), RadiusEnd: v[76], RadiusStart: v[76], StrandOffset: 0f, Strands: 1, Twist: 0f), scale: Vector3.One, type: SdfSolidPrimitive.Sweep), Stroke: 0f, Slot: 3),
                     ],
                     EmissiveLane: ((int)v[80]),
-                    Glass: new SdfGlass(Depth: v[81], Ior: v[82])
+                    Glass: new SdfGlass(Depth: v[81], Ior: v[82]),
+                    Toon: SdfToon.Default with {
+                        Enabled = true, Band = SdfToonBand.Combined, Threshold = v[83], Softness = v[84],
+                        ShadowTint = new Vector3(x: v[85], y: v[86], z: v[87]), OutlineWidth = v[88], OutlineDistance = v[89],
+                        OutlineNormal = v[90], OutlineTint = new Vector3(x: v[91], y: v[92], z: v[93]), SpecularSize = v[94],
+                        Exposure = v[95], Shoulder = v[96],
+                    }
                 )),
                 radius: 0.5f
             ),
@@ -205,7 +211,8 @@ public static class SdfEncodingProbe {
                 0.6f, 0.61f, 0.3f, 0.63f, 0.64f, 0.65f, 0.66f, 0.67f, 0.7f, 0.69f,
                 0.71f, 0.72f, 0.73f, 0.3f, 0.4f, 0.5f, 0.02f, 0.77f, 0.78f, 0.79f,
                 0.81f, 0.82f, 0.83f, 0.5f, 0.6f, 0.7f, 0.03f, 0.87f, 0.88f, 0.89f,
-                2f, 0.004f, 1.5f,
+                2f, 0.004f, 1.5f, 0.41f, 0.12f, 0.31f, 0.42f, 0.53f, 1.25f, 10f, 0.6f, 0.11f,
+                0.21f, 0.32f, 0.03f, 0.75f, 0.7f,
             ],
             name: "material"
         );

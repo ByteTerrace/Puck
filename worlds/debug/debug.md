@@ -164,6 +164,21 @@ the `world.rates` levers: walking Moths, screens and windows at marked
 distances in each tier, a tier view (`world.debug-view rates`, F8) and an A/B
 key (`world.rates toggle`, F7). [range.md](range.md) says how to use it.
 
+## Time of day
+
+[day.puck](day.puck) runs the standard's day cycle (`dayCycle` in
+[skies.puck](../standard/skies.puck)): the sun (the `key` light), its colour and
+the sky follow the `day` state row, which holds the day's phase and advances one
+day every 24 minutes from ten in the morning. At noon the sun stands 46 degrees
+up toward +x and -z.
+
+| To | Console line |
+|---|---|
+| Read the time | `world.state day` (0.25 is six, 0.5 noon, 0.75 eighteen) |
+| Go to a time | `world.state.cell.set day $value 0.5` |
+| Hold the sun | `world.row.set state day advance {"perSecondNumerator":0,"perSecondDenominator":1}` |
+| Run the day again | `world.row.set state day advance {"perSecondNumerator":1,"perSecondDenominator":1440}` |
+
 ## Going places
 
 The [wind meadow](meadow.md), east of the hero studio, is reached with
