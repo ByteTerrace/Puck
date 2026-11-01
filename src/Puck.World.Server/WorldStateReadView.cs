@@ -10,7 +10,6 @@ namespace Puck.World.Server;
 public sealed class WorldStateReadView {
     private WorldServer? m_server;
     private StateArena? m_arena;
-    private readonly IReadOnlyDictionary<string, WorldWithheldRow> m_withheld;
 
     private WorldStateReadView(Principal reader, WorldStateDisclosed disclosed, ulong completedTick, ulong completedEngineTick, long arenaBytes) {
         Reader = reader;
@@ -20,7 +19,6 @@ public sealed class WorldStateReadView {
                 World = Definition.AuthoredState.Select(WorldStateDisclosure.WithoutStorageMetadata).ToArray()
             } };
         }
-        m_withheld = disclosed.Withheld;
         CompletedTick = completedTick;
         CompletedEngineTick = completedEngineTick;
         ArenaBytes = reader.Kind == PrincipalKind.Console ? arenaBytes : 0L;
@@ -98,18 +96,22 @@ public sealed class WorldStateReadView {
         ? $"[{verb}: '{row}' is not disclosed to {Reader.Describe()} — its visibility withholds it]"
         : $"[{verb}: '{row}'.'{key}' is not disclosed to {Reader.Describe()} — its visibility withholds it]"
     );
-    /// <summary>Returns what the reader's disclosure withheld from one row.</summary>
+    /// <summary>Returns what the reader's disclosure withholds from one row, read from the live store at this call.
+    /// A row whose declared policy can withhold from the reader (<see cref="WorldStateDisclosure.ReadsWholeRow"/>)
+    /// answers a record whether zero or many of its cells are withheld now, so a door that refuses or reshapes a
+    /// restricted row does so by policy, never by current membership.</summary>
     /// <param name="row">The row's name.</param>
-    /// <returns>The withheld record, or <see langword="null"/> when the row is disclosed whole.</returns>
+    /// <returns>The withheld record, or <see langword="null"/> when the row reads whole for the reader.</returns>
     public WorldWithheldRow? Withheld(string row) {
-        var withheldRows = m_server is null || IsOperator ? m_withheld : WorldStateDisclosure.Disclose(m_server.Configuration, m_server.Arena, Reader).Withheld;
-        return (withheldRows.TryGetValue(
-        key: row,
-        value: out var withheld
-    )
-        ? withheld
-        : null
-    );
+        // The operator reads whole; a session reads the projection its deliveries carry, already disclosed.
+        if ((m_server is null) || IsOperator) {
+            return null;
+        }
+        var arena = m_server.Arena;
+
+        return (arena.Catalog.TryResolve(handle: out var handle, lane: StateLane.Document, name: row)
+            ? WorldStateDisclosure.WithheldFrom(arena: arena, recipient: Reader, rowOrdinal: handle.Ordinal)
+            : null);
     }
 
     /// <summary>Reads through the live arena and checks disclosure at this read.</summary>

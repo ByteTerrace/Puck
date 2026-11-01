@@ -55,25 +55,28 @@ public sealed class StateCellOperand : RuleOperand, IStateAddressedOperand {
 
         var ordinal = RowOrdinal;
 
-        if (
-            (RowFrom is { } live) &&
-            !live.TryResolve(
-            reader: reader,
-            rowOrdinal: out ordinal
-        )
-        ) {
-            return RuleFact.Absent(kind: ValueKind);
+        if (RowFrom is { } live) {
+            var selected = live.Resolve(
+                reader: reader,
+                rowOrdinal: out ordinal
+            );
+
+            if (selected != KeyNaming.Cell) {
+                return ((selected == KeyNaming.Fault)
+                    ? RuleFact.Faulted(kind: ValueKind)
+                    : RuleFact.Absent(kind: ValueKind));
+            }
         }
 
         return RuleReads.ReadCell(
             key: RuleReads.ResolveKey(
                 keyFrom: KeyFrom,
                 literal: Key,
-                named: out var named,
+                naming: out var naming,
                 reader: reader
             ),
             kind: ValueKind,
-            named: named,
+            naming: naming,
             reader: reader,
             rowOrdinal: ordinal
         );
@@ -168,15 +171,18 @@ public sealed class TableOperand : RuleOperand {
 
         var key = Key;
 
-        if (
-            (KeyFrom is { } indirection) &&
-            !RuleReads.TryResolveIndex(
-            index: out key,
-            reader: reader,
-            reference: in indirection
-        )
-        ) {
-            return RuleFact.Absent(kind: ValueKind);
+        if (KeyFrom is { } indirection) {
+            var naming = RuleReads.ResolveIndex(
+                index: out key,
+                reader: reader,
+                reference: in indirection
+            );
+
+            if (naming != KeyNaming.Cell) {
+                return ((naming == KeyNaming.Fault)
+                    ? RuleFact.Faulted(kind: ValueKind)
+                    : RuleFact.Absent(kind: ValueKind));
+            }
         }
 
         return (Table.TryLookup(
@@ -280,14 +286,17 @@ public sealed class ReductionOperand : RuleOperand {
 
         var ordinal = RowOrdinal;
 
-        if (
-            (RowFrom is { } live) &&
-            !live.TryResolve(
-            reader: reader,
-            rowOrdinal: out ordinal
-        )
-        ) {
-            return RuleFact.Absent(kind: ValueKind);
+        if (RowFrom is { } live) {
+            var selected = live.Resolve(
+                reader: reader,
+                rowOrdinal: out ordinal
+            );
+
+            if (selected != KeyNaming.Cell) {
+                return ((selected == KeyNaming.Fault)
+                    ? RuleFact.Faulted(kind: ValueKind)
+                    : RuleFact.Absent(kind: ValueKind));
+            }
         }
         if (ordinal < 0) {
             return RuleFact.Finite(
@@ -407,18 +416,21 @@ public sealed class HistoryOperand : RuleOperand {
 
         var age = Age;
 
-        // An age the expression cannot compute names no slot, which the ring answers with its empty value the same
-        // way an age past what it holds does.
+        // An age whose expression reads an absence names no slot, which the ring answers with its empty value the same
+        // way an age past what it holds does; an age whose arithmetic faulted faults the read.
         if (
             (AgeExpression is { } expression) &&
             !RuleExpressions.TryEvaluate(
-            fault: out _,
+            fault: out var fault,
             kind: CellKind.Int,
             program: expression,
             reader: reader,
             value: out age
         )
         ) {
+            if (fault != ExpressionFault.Absent) {
+                return RuleFact.Faulted(kind: ValueKind);
+            }
             age = -1L;
         }
 

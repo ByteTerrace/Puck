@@ -1073,7 +1073,7 @@ public sealed partial class RuleEvaluator {
         if (fact.IsAbsent) {
             refused = true;
             ReportRefusal(
-                detail: $"{RuleEvaluation.DescribeFault(fault: ExpressionFault.Absent)}; the effect did not fire",
+                detail: $"{RuleEvaluation.DescribeFault(fault: (fact.IsFaulted ? ExpressionFault.Domain : ExpressionFault.Absent))}; the effect did not fire",
                 effect: effect.Describe,
                 refusal: RuleEffectRefusal.Arithmetic,
                 ruleName: firing.RuleName,

@@ -6,19 +6,22 @@ namespace Puck.State.Rules;
 /// a fact, and reducing a row. Every address is a catalog row ordinal and an interned cell key.</summary>
 public static class RuleReads {
     /// <summary>Reads one cell as a fact at the reader's own tick pair: the absent fact when the address named no
-    /// cell at all, zero for a cell no row holds, and the live value otherwise.</summary>
+    /// cell at all, the faulted fact when computing the address faulted, zero for a cell no row holds, and the live
+    /// value otherwise.</summary>
     /// <param name="reader">The evaluation in flight.</param>
     /// <param name="rowOrdinal">The row's catalog ordinal, or <c>-1</c> for no row.</param>
     /// <param name="key">The interned cell key, or the invalid default for a cell no row holds.</param>
     /// <param name="kind">The encoding the fact carries.</param>
-    /// <param name="named">Whether the address named a cell — see
-    /// <see cref="ResolveKey(IStateReader, CellKey, CompiledCellRef?, out bool)"/>.</param>
+    /// <param name="naming">What the address named — see
+    /// <see cref="ResolveKey(IStateReader, CellKey, CompiledCellRef?, out KeyNaming)"/>.</param>
     /// <returns>The fact.</returns>
-    public static RuleFact ReadCell(IStateReader reader, int rowOrdinal, CellKey key, CellKind kind, bool named) {
+    public static RuleFact ReadCell(IStateReader reader, int rowOrdinal, CellKey key, CellKind kind, KeyNaming naming) {
         ArgumentNullException.ThrowIfNull(argument: reader);
 
-        if (!named) {
-            return RuleFact.Absent(kind: kind);
+        if (naming != KeyNaming.Cell) {
+            return ((naming == KeyNaming.Fault)
+                ? RuleFact.Faulted(kind: kind)
+                : RuleFact.Absent(kind: kind));
         }
         if (
             (rowOrdinal < 0) ||
@@ -204,7 +207,7 @@ public static class RuleReads {
     public static CellKey ResolveKey(IStateReader reader, CellKey literal, CompiledCellRef? keyFrom) => ResolveKey(
         keyFrom: keyFrom,
         literal: literal,
-        named: out _,
+        naming: out _,
         reader: reader
     );
     /// <summary>Attempts to resolve the key a state-writing effect addresses. Only a dynamic key family that must
@@ -232,27 +235,28 @@ public static class RuleReads {
             reference: in reference
         );
     }
-    /// <summary>Resolves the interned key a compiled address names, and whether it named a cell at all.</summary>
+    /// <summary>Resolves the interned key a compiled address names, and what it named.</summary>
     /// <param name="reader">The evaluation in flight.</param>
     /// <param name="literal">The compile-time key, used when <paramref name="keyFrom"/> is
     /// <see langword="null"/>.</param>
     /// <param name="keyFrom">The live indirection, or <see langword="null"/>.</param>
-    /// <param name="named">Whether the address named a cell. An address naming a cell no key table interns answers
-    /// <see langword="true"/> beside the invalid key: no row holds that cell, and it reads zero. An address naming
-    /// nothing — an empty zone's endpoint, a pointer spelling no cell name — answers <see langword="false"/>, and
-    /// reads absent.</param>
+    /// <param name="naming">What the address named. An address naming a cell no key table interns answers
+    /// <see cref="KeyNaming.Cell"/> beside the invalid key: no row holds that cell, and it reads zero. An address
+    /// naming nothing (an empty zone's endpoint, a pointer spelling no cell name) answers
+    /// <see cref="KeyNaming.Nothing"/>, and reads absent. One whose computation faulted answers
+    /// <see cref="KeyNaming.Fault"/>.</param>
     /// <returns>The key, or the invalid default.</returns>
-    public static CellKey ResolveKey(IStateReader reader, CellKey literal, CompiledCellRef? keyFrom, out bool named) {
+    public static CellKey ResolveKey(IStateReader reader, CellKey literal, CompiledCellRef? keyFrom, out KeyNaming naming) {
         ArgumentNullException.ThrowIfNull(argument: reader);
 
         if (keyFrom is not { } reference) {
-            named = literal.IsValid;
+            naming = Named(named: literal.IsValid);
 
             return literal;
         }
 
         return ResolveReference(
-            named: out named,
+            naming: out naming,
             reader: reader,
             reference: in reference
         );
@@ -262,25 +266,35 @@ public static class RuleReads {
     /// <param name="reference">The indirection.</param>
     /// <returns>The key, or the invalid default when the indirection names no cell.</returns>
     public static CellKey ResolveReference(IStateReader reader, in CompiledCellRef reference) => ResolveReference(
-        named: out _,
+        naming: out _,
         reader: reader,
         reference: in reference
     );
-    /// <summary>Resolves one live key indirection, and whether it named a cell at all.</summary>
+    /// <summary>Resolves one live key indirection, and what it named.</summary>
     /// <param name="reader">The evaluation in flight.</param>
     /// <param name="reference">The indirection.</param>
-    /// <param name="named">Whether the indirection named a cell — see
-    /// <see cref="ResolveKey(IStateReader, CellKey, CompiledCellRef?, out bool)"/>.</param>
+    /// <param name="naming">What the indirection named — see
+    /// <see cref="ResolveKey(IStateReader, CellKey, CompiledCellRef?, out KeyNaming)"/>.</param>
     /// <returns>The key, or the invalid default.</returns>
-    public static CellKey ResolveReference(IStateReader reader, in CompiledCellRef reference, out bool named) {
+    public static CellKey ResolveReference(IStateReader reader, in CompiledCellRef reference, out KeyNaming naming) {
         ArgumentNullException.ThrowIfNull(argument: reader);
 
         if (reference.Custom is { } custom) {
             return custom.Resolve(
-                named: out named,
+                naming: out naming,
                 reader: reader
             );
         }
+        var key = ResolveBuiltIn(named: out var named, reader: reader, reference: in reference);
+
+        naming = Named(named: named);
+
+        return key;
+    }
+
+    private static KeyNaming Named(bool named) => (named ? KeyNaming.Cell : KeyNaming.Nothing);
+    // The engine's own indirections: none computes arithmetic, so none faults.
+    private static CellKey ResolveBuiltIn(IStateReader reader, in CompiledCellRef reference, out bool named) {
         if (reference.Binding is BoundKey.Each or BoundKey.Token or BoundKey.Previous or BoundKey.Write) {
             // A binding that is not bound for this evaluation falls back to the reference's own key, which is how
             // the first token of a pattern word reads $previous as the cell no row holds rather than as no cell.
@@ -381,7 +395,7 @@ public static class RuleReads {
             );
         }
 
-        key = ResolveReference(
+        key = ResolveBuiltIn(
             named: out _,
             reader: reader,
             reference: in reference
@@ -395,13 +409,14 @@ public static class RuleReads {
     /// An indirection that spells no integer names nothing.</summary>
     /// <param name="reader">The evaluation in flight.</param>
     /// <param name="reference">The indirection.</param>
-    /// <param name="index">The index, on success.</param>
-    /// <returns><see langword="true"/> when the indirection spells an integer.</returns>
-    public static bool TryResolveIndex(IStateReader reader, in CompiledCellRef reference, out long index) {
+    /// <param name="index">The index when the indirection spells an integer.</param>
+    /// <returns><see cref="KeyNaming.Cell"/> when the indirection spells an integer, <see cref="KeyNaming.Fault"/>
+    /// when computing it faulted, and <see cref="KeyNaming.Nothing"/> otherwise.</returns>
+    public static KeyNaming ResolveIndex(IStateReader reader, in CompiledCellRef reference, out long index) {
         ArgumentNullException.ThrowIfNull(argument: reader);
 
         if (reference.Custom is { } custom) {
-            return custom.TryResolveIndex(
+            return custom.ResolveIndex(
                 index: out index,
                 reader: reader
             );
@@ -422,7 +437,7 @@ public static class RuleReads {
             if (!inner.IsValid) {
                 index = 0L;
 
-                return false;
+                return KeyNaming.Nothing;
             }
 
             // A pointer answers the integer its cell carries; routing it through the key table would lose every
@@ -433,19 +448,20 @@ public static class RuleReads {
                 reference: in reference
             );
 
-            return true;
+            return KeyNaming.Cell;
         }
 
-        var key = ResolveReference(
+        var key = ResolveBuiltIn(
+            named: out _,
             reader: reader,
             reference: in reference
         );
 
-        return TryKeyIndex(
+        return Named(named: TryKeyIndex(
             keys: reader.Arena.Keys,
             index: out index,
             key: key
-        );
+        ));
     }
     /// <summary>Returns the interned key whose name is an integer's decimal spelling, without minting one the
     /// arena does not already hold.</summary>
