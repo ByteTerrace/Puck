@@ -1,0 +1,53 @@
+// What a seat that may not read some of a row's cells is told about that row, at every door a seat reaches: the probe
+// for "hidden answers as absent". Boot it headless with a schedule directory and an operator prelude on stdin that
+// mints zero, one or two cells only seat1 reads into `hand`, and the second seat's answers in the run's
+// test-run.json come out byte-identical whatever the prelude minted:
+//
+//   dotnet run --project src/Puck.World -c Release -- --world worlds/debug/disclosure-probe.puck --devices none
+//     --headless --exit-after-seconds 4 --state-dir <dir> --schedule-dir <dir> < prelude.txt
+//
+// A prelude for two hidden members, operator lines the schedule runs after:
+//
+//   world.row.set state {"name":"hand","kind":"Int","visibility":{},"cells":[{"key":"a","value":1},
+//     {"key":"secret0","value":7,"visibility":{"readers":["seat1"]}},{"key":"secret1","value":8,
+//     "visibility":{"readers":["seat1"]}},{"key":"pub","value":3}]}
+//   world.state.cell.remove hand a
+//
+// Removing `a` leaves the row's members in non-contiguous slots, a storage shape no reader's answer may reflect. The
+// row's own `visibility {}` declares that its cells may carry their own readers, so it is a restricted row for every
+// seat whether or not a hidden member is present now.
+
+schema: "puck.world.definition.v1"
+basis: "avatars/moth"
+documentId: "disclosure-probe"
+
+bodies {
+  localSeats: 2
+  seatActivation [Eager, Eager]
+  seatSpawns ["stage", "stage"]
+}
+
+state {
+  world {
+    row {
+      name: "hand"
+      kind: "Int"
+      visibility {}
+      cells [{ key: "a", value: 1 }, { key: "pub", value: 3 }]
+    }
+  }
+}
+
+schedule {
+  settleTicks: 4
+  rows [
+    { tick: 20, principal: "seat2", command: "world.row state hand" }
+    { tick: 20, principal: "seat2", command: "world.state hand" }
+    { tick: 20, principal: "seat2", command: "world.hud.template p={state.hand.pub}" }
+    { tick: 20, principal: "seat2", command: "world.hud.template s={state.hand.secret0}" }
+    { tick: 20, principal: "seat2", command: "world.hud.template n={state.hand.nothing}" }
+    { tick: 20, principal: "seat2", command: "world.state.observe" }
+    { tick: 20, principal: "seat2", command: "world.observe seat2" }
+    { tick: 21, principal: "seat2", command: "world.row.step state.hand.max 1" }
+  ]
+}

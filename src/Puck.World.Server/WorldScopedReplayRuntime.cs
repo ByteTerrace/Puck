@@ -133,7 +133,7 @@ public sealed partial class WorldScopedReplayRuntime {
         foreach (var image in m_startBodies) {
             if ((m_server.Body(index: image.Index) is null) || (m_server.Population.Generation(index: image.Index) != image.Generation)) { throw new InvalidOperationException(message: "A scoped body was replaced; capture again."); }
         }
-        m_server.Arena.ValidateScope(image: m_start);
+        // RestoreScope checks the whole image before it changes a column.
         m_server.Arena.RestoreScope(image: m_start);
         RestoreRules();
         foreach (var image in m_startBodies) {

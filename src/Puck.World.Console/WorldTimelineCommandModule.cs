@@ -28,9 +28,12 @@ public sealed class WorldTimelineCommandModule(IWorldConsoleAuthority authority,
     /// <param name="keyedResolutions">The keyed values the presentation has resolved, or <see langword="null"/> when
     /// nothing presents.</param>
     /// <param name="mirror">The addressed world's presentation mirror, including session clock previews.</param>
+    /// <param name="discloses">Determines whether the caller reads a state clock's row whole; a clock over a row it does
+    /// not omits the mirror's presented phase and reading, which are readings of that row. <see langword="null"/>
+    /// discloses every row.</param>
     /// <returns>The echo line.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
-    public static string Describe(WorldDefinition definition, ulong engineTick, long? keyedResolutions = null, WorldStateMirror? mirror = null) {
+    public static string Describe(WorldDefinition definition, ulong engineTick, long? keyedResolutions = null, WorldStateMirror? mirror = null, Func<string, bool>? discloses = null) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         var clocks = (definition.Timeline.Clocks ?? []);
@@ -65,7 +68,8 @@ public sealed class WorldTimelineCommandModule(IWorldConsoleAuthority authority,
 
                 echo = echo.Field(key: "held", value: held).Field(key: "rate", value: Number(value: rate))
                     .Field(key: "presentedTick", value: $"{tick.Whole}+{Number(value: tick.Fraction)}");
-                if (mirror.TryReadPhase(clock.Name, out _, out var presentedPhase)) {
+                if (((clock.State is not { } clockRow) || (discloses?.Invoke(arg: clockRow) != false)) &&
+                    mirror.TryReadPhase(clock.Name, out _, out var presentedPhase)) {
                     echo = echo.Field(key: "presentedPhase", value: Number(value: presentedPhase)).Field(key: "presentedReading", value: Number(value: (presentedPhase * clock.Span)));
                 }
             }
@@ -128,7 +132,12 @@ public sealed class WorldTimelineCommandModule(IWorldConsoleAuthority authority,
                     if ((args.Count == 2) && args.Is(index: 0, value: "hold")) { operation = WorldTimelineOperation.Hold; } else if ((args.Count == 2) && args.Is(index: 0, value: "run")) { operation = WorldTimelineOperation.Run; } else if ((args.Count == 3) && args.Is(index: 0, value: "at") && ulong.TryParse(args[2], NumberStyles.None, CultureInfo.InvariantCulture, out tick)) { operation = WorldTimelineOperation.At; } else if ((args.Count == 3) && args.Is(index: 0, value: "rate") && double.TryParse(args[2], NumberStyles.Float, CultureInfo.InvariantCulture, out rate) && double.IsFinite(d: rate) && (rate >= 0d)) { operation = WorldTimelineOperation.Rate; } else { return CommandResult.Usage(form: "hold|run <clock> | at <clock> <engine-tick> | rate <clock> <rate>", verb: "world.timeline"); }
                     if (!mirror.ControlClock(args[1].ToString(), operation, tick, rate, out var refusal)) { return CommandResult.Error(output: $"[world.timeline: {refusal}]"); }
                 }
-                return new CommandResult(Describe(definition: server.Definition, engineTick: server.CompletedEngineTicks, keyedResolutions: mirror?.KeyedResolutionCount, mirror: mirror));
+                var principal = context.Principal;
+
+                return new CommandResult(Describe(definition: server.Definition, engineTick: server.CompletedEngineTicks, keyedResolutions: mirror?.KeyedResolutionCount, mirror: mirror,
+                    discloses: row => ((principal.Kind == PrincipalKind.Console) ||
+                        (server.Arena.Catalog.TryResolve(handle: out var handle, lane: StateLane.Document, name: row) &&
+                        WorldStateDisclosure.ReadsWholeRow(arena: server.Arena, recipient: principal, rowOrdinal: handle.Ordinal)))));
             });
     }
 }

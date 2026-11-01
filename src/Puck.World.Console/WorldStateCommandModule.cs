@@ -304,7 +304,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             ));
         }
 
-        if (view.Withheld(row: row.Name.Value) is { Count: > 0 } withheld) {
+        if (view.Withheld(row: row.Name.Value) is { } withheld) {
             if (withheld.Policy == HiddenCells.Count) {
                 lines.Add(item: $"[world.state.hidden '{row.Name}' count={withheld.Count}]");
             } else if (withheld.Policy == HiddenCells.Placeholder) {
