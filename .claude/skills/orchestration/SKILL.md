@@ -422,7 +422,23 @@ wall-clock work needs a quiet machine, and the lead takes it: a lane judges
 by counts and lists the timing reads it wants, and the lead runs them in a
 window it has cleared of every other lane's builds, suites, evals and World
 runs. A brief that measures boot, compile or frame time grants no GPU and
-takes no timing while other lanes run. Booting a windowed `Puck.World` is a GPU
+takes no timing while other lanes run.
+
+Settle windows are how the lead clears it. The owner's loose deadlines were
+meant as these periods; the lead now schedules them by state, not the clock:
+- **Trigger:** a wave of related lanes has landed, or a decision waits on a
+  measurement (the culling order waits on M1). Never on a timer.
+- **Drain:** launch no new lanes; let running ones reach a stopping point.
+  Lanes may keep editing; their builds, tests and GPU legs queue.
+- **Hold:** `puck lease quiet --holder lead -- <recipe>` takes the build, GPU
+  and heavy leases together and waits for `puck host load` to report idle.
+- **Measure:** one fixed recipe so windows compare: `puck sweep --baseline
+  <last>` (frames at the standard stops, both backends, the day cycle
+  running), a cold bake per backend, and the measurement of the moment.
+- **Record and release:** the numbers go into the owning plan as a dated-free
+  baseline row with the commit in its message, then the leases return.
+A lane's own timing taken under load is recorded as load-bound, and the plan
+does not rank on it. Booting a windowed `Puck.World` is a GPU
 leg even when only its startup is measured; a headless one is not. Use
 [`verification`](../verification/SKILL.md#what-uses-the-gpu) for GPU work
 classification and execution.

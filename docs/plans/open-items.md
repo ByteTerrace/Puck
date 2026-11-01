@@ -1734,6 +1734,14 @@ them verbatim repeats) under-use the language:
 The [illumination plan](illumination.md) holds the research round's decisions
 and the order they land in; the items below are its findings and checks.
 
+- [high, the illum1-fix lane is fixing] Step 1's self-transmission allowance
+  (`passes/sdf-surface-stage.hlsli:219,282`) estimates thickness from
+  curvature, so a flat mm-thick wing ignores a separate slab 10 cm toward the
+  light while a 1 cm sheet self-shadows; [medium] the surface pass's identity
+  omits the material wrap (`SdfWorldTables.Cadence.cs:110`); [medium] cel style
+  values entered the bake code identity (`SdfProgram.Materials.cs:81`);
+  [medium] the standard cel style is duplicated in C# defaults
+  (`ToonStyleDocument.cs:29`, `SdfToon.cs:47`). (from: illum1-astra)
 - From step 1 (illum-step1): stretching the far cascade to cover the valley
   costs too much (at `valley-rim`, 120 m against 480 m: 208 against 7,170 draws,
   0.24 against 8.4 ms, 13.9 against 55.3 cm texels), so the valley waits for the
