@@ -37,7 +37,16 @@ public sealed unsafe class OwnedBuffer<T>(IAllocator? allocator, IAllocationObse
     public int Capacity => m_capacity;
 
     /// <summary>Gets a borrowed reference to an element.</summary>
-    public ref T this[int index] => ref GetSpan()[index];
+    /// <param name="index">The element's index, below <see cref="Length"/>.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> is negative or not below
+    /// <see cref="Length"/>, which is zero once the buffer is disposed.</exception>
+    public ref T this[int index] {
+        get {
+            if (((uint)index) >= ((uint)m_length)) { throw new ArgumentOutOfRangeException(paramName: nameof(index)); }
+            if (m_pointer is not null) { return ref m_pointer[index]; }
+            return ref m_managed![index];
+        }
+    }
 
     /// <summary>Enumerates a borrow of the logical contents.</summary>
     public Span<T>.Enumerator GetEnumerator() => GetSpan().GetEnumerator();
@@ -49,9 +58,12 @@ public sealed unsafe class OwnedBuffer<T>(IAllocator? allocator, IAllocationObse
     /// <summary>Changes the logical length, preserving existing entries and optionally clearing new entries.</summary>
     /// <param name="length">The nonnegative logical element count.</param>
     /// <param name="clear">Whether new logical elements are cleared before publication.</param>
-    public void Resize(int length, bool clear = true) {
+    /// <param name="preserve">Whether existing entries survive growth; a caller that overwrites every entry passes
+    /// <see langword="false"/>, so growth copies nothing and leaves every entry unspecified.</param>
+    public void Resize(int length, bool clear = true, bool preserve = true) {
         ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
         ArgumentOutOfRangeException.ThrowIfNegative(length);
+        if (!preserve) { m_length = 0; }
         if (length > m_capacity) {
             var bytes = checked((((long)length) * sizeof(T)));
 
@@ -96,7 +108,7 @@ public sealed unsafe class OwnedBuffer<T>(IAllocator? allocator, IAllocationObse
     /// <summary>Replaces the logical contents after earlier borrows have ended.</summary>
     /// <param name="source">The source elements, borrowed through the copy.</param>
     public void CopyFrom(ReadOnlySpan<T> source) {
-        Resize(source.Length, clear: false);
+        Resize(source.Length, clear: false, preserve: false);
         source.CopyTo(destination: GetSpan());
     }
     /// <inheritdoc/>

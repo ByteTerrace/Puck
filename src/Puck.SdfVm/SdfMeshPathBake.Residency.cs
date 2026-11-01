@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Numerics;
 using System.Text;
+using Puck.Hosting.Jobs;
 using Puck.SignedDistance;
 using Puck.SignedDistance.Baking;
 
@@ -45,11 +46,39 @@ public sealed partial class SdfMeshPathBake {
     // workspace when the GPU briefly leaves the CPU queue empty. Nothing is rented from or returned to another slot.
     private sealed class WorkerSlot {
         public bool Running;
+        // The scratch bytes this slot last reported to WorkerScratchMemory.
+        public long Reported;
 
         public readonly SdfSampledLattice.RefinementScratch Scratch = new();
+
+        // Reports the slot's retained scratch to the process account; only the slot's holder calls it.
+        public void Report() {
+            var retained = Scratch.RetainedBytes;
+
+            if (retained != Reported) { WorkerScratchMemory.Change(bytes: (retained - Reported)); }
+            Reported = retained;
+        }
     }
 
-    private static readonly WorkerSlot[] WorkerSlots = [.. Enumerable.Range(0, Workers).Select(selector: static _ => new WorkerSlot())];
+    // The worker slots' retained refinement scratch, which outlives any one bake: idle slots release it once a bake
+    // settles and whenever the account asks the caches to trim.
+    private static readonly MemoryAccount.Owner WorkerScratchMemory = MemoryAccount.Shared.CreateOwner(name: "mesh-bake-worker-scratch");
+    private static readonly WorkerSlot[] WorkerSlots = CreateWorkerSlots();
+
+    private static WorkerSlot[] CreateWorkerSlots() {
+        MemoryAccount.Shared.TrimRequested += ReleaseIdleWorkerScratch;
+        return [.. Enumerable.Range(0, Workers).Select(selector: static _ => new WorkerSlot())];
+    }
+    // Releases the scratch of every slot no worker holds.
+    private static void ReleaseIdleWorkerScratch() {
+        lock (WorkGate) {
+            foreach (var slot in WorkerSlots) {
+                if (slot.Running) { continue; }
+                slot.Scratch.Release();
+                slot.Report();
+            }
+        }
+    }
 
     // The bake's CPU stages, whose summed thread time the done line reports (Account).
     private enum BakeStage {
@@ -84,6 +113,25 @@ public sealed partial class SdfMeshPathBake {
     private long m_flyingGroups;
     private long m_workingGroups;
 
+    // How long the frame thread waited to take the bake's gate (Dress, TryTakeForFrame and Stage) since the bake
+    // started: the longest wait, their sum, and the waits past a millisecond. A worker that holds the gate through
+    // array-sized work shows here as frame time.
+    private long m_frameGateWaitMax;
+    private long m_frameGateWaitTotal;
+    private long m_frameGateWaitsSlow;
+
+    // Takes the gate on the frame thread, counting the wait.
+    private Lock.Scope EnterFrameGate() {
+        var started = Stopwatch.GetTimestamp();
+        var scope = m_gate.EnterScope();
+        var waited = (Stopwatch.GetTimestamp() - started);
+
+        m_frameGateWaitTotal += waited;
+        m_frameGateWaitMax = Math.Max(val1: m_frameGateWaitMax, val2: waited);
+        m_frameGateWaitsSlow += ((waited > (Stopwatch.Frequency / 1000)) ? 1 : 0);
+        return scope;
+    }
+
     // Adds the time since a timestamp to a stage's account.
     private void Account(BakeStage stage, long since, Group? group = null, string? detail = null) {
         var ticks = (Stopwatch.GetTimestamp() - since);
@@ -104,6 +152,7 @@ public sealed partial class SdfMeshPathBake {
         Array.Clear(array: m_kindSamples);
         m_bakeFrames = m_idleFrames = m_shareTaps = m_stopShare = m_stopSamples = m_stopBatch = m_stopDrained = 0;
         m_waitingGroups = m_flyingGroups = m_workingGroups = 0;
+        m_frameGateWaitMax = m_frameGateWaitTotal = m_frameGateWaitsSlow = 0;
     }
     // The accounts as done-line fields: each stage's thread seconds, then the frames' use of their shares.
     private string DescribeAccounts() {
@@ -112,7 +161,7 @@ public sealed partial class SdfMeshPathBake {
 
         var kinds = string.Join(separator: ",", values: Enumerable.Range(start: 0, count: KindNames.Length).Select(selector: kind => string.Create(provider: CultureInfo.InvariantCulture, handler: $"{KindNames[kind]}:{m_kindSamples[kind]}")));
 
-        return string.Create(provider: CultureInfo.InvariantCulture, handler: $" kinds=[{kinds}] cpu=[{stages}] frames={m_bakeFrames} idle={m_idleFrames} share-use={((m_shareTaps > 0) ? (m_taps / ((double)m_shareTaps)) : 0d):0.00} stop=[share:{m_stopShare},samples:{m_stopSamples},batch:{m_stopBatch},drained:{m_stopDrained}] per-frame=[waiting:{(m_waitingGroups / ((double)frames)):0.0},flying:{(m_flyingGroups / ((double)frames)):0.0},working:{(m_workingGroups / ((double)frames)):0.0}]");
+        return string.Create(provider: CultureInfo.InvariantCulture, handler: $" kinds=[{kinds}] cpu=[{stages}] frames={m_bakeFrames} idle={m_idleFrames} share-use={((m_shareTaps > 0) ? (m_taps / ((double)m_shareTaps)) : 0d):0.00} stop=[share:{m_stopShare},samples:{m_stopSamples},batch:{m_stopBatch},drained:{m_stopDrained}] per-frame=[waiting:{(m_waitingGroups / ((double)frames)):0.0},flying:{(m_flyingGroups / ((double)frames)):0.0},working:{(m_workingGroups / ((double)frames)):0.0}] frame-gate=[max:{((m_frameGateWaitMax * 1000d) / Stopwatch.Frequency):0.00}ms,total:{((m_frameGateWaitTotal * 1000d) / Stopwatch.Frequency):0.0}ms,over-1ms:{m_frameGateWaitsSlow}]");
     }
     // Measures every group still owing a mesh by its demand box at the demand points, under the gate; with none, the
     // priorities stand as they were and the plan's order decides.
@@ -171,21 +220,53 @@ public sealed partial class SdfMeshPathBake {
     // Queues a group's work off the frame's thread, taken by priority (TakeWork) or, urgent, before any other in the
     // order it came, and starts a worker for it if one is free. Work that takes the bake's gate waits while a caller
     // holds it, as a restart does.
-    private static bool Schedule(Group group, Action<SdfSampledLattice.RefinementScratch> work, bool urgent = false) {
+    private bool Schedule(Group group, Action<SdfSampledLattice.RefinementScratch> work) {
         if (!group.QueueWork()) { return false; }
+        Enqueue(group: group, urgent: false, work: work);
+        return true;
+    }
+    // Queues work for which the group's job count is already taken (Group.QueueWork). A stage that throws finishes its
+    // group with no new mesh (Fail), so its reservation and workspace are released and the bake still settles. An
+    // urgent answer runs even once its group retires, since it owns its decoded samples and frees them.
+    private void Enqueue(Group group, Action<SdfSampledLattice.RefinementScratch> work, bool urgent) {
         void Run(SdfSampledLattice.RefinementScratch scratch) {
-            try { if (!group.Retired) { work(scratch); } } finally { group.EndWork(); }
+            try {
+                if (urgent || !group.Retired) { work(scratch); }
+            } catch (Exception exception) {
+                Fail(exception: exception, group: group);
+            } finally {
+                group.EndWork();
+            }
         }
         lock (WorkGate) {
             if (urgent) {
-                // An answer owns its copied readback even when its group retires. Its callback returns it.
-                AnswerQueue.Enqueue(item: scratch => { try { work(scratch); } finally { group.EndWork(); } });
+                AnswerQueue.Enqueue(item: Run);
             } else {
                 WorkQueue.Add(item: (group, Run));
             }
             StartWorkers();
         }
-        return true;
+    }
+    // Finishes a group whose stage threw: it keeps drawing the mesh it drew before, if any, and a later program plans it
+    // again rather than keeping the failure (Keeps).
+    private void Fail(Group group, Exception exception) {
+        Console.Error.WriteLine(value: $"[sdf.mesh-bake] residency={Residency} group={group.Selector} failed: {exception.GetType().Name}: {exception.Message}");
+        lock (m_gate) {
+            group.Contouring = false;
+            group.InFlight = false;
+            if (group.Done || !m_groups.Contains(item: group)) { return; }
+            group.Failed = true;
+            group.Outcome = $"failed: {exception.GetType().Name}";
+            group.Next = null;
+            group.Done = true;
+            Finish();
+        }
+    }
+    // Whether the pool's queued stages, every residency's, fill a round of its workers. A worker starts whenever a slot is
+    // free (StartWorkers), so such a queue keeps every worker busy for a round, which covers the GPU rounds a newly
+    // admitted group takes before its first stage; a group admitted beyond it would only hold its lattice in the queue.
+    private static bool Backlogged() {
+        lock (WorkGate) { return (WorkQueue.Count >= WorkerSlots.Length); }
     }
     // Called only with WorkGate held. The task's finally returns ownership of the slot after its last borrower ends.
     private static void StartWorkers() {
@@ -198,22 +279,20 @@ public sealed partial class SdfMeshPathBake {
         }
     }
 
-    /// <summary>Retires every group of the bake, for a residency released: their queued work is dropped before it runs,
-    /// so a stage running for one queues no further stage.</summary>
+    /// <summary>Retires every group of the bake, for a residency released, without waiting for any of them: their queued
+    /// work is dropped before it runs, a stage running for one queues no further stage, an answer arriving for one is
+    /// dropped, and each group frees its workspace when its last running job ends.</summary>
     public void Retire() {
-        Group[] retiring;
-
         lock (m_gate) {
-            retiring = m_groups.Concat(second: m_retiredGroups).Distinct().ToArray();
-            foreach (var group in m_groups) { group.Retired = true; }
+            foreach (var group in m_groups.Concat(second: m_retiredGroups)) {
+                group.Retired = true;
+                group.InFlight = false;
+            }
+            m_drawClaims?.Dispose(); m_drawClaims = null;
+            m_pointTableStorage?.Dispose(); m_pointTableStorage = null;
+            m_pointTableMemory.Dispose();
         }
         lock (WorkGate) { _ = WorkQueue.RemoveAll(match: item => { if (!item.Group.Retired) { return false; } item.Group.EndWork(); return true; }); }
-        foreach (var group in retiring) { group.WaitForWork(); group.InFlight = false; }
-        m_drawClaims?.Dispose(); m_drawClaims = null;
-        lock (m_answerGate) {
-            m_answerValues?.Dispose(); m_answerMaterials?.Dispose(); m_answerGradients?.Dispose(); m_answerSlots?.Dispose();
-            m_pointTableStorage?.Dispose(); m_workspaceMemory.Dispose();
-        }
     }
 
     // A worker: runs the queued work, answers first, then the highest priority, until none is queued.
@@ -227,6 +306,7 @@ public sealed partial class SdfMeshPathBake {
                     Console.Error.WriteLine(value: $"[sdf.mesh-bake] work failed: {exception}");
                 } finally {
                     slot.Scratch.TrimForWorkers(workers: WorkerSlots.Length);
+                    slot.Report();
                 }
             }
         } finally {
