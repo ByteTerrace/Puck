@@ -485,6 +485,15 @@ leg did not include a pre-phase still or a Vulkan boot; pixel parity remains
 unconfirmed. The later phases retain their paired-still and frame-budget
 finish lines.
 
+The sweep and windowed observation above were recorded at `02e6bd3cde`.
+The final integration merge includes `lead/fundamentals` at `5ce882b902`,
+including its later mesh-bake changes. On that combined head, Release builds
+of World and CLI passed with zero warnings/errors and the rebuilt private CLI
+reproduced `input-clock30-tests.puck`; both its authority-hash sequence and
+canonical export still match the pre-phase artifact byte for byte. The GPU
+leg was not repeated after that later rendering merge. The integration lead
+owns the current-tip windowed qualification and the cross-family code review.
+
 Original scope and finish:
 
 Converge duplicates 1 to 5; keep one drain operation at both scheduling
