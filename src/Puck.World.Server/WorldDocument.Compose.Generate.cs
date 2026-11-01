@@ -71,15 +71,40 @@ public sealed partial class WorldDocument {
                 return false;
             }
 
+            var advancedMasks = GeneratorEngine.MasksAfter(
+                generator: fillSource,
+                fired: masksAfter,
+                previous: siteRow.DrawnMasks
+            );
+
+            // The apply side paints the pass at the advanced position, so that pass is drawn here too: a draw the
+            // source refuses (an exhausted bounded draw, a drawn-out mask) refuses the mutation rather than the repaint.
+            if (!GeneratorEngine.TryAdvanceBatch(
+                generator: fillSource,
+                targetKind: CellKind.Fixed,
+                seedState: GeneratorEngine.ComputeSeedState(
+                    documentSeed: (current.Generation?.WorldSeed ?? 0UL),
+                    instanceIdentity: instanceIdentity,
+                    site: fillSite
+                ),
+                stream: GeneratorEngine.ComputeStreamId(site: fillSite),
+                cursor: (siteRow.DrawCursor + advances),
+                masks: advancedMasks,
+                sampleCount: cellCount,
+                masksAfter: out _,
+                advances: out _,
+                reason: out var paintReason
+            )) {
+                reason = $"state row '{mutation.Row}' draw fill {paintReason}";
+
+                return false;
+            }
+
             candidate = current.WithWorldState(rows: Upsert(
                 list: current.AuthoredState,
                 item: (siteRow with {
                     DrawCursor = (siteRow.DrawCursor + advances),
-                    DrawnMasks = GeneratorEngine.MasksAfter(
-                    generator: fillSource,
-                    fired: masksAfter,
-                    previous: siteRow.DrawnMasks
-                ),
+                    DrawnMasks = advancedMasks,
                 }),
                 keyOf: static (WorldStateRow row) => row.Name
             ));

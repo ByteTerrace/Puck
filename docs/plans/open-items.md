@@ -2276,6 +2276,13 @@ or deletes tests freely.
   first four expect addon and history messages that the addon-checkpoint and
   history work changed. They are triaged with the shards below. (from:
   field-contact)
+- Three more laws fail beside those five: `WorldConsoleAddressLawTests`
+  ("editor.bar.banks must declare at least one bank", after the standard's
+  editor moved to `.puck`), `WorldInstanceStopLawTests` (after the custody stop
+  work) and `WorldNameRegistryLawTests` (`screenMaterials` and
+  `editor.bar.iconRow` uncovered; the leaks3 lane registers the materials).
+  `WorldInstanceStopLawTests` is the one that may hide a real custody
+  regression: run the stop path by hand before deleting it. (from: unbiased-2)
 - [medium] The first main run after the fundamentals landing fails all four
   Windows test shards, where earlier runs failed only shard 3. Tests do not gate
   deploy during the refactoring campaign, but the jump may hide real regressions
@@ -2740,6 +2747,10 @@ step's completion criteria; C1 to C7 are in.
 Owner: an independent reviewer (Argon) · unconfirmed · Next: the researcher
 brief's priorities ([security review](../development/security-review.md)).
 
+- [unconfirmed] `ArenaSearchEffectHost` (`src/Puck.State.Search/ArenaSearchEffectHost.cs:30-32`)
+  is documented to reproduce the live host's draws, so a search over an arena
+  holding private (keyed) sites may compute the private outcomes. Confirm
+  whether a search can run where the secret is not granted. (from: unbiased-review)
 - [low] `worlds/hosting/granaries.extensions.json` grants its `console` client
   `mutate` over `section:state` to write six feed rows; scope it to those rows if
   the extension grant vocabulary allows. (from: the lead, landing granaries)
@@ -2793,6 +2804,18 @@ Owner: maths lane · ordinary · Next: the segment durations' wire double (`Worl
 `WorldCommand.EnqueueSegment.Seconds` through `FromDouble`), then the float
 duration fields' schema migration.
 
+- [low] `Pcg3dLatticeNoise.ScatterPoint`
+  (`src/Puck.Maths/Sampling/Pcg3dLatticeNoise.cs:78`) reduces a stateless hash
+  with `hash % inset`, a bias of inset/2^32; and a lattice's boot-time paint
+  still throws on draw exhaustion where compose now refuses (about 1e-14 a
+  generate at the worst bound). (from: unbiased-2)
+- [low] The alias table rounds each threshold to 32 fractional bits
+  (`src/Puck.Maths/Sampling/WeightedSampler.cs:84`), so `weightedNumeric`,
+  `symmetryOrbit` and Markov draws keep a bias of the order the bounded-draw
+  change removed (three equal weights give 5726623061, 5726623062 and
+  5726623061 out of 2^34). Exact alias thresholds (an integer remainder with a
+  bounded rejection through `BoundedRandomSampling`) would remove it.
+  (from: unbiased-review)
 - Decide (the lead's call): Production `IsPrime`: whether a hashed-witness
   table may decide primes below 2^47 in one strong round. machine-prime's
   512 KiB table is why it leads Puck there (about 1.5x on primes); a table is

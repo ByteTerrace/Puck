@@ -436,6 +436,13 @@ watcher, `puck host load --watch` prints one line per transition (`CAPACITY`,
   around each heavy suite, sample headroom while holding it, and release it on
   every exit. Nested runs under `puck lease heavy` serialize on child leases
   after validating the ancestor holder's process identity.
+- A lane never runs a full `puck test worlds/debug` sweep (112 worlds, 30 to 60
+  minutes, several GB per world process): the brief names the test files its
+  change can reach, and the lead runs one full sweep on the integrated head.
+  Two lanes' full sweeps once ran together, one outside the heavy lease, while
+  four GPU waiters and an hour-long heavy ticket queued behind them. A lane
+  waiting on a lease keeps working (code, docs, its hand-back) instead of
+  idling on the ticket.
 - Lease admission is a queue that rotates between lanes, not a race:
   `puck lease` waiters take tickets, and the lease goes to the oldest ticket of
   the lane that held it least recently. A lane is the first word of `--holder`

@@ -22,54 +22,106 @@ public static class BoundedRandomSampling {
         return ((low >= exclusiveHigh) || (low >= (unchecked((0U - exclusiveHigh)) % exclusiveHigh)));
     }
 
-    /// <summary>Lemire's nearly divisionless bounded draw at 64 bits, over a bound fixed for the request.</summary>
-    /// <param name="exclusiveHigh">The exclusive bound, at least two.</param>
-    /// <remarks>
-    /// <para>
-    /// Raw draws are counted, biased-window rejections included, so a degenerate generator cannot turn a finite
-    /// prime-selection budget into an unbounded inner loop.
-    /// </para>
-    /// <para>
-    /// The rejection threshold <c>2^64 mod exclusiveHigh</c> is the one hardware divide of a request, and it is
-    /// derived on the first draw whose low product is below the bound: every rejected low product is below the
-    /// threshold, which is below the bound, so a draw whose low product is at or past the bound is accepted without
-    /// it, and a request whose draws all land there never pays for it. Until then the bound itself stands in for the
-    /// threshold, so the accepting path is one compare against a field either way; a threshold is always below the
-    /// bound, so the bound also marks it underived.
-    /// </para>
-    /// </remarks>
-    internal struct Range64(ulong exclusiveHigh) {
-        private readonly ulong m_exclusiveHigh = exclusiveHigh;
-        private ulong m_threshold = exclusiveHigh;
+    /// <summary>The refusal text when a bounded draw spends its whole attempt budget on rejected words.</summary>
+    public const string ExhaustedReason = "bounded draw exhausted its raw-word work budget";
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal bool TrySample<TGenerator>(ref TGenerator generator, ref int attempts, out ulong value)
-            where TGenerator : struct, IDrawGenerator {
-            while (attempts > 0) {
-                --attempts;
-                var word = (((ulong)generator.NextUInt32()) << 32) | generator.NextUInt32();
+    /// <summary>
+    /// Draws an unbiased value from an inclusive range within a finite raw-word budget, refusing rather than
+    /// falling back to a biased answer.
+    /// </summary>
+    /// <typeparam name="TSource">The word source type.</typeparam>
+    /// <param name="source">The word source, advanced by every word drawn, rejected words included.</param>
+    /// <param name="minimum">One end of the inclusive range.</param>
+    /// <param name="maximum">The other end of the inclusive range; the bounds may be given in either order.</param>
+    /// <param name="maxAttempts">The most raw words one result may consume.</param>
+    /// <param name="value">The result in the range, valid only on success.</param>
+    /// <param name="word">The last raw word drawn, valid only on success.</param>
+    /// <param name="words">The raw words consumed, accepted and rejected, whatever the outcome.</param>
+    /// <param name="reason">The source's refusal, <see cref="ExhaustedReason"/> when every attempt was rejected, or empty on success.</param>
+    /// <returns>Whether a value was drawn. A full-width range accepts its first word.</returns>
+    public static bool TrySampleRange<TSource>(ref TSource source, uint minimum, uint maximum, int maxAttempts, out uint value, out uint word, out int words, out string reason) where TSource : IRawWordSource {
+        if (maximum < minimum) {
+            (minimum, maximum) = (maximum, minimum);
+        }
 
-                // The halves of word * exclusiveHigh, taken separately, keep the product off the fixed registers a
-                // widening multiply pins. The bound is the left factor, the operand MULX reads implicitly, so the
-                // generator's state never has to make way for it.
-                var low = unchecked((word * m_exclusiveHigh));
+        var range = (maximum - minimum);
 
-                if (low < m_threshold) {
-                    if (m_threshold != m_exclusiveHigh) { continue; }
-
-                    m_threshold = (unchecked((0UL - m_exclusiveHigh)) % m_exclusiveHigh);
-
-                    if (low < m_threshold) { continue; }
-                }
-                value = ScaledResidueRing64.MultiplyHigh(
-                    left: m_exclusiveHigh,
-                    right: word
-                );
+        words = 0;
+        value = 0;
+        word = 0;
+        reason = string.Empty;
+        for (var attempt = 0; (attempt < maxAttempts); attempt++) {
+            if (!source.TryNextWord(out word, out reason)) { return false; }
+            ++words;
+            if (range == uint.MaxValue) {
+                value = word;
                 return true;
             }
-            value = 0;
-            return false;
+            if (TryMap(exclusiveHigh: (range + 1U), value: out value, word: word)) {
+                value = unchecked((value + minimum));
+                return true;
+            }
         }
+        word = 0;
+        reason = ExhaustedReason;
+        return false;
+    }
+    /// <summary>
+    /// Draws an unbiased value below a bound that may exceed 32 bits, within a finite raw-word budget. A bound that
+    /// fits one word runs <see cref="TrySampleRange{TSource}"/>; a wider bound draws enough words to cover its bit
+    /// width, masks them to that width and accepts a candidate below the bound, so every value stays equally likely
+    /// and each attempt is rejected with probability below one half.
+    /// </summary>
+    /// <typeparam name="TSource">The word source type.</typeparam>
+    /// <param name="source">The word source, advanced by every word drawn, rejected words included.</param>
+    /// <param name="exclusiveHigh">The nonzero exclusive upper bound.</param>
+    /// <param name="maxAttempts">The most candidates one result may draw; a wide candidate spans several words.</param>
+    /// <param name="value">The result in <c>[0, exclusiveHigh)</c>, valid only on success.</param>
+    /// <param name="words">The raw words consumed, accepted and rejected, whatever the outcome.</param>
+    /// <param name="reason">The source's refusal, <see cref="ExhaustedReason"/> when every attempt was rejected, or empty on success.</param>
+    /// <returns>Whether a value was drawn.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="exclusiveHigh"/> is zero.</exception>
+    public static bool TrySampleWide<TSource>(ref TSource source, UInt128 exclusiveHigh, int maxAttempts, out UInt128 value, out int words, out string reason) where TSource : IRawWordSource {
+        ArgumentOutOfRangeException.ThrowIfZero(exclusiveHigh);
+        if (exclusiveHigh <= (((UInt128)uint.MaxValue) + 1U)) {
+            var drawn = TrySampleRange(
+                maxAttempts: maxAttempts,
+                maximum: unchecked((uint)(exclusiveHigh - 1U)),
+                minimum: 0U,
+                reason: out reason,
+                source: ref source,
+                value: out var narrow,
+                word: out _,
+                words: out words
+            );
+
+            value = narrow;
+            return drawn;
+        }
+
+        var bits = (128 - ((int)UInt128.LeadingZeroCount(exclusiveHigh - 1U)));
+        var wordsPerCandidate = ((bits + 31) / 32);
+        var mask = (UInt128.MaxValue >>> (128 - bits));
+
+        words = 0;
+        value = UInt128.Zero;
+        reason = string.Empty;
+        for (var attempt = 0; (attempt < maxAttempts); attempt++) {
+            var candidate = UInt128.Zero;
+
+            for (var index = 0; (index < wordsPerCandidate); index++) {
+                if (!source.TryNextWord(out var word, out reason)) { return false; }
+                ++words;
+                candidate |= (((UInt128)word) << (32 * index));
+            }
+            candidate &= mask;
+            if (candidate < exclusiveHigh) {
+                value = candidate;
+                return true;
+            }
+        }
+        reason = ExhaustedReason;
+        return false;
     }
 
     /// <summary>

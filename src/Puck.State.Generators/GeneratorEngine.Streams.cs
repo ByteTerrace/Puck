@@ -56,7 +56,7 @@ public static partial class GeneratorEngine {
     /// <remarks>An extended source draws in place from the generator its compiled source caches, so no other draw of
     /// the same source may run between opening a stream and its last sample. A mutable value: hold it in one local and
     /// draw through that local.</remarks>
-    public struct DrawStream {
+    public struct DrawStream : IRawWordSource {
         private StateGenerator m_generator;
         private CellKind m_targetKind;
         private Pcg32XshRr m_base;
@@ -218,15 +218,29 @@ public static partial class GeneratorEngine {
             if (m_generator?.Source != GeneratorSource.StreamDraw) { throw new InvalidOperationException(message: "Bounded indices require an open raw stream."); }
             var before = this;
 
-            for (var attempt = 0; (attempt < GeneratorCapacity.MaxBoundedAttempts); attempt++) {
-                if (!TryNext(reason: out reason, value: out sample)) { Restore(before: before); value = 0; return false; }
-                if (BoundedRandomSampling.TryMap(exclusiveHigh: exclusiveHigh, value: out value, word: ((uint)sample))) { return true; }
+            if (BoundedRandomSampling.TrySampleRange(
+                maxAttempts: GeneratorCapacity.MaxBoundedAttempts,
+                maximum: (exclusiveHigh - 1U),
+                minimum: 0U,
+                reason: out reason,
+                source: ref this,
+                value: out value,
+                word: out var word,
+                words: out _
+            )) {
+                sample = word;
+                return true;
             }
             Restore(before: before);
             value = 0;
             sample = 0;
-            reason = "bounded selection exhausted its raw-word work budget";
             return false;
+        }
+        bool IRawWordSource.TryNextWord(out uint word, out string reason) {
+            var drawn = TryNext(reason: out reason, value: out var raw);
+
+            word = ((uint)raw);
+            return drawn;
         }
 
         private void Restore(DrawStream before) {
