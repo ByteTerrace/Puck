@@ -322,7 +322,7 @@ public sealed class OverlayPackage(UnifiedOverlaySources sources, OverlayCapacit
                 );
             }
 
-            var visible = m_composer.Compose(renderTicks: recording.Context.RenderTicks);
+            var visible = m_composer.Compose(renderTicks: recording.Context.PresentedTicks);
 
             // With nothing visible the world stands for the overlay's output when the instance lets it; otherwise the
             // empty frame is drawn, which reproduces the world into the output.

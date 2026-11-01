@@ -498,7 +498,7 @@ public sealed class WindowHostPresentation {
 
                     },
                     produce: iteration => {
-                        var tickLocked = iteration.Pacing.StepsOneTickPerFrame;
+                        var tickLocked = iteration.TickLocked;
                         var stepTicks = iteration.StepTicks;
                         var fixedSteps = ((ulong)iteration.Steps);
                         var deltaTicks = iteration.IntervalTicks;
@@ -560,6 +560,7 @@ public sealed class WindowHostPresentation {
                                     GridHertz: PresentPacingControl.GridOf(displayGridHertz: gridHertz, simulates: iteration.HasSimulation, stepTicks: stepTicks, tickLocked: tickLocked),
                                     Host: m_rootHostContext,
                                     StepTicks: stepTicks,
+                                    Tick: iteration.Tick,
                                     TargetHeight: height,
                                     TargetWidth: width
                                 );
@@ -571,8 +572,11 @@ public sealed class WindowHostPresentation {
 
                                 m_timeline.Mark(phase: HostFramePhase.Produce);
 
+                                // Pace on the clock the root rendered with, so a capture and the graph share one render clock.
+                                var renderedContext = (produced.Context ?? frameContext);
+
                                 m_capture?.Capture(
-                                    context: in frameContext,
+                                    context: in renderedContext,
                                     readback: m_presentReadback,
                                     surface: surface
                                 );
