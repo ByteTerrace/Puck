@@ -1,6 +1,7 @@
 using Puck.Abstractions;
 using Puck.Abstractions.Presentation;
 using Puck.Assets;
+using Puck.Confinement;
 using Puck.Hosting;
 using System.Diagnostics;
 using System.Globalization;
@@ -492,10 +493,7 @@ public sealed partial class ShaderCompiler {
             );
         } finally {
             try {
-                Directory.Delete(
-                path: buildRoot,
-                recursive: true
-            );
+                ConfinedDirectory.RemoveTree(path: buildRoot);
             } catch (IOException) { }
         }
     }

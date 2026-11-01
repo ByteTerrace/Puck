@@ -1,5 +1,6 @@
 using Puck.Abstractions.Presentation;
 using Puck.Commands;
+using Puck.Confinement;
 
 namespace Puck.Hosting.Tests;
 
@@ -43,7 +44,7 @@ public sealed class ControlPresentedCaptureLawTests {
             Assert.True(condition: File.Exists(path: armed.PathOf(index: 1)));
             Assert.False(condition: (response with { Png = [1] }).IsValidFor(request: request));
         } finally {
-            Directory.Delete(path: directory, recursive: true);
+            ConfinedDirectory.RemoveTree(path: directory);
         }
     }
     [Fact]

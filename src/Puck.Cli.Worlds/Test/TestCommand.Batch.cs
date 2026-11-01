@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using Puck.Confinement;
 
 namespace Puck.Cli.Test;
 
@@ -19,9 +20,7 @@ public static partial class TestCommand {
             var legDirectory = Path.Combine(path1: WorldDirectory(index: index, runDirectory: runDirectory), path2: "run1");
             // --keep retains evidence, never input state. In particular a crashed worker must not inherit an old
             // successful exit marker or export and turn its missing result into a pass.
-            if (Directory.Exists(path: legDirectory)) {
-                Directory.Delete(path: legDirectory, recursive: true);
-            }
+            ConfinedDirectory.RemoveTree(path: legDirectory);
             legs.Add(item: new {
                 World = world.Path,
                 Reproduce = reproduce,

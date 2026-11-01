@@ -121,6 +121,10 @@ shared-file edits are sequenced; its report shape is the three headings that
 brief:
 
 - an id, used in the brief file name, the commit trailer and every message;
+- its family and model, chosen from the whole roster (Claude, Codex and
+  Antigravity, [select models](#select-models-and-route-findings)) with a
+  one-line reason: a batch the lead briefs entirely to one family is a
+  lapse to correct, not a default;
 - the base commit, verified by the lead before the brief goes out;
 - a fresh read of the worktree's AGENTS.md and owning skill, correcting stale
   startup repository text while preserving current owner and system precedence.

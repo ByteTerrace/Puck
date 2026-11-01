@@ -1,4 +1,5 @@
 using Puck.Cli.Canary;
+using Puck.Confinement;
 using Xunit;
 
 namespace Puck.Cli.Runs.Tests;
@@ -280,7 +281,7 @@ public sealed class CanaryLegSchedulingLawTests {
         } finally {
             foreach (var directory in directories.Where(predicate: static directory => (directory is not null)).Distinct(comparer: StringComparer.OrdinalIgnoreCase)) {
                 if (Directory.Exists(path: directory)) {
-                    Directory.Delete(path: directory, recursive: true);
+                    ConfinedDirectory.RemoveTree(path: directory);
                 }
             }
         }

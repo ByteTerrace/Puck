@@ -1,5 +1,6 @@
 using System.CommandLine;
 using System.Xml.Linq;
+using Puck.Confinement;
 
 namespace Puck.Cli.Shaders;
 
@@ -148,7 +149,7 @@ public static class CompareCommand {
         } finally {
             try {
                 if (keptCache is null) {
-                    Directory.Delete(path: cache, recursive: true);
+                    ConfinedDirectory.RemoveTree(path: cache);
                 }
             } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
                 Console.Error.WriteLine(value: $"{Verb}: could not remove the comparison's shader cache {cache}: {exception.Message.ReplaceLineEndings(replacementText: " ")}");

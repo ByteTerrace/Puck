@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using Puck.Abstractions.Presentation;
 using Puck.Assets;
+using Puck.Confinement;
 
 namespace Puck.Shaders;
 
@@ -153,10 +154,7 @@ public sealed partial class ShaderPackager {
 
             if (Directory.Exists(path: package) && !IsCommitted(package: package)) {
                 m_removingAbandoned?.Invoke(obj: package);
-                Directory.Delete(
-                    path: package,
-                    recursive: true
-                );
+                ConfinedDirectory.RemoveTree(path: package);
             }
 
             var built = await BuildAsync(

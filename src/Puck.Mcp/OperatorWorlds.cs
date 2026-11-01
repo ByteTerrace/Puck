@@ -7,6 +7,7 @@ using System.Text.Json.Nodes;
 
 using ModelContextProtocol.Protocol;
 
+using Puck.Confinement;
 using Puck.Hosting;
 
 namespace Puck.Mcp;
@@ -552,7 +553,7 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
         _ = m_started.TryRemove(key: started.Process.Id, value: out _);
 
         try {
-            Directory.Delete(path: started.StateDirectory, recursive: true);
+            ConfinedDirectory.RemoveTree(path: started.StateDirectory);
         } catch (Exception error) when ((error is IOException or UnauthorizedAccessException)) { }
 
         return (started.Process.ExitCode, killed, started.Leased);

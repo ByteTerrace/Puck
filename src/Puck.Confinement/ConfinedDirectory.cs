@@ -306,6 +306,55 @@ public sealed partial class ConfinedDirectory : IDisposable {
         }
     }
 
+    /// <summary>Removes the directory at <paramref name="path"/> and everything below it, the one way the repository
+    /// deletes a tree it owns. The directory is reached as the operating system resolves its path (links in the path
+    /// itself are followed), then removed by <see cref="DeleteTree"/>: iteratively, one open handle per level, so a
+    /// tree of any depth cannot overflow the stack, and never through a link.</summary>
+    /// <param name="path">The directory to remove.</param>
+    /// <exception cref="IOException">The directory or an entry below it is a link or is held by another process, or
+    /// cannot be removed, or <paramref name="path"/> is a volume root; what was not yet removed stays in place. A
+    /// directory that does not exist is not an error.</exception>
+    /// <exception cref="PlatformNotSupportedException">The platform is neither Windows nor Linux x64.</exception>
+    public static void RemoveTree(string path) {
+        var full = System.IO.Path.TrimEndingDirectorySeparator(path: System.IO.Path.GetFullPath(path: path));
+        var name = System.IO.Path.GetFileName(path: full);
+
+        if (!Directory.Exists(path: full)) {
+            return;
+        }
+        if ((System.IO.Path.GetDirectoryName(path: full) is not { } parentPath) || (name.Length == 0)) {
+            throw new IOException(message: $"'{full}' is a volume root, which a tree removal never owns.");
+        }
+
+        using var parent = OpenAnchor(
+            create: false,
+            path: parentPath
+        );
+
+        if (parent is null) {
+            return;
+        }
+
+        ConfinedDirectory? directory;
+
+        try {
+            directory = parent.TryOpenChildForRemoval(name: name);
+        } catch (DirectoryNotFoundException) {
+            return;
+        }
+
+        if (directory is null) {
+            throw new IOException(message: $"'{full}' is held by another process.");
+        }
+
+        using (directory) {
+            directory.DeleteTree(
+                name: name,
+                parent: parent
+            );
+        }
+    }
+
     // The base address of this process's executable image on Windows (GetModuleHandle of null), for a single-file app
     // whose executable is its image; zero elsewhere.
     internal static nint ProcessImageAddress() => (OperatingSystem.IsWindows() ? Windows.GetModuleHandle(name: 0) : 0);

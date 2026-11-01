@@ -1,4 +1,5 @@
 using System.Xml.Linq;
+using Puck.Confinement;
 using Puck.SdfVm;
 using Puck.Shaders;
 using Puck.Testing;
@@ -22,7 +23,7 @@ public sealed class ShaderDeclarationBuildLawTests {
             RequireSuccess(run: Run(project: project, target: "Build"));
             Assert.Equal(expected: settled, actual: File.GetLastWriteTimeUtc(path: path));
 
-            Directory.Delete(path: Path.GetDirectoryName(path: path)!, recursive: true);
+            ConfinedDirectory.RemoveTree(path: Path.GetDirectoryName(path: path)!);
             RequireSuccess(run: Run(project: project, target: "Build"));
             Assert.Equal(expected: declaration.Generate(), actual: File.ReadAllText(path: path));
         });

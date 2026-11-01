@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Puck.Confinement;
 using Puck.Testing;
 using Xunit;
 
@@ -118,10 +119,7 @@ public sealed class ShadersPackageCommandLawTests {
             destDirName: relocated,
             sourceDirName: package
         );
-        Directory.Delete(
-            path: Path.GetDirectoryName(path: source)!,
-            recursive: true
-        );
+        ConfinedDirectory.RemoveTree(path: Path.GetDirectoryName(path: source)!);
         Assert.Equal(
             actual: (await RunAsync("shaders", "pipeline", relocated, "--cache", Path.Combine(path1: root, path2: "clean-cache"))).ExitCode,
             expected: CliExit.Success

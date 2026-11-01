@@ -5,6 +5,7 @@ using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Puck.Commands;
+using Puck.Confinement;
 using Puck.World.Server;
 
 namespace Puck.World;
@@ -62,7 +63,7 @@ internal sealed class WorldTestBatch {
             path3: ("worker-" + Path.GetFileName(path: Path.GetDirectoryName(path: legs[0].Directory)))));
         var stateDirectory = (batch.m_workingDirectory + "-state");
 
-        if (Directory.Exists(path: stateDirectory)) { Directory.Delete(stateDirectory, recursive: true); }
+        ConfinedDirectory.RemoveTree(path: stateDirectory);
         Console.SetOut(newOut: TextWriter.Synchronized(writer: output));
         Console.SetError(newError: TextWriter.Synchronized(writer: error));
         host.Initialize = batch.Initialize;
@@ -71,7 +72,7 @@ internal sealed class WorldTestBatch {
 
             while (batch.m_index < legs.Length) {
                 batch.OpenLeg();
-                if (Directory.Exists(path: stateDirectory)) { Directory.Delete(stateDirectory, recursive: true); }
+                ConfinedDirectory.RemoveTree(path: stateDirectory);
                 var first = legs[batch.m_index];
                 var startingIndex = batch.m_index;
 
