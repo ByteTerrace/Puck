@@ -542,23 +542,26 @@ second, and recording third; recording alone would not reach it.
 
 ### The cause fix beside it
 
-`SdfWorldPassRecorder.Choose` culls and levels every draw for every pass on the
-CPU (`SdfWorldPassRecorder.cs:752`, `:886`), and 160,000 draws took 700 ms a
-frame. Threads would divide that, not remove it. The engine already records
-counted indirect draws for opaque occlusion: `SdfMeshOcclusion.RecordDraws`
-(`SdfMeshOcclusion.cs:185-193`) through `ExecuteIndirect` on Direct3D 12
-(`DirectXGpuRecorder.Device.cs:18-29`) and non-indexed `DrawIndirectCount` on
-Vulkan (`VulkanGpuRecorder.cs:277-282`), matching the vertex-pulling draw
-(`SdfWorldPassRecorder.cs:912-933`), in an early phase of last frame's visible
-draws and a late phase of newly visible ones (`:839-864`). Decision: extend that
-mechanism, not build a second indirect path. A compute cull-and-level pass
-writes the per-phase argument buffers for every pass kind (opaque, shadow
-cascades, glass), carrying the level hysteresis `Choose` keeps today
-(`:902-907`, a draw keeps its level while its mesh is unchanged) as a per-draw
-previous-level buffer the pass reads and writes, so the CPU records one counted
-indirect draw per phase per pass whatever the draw count. This is a rendering
-change the [rendering plan](rendering.md) owns; the memo names it so parallel
-recording is not asked to hide it.
+At R2's input (`997fb2d002`), `SdfWorldPassRecorder.Choose` culled and levelled
+every draw for every pass on the CPU, and 160,000 draws took 700 ms a frame.
+Threads would divide that, not remove it. R2 extends the existing opaque
+occlusion mechanism, `SdfMeshOcclusion.RecordDraws`, through `ExecuteIndirect`
+on Direct3D 12 and non-indexed `DrawIndirectCount` on Vulkan. Its existing
+compute kernel now writes the per-phase arguments for opaque, every shadow
+cascade and glass. Each pass uploads 224 bytes of controls; bounds and the
+complete shared geometry level table live in the retained mesh region.
+
+The per-draw GPU history carries visibility, the previous level and mesh
+identity, keeps the 1/1.1 display-pixel band while the mesh is unchanged,
+survives buffer growth and ignores prior levels for a settled still. Rejected
+commands are empty slots, preserving staged order and depth ties. Opaque
+occlusion retains its early and late phases; other raster passes use one.
+The CPU records one counted indirect call per phase regardless of draw count;
+CPU `Choose` and its direct-draw loop are deleted. Vulkan without native
+counting consumes the same initialized arguments, in one multi-draw where
+available or individual slots otherwise. This is a rendering change the
+[rendering plan](rendering.md) owns; parallel recording need not hide the
+removed per-pass walk.
 
 ## 4. Memory ownership
 
