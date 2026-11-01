@@ -81,7 +81,7 @@ blocked until it is taken.
     qualify the original temporal-off blink at a quiet refresh cadence;
     reconstruction now converges on both backends.
 16. [Simulation tick off the frame thread](#simulation-tick-off-the-frame-thread):
-    [the memo](simulation-thread.md)'s phases, one host loop first.
+    [the memo](simulation-thread.md)'s phase 2, the mailbox on one thread.
 
 ## Owner decisions
 
@@ -149,14 +149,6 @@ Code that grew a second implementation (AGENTS.md rule 7) or costs velocity:
   builds and boots with `Puck.Confinement` in its closure. `BrowserWorkspace`
   deletes the browser's in-memory mount, where the confined removal refuses by
   design, and keeps its delete.
-- The host loop's duplicates, converged by
-  [the simulation thread](simulation-thread.md#6-duplicated-mechanisms-on-this-path)'s
-  phase 1: three host loops (`LauncherWindowHostedService.cs:395-720`,
-  `HeadlessTickHostedService.cs:151-230`, `OffscreenTickHostedService.cs:236-330`,
-  with the windowed lockstep branch a fourth copy), two step shells
-  (`WorldSimulation.cs:16`, `HeadlessWorldSimulation.cs:17`), two console
-  drains per windowed iteration, three simulation clocks the frame reads and
-  two interpolation fractions.
 - Two mirrors of the boot world's snapshot, both hub subscribers copying every
   entry per tick: `WorldClient` (presentation) and the boot endpoint's
   `WorldSessionMirror` (`WorldAuthorityEndpoint.cs:121`); and three per-sink
@@ -999,10 +991,9 @@ empty store (AGENTS.md).
 ### Simulation tick off the frame thread
 
 Owner: principal designs (sparingly, design only), specialist builds · high ·
-Next: build [the simulation thread](simulation-thread.md) by its phases, phase
-1 (one host loop, no thread) first. The owner queued the thread.
-
-- [low] The pump now sheds owed steps once a burst spends a step's period of wall time, but nothing counts the shed steps: add a drop counter to `host.frames` (and `world.rate`) so a World running slower than real time says so. Owed in the lead's windowed window: a hall lift ride's `host.frames` with frames near one tick's cost. The memo's phase 1 carries it (the timeline's tick lane). (from: sim-bounds lane)
+Next: build [the simulation thread](simulation-thread.md) phase 2, the mailbox
+on the existing single host thread. Phase 1 delivered the shared loop, clock,
+interpolation, step shell, console operation and shed-step diagnostics. The owner queued the thread.
 
 - Decided in [the simulation thread](simulation-thread.md#decisions): one
   simulation thread owns the pump, the server, every instance host, the

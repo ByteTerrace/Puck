@@ -21,6 +21,15 @@ contracts as porting work in that host or the engine
 ([owner ruling](../../../docs/decisions/runtime-and-delivery.md#the-runtime)).
 The archived BareMetal experiment remains read-only prior art.
 
+**Host pacing and console holds.** Every boot shape uses `Puck.Launcher.HostLoop`
+and the single `WorldSimulation` shell. The live `HostPacing` is shared with
+replay stepping: runtime lockstep limits fast-forward to one authority tick per
+outer step. Keep the shared console operation on held/no-step iterations and
+hosts with no simulation as well as between ticks; ready immediate control work
+must progress while simulation submissions and session barriers wait for a tick.
+`host.frames` includes an independent tick lane and `steps.shed`; `world.rate
+shed` reads the same host-lifetime counter.
+
 **One live world.** The debug world, the asset package `worlds/debug/` (entry
 `debug.puck`, basis `avatars/moth`), is the only live world, with the
 garden (`garden.puck`) and the night field (`night.puck`) its painting wing's portals open onto
@@ -547,7 +556,7 @@ check the flag: the owner may be holding the pad.
   their own.
 - **Presentation modes** (`host.presentation`): windowed, `offscreen` (GPU
   composition to images, what `puck parity` boots) and `none`
-  (`HeadlessWorldSimulation`, full authority, no GPU, so no capture). The Moth
+  (`WorldSimulation`, full authority, no GPU, so no capture). The Moth
   basis authors `Windowed`, so the debug world boots windowed. `--headless`
   (or `--headless true`) forces `none` for one run and `--headless false`
   forces windowed; offscreen is a document's `host.presentation`. Check the

@@ -2,8 +2,11 @@
 
 Design memo for the [simulation tick off the frame thread](open-items.md#simulation-tick-off-the-frame-thread)
 packet, which the owner queued. It settles the shape from the code and hands
-specialist lanes a phased build. File and line citations name the sources as
-they stand when the packet is taken; a builder re-reads each before editing.
+specialist lanes a phased build. The pre-phase file and line citations below
+refer to commit `8075db0d56`; Phase 1's delivery notes name the current seams.
+A builder re-reads the cited source before editing. Phase 1 rechecked the
+citations against that source, including the full cited ranges, rather than
+treating their line numbers as current after the moves.
 
 The goal is the [frame-rate bar](../decisions/rendering.md#the-frame-rate-bar):
 on the RTX 4070 every frame under 16.7 ms at the highest settings. Today a
@@ -23,7 +26,7 @@ two or three misses the blank
 2. **The handoff is the existing client sink, not a new snapshot ring.** The
    frame thread's consumer is `WorldClient`, whose state is incremental
    (previous and current poses, correction easers, the state mirror's rows,
-   `WorldClient.cs:883-1038`) and which receives five delivery kinds, not one.
+   `WorldClient.cs:883-1038`) and which receives six delivery kinds, not one.
    So `LoopbackTransport.Bind` (`src/Puck.World.Protocol/Protocol/LoopbackTransport.cs:214`)
    binds a mailbox: the simulation thread records each tick's deliveries into
    a slot of its own buffers, and the frame thread applies the pending slots,
@@ -311,7 +314,7 @@ host with the exception in hand, as a loop fault does today
 finishes its frame and signals the simulation thread; the simulation thread
 finishes its step, drains nothing further and exits; the frame thread applies
 the last tick record, calls `SettleOwedFrames` (owed captures refused by name,
-`FixedStepContext.cs:106-110`), then disposes the render root. A parked pump
+`FixedStepContext.cs:43-47`), then disposes the render root. A parked pump
 (lockstep) is released by the stop signal. `StopAsync` joins the simulation
 thread with a bound and reports a thread that did not return.
 
@@ -344,9 +347,13 @@ rather than building the thread beside them.
 2. **Two step shells** over `WorldHostStep`: `WorldSimulation.cs:16` and
    `HeadlessWorldSimulation.cs:17`, differing in `afterInstances` only. One
    `WorldSimulation` taking its post-step.
-3. **Two console drains per windowed iteration**: the loop's own
+3. **Two console drain implementations per windowed iteration**: the loop's own
    `m_textSource.Collect()` (`LauncherWindowHostedService.cs:574`) and the pump's
-   `beforeStep` drain (`FixedStepPump.cs:150-154`). The pump's stays.
+   `beforeStep` drain (`FixedStepPump.cs:150-154`). One shared operation must
+   serve both scheduling points: before input snapshots between ticks, and
+   iterations with no due step, a held capture or no simulation. Deleting the
+   iteration scheduling point strands quit, recovery and presentation work
+   while `Hold` or a host with no pump runs (memo review F16).
 4. **Three simulation clocks the frame reads**: `IWorldSimulationClock.Tick`
    (`WorldHostStep.cs:55`), `WorldClient.Tick` (`WorldClient.cs:132`), and
    `WorldOverlayFacts.CompletedTick` (`WorldOverlayFacts.cs:62-69`). One:
@@ -374,7 +381,55 @@ verified by building and running what it touched.
 
 ### Phase 1: one host loop, no thread
 
-Converge duplicates 1 to 5. Files: `src/Puck.Launcher/LauncherWindowHostedService.cs`,
+**Delivered by `sim-phase1`.** `Puck.Launcher.HostLoop` owns the iteration,
+input contributions, console scheduling, stepping, holds, deadlines and pacing.
+The three hosted services only start it with their presentation adapter;
+`WindowHostPresentation` owns window input, rendering and display waits, and
+`OffscreenHostPresentation` owns offscreen rendering. All simulation still
+runs inline on the existing host pump thread. `WallClockThreaded` names a
+reserved policy; this phase starts no simulation thread.
+
+`WorldSimulation` is the single shell over `WorldHostStep`, with its post-step
+supplied by composition. Frames and overlay facts read `WorldClient.Tick`;
+`WorldRenderRoot` fills the graph's `FrameContext` from the client's delivered
+engine time, step width and arrival fraction. The client, session views and
+pinned adjacency views all use `WorldSessionMirror.ResolveInterpolationAlpha`.
+Lockstep and settled captures pin that fraction to one.
+
+Two corrections to the proposed convergence are part of delivery:
+
+- F16: `HostConsoleDrain.Collect` is the shared operation. The pump's
+  `BeginIteration` runs it even without a due tick or during a held frame;
+  the first step reuses that drain and subsequent catch-up steps drain before
+  each snapshot. A host with no pump calls the same operation each iteration.
+  Ready immediate commands, including quit, recovery and presentation controls,
+  can progress during a capture hold. Simulation submissions wait for a tick;
+  session waits and read-after-write barriers continue to preserve each
+  session's FIFO, so a blocked session does not acquire an out-of-order quit.
+- F14: window composition registers the live `HostPacing` owned by
+  `PresentPacingControl`. `world.lockstep` retargets that same object, which
+  `WorldHostStep` and `WorldInstanceHost` pass to `WorldServerStepShell`.
+  Replay fast-forward therefore runs one authority tick per outer step under
+  runtime lockstep, instead of retaining an independent wall-clock policy.
+
+`HostFrameTimeline` retains the frame's `simulate` phase and adds an independent
+per-step cost ring (count, avg, p50, p99, max). `steps.shed` is an atomic,
+host-lifetime counter of whole steps discarded when a catch-up burst spends
+its wall-time budget; holds and the runaway-frame clamp are distinct and are
+not counted as shed. `host.frames`, `world.rate` and `world.rate shed` report
+it. Resetting the frame sample window does not reset that counter. Folded and
+parked tick metrics remain for the phases that introduce a mailbox and thread.
+
+Verification and windowed measurements are recorded in the delivery commits.
+The four focused debug sources are `controls-dash-tests.puck`,
+`input-clock30-tests.puck`, `relative-input-tests.puck` and `noclip-tests.puck`:
+nine scenarios reproduce, with byte-identical authority hash sequences and
+canonical state exports before and after. The standard package has no
+`*-tests.puck` source. A headless stdin script lands movement at ticks 10 and
+30 and reads tick 31 hash `d8484552ca622a93`, then tick 32 hash
+`b30470686bd27afd`, before and after.
+
+Original scope: converge duplicates 1 to 5. Files: `src/Puck.Launcher/LauncherWindowHostedService.cs`,
 `HeadlessTickHostedService.cs`, `OffscreenTickHostedService.cs` (become one
 `HostLoop` plus a thin hosted service per registration), `LauncherHostLoop.cs`,
 `src/Puck.Hosting/HostPacing.cs`, `src/Puck.World/WorldSimulation.cs`,
