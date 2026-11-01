@@ -328,7 +328,12 @@ keep their existing owners; the allocation-review items above still apply.
   its authoring/schema changes move the old hashes: all eight merged-native
   reproduction files instead match the separate integration-only artifact
   (`Puck.SourceRevision=16db8704f0`) byte for byte. That artifact excludes
-  the memory commits. Evidence is under `.claude/scratch/mem-m1-*`.
+  the memory commits. After the final silo-recovery merge (`9e81ac0f75`),
+  both Release builds again have zero warnings/errors and all eight replay
+  files match the integration-only `1f8d233998` artifact (its only source
+  difference from that tip is the silo README). Final Direct3D 12 and Vulkan
+  boots settle at tick 12, capture and exit 0 without worker/device failures.
+  Evidence is under `.claude/scratch/mem-m1-*`.
 
 - Ownership and borrowing: authoritative ownership stays in an existing arena,
   scratch pool, job slot, mesh or host service, and its private record holds
