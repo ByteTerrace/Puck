@@ -42,8 +42,9 @@ public static partial class SdfWorldPackage {
     /// <summary>The most samples a bake lattice holds along one axis.</summary>
     public const int MeshBakeMaxSamplesPerAxis = 65;
     /// <summary>The most samples one bake dispatch writes, at least a lattice of <see cref="MeshBakeMaxSamplesPerAxis"/>
-    /// samples a side: the bake samples buffer and its readback hold this many records.</summary>
-    public const int MeshBakeMaxSamples = (1 << 20);
+    /// samples a side: the bake samples buffer and its readback hold this many records. Its 64-sample thread groups stay
+    /// under the 65,535 one dispatch axis allows; a cold bake's frames fill smaller dispatches and wait on them.</summary>
+    public const int MeshBakeMaxSamples = (1 << 21);
     /// <summary>The mesh bake's point table, a World-group table of one float4 a point: the surface points a points lattice
     /// samples the field's material at.</summary>
     public const string MeshBakePoints = "sdfMeshBakePoints";
