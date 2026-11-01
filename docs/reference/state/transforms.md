@@ -103,8 +103,8 @@ the pattern steps it takes, and the journal entries its writes record,
 including every board derived from a row it writes. A sort grows with the
 square of its row's capacity, a board transform with the topology's cells, a
 `pushRay` with its board and its pool. A random `transfer` or a `shuffle` seeks
-its draw site once and then pays one generator step a sample (a keyed sample on
-a secret site); the site's seed is folded when the host is built, so neither the
+its draw site once and then pays for every raw word attempted, including rejections (a keyed word on
+a secret site); the full 64-word attempt budget is priced for each selection. The site's seed is folded when the host is built, so neither the
 instance identity nor the site's name enters the price. Author a `capacity` on piles and
 tables you sort or shuffle so the price reflects the row you mean. [Rule
 analysis, scheduling, and work budgets](analysis.md) explains the budget.
@@ -165,8 +165,8 @@ The `selector` (a `ZoneSelector`) chooses the tokens:
 - A transfer onto its own pile is a reorder: the token moves to the chosen end
   and every other token keeps its relative order. A slice onto its own pile with
   `insertFirst` rotates the run to the front; without it, nothing moves.
-- A random transfer samples its site once per token and maps each sample onto
-  the remaining count with a multiply-high map. After the last token, the site's
+- A random transfer selects each token with the shared unbiased bounded sampler,
+  rejecting raw words until an index in the remaining count is accepted. After the last token, the site's
   own cell records the last sample.
 - `from` and `to` may be live zones (`$zones[…]`), and `key` may be a dynamic
   key such as `cell(picked, card)` or `zone(hand, first)`. Both resolve when the
@@ -198,9 +198,11 @@ rule shuffleDeck {
 
 `shuffle` runs one Fisher-Yates pass over the row using samples from a
 redrawable Int `StreamDraw` site. Position *i*, walking down from the last,
-swaps with a pick from `[0, i]` made by the same multiply-high map a random
-transfer uses. A row of *n* members consumes *n* − 1 samples, so a replay that
-starts the site at the same cursor reproduces the permutation. A row with fewer
+swaps with an unbiased pick from `[0, i]` using the same Maths rejection sampler
+as random transfer. A row of *n* members makes *n* − 1 selections and consumes
+every accepted and rejected raw word. Persisting that actual cursor reproduces
+the permutation. Each selection attempts at most 64 words; a budget or source
+refusal rewinds the operation through its caller's scope. A row with fewer
 than two members consumes nothing. The site's cell records the last sample, and
 the shuffle reports movement even when the permutation is the identity.
 

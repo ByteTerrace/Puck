@@ -171,7 +171,7 @@ public sealed class WorldGeneratorOrbitLawTests {
                 collection: nodes
             );
             seen.Add(item: fired.Numeric!.Value);
-            cursor += fired.Samples;
+            cursor += fired.Advances;
             masks = fired.Masks;
         }
 
@@ -239,15 +239,15 @@ public sealed class WorldGeneratorOrbitLawTests {
                 userMessage: reason
             );
             Assert.Equal(
-                expected: 1L,
-                actual: fired.Samples
+                expected: 2L,
+                actual: fired.Advances
             );
             Assert.Equal(
                 expected: 2,
                 actual: SymmetryLattice.Ring(node: ((int)fired.Numeric!.Value))
             );
             drawn.Add(item: fired.Numeric!.Value);
-            cursor += fired.Samples;
+            cursor += fired.Advances;
             masks = fired.Masks;
         }
 

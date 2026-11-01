@@ -63,11 +63,9 @@ public enum GeneratorSource : byte {
 
     /// <summary>One draw over the closed integer range
     /// <c>[<see cref="StateGenerator.RangeMin"/>, <see cref="StateGenerator.RangeMax"/>]</c> — reads only those two
-    /// fields, writes an int or fixed value. One fixed-cost advance per draw: a multiply-high map of a
-    /// <c>UnitFraction32</c>, rather than the rejection-sampled <c>Pcg32XshRr.NextUInt32(min, max)</c>, which keeps
-    /// the cursor seekable. The map is uniform rather than exactly uniform: with <c>n</c> the range's value count,
-    /// each outcome claims either <c>⌊2³²/n⌋</c> or <c>⌈2³²/n⌉</c> of the 2³² fractions — a relative deviation of at
-    /// most <c>n/2³²</c>, and zero whenever <c>n</c> divides 2³².</summary>
+    /// fields, writes an int or fixed value. The shared Maths rejection sampler makes every accepted value
+    /// equally likely. The cursor counts all raw words, including rejected words. A result attempts at most
+    /// <see cref="GeneratorCapacity.MaxBoundedAttempts"/> words, then refuses without a biased fallback.</summary>
     UniformRange,
 
     /// <summary>One alias-table draw over <see cref="StateGenerator.Weighted"/>'s numeric outcomes — reads that field
@@ -117,7 +115,7 @@ public sealed record GeneratorWeightedNumeric(long Value, ulong Weight, [propert
 /// to a table at boot resolution: word <c>i</c> is <c>wanted_i XOR base_i</c>, where <c>base_i</c> is the base
 /// generator's own <c>i</c>-th raw draw (independent of any table content) and <c>wanted_i</c> is the raw draw the
 /// source's own sampling maps onto the scripted value. Only <c>streamDraw</c> and <c>uniformRange</c> admit a script:
-/// both sample in one fixed-cost draw with no drawn-mask state, so a wanted output maps back to a single raw draw;
+/// both map a scripted value to one accepted raw word with no drawn-mask state, so a wanted output maps back to a single raw draw;
 /// <c>markov</c>, <c>weightedNumeric</c> and <c>symmetryOrbit</c> draw through an alias table whose selection depends
 /// on the site's own drawn masks, so no single raw draw maps a scripted value back. Words past the script's length are
 /// the self-seeded table's own.</remarks>
@@ -298,6 +296,8 @@ public sealed record GeneratorRow(CellName Name, StateGenerator Generator);
 /// records one <see cref="StateRow.DrawnMasks"/> mask per context, and each such mask is a 256-bit drawn set (so
 /// a context can hold no more alternatives than the membership set has bits).</remarks>
 public static class GeneratorCapacity {
+    /// <summary>The maximum raw words attempted for one bounded result. Exhaustion refuses the operation.</summary>
+    public const int MaxBoundedAttempts = 64;
     /// <summary>A context's alternative-count ceiling — one bit per alternative in its drawn mask.</summary>
     public const int MaxAlternativesPerContext = 256;
     /// <summary>A source's context-count ceiling. An exhausting source persists one 32-byte drawn mask per context
@@ -316,7 +316,7 @@ public static class GeneratorCapacity {
     /// <c>Pcg32Extended</c>'s own ceiling: four bytes a word, sixteen kibibytes at the ceiling.</summary>
     public const int MaxExtendedTableSize = Pcg32Extended.MaxTableSize;
     /// <summary>The greatest value a <see cref="GeneratorSource.UniformRange"/> bound may hold. The draw is a
-    /// single fixed-cost multiply-high map whose span must fit a <c>uint</c> without truncation; this bound is what
+    /// bounded rejection sampler whose inclusive width is at most 2^32; this bound is what
     /// keeps it there.</summary>
     public const long MaxRangeBound = int.MaxValue;
     /// <summary>One emitted token's length ceiling, in UTF-16 code units (the JOINED emission is separately bounded

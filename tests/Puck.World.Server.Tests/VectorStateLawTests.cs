@@ -641,7 +641,7 @@ public sealed class VectorStateLawTests {
         var hiddenQueryResult = Assert.Single(collection: hiddenResults);
 
         Assert.True(condition: hiddenQueryResult.IsError);
-        Assert.Contains(expectedSubstring: "query cell 'hiddenQuery.$value' is hidden", actualString: hiddenQueryResult.Output);
+        Assert.Contains(expectedSubstring: "no such query vector 'hiddenQuery.$value'", actualString: hiddenQueryResult.Output);
     }
     [Fact]
     public void VectorRemember_SkipsNearDuplicate_AndIgnoresOwnKey() {

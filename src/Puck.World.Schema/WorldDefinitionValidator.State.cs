@@ -365,7 +365,7 @@ public static partial class WorldDefinitionValidator {
         }
 
         if (row.DrawCursor < 0L) {
-            errors.Add(item: $"{path}.drawCursor {row.DrawCursor} is negative — a draw cursor is a non-negative sample count the engine only ever advances.");
+            errors.Add(item: $"{path}.drawCursor {row.DrawCursor} is negative — a draw cursor is a non-negative raw-word count the engine only ever advances.");
         }
 
         var (domainLow, domainHigh) = (row.Kind switch {

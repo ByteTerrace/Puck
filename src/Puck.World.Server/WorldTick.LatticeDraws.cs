@@ -69,6 +69,7 @@ public sealed partial class WorldTick {
                 masks: row.DrawnMasks,
                 values: pass,
                 masksAfter: out _,
+                advances: out _,
                 reason: out var fireReason
             )) {
                 throw new InvalidOperationException(message: $"state row '{row.Name}' draw fill {fireReason} (a validated document must still draw when it paints).");

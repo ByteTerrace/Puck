@@ -321,7 +321,10 @@ A windowed World driven by a stdin script spells its backend `--backend directx`
 Use the private CLI copy's `puck lease gpu --holder <lane> --wait 1200 -- <command...>` for a granted GPU leg, and `puck lease heavy --holder <lane> --wait 1200 -- <command...>` for a heavy suite. The verb owns acquisition, stale recovery and release, including failure and cancellation. A windowed World started with `puck_world_start` takes the same GPU lease itself (`holder`: your lane), waits at most its `timeoutSeconds` for it, and releases it when `puck_world_stop` ends the World or the World exits.
 Keep a granted batch within its brief's time box (at most 20 minutes for a GPU lease).
 `gate` and `affected` hold the same heavy lease through each heavy suite and
-check host headroom after acquisition. When an ancestor already owns it,
+check host headroom after acquisition. `puck test` holds it too whenever it runs
+more than one world (a debug-world sweep is 112 World processes, several GB each);
+a single world stays unleased, and `--workers` legs run one after another so they
+do not count. When an ancestor already owns it,
 validated PID/start-time ancestry admits a serialized child lease, so a run
 does not wait on itself and siblings still exclude one another; [lease reference](../../../docs/reference/cli.md#puck-leaseexclusive-machine-work).
 

@@ -138,11 +138,11 @@ public sealed class WorldGeneratorEngineLawTests {
             stream: GeneratorEngine.ComputeStreamId(site: site)
         );
 
-        rng.Advance(count: unchecked((((ulong)cursor) * GeneratorEngine.AdvancesPerSample(source: generator.Source))));
+        rng.Advance(count: ((ulong)cursor));
 
         return generator.Source switch {
             GeneratorSource.StreamDraw => rng.NextUInt32(),
-            GeneratorSource.UniformRange => (generator.RangeMin!.Value + ((long)(((((ulong)((uint)(generator.RangeMax!.Value - generator.RangeMin.Value))) + 1UL) * rng.NextUnitFraction32().Value) >> 32))),
+            GeneratorSource.UniformRange => (generator.RangeMin!.Value + ((long)rng.NextUInt32(0, ((uint)(generator.RangeMax!.Value - generator.RangeMin.Value))))),
             GeneratorSource.WeightedNumeric => WeightedSampler.Create<long>(entries: generator.Weighted!.Select(selector: static row => (row.Value, row.Weight)).ToArray()).Sample(generator: ref rng),
             _ => throw new ArgumentOutOfRangeException(paramName: nameof(generator)),
         };
@@ -203,7 +203,7 @@ public sealed class WorldGeneratorEngineLawTests {
             stream: GeneratorEngine.ComputeStreamId(site: site)
         );
 
-        rng.Advance(count: unchecked((((ulong)cursor) * GeneratorEngine.AdvancesPerSample(source: GeneratorSource.Markov))));
+        rng.Advance(count: ((ulong)cursor));
 
         var first = WeightedSampler.Create<string>(entries: ((ReadOnlySpan<(string Value, ulong Weight)>)[("red", 1UL), ("blue", 2UL)])).Sample(generator: ref rng);
         var second = WeightedSampler.Create<string>(entries: ((ReadOnlySpan<(string Value, ulong Weight)>)[("fox", 1UL), ("hare", 1UL)])).Sample(generator: ref rng);
@@ -212,7 +212,7 @@ public sealed class WorldGeneratorEngineLawTests {
     }
 
     [Fact]
-    public void MarkovCursorCountsSamplesRatherThanEmissions() {
+    public void MarkovCursorCountsRawWordsRatherThanEmissions() {
         var cursor = 0L;
         var walked = new List<(long Cursor, string Text)>();
 
@@ -224,8 +224,8 @@ public sealed class WorldGeneratorEngineLawTests {
             );
 
             Assert.Equal(
-                expected: 2L,
-                actual: fired.Samples
+                expected: 4L,
+                actual: fired.Advances
             );
             Assert.Equal(
                 expected: TwoTokenMarkovOracle(
@@ -235,7 +235,7 @@ public sealed class WorldGeneratorEngineLawTests {
                 actual: fired.Text
             );
             walked.Add(item: (cursor, fired.Text!));
-            cursor += fired.Samples;
+            cursor += fired.Advances;
         }
 
         foreach (var expected in walked) {
@@ -250,8 +250,8 @@ public sealed class WorldGeneratorEngineLawTests {
                 actual: seeked.Text
             );
             Assert.Equal(
-                expected: 2L,
-                actual: seeked.Samples
+                expected: 4L,
+                actual: seeked.Advances
             );
         }
     }
@@ -266,8 +266,8 @@ public sealed class WorldGeneratorEngineLawTests {
                 );
 
                 Assert.Equal(
-                    expected: 1L,
-                    actual: fired.Samples
+                    expected: ((generator.Source == GeneratorSource.WeightedNumeric) ? 2L : 1L),
+                    actual: fired.Advances
                 );
                 Assert.Equal(
                     expected: NumericOracle(
@@ -299,7 +299,7 @@ public sealed class WorldGeneratorEngineLawTests {
             );
 
             drawn.Add(item: fired.Text!);
-            cursor += fired.Samples;
+            cursor += fired.Advances;
             masks = fired.Masks;
         }
 
@@ -377,7 +377,7 @@ public sealed class WorldGeneratorEngineLawTests {
                 masks: masks
             );
 
-            cursor += fired.Samples;
+            cursor += fired.Advances;
             masks = fired.Masks;
         }
 
@@ -403,8 +403,8 @@ public sealed class WorldGeneratorEngineLawTests {
             actual: replayed.Numeric
         );
         Assert.Equal(
-            expected: restarted.Samples,
-            actual: replayed.Samples
+            expected: restarted.Advances,
+            actual: replayed.Advances
         );
         Assert.Equal(
             expected: restarted.Masks,
@@ -446,25 +446,6 @@ public sealed class WorldGeneratorEngineLawTests {
                 count: 32
             )),
             userMessage: "different site descriptors unexpectedly produced the same 32-sample stream"
-        );
-    }
-    [Fact]
-    public void SourcesDeclareTheFixedAdvanceCostCursorSeekingDependsOn() {
-        Assert.Equal(
-            expected: 2UL,
-            actual: GeneratorEngine.AdvancesPerSample(source: GeneratorSource.Markov)
-        );
-        Assert.Equal(
-            expected: 1UL,
-            actual: GeneratorEngine.AdvancesPerSample(source: GeneratorSource.UniformRange)
-        );
-        Assert.Equal(
-            expected: 2UL,
-            actual: GeneratorEngine.AdvancesPerSample(source: GeneratorSource.WeightedNumeric)
-        );
-        Assert.Equal(
-            expected: 1UL,
-            actual: GeneratorEngine.AdvancesPerSample(source: GeneratorSource.StreamDraw)
         );
     }
     [Fact]

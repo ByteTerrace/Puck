@@ -67,9 +67,11 @@ public sealed class DrawStreamLawTests {
         for (var index = 0; (index < values.Length); index++) {
             Assert.True(condition: stream.TryNext(reason: out reason, value: out values[index]), userMessage: reason);
         }
-        Assert.Equal(expected: Samples, actual: stream.Samples);
+        var advances = ((generator.Source is GeneratorSource.WeightedNumeric or GeneratorSource.SymmetryOrbit) ? (Samples * 2L) : Samples);
+
+        Assert.Equal(expected: advances, actual: stream.Advances);
         Assert.True(condition: ArenaDraws.TryClose(arena: arena, reason: out reason, rowOrdinal: TopologyArenaFixture.Deal, stream: in stream), userMessage: reason);
-        Assert.Equal(expected: ((long)Samples), actual: arena.DrawCursor(rowOrdinal: TopologyArenaFixture.Deal));
+        Assert.Equal(expected: advances, actual: arena.DrawCursor(rowOrdinal: TopologyArenaFixture.Deal));
 
         return (values, ((long)arena.ComputeHash()));
     }
@@ -99,7 +101,7 @@ public sealed class DrawStreamLawTests {
         }
         Assert.False(condition: stream.TryNext(reason: out reason, value: out _));
         Assert.NotEqual(actual: reason, expected: string.Empty);
-        Assert.Equal(expected: 3L, actual: stream.Samples);
+        Assert.Equal(expected: 6L, actual: stream.Advances);
     }
     [Fact]
     public void ASeedTableSeedsEverySiteAsTheLadderDoes() {
