@@ -1867,8 +1867,8 @@ puck test <path> --jobs <n>            run at most n worker processes concurrent
                                      or 1 on a machine with fewer than four logical CPUs)
 puck test <path> --reproduce           restore each authority's checkpoint and replay its recorded input
 puck test <path> --workers 1,2,0       run every scenario at each Puck.World --workers count and
-                                       require their hashes, exports and crossing logs to match
-puck test <path> --record <dir>        keep each world's hashes, exports and crossing log
+                                       require their hashes, snapshots, exports and crossing logs to match
+puck test <path> --record <dir>        keep each world's hashes, snapshots, exports and crossing log
                                        under <dir>/<world> (lane scratch, never committed)
 puck test <path> --compare <dir>       require each world to match its recording under <dir>
 puck test <path> --cache-dir <dir>     share this device-cache root across workers and runs
@@ -1959,15 +1959,18 @@ verb runs every scenario as a full authored host run, the batch host with its
 instance host and portal scan, under `<dir>/worlds/<n>/workers-<count>`, one
 count after another, and prints each count's wall time. Each leg records
 `reproduction.json` (each authority's per-tick state hash, from the same replay
-probe `--reproduce` uses; its `divergence` is set only under `--reproduce`) and
-`crossings.json` (every crossing line the instance host narrates, stamped with
-the booted authority's completed tick) beside its `out` exports and manifest.
-Every count must match the first: a mismatch prints `DIVERGED` with the first
-recorded tick whose hash differs per authority, the first JSON path where an
-export differs, and the first differing crossing entry, and exits 2. Verdicts are
-read from the first count.
+probe `--reproduce` uses; its `divergence` is set only under `--reproduce`),
+`snapshots.json` (each authority's delivered snapshots, one hash per delivery
+of its tick and every entity entry in delivered order, so a count that delivers
+the same rows in other positions differs) and `crossings.json` (every crossing
+line the instance host narrates, stamped with the booted authority's completed
+tick) beside its `out` exports and manifest. Every count must match the first:
+a mismatch prints `DIVERGED` with the first recorded tick whose state or
+snapshot hash differs per authority, the first JSON path where an export
+differs, and the first differing crossing entry, and exits 2. Verdicts are read
+from the first count.
 
-`--record <dir>` keeps the first count's `reproduction.json`,
+`--record <dir>` keeps the first count's `reproduction.json`, `snapshots.json`,
 `crossings.json` and `out` under `<dir>/<world>`, and a later run with
 `--compare <dir>` must match it the same way: the before-and-after oracle a
 step that should not change semantics runs against. A recording is a lane-local

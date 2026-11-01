@@ -1,0 +1,77 @@
+// The snapshot's entity-row partitions (256 rows each) under worker counts: 300 idle stand-ins in a 320-slot table,
+// whose middle placement grows, shrinks and regrows so the inactive holes it leaves straddle row 256. Run it at every
+// count against a recording taken before a change to snapshot emission:
+// `puck test worlds/debug/snapshot-partitions-tests.puck --workers 1,2,0 --compare <dir>`.
+// Inhabited placements fill the table from the top down in document order once their counts move, so `upper` holds
+// 319..270, `middle` 269..240 and `lower` 239..21; `middle` retires its lowest bodies first and regrows from its top.
+schema: "puck.world.definition.v1"
+basis: "avatars/moth"
+documentId: "snapshot-partitions-tests"
+import "stand-in"
+
+bodies {
+  capacity: 320
+}
+
+state {
+  world {
+    row {
+      name: "upperCount"
+      kind: Int
+      value: 50
+    }
+    row {
+      name: "middleCount"
+      kind: Int
+      value: 30
+    }
+    row {
+      name: "lowerCount"
+      kind: Int
+      value: 219
+    }
+  }
+}
+
+template crowd(name, at, count) {
+  placement name {
+    prototype: "standIn"
+    position: at
+    inhabit {
+      count { row: count }
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 12)
+      }
+      kit: "walker"
+      look: "standIn"
+      source: "Idle"
+    }
+  }
+}
+
+placements {
+  crowd("upper", [120, 0.05, 120], "upperCount")
+  crowd("middle", [150, 0.05, 120], "middleCount")
+  crowd("lower", [120, 0.05, 150], "lowerCount")
+}
+
+// Holes 240..259 (across 256), then 240..269, then 240..244 as the middle regrows from its top.
+test "snapshot rows keep their order as holes open and close across row 256" {
+  when {
+    ticks 10
+    seat1: world.state.cell.set middleCount $value 10
+    ticks 10
+    seat1: world.state.cell.set middleCount $value 0
+    ticks 10
+    seat1: world.state.cell.set middleCount $value 25
+    ticks 10
+  }
+  expect {
+    middleCount == 25
+  }
+}

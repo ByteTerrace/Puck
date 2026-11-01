@@ -5,9 +5,11 @@ using Puck.Confinement;
 namespace Puck.Cli.Test;
 
 public static partial class TestCommand {
-    // The files that record a leg for comparison: each authority's per-tick hashes, the instance host's crossing log,
-    // and the schedule's exports and manifest. A recording under --record holds exactly these.
+    // The files that record a leg for comparison: each authority's per-tick hashes, each authority's delivered snapshot
+    // entries hashed per tick, the instance host's crossing log, and the schedule's exports and manifest. A recording
+    // under --record holds exactly these.
     private const string AuthoritiesFile = "reproduction.json";
+    private const string SnapshotsFile = "snapshots.json";
     private const string CrossingsFile = "crossings.json";
     private const string ExportsDirectory = "out";
 
@@ -82,7 +84,7 @@ public static partial class TestCommand {
     }
     private static bool Report(IReadOnlyList<string> differences, string subject, TextWriter output, TextWriter error) {
         if (differences.Count == 0) {
-            output.WriteLine(value: $"  agree: {subject} (authority hashes, exports, crossing log)");
+            output.WriteLine(value: $"  agree: {subject} (authority hashes, snapshot entries, exports, crossing log)");
             return false;
         }
         error.WriteLine(value: $"  DIVERGED: {subject}");
@@ -91,7 +93,7 @@ public static partial class TestCommand {
     }
     private static void CopyRecording(string source, string destination) {
         _ = Directory.CreateDirectory(path: Path.Combine(path1: destination, path2: ExportsDirectory));
-        foreach (var file in (string[])[AuthoritiesFile, CrossingsFile]) {
+        foreach (var file in (string[])[AuthoritiesFile, SnapshotsFile, CrossingsFile]) {
             File.Copy(destFileName: Path.Combine(path1: destination, path2: file), sourceFileName: Path.Combine(path1: source, path2: file));
         }
         foreach (var file in Directory.EnumerateFiles(path: Path.Combine(path1: source, path2: ExportsDirectory))) {
@@ -105,7 +107,9 @@ public static partial class TestCommand {
         var differences = new List<string>();
 
         CompareAuthorities(actual: ReadArray(path: Path.Combine(path1: actual, path2: AuthoritiesFile)), differences: differences,
-            expected: ReadArray(path: Path.Combine(path1: expected, path2: AuthoritiesFile)));
+            expected: ReadArray(path: Path.Combine(path1: expected, path2: AuthoritiesFile)), file: AuthoritiesFile, subject: "the state hash");
+        CompareAuthorities(actual: ReadArray(path: Path.Combine(path1: actual, path2: SnapshotsFile)), differences: differences,
+            expected: ReadArray(path: Path.Combine(path1: expected, path2: SnapshotsFile)), file: SnapshotsFile, subject: "the delivered snapshot's entries");
         CompareExports(actual: Path.Combine(path1: actual, path2: ExportsDirectory), differences: differences,
             expected: Path.Combine(path1: expected, path2: ExportsDirectory));
         CompareCrossings(actual: ReadArray(path: Path.Combine(path1: actual, path2: CrossingsFile)), differences: differences,
@@ -113,9 +117,10 @@ public static partial class TestCommand {
         return differences;
     }
     private static JsonArray? ReadArray(string path) => (File.Exists(path: path) ? (JsonNode.Parse(json: File.ReadAllText(path: path)) as JsonArray) : null);
-    private static void CompareAuthorities(JsonArray? expected, JsonArray? actual, List<string> differences) {
+    // Compares one file of per-authority, per-tick hashes: the state hashes, or the delivered snapshot entries' hashes.
+    private static void CompareAuthorities(JsonArray? expected, JsonArray? actual, List<string> differences, string file, string subject) {
         if ((expected is null) || (actual is null)) {
-            differences.Add(item: $"{AuthoritiesFile} is missing from the {((expected is null) ? "expected" : "actual")} leg.");
+            differences.Add(item: $"{file} is missing from the {((expected is null) ? "expected" : "actual")} leg.");
             return;
         }
         static string Name(JsonNode? row) => (row?["world"]?.GetValue<string>() ?? "?");
@@ -123,7 +128,7 @@ public static partial class TestCommand {
         var actualNames = actual.Select(selector: Name).ToArray();
 
         if (!expectedNames.SequenceEqual(second: actualNames)) {
-            differences.Add(item: $"the authorities differ: [{string.Join(separator: ", ", values: expectedNames)}] against [{string.Join(separator: ", ", values: actualNames)}].");
+            differences.Add(item: $"{file}: the authorities differ: [{string.Join(separator: ", ", values: expectedNames)}] against [{string.Join(separator: ", ", values: actualNames)}].");
         }
         foreach (var name in expectedNames.Intersect(second: actualNames)) {
             var left = Hashes(row: expected.First(predicate: row => (Name(row: row) == name)));
@@ -132,9 +137,9 @@ public static partial class TestCommand {
             var tick = Enumerable.Range(start: 0, count: shared).FirstOrDefault(predicate: index => (left[index] != right[index]), defaultValue: -1);
 
             if (tick >= 0) {
-                differences.Add(item: $"authority '{name}': the state hash differs first at recorded tick {tick} ({left[tick]:X16} against {right[tick]:X16}).");
+                differences.Add(item: $"authority '{name}': {subject} differs first at recorded tick {tick} ({left[tick]:X16} against {right[tick]:X16}).");
             } else if (left.Length != right.Length) {
-                differences.Add(item: $"authority '{name}': {left.Length} recorded ticks against {right.Length}; the first {shared} agree.");
+                differences.Add(item: $"authority '{name}': {subject}: {left.Length} recorded ticks against {right.Length}; the first {shared} agree.");
             }
         }
     }

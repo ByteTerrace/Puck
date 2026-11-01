@@ -176,7 +176,7 @@ public static partial class TestCommand {
         Console.WriteLine(value: $"test: work processes={batches.Length} host-boots={boots} world-runs={worlds.Count} exported-authority-ticks={ticks}");
         if (refused) {
             if (diverged) {
-                Console.Error.WriteLine(value: "FAIL: a world's authority hashes, exports or crossing log differed between worker counts or from its recording, or had no recording to compare.");
+                Console.Error.WriteLine(value: "FAIL: a world's authority hashes, snapshot entries, exports or crossing log differed between worker counts or from its recording, or had no recording to compare.");
             }
 
             return 2;
@@ -193,7 +193,7 @@ public static partial class TestCommand {
             : $"PASS: every verdict in {worlds.Count} test world(s) passed."
         ));
         if (legs.Count > 1) {
-            Console.WriteLine(value: $"PASS: every world's authority hashes, exports and crossing log agreed at {string.Join(separator: ", ", values: legs.Select(selector: static leg => leg.Label))}.");
+            Console.WriteLine(value: $"PASS: every world's authority hashes, snapshot entries, exports and crossing log agreed at {string.Join(separator: ", ", values: legs.Select(selector: static leg => leg.Label))}.");
         }
         if (compare is { }) {
             Console.WriteLine(value: $"PASS: every world matched its recording under {Path.GetFullPath(path: compare)}.");
