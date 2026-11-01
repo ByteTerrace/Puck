@@ -4,6 +4,43 @@ using Xunit;
 namespace Puck.State.Tests;
 
 public sealed class ArenaScopeSnapshotTests {
+    [InlineData(0)]
+    [InlineData(1)]
+    [Theory]
+    public void AGrowingKeyedRowRestoresItsCapturedReservationAndContents(int initialCells) {
+        var section = new StateSection(Rows: [
+            new StateRow(Name: CellName.Parse("selected"), Kind: CellKind.Int, Domain: StateDomain.Keys.Instance, Visibility: new StateVisibility(Readers: ["seat1"]),
+                Cells: Enumerable.Range(0, initialCells).Select(index => new StateCell(CellName.Parse($"seed{index}"), CellValue.Int(3))).ToArray()),
+            new StateRow(Name: CellName.Parse("outside"), Kind: CellKind.Int, Domain: StateDomain.Keys.Instance)
+        ]);
+        var arena = new StateArena(catalog: StateCatalog.Compile(section), section: section, time: ArenaTime.Origin);
+        var image = arena.CaptureScope(new HashSet<int> { 0 });
+        var initial = Hash(arena, 0);
+        Assert.Equal(initialCells, arena.Layout[0].CellCapacity);
+        var key = arena.Keys.Intern(CellName.Parse("new"));
+        Assert.True(arena.TryWriteOrMint(rowOrdinal: 0, key: key, value: CellValue.Int(7), evicted: out _, reason: out var reason), reason);
+        Assert.True(arena.Layout[0].CellCapacity > initialCells);
+        Assert.True(arena.TryWriteOrMint(rowOrdinal: 1, key: key, value: CellValue.Int(19), evicted: out _, reason: out reason), reason);
+        var outside = Hash(arena, 1);
+        Assert.True(arena.TryWriteVisibility(rowOrdinal: 0, key: key, visibility: new StateVisibility(Readers: ["seat1"])));
+        var beforeInvalidRestore = arena.ComputeHash();
+        Assert.Throws<InvalidOperationException>(() => arena.RestoreScope(image with { Numbers = image.Numbers.Skip(1).ToArray() }));
+        Assert.Equal(beforeInvalidRestore, arena.ComputeHash());
+
+        arena.ValidateScope(image);
+        arena.RestoreScope(image);
+        Assert.Equal(initialCells, arena.Layout[0].CellCapacity);
+        Assert.Equal(initial, Hash(arena, 0));
+        Assert.Equal(outside, Hash(arena, 1));
+        Assert.True(arena.Keys.TryResolve(CellName.Parse("new"), out _));
+        var restoredBytes = arena.Bytes;
+        Assert.True(arena.TryWriteOrMint(rowOrdinal: 0, key: key, value: CellValue.Int(7), evicted: out _, reason: out reason), reason);
+        Assert.True(arena.TryWriteVisibility(rowOrdinal: 0, key: key, visibility: new StateVisibility(Readers: ["seat1"])));
+        arena.RestoreScope(image);
+        Assert.Equal(initial, Hash(arena, 0));
+        Assert.Equal(restoredBytes, arena.Bytes);
+    }
+
     [Fact]
     public void AReplayScopeSurvivesStorageGrowthInAnotherRow() {
         var section = new StateSection(Rows: [

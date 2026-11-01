@@ -10,44 +10,8 @@ namespace Puck.Cli.Host;
 /// also waits while another process runs one, machine-wide, since two at once exhaust memory; the waiting process's own
 /// runs never hold it back.</summary>
 public static class HostAdmission {
-    /// <summary>Holds the shared heavy lease for a suite's admission and entire execution.</summary>
-    /// <param name="repositoryRoot">The checkout whose common Git directory owns the lease.</param>
-    /// <param name="step">The suite's name.</param>
-    /// <param name="clock">The acquisition clock.</param>
-    /// <param name="cancellationToken">Cancels acquisition.</param>
-    /// <returns>The lease to dispose after the suite exits.</returns>
-    public static CliLease AcquireHeavy(string repositoryRoot, string step, TimeProvider clock, CancellationToken cancellationToken = default) {
-        var root = CliLease.RootAsync(cancellationToken: cancellationToken, checkout: repositoryRoot).GetAwaiter().GetResult();
-
-        return CliLease.AcquireAsync(ancestor: IsAncestor, cancellationToken: cancellationToken, clock: clock, holder: step, lane: CliLease.LaneOf(checkout: repositoryRoot), name: "heavy", root: root, wait: HeavyTimeout).GetAwaiter().GetResult();
-    }
-    /// <summary>Whether the named process, with the given UTC start ticks, is a live ancestor of this process.</summary>
-    public static bool IsAncestor(int pid, long ticks) {
-        var child = Environment.ProcessId;
-        var visited = new HashSet<int>();
-
-        try {
-            while (visited.Add(item: child)) {
-                using var childProcess = System.Diagnostics.Process.GetProcessById(processId: child);
-                var parent = HostProbe.ParentId(processId: child);
-
-                if (parent <= 0) { return false; }
-                using var parentProcess = System.Diagnostics.Process.GetProcessById(processId: parent);
-                var started = parentProcess.StartTime.ToUniversalTime();
-
-                if (started > childProcess.StartTime.ToUniversalTime()) { return false; }
-                if (parent == pid) { return (started.Ticks == ticks); }
-                child = parent;
-            }
-        } catch (Exception exception) when ((exception is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception)) { }
-        return false;
-    }
-
     /// <summary>How long a step waits before it is refused.</summary>
     public static readonly TimeSpan Timeout = TimeSpan.FromMinutes(minutes: 30);
-    /// <summary>How long a heavy suite waits before it is refused: another heavy run can take half an hour under load,
-    /// and a gate can queue behind two, so refusing sooner would throw away the gate's build.</summary>
-    public static readonly TimeSpan HeavyTimeout = TimeSpan.FromHours(hours: 2);
     /// <summary>How often a wait samples the machine.</summary>
     public static readonly TimeSpan Interval = TimeSpan.FromSeconds(seconds: 10);
     /// <summary>How long a wait goes without printing before it prints that it is still waiting.</summary>
@@ -62,7 +26,7 @@ public static class HostAdmission {
             : string.Create(provider: CultureInfo.InvariantCulture, handler: $"no memory headroom: freeRAM={reading.FreeRamGb:0.0}GB freeDisk={reading.FreeDiskGb:0.0}GB (admission needs freeRAM>{thresholds.CapacityRamGb:0.0}GB and freeDisk>={thresholds.PressureDiskGb:0.0}GB)")));
 
     /// <summary>Waits until the host can take <paramref name="step"/>, at most <see cref="Timeout"/>, or
-    /// <see cref="HeavyTimeout"/> for a heavy suite. CPU load never holds a step back.</summary>
+    /// <see cref="HeavyLease.Timeout"/> for a heavy suite. CPU load never holds a step back.</summary>
     /// <param name="step">The step's name, for the wait lines.</param>
     /// <param name="device">Whether the step opens a GPU device, and so must also wait for the GPU to be idle.</param>
     /// <param name="heavySuite">Whether the step runs a heavy suite, and so must also wait while another process runs
@@ -78,7 +42,7 @@ public static class HostAdmission {
     /// first.</returns>
     public static bool Wait(string step, bool device, bool heavySuite, Func<HostSample> sample, TimeProvider clock, Action<TimeSpan> delay, TextWriter error, CancellationToken cancellationToken, HostLoadThresholds thresholds) {
         var started = clock.GetTimestamp();
-        var bound = (heavySuite ? HeavyTimeout : Timeout);
+        var bound = (heavySuite ? HeavyLease.Timeout : Timeout);
         var printed = started;
         string? reason = null;
 

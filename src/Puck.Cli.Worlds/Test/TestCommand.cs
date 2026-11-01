@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -23,7 +24,7 @@ public static partial class TestCommand {
 
     private static readonly TimeSpan BuildBudget = TimeSpan.FromSeconds(value: 600);
 
-    private static int Run(string path, TestHost host, string? worldArtifact, string? keep, int jobs, bool reproduce, string? cacheDirectory) {
+    private static int Run(string path, TestHost host, string? worldArtifact, string? keep, int jobs, bool reproduce, string? cacheDirectory, string? workers, string? record, string? compare) {
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
             Console.Error.WriteLine(value: "ERROR: puck test must run inside the repository.");
 
@@ -32,6 +33,12 @@ public static partial class TestCommand {
 
         if (host == TestHost.Browser) {
             Console.Error.WriteLine(value: "ERROR: --host browser is not implemented: the browser engine host has no command ingress, no acting principal and no authoritative server, so it cannot submit a scheduled command at all. Cross-host determinism there is an open gap, not a leg this verb can run.");
+
+            return 2;
+        }
+
+        if (!TryParseLegs(legs: out var legs, reason: out var legsReason, workers: workers)) {
+            Console.Error.WriteLine(value: $"ERROR: {legsReason}");
 
             return 2;
         }
@@ -50,8 +57,11 @@ public static partial class TestCommand {
             try {
                 return RunIn(
                     cacheDirectory: cacheDirectory,
+                    compare: compare,
                     jobs: jobs,
+                    legs: legs,
                     path: path,
+                    record: record,
                     repositoryRoot: repositoryRoot,
                     reproduce: reproduce,
                     runDirectory: kept,
@@ -66,8 +76,11 @@ public static partial class TestCommand {
 
         return run.Conclude(exitCode: RunIn(
             cacheDirectory: cacheDirectory,
+            compare: compare,
             jobs: jobs,
+            legs: legs,
             path: path,
+            record: record,
             repositoryRoot: repositoryRoot,
             reproduce: reproduce,
             runDirectory: run.Path,
@@ -76,7 +89,7 @@ public static partial class TestCommand {
     }
     // One run of the verb inside runDirectory: the --keep directory, or a run directory the caller concludes with the
     // exit code this returns.
-    private static int RunIn(string path, string? worldArtifact, int jobs, bool reproduce, string repositoryRoot, string runDirectory, string? cacheDirectory) {
+    private static int RunIn(string path, string? worldArtifact, int jobs, bool reproduce, string repositoryRoot, string runDirectory, string? cacheDirectory, IReadOnlyList<TestLeg> legs, string? record, string? compare) {
         var preparation = new WorldBootWork();
         using var attribution = WorldBootWork.Attribute(work: preparation);
 
@@ -117,30 +130,60 @@ public static partial class TestCommand {
         var batches = Enumerable.Range(0, worlds.Count)
             .GroupBy(keySelector: index => (index % parallelism))
             .Select(selector: chunk => chunk.ToArray()).ToArray();
-        var batchPassed = new bool[batches.Length];
+        var batchPassed = new bool[(batches.Length * legs.Count)];
+        // A leg is recorded for comparison whenever something compares it: another worker count, or a recording.
+        var recorded = ((legs.Count > 1) || (legs[0].Workers is not null) || (record is not null) || (compare is not null));
 
-        Parallel.For(fromInclusive: 0, toExclusive: batches.Length,
-            parallelOptions: new ParallelOptions { MaxDegreeOfParallelism = parallelism },
-            body: worker => batchPassed[worker] = RunBatch(artifact: artifact!, chunk: worker, indices: batches[worker],
-                reproduce: reproduce, runDirectory: runDirectory, worlds: worlds, cacheDirectory: cacheDirectory));
+        // A run of several worlds is a sweep of World processes at several GB each, so it holds the machine's heavy lease; a single world
+        // stays unleased. A --workers sweep re-runs the same worlds one count after another, never beside each other, so its legs add no
+        // concurrency and do not count.
+        using var heavy = ((worlds.Count > 1) ? AcquireHeavy(path: path, repositoryRoot: repositoryRoot, worlds: worlds.Count) : null);
+
+        // Each worker count runs every scenario before the next count starts, so a count's wall time is its own.
+        for (var legIndex = 0; (legIndex < legs.Count); legIndex++) {
+            var leg = legs[legIndex];
+            var offset = (legIndex * batches.Length);
+            var started = Stopwatch.GetTimestamp();
+
+            Parallel.For(fromInclusive: 0, toExclusive: batches.Length,
+                parallelOptions: new ParallelOptions { MaxDegreeOfParallelism = parallelism },
+                body: worker => batchPassed[(offset + worker)] = RunBatch(artifact: artifact!, chunk: worker, indices: batches[worker],
+                    reproduce: reproduce, runDirectory: runDirectory, worlds: worlds, cacheDirectory: cacheDirectory, leg: leg, record: recorded));
+            if (leg.Workers is { }) {
+                Console.WriteLine(value: string.Create(provider: CultureInfo.InvariantCulture,
+                    handler: $"test: {leg.Label} ran {worlds.Count} world(s) in {Stopwatch.GetElapsedTime(startingTimestamp: started).TotalSeconds:F1} s"));
+            }
+        }
         var boots = 0;
         var ticks = 0UL;
         var refused = batchPassed.Any(predicate: static passed => !passed);
         var failed = false;
+        var diverged = false;
 
         for (var index = 0; (index < worlds.Count); index++) {
+            var worldDirectory = WorldDirectory(index: index, runDirectory: runDirectory);
             var verdict = RunWorld(reproduce: reproduce, test: worlds[index], output: Console.Out, error: Console.Error,
-                boots: out var worldBoots, ticks: out var worldTicks,
-                worldDirectory: WorldDirectory(index: index, runDirectory: runDirectory));
+                boots: out var worldBoots, ticks: out var worldTicks, leg: legs[0].Name, worldDirectory: worldDirectory);
 
             boots += worldBoots;
             ticks += worldTicks;
             refused |= (verdict == 2);
             failed |= (verdict != 0);
+            if (recorded && (verdict != 2)) {
+                var compared = CompareAndRecord(compare: compare, error: Console.Error, legs: legs, output: Console.Out,
+                    record: record, test: worlds[index], worldDirectory: worldDirectory);
+
+                diverged |= (compared != 0);
+            }
         }
+        refused |= diverged;
 
         Console.WriteLine(value: $"test: work processes={batches.Length} host-boots={boots} world-runs={worlds.Count} exported-authority-ticks={ticks}");
         if (refused) {
+            if (diverged) {
+                Console.Error.WriteLine(value: "FAIL: a world's authority hashes, exports or crossing log differed between worker counts or from its recording, or had no recording to compare.");
+            }
+
             return 2;
         }
 
@@ -154,11 +197,27 @@ public static partial class TestCommand {
             ? $"PASS: every verdict in {worlds.Count} test world(s) passed, and recorded inputs reproduced every authority from its checkpoint."
             : $"PASS: every verdict in {worlds.Count} test world(s) passed."
         ));
+        if (legs.Count > 1) {
+            Console.WriteLine(value: $"PASS: every world's authority hashes, exports and crossing log agreed at {string.Join(separator: ", ", values: legs.Select(selector: static leg => leg.Label))}.");
+        }
+        if (compare is { }) {
+            Console.WriteLine(value: $"PASS: every world matched its recording under {Path.GetFullPath(path: compare)}.");
+        }
 
         return 0;
     }
+    // Holds the shared heavy lease (HeavyLease) and says so: the lease prints its own line while it waits, and this one when it is held.
+    private static CliLease AcquireHeavy(string path, string repositoryRoot, int worlds) {
+        var started = Stopwatch.GetTimestamp();
+        var lease = HeavyLease.Acquire(clock: TimeProvider.System, holder: $"puck test {Path.GetFileName(path: path)}", repositoryRoot: repositoryRoot);
+
+        Console.WriteLine(value: string.Create(provider: CultureInfo.InvariantCulture,
+            handler: $"test: holding the heavy lease as lane {CliLease.LaneOf(checkout: repositoryRoot)} for {worlds} worlds (waited {Stopwatch.GetElapsedTime(startingTimestamp: started).TotalSeconds:F1} s)"));
+
+        return lease;
+    }
     // The authored run supplies verdicts; reproduction replays captured input inside its worker.
-    private static int RunWorld(TestWorld test, string worldDirectory, TextWriter output, TextWriter error, bool reproduce, out int boots, out ulong ticks) {
+    private static int RunWorld(TestWorld test, string worldDirectory, string leg, TextWriter output, TextWriter error, bool reproduce, out int boots, out ulong ticks) {
         boots = 0;
         ticks = 0;
         var name = test.Name;
@@ -170,18 +229,18 @@ public static partial class TestCommand {
             error.WriteLine(value: $"ERROR: {scheduleReason}");
             return 2;
         }
-        var leg = Path.Combine(path1: worldDirectory, path2: "run1");
-        var bootCount = Path.Combine(path1: leg, path2: "host-boots");
+        var legDirectory = Path.Combine(path1: worldDirectory, path2: leg);
+        var bootCount = Path.Combine(path1: legDirectory, path2: "host-boots");
 
         if (File.Exists(path: bootCount)) { boots = int.Parse(File.ReadAllText(path: bootCount), CultureInfo.InvariantCulture); }
-        if (!TryReadBatchLeg(error: error, legDirectory: leg, reading: out var reading, world: world)) { return 2; }
+        if (!TryReadBatchLeg(error: error, legDirectory: legDirectory, reading: out var reading, world: world)) { return 2; }
         ticks = reading!.Worlds.Aggregate(0UL, (total, row) => (total + row.ExportTick));
         var verdict = TestReconciliation.Judge(name: name, reading: reading, reason: out var judged, schedule: schedule!);
 
         if (verdict == TestReconciliationVerdict.Unmeasured) { error.WriteLine(value: $"  REFUSED: {judged}"); return 2; }
         if (verdict == TestReconciliationVerdict.Unexpected) { error.WriteLine(value: $"  OUTCOME: {judged}"); }
         if (reproduce) {
-            var proof = Path.Combine(path1: leg, path2: "reproduction.json");
+            var proof = Path.Combine(path1: legDirectory, path2: AuthoritiesFile);
 
             if (!File.Exists(path: proof) || (JsonNode.Parse(File.ReadAllText(path: proof)) is not JsonArray { Count: > 0 } rows) ||
                 rows.Any(predicate: row => (row?["divergence"]?.GetValue<int>() != -1)) ||

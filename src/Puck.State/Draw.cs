@@ -52,8 +52,8 @@ public enum DrawTiming : byte {
 /// <param name="Timing">When this site draws and whether it may be redrawn (see <see cref="DrawTiming"/>).</param>
 /// <param name="Secret">An authority-provisioned 256-bit secret for an independently keyed streamDraw sample at each cursor. Never sent in observations.</param>
 /// <param name="Skip">An authored seek, non-negative, default <c>0</c>: a rebuild advances the generator by
-/// <c>(skip + cursor) * cost</c> rather than <c>cursor * cost</c>. Authored data, the same class as the seed ladder's
-/// own rungs — it never writes the persisted <see cref="StateRow.DrawCursor"/>, which keeps counting samples from
+/// <c>skip + cursor</c> rather than <c>cursor</c>. Authored data, the same class as the seed ladder's
+/// own rungs — it never writes the persisted <see cref="StateRow.DrawCursor"/>, which keeps counting raw words from
 /// zero exactly as an unskipped site's does.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record Draw(

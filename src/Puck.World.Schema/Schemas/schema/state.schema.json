@@ -215,7 +215,7 @@
                 "title": "ClosedBitset256"
               },
               "skip": {
-                "description": "An authored seek, non-negative, default 0: a rebuild advances the generator by (skip \u002B cursor) * cost rather than cursor * cost. Authored data, the same class as the seed ladder\u0027s own rungs \u2014 it never writes the persisted DrawCursor, which keeps counting samples from zero exactly as an unskipped site\u0027s does.",
+                "description": "An authored seek, non-negative, default 0: a rebuild advances the generator by skip \u002B cursor rather than cursor. Authored data, the same class as the seed ladder\u0027s own rungs \u2014 it never writes the persisted DrawCursor, which keeps counting raw words from zero exactly as an unskipped site\u0027s does.",
                 "type": "integer",
                 "default": 0
               }
@@ -223,7 +223,7 @@
             "additionalProperties": false
           },
           "drawCursor": {
-            "description": "How many samples this site\u0027s Draw has ever consumed \u2014 engine-minted bookkeeping and the position the engine re-seeks to (GeneratorEngine.AdvancesPerSample scales it into Pcg32XshRr advances, so resuming is an exact O(1) advance rather than a replay of the earlier draws). Stored in the document, so world.undo, world.save, and replay rewind a site\u0027s draw position with the same whole-document restore that rewinds an ordinary counter. Zero when Draw is null; refused negative.",
+            "description": "How many raw words this site\u0027s Draw has consumed, including rejections. Resuming seeks directly to that position rather than replaying earlier results. Stored in the document, so world.undo, world.save, and replay rewind a site\u0027s draw position with the same whole-document restore that rewinds an ordinary counter. Zero when Draw is null; refused negative.",
             "type": "integer"
           },
           "drawnMasks": {
@@ -591,7 +591,7 @@
                       "title": "WorldLatticeFillScatter"
                     },
                     {
-                      "description": "Every cell drawn from a numeric authored-randomness source \u2014 the per-cell lattice draw. The fill is one pass of the row\u0027s own draw stream (seeded through the same ladder as a state-row site, under the row\u0027s state.\u003Crow\u003E descriptor): cell k, in cell-index order, takes the sample a site at drawCursor \u002B k would draw, so a weighted source under an exhausting mode draws its units across the field and restarts as it goes. The row\u0027s DrawCursor/DrawnMasks name the pass currently painted; generate \u003Crow\u003E advances them one whole pass and repaints. Draw occupies its authored paint position (overwriting earlier fills and preceding later fills); boot, rebuild, load/reset, and a draw-rewinding undo repaint the pass the document names.",
+                      "description": "Every cell drawn from a numeric authored-randomness source \u2014 the per-cell lattice draw. The fill is one pass of the row\u0027s own draw stream (seeded through the same ladder as a state-row site, under the row\u0027s state.\u003Crow\u003E descriptor): the cells, in cell-index order, each take the next sample the row\u0027s stream draws from drawCursor, so a weighted source under an exhausting mode draws its units across the field and restarts as it goes. The pass advances the cursor by the raw words it consumed, a bounded range\u0027s rejected words included. The row\u0027s DrawCursor/DrawnMasks name the pass currently painted; generate \u003Crow\u003E advances them one whole pass and repaints. Draw occupies its authored paint position (overwriting earlier fills and preceding later fills); boot, rebuild, load/reset, and a draw-rewinding undo repaint the pass the document names.",
                       "properties": {
                         "$type": {
                           "const": "draw"

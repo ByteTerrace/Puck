@@ -318,6 +318,13 @@ Workflows orchestrate verbs and bash composite actions; harness hooks are the sc
 - Report through the hand-back report and the final commit's `Brief:` trailer;
   use `<worktree>/.claude/scratch/<lane>-*` for scratch. Preserve needed output
   outside a worktree Claude may remove; [lane work](.claude/skills/orchestration/references/lane-work.md) owns details.
+- One watcher per running job, stopped before another is armed and ending on
+  success, failure or exit; no `sleep` timers, no polling a job that will
+  report its own exit, and no full `worlds/debug` sweep (the brief names the
+  test files). Keep working while a lease ticket waits, and stop a windowed
+  World (it holds the GPU lease) as soon as its captures are done, never
+  keeping it open across code edits
+  ([lane work](.claude/skills/orchestration/references/lane-work.md)).
 - Merge the integration tip into your own branch before reporting and re-run
   checks, except for a read-only brief or after a stop order.
 - A lane (Claude subagent, `codex exec` or `agy -p`) never pushes; the lead pushes.

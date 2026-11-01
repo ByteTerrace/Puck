@@ -309,5 +309,8 @@ public static class PuckDiagnosticCodes {
     public const string MovingBlend = "PUCK122";
     /// <summary>PUCK_LINT_010: a literal mix weight's share is below 1/64; consider mean over a history table.</summary>
     public const string VectorMixStall = "PUCK_LINT_010";
+    /// <summary>PUCK_LINT_011: division or remainder by a potentially zero divisor in an eager ternary arm.
+    /// Selecting the other arm does not guard the operation.</summary>
+    public const string EagerConditionalArithmetic = "PUCK_LINT_011";
 }
 

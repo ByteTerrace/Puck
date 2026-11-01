@@ -50,8 +50,8 @@ public static class RuleEvaluation {
         ExpressionFault.Absent => "the read went through a dynamic key that named no cell (an empty zone's endpoint); answer the absence with 'isAbsent(...)' or '... ?? <fallback>'",
         _ => "the expression overflowed, divided by zero, left a function's domain, or produced an invalid stack result",
     };
-    /// <summary>Evaluates a compiled postfix gate. A conjunct that cannot answer reads false and names its fault, so
-    /// the caller reports it rather than letting the gate silently stop holding. A gate with no tokens always
+    /// <summary>Evaluates a compiled postfix gate. A conjunct that faults closes the whole gate, including under
+    /// negation, and names its fault for the caller to report. A gate with no tokens always
     /// holds.</summary>
     /// <param name="reader">The evaluation in flight.</param>
     /// <param name="gate">The compiled postfix gate.</param>
@@ -170,6 +170,13 @@ public static class RuleEvaluation {
                 fact: in right,
                 read: rightRead
             )} -> {Spell(value: holds)}");
+
+            // A failed comparison has no truth value to negate or combine. End here so every gate consumer,
+            // including ordinary rules, groups and conditional effects, observes the same closed verdict.
+            if (raised != ExpressionFault.None) {
+                fault = raised;
+                return false;
+            }
         }
 
         fault = raised;
