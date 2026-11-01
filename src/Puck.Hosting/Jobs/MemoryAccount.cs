@@ -3,7 +3,16 @@ using Puck.Abstractions.Memory;
 namespace Puck.Hosting.Jobs;
 
 /// <summary>The disjoint categories of owned bytes. An alias never adds another charge.</summary>
-public enum MemoryCategory { Live, Cached, Retirement, Metadata }
+public enum MemoryCategory {
+    /// <summary>Storage an active consumer holds.</summary>
+    Live,
+    /// <summary>Storage only a reclaimable cache claim holds.</summary>
+    Cached,
+    /// <summary>Storage of work that was retired and is waiting for its last borrower.</summary>
+    Retirement,
+    /// <summary>Bookkeeping storage beside the payloads it describes.</summary>
+    Metadata,
+}
 /// <summary>A consistent reading of owned storage and future admission promises, in bytes.</summary>
 public readonly record struct MemoryReading(long Live, long Reserved, long Cached, long Retirement, long Metadata, long Budget, long Headroom) {
     /// <summary>Gets physical bytes owned by participating subsystems; reservations are not physical allocations.</summary>
@@ -11,7 +20,9 @@ public readonly record struct MemoryReading(long Live, long Reserved, long Cache
 }
 /// <summary>
 /// The process's admission authority and byte ledger. Owners report storage, never buffer addresses or references.
-/// Physical availability is an observation; a successful reservation promises only this account's unused budget.
+/// A reservation promises only this account's unused budget. The machine's free physical memory is an observation the
+/// caller reads outside the account and passes in: it paces admission, and a caller that has nothing admitted admits
+/// its next job regardless (<see cref="Owner.Reserve"/>), so a reading never holds work back forever.
 /// </summary>
 public sealed class MemoryAccount {
     /// <summary>Gets the process account shared by mesh libraries, residencies and jobs.</summary>
@@ -37,17 +48,32 @@ public sealed class MemoryAccount {
     /// <summary>Gets the default cache allowance, governed by the same authority as job admission.</summary>
     public long CacheBudget => Math.Clamp((DefaultBudget / 12), (16L << 20), (512L << 20));
 
-    /// <summary>Lowers the admission budget, or restores the machine-derived value. Existing owners keep their storage.</summary>
+    /// <summary>Lowers the admission budget, or restores the machine-derived value. Existing owners keep their storage;
+    /// a budget lowered below the one before asks the caches to release their claims (<see cref="TrimCaches"/>).</summary>
+    /// <param name="bytes">The budget, in bytes, at most <see cref="DefaultBudget"/>; <see langword="null"/> restores the
+    /// machine-derived budget.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="bytes"/> is negative.</exception>
     public void SetBudget(long? bytes) {
         if (bytes is < 0) { throw new ArgumentOutOfRangeException(paramName: nameof(bytes)); }
-        lock (m_gate) { m_budget = ((bytes is { } value) ? Math.Min(val1: value, val2: DefaultBudget) : null); }
-        TrimCaches();
+        bool lowered;
+
+        lock (m_gate) {
+            var before = (m_budget ?? DefaultBudget);
+
+            m_budget = ((bytes is { } value) ? Math.Min(val1: value, val2: DefaultBudget) : null);
+            lowered = ((m_budget ?? DefaultBudget) < before);
+        }
+        if (lowered) { TrimCaches(); }
     }
     /// <summary>Reads all categories atomically.</summary>
+    /// <returns>The reading.</returns>
     public MemoryReading Read() {
         lock (m_gate) { return new(m_bytes[0], m_reserved, m_bytes[1], m_bytes[2], m_bytes[3], (m_budget ?? DefaultBudget), Headroom); }
     }
     /// <summary>Creates an explicit owner. It must outlive every allocation that reports to it.</summary>
+    /// <param name="name">The owner's name, for diagnostics.</param>
+    /// <param name="category">The category its charges count in until it is reclassified.</param>
+    /// <returns>The owner.</returns>
     public Owner CreateOwner(string name, MemoryCategory category = MemoryCategory.Live) => new(account: this, category: category, name: name);
 
     /// <summary>One lifecycle's allocation totals and simultaneous-peak reservation, with no buffer registry.</summary>
@@ -61,25 +87,51 @@ public sealed class MemoryAccount {
 
         /// <summary>Gets the owner for diagnostics.</summary>
         public string Name { get; }
+        /// <summary>Gets the bytes the owner's storage holds now.</summary>
+        public long Bytes {
+            get {
+                lock (m_account.m_gate) { return m_bytes; }
+            }
+        }
 
         internal Owner(MemoryAccount account, string name, MemoryCategory category) { m_account = account; Name = name; m_category = category; }
 
         private long Promise => Math.Max(val1: 0, val2: (m_peak - m_bytes));
 
-        /// <summary>Reserves the owner's simultaneous peak before it starts; false means defer without holding partial resources.</summary>
-        public bool TryReserve(long peak) {
+        /// <summary>Reserves the owner's simultaneous peak before its work starts, or lowers a reservation already held;
+        /// false means defer without holding partial resources.</summary>
+        /// <param name="peak">The most bytes the owner's storage holds at once while the work runs.</param>
+        /// <param name="available">The machine's free physical memory, in bytes, as the caller read it outside the
+        /// account (<see cref="HostMemory.AvailablePhysicalBytes"/>), or <see langword="null"/> to pace by the budget
+        /// alone.</param>
+        /// <returns><see langword="true"/> when the reservation is held.</returns>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="peak"/> is negative.</exception>
+        /// <exception cref="ObjectDisposedException">The owner is disposed.</exception>
+        public bool TryReserve(long peak, long? available = null) {
             ArgumentOutOfRangeException.ThrowIfNegative(peak);
             lock (m_account.m_gate) {
                 ObjectDisposedException.ThrowIf(condition: m_closed, instance: this);
                 var extra = (Math.Max(val1: 0, val2: (peak - m_bytes)) - Promise);
-                var owned = m_account.m_bytes.Sum();
-                var spare = Math.Max(val1: 0, val2: ((((m_account.m_budget ?? m_account.DefaultBudget) - m_account.Headroom) - owned) - m_account.m_reserved));
+                var spare = Math.Max(val1: 0, val2: ((((m_account.m_budget ?? m_account.DefaultBudget) - m_account.Headroom) - m_account.m_bytes.Sum()) - m_account.m_reserved));
 
-                if (HostMemory.AvailablePhysicalBytes() is { } available) { spare = Math.Min(val1: spare, val2: Math.Max(val1: 0, val2: ((available - m_account.Headroom) - m_account.m_reserved))); }
+                if (available is { } free) { spare = Math.Min(val1: spare, val2: Math.Max(val1: 0, val2: ((free - m_account.Headroom) - m_account.m_reserved))); }
                 if ((extra > 0) && (extra > spare)) { return false; }
                 m_account.m_reserved += extra;
                 m_peak = peak;
                 return true;
+            }
+        }
+        /// <summary>Reserves the owner's simultaneous peak whatever the budget holds, for the one job a caller must
+        /// admit so that its work progresses when nothing else of it is admitted.</summary>
+        /// <param name="peak">The most bytes the owner's storage holds at once while the work runs.</param>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="peak"/> is negative.</exception>
+        /// <exception cref="ObjectDisposedException">The owner is disposed.</exception>
+        public void Reserve(long peak) {
+            ArgumentOutOfRangeException.ThrowIfNegative(peak);
+            lock (m_account.m_gate) {
+                ObjectDisposedException.ThrowIf(condition: m_closed, instance: this);
+                m_account.m_reserved += (Math.Max(val1: 0, val2: (peak - m_bytes)) - Promise);
+                m_peak = peak;
             }
         }
         /// <summary>Releases the future promise after work ends; any still-owned storage remains accounted.</summary>
@@ -100,8 +152,10 @@ public sealed class MemoryAccount {
             }
         }
         /// <summary>Moves the existing charge between categories without charging aliases.</summary>
+        /// <param name="category">The category the owner's charges count in from now on.</param>
         public void Classify(MemoryCategory category) {
             lock (m_account.m_gate) {
+                if (category == m_category) { return; }
                 m_account.m_bytes[((int)m_category)] -= m_bytes;
                 m_category = category;
                 m_account.m_bytes[((int)m_category)] += m_bytes;
