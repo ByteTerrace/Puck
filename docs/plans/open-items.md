@@ -280,6 +280,25 @@ publication boundaries. The single-owner assumptions to replace:
   cause fix beside the parallel recording rather than leaving it to threads. A
   frame during a cold bake read avg 96 ms and p99 183 ms (simulate 28 ms of it)
   with a worker a processor at normal priority.
+- One handoff into the frame thread. Background work reaches the frame through
+  a different hand-rolled path at each site. Kernel loads use `ConcurrentQueue`
+  (`SdfKernelTreeLoad.cs:16`). The composition build polls a `Task`
+  (`SdfCompositionFrameSource.cs:625`). The irradiance build, trace and refill
+  each use their own `Task.Run` (`SdfMeshIrradiance.cs:422,691,802`), and the
+  bake uses fire-and-forget `Task.Run` (`SdfMeshPathBake.cs:1006`,
+  `SdfMeshPathBake.Residency.cs:167,194`). The memo names one completion
+  primitive the scheduler owns: a bounded `System.Threading.Channels` channel
+  with the frame thread as its single reader, drained with `TryRead` at a fixed
+  point in the frame. Every site moves onto it. Channels stay off the parallel
+  tick's hot path. A frame-scale fork and join over fixed partitions wants
+  preallocated work ranges, a counter join and an ordered merge for
+  determinism, never per-item queueing or async continuations. The machine
+  worker's request and reply (`QueuedWorkerLifecycle`, a `Monitor` queue with a
+  new `ManualResetEventSlim` per synchronous request) is a dedicated-thread
+  rendezvous rather than a stream, and the memo decides whether its
+  per-request allocation is worth pooling. Channels already serve the
+  asynchronous I/O streams (`PersistentRequestLane`, `PeerLink`,
+  `WorldSiloHost.Mailbox`, `WorldAgentMailbox`), where they fit.
 
 #### Measurements and evidence
 
