@@ -115,7 +115,14 @@ agent works in that mode by default, without asking:
     implementation of a mechanism, copied logic, parallel helpers, two paths
     to one result) and refactors it to one, fixing every caller in the same
     change; one too large for the change at hand goes into the refactoring
-    campaign's packet with its file and line, never left unrecorded.
+    campaign's packet with its file and line, never left unrecorded. One
+    implementation is the faster path, never a cost traded against time (the
+    owner's ruling): a bug is fixed and a hot path optimized once instead of N
+    times, copies cannot drift apart, and finding the one right home is a
+    light forcing function for the abstraction and where the code lives.
+    Before writing a mechanism, search for it (`puck references`,
+    `puck declarations`, `puck search`); when the home is unclear, put it
+    where its callers can share it rather than beside the one caller at hand.
   - No recorded ledgers or fingerprints: format-shape fingerprints, the bake
     derivation fingerprint, the file-length and comment-smell ratchets, canary
     and counters ceilings, test durations, `VerifiedCode` brands, the emulator
