@@ -311,7 +311,13 @@ as [verification](../verification/SKILL.md#run-verbs-from-your-own-cli-copy)
 describes and run `dotnet <lane>-cli/Puck.Cli.dll agents link` there. Then launch
 `codex exec --cd <worktree> -m <model> -c model_reasoning_effort='"<effort>"' "$(cat <brief>)" < /dev/null`.
 Without the `< /dev/null`, a background launch can stop at "Reading additional input from stdin..." and never
-start. Keep the output in a lane-named log. A resumed Codex session retains its launch
+start. A lead session isolated in a worktree has its Bash commands checked
+for Git that could leave the worktree, and the check refuses a command whose
+program or input it cannot read statically (a `"$(cat <brief>)"` argument, a
+quoted `-c` value, `printf … |` into `dotnet`). Put such a launch, or a World
+boot fed a stdin script, in a reviewed script file that takes the lane,
+worktree, model and effort as arguments, and run `bash <script> …` (the
+owner's approval). Keep the output in a lane-named log. A resumed Codex session retains its launch
 sandbox; after changing permissions, start a fresh continuation instead of
 `--resume-last`. Companion restrictions are specific to `task`, not native exec.
 

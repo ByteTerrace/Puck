@@ -58,7 +58,7 @@ then `pixtool open-capture <path>.wpix save-event-list <csv> --counters=*`
 PIX's NVIDIA counters gave the RTX 4070's registers a thread and achieved
 warps for every pixel pass; the exact counter names are unrecorded, so list
 them with `pixtool open-capture <path>.wpix list-counters`. PIX analysis needs
-Windows developer mode, which is the owner's to turn on
+Windows developer mode, which the lead machine has on
 ([Direct3D 12 captures](../../../../docs/rendering/directx.md#gpu-captures)).
 
 **RenderDoc (Vulkan).** From a build that carries SPIR-V (a solution build, or

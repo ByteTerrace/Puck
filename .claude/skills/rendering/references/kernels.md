@@ -305,8 +305,8 @@ exactness off its lowering without a GPU.
   backend: `renderdoccmd convert -f x.rdc -o x.zip.xml -c zip.xml` exports every
   call of the frame with its parameters and debug names, which is how
   submissions, barriers and copies are counted. PIX analysis (`pixtool`, the PIX
-  UI) needs Windows developer mode and a PIX timing capture an answered UAC
-  prompt; both are the owner's to grant. Pass timestamps are recorded only under
+  UI) needs Windows developer mode, which the lead machine has on; a PIX timing
+  capture also needs an answered UAC prompt, which is the owner's to grant. Pass timestamps are recorded only under
   `world.gpu-timing`; read pass times there, beside the capture.
 - **Device faults.** A removed Direct3D 12 device prints its DRED record as
   `[d3d12-dred]` lines; `gpu.faults remove` removes one on purpose. A lost
