@@ -86,8 +86,8 @@ agent works in that mode by default, without asking:
   - Edit to running: under 30 seconds from changing a C# or HLSL file in the
     engine to seeing it in the running debug world.
   - Cold bake: the debug world's meshes bake from an empty store in one minute
-    at most per backend on the lead machine (384 s on Direct3D 12 at the
-    November 2026 landing).
+    at most per backend on the lead machine (384 s on Direct3D 12 when the
+    owner set it).
   - Fundamentals first: the work is the engine's fundamental problems, those
     already known and those found along the way (frame time against the 60 FPS
     bar, build and bake times, duplicated systems), ahead of new features.

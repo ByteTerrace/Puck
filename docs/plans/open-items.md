@@ -26,7 +26,7 @@ How the file stays usable:
 Ranked by payoff at the latest batch. Lanes in flight are named; the lead
 resolves their edits to this file at merge.
 
-The owner's direction (November 2026): fundamentals first, known or found
+The owner's direction: fundamentals first, known or found
 along the way (AGENTS.md). Three lanes lead: the [simulation tick off the frame
 thread](#simulation-tick-off-the-frame-thread) (queued by the owner), a [cold
 bake](#cold-bake-under-a-minute) of one minute at most per backend, and the
@@ -780,7 +780,7 @@ Owner: specialist (rendering) · high · Next: profile where a cold bake's time
 goes, then cut it to the owner's bar: one minute at most per backend from an
 empty store (AGENTS.md).
 
-- Measured at the November 2026 landing (lead machine, RTX 4070, windowed,
+- Measured when the owner set the bar (lead machine, RTX 4070, windowed,
   `--devices none`): Direct3D 12's `world` residency baked 2,090 groups in
   384.4 s (50,854 dispatches, 1.20 billion samples, 1.64 billion taps, 38.6
   million triangles); Vulkan had 187 groups pending after 420 s. Every frame
@@ -795,8 +795,7 @@ empty store (AGENTS.md).
 ### Simulation tick off the frame thread
 
 Owner: principal designs (sparingly, design only), specialist builds · high ·
-Next: the design memo, then its build. The owner queued the thread in November
-2026.
+Next: the design memo, then its build. The owner queued the thread.
 
 - [low] The pump now sheds owed steps once a burst spends a step's period of wall time, but nothing counts the shed steps: add a drop counter to `host.frames` (and `world.rate`) so a World running slower than real time says so. Owed in the lead's windowed window: a hall lift ride's `host.frames` with frames near one tick's cost. (from: sim-bounds lane)
 

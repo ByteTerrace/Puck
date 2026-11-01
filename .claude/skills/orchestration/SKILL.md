@@ -623,6 +623,12 @@ not a spiral:
   unseen for an hour and a half that way.
 - Findings never bounce between a reviewer and an author: a finding goes into
   its work packet with its owner and is not argued back and forth.
+- Forward progress over review turns (the owner's ruling): the
+  goal is to keep closing open items. A change gets at most one review pass,
+  run beside the next work, never in front of it; its findings are fixed in the
+  next batch or filed into their packet, and that fix lands on its own evidence
+  without a second review round. A lane that lands is followed at once by the
+  next open item, and each batch deletes the items it closed.
 - The lead's audit stops a lane that repeats a failure or makes no writes for 30
   minutes, saves its tree as a WIP commit, and hands the work to another lane.
 - When the review of a fix finds more instances of the class it fixed, the next
@@ -635,8 +641,8 @@ not a spiral:
 - "Conserve Fable" means no new principal (Fable) lane without the owner's
   go-ahead, however hard the problem: route it to specialist (Opus) and say so.
   Twice the lead started principal lanes after that instruction, and the owner
-  found Fable past half its usage. The owner's standing go-ahead (November
-  2026): Fable may design (a design memo, an architecture, a review of a
+  found Fable past half its usage. The owner's standing go-ahead: Fable may
+  design (a design memo, an architecture, a review of a
   design), sparingly; it never does the hard labor of implementing,
   measuring or bisecting, which goes to specialist or implementer.
 - A defect the owner can see (a walkthrough, a sweep still, a capture) ranks
