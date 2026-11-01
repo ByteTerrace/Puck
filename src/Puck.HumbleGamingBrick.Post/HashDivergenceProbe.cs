@@ -71,21 +71,6 @@ internal static class HashDivergenceProbe {
             }
         }
     }
-    // Snapshot-hashes both machines and, on a mismatch, prints the full localization report. Returns false (and has
-    // already printed the report) on divergence, so the caller can stop the lockstep immediately.
-    private static bool TryCompare(Machine machineA, Machine machineB, int frame, int? scanline) {
-        var where = ((scanline is not null)
-            ? $"frame {frame} scanline {scanline}"
-            : $"frame {frame}"
-        );
-
-        return HashDivergenceReport.TryCompare<MachineSnapshot, MachineIdentity, Tick>(
-            snapshotA: machineA.Snapshot(),
-            snapshotB: machineB.Snapshot(),
-            where: where,
-            describeDivergence: DescribeDivergence
-        );
-    }
 
     /// <summary>
     /// Describes the first byte-level difference between two snapshots as a one-line, component-localized detail —
@@ -196,79 +181,13 @@ internal static class HashDivergenceProbe {
         var machineA = hostA.Machine;
         var machineB = hostB.Machine;
 
-        var mode = ((romBLabel is not null)
-            ? $"romA={romALabel} romB={romBLabel}"
-            : ((perturbAtFrame is not null)
-                ? $"rom={romALabel} (self-check + deliberate perturbation @frame {perturbAtFrame})"
-                : $"rom={romALabel} (self-check)"
-        ));
-
-        Console.WriteLine(value: $"== hash-divergence localizer: {mode} ({model}), {frames} frames{(fine
-            ? ", --fine (per-scanline)"
-            : "")} ==");
-
-        // Drive both machines against one shared, absolute cumulative cycle target rather than each machine's private
-        // pacing accumulator, so a perturbation's snapshot/restore (which reanchors that accumulator) can never desync
-        // the two clocks — both are always told to reach the identical instant.
-        var target = 0L;
-
-        for (var frame = 0; (frame < frames); ++frame) {
-            if (fine) {
-                for (var scanline = 0; (scanline < ScanlinesPerFrame); ++scanline) {
-                    if (
-                        (perturbAtFrame == frame) &&
-                        (scanline == 0)
-                    ) {
-                        Perturb(machine: machineB);
-                    }
-
-                    target += ScanlineCycles;
-                    RunTo(
-                        machine: machineA,
-                        target: target
-                    );
-                    RunTo(
-                        machine: machineB,
-                        target: target
-                    );
-
-                    if (!TryCompare(
-                        frame: frame,
-                        machineA: machineA,
-                        machineB: machineB,
-                        scanline: scanline
-                    )) {
-                        return 1;
-                    }
-                }
-            } else {
-                if (perturbAtFrame == frame) {
-                    Perturb(machine: machineB);
-                }
-
-                target += (ScanlineCycles * ScanlinesPerFrame);
-                RunTo(
-                    machine: machineA,
-                    target: target
-                );
-                RunTo(
-                    machine: machineB,
-                    target: target
-                );
-
-                if (!TryCompare(
-                    frame: frame,
-                    machineA: machineA,
-                    machineB: machineB,
-                    scanline: null
-                )) {
-                    return 1;
-                }
-            }
-        }
-
-        Console.WriteLine(value: $"== hash-divergence: NO divergence across {frames} frames ==");
-
-        return 0;
+        return HashDivergenceReport.Run<Machine, MachineSnapshot, MachineIdentity, Tick>(
+            machineA: machineA, machineB: machineB, runTo: RunTo,
+            snapshot: static machine => machine.Snapshot(), perturb: Perturb,
+            describeDivergence: DescribeDivergence,
+            romALabel: romALabel, romBLabel: romBLabel, modelLabel: $" ({model})",
+            frames: frames, fine: fine, perturbAtFrame: perturbAtFrame,
+            scanlineCycles: ScanlineCycles, scanlinesPerFrame: ScanlinesPerFrame
+        );
     }
 }
