@@ -156,17 +156,26 @@ One engine-wide job system answers all of it:
 - **Schedule as well as spread**, what remains [high]. Rated work keeps off the
   frames that run a step: `PresentationRate.Holds` (the one floor every lever
   decides through) updates early on a frame without a step when the next frame
-  runs one (`FrameContext.StepsNext`, from the pump's remainder in `HostLoop`).
-  A body neither a view nor a shadow cascade may show holds
-  (`SdfUpdateRateTiers.HeldHertz`; the caster test is the renderer's own
-  `SdfMeshCull`) and resumes as a continuity cut, and bodies taking a tier
-  together alternate their phase by half its period. Open: the rated views and
+  runs one (`FrameContext.StepsNext`, from the pump's remainder in `HostLoop`);
+  the stamp pool takes this frame's flags and levers before it packs
+  (`WorldCreationInstances.PresentAt`, from `PrepareGraph`), none for a settled
+  capture. A body nothing may show or read holds (`SdfUpdateRateTiers.HeldHertz`):
+  no camera of any view, displayed or not, no shadow cascade (the renderer's own
+  `SdfMeshCull`, fitted on the frame just dressed), and no consumer of its parts
+  since the previous pack (lights, camera anchors, audio emitters and overlay
+  facts all read through the pool's part accessors, which record the read,
+  `NotePoseRead`). Its bound is the larger of the rest reach and the farthest
+  any pack posed a part (`MotionReach`). It resumes as a continuity cut, and
+  bodies taking a tier together alternate their phase by half its period. Open:
+  a held body's motion no pack has posed yet (a slide first driven while held)
+  is outside its bound. The rated views and
   screens (eight machine sources and a session at 15 Hz in the lobby) still
   share one phase, since the render graph's history keeps none to stagger; a
   tick frame's own work (a 6 to 9 ms tick plus the tick-bound session views'
   recording, produce 12 to 16 ms) is what still crosses 16.7 ms, which parallel
   recording and the parallel tick take. A held body shows its held pose for the
-  one frame the rate views lag behind a camera cut. (from: slow-frames)
+  one frame the rate views lag behind a camera cut, since the cameras resolve
+  after the pack. (from: slow-frames)
 - The effector solver passes the "Puck code over engine code" check: which
   effectors, chain, tip, target kind, reach, standoff, direction, gate, plant
   window, replant and weight are authored `CreationEffectorDocument` data, and
@@ -517,6 +526,19 @@ system can take, from `dotnet-trace` thread-time samples of the frame thread
   | Direct3D 12 gallery walk, A | 39.76 | 57.86 | 136 of 273 | 31.03 | 39.7 / 57.8 |
   | Direct3D 12 gallery walk, B | 26.11 | 30.54 | 72 of 315 | 16.29 | 32.1 / 36.9 |
   | Vulkan lobby standing, B with the collection cuts | 18.11 | 19.32 | 4 of 600 | 9.93 | 43.2 / 57.5 |
+
+  The first B read its step flags a frame late (the pool packed before `Dress`
+  handed it the frame's rate), so its bodies packed on step frames. With this
+  frame's flags (B2 against that build, A2, on a machine more loaded still,
+  ticks 6.7 to 9.0 ms), the walk's "produce with a step" falls below the frames
+  without one:
+
+  | Reading | p99 | max | work over 16.7 | produce with / without a step, avg |
+  |---|---|---|---|---|
+  | Direct3D 12 lobby standing, A2 | 34.99 | 51.64 | 198 of 600 | 8.91 / 7.70 |
+  | Direct3D 12 lobby standing, B2 | 25.19 | 32.92 | 214 of 600 | 9.39 / 9.28 |
+  | Direct3D 12 gallery walk, A2 | 26.66 | 28.72 | 72 of 313 | 8.96 / 8.61 |
+  | Direct3D 12 gallery walk, B2 | 22.42 | 22.80 | 40 of 320 | 7.86 / 9.17 |
 
   The standing iterations still over 16.7 ms are tick frames: a 7 to 9 ms tick
   plus 12 to 13.6 ms of produce, the tick-bound views (above). Present-to-present

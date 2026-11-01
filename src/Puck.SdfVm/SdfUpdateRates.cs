@@ -16,7 +16,7 @@ public enum SdfUpdateRates : byte {
     /// <summary>Every lever off: everything updates every frame.</summary>
     None = 0,
     /// <summary>A body's pose evaluation and skinned pose (its drivers, effectors and part slots) at least 30 or 15 times
-    /// a second as its pixels per metre fall, and held while no view may see it or its shadow, its root still followed
+    /// a second as its pixels per metre fall, and held while nothing may show or read its pose, its root still followed
     /// every frame.</summary>
     Bodies = 1,
     /// <summary>A nested portal or session view at least 30 or 15 times a second as the share of the display it covers
@@ -79,15 +79,17 @@ public static class SdfUpdateRateTiers {
     /// <summary>Returns the rate a body updates at for its largest pixels per metre over the views that may see it.</summary>
     /// <param name="pixelsPerMetre">The body's pixels per metre in the view that shows it largest, or zero when no view
     /// may see it.</param>
-    /// <param name="shadowShown">Whether a shadow cascade may draw the body where a view shows its shadow: a body no view
-    /// may see but whose shadow one may takes the slowest tier, its shadow's pose still moving.</param>
+    /// <param name="shownElsewhere">Whether anything but a displayed view's image may show or read the body's pose: a
+    /// shadow a cascade may draw, a camera whose view the display showed none of yet, or a consumer of its parts (a light,
+    /// a camera anchor, an audio emitter). A body no displayed view may see but that is shown elsewhere takes the
+    /// slowest tier, its pose still moving.</param>
     /// <returns>60, 30 or 15: the hertz the body's pose updates at, where 60 means every frame; or
-    /// <see cref="HeldHertz"/> when no view may see the body or its shadow.</returns>
-    public static int BodyHertz(float pixelsPerMetre, bool shadowShown) => ((pixelsPerMetre > BodyHalfRatePixelsPerMetre)
+    /// <see cref="HeldHertz"/> when nothing may show or read its pose.</returns>
+    public static int BodyHertz(float pixelsPerMetre, bool shownElsewhere) => ((pixelsPerMetre > BodyHalfRatePixelsPerMetre)
         ? 60
         : ((pixelsPerMetre > BodyQuarterRatePixelsPerMetre)
             ? 30
-            : (((pixelsPerMetre > 0f) || shadowShown) ? 15 : HeldHertz)));
+            : (((pixelsPerMetre > 0f) || shownElsewhere) ? 15 : HeldHertz)));
     /// <summary>Returns the rate a nested view renders at for the pixels of display height it covers.</summary>
     /// <param name="pixels">The view's height on the display, in pixels.</param>
     /// <returns>60, 30 or 15, where 60 means every frame its consumer renders.</returns>
