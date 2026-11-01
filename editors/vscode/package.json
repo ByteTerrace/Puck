@@ -245,13 +245,13 @@
         ]
     },
     "dependencies": {
-        "vscode-languageclient": "10.1.2",
+        "vscode-languageclient": "11.0.0",
         "vscode-oniguruma": "^2.0.1",
         "vscode-textmate": "^9.3.2"
     },
     "description": "IntelliSense, diagnostics, hover, formatting, and syntax highlighting for the Puck DSL (.puck).",
     "devDependencies": {
-        "@vscode/vsce": "4.0.0",
+        "@vscode/vsce": "4.1.0",
         "esbuild": "0.28.2"
     },
     "displayName": "Puck Authoring Language",
@@ -272,6 +272,9 @@
     "license": "Apache-2.0",
     "main": "./dist/extension.js",
     "name": "vscode-puck",
+    "overrides": {
+        "minimatch": "^11.0.3"
+    },
     "publisher": "ByteTerrace",
     "repository": {
         "type": "git",
