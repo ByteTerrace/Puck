@@ -20,6 +20,11 @@ namespace Puck.Hosting;
 /// Authoritative simulation must use <paramref name="DeltaTicks"/> / fixed steps.</param>
 /// <param name="AccumulatorTicks">The presentation offset through the last delivered step; the render interpolation
 /// numerator. The World fills it from snapshot arrival, independently of the pump's scheduling accumulator.</param>
+/// <param name="Tick">The simulation tick this frame shows, the host's own count; a root whose client delivers snapshots (the
+/// World's) replaces it with the delivered snapshot's tick.</param>
+/// <param name="PresentedTicks">The presentation time the root has presented through this frame, the sum of every
+/// <paramref name="FrameDeltaTicks"/> so far; the render graph root fills it. It never moves back and keeps moving while
+/// the simulation is paused, so presentation animation (a toast's fade) ages on it.</param>
 /// <param name="StepTicks">The fixed update period in engine ticks; the render interpolation denominator.</param>
 /// <param name="TargetWidth">The pixel width the parent is asking this node to fill.</param>
 /// <param name="TargetHeight">The pixel height the parent is asking this node to fill.</param>
@@ -38,7 +43,9 @@ public readonly record struct FrameContext(
     uint TargetWidth,
     uint TargetHeight,
     int DisplayHertz = 0,
-    double GridHertz = 0d
+    double GridHertz = 0d,
+    long Tick = 0L,
+    ulong PresentedTicks = 0UL
 ) {
     /// <summary>Gets the seconds the simulation advances this frame (<see cref="DeltaTicks"/> as seconds).</summary>
     public double DeltaSeconds =>

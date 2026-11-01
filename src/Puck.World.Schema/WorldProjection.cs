@@ -262,8 +262,9 @@ public static class WorldProjection {
 
         // Every state clock a carried value keys on is a dependency of a derived value: it must pass the disclosure
         // boundary before anything is composed, or nothing is.
-        var keyed = KeyedClocks(definition: definition);
-        var bound = WorldKeyedValues.BoundOf(definition: definition);
+        var authored = WorldKeyedValues.AuthoredBy(definition: definition);
+        var keyed = KeyedClocks(definition: definition, values: authored.Keyed);
+        var bound = authored.Bound;
 
         if (!unrestricted) {
             RefuseHiddenClocks(
@@ -389,7 +390,7 @@ public static class WorldProjection {
 
     // Every clock a value of the document keys on, by the path that first names it: a keyed section's own clock and
     // each keyed value's.
-    private static Dictionary<string, string> KeyedClocks(WorldDefinition definition) {
+    private static Dictionary<string, string> KeyedClocks(WorldDefinition definition, IReadOnlyList<WorldKeyedValue> values) {
         var keyed = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
 
         foreach (var (path, clock) in new[] { ("render.lighting", definition.Render.Lighting?.Clock), ("render.sky", definition.Render.Sky?.Clock) }) {
@@ -398,7 +399,7 @@ public static class WorldProjection {
             }
         }
 
-        foreach (var value in WorldKeyedValues.Of(definition: definition)) {
+        foreach (var value in values) {
             _ = keyed.TryAdd(key: value.Track.Clock, value: value.Path);
         }
 
@@ -572,7 +573,7 @@ public static class WorldProjection {
             }
         }
 
-        foreach (var (clock, path) in KeyedClocks(definition: definition)) {
+        foreach (var (clock, path) in KeyedClocks(definition: definition, values: WorldKeyedValues.Of(definition: definition))) {
             if (!WorldKeyResolver.TryClock(
                 clock: out _,
                 name: clock,

@@ -111,10 +111,36 @@ public sealed class LawProofTreeLeaseLawTests : LawProofLaws {
             Assert.True(condition: (lease is not null), userMessage: reason);
             // The leased clone and the most recently leased other stay; another proof's lease keeps its clone too.
             Assert.True(condition: Directory.Exists(path: recent));
-            Assert.False(condition: Directory.Exists(path: older));
-            Assert.False(condition: Directory.Exists(path: oldest));
+            Assert.False(condition: Directory.Exists(path: Path.Combine(path1: older, path2: "tree")));
+            Assert.False(condition: Directory.Exists(path: Path.Combine(path1: oldest, path2: "tree")));
+            // The lock file stays: deleting a file another proof may be opening lets two proofs lease different files.
+            Assert.True(condition: File.Exists(path: Path.Combine(path1: oldest, path2: "proof.lock")));
             Assert.True(condition: File.Exists(path: Path.Combine(path1: held, path2: "tree", path3: "file")));
         }
+    }
+    [Fact]
+    public void AStrayFileWhereTheCloneBelongsIsRemovedBeforeTheCloneIsMade() {
+        using var checkout = Checkout(initial: "broken");
+        var root = LawTreesRoot(checkout: checkout);
+        using var lease = LawProofTree.TryAcquire(reason: out var reason, repository: checkout.Root, root: root);
+
+        Assert.True(condition: (lease is not null), userMessage: reason);
+        File.WriteAllText(contents: "damaged", path: lease.Tree);
+        var cloned = false;
+
+        var prepared = lease.TryPrepare(
+            git: (_, arguments) => {
+                cloned = (arguments[0] == "clone");
+                Assert.False(condition: File.Exists(path: lease.Tree));
+
+                return new Puck.Hosting.ChildProcessResult(ExitCode: 1, Stderr: "stop here", Stdout: string.Empty);
+            },
+            head: "HEAD",
+            reason: out _
+        );
+
+        Assert.False(condition: prepared);
+        Assert.True(condition: cloned);
     }
     [Fact]
     public void EveryOutcomeKeepsThePersistentTreeAndReleasesItsLease() {

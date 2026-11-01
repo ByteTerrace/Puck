@@ -43,7 +43,7 @@ public sealed class WorldHistoryShadow : IDisposable {
         try {
             ConfinedDirectory.RemoveTree(path: m_directory);
         } catch (IOException) {
-        } catch (UnauthorizedAccessException) {
+        } catch (Exception error) when ((error is UnauthorizedAccessException or PlatformNotSupportedException)) {
         }
     }
 }

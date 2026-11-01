@@ -301,7 +301,7 @@ public sealed class OverlayFrameComposer {
     /// base (the four first-party writers in <see cref="OverlayChannel"/> order, unless a live authored panel declares
     /// the replace band, whose panels take the base instead), the HUD's over band, the player-scope seat panels, the inspector, the
     /// annotation outlines, the radial action menu and the drawn cursor, the last two outside the replace-band suppression.</summary>
-    /// <param name="renderTicks">The frame's continuous content clock.</param>
+    /// <param name="renderTicks">The frame's presented time (<c>FrameContext.PresentedTicks</c>).</param>
     /// <returns><see langword="true"/> when the frame has anything to draw.</returns>
     public bool Compose(ulong renderTicks) {
         m_sources.FeedTick?.Invoke();

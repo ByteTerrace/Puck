@@ -8,7 +8,17 @@ using Puck.Maths;
 namespace Puck.Launcher;
 
 /// <summary>The common iteration handed to a presentation adapter.</summary>
-public readonly record struct HostIteration(HostPacing Pacing, ulong IntervalTicks, ulong StepTicks, ulong ElapsedTicks, int Steps, bool HasSimulation, bool Holding);
+/// <param name="TickLocked">Whether the iteration stepped at most one tick for its frame, read once as the iteration began.</param>
+/// <param name="IntervalTicks">The wall interval the iteration sampled, in engine ticks.</param>
+/// <param name="StepTicks">The fixed step, in engine ticks.</param>
+/// <param name="ElapsedTicks">The engine ticks the pump has consumed.</param>
+/// <param name="Steps">The whole steps the iteration ran.</param>
+/// <param name="HasSimulation">Whether the host steps a simulation.</param>
+/// <param name="Holding">Whether the previous frame left its tick owing a rendered frame.</param>
+public readonly record struct HostIteration(bool TickLocked, ulong IntervalTicks, ulong StepTicks, ulong ElapsedTicks, int Steps, bool HasSimulation, bool Holding) {
+    /// <summary>Gets the simulation tick the pump has consumed through.</summary>
+    public long Tick => ((StepTicks == 0UL) ? 0L : ((long)(ElapsedTicks / StepTicks)));
+}
 /// <summary>Owns input contributions, console drains, fixed steps, frame holds, deadlines and pacing for every
 /// launcher registration. Presentation adapters supply window input, frame production and display waits.</summary>
 public sealed class HostLoop(
@@ -68,17 +78,19 @@ public sealed class HostLoop(
                 frame++;
                 timeline.Mark(phase: HostFramePhase.Commands);
 
-                var policy = pacing;
+                // Read once: a lockstep switch inside this iteration's drain takes effect on the next one, so the step, the
+                // hold and the adapter's frame all agree on one mode.
+                var tickLocked = pacing.StepsOneTickPerFrame;
                 var stepTicks = FixedTickConversion.PerRate(ratePerSecond: LauncherHostLoop.ResolveRatePerSecond(simulation: m_simulation));
                 var interval = clock.Sample();
                 var steps = 0;
 
-                if (!policy.StepsOneTickPerFrame) {
+                if (!tickLocked) {
                     holding = false;
                 }
                 if (holding) {
                     pump?.Hold(intervalTicks: interval);
-                } else if (policy.StepsOneTickPerFrame) {
+                } else if (tickLocked) {
                     steps = ((pump?.TryStep(intervalTicks: interval, stepTicks: stepTicks) == true) ? 1 : 0);
                 } else {
                     steps = (pump?.Advance(deltaTicks: interval, maxFrameTicks: (FixedTickConversion.TicksPerSecond / 4UL), stepTicks: stepTicks) ?? 0);
@@ -88,15 +100,15 @@ public sealed class HostLoop(
                 output.Flush();
                 timeline.Mark(phase: HostFramePhase.Commands);
 
-                if ((produce is not null) && (!policy.StepsOneTickPerFrame || (pump is null) || (steps > 0) || holding || (m_simulation?.AwaitsFrame ?? false))) {
-                    holding = produce(new HostIteration(policy, interval, stepTicks, (pump?.ElapsedTicks ?? 0UL), steps, (pump is not null), holding));
+                if (produce is not null) {
+                    holding = produce(new HostIteration(tickLocked, interval, stepTicks, (pump?.ElapsedTicks ?? 0UL), steps, (pump is not null), holding));
                 }
                 if (terminal.TryConsumeExit()) {
                     break;
                 }
                 if (wait is not null) {
                     wait();
-                } else if (!policy.IsUnpaced) {
+                } else if (!pacing.IsUnpaced) {
                     var period = (frequency / ((long)LauncherHostLoop.ResolveRatePerSecond(simulation: m_simulation)));
 
                     nextDeadline += period;
