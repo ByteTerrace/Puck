@@ -617,7 +617,7 @@ system can take, from `dotnet-trace` thread-time samples of the frame thread
   registrations cannot use the existing pose-rate holds:
   `WorldCreationInstances.Pack.cs:247` requires `BodyIndex`, and
   `WorldCreationInstances.Rates.cs:193` omits them from readings. Owner:
-  rendering/job-system lane. Extend the same projection/consumer-based rate
+  rendering lane. Extend the same projection/consumer-based rate
   mechanism to placement roots, measure pose packing and draw recording, and
   preserve planted roots, continuous world-phased gusts and independent tip
   flutter. Triangle detail already exists (`SdfWorldPassRecorder.cs:886`);
@@ -2454,7 +2454,7 @@ hang, then the pre-`main` language findings.
   `worlds/standard/foliage.puck`'s `sceneryPatch` makes both `compile --validate`
   and a headless debug boot throw `NullReferenceException` at
   `WorldDefinitionValidator.Placements.cs:1723`, through
-  `DocumentSpatialValues.cs:143`. Owner: language/validation lane. Default or
+  `DocumentSpatialValues.cs:143`. Owner: language lane. Default or
   refuse the missing position before the domain-expansion walk. The port
   authors the explicit position and boots successfully. (from: meadow)
 

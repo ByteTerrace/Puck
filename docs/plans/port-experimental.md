@@ -200,16 +200,21 @@ during these runs: these are loaded-machine observations, not quiet speed claims
 |---|---:|---:|
 | Direct3D 12 cold bake | 209.996 s | 306.639 s |
 | Vulkan cold bake | 321.246 s | 499.573 s |
-| Direct3D 12 standing, avg / p99 | 23.49 / 42.71 ms | 46.59 / 73.94 ms |
-| Direct3D 12 walking, avg / p99 | 24.38 / 52.67 ms | 55.21 / 82.89 ms |
+| Direct3D 12 standing, avg / p99 | 26.40 / 68.15 ms | 46.59 / 73.94 ms |
+| Direct3D 12 walking, avg / p99 | 23.77 / 61.81 ms | 55.21 / 82.89 ms |
 | Vulkan standing, avg / p99 | 23.50 / 48.18 ms | 63.11 / 102.76 ms |
 
 The Direct3D reads each cover 600 host iterations. Walking alternates
 `player.move 0.2 0` and `player.move -0.2 0` twenty times, 45 ticks per leg,
-through the patch. The initial before readings follow 900 post-bake ticks;
-the after readings allow another 1,800 ticks for GI first and reset the frame
-window. Vulkan's after window contains 479 iterations after that reset;
-the before contains 600. `world.cadence off` keeps both views rendering.
+through the patch. The Direct3D timing table uses matching 1,800-tick
+post-bake settling, a frame reset, then a 900-tick standing interval and the
+walking script. The matched baseline reuses the original package snapshot,
+the preserved measurement executable and its own completed cache (zero bake
+dispatches, 5.588 s loading); it does not rerun the changed integration code.
+The initial cold-leg Direct3D averages, after only 900 post-bake ticks, are
+23.49 ms standing and 24.38 ms walking. Vulkan's before window contains
+600 iterations after 900 post-bake ticks; its after contains 479 following
+the longer settling and reset. `world.cadence off` keeps both views rendering.
 `world.rates` keeps bodies, views, screens and far shadows on. Its 30/15 Hz
 periods are 33.3/66.7 ms; the after Direct3D longest screen/far-shadow intervals
 reach 77.0/76.2 ms, Vulkan 78.0/78.0 ms. These are frame overruns, not lower
@@ -241,8 +246,9 @@ managed garbage depend on collection timing; private bytes include driver heaps.
 The blades share repeated geometry across tiles, rather than one bake for all
 blades: 144 varying stems and 144 tips account for 288 unique blade geometries;
 the other 105 new bakes are scenery. Each blade part keeps its own motion
-slot and draw. Direct3D's sampled primary mesh pass rises to 3,906 draws and
-5,547,060 vertices; the whole primary node reads 12,467 draws across its passes.
+slot and draw. Direct3D's second sampled primary mesh-pass read rises from
+163 to 3,906 draws and from 1,080,414 to 5,547,060 vertices; the whole primary
+node reads 589 → 12,467 draws across its passes.
 The retained mesh region grows from 1,346,365,816 to 1,588,961,748 B.
 Cold field samples rise from 999,550,075 to 1,101,618,980 on Direct3D and from
 999,477,183 to 1,101,543,801 on Vulkan. Moving exhibit poses account for small
