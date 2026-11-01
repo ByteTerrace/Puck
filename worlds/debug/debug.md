@@ -164,6 +164,10 @@ key (`world.rates toggle`, F7). [range.md](range.md) says how to use it.
 
 ## Going places
 
+The [wind meadow](meadow.md), east of the hero studio, is reached with
+`debug.go meadow`. Its 1,994 two-part blades, relieved banks, trees and mossy
+rocks provide the dense animated-geometry workload for bake and frame profiling.
+
 [places.puck](places.puck) names a spot a few metres from each feature and
 authors `debug.go`, a console command composed from existing verbs, that goes
 there from anywhere:
