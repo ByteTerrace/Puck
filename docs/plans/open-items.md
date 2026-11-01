@@ -96,6 +96,10 @@ Each waits on the owner: what the engine should do, how it looks and feels, and 
   client object on the frame thread; the lower-latency shape brings back the
   cross-thread protocols its review found unsafe
   ([simulation thread](simulation-thread.md#latency)).
+- Whether a cold bake pauses the irradiance preview (it re-traces about every
+  4 s on four workers, roughly 800 thread-seconds beside the bake's 1,670), so
+  the meshes land about a quarter sooner and the scene lights later
+  ([cold bake](#cold-bake-under-a-minute)).
 - What the back of a door's glass shows: nothing, the fallback colour, or a
   mirror of the front ([rendering plan](rendering.md#open-items)).
 - Look calls in the rendering plan: whether the far cascade caches its static
