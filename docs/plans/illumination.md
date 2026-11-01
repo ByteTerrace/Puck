@@ -563,9 +563,12 @@ Open in step 1:
 - **A dawn leg.** A windowed Vulkan boot showed the same three results (no sun
   on the cheek under the slab, the soft penumbra under `world.toon on`, the
   STYLES row's banded sphere beside its continuous twin). With the sun at about
-  10 degrees the default style's 0.45 threshold puts every horizontal surface in
-  the shadow band, so a dawn penumbra check needs the authored day cycle and a
-  style tuned for it.
+  10 degrees (a fixed key light, before step 0's day cycle merged) the default
+  style's 0.45 threshold puts every horizontal surface in the shadow band, so
+  the dawn penumbra check runs on the debug world's `day` row at about 0.3 with
+  a style whose threshold sits below the low sun's cosine. Step 1's checks ran
+  on a fixed sun; with the cycle merged, they and the frame bar are owed again
+  with the sun moving.
 
 ## Corrections
 
