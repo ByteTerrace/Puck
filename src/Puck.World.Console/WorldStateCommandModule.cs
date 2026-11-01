@@ -352,14 +352,19 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             max: row.Max
         )}{DescribeOverflow(row: row)}";
 
-        // A row the reader's disclosure withheld anything from shows its declaration and what was withheld, and none
-        // of the live facts a trait carries (a clock, a draw cursor or drawn mask, a ring cursor, a phase sequence),
-        // since each of those is a reading of the cells it withheld.
-        if (view.Withheld(row: row.Name.Value) is { } withheld) {
-            var disclosure = withheld.WholeRow ? " withheld=row" : withheld.Policy == HiddenCells.Omit
-                ? string.Empty : $" withheld={withheld.Count.ToString(provider: CultureInfo.InvariantCulture)}";
+        // Restricted summaries have one shape whether zero or many cells are withheld. Storage and cursor
+        // metadata can reveal omitted membership; readable cell values still use the live disclosed read door.
+        var withheld = view.Withheld(row: row.Name.Value);
+        if (withheld is not null || !view.IsOperator) {
+            var disclosure = withheld?.WholeRow == true ? " withheld=row" : withheld is { Policy: not HiddenCells.Omit }
+                ? $" withheld={withheld.Count.ToString(provider: CultureInfo.InvariantCulture)}" : string.Empty;
+            var value = "withheld";
+            if (row.IsSlot) {
+                _ = view.TryReadValue(rowName: row.Name.Value, key: null, row: out _, value: out var visibleSlot);
+                if (visibleSlot.HasValue || withheld is null) { value = DescribeValue(view: view, row: row, value: visibleSlot); }
+            }
             return $"{head}{(row.IsSlot
-                ? " value=withheld"
+                ? $" value={value}"
                 : $" cells={(row.Cells?.Count ?? 0)}")}{disclosure}{range}]";
         }
 

@@ -15,6 +15,11 @@ public sealed class WorldStateReadView {
     private WorldStateReadView(Principal reader, WorldStateDisclosed disclosed, ulong completedTick, ulong completedEngineTick, long arenaBytes) {
         Reader = reader;
         Definition = disclosed.Definition;
+        if (reader.Kind != PrincipalKind.Console && Definition.StateRaw is { } state) {
+            Definition = Definition with { StateRaw = state with {
+                World = Definition.AuthoredState.Select(WorldStateDisclosure.WithoutStorageMetadata).ToArray()
+            } };
+        }
         m_withheld = disclosed.Withheld;
         CompletedTick = completedTick;
         CompletedEngineTick = completedEngineTick;

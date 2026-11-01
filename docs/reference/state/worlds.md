@@ -490,6 +490,9 @@ prints a withheld count. Arena byte totals and `world.state.hash` are operator
 diagnostics because they can reveal changes in undisclosed state.
 State summaries enumerate authored rows, as named lookups do; generated pool
 storage remains internal.
+Restricted readback always omits storage reservations and row cursor metadata,
+including when no cell is currently hidden, so the formatting cannot distinguish
+an empty hidden inventory from a nonempty one.
 
 ## Hashes, checkpoints, and replay
 
