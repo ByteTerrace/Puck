@@ -143,6 +143,13 @@ Code that grew a second implementation (AGENTS.md rule 7) or costs velocity:
   `GpuRegion.Grow`, which grows under every residency policy.
 - Two directory removers: `tests/Shared/TemporaryDirectory.cs` still deletes
   recursively beside the confined removal `RunDirectory.Delete` uses.
+- Two block arenas with one pool policy: `VulkanMemoryArena.Bind`/`Release`
+  (`VulkanMemoryArena.cs:60-127`) and `DirectXHeapArena.Create`/`Return`
+  (`DirectXHeapArena.cs:78-107`, `:176-183`) each keep a dictionary of pools,
+  first-fit over the pool's blocks, give a resource past half of 64 MiB a block
+  of its own, and free an emptied block unless it is the pool's one spare
+  shared block. Both already stand on `GpuMemoryRanges`; lift the pool policy
+  beside it so the backends supply only allocate, bind and free.
 
 The `.puck` sources (about 42,000 lines outside the cartridges, about 2,500 of
 them verbatim repeats) under-use the language:
@@ -304,6 +311,16 @@ packet), and re-read these stops on a quiet machine.
 - [low] `WorldGpuTiming` (`world.gpu-timing` and its `timeline`) has no CPU
   test over a fake runtime, so its lines rely on a live render root.
   (from: frame-time)
+- [low · unmeasured] `SdfMeshPathBake.IrradiancePending` walks every group once
+  a frame per residency after the bake settles (`SdfMeshPathBake.cs:288-294`,
+  called from `SdfWorldResidency.cs:561`), the scan `Pending` dropped for a
+  done-through cursor when it touched all 2,596 groups per call. Give it the
+  same cursor over the opaque static groups. (from: perf-guidance)
+- [low] The sky environment reduction reads `sdfSkyReduce[row][added]` with 28
+  lanes on rows 64 words apart
+  (`sdf-sky-environment-reduce.comp.hlsl:13,49`), a 28-way groupshared bank
+  conflict on each of 64 reads; pad the row to 65 words. It runs one group only
+  when the environment refreshes. (from: perf-guidance)
 - [low] The hall lift ride's `host.frames` (owed by the sim-bounds lane) is still
   unread: `gallery.level 0` stands her before the door, not in the car, so the
   reading taken (`gallery.lift 3`, 300 ticks: 128 ms average, simulate up to 4
@@ -743,6 +760,15 @@ windowed checks, then the three developer exhibits.
   derived face (a creation's own screen) does not name the placement it belongs
   to: `WorldStaticSceneEmit` registers no pick target for either. A pick on the
   group of the program's segments no instance owns names nothing.
+- [low] A kernel's registers and local memory are read only through RenderDoc,
+  Nsight or PIX ([gpu cost](../../.claude/skills/rendering/references/gpu-cost.md#read-a-kernels-registers-and-occupancy)),
+  though Vulkan's `VK_KHR_pipeline_executable_properties` is enabled
+  (`VulkanLogicalDeviceFactory.cs:222`) and its entry points bound
+  (`VulkanDeviceCommands.cs:177-180`): no pipeline is created with
+  `VK_PIPELINE_CREATE_CAPTURE_STATISTICS_BIT_KHR` and nothing calls
+  `vkGetPipelineExecutableStatisticsKHR`. Wire a verb that prints each kernel's
+  driver statistics on Vulkan, so a register or spill change reads without a
+  capture. (from: perf-guidance)
 - Restore and inspect the remaining developer exhibits: the rate range (LoD and
   rate tiers), the traversal course's geometry and the kinematics scope
   (position and measurement). Clean bot verdicts do not show that they look or
@@ -795,6 +821,14 @@ empty store (AGENTS.md).
   kernels agree, so a shared store would halve the cold cost of using both.
 - The rebakes nobody needed are the [refactoring campaign](#refactoring-campaign)'s
   first item (`SdfMeshBakeClosure` reaching upload and draw-record code).
+- [low · unconfirmed] The bake indexes its `static const float3 SdfBakeTaps[4]`
+  by the `[loop]` counter (`sdf-mesh-bake.comp.hlsl:22,94,102`), the shape the
+  rendering skill's local-array rule forbids; no capture has read the bake
+  kernel's local memory, since it dispatches only while a bake is pending. Read
+  its "Local Memory Size" in a Vulkan RenderDoc capture of a baking frame; if it
+  spills, pick each tap's signs from bits (x from 0x9, y from 0xC, z from 0xA,
+  bit `tap - 1`). Any edit moves the bake identity, so batch it with the next
+  bake-kernel change. (from: perf-guidance)
 
 ### Simulation tick off the frame thread
 

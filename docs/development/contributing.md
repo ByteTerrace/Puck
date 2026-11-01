@@ -776,6 +776,14 @@ build configuration before and after the change. Report these conditions with
 the result. See
 [World graphics options](../../src/Puck.World/README.md#graphics-options).
 
+What the data and the kernels cost on the hardware has two agent references:
+[CPU data and memory](../../.claude/skills/dotnet-performance/references/data-and-memory.md)
+(frame and tick allocation, collection pauses, layout, copies, false sharing,
+and the tools that measure them here) and
+[GPU cost](../../.claude/skills/rendering/references/gpu-cost.md) (registers
+and occupancy and how to read them in Nsight Graphics, PIX or RenderDoc,
+groupshared banks, coalescing, dispatch limits, CPU and GPU waits).
+
 ### Browser engine changes (`Puck.World.Browser`)
 
 Remove `C_INCLUDE_PATH` from the build shell first if the machine has a Cosmocc toolchain installed
