@@ -15,7 +15,7 @@
 //
 // Draws are counted on the GPU, into the pass's drawn counts past the work counter rows (GpuKernelCounters.DrawnWords).
 // The controls' header holds the draw count and pyramid levels; each phase writes one GpuDrawIndirectCommand a
-// candidate at the candidate's place, empty where it draws nothing, the identity first and the first instance the draw.
+// candidate at the candidate's place, empty where it draws nothing, with the identity first and first instance zero.
 // KEEP IN SYNC with SdfMeshOcclusion. Bounds, levels and mesh identity come from the retained mesh region.
 #include "../isa/sdf-mesh.interface.hlsli"
 #include "../frame/sdf-viewport.hlsli"

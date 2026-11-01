@@ -14,7 +14,7 @@ struct MeshRasterVertex {
 };
 
 // Direct3D 12 ExecuteIndirect pushes the record's identity. Vulkan pushes a word base and reads the same identity
-// through DrawIndex, including when native counting is unavailable and one initialized slot is issued per call.
+// through DrawIndex, including the fixed multi-draw and single-slot fallbacks when native counting is unavailable.
 uint sdfMeshRasterIdentity(uint drawId) {
 #ifdef __spirv__
     return sdfMeshIndirectCommands[pushedIndex.index + 5u * drawId];

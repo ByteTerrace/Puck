@@ -97,13 +97,13 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
     // read/write without a shader format qualifier (shaderStorageImage*WithoutFormat), needed to write
     // image views whose format (commonly BGRA8) has no GLSL format qualifier, and dynamic indexing of storage-image
     // arrays; callers that need those probe separately and fall back otherwise.
-    // multiDrawIndirect and drawIndirectFirstInstance, which a counted indirect draw needs beside
-    // VK_KHR_draw_indirect_count: several draws in one call, each starting its instances at its own record's identity.
+    // Multi-draw permits native counted drawing and the batched fixed-count fallback. First-instance support is
+    // optional too; GPU mesh identities use DrawIndex instead and keep firstInstance zero.
     private const uint MultiDrawIndirectFeatureIndex = 9u;
     private const uint DrawIndirectFirstInstanceFeatureIndex = 10u;
     private static readonly uint[] OptionalBaseFeatureIndices = [MultiDrawIndirectFeatureIndex, DrawIndirectFirstInstanceFeatureIndex, 31u, 32u, 36u];
 
-    // Whether a device reports both base features a counted indirect draw needs.
+    // Whether the device permits several indirect records in one call.
     private static bool SupportsIndirectDrawFeatures(IReadOnlyList<bool> support) =>
         ((MultiDrawIndirectFeatureIndex < support.Count) && support[((int)MultiDrawIndirectFeatureIndex)]);
 

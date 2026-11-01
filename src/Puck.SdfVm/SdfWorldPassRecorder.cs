@@ -784,8 +784,8 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
                 set: set
             );
 
-            // The raster pipelines read none of the occlusion's members; the mesh set binds the tables' dummy and filler at
-            // them, and the occlusion kernel's own set binds the occlusion's.
+            // The raster set binds dummies at the compute-only members and reads the command identity alias. The
+            // selection kernel's own sets bind its writable state and each phase's sampled target.
             SdfMeshOcclusion.Unbind(bound: m_meshSetOcclusion[meshSet], boundTarget: ref m_meshSetTargets[meshSet], first: 0, set: set, tables: tables);
 
             if (occlusion is not null) {

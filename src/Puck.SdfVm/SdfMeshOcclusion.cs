@@ -88,7 +88,7 @@ internal sealed class SdfMeshOcclusion : IDisposable {
         tables.WriteMeshBuffer(bound: ref bound[(first + 5)], buffer: tables.DummyBuffer, member: SdfKernelInterfaces.MeshIndirectCommands, set: set);
         tables.WriteMeshTarget(bound: ref boundTarget, set: set, view: target);
     }
-    // Writes the tables' dummy and filler at the occlusion's members of a mesh set whose pass does not occlude.
+    // The raster set binds dummies at compute-only members; BindDraws supplies its read-only command alias.
     public static void Unbind(SdfWorldTables tables, nint set, IGpuBuffer?[] bound, int first, ref nint boundTarget) {
         tables.WriteMeshBuffer(bound: ref bound[(first + 0)], buffer: tables.DummyBuffer, member: SdfKernelInterfaces.MeshOcclusionCandidates, set: set);
         tables.WriteMeshBuffer(bound: ref bound[(first + 1)], buffer: tables.DummyBuffer, member: SdfKernelInterfaces.MeshOcclusionVisibleWritten, set: set);
@@ -100,8 +100,8 @@ internal sealed class SdfMeshOcclusion : IDisposable {
     // The raster set reads the exact command identity on Vulkan; no optional first-instance feature is needed.
     public void BindDraws(SdfWorldTables tables, nint set, IGpuBuffer?[] bound) =>
         tables.WriteMeshBuffer(bound: ref bound[5], buffer: m_draws!, member: SdfKernelInterfaces.MeshIndirectCommands, set: set);
-    // Records the first phase's choice before the mesh pass's render pass: the counts cleared, then the candidates the
-    // visible set holds written as the first phase's draws. The barrier first orders the previous frame's draws, test and
+    // Records selection before rasterization: clear counts, choose kept draws and their levels, then emit the first
+    // phase (the previous visible set for opaque occlusion, every kept draw otherwise). The barrier orders prior draws, test and
     // pyramid before this frame's writes, as the buffers are the view's across frames.
     public void RecordEarly(IGpuRecorder recorder, nint commandBuffer, IGpuComputePipeline pipeline, nint set) {
         recorder.MemoryBarrier(
@@ -238,8 +238,8 @@ internal sealed class SdfMeshOcclusion : IDisposable {
 
         return words;
     }
-    // Grows the buffers to the frame's draws and render extent. A grown visible set starts empty, so its first frame's
-    // second phase draws every candidate.
+    // Grows the buffers to the frame's draws and render extent. History is copied; the new tail starts empty, so its
+    // first opaque occlusion frame tests every new candidate in the second phase.
     private void EnsureBuffers(uint draws) {
         var capacity = Math.Max(val1: draws, val2: 1u);
         var candidateBytes = (ulong)(HeaderWords * sizeof(uint));
