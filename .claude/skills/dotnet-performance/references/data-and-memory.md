@@ -216,20 +216,26 @@ Sources: bandwidth and the cost of streaming past the last-level cache
 
 `Puck.Hosting.Jobs.MemoryAccount.Shared` is the process's byte authority.
 An owner reserves its simultaneous peak before admission; unused promises are
-`reserved`, not allocated memory. A reservation that does not fit defers the
-bake and reports `[sdf.mesh-bake] deferred`. `host.memory budget 1`, followed by
-`host.memory budget auto`, exercises deferral and resumption. The
-low-budget check sets `world.lockstep off`, then waits for that stderr line in
-wall time, never for a tick: a deferred lockstep bake holds its frame and
-therefore cannot satisfy a tick wait. Restore the budget before waiting for
-bake settlement. A one-group uncached edit exercises this without another
-whole-world cold bake; keep the full cold bake for the allocation comparison.
-The mesh library's
-unused cache allowance and every residency's admitted bake groups draw from
-this account. The account reads physical availability as an observation and
-leaves failure/allocator headroom; it never promises that another process or a
-driver cannot consume memory. Its categories cover participating owners, while
-the managed heap and process readings still expose unmigrated storage.
+`reserved`, not allocated memory. Admission paces, it never refuses: a bake
+group whose reservation does not fit while others of its bake are admitted
+waits (`[sdf.mesh-bake] deferred`), holding its place so no group behind it is
+admitted first, and a group that does not fit when nothing of its bake is
+admitted is admitted anyway (`[sdf.mesh-bake] admitted alone`). So a bake under
+`host.memory budget 1`, or on a machine with little free memory, still settles,
+one group at a time, and a lockstep World never holds its frame forever. A
+group also waits while the bake pool's queue holds a round of every worker's
+stages (`Backlogged`): admitted beyond that, it would only hold its lattice in
+the queue. A group's peak comes from its own final lattice and the most fine samples its
+refinement factor can measure (`SdfSampledLattice.FineSampleBound`), and
+narrows to the measured count once the refinement names it. Only charged
+storage counts: the mesh library's retained meshes are charged once as cached
+bytes, and the library evicts by those charges (`SdfMesh.StorageBytes`); no
+unused allowance is reserved. The machine's free physical memory is read once a
+frame outside the account and passed in, as an observation that paces; the
+account leaves failure/allocator headroom and never promises that another
+process or a driver cannot consume memory. Its categories cover participating
+owners, while the managed heap and process readings still expose unmigrated
+storage.
 
 The host injects `MimallocAllocator` through `IAllocator`; the accounting owner
 stores byte totals, never addresses or buffer registry entries. `OwnedBuffer<T>`
@@ -237,15 +243,24 @@ keeps capacity and logical length for reference-free storage. Growth allocates,
 copies and publishes before releasing the old block, including overlap in the
 owner's charge. Every borrowed span or memory slice ends before growth, reset
 or disposal. Managed backing serves standalone geometry callers without an
-injected allocator; published World bake payloads, readback copies, lattice
-planes, lattice indices and point workspaces use the injected native allocator.
+injected allocator; published World bake payloads, decoded readback answers,
+lattice planes, lattice indices and point workspaces use the injected native
+allocator, charged to the group that owns them. A caller that overwrites every
+entry grows a buffer with `Resize(..., preserve: false)`, which copies nothing.
 Reference-bearing contour roots and the bounded worker-slot refinement
-collections stay managed under their existing ownership.
+collections stay managed under their existing ownership; the slots report their
+retained bytes (`mesh-bake-worker-scratch`) and release them once a bake settles
+or the account asks for a trim.
 
 `SdfMesh.Storage` owns each published mesh's blocks. Cache, residency, dressed
 frame, upload arena and GI scene claims are specific to that resource; the last
 claim frees its storage. Material variants share geometry and allocate only
-remapped materials. A group hands its final lattice to the running contour
+remapped materials. A chunked mesh's chunks are views of its joined vertex and
+triangle attributes, stored once (`SdfMeshChunks.Join`, `NativeCopy`); each
+chunk keeps its own indices and levels. A claim takes the account's lock only
+when it moves its storage between live and cached, and the draw and region
+claim sets claim only the meshes entering their list and release only those
+leaving it (`SdfMeshClaims.Update`). A group hands its final lattice to the running contour
 stage, clearing `Final` before crease/material answers can arrive. Retirement
 drops queued stages, joins running borrowers and frees their owned workspaces;
 no finalizer recovers an abandoned owner. `host.memory collect` also drops idle

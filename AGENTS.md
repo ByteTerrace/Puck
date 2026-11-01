@@ -156,6 +156,11 @@ agent works in that mode by default, without asking:
     self-improvement is expected: when a session learns that a process wastes
     time or fails, it changes the process in that session, and judgement
     outranks any fixed numeric rule in these documents.
+  - Regular research is worth it (the owner's ruling), even down paths Puck
+    has checked before, if only as a refresher. Before a major area of work
+    (the illumination round before further graphical work is the example), the
+    lead runs a research round across the families, each with its own focus
+    and verified citations, then synthesizes it into the area's plan.
   - Removing or changing gate steps, CI steps and the tests that pin them is
     explicitly approved as ordinary work.
   - While the debug world is the one live world, production deploys it: `world

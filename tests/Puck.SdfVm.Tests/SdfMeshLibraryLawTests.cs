@@ -83,7 +83,8 @@ public sealed class SdfMeshLibraryLawTests {
 
     [Fact]
     public void ByteBudgetEvictsOnlyTheOldestGeometryAndKeepsAMissDerivable() {
-        var library = new SdfMeshLibrary(byteBudget: 512);
+        var mesh = new SdfMesh(positions: new Vector3[] { Vector3.Zero, Vector3.UnitX, Vector3.UnitY }, indices: new uint[] { 0, 1, 2 });
+        var library = new SdfMeshLibrary(byteBudget: (2 * mesh.StorageBytes));
 
         static SdfMeshGeometry Key(float x) {
             var builder = new SdfMeshGeometryBuilder(dynamic: false);
@@ -96,14 +97,15 @@ public sealed class SdfMeshLibraryLawTests {
         }
         var first = Key(0); var recent = Key(1); var incoming = Key(2);
 
-        library.StoreEmpty(first); library.StoreEmpty(recent);
-        library.StoreEmpty(incoming);
-        Assert.False(library.HoldsEmpty(first));
-        Assert.True(library.HoldsEmpty(recent));
-        Assert.True(library.HoldsEmpty(incoming));
-        Assert.Equal(512, library.RetainedBytes);
-        library.StoreEmpty(first);
-        Assert.True(library.HoldsEmpty(first));
+        // The budget counts each mesh's storage bytes: two meshes fit, and a third evicts the oldest alone.
+        _ = library.Store(geometry: first, materials: [], mesh: mesh); _ = library.Store(geometry: recent, materials: [], mesh: mesh);
+        _ = library.Store(geometry: incoming, materials: [], mesh: mesh);
+        Assert.False(library.TryTake(geometry: first, materials: [], mesh: out _));
+        Assert.True(library.TryTake(geometry: recent, materials: [], mesh: out _));
+        Assert.True(library.TryTake(geometry: incoming, materials: [], mesh: out _));
+        Assert.Equal((2 * mesh.StorageBytes), library.RetainedBytes);
+        _ = library.Store(geometry: first, materials: [], mesh: mesh);
+        Assert.True(library.TryTake(geometry: first, materials: [], mesh: out _));
         Assert.Equal(2, library.Count);
     }
     [Fact]

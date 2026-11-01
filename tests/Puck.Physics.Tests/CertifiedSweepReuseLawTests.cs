@@ -35,7 +35,7 @@ public sealed class CertifiedSweepReuseLawTests(ITestOutputHelper output) {
         var solver = new FixedFieldContactSolver(
             contactSkin: Q(value: 0.02), field: evaluator, gradientProbe: FixedQ4816.Zero, gradientUp: false,
             groundedThreshold: Q(value: 0.5), maxIterations: 4, query: evaluator,
-            sweep: new CertifiedFieldSweep(field: bounds), sweepBoundsQueryBudget: budget, sweepWork: work);
+            sweep: new CertifiedFieldSweep(field: bounds), bounds: bounds, sweepBoundsQueryBudget: budget, sweepWork: work);
         FixedBodyColliderVolume[] volumes = [new(
             Kind: (capsule ? FixedBodyColliderKind.Capsule : FixedBodyColliderKind.Sphere),
             Center: V(x: 0, y: 0.5, z: 0), Endpoint: V(x: 0, y: 1.5, z: 0), HalfExtents: default,

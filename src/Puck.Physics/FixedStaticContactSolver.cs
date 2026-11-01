@@ -121,7 +121,8 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
         ref bool grounded,
         ref FixedVector3 lastNormal,
         ref FixedVector3 groundNormal,
-        ref FixedQ4816 requiredStepHeight
+        ref FixedQ4816 requiredStepHeight,
+        ref bool uncertain
     ) {
         var pushed = false;
         var culls = (extents.Length == colliders.Length);
@@ -147,8 +148,11 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
                 position: position,
                 push: out var push,
                 skin: ContactSkin,
+                uncertain: out var unsure,
                 volume: in volume
             );
+
+            uncertain |= unsure;
 
             FixedStaticContactWork.Process.CountQuery(pushed: pushes);
             if (pushes) {
@@ -287,6 +291,7 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
         var result = default(ContactResolution);
         var obstruction = FixedVector3.Zero;
         var stepHeight = FixedQ4816.Zero;
+        var uncertain = false;
 
         for (var part = 0; (part < count); part++) {
             var increment = split.Integrate(elapsedTicks: 1UL, ratePerSecond: movement);
@@ -300,10 +305,11 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
             resolved = position;
             if (result.ObstructionNormal != FixedVector3.Zero) { obstruction = result.ObstructionNormal; }
             stepHeight = FixedQ4816.Max(x: stepHeight, y: result.RequiredStepHeight);
+            uncertain |= result.Unproved;
         }
         // Match field-sweep budget exhaustion: keep only the proved prefix and report it as unproved,
         // without turning a work limit into a physical obstruction or integrating the unvisited suffix.
-        return result with { ObstructionNormal = obstruction, RequiredStepHeight = stepHeight, Unproved = (parts > count) };
+        return result with { ObstructionNormal = obstruction, RequiredStepHeight = stepHeight, Unproved = (uncertain || (parts > count)) };
     }
 
     // Every intermediate pose of a straight move lies inside the box spanning its start and end bounds. A collider
@@ -365,8 +371,13 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
             val2: MaxIterations
         );
 
+        var uncertain = false;
+
         for (var iteration = 0; (iteration < iterations); iteration++) {
             var pushed = false;
+
+            // Only the last pass, at the pose the body keeps, says whether that pose is proved.
+            uncertain = false;
 
             foreach (ref readonly var volume in volumes) {
                 pushed |= Sweep(
@@ -385,6 +396,7 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
                     support: ref support,
                     up: in up,
                     velocity: ref velocity,
+                    uncertain: ref uncertain,
                     volume: in volume
                 );
                 pushed |= Sweep(
@@ -403,6 +415,7 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
                     support: ref support,
                     up: in up,
                     velocity: ref velocity,
+                    uncertain: ref uncertain,
                     volume: in volume
                 );
             }
@@ -416,7 +429,8 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
             RequiredStepHeight: requiredStepHeight,
             GroundNormal: groundNormal,
             Grounded: grounded,
-            ObstructionNormal: lastNormal
+            ObstructionNormal: lastNormal,
+            Unproved: uncertain
         ) { Support = support };
     }
 }

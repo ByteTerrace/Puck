@@ -72,13 +72,14 @@ contact shapes and `NoiseDisplace` in one scope, read by the contact
 `SdfFieldEvaluator` (the op is a contact op, and the field provider emits the
 same relief), with the fixed-point fBm in `Pcg3dLatticeNoise.Fbm3`. The
 narrowphase is the one certified surface solve the field provider's
-`FixedFieldContactSolver` reads too (`FixedFieldColliderContact.Solve`): the
-shapes' unrelieved union grown by the amplitude, then the evaluator's certified
-step scale less its value error, prove a body clear, whole or per core piece no
-longer than its radius; otherwise a converged surface solve measures the
-Euclidean distance from the core to a bracketed surface point. A union scope's
-`1/L` is carried in that certified scale rather than applied to its values, so
-a scale under the Q48.16 grid keeps the field's resolution. A smooth blend
+`FixedFieldContactSolver` reads too (`FixedFieldColliderContact.Solve`): only
+the evaluator's certified box bounds prove a body clear, whole or per core piece
+no longer than its radius, with the relief charged at its full reach; otherwise
+a converged surface solve measures the Euclidean distance from the core to a
+bracketed surface point. A union scope's `1/L` is carried in the proposed step
+scale rather than applied to its values only where nothing after the scope reads
+its magnitude, so a scale under the Q48.16 grid keeps the field's resolution
+without moving the solid. A smooth blend
 over the cap reuses the collider by compiling its creation the same way; `TerrainRelief` replaces `NoiseDisplace`
 inside the same program.
 
@@ -232,12 +233,13 @@ Risks:
   [bake fundamental](open-items.md#bake-proportional-to-change) and land kernel
   edits together. A relief edit afterwards rebakes its own tiles, nearest first.
 - **Field contact cost.** At the rim the certified solve reads the field about
-  70 times a tick at about 18.5 samples a read, each six octaves; lattice
-  corners are cached per cell, so relief contact holds its share of a headless
-  tick. If a denser relief or more bodies on it miss the p99, the next cuts are
-  the noise's gradient in closed form beside its value and the job system's
-  parallel contact work. Contact keeps every geometric octave and its declared
-  precision.
+  70 times a tick at about 17.5 samples a read, each six octaves, and proves
+  clearance with about 670 box-bound walks a tick; relief contact is about 19 %
+  of a headless tick, against 14.6 % for the old first-order collider. The next
+  cuts are the noise's gradient in closed form beside its value (which also
+  tightens the relief's enclosure, so fewer queries reach the field), a cached
+  box walk, and the job system's parallel contact work. Contact keeps every
+  geometric octave and its declared precision.
 - **Loose fields.** Warp and amplitude raise the step factor, slowing the bake
   and the sweep; the erosion mask and relative cap hold it.
 - **Views-pass registers** (168 on Direct3D 12 drove paints out of the
