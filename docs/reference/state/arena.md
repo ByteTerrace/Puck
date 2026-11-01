@@ -515,6 +515,21 @@ The native snapshot is independent of row serialization. A complete checkpoint i
 3. The retained undo history (`ExportUndoSnapshot`), when rule groups keep
    one. See [Rule groups and turn undo](rule-groups.md).
 
+## Scoped replay images
+
+`CaptureScope` retains selected plain document rows, their reservations, ring and
+draw cursors, and stored cell metadata. `RestoreScope` restores their captured
+reservations through the full snapshot's admitted relayout path. An empty keyed
+row without an explicit capacity can grow from zero to one cell and rewind to
+empty; growth in an unrelated row stays live. Selected keys keep their arena-local
+identities and newly interned names remain available to unrelated live state.
+
+Validation checks the complete image against the layout it will restore before
+changing any live column. Timed, vector, host-owned and pool rows require a wider
+continuation and are refused by name at capture. World replay cancellation or
+refusal ends the active drive and discards an incomplete first recording, leaving
+the runtime idle and checkpointable.
+
 ## Byte accounting
 
 An arena has a single memory ceiling, `ArenaCapacity.MaxBytes` (64 MiB), and

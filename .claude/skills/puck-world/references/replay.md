@@ -40,9 +40,12 @@ before the host finishes its post-step work, then restore and replay each author
 in place. A probe retains the final open tick's already-applied inputs without
 advancing that authority.
 
-Only `puck test --reproduce` attaches scenario probes and writes `reproduction.json`,
-after comparing each authority. An ordinary scheduled boot makes no reproduction
-claim. Reproduction consumes the host's already delivered authority inputs (session
+Only `puck test --reproduce` replays scenario probes, writing `reproduction.json`
+after comparing each authority; `--workers`, `--record` and `--compare` attach the
+same probes only to record each authority's per-tick hashes there (`divergence`
+null), with no replay. An ordinary scheduled boot attaches none and makes no
+reproduction claim. The host's choice of which transfer to initiate is proved by
+`--workers` instead, which compares full host runs and their crossing logs. Reproduction consumes the host's already delivered authority inputs (session
 admissions, departures, arrivals and forwarded input); it does not rerun the host's
 crossing detector or transfer coordinator, which would deliver those inputs twice.
 It proves each authority's continuation from those inputs, not the host's choice of

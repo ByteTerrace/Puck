@@ -718,7 +718,9 @@ public sealed partial class StateArena {
             // Unstored rows and numeric pool keys have no per-row key index.
             return;
         }
-        var extent = ((layout.Shape == RowShape.Slot) ? layout.CellCapacity : m_memberCounts[rowOrdinal]);
+        // A snapshot relayout can shrink storage before it installs the captured member count. Index only
+        // positions the new reservation owns during that transition; restoration reindexes the final contents.
+        var extent = ((layout.Shape == RowShape.Slot) ? layout.CellCapacity : Math.Min(layout.CellCapacity, m_memberCounts[rowOrdinal]));
 
         Visit(lanes: extent);
         for (var position = 0; (position < extent); position++) {

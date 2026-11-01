@@ -16,107 +16,14 @@ namespace Puck.Cli.Host;
 /// <param name="checkoutRoot">The checkout whose drive's free disk is read.</param>
 /// <param name="gpuVerbGrammars">By verb name, the grammar of each CLI verb whose own arguments decide whether its run is GPU work.</param>
 public sealed partial class HostProbe(string checkoutRoot, IReadOnlyDictionary<string, Func<Command>> gpuVerbGrammars) {
-    private const uint ProcessBasicInformation = 0;
-    private const uint ProcessCommandLineInformation = 60;
-    private const uint ProcessQueryLimitedInformation = 0x1000;
-
     private (ulong Idle, ulong Total)? m_previous;
 
-    [LibraryImport(libraryName: "kernel32.dll")]
-    [return: MarshalAs(unmanagedType: UnmanagedType.Bool)]
-    private static partial bool CloseHandle(nint handle);
     [LibraryImport(libraryName: "kernel32.dll", SetLastError = true)]
     [return: MarshalAs(unmanagedType: UnmanagedType.Bool)]
     private static partial bool GetSystemTimes(out ulong idle, out ulong kernel, out ulong user);
     [LibraryImport(libraryName: "kernel32.dll", EntryPoint = "GetDiskFreeSpaceExW", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
     [return: MarshalAs(unmanagedType: UnmanagedType.Bool)]
     private static partial bool GetDiskFreeSpaceEx(string directory, out ulong available, out ulong total, out ulong free);
-    [LibraryImport(libraryName: "ntdll.dll")]
-    private static unsafe partial int NtQueryInformationProcess(nint process, uint informationClass, void* information, uint length, out uint returned);
-    [LibraryImport(libraryName: "kernel32.dll", SetLastError = true)]
-    private static partial nint OpenProcess(uint access, [MarshalAs(unmanagedType: UnmanagedType.Bool)] bool inherit, uint processId);
-    // The command line of another process, or empty when it cannot be read (it exited, or belongs to another user).
-    private static unsafe string CommandLine(int processId) {
-        if (OperatingSystem.IsLinux()) {
-            try {
-                return File.ReadAllText(path: $"/proc/{processId.ToString(provider: CultureInfo.InvariantCulture)}/cmdline");
-            } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-                return string.Empty;
-            }
-        }
-        if (!OperatingSystem.IsWindows()) {
-            return string.Empty;
-        }
-
-        var process = OpenProcess(access: ProcessQueryLimitedInformation, inherit: false, processId: ((uint)processId));
-
-        if (process == 0) {
-            return string.Empty;
-        }
-
-        try {
-            _ = NtQueryInformationProcess(information: null, informationClass: ProcessCommandLineInformation, length: 0, process: process, returned: out var needed);
-
-            if (needed == 0) {
-                return string.Empty;
-            }
-
-            var buffer = new byte[needed];
-
-            fixed (byte* start = buffer) {
-                if (NtQueryInformationProcess(information: start, informationClass: ProcessCommandLineInformation, length: needed, process: process, returned: out _) != 0) {
-                    return string.Empty;
-                }
-
-                // A UNICODE_STRING header (length in bytes, then the buffer pointer) followed by the characters.
-                var length = *((ushort*)start);
-                var characters = *((char**)(start + IntPtr.Size));
-
-                return new string(length: (length / sizeof(char)), startIndex: 0, value: characters);
-            }
-        } finally {
-            _ = CloseHandle(handle: process);
-        }
-    }
-
-    /// <summary>Reads a process's parent id, or -1 when it cannot be read.</summary>
-    /// <param name="processId">The process to inspect.</param>
-    /// <returns>The parent process id, or -1.</returns>
-    public static unsafe int ParentId(int processId) {
-        if (OperatingSystem.IsLinux()) {
-            try {
-                // pid (comm) state ppid …: the name may hold spaces and parentheses, so read after its last ')'.
-                var stat = File.ReadAllText(path: $"/proc/{processId.ToString(provider: CultureInfo.InvariantCulture)}/stat");
-                var fields = stat[(stat.LastIndexOf(value: ')') + 2)..].Split(separator: ' ');
-
-                return int.Parse(provider: CultureInfo.InvariantCulture, s: fields[1]);
-            } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or FormatException or IndexOutOfRangeException)) {
-                return -1;
-            }
-        }
-        if (!OperatingSystem.IsWindows()) {
-            return -1;
-        }
-
-        var process = OpenProcess(access: ProcessQueryLimitedInformation, inherit: false, processId: ((uint)processId));
-
-        if (process == 0) {
-            return -1;
-        }
-
-        try {
-            // PROCESS_BASIC_INFORMATION: exit status, PEB, affinity, base priority, own id, then the parent's id, each
-            // pointer-sized.
-            var information = stackalloc nint[6];
-
-            return ((NtQueryInformationProcess(information: information, informationClass: ProcessBasicInformation, length: ((uint)(6 * IntPtr.Size)), process: process, returned: out _) == 0)
-                ? ((int)information[5])
-                : -1);
-        } finally {
-            _ = CloseHandle(handle: process);
-        }
-    }
-
     // Busy and total CPU time since boot, in the platform's ticks.
     private static (ulong Idle, ulong Total)? CpuTimes() {
         if (OperatingSystem.IsWindows()) {
@@ -200,11 +107,11 @@ public sealed partial class HostProbe(string checkoutRoot, IReadOnlyDictionary<s
                     started = DateTime.MinValue;
                 }
 
-                tree[process.Id] = (ParentId(processId: process.Id), started);
+                tree[process.Id] = (ProcessInspection.ParentId(processId: process.Id), started);
 
                 // The probe never matches itself, whatever its own command line says.
                 if (process.Id != self) {
-                    running.Add(item: (process.Id, process.ProcessName, CommandLine(processId: process.Id)));
+                    running.Add(item: (process.Id, process.ProcessName, ProcessInspection.CommandLine(processId: process.Id)));
                 }
             }
         }

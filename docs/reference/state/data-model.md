@@ -479,8 +479,11 @@ names the member:
 - A cell's value uses its kind's spelling: a JSON number for `Int`, a decimal
   string for `Fixed` (`"12.5"`, never raw bits), a boolean for `Bool`, a string
   for `Text`, and an unpadded base64url string for `Vector`.
-- A slot's timing state is written as a row-level `clock` beside `value`; a
-  keyed cell carries its own `clock`.
+- A slot using `value` sugar writes its timing state as a row-level `clock`.
+  Cell-specific metadata that sugar cannot express is preserved in an explicit
+  `$value` entry in `cells`, with its clock. Slot authoring rules still apply:
+  visibility and behavior traits belong on the row; invalid cell declarations
+  are preserved for validation to refuse, never silently erased.
 - Pairs of time traits that can't combine are refused while reading, before any
   validator runs.
 

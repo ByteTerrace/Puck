@@ -409,12 +409,7 @@ public static class WorldStateDisclosure {
                 WholeRow: !rowReadable
             );
             // The row's own draw and ring bookkeeping is a reading of the cells withheld from it, so it goes too.
-            rows[index] = (row with {
-                Cells = kept,
-                DrawCursor = 0L,
-                DrawnMasks = null,
-                HistoryCursor = 0L,
-            });
+            rows[index] = WithoutStorageMetadata(row: row) with { Cells = kept };
         }
 
         if (withheld.Count == 0) {
@@ -439,6 +434,17 @@ public static class WorldStateDisclosure {
             Withheld: withheld
         );
     }
+    /// <summary>Removes reservation and cursor metadata that can reveal omitted membership, preserving the
+    /// declared or inferred domain. A readback applies this even when no current cell is withheld, so zero and
+    /// nonzero hidden inventories have the same metadata shape.</summary>
+    public static WorldStateRow WithoutStorageMetadata(WorldStateRow row) => row with {
+        Domain = row.Domain ?? row.InferDomain(),
+        ReservedCapacity = null,
+        DrawCursor = 0L,
+        DrawnMasks = null,
+        HistoryCursor = 0L,
+    };
+
     /// <summary>Reads placement projections directly from the arena for one recipient, without exporting state rows.</summary>
     public static IReadOnlyList<WorldPlacement> PlacementProjection(WorldDefinition definition, StateArena arena, Principal? recipient, bool unrestricted = false) {
         var observer = new Observer(arena: arena, recipient: recipient, unrestricted: unrestricted);

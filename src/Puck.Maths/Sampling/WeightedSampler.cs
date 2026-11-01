@@ -8,6 +8,8 @@ namespace Puck.Maths;
 /// shares its partition.
 /// </summary>
 public static class WeightedSampler {
+    /// <summary>The generator advances one alias draw consumes: a masked column draw, then a threshold compare.</summary>
+    public const int AdvancesPerDraw = 2;
     internal const string CountError = "entry count must be within [1, 2^30]";
     internal const string EntriesParameterName = "entries";
     internal const int MaximumEntryCount = (1 << 30);
