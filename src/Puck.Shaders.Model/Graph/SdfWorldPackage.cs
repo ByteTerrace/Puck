@@ -80,13 +80,16 @@ public static partial class SdfWorldPackage {
     /// luminance it shades to the display by before the tonemap, and the display-referred terms (an ink line, the editor
     /// grid, an unbound screen's glass) are divided by (<c>float</c>).</summary>
     public const string Exposure = "exposure";
-    /// <summary>Cel response: enable, diffuse threshold, terminator width and specular size (<c>float4</c>).</summary>
+    /// <summary>The world's default cel style (<c>SdfToon.WriteRows</c>, a material's rows 22 to 25 alike): mode (zero
+    /// off, one banding the cosine under its visibility, two banding both together), diffuse threshold, terminator width and
+    /// specular size (<c>float4</c>).</summary>
     public const string ToonBands = "toonBands";
     /// <summary>Cel shadow tint and reflected-light exposure gain (<c>float4</c>).</summary>
     public const string ToonShadow = "toonShadow";
-    /// <summary>Cel outline render-pixel radius, half-width distance, normal threshold and colour shoulder (<c>float4</c>).</summary>
+    /// <summary>Cel outline radius in output pixels, half-width distance, normal threshold and colour shoulder (<c>float4</c>).</summary>
     public const string ToonOutline = "toonOutline";
-    /// <summary>Cel outline's linear RGB multiplier (<c>float3</c>).</summary>
+    /// <summary>Cel outline's linear RGB multiplier, and the view's render grid, which scales every style's outline radius
+    /// from output to render pixels (<c>float4</c>).</summary>
     public const string ToonInk = "toonInk";
     /// <summary>The pass-group value holding the power the composite raises <see cref="Exposure"/> to before applying it
     /// to the view's output (<c>float</c>): one for a view the display shows, and the window share
@@ -295,7 +298,7 @@ public static partial class SdfWorldPackage {
         Value(name: ToonBands, type: ShaderValueType.Float4),
         Value(name: ToonShadow, type: ShaderValueType.Float4),
         Value(name: ToonOutline, type: ShaderValueType.Float4),
-        Value(name: ToonInk, type: ShaderValueType.Float3),
+        Value(name: ToonInk, type: ShaderValueType.Float4),
         Value(name: ExposeShare, type: ShaderValueType.Float),
         Value(name: AirLight, type: ShaderValueType.Float),
         Value(name: MeterLuminance, type: ShaderValueType.Float),

@@ -3,6 +3,7 @@ using Puck.Abstractions.Documents;
 using Puck.Abstractions.Presentation;
 using Puck.Assets.Documents;
 using Puck.SignedDistance;
+using Puck.World.Authoring;
 
 namespace Puck.World;
 
@@ -148,8 +149,13 @@ public readonly record struct WorldQualityPreset(
 /// <param name="SkyFieldScale">The boot sky field grid fraction, one or one half, independent of view render scale.</param>
 /// <param name="Exposure">The camera exposure each view maps the luminance it shades to the display by, before the
 /// tonemap. Absent is a manual exposure at <c>SdfExposure.DefaultEv100</c>, a sunlit day's.</param>
-/// <param name="Toon">Optional cel shading and its tuning. Absent is off.</param>
+/// <param name="Toon">The world's default cel style, which every material that authors no style of its own shades with
+/// (<see cref="ToonStyleDocument"/>), on unless it says <c>enabled: false</c>, and which the live <c>world.toon</c> lever
+/// turns on or off. Absent is off.</param>
 /// <param name="Bloom">Optional camera scatter. Absent is off.</param>
+/// <param name="ShadowCoverage">How far the key light's shadow cascades reach (<see cref="WorldRenderShadowCoverage"/>).
+/// Absent keeps the engine's 16 m near, 120 m far and 200 m caster reach; <c>world.budget</c> prints the coverage with
+/// each cascade's texel.</param>
 public sealed record WorldRenderDefaults(
     ShadowTier Shadows = ShadowTier.Off,
     bool AmbientOcclusion = false,
@@ -174,8 +180,9 @@ public sealed record WorldRenderDefaults(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderIndirect? Indirect = null,
     float SkyFieldScale = 1f,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderExposure? Exposure = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderToon? Toon = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Puck.Hosting.CameraBloom? Bloom = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ToonStyleDocument? Toon = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Puck.Hosting.CameraBloom? Bloom = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderShadowCoverage? ShadowCoverage = null
 ) {
     /// <summary>The largest <see cref="FarDistance"/> the validator admits: 8192 world units, the largest power of two
     /// at which a float's spacing (2^13 · 2^-23 = 0.00098) still resolves a millimetre, so a depth anywhere in the view
@@ -294,6 +301,20 @@ public sealed record WorldRenderExposure(
         );
     }
 }
+/// <summary>The reach of the key light's shadow cascades, in metres. Each cascade spreads the same texels over the view's
+/// slice it covers, so a longer reach costs precision rather than texels: a valley whose walls stand hundreds of metres
+/// off needs a far reach past them, and its far cascade's texel grows in proportion. Every member is optional; an absent
+/// one keeps the engine's value.</summary>
+/// <param name="Near">The depth from the eye the near cascade covers, positive and below the far reach (16 when
+/// absent).</param>
+/// <param name="Far">The depth from the eye the far cascade covers, at most the far distance it is clipped to (120 when
+/// absent).</param>
+/// <param name="Casters">How far past a cascade toward the light a caster may stand and still shadow it (200 when
+/// absent).</param>
+public sealed record WorldRenderShadowCoverage(
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Near = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Far = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Casters = null);
 /// <summary>Authored tier, sources, bounce depth and receiver application for the baked-mesh path's irradiance volume.</summary>
 /// <param name="Sources">Bindable source gains in [0, 1]; absent gains are one.</param>
 /// <param name="Bounces">Feedback sweeps after the direct sweep, capped by the selected tier. Absent uses that tier's limit.</param>

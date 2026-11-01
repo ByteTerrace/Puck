@@ -47,6 +47,10 @@ the garden and the night field import in the standard's place; the debug world's
 Go and Tour pages, Places ring and gallery icons live in
 [`../debug/controls.puck`](../debug/controls.puck), which refines those.
 
+`styles.puck` is a library of cel styles (`celStyle`, `celHardStyle`, `continuousStyle`): a palette row names one
+as its own (`toon: celStyle`) and a world names one as the default every other material inherits
+(`render { toon: celStyle }`), which `world.toon` switches live.
+
 `terrain.puck` and `foliage.puck` are optional libraries. Foliage supplies
 `broadleafTree`, `mossyRock`, `grassTuft`, `sceneryPatch`, `sceneryScatter` and
 `windMeadowTile`; import it with `import "../standard/foliage"` and expand its
