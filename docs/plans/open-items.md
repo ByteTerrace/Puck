@@ -305,7 +305,14 @@ account and release them when a bake settles.
   to 1,409,528,905 B (chunked attributes stored once). Frame times during the
   bake (p99 per minute 186 to 307 ms before, 233 to 398 ms after) are not
   comparable: GC pause per collection read 22 ms in the before run and 40 to
-  83 ms in three after runs as the machine load rose.
+  83 ms in three after runs as the machine load rose. The after build's Vulkan
+  cold bake settled in 525 s with 346 deferrals, gate waits up to 149 ms and
+  64 over 1 ms, and live payload 1,607,238,606 B after collection; it baked
+  1,101,923,007 samples and 45,044,555 triangles against Direct3D 12's
+  999,550,075 and 38,652,955. No before Vulkan run was taken, so whether that
+  backend difference predates these changes is unconfirmed; the changes are
+  CPU-side and left Direct3D 12's counts identical. Both backends stay far
+  past the one-minute cold-bake ruling on this loaded machine.
 - Still open from the memory review:
   - [medium] Managed working memory per admitted group (contour lists,
     refinement masks and `Vector3[]` point rounds: `SdfSampledLattice.cs:439`
@@ -314,6 +321,11 @@ account and release them when a bake settles.
     LOH still reads about 1.5 GB after `host.memory collect`. The cure is the
     next native movers (the contour and the refinement's per-cell masks), not
     a count cap.
+  - [low] A chunked mesh still stores its triangles' indices twice: the
+    parent's joined indices for whole-group queries and each chunk's own
+    (`SdfMesh.Storage.cs`, `NativeCopy`). Dropping the parent's needs its
+    readers (the irradiance scene, `SdfMeshAudit`, the diagnostics' nearest
+    query) to walk the chunks.
   - [low] The library releases evicted claims, which frees native payloads,
     under its own gate (`SdfMeshLibrary.cs` `Retain`), the gate the frame
     thread takes in `Restart` through `TryTake`.
