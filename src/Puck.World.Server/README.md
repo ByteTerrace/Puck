@@ -2000,6 +2000,17 @@ world's `Store` names that store, which no machine keeps anywhere, so the
 checkpoint writes it as it is and a restore never resolves it.
 `CheckpointAssetAnchorLawTests` holds these rules.
 
+Mounted guests use the mandatory `IWorldAddonHost` checkpoint boundary. Its strict
+addon image is framed in `WorldAuthorityCheckpoint.Addons`, alongside machine
+images, and captures supported guests even after they have run. A fresh server
+retains this image until addon attachment and cannot step or capture meanwhile.
+A live restore stages and validates all guest images before adopting authority
+state, then commits the replacement at the same authority boundary. Recovery
+retains pinned module sources with guest memory, independently of deployed files.
+The codec enforces its section and whole-body decode bounds when encoding too.
+The [addon runtime README](../Puck.World.Addons/README.md#durable-guest-state)
+owns its complete state inventory and unsupported-resource refusals.
+
 ## The tick (`WorldTick*.cs`)
 
 `WorldTick` is the tick facade of `WorldServer`: the one ordered domain and the
@@ -2213,7 +2224,7 @@ every screen slot's selector and link membership, the link rows
 (`WorldMachineHostCheckpoint`), the named bindings' memo and the live sessions,
 and the offline replay and the live drive restore them into their hosts. A
 state the checkpoint cannot capture refuses the arm by name
-(`ReplayRefusal.StartNotCheckpointable`): a pumped addon guest, a stepped
+(`ReplayRefusal.StartNotCheckpointable`): an interrupted guest's incomplete tick, a stepped
 machine without checkpoint support, a coupled link or rewind history.
 `Puck.World.WorldScreenBinder`
 is a pure reader of this type's outputs for presentation (a machine source
@@ -2552,13 +2563,10 @@ therefore indicts the checkpoint, never a boot image. Input the history's captur
 already held for the open tick when the recording armed has reached the server,
 and the checkpoint holds it, so the recording's first tick leaves it out.
 
-A post-boot arm with mounted addons prepares every guest fresh, captures the
-surrounding authority state, then commits the restart under the same authority
-operation (`WorldPersistence.TryCaptureReplayStart`). The checkpoint never
-claims to hold guest memory: both live capture and re-drive initialize the
-pinned modules at that boundary. Refusal disposes the staged stores and leaves
-the running guests intact. This makes recording over MCP possible after boot;
-ordinary checkpoint capture continues to refuse pumped guests.
+A post-boot arm captures the guests' live memory and host continuations through
+the ordinary checkpoint boundary (`WorldPersistence.TryCaptureReplayStart`).
+Arming changes no guest, input controller or held channel. The re-drive restores
+that exact image; it never records an addon restart as an independent event.
 
 Each authority tapes its own half of a crossing: a source its departure
 (`Transfer`, naming the target authority and the slots that left), a
@@ -2693,7 +2701,7 @@ a buffered edit, ordered submission or provider contribution is pending, across
 a crossing, an arrival, a session event, a federated traveler or a remote peer in
 the window, and while a remote occupant, transfer obligation or engagement
 depends on the timeline. The checks and restore share the authority gate. Live
-sessions, mounted or previously pumped addon guests, applied screen operations,
+sessions, applied screen operations,
 and stepped machines without checkpoint support refuse both capture and seek.
 A keyframe also refuses when the document's score differs from the running boot
 music plan. Owned documents retain their individual asset directories in the

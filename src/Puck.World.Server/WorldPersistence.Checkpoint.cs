@@ -485,12 +485,9 @@ public sealed partial class WorldPersistence {
         }
     }
 
-    /// <summary>Whether this server's live state is outside what a checkpoint can capture: a pumped addon guest, or a
-    /// stepped machine on a host without checkpoint support — see <see cref="TryCaptureCheckpoint"/>.</summary>
-    /// <param name="restartingAddons">Whether a prepared restart replaces the guests at this recording boundary.</param>
+    /// <summary>Whether a pumped addon or machine uses a host without checkpoint support — see <see cref="TryCaptureCheckpoint"/>.</summary>
     /// <returns><see langword="true"/> when this server's live state is outside what a checkpoint can capture.</returns>
-    private bool AnyUncapturableStateEverLatched(bool restartingAddons) => ((!restartingAddons && Host.AnyAddonEverPumped) ||
-        (Host.AnyMachineEverPumped && (Host.Machines is not IWorldMachineCheckpointHost)));
+    private bool AnyUncapturableStateEverLatched() => (Host.AnyMachineEverPumped && (Host.Machines is not IWorldMachineCheckpointHost));
 
     /// <summary>Builds a fresh server from a previously captured checkpoint — the sequence
     /// <see cref="WorldReplaySnapshot.Drive"/> already follows for an offline rehydration (population, machine
@@ -544,7 +541,7 @@ public sealed partial class WorldPersistence {
     /// <summary>Captures a full simulation-state image of this server and every subsystem it owns, under
     /// <see cref="WorldServer.AuthorityGate"/>: the sessions it admitted, the screen slots and links a screen operation
     /// moves, and the machine cores included. Refuses by name (returns <see langword="false"/>) when this server has
-    /// ever pumped an addon or stepped a machine without durable checkpoint support. Supported machine hosts drain
+    /// ever pumped an addon or stepped a machine on a host without durable checkpoint support. Supported hosts drain
     /// accepted steps and capture their complete runtime images; unsupported runtime state, a live coupled link or
     /// enabled rewind history, refuses capture by name — or when <see cref="WorldDocument.Pending"/> or
     /// <see cref="WorldTick.Ordered"/> is non-empty at the moment of the call, which the caller must retry at the NEXT
@@ -556,50 +553,12 @@ public sealed partial class WorldPersistence {
     /// <param name="reason">Why capture was refused, on failure.</param>
     /// <returns><see langword="true"/> when capture succeeded.</returns>
     internal bool TryCaptureCheckpoint(WorldAuthorityHostRowCheckpoint hostRow, out WorldAuthorityCheckpoint? checkpoint, out string reason) =>
-        TryCaptureCheckpointCore(hostRow, out checkpoint, out reason, restartingAddons: false);
-    // A recording restarts guests from their pinned modules instead of claiming to capture their memory. Stage
-    // that restart first, but publish it only after every ordinary checkpoint gate succeeds. A refused arm leaves
-    // the live stores, their fuel counters and pending answers untouched. Ordinary captures never use this door.
-    internal bool TryCaptureReplayStart(out WorldAuthorityCheckpoint? checkpoint, out string reason) {
-        lock (Host.AuthorityGate) {
-            IWorldAddonPreparedPlan? plan = null;
-            var committed = false;
+        TryCaptureCheckpointCore(checkpoint: out checkpoint, hostRow: hostRow, reason: out reason);
+    // Recording uses the same durable guest image as persistence and history.
+    internal bool TryCaptureReplayStart(out WorldAuthorityCheckpoint? checkpoint, out string reason) =>
+        TryCaptureCheckpointCore(WorldAuthorityHostRowCheckpoint.Empty, out checkpoint, out reason);
 
-            try {
-                if ((Host.Addons is { MountedCount: > 0 } addons) && !addons.TryPrepare(
-                    current: null,
-                    candidate: Host.Definition,
-                    plan: out plan,
-                    reason: out var addonReason
-                )) {
-                    checkpoint = null;
-                    reason = $"the recording's addon restart refused: {addonReason}";
-                    return false;
-                }
-                if (!TryCaptureCheckpointCore(WorldAuthorityHostRowCheckpoint.Empty, out checkpoint, out reason,
-                    restartingAddons: (plan is not null))) {
-                    return false;
-                }
-                if (plan is not null) {
-                    Host.Addons!.Commit(plan: plan);
-                    committed = true;
-                    Host.Addons.Finish(plan: plan);
-                    // Restart retires the guests' input controllers and releases their held body channels.
-                    // The tape must start AFTER those authoritative changes, just as the live recording does.
-                    // The first capture above preflights every refusal before the restart is committed.
-                    if (!TryCaptureCheckpointCore(WorldAuthorityHostRowCheckpoint.Empty, out checkpoint, out reason,
-                        restartingAddons: true)) {
-                        throw new InvalidOperationException(message: $"the committed addon restart invalidated its checkpoint: {reason}");
-                    }
-                }
-                return true;
-            } finally {
-                if (!committed) { plan?.Dispose(); }
-            }
-        }
-    }
-
-    private bool TryCaptureCheckpointCore(WorldAuthorityHostRowCheckpoint hostRow, out WorldAuthorityCheckpoint? checkpoint, out string reason, bool restartingAddons) {
+    private bool TryCaptureCheckpointCore(WorldAuthorityHostRowCheckpoint hostRow, out WorldAuthorityCheckpoint? checkpoint, out string reason) {
         ArgumentNullException.ThrowIfNull(argument: hostRow);
 
         lock (Host.AuthorityGate) {
@@ -609,7 +568,17 @@ public sealed partial class WorldPersistence {
 
                 return false;
             }
-            if (AnyUncapturableStateEverLatched(restartingAddons: restartingAddons)) {
+            if (Host.Tick.ExecutionInterrupted) {
+                checkpoint = null;
+                reason = "an interrupted guest left an incomplete tick; recover from the last durable checkpoint";
+                return false;
+            }
+            if ((m_pendingAddonCheckpoint is not null) || ((Host.Addons is null) && Host.Definition.Addons.Any(predicate: row => row.Enabled))) {
+                checkpoint = null;
+                reason = "a checkpoint requires the declared addon host and its restored state";
+                return false;
+            }
+            if (AnyUncapturableStateEverLatched()) {
                 checkpoint = null;
                 reason = "a checkpoint cannot capture pumped addon guests or a stepped machine without durable checkpoint support";
 
@@ -659,6 +628,18 @@ public sealed partial class WorldPersistence {
             }
 
             WorldMachineHostCheckpoint? machines = null;
+            byte[]? addons = null;
+
+            if (Host.Addons is { MountedCount: > 0 } addonHost) {
+                try { addons = addonHost.CaptureCheckpoint(); } catch (Exception error) when ((error is InvalidOperationException or IOException or ArgumentException)) {
+                    checkpoint = null;
+                    reason = $"addon checkpoint refused: {error.Message}";
+                    return false;
+                }
+                if (addons.Length > WorldAuthorityCheckpointCodec.MaxSectionBytes) {
+                    checkpoint = null; reason = "addon checkpoint exceeds the authority section byte limit"; return false;
+                }
+            }
 
             if (Host.Machines is IWorldMachineCheckpointHost machineHost) {
                 try { machines = machineHost.CaptureCheckpoint(); } catch (Exception error) when ((error is InvalidOperationException or IOException or ArgumentException)) {
@@ -749,7 +730,8 @@ public sealed partial class WorldPersistence {
                 Fields: Host.Population.CaptureFieldRegions(),
                 Search: Host.Search.Capture(),
                 BoardEnforcement: BoardEnforcement.Capture(),
-                Machines: machines
+                Machines: machines,
+                Addons: addons
             );
             reason = string.Empty;
 
@@ -811,7 +793,7 @@ public sealed partial class WorldPersistence {
             )),
         });
     }
-    private void RestoreCheckpointCore(WorldAuthorityCheckpoint checkpoint, WorldDefinitionAdmission admission, bool restoreOwnedIdentities = true, bool resetSessionEpochs = false, string? authorityIdentity = null) {
+    private void RestoreCheckpointCore(WorldAuthorityCheckpoint checkpoint, WorldDefinitionAdmission admission, bool restoreOwnedIdentities = true, bool resetSessionEpochs = false, string? authorityIdentity = null, IWorldAddonPreparedPlan? preparedAddons = null) {
         var server = checkpoint.Server;
 
         Host.Population.ValidateFieldRegions(checkpoints: checkpoint.Fields);
@@ -851,6 +833,10 @@ public sealed partial class WorldPersistence {
             definition: restoredDefinition,
             entries: server.MachineBindings
         );
+
+        // Stage guest decoding and execution before adopting any authority state.
+        using var addonPlan = (preparedAddons ?? ((Host.Addons is { } attachedAddons)
+            ? attachedAddons.PrepareCheckpoint(restoredDefinition, (checkpoint.Addons ?? [])) : null));
 
         // A checkpoint with no machine section came from a host without checkpoint support, which ran no machine.
         if (Host.Machines is IWorldMachineCheckpointHost machineHost) {
@@ -1042,6 +1028,11 @@ public sealed partial class WorldPersistence {
             throw new InvalidOperationException(message: $"the checkpoint's search progress does not restore: {searchReason}");
         }
         BoardEnforcement.Restore(checkpoint: (checkpoint.BoardEnforcement ?? WorldBoardEnforcementCheckpoint.Empty));
+        m_pendingAddonCheckpoint = ((Host.Addons is null) ? checkpoint.Addons : null);
+        if (addonPlan is not null) {
+            Host.Addons!.Commit(plan: addonPlan);
+            Host.Addons.Finish(plan: addonPlan);
+        }
         if (resetSessionEpochs) {
             // A replay start must deliver its restored grants and seed clocks, including to attached sinks.
             Host.GrantTable.SyncState(definition: restoredDefinition, arena: Host.Arena);

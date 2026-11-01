@@ -1,3 +1,4 @@
+using Puck.Abstractions.Memory;
 using System.Numerics;
 using System.Runtime.InteropServices;
 
@@ -42,7 +43,6 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
     /// <summary>Selects each quad's outward-facing diagonal from its current vertex positions and normals. Call again
     /// after changing positions, before <see cref="SplitAtCreases"/> freezes the per-face normals.</summary>
     public void SelectDiagonals() => SdfSampledLattice.SelectDiagonals(contour: this);
-
     /// <summary>Returns the contour with its crease vertices split: a vertex two of whose quads face
     /// apart by more than 25 degrees gives each quad corner a vertex of its own at the same place, whose normal is the
     /// area-weighted facing of the vertex's quads within 25 degrees of that quad's, so a sharp edge shades as the two faces
@@ -132,7 +132,7 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
         var creased = new bool[vertexCount];
 
         for (var vertex = 0; (vertex < vertexCount); vertex++) {
-            for (var first = starts[vertex]; (first < starts[(vertex + 1)]) && !creased[vertex]; first++) {
+            for (var first = starts[vertex]; ((first < starts[(vertex + 1)]) && !creased[vertex]); first++) {
                 if (!(facings[around[first]].LengthSquared() > 0f)) { continue; }
                 var one = Vector3.Normalize(value: facings[around[first]]);
 
@@ -178,6 +178,7 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
 
                 var sum = Vector3.Zero;
                 var group = int.MaxValue;
+
                 members.Clear();
 
                 for (var index = starts[vertex]; (index < starts[(vertex + 1)]); index++) {
@@ -251,9 +252,11 @@ public readonly record struct SdfLatticeRegion(Vector3 Low, Vector3 High);
 /// from the GPU interpreter in floats, so its surface is presentation data that may differ between devices; nothing in it
 /// reaches simulation state.</para>
 /// </summary>
-public sealed class SdfSampledLattice {
+public sealed class SdfSampledLattice : IDisposable {
     // A refinement that would measure more fine samples than this is not taken: the lattice contours at its own spacing.
-    private const int MaxFineSamples = 4_000_000;
+    /// <summary>The maximum measured fine samples of one lattice; also bounds its admission workspace.</summary>
+    public const int MaxFineSamples = 4_000_000;
+
     // The share of a step across a line, at the line's own slope, the field may change by toward either neighbour before
     // a pair on the line lies beside a solid rather than either side of a sheet (SheetsBetween): a sheet tilted 45
     // degrees from the line changes the field by 0.71 of a step across it and stays a sheet; a line over a plate's top
@@ -270,42 +273,55 @@ public sealed class SdfSampledLattice {
     private readonly int m_samplesX;
     private readonly int m_samplesY;
     private readonly int m_samplesZ;
-    private readonly float[] m_values;
-    private readonly int[] m_materials;
-    private readonly Vector3[] m_gradients;
+    private readonly ReadOnlyMemory<float> m_valueMemory;
+
+    private ReadOnlySpan<float> Values => m_valueMemory.Span;
+
+    private readonly ReadOnlyMemory<int> m_materialMemory;
+
+    private ReadOnlySpan<int> Materials => m_materialMemory.Span;
+
+    private readonly OwnedBuffer<Vector3> m_gradients;
 
     private int m_factor = 1;
-    private bool[] m_measured = [];
+
+    private readonly OwnedBuffer<bool> m_measured;
     // Per coarse cell, whether a sheet or gap thinner than a cell crosses an edge of it (Refine), the cells CloseSheets
     // closes sheets in.
-    private bool[] m_thin = [];
-    private bool[] m_refined = [];
+    private readonly OwnedBuffer<bool> m_thin;
+    private readonly OwnedBuffer<bool> m_refined;
     // Per coarse cell, the block of fine slots a measured cell holds (-1 for a cell not measured), and per block the slot
     // in m_fineValues of each of its (m_factor + 1)^3 fine samples, faces included (-1 at its coarse corners): FineSlot's
     // dense index of the measured fine samples.
-    private int[] m_cellBlocks = [];
-    private int[] m_blockSlots = [];
-    private int[] m_fineKeys = [];
-    private float[] m_fineValues = [];
-    private int[] m_fineMaterials = [];
+    private readonly OwnedBuffer<int> m_cellBlocks;
+    private readonly OwnedBuffer<int> m_blockSlots;
+    private readonly OwnedBuffer<int> m_fineKeys;
+    private readonly OwnedBuffer<float> m_fineValues;
+    private readonly OwnedBuffer<int> m_fineMaterials;
     private readonly Dictionary<int, Vector3> m_fineGradients = [];
-    private int[] m_gradientKeys = [];
-    private long[] m_crossingKeys = [];
+    private readonly OwnedBuffer<int> m_gradientKeys;
+    private readonly OwnedBuffer<long> m_crossingKeys;
+
     private bool m_crossingsPrepared;
     private bool m_rootsPrepared;
+
     private readonly Dictionary<long, CrossingRoot> m_crossingRoots = [];
-    private long[] m_pendingCrossings = [];
+    private readonly OwnedBuffer<long> m_pendingCrossings;
+
     // The roots of m_pendingCrossings' edges, in its order.
     private CrossingRoot[] m_pendingRoots = [];
+
     // Per crossing edge (CrossingKey), the gradient measured at its crossing and the field's value there.
     private readonly Dictionary<long, Vector4> m_crossingGradients = [];
     // The measured fine samples a sheet thinner than the fine cell passed beside, and the value each reads (CloseSheets).
     // Per measured fine sample's slot, NaN for one CloseSheets left open; and how many it closed.
-    private float[] m_closedValues = [];
+    private readonly OwnedBuffer<float> m_closedValues;
+
     private int m_closedCount;
+
     // Per fine key, whether FineInside has read the sample's sign, and that sign: one bit each.
-    private ulong[] m_signKnown = [];
-    private ulong[] m_signInside = [];
+    private readonly OwnedBuffer<ulong> m_signKnown;
+    private readonly OwnedBuffer<ulong> m_signInside;
 
     /// <summary>Initializes a new instance of the <see cref="SdfSampledLattice"/> class.</summary>
     /// <param name="origin">The position of sample (0, 0, 0), in the frame the samples were taken in.</param>
@@ -315,13 +331,15 @@ public sealed class SdfSampledLattice {
     /// <param name="samplesZ">The samples along Z, at least two.</param>
     /// <param name="values">One field value per sample, X fastest: negative inside. The lattice keeps the array.</param>
     /// <param name="materials">One material per sample. The lattice keeps the array.</param>
+    /// <param name="allocator">Native workspace allocator, or null for offline managed storage.</param>
+    /// <param name="observer">The owning job's byte account, or null for unmetered offline work.</param>
     /// <exception cref="ArgumentNullException"><paramref name="values"/> or <paramref name="materials"/> is
     /// <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">An axis has fewer than two samples, a spacing is not positive, or an array's
     /// length does not match the lattice.</exception>
-    public SdfSampledLattice(Vector3 origin, Vector3 cell, int samplesX, int samplesY, int samplesZ, float[] values, int[] materials) {
-        ArgumentNullException.ThrowIfNull(argument: values);
-        ArgumentNullException.ThrowIfNull(argument: materials);
+    public SdfSampledLattice(Vector3 origin, Vector3 cell, int samplesX, int samplesY, int samplesZ, ReadOnlyMemory<float> values, ReadOnlyMemory<int> materials, IAllocator? allocator = null, IAllocationObserver? observer = null) {
+
+
 
         if ((samplesX < 2) || (samplesY < 2) || (samplesZ < 2)) {
             throw new ArgumentException(message: "A lattice holds at least two samples along each axis.");
@@ -341,9 +359,38 @@ public sealed class SdfSampledLattice {
         m_samplesX = samplesX;
         m_samplesY = samplesY;
         m_samplesZ = samplesZ;
-        m_values = values;
-        m_materials = materials;
-        m_gradients = new Vector3[count];
+        m_valueMemory = values;
+        m_materialMemory = materials;
+        m_gradients = new OwnedBuffer<Vector3>(allocator: allocator, observer: observer);
+        m_closedValues = new OwnedBuffer<float>(allocator: allocator, observer: observer);
+        m_signKnown = new OwnedBuffer<ulong>(allocator: allocator, observer: observer);
+        m_cellBlocks = new OwnedBuffer<int>(allocator: allocator, observer: observer);
+        m_measured = new(allocator: allocator, observer: observer);
+        m_thin = new(allocator: allocator, observer: observer);
+        m_refined = new(allocator: allocator, observer: observer);
+        m_fineKeys = new(allocator: allocator, observer: observer);
+        m_gradientKeys = new(allocator: allocator, observer: observer);
+        m_crossingKeys = new(allocator: allocator, observer: observer);
+        m_pendingCrossings = new(allocator: allocator, observer: observer);
+        m_fineValues = new OwnedBuffer<float>(allocator: allocator, observer: observer);
+        m_blockSlots = new OwnedBuffer<int>(allocator: allocator, observer: observer);
+        m_signInside = new OwnedBuffer<ulong>(allocator: allocator, observer: observer);
+        m_fineMaterials = new OwnedBuffer<int>(allocator: allocator, observer: observer);
+        m_gradients.Resize(count);
+    }
+
+    /// <summary>Releases the lattice's owned workspaces after its contour and point borrows end.</summary>
+    public void Dispose() {
+        m_measured.Dispose(); m_thin.Dispose(); m_refined.Dispose(); m_fineKeys.Dispose();
+        m_gradientKeys.Dispose(); m_crossingKeys.Dispose(); m_pendingCrossings.Dispose();
+        m_gradients.Dispose();
+        m_closedValues.Dispose();
+        m_signKnown.Dispose();
+        m_cellBlocks.Dispose();
+        m_fineValues.Dispose();
+        m_blockSlots.Dispose();
+        m_signInside.Dispose();
+        m_fineMaterials.Dispose();
     }
 
     /// <summary>Gets the fine cells along each axis of a coarse cell: one until <see cref="Refine"/> refines the
@@ -373,12 +420,13 @@ public sealed class SdfSampledLattice {
     /// the samples put it: the parts of a union whose own detail is finer than the lattice. Empty for none. Where every
     /// region's cells would measure more fine samples than the refinement's budget, the regions covering the fewest cells
     /// are refined and the rest contour at the lattice's own spacing.</param>
+    /// <param name="scratch">The caller's exclusive reusable fine-sample index, or null for storage owned by this call.</param>
     /// <returns>The fine samples to measure, in the lattice's frame, in the order <see cref="AnswerRefinement"/> takes
     /// their answers; empty when no cell needs refining or even two fine cells a side would measure too many, and the
     /// lattice then contours at its own spacing.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="factor"/> is less than two.</exception>
     /// <exception cref="InvalidOperationException">The lattice is already refined.</exception>
-    public Vector3[] Refine(int factor, ReadOnlySpan<SdfLatticeRegion> regions = default) {
+    public Vector3[] Refine(int factor, ReadOnlySpan<SdfLatticeRegion> regions = default, RefinementScratch? scratch = null) {
         ArgumentOutOfRangeException.ThrowIfLessThan(value: factor, other: 2);
 
         if (m_factor != 1) {
@@ -418,7 +466,7 @@ public sealed class SdfSampledLattice {
 
                     for (var step = Math.Max(val1: 0, val2: first); (step <= Math.Min(val1: last, val2: (samples[axis] - 1))); step++) {
                         p[axis] = step;
-                        run = (((m_values[Index(x: p[0], y: p[1], z: p[2])] < 0f) == inside) ? (run + 1) : 0);
+                        run = (((Values[Index(x: p[0], y: p[1], z: p[2])] < 0f) == inside) ? (run + 1) : 0);
                         if (run >= 2) {
                             return true;
                         }
@@ -463,7 +511,7 @@ public sealed class SdfSampledLattice {
                     float Beside(Span<int> q, int i) {
                         q[axis] = i;
 
-                        return m_values[Index(x: q[0], y: q[1], z: q[2])];
+                        return Values[Index(x: q[0], y: q[1], z: q[2])];
                     }
 
                     for (var i = Math.Max(val1: 1, val2: first); (i <= Math.Min(val1: last, val2: (n - 2))); i++) {
@@ -485,8 +533,8 @@ public sealed class SdfSampledLattice {
                                 var slope = Slope(x: p[0], y: p[1], z: p[2]);
 
                                 p[axis] = (i + 1);
-                                slope = MathF.Max(slope, Slope(x: p[0], y: p[1], z: p[2]));
-                                if (PassesBetween(after: MathF.Abs(after), before: MathF.Abs(before), further: MathF.Abs(further), reach: (h * slope), value: MathF.Abs(value))) {
+                                slope = MathF.Max(x: slope, y: Slope(x: p[0], y: p[1], z: p[2]));
+                                if (PassesBetween(after: MathF.Abs(x: after), before: MathF.Abs(x: before), further: MathF.Abs(x: further), reach: (h * slope), value: MathF.Abs(x: value))) {
                                     return true;
                                 }
                             }
@@ -527,7 +575,7 @@ public sealed class SdfSampledLattice {
                     var mask = 0;
 
                     for (var offset = 0; (offset < 8); offset++) {
-                        if (m_values[Index(x: (x + (offset & 1)), y: (y + ((offset >> 1) & 1)), z: (z + ((offset >> 2) & 1)))] < 0f) {
+                        if (Values[Index(x: (x + (offset & 1)), y: (y + ((offset >> 1) & 1)), z: (z + ((offset >> 2) & 1)))] < 0f) {
                             mask |= (1 << offset);
                         }
                     }
@@ -554,9 +602,10 @@ public sealed class SdfSampledLattice {
                 var cellsOf = new List<int>();
                 var from = ((region.Low - m_origin) / m_cell);
                 var to = ((region.High - m_origin) / m_cell);
-                var (x0, x1) = (Math.Max(val1: 0, val2: ((int)MathF.Floor(x: from.X) - 1)), Math.Min(val1: (cellsX - 1), val2: ((int)MathF.Floor(x: to.X) + 1)));
-                var (y0, y1) = (Math.Max(val1: 0, val2: ((int)MathF.Floor(x: from.Y) - 1)), Math.Min(val1: (cellsY - 1), val2: ((int)MathF.Floor(x: to.Y) + 1)));
-                var (z0, z1) = (Math.Max(val1: 0, val2: ((int)MathF.Floor(x: from.Z) - 1)), Math.Min(val1: (cellsZ - 1), val2: ((int)MathF.Floor(x: to.Z) + 1)));
+
+                var (x0, x1) = (Math.Max(val1: 0, val2: (((int)MathF.Floor(x: from.X)) - 1)), Math.Min(val1: (cellsX - 1), val2: (((int)MathF.Floor(x: to.X)) + 1)));
+                var (y0, y1) = (Math.Max(val1: 0, val2: (((int)MathF.Floor(x: from.Y)) - 1)), Math.Min(val1: (cellsY - 1), val2: (((int)MathF.Floor(x: to.Y)) + 1)));
+                var (z0, z1) = (Math.Max(val1: 0, val2: (((int)MathF.Floor(x: from.Z)) - 1)), Math.Min(val1: (cellsZ - 1), val2: (((int)MathF.Floor(x: to.Z)) + 1)));
 
                 for (var z = z0; (z <= z1); z++) {
                     for (var y = y0; (y <= y1); y++) {
@@ -573,7 +622,7 @@ public sealed class SdfSampledLattice {
                             var nearest = float.PositiveInfinity;
 
                             for (var offset = 0; (offset < 8); offset++) {
-                                nearest = MathF.Min(nearest, MathF.Abs(m_values[Index(x: (x + (offset & 1)), y: (y + ((offset >> 1) & 1)), z: (z + ((offset >> 2) & 1)))]));
+                                nearest = MathF.Min(x: nearest, y: MathF.Abs(x: Values[Index(x: (x + (offset & 1)), y: (y + ((offset >> 1) & 1)), z: (z + ((offset >> 2) & 1)))]));
                             }
                             if (nearest <= reach) {
                                 cellsOf.Add(item: CellIndex(x: x, y: y, z: z));
@@ -603,7 +652,7 @@ public sealed class SdfSampledLattice {
 
                         p[axis] = i;
 
-                        return m_values[Index(x: p[0], y: p[1], z: p[2])];
+                        return Values[Index(x: p[0], y: p[1], z: p[2])];
                     }
 
                     for (var i = 1; ((i + 1) < n); i++) {
@@ -645,7 +694,7 @@ public sealed class SdfSampledLattice {
                         var slope = Slope(x: at[0], y: at[1], z: at[2]);
 
                         at[axis] = (i + 1);
-                        slope = MathF.Max(slope, Slope(x: at[0], y: at[1], z: at[2]));
+                        slope = MathF.Max(x: slope, y: Slope(x: at[0], y: at[1], z: at[2]));
                         at[axis] = i;
 
                         // A solid's edge or corner the line grazes falls toward the pair from both sides as a sheet does,
@@ -657,7 +706,7 @@ public sealed class SdfSampledLattice {
                         // them, contoured from interpolated corners, to cut the crease above the seam.
                         var tolerance = (inside ? (-0.5f / factor) : 0.1f);
 
-                        if (!Thickens(at: at, axis: axis, first: (i - 1), inside: !inside, last: (i + 2)) && PassesBetween(after: MathF.Abs(after), before: MathF.Abs(before), further: MathF.Abs(further), reach: (h * slope), tolerance: tolerance, value: MathF.Abs(value)) && ThinBeside(at: at, axis: axis, first: (i - 1), last: (i + 2), sheetInside: !inside)) {
+                        if (!Thickens(at: at, axis: axis, first: (i - 1), inside: !inside, last: (i + 2)) && PassesBetween(after: MathF.Abs(x: after), before: MathF.Abs(x: before), further: MathF.Abs(x: further), reach: (h * slope), tolerance: tolerance, value: MathF.Abs(x: value)) && ThinBeside(at: at, axis: axis, first: (i - 1), last: (i + 2), sheetInside: !inside)) {
                             MarkEdge(at: at, axis: axis);
                         }
                     }
@@ -695,7 +744,7 @@ public sealed class SdfSampledLattice {
         var addedCells = new List<int>();
 
         for (var split = factor; (split >= 2); split--) {
-            var mask = (bool[])essential.Clone();
+            var mask = ((bool[])essential.Clone());
             var fits = true;
 
             Array.Clear(array: countedCells);
@@ -768,9 +817,9 @@ public sealed class SdfSampledLattice {
         // Whether a counted cell besides cell (x, y, z) holds its fine sample (lx, ly, lz): a neighbour across each face the
         // sample lies on.
         bool HeldByCounted(int x, int y, int z, int lx, int ly, int lz, int split) {
-            var (lowX, highX) = (((lx == 0) && (x > 0)) ? -1 : 0, ((lx == split) && ((x + 1) < cellsX)) ? 1 : 0);
-            var (lowY, highY) = (((ly == 0) && (y > 0)) ? -1 : 0, ((ly == split) && ((y + 1) < cellsY)) ? 1 : 0);
-            var (lowZ, highZ) = (((lz == 0) && (z > 0)) ? -1 : 0, ((lz == split) && ((z + 1) < cellsZ)) ? 1 : 0);
+            var (lowX, highX) = ((((lx == 0) && (x > 0)) ? -1 : 0), (((lx == split) && ((x + 1) < cellsX)) ? 1 : 0));
+            var (lowY, highY) = ((((ly == 0) && (y > 0)) ? -1 : 0), (((ly == split) && ((y + 1) < cellsY)) ? 1 : 0));
+            var (lowZ, highZ) = ((((lz == 0) && (z > 0)) ? -1 : 0), (((lz == split) && ((z + 1) < cellsZ)) ? 1 : 0));
 
             for (var dz = lowZ; (dz <= highZ); dz++) {
                 for (var dy = lowY; (dy <= highY); dy++) {
@@ -819,8 +868,9 @@ public sealed class SdfSampledLattice {
         // The fine samples of every measured cell, its faces included, that are not coarse samples. A refinement that would
         // measure more than MaxFineSamples splits each cell into fewer fine cells rather than none: a sheet thinner than
         // the coarse cell is caught by any refinement and lost by the coarse contour.
-        var keys = new List<int>();
-        var slots = new Dictionary<int, int>();
+        scratch ??= new RefinementScratch();
+        var keys = scratch.Keys;
+        var slots = scratch.Slots;
 
         while (!FineKeys(split: factor)) {
             if (--factor < 2) {
@@ -865,14 +915,14 @@ public sealed class SdfSampledLattice {
         }
 
         m_factor = factor;
-        m_measured = measured;
-        m_thin = thin;
-        m_refined = refined;
+        m_measured.CopyFrom(source: measured);
+        m_thin.CopyFrom(source: thin);
+        m_refined.CopyFrom(source: refined);
         MeasuredCells = measuredCount;
         RefinedCells = refinedCount;
-        m_fineKeys = [.. keys];
-        m_fineValues = new float[keys.Count];
-        m_fineMaterials = new int[keys.Count];
+        m_fineKeys.CopyFrom(source: CollectionsMarshal.AsSpan(list: keys));
+        m_fineValues.Resize(keys.Count);
+        m_fineMaterials.Resize(keys.Count);
         IndexFineSlots(slots: slots);
 
         var points = new Vector3[keys.Count];
@@ -886,6 +936,24 @@ public sealed class SdfSampledLattice {
 
         return points;
     }
+
+    /// <summary>Temporary fine-sample indexing retained by one refinement worker. A call to <see cref="Refine"/>
+    /// borrows it exclusively until return; the lattice copies every index it keeps.</summary>
+    public sealed class RefinementScratch {
+        internal List<int> Keys = [];
+        internal Dictionary<int, int> Slots = [];
+
+        /// <summary>Ends a worker's borrow and bounds aggregate idle index storage to one fine-sample budget.
+        /// Larger one-off workspaces are released; common jobs reuse their slot's retained capacity.</summary>
+        /// <param name="workers">The number of slots sharing that retention budget.</param>
+        public void TrimForWorkers(int workers) {
+            var limit = (MaxFineSamples / Math.Max(val1: 1, val2: workers));
+
+            if (Keys.Capacity > limit) { Keys = []; } else { Keys.Clear(); }
+            if (Slots.EnsureCapacity(capacity: 0) > limit) { Slots = []; } else { Slots.Clear(); }
+        }
+    }
+
     /// <summary>Returns, per sample of a lattice, whether it is one of a pair along an axis that a sheet or gap thinner
     /// than the spacing passes between: the four samples along the line are of one sign, the field falls toward the pair
     /// from both sides and the falls, extended, meet strictly below the surface between them, as a sheet's do by half
@@ -935,9 +1003,9 @@ public sealed class SdfSampledLattice {
                     // ends as falls either side of a flat floor) changes across the line by the step instead.
                     var (first, second) = ((start + (i * stride)), (start + ((i + 1) * stride)));
 
-                    if (ChangesAcross(axis: axis, values: values, sample: first, slope: slope) || ChangesAcross(axis: axis, values: values, sample: second, slope: slope)) { continue; }
-                    between[first] |= (byte)(1 << axis);
-                    between[second] |= (byte)(1 << axis);
+                    if (ChangesAcross(axis: axis, sample: first, slope: slope, values: values) || ChangesAcross(axis: axis, sample: second, slope: slope, values: values)) { continue; }
+                    between[first] |= ((byte)(1 << axis));
+                    between[second] |= ((byte)(1 << axis));
                 }
             }
         }
@@ -967,6 +1035,7 @@ public sealed class SdfSampledLattice {
             return false;
         }
     }
+
     // Whether a sheet passed between two samples of one sign, `value` and `after`, whose neighbours `before` and `further`
     // lie a step out on either side, all as magnitudes: the field falls toward the pair from both sides by over half
     // `reach`, the most it changes over a step there, and the falls, extended, meet within `tolerance` of `reach` of the
@@ -984,25 +1053,26 @@ public sealed class SdfSampledLattice {
             return false;
         }
 
-        var t = Math.Clamp(value: (((value - after) + fallB) / (fallA + fallB)), min: 0f, max: 1f);
+        var t = Math.Clamp(max: 1f, min: 0f, value: (((value - after) + fallB) / (fallA + fallB)));
 
         return ((value - (fallA * t)) < (tolerance * reach));
     }
     // The most the field changes per world unit between a coarse sample and any of its six neighbours: the scale of the
     // field there, which a step's change is measured against (PassesBetween).
     private float Slope(int x, int y, int z) {
-        var value = m_values[Index(x: x, y: y, z: z)];
+        var value = Values[Index(x: x, y: y, z: z)];
         var slope = 0f;
 
-        if (x > 0) { slope = MathF.Max(slope, (MathF.Abs(value - m_values[Index(x: (x - 1), y: y, z: z)]) / m_cell.X)); }
-        if ((x + 1) < m_samplesX) { slope = MathF.Max(slope, (MathF.Abs(value - m_values[Index(x: (x + 1), y: y, z: z)]) / m_cell.X)); }
-        if (y > 0) { slope = MathF.Max(slope, (MathF.Abs(value - m_values[Index(x: x, y: (y - 1), z: z)]) / m_cell.Y)); }
-        if ((y + 1) < m_samplesY) { slope = MathF.Max(slope, (MathF.Abs(value - m_values[Index(x: x, y: (y + 1), z: z)]) / m_cell.Y)); }
-        if (z > 0) { slope = MathF.Max(slope, (MathF.Abs(value - m_values[Index(x: x, y: y, z: (z - 1))]) / m_cell.Z)); }
-        if ((z + 1) < m_samplesZ) { slope = MathF.Max(slope, (MathF.Abs(value - m_values[Index(x: x, y: y, z: (z + 1))]) / m_cell.Z)); }
+        if (x > 0) { slope = MathF.Max(x: slope, y: (MathF.Abs(x: (value - Values[Index(x: (x - 1), y: y, z: z)])) / m_cell.X)); }
+        if ((x + 1) < m_samplesX) { slope = MathF.Max(x: slope, y: (MathF.Abs(x: (value - Values[Index(x: (x + 1), y: y, z: z)])) / m_cell.X)); }
+        if (y > 0) { slope = MathF.Max(x: slope, y: (MathF.Abs(x: (value - Values[Index(x: x, y: (y - 1), z: z)])) / m_cell.Y)); }
+        if ((y + 1) < m_samplesY) { slope = MathF.Max(x: slope, y: (MathF.Abs(x: (value - Values[Index(x: x, y: (y + 1), z: z)])) / m_cell.Y)); }
+        if (z > 0) { slope = MathF.Max(x: slope, y: (MathF.Abs(x: (value - Values[Index(x: x, y: y, z: (z - 1))])) / m_cell.Z)); }
+        if ((z + 1) < m_samplesZ) { slope = MathF.Max(x: slope, y: (MathF.Abs(x: (value - Values[Index(x: x, y: y, z: (z + 1))])) / m_cell.Z)); }
 
         return slope;
     }
+
     /// <summary>Returns the field's typical change per world unit across its surface: the median, over the coarse lattice
     /// edges that change sign, of the change along the edge over its length. A field that is no true distance changes by
     /// less, or more, than one.</summary>
@@ -1013,11 +1083,11 @@ public sealed class SdfSampledLattice {
         for (var z = 0; (z < m_samplesZ); z++) {
             for (var y = 0; (y < m_samplesY); y++) {
                 for (var x = 0; (x < m_samplesX); x++) {
-                    var value = m_values[Index(x: x, y: y, z: z)];
+                    var value = Values[Index(x: x, y: y, z: z)];
 
-                    if (((x + 1) < m_samplesX) && ((value < 0f) != (m_values[Index(x: (x + 1), y: y, z: z)] < 0f))) { slopes.Add(item: (MathF.Abs(value - m_values[Index(x: (x + 1), y: y, z: z)]) / m_cell.X)); }
-                    if (((y + 1) < m_samplesY) && ((value < 0f) != (m_values[Index(x: x, y: (y + 1), z: z)] < 0f))) { slopes.Add(item: (MathF.Abs(value - m_values[Index(x: x, y: (y + 1), z: z)]) / m_cell.Y)); }
-                    if (((z + 1) < m_samplesZ) && ((value < 0f) != (m_values[Index(x: x, y: y, z: (z + 1))] < 0f))) { slopes.Add(item: (MathF.Abs(value - m_values[Index(x: x, y: y, z: (z + 1))]) / m_cell.Z)); }
+                    if (((x + 1) < m_samplesX) && ((value < 0f) != (Values[Index(x: (x + 1), y: y, z: z)] < 0f))) { slopes.Add(item: (MathF.Abs(x: (value - Values[Index(x: (x + 1), y: y, z: z)])) / m_cell.X)); }
+                    if (((y + 1) < m_samplesY) && ((value < 0f) != (Values[Index(x: x, y: (y + 1), z: z)] < 0f))) { slopes.Add(item: (MathF.Abs(x: (value - Values[Index(x: x, y: (y + 1), z: z)])) / m_cell.Y)); }
+                    if (((z + 1) < m_samplesZ) && ((value < 0f) != (Values[Index(x: x, y: y, z: (z + 1))] < 0f))) { slopes.Add(item: (MathF.Abs(x: (value - Values[Index(x: x, y: y, z: (z + 1))])) / m_cell.Z)); }
                 }
             }
         }
@@ -1039,9 +1109,10 @@ public sealed class SdfSampledLattice {
             m_fineValues[(first + index)] = values[index];
             m_fineMaterials[(first + index)] = materials[index];
         }
-        m_signKnown = [];
-        m_signInside = [];
+        m_signKnown.Resize(0);
+        m_signInside.Resize(0);
     }
+
     // An edge root stays bracketed by its original signs, and the search ends once the bracket is an 8,192th of the edge
     // wide, its root then the bracket's middle, within a 16,384th of the zero. Each round measures two trials a
     // tolerance apart about an estimate (the linear estimate, first, then the secant through the last round's trials, or
@@ -1056,6 +1127,7 @@ public sealed class SdfSampledLattice {
         // The rounds a search takes at most: one about the linear estimate, one about the next false position, and the
         // nine thirdings that close an edge's bracket.
         public const int MostRounds = 11;
+
         // Half the gap between a round's trials about an estimate: under half the tolerance, so a root between them
         // ends the search.
         private const float Straddle = (0.45f * Tolerance);
@@ -1067,17 +1139,19 @@ public sealed class SdfSampledLattice {
             Position = (Done ? ((first == 0f) ? 0f : 1f) : 0.5f);
             if (!Done) { Straddling(estimate: (first / (first - second))); }
         }
-        public float Position { get; private set; }
+
         public bool Done { get; private set; }
+        public float Position { get; private set; }
         // The round's two trials along the edge, nearer the low end first.
         public float First { get; private set; }
         public float Second { get; private set; }
-        private float Low { get; set; }
-        private float High { get; set; } = 1f;
-        private float LowValue { get; set; }
-        private float HighValue { get; set; }
-        private float FirstValue { get; set; }
+
         private int Answered { get; set; }
+        private float FirstValue { get; set; }
+        private float High { get; set; } = 1f;
+        private float HighValue { get; set; }
+        private float Low { get; set; }
+        private float LowValue { get; set; }
         private int Rounds { get; set; }
 
         // Takes the field's value at one of the round's trials (0 the first, 1 the second); once both are answered,
@@ -1127,6 +1201,7 @@ public sealed class SdfSampledLattice {
 
             Straddling(estimate: ((float.IsFinite(f: secant) && (secant > Low) && (secant < High)) ? secant : (((Low * HighValue) - (High * LowValue)) / (HighValue - LowValue))));
         }
+
         // Places the round's trials a tolerance apart about an estimate inside the bracket.
         private void Straddling(float estimate) {
             var inset = (0.125f * Tolerance);
@@ -1136,19 +1211,20 @@ public sealed class SdfSampledLattice {
             Second = MathF.Min(x: (centre + Straddle), y: (High - inset));
         }
     }
+
     // Closing sheets changes their edge crossings deliberately; both crossing searches and gradient sampling use the
     // resulting lattice, prepared once after the refinement answers arrive.
     private void PrepareCrossings() {
         if (m_crossingsPrepared) { return; }
         CloseSheets();
-        m_crossingKeys = CrossingEdges();
+        m_crossingKeys.CopyFrom(source: CrossingEdges());
         m_crossingsPrepared = true;
     }
     private int EdgeEnd(int start, int axis, int length) {
         var fineX = (((m_samplesX - 1) * m_factor) + 1);
         var fineY = (((m_samplesY - 1) * m_factor) + 1);
 
-        return (start + ((axis == 0) ? length : ((axis == 1) ? (length * fineX) : (length * fineX * fineY))));
+        return (start + ((axis == 0) ? length : ((axis == 1) ? (length * fineX) : ((length * fineX) * fineY))));
     }
     private Vector3 CrossingPoint(long key, float fraction) {
         var (start, axis, length) = CrossingEdge(key: key);
@@ -1157,6 +1233,7 @@ public sealed class SdfSampledLattice {
 
         return (m_origin + (new Vector3(x: (x + ((axis == 0) ? along : 0f)), y: (y + ((axis == 1) ? along : 0f)), z: (z + ((axis == 2) ? along : 0f))) * ContourCell));
     }
+
     /// <summary>Returns the next points for locating each sign-changing edge's zero along that edge. After refinement,
     /// repeatedly answer these points with <see cref="AnswerCrossings"/> until this returns no points, then measure
     /// <see cref="GradientPoints"/>. Closed thin sheets and gaps keep their lattice crossings.</summary>
@@ -1166,7 +1243,7 @@ public sealed class SdfSampledLattice {
         if (!m_rootsPrepared) {
             foreach (var key in m_crossingKeys) {
                 var (start, axis, length) = CrossingEdge(key: key);
-                var end = EdgeEnd(start: start, axis: axis, length: length);
+                var end = EdgeEnd(axis: axis, length: length, start: start);
 
                 // A transition edge's unmeasured end reads the value its coarse corners interpolate, whose sign the
                 // contour's topology keeps; its root is searched along the edge as a measured one is. Inside a union the
@@ -1180,8 +1257,18 @@ public sealed class SdfSampledLattice {
             }
             m_rootsPrepared = true;
             // The first round's roots, in the order of their edges; each later round keeps those still searching.
-            m_pendingCrossings = [.. m_crossingKeys.Where(predicate: m_crossingRoots.ContainsKey)];
-            m_pendingRoots = [.. m_pendingCrossings.Select(selector: key => m_crossingRoots[key])];
+            var count = 0;
+
+            foreach (var key in m_crossingKeys) { if (m_crossingRoots.ContainsKey(key: key)) { count++; } }
+            m_pendingCrossings.Resize(count);
+            m_pendingRoots = new CrossingRoot[count];
+            var index = 0;
+
+            foreach (var key in m_crossingKeys) {
+                if (!m_crossingRoots.TryGetValue(key: key, value: out var root)) { continue; }
+                m_pendingCrossings[index] = key;
+                m_pendingRoots[index++] = root;
+            }
         }
 
         var kept = 0;
@@ -1192,7 +1279,7 @@ public sealed class SdfSampledLattice {
             m_pendingRoots[kept] = m_pendingRoots[index];
             kept++;
         }
-        Array.Resize(array: ref m_pendingCrossings, newSize: kept);
+        m_pendingCrossings.Resize(kept);
         Array.Resize(array: ref m_pendingRoots, newSize: kept);
 
         // Two trials a root, the root's first then its second.
@@ -1218,7 +1305,7 @@ public sealed class SdfSampledLattice {
         for (var index = 0; (index < values.Length); index++) {
             var value = values[index];
 
-            if (!float.IsFinite(value)) { throw new ArgumentException(message: "A crossing answer must be finite."); }
+            if (!float.IsFinite(f: value)) { throw new ArgumentException(message: "A crossing answer must be finite."); }
             m_pendingRoots[((first + index) / 2)].Answer(trial: ((first + index) % 2), value: value);
         }
     }
@@ -1255,7 +1342,7 @@ public sealed class SdfSampledLattice {
                     var mask = 0;
 
                     for (var offset = 0; (offset < 8); offset++) {
-                        mask |= ((m_values[Index(x: (x + (offset & 1)), y: (y + ((offset >> 1) & 1)), z: (z + ((offset >> 2) & 1)))] < 0f) ? (1 << offset) : 0);
+                        mask |= ((Values[Index(x: (x + (offset & 1)), y: (y + ((offset >> 1) & 1)), z: (z + ((offset >> 2) & 1)))] < 0f) ? (1 << offset) : 0);
                     }
                     if (refined || ((mask != 0) && (mask != 0xFF))) {
                         for (var offset = 0; (offset < 8); offset++) {
@@ -1293,7 +1380,7 @@ public sealed class SdfSampledLattice {
             }
         }
 
-        m_gradientKeys = [.. keys];
+        m_gradientKeys.CopyFrom(source: CollectionsMarshal.AsSpan(list: keys));
 
         var points = new Vector3[(keys.Count + m_crossingKeys.Length)];
         var fine = ContourCell;
@@ -1314,6 +1401,7 @@ public sealed class SdfSampledLattice {
 
         return points;
     }
+
     // Closes the sheets thinner than the fine cell in the cells Refine saw one cross, which the fine samples alone leave
     // holed, fray into slivers where they thin to a knife edge, and contour as two faces closer than a vertex's placement
     // can tell apart. A measured fine sample inside such a sheet reads as inside by half the field's change over a fine
@@ -1330,7 +1418,7 @@ public sealed class SdfSampledLattice {
         int[] fine = [(((m_samplesX - 1) * factor) + 1), (((m_samplesY - 1) * factor) + 1), (((m_samplesZ - 1) * factor) + 1)];
         var cell = ContourCell;
         float[] spacing = [cell.X, cell.Y, cell.Z];
-        var step = MathF.Min(cell.X, MathF.Min(cell.Y, cell.Z));
+        var step = MathF.Min(x: cell.X, y: MathF.Min(x: cell.Y, y: cell.Z));
         var closing = new Dictionary<int, float>();
         Span<int> p = stackalloc int[3];
 
@@ -1352,14 +1440,14 @@ public sealed class SdfSampledLattice {
                     neighbour[2] = at[2];
                     neighbour[axis] += direction;
                     if (Real(at: neighbour)) {
-                        slope = MathF.Max(slope, (MathF.Abs(value - FineValue(x: neighbour[0], y: neighbour[1], z: neighbour[2])) / spacing[axis]));
+                        slope = MathF.Max(x: slope, y: (MathF.Abs(x: (value - FineValue(x: neighbour[0], y: neighbour[1], z: neighbour[2]))) / spacing[axis]));
                     }
                 }
             }
 
             return slope;
         }
-        void Close(int key, float slope, float depth) => closing.TryAdd(key: key, value: -MathF.Max(depth, MathF.Max((0.25f * step * slope), 1.0e-7f)));
+        void Close(int key, float slope, float depth) => closing.TryAdd(key: key, value: -MathF.Max(x: depth, y: MathF.Max(x: ((0.25f * step) * slope), y: 1.0e-7f)));
         var around = new int[3];
         // The deepest inside value among a fine sample's six neighbours, zero for none inside.
         float Deepest(Span<int> at) {
@@ -1371,7 +1459,7 @@ public sealed class SdfSampledLattice {
                     around[1] = at[1];
                     around[2] = at[2];
                     around[axis] += direction;
-                    deepest = (Within(at: around) ? MathF.Min(deepest, FineValue(x: around[0], y: around[1], z: around[2])) : deepest);
+                    deepest = (Within(at: around) ? MathF.Min(x: deepest, y: FineValue(x: around[0], y: around[1], z: around[2])) : deepest);
                 }
             }
 
@@ -1379,7 +1467,7 @@ public sealed class SdfSampledLattice {
         }
         var side = new int[3];
         var beside = new int[3];
-        var clear = (0.1f * step * SurfaceSlope());
+        var clear = ((0.1f * step) * SurfaceSlope());
         // Whether a fine sample lies inside a sheet: inside, outside a step to either side along some axis by more than a
         // tenth of the field's typical change over a step, which a surface grazing the line within its samples' noise is
         // not, and no neighbour deeper inside than those two lie outside, as a solid's edge or corner, which a line near it
@@ -1401,13 +1489,15 @@ public sealed class SdfSampledLattice {
                 side[2] = at[2];
                 side[axis]--;
                 var low = (Within(at: side) ? FineValue(x: side[0], y: side[1], z: side[2]) : -1f);
+
                 if (!(low > clear)) { continue; }
                 side[axis] += 2;
                 var high = (Within(at: side) ? FineValue(x: side[0], y: side[1], z: side[2]) : -1f);
+
                 if (!(high > clear)) { continue; }
                 if (float.IsNaN(f: deepest)) { deepest = Deepest(at: at); }
 
-                if ((deepest > -MathF.Max(low, high)) && (!thinner || (((-value / (low - value)) + (-value / (high - value))) < 1f)) &&
+                if ((deepest > -MathF.Max(x: low, y: high)) && (!thinner || (((-value / (low - value)) + (-value / (high - value))) < 1f)) &&
                     !Thickens(at: at, axis: axis, first: (at[axis] - 1), last: (at[axis] + 1))) {
                     return true;
                 }
@@ -1470,7 +1560,7 @@ public sealed class SdfSampledLattice {
             // A sheet a sample caught, thinner than the fine cell along a line: its two faces, a fraction of a cell
             // apart, cross where the tangent planes misplace a vertex by as much, so it too contours a cell thick.
             if (Sheet(at: p, thinner: true)) {
-                Close(depth: (0.5f * step * FineSlope(at: p)), key: key, slope: 0f);
+                Close(depth: ((0.5f * step) * FineSlope(at: p)), key: key, slope: 0f);
             }
 
             for (var axis = 0; (axis < 3); axis++) {
@@ -1491,27 +1581,33 @@ public sealed class SdfSampledLattice {
                     p[axis]++;
                     if (!Within(at: p) || FineInside(x: p[0], y: p[1], z: p[2])) { continue; }
                     var further = FineValue(x: p[0], y: p[1], z: p[2]);
+
                     p[axis]--;
                     var second = FineValue(x: p[0], y: p[1], z: p[2]);
                     var secondKey = (Coarse(at: p) ? -1 : Key(at: p));
+
                     p[axis]--;
                     var first = FineValue(x: p[0], y: p[1], z: p[2]);
                     var firstKey = (Coarse(at: p) ? -1 : Key(at: p));
+
                     p[axis]--;
                     var before = FineValue(x: p[0], y: p[1], z: p[2]);
+
                     p[axis]++;
                     var firstSlope = FineSlope(at: p);
                     var deepest = Deepest(at: p);
+
                     p[axis]++;
                     var secondSlope = FineSlope(at: p);
-                    deepest = MathF.Min(deepest, Deepest(at: p));
+
+                    deepest = MathF.Min(x: deepest, y: Deepest(at: p));
                     p[axis]++;
 
                     // A solid's edge the line grazes falls toward the pair from both sides as a sheet does, but holds
                     // a neighbour of the pair deeper inside than half a step, which a sheet thinner than a step cannot,
                     // or, an acute wedge's, a line beside the pair inside for two steps (Thickens).
-                    if ((deepest < (-0.5f * spacing[axis] * MathF.Max(firstSlope, secondSlope))) ||
-                        !PassesBetween(after: second, before: before, further: further, reach: (spacing[axis] * MathF.Max(firstSlope, secondSlope)), value: first) ||
+                    if ((deepest < ((-0.5f * spacing[axis]) * MathF.Max(x: firstSlope, y: secondSlope))) ||
+                        !PassesBetween(after: second, before: before, further: further, reach: (spacing[axis] * MathF.Max(x: firstSlope, y: secondSlope)), value: first) ||
                         Thickens(at: p, axis: axis, first: (p[axis] - 3), last: p[axis])) {
                         continue;
                     }
@@ -1522,7 +1618,7 @@ public sealed class SdfSampledLattice {
                     // surface the samples beyond the pair, interpolated across a coarse cell, misread as falling.
                     // It reads as far inside as it lay outside, which puts the sheet's face toward the pair where the
                     // sheet passed and moves a surface a grazed edge misread by no more than the sample's own distance.
-                    if ((nearer.Key >= 0) && (nearer.Value <= (0.5f * spacing[axis] * nearer.Slope))) { Close(depth: nearer.Value, key: nearer.Key, slope: nearer.Slope); }
+                    if ((nearer.Key >= 0) && (nearer.Value <= ((0.5f * spacing[axis]) * nearer.Slope))) { Close(depth: nearer.Value, key: nearer.Key, slope: nearer.Slope); }
                 }
             }
         }
@@ -1563,11 +1659,11 @@ public sealed class SdfSampledLattice {
                             // alternate around it is passed before any of its slots is looked up.
                             var alternates = true;
 
-                            for (var at = 0; (at < 4) && alternates; at++) {
+                            for (var at = 0; ((at < 4) && alternates); at++) {
                                 p[0] = corner[0];
                                 p[1] = corner[1];
                                 p[2] = corner[2];
-                                p[u] += (at & 1);
+                                p[u] += at & 1;
                                 p[v] += (at >> 1);
                                 if (!Within(at: p)) {
                                     alternates = false;
@@ -1590,11 +1686,11 @@ public sealed class SdfSampledLattice {
                             var real = true;
                             var visitor = true;
 
-                            for (var at = 0; (at < 4) && real; at++) {
+                            for (var at = 0; ((at < 4) && real); at++) {
                                 p[0] = corner[0];
                                 p[1] = corner[1];
                                 p[2] = corner[2];
-                                p[u] += (at & 1);
+                                p[u] += at & 1;
                                 p[v] += (at >> 1);
                                 if (!Within(at: p)) {
                                     real = false;
@@ -1602,7 +1698,7 @@ public sealed class SdfSampledLattice {
                                 }
                                 if (Coarse(at: p)) {
                                     keys[at] = -1;
-                                    values[at] = m_values[Index(x: (p[0] / factor), y: (p[1] / factor), z: (p[2] / factor))];
+                                    values[at] = Values[Index(x: (p[0] / factor), y: (p[1] / factor), z: (p[2] / factor))];
                                 } else {
                                     var (cx, cy, cz, lx, ly, lz) = FineCell(x: p[0], y: p[1], z: p[2]);
                                     var slot = FineSlot(cx: cx, cy: cy, cz: cz, lx: lx, ly: ly, lz: lz);
@@ -1639,11 +1735,11 @@ public sealed class SdfSampledLattice {
                             var (inA, inB, outA, outB) = ((diagonal == 0) ? (0, 3, 1, 2) : (1, 2, 0, 3));
                             var sheet = true;
 
-                            foreach (var inner in (ReadOnlySpan<int>)[inA, inB]) {
+                            foreach (var inner in ((ReadOnlySpan<int>)[inA, inB])) {
                                 p[0] = corner[0];
                                 p[1] = corner[1];
                                 p[2] = corner[2];
-                                p[u] += (inner & 1);
+                                p[u] += inner & 1;
                                 p[v] += (inner >> 1);
                                 sheet &= Sheet(at: p, thinner: false);
                             }
@@ -1656,7 +1752,7 @@ public sealed class SdfSampledLattice {
                             chosenAt[0] = corner[0];
                             chosenAt[1] = corner[1];
                             chosenAt[2] = corner[2];
-                            chosenAt[u] += (chosen & 1);
+                            chosenAt[u] += chosen & 1;
                             chosenAt[v] += (chosen >> 1);
                             Close(depth: values[chosen], key: keys[chosen], slope: FineSlope(at: chosenAt));
                         }
@@ -1685,8 +1781,8 @@ public sealed class SdfSampledLattice {
         var slot = FineSlot(x: x, y: y, z: z);
 
         if (m_closedValues.Length != m_fineValues.Length) {
-            m_closedValues = new float[m_fineValues.Length];
-            Array.Fill(array: m_closedValues, value: float.NaN);
+            m_closedValues.Resize(m_fineValues.Length);
+            m_closedValues.GetSpan().Fill(value: float.NaN);
         }
         if (!float.IsNaN(f: m_closedValues[slot])) { return; }
         m_closedValues[slot] = value;
@@ -1696,9 +1792,9 @@ public sealed class SdfSampledLattice {
     // The thickness, in steps, of the run of one sample `value` between `before` and `after` of the other sign along a
     // line, as the line's values interpolate its two crossings.
     private static float RunThickness(float before, float value, float after) {
-        var middle = MathF.Abs(value);
+        var middle = MathF.Abs(x: value);
 
-        return ((middle / (MathF.Abs(before) + middle)) + (middle / (middle + MathF.Abs(after))));
+        return ((middle / (MathF.Abs(x: before) + middle)) + (middle / (middle + MathF.Abs(x: after))));
     }
     // Every sign-changing lattice edge the contour places a vertex by: the edges of each crossed cell that contours whole,
     // a coarse cell long, and the fine edges of each crossed fine cell of a refined cell. A crossing's gradient is measured
@@ -1729,7 +1825,7 @@ public sealed class SdfSampledLattice {
                     for (var v = 0; (v < 2); v++) {
                         // The edge along `axis` at offsets (u, v) on the two axes after it, as corner bits a (start) and b.
                         var a = (((u << ((axis + 1) % 3)) | (v << ((axis + 2) % 3))));
-                        var b = (a | (1 << axis));
+                        var b = a | (1 << axis);
 
                         if ((((mask >> a) ^ (mask >> b)) & 1) == 0) {
                             continue;
@@ -1769,7 +1865,7 @@ public sealed class SdfSampledLattice {
         return [.. edges];
     }
     // A crossing edge's key: its start sample's fine key, its axis and whether it is a coarse cell long.
-    private long CrossingKey(int start, int axis, int length) => (((((long)start) * 3L) + axis) * 2L) + (((length > 1) && (m_factor > 1)) ? 1L : 0L);
+    private long CrossingKey(int start, int axis, int length) => ((((((long)start) * 3L) + axis) * 2L) + (((length > 1) && (m_factor > 1)) ? 1L : 0L));
     private (int Start, int Axis, int Length) CrossingEdge(long key) => (((int)((key / 2L) / 3L)), ((int)((key / 2L) % 3L)), (((key & 1L) == 1L) ? m_factor : 1));
     // The refined zero along the edge `length` fine cells long from (x, y, z), in [0, 1]. Synthetic samples retain the
     // linear crossing of the lattice the contour must connect, rather than the underlying field it intentionally replaces.
@@ -1778,13 +1874,14 @@ public sealed class SdfSampledLattice {
         var fineY = (((m_samplesY - 1) * m_factor) + 1);
         var start = (x + (fineX * (y + (fineY * z))));
 
-        if (m_crossingRoots.TryGetValue(key: CrossingKey(start: start, axis: axis, length: length), value: out var root)) { return root.Position; }
+        if (m_crossingRoots.TryGetValue(key: CrossingKey(axis: axis, length: length, start: start), value: out var root)) { return root.Position; }
         var va = FineValue(x: x, y: y, z: z);
         var vb = FineValue(x: (x + ((axis == 0) ? length : 0)), y: (y + ((axis == 1) ? length : 0)), z: (z + ((axis == 2) ? length : 0)));
         var denominator = (va - vb);
 
         return ((denominator == 0f) ? 0.5f : Math.Clamp(max: 1f, min: 0f, value: (va / denominator)));
     }
+
     /// <summary>Answers a run of the samples <see cref="GradientPoints"/> named with the field's value and gradient
     /// there.</summary>
     /// <param name="first">The first sample the run answers, in <see cref="GradientPoints"/>'s order.</param>
@@ -1825,7 +1922,6 @@ public sealed class SdfSampledLattice {
             }
         }
     }
-
     /// <summary>Extracts the lattice's surface: at the fine spacing in the cells <see cref="Refine"/> refined, and at
     /// the lattice's own everywhere else, with its feature vertices marked (<see cref="SdfContour.Features"/>). A piece
     /// of the surface apart from the rest, under two lattice cells across and a hundredth of the largest piece's quads,
@@ -1853,10 +1949,11 @@ public sealed class SdfSampledLattice {
             QuadMaterials: materials,
             Quads: quads
         ) {
-            Features = surface.Features,
             Beside = surface.Beside,
+            Features = surface.Features,
             Solved = surface.Solved,
         };
+
         contour.SelectDiagonals();
 
         return contour;
@@ -1868,7 +1965,7 @@ public sealed class SdfSampledLattice {
         for (var quad = 0; (quad < contour.QuadCount); quad++) {
             var at = (4 * quad);
 
-            if ((quads[(at + 2)] != quads[(at + 3)]) && !SplitsAlongFirstDiagonal(features: contour.Features, normals: contour.Normals, positions: contour.Positions, quad: quads.AsSpan(start: at, length: 4))) {
+            if ((quads[(at + 2)] != quads[(at + 3)]) && !SplitsAlongFirstDiagonal(features: contour.Features, normals: contour.Normals, positions: contour.Positions, quad: quads.AsSpan(length: 4, start: at))) {
                 (quads[at], quads[(at + 1)], quads[(at + 2)], quads[(at + 3)]) = (quads[(at + 1)], quads[(at + 2)], quads[(at + 3)], quads[at]);
             }
         }
@@ -1929,7 +2026,7 @@ public sealed class SdfSampledLattice {
 
         var turn = 0.0;
 
-        foreach (var corner in (ReadOnlySpan<int>)[a, b, c]) {
+        foreach (var corner in ((ReadOnlySpan<int>)[a, b, c])) {
             if ((corner < features.Length) && features[corner]) {
                 continue;
             }
@@ -1967,7 +2064,6 @@ public sealed class SdfSampledLattice {
 
         return (((dx * dx) + (dy * dy)) + (dz * dz));
     }
-
     // Drops the specks a sheet thinner than the finest cell leaves where it thins to a knife edge (the top of a shell cut
     // where its inside meets its outside): pieces of the surface apart from the rest, each smaller than two lattice cells
     // across and holding under a hundredth of the largest piece's quads. A whole surface that small, a part's own, stays.
@@ -2027,7 +2123,6 @@ public sealed class SdfSampledLattice {
 
         return ([.. keptQuads], [.. keptMaterials]);
     }
-
     private int Index(int x, int y, int z) => (x + (m_samplesX * (y + (m_samplesY * z))));
     private (int X, int Y, int Z) FineCoordinates(int key) {
         var fineX = (((m_samplesX - 1) * m_factor) + 1);
@@ -2051,9 +2146,9 @@ public sealed class SdfSampledLattice {
         var fineY = ((cellsY * factor) + 1);
         var blocks = 0;
 
-        m_cellBlocks = new int[m_measured.Length];
+        m_cellBlocks.Resize(m_measured.Length);
         foreach (var measured in m_measured) { blocks += (measured ? 1 : 0); }
-        m_blockSlots = new int[(blocks * side * side * side)];
+        m_blockSlots.Resize((((blocks * side) * side) * side));
         blocks = 0;
         for (var cell = 0; (cell < m_measured.Length); cell++) {
             if (!m_measured[cell]) {
@@ -2062,7 +2157,7 @@ public sealed class SdfSampledLattice {
             }
 
             var (x, y, z) = ((cell % cellsX), ((cell / cellsX) % cellsY), (cell / (cellsX * cellsY)));
-            var at = (blocks * side * side * side);
+            var at = (((blocks * side) * side) * side);
 
             m_cellBlocks[cell] = blocks++;
             for (var lz = 0; (lz < side); lz++) {
@@ -2103,7 +2198,7 @@ public sealed class SdfSampledLattice {
         var cellsY = (m_samplesY - 1);
         var primary = m_cellBlocks[(cx + (cellsX * (cy + (cellsY * cz))))];
 
-        if (primary >= 0) { return m_blockSlots[((primary * side * side * side) + (lx + (side * (ly + (side * lz)))))]; }
+        if (primary >= 0) { return m_blockSlots[((((primary * side) * side) * side) + (lx + (side * (ly + (side * lz)))))]; }
         if ((lx != 0) && (ly != 0) && (lz != 0)) { return -1; }
 
         for (var shift = 1; (shift < 8); shift++) {
@@ -2115,7 +2210,7 @@ public sealed class SdfSampledLattice {
 
             var block = m_cellBlocks[(ax + (cellsX * (ay + (cellsY * az))))];
 
-            if (block >= 0) { return m_blockSlots[((block * side * side * side) + (bx + (side * (by + (side * bz)))))]; }
+            if (block >= 0) { return m_blockSlots[((((block * side) * side) * side) + (bx + (side * (by + (side * bz)))))]; }
         }
 
         return -1;
@@ -2132,11 +2227,12 @@ public sealed class SdfSampledLattice {
     // the trilinear interpolation of its coarse cell's corners.
     private float FineValue(int x, int y, int z) {
         var factor = m_factor;
+
         var (cx, cy, cz, lx, ly, lz) = FineCell(x: x, y: y, z: z);
 
         // A coarse position: every place in the cell is 0 or the far face's m_factor.
         if (((lx == 0) || (lx == factor)) && ((ly == 0) || (ly == factor)) && ((lz == 0) || (lz == factor))) {
-            return m_values[Index(x: (x / factor), y: (y / factor), z: (z / factor))];
+            return Values[Index(x: (x / factor), y: (y / factor), z: (z / factor))];
         }
 
         if (FineSlot(cx: cx, cy: cy, cz: cz, lx: lx, ly: ly, lz: lz) is var slot and >= 0) { return MeasuredValue(slot: slot); }
@@ -2145,12 +2241,12 @@ public sealed class SdfSampledLattice {
         var sum = 0f;
 
         for (var corner = 0; (corner < 8); corner++) {
-            var dx = (corner & 1);
-            var dy = ((corner >> 1) & 1);
-            var dz = ((corner >> 2) & 1);
+            var dx = corner & 1;
+            var dy = (corner >> 1) & 1;
+            var dz = (corner >> 2) & 1;
             var weight = ((((dx == 1) ? u : (1f - u)) * ((dy == 1) ? v : (1f - v))) * ((dz == 1) ? w : (1f - w)));
 
-            sum += (weight * m_values[Index(x: (cx + dx), y: (cy + dy), z: (cz + dz))]);
+            sum += (weight * Values[Index(x: (cx + dx), y: (cy + dy), z: (cz + dz))]);
         }
 
         return sum;
@@ -2160,13 +2256,13 @@ public sealed class SdfSampledLattice {
     // keeps a closed sample's.
     private bool FineInside(int x, int y, int z) => FineInside(key: (x + ((((m_samplesX - 1) * m_factor) + 1) * (y + ((((m_samplesY - 1) * m_factor) + 1) * z)))));
     private bool FineInside(int key) {
-        if (m_factor == 1) { return (m_values[key] < 0f); }
+        if (m_factor == 1) { return (Values[key] < 0f); }
         if (m_signKnown.Length == 0) {
             var count = ((((long)(((m_samplesX - 1) * m_factor) + 1)) * (((m_samplesY - 1) * m_factor) + 1)) * (((m_samplesZ - 1) * m_factor) + 1));
             var words = ((int)((count + 63L) >> 6));
 
-            m_signKnown = new ulong[words];
-            m_signInside = new ulong[words];
+            m_signKnown.Resize(words);
+            m_signInside.Resize(words);
         }
 
         var word = (key >> 6);
@@ -2189,7 +2285,7 @@ public sealed class SdfSampledLattice {
         var bit = (1UL << (key & 63));
 
         m_signKnown[word] |= bit;
-        m_signInside[word] = ((value < 0f) ? (m_signInside[word] | bit) : (m_signInside[word] & ~bit));
+        m_signInside[word] = ((value < 0f) ? m_signInside[word] | bit : m_signInside[word] & ~bit);
     }
     // A fine sample's gradient: the one measured there, or else the trilinear interpolation of its coarse cell's corners'.
     private Vector3 FineGradient(int x, int y, int z) {
@@ -2210,9 +2306,9 @@ public sealed class SdfSampledLattice {
         var sum = Vector3.Zero;
 
         for (var corner = 0; (corner < 8); corner++) {
-            var dx = (corner & 1);
-            var dy = ((corner >> 1) & 1);
-            var dz = ((corner >> 2) & 1);
+            var dx = corner & 1;
+            var dy = (corner >> 1) & 1;
+            var dz = (corner >> 2) & 1;
             var weight = ((((dx == 1) ? u : (1f - u)) * ((dy == 1) ? v : (1f - v))) * ((dz == 1) ? w : (1f - w)));
 
             sum += (m_gradients[Index(x: (cx + dx), y: (cy + dy), z: (cz + dz))] * weight);
@@ -2225,7 +2321,7 @@ public sealed class SdfSampledLattice {
         var factor = m_factor;
 
         if (factor == 1) {
-            return m_materials[key];
+            return Materials[key];
         }
         var (fx, fy, fz) = FineCoordinates(key: key);
 
@@ -2233,7 +2329,7 @@ public sealed class SdfSampledLattice {
             return m_fineMaterials[slot];
         }
 
-        return m_materials[Index(
+        return Materials[Index(
             x: (((fx * 2) + factor) / (2 * factor)),
             y: (((fy * 2) + factor) / (2 * factor)),
             z: (((fz * 2) + factor) / (2 * factor))
@@ -2244,7 +2340,8 @@ public sealed class SdfSampledLattice {
     // cell coordinates scaled per axis, and a normal trilinearly interpolated from the gradients of the eight samples
     // around a point.
     private readonly struct Lattice(SdfSampledLattice owner) : ISdfRefinedContourLattice {
-        public double Crossing(int x, int y, int z, int axis, int length) => owner.Crossing(x: x, y: y, z: z, axis: axis, length: length);
+        public double Crossing(int x, int y, int z, int axis, int length) => owner.Crossing(axis: axis, length: length, x: x, y: y, z: z);
+
         public int CellsX => ((owner.m_samplesX - 1) * owner.m_factor);
         public int CellsY => ((owner.m_samplesY - 1) * owner.m_factor);
         public int CellsZ => ((owner.m_samplesZ - 1) * owner.m_factor);
@@ -2266,7 +2363,7 @@ public sealed class SdfSampledLattice {
 
         public bool Refined(int x, int y, int z) => owner.m_refined[(x + ((owner.m_samplesX - 1) * (y + ((owner.m_samplesY - 1) * z))))];
         public bool Measured(int x, int y, int z) => owner.m_measured[(x + ((owner.m_samplesX - 1) * (y + ((owner.m_samplesY - 1) * z))))];
-        public bool CoarseInside(int x, int y, int z) => (owner.m_values[owner.Index(x: x, y: y, z: z)] < 0f);
+        public bool CoarseInside(int x, int y, int z) => (owner.Values[owner.Index(x: x, y: y, z: z)] < 0f);
         public int Corner(int x, int y, int z) => (x + ((CellsX + 1) * (y + ((CellsY + 1) * z))));
         public bool Inside(int corner) => owner.FineInside(key: corner);
         public double Value(int corner, int x, int y, int z) => owner.FineValue(x: x, y: y, z: z);
@@ -2279,12 +2376,14 @@ public sealed class SdfSampledLattice {
                 (owner.m_origin.Z + (z * cell.Z))
             );
         }
+
         public double FeatureReach => 0.5;
         public bool CrossingNormals => true;
+
         // A crossing's own measured gradient and value, or the gradient its edge's samples interpolate, on the surface.
         public bool TryCrossingNormal(int x, int y, int z, int axis, int length, double wx, double wy, double wz, out double nx, out double ny, out double nz, out double offset) {
             var start = (x + ((CellsX + 1) * (y + ((CellsY + 1) * z))));
-            var end = (start + ((axis == 0) ? length : ((axis == 1) ? (length * (CellsX + 1)) : (length * (CellsX + 1) * (CellsY + 1)))));
+            var end = (start + ((axis == 0) ? length : ((axis == 1) ? (length * (CellsX + 1)) : ((length * (CellsX + 1)) * (CellsY + 1)))));
             // A crossing beside a closed sample lies where the samples put it, a cell's thickness from the sheet's other
             // face (CloseSheets); moved onto the sheet it would cross it.
             var closed = (owner.Closed(key: start) || owner.Closed(key: end));
@@ -2303,7 +2402,7 @@ public sealed class SdfSampledLattice {
                     // any other crossing's plane moves by its measured value.
                     offset = ((closed || owner.m_crossingRoots.ContainsKey(key: owner.CrossingKey(axis: axis, length: length, start: start)))
                         ? 0.0
-                        : Math.Clamp(value: (measured.W / magnitude), min: -reach, max: reach));
+                        : Math.Clamp(max: reach, min: -reach, value: (measured.W / magnitude)));
 
                     return true;
                 }
@@ -2318,22 +2417,22 @@ public sealed class SdfSampledLattice {
             var cellsX = CellsX;
             var cellsY = CellsY;
             var cellsZ = CellsZ;
-            var lx = Math.Clamp(value: ((x - owner.m_origin.X) / cell.X), min: 0.0, max: cellsX);
-            var ly = Math.Clamp(value: ((y - owner.m_origin.Y) / cell.Y), min: 0.0, max: cellsY);
-            var lz = Math.Clamp(value: ((z - owner.m_origin.Z) / cell.Z), min: 0.0, max: cellsZ);
+            var lx = Math.Clamp(max: cellsX, min: 0.0, value: ((x - owner.m_origin.X) / cell.X));
+            var ly = Math.Clamp(max: cellsY, min: 0.0, value: ((y - owner.m_origin.Y) / cell.Y));
+            var lz = Math.Clamp(max: cellsZ, min: 0.0, value: ((z - owner.m_origin.Z) / cell.Z));
             var x0 = Math.Min(val1: ((int)lx), val2: (cellsX - 1));
             var y0 = Math.Min(val1: ((int)ly), val2: (cellsY - 1));
             var z0 = Math.Min(val1: ((int)lz), val2: (cellsZ - 1));
-            var fx = (float)(lx - x0);
-            var fy = (float)(ly - y0);
-            var fz = (float)(lz - z0);
+            var fx = ((float)(lx - x0));
+            var fy = ((float)(ly - y0));
+            var fz = ((float)(lz - z0));
             var sum = Vector3.Zero;
 
             for (var corner = 0; (corner < 8); corner++) {
-                var dx = (corner & 1);
-                var dy = ((corner >> 1) & 1);
-                var dz = ((corner >> 2) & 1);
-                var weight = (((dx == 1) ? fx : (1f - fx)) * ((dy == 1) ? fy : (1f - fy))) * ((dz == 1) ? fz : (1f - fz));
+                var dx = corner & 1;
+                var dy = (corner >> 1) & 1;
+                var dz = (corner >> 2) & 1;
+                var weight = ((((dx == 1) ? fx : (1f - fx)) * ((dy == 1) ? fy : (1f - fy))) * ((dz == 1) ? fz : (1f - fz)));
 
                 if (weight != 0f) {
                     sum += (owner.FineGradient(x: (x0 + dx), y: (y0 + dy), z: (z0 + dz)) * weight);

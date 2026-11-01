@@ -38,8 +38,9 @@ portal demo and its inspection verbs. It boots on the Moth's seat chase
 camera: the first authored `views` layout is what a boot shows, and the Moth's
 is `play`, followed by inspection layouts (`three-quarter`, `front`, …) that
 `view.override layout <name>` selects. The Moth basis (`avatars/moth.puck`)
-authors the body, its motion programs, its camera (`seatControl`,
-`seatRig "moth-camera"`); the standard's `camera.puck` supplies shared feel and boom limits. A new rule or feature for
+authors the body and its motion programs, and expands the standard's
+`chaseCamera` template with her body offsets for its camera (`avatars/moth-camera.puck`,
+rig `moth-camera`). A new rule or feature for
 the live world goes in `debug.puck` (or a scratch `.puck` world booted with
 `--world`). Every other world (the island
 `puck.world.json`, its districts, the games) and their canary, parity and
@@ -48,6 +49,15 @@ retarget them, and read the references' mentions of them as prior art
 ([decision](../../../docs/decisions/engine-design.md#one-live-world-while-the-campaign-runs)).
 
 ## Live state reads and writes
+
+**Durable addon state.** `IWorldAddonHost` stages guest checkpoint decoding before
+authority adoption. Persistence, recording and history capture the same live
+memory and retained pinned module sources; arming never restarts guests. The silo
+recovery tail contains external edits only, never guest-derived mutations. Changed
+deployment modules reconcile after old guest memory has recovered under its old
+pin. A host epoch timeout freezes the affected authority and refuses a checkpoint
+of its incomplete tick; it is not a timing-dependent simulated fault. See
+[`WorldAddonRuntime`'s contract](../../../src/Puck.World.Addons/README.md#durable-guest-state).
 
 **The standard is authored.** `worlds/standard/standard.puck` composes the
 optional controls and skin. Shared cursor, icons, binding-bar designs, pages
@@ -738,7 +748,8 @@ printf 'world.status\nbody.where 0\nworld.grants console\n' |
   worked building: switchback stairs of 0.25 m risers, slabs holed by unions,
   and a lift.
 - Input has independent budgets of 32 numeric axes and 64 packed buttons. The
-  debug modules import one vocabulary in `worlds/debug/inputs.puck`; chess uses
+  standard's `worlds/standard/inputs.puck` declares the shared vocabulary (the
+  debug world adds `suit` and `noclip` in `suit.puck` and `noclip.puck`); chess uses
   shared `confirm` and `cancel`, independently of machine `select`. Resolve
   names through `WorldChannelTable`: a declaration index is not a storage
   address. Target-register reach has its own mask and budget. Relative input

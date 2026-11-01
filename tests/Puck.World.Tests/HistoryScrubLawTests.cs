@@ -41,12 +41,8 @@ public sealed class HistoryScrubLawTests {
         using var console = new HistoryConsole(harness: harness);
 
         harness.Steps(count: 20);
-        Assert.True(condition: console.Registry.TryGetMetadata(metadata: out var metadata, name: WorldEditorBindings.HistoryCommand));
+        Assert.True(condition: console.Registry.TryGetMetadata(metadata: out var metadata, name: "world.history"));
         Assert.Equal(expected: CommandBindability.Bindable, actual: metadata.Bindability);
-        Assert.Contains(
-            collection: WorldEditorBindings.BuildPageDefinition.Entries,
-            filter: static entry => ((entry.Command == WorldEditorBindings.HistoryCommand) && (entry.Text == "step -1"))
-        );
 
         var stepped = console.Seat(line: "world.history step -5", slot: 0);
 
@@ -54,11 +50,11 @@ public sealed class HistoryScrubLawTests {
         Assert.Equal(expected: 15UL, actual: harness.History.CursorTick);
         Assert.Equal(expected: harness.Live[15], actual: harness.Hash());
 
-        var kept = console.Seat(line: $"world.history branch {WorldEditorBindings.KeptBranch}", slot: 0);
+        var kept = console.Seat(line: "world.history branch kept", slot: 0);
 
         Assert.False(condition: kept.IsError, userMessage: kept.Output);
         harness.Steps(count: 1);
-        Assert.Contains(collection: harness.History.Status().Branches, filter: static branch => ((branch.Name == WorldEditorBindings.KeptBranch) && (branch.ForkTick == 15UL)));
+        Assert.Contains(collection: harness.History.Status().Branches, filter: static branch => ((branch.Name == "kept") && (branch.ForkTick == 15UL)));
 
         var resumed = console.Seat(line: "world.history resume", slot: 0);
 
@@ -109,7 +105,7 @@ public sealed class HistoryScrubLawTests {
 
         // A press on the row a quarter of the way along it.
         pointer.SetPosition(position: new Vector2(x: ((rect.X + (0.25f * rect.Width)) * Width), y: ((rect.Y + (0.5f * rect.Height)) * Height)), slot: 0);
-        var dragged = console.Seat(line: WorldEditorBindings.HistoryDragCommand, slot: 0);
+        var dragged = console.Seat(line: "world.history.drag", slot: 0);
 
         Assert.False(condition: dragged.IsError, userMessage: dragged.Output);
         Assert.Equal(expected: expected, actual: harness.History.CursorTick);
@@ -127,7 +123,7 @@ public sealed class HistoryScrubLawTests {
 
         // A press off the row does nothing.
         pointer.SetPosition(position: new Vector2(x: (0.5f * Width), y: (0.1f * Height)), slot: 0);
-        var missed = console.Seat(line: WorldEditorBindings.HistoryDragCommand, slot: 0);
+        var missed = console.Seat(line: "world.history.drag", slot: 0);
 
         Assert.Equal(expected: string.Empty, actual: missed.Output);
         Assert.Equal(expected: expected, actual: harness.History.CursorTick);
@@ -135,7 +131,7 @@ public sealed class HistoryScrubLawTests {
         // The red leg: a seat without control over history is refused by name, and the timeline stays where it was.
         RevokeControl(harness: harness, slot: 0);
         pointer.SetPosition(position: new Vector2(x: ((rect.X + (0.75f * rect.Width)) * Width), y: ((rect.Y + (0.5f * rect.Height)) * Height)), slot: 0);
-        var refused = console.Seat(line: WorldEditorBindings.HistoryDragCommand, slot: 0);
+        var refused = console.Seat(line: "world.history.drag", slot: 0);
 
         Assert.True(condition: refused.IsError);
         Assert.Contains(expectedSubstring: "seat1 cannot control history (no grant names it)", actualString: refused.Output, comparisonType: StringComparison.Ordinal);

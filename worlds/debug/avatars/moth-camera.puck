@@ -1,0 +1,6 @@
+// Her chase camera: the standard template with her own body offsets, a waist pivot, a close target at her head and a
+// first-person eye in her face. A dual-stick third-person action camera: the left stick moves and strafes relative to
+// the camera, the right stick turns the camera and the body with it, and the right-stick press recenters it behind her.
+import "../../standard/camera"
+
+chaseCamera(rig: "moth-camera", pivotOffset: [0, 1, 0], closeTargetOffset: [0, 1.74, 0], eyePoint: [0, 1.75, 0.22])

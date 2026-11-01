@@ -18,8 +18,7 @@ public sealed partial class WorldReplayTape {
     private int m_startSkipIntents;
 
     // Captures the checkpoint a recording armed after the first step starts from, or names why the live state cannot
-    // be one. Mounted guests restart from their pinned modules, in the same transaction as capture; their old memory
-    // is never claimed by the checkpoint. Every other checkpoint refusal stays in force. Live sessions, screen
+    // be one. Mounted guests retain their captured memory and host continuations. Live sessions, screen
     // selectors and machine cores ride the checkpoint.
     internal bool TryCaptureStart(out WorldAuthorityCheckpoint? start, out string reason) {
         start = null;
@@ -33,9 +32,6 @@ public sealed partial class WorldReplayTape {
             }
 
             start = WorldReplaySnapshot.ForTape(checkpoint: checkpoint!);
-            if (m_capturing && (m_liveServer.Addons is { MountedCount: > 0 })) {
-                m_currentAuthority.Add(item: new WorldReplayEntry.RestartAddons());
-            }
 
             return true;
         } catch (InvalidOperationException exception) {

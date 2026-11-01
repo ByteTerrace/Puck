@@ -23,7 +23,7 @@ public sealed class WorldCameraClearanceLawTests {
         var desired = Desired(yaw: 0.2f, pitch: 0.3f);
 
         for (var i = 0; (i < 120); i++) {
-            _ = arm.Resolve(wall, desired, Target, Body(), Vector3.UnitY, Boom, Frame, targetShift: shift, choice: choice);
+            _ = arm.Resolve(wall, desired, Target, Body(), Vector3.UnitY, Boom, Frame, targetShift: shift, choice: choice, maxElevation: Ceiling, characterFade: MothFade);
         }
         Assert.InRange(arm.Target.Y, 1.4f, 1.74f);
         Assert.Equal(Heading(eye: desired, target: Target), Heading(eye: arm.Eye, target: arm.Target), tolerance: 1e-5f);
@@ -32,7 +32,7 @@ public sealed class WorldCameraClearanceLawTests {
             Assert.Equal(1f, arm.BodyOpacity);
         }
         for (var i = 0; (i < 180); i++) {
-            _ = arm.Resolve(null, desired, Target, Body(), Vector3.UnitY, Boom, Frame, targetShift: shift, choice: choice);
+            _ = arm.Resolve(null, desired, Target, Body(), Vector3.UnitY, Boom, Frame, targetShift: shift, choice: choice, maxElevation: Ceiling, characterFade: MothFade);
         }
         Assert.Equal(1f, arm.Target.Y, tolerance: 0.001f);
         Assert.Equal(4.2f, arm.Length, tolerance: 0.001f);
@@ -48,7 +48,7 @@ public sealed class WorldCameraClearanceLawTests {
         var desired = (Desired(yaw: 0f, pitch: 0f) * scale);
         var eye = arm.Resolve(wall, desired, target, Body(scale: scale), Vector3.UnitY, SdfCameraDynamics.None, Frame,
             targetShift: new SdfCameraTargetShift((new Vector3(x: 0f, y: 0.74f, z: 0f) * scale), 0.6f, 0.2f),
-            choice: WorldCameraClearanceChoice.Fade, scale: scale);
+            choice: WorldCameraClearanceChoice.Fade, maxElevation: Ceiling, characterFade: MothFade, scale: scale);
 
         Assert.Equal((1.74f * scale), arm.Target.Y, tolerance: 0.0001f);
         Assert.Equal(0f, arm.Rise);
@@ -60,7 +60,7 @@ public sealed class WorldCameraClearanceLawTests {
     }
     [Fact]
     public void SessionAndPortableChoicesOverrideTheAuthorAndAutoRestoresThem() {
-        var control = new WorldSeatViewControl(WorldSeatYawReference.World, -0.5f, 1.2f, ClearanceMode: WorldCameraClearanceChoice.Fade);
+        var control = new WorldSeatViewControl(WorldSeatYawReference.World, -0.5f, 1.2f, ClearanceMode: WorldCameraClearanceChoice.Fade, ClearanceMaxElevation: Ceiling);
         var feel = WorldSeatCameraFeel.Default;
         var seat = new WorldSeatViewState();
 
@@ -75,6 +75,9 @@ public sealed class WorldCameraClearanceLawTests {
 
     // The debug world's camera-boom row: 4 Hz, critically damped.
     private static readonly SdfCameraDynamics Boom = new(Damping: 1f, Frequency: 4f, Response: 0f);
+    // The standard chase camera's cutaway ceiling and fade distances (worlds/standard/camera.puck).
+    private const float Ceiling = 1.1f;
+    private static readonly WorldCameraCharacterFade MothFade = new(StartDistance: 1.25f, EndDistance: 0.45f, MinimumBoom: 0.35f);
 
     private const float Frame = (1f / 60f);
 
@@ -147,7 +150,9 @@ public sealed class WorldCameraClearanceLawTests {
                 field: field,
                 subject: body,
                 target: Target,
-                up: Vector3.UnitY
+                up: Vector3.UnitY,
+                choice: WorldCameraClearanceChoice.Cutaway,
+                maxElevation: Ceiling
             );
         }
 
@@ -180,7 +185,7 @@ public sealed class WorldCameraClearanceLawTests {
         Assert.True(condition: (FieldDistance(field: ledge, point: eye) >= 0f), userMessage: $"eye {eye} is inside the ledge");
         Assert.True(condition: ledge.LineOfSight(from: At(value: eye), to: At(value: Target)));
         Assert.True(condition: (MathF.Asin(x: (boom.Y / boom.Length())) > 0.5f), userMessage: $"eye {eye} did not rise over the ledge");
-        Assert.True(condition: (MathF.Asin(x: (boom.Y / boom.Length())) <= (WorldCameraClearance.LiftCeiling + 1e-3f)));
+        Assert.True(condition: (MathF.Asin(x: (boom.Y / boom.Length())) <= (Ceiling + 1e-3f)));
         Assert.Equal(expected: Heading(eye: desired, target: Target), actual: Heading(eye: eye, target: Target), tolerance: 1e-3f);
 
         var previous = eye;

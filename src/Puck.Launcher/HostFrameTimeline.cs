@@ -165,7 +165,7 @@ public sealed class HostFrameTimeline {
         for (var index = first; (index < last); index++) {
             var slot = ((int)(index % Capacity));
             var interval = Milliseconds(ticks: m_intervals[slot]);
-            var work = (interval - Milliseconds(ticks: m_phases[((slot * PhaseCount) + ((int)HostFramePhase.Wait))]));
+            var work = WorkOf(slot: slot);
 
             iterations++;
             over += ((work > budgetMilliseconds) ? 1 : 0);
@@ -181,17 +181,20 @@ public sealed class HostFrameTimeline {
 
         return (iterations, over, worstWork, worstInterval);
     }
+    // An iteration's work, in milliseconds: its interval less the pacer's wait. Every reading judges an iteration over
+    // its budget by this, so a vsync-paced interval a few hundredths past the period is not counted as a slow frame.
+    private double WorkOf(int slot) => (Milliseconds(ticks: m_intervals[slot]) - Milliseconds(ticks: m_phases[((slot * PhaseCount) + ((int)HostFramePhase.Wait))]));
     /// <summary>Forgets every recorded iteration.</summary>
     public void Reset() {
         m_count = 0L;
         m_iterationStart = 0L;
         Interlocked.Exchange(location1: ref m_tickCount, value: 0L);
     }
-    /// <summary>Describes the latest iterations: the interval's distribution, the count over a budget, the most work an
-    /// iteration did, the pacer's greatest lateness, the collections, and the slowest iterations with their phases,
-    /// followed by the busiest one when they do not hold it.</summary>
+    /// <summary>Describes the latest iterations: the interval's distribution, the count whose work is over a budget, the
+    /// most work an iteration did, the pacer's greatest lateness, the collections, and the slowest iterations with their
+    /// phases, followed by the busiest one when they do not hold it. Work is judged as <see cref="Scan"/> judges it.</summary>
     /// <param name="frames">The iterations to read, at most <see cref="Capacity"/>.</param>
-    /// <param name="budgetMilliseconds">The interval past which an iteration counts as over.</param>
+    /// <param name="budgetMilliseconds">The work, in milliseconds, past which an iteration counts as over.</param>
     /// <param name="worst">The slowest iterations to list.</param>
     /// <returns>The description, one line per listed iteration after the summary.</returns>
     public string Describe(int frames, double budgetMilliseconds, int worst) {
@@ -233,10 +236,12 @@ public sealed class HostFrameTimeline {
 
         for (var i = 0; (i < count); i++) {
             var slot = ((int)(indices[i] % Capacity));
-            var work = (intervals[i] - Milliseconds(ticks: m_phases[((slot * PhaseCount) + ((int)HostFramePhase.Wait))]));
+            var work = WorkOf(slot: slot);
 
             total += intervals[i];
-            collections += ((m_collections[(slot * 3)] + m_collections[((slot * 3) + 1)]) + m_collections[((slot * 3) + 2)]);
+            // GC.CollectionCount is inclusive (a gen1 collection counts in gen0's too), so gen0's increment is the
+            // iteration's collections and gen1 and gen2 its breakdown.
+            collections += m_collections[(slot * 3)];
             pause += m_pauses[slot];
             if (work > busiest) {
                 busiest = work;
@@ -247,7 +252,7 @@ public sealed class HostFrameTimeline {
                 val2: Milliseconds(ticks: m_late[slot])
             );
 
-            if (intervals[i] > budgetMilliseconds) {
+            if (work > budgetMilliseconds) {
                 over++;
             }
         }
@@ -263,6 +268,9 @@ public sealed class HostFrameTimeline {
         AppendPhases(builder: builder, first: HostFramePhase.Produce, indices: indices, label: "produce", second: null);
         AppendPhases(builder: builder, first: HostFramePhase.Simulate, indices: indices, label: "simulate", second: null);
         AppendPhases(builder: builder, first: HostFramePhase.Produce, indices: indices, label: "produce+simulate", second: HostFramePhase.Simulate);
+        // Produce split by whether the iteration ran a step, where presentation work a frame carries beside a tick shows.
+        AppendPhases(builder: builder, first: HostFramePhase.Produce, indices: indices, label: "produce with a step", second: null, stepped: true);
+        AppendPhases(builder: builder, first: HostFramePhase.Produce, indices: indices, label: "produce without one", second: null, stepped: false);
 
         var order = Enumerable.Range(
             count: count,
@@ -304,26 +312,40 @@ public sealed class HostFrameTimeline {
         return builder.ToString();
     }
 
-    private void AppendPhases(StringBuilder builder, long[] indices, string label, HostFramePhase first, HostFramePhase? second) {
-        var values = new double[indices.Length];
+    // Appends one phase's (or two phases' summed) distribution over the iterations, or over those that ran a step or
+    // none when stepped says which; nothing when no iteration qualifies.
+    private void AppendPhases(StringBuilder builder, long[] indices, string label, HostFramePhase first, HostFramePhase? second, bool? stepped = null) {
+        var values = new List<double>(capacity: indices.Length);
         var total = 0.0;
 
         for (var i = 0; (i < indices.Length); i++) {
-            var phases = (((int)(indices[i] % Capacity)) * PhaseCount);
+            var slot = ((int)(indices[i] % Capacity));
+
+            if ((stepped is { } wanted) && ((m_steps[slot] > 0) != wanted)) {
+                continue;
+            }
+
+            var phases = (slot * PhaseCount);
             var ticks = m_phases[(phases + ((int)first))];
 
             if (second is { } other) {
                 ticks += m_phases[(phases + ((int)other))];
             }
 
-            values[i] = Milliseconds(ticks: ticks);
-            total += values[i];
+            values.Add(item: Milliseconds(ticks: ticks));
+            total += values[^1];
         }
 
-        Array.Sort(array: values);
+        if (values.Count == 0) {
+            return;
+        }
+
+        var sorted = values.ToArray();
+
+        Array.Sort(array: sorted);
         builder.Append(
             provider: CultureInfo.InvariantCulture,
-            handler: $"\n  {label}: avg={(total / values.Length):0.00} p50={Percentile(fraction: 0.5, sorted: values):0.00} p99={Percentile(fraction: 0.99, sorted: values):0.00} max={values[^1]:0.00} ms"
+            handler: $"\n  {label}: avg={(total / sorted.Length):0.00} p50={Percentile(fraction: 0.5, sorted: sorted):0.00} p99={Percentile(fraction: 0.99, sorted: sorted):0.00} max={sorted[^1]:0.00} ms"
         );
     }
     private double Milliseconds(long ticks) => ((ticks * 1000.0) / m_frequency);

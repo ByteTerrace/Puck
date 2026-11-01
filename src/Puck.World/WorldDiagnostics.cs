@@ -30,8 +30,14 @@ internal sealed class WorldDiagnostics(WorldServer server, WorldRenderProbe? ren
 
     public bool Amber { get; set; }
     public IReadOnlyList<WorldDiagnosticCollider> Colliders => server.Population.DiagnosticColliders;
-    public bool DrawnReady => ((render?.Residency is { Frame: { } frame } residency) && !residency.MeshPathBake.Pending &&
-        Equals(objA: frame.DiagnosticSource, objB: server.DocumentVersion) && (residency.MeshIrradiance.DiagnosticScene(frame: frame) is not null));
+    public bool DrawnReady {
+        get {
+            if ((render?.Residency is not { Frame: { } frame } residency) || residency.MeshPathBake.Pending || !Equals(objA: frame.DiagnosticSource, objB: server.DocumentVersion)) { return false; }
+            using var scene = residency.MeshIrradiance.DiagnosticScene(frame: frame);
+
+            return (scene is not null);
+        }
+    }
     public WorldDiagnosticReport? Latest => m_reports.GetValueOrDefault(key: Mode);
     public long Revision => server.SolidRevision;
     public ulong Tick => (server.NextInputTick - 1);
@@ -64,7 +70,7 @@ internal sealed class WorldDiagnostics(WorldServer server, WorldRenderProbe? ren
         // names each, so an unknown is a placement to look at rather than a count.
         var uncorresponded = new SortedDictionary<string, (int Count, Vector3 Witness)>(comparer: StringComparer.Ordinal);
         var frame = render?.Residency?.Frame;
-        var scene = (((frame is not null) && Equals(objA: frame.DiagnosticSource, objB: server.DocumentVersion) &&
+        using var scene = (((frame is not null) && Equals(objA: frame.DiagnosticSource, objB: server.DocumentVersion) &&
             (render?.Residency?.MeshPathBake.Pending == false)) ? render?.Residency.MeshIrradiance.DiagnosticScene(frame: frame) : null);
         // A conservative scene-wide bound is still derived from the cells actually drawn, never a recorded allowance.
         var bakeError = ((scene is null) ? 0 : frame!.MeshDraws.Where(predicate: d => SdfMeshIrradianceScene.IsStatic(draw: d))

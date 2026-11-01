@@ -11,10 +11,22 @@ namespace Puck.World.Client;
 // that may see it fall to a tier (SdfUpdateRateTiers.BodyHertz) evaluates its pose, drivers, effectors and part followers
 // at 30 or 15 Hz. Between those packs its root still follows the body every frame and its other slots ride the root
 // rigidly, so the body moves smoothly while its limbs hold; the next full pack advances by every second the holds
-// carried past. The views are the frame source's previous frame's, a frame's lag the tiers do not notice.
+// carried past. A body nothing may show or read (no camera, no shadow cascade, no consumer of its parts) holds until
+// something may (HeldHertz), and its next full pack is a continuity cut, as a teleport's is, rather than an advance over
+// everything it held. The bodies that take a tier together alternate their phase by half its period, so their packs
+// spread over the period's frames. The levers and the step flags are this frame's (PresentAt, before the pack); the
+// views and shadow cascades are the frame just dressed, a frame's lag the tiers do not notice, so a camera cut shows a
+// held body's held pose for one frame.
 public sealed partial class WorldCreationInstances {
+    // The packs this pool has run, the clock NotePoseRead stamps a registration's last read with.
+    private long m_packCount;
     // The views the last frame rendered the pool's world through: each camera and its image's height in pixels.
     private readonly List<(CameraSnapshot Camera, float Pixels)> m_rateViews = [];
+    // The shadow cascades of those views, each the renderer's own caster cull (SdfMeshCull) and the view it shadows.
+    private readonly List<(int View, SdfMeshCull Cull)> m_rateShadows = [];
+    private bool m_rateShadowsKnown;
+    // Whether the next body to choose its phase within a tier takes the later half of the period.
+    private bool m_rateLateHalf;
 
     private SdfUpdateRates m_rates;
     private WorkCounterSet? m_rateCounts;
@@ -35,10 +47,19 @@ public sealed partial class WorldCreationInstances {
     /// <see cref="SdfUpdateRateCode.None"/>. The pool reuses the array on its next pack.</summary>
     public ReadOnlyMemory<byte> SlotRateCodes => m_slotRateCodes;
 
-    /// <summary>Records the views the frame source rendered the pool's world through and the levers it rendered under,
-    /// which the next <see cref="PackTransforms"/> rates its bodies by.</summary>
-    /// <param name="rates">The frame's levers (<see cref="SdfFrame.UpdateRates"/>).</param>
+    /// <summary>Sets the levers and the presentation rate this frame's <see cref="PackTransforms"/> rates its bodies
+    /// under. Called each frame before the pack, so the pack reads this frame's step flags
+    /// (<see cref="PresentationRate.Steps"/>, <see cref="PresentationRate.StepsNext"/>) and a settled capture's levers
+    /// (none), never the previous frame's.</summary>
+    /// <param name="rates">The frame's levers (<see cref="SdfFrame.UpdateRates"/>): none for a frame held for a settled
+    /// capture, so every body poses in full before the capture freezes it.</param>
     /// <param name="rate">The presentation rate a held pose's floor is judged against; an unpaced rate holds none.</param>
+    public void PresentAt(SdfUpdateRates rates, PresentationRate rate) {
+        m_rates = rates;
+        m_presentationRate = rate;
+    }
+    /// <summary>Records the views the frame source rendered the pool's world through, which the next
+    /// <see cref="PackTransforms"/> rates its bodies by.</summary>
     /// <param name="counts">The counters the pool's rated bodies count into, or <see langword="null"/> for none.</param>
     /// <param name="intervals">The window the pool's rated bodies record their intervals between poses into, or
     /// <see langword="null"/> for none.</param>
@@ -50,11 +71,9 @@ public sealed partial class WorldCreationInstances {
     /// <param name="pixels">The display pixels each view is shown over, by view, or <see langword="null"/> for each
     /// view's region of <paramref name="height"/>.</param>
     /// <exception cref="ArgumentNullException"><paramref name="views"/> is <see langword="null"/>.</exception>
-    public void RateBy(SdfUpdateRates rates, PresentationRate rate, WorkCounterSet? counts, SdfUpdateRateIntervals? intervals, IReadOnlyList<SdfViewSnapshot> views, uint height, SdfUpdateRateReadings? readings = null, bool codes = false, IReadOnlyList<float>? pixels = null) {
+    public void RateBy(WorkCounterSet? counts, SdfUpdateRateIntervals? intervals, IReadOnlyList<SdfViewSnapshot> views, uint height, SdfUpdateRateReadings? readings = null, bool codes = false, IReadOnlyList<float>? pixels = null) {
         ArgumentNullException.ThrowIfNull(argument: views);
 
-        m_rates = rates;
-        m_presentationRate = rate;
         m_rateCounts = counts;
         m_rateIntervals = intervals;
         m_rateReadings = readings;
@@ -65,12 +84,63 @@ public sealed partial class WorldCreationInstances {
             m_rateViews.Add(item: (views[index].Camera, (((pixels is not null) && (index < pixels.Count)) ? pixels[index] : (views[index].Region.Height * height))));
         }
     }
+    /// <summary>Records the shadow cascades of the views <see cref="RateBy"/> recorded, fitted on the frame just dressed
+    /// with its own lights, which the next <see cref="PackTransforms"/> reads: a body no view may see but one of these may
+    /// draw takes the slowest tier rather than holding.</summary>
+    /// <param name="shadows">Each cascade's caster cull with the index of the view whose receivers it shadows, or
+    /// <see langword="null"/> when the cascades are not known, which holds no body.</param>
+    public void ShadowBy(IReadOnlyList<(int View, SdfMeshCull Cull)>? shadows) {
+        m_rateShadows.Clear();
+        m_rateShadowsKnown = (shadows is not null);
 
-    // The rate a body updates at: its largest pixels per metre over the views that may see the sphere it reaches, every
-    // frame while the lever is off or no view is known yet.
-    private int BodyHertz(Vector3 center, float radius) => (((m_rates & SdfUpdateRates.Bodies) == 0)
+        if (shadows is not null) {
+            m_rateShadows.AddRange(collection: shadows);
+        }
+    }
+
+    // The rate a body updates at: its largest pixels per metre over the views that may see the sphere it reaches, held
+    // when nothing may show or read its pose (Shown), and every frame while the lever is off or no view is known yet.
+    private int BodyHertz(Registration live, Vector3 center, float radius) => (((m_rates & SdfUpdateRates.Bodies) == 0)
         ? SdfUpdateRateTiers.EveryFrameHertz
-        : SdfUpdateRateTiers.BodyHertz(pixelsPerMetre: BodyPixelsPerMetre(center: center, radius: radius)));
+        : TierOf(center: center, live: live, pixelsPerMetre: BodyPixelsPerMetre(center: center, radius: radius), radius: radius));
+    private int TierOf(Registration live, Vector3 center, float radius, float pixelsPerMetre) => SdfUpdateRateTiers.BodyHertz(
+        pixelsPerMetre: pixelsPerMetre,
+        shownElsewhere: ((pixelsPerMetre <= 0f) && Shown(center: center, live: live, radius: radius))
+    );
+    // Whether anything but a displayed view's image may show a body's pose or read it, so it may not hold: something
+    // read one of its parts since the previous pack (NotePoseRead, the one record of a pose's consumers); a camera may
+    // see the sphere it reaches though the display showed its view none last frame (a window about to open); or a shadow
+    // cascade of any view may draw it where that view shows its shadow (the renderer's own caster cull, every body while
+    // the cascades are not known).
+    private bool Shown(Registration live, Vector3 center, float radius) {
+        if ((live.PoseReadPack >= (m_packCount - 1L)) || !m_rateShadowsKnown) {
+            return true;
+        }
+
+        var half = new Vector3(value: radius);
+
+        foreach (var (camera, _) in m_rateViews) {
+            if (camera.MaySee(center: center, halfX: (Vector3.UnitX * half.X), halfY: (Vector3.UnitY * half.Y), halfZ: (Vector3.UnitZ * half.Z), margin: WorldPortalVisibility.Margin)) {
+                return true;
+            }
+        }
+
+        var box = new SdfMeshBox(Center: center, HalfX: (Vector3.UnitX * radius), HalfY: (Vector3.UnitY * radius), HalfZ: (Vector3.UnitZ * radius));
+
+        foreach (var (_, cull) in m_rateShadows) {
+            if (cull.Keeps(box: box)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+    // Records that something outside the pack read a body registration's part pose, slot or latch this frame. Every
+    // accessor that hands one out calls this, and it is the only record of a pose's consumers the bodies lever holds by.
+    private void NotePoseRead(Registration live) => live.PoseReadPack = m_packCount;
+    // A body's reach for rating, in metres: the larger of its creation's rest reach and the farthest any pack has posed
+    // a part of it from its root (MotionReach), so a part a driver slides past the rest bound still counts.
+    private static float RateReach(Registration live, float placementScale) => (MathF.Max(x: ReachOf(live: live), y: live.MotionReach) * placementScale);
     // A body's largest pixels per metre over the views that may see the sphere it reaches, at its nearest point: infinity
     // when no view is known yet or one holds it at or inside its near plane, zero when none may see it.
     private float BodyPixelsPerMetre(Vector3 center, float radius) {
@@ -126,7 +196,7 @@ public sealed partial class WorldCreationInstances {
 
         var rated = ((m_rates & SdfUpdateRates.Bodies) != 0);
         var pixelsPerMetre = (rated ? BodyPixelsPerMetre(center: center, radius: radius) : float.PositiveInfinity);
-        var hertz = (rated ? SdfUpdateRateTiers.BodyHertz(pixelsPerMetre: pixelsPerMetre) : SdfUpdateRateTiers.EveryFrameHertz);
+        var hertz = (rated ? TierOf(center: center, live: live, pixelsPerMetre: pixelsPerMetre, radius: radius) : SdfUpdateRateTiers.EveryFrameHertz);
 
         if (rated && (m_rateReadings is not null)) {
             if (!m_bodyNames.TryGetValue(key: body, value: out var name)) {
@@ -143,28 +213,52 @@ public sealed partial class WorldCreationInstances {
     // Ends a pack's tiers: publishes the bodies' readings.
     private void EndRateCodes() => m_rateReadings?.Publish(lever: SdfUpdateRates.Bodies, readings: m_bodyReadings);
     // Whether a woken body-rooted registration holds its pose this frame rather than packing it in full: the floor at its
-    // tier still holds over the seconds since its last full pack with this frame's (SdfUpdateRateTiers.Holds). The
-    // slowest tier since that pack is the one its next interval is recorded under.
+    // tier still holds over the seconds since its last full pack with this frame's (SdfUpdateRateTiers.Holds), counted
+    // ahead by its phase's lead. The slowest tier since that pack is the one its next interval is recorded under.
     private bool HoldsPose(Registration live, float deltaSeconds, Vector3 center, float radius) {
-        var hertz = BodyHertz(center: center, radius: radius);
+        var hertz = BodyHertz(center: center, live: live, radius: radius);
 
         live.RateSlowest = Math.Min(val1: live.RateSlowest, val2: hertz);
+        ChoosePhase(hertz: hertz, live: live);
 
         return SdfUpdateRateTiers.Holds(
-            elapsedSeconds: (live.RateSeconds + deltaSeconds),
+            elapsedSeconds: ((live.RateSeconds + deltaSeconds) + live.RateLead),
             frameSeconds: deltaSeconds,
             hertz: hertz,
             rate: m_presentationRate
         );
     }
+    // Chooses a body's phase within the period of a tier it has just taken: every other body to do so packs half a period
+    // early once, then keeps the period, so bodies that took the tier on one frame pack on alternate frames of it, not
+    // all on one. The lead only moves the pack earlier: the floor still holds.
+    private void ChoosePhase(Registration live, int hertz) {
+        if (live.RatePhaseHertz == hertz) {
+            return;
+        }
+
+        live.RatePhaseHertz = hertz;
+
+        if ((hertz == SdfUpdateRateTiers.HeldHertz) || (hertz >= SdfUpdateRateTiers.EveryFrameHertz) || !m_presentationRate.IsPaced) {
+            return;
+        }
+
+        live.RateLead = (m_rateLateHalf ? ((float)(m_presentationRate.PeriodSeconds(hertz: hertz) * 0.5d)) : 0f);
+        m_rateLateHalf = !m_rateLateHalf;
+    }
+    // Forgets a body's phase, for a full pack its tier did not ask for: the body chooses again when it next holds.
+    private static void ForgetPhase(Registration live) {
+        live.RatePhaseHertz = SdfUpdateRateTiers.EveryFrameHertz;
+        live.RateLead = 0f;
+    }
     // Records a full pack's interval since the previous one under the slowest tier it was rated at between them, and
-    // starts the next interval.
+    // starts the next interval. A pack after a hold no view could see (HeldHertz) records none.
     private void RecordPose(Registration live, float deltaSeconds) {
-        if (live.RateSlowest < SdfUpdateRateTiers.EveryFrameHertz) {
+        if ((live.RateSlowest != SdfUpdateRateTiers.HeldHertz) && (live.RateSlowest < SdfUpdateRateTiers.EveryFrameHertz)) {
             m_rateIntervals?.Record(hertz: live.RateSlowest, lever: SdfUpdateRates.Bodies, seconds: (live.RateSeconds + deltaSeconds));
         }
 
         live.RateSlowest = SdfUpdateRateTiers.EveryFrameHertz;
+        live.RateLead = 0f;
     }
     // Carries a held registration's slots with its root: the root follows the body as a full pack would, and every
     // other slot it packed rides the root's motion since the last frame rigidly.

@@ -171,7 +171,8 @@ public sealed record WorldAuthorityHostRowCheckpoint(
     int FreshCounter,
     bool Retained,
     IReadOnlyList<(int Seat, ulong TransferId)> AnnouncedCrossingHolds,
-    IReadOnlyList<(int Seat, string Border)> SeededArrivals
+    IReadOnlyList<(int Seat, string Border)> SeededArrivals,
+    bool Stopping = false
 ) {
     /// <summary>Gets a detached row with no scheduling residue, transfers, or portal history. Used by a replay
     /// shadow that owns no host-side activity.</summary>
@@ -209,5 +210,6 @@ public sealed record WorldAuthorityCheckpoint(
     IReadOnlyList<WorldFieldRegionCheckpoint>? Fields = null,
     ArenaSearchCheckpoint? Search = null,
     WorldBoardEnforcementCheckpoint? BoardEnforcement = null,
-    WorldMachineHostCheckpoint? Machines = null
+    WorldMachineHostCheckpoint? Machines = null,
+    byte[]? Addons = null
 );

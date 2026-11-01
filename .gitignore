@@ -75,6 +75,10 @@ __pycache__/
 # Nothing here is repo content: the authored cartridges live in the debug world's package, worlds/debug/cartridges.
 roms/
 
+# Extensions installed for a local host (dotnet publish src/<Name> -o extensions/<Name>, docs/reference/extensions.md):
+# published output a World or silo discovers from its working directory, never committed.
+/extensions/
+
 # Runtime authoring saves (the player's own documents/store — never repo content; checked-in examples live under docs/examples/)
 /creations/
 /store/

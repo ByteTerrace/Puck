@@ -120,7 +120,8 @@ public sealed class WorldCreationInstancesRateLawTests {
         var counts = SdfUpdateRateCounts.Counters();
         var intervals = new SdfUpdateRateIntervals();
 
-        pool.RateBy(counts: counts, height: 900U, intervals: intervals, rate: Paced60, rates: SdfUpdateRates.All, views: ViewFrom(distance: 500f));
+        pool.PresentAt(rate: Paced60, rates: SdfUpdateRates.All);
+        pool.RateBy(counts: counts, height: 900U, intervals: intervals, views: ViewFrom(distance: 500f));
 
         var phases = new List<float>();
         var offsets = new List<Vector3>();
@@ -155,7 +156,8 @@ public sealed class WorldCreationInstancesRateLawTests {
         var counts = SdfUpdateRateCounts.Counters();
         var intervals = new SdfUpdateRateIntervals();
 
-        pool.RateBy(counts: counts, height: 900U, intervals: intervals, rate: Paced60, rates: SdfUpdateRates.All, views: ViewFrom(distance: 500f));
+        pool.PresentAt(rate: Paced60, rates: SdfUpdateRates.All);
+        pool.RateBy(counts: counts, height: 900U, intervals: intervals, views: ViewFrom(distance: 500f));
 
         var roots = new List<Vector3>();
         var offsets = new List<Vector3>();
@@ -186,7 +188,8 @@ public sealed class WorldCreationInstancesRateLawTests {
             ? CameraSnapshot.LookAt(fieldOfViewRadians: (MathF.PI / 3f), position: new Vector3(x: 0f, y: 0.5f, z: 0f), target: new Vector3(x: 0f, y: 0.5f, z: 1f), viewportHeight: 900f, viewportWidth: 1280f)
             : CameraSnapshot.LookAt(fieldOfViewRadians: (MathF.PI / 3f), position: new Vector3(x: 0f, y: 0.5f, z: -3f), target: new Vector3(x: 0f, y: 0.5f, z: -6f), viewportHeight: 900f, viewportWidth: 1280f));
 
-        pool.RateBy(counts: counts, height: 900U, intervals: intervals, rate: Paced60, rates: SdfUpdateRates.All, views: [new SdfViewSnapshot(Camera: camera, Region: new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f))]);
+        pool.PresentAt(rate: Paced60, rates: SdfUpdateRates.All);
+        pool.RateBy(counts: counts, height: 900U, intervals: intervals, views: [new SdfViewSnapshot(Camera: camera, Region: new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f))]);
 
         for (var tick = 1UL; (tick <= 6UL); tick++) {
             _ = Walk(client: client, pool: pool, tick: tick, transforms: transforms);
@@ -199,6 +202,57 @@ public sealed class WorldCreationInstancesRateLawTests {
             Assert.True(condition: (counts.Read(kind: SdfUpdateRateCounts.BodiesHeld) > 0L));
         }
     }
+    // A body no camera and no shadow cascade may show holds after its first pack, its root still followed; one whose part
+    // something reads every frame (a light, a camera anchor, an emitter) keeps posing at the least rate.
+    [InlineData(false)]
+    [InlineData(true)]
+    [Theory]
+    public void ABodyNothingShowsHoldsUnlessSomethingReadsItsParts(bool read) {
+        var (client, pool, transforms) = Stage();
+        var counts = SdfUpdateRateCounts.Counters();
+        var away = CameraSnapshot.LookAt(fieldOfViewRadians: (MathF.PI / 3f), position: new Vector3(x: 0f, y: 0.5f, z: -3f), target: new Vector3(x: 0f, y: 0.5f, z: -6f), viewportHeight: 900f, viewportWidth: 1280f);
+
+        pool.PresentAt(rate: Paced60, rates: SdfUpdateRates.All);
+        pool.RateBy(counts: counts, height: 900U, intervals: null, views: [new SdfViewSnapshot(Camera: away, Region: new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f))]);
+        pool.ShadowBy(shadows: []);
+
+        var roots = new List<float>();
+
+        for (var tick = 1UL; (tick <= 9UL); tick++) {
+            _ = Walk(client: client, pool: pool, tick: tick, transforms: transforms);
+            roots.Add(item: transforms[0].Position.X);
+
+            if (read) {
+                _ = pool.BodyShapePose(0, 1);
+            }
+        }
+
+        Assert.Equal(expected: (read ? 3L : 1L), actual: counts.Read(kind: SdfUpdateRateCounts.BodiesPosed));
+        Assert.True(condition: (roots[^1] > roots[0]));
+    }
+    // With a 30 Hz step on every even frame of a 60 Hz display, a 15 and a 30 Hz floor update only on odd frames, the
+    // ones that run no step, and still at least as often as their tier, on a fixed grid and off one.
+    [InlineData(60d)]
+    [InlineData(0d)]
+    [Theory]
+    public void AFloorUpdatesOnFramesThatRunNoStep(double grid) {
+        foreach (var (hertz, period) in new[] { (15, 4), (30, 2) }) {
+            var updates = new List<int>();
+            var last = 1;
+
+            for (var frame = 2; (frame <= 40); frame++) {
+                var rate = new PresentationRate(DisplayHertz: 60, GridHertz: grid, Steps: ((frame % 2) == 0), StepsNext: (((frame + 1) % 2) == 0));
+
+                if (!rate.Holds(elapsedSeconds: ((frame - last) / 60d), frameSeconds: (1d / 60d), hertz: hertz)) {
+                    updates.Add(item: frame);
+                    last = frame;
+                }
+            }
+
+            Assert.All(collection: updates, action: frame => Assert.Equal(expected: 1, actual: (frame % 2)));
+            Assert.All(collection: updates.Zip(second: updates.Skip(count: 1)), action: pair => Assert.Equal(expected: period, actual: (pair.Second - pair.First)));
+        }
+    }
     // A view the display shows none of, as a window out of every view's sight, rates nothing by what it holds: a body
     // close before it is still rated as no view sees it, and the same view shown over the display's height poses it
     // every frame.
@@ -209,7 +263,8 @@ public sealed class WorldCreationInstancesRateLawTests {
         var (client, pool, transforms) = Stage();
         var counts = SdfUpdateRateCounts.Counters();
 
-        pool.RateBy(counts: counts, height: 900U, intervals: null, pixels: [pixels], rate: Paced60, rates: SdfUpdateRates.All, views: ViewFrom(distance: 3f));
+        pool.PresentAt(rate: Paced60, rates: SdfUpdateRates.All);
+        pool.RateBy(counts: counts, height: 900U, intervals: null, pixels: [pixels], views: ViewFrom(distance: 3f));
 
         for (var tick = 1UL; (tick <= 6UL); tick++) {
             _ = Walk(client: client, pool: pool, tick: tick, transforms: transforms);
@@ -224,7 +279,8 @@ public sealed class WorldCreationInstancesRateLawTests {
             var counts = SdfUpdateRateCounts.Counters();
             var intervals = new SdfUpdateRateIntervals();
 
-            pool.RateBy(counts: counts, height: 900U, intervals: intervals, rate: Paced60, rates: rates, views: ViewFrom(distance: distance));
+            pool.PresentAt(rate: Paced60, rates: rates);
+            pool.RateBy(counts: counts, height: 900U, intervals: intervals, views: ViewFrom(distance: distance));
 
             for (var tick = 1UL; (tick <= 6UL); tick++) {
                 _ = Walk(client: client, pool: pool, tick: tick, transforms: transforms);
@@ -241,7 +297,8 @@ public sealed class WorldCreationInstancesRateLawTests {
         var (client, pool, transforms) = Stage();
         var readings = new SdfUpdateRateReadings();
 
-        pool.RateBy(codes: true, counts: null, height: 900U, intervals: null, rate: Paced60, rates: SdfUpdateRates.All, readings: readings, views: ViewFrom(distance: 500f));
+        pool.PresentAt(rate: Paced60, rates: SdfUpdateRates.All);
+        pool.RateBy(codes: true, counts: null, height: 900U, intervals: null, readings: readings, views: ViewFrom(distance: 500f));
 
         var codes = new List<SdfUpdateRateCode>();
 
@@ -262,7 +319,8 @@ public sealed class WorldCreationInstancesRateLawTests {
         Assert.Equal(expected: 15, actual: reading.Hertz);
         Assert.InRange(actual: reading.Size, low: 0d, high: 15d);
 
-        pool.RateBy(codes: true, counts: null, height: 900U, intervals: null, rate: Paced60, rates: SdfUpdateRates.None, readings: readings, views: ViewFrom(distance: 500f));
+        pool.PresentAt(rate: Paced60, rates: SdfUpdateRates.None);
+        pool.RateBy(codes: true, counts: null, height: 900U, intervals: null, readings: readings, views: ViewFrom(distance: 500f));
         _ = Walk(client: client, pool: pool, tick: 6UL, transforms: transforms);
 
         Assert.Equal(expected: ((byte)SdfUpdateRateTiers.CodeOf(hertz: 60, updated: true)), actual: pool.SlotRateCodes.Span[0]);
@@ -274,9 +332,11 @@ public sealed class WorldCreationInstancesRateLawTests {
         Assert.Equal(expected: SdfUpdateRateCode.Every, actual: SdfUpdateRateTiers.CodeOf(hertz: 60, updated: false));
         Assert.Equal(expected: SdfUpdateRateCode.Half, actual: SdfUpdateRateTiers.CodeOf(hertz: 30, updated: false));
         Assert.Equal(expected: ((SdfUpdateRateCode)7), actual: SdfUpdateRateTiers.CodeOf(hertz: 15, updated: true));
-        Assert.Equal(expected: 60, actual: SdfUpdateRateTiers.BodyHertz(pixelsPerMetre: 31f));
-        Assert.Equal(expected: 30, actual: SdfUpdateRateTiers.BodyHertz(pixelsPerMetre: 30f));
-        Assert.Equal(expected: 15, actual: SdfUpdateRateTiers.BodyHertz(pixelsPerMetre: 15f));
+        Assert.Equal(expected: 60, actual: SdfUpdateRateTiers.BodyHertz(pixelsPerMetre: 31f, shownElsewhere: false));
+        Assert.Equal(expected: 30, actual: SdfUpdateRateTiers.BodyHertz(pixelsPerMetre: 30f, shownElsewhere: false));
+        Assert.Equal(expected: 15, actual: SdfUpdateRateTiers.BodyHertz(pixelsPerMetre: 15f, shownElsewhere: false));
+        Assert.Equal(expected: 15, actual: SdfUpdateRateTiers.BodyHertz(pixelsPerMetre: 0f, shownElsewhere: true));
+        Assert.Equal(expected: SdfUpdateRateTiers.HeldHertz, actual: SdfUpdateRateTiers.BodyHertz(pixelsPerMetre: 0f, shownElsewhere: false));
         Assert.Equal(expected: 60, actual: SdfUpdateRateTiers.ViewHertz(pixels: 121d));
         Assert.Equal(expected: 30, actual: SdfUpdateRateTiers.ViewHertz(pixels: 120d));
         Assert.Equal(expected: 15, actual: SdfUpdateRateTiers.ViewHertz(pixels: 60d));

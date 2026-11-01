@@ -116,12 +116,21 @@ internal sealed class CompanionRows : IDisposable {
         Assert.True(condition: Host.TryRetire(name: name, reason: out var reason), userMessage: reason);
         Activate(name: name);
     }
-    /// <summary>Makes every explicit stop write its row's final checkpoint as the row's durable image.</summary>
-    public void KeepFinalImages() => Host.FinalCheckpoints = (WorldInstance row, WorldAuthorityCheckpoint checkpoint, out string reason) => {
+    /// <summary>Makes every image an explicit stop writes the row's durable image, and records each write: the row and
+    /// whether the image resumes the stop. <paramref name="refuse"/> names the rows whose final image the store
+    /// refuses.</summary>
+    public void KeepDurableImages(Func<string, bool>? refuse = null) => Host.DurableImages = (WorldInstance row, WorldAuthorityCheckpoint checkpoint, out string reason) => {
+        if (!checkpoint.HostRow.Stopping && (refuse?.Invoke(arg: row.Name) == true)) {
+            reason = "the store refused the write";
+            return false;
+        }
         m_images[row.Name] = WorldAuthorityCheckpointCodec.Encode(checkpoint: checkpoint);
+        ImageWrites.Add(item: (row.Name, checkpoint.HostRow.Stopping));
         reason = string.Empty;
         return true;
     };
+    /// <summary>Every image a stop wrote durably, in order: the row and whether the image resumes the stop.</summary>
+    public List<(string Row, bool Stopping)> ImageWrites { get; } = [];
     /// <summary>Starts a row no longer running from its latest durable image and its crossing log, as a later activation
     /// of a stopped authority does.</summary>
     public void Activate(string name) {

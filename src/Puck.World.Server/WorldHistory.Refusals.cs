@@ -36,9 +36,6 @@ public sealed partial class WorldHistory {
     }
 
     private string? UncapturableLiveState() {
-        if (m_server.AnyAddonEverPumped || (m_server.Addons is { MountedCount: > 0 })) {
-            return "addon guest state cannot be restored by a history keyframe";
-        }
         if (m_server.AnyMachineEverPumped && (m_server.Machines is not IWorldMachineCheckpointHost)) {
             return "a stepped machine has no checkpoint support";
         }
@@ -59,7 +56,7 @@ public sealed partial class WorldHistory {
             return external;
         }
         if ((entry is WorldReplayEntry.Mutation mutation) && ChangesAddons(mutation: mutation.Value)) {
-            return "an addon edit requires guest state that history cannot restore";
+            return "history does not rewind addon declarations; choose a keyframe after the edit";
         }
         if (entry is not WorldReplayEntry.Rebuild { Kind: WorldRebuildKind.Load or WorldRebuildKind.Reload } rebuild) {
             return null;
@@ -85,11 +82,7 @@ public sealed partial class WorldHistory {
         if (!string.Equals(a: contentHash, b: rebuild.ContentHash, comparisonType: StringComparison.Ordinal)) {
             return $"the recorded rebuild's content changed at '{path}': expected {rebuild.ContentHash}, found {contentHash}";
         }
-        if (admission!.Definition.Addons.Any(predicate: static addon => addon.Enabled)) {
-            return "the recorded rebuild mounts addon guests whose state history cannot restore";
-        }
-
-        m_verifiedRebuilds[rebuild] = admission.Definition;
+        m_verifiedRebuilds[rebuild] = admission!.Definition;
 
         return null;
     }

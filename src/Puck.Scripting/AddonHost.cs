@@ -31,6 +31,7 @@ public sealed class AddonHost : IDisposable {
     private readonly IAddonChannelResolver m_channelResolver;
     private readonly ScriptingEngine m_engine;
     private readonly WasmModuleLoader m_loader;
+    private readonly bool m_ownsEngine;
 
     private bool m_disposed;
 
@@ -41,7 +42,8 @@ public sealed class AddonHost : IDisposable {
     /// against at instantiation — supplied by the consumer because the table is lane knowledge this core
     /// deliberately does not reference (see <see cref="IAddonChannelResolver"/>).</param>
     /// <exception cref="ArgumentNullException"><paramref name="engine"/>, <paramref name="loader"/>, or <paramref name="channelResolver"/> is <see langword="null"/>.</exception>
-    public AddonHost(ScriptingEngine engine, WasmModuleLoader loader, IAddonChannelResolver channelResolver) {
+    /// <param name="ownsEngine">Whether disposing this host also disposes the engine, or the engine is process shared.</param>
+    public AddonHost(ScriptingEngine engine, WasmModuleLoader loader, IAddonChannelResolver channelResolver, bool ownsEngine = true) {
         ArgumentNullException.ThrowIfNull(argument: engine);
         ArgumentNullException.ThrowIfNull(argument: loader);
         ArgumentNullException.ThrowIfNull(argument: channelResolver);
@@ -49,21 +51,22 @@ public sealed class AddonHost : IDisposable {
         m_channelResolver = channelResolver;
         m_engine = engine;
         m_loader = loader;
+        m_ownsEngine = ownsEngine;
     }
 
     /// <summary>Gets the loaded addon instances in load order.</summary>
     public IReadOnlyList<AddonInstance> Instances => m_instances;
 
     private static string DescribeInstance(AddonInstance addon) {
-        var identity = addon.Hash is { } hash
+        var identity = ((addon.Hash is { } hash)
             ? $"{ContentPetname.From(hashHex: hash.Hex)}  {hash}"
-            : $"{addon.Name}  hash unavailable";
+            : $"{addon.Name}  hash unavailable");
 
         return $"{identity}  fuel {addon.FuelPerTick}  {StateLabel(addon: addon)}";
     }
-    private AddonInstance Load(in AddonDescriptor descriptor) {
+    private AddonInstance Load(in AddonDescriptor descriptor, ReadOnlyMemory<byte>? moduleSource) {
         try {
-            var info = m_loader.Load(path: descriptor.ModulePath, expectedHash: descriptor.ModuleHash);
+            var info = m_loader.Load(path: descriptor.ModulePath, expectedHash: descriptor.ModuleHash, source: moduleSource);
 
             return new AddonInstance(
                 channelResolver: m_channelResolver,
@@ -74,7 +77,7 @@ public sealed class AddonHost : IDisposable {
         } catch (AddonModuleLoadException error) {
             return new AddonInstance(descriptor: in descriptor, hash: error.Hash,
                 fault: new AddonFault(Kind: error.Kind, Detail: $"addon {descriptor.Name}: {error.Message}"));
-        } catch (Exception error) when ((error is ArgumentException or FileNotFoundException or InvalidDataException or WasmtimeException or UnauthorizedAccessException or IOException)) {
+        } catch (Exception error) when ((error is ArgumentException or FileNotFoundException or InvalidDataException or WasmtimeException or UnauthorizedAccessException or IOException or TimeoutException)) {
             // A locked file, a permissions denial, or a transient disk error is an ordinary environment failure a
             // module read can hit — a sticky load fault, never a tick-thread exception.
             return new AddonInstance(
@@ -146,7 +149,7 @@ public sealed class AddonHost : IDisposable {
         m_instances.Clear();
         m_byName.Clear();
         m_descriptors.Clear();
-        m_engine.Dispose();
+        if (m_ownsEngine) { m_engine.Dispose(); }
         GC.SuppressFinalize(obj: this);
     }
     /// <summary>Compiles a guest under <paramref name="descriptor"/> without registering it — the PREPARE half of
@@ -157,13 +160,14 @@ public sealed class AddonHost : IDisposable {
     /// <param name="descriptor">The neutral load request.</param>
     /// <returns>The prepared instance — faulted rather than thrown on a load failure.</returns>
     /// <exception cref="ArgumentException"><paramref name="descriptor"/> has a null-or-whitespace name.</exception>
-    public AddonInstance Prepare(in AddonDescriptor descriptor) {
+    /// <param name="moduleSource">Pinned source retained by a checkpoint, or null to read the declared file.</param>
+    public AddonInstance Prepare(in AddonDescriptor descriptor, ReadOnlyMemory<byte>? moduleSource = null) {
         ArgumentException.ThrowIfNullOrWhiteSpace(
             argument: descriptor.Name,
             paramName: nameof(descriptor)
         );
 
-        return Load(descriptor: in descriptor);
+        return Load(descriptor: in descriptor, moduleSource: moduleSource);
     }
     /// <summary>Looks up an addon by name.</summary>
     /// <param name="name">The addon name.</param>

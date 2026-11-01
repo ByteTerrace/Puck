@@ -8,7 +8,7 @@ namespace Puck.World.Client;
 /// <summary>
 /// The body a chase camera frames, as the volume its eye keeps out of: the body's kit collider and the shapes it is drawn
 /// with, placed at the pose the body is drawn at and scaled by its live scale. The drawn shapes reach past the collider
-/// (armour, a helmet, a pack), and an eye inside one starts its view inside her, so both count. Presentation-only and
+/// (armour, a helmet, a pack), and an eye inside one starts its view inside the body, so both count. Presentation-only and
 /// allocation-free; the collider's volumes are read in place and converted to single precision per query.
 /// </summary>
 public readonly struct WorldChaseBody {

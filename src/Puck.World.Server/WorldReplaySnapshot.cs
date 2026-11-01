@@ -110,8 +110,6 @@ public abstract record WorldReplayEntry {
     /// <see cref="Puck.World.WorldReplayTape"/>'s class remarks).</summary>
     /// <param name="Paused"><see langword="true"/> for a pause, <see langword="false"/> for a resume.</param>
     internal sealed record RateLever(bool Paused) : WorldReplayEntry;
-    /// <summary>A recording arm restarted guest memory and retired its input controllers.</summary>
-    internal sealed record RestartAddons : WorldReplayEntry;
 
     /// <summary>A seat's switch from the identity the tape pinned to another, applied at the head of the tick it is recorded on.
     /// A fork records one for each seat its drive rebound to the live owned identity, so the fork's tape holds the identity
@@ -196,6 +194,7 @@ public abstract record WorldReplayEntry {
     /// what a MATCH proves.</para></summary>
     /// <param name="Adjacency">The authored <c>adjacencies</c> row name that refreshed.</param>
     internal sealed record LinkDelivery(string Adjacency) : WorldReplayEntry;
+
     /// <summary>One custody record the authority made durable (<see cref="WorldServer.CustodyTap"/>), encoded with the
     /// crossing log's own record leaf (<see cref="Server.WorldAuthorityCheckpointCodec.EncodeCrossingRecord"/>), at its
     /// position among the tick's authority entries. A re-drive folds it through the shadow's custody reducer
@@ -316,7 +315,7 @@ public sealed partial class WorldReplaySnapshot {
     // authority, every arrival a commit decided with its outcome and each traveler as its identity projection alone,
     // federated input, the seat identity a fork switches to, and the optional start checkpoint a mid-session recording
     // or a saved history branch starts from.
-    private const uint Version = 12u;
+    private const uint Version = 13u;
 
     /// <summary>Gets the recorded authority's identity — the namespace its crossings are keyed under, so a set of
     /// tapes pairs one authority's departure with another's arrival.</summary>
@@ -548,11 +547,6 @@ public sealed partial class WorldReplaySnapshot {
                 case WorldReplayEntry.RateLever:
                     // Deliberately a no-op: a paused span recorded zero ticks live, so re-driving exactly
                     // Ticks.Count steps already reproduces the identical stepping cadence with no lever to apply.
-                    break;
-                case WorldReplayEntry.RestartAddons:
-                    if (!server.Persistence.TryCaptureReplayStart(checkpoint: out _, reason: out var restartReason)) {
-                        throw new InvalidOperationException(message: restartReason);
-                    }
                     break;
                 case WorldReplayEntry.FederatedIntents federated:
                     server.ReplaceFederatedIntents(held: federated.Held);
@@ -891,9 +885,6 @@ public sealed partial class WorldReplaySnapshot {
                 }
             case 9:
                 return new WorldReplayEntry.RateLever(Paused: reader.ReadBoolean());
-            case 24:
-                _ = reader.ReadBoolean();
-                return new WorldReplayEntry.RestartAddons();
             case 10:
                 return ReadTransferEntry(reader: ref reader);
             case 11: {
@@ -1571,10 +1562,6 @@ public sealed partial class WorldReplaySnapshot {
                 writer.WriteByte(value: 9);
                 writer.WriteBoolean(value: rateLever.Paused);
 
-                break;
-            case WorldReplayEntry.RestartAddons:
-                writer.WriteByte(value: 24);
-                writer.WriteBoolean(value: true);
                 break;
             case WorldReplayEntry.SeatIdentity seatIdentity:
                 writer.WriteByte(value: 22);

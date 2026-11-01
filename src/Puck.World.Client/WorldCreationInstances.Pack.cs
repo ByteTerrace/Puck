@@ -57,6 +57,23 @@ public sealed partial class WorldCreationInstances {
 
         return true;
     }
+    // Widens a body's MotionReach to the farthest part sphere this full pack posed from its root: driver swings and
+    // slides, parent chains, effectors and followers can carry a part past the creation's rest reach, and the bodies
+    // lever must not judge a body unseen by a bound its posed parts exceed.
+    private void WidenMotionReach(Registration live, ReadOnlySpan<DynamicTransform> transforms, int rootSlot, int shapeCount, float placementScale, Vector3 rootPosition) {
+        if (placementScale <= 0f) {
+            return;
+        }
+
+        var count = PartSpheres(live: live, placementScale: placementScale, rootSlot: rootSlot, shapeCount: shapeCount, transforms: transforms);
+
+        for (var index = 0; (index < count); index++) {
+            var sphere = m_partSpheres[index];
+            var reach = ((Vector3.Distance(value1: new Vector3(x: sphere.X, y: sphere.Y, z: sphere.Z), value2: rootPosition) + sphere.W) / placementScale);
+
+            live.MotionReach = MathF.Max(x: live.MotionReach, y: reach);
+        }
+    }
     // A registration's creation's reach from its root, in creation units, measured once.
     private static float ReachOf(Registration live) {
         if (live.Reach < 0f) {
@@ -124,6 +141,7 @@ public sealed partial class WorldCreationInstances {
         m_volumes.Clear();
         m_slotClipRun.Clear();
         m_slotClipBodies.Clear();
+        m_packCount++;
         BeginRateCodes(slotBase: slotBase);
 
         var doors = WorldPortalStraddle.Doors(definition: client.Definition);
@@ -225,15 +243,20 @@ public sealed partial class WorldCreationInstances {
 
                 // A body's pose holds between its rated packs, except on the frame its slots change owner or the whole
                 // table is owed (WorldCreationInstances.Rates).
-                if (
+                var mayHold = (
                     (live.BodyIndex is not null) &&
                     packedBefore &&
                     !moved.Everything &&
                     !m_owners.Reseats(owner: index) &&
                     // A held pose carries its slots rigidly, so a registration whose scale changed packs in full.
-                    (transforms[rootSlot].Scale == placementScale) &&
-                    HoldsPose(center: rootPosition, deltaSeconds: deltaSeconds, live: live, radius: (ReachOf(live: live) * placementScale))
-                ) {
+                    (transforms[rootSlot].Scale == placementScale)
+                );
+
+                if (!mayHold) {
+                    ForgetPhase(live: live);
+                }
+
+                if (mayHold && HoldsPose(center: rootPosition, deltaSeconds: deltaSeconds, live: live, radius: RateReach(live: live, placementScale: placementScale))) {
                     CarryPose(
                         deltaSeconds: deltaSeconds,
                         live: live,
@@ -247,9 +270,18 @@ public sealed partial class WorldCreationInstances {
                     live.RateOwed = true;
                     m_rateCounts?.Count(kind: SdfUpdateRateCounts.BodiesHeld);
                 } else {
+                    // A pose held while nothing could show it resumes as a continuity cut: its followers, plants and
+                    // drivers relatch where the body is now, as after a teleport, rather than advancing over every
+                    // second it held.
+                    var unseen = (live.RateSlowest == SdfUpdateRateTiers.HeldHertz);
+
+                    if (unseen) {
+                        live.RootEpoch = -1;
+                    }
+
                     PackRegistration(
                         client: client,
-                        deltaSeconds: (live.RateSeconds + deltaSeconds),
+                        deltaSeconds: (unseen ? deltaSeconds : (live.RateSeconds + deltaSeconds)),
                         live: live,
                         parkPosition: parkPosition,
                         placementScale: placementScale,
@@ -263,6 +295,7 @@ public sealed partial class WorldCreationInstances {
                     if (live.BodyIndex is not null) {
                         m_rateCounts?.Count(kind: SdfUpdateRateCounts.BodiesPosed);
                         RecordPose(deltaSeconds: deltaSeconds, live: live);
+                        WidenMotionReach(live: live, placementScale: placementScale, rootPosition: transforms[rootSlot].Position, shapeCount: shapeCount, transforms: transforms, rootSlot: rootSlot);
                         posed = true;
                     }
                     live.RateSeconds = 0f;
@@ -280,7 +313,7 @@ public sealed partial class WorldCreationInstances {
                 );
             }
 
-            NoteRate(center: rootPosition, live: live, packedSlots: packedSlots, posed: posed, radius: (ReachOf(live: live) * placementScale), rootSlot: rootSlot);
+            NoteRate(center: rootPosition, live: live, packedSlots: packedSlots, posed: posed, radius: RateReach(live: live, placementScale: placementScale), rootSlot: rootSlot);
             AppendVolumes(
                 live: live,
                 document: document,

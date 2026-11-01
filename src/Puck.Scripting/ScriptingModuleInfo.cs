@@ -12,4 +12,11 @@ namespace Puck.Scripting;
 /// <param name="Module">The compiled Wasmtime module, cached and shared across addons with identical bytes.</param>
 /// <param name="Memories">Every linear memory the module defines or imports, read from its binary before it was
 /// compiled.</param>
-public sealed record ScriptingModuleInfo(string Path, ContentPin ContentHash, int ByteLength, Module Module, IReadOnlyList<WasmMemoryDeclaration> Memories);
+public sealed record ScriptingModuleInfo(string Path, ContentPin ContentHash, int ByteLength, Module Module, IReadOnlyList<WasmMemoryDeclaration> Memories) {
+    /// <summary>The exact source bytes whose content pin identifies this module, retained for durable recovery.</summary>
+    public ReadOnlyMemory<byte> Source { get; init; }
+    /// <summary>Host-only exports for the module's globals; null when the loader did not prepare checkpoint access.</summary>
+    public string[]? CheckpointGlobals { get; init; }
+    /// <summary>A declared resource whose private state cannot be captured, or null.</summary>
+    public string? CheckpointRefusal { get; init; }
+}

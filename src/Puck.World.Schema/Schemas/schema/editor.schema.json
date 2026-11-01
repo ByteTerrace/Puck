@@ -5,16 +5,12 @@
   ],
   "properties": {
     "grid": {
-      "description": "The grid; absent takes every grid default.",
-      "type": [
-        "object",
-        "null"
-      ],
+      "description": "The grid a building seat starts from.",
+      "type": "object",
       "properties": {
         "visible": {
           "description": "Whether the grid draws.",
-          "type": "boolean",
-          "default": false
+          "type": "boolean"
         },
         "mode": {
           "description": "Where the world grid draws.",
@@ -23,114 +19,294 @@
             "Follow",
             "Plane"
           ],
-          "default": "Surface",
           "title": "WorldEditorGridMode"
         },
         "pitch": {
           "$ref": "./common.schema.json#/$defs/DocumentVector3",
-          "description": "The world lattice\u0027s pitch on X, Y and Z, in world units; every component positive.",
-          "default": null
+          "description": "The world lattice\u0027s pitch on X, Y and Z, in world units; every component positive."
         },
         "planeY": {
           "description": "The working plane\u0027s height, in world units, when the mode is Plane.",
-          "type": "number",
-          "default": 0
+          "type": "number"
         },
         "lineWidth": {
           "description": "The drawn line\u0027s width, in pixels; positive.",
-          "type": "number",
-          "default": 1.5
+          "type": "number"
         }
       },
+      "required": [
+        "visible",
+        "mode",
+        "pitch",
+        "planeY",
+        "lineWidth"
+      ],
       "additionalProperties": false,
-      "default": null,
       "title": "WorldEditorGrid"
     },
     "snap": {
-      "description": "The snapping; absent takes every snapping default.",
-      "type": [
-        "object",
-        "null"
-      ],
+      "description": "The snapping a building seat starts from.",
+      "type": "object",
       "properties": {
         "enabled": {
           "description": "Whether positions snap to the grid.",
-          "type": "boolean",
-          "default": false
+          "type": "boolean"
         },
         "angleStepDegrees": {
           "description": "The angle a turn steps and a rotation snaps to, in degrees; in (0, 180].",
-          "type": "number",
-          "default": 15
+          "type": "number"
         },
         "surface": {
           "description": "Whether a placement rests on the surface under the pointer.",
-          "type": "boolean",
-          "default": true
+          "type": "boolean"
         },
         "objectPatchRadius": {
           "description": "How far a captured reference\u0027s own grid reaches around it, in multiples of its largest half extent; positive.",
-          "type": "number",
-          "default": 2.5
+          "type": "number"
         }
       },
+      "required": [
+        "enabled",
+        "angleStepDegrees",
+        "surface",
+        "objectPatchRadius"
+      ],
       "additionalProperties": false,
-      "default": null,
       "title": "WorldEditorSnap"
     },
     "camera": {
-      "description": "The editor camera\u0027s feel; absent takes every camera default.",
-      "type": [
-        "object",
-        "null"
-      ],
+      "description": "The editor camera\u0027s feel.",
+      "type": "object",
       "properties": {
         "orbitRate": {
           "description": "The orbit rate at full input, in radians per second; positive.",
-          "type": "number",
-          "default": 2.4
+          "type": "number"
         },
         "panRate": {
           "description": "The pan rate at full input, in world units per second; positive.",
-          "type": "number",
-          "default": 3
+          "type": "number"
         },
         "zoomRate": {
           "description": "The exponential dolly rate at full input, per second; positive.",
-          "type": "number",
-          "default": 1.2
+          "type": "number"
         },
         "flyRate": {
           "description": "The fly rate at full input, in world units per second; positive.",
-          "type": "number",
-          "default": 6
+          "type": "number"
         },
         "minPitch": {
           "description": "The lowest orbit pitch, in radians; above -\u03C0/2 and below MaxPitch.",
-          "type": "number",
-          "default": 0.05
+          "type": "number"
         },
         "maxPitch": {
           "description": "The highest orbit pitch, in radians; below \u03C0/2.",
-          "type": "number",
-          "default": 1.35
+          "type": "number"
         },
         "minDistance": {
           "description": "The nearest orbit distance, in world units; positive and below MaxDistance.",
-          "type": "number",
-          "default": 0.5
+          "type": "number"
         },
         "maxDistance": {
           "description": "The farthest orbit distance, in world units.",
-          "type": "number",
-          "default": 14
+          "type": "number"
         }
       },
+      "required": [
+        "orbitRate",
+        "panRate",
+        "zoomRate",
+        "flyRate",
+        "minPitch",
+        "maxPitch",
+        "minDistance",
+        "maxDistance"
+      ],
       "additionalProperties": false,
-      "default": null,
       "title": "WorldEditorCamera"
+    },
+    "toggle": {
+      "description": "The binding entry that flips a seat between playing and building, composed beneath the resting page of every group the world\u0027s binding layers declare, so a seat reaches build mode from wherever it rests. The world\u0027s own layers compose over it, so a page that binds the entry\u0027s id or one of its sources keeps its own meaning.",
+      "type": "object",
+      "properties": {
+        "sources": {
+          "$ref": "./common.schema.json#/$defs/StringListNullable"
+        },
+        "command": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "channel": {
+          "default": null,
+          "title": "ChannelRef"
+        },
+        "scale": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "activateOn": {
+          "$ref": "./common.schema.json#/$defs/CommandPhase",
+          "default": null
+        },
+        "label": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "value": {
+          "default": null,
+          "title": "CommandValue"
+        },
+        "text": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "activator": {
+          "$ref": "./common.schema.json#/$defs/BindingActivatorDefinition",
+          "default": null
+        },
+        "mode": {
+          "enum": [
+            "Hold",
+            "Toggle"
+          ],
+          "default": "Hold",
+          "title": "BindingEntryMode"
+        }
+      },
+      "required": [
+        "sources"
+      ],
+      "additionalProperties": false,
+      "title": "BindingPageEntryDefinition"
+    },
+    "bar": {
+      "description": "The binding bar a building seat shows when its own bar places no bank for a page this bar shows.",
+      "type": "object",
+      "properties": {
+        "slotSet": {
+          "$ref": "./common.schema.json#/$defs/StringList",
+          "description": "The physical controls this bar shows, by input source id (gamepad.buttonSouth, mouse.button1, \u2026) \u2014 the same vocabulary a binding entry\u0027s sources speak, every id validated against the engine\u0027s input-source catalog, unique, at most MaxSlots. A layout\u0027s bank places these; one it does not place is not shown on that bank."
+        },
+        "banks": {
+          "$ref": "./common.schema.json#/$defs/WorldBindingBarBankList",
+          "description": "The stacked banks \u2014 at least one, at most MaxBanks, unique ids, each naming a page the composed binding profile actually declares. List order is draw order."
+        },
+        "enabled": {
+          "description": "Whether the bar is shown when no live override hides it.",
+          "type": "boolean",
+          "default": true
+        },
+        "text": {
+          "description": "Whether the bar draws the atlas text it composes \u2014 a badge whose icon row carries a Label (LB/RB, LT/RT, LS/RS, the menu trio, the exotics), the active page\u0027s name under the modifier indicators, and a chord hint\u0027s label. false drops every label-content badge outright and leaves a purely pictographic bar: every plate, the glyph-content badges (the d-pad arrows and the face-position marks), the bound actions\u0027 icons, and the modifier indicators all still draw.",
+          "type": "boolean",
+          "default": true
+        },
+        "modifiers": {
+          "description": "Whether the bar draws the modifier indicator row on its anchor line \u2014 one plate per modifier the composed profile carries (declared rows plus every chord/held token the compiler synthesizes), lit while held. false drops the row and leaves the slot clusters alone. While the row draws, it places every chord member, so every command chord can show as a hint; without it a hint shows only for a chord whose members are all in SlotSet.",
+          "type": "boolean",
+          "default": true
+        },
+        "declaredModifiersOnly": {
+          "description": "Whether the modifier row (and the chord hints it places) keeps to the modifiers the binding document DECLARES in its modifiers section \u2014 the page-holding triggers an author named \u2014 and leaves out the implicit modifier the compiler mints for every raw source a chord or held row names (a bare key, a mouse button, a shoulder). false draws every one. It shapes only what Modifiers draws, so it does nothing while that is off.",
+          "type": "boolean",
+          "default": false
+        },
+        "pageLabel": {
+          "description": "Whether the bar names the active page under its anchor while Text is on; false keeps every badge label and chord hint and drops only the page\u0027s name.",
+          "type": "boolean",
+          "default": true
+        },
+        "hideUnbound": {
+          "description": "Whether a slot with no bound act on its bank\u0027s page should not render at all, rather than drawing the disabled tier-0 plate. A player\u0027s own BindingBarPreferences.HideUnbound overrides this.",
+          "type": "boolean",
+          "default": false
+        },
+        "multiSeatAlpha": {
+          "description": "The opacity every joined seat\u0027s bar renders at while two or more seats are joined \u2014 the split-screen quieting lever, multiplied into each bank\u0027s own alpha; 1 keeps multi-seat bars fully opaque.",
+          "type": "number",
+          "default": 1
+        },
+        "iconRow": {
+          "description": "The state row a slot\u0027s icon resolves through, spelled state.\u003Crow\u003E \u2014 the row\u0027s CELL KEY is the bound row\u0027s id when it authors one, else its action (command or channel; a dotted command name therefore needs an id, since a cell key holds no dot), and its value is an icons name. The engine holds no action-to-icon vocabulary of its own: the association is ordinary authored state, so it is written, read, and MUTATED like any other state (world.state.cell.set) \u2014 a spell minted at runtime gets its icon by writing a cell, never by reshaping the document. null resolves no slot icons at all; a key the row does not carry simply draws no icon.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "layouts": {
+          "$ref": "./common.schema.json#/$defs/IReadOnlyDictionaryStringWorldBindingBarLayout",
+          "description": "The bar\u0027s layouts by name \u2014 a crossbar, a strip, whatever an author adds next \u2014 each a whole WorldBindingBarLayout.",
+          "default": null
+        },
+        "layout": {
+          "description": "The name of the layout drawn when LayoutCell is absent or names none.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "layoutCell": {
+          "description": "A text state cell, state.\u003Crow\u003E.\u003Ckey\u003E, whose value names the live entry of Layouts; a value naming none falls back to Layout. Ordinary state: a chord, a wheel sector, or the console switches the bar\u0027s whole shape by writing the cell.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "modelCell": {
+          "description": "A text state cell, state.\u003Crow\u003E.\u003Ckey\u003E, whose value picks the bar\u0027s model: single draws one bar \u2014 the active page\u0027s bank, in the first authored bank\u0027s place, swapping in place as a chord is held or released; any other value (or no cell) draws every bank the live layout places, the active one at full alpha and the rest as wings. Ordinary state, flipped the same way LayoutCell is.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "visible": {
+          "$ref": "./common.schema.json#/$defs/OverlayPredicateNullable",
+          "description": "The bar\u0027s visibility condition over presentation facts, or null for always.",
+          "default": null
+        }
+      },
+      "required": [
+        "slotSet",
+        "banks"
+      ],
+      "additionalProperties": false,
+      "title": "WorldBindingBarAuthoring"
+    },
+    "readOnlyLabel": {
+      "description": "The page label a building seat\u0027s bar shows in place of its page\u0027s own when the seat\u0027s principal may not edit placements.",
+      "type": "string"
     }
   },
+  "required": [
+    "grid",
+    "snap",
+    "camera",
+    "toggle",
+    "bar",
+    "readOnlyLabel"
+  ],
   "additionalProperties": false,
   "default": null,
   "title": "WorldEditorDefaults"

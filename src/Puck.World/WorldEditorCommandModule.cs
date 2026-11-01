@@ -44,7 +44,7 @@ public sealed partial class WorldEditorCommandModule(WorldEditorSeats seats, IWo
     // submitted through, the token cancelled when that link's world goes away, the mirror its documents arrive on (none
     // for the console's own world, whose live document is read directly), and the guard its console's other row-editing
     // doors claim rows in with the read of the world's current window, which only the console's own world has.
-    private readonly record struct EditWorld(string Name, string Authority, WorldDefinition Definition, WorldDocumentVersion Version, Func<WorldDeliveredDocument> Delivered, IServerLink Link, CancellationToken Lifetime, WorldSessionMirror? Mirror, (WorldRowStepWindowGuard Guard, Func<WorldRowStepWindow> Window)? Guard);
+    private readonly record struct EditWorld(string Name, string Authority, WorldDefinition Definition, WorldEditorDefaults Editor, WorldDocumentVersion Version, Func<WorldDeliveredDocument> Delivered, IServerLink Link, CancellationToken Lifetime, WorldSessionMirror? Mirror, (WorldRowStepWindowGuard Guard, Func<WorldRowStepWindow> Window)? Guard);
 
     private static string Format(float value) => value.ToString(
         format: "0.####",
@@ -66,19 +66,19 @@ public sealed partial class WorldEditorCommandModule(WorldEditorSeats seats, IWo
 
         return (value || token.SequenceEqual(other: "off"));
     }
-    private CommandResult EchoGrid(int slot, WorldDefinition definition) {
-        var grid = seats.GridOf(document: definition.Editor, slot: slot);
+    private CommandResult EchoGrid(int slot, WorldEditorDefaults editor) {
+        var grid = seats.GridOf(document: editor, slot: slot);
 
         return new CommandResult(Output: CommandEcho.Open(verb: GridCommand)
             .Field(key: "seat", value: PlayerRoster.DisplayNumber(slot: slot))
             .Field(key: "visible", value: grid.Visible)
             .Field(key: "mode", value: ModeName(mode: grid.Mode))
-            .Field(key: "pitch", value: Format(value: grid.ResolvedPitch))
+            .Field(key: "pitch", value: Format(value: grid.Pitch.Value))
             .Field(key: "plane", value: Format(value: grid.PlaneY))
             .Close());
     }
     private CommandResult EchoSnap(int slot, EditWorld world) {
-        var snap = seats.SnapOf(document: world.Definition.Editor, slot: slot);
+        var snap = seats.SnapOf(document: world.Editor, slot: slot);
 
         return new CommandResult(Output: CommandEcho.Open(verb: SnapCommand)
             .Field(key: "seat", value: PlayerRoster.DisplayNumber(slot: slot))
@@ -106,9 +106,14 @@ public sealed partial class WorldEditorCommandModule(WorldEditorSeats seats, IWo
             var endpoint = route.Endpoint;
             var document = endpoint.Mirror.Document;
 
+            if (!TryEditor(definition: document.Definition, editor: out var routedEditor, refusal: out refusal, verb: verb)) {
+                return false;
+            }
+
             world = new EditWorld(
                 Authority: route.Entity.Authority,
                 Definition: document.Definition,
+                Editor: routedEditor,
                 Delivered: () => endpoint.Mirror.Document,
                 Guard: null,
                 Lifetime: endpoint.Retired,
@@ -123,11 +128,16 @@ public sealed partial class WorldEditorCommandModule(WorldEditorSeats seats, IWo
 
         var server = instance.Server;
 
+        if (!TryEditor(definition: server.Definition, editor: out var editor, refusal: out refusal, verb: verb)) {
+            return false;
+        }
+
         // A server-direct editor sees one world for the instance's whole life: a replacement retires the instance, so its
         // delivered lifetime never advances.
         world = new EditWorld(
             Authority: server.AuthorityIdentity,
             Definition: server.Definition,
+            Editor: editor,
             Delivered: () => new WorldDeliveredDocument(Definition: server.Definition, Lifetime: 0, Version: server.DocumentVersion),
             Guard: (stepGuard, () => WorldRowStepWindow.Of(server: server)),
             Lifetime: instance.Retired,
@@ -139,19 +149,33 @@ public sealed partial class WorldEditorCommandModule(WorldEditorSeats seats, IWo
 
         return true;
     }
+    // The world's editor section, which every editor verb needs: a world that authors none has no grid, snapping or
+    // step to edit with, so the verb refuses by name.
+    private static bool TryEditor(WorldDefinition definition, string verb, out WorldEditorDefaults editor, out CommandResult refusal) {
+        if (definition.EditorRaw is { } authored) {
+            editor = authored;
+            refusal = CommandResult.None;
+
+            return true;
+        }
+
+        editor = null!;
+        refusal = CommandResult.Error(output: $"[{verb}: this world authors no editor section; import one, such as the standard's editor]");
+
+        return false;
+    }
     private CommandResult GridHandler(CommandContext context, WireArgs args) {
         if (!TryEditWorld(context: context, refusal: out var refusal, verb: GridCommand, world: out var world)) {
             return refusal;
         }
 
         var slot = context.Slot;
-        var definition = world.Definition;
 
         if (args.Count == 0) {
-            return EchoGrid(definition: definition, slot: slot);
+            return EchoGrid(editor: world.Editor, slot: slot);
         }
 
-        var grid = seats.GridOf(document: definition.Editor, slot: slot);
+        var grid = seats.GridOf(document: world.Editor, slot: slot);
 
         if ((args.Count == 1) && TryOnOff(token: args[0], value: out var visible)) {
             seats.SetGridVisible(slot: slot, visible: visible);
@@ -166,7 +190,7 @@ public sealed partial class WorldEditorCommandModule(WorldEditorSeats seats, IWo
         } else if ((args.Count == 2) && args.Is(index: 0, value: "plane") && args.TryFloat(index: 1, value: out var planeY) && float.IsFinite(f: planeY)) {
             seats.SetGridMode(mode: WorldEditorGridMode.Plane, planeY: planeY, slot: slot);
         } else if ((args.Count == 2) && args.Is(index: 0, value: "pitch") && (args.Is(index: 1, value: "up") || args.Is(index: 1, value: "down"))) {
-            var stepped = (grid.ResolvedPitch * (args.Is(index: 1, value: "up") ? 2f : 0.5f));
+            var stepped = (grid.Pitch.Value * (args.Is(index: 1, value: "up") ? 2f : 0.5f));
 
             if ((MathF.Min(x: stepped.X, y: MathF.Min(x: stepped.Y, y: stepped.Z)) < MinStepPitch) || (MathF.Max(x: stepped.X, y: MathF.Max(x: stepped.Y, y: stepped.Z)) > MaxStepPitch)) {
                 return CommandResult.Error(output: $"[{GridCommand}: a stepped pitch stays within {Format(value: MinStepPitch)}..{Format(value: MaxStepPitch)}]");
@@ -181,7 +205,7 @@ public sealed partial class WorldEditorCommandModule(WorldEditorSeats seats, IWo
             }
 
             var pitch = ((args.Count == 3)
-                ? new Vector3(x: x, y: grid.ResolvedPitch.Y, z: z)
+                ? new Vector3(x: x, y: grid.Pitch.Value.Y, z: z)
                 : new Vector3(value: x));
 
             if (!(float.IsFinite(f: pitch.X) && float.IsFinite(f: pitch.Z) && (pitch.X > 0f) && (pitch.Z > 0f))) {
@@ -193,7 +217,7 @@ public sealed partial class WorldEditorCommandModule(WorldEditorSeats seats, IWo
             return CommandResult.Usage(form: "on|off|toggle|next|pitch <x> [<z>]|pitch up|down|plane <y>|follow|surface", verb: GridCommand);
         }
 
-        return EchoGrid(definition: definition, slot: slot);
+        return EchoGrid(editor: world.Editor, slot: slot);
     }
     private CommandResult SnapHandler(CommandContext context, WireArgs args) {
         if (!TryEditWorld(context: context, refusal: out var refusal, verb: SnapCommand, world: out var world)) {
@@ -207,7 +231,7 @@ public sealed partial class WorldEditorCommandModule(WorldEditorSeats seats, IWo
             return EchoSnap(slot: slot, world: world);
         }
 
-        var snap = seats.SnapOf(document: definition.Editor, slot: slot);
+        var snap = seats.SnapOf(document: world.Editor, slot: slot);
 
         if ((args.Count == 1) && TryOnOff(token: args[0], value: out var enabled)) {
             seats.SetSnapEnabled(enabled: enabled, slot: slot);

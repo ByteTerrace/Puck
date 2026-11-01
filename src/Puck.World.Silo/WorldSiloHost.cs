@@ -5,6 +5,7 @@ using Puck.Storage;
 using Puck.World.Protocol;
 using Puck.World.Machines;
 using Puck.World.Server;
+using Puck.World.Addons;
 
 namespace Puck.World.Silo;
 
@@ -1193,6 +1194,17 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
     }
 
     private async Task<bool> ActivateCoreAsync(WorldAuthorityIdentity identity, CancellationToken ct) {
+        // A completed storage await need not yield; explicitly leave Orleans' scheduler before CPU construction.
+        await Task.CompletedTask.ConfigureAwait(options: ConfigureAwaitOptions.ForceYielding);
+        var activationTimer = System.Diagnostics.Stopwatch.StartNew();
+        var stageStarted = TimeSpan.Zero;
+
+        void NoteStage(string stage) {
+            var elapsed = activationTimer.Elapsed;
+
+            Console.Error.WriteLine(value: $"[silo.activate.timing: '{RowKey(identity: identity)}' {stage} {(elapsed - stageStarted).TotalMilliseconds:F0} ms; total {elapsed.TotalMilliseconds:F0} ms]");
+            stageStarted = elapsed;
+        }
         if (IsDraining) { return false; }
         if (FindWorldRow(identity: identity) is not { } worldRow) {
             Console.Error.WriteLine(value: $"[silo.activate: '{RowKey(identity: identity)}' refused (not declared in this silo's document)]");
@@ -1222,7 +1234,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
         var acquired = await m_store.AcquireActivationAsync(
             cancellationToken: ct,
             identity: identity
-        );
+        ).ConfigureAwait(continueOnCapturedContext: false);
 
         if (acquired is not { } fence) { return false; }
         var admitted = false;
@@ -1231,7 +1243,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
             var recovery = (await m_store.LoadRecoveryAsync(
                 cancellationToken: ct,
                 identity: identity
-            )
+            ).ConfigureAwait(continueOnCapturedContext: false)
                 ?? throw new InvalidDataException(message: "The acquired authority has no recovery root."));
 
             if (
@@ -1255,28 +1267,16 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                 return false;
             }
 
-            // The silo genuinely cannot mount an addon guest — refuse an initial candidate that names one enabled BY
-            // NAME, before any server exists to install it, rather than accepting the document and running it addon-
-            // less. WorldNoAddonHost.TryPrepare is the identical door the attached live host below enforces; reusing it
-            // here means this refusal and that one can never disagree.
-            if (!new WorldNoAddonHost().TryPrepare(
-                candidate: definition!,
-                current: null,
-                plan: out _,
-                reason: out var addonReason
-            )) {
-                Console.Error.WriteLine(value: $"[silo.activate: '{RowKey(identity: identity)}' refused (addon {addonReason})]");
-
-                return false;
-            }
-
             var checkpointBlob = recovery.Checkpoint;
+
+            NoteStage(stage: "storage");
             WorldAuthorityCheckpoint? checkpoint = null;
 
             if (checkpointBlob is { } blob) {
                 if (!WorldAuthorityCheckpointCodec.TryDecode(
                     bytes: blob.Encoded.Span,
                     checkpoint: out checkpoint,
+                    documentDirectory: m_documentDirectory,
                     reason: out var decodeReason
                 )) {
                     Console.Error.WriteLine(value: $"[silo.activate: '{RowKey(identity: identity)}' refused (checkpoint decode: {decodeReason})]");
@@ -1285,6 +1285,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                 }
             }
 
+            NoteStage(stage: "checkpoint decode");
             var ownedWorldsDirectory = Path.Combine(
                 path1: m_definition.StateDir,
                 path2: "hosted",
@@ -1345,6 +1346,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                 throw;
             }
 
+            NoteStage(stage: "authority construction and restore");
             if (!TryFinishActivationWiring(
                 adjacencies: adjacencies,
                 identity: identity,
@@ -1355,6 +1357,8 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                 return false;
             }
 
+            NoteStage(stage: "activation wiring and addons");
+
             if (!TryBuildFederationIdentity(
                 definition: definition,
                 trustEntries: () => server.Definition.Admission,
@@ -1363,6 +1367,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                 worldRow: worldRow
             )) {
                 Console.Error.WriteLine(value: $"[silo.activate: '{RowKey(identity: identity)}' refused ({federationReason})]");
+                server.Addons?.Dispose();
                 adjacencies.Dispose();
                 machines.Dispose();
 
@@ -1371,7 +1376,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
 
             var link = new LoopbackTransport(server: server);
             var tape = new WorldReplayTape(
-                addonHostFactory: static (_, _) => new WorldNoAddonHost(),
+                addonHostFactory: static (definition, server) => WorldAddonRuntime.Create(definition: definition, server: server),
                 engines: [],
                 liveServer: server,
                 machineHostFactory: MachineHostFactory,
@@ -1392,6 +1397,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                 name: identity.World.Value,
                 origin: () => origin.Identity,
                 ownedAdjacencies: adjacencies,
+                ownedAddons: server.Addons,
                 ownedMachines: machines,
                 ownedNetwork: federation.Network,
                 server: server

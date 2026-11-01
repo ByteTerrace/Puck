@@ -94,6 +94,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     // WorldMachineHost itself — the same "the server calls out, the composition root supplies the capability" shape
     // as m_addonHostFactory (WorldReplaySnapshot).
     private readonly Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, WorldOutputHub?, IWorldMachineHost> m_machineHostFactory;
+    private readonly Func<WorldDefinition, WorldServer, IWorldAddonHost>? m_addonHostFactory;
     // The transport-neutral local resolver ResolveAndEnqueueCoalescedTransfers consumes to turn a
     // destinations row plus a traveling cohort into a scoped generation/instance name — see
     // WorldSessionResolver. TryRetire notifies it so a reaped/stopped instance's cache entry does not
@@ -290,7 +291,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     // authenticated peer namespace is that identity.
     private IWorldCustodyPeer? ResolveCustodyPeer(string authority) {
         if (m_custodyPeers.TryGetValue(key: authority, value: out var home)) {
-            return home;
+            return ((home is WorldServer { IsRetiring: true }) ? null : home);
         }
         foreach (var remote in m_remoteCustodyPeers.Keys) {
             if (string.Equals(a: remote.PeerAuthority, b: authority, comparisonType: StringComparison.Ordinal)) {
@@ -507,7 +508,8 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     /// <see cref="m_retainedInstances"/> — a <c>persistent</c>-lifetime transfer destination stays up through an
     /// occupancy dip to zero, by design), an unknown name, an instance that still holds an active entry, an authority
     /// that still forwards departed travelers, one whose custody still holds (the guard <see cref="Stop"/> applies
-    /// too), or an instance a queued transfer is bound for. Forwarding authorities remain available until explicitly
+    /// too), one an explicit stop is retiring (its stop finishes it, final image included) or that has frozen for
+    /// retirement, or an instance a queued transfer is bound for. Forwarding authorities remain available until explicitly
     /// stopped; an instance spared for its custody or a queued arrival is reaped by the drain after which neither
     /// holds it, if it is still empty then.</summary>
     /// <param name="name">The instance name to reap if now empty.</param>
@@ -521,7 +523,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
             return false;
         }
 
-        if (m_retainedInstances.Contains(item: name)) {
+        if (m_retainedInstances.Contains(item: name) || m_stopping.Contains(item: name)) {
             return false;
         }
 
@@ -530,6 +532,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
             key: name,
             value: out var instance
         ) ||
+            instance.Server.IsRetiring ||
             (instance.Server.Population.ActiveCount() > 0)
         ) {
             return false;
@@ -814,6 +817,9 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
                         tape: instance.Tape,
                         peerHost: instance.Door
                     );
+                } catch (TimeoutException error) when (instance.Server.Tick.ExecutionInterrupted) {
+                    instance.Server.Output.Narrate("world.instance", $"[world.instance: '{name}' execution interrupted; recover from its last checkpoint: {error.Message}]");
+                    break;
                 } finally {
                     WorldNarrationScope.Current = null;
                 }
@@ -1254,6 +1260,8 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
             m_narration
         );
         WorldInstance started;
+        IWorldAddonHost? addons = null;
+        WorldAdjacencyFields? adjacencies = null;
 
         // Construction touches the file system (the owned-world store creates its directory and seeds documents into
         // it). This runs on the FIXED-STEP THREAD — world.instance.start routes Simulation — where an escaping
@@ -1287,13 +1295,20 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
                     ? admission
                     : null)
             );
-            var adjacencies = new WorldAdjacencyFields(
+
+            adjacencies = new WorldAdjacencyFields(
                 instances: this,
                 sourceInstanceName: name
             );
 
             server.Neighbours = instanceNeighbours;
             server.Adjacencies = adjacencies;
+            if (m_addonHostFactory is { } addonFactory) {
+                addons = addonFactory(definition, server);
+                server.AttachAddons(runtime: addons);
+            } else if (definition.Addons.Any(predicate: row => row.Enabled)) {
+                throw new InvalidOperationException(message: "Enabled addons require the host's addon factory.");
+            }
 
             // The identical two-line pattern WorldBootComposition wires for the boot instance's own transport (a
             // WorldServer implements IWorldServerHost directly — see LoopbackTransport's own remarks) — one
@@ -1312,9 +1327,12 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
                     catalogFingerprint: m_catalogFingerprint,
                     resolvedPath: resolvedPath
                 ),
-                ownedAdjacencies: adjacencies
+                ownedAdjacencies: adjacencies,
+                ownedAddons: addons
             );
-        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or NotSupportedException or ArgumentException or System.Security.SecurityException)) {
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or NotSupportedException or ArgumentException or InvalidOperationException or System.Security.SecurityException)) {
+            addons?.Dispose();
+            adjacencies?.Dispose();
             machines.Dispose();
             reason = $"'{name}' could not open its owned-world store at {ownedWorlds} — {exception.Message}";
 
@@ -1344,6 +1362,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
         Retire(instance: instance);
         return true;
     }
+
     // The refusals every retirement shares: the boot instance, an unknown name, and a row presenting a local seat.
     private bool TryRetirable(string name, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out WorldInstance? instance, out string reason) {
         if (string.Equals(
@@ -1397,6 +1416,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
         _ = m_instances.Remove(key: name);
         _ = m_deferredReaps.Remove(item: name);
         _ = m_stopping.Remove(item: name);
+        _ = m_stopNarrated.Remove(key: name);
         ForgetResolvedDocuments();
         _ = m_documentShared.Remove(key: name);
         // A stopped row answers for no transfer. An in-doubt transfer addressed to it waits, by authority, for the
@@ -1484,7 +1504,8 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     /// passes it to place an observed route before, during or after the claim.</param>
     /// <param name="pacing">The live host pacing policy shared by every instance's replay stepper. A non-launcher
     /// host defaults to inline wall-clock pacing.</param>
-    public WorldInstanceHost(IWorldEmbodiedSeats seats, WorldSessionResolver resolver, Guid machineId, WorldStateRoot stateRoot, CancellationToken applicationStopping, Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, WorldOutputHub?, IWorldMachineHost> machineHostFactory, bool admitsSpawn = true, string catalogFingerprint = "", IMachineValidationCatalog? machineCatalog = null, Action<WorldRemoteAuthority>? travelerRouteStarted = null, HostPacing? pacing = null) {
+    /// <param name="addonHostFactory">The composition root's shared addon mount path for spawned rows.</param>
+    public WorldInstanceHost(IWorldEmbodiedSeats seats, WorldSessionResolver resolver, Guid machineId, WorldStateRoot stateRoot, CancellationToken applicationStopping, Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, WorldOutputHub?, IWorldMachineHost> machineHostFactory, bool admitsSpawn = true, string catalogFingerprint = "", IMachineValidationCatalog? machineCatalog = null, Action<WorldRemoteAuthority>? travelerRouteStarted = null, HostPacing? pacing = null, Func<WorldDefinition, WorldServer, IWorldAddonHost>? addonHostFactory = null) {
         m_pacing = (pacing ?? HostPacing.WallClockInline);
         ArgumentNullException.ThrowIfNull(argument: seats);
         ArgumentNullException.ThrowIfNull(argument: resolver);
@@ -1500,6 +1521,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
         m_catalogFingerprint = catalogFingerprint;
         m_machineCatalog = machineCatalog;
         m_machineHostFactory = machineHostFactory;
+        m_addonHostFactory = addonHostFactory;
         m_admitsSpawn = admitsSpawn;
         m_travelerRouteStarted = travelerRouteStarted;
     }
@@ -1704,7 +1726,8 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
                     b: row.Name,
                     comparisonType: StringComparison.Ordinal
                 ))
-                .Select(selector: pair => (pair.Key.Seat, pair.Value))]
+                .Select(selector: pair => (pair.Key.Seat, pair.Value))],
+            Stopping: m_stopping.Contains(item: row.Name)
         );
     }
     /// <summary>Restores this row's own slice of the host engine's cross-instance tables from a previously captured
@@ -1741,6 +1764,9 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
 
         m_freshCounters[row.Name] = slice.FreshCounter;
 
+        if (slice.Stopping) {
+            _ = m_stopping.Add(item: row.Name);
+        }
         if (slice.Retained) {
             _ = m_retainedInstances.Add(item: row.Name);
         }

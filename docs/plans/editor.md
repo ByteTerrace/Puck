@@ -28,7 +28,11 @@ session saved back into the place's `.puck` source. Highest-quality frame target
 
 ## Implementation status
 
-E1's mechanisms are in place; its authored standard bindings and feel remain open: every seat can enter build mode (`player.build`, the built-in
+E1 is in place, its design authored in `worlds/standard/editor.puck` (the
+`editor` section's grid, snapping, camera feel, build toggle, read-only label
+and build bar, and the `editor` binding overlay's build page and context row; a
+world without the section has no build controls, and the editor verbs refuse by
+name): every seat can enter build mode (`player.build`, the built-in
 `editor` context family), draw its own grid on the ground it works on, and put
 down, nudge and turn placements by whole grid and angle steps from bound keys
 (`world.grid`, `world.snap`, `world.place`, `world.nudge`, `world.turn`). The
@@ -667,6 +671,9 @@ pitch pass the pole).
 
 **Depends on:** E1; E2 for framing.
 
+**Status:** the feel is authored (`editor.camera` in `worlds/standard/editor.puck`,
+every field required and validated by name); the camera that reads it is open.
+
 ### E9 — Cost per object and GPU pass timing
 
 **Problem:** a builder cannot tell which object makes the frame slow.
@@ -1030,12 +1037,9 @@ holds, so no capability is lost on the way.
 - Decide (the lead's call): Primitives that lower to a distance bound under a non-uniform scale: iterate an exact distance, change the zero set, or refuse such scales at authoring.
 
 What the plan still owes. A line is deleted when its work lands, never ticked;
-the [open items](open-items.md#next) rank the work packets drawn from it. E1's
-mechanisms, E5, E9, E10, and E14's recording and scrubbing are in.
-
-- [E1](#e1--build-mode-the-grid-and-snapping): move bars, pages, keys, grid, snap,
-  and feel into the standard editor source imported by debug; schema defaults
-  with the same constants leave this open.
+the [open items](open-items.md#next) rank the work packets drawn from it. E1,
+E5, E9, E10, and E14's recording and scrubbing are in; E8's feel values and
+bindings are authored in `worlds/standard/editor.puck`.
 
 - [E2](#e2--selection-picking-and-highlight): the identity map and GPU hover
   picking are in place through P13; the line primitive, `world.select`,
@@ -1054,8 +1058,9 @@ mechanisms, E5, E9, E10, and E14's recording and scrubbing are in.
   point, `board(pointer, …)`, `WorldTabletopFrame.TryPointerCell`, and the debug
   world's chess rules lift a piece on press and put it down on a click or a
   release elsewhere); the gizmos and the placement drag remain.
-- [E8](#e8--editor-camera): generic editor camera ops with feel and bindings
-  authored in the standard editor source.
+- [E8](#e8--editor-camera): the editor camera itself (the view override, its
+  camera-program ops and `world.camera`); its feel values are authored and
+  validated in the standard's `editor.camera`, and nothing reads them yet.
 - [E11](#e11--save-edits-back-to-source): source-preserving save for authored
   rows has landed, with named generated-row refusals; E3's live duplicate and
   rename workflow remains.

@@ -67,12 +67,41 @@ public readonly record struct SdfMeshIrradianceParameters(bool Enabled, float Sp
 /// scene. Until a probe lands, the old one keeps drawing. The dynamic draws (moving bodies) receive the volume's light
 /// and do not cast into it; an anchored light, which moves, is neither traced nor occluded.</para>
 /// </summary>
-public sealed class SdfMeshIrradiance {
+public sealed class SdfMeshIrradiance : IDisposable {
+    private bool m_disposed;
+    private bool m_trimListening;
+
+    private void TrimRetained() {
+        lock (m_gate) {
+            if (m_disposed || (m_scene is null)) { return; }
+            var previous = m_scene;
+
+            m_scene = previous.WithoutRetained();
+            previous.Dispose();
+        }
+    }
+
+    /// <summary>Stops new work, joins scene and trace borrowers, then releases the last scene.</summary>
+    public void Dispose() {
+        Task[] jobs;
+
+        lock (m_gate) {
+            if (m_disposed) { return; }
+            m_disposed = true;
+            if (m_trimListening) { Puck.Hosting.Jobs.MemoryAccount.Shared.TrimRequested -= TrimRetained; m_trimListening = false; }
+            m_owed = m_refillOwed = false;
+            jobs = new[] { m_build, m_refill, m_worker }.OfType<Task>().ToArray();
+        }
+        try { Task.WhenAll(jobs).GetAwaiter().GetResult(); } finally { lock (m_gate) { m_scene?.Dispose(); m_scene = null; m_materialsScene = null; m_diagnosticDraws = []; } }
+    }
+
     /// <summary>The most probes a volume holds, the High tier's: its finest window and the coarser levels'.</summary>
     public const int MaxProbes = (((48 * 16) * 48) + ((SdfMeshIrradianceProbe.Levels - 1) * ((32 * 12) * 32)));
+
     /// <summary>The probe spacing, in metres, of each level past the finest, whatever the tier: a window of 32 cells
     /// reaches 256 metres at the second level and 1,024 at the third.</summary>
     public static ReadOnlySpan<float> LevelSpacing => [8f, 32f];
+
     /// <summary>The counter source's name.</summary>
     public const string SourceName = "sdf.mesh-gi";
 
@@ -142,7 +171,6 @@ public sealed class SdfMeshIrradiance {
     // measures what has landed without restarting on every arrival. Presentation only: the scene a frame lights by is
     // never simulation state.
     private static readonly TimeSpan PendingSceneInterval = TimeSpan.FromSeconds(value: 4d);
-
     private readonly Lock m_gate = new();
     private readonly Level[] m_levels = CreateLevels();
 
@@ -172,6 +200,7 @@ public sealed class SdfMeshIrradiance {
 
         return string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $"probe-cache-probes={count} probe-cache-capacity={capacity} probe-cache-table={table}B probe-cache-blocks={blocks}B probe-cache-bytes={(table + blocks)}B");
     }
+
     // The trace's candidates and a batch's results, kept across batches and traces: one trace runs at a time.
     private readonly List<(int Level, (int X, int Y, int Z) Cell, int Sweeps, float Distance)> m_candidates = [];
     private ProbeData[] m_results = [];
@@ -190,9 +219,9 @@ public sealed class SdfMeshIrradiance {
     private Action<ReadOnlyMemory<uint>>? m_write;
     private SdfMeshIrradianceScene? m_scene;
 
-    /// <summary>Returns the existing opaque static BVH only when it represents the supplied frame's exact draw inputs.</summary>
+    /// <summary>Acquires the opaque static BVH only when it represents the supplied frame's exact draw inputs.</summary>
     /// <param name="frame">The retained rendered frame.</param>
-    /// <returns>The matching scene, or null while absent or building.</returns>
+    /// <returns>The matching scene under a claim the caller disposes, or null while absent or building.</returns>
     public SdfMeshIrradianceScene? DiagnosticScene(SdfFrame frame) {
         ArgumentNullException.ThrowIfNull(frame);
         lock (m_gate) {
@@ -202,7 +231,7 @@ public sealed class SdfMeshIrradiance {
                 if (!SdfMeshIrradianceScene.IsStatic(draw: in draw)) { continue; }
                 if ((index >= m_diagnosticDraws.Length) || (draw != m_diagnosticDraws[index++])) { return null; }
             }
-            return ((index == m_diagnosticDraws.Length) ? m_scene : null);
+            return ((index == m_diagnosticDraws.Length) ? m_scene?.Acquire() : null);
         }
     }
 
@@ -238,6 +267,7 @@ public sealed class SdfMeshIrradiance {
     // Whether the windows may hold probes the trace has not yet traced: set when the scene, the lighting or a window
     // changes, cleared when a trace finds every probe of every window traced.
     private bool m_owed;
+
     // Whether a level holds slots composed since its last publication.
     private bool Dirty {
         get {
@@ -247,6 +277,7 @@ public sealed class SdfMeshIrradiance {
             return false;
         }
     }
+
     // Whether the latest Stage wrote the volume table: the frame it prepared must render even once the trace is done.
     private bool m_wrote;
     private bool m_reported;
@@ -350,7 +381,7 @@ public sealed class SdfMeshIrradiance {
 
         lock (m_gate) {
             m_wrote = false;
-            if (!bakePending || ScenePendingDue(frame: frame)) { _ = RefreshScene(frame: frame, bakePending: bakePending); }
+            if (!bakePending || ScenePendingDue(frame: frame)) { _ = RefreshScene(bakePending: bakePending, frame: frame); }
             RefreshLighting(frame: frame, layout: layout);
             m_camera = WindowCamera(frame: frame);
             if (m_cameraSamples.Length != frame.Views.Count) {
@@ -425,6 +456,7 @@ public sealed class SdfMeshIrradiance {
             return m_published;
         }
     }
+
     // Publishes each level whose window has every slot measured: the slots composed since its last publication reach the
     // table in one write with every other ready level's, and its window's coordinates reach the parameters. A level with
     // a slot still unmeasured keeps its previous window and table words, since publishing an empty slot would invent
@@ -484,7 +516,7 @@ public sealed class SdfMeshIrradiance {
             low = (Math.Min(val1: low.X, val2: cell.X), Math.Min(val1: low.Y, val2: cell.Y), Math.Min(val1: low.Z, val2: cell.Z));
             high = (Math.Max(val1: high.X, val2: cell.X), Math.Max(val1: high.Y, val2: cell.Y), Math.Max(val1: high.Z, val2: cell.Z));
         }
-        if (!Fits(low: low.X, high: high.X, dims: dims.X) || !Fits(low: low.Y, high: high.Y, dims: dims.Y) || !Fits(low: low.Z, high: high.Z, dims: dims.Z)) {
+        if (!Fits(dims: dims.X, high: high.X, low: low.X) || !Fits(dims: dims.Y, high: high.Y, low: low.Y) || !Fits(dims: dims.Z, high: high.Z, low: low.Z)) {
             low = first;
             high = first;
         }
@@ -498,6 +530,7 @@ public sealed class SdfMeshIrradiance {
         (((int)MathF.Floor(x: (position.X / spacing))), ((int)MathF.Floor(x: (position.Y / spacing))), ((int)MathF.Floor(x: (position.Z / spacing))));
     // Whether cells from low to high fit in a window's middle along one axis.
     private static bool Fits(int low, int high, int dims) => ((high - low) < (dims - (2 * Math.Max(val1: 1, val2: (dims / 8)))));
+
     /// <summary>Reads the volume as a center-weighted reflected-light meter at a camera: the luminance the traced probes
     /// about the camera see along each of their six axes, the light the surfaces about it reflect and emit under every
     /// traced light and the sky through the openings it sees, averaged with each axis weighted by the squared cosine of
@@ -683,21 +716,29 @@ public sealed class SdfMeshIrradiance {
     // Apart from RefreshScene, since the build's closure is made on entry to the method holding it, and nearly every frame
     // matches the installed scene.
     private Task StartSceneBuild(SdfFrame frame, int key, int draws) {
+        if (!m_trimListening) { Puck.Hosting.Jobs.MemoryAccount.Shared.TrimRequested += TrimRetained; m_trimListening = true; }
         var snapshot = frame.MeshDraws.ToArray();
-        var previous = m_scene;
+        var previous = m_scene?.Acquire();
+        var snapshotClaims = new SdfMeshClaims(meshes: snapshot.Select(selector: static draw => draw.Mesh));
 
         m_buildingKey = key;
         m_sceneClock.Restart();
         m_build = Task.Run(action: () => {
+            using var snapshotBorrow = snapshotClaims;
+            using var previousBorrow = previous;
             var clock = Stopwatch.StartNew();
             var scene = SdfMeshIrradianceScene.Build(draws: snapshot, previous: previous);
 
             Counters.Count(kind: Scenes);
-            Counters.Add(amount: (scene?.GeometriesBuilt ?? 0), kind: GeometriesBuilt);
-            Counters.Add(amount: (scene?.GeometriesReused ?? 0), kind: GeometriesReused);
-            Counters.Add(amount: (scene?.TrianglesBuilt ?? 0L), kind: TrianglesBuilt);
+            Counters.Add(amount: scene.GeometriesBuilt, kind: GeometriesBuilt);
+            Counters.Add(amount: scene.GeometriesReused, kind: GeometriesReused);
+            Counters.Add(amount: scene.TrianglesBuilt, kind: TrianglesBuilt);
             lock (m_gate) {
+                if (m_disposed) { scene.Dispose(); return; }
+                var oldScene = m_scene;
+
                 m_scene = scene;
+                oldScene?.Dispose();
                 m_diagnosticDraws = snapshot.Where(predicate: d => SdfMeshIrradianceScene.IsStatic(draw: d)).ToArray();
                 m_sceneKey = key;
                 m_buildingKey = 0;
@@ -957,14 +998,15 @@ public sealed class SdfMeshIrradiance {
             int generation;
 
             lock (m_gate) {
-                if ((m_scene is null) || (m_lighting is null)) { return; }
-                scene = m_scene;
+                if (m_disposed || (m_scene is null) || (m_lighting is null)) { return; }
+                scene = m_scene.Acquire();
                 lighting = m_lighting;
                 layout = m_layout;
                 lows = Lows();
                 camera = m_camera;
                 generation = m_generation;
             }
+            using var sceneBorrow = scene;
 
             candidates.Clear();
             for (var level = 0; (level < m_levels.Length); level++) {
@@ -1366,6 +1408,7 @@ public sealed class SdfMeshIrradiance {
             Span<(int X, int Y, int Z)> cells = stackalloc (int, int, int)[8];
             Span<float> weights = stackalloc float[8];
             var probes = new Corners();
+
             var (_, measured) = Select(point: point, normal: normal, layout: m_layout, lows: Lows(), readable: true,
                 cells: cells, cornerWeights: weights, cornerProbes: ref probes);
 
@@ -1499,6 +1542,7 @@ public sealed class SdfMeshIrradiance {
         var dims = layout.DimsOf(level: level);
         var cache = m_levels[level].Cache;
         var pushed = (point + (normal * SdfMeshIrradianceProbe.NormalBias));
+
         var (unclamped, sample) = Lattice(layout: layout, level: level, low: low, normal: normal, point: point);
         // How far past the boundary probes the receiver stands, in cells, at most one: the facing term eases to one over
         // that cell, since every boundary probe lies on the window's side of a receiver outside it.
@@ -1666,7 +1710,6 @@ public sealed class SdfMeshIrradiance {
 
             return (tableBytes, blockBytes, capacity);
         }
-
         // Forgets every probe; the next write starts a table of the capacity the cache last reached.
         public void Clear() {
             if (m_table is { } table) { m_capacity = table.Keys.Length; }
@@ -1780,6 +1823,7 @@ public sealed class SdfMeshIrradiance {
         public int Index { get; } = index;
         public ProbeCache Cache { get; } = new();
         public List<int> Changed { get; } = [];
+
         public (int X, int Y, int Z) Low;
         public int Unwritten;
         public SdfMeshIrradianceWindow Published;
@@ -1811,10 +1855,11 @@ public sealed class SdfMeshIrradiance {
             for (var finer = 0; (finer < level); finer++) { offset += CountOf(level: finer); }
             return offset;
         }
+
         public int TotalCount => OffsetOf(level: SdfMeshIrradianceProbe.Levels);
+
         public SdfMeshIrradianceWindow WindowOf(int level, (int X, int Y, int Z) low) =>
             new(Dims: DimsOf(level: level), Low: low, Spacing: SpacingOf(level: level));
-
         public static Layout Of(SdfIndirectTier tier, int? bounces) {
             var high = (tier == SdfIndirectTier.High);
             var cap = (high ? 3 : 2);

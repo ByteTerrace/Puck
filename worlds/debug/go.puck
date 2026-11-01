@@ -1,4 +1,4 @@
-import "inputs"
+import "../standard/inputs"
 import "shapes"
 // Physical Go on a 19x19 board: 361 rigid stones on a goban in the gallery hall's board game room (hall.puck), whose every
 // settled arrangement is judged against the position the rules last accepted, and a computer opponent. The debug

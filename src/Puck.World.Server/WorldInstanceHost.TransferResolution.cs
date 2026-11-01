@@ -30,6 +30,12 @@ public sealed partial class WorldInstanceHost {
         for (var index = 0; (index < m_inDoubtTransfers.Count);) {
             var pending = m_inDoubtTransfers[index];
 
+            // A row frozen for retirement answers no authority operation: its own departures in doubt wait for the
+            // activation that replaces it, whose image carries them.
+            if (m_instances.TryGetValue(key: pending.Transfer.SourceInstance, value: out var frozen) && frozen.Server.IsRetiring) {
+                index++;
+                continue;
+            }
             // A settled crossing whose unlanded members could not be restored owes their restoration alone.
             if (pending.RestoreOnly) {
                 if (
@@ -42,7 +48,8 @@ public sealed partial class WorldInstanceHost {
                 }
                 continue;
             }
-            if (!TryBindRecoveryDestination(pending: ref pending)) {
+            // A destination frozen for retirement is asked nothing: the activation that replaces it answers.
+            if (!TryBindRecoveryDestination(pending: ref pending) || (pending.TargetAuthority?.Local?.Server.IsRetiring == true)) {
                 index++;
                 continue;
             }
@@ -564,6 +571,11 @@ public sealed partial class WorldInstanceHost {
                     value: out resolved
                 )) {
                     reason = $"no instance named '{resolvedName}'";
+
+                    return false;
+                }
+                if (resolved.Server.IsRetiring) {
+                    reason = $"'{resolvedName}' is retiring and admits no arrival";
 
                     return false;
                 }

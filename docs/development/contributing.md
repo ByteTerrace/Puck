@@ -940,6 +940,15 @@ unverified when no device run exists.
 
 ## Hardware and toolchain cautions
 
+- Docker Desktop is installed on the lead machine, but its service starts
+  manually, so a stopped engine is not a missing one. When `docker version`
+  reports no server, start it with
+  `Start-Process "C:\Program Files\Docker\Docker\Docker Desktop.exe"` and wait
+  until `docker version --format '{{.Server.Version}}'` answers (under a
+  minute). Then the container legs run locally: build an image as CI does
+  (`docker build --file src/<Project>/Dockerfile --tag puck/<image>:local .`
+  from the root) and run `puck azure test-world-container --image
+  puck/world-silo:local`.
 - The owner's development machine (Ryzen 7 7800X3D, RTX 4070) powers off
   without a bugcheck, a dump or a hardware-error record under sustained load, as
   a thermal or power trip does, most often while a windowed World renders and
@@ -952,7 +961,14 @@ unverified when no device run exists.
   Log Sensors, Run On Windows Startup and Start Minimized ticked (they persist
   in `LibreHardwareMonitor.config` beside the executable; with no such file it
   has never logged). System event 41 with `BugcheckCode=0`, no power-button
-  timestamp, no WHEA record and no minidump is the trip's signature. A trip
+  timestamp, no WHEA record and no minidump is the trip's signature.
+  One trip's last logged rows point at sustained CPU load at its thermal limit
+  rather than the GPU: five lanes were building, baking and measuring, with no
+  windowed World. CPU Total read 100 % then 83 %, `Core (Tctl/Tdie)` 90 then
+  88.75 °C (the 7800X3D's limit is 89 °C), Package power 77 W, and GPU board
+  power 19 to 47 W. A short Python `csv` reader prints those columns faster
+  than PowerShell string handling; LibreHardwareMonitor rotates its log into
+  small files, so the trip's file is the last one written before the reboot. A trip
   zero-fills files whose data had not reached the disk: in one, `.git/config`,
   `.git/index`, the integration branch's ref file and every file of an
   in-progress merge read as NUL bytes. Recovery: find them

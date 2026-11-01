@@ -16,7 +16,8 @@ public enum SdfUpdateRates : byte {
     /// <summary>Every lever off: everything updates every frame.</summary>
     None = 0,
     /// <summary>A body's pose evaluation and skinned pose (its drivers, effectors and part slots) at least 30 or 15 times
-    /// a second as its pixels per metre fall, its root still followed every frame.</summary>
+    /// a second as its pixels per metre fall, and held while nothing may show or read its pose, its root still followed
+    /// every frame.</summary>
     Bodies = 1,
     /// <summary>A nested portal or session view at least 30 or 15 times a second as the share of the display it covers
     /// shrinks.</summary>
@@ -78,10 +79,17 @@ public static class SdfUpdateRateTiers {
     /// <summary>Returns the rate a body updates at for its largest pixels per metre over the views that may see it.</summary>
     /// <param name="pixelsPerMetre">The body's pixels per metre in the view that shows it largest, or zero when no view
     /// may see it.</param>
-    /// <returns>60, 30 or 15: the hertz the body's pose updates at, where 60 means every frame.</returns>
-    public static int BodyHertz(float pixelsPerMetre) => ((pixelsPerMetre > BodyHalfRatePixelsPerMetre)
+    /// <param name="shownElsewhere">Whether anything but a displayed view's image may show or read the body's pose: a
+    /// shadow a cascade may draw, a camera whose view the display showed none of yet, or a consumer of its parts (a light,
+    /// a camera anchor, an audio emitter). A body no displayed view may see but that is shown elsewhere takes the
+    /// slowest tier, its pose still moving.</param>
+    /// <returns>60, 30 or 15: the hertz the body's pose updates at, where 60 means every frame; or
+    /// <see cref="HeldHertz"/> when nothing may show or read its pose.</returns>
+    public static int BodyHertz(float pixelsPerMetre, bool shownElsewhere) => ((pixelsPerMetre > BodyHalfRatePixelsPerMetre)
         ? 60
-        : ((pixelsPerMetre > BodyQuarterRatePixelsPerMetre) ? 30 : 15));
+        : ((pixelsPerMetre > BodyQuarterRatePixelsPerMetre)
+            ? 30
+            : (((pixelsPerMetre > 0f) || shownElsewhere) ? 15 : HeldHertz)));
     /// <summary>Returns the rate a nested view renders at for the pixels of display height it covers.</summary>
     /// <param name="pixels">The view's height on the display, in pixels.</param>
     /// <returns>60, 30 or 15, where 60 means every frame its consumer renders.</returns>
@@ -96,6 +104,9 @@ public static class SdfUpdateRateTiers {
         : ((share > ScreenQuarterRateShare) ? 30 : 15));
     /// <summary>The tier that means every frame: content at it is not rated.</summary>
     public const int EveryFrameHertz = 60;
+    /// <summary>The tier of rated work nothing shown depends on: it holds until something may show it again, whatever the
+    /// time held.</summary>
+    public const int HeldHertz = 0;
 
     /// <summary>Returns the code a tier view shows a rated item by (<see cref="SdfUpdateRateCode"/>).</summary>
     /// <param name="hertz">The item's tier: 60 or more for every frame, 30 or 15.</param>
@@ -113,14 +124,14 @@ public static class SdfUpdateRateTiers {
     /// and the floor at its tier still holds (<see cref="PresentationRate.Holds"/>), so it updates at least
     /// <paramref name="hertz"/> times a second of presentation time whatever the frames' pace.</summary>
     /// <param name="rate">The frame's presentation rate.</param>
-    /// <param name="hertz">The item's tier: 60 for every frame, 30 or 15.</param>
+    /// <param name="hertz">The item's tier: 60 for every frame, 30 or 15, or <see cref="HeldHertz"/>, which holds on
+    /// every paced frame.</param>
     /// <param name="elapsedSeconds">The presentation time from the frame the item last updated on to this frame.</param>
     /// <param name="frameSeconds">The latest frame's span.</param>
-    /// <returns><see langword="true"/> when the item holds this frame.</returns>
-    public static bool Holds(PresentationRate rate, int hertz, double elapsedSeconds, double frameSeconds) => (
-        (hertz < EveryFrameHertz) &&
-        rate.Holds(elapsedSeconds: elapsedSeconds, frameSeconds: frameSeconds, hertz: hertz)
-    );
+    /// <returns><see langword="true"/> when the item holds this frame; never on a host not paced to a display.</returns>
+    public static bool Holds(PresentationRate rate, int hertz, double elapsedSeconds, double frameSeconds) => ((hertz == HeldHertz)
+        ? rate.IsPaced
+        : ((hertz < EveryFrameHertz) && rate.Holds(elapsedSeconds: elapsedSeconds, frameSeconds: frameSeconds, hertz: hertz)));
 }
 /// <summary>
 /// The longest interval between updates each <see cref="SdfUpdateRates"/> lever achieved at each reduced tier over a

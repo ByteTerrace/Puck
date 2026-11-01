@@ -2467,6 +2467,9 @@ public sealed partial class WorldTransferEscrow {
         return false;
     }
 
+    /// <summary>Gets how many reservations this destination accepted that have neither landed nor expired: arrivals it
+    /// has promised a commit for.</summary>
+    public int AcceptedArrivals => m_leases.Count;
     public WorldTransferTableCounts Counts => new(
         ActiveTransactions: ((m_leases.Count + m_committed.Count) + m_uncertain.Count),
         MobilityCredentials: m_mobilityAdmissions.Count,

@@ -10,7 +10,7 @@ namespace Puck.SdfVm;
 /// placements and stamps, and so does each group the mesh-path bake contours (<see cref="SdfMeshPathBake"/>), which also
 /// carries each vertex's normal and each triangle's palette entry, and, for a group whose shapes ride slots of their own,
 /// each vertex's member (<see cref="Members"/>). The mesh pass rasterizes it.</remarks>
-public sealed record SdfMesh {
+public sealed partial record SdfMesh {
     /// <summary>The actual contour lattice spacing in object space; zero for an authored triangle mesh.</summary>
     public Vector3 BakeCell { get; init; }
     /// <summary>Gets the independently drawn pieces of a large static union; empty for a single mesh. The mesh's own

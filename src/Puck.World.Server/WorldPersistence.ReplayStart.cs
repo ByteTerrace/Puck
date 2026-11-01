@@ -10,7 +10,6 @@ public sealed partial class WorldPersistence {
     private WorldDefinitionAdmission CheckpointAdmission(byte[] json) => m_checkpointAdmissions.GetValue(json,
         bytes => WorldDefinitionSerialization.DeserializeForAdmission(documentDirectory: Host.Configuration.DocumentDirectory,
             utf8Json: bytes, machines: Host.Machines.ValidationCatalog));
-
     // A computed identity for a serialized definition: every member except the command schedule.
     private static string ConfigurationShape(byte[] json) {
         using var document = JsonDocument.Parse(json);
@@ -27,13 +26,20 @@ public sealed partial class WorldPersistence {
         stream.FlushFinalBlock();
         return Convert.ToHexStringLower(inArray: hash.Hash!);
     }
-    /// <summary>Restarts module memory and restores a replay's starting checkpoint into this authority, reinstalling the
+
+    /// <summary>Restores a replay's starting checkpoint into this authority, reinstalling the
     /// definition's geometry, machines and population first when the run edited its configuration.</summary>
     /// <param name="checkpoint">The checkpoint captured when the replay probe attached.</param>
-    public void RestoreReplayStart(WorldAuthorityCheckpoint checkpoint) {
+    /// <param name="restoreOwnedIdentities">Whether to restore owned documents; tapes retain only projected identities.</param>
+    /// <param name="documentDirectory">The tape's asset directory, or null to use this authority's directory.</param>
+    public void RestoreReplayStart(WorldAuthorityCheckpoint checkpoint, bool restoreOwnedIdentities = true, string? documentDirectory = null) {
         lock (Host.AuthorityGate) {
-            var admission = CheckpointAdmission(json: checkpoint.Server.DefinitionJson);
+            var admission = ((documentDirectory is null) ? CheckpointAdmission(json: checkpoint.Server.DefinitionJson)
+                : WorldDefinitionSerialization.DeserializeForAdmission(documentDirectory: documentDirectory,
+                    utf8Json: checkpoint.Server.DefinitionJson, machines: Host.Machines.ValidationCatalog));
             var definition = admission.Definition;
+            // A malformed guest image must refuse before geometry, machines, or the live definition move.
+            using var addonPlan = Host.Addons?.PrepareCheckpoint(definition, (checkpoint.Addons ?? []));
             // The run may have edited geometry or machine configuration after the checkpoint.
             if (ConfigurationShape(json: WorldDefinitionSerialization.Serialize(definition: Host.Configuration)) !=
                 ConfigurationShape(json: checkpoint.Server.DefinitionJson)) {
@@ -43,13 +49,8 @@ public sealed partial class WorldPersistence {
                 Host.Document.RestoreSolidField(solids, checkpoint.Server.SolidRevision);
                 Host.Document.Install(definition, rebuildPopulation: true, compilation: admission.Compilation);
             }
-            IWorldAddonPreparedPlan? plan = null;
-
-            if (Host.Addons is { } addons) {
-                if (!addons.TryPrepare(candidate: definition, current: null, plan: out plan, reason: out var reason)) { throw new InvalidOperationException(message: reason); }
-                if (plan is not null) { addons.Commit(plan: plan); addons.Finish(plan: plan); }
-            }
-            RestoreCheckpointCore(checkpoint, admission, resetSessionEpochs: true);
+            RestoreCheckpointCore(checkpoint, admission, resetSessionEpochs: true,
+                restoreOwnedIdentities: restoreOwnedIdentities, preparedAddons: addonPlan);
         }
     }
 }

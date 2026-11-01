@@ -22,7 +22,7 @@ namespace Puck.Scripting;
 /// in place: output cells only ever cross when a <c>puck_on_tick</c> return announces them, and
 /// <see cref="Tick"/> refuses to run unadmitted.</para>
 /// </remarks>
-public sealed class AddonInstance : IDisposable {
+public sealed partial class AddonInstance : IDisposable {
     private readonly AddonChannelBinding[] m_channelBindings;
     private readonly IAddonChannelResolver? m_channelResolver;
     private readonly AddonChannelDescriptor[] m_channels;
@@ -74,6 +74,9 @@ public sealed class AddonInstance : IDisposable {
         m_memories = moduleInfo.Memories;
         m_module = moduleInfo.Module;
         m_name = descriptor.Name;
+        m_checkpointGlobals = moduleInfo.CheckpointGlobals;
+        m_checkpointRefusal = moduleInfo.CheckpointRefusal;
+        ModuleSource = moduleInfo.Source;
 
         Instantiate();
     }
@@ -99,6 +102,10 @@ public sealed class AddonInstance : IDisposable {
     /// <summary>Gets whether <see cref="Admit"/> has run for the current store — the gate <see cref="Tick"/>
     /// requires.</summary>
     public bool Admitted => m_admitted;
+    /// <summary>The pinned source required to restore this guest independently of deployed files.</summary>
+    public ReadOnlyMemory<byte> ModuleSource { get; }
+    /// <summary>A resource preventing durable capture, or null when the guest can be captured.</summary>
+    public string? CheckpointRefusal => m_checkpointRefusal;
     /// <summary>Gets the input channel's resolved channel-name bindings (empty when the guest declares no input
     /// channel), indexed by the guest's own declared ordinal.</summary>
     public ReadOnlySpan<AddonChannelBinding> ChannelBindings => m_channelBindings.AsSpan(
@@ -210,15 +217,18 @@ public sealed class AddonInstance : IDisposable {
         try {
             store = new Store(engine: m_engine.Engine);
 
-            store.SetLimits(memorySize: AddonModuleLimits.MemoryBytes,
-                tableElements: AddonModuleLimits.TableElements, instances: 1,
-                memories: AddonModuleLimits.Memories, tables: AddonModuleLimits.Tables);
+            store.SetLimits(instances: 1,
+                memories: AddonModuleLimits.Memories, memorySize: AddonModuleLimits.MemoryBytes,
+                tableElements: AddonModuleLimits.TableElements, tables: AddonModuleLimits.Tables);
             store.Fuel = ((ulong)m_fuelPerTick);
+            store.SetEpochDeadline(ticksBeyondCurrent: ScriptingEngine.CallDeadlineEpochs);
 
             var instance = new Instance(
                 store: store,
                 module: m_module
             );
+
+            m_instance = instance;
 
             if (!TryHandshake(
                 instance: instance,
@@ -232,6 +242,7 @@ public sealed class AddonInstance : IDisposable {
             m_state = AddonState.Enabled;
             m_store = store;
         } catch (TrapException trap) {
+            if (trap.Type == TrapCode.Interrupt) { store?.Dispose(); throw new TimeoutException(innerException: trap, message: $"Addon '{m_name}' exceeded its execution deadline during instantiation."); }
             var kind = Classify(code: trap.Type);
 
             store?.Dispose();
@@ -531,6 +542,7 @@ public sealed class AddonInstance : IDisposable {
         var store = m_store!;
 
         store.Fuel = ((ulong)m_fuelPerTick);
+        store.SetEpochDeadline(ticksBeyondCurrent: ScriptingEngine.CallDeadlineEpochs);
 
         try {
             var init = m_initAction;
@@ -541,6 +553,7 @@ public sealed class AddonInstance : IDisposable {
 
             GC.KeepAlive(obj: store);
         } catch (TrapException trap) {
+            if (trap.Type == TrapCode.Interrupt) { throw new TimeoutException(innerException: trap, message: $"Addon '{m_name}' exceeded its execution deadline during initialization."); }
             var kind = Classify(code: trap.Type);
 
             m_lastFuelConsumed = FuelConsumed();
@@ -633,12 +646,14 @@ public sealed class AddonInstance : IDisposable {
             length: (m_outCap * AddonAbi.OutCellBytes)
         ).Clear();
         store.Fuel = ((ulong)m_fuelPerTick);
+        store.SetEpochDeadline(ticksBeyondCurrent: ScriptingEngine.CallDeadlineEpochs);
 
         int count;
 
         try {
             count = onTick(arg: input.Length);
         } catch (TrapException trap) {
+            if (trap.Type == TrapCode.Interrupt) { throw new TimeoutException(innerException: trap, message: $"Addon '{m_name}' exceeded its execution deadline during its tick."); }
             var kind = Classify(code: trap.Type);
             var consumed = FuelConsumed();
 
@@ -710,13 +725,14 @@ public sealed class AddonInstance : IDisposable {
     /// <returns>Whether the operation may execute.</returns>
     public bool TryChargeHostFuel(ulong cost, out ulong spent) {
         var remaining = m_store!.Fuel;
-        spent = Math.Min(remaining, cost);
-        m_store.Fuel = remaining - spent;
+
+        spent = Math.Min(val1: remaining, val2: cost);
+        m_store.Fuel = (remaining - spent);
         if (remaining < cost) {
-            SetFault(AddonFaultKind.OutOfFuel, "OutOfFuel during host query");
+            SetFault(kind: AddonFaultKind.OutOfFuel, reason: "OutOfFuel during host query");
             return false;
         }
-        return m_state == AddonState.Enabled;
+        return (m_state == AddonState.Enabled);
     }
     /// <summary>Reads <paramref name="length"/> bytes at <paramref name="pointer"/> out of the guest's linear
     /// memory into <paramref name="destination"/>, immediately — no live span is ever handed back, so nothing
@@ -784,13 +800,13 @@ public sealed class AddonInstance : IDisposable {
     /// <param name="error">Refusal reason, or empty on success.</param>
     /// <returns>Whether the entire result was written.</returns>
     public bool TryWriteMemory(long pointer, ReadOnlySpan<byte> source, out string error) {
-        ObjectDisposedException.ThrowIf(m_disposed, this);
-        if (pointer < 0 || pointer > uint.MaxValue || m_memory is not { } memory ||
-            pointer + source.Length > memory.GetLength()) {
+        ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
+        if ((pointer < 0) || (pointer > uint.MaxValue) || (m_memory is not { } memory) ||
+            ((pointer + source.Length) > memory.GetLength())) {
             error = "bulk result range is outside guest memory";
             return false;
         }
-        source.CopyTo(memory.GetSpan((int)pointer, source.Length));
+        source.CopyTo(destination: memory.GetSpan(address: ((int)pointer), length: source.Length));
         error = "";
         return true;
     }

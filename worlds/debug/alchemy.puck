@@ -1,5 +1,5 @@
 import "elements"
-import "inputs"
+import "../standard/inputs"
 import "shapes"
 
 // Physical Alchemy at the board room's north-east table on level 2 (hall.puck): 31 element tokens, four starters (Air,

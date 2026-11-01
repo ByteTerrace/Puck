@@ -354,8 +354,8 @@ a guest's compute and charged host query work, never its authority. Host queries
 mounted, never the row; only guests that reached the admitted set get one.
 The replay tape pins the receipts at record-start (and Drive re-checks them
 before tick zero on every re-drive) and refuses a re-drive whose fresh
-mounts disagree (see [replay.md](replay.md)). The ABI and replay format are
-still version 1 and develop in place. Re-record tapes after changing their
+mounts disagree (see [replay.md](replay.md)). The ABI and replay format
+admit only their current build's shape. Re-record tapes after changing their
 layout or execution semantics; do not preserve obsolete fields or add
 development version histories. A changed guest hash is independently
 refused by the receipt comparison. A live `world.row.set addons`/`world.row.remove addons` mutation
@@ -363,16 +363,17 @@ is captured and re-executed on replay through the ordinary tape-covered
 mutation leaf (see [replay.md](replay.md)'s mutation-outcome pin) — there is
 no separate lifecycle leaf left to reason about arming against.
 
-No checkpoint holds a guest's memory. A post-boot `replay.record`, including
-one sent over MCP, prepares every mounted guest fresh and captures the
-surrounding authority state at the arm under one authority operation. It
-commits the restart only after capture succeeds, so refusal leaves every live
-store untouched. The recording and its re-drive both start those pinned guests
-from module initialization; guest-private trails, counters and pending answers
-restart, while poses, authored state, grants, sessions and machine cores remain.
-Ordinary checkpoints still refuse pumped guests. Arming before the first step
+A post-boot `replay.record`, including one sent over MCP, captures live guest
+memory and host continuations with the surrounding authority state. Arming never
+replaces guests, pending answers or input controllers. Recording, history and
+persistence share `IWorldAddonHost`'s mandatory checkpoint boundary:
+memory, private numeric globals, fault/fuel state and the mount's cross-tick host
+state. The [runtime README](../../../../src/Puck.World.Addons/README.md#durable-guest-state)
+owns its inventory and named unsupported-resource refusals. Silo activations
+mount through the same `WorldAddonRuntime.TryCreate` as World, and restore this
+section before replaying their journal tail. Arming before the first step
 uses the boot image as before. `replay.drive` prepares fresh guests for either
-kind of recorded start.
+kind of recorded start, then restores the captured guest image when present.
 
 When piping the startup script, close stdin after the replay arm. Headless
 startup drains that script before stepping; leaving the pipe open waiting for

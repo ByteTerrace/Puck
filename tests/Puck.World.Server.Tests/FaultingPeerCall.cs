@@ -26,6 +26,8 @@ internal sealed class FaultingPeerCall : IWorldPeerCall {
     public bool LoseFirstCommit { get; set; } = true;
     /// <summary>Runs after the destination reserves and before the source sees its answer.</summary>
     public Action? AfterReserve { get; set; }
+    /// <summary>Runs when the first commit is lost, before the source sees no answer.</summary>
+    public Action? Lost { get; set; }
 
     /// <inheritdoc/>
     public void Abort(string sourceAuthority, ulong transferId) => m_destination.AbortTransfer(
@@ -40,6 +42,7 @@ internal sealed class FaultingPeerCall : IWorldPeerCall {
     /// <inheritdoc/>
     public WorldTransferStep Commit(string sourceAuthority, ulong transferId, IReadOnlyList<WorldTransferCommitMember> members, out WorldTransferStatus status, out string reason) {
         if ((Interlocked.Increment(location: ref m_commitCalls) == 1) && LoseFirstCommit) {
+            Lost?.Invoke();
             status = WorldTransferStatus.Missing;
             reason = string.Empty;
 
@@ -61,6 +64,15 @@ internal sealed class FaultingPeerCall : IWorldPeerCall {
 
         AfterReserve?.Invoke();
         return reply;
+    }
+    /// <inheritdoc/>
+    public bool TryLanded(string sourceAuthority, ulong transferId, out IReadOnlyList<int>? landed) {
+        landed = m_destination.TransferLanded(
+            sourceAuthority: sourceAuthority,
+            transferId: transferId
+        );
+
+        return true;
     }
     /// <inheritdoc/>
     public bool TryStatus(string sourceAuthority, ulong transferId, out WorldTransferStatus status) {

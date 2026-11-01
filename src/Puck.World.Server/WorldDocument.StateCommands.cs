@@ -7,45 +7,44 @@ namespace Puck.World.Server;
 public sealed partial class WorldDocument {
     private bool IsStateCommand(WorldMutation mutation) => mutation switch {
         WorldMutation.UpsertStateCell or WorldMutation.RemoveStateCell or WorldMutation.TransformState => true,
-        WorldMutation.Generate generate => WorldDefinitionRows.FindStateRow(m_definition.State, generate.Row) is { Field: null },
-        WorldMutation.UpsertStateRow write => WorldDefinitionRows.FindStateRow(rows: m_definition.State, name: write.Row.Name.Value) is { } before && SameComposeDeclaration(row: write.Row, previous: before),
-        WorldMutation.Batch batch => batch.Mutations.All(member => IsStateCommand(mutation: member)),
+        WorldMutation.Generate generate => (WorldDefinitionRows.FindStateRow(m_definition.State, generate.Row) is { Field: null }),
+        WorldMutation.UpsertStateRow write => ((WorldDefinitionRows.FindStateRow(rows: m_definition.State, name: write.Row.Name.Value) is { } before) && SameComposeDeclaration(row: write.Row, previous: before)),
+        WorldMutation.Batch batch => batch.Mutations.All(predicate: member => IsStateCommand(mutation: member)),
         _ => false,
     };
-
-    private bool TryApplyStateCommand(WorldMutation mutation, ulong tick, ulong engineTick, int connectionId, long correlationId, bool preMetered) {
+    private bool TryApplyStateCommand(WorldMutation mutation, ulong tick, ulong engineTick, int connectionId, long correlationId, bool preMetered, bool derived) {
         m_lastMutationFailureDetail = null;
-        if (!TryAdmitCompleteMutation(mutation: mutation, preMetered: preMetered, admission: out var admission)) {
+        if (!TryAdmitCompleteMutation(admission: out var admission, mutation: mutation, preMetered: preMetered)) {
             m_lastMutationFailureDetail = admission.Describe();
             Host.EchoTap?.Invoke(new WorldEditEcho(Message: m_lastMutationFailureDetail, Rejected: true, Denied: true, Kind: WorldEditEchoKind.Mutation, Mutation: mutation, ConnectionId: connectionId, CorrelationId: correlationId));
             return false;
         }
         var mark = Host.BeginStateTransaction();
-        var time = ComposeTime(definition: m_definition, tick: tick, engineTick: engineTick);
-        if (!TryStateMembers(mutation: mutation, time: in time, reason: out var reason, evicted: out var evicted)) {
+        var time = ComposeTime(definition: m_definition, engineTick: engineTick, tick: tick);
+
+        if (!TryStateMembers(evicted: out var evicted, mutation: mutation, reason: out var reason, time: in time)) {
             Host.RewindStateTransaction(mark: mark);
-            Reject(mutation: mutation, reason: reason, connectionId: connectionId, correlationId: correlationId);
+            Reject(connectionId: connectionId, correlationId: correlationId, mutation: mutation, reason: reason);
             return false;
         }
         if (!Host.TryCommitStateTransaction(mark: mark, principal: mutation.Principal, reason: out reason)) {
-            Reject(mutation: mutation, reason: reason, connectionId: connectionId, correlationId: correlationId);
+            Reject(connectionId: connectionId, correlationId: correlationId, mutation: mutation, reason: reason);
             return false;
         }
         Host.PublishArena();
-        RecordCommittedMutation(mutation: mutation, tick: tick, engineTick: engineTick, connectionId: connectionId, correlationId: correlationId, evictedKey: evicted);
+        RecordCommittedMutation(mutation: mutation, tick: tick, engineTick: engineTick, connectionId: connectionId, correlationId: correlationId, evictedKey: evicted, derived: derived);
         return true;
     }
-
     private bool TryStateMembers(WorldMutation mutation, in ArenaTime time, out string reason, out CellName? evicted) {
         reason = string.Empty; evicted = null;
         switch (mutation) {
             case WorldMutation.Generate generate:
-                if (!DisclosesStateRead(generate.Row, generate.Principal)) { reason = "draw site is not disclosed"; return false; }
-                return TryGenerateState(generate, in time, out reason);
+                if (!DisclosesStateRead(name: generate.Row, principal: generate.Principal)) { reason = "draw site is not disclosed"; return false; }
+                return TryGenerateState(mutation: generate, reason: out reason, time: in time);
             case WorldMutation.TransformState transform:
                 foreach (var subject in transform.Transform.Subjects()) {
-                    if (transform.Principal == Puck.Commands.Principal.World || transform.Principal == Puck.Commands.Principal.Console) { continue; }
-                    if (!DisclosesStateRead(subject.Name, transform.Principal)) { reason = "state operation is not disclosed"; return false; }
+                    if ((transform.Principal == Puck.Commands.Principal.World) || (transform.Principal == Puck.Commands.Principal.Console)) { continue; }
+                    if (!DisclosesStateRead(name: subject.Name, principal: transform.Principal)) { reason = "state operation is not disclosed"; return false; }
                 }
                 return WorldArenaTransforms.TryApply(definition: m_definition, transform: transform.Transform, actor: transform.Principal,
                     tick: time.Tick, engineTick: time.EngineTick, instance: Host.InstanceIdentity, candidate: out _, reason: out reason, guard: transform.Guard, live: Host.Arena);
@@ -73,21 +72,21 @@ public sealed partial class WorldDocument {
             case WorldMutation.RemoveStateCell remove:
                 return TryApplyCellRemove(arena: Host.Arena, working: m_definition, mutation: remove, reason: out reason);
             case WorldMutation.Batch batch:
-                if (!CheckStateExpectations(batch: batch, time: in time, reason: out reason)) { return false; }
+                if (!CheckStateExpectations(batch: batch, reason: out reason, time: in time)) { return false; }
                 List<(WorldStateExpectation Guard, long Before)>? exact = null;
-                foreach (var guard in batch.ExpectedCells ?? []) {
+                foreach (var guard in (batch.ExpectedCells ?? [])) {
                     if (guard.Change is null) { continue; }
                     if (!WorldStateReader.TryRead(m_definition, guard.Row, guard.Key, time.Tick, time.EngineTick,
-                        out _, out var before, out _, Host.Arena) || before is null) { reason = "an exact change requires a numeric cell"; return false; }
-                    (exact ??= []).Add((guard, before.Value));
+                        out _, out var before, out _, Host.Arena) || (before is null)) { reason = "an exact change requires a numeric cell"; return false; }
+                    (exact ??= []).Add(item: (guard, before.Value));
                 }
                 foreach (var member in batch.Mutations) {
-                    if (!TryStateMembers(mutation: member, time: in time, reason: out reason, evicted: out var dropped)) { return false; }
+                    if (!TryStateMembers(evicted: out var dropped, mutation: member, reason: out reason, time: in time)) { return false; }
                     evicted ??= dropped;
                 }
-                foreach (var (guard, before) in exact ?? []) {
+                foreach (var (guard, before) in (exact ?? [])) {
                     if (!WorldStateReader.TryRead(m_definition, guard.Row, guard.Key, time.Tick, time.EngineTick,
-                        out _, out var after, out _, Host.Arena) || after is null || (Int128)after.Value - before != guard.Change) {
+                        out _, out var after, out _, Host.Arena) || (after is null) || ((((Int128)after.Value) - before) != guard.Change)) {
                         reason = $"state '{guard.Row}' constraints prevent the exact required change"; return false;
                     }
                 }
@@ -95,48 +94,49 @@ public sealed partial class WorldDocument {
             default: reason = "the command is not a state batch"; return false;
         }
     }
-
     private bool DisclosesStateRead(string name, Puck.Commands.Principal principal) {
         var arena = Host.Arena;
-        if (!arena.Catalog.TryResolve(StateLane.Document, name, out var handle)) {
-            if (m_definition.Sets.FirstOrDefault(set => set.Name.Value == name) is not { } declared) { return false; }
+
+        if (!arena.Catalog.TryResolve(handle: out var handle, lane: StateLane.Document, name: name)) {
+            if (m_definition.Sets.FirstOrDefault(predicate: set => (set.Name.Value == name)) is not { } declared) { return false; }
             m_setReadOrdinals.Clear();
-            RuleCompiler.CollectCellSetReads(WorldFactsCompiler.Context(m_definition), declared, m_setReadOrdinals);
+            RuleCompiler.CollectCellSetReads(WorldFactsCompiler.Context(definition: m_definition), declared, m_setReadOrdinals);
             foreach (var ordinal in m_setReadOrdinals) {
-                if (!DisclosesStateRead(arena.Catalog.Descriptors[ordinal].Name, principal)) { return false; }
+                if (!DisclosesStateRead(name: arena.Catalog.Descriptors[ordinal].Name, principal: principal)) { return false; }
             }
             return true;
         }
-        if (!WorldStateDisclosure.CanReadRow(arena, name, principal)) { return false; }
+        if (!WorldStateDisclosure.CanReadRow(arena: arena, recipient: principal, rowName: name)) { return false; }
         var cursor = 0;
+
         while (arena.TryNextCell(handle.Ordinal, ref cursor, out var key)) {
             if (!WorldStateDisclosure.CanReadCell(m_definition, arena, name, arena.Keys[key], principal)) { return false; }
         }
         return true;
     }
-
     private bool CheckStateExpectations(WorldMutation.Batch batch, in ArenaTime time, out string reason) {
         reason = string.Empty;
         // Fingerprint guards are explicit preview/edit boundaries; ordinary state batches export nothing.
         if ((batch.ExpectedDefinition is not null) || (batch.ExpectedInputs is not null) || (batch.ExpectedSpatialReads is { Count: > 0 })) {
             var current = Host.MaterializeArena();
-            if ((batch.ExpectedDefinition is { } expected) && expected != WorldDefinitionFingerprint.Compute(definition: current, stateRows: batch.ExpectedStateRows)) {
+
+            if ((batch.ExpectedDefinition is { } expected) && (expected != WorldDefinitionFingerprint.Compute(definition: current, stateRows: batch.ExpectedStateRows))) {
                 reason = "the proposal is stale: its base definition changed; preview again"; return false;
             }
-            if ((batch.ExpectedInputs is { } inputs) && inputs.Fingerprint != WorldDefinitionFingerprint.ComputeInputs(definition: current, placementIds: inputs.PlacementIds, stateRows: inputs.StateRows)) {
+            if ((batch.ExpectedInputs is { } inputs) && (inputs.Fingerprint != WorldDefinitionFingerprint.ComputeInputs(definition: current, placementIds: inputs.PlacementIds, stateRows: inputs.StateRows))) {
                 reason = "the proposal is stale: its named inputs changed; preview again"; return false;
             }
-            foreach (var spatial in batch.ExpectedSpatialReads ?? []) {
+            foreach (var spatial in (batch.ExpectedSpatialReads ?? [])) {
                 if (spatial.Fingerprint != WorldDefinitionFingerprint.ComputeSpatial(definition: current, region: spatial.Region)) {
                     reason = "the proposal is stale: its spatial read changed; preview again"; return false;
                 }
             }
         }
-        foreach (var cell in batch.ExpectedCells ?? []) {
+        foreach (var cell in (batch.ExpectedCells ?? [])) {
             if (!WorldStateReader.TryRead(definition: m_definition, arena: Host.Arena, rowName: cell.Row, key: cell.Key,
                 tick: time.Tick, engineTick: time.EngineTick, row: out var row, rawValue: out var raw, text: out var text) ||
-                (raw is not { } value) || ((cell.Kind is { } kind) && row.Kind != kind) || (cell.Text is not null && text != cell.Text) ||
-                ((row.Kind != CellKind.Text) && (cell.Kind != CellKind.Text) && !cell.Comparison.Holds(value: FixedQ4816.FromRawBits(value), expected: FixedQ4816.FromRawBits(cell.Value)))) {
+                (raw is not { } value) || ((cell.Kind is { } kind) && (row.Kind != kind)) || ((cell.Text is not null) && (text != cell.Text)) ||
+                ((row.Kind != CellKind.Text) && (cell.Kind != CellKind.Text) && !cell.Comparison.Holds(value: FixedQ4816.FromRawBits(value: value), expected: FixedQ4816.FromRawBits(value: cell.Value)))) {
                 reason = $"the proposal is stale: state '{cell.Row}' changed; preview again"; return false;
             }
         }

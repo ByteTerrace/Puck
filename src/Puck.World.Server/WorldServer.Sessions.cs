@@ -164,13 +164,13 @@ public sealed partial class WorldServer {
     }
 
     /// <summary>Ends every live session no observer holds, through the one end door: a session a checkpoint restored,
-    /// whose viewer is not watching this world, so nothing it last pressed or pointed at stays held. A session admits
-    /// only through an observation (<see cref="TryObserveAsSession"/>), so one without an attached observer has nobody
-    /// left to end it. Called as a replay drive ends and as a hosted activation restores; a replay's shadow keeps its
+    /// whose viewer is not watching this world, so nothing it last pressed or pointed at stays held. Local input
+    /// controllers own their synthetic sessions without a socket observer and retain their checkpointed history.
+    /// Called as a replay drive ends and as a hosted activation restores; a replay's shadow keeps its
     /// restored sessions, which the tape ends where the live ones ended.</summary>
     public void EndUnobservedSessions() {
         foreach (var session in m_grants.LiveSessionPrincipals()) {
-            if (!m_sessionSinks.ContainsKey(key: session)) {
+            if (!m_sessionSinks.ContainsKey(key: session) && !Input.OwnsControllerSession(principal: session)) {
                 _ = m_grants.EndSession(
                     refusal: out _,
                     session: session

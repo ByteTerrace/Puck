@@ -136,11 +136,17 @@ and never on a simulation or frame path.
 
 | Host | Built-ins | Installs the set with |
 |---|---|---|
-| `Puck.World` | both Gaming Brick forges, `WorldServerExtension` | `AddPuckExtensions` |
+| `Puck.World` | both Gaming Brick forges, the Gaming Deck forge, `WorldServerExtension` | `AddPuckExtensions` |
 | `Puck.World.Silo` and `puck mcp --silo` | `WorldServerExtension` | `AddPuckExtensions`, with `--mcp` naming the control configuration |
-| CLI tooling verbs | both Gaming Brick forges | the machine catalog only |
+| CLI tooling verbs | both Gaming Brick forges, the Gaming Deck forge | the machine catalog only |
 
-`WorldServerExtension` contributes the `directory` storage provider.
+`WorldServerExtension` contributes the `directory` storage provider and the
+`observation.fixture` provider type. Every other provider type an extension
+configuration names (`azure.resource`, the embedding and participant types) is
+an installed extension. A World run from the repository root finds one published
+there (`dotnet publish src/Puck.World.Azure -c Release -nodeReuse:false -o extensions/Puck.World.Azure`;
+`extensions/` is ignored), and refuses a configuration that names a type nothing
+installed contributes.
 `AddPuckExtensions` (in `Puck.Launcher`) registers the set, every
 `PuckHostedService` contribution, the hosted control when a control
 configuration is named (refused when none is installed), and the

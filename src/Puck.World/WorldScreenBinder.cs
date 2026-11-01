@@ -496,6 +496,7 @@ public sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPresent
         RetireCameraTargetDevice();
         ReleaseViewResidencies();
         UnregisterAllViewWork();
+        MeshLibrary.Dispose();
     }
     /// <summary>Drops every device-owned upload and shared target ring while preserving CPU sessions, machine simulation,
     /// declarations, probe requests and view registrations; the render graph releases the views' engines itself. The next

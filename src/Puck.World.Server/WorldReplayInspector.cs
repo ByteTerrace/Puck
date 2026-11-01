@@ -266,11 +266,13 @@ public sealed partial class WorldReplayInspector {
 
                         if (includePoses) { poses[index] = CapturePoses(population: population); }
                         var accepted = new StringBuilder();
+
                         foreach (var entry in recording.Ticks[index].Authority) {
                             if (accepted.Length != 0) { accepted.Append(value: "; "); }
                             accepted.Append(value: WorldReplayEntryDescriber.Describe(entry: entry));
                         }
                         var semantic = CaptureInputs(cursors: inputCursors, server: server);
+
                         if ((accepted.Length != 0) && (semantic.Length != 0)) { accepted.Append(value: "; "); }
                         inputs[index] = accepted.Append(value: semantic).ToString();
                         observed[index] = WorldReplaySnapshot.HashState(population: population);
@@ -505,6 +507,10 @@ public sealed partial class WorldReplayInspector {
 
         /// <inheritdoc/>
         public bool AnyEverPumped => m_inner.AnyEverPumped;
+
+        public byte[] CaptureCheckpoint() => m_inner.CaptureCheckpoint();
+        public IWorldAddonPreparedPlan PrepareCheckpoint(WorldDefinition definition, byte[] checkpoint) => m_inner.PrepareCheckpoint(checkpoint: checkpoint, definition: definition);
+
         /// <inheritdoc/>
         public int MountedCount => m_inner.MountedCount;
         /// <inheritdoc/>

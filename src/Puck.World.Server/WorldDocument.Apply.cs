@@ -9,11 +9,6 @@ public sealed partial class WorldDocument {
     // the exact refusal detail already emitted by the legacy echo path without changing the composition/staging code.
     private string? m_lastMutationFailureDetail;
 
-    /// <summary>Gets or sets whether the next rebuild prepares every addon guest fresh rather than reusing the guests
-    /// of unchanged rows, so their memory starts from the module's initial state. The next rebuild consumes it,
-    /// applied or refused; a replay drive sets it before resetting the live world to its tape's boot image.</summary>
-    internal bool ReinstantiateAddonsOnNextRebuild { get; set; }
-
     // The presented action-state register file of every entity index, the borrowed scratch each snapshot entry's
     // State slices; overwritten by the next snapshot, like the entry array itself.
     private long[] m_snapshotState = [];
@@ -609,9 +604,9 @@ public sealed partial class WorldDocument {
         // classification the way TryApplyMutation's own AffectsAddons predicate is: a whole-document swap can move
         // ANY section, including the channel table TryPrepare's own dependency check watches for. Unconditional is
         // cheap here too — a reused row costs a structural compare, never a recompile. A server with no addon host
-        // attached (a test double; the silo attaches its own refusing WorldNoAddonHost instead of leaving this null)
+        // attached (a test double; production hosts attach WorldAddonRuntime)
         // is vacuous only for a candidate whose addon rows are all absent or disabled — an ENABLED row is refused by
-        // name below, the identical shape TryApplyMutation's own no-host gate and WorldNoAddonHost.TryPrepare use,
+        // name below, the identical shape TryApplyMutation's own no-host gate uses,
         // rather than installing a candidate that claims a mounted addon no host can ever run.
         IWorldAddonPreparedPlan? rebuildAddonPlan = null;
         int[]? newRebuildTickWrittenEntity = null;
@@ -625,19 +620,13 @@ public sealed partial class WorldDocument {
         // The whole sequence from here through Commit runs under ONE try/finally — see TryApplyMutation's identical
         // shape for why: rebuildAddonPlan starts null, so a return before TryPrepare ever succeeds leaves the
         // finally a no-op, and a downstream throw from contention-array staging, Install, or Commit alike still
-        // disposes an uncommitted plan. A replay drive's boot-image reset asks for fresh guests, a request this rebuild
-        // consumes whichever way it ends.
-        var freshAddons = ReinstantiateAddonsOnNextRebuild;
-
-        ReinstantiateAddonsOnNextRebuild = false;
+        // disposes an uncommitted plan. Replay restores the complete guest image through the checkpoint boundary.
 
         try {
             if (Host.Addons is { } addonsForRebuild) {
                 if (!addonsForRebuild.TryPrepare(
                     candidate: candidate,
-                    current: (freshAddons
-                    ? null
-                    : m_definition),
+                    current: m_definition,
                     plan: out rebuildAddonPlan,
                     reason: out var rebuildAddonReason
                 )) {
@@ -1373,8 +1362,7 @@ public sealed partial class WorldDocument {
     }
     // ApplyRebuild's own null-host gate: with no addon host attached, a candidate whose addon rows are all absent or
     // disabled is vacuous (nothing to mount either way), but an ENABLED row names a guest that would install into
-    // the document with no runtime ever able to run it — the same shape TryApplyMutation's own no-host gate and
-    // WorldNoAddonHost.TryPrepare both refuse.
+    // the document with no runtime ever able to run it — the same shape TryApplyMutation's own no-host gate refuses.
     private static bool TryFindEnabledAddonRow(WorldDefinition candidate, out string name) {
         foreach (var row in candidate.Addons) {
             if (row.Enabled) {
@@ -2022,6 +2010,7 @@ public sealed partial class WorldDocument {
             throw new InvalidOperationException(message: "Tick-pumped addon hosts must implement Recomputed contributions; use WorldRecordedExtension for recorded providers.");
         }
 
+        Host.Persistence.RestoreAttachedAddons(host: runtime);
         Host.AdoptAddonHost(runtime: runtime);
 
         StageAddonContentionArrays(
