@@ -3,7 +3,7 @@
 This memo designs the engine job system the [packet](open-items.md#engine-job-system)
 asks for: one scheduler for frame-critical work, the tick, the bake and GI; a
 deterministic parallel tick; parallel view recording on both backends; memory
-ownership; and background work proportional to change. M1 and M2a are built;
+ownership; and background work proportional to change. M1, M2a and T0 are built;
 the build table tracks the remaining work. Every
 decision names the code it rests on, so a reviewer can check it against the
 source before anything is built; a builder re-reads each citation first. The
@@ -77,7 +77,13 @@ the bake's static pool (`SdfMeshPathBake.Residency.cs:31-39`), the irradiance
 worker counts, `Parallel.For` in the engine's runtime paths
 (`SdfMeshIrradiance.cs:1017`, `SdfMeshIrradianceScene.cs:103,579,756`,
 `SdfMeshChunks.cs:96`) and the thread-pool `Task.Run` sites listed below all
-move onto it. The pool never oversubscribes the machine, which is what today's
+move onto it. Three more sites size work from `Environment.ProcessorCount` on
+their own and move with them: the pipeline cache's `BuildConcurrency`
+(`GpuPassPipelineCache.cs:47-51`), the kernel-tree load's compile semaphore
+(`SdfKernelTreeLoad.cs:174-177`) and the font atlas's raster `Parallel.For`
+(`ManagedFontAtlasGenerator.cs:500-504`). The worker count itself is
+`JobWorkers`, which T0 registers from `Puck.World --workers`; the pool reads
+it rather than a count of its own. The pool never oversubscribes the machine, which is what today's
 three independent worker counts do during a cold bake.
 
 The pool lives in `Puck.Hosting` because every consumer already reaches it:
@@ -722,7 +728,7 @@ as `puck mesh audit` for bake defects.
 | **M1 The memory account — built** | `MemoryAccount`, `host.memory` readings by category, the mesh library's cache allowance and residency bake peaks as reservations. | `host.memory` before and after a cold bake balances live, reserved and cached against the process; a bake under a budget lowered by `host.memory budget` defers (a `[sdf.mesh-bake] deferred` line) and never refuses or fails. Measurements and scope are in the [packet](open-items.md#memory-ownership). |
 | **M2a Native movers 1 and 2 — built** | Published mesh payloads, readback copies, lattice storage and point workspaces on `IAllocator`; reference-bearing contour storage and worker-slot refinement indexes retain managed ownership. | Collections during a cold bake (`host.frames`) against 345; windowed stills at `debug.go desktop` before and after on both backends, compared as above; `host.memory collect` after `world.reload` of a one-group edit shows the replaced group's bytes released. The [packet](open-items.md#memory-ownership) records the measurements. |
 | **J1 The pool and the channels** | `Puck.Hosting.Jobs`: classes with their comparers, bounded units, the dependency rules, the cap with hysteresis, per-owner channels drained at each owner's install point, parking, shutdown settlement; every site in section 1's table moved; the bake's static pool, the irradiance worker counts and the engine's `Parallel.For` deleted. | A cold bake with `host.frames` sampled through it against 96 / 183 ms, and the process's thread count at `workers + 2` plus the dedicated threads. A lockstep `world.at` still after a `world.reload` traces its own scene (`[sdf.mesh-gi]` reports the frame's draw count). A channel forced full by a scratch world with more groups than its capacity lands every group (`[sdf.mesh-bake] done` counts match). A headless boot with a reflow verb answers it. `quit` during a cold bake exits cleanly with no device-after-dispose message in stderr on both backends. The first visible group bakes before any unseen one (`[sdf.mesh-bake]` order against `world.view.pick`). |
-| **T0 The worker-count harness** | `--workers N` on `Puck.World`; `puck test --workers 1,2,0` as full host runs compared across counts and against the recorded oracle; the focused `*-tests.puck` fixtures below. | `puck test --workers 1,2,0` on the four debug sources and the standard's test worlds passes with the serial code (a baseline for the T-steps). |
+| **T0 The worker-count harness — built** | `--workers N` on `Puck.World`, carried as `Puck.Hosting.Jobs.JobWorkers` (the one setting `AddWorldBoot` registers; `0` is `Environment.ProcessorCount`, frame thread included); `puck test --workers 1,2,0` as full host runs compared across counts, and `--record <dir>` / `--compare <dir>` as the recorded oracle ([CLI reference](../reference/cli.md#puck-testtest-worlds)). Deviations: the crossing log is the instance host's crossing narration (`world.transfer`, `world.portal`, `world.adjacency`, `world.continuum`) stamped with the booted authority's tick, since a `Puck.World` host installs no durable `IWorldCrossingLog`; the per-tick hashes reuse `reproduction.json` from the same replay probe; the focused fixtures are left to T1, T3 and T2, which name them; J1 reconciles `0`'s count with the pool's `max(2, ProcessorCount - 2)` workers plus the frame thread. | `puck test --workers 1,2,0` on the four debug sources and the standard's test worlds passes with the serial code (a baseline for the T-steps). |
 | **T1 Snapshot partitions** | E4 with partition counts, the prefix sum and `PrepareReads`. No semantic change. | T0 on a fixture of 300 bodies with inactive holes across the 256-row boundary, comparing the delivered entity sequence (a sink that hashes each snapshot's entries, printed per tick) across counts and against the recording. |
 | **T3 Crossing scan partitions** | E3 by seat partition with occupancy deltas. | T0 on a fixture of 40 seats where two seats enter one party-travel door on one tick and seats straddle the 32-seat boundary; the crossing log (transfer tick, cohort) identical across counts and against the recording. |
 | **T2 Rigid advance partitions** | E1 for rigid bodies with partition scratch; the rigid share measured first; the one pose-read change re-recorded. | T0 on a fixture of 200 rigid bodies (a rack and a domino line) beside kit bodies whose producers target a rigid body; hashes identical across counts; `puck bench world` at 0 B median a tick; a standing `host.frames` simulate read against 6.3 ms. |
