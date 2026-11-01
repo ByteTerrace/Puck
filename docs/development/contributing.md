@@ -448,10 +448,15 @@ What the C# loop costs:
   reference assembly, so no dependent recompiles: a body edit in `Puck.SdfVm`
   compiles `Puck.SdfVm` alone. The rest of the build is MSBuild's check of the
   other projects the World reaches, 64 in all with the world compiler's.
-- **One inline task.** Every build operation the tree implements in its own
-  code (the architecture gates, the shader build, the Direct3D 11 kernels, the
-  stale package sweep) is one inline task (`build/PuckBuildTasks.targets`), so
-  a cold node compiles it once rather than once per operation.
+- **One build task, compiled once.** Every build operation the tree implements
+  in its own code (the architecture gates, the shader build, the Direct3D 11
+  kernels) is one task (`build/PuckBuildTasks.cs`), which
+  `build/PuckBuildTasks.targets` compiles once per version of the source into
+  `build/obj/build-tasks/` and every node loads. As an inline
+  (`RoslynCodeTaskFactory`) task it compiled in every node of every build, a
+  cold compiler process each time: a cold no-op build of `src/Puck.World`
+  compiled it 16 times, about 2.6 s each, on the nodes its critical path
+  crossed.
 - **No rebake.** The World keeps its baked meshes between runs (`SdfMeshStore`,
   in the `meshes` device cache), keyed by geometry and by the bake's own code
   (the methods it reaches, `SdfMeshBakeClosure`) and kernels, which read their

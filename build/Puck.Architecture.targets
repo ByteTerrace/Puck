@@ -2,7 +2,7 @@
 
     <Import Project="$(MSBuildThisFileDirectory)Architecture.props" />
 
-    <!-- Both gates run as operations of the repository's one inline task (PuckBuildTasks.targets). -->
+    <!-- Both gates run as operations of the repository's one build task (PuckBuildTasks.targets). -->
 
     <!--
         The hook point is BeforeTargets="CoreCompile", and it was chosen by measurement rather than by
