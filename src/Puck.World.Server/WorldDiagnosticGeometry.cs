@@ -104,7 +104,7 @@ public static class WorldDiagnosticGeometry {
     /// <returns>Signed separation in metres.</returns>
     public static double SignedDistance(FixedStaticCollider collider, Vector3 point) {
         if (collider.Kind == FixedStaticColliderKind.Field) {
-            // A field answers only near its surface; elsewhere its sign still separates inside from outside.
+            // The surface solve's distance; a point it reaches no surface from reads as far.
             return (FixedFieldColliderContact.TryMeasure(collider: in collider, distance: out var measured, normal: out _, point: FixedVector3.FromVector3(value: point))
                 ? (double)measured
                 : double.PositiveInfinity);
@@ -156,10 +156,13 @@ public static class WorldDiagnosticGeometry {
             yield break;
         }
         if (collider.Kind == FixedStaticColliderKind.Field) {
-            // The relieved surface's witnesses: each relieved primitive's own, projected onto the field.
+            // The relieved surface's witnesses: each relieved primitive's own, projected onto the field. A witness the
+            // surface solve reaches no surface from is no witness.
             foreach (var primitive in (collider.Field?.Bases ?? [])) {
                 foreach (var witness in SurfaceSamples(collider: primitive)) {
-                    yield return FixedFieldColliderContact.Nearest(collider: in collider, probe: FixedVector3.FromVector3(value: witness)).Point.ToVector3();
+                    if (FixedFieldColliderContact.TryNearest(collider: in collider, normal: out _, point: out var projected, probe: FixedVector3.FromVector3(value: witness))) {
+                        yield return projected.ToVector3();
+                    }
                 }
             }
             yield break;

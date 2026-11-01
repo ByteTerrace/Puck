@@ -373,7 +373,7 @@ internal static class Coverage {
         // gradient, so there is no operand domain, subject shape or oracle to state a law against — a law would have to
         // supply an implementation, and it would then be testing that implementation rather than this declaration. The
         // behavior belongs to each provider and is gated where the provider lives: SdfFieldEvaluator answers in
-        // tests/Puck.SignedDistance.Tests. FieldEvaluatorCapabilities is the one-flag carrier the contract hands back.
+        // tests/Puck.SignedDistance.Tests. FieldEvaluatorCapabilities is the carrier the contract hands back.
         // NOTHING is owed here; a law would become owed only if Puck.Maths ever ships a field implementation of its own.
         (new CoverRef(
             Name: "Capabilities",
@@ -521,6 +521,14 @@ internal static class Coverage {
         ), FieldSeamReason),
         (new CoverRef(
             Name: "WarpFree",
+            Type: typeof(FieldEvaluatorCapabilities)
+        ), FieldSeamReason),
+        (new CoverRef(
+            Name: "StepScale",
+            Type: typeof(FieldEvaluatorCapabilities)
+        ), FieldSeamReason),
+        (new CoverRef(
+            Name: "ValueError",
             Type: typeof(FieldEvaluatorCapabilities)
         ), FieldSeamReason),
 

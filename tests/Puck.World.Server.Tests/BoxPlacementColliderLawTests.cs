@@ -123,9 +123,12 @@ public sealed class BoxPlacementColliderLawTests {
 
         Assert.Equal(Puck.Physics.FixedStaticColliderKind.Superellipsoid, collider.Kind);
         Assert.True(condition: WorldSolidField.TryBuild(definition, out var field, out var reason), userMessage: reason);
+        // The probe measures the Euclidean distance to the drawn solid, which the collider's numerical budget bounds.
+        var budget = WorldDiagnosticGeometry.Numerical(collider: collider);
+
         foreach (var point in WorldDiagnosticGeometry.SurfaceSamples(collider: collider)) {
             Assert.True(condition: field!.Probe(FixedVector3.FromVector3(value: point), out var distance, out _, out _));
-            Assert.InRange(actual: ((double)distance), high: 0.0002, low: -0.0002);
+            Assert.InRange(actual: ((double)distance), high: budget, low: -budget);
         }
     }
     [InlineData(0.1f, 0f)]

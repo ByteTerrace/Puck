@@ -186,13 +186,20 @@ public sealed partial class WorldColliderSet : IContactField {
                 mirror: WorldPlacementStamp.MirrorFor(placement: placement)
             );
 
-            // A relieved creation compiles one field collider per copy, whatever its shapes.
+            // A relieved creation compiles one field collider per copy that keeps a contact shape.
             if (Relieves(document: creation.EngineDocument)) {
-                placementFields = AddSaturated(left: placementFields, right: copies);
+                if (CreationStampEmitter.EmitsContact(document: creation.EngineDocument)) {
+                    placementFields = AddSaturated(left: placementFields, right: copies);
+                }
+
                 continue;
             }
 
             foreach (var shape in (creation.Document.Shapes ?? [])) {
+                if (!CreationStampEmitter.EmitsContact(shape: shape)) {
+                    continue;
+                }
+
                 // A shape carrying domain ops compiles one collider PER EXPANDED COPY, exactly as Build emits them —
                 // counting the authored shape once would under-report the census the placement budget is read against.
                 var shapeCopies = (ShapeDomainOps.TryExpand(
@@ -668,7 +675,9 @@ public sealed partial class WorldColliderSet : IContactField {
                 );
 
                 if (relieved) {
-                    var relief = ReliefCollider(document: creation.EngineDocument, margin: solid.Margin, transform: transform);
+                    if (ReliefCollider(document: creation.EngineDocument, margin: solid.Margin, transform: transform) is not { } relief) {
+                        return;
+                    }
 
                     colliders.Add(item: relief);
                     diagnostics.Add(item: new WorldDiagnosticCollider(relief, placement.Id.ToString(), creation.Id.ToString(), "relief",

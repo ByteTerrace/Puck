@@ -378,7 +378,7 @@ public sealed class SdfSampledLatticeLawTests {
             values[index] = ((Origin + (new Vector3(x: (index % Samples), y: ((index / Samples) % Samples), z: (index / (Samples * Samples))) * Cell)).Length() - 0.15f);
         }
 
-        SdfSampledLattice Lattice() => new(cell: new Vector3(value: Cell), materials: new int[values.Length], origin: Origin, samplesX: Samples, samplesY: Samples, samplesZ: Samples, values: [.. values]);
+        SdfSampledLattice Lattice() => new(cell: new Vector3(value: Cell), materials: new int[values.Length], origin: Origin, samplesX: Samples, samplesY: Samples, samplesZ: Samples, values: values.ToArray());
 
         var plain = Lattice();
         var refined = Lattice();
