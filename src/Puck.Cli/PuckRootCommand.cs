@@ -96,7 +96,7 @@ public static class PuckRootCommand {
             LawsCommand.Create(),
             LeaseCommand.Create(clock: clock),
             LocksCommand.Create(),
-            McpCommand.Create(ancestor: Puck.Cli.Host.HostAdmission.IsAncestor),
+            McpCommand.Create(ancestor: ProcessInspection.IsAncestor),
             MotionCommand.Create(),
             NuGetCommand.Create(),
             OfficialCommand.Create(),
