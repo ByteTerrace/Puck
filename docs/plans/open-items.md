@@ -2647,6 +2647,13 @@ the completed 70-stop comparison manifest.
 Owner: language lane (transpiler) · medium · Next: the inline console command
 hang, then the pre-`main` language findings.
 
+- [medium] An `enum` block inside a template is silently dropped from the
+  compiled document, so a row naming the enum fails with PUCK119; the
+  standard's `chaseCamera` writes its enum as a `state.enums` row to work around
+  it. Two `exports` blocks in one template do not merge (the second drops the
+  first's names), and a `for` loop cannot produce list elements (`map` does).
+  Fix the drop and the merge in the transpiler rather than documenting them.
+  (from: clearance-op)
 - [medium] A literal read from an initially empty ordered pile is refused even
   when its key belongs to the declared `KeysOf` token domain. `RuleCompileContext.cs:242`
   admits authored cells and `CellsOf` topology cells only;
@@ -2964,6 +2971,13 @@ Owner: specialist lane (puck-world, build and hot reload, input) · ordinary · 
 Owner: debug-world content lanes, each started by the owner's direction ·
 ordinary · Next: new content and art on the owner's call.
 
+- [medium] `worlds/debug/controls-dash-tests.puck` fails on its own: booted
+  alone it reports binding group `$empty`, because the Moth basis
+  (`worlds/debug/avatars/moth.puck`) no longer imports bindings since they
+  moved to `moth-controls.puck` (leaks-2), so its keyboard input does nothing.
+  In the full debug world D plus J still dashes. Make the fixture import the
+  controls it exercises. Also owed: `puck verbs --check` with a windowed boot
+  after clearance-op removed `player.camera.clearance` by hand. (from: clearance-op)
 - The faerie: the companion becomes small, abstract and original (nothing that
   reads as Ocarina of Time's) beside the moth, its animation rich, varied and
   reactive, dodging a swat through one generic threat input (a point and
