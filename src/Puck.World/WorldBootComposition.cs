@@ -456,6 +456,7 @@ public static class WorldBootComposition {
                 windowCapture: sp.GetRequiredService<INativeImageCaptureService>(),
                 probeKernels: sp.GetRequiredService<IProbeKernelHostService>(),
                 cameras: definition.Cameras,
+                screenMaterials: definition.ScreenMaterials,
                 anchors: sp.GetRequiredService<WorldClient>(),
                 stamps: sp.GetRequiredService<WorldCreationInstances>(),
                 // Seat-relative and ranked camera anchors resolve per seat through the perception anchor and the
@@ -1025,6 +1026,8 @@ public static class WorldBootComposition {
         services.AddWorldMachineCatalog(machineCatalog: inputs.MachineCatalog);
         services.AddSingleton(implementationInstance: inputs.StateRoot);
         services.AddSingleton(implementationInstance: inputs.Caches);
+        // The one worker-count setting: the job system sizes its partition forks from it.
+        services.AddSingleton(implementationInstance: inputs.Workers);
         services.AddSingleton(implementationInstance: new WorldCaptureRoot(path: inputs.CaptureDirectory));
         services.AddSingleton(implementationInstance: new WorldScheduleRoot(path: inputs.ScheduleDirectory));
         services.AddSingleton(implementationInstance: worldSource);

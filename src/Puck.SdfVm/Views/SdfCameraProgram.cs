@@ -91,11 +91,12 @@ public abstract record SdfCameraOp {
     /// own.</param>
     /// <param name="FocusDistance">The finite target distance along the current subject's forward axis, read only for
     /// <see cref="SdfCameraProgram.FacingSubject"/>.</param>
-    /// <param name="CloseTargetOffset">The optional offset approached when the caller shortens the chase boom.</param>
+    /// <param name="CloseTargetOffset">The optional offsets, one per clearance treatment, approached when the caller
+    /// shortens the chase boom, in the axes of <paramref name="TargetOffset"/>.</param>
     /// <param name="CloseTargetStartFraction">The fraction below which target migration begins.</param>
     /// <param name="CloseTargetFullFraction">The fraction at which target migration is complete.</param>
     public sealed record LookAt(int SubjectSlot, Vector3 TargetOffset, bool WorldAxes, SdfCameraScalar FocusDistance,
-        Vector3? CloseTargetOffset = null, float CloseTargetStartFraction = 0.6f, float CloseTargetFullFraction = 0.2f) : SdfCameraOp;
+        SdfCameraClearanceOffsets? CloseTargetOffset = null, float CloseTargetStartFraction = 0.6f, float CloseTargetFullFraction = 0.2f) : SdfCameraOp;
     /// <summary>Places the eye by orbiting the current subject's pose.</summary>
     /// <param name="Distance">The orbit distance.</param>
     /// <param name="Yaw">The orbit heading in radians.</param>
@@ -213,11 +214,34 @@ public readonly record struct SdfCameraPose(Vector3 Eye, Vector3 Target, float F
 /// <summary>A first-person eye point in the reference body's local axes at full size, with its authored request
 /// and transition parameters. The host applies the body's presented pose and live scale.</summary>
 public readonly record struct SdfCameraFirstPerson(Vector3 EyePoint, bool Active, float TransitionSeconds, float HideRadius);
+/// <summary>A value a chase boom's clearance reads per treatment of a close obstruction: one for a boom that keeps the
+/// room and fades the body, one for a boom that keeps the body and cuts the walls away.</summary>
+/// <param name="Fade">The value the fading treatment reads.</param>
+/// <param name="Cutaway">The value the cutaway treatment reads.</param>
+public readonly record struct SdfCameraClearanceOffsets(Vector3 Fade, Vector3 Cutaway) {
+    /// <summary>Returns the value one treatment reads.</summary>
+    /// <param name="cutaway">Whether the treatment is the cutaway; otherwise the fade.</param>
+    /// <returns><see cref="Cutaway"/> or <see cref="Fade"/>.</returns>
+    public Vector3 Of(bool cutaway) => (cutaway ? Cutaway : Fade);
+    /// <summary>Returns both values multiplied by <paramref name="scale"/>.</summary>
+    /// <param name="scale">The factor, such as a body's live scale.</param>
+    /// <returns>The scaled pair.</returns>
+    public SdfCameraClearanceOffsets Scaled(float scale) => new(Fade: (Fade * scale), Cutaway: (Cutaway * scale));
+    /// <summary>Returns the pair a fraction of the way from <paramref name="from"/> to <paramref name="to"/>.</summary>
+    /// <param name="from">The pair at zero.</param>
+    /// <param name="to">The pair at one.</param>
+    /// <param name="weight">The fraction.</param>
+    /// <returns>The interpolated pair.</returns>
+    public static SdfCameraClearanceOffsets Lerp(SdfCameraClearanceOffsets from, SdfCameraClearanceOffsets to, float weight) => new(
+        Fade: Vector3.Lerp(value1: from.Fade, value2: to.Fade, amount: weight),
+        Cutaway: Vector3.Lerp(value1: from.Cutaway, value2: to.Cutaway, amount: weight)
+    );
+}
 /// <summary>A collision-driven displacement from the rest target, in world axes before the caller's live scale.</summary>
-/// <param name="Offset">The displacement from the rest target to the close target.</param>
+/// <param name="Offset">The displacement from the rest target to each treatment's close target.</param>
 /// <param name="StartFraction">The boom fraction below which migration begins.</param>
 /// <param name="FullFraction">The boom fraction at which migration is complete.</param>
-public readonly record struct SdfCameraTargetShift(Vector3 Offset, float StartFraction, float FullFraction);
+public readonly record struct SdfCameraTargetShift(SdfCameraClearanceOffsets Offset, float StartFraction, float FullFraction);
 /// <summary>The per-frame inputs a program evaluates against — everything that varies while the compiled ops do
 /// not.</summary>
 public readonly ref struct SdfCameraProgramFrame {
@@ -390,7 +414,10 @@ public static class SdfCameraProgramEvaluator {
                         );
                         if (lookAt.CloseTargetOffset is { } closeOffset) {
                             targetShift = new SdfCameraTargetShift(
-                                Offset: (Place(subject: in aim, value: closeOffset, worldAxes: lookAt.WorldAxes, scale: 1f) - target),
+                                Offset: new SdfCameraClearanceOffsets(
+                                    Fade: (Place(subject: in aim, value: closeOffset.Fade, worldAxes: lookAt.WorldAxes, scale: 1f) - target),
+                                    Cutaway: (Place(subject: in aim, value: closeOffset.Cutaway, worldAxes: lookAt.WorldAxes, scale: 1f) - target)
+                                ),
                                 StartFraction: lookAt.CloseTargetStartFraction,
                                 FullFraction: lookAt.CloseTargetFullFraction);
                         }
@@ -453,7 +480,7 @@ public static class SdfCameraProgramEvaluator {
                         weight: weight
                     );
                     targetShift = new SdfCameraTargetShift(
-                        Offset: Vector3.Lerp(resolvedA.TargetShift.Offset, resolvedB.TargetShift.Offset, weight),
+                        Offset: SdfCameraClearanceOffsets.Lerp(resolvedA.TargetShift.Offset, resolvedB.TargetShift.Offset, weight),
                         StartFraction: float.Lerp(resolvedA.TargetShift.StartFraction, resolvedB.TargetShift.StartFraction, weight),
                         FullFraction: float.Lerp(resolvedA.TargetShift.FullFraction, resolvedB.TargetShift.FullFraction, weight));
                     firstPerson = ((weight < 0.5f) ? resolvedA.FirstPerson : resolvedB.FirstPerson);

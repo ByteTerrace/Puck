@@ -63,7 +63,7 @@ flowchart LR
     B --> StateB["dieB's value, cursor, and drawn masks"]
 ```
 
-A site's value, its **cursor** (how many samples it has consumed), and its
+A site's value, its **cursor** (how many raw generator words it has consumed, including rejections), and its
 **drawn masks** (which entries it has used up) live in the arena beside the row.
 The source holds no position at all.
 
@@ -105,7 +105,7 @@ refuses fields that belong to another shape.
 | Source | Fields | Writes | Advances per sample | Can exhaust |
 |---|---|---|---|---|
 | `Markov` | `start`, `bound`, `contexts`, `mode` | `Text` | 2 per token | Yes, per context |
-| `UniformRange` | `rangeMin`, `rangeMax` | `Int` or `Fixed` | 1 | No |
+| `UniformRange` | `rangeMin`, `rangeMax` | `Int` or `Fixed` | 1 to 64; refuses if every word rejects | No |
 | `WeightedNumeric` | `weighted`, `mode` | `Int` or `Fixed` | 2 | Yes |
 | `StreamDraw` | none | `Int` or `Fixed` | 1 | No |
 | `SymmetryOrbit` | `ring`, or `node` with optional `word`; `mode` | `Int` or `Fixed` | 2 | Yes |
@@ -171,22 +171,25 @@ joined with single spaces, so this source writes text such as `Oh friend.` into
 a `Text` site. The current context is all the walk remembers, so a chain that
 needs more history encodes it in its context keys.
 
-Each token is one sample, so an emission of three tokens advances the cursor by
-three. A walk that has emitted `bound` tokens (1 to 256) without reaching a
+Each token consumes two raw words, so an emission of three tokens advances the cursor by
+six. A walk that has emitted `bound` tokens (1 to 256) without reaching a
 terminal context refuses the whole emission rather than truncating it. A source
 holds at most 64 contexts, a context at most 256 alternatives, and a token at
 most 64 characters; the joined text is bounded by the row's text ceiling.
 
 ### The range source's mapping
 
-`UniformRange` maps one raw 32-bit draw onto the range with a multiply-high:
-the offset is `((n × draw) >> 32)` for a range of `n` values. That costs one
-generator advance, so every sample costs the same and the cursor stays
-seekable. The trade-off is uniformity. Each outcome claims either ⌊2³²/n⌋ or
-⌈2³²/n⌉ of the 2³² possible draws, a relative deviation of at most n/2³², and
-none when `n` divides 2³². A six-sided die is off by less than two parts in a
-billion. Reproducibility doesn't prove a distribution's properties, so when that
-bound matters, check it against your range.
+`UniformRange` uses the shared Maths Lemire sampler. For a range of `n`
+values, a word's product with `n` supplies the candidate in its high 32 bits;
+the low bits must be at least `2^32 mod n`, otherwise that word is rejected.
+Every accepted outcome has the same number of raw preimages. Singleton and
+power-of-two ranges accept the first word; the full signed 32-bit range uses
+one raw word directly. Endpoints are inclusive.
+
+Every rejected word consumes a raw advance. A bounded result attempts at most
+`GeneratorCapacity.MaxBoundedAttempts` (64) words; exhausting this priced work
+budget refuses the operation, with no biased fallback. Gameplay and cursor
+writes rewind together in the caller's journal scope.
 
 ## Seeds, cursors, and seeking
 
@@ -223,13 +226,12 @@ that pair instead of hashing the instance identity and the descriptor again, so
 its cost doesn't depend on how long either string is.
 `GeneratorEngine.ComputeDrawSeed` returns the same pair for one site.
 
-**Seeking.** Every source costs a fixed number of generator advances per
-sample, so resuming a site at cursor *c* is one jump of `(skip + c) × advances`,
-and the earlier draws aren't replayed. A rule that redraws a site every tick
-costs the same at cursor 1,000,000 as at cursor 0. The cursor counts samples
-from zero. A site's `skip` is an authored, non-negative seek
-offset: the site starts `skip` samples into its stream, and `skip` never changes
-the persisted cursor.
+**Seeking.** The persisted cursor counts raw advances from zero for every source,
+including rejected words. A resume jumps directly to `skip + cursor`; earlier
+results are never replayed. `skip` is an authored non-negative raw-word offset
+and never changes the persisted cursor. After a successful draw, add the
+reported `FireResult.Advances`, rather than a result or token count. Weighted
+and orbit results use two words; Markov emissions use two per token.
 
 ## Decide what exhaustion means
 
@@ -314,19 +316,21 @@ var d6 = new StateGenerator(Source: GeneratorSource.UniformRange, RangeMin: 1, R
 var seed = GeneratorEngine.ComputeSeedState(documentSeed: 42UL, instanceIdentity: "table-1", site: "dieA");
 var stream = GeneratorEngine.ComputeStreamId(site: "dieA");
 
-for (var cursor = 0L; cursor < 3L; cursor++)
+var cursor = 0L;
+for (var sample = 0; sample < 3; sample++)
 {
     if (GeneratorEngine.TryFire(
             generator: d6, targetKind: CellKind.Int, seedState: seed, stream: stream,
             cursor: cursor, masks: null, result: out var roll, reason: out var reason))
     {
-        Console.WriteLine($"roll {cursor}: {roll.Numeric}");
+        Console.WriteLine($"roll {sample}: {roll.Numeric}");
+        cursor += roll.Advances;
     }
 }
 ```
 
-`TryFire` returns a `FireResult`: the text or the number, the samples consumed
-(the amount the cursor advances), and the masks to persist. Running it again
+`TryFire` returns a `FireResult`: the text or the number, the raw advances consumed
+(the cursor delta), and the masks to persist. Running it again
 with the same inputs prints the same three rolls. `ArenaDraws.TryFire` does the
 same against an arena, from the site's `DrawSeed`: it reads the site's cursor and masks from the arena's
 columns, draws, and writes the advanced cursor and masks back through the arena.
@@ -335,29 +339,29 @@ the site's cell yourself. Call it inside a journal scope when the draw should
 rewind with a refusal.
 
 `GeneratorEngine.TryResolveSource` resolves a `Draw` to its source; validation
-and every firing path share that resolution. `AdvancesPerSample` returns a
-source's fixed cost, and `MasksAfter` says which masks a site keeps after an
+and every firing path share that resolution. `MasksAfter` says which masks a site keeps after an
 emission, so a site whose source stops exhausting sheds the masks its previous
 source left.
 
 ## Draw a whole field at once
 
 `GeneratorEngine.TryFireBatch` fills a span with consecutive samples of a
-numeric source: cell *k* receives the sample a single draw at cursor + *k* would
-produce, with an exhausting source's mask threaded from cell to cell. One pass
+numeric source: cell *k* receives the sample the next successful single draw would
+produce, threading its reported raw cursor delta, with an exhausting source's mask threaded from cell to cell. One pass
 over a field is one run of the site's stream. `TryAdvanceBatch` consumes the same
 samples without writing values, to compute the masks a pass leaves, and
 `TryCheckBatchCapacity` checks that a pass can complete from the current masks.
-A Markov source is refused in a batch.
+Both batch methods return the raw advances consumed. Persist that delta with
+the masks; the result count alone cannot locate the next draw. A Markov source
+is refused in a batch.
 
 When the number of samples isn't known in advance, open a stream instead.
 `ArenaDraws.TryOpen` seeks the site once at the cursor the arena holds and
-returns a `GeneratorEngine.DrawStream`; each `TryNext` draws the sample a single
-draw one cursor further on would produce, in constant work, and
+returns a `GeneratorEngine.DrawStream`; each `TryNext` draws the next sample and records its actual raw advances, and
 `ArenaDraws.TryClose` stores the advanced cursor and masks. Nothing is written
 between the open and the close. A random `transfer` and a `shuffle` draw
-through a stream, so a 104-card shuffle seeks once and then takes 103 generator
-steps. An extended source draws in place from its cached generator, so no other
+through a stream, so a 104-card shuffle seeks once and makes 103 bounded selections,
+plus any rejected words. An extended source draws in place from its cached generator, so no other
 draw of the same source may run while its stream is open.
 
 ## Keep draws private
@@ -379,7 +383,10 @@ drawing from it is equidistributed in *k* dimensions rather than one. You author
 either the whole `table`, or a `script` of up to `k` values in the source's own
 output space that becomes the site's first draws, in order, after which the site
 continues like a normally seeded one. Only `StreamDraw` and `UniformRange` accept
-a script, because only they map one wanted value back to one raw draw. The
+a script, because only they map one wanted value back to one accepted raw draw. The
+inverse range mapping chooses a word outside the rejection window, including
+for the lowest scripted endpoint, so each scripted value costs exactly one
+advance. The
 engine caches the built generator beside the cursor it matches, so a site drawn
 every tick draws in place without rebuilding the table.
 
@@ -425,8 +432,6 @@ static lookup tables a document pins and a rule reads with `$table:`.
 
 ## Limitations
 
-- **A range draw is nearly uniform.** The multiply-high map is off by at most
-  n/2³² per outcome, the price of a fixed-cost, seekable draw.
 - **Bounded sources.** A document declares at most 256 sources; a Markov source
   at most 64 contexts of 256 alternatives each and 256 tokens per emission; a
   weighted source at most 256 outcomes; a range bound fits in 32 bits; and a
@@ -438,7 +443,7 @@ static lookup tables a document pins and a rule reads with `$table:`.
 - **Secrets are narrow.** Only an `Int` `StreamDraw` site drawn with replacement
   can be private.
 
-For the reasoning behind the fixed-cost draw and the 256-unit masks, see [State
+For the reasoning behind raw-word cursors and the 256-unit masks, see [State
 and the authoring language: decisions](../../decisions/state-and-language.md).
 
 ## Key types

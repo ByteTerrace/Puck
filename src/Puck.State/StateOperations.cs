@@ -230,8 +230,8 @@ public abstract record StateTransform {
         public override IReadOnlyList<StateSubject> Subjects() => Addressing(writes: [Pool.Value]);
     }
     /// <summary>Reorders a row's cells by value in place by one Fisher-Yates pass over the named redrawable integer
-    /// <c>streamDraw</c> site: n cells consume n - 1 samples, so the site's cursor advances by exactly that and a
-    /// replay reproduces the permutation.</summary>
+    /// <c>streamDraw</c> site: n cells make n - 1 unbiased bounded selections. The cursor counts every raw word,
+    /// including rejections, so reopening it reproduces the permutation.</summary>
     /// <param name="Row">Any ordered zone or keyed row.</param>
     /// <param name="Draw">The integer streamDraw site supplying the samples.</param>
     public sealed record Shuffle(StateChannelRef Row, StateChannelRef Draw) : StateTransform {

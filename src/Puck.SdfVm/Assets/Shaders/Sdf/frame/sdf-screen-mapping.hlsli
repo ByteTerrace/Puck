@@ -11,11 +11,13 @@ struct ScreenMappingData {
     float4 imageV;      // xyz = the source v's coefficients of the warped u, v and 1; w = 1 when the fit letterboxes
     float4 crop;        // the crop: left, top, right, bottom
     float4 sampleClamp; // the crop inset by half a source pixel: left, top, right, bottom
-    float4 state;       // x = bound source, y = sampler (SDF_FILTER_*), z = the luminance in nits a picture value of one shows at (one for an opening), w = drawn through the screen glass (0 for an opening)
+    float4 state;       // x = bound source, y = sampler (SDF_FILTER_*), z = the luminance in nits a picture value of one shows at (one for an opening), w = the face (SdfScreenFace: 0 an opening, 1 a display)
+    float4 treatment;   // the display treatment (SdfScreenTreatment): x = scanlines, y = subpixel stripes, z = vignette, w = glint
+    float4 treatmentShape; // x = glint power, y = corner radius, z = edge softness, w = 1 when the face draws the treatment
 };
 // A screen's record is its ScreenMappingData rows, then its ScreenRippleData rows. KEEP IN SYNC with
 // SdfWorldTables.ScreenMappingStride and SdfScreenRipple.Rows.
-static const uint WorldScreenMappingDataRows = 7u;
+static const uint WorldScreenMappingDataRows = 9u;
 static const uint WorldScreenRippleRows = 5u;
 static const uint WorldScreenMappingRows = (WorldScreenMappingDataRows + WorldScreenRippleRows);
 // SdfWorldTables.SetScreenRipple writes the opening's ripple, indexed by screen slot.
@@ -43,6 +45,8 @@ ScreenMappingData worldScreenMapping(uint screenIndex) {
     data.crop = screenMappings[(row + 4u)];
     data.sampleClamp = screenMappings[(row + 5u)];
     data.state = screenMappings[(row + 6u)];
+    data.treatment = screenMappings[(row + 7u)];
+    data.treatmentShape = screenMappings[(row + 8u)];
     return data;
 }
 #endif

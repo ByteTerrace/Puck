@@ -58,8 +58,8 @@ experimental worlds have that it lacks is ported into it
    bodies, then clearance on slopes within a third of a metre.
 7. [Delivery](#delivery-launcher-and-ci): CI's steady state, the shader cache
    and the GC-hole retirement.
-8. [Author leaks to the standard](#author-leaks-to-the-standard): the CRT as an
-   authored screen material and the standard pad kit's debug sectors.
+8. [Author leaks to the standard](#author-leaks-to-the-standard): the overlay
+   text advance and the helper templates.
 9. [Port the experimental worlds' missing features](#port-the-experimental-worlds-missing-features):
    the meadow and the creature garden now, as the bake's and the parallel
    tick's forcing workloads; the second seat, the authored passes and the
@@ -1167,65 +1167,67 @@ then CI's steady state, the shader cache and the GC-hole retirement.
 ### Author leaks to the standard
 
 Owner: UI lane, with the play-feel and editor lanes · ordinary, each leak fixed
-when it is found (AGENTS.md) · Next: the CRT as an authored screen material and
-the standard pad kit's debug sectors; then the overlay text advance and the
-helper templates. The engine's neutral default theme
-(`WorldThemeSection.Default`; no phosphor role in `WorldTheme`) and a warp that
-applies only to `WorldScreenMaterial.Crt` are in; [UI step 1](ui.md) is this
-packet's remainder.
+when it is found (AGENTS.md) · Next: the overlay text advance and the helper
+templates. The engine's neutral default theme (`WorldThemeSection.Default`; no
+phosphor role in `WorldTheme`), the CRT as the standard's authored screen
+material, per-treatment chase-camera values, and a standard that boots alone
+(`worlds/minimal`) are in; [UI step 1](ui.md) is this packet's remainder.
 
 The engine provides mechanisms; every concrete design is `.puck` data in
 `worlds/standard/`, which the debug world imports and develops. Each item below is
 a design built into C# or living only in the debug world.
 
-- [high] A world that imports only the standard is refused at boot:
-  `worlds/standard/controls.puck` refines the Moth's `bare` overlay, so the
-  standard depends on the debug world's avatar. Authors cannot build a world
-  on the standard alone. Fix: the standard defines what it refines, or the
-  refinement moves into the debug world's controls. A committed minimal world
-  that imports only the standard boots headless with the camera template,
-  inputs and editor feel resolved, and is the worked example authors start
-  from. (leaks-2 lane)
-- The CRT look in the engine. `WorldScreenMappings.CrtGlass`
-  (`src/Puck.World.Schema/WorldScreenMappings.cs:17-23`) insets the picture by
-  0.03 of each side and is mirrored by the glass shading, and
-  `WorldScreenMaterial.Crt` (`src/Puck.World.Schema/WorldScreen.cs:509-511`) is
-  documented as a bezel, scanlines, an aperture grille and bloom (`WarpOf` gives
-  every other material none). A CRT device's picture is therefore 94 % of the
-  glass the owner ruled is exactly its picture, with the bezel outside the glass
-  ([decision](../decisions/rendering.md#in-world-devices-and-screens)). Fix: a
-  generic screen-material mechanism (a warp and a shader lane an authored material
-  names) with the CRT authored in `worlds/standard/skin.puck`; delete the enum
-  value and the constant. A CRT's bezel is geometry authored outside the face.
-- The standard pad kit carries debug-world sectors: the play wheel's Act ring
-  binds `body.press suit` (the debug world's suit channel, `suit.puck`) and
-  `body.pose spawn:stage` (`worlds/standard/pad-kit.puck:44-57`,
-  `controls.puck:567`), and its View
-  ring and the View page name the Moth's inspection layouts (`flight-stage`,
-  `face`, `desktop`; `pad-kit.puck:59-70`, `controls.puck:714, 733`). Fix: the
-  standard's rings and pages name only what the standard authors; the debug
-  refinement (`worlds/debug/controls.puck`) adds its sectors by id.
-- The chase-camera decision's table gives `fade` a 0.35 rad `maxRise` and
-  cutaway its own close target (`[0, 1.55, 0]`), but the solver reads one
-  `clearanceMaxElevation` for cutaway only (fade never rises,
-  `src/Puck.World.Client/WorldCameraClearance.cs`, `Resolve`) and one
-  `closeTargetOffset` for both modes, so `chaseCamera` authors the cutaway
-  ceiling (1.1) and the fade close target. Decided: clearance becomes a camera
-  program operation, and the modes leave the engine. The owner's direction is
-  that feel is worked out in Puck expression. The `WorldCameraClearanceChoice`
-  modes (Cutaway, Fade) are behaviours baked into C#, and per-mode C# fields
-  would bake in more. A `Clearance` operation in `WorldCameraProgramOp` is the
-  mechanism. It probes the room (free boom, free rise, intervening walls) and
-  offers wall cutaway and body fade. Every number is an authored, bindable
-  parameter, including the eye radius and skin
-  (`WorldCameraClearance.cs:43,46`). Fade and cutaway are authored cases of
-  `worlds/standard/camera.puck`'s `chaseCamera`, chosen by `SelectProgram`
-  from the player's preference row. The decision table's values are those
-  cases' starting values, tuned in `.puck`. (leaks-2 lane)
+- The leaks-2 review (Codex Astra; the leaks3 lane is fixing all four):
+  [medium] Presentation-tier projection and hydration drop the screen-material
+  table (`src/Puck.World.Schema/WorldProjection.cs:115`, `:316`, `:792`), so a
+  disclosed world's screens render untreated; [medium] screen material ids and
+  both reference sites are absent from `WorldNameRegistry`, so aliased modules
+  collide on a material id; [medium] a neutral or scanline-only material drops
+  the screen edge's footprint protection
+  (`src/Puck.SdfVm/Assets/Shaders/Sdf/shade/sdf-environment.hlsli:312`);
+  [low] `worlds/standard/walker.puck:22` copies the Moth's `walk` program
+  (`worlds/debug/avatars/moth.puck:223`).
 - [low] Flight and fuel are authored only in the Moth
   (`worlds/debug/avatars/moth.puck:1860-1925`). When the assisted-flight pass
   comes it is a standard ability template, with `dashAbility` in
   `worlds/standard/abilities.puck` as the precedent.
+- The chase camera's clearance as a camera-program operation (the lead's
+  decision, replacing the per-treatment fields that landed first). Today the
+  solver (`src/Puck.World.Client/WorldCameraClearance.cs`, `Resolve`) branches
+  on `WorldCameraClearanceChoice` (`src/Puck.World.Schema/WorldCameraClearanceChoice.cs`)
+  and reads its numbers from `WorldSeatViewControl` (`ClearanceMode`, `MaxRise`,
+  `EyeRadius`, `SurfaceSkin`, `CharacterFade`; `src/Puck.World.Schema/WorldViews.cs`)
+  and the look-at's per-treatment `closeTargetOffset { fade, cutaway }`
+  (`WorldCameraProgram.cs`, `LookAt`). Fix: a `clearance` operation in
+  `WorldCameraProgramOp` is the mechanism: it probes the room (free boom
+  distance, free rise, intervening walls) and offers the engine-only
+  capabilities (cutting intervening walls away, fading this view's own body),
+  with every number an authored, bindable parameter (eye radius and skin, max
+  rise, close target and its fractions, fade start, end and minimum boom). Fade
+  and cutaway become authored cases of `chaseCamera` in
+  `worlds/standard/camera.puck`, chosen by a select from the player's preference
+  state row; `ClearanceMode`, `MaxRise`, `CharacterFade`, `EyeRadius` and
+  `SurfaceSkin` leave `WorldSeatViewControl`, and the enum loses its behavioural
+  meaning in the solver (`player.camera.clearance`, `seatCameraFeel.clearanceMode`
+  and `world.view.camera`'s `mode=` move to the state row). The decision table's
+  values (`docs/decisions/play.md`, "The chase camera") are the template's
+  starting values. Verify with the clearance laws (`WorldCameraClearanceLawTests`)
+  and a windowed `world.view.camera` reading near a wall in each case.
+- The chase solver's remaining mechanism constants are engine values, not
+  authored ones: the near plane's margin short of the body (`NearMargin`,
+  0.05 m), the retraction skin (0.05 m) and the obstructed-target shell skip
+  (1.1 m) in `src/Puck.World.Client/WorldCameraClearance.cs`; the eye radius,
+  surface skin, rise ceilings and gyro mapping are authored.
+- The standard's binding bar slot set (`worlds/standard/controls.puck`, the
+  `bare` overlay) still lists keys only the Moth binds (1 to 5 and F4); they
+  show as unbound plates in a world without her controls.
+- In `worlds/minimal` at 1280×900 the standard's editor bar
+  (`worlds/standard/editor.puck`, `editor.bar`) runs past the window's right
+  edge and its plates show no icons (the bar names no `iconRow`), and the
+  resting page draws no bar at all; look at both on the GPU.
+- A windowed boot of a world with no `host` section opens a 120×1 window
+  (`WorldHostDefaults.Absent`, `src/Puck.World.Schema/WorldHostDefaults.cs`):
+  either refuse it by name or let the standard author the host default.
 - Overlay text is spread too wide: each character advances a padded atlas cell,
   not the font's advance. Related: a 12 px mono run's 18 px cell spans the whole
   padded atlas cell (1.729 em), so its em is 10.4 px; decide whether overlay
@@ -1743,17 +1745,31 @@ them verbatim repeats) under-use the language:
 
 ### Lighting and GI
 
+The [illumination plan](illumination.md) holds the research round's decisions
+and the order they land in; the items below are its findings and checks.
+
 - [high · unconfirmed] A sun that moves every frame freezes indirect light.
   Each direction change starts a new lighting generation
-  (`SdfMeshIrradiance.cs:759-779`), and a trace batch landing after a
-  generation change is discarded (`:1067`), so GI sticks at the last sun that
-  held still. The debug world's sun is static (`worlds/debug/hall.puck:1413`),
-  so nothing has exercised it; the owner's authored day cycle will. Confirm
-  with a run that binds the key light to a clock, then fix it with the
-  illumination research's plan. (from: research-claude)
+  (`SdfMeshIrradiance.RefreshLighting` hashes every directional and traced
+  light record), and a trace batch landing after a generation change is
+  discarded (the `generation != m_generation` test after the parallel trace),
+  so GI sticks at the last sun that held still. The debug world's sun is
+  static (`worlds/debug/hall.puck`, the `key` directional), so nothing has
+  exercised it; the owner's authored day cycle will. Confirm with a run that
+  binds the key light to a clock ([step 0](illumination.md#the-build-order)),
+  then fix it with the plan's [first decision](illumination.md#1-split-each-probe-into-cached-hits-and-a-budgeted-gpu-relight).
+  (from: research-claude)
 - The probe trace casts two ray sets from one origin: 128 for radiance
-  (`SdfMeshIrradiance.cs:1245`) and 144 for depth (`SdfMeshProbeDepth.cs:19`).
-  This is duplication to converge into one hit buffer. (from: research-claude)
+  (`SdfMeshIrradiance.TraceProbe`) and 144 for depth
+  (`SdfMeshProbeDepth.Trace`). This is duplication the plan's step 2
+  converges into one hit buffer. (from: research-claude)
+- `RefreshLighting` does not hash the sky, so a sky-only change leaves the
+  bounced sky baked into the radiance cube stale while the zero-bounce term
+  relights; and a lighting change resets sweeps to zero, so it re-traces the
+  geometry-only depth rays the mesh-GI reference says are reused. Both are
+  leads for the plan's step 0 to confirm and its
+  [corrections](illumination.md#corrections) list to fix.
+  (from: consensus-agy)
 
 Owner: next lighting batch (rendering, principal-grade review) · medium · Next:
 light a cold area from the coarser levels or the sky term the moment a view
@@ -2274,6 +2290,13 @@ or deletes tests freely.
   first four expect addon and history messages that the addon-checkpoint and
   history work changed. They are triaged with the shards below. (from:
   field-contact)
+- Three more laws fail beside those five: `WorldConsoleAddressLawTests`
+  ("editor.bar.banks must declare at least one bank", after the standard's
+  editor moved to `.puck`), `WorldInstanceStopLawTests` (after the custody stop
+  work) and `WorldNameRegistryLawTests` (`screenMaterials` and
+  `editor.bar.iconRow` uncovered; the leaks3 lane registers the materials).
+  `WorldInstanceStopLawTests` is the one that may hide a real custody
+  regression: run the stop path by hand before deleting it. (from: unbiased-2)
 - [medium] The first main run after the fundamentals landing fails all four
   Windows test shards, where earlier runs failed only shard 3. Tests do not gate
   deploy during the refactoring campaign, but the jump may hide real regressions
@@ -2605,6 +2628,18 @@ the completed 70-stop comparison manifest.
 Owner: language lane (transpiler) · medium · Next: the inline console command
 hang, then the pre-`main` language findings.
 
+- [medium] A literal read from an initially empty ordered pile is refused even
+  when its key belongs to the declared `KeysOf` token domain. `RuleCompileContext.cs:242`
+  admits authored cells and `CellsOf` topology cells only;
+  `RuleCompiler.Operands.cs:365` then reports `StateCellUndeclared`. Reproduce by
+  adding `hand["c"] == 1` to `worlds/debug/unbiased-draws-tests.puck` after its
+  transfer: the real host refuses before running, although the transfer can
+  install that member. Admit literal keys from the declared token domain while
+  retaining refusal of out-of-domain keys; cover absence before transfer and
+  presence afterward. The sampling fixture checks counts and the remaining
+  source member, and its C# transform laws check transferred identities.
+  (from: unbiased-draws)
+
 - Decide (the language lane's call): whether a rule's effect list merges by
   `key` when a template is re-expanded over a basis. Today a rule whose effects
   write one key twice (`claim-expire` in `worlds/debug/pond.puck`) refuses with
@@ -2726,6 +2761,10 @@ step's completion criteria; C1 to C7 are in.
 Owner: an independent reviewer (Argon) · unconfirmed · Next: the researcher
 brief's priorities ([security review](../development/security-review.md)).
 
+- [unconfirmed] `ArenaSearchEffectHost` (`src/Puck.State.Search/ArenaSearchEffectHost.cs:30-32`)
+  is documented to reproduce the live host's draws, so a search over an arena
+  holding private (keyed) sites may compute the private outcomes. Confirm
+  whether a search can run where the secret is not granted. (from: unbiased-review)
 - [low] `worlds/hosting/granaries.extensions.json` grants its `console` client
   `mutate` over `section:state` to write six feed rows; scope it to those rows if
   the extension grant vocabulary allows. (from: the lead, landing granaries)
@@ -2779,6 +2818,18 @@ Owner: maths lane · ordinary · Next: the segment durations' wire double (`Worl
 `WorldCommand.EnqueueSegment.Seconds` through `FromDouble`), then the float
 duration fields' schema migration.
 
+- [low] `Pcg3dLatticeNoise.ScatterPoint`
+  (`src/Puck.Maths/Sampling/Pcg3dLatticeNoise.cs:78`) reduces a stateless hash
+  with `hash % inset`, a bias of inset/2^32; and a lattice's boot-time paint
+  still throws on draw exhaustion where compose now refuses (about 1e-14 a
+  generate at the worst bound). (from: unbiased-2)
+- [low] The alias table rounds each threshold to 32 fractional bits
+  (`src/Puck.Maths/Sampling/WeightedSampler.cs:84`), so `weightedNumeric`,
+  `symmetryOrbit` and Markov draws keep a bias of the order the bounded-draw
+  change removed (three equal weights give 5726623061, 5726623062 and
+  5726623061 out of 2^34). Exact alias thresholds (an integer remainder with a
+  bounded rejection through `BoundedRandomSampling`) would remove it.
+  (from: unbiased-review)
 - Decide (the lead's call): Production `IsPrime`: whether a hashed-witness
   table may decide primes below 2^47 in one strong round. machine-prime's
   512 KiB table is why it leads Puck there (about 1.5x on primes); a table is

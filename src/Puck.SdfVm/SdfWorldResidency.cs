@@ -954,7 +954,8 @@ public sealed partial class SdfWorldResidency : IDisposable {
             tables.SetScreenMapping(
                 face: sources.FaceOf(screen: screen),
                 mapping: sources.MappingOf(screen: screen),
-                screenIndex: screen
+                screenIndex: screen,
+                treatment: sources.TreatmentOf(screen: screen)
             );
             tables.SetScreenLuminance(
                 luminance: sources.LuminanceOf(screen: screen),

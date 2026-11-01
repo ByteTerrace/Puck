@@ -69,7 +69,7 @@ public sealed class GeneratorExtendedLawTests {
             ),
             userMessage: reason
         );
-        cursor = checked((cursor + fired.Samples));
+        cursor = checked((cursor + fired.Advances));
 
         // The window opens on a collection, so a check that re-reads a weakly held runtime cache after one — as
         // Enum.IsDefined does — allocates inside it.
@@ -90,7 +90,7 @@ public sealed class GeneratorExtendedLawTests {
                         ),
                         userMessage: refused
                     );
-                    cursor = checked((cursor + drawn.Samples));
+                    cursor = checked((cursor + drawn.Advances));
                 }
             }),
             expected: 0L

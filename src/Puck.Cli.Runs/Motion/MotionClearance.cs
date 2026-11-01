@@ -30,7 +30,7 @@ public interface IMotionClearance {
 /// giving the eye and the aim point a frame would use. The geometry is the one the seat camera's clearance keeps its eye out of
 /// (<see cref="WorldCameraClearance"/>): every placement the field query can read, emitted as <see cref="WorldPlacementStamper.EmitStatic"/>
 /// emits it and read through <see cref="SdfFieldEvaluator"/>, which holds no body. An eye is blocked when a sphere of
-/// <see cref="WorldCameraClearance.EyeRadius"/> about it overlaps geometry, and the sight line is blocked when a thin sphere swept from
+/// the seat control's authored eye radius (<see cref="WorldSeatViewControl.EyeRadius"/>) about it overlaps geometry, and the sight line is blocked when a thin sphere swept from
 /// the eye to the aim point hits geometry before the point.
 /// </summary>
 public sealed class MotionClearance : IMotionClearance {
@@ -40,7 +40,6 @@ public sealed class MotionClearance : IMotionClearance {
     public const float AimSkin = 0.2f;
 
     private static readonly FixedQ4816 FixedSightRadius = FixedQ4816.FromDouble(value: SightRadius);
-    private static readonly FixedQ4816 FixedEyeRadius = FixedQ4816.FromDouble(value: WorldCameraClearance.EyeRadius);
 
     private readonly WorldDefinition m_definition;
     private readonly SdfFieldEvaluator m_field;
@@ -140,8 +139,10 @@ public sealed class MotionClearance : IMotionClearance {
     public string? Blocked(Vector3 eye, Vector3 target) {
         var fixedEye = FixedPosition.FromLocal(local: FixedVector3.FromVector3(value: eye));
 
-        if (m_field.Overlap(center: fixedEye, radius: FixedEyeRadius)) {
-            return $"the eye ({Format(point: eye)}) is inside geometry or within {WorldCameraClearance.EyeRadius.ToString(provider: CultureInfo.InvariantCulture)} m of it, {Nearest(point: eye)}";
+        var eyeRadius = m_definition.Views.SeatControl.EyeRadius;
+
+        if (m_field.Overlap(center: fixedEye, radius: FixedQ4816.FromDouble(value: eyeRadius))) {
+            return $"the eye ({Format(point: eye)}) is inside geometry or within {eyeRadius.ToString(provider: CultureInfo.InvariantCulture)} m of it, {Nearest(point: eye)}";
         }
 
         var offset = (target - eye);

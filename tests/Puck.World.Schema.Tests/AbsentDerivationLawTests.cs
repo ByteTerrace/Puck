@@ -386,7 +386,7 @@ public sealed class AbsentDerivationLawTests {
     private const string MinimalViewsSection = """
         "views": {
           "layouts": [],
-          "seatControl": { "yawReference": "World", "minPitch": -0.35, "maxPitch": 1.2 },
+          "seatControl": { "yawReference": "World", "minPitch": -0.35, "maxPitch": 1.2, "clearanceMode": "Fade", "maxRise": { "fade": 0.35, "cutaway": 1.1 }, "eyeRadius": 0.3, "surfaceSkin": 0.1 },
           "seatRig": {
             "name": "seatChase",
             "version": "puck.camera.program.v1",
