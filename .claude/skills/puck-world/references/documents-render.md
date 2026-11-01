@@ -444,7 +444,18 @@ expanded width while validating template syntax length.
 `WorldKeyedValues.BoundOf` includes text placeholders wherever a source sits
 (screen, magazine or placement face), so projection's existing disclosure
 checks and observations see their dependencies. The protocol manifest and
-`WorldBakedColors` read the same parsed grammar through the mirror. A local
+`WorldBakedColors` read the same parsed grammar through the mirror; the
+manifest and `WorldKeyedValues` both take placeholders from
+`WorldScreenText.Placeholders`.
+
+Both are visitors of one walk of the document model,
+`WorldDocumentWalker` (`Puck.World.Schema`): a walker is built over a consumer's
+surface types and enters only members that can reach one, with readers, fields
+and member lists cached per type. A walk that finds state a document reads is
+a new visitor of it, never a new walker. `BindableDirection`,
+`BindableVector2` and `BindableVector3` bind no state cell (literal or keys
+only), so the manifest does not list them; a keyed one reads its clock, whose
+state row the manifest records with the timeline. A local
 mirror test alone cannot prove a presentation observer receives the row: test
 compose, hydrate, and resolve too, including a restricted recipient.
 

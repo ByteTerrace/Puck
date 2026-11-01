@@ -202,18 +202,6 @@ second implementations of one mechanism under other names:
      `CliLease.Serve` (`CliLease.cs:265`), whose fixed `<path>.tmp` name two
      writers share `[low]`. None keeps the mapped-file `File.Replace` fallback
      `AtomicFile` has for Windows.
-2. The document binding walk (M, specialist). `WorldPresentationManifest`
-   (`Puck.World.Protocol/Protocol/WorldPresentationManifest.cs:55-70`,
-   `345-418`, its `Builder` from 420) and `WorldKeyedValues`
-   (`Puck.World.Schema/WorldKeyedValues.cs:47-56`, `128-190`, its `Walk` from
-   192) each carry a reflective walk of the document model with its own
-   `Surfaces`, `ComputeReaching`, `Reaches`, `Walked`, `IsWalked`, `MembersOf`
-   and text-screen placeholder handling, to find the state a document reads.
-   Their surface lists differ: the keyed-values walk handles
-   `BindableDirection`, `BindableVector2` and `BindableVector3`, the manifest
-   does not `[medium, unconfirmed]`: check whether a state-bound vector is ever
-   registered with the mirror. Survivor: one walker in `Puck.World.Schema`
-   (which the protocol references) taking a per-consumer visitor.
 3. GPU memory arenas (M, implementer; a GPU leg with the Vulkan windowed boot).
    `DirectXHeapArena.Create`/`Return` (`Puck.DirectX/DirectXHeapArena.cs:73`,
    `166`) and `VulkanMemoryArena.Bind`/`Release`

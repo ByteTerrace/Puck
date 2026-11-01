@@ -1,9 +1,3 @@
-using System.Collections;
-using System.Collections.Concurrent;
-using System.Reflection;
-using System.Text.Json.Serialization;
-using System.Text.Json.Serialization.Metadata;
-
 namespace Puck.World;
 
 /// <summary>A keyed value's clock and key times, whatever its value's type: what the validator judges of every keyed
@@ -35,16 +29,18 @@ public readonly record struct WorldKeyedValue(string Path, object Value, IWorldK
 /// <param name="Field">The field the value fills, or <see langword="null"/> for a value that fills no declared scalar
 /// field.</param>
 public readonly record struct WorldBoundValue(string Path, StateBinding Binding, BindableScalar? Value, WorldValueField? Field);
+/// <summary>The keyed values and the bound values one document authors, both found by one walk.</summary>
+/// <param name="Keyed">The keyed values, in document order (<see cref="WorldKeyedValues.Of"/>).</param>
+/// <param name="Bound">The bound values, in document order (<see cref="WorldKeyedValues.BoundOf"/>).</param>
+public readonly record struct WorldAuthoredValues(IReadOnlyList<WorldKeyedValue> Keyed, IReadOnlyList<WorldBoundValue> Bound);
 /// <summary>
 /// Finds every keyed value a document authors, wherever the document places a bindable that can carry keys
 /// (<see cref="BindableColor"/>, <see cref="BindableScalar"/>, <see cref="BindableAngle"/>,
-/// <see cref="BindableDirection"/>, <see cref="BindableVector2"/>, <see cref="BindableVector3"/>), so the validator judges each one's clock and times
-/// without a walker per section. The walk follows the document model's generated shape
-/// (<see cref="WorldModelShape"/>) and visits only members whose type can reach a bindable.
+/// <see cref="BindableDirection"/>, <see cref="BindableVector2"/>, <see cref="BindableVector3"/>), so the validator judges
+/// each one's clock and times without a walker per section, and every bindable and text-screen placeholder a document
+/// binds to a state cell. It is one consumer of the document walk (<see cref="WorldDocumentWalker"/>).
 /// </summary>
 public static class WorldKeyedValues {
-    private static readonly ConcurrentDictionary<Type, (PropertyInfo Property, string Name)[]> MemberCache = new();
-    private static readonly Lazy<HashSet<Type>> Reaching = new(valueFactory: ComputeReaching);
     private static readonly Type[] Surfaces = [
         typeof(BindableAngle),
         typeof(BindableColor),
@@ -53,42 +49,39 @@ public static class WorldKeyedValues {
         typeof(BindableVector2),
         typeof(BindableVector3),
     ];
+    private static readonly WorldDocumentWalker Walker = new(surfaces: [.. Surfaces, typeof(WorldScreenSource.Text)]);
 
     /// <summary>Returns every keyed value a document authors, in document order.</summary>
     /// <param name="definition">The document.</param>
     /// <returns>The keyed values.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
-    public static IReadOnlyList<WorldKeyedValue> Of(WorldDefinition definition) {
-        ArgumentNullException.ThrowIfNull(argument: definition);
-
-        var walk = new Walk();
-
-        walk.Visit(
-            declared: null,
-            path: string.Empty,
-            value: definition
-        );
-
-        return walk.Found;
-    }
+    public static IReadOnlyList<WorldKeyedValue> Of(WorldDefinition definition) => AuthoredBy(definition: definition).Keyed;
     /// <summary>Returns every bindable a document binds to a state cell, in document order: each a reading of that
     /// cell wherever it is presented, and, for a presentation scalar in a field the document model declares
     /// (<see cref="WorldValueFields"/>), its scalar form and that field.</summary>
     /// <param name="definition">The document.</param>
     /// <returns>The bound values, including text-screen placeholders.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
-    public static IReadOnlyList<WorldBoundValue> BoundOf(WorldDefinition definition) {
+    public static IReadOnlyList<WorldBoundValue> BoundOf(WorldDefinition definition) => AuthoredBy(definition: definition).Bound;
+    /// <summary>Returns a document's keyed values (<see cref="Of"/>) and bound values (<see cref="BoundOf"/>) from one
+    /// walk of the document.</summary>
+    /// <param name="definition">The document.</param>
+    /// <returns>Both lists, each in document order.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
+    public static WorldAuthoredValues AuthoredBy(WorldDefinition definition) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
-        var walk = new Walk();
+        var visitor = new Visitor();
 
-        walk.Visit(
-            declared: null,
-            path: string.Empty,
-            value: definition
+        Walker.Walk(
+            root: definition,
+            visitor: visitor
         );
 
-        return walk.Bound;
+        return new WorldAuthoredValues(
+            Bound: visitor.Bound,
+            Keyed: visitor.Found
+        );
     }
     /// <summary>Returns whether a model type is a bindable that can carry keys on a clock.</summary>
     /// <param name="type">The type; a nullable value type answers for its underlying type.</param>
@@ -99,10 +92,10 @@ public static class WorldKeyedValues {
     public static bool IsKeyable(Type type) {
         ArgumentNullException.ThrowIfNull(argument: type);
 
-        return Surfaces.Contains(value: Underlying(type: type));
+        return Surfaces.Contains(value: (Nullable.GetUnderlyingType(nullableType: type) ?? type));
     }
     /// <summary>Returns the state cell a bindable reads, or <see langword="null"/> for a literal, keys or a value that
-    /// is no bindable.</summary>
+    /// is no bindable. A direction or a vector binds no state cell.</summary>
     /// <param name="value">The value.</param>
     /// <returns>The binding, or <see langword="null"/>.</returns>
     public static StateBinding? BindingOf(object? value) => (value switch {
@@ -125,191 +118,50 @@ public static class WorldKeyedValues {
         _ => null,
     });
 
-    private static HashSet<Type> ComputeReaching() {
-        var reaching = new HashSet<Type>(collection: [.. Surfaces, typeof(WorldScreenSource.Text)]);
-        var grew = true;
-
-        while (grew) {
-            grew = false;
-
-            foreach (var shape in WorldModelShape.Types) {
-                if (
-                    !reaching.Contains(item: shape.Type) &&
-                    Reaches(
-                    reaching: reaching,
-                    shape: shape
-                )
-                ) {
-                    _ = reaching.Add(item: shape.Type);
-                    grew = true;
-                }
-            }
-        }
-
-        return reaching;
-    }
-    private static bool Reaches(WorldModelType shape, HashSet<Type> reaching) {
-        if ((shape.ElementType is { } element) && reaching.Contains(item: Underlying(type: element))) {
-            return true;
-        }
-
-        foreach (var arm in shape.Arms) {
-            if (reaching.Contains(item: arm.Type)) {
-                return true;
-            }
-        }
-
-        foreach (var member in Walked(shape: shape)) {
-            if (IsWalked(member: member) && reaching.Contains(item: Underlying(type: member.Type))) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-    private static IReadOnlyList<WorldModelMember> Walked(WorldModelType shape) => ((shape.Kind == JsonTypeInfoKind.Object)
-        ? shape.Members
-        : shape.Properties
-    );
-    private static bool IsWalked(WorldModelMember member) => (
-        member.Access.HasFlag(flag: WorldModelAccess.Read) &&
-        !member.Access.HasFlag(flag: WorldModelAccess.ExtensionData)
-    );
-    private static (PropertyInfo Property, string Name)[] MembersOf(WorldModelType shape) => MemberCache.GetOrAdd(
-        factoryArgument: shape,
-        key: shape.Type,
-        valueFactory: static (_, shape) => [.. Walked(shape: shape)
-            .Where(predicate: static member => (IsWalked(member: member) && Reaching.Value.Contains(item: Underlying(type: member.Type))))
-            .Select(selector: static member => (Property: member.DeclaringType.GetProperty(
-                bindingAttr: BindingFlags.Instance | BindingFlags.Public,
-                name: member.Member
-            ), member.Name))
-            .Where(predicate: static pair => ((pair.Property is not null) && (pair.Property.GetCustomAttribute<JsonIgnoreAttribute>() is not { Condition: JsonIgnoreCondition.Always })))
-            .Select(selector: static pair => (pair.Property!, pair.Name))]
-    );
-    private static Type Underlying(Type type) => (Nullable.GetUnderlyingType(nullableType: type) ?? type);
-
-    private sealed class Walk {
-        private readonly HashSet<object> m_visited = new(comparer: ReferenceEqualityComparer.Instance);
-
+    // Records a bindable's keys or the cell it reads, and a text screen's placeholders; the walk enters neither.
+    private sealed class Visitor : IWorldDocumentVisitor {
         public List<WorldBoundValue> Bound { get; } = [];
         public List<WorldKeyedValue> Found { get; } = [];
 
-        // The field is the one the member holding the value declares, or null for a value no member declares (a
-        // dictionary's or a list's element).
-        public void Visit(object? value, string path, WorldModelType? declared, WorldValueField? field = null) {
-            if ((value is null) || (value is string)) {
-                return;
-            }
-
+        public bool Enter(object value, WorldDocumentSite site) {
             if (value is WorldScreenSource.Text text) {
-                for (var index = 0; (index < text.Lines.Count); index++) {
-                    if ((text.Lines[index] is not { } line) ||
-                        !WorldScreenText.TryParse(error: out _, line: line, segments: out var segments)) {
-                        continue;
-                    }
-                    foreach (var segment in segments) {
-                        if (segment.IsPlaceholder) {
-                            Bound.Add(item: new WorldBoundValue(Path: $"{path}.lines[{index}] placeholder '{{{segment.Text}}}'",
-                                Binding: StateBinding.Parse(token: segment.Text)!.Value, Value: null, Field: null));
-                        }
-                    }
-                }
-                return;
-            }
-
-            if (Surfaces.Contains(value: value.GetType())) {
-                if (KeysOf(value: value) is { } track) {
-                    Found.Add(item: new WorldKeyedValue(
-                        Path: path,
-                        Track: track,
-                        Value: value
-                    ));
-                } else if (BindingOf(value: value) is { } binding) {
-                    var scalar = (value switch {
-                        BindableScalar bindable => bindable,
-                        BindableAngle angle => angle.Value,
-                        _ => ((BindableScalar?)null),
-                    });
-                    var declaredScalar = ((field is not null) && scalar.HasValue);
-
+                foreach (var (line, token, binding) in WorldScreenText.Placeholders(text: text)) {
                     Bound.Add(item: new WorldBoundValue(
                         Binding: binding,
-                        Field: (declaredScalar ? field : null),
-                        Path: path,
-                        Value: (declaredScalar ? scalar : null)
+                        Field: null,
+                        Path: $"{site.Path}.lines[{line}] placeholder '{{{token}}}'",
+                        Value: null
                     ));
                 }
 
-                return;
+                return false;
+            }
+            if (!Surfaces.Contains(value: value.GetType())) {
+                return true;
+            }
+            if (KeysOf(value: value) is { } track) {
+                Found.Add(item: new WorldKeyedValue(
+                    Path: site.Path,
+                    Track: track,
+                    Value: value
+                ));
+            } else if (BindingOf(value: value) is { } binding) {
+                var scalar = (value switch {
+                    BindableScalar bindable => bindable,
+                    BindableAngle angle => angle.Value,
+                    _ => ((BindableScalar?)null),
+                });
+                var declaredScalar = ((site.Field is not null) && scalar.HasValue);
+
+                Bound.Add(item: new WorldBoundValue(
+                    Binding: binding,
+                    Field: (declaredScalar ? site.Field : null),
+                    Path: site.Path,
+                    Value: (declaredScalar ? scalar : null)
+                ));
             }
 
-            var type = value.GetType();
-
-            if (!type.IsValueType && !m_visited.Add(item: value)) {
-                return;
-            }
-
-            if ((WorldModelShape.Of(type: type) ?? declared) is not { } shape) {
-                return;
-            }
-
-            switch (shape.Kind) {
-                case JsonTypeInfoKind.Enumerable:
-                    if ((shape.ElementType is { } element) && Reaching.Value.Contains(item: Underlying(type: element)) && (value is IEnumerable items)) {
-                        var elementShape = WorldModelShape.Of(type: element);
-                        var index = 0;
-
-                        foreach (var item in items) {
-                            Visit(
-                                declared: elementShape,
-                                path: $"{path}[{index}]",
-                                value: item
-                            );
-                            index++;
-                        }
-                    }
-
-                    break;
-                case JsonTypeInfoKind.Dictionary:
-                    if ((shape.ElementType is { } valueType) && Reaching.Value.Contains(item: Underlying(type: valueType)) && (value is IEnumerable pairs)) {
-                        var valueShape = WorldModelShape.Of(type: valueType);
-
-                        foreach (var pair in pairs) {
-                            if (pair is null) {
-                                continue;
-                            }
-
-                            var pairType = pair.GetType();
-                            var key = pairType.GetProperty(name: "Key")?.GetValue(obj: pair);
-
-                            Visit(
-                                declared: valueShape,
-                                path: $"{path}.{key}",
-                                value: pairType.GetProperty(name: "Value")?.GetValue(obj: pair)
-                            );
-                        }
-                    }
-
-                    break;
-                case JsonTypeInfoKind.Object:
-                case JsonTypeInfoKind.None:
-                    foreach (var (property, name) in MembersOf(shape: shape)) {
-                        Visit(
-                            declared: WorldModelShape.Of(type: property.PropertyType),
-                            field: WorldValueFields.Of(
-                                member: property.Name,
-                                owner: property.DeclaringType!
-                            ),
-                            path: ((path.Length == 0)
-                                ? name
-                                : $"{path}.{name}"),
-                            value: property.GetValue(obj: value)
-                        );
-                    }
-
-                    break;
-            }
+            return false;
         }
     }
 }

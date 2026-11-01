@@ -1,9 +1,4 @@
-using System.Collections;
-using System.Collections.Concurrent;
-using System.Reflection;
 using System.Runtime.CompilerServices;
-using System.Text.Json.Serialization;
-using System.Text.Json.Serialization.Metadata;
 using Puck.Commands;
 using Puck.World.Authoring;
 
@@ -35,9 +30,10 @@ public readonly record struct WorldPresentationBinding(StateBinding Binding, Wor
 /// contexts, radial wheel cells and binding bar cells — is compiled per seat by <see cref="SeatBindings"/>.
 /// <para>
 /// A surface is found by the type that carries it, wherever the document places that type, so a section that gains a
-/// bindable member is covered without a new walker. The walk follows the world document model's generated shape
-/// (<see cref="WorldModelShape"/>) and visits only members whose type can reach a surface, so a document's state rows,
-/// rules and literal-only sections are never read.
+/// bindable member is covered without a new walker: the manifest is a consumer of the document walk
+/// (<see cref="WorldDocumentWalker"/>), which enters only members whose type can reach a surface, so a document's state
+/// rows, rules and literal-only sections are never read. A direction or a vector binds no state cell, so neither is a
+/// surface; a keyed one reads its clock, whose state row the manifest records with the timeline's.
 /// </para>
 /// </summary>
 public sealed class WorldPresentationManifest {
@@ -50,10 +46,7 @@ public sealed class WorldPresentationManifest {
     );
 
     private static readonly ConditionalWeakTable<WorldDefinition, WorldPresentationManifest> Compiled = new();
-    private static readonly ConcurrentDictionary<Type, PropertyInfo[]> MemberCache = new();
-    private static readonly ConcurrentDictionary<Type, PropertyInfo?> PairValueCache = new();
-    private static readonly Lazy<HashSet<Type>> Reaching = new(valueFactory: ComputeReaching);
-    private static readonly Type[] Surfaces = [
+    private static readonly WorldDocumentWalker Walker = new(surfaces: [
         typeof(BindableAngle),
         typeof(BindableColor),
         typeof(BindableScalar),
@@ -68,7 +61,7 @@ public sealed class WorldPresentationManifest {
         typeof(WorldHudElement),
         typeof(WorldLookMotion),
         typeof(WorldScreenSource.Text),
-    ];
+    ]);
 
     private readonly WorldPresentationBinding[] m_bindings;
     private readonly WorldPresentationBinding[] m_bodyBindings;
@@ -199,7 +192,10 @@ public sealed class WorldPresentationManifest {
             builder.Owner = null;
         }
 
-        builder.Visit(value: definition);
+        Walker.Walk(
+            root: definition,
+            visitor: builder
+        );
         foreach (var region in definition.FieldRegions) { builder.AddFields(fields: region); }
 
         var clocks = (definition.Timeline.Clocks ?? []).Where(predicate: static clock => (clock is not null)).ToArray();
@@ -340,87 +336,10 @@ public sealed class WorldPresentationManifest {
         return [.. builder.Bindings];
     }
 
-    // Every model type from which a surface type is reachable through a readable member, an element type, or a
-    // polymorphic arm: the fixed point over the generated shape table, computed once.
-    private static HashSet<Type> ComputeReaching() {
-        var reaching = new HashSet<Type>(collection: Surfaces);
-        var types = WorldModelShape.Types;
-        var grew = true;
-
-        while (grew) {
-            grew = false;
-
-            foreach (var shape in types) {
-                if (
-                    !reaching.Contains(item: shape.Type) &&
-                    Reaches(
-                    reaching: reaching,
-                    shape: shape
-                )
-                ) {
-                    _ = reaching.Add(item: shape.Type);
-                    grew = true;
-                }
-            }
-        }
-
-        return reaching;
-    }
-    private static bool Reaches(WorldModelType shape, HashSet<Type> reaching) {
-        if (
-            (shape.ElementType is { } element) &&
-            reaching.Contains(item: Underlying(type: element))
-        ) {
-            return true;
-        }
-
-        foreach (var arm in shape.Arms) {
-            if (reaching.Contains(item: arm.Type)) {
-                return true;
-            }
-        }
-        foreach (var member in Walked(shape: shape)) {
-            if (
-                IsWalked(member: member) &&
-                reaching.Contains(item: Underlying(type: member.Type))
-            ) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-    // A serializer-described object carries its members; a converter-backed one (a creation document) carries its
-    // public properties instead, which hold the same document data.
-    private static IReadOnlyList<WorldModelMember> Walked(WorldModelType shape) => ((shape.Kind == JsonTypeInfoKind.Object)
-        ? shape.Members
-        : shape.Properties
-    );
-    private static bool IsWalked(WorldModelMember member) => (
-        member.Access.HasFlag(flag: WorldModelAccess.Read) &&
-        !member.Access.HasFlag(flag: WorldModelAccess.ExtensionData)
-    );
-    // An unconditionally ignored property is derived from the document rather than part of it.
-    private static bool IsDocumentData(PropertyInfo property) =>
-        (property.GetCustomAttribute<JsonIgnoreAttribute>() is not { Condition: JsonIgnoreCondition.Always });
-    private static PropertyInfo[] MembersOf(WorldModelType shape) => MemberCache.GetOrAdd(
-        factoryArgument: shape,
-        key: shape.Type,
-        valueFactory: static (_, shape) => [.. Walked(shape: shape)
-            .Where(predicate: member => (IsWalked(member: member) && Reaching.Value.Contains(item: Underlying(type: member.Type))))
-            .Select(selector: static member => member.DeclaringType.GetProperty(
-                bindingAttr: BindingFlags.Instance | BindingFlags.Public,
-                name: member.Member
-            ))
-            .OfType<PropertyInfo>()
-            .Where(predicate: IsDocumentData)]
-    );
-    private static Type Underlying(Type type) => (Nullable.GetUnderlyingType(nullableType: type) ?? type);
-
-    private sealed class Builder {
+    private sealed class Builder : IWorldDocumentVisitor {
         private readonly HashSet<WorldPresentationBinding> m_bodySeen = [];
+        private readonly Stack<object?> m_owners = [];
         private readonly HashSet<WorldPresentationBinding> m_seen = [];
-        private readonly HashSet<object> m_visited = new(comparer: ReferenceEqualityComparer.Instance);
 
         public List<WorldPresentationBinding> Bindings { get; } = [];
 
@@ -559,95 +478,24 @@ public sealed class WorldPresentationManifest {
                 }
             }
         }
-        public void Visit(object? value, WorldModelType? declared = null) {
-            if (
-                (value is null) ||
-                (value is string)
-            ) {
-                return;
-            }
-
+        // A look's or a creation's members record their templates under it.
+        public bool Enter(object value, WorldDocumentSite site) {
             if (!Collect(value: value)) {
-                return;
+                return false;
             }
-
-            var type = value.GetType();
-
-            if (
-                !type.IsValueType &&
-                !m_visited.Add(item: value)
-            ) {
-                return;
-            }
-
-            if ((WorldModelShape.Of(type: type) ?? declared) is not { } shape) {
-                return;
-            }
-
-            var owner = Owner;
-
             if (value is WorldLook or WorldPrototype) {
+                m_owners.Push(item: Owner);
                 Owner = value;
             }
 
-            VisitMembers(
-                shape: shape,
-                value: value
-            );
-            Owner = owner;
+            return true;
         }
-
-        private void VisitMembers(object value, WorldModelType shape) {
-            switch (shape.Kind) {
-                case JsonTypeInfoKind.Enumerable:
-                case JsonTypeInfoKind.Dictionary:
-                    if (
-                        (shape.ElementType is { } element) &&
-                        Reaching.Value.Contains(item: Underlying(type: element)) &&
-                        (value is IEnumerable items)
-                    ) {
-                        var elementShape = WorldModelShape.Of(type: element);
-
-                        foreach (var item in items) {
-                            Visit(
-                                declared: elementShape,
-                                value: PairValue(item: item)
-                            );
-                        }
-                    }
-
-                    break;
-                case JsonTypeInfoKind.Object:
-                case JsonTypeInfoKind.None:
-                    foreach (var property in MembersOf(shape: shape)) {
-                        Visit(
-                            declared: WorldModelShape.Of(type: property.PropertyType),
-                            value: property.GetValue(obj: value)
-                        );
-                    }
-
-                    break;
+        public void Leave(object value) {
+            if (value is WorldLook or WorldPrototype) {
+                Owner = m_owners.Pop();
             }
         }
-        private static object? PairValue(object? item) {
-            if (item is null) {
-                return null;
-            }
 
-            var type = item.GetType();
-
-            if (
-                !type.IsGenericType ||
-                (type.GetGenericTypeDefinition() != typeof(KeyValuePair<,>))
-            ) {
-                return item;
-            }
-
-            return PairValueCache.GetOrAdd(
-                key: type,
-                valueFactory: static type => type.GetProperty(name: "Value")
-            )?.GetValue(obj: item);
-        }
         // Records the bindings a surface carries; returns whether the walk continues into its members.
         private bool Collect(object value) {
             switch (value) {
@@ -699,25 +547,11 @@ public sealed class WorldPresentationManifest {
                     AddColor(token: text.Foreground);
                     AddColor(token: text.Background);
 
-                    foreach (var line in (text.Lines ?? [])) {
-                        if (
-                            (line is { Length: > 0 }) &&
-                            WorldScreenText.TryParse(
-                            error: out _,
-                            line: line,
-                            segments: out var segments
-                        )
-                        ) {
-                            foreach (var segment in segments) {
-                                if (!segment.IsPlaceholder) {
-                                    continue;
-                                }
-                                Add(
-                                    binding: StateBinding.Parse(token: segment.Text),
-                                    conversion: WorldStateConversion.Number
-                                );
-                            }
-                        }
+                    foreach (var (_, _, binding) in WorldScreenText.Placeholders(text: text)) {
+                        Add(
+                            binding: binding,
+                            conversion: WorldStateConversion.Number
+                        );
                     }
 
                     return false;
