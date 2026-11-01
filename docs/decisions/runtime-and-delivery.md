@@ -101,9 +101,13 @@ committed ([a derived product is a cache](engine-design.md#a-derived-product-is-
 never enter the repository; the ledger records id and SHA-256, and the battery
 refuses an image whose hash matches no accepted value.
 
-**`roms/` holds the engine's verification ROMs; cartridges live in the package
-that ships them.** House cartridges are package content, not evidence, and
-`roms/` is never copied into a build, publish or image.
+**`roms/` (planned) holds the engine's verification ROMs; cartridges live in the
+package that ships them.** The directory does not exist yet; the
+[ledger](../plans/runtime-and-delivery.md#the-ledger) creates it. House
+cartridges are package content, not evidence, and `roms/` is never copied into a
+build, publish or image. The ledger splits firmware by origin: a hand-authored
+image is source and its bytes stay committed; a generated image is a derived
+product, built on demand and never committed or compared by bytes.
 
 **The ledger governs `bios=` and `firmware.path` too.** They are player-facing
 inputs for a player's own images, but one home for every path that reaches a
@@ -160,6 +164,10 @@ declares that dependency.
 ROM already; a second form would be a container with no consumer.
 
 ## Releases
+
+**These decisions apply after the first shipped release.** Nothing has shipped,
+so there is no deployed predecessor to preserve; the release-pair work is frozen
+until one exists, and the rules below are scoped to it.
 
 **One active release and at most one retained previous release.** Deploying C
 while A is the rollback target for B refuses until B is finalized. All

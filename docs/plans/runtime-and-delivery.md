@@ -8,8 +8,8 @@ Today each leg was designed on its own: content is welded into the engine,
 every boot re-derives the same products from JSON, verification ROMs are
 reached through nine unrelated mechanisms, and release identity has no single
 packaged unit to name. This programme makes the whole path one unit, a product
-tree that declares what it holds, carries its derived data beside its sources,
-and is deployed, retained, and returned to as one thing. It also settles the
+tree that declares what it holds, ships its authored sources and derives its
+data on demand as a cache, and is deployed, retained, and returned to as one thing. It also settles the
 last leg of that path: what a client may observe of the document it draws. The
 reasoning behind every decision is in
 [the decisions register](../decisions/runtime-and-delivery.md).
@@ -21,15 +21,10 @@ foundation: retained owner storage, explicit reclamation, mimalloc, and selectiv
 shared reuse without GC. Its first memory slice is separated from the later
 State and World runtime ports; packages and status live on that page.
 
-- **Canonical world sources:** `standard`, `pipeline` and `shards/quilt-nw-gap`
-  are authored as `.puck`. Five migrations remain unstarted:
-  `puck.world.json` and `shards/quilt-ne.world.json`, `quilt-nw.world.json`,
-  `quilt-se.world.json` and `quilt-sw.world.json`, all under
-  `experimental/src/Puck.World/Assets/worlds`. The JSON resolver prerequisite is implemented.
-  Each migration must preserve the composed definition and its state baseline,
-  replace source-facing references, and keep executable-relative references
-  naming the generated `.world.json` output. The build ships those generated
-  documents, not the authored sources.
+- **Canonical world sources:** the debug package, `standard` and `pipeline`
+  are authored as `.puck`. A package ships its authored sources; a compiled
+  world is a cache derived from them. The quilt's JSON shards stay quarantined
+  under `experimental/` and are not migrated.
 - **Landed:** the baked solid query, `WorldSolidField`, `WorldOutputHub`
   narration, and `WorldDeadlineTable`; the `WorldServer` facade split and its
   constraint that every record the checkpoint codec reads sits at the top level
@@ -48,38 +43,40 @@ State and World runtime ports; packages and status live on that page.
   compiled-world chunks, and the evidence package. Release-pair qualification
   (`puck world release qualify`) exists; only metadata-only definition deltas
   pass it, other sections refuse, and Azure acceptance is open.
-- **Partly landed, and partly defective where it exists:** the presentation
-  view. `IWorldStateView` exists, with one implementation,
-  `WorldDocumentStateView`, which answers from the definition the client was
-  delivered; `WorldStateMirror` reads every presentation `state.*` row through
-  it. `WorldProjection` composes and hydrates a document for a federated
-  neighbour, but `Compose` never sets `Fields`, so a presentation-tier peer sees
-  no field lattice, and the primary client is fed the authority's own definition
-  by reference. `TryToDefinition` rebuilds the disclosed observations as plain
-  `state.world` rows and copies no other authored row.
+- **Partly landed:** the presentation view. `IWorldStateView` exists, with one
+  implementation, `WorldDocumentStateView`, which answers from the definition
+  the client was delivered; `WorldStateMirror` reads every presentation
+  `state.*` row through it. `WorldProjection` composes and hydrates a document
+  for a federated neighbour: `Compose` sets `FieldRegions` and `TryToDefinition`
+  hydrates them through `WorldFieldsSection.ToStateSection`, and rebuilds the
+  disclosed observations as plain `state.world` rows. No conformance law holds
+  the colocated view and a round-tripped view to the same answers, `TryToDefinition`
+  copies no other authored row, and the primary client is fed the authority's
+  own definition by reference.
 
 ## The forcing artifact
 
-The quilt, [the forcing world](state-and-language.md#the-forcing-world), is
-built as an asset package, shipped as compiled worlds inside it, deployed to a
+The debug world, [the forcing world](state-and-language.md#the-forcing-world),
+is built as an asset package, shipped from its authored sources, deployed to a
 hosted authority, rolled back, and restored. The package supplies the unit
-(`worlds/<id>/manifest.json` names its entry, its folder carries its worlds,
-cartridges and addons, and the engine ships none of it); compiled worlds supply the delivery
-format; the ledger supplies the boundary between house content and someone
-else's; release pairs supply the operation (release B replaces A inside a
-maintenance window, players earn items and cross corner boundaries under B, an
-operator rolls back to A, and the items and completed transfers survive); and
-the evidence package proves one candidate carrying all four.
+(`worlds/debug/manifest.json` names its entry, its folder carries its worlds,
+cartridges and addons, and the engine ships none of it); compiled worlds are a
+cache derived from the sources on demand, never the shipped truth; the ledger
+supplies the boundary between house content and someone else's; release pairs
+supply the operation (release B replaces A inside a maintenance window, players
+earn items and cross place boundaries under B, an operator rolls back to A, and
+the items and completed transfers survive); and the evidence package proves one
+candidate carrying all four. The quilt is quarantined and is not the artifact.
 
-**Check:** the quilt boots from its package folder with `--world`, and the
-same command without one refuses and names what it needs; a law derives every
-chunk fresh and compares it byte for byte with the chunk loaded from the
-compiled world, and a `puck landing` canary boots the quilt from JSON and from
-its compiled world and compares `stateHash` at a fixed tick; `puck roms --check`
-passes on the checkout and fails on each seeded defect; the operator exercise
-(prepare B, deploy B, inspect status, play, roll back, reconnect, verify
-progress) completes through the supported CLI with no manual blob edits, and
-repeats with an interrupted deployment and an interrupted rollback.
+**Check:** `puck_world_start` boots the debug package from its folder with
+`world`, and the same start without one refuses and names what it needs; a law
+derives every chunk fresh and compares it byte for byte with the chunk the cache
+holds, and a debug-world boot from its sources and from its compiled world
+compares `stateHash` at a fixed tick; once the first release has shipped, the
+operator exercise (prepare B, deploy B, inspect status, play, roll back,
+reconnect, verify progress) completes through the supported CLI with no manual
+blob edits, and repeats with an interrupted deployment and an interrupted
+rollback ([release pairs](#release-pairs) are frozen until then).
 
 ## Packages
 
@@ -117,7 +114,7 @@ read them, the orphans were deleted, and the generated schemas moved to
 worlds/debug --exit-after-seconds 2` boots the debug world and the same command
 without `--world` refuses naming it; `puck official build --worlds worlds/debug`
 then `puck official verify` passes; `puck azure build` produces a bundle with no
-hard-coded package name or channel; `puck landing` passes.
+hard-coded package name or channel.
 
 ### The ledger
 
@@ -133,12 +130,17 @@ verification ROMs; the cartridges' move into the product.
    transpiler test; `CartridgeCostMeasurement` is public in
    `Puck.GamingBricks.Forge` and `puck cartridge-cost` runs its bisection on
    both machines.
-2. The ledger: every entry has `id`, `kind`, `sha256`; `firmware` entries
-   (bytes in git beside their source and license, with the `puck firmware`
-   generator), `corpus` entries (fetched into the local cache; `version`,
-   `archive`, `root`, `license`, `homepage`), `external` entries (bytes never in
-   git; description, accepted hashes, the battery stages that use them).
-   `CorpusManifest` reads the ledger and both `corpora.json` files are deleted.
+2. The ledger: every entry has `id`, `kind`, `sha256`; `firmware` entries,
+   split by origin (a hand-authored replacement image is source and its bytes
+   stay in git beside their license; an image generated from a program, which
+   `puck firmware` builds, is a derived product: built on demand, removed from
+   git, and never verified by a byte compare, so the generator's `--verify` is
+   deleted; the removal of the generated images is an engine work item pending
+   in the open items), `corpus` entries (fetched into the local cache;
+   `version`, `archive`, `root`, `license`, `homepage`), `external` entries
+   (bytes never in git; description, accepted hashes, the battery stages that
+   use them). `CorpusManifest` reads the ledger and all three `corpora.json`
+   files are deleted.
    `--check` verifies the manifest and every tracked hash and scans in reverse:
    any tracked file with a ROM extension or a valid Game Boy or Game Boy
    Advance header that neither the ledger nor a product manifest names fails.
@@ -190,6 +192,7 @@ projections and neighbour solids, and the live scene program are never stored.
 |---|---|---|
 | `DEFN` | the drawn, resolved definition, as compact canonical JSON | header only |
 | `ASST` | content hashes of every asset file read | asset files |
+| `CURV` | each drawn curve's compiled coefficients, stations and arc tables | `DEFN` |
 | `PLCE` | placement frames, spatial index, distribution offsets | `DEFN` |
 | `SOLD` | the server solid program, evaluator, and a fully baked distance grid | `DEFN`, kits |
 | `NAVB` | navigation bake arrays per domain | `SOLD` |
@@ -273,8 +276,9 @@ what its document derives fresh, byte for byte. Still open:
   travel in the compiled world, which the trust decision allows for a local
   boot and nothing stores yet.
 - A hit still compiles, composes, parses and serializes the authored document
-  to compute the header's definition hash, so `DEFN` saves the draw alone; the
-  boot-time win arrives with the simulation chunks.
+  to compute the header's definition hash, so `DEFN` saves the draw alone; a
+  larger boot-time win needs a simulation chunk that is shown to save measured
+  time (see below).
 - A derivation that reads an earlier chunk's product declares it in
   `DependsOn`, and a boot re-derives it when that chunk is re-derived; a chunk
   that reads a neighbour document or the CPU identity records it as an input
@@ -285,38 +289,51 @@ what its document derives fresh, byte for byte. Still open:
 - The per-user compiled-world cache keeps one compiled world per document
   path and never evicts one whose document was deleted.
 
-**Simulation chunks** (`PLCE`, `SOLD`, `NAVB`, `TOPO`, `POPL`, `TBLS`). Owns
-the caches those derivations sit behind, which are `ConditionalWeakTable` and
-`ReferenceEquals` checks on section instances today and must be seeded by the
-loader or move to content keys; and the duplicated work beside them (channels compiled per consumer,
-distribution offsets computed three times, solids built twice per mutation).
-Constructor tables now reuse validation's compiled bundle.
-Check: the byte-for-byte law over the six chunks; the duplicated work gone.
+**Simulation chunks** (`PLCE`, `SOLD`, `NAVB`, `TOPO`, `POPL`, `TBLS`).
+Paused: no simulation chunk is built until one is shown to save measured boot
+time or edit-to-running time, because a chunk the cache must re-derive on every
+edit adds a keying and storage cost without a win. A candidate is measured
+first, as a counted derivation against the cold and warm boot profile, and
+lands only when the saving is read. Owns the caches those derivations sit
+behind, which are `ConditionalWeakTable` and `ReferenceEquals` checks on
+section instances today and must be seeded by the loader or move to content
+keys; and the duplicated work beside them (channels compiled per consumer,
+distribution offsets computed three times, solids built twice per mutation),
+which is removed whether or not a chunk is built. Constructor tables now reuse
+validation's compiled bundle. Check: the measured saving; for a chunk that
+lands, the byte-for-byte law; the duplicated work gone.
 
 **Everything else.** `RULE` after ordinal operands and closed fact tags (the
 rebuilt state vocabulary decides them); `ROMS` and `WASM` after confirming the
 Wasmtime binding exposes module serialization; `FONT`, `SCNE`, `AUDI` after the
 static scene is its own stream and stamps on the fixed-point path so `SCNE` is
-bit-portable; and the checkpoint, replay, and instance references. Check: the
-byte-for-byte law over every chunk; restore, rewind, and the replay drive load
-products from the compiled world their checkpoint names; the `puck landing`
-canary and `puck parity` from compiled worlds on both backends.
+bit-portable; and the checkpoint, replay, and instance references. Each waits,
+as the simulation chunks do, for a measured saving. Check: the
+byte-for-byte law over every chunk that lands; restore, rewind, and the replay
+drive load products from the compiled world their checkpoint names; a
+debug-world boot from sources and from the cache agree, and `puck parity` from
+compiled worlds on both backends.
 
 #### Derivation keys
 
 A derived product is keyed by the code that makes it, so a deliberate change to
 that code moves the key and nothing is served stale. The running build computes
-the key, so nothing records it and nothing goes stale: the producer's assembly
-roots the reach (`AssemblyReach.Of`, every Puck assembly it reaches), and the
-content fingerprint of that reach is the key. The compiled world's chunks need
-none of their own: its header keys the engine build, the module version id of
-every `Puck.*` assembly reachable from `Puck.World.Schema`
-(`CompiledWorld.EngineBuild`), and `DEFN`, `ASST` and `CURV` derive wholly
-inside that reach. A chunk whose derivation lies outside the reach adds the
-fingerprint of its producer's assembly as its key. No other product is keyed
-this way yet; the first slice that keys one adds the fingerprint over the reach.
+the key, so nothing records it and nothing goes stale. The key is narrowed to
+the deriving call graph: the methods the derivation actually reaches, hashed
+from the running build, so an edit elsewhere in the same assembly does not move
+it. An assembly-wide key (the producer's assembly roots the reach,
+`AssemblyReach.Of`, and the content fingerprint of every Puck assembly it
+reaches is the key) is too coarse for the edit-to-running bar: any edit to any
+reached assembly would re-derive every product. The compiled world's header
+keys the engine build today as the module version id of every `Puck.*` assembly
+reachable from `Puck.World.Schema` (`CompiledWorld.EngineBuild`), and `DEFN`,
+`ASST` and `CURV` derive wholly inside that reach; the narrowing replaces that
+header key and gives each chunk the call-graph fingerprint of its own producer.
+No other product is keyed this way yet; the first slice that keys one adds the
+call-graph fingerprint.
 
-**Owns:** `AssemblyReach` and the product below.
+**Owns:** `AssemblyReach` (to be replaced by the call-graph reach) and the
+product below.
 
 **Delivers:**
 
@@ -325,7 +342,7 @@ this way yet; the first slice that keys one adds the fingerprint over the reach.
    and declarations pins. It reads nothing of the code that compiles and writes
    the package, so a change to that code under an unchanged source keeps the key
    and a stored package is served. The key gains the packaging code's
-   fingerprint. Check: a law that a packaging-code change misses a package stored
+   call-graph fingerprint. Check: a law that a packaging-code change misses a package stored
    under the earlier key and loads the rebuilt one.
 
 ### The presentation view
@@ -341,23 +358,22 @@ answers from that delivered definition; the cuts below add the view that does
 not need the document. The five cuts are in dependency order, each independently
 landable.
 
-**The mechanism defects, and the conformance law.** Owns `WorldProjection`'s
-`Compose` and `TryToDefinition`, and the round-trip law. Delivers a `Compose`
-that supplies `Fields`, which it declares and never sets, so a presentation-tier
-peer stops seeing no field lattice where the client's state view
-(`WorldDocumentStateView`) and `WorldFieldEmitter` read `Definition.Fields`. The
-hydration already reads `projection.Observations` back as plain `state.world`
-rows, so the channel `WorldStateDisclosure.Compose` fills is not inert; it
-rebuilds the rest of `StateRaw` only through `WorldFieldsSection.ToStateSection`,
-which manufactures lattice-shaped rows from `Fields`, and copies no authored row
-beyond the observed ones. The conformance law is written here: for every shipped
-world, tick, and recipient, the colocated view and a view rebuilt from an
-encode-then-decode round trip answer every query identically. Check: a law that
-a composed projection carries the document's field lattice; a law that a
-disclosed observation of each cell kind survives the round trip
-(`VectorStateLawTests` holds the vector row's); the conformance law green over
-every shipped world and red when one member is dropped from `Compose`, shown
-once.
+**The conformance law and the disclosure round trip.** Owns `WorldProjection`'s
+`Compose` and `TryToDefinition`, and the round-trip law. `Compose` already sets
+`FieldRegions` (`WorldProjection.cs:337`) and `TryToDefinition` hydrates them
+through `WorldFieldsSection.ToStateSection` (`:749`), so a presentation-tier
+peer sees the field lattice that the client's state view
+(`WorldDocumentStateView`) and `WorldFieldEmitter` read; the hydration reads
+`projection.Observations` back as plain `state.world` rows, so the channel
+`WorldStateDisclosure.Compose` fills is not inert, and it copies no authored row
+beyond the observed ones. What this cut delivers is the law that holds both: for
+every shipped world, tick, and recipient, the colocated view and a view rebuilt
+from an encode-then-decode round trip answer every query identically. Check: a
+law that a composed projection carries the document's field regions and a
+hydrated one rebuilds the lattice; a law that a disclosed observation of each
+cell kind survives the round trip (`VectorStateLawTests` holds the vector row's);
+the conformance law green over every shipped world and red when one member is
+dropped from `Compose`, shown once.
 
 **The static sections become disclosure decisions.** Owns
 `WorldProjectionDocument`'s member list and the compose and hydrate arms for
@@ -412,7 +428,8 @@ invisible to the compose-time gate; they become document state values or the
 walk learns their shape. A binding its recipient may not read draws its literal
 fallback and narrates once, and a row whose audience comes from whichever
 ordered zone holds a token is not reachable from a document, so a binding to one
-refuses at validation rather than being half-enforced. Check: a `hiddenranks` canary
+refuses at validation rather than being half-enforced. Check: a hidden-ranks
+signal on the debug world
 — a HUD gauge bound to the opposing rank row draws its fallback, the owning
 seat's draws the value, and a rule writing the reveal row mid-run flips the
 first; a law that `ValidateBindings` refuses a `BindableScalar` naming a
@@ -420,7 +437,11 @@ restricted row; the conformance law over a world with restricted rows; a
 `state.<row>` gauge resolving over a presentation-tier link on the real
 executable.
 
-**The primary client onto the view.** Owns `WorldOutputHub`'s fan-out,
+**The primary client onto the view.** Merges with the
+[simulation-thread memo's phase 3](simulation-thread.md#phase-3-the-produce-path-reads-no-server-state)
+(a produce path that reads no server state) under the job-system memo: both
+change what the frame reads from the server, so one design hands the frame its
+view and one landing replaces both. Owns `WorldOutputHub`'s fan-out,
 `WorldClient.DeliverDefinition` and `DeliverState`, and the colocated view.
 Delivers the delivery seam handing out a view rather than the live definition
 `WorldDocument.DeliverPending` passes today, with the colocated view a zero-copy filtered
@@ -431,11 +452,17 @@ whole-document capability instead. The federated-neighbour mirror, which already
 observes through `WorldProjection`, is the working precedent. Check:
 `puck references WorldDefinition` over `src/Puck.World.Client` names the view's
 own surface and the tool capability, nothing else; the conformance law green;
-`puck landing` and `puck parity` exit 0 with the `rim-drop` and `traveller-kit`
-canaries green; frame time and steady-state allocation at the colocated seam
+`puck sweep` and `puck parity` exit 0 over the debug world; frame time and steady-state allocation at the colocated seam
 unregressed over one authored workload.
 
 ### Release pairs
+
+Frozen until the first shipped release. A qualified pair protects a deployed
+predecessor, and nothing has shipped; the owner's decision is that compatibility
+is bounded to deployed official artifacts and their retained predecessor
+([the releases decision](../decisions/runtime-and-delivery.md#releases)). No
+work here starts before the first release exists, and the maintenance and
+recovery sequence already landed stays as it is.
 
 **Owns:** the release manifest, the durable maintenance operation, the
 coordinator, rollback and restore, `WorldSiloLifecycleLawTests`,
@@ -516,18 +543,18 @@ carries the commands and results against the candidate.
 
 | Step | Packages, in parallel | Why here |
 |---|---|---|
-| 1 — today | The rest of the asset packages; the ledger; the view's mechanism defects and conformance law | Neither of the first two reads `Puck.State`. The root must exist before anything is named relative to it, and the ledger before cartridges leave the engine tree. The two projection defects are `Puck.World.Schema` alone, and the law they are written with is what every later cut is measured by. |
-| 2 | One validated load; the container; the view's static sections; the derivation keys for shader packages, pipeline caches and kernel sets | Validating once and the container are independent of the arena; a disclosed static section is one compose and hydrate arm each and parallelizable; the derivation-key slices share the verb's machinery and touch no simulation state, and a new chunk outside the engine build's reach adds its key with the chunk. |
-| 3 | Simulation chunks; target registers and the authoring envelope | Content-keyed caches first; the widest slice of the boot profile. The two by-design members need a decision before state crosses, because both change what a client submits or recomputes. |
-| 4 | Everything else in the compiled world; release pairs; bound state as observations | `RULE` needs the rebuilt vocabulary's ordinal operands; a qualified pair needs a packaged world; the observation channel needs the rebuilt substrate's delivery seam. |
-| 5 | The primary client onto the view | Last of the view's cuts: until the four above are settled it would either darken presentation or keep a raw-document escape hatch, which is what it exists to remove. |
+| 1 — today | The rest of the asset packages; the ledger; the view's conformance law | Neither of the first two reads `Puck.State`. The root must exist before anything is named relative to it, and the ledger before cartridges leave the engine tree. The law is `Puck.World.Schema` alone, and is what every later cut is measured by. |
+| 2 | One validated load; the container; the view's static sections; the call-graph derivation keys for shader packages, pipeline caches and kernel sets | Validating once and the container are independent of the arena; a disclosed static section is one compose and hydrate arm each and parallelizable; the derivation-key slices share the verb's machinery and touch no simulation state. |
+| 3 | Target registers and the authoring envelope; a simulation chunk only once it is measured to save boot or edit-to-running time | The two by-design members need a decision before state crosses, because both change what a client submits or recomputes. The simulation chunks are paused until a measurement names a saving. |
+| 4 | Everything else in the compiled world, each chunk only after a measured saving; bound state as observations | `RULE` needs the rebuilt vocabulary's ordinal operands; the observation channel needs the rebuilt substrate's delivery seam. |
+| 5 | The primary client onto the view, under the job-system memo with the simulation-thread memo's phase 3 | Last of the view's cuts: until the four above are settled it would either darken presentation or keep a raw-document escape hatch, which is what it exists to remove. |
 | 6 | The evidence package; the forcing artifact end to end | One candidate carrying all four. |
+| Frozen | Release pairs | Until the first shipped release. |
 
 ## Verification summary
 
-```bash
-dotnet run --project src/Puck.World -c Release -- --world worlds/debug --exit-after-seconds 2
-```
+A change is read by running it: boot `worlds/debug` through the `puck` server's
+`puck_world_start` (`world`: the package folder) and read it with `puck_exec`.
 
 ```bash
 puck official build --tree artifacts/official --channel dev --engine src/Puck.World.Browser/bin/Release/net11.0/publish/wwwroot --worlds worlds/debug
@@ -538,25 +565,11 @@ puck official verify --tree artifacts/official --channel dev
 ```
 
 ```bash
-puck roms --check
-```
-
-```bash
-puck landing --against origin/main --base <the commit the branch was authored from>
+puck sweep
 ```
 
 ```bash
 puck parity
-```
-
-```bash
-dotnet test tests/Puck.World.Server.Tests -c Release
-dotnet test tests/Puck.World.Games.Tests -c Release
-dotnet test tests/Puck.World.Machines.Tests -c Release
-dotnet test tests/Puck.World.Client.Tests -c Release
-dotnet test tests/Puck.World.Presentation.Tests -c Release
-dotnet test tests/Puck.World.Silo.Tests -c Release
-dotnet test tests/Puck.World.Tests -c Release
 ```
 
 ```bash
@@ -568,29 +581,25 @@ puck docs links
 What the programme still owes. A line is deleted when its work lands, never
 ticked; the [open items](open-items.md#next) rank the work packets drawn from it.
 
-- Finish the five canonical world-source migrations: `puck` and the four
-  `quilt-ne`, `quilt-nw`, `quilt-se`, `quilt-sw` shards. `standard`, `pipeline`
-  and `quilt-nw-gap` are already `.puck`; the resolver prerequisite and
-  trivia-free format fingerprints are implemented. The
-  [implementation status](#implementation-status) names the paths and
-  preservation checks.
 - The rest of the [asset packages](#asset-packages): branding from the manifest,
   per-package official trees, the release manifest pinning package content
   (startable today).
-- The ledger (startable today).
+- The ledger (startable today), including the split of firmware by origin.
 - Compiled worlds: the container's remaining gaps (a hit still validates and
   compiles, the hosted-load and replay doors, checkpoint and tape references,
-  cache eviction); simulation chunks; everything else. One validated load, the
-  container, its header and the `DEFN`, `ASST` and `CURV` chunks are landed.
-- The presentation view: the projection's mechanism defects and the conformance
-  law (startable today); the static sections as disclosure decisions; target
+  cache eviction); the call-graph derivation key; simulation chunks and the rest
+  only after a measured saving. One validated load, the container, its header
+  and the `DEFN`, `ASST` and `CURV` chunks are landed.
+- The presentation view: the conformance law and the disclosure round trip
+  (startable today); the static sections as disclosure decisions; target
   registers and the authoring envelope; bound state as per-recipient
-  observations; the primary client onto the view.
-- Release pairs: group-scoped restore, definition-edit preservation, a qualified
-  pair with the operator exercise. `world release deploy` and `rollback` take
-  the qualification exit codes: `world release qualify` exits 1 for a failed
-  check and 2 for a refusal, but `AzureCommand.DeployWorldReleaseAsync` still
-  throws on a refused start, so both verbs exit 2 for a failed check.
+  observations; the primary client onto the view, under the job-system memo.
+- Release pairs, frozen until the first shipped release: group-scoped restore,
+  definition-edit preservation, a qualified pair with the operator exercise.
+  `world release deploy` and `rollback` take the qualification exit codes:
+  `world release qualify` exits 1 for a failed check and 2 for a refusal, but
+  `AzureCommand.DeployWorldReleaseAsync` still throws on a refused start, so
+  both verbs exit 2 for a failed check.
 - The evidence package, against one named candidate.
 
 ---
