@@ -1097,6 +1097,14 @@ The engine provides mechanisms; every concrete design is `.puck` data in
 `worlds/standard/`, which the debug world imports and develops. Each item below is
 a design built into C# or living only in the debug world.
 
+- [high] A world that imports only the standard is refused at boot:
+  `worlds/standard/controls.puck` refines the Moth's `bare` overlay, so the
+  standard depends on the debug world's avatar. Authors cannot build a world
+  on the standard alone. Fix: the standard defines what it refines, or the
+  refinement moves into the debug world's controls. A committed minimal world
+  that imports only the standard boots headless with the camera template,
+  inputs and editor feel resolved, and is the worked example authors start
+  from. (leaks-2 lane)
 - The CRT look in the engine. `WorldScreenMappings.CrtGlass`
   (`src/Puck.World.Schema/WorldScreenMappings.cs:17-23`) insets the picture by
   0.03 of each side and is mirrored by the glass shading, and
