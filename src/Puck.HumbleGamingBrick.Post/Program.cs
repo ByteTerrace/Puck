@@ -1,17 +1,10 @@
 using Puck.HumbleGamingBrick.Post;
 
-// Puck.HumbleGamingBrick.Post — the HumbleGamingBrick machine's power-on self-test and the primary way the
-// machine is validated. It runs an ordered battery of self-checking stages and exits 0 (all passed), 1 (a check
-// failed, a ROM that does not pass its suite included), or 2 (a stage could not run). There is no rich CLI:
-// hand-parsed knobs for where artifacts land, an optional tier/name subset for iterating, the corpus roots and
-// --require-assets. No expectation file is read or written: each corpus ROM's own result
-// is the run's result.
-
-if (!CommandLineArguments.TryValidateValues(
-    args: args,
-    error: out var optionError,
-    names: ["--corpus-cache"]
-)) {
+var options = new PostCommandLine(args: args,
+    flags: ["--fetch-corpora", "--require-assets"],
+    requiredValues: ["--corpus-cache"],
+    values: ["--artifacts", "--tier", "--filter", "--parallelism", "--corpus-cache"]);
+if (!options.TryValidateValues(error: out var optionError)) {
     Console.Error.WriteLine(value: optionError);
     return 2;
 }
@@ -21,41 +14,23 @@ if (Diagnostics.TryRun(
 )) {
     return diagnosticExitCode;
 }
-var artifactsDirectory = (CommandLineArguments.Value(
-    args: args,
-    name: "--artifacts"
-) ?? Path.Combine(
+var artifactsDirectory = (options.Value(name: "--artifacts") ?? Path.Combine(
     path1: "artifacts",
     path2: "gb-post"
 ));
-var tierFilter = CommandLineArguments.Value(
-    args: args,
-    name: "--tier"
-);
-var nameFilter = CommandLineArguments.Value(
-    args: args,
-    name: "--filter"
-);
+var tierFilter = options.Value(name: "--tier");
+var nameFilter = options.Value(name: "--filter");
 var parallelism = int.Parse(
     provider: System.Globalization.CultureInfo.InvariantCulture,
-    s: (CommandLineArguments.Value(
-        args: args,
-        name: "--parallelism"
-    ) ?? "0")
+    s: (options.Value(name: "--parallelism") ?? "0")
 );
 var corpora = CorpusManifest.Load(
     path: CorpusManifest.InRepository(projectName: "Puck.HumbleGamingBrick.Post"),
-    cacheRoot: CommandLineArguments.Value(
-        args: args,
-        name: "--corpus-cache"
-    )
+    cacheRoot: options.Value(name: "--corpus-cache")
 );
 // --fetch-corpora fills the local cache from the manifest's pinned archives and exits; a build agent runs it once per
 // cache key, a developer once per version bump.
-if (args.Contains(
-    comparer: StringComparer.OrdinalIgnoreCase,
-    value: "--fetch-corpora"
-)) {
+if (options.Flag(name: "--fetch-corpora")) {
     Console.Out.WriteLine(value: $"{corpora.Fetch()} corpus archive(s) fetched into {corpora.EffectiveCacheRoot}");
 
     return 0;
@@ -70,10 +45,7 @@ var sstRoot = corpora.Resolve(
     flag: "--sst",
     name: "sm83-sst"
 );
-var requireAssets = args.Contains(
-    comparer: StringComparer.OrdinalIgnoreCase,
-    value: "--require-assets"
-);
+var requireAssets = options.Flag(name: "--require-assets");
 var stages = PostStages.Create()
     .Where(predicate: stage => PostStageFilters.TierMatches(
     stage: stage,
@@ -101,5 +73,4 @@ if (report.Abandoned) {
     // thread from holding the run open.
     Environment.Exit(exitCode: report.ExitCode);
 }
-
 return report.ExitCode;

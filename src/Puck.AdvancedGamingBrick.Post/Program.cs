@@ -1,46 +1,25 @@
 using Puck.AdvancedGamingBrick;
 using Puck.AdvancedGamingBrick.Post;
 
-// Puck.AdvancedGamingBrick.Post — the AdvancedGamingBrick machine's power-on self-test and the primary way the machine is
-// validated. It runs an ordered battery of self-checking stages and exits 0 (all passed), 1 (a check failed), or 2 (a
-// stage could not run). There is no rich CLI for the battery: a few hand-parsed knobs — where artifacts land, the corpus
-// roots and the accuracy-suite cartridge, and an optional tier/name subset for iterating. Tier A runs anywhere on
-// hand-assembled vectors and a synthetic cartridge; Tier B needs the corpora declared in corpora.json (--fetch-corpora
-// fills the cache) or the accuracy-suite cartridge, and its stages skip when those are absent. The
-// accuracy-frontier diagnostic modes (the cosim oracles, single-ROM inspectors) live in Diagnostics and run before the
-// battery when their flag is present; see the README.
-
-if (!CommandLineArguments.TryValidateValues(
-    args: args,
-    error: out var optionError,
-    names: ["--bios", "--ares", "--suite-focus", "--corpus-cache"]
-)) {
+var options = new PostCommandLine(args: args,
+    flags: ["--fetch-corpora", "--no-prefetch", "--no-rtc", "--bus-trace"],
+    requiredValues: ["--bios", "--ares", "--suite-focus", "--corpus-cache"],
+    values: ["--bios", "--ares", "--suite-focus", "--corpus-cache", "--artifacts", "--tier", "--filter", "--parallelism", "--accuracy-suite"]);
+if (!options.TryValidateValues(error: out var optionError)) {
     Console.Error.WriteLine(value: optionError);
     return 2;
 }
 ReadOnlyMemory<byte>? explicitBios;
 try {
-    explicitBios = LoadBios(path: CommandLineArguments.Value(
-        args: args,
-        name: "--bios"
-    ));
+    explicitBios = LoadBios(path: options.Value(name: "--bios"));
 } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or ArgumentException)) {
     Console.Error.WriteLine(value: $"--bios: {exception.Message}");
     return 2;
 }
 var machineOptions = new AgbMachineOptions {
-    DisablePrefetch = args.Contains(
-    value: "--no-prefetch",
-    comparer: StringComparer.OrdinalIgnoreCase
-),
-    DisableRtc = args.Contains(
-    value: "--no-rtc",
-    comparer: StringComparer.OrdinalIgnoreCase
-),
-    BusTrace = (args.Contains(
-    value: "--bus-trace",
-    comparer: StringComparer.OrdinalIgnoreCase
-)
+    DisablePrefetch = options.Flag(name: "--no-prefetch"),
+    DisableRtc = options.Flag(name: "--no-rtc"),
+    BusTrace = (options.Flag(name: "--bus-trace")
     ? Console.Error.WriteLine
     : null),
 };
@@ -74,40 +53,22 @@ if (diagnostics.TryRun(
 }
 var corpora = CorpusManifest.Load(
     path: CorpusManifest.InRepository(projectName: "Puck.AdvancedGamingBrick.Post"),
-    cacheRoot: CommandLineArguments.Value(
-        args: args,
-        name: "--corpus-cache"
-    )
+    cacheRoot: options.Value(name: "--corpus-cache")
 );
-if (args.Contains(
-    comparer: StringComparer.OrdinalIgnoreCase,
-    value: "--fetch-corpora"
-)) {
+if (options.Flag(name: "--fetch-corpora")) {
     Console.Out.WriteLine(value: $"{corpora.Fetch()} corpus archive(s) fetched into {corpora.EffectiveCacheRoot}");
 
     return 0;
 }
-var artifactsDirectory = (CommandLineArguments.Value(
-    args: args,
-    name: "--artifacts"
-) ?? Path.Combine(
+var artifactsDirectory = (options.Value(name: "--artifacts") ?? Path.Combine(
     path1: "artifacts",
     path2: "agb-post"
 ));
-var tierFilter = CommandLineArguments.Value(
-    args: args,
-    name: "--tier"
-);
-var nameFilter = CommandLineArguments.Value(
-    args: args,
-    name: "--filter"
-);
+var tierFilter = options.Value(name: "--tier");
+var nameFilter = options.Value(name: "--filter");
 var parallelism = int.Parse(
     provider: System.Globalization.CultureInfo.InvariantCulture,
-    s: (CommandLineArguments.Value(
-        args: args,
-        name: "--parallelism"
-    ) ?? "0")
+    s: (options.Value(name: "--parallelism") ?? "0")
 );
 var stages = PostStages.Create()
     .Where(predicate: stage => PostStageFilters.TierMatches(
@@ -120,10 +81,7 @@ var stages = PostStages.Create()
 ))
     .ToArray();
 var context = new PostContext(
-    accuracySuitePath: ExistingFile(path: CommandLineArguments.Value(
-        args: args,
-        name: "--accuracy-suite"
-    )),
+    accuracySuitePath: ExistingFile(path: options.Value(name: "--accuracy-suite")),
     artifactsDirectory: artifactsDirectory,
     biosImage: (explicitBios ?? new byte[ReplacementBios.ImageSize]),
     fuzzRoot: corpora.Resolve(
