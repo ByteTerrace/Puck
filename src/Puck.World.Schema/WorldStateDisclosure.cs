@@ -131,6 +131,21 @@ public static class WorldStateDisclosure {
             rowOrdinal: ordinal
         ));
     }
+    /// <summary>Determines whether the recipient may read every cell a document row holds without asking per cell: the
+    /// row's own policy admits the recipient, and neither a cell policy nor a containing zone can withhold a cell.</summary>
+    /// <param name="arena">The live store and its declarations.</param>
+    /// <param name="rowOrdinal">The row's catalog ordinal.</param>
+    /// <param name="recipient">The recipient, or <see langword="null"/> for the public observer.</param>
+    /// <returns><see langword="true"/> when every cell of the row is readable; <see langword="false"/> when some cell
+    /// may be withheld and each must be asked.</returns>
+    public static bool ReadsWholeRow(StateArena arena, int rowOrdinal, Principal? recipient) {
+        ArgumentNullException.ThrowIfNull(argument: arena);
+
+        return ((((uint)rowOrdinal) < ((uint)arena.Rows.Count)) &&
+            (arena.Catalog.ContainingZones(rowOrdinal: rowOrdinal).Count == 0) &&
+            !arena.HasCellVisibility(rowOrdinal: rowOrdinal) &&
+            new Observer(arena: arena, recipient: recipient).Allows(policy: arena.Rows[rowOrdinal].Visibility));
+    }
     /// <summary>Determines whether the recipient may read one cell of a named row, for a door that must answer a cell
     /// the recipient may not read exactly as it answers an absent one.</summary>
     /// <param name="definition">The live document, for the row declarations.</param>

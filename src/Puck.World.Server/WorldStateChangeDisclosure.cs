@@ -24,14 +24,16 @@ public sealed class WorldStateChangeDisclosure {
         var arena = server.Arena;
 
         if (m_changed.Length != arena.Rows.Count) { m_changed = new bool[arena.Rows.Count]; } else { Array.Clear(array: m_changed); }
+        var withheld = false;
+
         foreach (var delta in changes.Span) {
             if (delta.Row < 0) {
                 var fields = server.Population.TryFieldRegion(name: delta.Region)?.Lattice.Input.Fields;
 
-                if ((fields is null) || (((uint)delta.Field) >= ((uint)fields.Count)) || (delta.Cell < 0) || (fields[delta.Field].Name != delta.FieldName)) { continue; }
+                if ((fields is null) || (((uint)delta.Field) >= ((uint)fields.Count)) || (delta.Cell < 0) || (fields[delta.Field].Name != delta.FieldName)) { withheld = true; continue; }
                 if (arena.Catalog.TryResolve(StateLane.Document, fields[delta.Field].Name, out var row) &&
                     !WorldStateDisclosure.CanRead(server.Configuration, arena, arena.Rows[row.Ordinal],
-                        CellName.Parse(candidate: IndexKeyCache.Get(index: delta.Cell)), recipient)) { continue; }
+                        CellName.Parse(candidate: IndexKeyCache.Get(index: delta.Cell)), recipient)) { withheld = true; continue; }
                 Add(delta: delta);
             } else { m_changed[delta.Row] = true; }
         }
@@ -50,6 +52,12 @@ public sealed class WorldStateChangeDisclosure {
                 policiesMoved |= ReadersMoved(arena: arena, policy: arena.Visibility(key: key, rowOrdinal: ordinal));
             }
         }
+        if (!policiesMoved && !withheld && DisclosesWhole(arena: arena, changes: changes.Span, recipient: recipient)) {
+            // The snapshot's own replacements are already what composing them for this recipient would produce.
+            Array.Clear(array: m_result, index: 0, length: m_count);
+            m_count = 0;
+            return changes;
+        }
         for (var ordinal = 0; (ordinal < arena.Rows.Count); ordinal++) {
             if (!policiesMoved && !m_changed[ordinal]) { continue; }
             var header = m_count;
@@ -64,6 +72,28 @@ public sealed class WorldStateChangeDisclosure {
             m_result[header] = m_result[header] with { Raw = position };
         }
         return m_result.AsMemory(length: m_count, start: 0);
+    }
+
+    // Whether the snapshot's row replacements are exactly the recipient's: every replaced row reads whole for it (no
+    // cell or zone policy can withhold a cell, and its own policy admits the recipient), and each replacement's
+    // header counts the cells that follow it, as a composed header counts the cells it disclosed.
+    private static bool DisclosesWhole(StateArena arena, ReadOnlySpan<FieldCellDelta> changes, Principal? recipient) {
+        var index = 0;
+
+        while ((index < changes.Length) && (changes[index].Row < 0)) { index++; }
+        while (index < changes.Length) {
+            var header = changes[index];
+
+            if ((header.Cell != -1) || !WorldStateDisclosure.ReadsWholeRow(arena: arena, recipient: recipient, rowOrdinal: header.Row)) {
+                return false;
+            }
+            var cells = 0;
+
+            index++;
+            while ((index < changes.Length) && (changes[index].Row == header.Row) && (changes[index].Cell >= 0)) { cells++; index++; }
+            if (cells != header.Raw) { return false; }
+        }
+        return true;
     }
 
     private bool ReadersMoved(StateArena arena, StateVisibility? policy) => ((policy?.ReadersFrom is { } readers) &&
