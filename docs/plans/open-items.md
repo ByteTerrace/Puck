@@ -1197,6 +1197,13 @@ a design built into C# or living only in the debug world.
 - The standard's binding bar slot set (`worlds/standard/controls.puck`, the
   `bare` overlay) still lists keys only the Moth binds (1 to 5 and F4); they
   show as unbound plates in a world without her controls.
+- In `worlds/minimal` at 1280×900 the standard's editor bar
+  (`worlds/standard/editor.puck`, `editor.bar`) runs past the window's right
+  edge and its plates show no icons (the bar names no `iconRow`), and the
+  resting page draws no bar at all; look at both on the GPU.
+- A windowed boot of a world with no `host` section opens a 120×1 window
+  (`WorldHostDefaults.Absent`, `src/Puck.World.Schema/WorldHostDefaults.cs`):
+  either refuse it by name or let the standard author the host default.
 - Overlay text is spread too wide: each character advances a padded atlas cell,
   not the font's advance. Related: a 12 px mono run's 18 px cell spans the whole
   padded atlas cell (1.729 em), so its em is 10.4 px; decide whether overlay
