@@ -137,9 +137,6 @@ Code that grew a second implementation (AGENTS.md rule 7) or costs velocity:
   `GpuRegion.Grow`, which grows under every residency policy.
 - Two directory removers: `tests/Shared/TemporaryDirectory.cs` still deletes
   recursively beside the confined removal `RunDirectory.Delete` uses.
-- The bake's contour patches (`GapFill`, `CloseCoarseGaps`, `CloseFineGaps`,
-  `SeamGradient`) may be dead now that boxes are sharp unless rounded; bake-seams-2
-  measures and deletes them if so.
 
 The `.puck` sources (about 42,000 lines outside the cartridges, about 2,500 of
 them verbatim repeats) under-use the language:
@@ -653,16 +650,6 @@ colliders report's only red findings left are the valley's relief
   then narrates `inhabited '<row>' has no free entity slot — the 559-slot table
   is full` and spawns only what the boot's entity table holds. Decide whether a
   reload grows the live entity table or refuses the raised capacity by name.
-- [high · owner: lead integration] The combined debug document at integration
-  45d6a960c is refused by `puck compile worlds/debug/debug.puck --validate`:
-  PUCK030, `chessAI` has 1,037,029 work units available but needs 1,075,835 for
-  progress. This appears after the card-table merge and blocks the latest
-  probe-depth-fix World smoke qualification; the preceding integrated build
-  booted on both backends. Reconcile the composed recurring work and search
-  allowance without disabling chess. The focused probe/tooling builds and
-  96 cases still pass. The diagnostic is in the probe-depth-fix hand-back's
-  `integrated-latest-debug-compile.log`.
-
 - [medium] A `world.load` from debug into a same-capacity input fixture leaves
   authored state-writing rules refused with `the live edit grant refuses
   state:blink` (and the fixture's counters stay zero); a fresh boot of that
@@ -876,15 +863,6 @@ movement-facing scheme returns.
   and the dash's appearance remain unconfirmed. The durable
   controls and commands live in the [standard package](../../worlds/standard/README.md)
   and [Moth controls](../../worlds/debug/avatars/moth.md#controls).
-- [high · owner: lead integration] Land the controls review's follow-up
-  branch. It fixes R1 (high): the sliced analytic sweep measured each slice's
-  edge rule from that slice's start, so a body lowered onto a nearly flat fillet
-  read it as a riser (`RoundedBoxContactLawTests.ANearlyFlatFilletBelowTheFootRemainsWalkable`
-  failed on the landed lane); R2 (medium): it sliced and spent the 64-slice
-  budget in clear space, so a small fast body stopped short and read `Unproved`;
-  R3 (medium): `player.camera.boom` refused input while a wheel was open, an
-  engine policy duplicating the standard's hold-page bindings. The high blocks
-  the owner's main push until this lands.
 - [low · owner: play-feel lane] A timed impulse integrates only inside
   `IntegratePlanarAndVerticalVelocity` and `IntegrateScratchVelocity`
   (`WorldBody.Step.cs`, `IntegrateOverlay`). On a body whose motion program has
@@ -1459,6 +1437,16 @@ the boot deadline, or give admission a ceiling that covers the granted queue.
   windowed batch limit separate from time spent waiting for admission.
 
 ### Delivery, launcher and CI
+
+- [high] The production silo cannot run the world it deploys: every addon row
+  in `worlds/debug` is enabled (companion, fuzzer, guide, kinematics-scope,
+  machine-debugger, traversal, watchdog), and the silo refuses a world naming an
+  enabled addon (`WorldNoAddonHost.TryPrepare`,
+  `WorldSiloHost.cs` activation), so `puck azure test-world-container` fails
+  with `Pinned row '…/debug' did not activate and checkpoint` and Release Azure
+  has deployed nothing since Sep 9. The fix at the cause is a silo that mounts
+  addon guests (`Puck.World.Addons` is already referenced) and checkpoints
+  their state, which today refuses capture. (from: the main landing's CI triage)
 
 Owner: delivery lane · ordinary · Next: measure deriving the eleven addon guest
 `.wasm` modules from source against edit-to-running.
