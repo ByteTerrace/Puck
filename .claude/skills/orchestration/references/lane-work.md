@@ -119,7 +119,13 @@ its result. Watch each thing you need to see mid-run (failure lines,
 progress) with one Monitor, never one per milestone or threshold. A bash
 wait loop or "wait until" command in place of that Monitor is the same
 waiter in another tool, and a second watcher on a job is waste whichever
-tool runs it. Stop each Monitor once its job ends.
+tool runs it. Stop each Monitor once its job ends. A background `sleep N;
+echo t` is not a timer either: when a turn ends with work still running, the
+job's own exit notice resumes the lane. Before arming a watcher, stop any
+earlier one on the same job (a lane once held nine: four on a log that had
+ended without the awaited line, five identical re-arms of one wait), and give
+each watcher an end condition that covers success, failure and the process
+exiting, so none outlives its job.
 Codex uses yielded exec sessions and `write_stdin` to collect progress and
 completion; Antigravity uses its command's completion handle or a foreground
 run with an adequate timeout. Neither assumes Claude's Monitor or exit notices.

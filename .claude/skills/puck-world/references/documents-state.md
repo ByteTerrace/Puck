@@ -524,8 +524,9 @@ in bounded stack storage per emission, with the identical alias mapping.
 A lattice row's paint may carry one `draw` fill (`WorldLatticeFill.Draw`,
 `{ "$type": "draw", "source" | "generator" }`, numeric sources only): the
 per-cell lattice draw. It is one whole-field pass of the row's stream
-(`GeneratorEngine.TryFireBatch`; cell `k` = the sample at
-`drawCursor + k`, mask threaded cell to cell), painted at boot by `WorldServer`
+(`GeneratorEngine.TryFireBatch`; the cells take successive samples of the
+stream from `drawCursor`, mask threaded cell to cell, and the pass advances the
+cursor by the raw words it consumed), painted at boot by `WorldServer`
 at the pass the row's `drawCursor`/`drawnMasks` name, and advanced one pass plus
 repainted by `world.generate <row>` (`TryComposeGenerate`'s lattice arm, then
 `WorldTick.RepaintChangedLatticeDraws`, which repaints only a row whose draw

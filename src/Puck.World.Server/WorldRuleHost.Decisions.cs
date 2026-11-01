@@ -233,20 +233,30 @@ public sealed partial class WorldRuleHost : IWorldPersistedDecisions {
         }
         if (
             (policy.Mode == WorldDecisionMode.Weighted) &&
-            (choiceCount > 1)
+            (choiceCount > 1) &&
+            (total != UInt128.Zero)
         ) {
-            var random = Pcg32XshRr.FromRawBits(
+            // Up to 1024 expanded choices occupy at most 73 bits. The ticket is an unbiased draw below the total
+            // within the shared word budget; the cursor counts every raw word, rejected ones included.
+            var words = new DrawGeneratorWords<Pcg32XshRr>(generator: Pcg32XshRr.FromRawBits(
                 increment: 1,
                 multiplier: Pcg32XshRr.DefaultMultiplier,
                 state: state.RandomState
+            ));
+            var drawn = BoundedRandomSampling.TrySampleWide(
+                exclusiveHigh: total,
+                maxAttempts: GeneratorCapacity.MaxBoundedAttempts,
+                reason: out _,
+                source: ref words,
+                value: out var ticket,
+                words: out var consumed
             );
-            var draw = (((ulong)random.NextUInt32()) << 32) | random.NextUInt32();
 
-            state.RandomState = random.State;
-            state.DrawCount = unchecked((state.DrawCount + 2));
-            // floor(total * draw / 2^64), split before multiplying: up to 1024 expanded choices occupy at most 73 bits.
-            // A fixed-width ticket bounds work; an unbiased rejection loop would have no hard iteration bound.
-            var ticket = (((total >> 64) * draw) + (((total & ulong.MaxValue) * draw) >> 64));
+            state.RandomState = words.Generator.State;
+            state.DrawCount = unchecked((state.DrawCount + ((ulong)consumed)));
+            // A refused ticket keeps the words it consumed, so the next reconsideration draws fresh ones instead of
+            // repeating the refusal, and leaves the standing choice as it was.
+            if (!drawn) { return false; }
 
             for (var index = 0; (index < choiceCount); index++) {
                 var weight = ((ulong)runtime.Choices[index].Score);
@@ -462,7 +472,6 @@ public sealed partial class WorldRuleHost : IWorldPersistedDecisions {
                 (!s.Evaluated && ((s.Selected != -1) || (s.PeriodRemaining != 0) || (s.CommitmentRemaining != 0))) ||
                 ((s.Selected == -1) && ((s.CommitmentRemaining != 0) || (s.LastScore != 0))) ||
                 ((policy.Interrupt is null) && s.InterruptHeld) ||
-                ((s.DrawCount & 1) != 0) ||
                 ((policy.Mode == WorldDecisionMode.HighestScore) && (s.DrawCount != 0))
             ) {
                 throw new InvalidOperationException(message: "invalid decision checkpoint binding or policy state");
