@@ -78,8 +78,13 @@ public static partial class SdfFrameBlock {
     /// <param name="workCounterDetailRow">The pass's first named detail row, zero for none
     /// (<see cref="ShaderWorkCounters.DetailRow"/>).</param>
     /// <exception cref="ArgumentNullException"><paramref name="batch"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="batch"/> holds more than
+    /// <see cref="SdfWorldPackage.MeshBakeBatch"/> lattices, which the bake kernels' search assumes it never does.</exception>
     public static void WriteMeshBake(Span<byte> block, SdfMeshBakeBatch batch, uint instanceMaskWordCount, uint workCounterRow, uint workCounterDetailRow) {
         ArgumentNullException.ThrowIfNull(argument: batch);
+        if (batch.Lattices.Length > SdfWorldPackage.MeshBakeBatch) {
+            throw new ArgumentException(message: $"A bake dispatch holds at most {SdfWorldPackage.MeshBakeBatch} lattices; this batch holds {batch.Lattices.Length}.", paramName: nameof(batch));
+        }
 
         var first = 0u;
 
@@ -98,9 +103,10 @@ public static partial class SdfFrameBlock {
             WriteUInt32(block: block, offset: (row + 32), value: ((uint)lattice.Dims.X));
             WriteUInt32(block: block, offset: (row + 36), value: ((uint)lattice.Dims.Y));
             WriteUInt32(block: block, offset: (row + 40), value: ((uint)lattice.Dims.Z));
-            // The lattice's mode in the low half (three samples the point table with gradients, two without, zero a grid)
-            // and, in the high half, the run of instances a static selector names.
-            WriteUInt32(block: block, offset: (row + 44), value: (lattice.Points.IsEmpty ? 0u : (lattice.Gradients ? 3u : 2u)) | (((uint)lattice.Instances) << 16));
+            // The lattice's mode in the low two bits (three samples the point table with gradients, two without, zero a
+            // grid), a slab's first plane of its final lattice above them, and, in the high half, the run of instances a
+            // static selector names.
+            WriteUInt32(block: block, offset: (row + 44), value: (lattice.Points.IsEmpty ? 0u : (lattice.Gradients ? 3u : 2u)) | (((uint)Math.Max(val1: 0, val2: lattice.Slab)) << 2) | (((uint)lattice.Instances) << 16));
 
             var (poseFirst, poseRows) = ((index < batch.Poses.Length) ? batch.Poses[index] : (0, ReadOnlyMemory<Vector4>.Empty));
 
