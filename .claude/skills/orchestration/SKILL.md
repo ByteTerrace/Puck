@@ -203,6 +203,15 @@ The open items are the batches' queue
 - a programme's phase-scale work stays in its plan's open items, and a packet
   points at it.
 
+Before the owner's push to `main`, rehearse the release on the hosted runners,
+not only locally: push the integration branch and dispatch Release Azure on it
+without deploying (`gh workflow run azure.yml --ref <branch> -f deploy=false`),
+then read every job's result. A local rehearsal of the build and checks missed
+the published World's startup step, which boots the published debug world from
+its compiled package and failed once that package imported another
+(`worlds/standard`); the dispatched run shows exactly what a push to `main`
+will do.
+
 ### Coding lanes and the integration lane
 
 Heavy verification runs in one place, one job at a time; this is the owner's
