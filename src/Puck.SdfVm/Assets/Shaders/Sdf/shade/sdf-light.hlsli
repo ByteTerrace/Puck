@@ -31,15 +31,16 @@ struct SdfLightSource {
     SdfLight record;
 };
 
-// The surface a light answers at: its point, lit normal and camera ray, its material, its ambient occlusion (a wrapped
-// material's already relaxed toward 1), each stable slot's shadow visibility, and the irradiance volume's probes about
-// it, which occlude a traced point or spot light (probed is false while the volume is off, and every such light goes
-// unoccluded).
+// The surface a light answers at: its point, lit normal and camera ray, its material and the cel style it shades with
+// (sdfToonStyle), its ambient occlusion (a wrapped material's already relaxed toward 1), each stable slot's shadow
+// visibility, and the irradiance volume's probes about it, which occlude a traced point or spot light (probed is false
+// while the volume is off, and every such light goes unoccluded).
 struct SdfShadeSurface {
     float3 position;
     float3 normal;
     float3 rayDirection;
     SdfMaterialData material;
+    SdfToonStyle toon;
     float ambientOcclusion;
     float4 shadowVisibility;
     bool probed;
@@ -183,9 +184,9 @@ SdfLightResponse sdfLightResponse(SdfLightSource light, SdfShadeSurface surface)
         float lambert = sdfWrapDiffuse(dot(normal, light.position), surface.material.wrap);
         float occlusion = sdfLightVisibility(light.index, surface.shadowVisibility, surface.ambientOcclusion);
 
-        if (sdfToonEnabled()) {
-            response.diffuse = light.color * light.weight * sdfToonBand(lambert, occlusion);
-            response.specular = light.color * sdfToonSpecular(surface.material, normal, -surface.rayDirection, light.position, light.weight, occlusion);
+        if (sdfToonEnabled(surface.toon)) {
+            response.diffuse = light.color * light.weight * sdfToonBand(surface.toon, lambert, occlusion);
+            response.specular = light.color * sdfToonSpecular(surface.toon, surface.material, normal, -surface.rayDirection, light.position, light.weight, occlusion);
         } else {
             response.diffuse = (light.color * ((light.weight * lambert) * occlusion));
             response.specular = (light.color * sdfMaterialSpecular(surface.material, normal, -surface.rayDirection, light.position, ((SDF_PI * light.weight) * occlusion)));
@@ -200,9 +201,9 @@ SdfLightResponse sdfLightResponse(SdfLightSource light, SdfShadeSurface surface)
         if (reach > 0.0) {
             float pointLambert = sdfWrapDiffuse(dot(normal, pointDirection), surface.material.wrap);
 
-            if (sdfToonEnabled()) {
-                response.diffuse = light.color * reach * sdfToonBand(pointLambert, 1.0);
-                response.specular = light.color * sdfToonSpecular(surface.material, normal, -surface.rayDirection, pointDirection, reach, 1.0);
+            if (sdfToonEnabled(surface.toon)) {
+                response.diffuse = light.color * reach * sdfToonBand(surface.toon, pointLambert, surface.ambientOcclusion);
+                response.specular = light.color * sdfToonSpecular(surface.toon, surface.material, normal, -surface.rayDirection, pointDirection, reach, surface.ambientOcclusion);
             } else {
                 response.diffuse = (light.color * ((reach * pointLambert) * surface.ambientOcclusion));
                 response.specular = (light.color * sdfMaterialSpecular(surface.material, normal, -surface.rayDirection, pointDirection, ((SDF_PI * reach) * surface.ambientOcclusion)));

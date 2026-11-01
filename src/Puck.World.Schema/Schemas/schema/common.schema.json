@@ -2801,29 +2801,6 @@
       ],
       "title": "WorldCameraSubject"
     },
-    "WorldCameraCloseTarget": {
-      "description": "The target a chase boom\u0027s look migrates to as geometry shortens it, per treatment of a close obstruction, in the axes of the look-at\u0027s own target offset.",
-      "type": [
-        "object",
-        "null"
-      ],
-      "properties": {
-        "fade": {
-          "$ref": "#/$defs/DocumentVector3",
-          "description": "The close target while the seat fades its body."
-        },
-        "cutaway": {
-          "$ref": "#/$defs/DocumentVector3",
-          "description": "The close target while the seat cuts walls away."
-        }
-      },
-      "required": [
-        "fade",
-        "cutaway"
-      ],
-      "additionalProperties": false,
-      "title": "WorldCameraCloseTarget"
-    },
     "WorldCameraProgramOpLookAt": {
       "description": "Sets the aim target.",
       "properties": {
@@ -2848,21 +2825,6 @@
           "description": "The finite target distance along the current subject\u0027s forward axis, used only when Subject is null.",
           "type": "number",
           "default": 6
-        },
-        "closeTargetOffset": {
-          "$ref": "#/$defs/WorldCameraCloseTarget",
-          "description": "The target offsets approached as collision shortens a seat\u0027s boom, one per clearance treatment, in the axes of TargetOffset; absent keeps the rest target.",
-          "default": null
-        },
-        "closeTargetStartFraction": {
-          "description": "The boom fraction below which target migration begins.",
-          "type": "number",
-          "default": 0.6
-        },
-        "closeTargetFullFraction": {
-          "description": "The boom fraction at which migration reaches the close target.",
-          "type": "number",
-          "default": 0.2
         },
         "opcode": {
           "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
@@ -3024,7 +2986,7 @@
       "title": "WorldCameraProgramOpFieldOfView"
     },
     "WorldCameraProgramOpBlend": {
-      "description": "Evaluates two other authored programs by name and linearly interpolates their resolved eye, target, and field of view \u2014 the whole document\u0027s camera-program table (every cameras[].rig plus views.seatRig/views.cameraRig) is the namespace A/B resolve against. At most one per program; refused when it would create a reference cycle.",
+      "description": "Evaluates two other authored programs by name and linearly interpolates their resolved eye, target, and field of view \u2014 the whole document\u0027s camera-program table (every cameras[].rig plus views.seatRig/views.cameraRig/views.programs) is the namespace A/B resolve against. At most one per program; refused when it would create a reference cycle.",
       "properties": {
         "$type": {
           "const": "blend"
@@ -3069,7 +3031,7 @@
           "type": "integer"
         },
         "program": {
-          "description": "The candidate program\u0027s name \u2014 the same blend namespace Blend resolves against (every cameras[].rig, plus views.seatRig/views.cameraRig).",
+          "description": "The candidate program\u0027s name \u2014 the same blend namespace Blend resolves against (every cameras[].rig, plus views.seatRig/views.cameraRig/views.programs).",
           "type": "string"
         }
       },
@@ -3156,6 +3118,90 @@
       "additionalProperties": false,
       "title": "WorldCameraProgramOpFirstPerson"
     },
+    "WorldCameraProgramOpClearance": {
+      "description": "Keeps a seat\u0027s chase eye in the room: the seat probes the static geometry and the framed body along the boom each frame and places the eye on a spring arm eased on the program\u0027s Dynamics. It shortens the boom along its own heading, rises it toward the seat\u0027s up by at most MaxRise when no level boom stands far enough out, and migrates the look target toward CloseTargetOffset as the boom compresses. Two capabilities only the engine has are offered: cutting away the walls between an eye the body put beyond them and the body (Cutaway), and fading the framed body in this seat\u0027s own view (FadeStart to FadeEnd). How a world trades them is authored: a program per treatment, chosen by a SelectProgram. A program without this op passes the eye through. At most one per program; read only by a seat framing its own body. Every parameter is a literal or a state.\u003Crow\u003E[.\u003Ckey\u003E] binding. Distances are full-size metres, scaled by the framed body\u0027s live scale; angles are radians.",
+      "properties": {
+        "$type": {
+          "const": "clearance"
+        },
+        "cutaway": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "One keeps the body solid: the eye stays out of the body (its collider and drawn shapes), a boom that no rise clears goes up and over at MaxRise, a target inside geometry skips ObstructedTargetSkin, and the near plane cuts away the geometry between the eye and the body. Zero keeps the room: the eye stays level and short of every wall, at least MinimumBoom out where the room allows."
+        },
+        "eyeRadius": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "The radius of the sphere the eye keeps clear of geometry and, under Cutaway, of the body."
+        },
+        "surfaceSkin": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "The nearest the eased eye\u0027s centre comes to geometry along the boom: a sudden obstruction cuts the eye in to here at once and the ease carries it the rest of the way."
+        },
+        "maxRise": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "The most the boom rises above the rig\u0027s own elevation, in [0, \u03C0/2]."
+        },
+        "minimumBoom": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "The shortest boom the eye keeps where the room allows it, rising if it must; a nearer wall takes precedence. Zero holds none."
+        },
+        "fadeStart": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "The boom length at which the body starts to fade from this seat\u0027s view."
+        },
+        "fadeEnd": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "The boom length at which the body is hidden; no less than FadeStart never fades it."
+        },
+        "closeTargetStartFraction": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "The boom fraction below which the target migrates."
+        },
+        "closeTargetFullFraction": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "The boom fraction at which the target reaches CloseTargetOffset."
+        },
+        "nearMargin": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "How far short of the body\u0027s nearest surface a cutaway\u0027s near plane stops."
+        },
+        "retractionSkin": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "How far short of a hit the probe reports the room."
+        },
+        "obstructedTargetSkin": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "How far out along the boom the sweep starts when the target is inside geometry, past a shell such as a portal frame round the pivot; zero never skips."
+        },
+        "closeTargetOffset": {
+          "$ref": "#/$defs/DocumentVector3",
+          "description": "The target the look migrates to as the boom compresses, in the axes of the preceding LookAt\u0027s target offset, which must name a subject; absent keeps the rest target.",
+          "default": null
+        },
+        "opcode": {
+          "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "cutaway",
+        "eyeRadius",
+        "surfaceSkin",
+        "maxRise",
+        "minimumBoom",
+        "fadeStart",
+        "fadeEnd",
+        "closeTargetStartFraction",
+        "closeTargetFullFraction",
+        "nearMargin",
+        "retractionSkin",
+        "obstructedTargetSkin"
+      ],
+      "additionalProperties": false,
+      "title": "WorldCameraProgramOpClearance"
+    },
     "WorldCameraProgramOp": {
       "description": "One instruction in an authored camera program\u0027s ordered op list \u2014 the presentation-side pose algebra bodyMotionPrograms established for sim-side movement, promoted to cameras: an authored rig is an ordered list of these trivial ops rather than a bespoke closed motion/aim union, so a new camera behavior is authored data, never new engine code. This is the AUTHORING vocabulary only: Puck.World.Client.WorldCameraRigCompiler translates it to Puck.SdfVm.Views.SdfCameraOp and resolves each frame\u0027s bindings and subject poses, and Puck.SdfVm.Views.SdfCameraProgramEvaluator \u2014 which parses no document \u2014 walks the result. Floats throughout; presentation carries no fixed-point burden.",
       "type": [
@@ -3198,6 +3244,9 @@
         },
         {
           "$ref": "#/$defs/WorldCameraProgramOpFirstPerson"
+        },
+        {
+          "$ref": "#/$defs/WorldCameraProgramOpClearance"
         }
       ],
       "title": "WorldCameraProgramOp"
@@ -3979,15 +4028,6 @@
       ],
       "additionalProperties": false,
       "title": "WorldSequence"
-    },
-    "WorldCameraClearanceChoice": {
-      "description": "How a seat\u0027s chase view handles a room that cannot fit its boom and body.",
-      "enum": [
-        "Auto",
-        "Cutaway",
-        "Fade"
-      ],
-      "title": "WorldCameraClearanceChoice"
     },
     "ShapeNonNullable9": {
       "enum": [

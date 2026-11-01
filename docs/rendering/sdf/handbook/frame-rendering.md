@@ -1340,7 +1340,13 @@ empty, and quads take their neighbours' materials.
 `SdfMeshShadowCascades` fits two orthographic cameras along the key light (the
 frame's first stable shadow slot): the near one around the view frustum's first
 16 metres, the far one to 120 metres or the far distance, each a bounding sphere
-of its slice snapped to whole texels. The `shadow-near` and `shadow-far` passes
+of its slice snapped to whole texels, with casters up to 200 metres past the
+sphere toward the light. A world authors those three reaches as
+`render.shadowCoverage { near, far, casters }` (`SdfShadowCoverage`, carried on
+`SdfFrame.ShadowCoverage`); each cascade spreads the same texels over its
+sphere, so a longer reach coarsens that cascade's texel in proportion, and
+`world.budget` prints the coverage with each cascade's texel for a 60-degree
+16:9 view. The `shadow-near` and `shadow-far` passes
 draw every mesh draw from their camera through the shadow pipeline
 (`SdfMeshRasterPass.ShadowKey`): the mesh pass's layout and triangle pull, an
 orthographic vertex stage along the light (`sdf-mesh-shadow.vert.hlsl`) and a

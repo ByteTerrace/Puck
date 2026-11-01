@@ -691,21 +691,36 @@ system can take, from `dotnet-trace` thread-time samples of the frame thread
   rendering lane. Extend the same projection/consumer-based rate
   mechanism to placement roots, measure pose packing and draw recording, and
   preserve planted roots, continuous world-phased gusts and independent tip
-  flutter. Triangle detail already exists (`SdfWorldPassRecorder.cs:886`);
+  flutter (the [visibility plan](visibility.md#v2-instance-updates-proportional-to-change-and-authored-motion-on-the-gpu)'s
+  step V2a). Triangle detail already exists (`SdfWorldPassRecorder.cs:886`);
   do not infer that triangle LOD is missing. Draw count is the other cost:
-  4,215 draws for 288 unique blade geometries, one draw per blade part. The
-  cause fix is one draw per shared geometry with its instances, through the
-  memo's R2 counted indirect path (`SdfMeshOcclusion`), not fewer blades. The
-  meadow is R2's and R1's forcing workload: measure produce's draw-recording
-  share before and after. The controlled-engine-build
+  4,215 draws for 288 unique blade geometries, one draw per blade part. Its
+  cause fix (ordered compaction and (geometry, level) instance buckets on R2's
+  counted indirect path, with every consumer of per-draw identity moved) is
+  the visibility plan's V1, not fewer blades. The meadow is also R1's forcing
+  workload: measure produce's draw-recording share before and after. The
+  controlled-engine-build
   before/after observations and their machine-load limits are in
   [port lane 9](port-experimental.md#9-meadow-and-foliage).
+- [high] Measure the meadow before ordering the visibility work, in the lead's
+  settle window (the [visibility plan](visibility.md#measure-first)). M1:
+  `debug.go meadow` on Direct3D 12 and a windowed Vulkan leg with
+  `world.cadence off`, `host.frames` and `world.gpu-timing timeline` as
+  authored against `meadowWindSpeed` and `meadowFlutterSpeed` at 0, plus a
+  `dotnet-trace` of the frame thread; it orders V1 against V2. M2: mesh-pass
+  and cascade GPU time beside draws and vertices, and triangles per blade
+  part at `world.detail 0`, `1` and `2`, on the RTX 2060 and at the Deck's
+  resolution; it decides whether V3 and V4 come ahead of V2 there. Every
+  frame number taken so far, R2's included, is load-bound and ranks nothing.
+  Owner: the lead.
 - [medium] `SdfMeshPathBake.Dress` rebuilds every draw of every group whenever
   one dynamic slot moved, and for each dynamic group scans `MeshAssetSlots`
   (`Enumerable.Contains` over an `IReadOnlyList<int>`) and every mesh instance
   (`SdfMeshPathBake.cs:375-388`): 0.6 to 1.2 ms a frame at the lobby and the
   rim, `Enumerable.Contains` alone 0.45 to 0.62 ms. Index the frame's instances
-  by slot once and redress only the moved groups. (from: slow-frames)
+  by slot once and redress only the moved groups; this is the first cut of the
+  [visibility plan](visibility.md#the-build-order)'s V2b, which retains the
+  instance table and stops the rebuild. (from: slow-frames)
 - [medium] The portal crossing scan visits every population slot for every
   portal face each tick, with an occupancy dictionary `Observe` or `Forget` per
   pair (`WorldInstanceHost.Adjacency.cs:294-434`): 1.1 to 1.2 ms, 16 to 19 % of
@@ -1156,8 +1171,9 @@ Owner: UI lane, with the play-feel and editor lanes · ordinary, each leak fixed
 when it is found (AGENTS.md) · Next: the overlay text advance and the helper
 templates. The engine's neutral default theme (`WorldThemeSection.Default`; no
 phosphor role in `WorldTheme`), the CRT as the standard's authored screen
-material, per-treatment chase-camera values, and a standard that boots alone
-(`worlds/minimal`) are in; [UI step 1](ui.md) is this packet's remainder.
+material, the chase camera's clearance as an authored camera-program operation,
+and a standard that boots alone (`worlds/minimal`) are in; [UI step 1](ui.md)
+is this packet's remainder.
 
 The engine provides mechanisms; every concrete design is `.puck` data in
 `worlds/standard/`, which the debug world imports and develops. Each item below is
@@ -1177,33 +1193,12 @@ a design built into C# or living only in the debug world.
   (`worlds/debug/avatars/moth.puck:1860-1925`). When the assisted-flight pass
   comes it is a standard ability template, with `dashAbility` in
   `worlds/standard/abilities.puck` as the precedent.
-- The chase camera's clearance as a camera-program operation (the lead's
-  decision, replacing the per-treatment fields that landed first). Today the
-  solver (`src/Puck.World.Client/WorldCameraClearance.cs`, `Resolve`) branches
-  on `WorldCameraClearanceChoice` (`src/Puck.World.Schema/WorldCameraClearanceChoice.cs`)
-  and reads its numbers from `WorldSeatViewControl` (`ClearanceMode`, `MaxRise`,
-  `EyeRadius`, `SurfaceSkin`, `CharacterFade`; `src/Puck.World.Schema/WorldViews.cs`)
-  and the look-at's per-treatment `closeTargetOffset { fade, cutaway }`
-  (`WorldCameraProgram.cs`, `LookAt`). Fix: a `clearance` operation in
-  `WorldCameraProgramOp` is the mechanism: it probes the room (free boom
-  distance, free rise, intervening walls) and offers the engine-only
-  capabilities (cutting intervening walls away, fading this view's own body),
-  with every number an authored, bindable parameter (eye radius and skin, max
-  rise, close target and its fractions, fade start, end and minimum boom). Fade
-  and cutaway become authored cases of `chaseCamera` in
-  `worlds/standard/camera.puck`, chosen by a select from the player's preference
-  state row; `ClearanceMode`, `MaxRise`, `CharacterFade`, `EyeRadius` and
-  `SurfaceSkin` leave `WorldSeatViewControl`, and the enum loses its behavioural
-  meaning in the solver (`player.camera.clearance`, `seatCameraFeel.clearanceMode`
-  and `world.view.camera`'s `mode=` move to the state row). The decision table's
-  values (`docs/decisions/play.md`, "The chase camera") are the template's
-  starting values. Verify with the clearance laws (`WorldCameraClearanceLawTests`)
-  and a windowed `world.view.camera` reading near a wall in each case.
-- The chase solver's remaining mechanism constants are engine values, not
-  authored ones: the near plane's margin short of the body (`NearMargin`,
-  0.05 m), the retraction skin (0.05 m) and the obstructed-target shell skip
-  (1.1 m) in `src/Puck.World.Client/WorldCameraClearance.cs`; the eye radius,
-  surface skin, rise ceilings and gyro mapping are authored.
+- [low] The chase camera's tight-space preference is one world-wide row
+  (`cameraClearance`, `worlds/standard/camera.puck`), so every seat in a world
+  shares it, and it no longer travels with a joined identity. A per-seat
+  preference needs a camera program's `state.<row>.$body` binding to resolve
+  against the framed body (`StateBinding.BodyKey`), which the rig compiler's
+  scalar slots (`WorldCameraRigCompiler`, `CompiledRig.Refresh`) do not do.
 - The standard's binding bar slot set (`worlds/standard/controls.puck`, the
   `bare` overlay) still lists keys only the Moth binds (1 to 5 and F4); they
   show as unbound plates in a world without her controls.
@@ -1734,28 +1729,66 @@ them verbatim repeats) under-use the language:
 The [illumination plan](illumination.md) holds the research round's decisions
 and the order they land in; the items below are its findings and checks.
 
-- [high · unconfirmed] A sun that moves every frame freezes indirect light.
-  Each direction change starts a new lighting generation
-  (`SdfMeshIrradiance.RefreshLighting` hashes every directional and traced
-  light record), and a trace batch landing after a generation change is
-  discarded (the `generation != m_generation` test after the parallel trace),
-  so GI sticks at the last sun that held still. The debug world's sun is
-  static (`worlds/debug/hall.puck`, the `key` directional), so nothing has
-  exercised it; the owner's authored day cycle will. Confirm with a run that
-  binds the key light to a clock ([step 0](illumination.md#the-build-order)),
-  then fix it with the plan's [first decision](illumination.md#1-split-each-probe-into-cached-hits-and-a-budgeted-gpu-relight).
-  (from: research-claude)
+- [high, the illum1-fix lane is fixing] Step 1's self-transmission allowance
+  (`passes/sdf-surface-stage.hlsli:219,282`) estimates thickness from
+  curvature, so a flat mm-thick wing ignores a separate slab 10 cm toward the
+  light while a 1 cm sheet self-shadows; [medium] the surface pass's identity
+  omits the material wrap (`SdfWorldTables.Cadence.cs:110`); [medium] cel style
+  values entered the bake code identity (`SdfProgram.Materials.cs:81`);
+  [medium] the standard cel style is duplicated in C# defaults
+  (`ToonStyleDocument.cs:29`, `SdfToon.cs:47`). (from: illum1-astra)
+- From step 1 (illum-step1): stretching the far cascade to cover the valley
+  costs too much (at `valley-rim`, 120 m against 480 m: 208 against 7,170 draws,
+  0.24 against 8.4 ms, 13.9 against 55.3 cm texels), so the valley waits for the
+  terrain pass's step 7 static cascade; indoors a cel style tints bounced light
+  as its shadow band, so banded materials in the hall read as shadow tone until
+  step 2 feeds GI to the style; `world.debug-view shadow` paints unqueried
+  pixels white like lit ones; at the noon sun the meadow lies in the east
+  wall's shadow. Step 1's checks and the frame bar are owed again on the moving
+  day cycle, with a low-sun cel style for the dawn penumbra check.
+- [high] A sun that moves every frame freezes indirect light. Each direction
+  change starts a new lighting generation (`SdfMeshIrradiance.RefreshLighting`
+  hashes every directional and traced light record), and a trace batch landing
+  after a generation change is discarded (the `generation != m_generation`
+  test after the parallel trace). Confirmed on both backends with the debug
+  world's day cycle (`worlds/debug/day.puck`): at High the main residency
+  printed no `[sdf.mesh-gi] done`, `sdf.mesh-gi.probes` held still,
+  `world.probe` answered `unsettled` with nothing published, and the camera
+  meter retraced every frame (`camera-traces` about 300 a second); holding the
+  sun let the window finish ([step 0](illumination.md#step-0-what-the-run-showed)).
+  The fix is the plan's [first decision](illumination.md#1-split-each-probe-into-cached-hits-and-a-budgeted-gpu-relight).
+  (from: research-claude; confirmed by illum-step0)
+- [medium] The exposure meter follows the stale volume: at night (0.95 of the
+  day) with the noon volume still published, the debug view metered
+  `ev100=12.20 meter=3171 nits source=probes` and drew black. Step 2's GPU
+  meter read removes the cause; the night look also sits under the basis's
+  exposure floor of EV 7 against the day cycle's 2-nit night sky, which is a
+  look for the owner to set. (from: illum-step0)
 - The probe trace casts two ray sets from one origin: 128 for radiance
   (`SdfMeshIrradiance.TraceProbe`) and 144 for depth
   (`SdfMeshProbeDepth.Trace`). This is duplication the plan's step 2
   converges into one hit buffer. (from: research-claude)
-- `RefreshLighting` does not hash the sky, so a sky-only change leaves the
-  bounced sky baked into the radiance cube stale while the zero-bounce term
-  relights; and a lighting change resets sweeps to zero, so it re-traces the
-  geometry-only depth rays the mesh-GI reference says are reused. Both are
-  leads for the plan's step 0 to confirm and its
-  [corrections](illumination.md#corrections) list to fix.
-  (from: consensus-agy)
+- [medium] `RefreshLighting` does not hash the sky, so a sky-only change
+  leaves the bounced sky baked into the radiance cube stale while the
+  zero-bounce term relights; and a lighting change resets sweeps to zero, so
+  it re-places every probe and re-traces the geometry-only depth rays. Both
+  confirmed by step 0's run (a muted sky gradient left a probe's cube at
+  10,477 nits until an unrelated retrace took it to 9,212; a held-sun move
+  re-traced 4,796,784 depth rays at Medium) and written into the mesh-GI
+  reference; step 2's relight removes both. (from: consensus-agy; confirmed by
+  illum-step0)
+- [medium · unconfirmed cause] The baseline's resolve pass read 6.5 to 17.9 ms
+  on the main view (Vulkan `overlook` 6.51, `portals` 9.41; Direct3D 12
+  `gallery` 17.88) against the 0.41 to 0.44 ms the GPU cost reference
+  records, on a machine whose CPU other lanes held at 100 %. Repeat on a quiet
+  machine before attributing it ([step 0](illumination.md#step-0-what-the-run-showed)).
+  (from: illum-step0)
+- The day cycle's hold is `world.row.set state day advance …`, which no
+  authored command may run (`world.row.set` is unbindable), so the hold cannot
+  be a `commands` row or a binding. A rule effect that writes a row's advance
+  rate would make it one. (from: illum-step0)
+- The Deck leg of step 0 is unmeasured: no Deck or remote target is reachable
+  from the repository. (from: illum-step0)
 
 Owner: next lighting batch (rendering, principal-grade review) · medium · Next:
 light a cold area from the coarser levels or the sky term the moment a view
@@ -2747,6 +2780,23 @@ step's completion criteria; C1 to C7 are in.
 Owner: an independent reviewer (Argon) · unconfirmed · Next: the researcher
 brief's priorities ([security review](../development/security-review.md)).
 
+- [high, the disclosure-2 lane is fixing] The state-correctness review
+  (Claude) found doors that decide "restricted for this reader" from live
+  membership instead of declared policy, so a non-operator seat can count or
+  locate hidden cells: `world.row state` prints `cellSlots`
+  (`src/Puck.World.Schema/WorldStateDisclosure.cs:440`); `world.hud.template`
+  answers hidden and absent differently (`src/Puck.World/WorldHudCommandModule.cs:236-249`);
+  observations list a row only when a restricted cell exists
+  (`WorldStateDisclosure.cs:219-227`). Mediums on the same cause: row edits,
+  `world.projection` bindings, replica deltas; plus arithmetic faults in a
+  dynamic key or ring age read as absent instead of faulting, and a derived
+  board outside a replay scope going stale on restore. All of it is in the
+  lane's brief. (from: statecorr-review)
+- [low] `world.identify` exposes a SHA-256 of the definition, authored hidden
+  seeds included, to a seat with Control over a screen. Closing a gate on a
+  fault re-arms an Edge rule after a one-tick fault and fires a decision's
+  `OnNoChoice`; decide whether a fault should hold the previous state instead.
+  `WorldBody.GateOpen` and `MotionGateOpen` are near-copies. (from: statecorr-review)
 - [unconfirmed] `ArenaSearchEffectHost` (`src/Puck.State.Search/ArenaSearchEffectHost.cs:30-32`)
   is documented to reproduce the live host's draws, so a search over an arena
   holding private (keyed) sites may compute the private outcomes. Confirm
@@ -3038,10 +3088,6 @@ ordinary · Next: new content and art on the owner's call.
 
 Owner: the lead · ordinary · Next: the Monitor hook check.
 
-- [low] The build lease cannot nest: `src/Puck.Cli.Harness/WorldArtifactBuild.cs:199`
-  acquires it with no `ancestor` recognizer, so a `puck test` run under `puck
-  lease build` waits on itself. Pass `ProcessInspection.IsAncestor` as the
-  heavy lease does. (from: test-lease)
 - The agent-policy hook may not cover Claude Code's `Monitor` tool:
   `.claude/settings.json` matches `Bash|PowerShell`, and whether a Monitor
   PreToolUse payload carries `tool_input.command` is unverified. Log one

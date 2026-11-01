@@ -279,6 +279,18 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `cameras[].rig.operations[][blend].weight` | State | Binding | Binding | `WorldCameraProgramOp.Blend.Weight` |
 | `cameras[].rig.operations[][selectProgram].key` | State | Binding | Binding | `WorldCameraProgramOp.SelectProgram.Key` |
 | `cameras[].rig.operations[][firstPerson].active` | State | Binding | Binding | `WorldCameraProgramOp.FirstPerson.Active` |
+| `cameras[].rig.operations[][clearance].cutaway` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.Cutaway` |
+| `cameras[].rig.operations[][clearance].eyeRadius` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.EyeRadius` |
+| `cameras[].rig.operations[][clearance].surfaceSkin` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.SurfaceSkin` |
+| `cameras[].rig.operations[][clearance].maxRise` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.MaxRise` |
+| `cameras[].rig.operations[][clearance].minimumBoom` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.MinimumBoom` |
+| `cameras[].rig.operations[][clearance].fadeStart` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.FadeStart` |
+| `cameras[].rig.operations[][clearance].fadeEnd` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.FadeEnd` |
+| `cameras[].rig.operations[][clearance].closeTargetStartFraction` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.CloseTargetStartFraction` |
+| `cameras[].rig.operations[][clearance].closeTargetFullFraction` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.CloseTargetFullFraction` |
+| `cameras[].rig.operations[][clearance].nearMargin` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.NearMargin` |
+| `cameras[].rig.operations[][clearance].retractionSkin` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.RetractionSkin` |
+| `cameras[].rig.operations[][clearance].obstructedTargetSkin` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.ObstructedTargetSkin` |
 | `cameras[].anchor[placement].placementId` | Placement | Names | Read | `WorldAnchor.Placement.PlacementId` |
 | `cameras[].anchors[].anchor[placement].placementId` | Placement | Names | Read | `WorldAnchor.Placement.PlacementId` |
 | `cameras[].anchors[].when[all].predicates[]…` | | | | re-enters `OverlayPredicate` |
@@ -1347,6 +1359,18 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `views.seatRig.operations[][blend].weight` | State | Binding | Binding | `WorldCameraProgramOp.Blend.Weight` |
 | `views.seatRig.operations[][selectProgram].key` | State | Binding | Binding | `WorldCameraProgramOp.SelectProgram.Key` |
 | `views.seatRig.operations[][firstPerson].active` | State | Binding | Binding | `WorldCameraProgramOp.FirstPerson.Active` |
+| `views.seatRig.operations[][clearance].cutaway` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.Cutaway` |
+| `views.seatRig.operations[][clearance].eyeRadius` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.EyeRadius` |
+| `views.seatRig.operations[][clearance].surfaceSkin` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.SurfaceSkin` |
+| `views.seatRig.operations[][clearance].maxRise` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.MaxRise` |
+| `views.seatRig.operations[][clearance].minimumBoom` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.MinimumBoom` |
+| `views.seatRig.operations[][clearance].fadeStart` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.FadeStart` |
+| `views.seatRig.operations[][clearance].fadeEnd` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.FadeEnd` |
+| `views.seatRig.operations[][clearance].closeTargetStartFraction` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.CloseTargetStartFraction` |
+| `views.seatRig.operations[][clearance].closeTargetFullFraction` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.CloseTargetFullFraction` |
+| `views.seatRig.operations[][clearance].nearMargin` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.NearMargin` |
+| `views.seatRig.operations[][clearance].retractionSkin` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.RetractionSkin` |
+| `views.seatRig.operations[][clearance].obstructedTargetSkin` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.ObstructedTargetSkin` |
 | `views.cameraRig.operations[][anchor].subject[placement].placementId` | Placement | Names | Read | `WorldCameraSubject.Placement.PlacementId` |
 | `views.cameraRig.operations[][lookAt].subject[placement].placementId` | Placement | Names | Read | `WorldCameraSubject.Placement.PlacementId` |
 | `views.cameraRig.operations[][orbit].yaw` | State | Binding | Binding | `WorldCameraProgramOp.Orbit.Yaw` |
@@ -1357,6 +1381,40 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `views.cameraRig.operations[][blend].weight` | State | Binding | Binding | `WorldCameraProgramOp.Blend.Weight` |
 | `views.cameraRig.operations[][selectProgram].key` | State | Binding | Binding | `WorldCameraProgramOp.SelectProgram.Key` |
 | `views.cameraRig.operations[][firstPerson].active` | State | Binding | Binding | `WorldCameraProgramOp.FirstPerson.Active` |
+| `views.cameraRig.operations[][clearance].cutaway` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.Cutaway` |
+| `views.cameraRig.operations[][clearance].eyeRadius` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.EyeRadius` |
+| `views.cameraRig.operations[][clearance].surfaceSkin` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.SurfaceSkin` |
+| `views.cameraRig.operations[][clearance].maxRise` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.MaxRise` |
+| `views.cameraRig.operations[][clearance].minimumBoom` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.MinimumBoom` |
+| `views.cameraRig.operations[][clearance].fadeStart` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.FadeStart` |
+| `views.cameraRig.operations[][clearance].fadeEnd` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.FadeEnd` |
+| `views.cameraRig.operations[][clearance].closeTargetStartFraction` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.CloseTargetStartFraction` |
+| `views.cameraRig.operations[][clearance].closeTargetFullFraction` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.CloseTargetFullFraction` |
+| `views.cameraRig.operations[][clearance].nearMargin` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.NearMargin` |
+| `views.cameraRig.operations[][clearance].retractionSkin` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.RetractionSkin` |
+| `views.cameraRig.operations[][clearance].obstructedTargetSkin` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.ObstructedTargetSkin` |
+| `views.programs[].operations[][anchor].subject[placement].placementId` | Placement | Names | Read | `WorldCameraSubject.Placement.PlacementId` |
+| `views.programs[].operations[][lookAt].subject[placement].placementId` | Placement | Names | Read | `WorldCameraSubject.Placement.PlacementId` |
+| `views.programs[].operations[][orbit].yaw` | State | Binding | Binding | `WorldCameraProgramOp.Orbit.Yaw` |
+| `views.programs[].operations[][orbit].pitch` | State | Binding | Binding | `WorldCameraProgramOp.Orbit.Pitch` |
+| `views.programs[].operations[][path].fraction` | State | Binding | Binding | `WorldCameraProgramOp.Path.Fraction` |
+| `views.programs[].operations[][dynamics].row` | Dynamics | Names | Binding | `WorldCameraProgramOp.Dynamics.Row` |
+| `views.programs[].operations[][fieldOfView].fieldOfViewRadians` | State | Binding | Binding | `WorldCameraProgramOp.FieldOfView.FieldOfViewRadians` |
+| `views.programs[].operations[][blend].weight` | State | Binding | Binding | `WorldCameraProgramOp.Blend.Weight` |
+| `views.programs[].operations[][selectProgram].key` | State | Binding | Binding | `WorldCameraProgramOp.SelectProgram.Key` |
+| `views.programs[].operations[][firstPerson].active` | State | Binding | Binding | `WorldCameraProgramOp.FirstPerson.Active` |
+| `views.programs[].operations[][clearance].cutaway` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.Cutaway` |
+| `views.programs[].operations[][clearance].eyeRadius` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.EyeRadius` |
+| `views.programs[].operations[][clearance].surfaceSkin` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.SurfaceSkin` |
+| `views.programs[].operations[][clearance].maxRise` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.MaxRise` |
+| `views.programs[].operations[][clearance].minimumBoom` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.MinimumBoom` |
+| `views.programs[].operations[][clearance].fadeStart` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.FadeStart` |
+| `views.programs[].operations[][clearance].fadeEnd` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.FadeEnd` |
+| `views.programs[].operations[][clearance].closeTargetStartFraction` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.CloseTargetStartFraction` |
+| `views.programs[].operations[][clearance].closeTargetFullFraction` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.CloseTargetFullFraction` |
+| `views.programs[].operations[][clearance].nearMargin` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.NearMargin` |
+| `views.programs[].operations[][clearance].retractionSkin` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.RetractionSkin` |
+| `views.programs[].operations[][clearance].obstructedTargetSkin` | State | Binding | Binding | `WorldCameraProgramOp.Clearance.ObstructedTargetSkin` |
 | `looks.rows[].source[creation].prototypeId` | Prototype | Names | Read | `WorldLookSource.Creation.PrototypeId` |
 | `looks.rows[].motion.lanes` | State | Expression | Read | `WorldLookMotion.Lanes` |
 | `looks.rows[].motion.lanes[]{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
@@ -2835,6 +2893,14 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `sets[].set[any].items[]…` | | | | re-enters `CellSetExpression` |
 | `sets[].set[both].items[]…` | | | | re-enters `CellSetExpression` |
 | `sets[].set[not].item…` | | | | re-enters `CellSetExpression` |
+| `editor.bar.iconRow` | State | Binding | Binding | `WorldBindingBarAuthoring.IconRow` |
+| `editor.bar.visible[all].predicates[]…` | | | | re-enters `OverlayPredicate` |
+| `editor.bar.visible[any].predicates[]…` | | | | re-enters `OverlayPredicate` |
+| `editor.bar.visible[not].predicate…` | | | | re-enters `OverlayPredicate` |
+| `editor.bar.visible[speaking].subject[placement].placementId` | Placement | Names | Read | `OverlaySubject.Placement.PlacementId` |
+| `editor.bar.visible[near].subject[placement].placementId` | Placement | Names | Read | `OverlaySubject.Placement.PlacementId` |
+| `editor.bar.visible[near].of[placement].placementId` | Placement | Names | Read | `OverlaySubject.Placement.PlacementId` |
+| `editor.bar.visible[state].binding` | State | Binding | Binding | `OverlayPredicate.State.Binding` |
 | `timeline.clocks[].name` | Clock | Declares |  | `WorldClock.Name` |
 | `timeline.clocks[].state` | State | Names | Read | `WorldClock.State` |
 | `replays[].rows` | State | Names | Read | `WorldScopedReplay.Rows` |
@@ -2886,6 +2952,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `screens[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `screens[].magazine.entries[][producer].id` | `WorldScreenSource.Producer.Id` | an image producer id |
 | `screens[].magazine.entries[][probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
+| `screenMaterials[].id` | `WorldScreenMaterial.Id` | a screen material id |
 | `cameras[].name` | `WorldCamera.Name` | a camera name |
 | `cameras[].rig.name` | `WorldCameraProgram.Name` | a camera program name |
 | `cameras[].rig.operations[][path].curve` | `WorldCameraProgramOp.Path.Curve` | a curve name |
@@ -3078,6 +3145,12 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `views.graphs[].source` | `WorldViewGraph.Source` | a view graph's source is a document path |
 | `views.post[].name` | `WorldViewPostPass.Name` | a post pass name |
 | `views.quality[].name` | `WorldViewQuality.Name` | a render view instance name or the default selector * |
+| `views.programs[].name` | `WorldCameraProgram.Name` | a camera program name |
+| `views.programs[].operations[][path].curve` | `WorldCameraProgramOp.Path.Curve` | a curve name |
+| `views.programs[].operations[][blend].a` | `WorldCameraProgramOp.Blend.A` | a camera program name |
+| `views.programs[].operations[][blend].b` | `WorldCameraProgramOp.Blend.B` | a camera program name |
+| `views.programs[].operations[][selectProgram].cases[].program` | `WorldCameraSelectCase.Program` | a camera program name |
+| `views.programs[].operations[][selectProgram].default` | `WorldCameraProgramOp.SelectProgram.Default` | a camera program name |
 | `views.layouts[].name` | `WorldViewLayout.Name` | a view layout name |
 | `looks.assignment.sequence.name` | `WorldSequence.Name` | a sequence name |
 | `looks.assignment.select.bodyState` | `WorldRowSelector.BodyState` | a per-body slot name |
@@ -3320,6 +3393,10 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `machines[].cable.name` | `WorldMachineCable.Name` | a link-cable name |
 | `ruleGroups[].trigger[timerElapsed].state` | `WorldPredicate.TimerElapsed.State` | a per-body slot name |
 | `sets[].set[family].name` | `CellSetExpression.Family.Name` | a family name is local to the document that declares the range |
+| `editor.toggle.id` | `BindingPageEntryDefinition.Id` | a binding entry id |
+| `editor.bar.banks[].id` | `WorldBindingBarBank.Id` | a binding bar bank id |
+| `editor.bar.layouts{*}.tables{*}[].source` | `WorldBindingBarSlotPlacement.Source` | an input source id |
+| `editor.bar.layouts{*}.banks{*}.pieces[].table` | `WorldBindingBarPiece.Table` | a key of the layout's own tables |
 | `commands[].name` | `WorldConsoleCommand.Name` | a console verb name, in the command registry's namespace |
 | `commands[].parameters[].name` | `WorldConsoleCommandParameter.Name` | a placeholder local to its command's lines |
 | `replays[].name` | `WorldScopedReplay.Name` | a replay scope identity, local to the replays section |

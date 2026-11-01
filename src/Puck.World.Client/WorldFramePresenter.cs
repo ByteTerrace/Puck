@@ -804,8 +804,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             ),
             target: ref target,
             up: seatUp,
-            targetShift: chase.TargetShift with { Offset = chase.TargetShift.Offset.Scaled(scale: liveScale) },
-            choice: view.ClearanceChoice(control: views.SeatControl, feel: (m_roster.Seat(slot: slot)?.Profile?.SeatLook ?? definition.PlayerDefaults.SeatLook)),
+            clearance: chase.Clearance,
             control: views.SeatControl,
             scale: liveScale,
             firstPerson: chase.FirstPerson,
@@ -2228,6 +2227,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             // The far plane every march ends at: render.farDistance off the LIVE definition (a world.row.set render
             // lands on the next frame, like the lighting below), or the engine's pinned default when unauthored.
             FarDistance = WorldRenderFarDistance.Resolve(defaults: m_client.Definition.Render),
+            ShadowCoverage = WorldRenderFarDistance.ResolveShadowCoverage(defaults: m_client.Definition.Render),
             // The lights and the sky: render.lighting, render.sky and render.environment with every keyed value at its
             // clock's presented phase (a world.row.set render lands on the next frame).
             Lights = lighting.Lights,

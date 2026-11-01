@@ -94,7 +94,7 @@ public static class PuckRootCommand {
             LandingCommand.Create(),
             LanesCommand.Create(clock: clock),
             LawsCommand.Create(),
-            LeaseCommand.Create(clock: clock),
+            LeaseCommand.Create(clock: clock, settleWait: (settle, timeout, progress, cancellationToken) => HostQuiet.SettleAsync(cancellationToken: cancellationToken, clock: clock, composition: Gate, progress: progress, settle: settle, timeout: timeout)),
             LocksCommand.Create(),
             McpCommand.Create(ancestor: ProcessInspection.IsAncestor),
             MotionCommand.Create(),

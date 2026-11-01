@@ -1,12 +1,14 @@
 using Puck.Assets.Documents;
 using Puck.Maths;
 using Puck.SignedDistance;
+using Puck.World.Authoring;
 
 namespace Puck.World;
 
 public static partial class WorldDefinitionValidator {
     private static void ValidateRenderResolution(WorldDefinition definition, List<string> errors) {
         ValidateToon(definition.Render.Toon, errors);
+        ValidateShadowCoverage(definition.Render.ShadowCoverage, errors);
         ValidateBloom(definition.Render.Bloom, "render.bloom", errors);
         ValidateIndirect(definition: definition, errors: errors);
         ValidateSkyFieldScale(definition.Render.SkyFieldScale, "render.skyFieldScale", errors);
@@ -38,23 +40,9 @@ public static partial class WorldDefinitionValidator {
             }
         }
     }
-    private static void ValidateToon(WorldRenderToon? toon, List<string> errors) {
-        if (toon is null) { return; }
-        RequireRange(toon.Threshold, 0f, 1f, "render.toon.threshold", errors);
-        RequireRange(toon.Softness, .001f, .5f, "render.toon.softness", errors);
-        RequireRange(toon.OutlineWidth, 0f, 4f, "render.toon.outlineWidth", errors);
-        RequireRange(toon.OutlineDistance, .1f, 1000f, "render.toon.outlineDistance", errors);
-        RequireRange(toon.OutlineNormal, 0f, .95f, "render.toon.outlineNormal", errors);
-        RequireRange(toon.SpecularSize, .001f, .25f, "render.toon.specularSize", errors);
-        RequireRange(toon.Exposure, -4f, 4f, "render.toon.exposure", errors);
-        RequireRange(toon.Shoulder, 0f, 2f, "render.toon.shoulder", errors);
-        Color(color: toon.ShadowTint, name: "shadowTint");
-        Color(color: toon.OutlineTint, name: "outlineTint");
-        void Color(DocumentVector3? color, string name) {
-            if (color is not { } value) { return; }
-            RequireRange(value.X, 0f, 1f, $"render.toon.{name}[0]", errors);
-            RequireRange(value.Y, 0f, 1f, $"render.toon.{name}[1]", errors);
-            RequireRange(value.Z, 0f, 1f, $"render.toon.{name}[2]", errors);
+    private static void ValidateToon(ToonStyleDocument? toon, List<string> errors) {
+        if (toon is not null) {
+            errors.AddRange(collection: toon.Refusals(path: "render.toon"));
         }
     }
     private static void ValidateBloom(Puck.Hosting.CameraBloom? bloom, string path, List<string> errors) {
@@ -90,6 +78,21 @@ public static partial class WorldDefinitionValidator {
                 name: "render.farDistance",
                 errors: errors
             );
+        }
+    }
+    // The cascades' reach shares the far distance's representable band; the near reach must stay below the far one so
+    // each cascade covers a slice of its own.
+    private static void ValidateShadowCoverage(WorldRenderShadowCoverage? coverage, List<string> errors) {
+        if (coverage is null) {
+            return;
+        }
+        foreach (var (name, value) in new[] { ("near", coverage.Near), ("far", coverage.Far), ("casters", coverage.Casters) }) {
+            if (value is { } reach) {
+                RequireRange(value: reach, min: ((name == "casters") ? 0f : WorldRenderDefaults.MinFarDistance), max: WorldRenderDefaults.MaxFarDistance, name: $"render.shadowCoverage.{name}", errors: errors);
+            }
+        }
+        if ((coverage.Near ?? 16f) >= (coverage.Far ?? 120f)) {
+            errors.Add(item: $"render.shadowCoverage.near ({coverage.Near ?? 16f}) must lie below render.shadowCoverage.far ({coverage.Far ?? 120f}).");
         }
     }
     // Judges a section after its keys are expanded (WorldRenderKeys.Expand), so every value a key states is judged as

@@ -133,6 +133,44 @@ public static partial class WorldDefinitionValidator {
                 break;
         }
     }
+    // A clearance op: every parameter a literal or binding in its field's domain, the literal bands ordered, and a close
+    // target placed by a lookAt that aims at a subject before it.
+    private static void ValidateClearance(WorldCameraProgramOp.Clearance clearance, bool aimed, WorldDefinition definition, string path, List<string> errors) {
+        foreach (var (field, scalar) in (ReadOnlySpan<(WorldValueField, BindableScalar)>)[
+            (WorldValueFields.ClearanceCutaway, clearance.Cutaway),
+            (WorldValueFields.ClearanceEyeRadius, clearance.EyeRadius),
+            (WorldValueFields.ClearanceSurfaceSkin, clearance.SurfaceSkin),
+            (WorldValueFields.ClearanceMaxRise, clearance.MaxRise),
+            (WorldValueFields.ClearanceMinimumBoom, clearance.MinimumBoom),
+            (WorldValueFields.ClearanceFadeStart, clearance.FadeStart),
+            (WorldValueFields.ClearanceFadeEnd, clearance.FadeEnd),
+            (WorldValueFields.ClearanceCloseTargetStart, clearance.CloseTargetStartFraction),
+            (WorldValueFields.ClearanceCloseTargetFull, clearance.CloseTargetFullFraction),
+            (WorldValueFields.ClearanceNearMargin, clearance.NearMargin),
+            (WorldValueFields.ClearanceRetractionSkin, clearance.RetractionSkin),
+            (WorldValueFields.ClearanceObstructedTargetSkin, clearance.ObstructedTargetSkin),
+        ]) {
+            JudgeScalar(definition: definition, errors: errors, field: field, path: $"{path}.{field.Name}", scalar: scalar);
+        }
+
+        if ((clearance.CloseTargetFullFraction.Literal is { } full) && (clearance.CloseTargetStartFraction.Literal is { } start) && (full >= start)) {
+            errors.Add(item: $"{path}.closeTargetFullFraction must be less than closeTargetStartFraction.");
+        }
+
+        if ((clearance.FadeEnd.Literal is { } fadeEnd) && (clearance.FadeStart.Literal is { } fadeStart) && (fadeEnd > fadeStart)) {
+            errors.Add(item: $"{path}.fadeEnd must not exceed fadeStart.");
+        }
+
+        if (clearance.CloseTargetOffset is { } closeTarget) {
+            if (!VectorFunctions.IsFinite(vector: closeTarget)) {
+                errors.Add(item: $"{path}.closeTargetOffset must contain finite coordinates.");
+            }
+
+            if (!aimed) {
+                errors.Add(item: $"{path}.closeTargetOffset needs a 'lookAt' op naming a subject before it, whose target offset it is measured against.");
+            }
+        }
+    }
     // An authored camera program: name/version/operation-count, per-op finiteness and subject references, and the
     // op-ordering rules an evaluator relies on (an anchor op — if any — leads, and a clampPitch op — if any —
     // precedes the orbit op it governs). Blend's cross-program name/cycle check runs once over the whole document's
@@ -178,6 +216,8 @@ public static partial class WorldDefinitionValidator {
         var seenBlend = false;
         var seenSelect = false;
         var seenFirstPerson = false;
+        var seenClearance = false;
+        var aimedAtSubject = false;
 
         for (var index = 0; (index < operations.Count); index++) {
             var opPath = $"{path}.operations[{index}]";
@@ -229,24 +269,24 @@ public static partial class WorldDefinitionValidator {
                     JudgeScalar(definition: definition, errors: errors, field: WorldValueFields.FirstPersonActive,
                         path: $"{opPath}.active", scalar: firstPerson.Active);
                     break;
+                case WorldCameraProgramOp.Clearance clearance:
+                    if (seenClearance) {
+                        errors.Add(item: $"{opPath} is a second 'clearance' op — at most one is admitted.");
+                    }
+
+                    seenClearance = true;
+                    ValidateClearance(
+                        aimed: aimedAtSubject,
+                        clearance: clearance,
+                        definition: definition,
+                        errors: errors,
+                        path: opPath
+                    );
+
+                    break;
                 case WorldCameraProgramOp.LookAt lookAt:
-                    RequireRange(value: lookAt.CloseTargetStartFraction, min: 0f, max: 1f, name: $"{opPath}.closeTargetStartFraction", errors: errors);
-                    RequireRange(value: lookAt.CloseTargetFullFraction, min: 0f, max: 1f, name: $"{opPath}.closeTargetFullFraction", errors: errors);
-                    if (lookAt.CloseTargetFullFraction >= lookAt.CloseTargetStartFraction) {
-                        errors.Add(item: $"{opPath}.closeTargetFullFraction must be less than closeTargetStartFraction.");
-                    }
-                    if (lookAt.CloseTargetOffset is { } closeTarget) {
-                        if (
-                            (closeTarget.Fade is null) || (closeTarget.Cutaway is null) ||
-                            !VectorFunctions.IsFinite(vector: closeTarget.Fade) ||
-                            !VectorFunctions.IsFinite(vector: closeTarget.Cutaway)
-                        ) {
-                            errors.Add(item: $"{opPath}.closeTargetOffset must name a fade and a cutaway target with finite coordinates.");
-                        }
-                        if (lookAt.Subject is null) {
-                            errors.Add(item: $"{opPath}.closeTargetOffset requires a subject.");
-                        }
-                    }
+                    aimedAtSubject = (lookAt.Subject is not null);
+
                     if (lookAt.Subject is null) {
                         RequireNonNegative(
                             value: lookAt.FocusDistance,
@@ -486,9 +526,9 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{path}.operations authors both 'anchor' and 'path' — each establishes its own subject; author only one.");
         }
     }
-    // Cross-program blend references: every cameras[].rig, views.seatRig, and views.cameraRig shares ONE name
-    // namespace (a blend op resolves any of them), so dangling names and cycles can only be checked once the whole
-    // table is assembled — never inside one program's own validation.
+    // Cross-program blend and select references: every program WorldCameraPrograms.Declared lists shares one name
+    // namespace, so dangling names and cycles can only be checked once the whole table is assembled — never inside one
+    // program's own validation.
     private static void ValidateCameraPrograms(IReadOnlyDictionary<string, WorldCameraProgram> programs, List<string> errors) {
         var visiting = new HashSet<string>(comparer: StringComparer.Ordinal);
         var settled = new HashSet<string>(comparer: StringComparer.Ordinal);
@@ -956,17 +996,6 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"{path}.boom.maximum must be at least minimum.");
             }
         }
-        if (!Enum.IsDefined(value: control.ClearanceMode) || (control.ClearanceMode == WorldCameraClearanceChoice.Auto)) {
-            errors.Add(item: $"{path}.clearanceMode must be Fade or Cutaway.");
-        }
-        if (control.MaxRise is not { } maxRise) {
-            errors.Add(item: $"{path}.maxRise is required.");
-        } else {
-            RequireRange(value: maxRise.Fade, min: 0f, max: (MathF.PI / 2f), name: $"{path}.maxRise.fade", errors: errors);
-            RequireRange(value: maxRise.Cutaway, min: 0f, max: (MathF.PI / 2f), name: $"{path}.maxRise.cutaway", errors: errors);
-        }
-        RequirePositive(value: control.EyeRadius, name: $"{path}.eyeRadius", errors: errors);
-        RequirePositive(value: control.SurfaceSkin, name: $"{path}.surfaceSkin", errors: errors);
         if (control.AutoFirstPerson is { } automatic) {
             RequirePositive(value: automatic.EntryDistance, name: $"{path}.autoFirstPerson.entryDistance", errors: errors);
             RequirePositive(value: automatic.ExitDistance, name: $"{path}.autoFirstPerson.exitDistance", errors: errors);
@@ -974,14 +1003,6 @@ public static partial class WorldDefinitionValidator {
             RequirePositive(value: automatic.ExitSeconds, name: $"{path}.autoFirstPerson.exitSeconds", errors: errors);
             if (automatic.ExitDistance <= automatic.EntryDistance) {
                 errors.Add(item: $"{path}.autoFirstPerson.exitDistance must exceed entryDistance.");
-            }
-        }
-        if (control.CharacterFade is { } fade) {
-            RequirePositive(value: fade.StartDistance, name: $"{path}.characterFade.startDistance", errors: errors);
-            RequireNonNegative(value: fade.EndDistance, name: $"{path}.characterFade.endDistance", errors: errors);
-            RequirePositive(value: fade.MinimumBoom, name: $"{path}.characterFade.minimumBoom", errors: errors);
-            if (fade.EndDistance >= fade.StartDistance) {
-                errors.Add(item: $"{path}.characterFade.endDistance must be less than startDistance.");
             }
         }
         RequireRange(
@@ -1021,9 +1042,6 @@ public static partial class WorldDefinitionValidator {
     // finite and non-negative. The member itself is required — an absent row is refused by the caller before this
     // runs, never silently defaulted.
     private static void ValidateSeatLook(WorldSeatCameraFeel seatLook, string path, List<string> errors) {
-        if (!Enum.IsDefined(value: seatLook.ClearanceMode)) {
-            errors.Add(item: $"{path}.clearanceMode is unknown.");
-        }
         RequireNonNegative(
             value: seatLook.YawSensitivity,
             name: $"{path}.yawSensitivity",
@@ -1269,9 +1287,21 @@ public static partial class WorldDefinitionValidator {
                 errors: errors,
                 path: "views.seatControl"
             );
-            if (seatRig.OrbitOp is null) {
-                errors.Add(item: "views.seatRig must contain an 'orbit' op because seatControl declares live yaw/pitch input; use cameras for non-interactive authored views.");
+            if (WorldCameraPrograms.SeatOrbit(views: views) is null) {
+                errors.Add(item: "views.seatRig must reach an 'orbit' op, its own or through its select's default or its blend's 'a' among the views section's programs, because seatControl declares live yaw/pitch input; use cameras for non-interactive authored views.");
             }
+        }
+
+        for (var index = 0; (index < views.Programs.Count); index++) {
+            ValidateProgram(
+                curveNames: curveNames,
+                definition: definition,
+                dynamicsNames: dynamicsNames,
+                errors: errors,
+                path: $"views.programs[{index}]",
+                placementIds: placementIds,
+                program: views.Programs[index]
+            );
         }
 
         if (views.CameraRig is { } cameraRig) {

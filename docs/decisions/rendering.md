@@ -120,6 +120,32 @@ recorded the result.
   both backends matching, read from `world.gpu-timing` and `world.counters gpu`,
   and judged for flicker in presented bursts, never only in settled stills.
 
+## A light is shadowed wherever it lights, and cel shading is a style per material
+
+The [illumination plan](../plans/illumination.md#cel-shading) settled both; the
+owner ruled the second (a style per material, not one look per world).
+
+- **Shadow where the response is.** The surface pass queries a light's cascades
+  wherever that light's diffuse response is non-zero, a wrapped material's side
+  past the terminator included, and filters what it queried. A side it skips
+  decodes as fully visible, so any response there is light through walls. Past
+  the terminator the receiver's own body stands between it and the light, so
+  casters within that depth transmit; a roof or a wall farther off does not.
+- **The band shapes the light, not the shadow.** A cel style bands a light's
+  cosine and keeps its visibility as a separate factor,
+  `band(cosine) × visibility`, so the filtered penumbra keeps its softness and
+  colour. `band(cosine × visibility)` stays as an authored shape for the harder
+  look. Rim lights, the environment reflection and ambient occlusion stay in the
+  cel response as in the continuous one; a style never discards a term.
+- **A style is material data.** One lighting path with a style response per
+  material: a palette row's `toon` opts its material in (or out, with
+  `enabled: false`), every other material inherits the world's default
+  `render.toon`, and `world.toon` is the live lever over that default. One
+  scene mixes cel-styled and continuous creations. The concrete styles are data
+  in the standard package (`worlds/standard/styles.puck`), never an engine
+  default, and the style rows live in the material record beside `wrap`,
+  `fill` and `receive`, the material system there already is.
+
 ## A raster pass draws only what it can show
 
 Every raster pass skips the mesh draws it cannot show any of, by a world box per

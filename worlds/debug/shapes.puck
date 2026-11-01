@@ -8,7 +8,7 @@
 //   level 1  composition: sweeps and the per-shape facets, every shape blend, the domain folds
 //   level 2  motion: the stamp pool's rotation, swings, slides, moving blends, paints, IK and frames, and warps II; the
 //            board game room fills its east end (boardroom.puck)
-//   level 3  form and surface: parameter forms, palette channels and wear, glass
+//   level 3  form and surface: parameter forms, palette channels and wear, cel styles, glass
 //
 // A sign hangs over the west end of each row naming the row, a map board in the lobby by the entrance lists the levels
 // and rows, a board over the lift door names each level, and every plinth's plaque says what the exhibit demos and what
@@ -16,6 +16,7 @@
 // (galleryCommands) walk, frame, inspect and flag exhibits through them. shapes.md beside this file holds the levels,
 // the coverage table, the operator camera line that frames each exhibit and the console controls the motion rows answer
 // to. This file is a library: debug.puck and hall.puck expand its templates and lets.
+import "../standard/styles"
 
 // The hall's storey height and each level's floor top: level k's floor stands at 4.5k + 0.05 (hall.puck).
 let galleryStorey = 4.5
@@ -93,6 +94,7 @@ let surfaceRow = [
   "shape-volume-cloud", "shape-state-color"
 ]
 let glassRow = ["shape-glass"]
+let styleRow = ["shape-cel", "shape-cel-hard"]
 let motionRow = [
   "motion-spin", "motion-rock", "motion-slide", "motion-chain", "motion-smooth-blend", "motion-state-blend",
   "motion-carve", "motion-mirror", "motion-polar"
@@ -114,13 +116,14 @@ let warpZ = 33
 let surfaceLevel = 3
 let surfaceZ = 25
 let glassZ = 37
+let styleZ = 31
 
 // The levels, in walking order: the board over each lift door names its level and what it shows.
 let galleryLevels = [
   { level: 0, title: "LEVEL 0  SHAPE", what: "primitives, stretched, extruded, revolved" }
   { level: 1, title: "LEVEL 1  COMPOSITION", what: "sweeps and facets, blends, folds" }
   { level: 2, title: "LEVEL 2  MOTION AND GAMES", what: "the stamp pool's motion, warps II, the board game room" }
-  { level: 3, title: "LEVEL 3  FORM AND SURFACE", what: "forms, surfaces, glass" }
+  { level: 3, title: "LEVEL 3  FORM AND SURFACE", what: "forms, surfaces, styles, glass" }
 ]
 
 // Every row, in walking order: its sign's title, its level, the z it stands on, its exhibit names and what it shows.
@@ -160,6 +163,13 @@ let galleryRows = [
     z: surfaceZ
     names: surfaceRow
     what: "palette channels, wear, panels, text"
+  }
+  {
+    title: "STYLES"
+    level: surfaceLevel
+    z: styleZ
+    names: styleRow
+    what: "a cel style per material, beside continuous ones"
   }
   {
     title: "GLASS"
@@ -1431,6 +1441,53 @@ template surfacePrototypes() {
       exhibit(
         label: "FILL BLEED",
         extra: [{ color: "#DDDDDD", roughness: 0.8, fill: "#2F5BFF", bleed: "#FF5A1F", receive: 1.5 }]
+      )
+    }
+  }
+  // Two spheres of one paint, the left banded by its palette row's own cel style and the right continuous, under a
+  // world whose default style is off: the left shows the band, its soft shadow edge, its rim and its ink, the right and
+  // the plinth stay continuous.
+  prototype "shape-cel" {
+    document {
+      shape Sphere "subject" {
+        material: accentMaterial
+        position [-0.3, 1.2, 0]
+        scale [0.25, 0.25, 0.25]
+      }
+      shape Sphere "continuous" {
+        material: 4
+        position [0.3, 1.2, 0]
+        scale [0.25, 0.25, 0.25]
+      }
+      exhibit(
+        label: "CEL STYLE",
+        extra: [
+          { color: "#C9A27E", roughness: 0.6, specular: 0.04, wrap: 0.35, toon: celStyle }
+          { color: "#C9A27E", roughness: 0.6, specular: 0.04, wrap: 0.35 }
+        ],
+        note: "left: its own cel style, the shadow kept under the band; right: continuous"
+      )
+    }
+  }
+  prototype "shape-cel-hard" {
+    document {
+      shape Sphere "subject" {
+        material: accentMaterial
+        position [-0.3, 1.2, 0]
+        scale [0.25, 0.25, 0.25]
+      }
+      shape Sphere "continuous" {
+        material: 4
+        position [0.3, 1.2, 0]
+        scale [0.25, 0.25, 0.25]
+      }
+      exhibit(
+        label: "CEL HARD",
+        extra: [
+          { color: "#C9A27E", roughness: 0.6, specular: 0.04, wrap: 0.35, toon: celHardStyle }
+          { color: "#C9A27E", roughness: 0.6, specular: 0.04, wrap: 0.35 }
+        ],
+        note: "left: the band over light and shadow together; right: continuous"
       )
     }
   }

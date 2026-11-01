@@ -110,7 +110,7 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck landing`](#puck-landinggit-loss-check) | refuses a commit that silently drops content its author never worked from. |
 | [`puck lanes`](#puck-lanesone-line-per-worktree) | prints one line per worktree: branch, commits ahead, changes, last commit, newest write, log, lease and stall state; `--watch` prints only the changes. |
 | [`puck laws`](#puck-laws-provea-law-against-its-fix) | `laws prove` shows, in an isolated proof tree, that a law fails with its fix withheld and passes with it, and prints the evidence for a commit body. |
-| [`puck lease`](#puck-leaseexclusive-machine-work) | run a command while exclusively holding the shared GPU, heavy-work or World-build resource. |
+| [`puck lease`](#puck-leaseexclusive-machine-work) | run a command while exclusively holding the shared GPU, heavy-work or World-build resource, or all three once the machine is idle (`lease quiet`, the settle window for timing measurements). |
 | [`puck lint`](#the-puck-dsl-verbs) | static analysis and symbol resolution over a `.puck` document, composed the same way `compile --validate` composes it. |
 | [`puck locks`](#puck-locksrestore-lock-files) | re-records the solution's `packages.lock.json` files after a reference change, takes newer packages with `--update`, or with `--check` runs a locked restore and names each project whose lock file drifted, writing nothing. |
 | [`puck lsp`](#the-puck-dsl-verbs) | the `.puck` language server over stdio: completion, hover, document symbols, formatting, semantic tokens, and diagnostics published once the input goes quiet. |
@@ -4415,6 +4415,17 @@ and execution. When a live ancestor already holds it, verified process ancestry
 and start ticks admit a `child` lease inside that holder's directory. Sibling
 suites compete for that child lease, so an enclosing lease neither deadlocks
 its own work nor permits its children to overlap. Wait messages name the holder.
+
+Every lease acquisition nests this way, whichever lease it takes: a heavy suite
+in `gate` and `affected`, a multi-world `puck test`, the World build store's
+`build` lease, `puck sweep`'s windowed `gpu` lease, and the `gpu` lease of a
+windowed World the MCP server starts all pass the ancestor recognizer
+(`ProcessInspection.IsAncestor`), so a command run under `puck lease <name>`
+that takes the same lease waits on a sibling, never on itself.
+
+### `puck lease quiet`—a settle window
+
+Run `puck lease quiet --holder <lane> [--lane <lane>] [--wait <seconds>] [--settle <seconds>] -- <executable> <arguments...>` to hold a measurement window: no other lane builds, tests or uses the GPU while the command runs. The verb takes the `heavy`, `build` and `gpu` leases in that one order (the order a heavy suite, a World build and a World boot already nest in, so it cannot deadlock against them), then samples the machine with the same readings [`puck host load`](#puck-host-loadadmission-lines-for-the-machine) prints until it has been idle for `--settle` seconds (default 30; zero skips the wait). Idle means no GPU work, no heavy test run another process started, and CAPACITY by the host-load thresholds (the CPU mean and free memory). The wait prints to standard error what it is waiting on whenever that changes (`the GPU is held by dotnet 15532`, `a heavy test run is held by ...`, `the machine is loaded: cpu=...`). `--wait` bounds the three acquisitions in total and, added to `--settle`, the wait for an idle machine; a lease or a machine that does not come free in time is refused (exit 2) with every lease already taken released. Then the command runs, and the leases are released in reverse on every exit path. A command run under it that takes any of the three leases (`puck sweep`, `puck_world_start`, a World build, `puck lease gpu`) nests under the quiet holder instead of waiting on it; another process's lease waits in the queue until the window closes. Child failure preserves its exit code; cancellation exits 130 and kills the child tree before releasing the leases.
 
 The exclusive guard handle proves ownership; holder metadata is diagnostic. Once the admitted waiter owns the guard, it replaces leftover metadata, including missing or malformed data and an alive adapter PID left when a Windows reader delayed cleanup after a World exited. Disposal always releases the guard even when directory deletion is delayed. Metadata readers permit deletion, and an unreadable queue ticket counts as occupied until it can be read or disappears. A live guard never expires. Never unlink its file or remove an active holder manually. The sandbox must allow writes to the shared lease directory; a refusal to write is an infrastructure error, never permission to run without the lease.
 

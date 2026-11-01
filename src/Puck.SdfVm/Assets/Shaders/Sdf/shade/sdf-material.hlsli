@@ -34,6 +34,13 @@ struct SdfMaterialData {
     uint emissiveLane; // the render lane scaling emissive, plus one; 0 keeps the static emissive
     float3 absorption; // a glass's absorption per world unit (SdfGlass.Absorption); exp(-absorption * distance) transmits
     float ior; // a glass's index of refraction; zero for an opaque material
+    // The material's own cel style (SdfToon, rows 22 to 25), laid out as the pass block's toon members: bands (mode,
+    // threshold, softness, specular size), shadow (tint, exposure gain), outline (width, distance, normal, shoulder),
+    // ink (tint). A zero mode inherits the world's default style (sdfToonStyle).
+    float4 toonBands;
+    float4 toonShadow;
+    float4 toonOutline;
+    float3 toonInk;
 };
 
 // The GGX roughness floor: alpha2 = roughness^2 + SdfRoughnessFloorSquared, so a bare light direction (no authored
@@ -48,18 +55,37 @@ static const float SdfCoatScale = 0.04;
 // rather than a tight silhouette-only rim.
 static const float SdfSheenFresnelExponent = 2.0;
 
-// The ONE material decode point (KEEP IN SYNC with SdfProgram.Materials.cs and SdfProgram.cs).
-SdfMaterialData sdfMaterialLoad(int material) {
+// A material's first vector in the program words, or false for a material the table does not hold (a screen's
+// sentinel, the error material, a table the program words cannot contain).
+bool sdfMaterialBase(int material, out uint materialBase) {
     uint4 header = sdfProgramWord(0);
-    SdfMaterialData data = (SdfMaterialData)0;
+
+    materialBase = 0u;
     if ((material < 0) || ((uint)material >= SDF_PROGRAM_MATERIAL_COUNT(header))
         || !sdfProgramRange(SDF_PROGRAM_MATERIAL_OFFSET(header), SDF_PROGRAM_MATERIAL_COUNT(header), SDF_MATERIAL_VECTORS_PER_ENTRY)) {
+        return false;
+    }
+    materialBase = SDF_PROGRAM_MATERIAL_OFFSET(header) + SDF_MATERIAL_VECTORS_PER_ENTRY * (uint)material;
+    return true;
+}
+// A material's wrap share alone (row 2's y), zero for a material the table does not hold: the surface pass reads it to
+// know how far past the terminator the material's diffuse response reaches.
+float sdfMaterialWrap(int material) {
+    uint materialBase;
+
+    return (sdfMaterialBase(material, materialBase) ? asfloat(sdfWords[materialBase + 2u]).y : 0.0);
+}
+
+// The ONE material decode point (KEEP IN SYNC with SdfProgram.Materials.cs and SdfProgram.cs).
+SdfMaterialData sdfMaterialLoad(int material) {
+    SdfMaterialData data = (SdfMaterialData)0;
+    uint materialBase;
+    if (!sdfMaterialBase(material, materialBase)) {
         data.albedo = float3(1.0, 0.0, 1.0);
         data.emissive = 4.0;
         data.roughness = 1.0;
         return data;
     }
-    uint materialBase = SDF_PROGRAM_MATERIAL_OFFSET(header) + SDF_MATERIAL_VECTORS_PER_ENTRY * (uint)material;
     float4 m0 = asfloat(sdfWords[materialBase]);
     float4 m1 = asfloat(sdfWords[materialBase + 1u]);
     float4 m2 = asfloat(sdfWords[materialBase + 2u]);
@@ -93,6 +119,10 @@ SdfMaterialData sdfMaterialLoad(int material) {
     data.emissiveLane = sdfWords[materialBase + 20u].z;
     data.absorption = asfloat(sdfWords[materialBase + 21u]).rgb;
     data.ior = asfloat(sdfWords[materialBase + 21u]).w;
+    data.toonBands = asfloat(sdfWords[materialBase + 22u]);
+    data.toonShadow = asfloat(sdfWords[materialBase + 23u]);
+    data.toonOutline = asfloat(sdfWords[materialBase + 24u]);
+    data.toonInk = asfloat(sdfWords[materialBase + 25u]).rgb;
 
     return data;
 }
@@ -103,16 +133,13 @@ bool sdfMaterialIsGlass(SdfMaterialData material) {
 // A material's albedo and its paints' range (paintFirst and paintCount, as sdfMaterialLoad reads them), loaded alone so
 // the paints draw before the rest of the material is live: zero paints for a material the table does not hold.
 float3 sdfMaterialPaints(int material, out uint paintFirst, out uint paintCount) {
-    uint4 header = sdfProgramWord(0);
+    uint materialBase;
 
     paintFirst = 0u;
     paintCount = 0u;
-    if ((material < 0) || ((uint)material >= SDF_PROGRAM_MATERIAL_COUNT(header))
-        || !sdfProgramRange(SDF_PROGRAM_MATERIAL_OFFSET(header), SDF_PROGRAM_MATERIAL_COUNT(header), SDF_MATERIAL_VECTORS_PER_ENTRY)) {
+    if (!sdfMaterialBase(material, materialBase)) {
         return float3(1.0, 0.0, 1.0);
     }
-
-    uint materialBase = SDF_PROGRAM_MATERIAL_OFFSET(header) + SDF_MATERIAL_VECTORS_PER_ENTRY * (uint)material;
 
     paintFirst = sdfWords[materialBase + 20u].x;
     paintCount = sdfWords[materialBase + 20u].y;
