@@ -73,9 +73,11 @@ When you are the delegate:
   read-only brief (a review, an audit) makes no commit, so its worktree is
   removed when it ends: the brief names a findings path outside the worktree,
   and the lead never relies on the hand-back alone. That applies to a Claude
-  subagent's worktree. A `codex exec` lane's hook refuses writes outside its
-  worktree, so its review writes `<worktree>/.claude/scratch/<lane>-findings.md`.
-  The lead creates that worktree and copies the file out when the lane ends.
+  subagent's worktree. A `codex exec` lane's command hook sometimes refuses a
+  write outside its worktree; one review wrote outside it and another could
+  not. So a Codex review brief names `<worktree>/.claude/scratch/<lane>-findings.md`
+  as the fallback. The lead creates that worktree, checks both paths when the
+  lane ends, and copies the findings out.
 - Never write the lead's scratch checklists or ledger; `docs/plans/open-items.md` and the plans are repository documents, and you update them for what you deliver.
 - Before reporting, merge the integration branch's current tip into your branch
   and re-run your checks, except on a read-only brief or after a stop order.
