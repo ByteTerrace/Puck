@@ -106,7 +106,7 @@ internal sealed class SdfMeshOcclusion : IDisposable {
     public void RecordEarly(IGpuRecorder recorder, nint commandBuffer, IGpuComputePipeline pipeline, nint set) {
         recorder.MemoryBarrier(
             commandBufferHandle: commandBuffer,
-            destinationAccessMask: GpuAccess.ShaderRead | GpuAccess.ShaderWrite | GpuAccess.TransferWrite,
+            destinationAccessMask: GpuAccess.ShaderRead | GpuAccess.ShaderWrite | GpuAccess.TransferRead | GpuAccess.TransferWrite,
             destinationStageMask: GpuStage.ComputeShader | GpuStage.Transfer,
             sourceAccessMask: GpuAccess.ShaderRead | GpuAccess.ShaderWrite | GpuAccess.IndirectCommandRead,
             sourceStageMask: GpuStage.ComputeShader | GpuStage.VertexShader | GpuStage.DrawIndirect
@@ -118,9 +118,9 @@ internal sealed class SdfMeshOcclusion : IDisposable {
             var copied = m_seedVisible is not null;
             recorder.ClearStorageBuffer(commandBufferHandle: commandBuffer, bufferHandle: m_visible!.BufferHandle, sizeBytes: m_visible.SizeBytes);
             if (m_seedVisible is { } previous) {
-                recorder.TransitionBuffer(commandBufferHandle: commandBuffer, bufferHandle: previous.BufferHandle,
-                    sourceAccessMask: GpuAccess.ShaderRead | GpuAccess.ShaderWrite, sourceStageMask: GpuStage.ComputeShader,
-                    destinationAccessMask: GpuAccess.TransferRead, destinationStageMask: GpuStage.Transfer);
+                // The old buffer's only use in this recording is the copy. The global barrier above makes its prior
+                // compute writes visible to transfer reads on Vulkan; Direct3D 12 promotes its decayed COMMON state
+                // to COPY_SOURCE implicitly. Do not invent a current-recording UAV access for a source transition.
                 recorder.TransitionBuffer(commandBufferHandle: commandBuffer, bufferHandle: m_visible.BufferHandle,
                     sourceAccessMask: GpuAccess.TransferWrite, sourceStageMask: GpuStage.Transfer,
                     destinationAccessMask: GpuAccess.CopyWrite, destinationStageMask: GpuStage.Transfer);

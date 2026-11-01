@@ -273,6 +273,14 @@ On Direct3D 12 an indirect argument buffer read by a vertex shader needs both
 clears its new tail through UAV access, transitions it to `COPY_DEST`, copies
 the previous history and then makes it shader-readable/writable. `TransferWrite`
 names the storage clear; `CopyWrite` names the copy destination.
+The retired history source is first used by the copy in a new recording;
+do not declare a current-recording UAV state for it. A global barrier includes
+transfer reads for Vulkan, and Direct3D 12 implicitly promotes its decayed
+COMMON state to COPY_SOURCE. The
+[legacy barrier documentation](https://learn.microsoft.com/en-us/windows/win32/direct3d12/using-resource-barriers-to-synchronize-resource-states-in-direct3d-12)
+and [Dawn's buffer state implementation](https://dawn.googlesource.com/dawn/+/c0064c5a73bfeff720c15d8d09c5b87a48e51160/src/dawn/native/d3d12/BufferD3D12.cpp)
+agree on buffer decay and promotion; these are legacy-barrier rules, not
+enhanced-barrier rules. Hardware validation still checks the actual use.
 
 ## Registers and bindings
 
