@@ -78,8 +78,13 @@ Glass is part of the baked frame; its remaining work is [below](#glass).
 
 #### P6-GI, global illumination
 
-The [Lighting and GI packet](open-items.md#lighting-and-gi) owns the remaining
-coverage, visibility, exposure and bounce work. The
+The [illumination plan](illumination.md) holds the decisions from the
+illumination research round and their build order: the probe volume splits
+into cached hits and a budgeted GPU relight, direct light is made correct at
+author scale, the geometry trace moves to the GPU behind one trace-hits
+interface, bitmask AO steers the gather, and light lists and area lights bound
+the light loop. The [Lighting and GI packet](open-items.md#lighting-and-gi)
+owns the remaining coverage, visibility, exposure and bounce findings. The
 [engine job system](open-items.md#engine-job-system) owns its execution budget,
 and [residency](open-items.md#residency-and-streaming) owns demand-point
 windowing. No second scheduler is built for GI.

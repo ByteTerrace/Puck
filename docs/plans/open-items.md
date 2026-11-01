@@ -1729,17 +1729,31 @@ them verbatim repeats) under-use the language:
 
 ### Lighting and GI
 
+The [illumination plan](illumination.md) holds the research round's decisions
+and the order they land in; the items below are its findings and checks.
+
 - [high · unconfirmed] A sun that moves every frame freezes indirect light.
   Each direction change starts a new lighting generation
-  (`SdfMeshIrradiance.cs:759-779`), and a trace batch landing after a
-  generation change is discarded (`:1067`), so GI sticks at the last sun that
-  held still. The debug world's sun is static (`worlds/debug/hall.puck:1413`),
-  so nothing has exercised it; the owner's authored day cycle will. Confirm
-  with a run that binds the key light to a clock, then fix it with the
-  illumination research's plan. (from: research-claude)
+  (`SdfMeshIrradiance.RefreshLighting` hashes every directional and traced
+  light record), and a trace batch landing after a generation change is
+  discarded (the `generation != m_generation` test after the parallel trace),
+  so GI sticks at the last sun that held still. The debug world's sun is
+  static (`worlds/debug/hall.puck`, the `key` directional), so nothing has
+  exercised it; the owner's authored day cycle will. Confirm with a run that
+  binds the key light to a clock ([step 0](illumination.md#the-build-order)),
+  then fix it with the plan's [first decision](illumination.md#1-split-each-probe-into-cached-hits-and-a-budgeted-gpu-relight).
+  (from: research-claude)
 - The probe trace casts two ray sets from one origin: 128 for radiance
-  (`SdfMeshIrradiance.cs:1245`) and 144 for depth (`SdfMeshProbeDepth.cs:19`).
-  This is duplication to converge into one hit buffer. (from: research-claude)
+  (`SdfMeshIrradiance.TraceProbe`) and 144 for depth
+  (`SdfMeshProbeDepth.Trace`). This is duplication the plan's step 2
+  converges into one hit buffer. (from: research-claude)
+- `RefreshLighting` does not hash the sky, so a sky-only change leaves the
+  bounced sky baked into the radiance cube stale while the zero-bounce term
+  relights; and a lighting change resets sweeps to zero, so it re-traces the
+  geometry-only depth rays the mesh-GI reference says are reused. Both are
+  leads for the plan's step 0 to confirm and its
+  [corrections](illumination.md#corrections) list to fix.
+  (from: consensus-agy)
 
 Owner: next lighting batch (rendering, principal-grade review) · medium · Next:
 light a cold area from the coarser levels or the sky term the moment a view
