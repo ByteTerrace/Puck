@@ -12,14 +12,12 @@ using Microsoft.Build.Framework;
 using Microsoft.Build.Utilities;
 
 /// <summary>
-/// The repository's one inline MSBuild task (<c>build/PuckBuildTasks.targets</c>): every build operation the tree runs in
+/// The repository's one MSBuild task (<c>build/PuckBuildTasks.targets</c>): every build operation the tree runs in
 /// its own code, chosen by <see cref="Operation"/>, with the union of their parameters.
 /// </summary>
 /// <remarks>
-/// <c>RoslynCodeTaskFactory</c> compiles a task's source once per task name in each build node, by starting the C#
-/// compiler, which costs a second or more a compile, and a build that reuses no node (every agent and CI build) starts
-/// every node cold. One name compiles once a node: separate tasks over the same sources compiled once a task a node,
-/// the architecture gates twice in the node that builds <c>Puck.Analyzers</c>, which every project waits for. Each
+/// <c>build/PuckBuildTasks.targets</c> compiles this file once per version of it into <c>build/obj/build-tasks/</c>, and
+/// every build node loads that assembly, against the classic <c>mscorlib</c> and <c>netstandard</c> facades. Each
 /// operation is its own class below and runs as itself, on this task's build engine.
 /// <list type="bullet">
 /// <item><c>architecture</c>: <see cref="PuckArchitectureGate"/>.</item>
@@ -174,9 +172,9 @@ public sealed class PuckBuildTask : Task, ICancelableTask {
 /// <c>ResolveReferences</c> and populated by <c>FindReferenceAssembliesForReferences</c> on the way into the
 /// compile, so a gate hooked earlier examines nothing and passes everything. <c>BeforeTargets="CoreCompile"</c>
 /// also fires on a fully up-to-date incremental build.</para>
-/// <para>Compiled by <c>RoslynCodeTaskFactory</c>, whose host resolves <c>System.Xml.Linq</c> but not
-/// <c>System.Text.Json</c>; that is why the ledger is an MSBuild props file. The file is outside the
-/// repository's analyzer and nullable context.</para>
+/// <para>Compiled against the classic framework facades (<c>build/PuckBuildTasks.targets</c>), which resolve
+/// <c>System.Xml.Linq</c> but not <c>System.Text.Json</c>; that is why the ledger is an MSBuild props file. The file
+/// is outside the repository's analyzer and nullable context.</para>
 /// </remarks>
 public sealed class PuckArchitectureGate : Task {
     private const string BackendsLayer = "Backends";
@@ -674,8 +672,8 @@ public sealed class PuckArchitectureGate : Task {
 /// member from it in — the C# compiler emits an assembly-reference row only for an assembly a type or member is
 /// actually read from, never for one merely available at compile time — so the check has to run once that output
 /// exists.</para>
-/// <para>Compiled by the same <c>RoslynCodeTaskFactory</c> host as <see cref="PuckArchitectureGate"/>, so it is
-/// outside the repository's analyzer and nullable context too.</para>
+/// <para>Compiled with <see cref="PuckArchitectureGate"/>, so it is outside the repository's analyzer and nullable
+/// context too.</para>
 /// </remarks>
 public sealed class PuckArchitectureDeniedApiGate : Task {
     /// <summary>The freshly compiled output assembly to inspect (<c>@(IntermediateAssembly)</c>).</summary>

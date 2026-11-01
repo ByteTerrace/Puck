@@ -91,7 +91,7 @@
          @(ProjectReference) is already populated when the ItemGroup condition is evaluated. -->
     <Import Project="$(MSBuildThisFileDirectory)src/Puck.Platform.Windows/WindowsCaptureProjection.targets" />
 
-    <!-- The repository's one inline task, which the gate, the shader build and the World's asset targets below call. -->
+    <!-- The repository's one build task, which the gate, the shader build and the World's asset targets below call. -->
     <Import Project="$(MSBuildThisFileDirectory)build/PuckBuildTasks.targets" />
 
     <!-- The architecture gate. Reads the RESOLVED reference set rather than @(ProjectReference), so a
@@ -105,6 +105,24 @@
     <!-- NuGet packaging policy for blessed projects. Imported here (after each project's body) so a
          csproj's own <IsPackable>true</IsPackable> is visible to the flag-guarded groups inside. -->
     <Import Project="$(MSBuildThisFileDirectory)build/Packaging.targets" />
+
+    <!-- The commit an executable is built at (WorldSchema.SourceRevision) rides its runtime configuration as the AppContext
+         value Puck.SourceRevision, never a compiled assembly: a commit compiled into Puck.World.Schema recompiled that
+         project on every commit, 15 s under load on the critical path of every World build. The revision is written to
+         a file only when it changes, and that file is an input of the runtime configuration targets, so a new commit
+         rewrites the executables' runtimeconfig.json and compiles nothing. Empty outside a git tree. -->
+    <Target Name="PuckStampSourceRevision" Condition="'$(OutputType)' == 'Exe' AND '$(DesignTimeBuild)' != 'true'"
+            BeforeTargets="GenerateBuildRuntimeConfigurationFiles;GeneratePublishRuntimeConfigurationFile" DependsOnTargets="InitializeSourceControlInformation">
+        <PropertyGroup>
+            <_PuckSourceRevisionFile>$(IntermediateOutputPath)puck.source-revision.txt</_PuckSourceRevisionFile>
+        </PropertyGroup>
+        <WriteLinesToFile File="$(_PuckSourceRevisionFile)" Lines="$(SourceRevisionId)" Overwrite="true" WriteOnlyWhenDifferent="true" />
+        <ItemGroup>
+            <RuntimeHostConfigurationOption Include="Puck.SourceRevision" Value="$(SourceRevisionId)" />
+            <GenerateRuntimeConfigurationFilesInputs Include="$(_PuckSourceRevisionFile)" />
+            <FileWrites Include="$(_PuckSourceRevisionFile)" />
+        </ItemGroup>
+    </Target>
 
     <!-- The artifact producer records evaluated test outputs, including any future test projects or TFMs.
          Consumers run these assemblies directly and do not need to evaluate the solution or install workloads. -->

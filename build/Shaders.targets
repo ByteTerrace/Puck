@@ -34,7 +34,7 @@
         verbs) compiles and collects nothing here. It builds no project reference, so the generator it would run may not
         exist, and a workspace needs no bytecode.
     -->
-    <!-- The shader build and the Direct3D 11 kernels run as operations of the repository's one inline task
+    <!-- The shader build and the Direct3D 11 kernels run as operations of the repository's one build task
          (PuckBuildTasks.targets). -->
 
     <PropertyGroup>

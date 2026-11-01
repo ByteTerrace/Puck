@@ -1,64 +1,58 @@
 <Project>
     <!--
-        The repository's one inline task, PuckBuildTask (build/PuckBuildTasks.cs), which runs every build operation the
-        tree implements in its own code: the architecture gates (Puck.Architecture.targets), the shader build and the
-        Direct3D 11 kernels (Shaders.targets). Each call names its Operation.
+        The repository's one build task, PuckBuildTask (build/PuckBuildTasks.cs), which runs every build operation the tree
+        implements in its own code: the architecture gates (Puck.Architecture.targets), the shader build and the Direct3D 11
+        kernels (Shaders.targets). Each call names its Operation.
 
-        RoslynCodeTaskFactory compiles a task's source once per task name in each build node, by starting the C# compiler,
-        a second or more each time, and a build that reuses no node starts every node cold. Separate task names over these
-        sources compiled up to five times a node, twice before the first project (Puck.Analyzers, which every project
-        waits for) could finish; one name compiles once a node.
+        The source compiles once per version of itself, not once per build node. An inline (RoslynCodeTaskFactory) task
+        compiles in every node that runs it by starting a cold C# compiler process, about 2.6 s a node under load, and a
+        no-op build of src/Puck.World paid that on most nodes along its critical path (docs/development/contributing.md,
+        "Edit to running"). PuckCompileBuildTasks compiles the source with the build's own Csc task (the compiler
+        server, when one is running) into obj/build-tasks/<hash>/ beside this file, where <hash> names the source's write
+        time and the toolset (MSBuild's version and directory, which hold the references), and every node loads that one
+        assembly. An edited, checked-out or restored source has a new write time and so names a new directory: a node
+        still holding the old assembly never blocks the new compile, and nothing compiles again until the source or the
+        SDK changes. (A property function cannot hash the file's content safely: the source's quotes and commas would be
+        read as the function's own syntax.)
 
-        RoslynCodeTaskFactory's own defaults (Microsoft.Build.Framework, Microsoft.Build.Utilities.Core, mscorlib,
-        netstandard) are UNIONED with whatever a task adds via <Reference>, never replaced — but the mscorlib and
-        netstandard it resolves them to are the classic .NET Framework facades bundled at $(MSBuildToolsPath)/ref/. Adding
-        the modern .NET-Core shared-framework System.Reflection.Metadata.dll conflicts with that pair: it is built against
-        System.Private.CoreLib, a DIFFERENT corlib than the one this compilation already committed to, so Object and
-        IDisposable stop resolving and every type the facades also carry becomes ambiguous between the two corlibs. The SDK
-        also carries a .NET Framework build of the same library, bundled for its own net472-hosted tooling; that build
-        targets the SAME classic mscorlib the two defaults already use, so it is the one that resolves cleanly alongside
-        them. The denied-API gate reads an assembly's references through it.
+        The references are the ones the inline factory used, so the task behaves as it did: Microsoft.Build.Framework,
+        Microsoft.Build.Utilities.Core and the classic mscorlib and netstandard facades from $(MSBuildToolsPath)/ref/,
+        plus the SDK's .NET Framework builds of System.Collections.Immutable and System.Reflection.Metadata. The modern
+        shared-framework System.Reflection.Metadata.dll is built against System.Private.CoreLib, a different corlib than
+        the facades, so Object and IDisposable stop resolving beside them; the SDK's own net472 build of the library
+        targets the same classic mscorlib and resolves cleanly. The denied-API gate reads an assembly's references
+        through it.
     -->
     <PropertyGroup>
         <PuckBuildTasksNetFrameworkToolsDirectory>$([System.IO.Path]::Combine('$(MSBuildToolsPath)', 'Sdks', 'Microsoft.NET.Sdk', 'tools', 'net472'))/</PuckBuildTasksNetFrameworkToolsDirectory>
+        <PuckBuildTasksReferenceDirectory>$([System.IO.Path]::Combine('$(MSBuildToolsPath)', 'ref'))/</PuckBuildTasksReferenceDirectory>
+        <PuckBuildTasksSource>$(MSBuildThisFileDirectory)PuckBuildTasks.cs</PuckBuildTasksSource>
+        <_PuckBuildTasksHash>$([MSBuild]::StableStringHash('$([System.IO.File]::GetLastWriteTime($(PuckBuildTasksSource)).Ticks)|$(MSBuildVersion)|$(MSBuildToolsPath)').ToString('x8'))</_PuckBuildTasksHash>
+        <PuckBuildTasksAssembly>$(MSBuildThisFileDirectory)obj/build-tasks/$(_PuckBuildTasksHash)/Puck.BuildTasks.dll</PuckBuildTasksAssembly>
     </PropertyGroup>
 
-    <UsingTask
-        AssemblyFile="$(MSBuildToolsPath)/Microsoft.Build.Tasks.Core.dll"
-        TaskFactory="RoslynCodeTaskFactory"
-        TaskName="PuckBuildTask"
-    >
-        <ParameterGroup>
-            <Operation ParameterType="System.String" Required="true" />
-            <AssemblyPath ParameterType="System.String" />
-            <Bytecode ParameterType="Microsoft.Build.Framework.ITaskItem[]" Output="true" />
-            <CacheDirectory ParameterType="System.String" />
-            <DeclaredReferences ParameterType="Microsoft.Build.Framework.ITaskItem[]" />
-            <DeniedApis ParameterType="Microsoft.Build.Framework.ITaskItem[]" />
-            <DxcCommand ParameterType="System.String" />
-            <Host ParameterType="System.String" />
-            <InputsFile ParameterType="System.String" />
-            <Kind ParameterType="System.String" />
-            <Kinds ParameterType="Microsoft.Build.Framework.ITaskItem[]" />
-            <Layer ParameterType="System.String" />
-            <Layers ParameterType="Microsoft.Build.Framework.ITaskItem[]" />
-            <LockFile ParameterType="System.String" />
-            <Mode ParameterType="System.String" />
-            <Outputs ParameterType="Microsoft.Build.Framework.ITaskItem[]" />
-            <Profiles ParameterType="Microsoft.Build.Framework.ITaskItem[]" />
-            <ProjectDirectory ParameterType="System.String" />
-            <ProjectFile ParameterType="System.String" />
-            <ProjectName ParameterType="System.String" />
-            <References ParameterType="Microsoft.Build.Framework.ITaskItem[]" />
-            <RequestFile ParameterType="System.String" />
-            <Sources ParameterType="Microsoft.Build.Framework.ITaskItem[]" />
-            <Tool ParameterType="System.String" />
-            <TransitiveReferences ParameterType="Microsoft.Build.Framework.ITaskItem[]" />
-        </ParameterGroup>
-        <Task>
-            <Reference Include="$(PuckBuildTasksNetFrameworkToolsDirectory)System.Collections.Immutable.dll" />
-            <Reference Include="$(PuckBuildTasksNetFrameworkToolsDirectory)System.Reflection.Metadata.dll" />
-            <Code Language="cs" Source="$(MSBuildThisFileDirectory)PuckBuildTasks.cs" Type="Class" />
-        </Task>
-    </UsingTask>
+    <UsingTask AssemblyFile="$(PuckBuildTasksAssembly)" TaskName="PuckBuildTask" />
+
+    <!-- Runs before every target that calls the task, and compiles nothing once the assembly exists. A compile writes a
+         directory of its own and moves the assembly into place only if no other node got there first, so two nodes that
+         race on a fresh source both finish with the same file. -->
+    <Target Name="PuckCompileBuildTasks" Condition="!Exists('$(PuckBuildTasksAssembly)')"
+            BeforeTargets="PuckArchitectureCheck;PuckArchitectureDeniedApiCheck;CompileShaders;CollectShaderBytecode;CompileDirect3D11Kernels;CollectDirect3D11KernelBytecode">
+        <PropertyGroup>
+            <_PuckBuildTasksStaging>$(MSBuildThisFileDirectory)obj/build-tasks/$(_PuckBuildTasksHash).$([System.Guid]::NewGuid().ToString('N'))/</_PuckBuildTasksStaging>
+        </PropertyGroup>
+        <ItemGroup>
+            <_PuckBuildTasksReference Include="$(PuckBuildTasksReferenceDirectory)mscorlib.dll;$(PuckBuildTasksReferenceDirectory)netstandard.dll" />
+            <_PuckBuildTasksReference Include="$(PuckBuildTasksReferenceDirectory)Microsoft.Build.Framework.dll;$(PuckBuildTasksReferenceDirectory)Microsoft.Build.Utilities.Core.dll" />
+            <_PuckBuildTasksReference Include="$(PuckBuildTasksNetFrameworkToolsDirectory)System.Collections.Immutable.dll;$(PuckBuildTasksNetFrameworkToolsDirectory)System.Reflection.Metadata.dll" />
+        </ItemGroup>
+        <MakeDir Directories="$(_PuckBuildTasksStaging)" />
+        <Csc Deterministic="true" DisabledWarnings="1701;1702" NoConfig="true" NoLogo="true" NoStandardLib="true" Optimize="true"
+             OutputAssembly="$(_PuckBuildTasksStaging)Puck.BuildTasks.dll" References="@(_PuckBuildTasksReference)" Sources="$(PuckBuildTasksSource)"
+             TargetType="library" UseSharedCompilation="true" />
+        <MakeDir Directories="$([System.IO.Path]::GetDirectoryName('$(PuckBuildTasksAssembly)'))" />
+        <Copy Condition="!Exists('$(PuckBuildTasksAssembly)')" ContinueOnError="true" DestinationFiles="$(PuckBuildTasksAssembly)" SourceFiles="$(_PuckBuildTasksStaging)Puck.BuildTasks.dll" />
+        <RemoveDir Directories="$(_PuckBuildTasksStaging)" ContinueOnError="true" />
+        <Error Condition="!Exists('$(PuckBuildTasksAssembly)')" Text="The build task assembly '$(PuckBuildTasksAssembly)' was not written." />
+    </Target>
 </Project>
