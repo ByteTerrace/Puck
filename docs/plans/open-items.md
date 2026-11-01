@@ -2747,6 +2747,23 @@ step's completion criteria; C1 to C7 are in.
 Owner: an independent reviewer (Argon) · unconfirmed · Next: the researcher
 brief's priorities ([security review](../development/security-review.md)).
 
+- [high, the disclosure-2 lane is fixing] The state-correctness review
+  (Claude) found doors that decide "restricted for this reader" from live
+  membership instead of declared policy, so a non-operator seat can count or
+  locate hidden cells: `world.row state` prints `cellSlots`
+  (`src/Puck.World.Schema/WorldStateDisclosure.cs:440`); `world.hud.template`
+  answers hidden and absent differently (`src/Puck.World/WorldHudCommandModule.cs:236-249`);
+  observations list a row only when a restricted cell exists
+  (`WorldStateDisclosure.cs:219-227`). Mediums on the same cause: row edits,
+  `world.projection` bindings, replica deltas; plus arithmetic faults in a
+  dynamic key or ring age read as absent instead of faulting, and a derived
+  board outside a replay scope going stale on restore. All of it is in the
+  lane's brief. (from: statecorr-review)
+- [low] `world.identify` exposes a SHA-256 of the definition, authored hidden
+  seeds included, to a seat with Control over a screen. Closing a gate on a
+  fault re-arms an Edge rule after a one-tick fault and fires a decision's
+  `OnNoChoice`; decide whether a fault should hold the previous state instead.
+  `WorldBody.GateOpen` and `MotionGateOpen` are near-copies. (from: statecorr-review)
 - [unconfirmed] `ArenaSearchEffectHost` (`src/Puck.State.Search/ArenaSearchEffectHost.cs:30-32`)
   is documented to reproduce the live host's draws, so a search over an arena
   holding private (keyed) sites may compute the private outcomes. Confirm
