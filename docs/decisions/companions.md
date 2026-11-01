@@ -154,13 +154,9 @@ a full world refuses at reservation.
 
 ## Building it
 
-The work, in the "Transfers, federation and server" packet of the
-[open items](../plans/open-items.md#transfers-federation-and-server): the role
-and preferred-driver fields on the reservation member; the destination's role
-declaration (`accept`, a driver pin, a substituted driver, or nothing), with
-`worlds/standard/` declaring `accept` for the companion role; refusal at
-reservation with the player's notice; home re-adoption by incarnation with the
-away placement counted as present (which also fixes a returning companion
-landing detached at its destination slot); placement- or group-keyed driver
-grants in place of `body:42`; and the faerie's lasting state moved into
-registers.
+The faerie's lasting state still moves into registers, and its driver grants
+become placement- or group-keyed rather than `body:42`. The
+[companion protocol plan](../plans/companion-redesign.md#9-build-plan) owns the
+remaining custody transitions, lifetime handling, and debug-world trip; the
+[Transfers, federation and server packet](../plans/open-items.md#transfers-federation-and-server)
+ranks that work.
