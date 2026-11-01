@@ -105,7 +105,7 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
 
     // Whether a device reports both base features a counted indirect draw needs.
     private static bool SupportsIndirectDrawFeatures(IReadOnlyList<bool> support) =>
-        ((DrawIndirectFirstInstanceFeatureIndex < support.Count) && support[((int)MultiDrawIndirectFeatureIndex)] && support[((int)DrawIndirectFirstInstanceFeatureIndex)]);
+        ((MultiDrawIndirectFeatureIndex < support.Count) && support[((int)MultiDrawIndirectFeatureIndex)]);
 
     private readonly IVulkanLogicalDeviceApi m_logicalDeviceApi;
     private readonly IVulkanPhysicalDeviceApi m_physicalDeviceApi;
@@ -194,7 +194,7 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
         }
         featureStructureTypes.Add(item: StructureTypePhysicalDeviceShaderDemoteToHelperInvocationFeatures);
         // Core in Vulkan 1.1; DrawIndex lets every indirect record carry its own identity without requiring the optional
-        // drawIndirectFirstInstance base feature. All supported devices expose shaderDrawParameters.
+        // drawIndirectFirstInstance base feature. Query support before enabling it for the vertex pipelines.
         const uint ShaderDrawParameters = 1000063000u;
         if (!m_physicalDeviceApi.IsExtensionFeatureSupported(instance: instance, physicalDeviceHandle: physicalDeviceHandle, structureType: ShaderDrawParameters)) {
             throw VulkanResultExtensions.Unavailable(reason: "The Vulkan device does not report shaderDrawParameters, which GPU mesh selection needs to read indirect draw identities.");

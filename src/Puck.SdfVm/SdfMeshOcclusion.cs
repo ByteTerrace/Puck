@@ -17,7 +17,6 @@ internal sealed class SdfMeshOcclusion : IDisposable {
     // The kernel's steps, pushed from SdfKernelInterfaces.MeshLevelShift up.
     private const uint EarlyStep = 0u;
     private const uint DepthStep = 1u;
-    private const uint GroupSize = 64u;
     private const uint LateStep = 2u;
     // Controls only; bounds and level metadata live in the shared mesh region. Paired with sdf-mesh-selection.hlsli:
     // one header row, three detail rows, ten cull rows.
@@ -116,6 +115,7 @@ internal sealed class SdfMeshOcclusion : IDisposable {
         Ready(buffer: m_counts, commandBuffer: commandBuffer, recorder: recorder, source: GpuAccess.TransferWrite, sourceStage: GpuStage.Transfer);
 
         if (!m_visibleCleared) {
+            var copied = m_seedVisible is not null;
             recorder.ClearStorageBuffer(commandBufferHandle: commandBuffer, bufferHandle: m_visible!.BufferHandle, sizeBytes: m_visible.SizeBytes);
             if (m_seedVisible is { } previous) {
                 recorder.TransitionBuffer(commandBufferHandle: commandBuffer, bufferHandle: previous.BufferHandle,
@@ -123,12 +123,12 @@ internal sealed class SdfMeshOcclusion : IDisposable {
                     destinationAccessMask: GpuAccess.TransferRead, destinationStageMask: GpuStage.Transfer);
                 recorder.TransitionBuffer(commandBufferHandle: commandBuffer, bufferHandle: m_visible.BufferHandle,
                     sourceAccessMask: GpuAccess.TransferWrite, sourceStageMask: GpuStage.Transfer,
-                    destinationAccessMask: GpuAccess.TransferWrite, destinationStageMask: GpuStage.Transfer);
+                    destinationAccessMask: GpuAccess.CopyWrite, destinationStageMask: GpuStage.Transfer);
                 recorder.CopyBuffer(commandBufferHandle: commandBuffer, sourceBufferHandle: previous.BufferHandle,
                     destinationBufferHandle: m_visible.BufferHandle, sizeBytes: previous.SizeBytes);
                 m_seedVisible = null;
             }
-            Ready(buffer: m_visible, commandBuffer: commandBuffer, recorder: recorder, source: GpuAccess.TransferWrite, sourceStage: GpuStage.Transfer);
+            Ready(buffer: m_visible, commandBuffer: commandBuffer, recorder: recorder, source: copied ? GpuAccess.CopyWrite : GpuAccess.TransferWrite, sourceStage: GpuStage.Transfer);
             m_visibleCleared = true;
         }
 
@@ -318,7 +318,10 @@ internal sealed class SdfMeshOcclusion : IDisposable {
             pipelineLayoutHandle: pipeline.LayoutHandle,
             stageFlags: GpuShaderStage.Compute
         );
-        recorder.Dispatch(commandBufferHandle: commandBuffer, groupCountX: invocations.CeilingDivide(divisor: GroupSize), groupCountY: 1u, groupCountZ: 1u);
+        var groups = invocations.CeilingDivide(divisor: SdfKernelInterfaces.MeshSelectionGroupSize);
+        recorder.Dispatch(commandBufferHandle: commandBuffer,
+            groupCountX: Math.Min(groups, SdfKernelInterfaces.MeshSelectionGroupsPerRow),
+            groupCountY: groups.CeilingDivide(divisor: SdfKernelInterfaces.MeshSelectionGroupsPerRow), groupCountZ: 1u);
     }
     // Readies a buffer a kernel wrote or read for the next kernel's reads and writes.
     private static void Ready(IGpuRecorder recorder, nint commandBuffer, IGpuBuffer buffer, GpuAccess source, GpuStage sourceStage) =>

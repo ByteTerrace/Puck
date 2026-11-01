@@ -49,6 +49,10 @@ public sealed class SdfKernelInterfaces {
     /// from the one its record names (<see cref="SdfMeshRecord.LevelTableWord"/>). The occlusion kernel's pushed index
     /// holds its step from this bit up and the pyramid level it writes below it.</summary>
     public const int MeshLevelShift = 24;
+    /// <summary>The selection kernel's threads per group.</summary>
+    public const uint MeshSelectionGroupSize = 64u;
+    /// <summary>The selection dispatch's groups per row, within both backends' per-axis limit.</summary>
+    public const uint MeshSelectionGroupsPerRow = 65535u;
     /// <summary>The raster pass's GPU selection controls: one header, three level-choice rows and ten cull rows.
     /// Draw bounds and mesh level metadata are retained in the shared mesh region.</summary>
     public const string MeshOcclusionCandidates = "sdfMeshOcclusionCandidates";

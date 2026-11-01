@@ -154,8 +154,9 @@ bool sdfOcclusionMaySee(float3 center, float3 halfX, float3 halfY, float3 halfZ,
     return (farthest == SdfOcclusionUncovered) || ((((asfloat(farthest) * 1.0001) + 1.0e-3)) >= nearest);
 }
 
-[numthreads(64, 1, 1)]
+[numthreads(SDF_MESH_SELECTION_GROUP_SIZE, 1, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID) {
+    id.x += id.y * (SDF_MESH_SELECTION_GROUP_SIZE * SDF_MESH_SELECTION_GROUPS_PER_ROW);
     uint step = (pushedIndex.index >> SDF_MESH_LEVEL_SHIFT);
 
     if (step == SdfOcclusionDepth) {

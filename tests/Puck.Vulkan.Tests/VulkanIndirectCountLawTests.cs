@@ -82,10 +82,29 @@ public sealed unsafe class VulkanIndirectCountLawTests {
         }
     }
 
-    private static VulkanGpuRecorder Recorder(bool drawIndirectCountEnabled) {
+    [Fact]
+    public void FixedRecordsBatchWithoutNativeCountingWhenMultiDrawIsAvailable() {
+        var recorder = Recorder(drawIndirectCountEnabled: false, multiDraw: true);
+        Draws = [];
+        Bases = [];
+        try {
+            recorder.DrawIndirectCount(argumentBufferHandle: ArgumentBuffer, argumentBufferOffset: 40UL,
+                commandBufferHandle: CommandBuffer, countBufferHandle: CountBuffer, countBufferOffset: 0UL,
+                maxDrawCount: 3u, pipelineLayoutHandle: 0x7000);
+            Assert.Equal(expected: [10u], actual: Bases);
+            Assert.Single(collection: Draws);
+            Assert.Equal(expected: (44UL, 3u), actual: (Draws[0].Offset, Draws[0].MaxDrawCount));
+        } finally {
+            Draws = null;
+            Bases = null;
+        }
+    }
+
+    private static VulkanGpuRecorder Recorder(bool drawIndirectCountEnabled, bool multiDraw = false) {
         var commands = new VulkanDeviceCommands(
             deviceHandle: DeviceHandle,
             drawIndirectCountEnabled: drawIndirectCountEnabled,
+            multiDrawIndirectEnabled: multiDraw,
             memory: null,
             procedures: new VulkanProcResolver(
                 getDeviceProcAddr: &Resolve,

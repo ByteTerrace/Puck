@@ -261,9 +261,18 @@ at the pushed word base plus five times that index, through the
 [`vk::builtin` mapping](https://github.com/microsoft/DirectXShaderCompiler/blob/main/docs/SPIR-V.rst)
 in DXC. These sources agree on the mapping. Without native counted drawing,
 [`vkCmdDrawIndirect`](https://docs.vulkan.org/refpages/latest/refpages/source/vkCmdDrawIndirect.html)
-issues one initialized slot per call and the base advances with it. Empty
-rejected slots preserve order. `VulkanIndirectCountLawTests` exercises native
-and fallback offsets without a driver. First instance is zero in both paths.
+issues the initialized slots in one call when multi-draw is enabled; without
+multi-draw it issues one slot per call and advances the base with it. Empty
+rejected slots preserve order. `VulkanIndirectCountLawTests` exercises native,
+fixed multi-draw and single-slot fallback offsets without a driver. First
+instance is zero in every path. Selection dispatches use bounded two-dimensional
+groups so the draw capacity does not depend on the API's single-axis limit.
+
+On Direct3D 12 an indirect argument buffer read by a vertex shader needs both
+`INDIRECT_ARGUMENT` and shader-resource state. Growing the per-draw history
+clears its new tail through UAV access, transitions it to `COPY_DEST`, copies
+the previous history and then makes it shader-readable/writable. `TransferWrite`
+names the storage clear; `CopyWrite` names the copy destination.
 
 ## Registers and bindings
 

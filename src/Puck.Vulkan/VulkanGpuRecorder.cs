@@ -282,7 +282,8 @@ public sealed class VulkanGpuRecorder(IVulkanDeviceContext deviceContext, IVulka
         // DrawIndex starts at zero for each native call. The pushed base names the first argument record, so vertex
         // pulling reads that record's identity without drawIndirectFirstInstance, including on the fallback.
         Span<byte> pushed = stackalloc byte[sizeof(uint)];
-        var calls = CanDrawIndirectCount ? Math.Min(maxDrawCount, 1u) : maxDrawCount;
+        var batch = CanDrawIndirectCount || Device.MultiDrawIndirectEnabled;
+        var calls = batch ? Math.Min(maxDrawCount, 1u) : maxDrawCount;
         for (var index = 0u; index < calls; index++) {
             var offset = argumentBufferOffset + ((ulong)index * GpuDrawIndirectCommand.StrideBytes);
             System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(pushed, (uint)(offset / sizeof(uint)));
@@ -291,7 +292,7 @@ public sealed class VulkanGpuRecorder(IVulkanDeviceContext deviceContext, IVulka
             recordingApi.DrawIndirectCount(
                 bufferHandle: argumentBufferHandle, commandBufferHandle: commandBufferHandle,
                 countBufferHandle: countBufferHandle, countBufferOffset: countBufferOffset, device: Device,
-                maxDrawCount: CanDrawIndirectCount ? maxDrawCount : 1u,
+                maxDrawCount: batch ? maxDrawCount : 1u,
                 offset: offset + (GpuDrawIndirectCommand.VertexCountWord * sizeof(uint)), stride: GpuDrawIndirectCommand.StrideBytes);
         }
     }
