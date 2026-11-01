@@ -308,7 +308,7 @@ this plan:
    applied per material or per style: a material's palette row or an authored
    style in `worlds/standard/` opts into banding, its threshold and softness,
    its shadow tint, its outline and its specular shape, and the world document
-   supplies the default style a material inherits. One scene can then mix
+   supplies the default style a material inherits (the owner's ruling: a style per material, not one look per world). One scene can then mix
    painterly foliage, cel-shaded characters and continuous screens, as the
    Wind Waker direction asks. `render.toon` and `world.toon` become the
    world's default style and the live lever that overrides it, with the same
@@ -339,7 +339,7 @@ a view only through the analytic room glow
 and the trace ignores it. Decision: a screen, a portal opening and a window
 onto another world are area emitters in the relight, shaded from the same
 reduced image the room glow reads, with LTC response at the hit (decision 5).
-A portal is a display for lighting purposes: the other world's image already
+A portal is a display for lighting purposes (the owner's ruling): the other world's image already
 carries that world's sun and sky, so the relight uses the image, and no
 directional light crosses a portal. An author who wants the other side's sun
 to cast through places a light. This keeps every residency's lighting its own

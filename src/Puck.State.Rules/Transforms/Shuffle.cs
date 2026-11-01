@@ -1,9 +1,7 @@
 namespace Puck.State.Rules;
 
 public static partial class ArenaTransforms {
-    // Fisher-Yates from the top: position i takes a uniform pick from [0, i], the same multiply-high map a random
-    // transfer selects with, one sample per position. n members consume n - 1 samples, so a replay that starts the
-    // site at the same cursor reproduces the permutation.
+    // Fisher-Yates uses unbiased bounded selections. The stream persists every accepted and rejected raw word.
     private static bool TryShuffle(in ArenaTransformContext context, ArenaTransform.Shuffle shuffle, out bool moved, out EffectRefusal refusal) {
         moved = false;
 
@@ -47,19 +45,16 @@ public static partial class ArenaTransforms {
         var sample = 0L;
 
         for (var position = (count - 1); (position > 0); position--) {
-            if (!TrySample(
+            if (!TrySelect(
                 code: TransformRefusal.ShuffleDrawSite,
+                count: (position + 1),
                 draws: ref draws,
                 refusal: out refusal,
-                sample: out sample
+                sample: out sample,
+                selected: out var pick
             )) {
                 return false;
             }
-
-            var pick = Select(
-                count: (position + 1),
-                sample: sample
-            );
 
             (order[position], order[pick]) = (order[pick], order[position]);
         }
