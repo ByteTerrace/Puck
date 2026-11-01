@@ -1042,8 +1042,8 @@ public sealed class SdfSampledLattice {
         m_signKnown = [];
         m_signInside = [];
     }
-    // An edge root stays bracketed by its original signs, and the search ends once the bracket is a 4,096th of the edge
-    // wide, its root then the bracket's middle, within an 8,192th of the zero. Each round measures two trials a
+    // An edge root stays bracketed by its original signs, and the search ends once the bracket is an 8,192th of the edge
+    // wide, its root then the bracket's middle, within a 16,384th of the zero. Each round measures two trials a
     // tolerance apart about an estimate (the linear estimate, first, then the secant through the last round's trials, or
     // the false position between the bracket's ends where that secant leaves the bracket), so a root the
     // estimate all but hits closes the bracket that round; the bracket becomes the part between its ends and the trials
@@ -1052,10 +1052,10 @@ public sealed class SdfSampledLattice {
     // takes more than MostRounds readback round trips of its group's.
     private sealed class CrossingRoot {
         // The bracket width at which a search ends.
-        public const float Tolerance = (1f / 4096f);
+        public const float Tolerance = (1f / 8192f);
         // The rounds a search takes at most: one about the linear estimate, one about the next false position, and the
-        // eight thirdings that close an edge's bracket.
-        public const int MostRounds = 10;
+        // nine thirdings that close an edge's bracket.
+        public const int MostRounds = 11;
         // Half the gap between a round's trials about an estimate: under half the tolerance, so a root between them
         // ends the search.
         private const float Straddle = (0.45f * Tolerance);
@@ -1206,8 +1206,8 @@ public sealed class SdfSampledLattice {
         return points;
     }
     /// <summary>Answers a chunk of the current <see cref="CrossingPoints"/> round with field values. Every root remains
-    /// on its own edge, bracketed, and its search ends once the bracket is a 4,096th of the edge wide, the root within an
-    /// 8,192th of the zero, in at most ten rounds.</summary>
+    /// on its own edge, bracketed, and its search ends once the bracket is an 8,192th of the edge wide, the root within an
+    /// 16,384th of the zero, in at most eleven rounds.</summary>
     /// <param name="first">The first point answered in the current round.</param>
     /// <param name="values">One field value per point.</param>
     /// <exception cref="ArgumentException">The chunk reaches past the current round or holds a non-finite value.</exception>

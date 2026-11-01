@@ -448,13 +448,13 @@ public sealed class SdfSampledLatticeLawTests {
         return used.Select(selector: Root).Distinct().Count();
     }
 
-    // Every searched crossing of a true distance (a sphere, a turned box, the carved box) lies within an 8,192th of its
+    // Every searched crossing of a true distance (a sphere, a turned box, the carved box) lies within a 16,384th of its
     // edge of the zero, so its field is no larger than that; the search takes a few rounds a root, not a dozen.
     [InlineData(0)]
     [InlineData(1)]
     [InlineData(2)]
     [Theory]
-    public void ACrossingLandsWithinAnEightThousandthOfItsEdgeInAFewRounds(int shape) {
+    public void ACrossingLandsWithinASixteenThousandthOfItsEdgeInAFewRounds(int shape) {
         Func<Vector3, float> field = shape switch {
             0 => static point => (point.Length() - 0.137f),
             1 => static point => Box(point: point, turn: 0.3f),
@@ -487,12 +487,12 @@ public sealed class SdfSampledLatticeLawTests {
             // A lattice sample a gradient is read at, not a crossing.
             if ((MathF.Abs(at.X - MathF.Round(at.X)) < 1e-3f) && (MathF.Abs(at.Y - MathF.Round(at.Y)) < 1e-3f) && (MathF.Abs(at.Z - MathF.Round(at.Z)) < 1e-3f)) { continue; }
             checkedCrossings++;
-            Assert.True(condition: (MathF.Abs(field(arg: point)) <= ((Cell / 8192f) + 1e-6f)), userMessage: $"the crossing at {point} reads {field(arg: point)}, past an 8,192th of its {Cell} edge");
+            Assert.True(condition: (MathF.Abs(field(arg: point)) <= ((Cell / 16384f) + 2e-7f)), userMessage: $"the crossing at {point} reads {field(arg: point)}, past a 16,384th of its {Cell} edge");
         }
 
         Assert.True(condition: (checkedCrossings > 100), userMessage: $"only {checkedCrossings} crossings were checked");
         Assert.True(condition: (samples <= (5 * roots)), userMessage: $"{roots} roots took {samples} samples");
-        // Each round is a readback round trip: no search takes more than ten, where bisection took thirteen.
-        Assert.True(condition: (rounds <= 10), userMessage: $"the search took {rounds} rounds");
+        // Each round is a readback round trip: no search takes more than eleven, where bisection took thirteen.
+        Assert.True(condition: (rounds <= 11), userMessage: $"the search took {rounds} rounds");
     }
 }
