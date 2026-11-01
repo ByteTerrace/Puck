@@ -924,6 +924,18 @@ store (AGENTS.md), and work proportional to change.
   spills, pick each tap's signs from bits (x from 0x9, y from 0xC, z from 0xA,
   bit `tap - 1`). Any edit moves the bake identity, so batch it with the next
   bake-kernel change. (from: perf-guidance)
+- [high] A static copy of a prototype bakes on its own: a static group is one
+  instance in world space (`SdfMeshBakeGroup.cs:12-13`, planned at `:299`), so
+  copies that differ only by a rigid transform never share a bake the way
+  dynamic copies do. The lawn's 307 static scenery rows (11 tree variants,
+  shrubs, boulders, flowers and 156 copies of one tuft) took the debug world's
+  unique cold bakes from 1,368 to 1,671 and its groups from 6,183 to 7,236
+  (`[sdf.mesh-bake] start residency=world`), while its 748 wind-grass parts,
+  dynamic, added only shared groups. Scatter is the floor's whole vocabulary
+  and the plan spreads it over a 400 m floor, so this decides whether the
+  cold-bake bar can hold: bake a static copy in its prototype's frame and
+  share it across copies whose transform is rigid (a uniform scale admitted),
+  as the dynamic path does. (from: c1-groundcover)
 
 ### Certified field contact
 
@@ -1434,6 +1446,16 @@ and warm builds measured.
   shader package directory holding binaries but no manifest; clearing
   `src/Puck.World/obj/Release/net11.0/worlds` and building again passed.
   Unconfirmed as a packaging race.
+- [high] A windowed Direct3D 12 debug World died on its sixth `world.reload` in
+  about ten minutes with an access violation in the native allocator, on a
+  bake worker loading a stored mesh: `MimallocAllocator.mi_malloc` ←
+  `OwnedBuffer<Vector3>.Resize` ← `SdfMesh.NativeCopy` ←
+  `SdfMeshLibrary.TryLoad` ← `SdfMeshPathBake.Load` ← `SdfMeshPathBake.Work`
+  (exit 139, `0xC0000005`, right after the reload's `[sdf.mesh-gi] scene`
+  line; the machine was short of memory, its working set paged down to
+  1.4 GB). Reproduce with repeated reloads under `world.wait bakes`, and check
+  whether a load can run against a mimalloc heap another thread owns or one a
+  reload has torn down. (from: c1-groundcover)
 
 ### The valley's terrain
 
@@ -2612,6 +2634,22 @@ movement-facing scheme returns.
   the room-first `fade` hides her, the design working as built).
 - The tight-space camera course's three-up `camera-compare` layout and a live
   mode toggle on the Debug page remain to author (`camera-course.puck`).
+- [high] Solid copies of an unscoped flat-crown tree (the standard's
+  `flatCrownTree` without its relief noise: a trunk, three yawed Capsule
+  branches and six flat `SmoothUnion` Superellipsoid crowns) made the chase
+  camera's clearance read an obstruction with nothing near: at the stage
+  `world.view.camera` read `boom=2.144/4.2 clearance=shortened`, and at
+  (0, 0, 150), (-150, 0, 0) and (60, 0, -100) the eye sat on the target. With
+  the lawn's solids off it read `clearance=open` at 4.012; bisecting by kind
+  with `world.reload` left the flat crowns (oak and boulder solids alone kept
+  it open or nearly so), and straightening their branches or thickening their
+  crowns live did not clear it. The clearance sphere-casts the presentation
+  field of every solid placement (`WorldCameraClearance.cs:186`, built at
+  `WorldFramePresenter.cs:480-511`), so one creation's field poisons the
+  camera valley-wide. The lawn keeps the trees in one scope with a 2.5 cm
+  relief; find why the unscoped creation's field answers a hit far from it
+  (a sphere cast through the fixed-point evaluator with smooth unions joining
+  the global accumulator is the first suspect). (from: c1-groundcover)
 
 ### Temporal shimmer and cadence flicker
 
