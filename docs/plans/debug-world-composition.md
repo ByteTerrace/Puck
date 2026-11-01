@@ -147,12 +147,12 @@ diffuse, and specular low enough that highlights never read as leaves.
 
 | Zone | Family | Template | Treatment |
 |---|---|---|---|
-| Floor | Lawn | The floor disc (`debug.puck`'s `floor`) takes the painterly set's turf slot ([the sets](terrain-pass.md#the-two-standard-material-sets)) with brush-scale breakup | Flat yellow-green, slightly warmer toward the walls |
-| Floor | Paths | `sceneryPatch` with flat radii in a paving colour, laid end to end along each route | Terracotta, the one place edges stay sharp |
+| Floor | Lawn | The floor disc (`lawn.puck`'s `floor`, the standard's `paintedGround`) in one turf value, broken by flat `sceneryPatch` masses in a shade and a light value; the painterly set's turf slot ([the sets](terrain-pass.md#the-two-standard-material-sets)) takes over the value when it lands | Flat yellow-green; the warmer band toward the walls is the terrain pass's |
+| Floor | Paths | Paints on the floor disc (`paintedGround`): quadratic Bézier sweeps in a paving colour, costing no draw, bake or contact | Terracotta, the one place edges stay sharp |
 | Floor | Grass | `windMeadowTile` where the camera comes close (the meadow, the spawn's lawn, the pool's banks, the approach); `grassTuft` clusters wider | The existing six-value ramp, one gust phase across the whole floor through the placed world position |
 | Floor | Flowers | A new `flowerCluster`: the tuft's stems with grouped coloured heads | Yellow and white near paths and water, as the overview's foreground |
 | Floor | Shrubs | A new `scrubClump`: two to four crowns at ground level, no trunk | Dark blue-green, in groups of three along banks and the hall's base |
-| Floor | Trees | `broadleafTree`, and a `flatCrownTree` variant whose crowns spread wider than tall | Grouped crowns in three greens; flat crowns where the overview shows them |
+| Floor | Trees | Four families on one `groupedTree`: `broadleafTree` (rounded), `flatCrownTree` (spreading, wider than tall), `columnTree` (tall and narrow) and `weepingTree` (a dome over hanging masses), each taking `height`, `spread`, `lean` and `leaves` | Grouped crowns in three flat greens; the families mixed by area so each reads as a species and no two trees as clones (the owner's answer: variety) |
 | Floor | Boulders | `mossyRock` with its palette made a parameter so the canyon set wears terracotta and peach strata over the same stone | Low, warm, rounded; moss only on the shaded side |
 | Floor | Banks and sand | `sceneryPatch` | Relieved caps that break the lawn's plane where paths bend |
 | Slopes | Green ledges | `sceneryPatch` in turf colour on each ledge the terrain's material layers show as turf | Flat green bands on the strata |
@@ -247,8 +247,6 @@ memo and the weather decision reach them.
   or moves into the gallery's level 3 as the discovery pack proposes.
 - Whether the stream may run through the centre-west of the floor past the
   spawn (this plan), or should hug the west wall as the overview frames it.
-- The tree form: the standard's rounded courtyard oak, the overview's flat
-  spreading crowns, or both families on the floor.
 - The sun's direction and the time of day, which the terrain pass already lists
   as the owner's call and which fixes where the rim's shadow falls on the lawn.
 

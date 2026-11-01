@@ -10,6 +10,10 @@ six broadleaf trees, seven mossy rocks, five banks, eight sand caps and thirteen
 clusters of six grass tufts. A low lawn cap meets the existing debug floor;
 the port does not replace that floor or import the courtyard's pose stations.
 
+The meadow is the densest patch of the floor's ground cover; [the lawn](lawn.md)
+carries its families west across the south lawn to the spawn, imports this
+module, and shares its wind cells, which this module exports.
+
 The reusable designs live in [foliage.puck](../standard/foliage.puck), beside
 the standard terrain library. `broadleafTree`, `mossyRock`, `grassTuft`,
 `sceneryPatch`, `sceneryScatter` and `windMeadowTile` emit prototypes or placements

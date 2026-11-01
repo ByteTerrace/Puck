@@ -12,11 +12,10 @@ middle of the lawn left open. It is lane C1 of the
 ## The ground and its paths
 
 The floor (`floor`, placed by the Moth basis) is the standard's
-`paintedGround`: the 740 m disc in a warmer turf value and an elliptical lawn
-field 1.5 mm proud of it, centred on the south lawn, in a cooler one. The eight
-paths are paints on the field, quadratic Béziers in world X/Z (`lawnPaths`):
-colour drawn at the hit, so they cost no draw, bake or contact and keep the
-sharp edge the art direction asks of paths alone. They run from the spawn to the
+`paintedGround`: the 740 m disc in one flat turf value carrying eight paths as
+paints, quadratic Béziers in world X/Z (`lawnPaths`). A paint is colour drawn
+at the hit, so the paths cost no draw, bake or contact and keep the sharp edge
+the art direction asks of paths alone. They run from the spawn to the
 entrance, north of the studio past the climate wing's reservation into the
 meadow between its two western banks, south past the studio, and west to the
 edge of the stream and pool corridor, which [C3](../../docs/plans/debug-world-composition.md#the-order)
@@ -43,8 +42,10 @@ whose flower would land on a neighbouring path is dropped.
 | Turf masses | `sceneryPatch` | `lawn-patch-0..9`, shade under the groves and lighter sweeps |
 
 Each tree family is a `groupedTree`: a trunk, roots and branches in bark and
-overlapping `Superellipsoid` crowns in three flat leaf values, with no relief
-noise. Every family takes `height`, `spread`, `lean` (radians, tipping everything
+overlapping `Superellipsoid` crowns in three flat leaf values, under a faint
+2.5 cm relief that keeps each creation in one field scope (a solid tree
+without it broke the chase camera's clearance across the valley). Every family
+takes `height`, `spread`, `lean` (radians, tipping everything
 above the roots) and `leaves`, so the floor mixes species and no two trees of one
 species read as a clone. To change the floor's mix, change a group's `kind` in
 `lawnGroups`; to change a species everywhere, change its variant rows in the

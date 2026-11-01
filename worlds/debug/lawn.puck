@@ -156,10 +156,9 @@ let lawnPatchTones = ["#4F6E2C", "#8DA845"]
 
 prototypes {
   // The valley's floor (valley.puck), placed by the Moth basis: a disc running on under the walls to their outer feet,
-  // so its rim never shows inside the ring, warmer toward the walls than the lawn field it carries.
+  // so its rim never shows inside the ring.
   paintedGround(
-    id: "floor", radius: 740, ground: "#8A9A46", turf: "#7C9A3C", paving: "#C08A62", paths: lawnPaths,
-    pathWidth: lawnPathWidth, field: { position [45, -40], r [150, 120] }
+    id: "floor", radius: 740, turf: "#6C8A33", paving: "#BC7F58", paths: lawnPaths, pathWidth: lawnPathWidth
   )
   broadleafTree(id: "lawn-oak-0")
   broadleafTree(id: "lawn-oak-1", height: 1.12, spread: 0.92, lean: 0.06)
@@ -176,7 +175,7 @@ prototypes {
   scrubClump(id: "lawn-scrub-1", size: 0.8, crowns: 2)
   scrubClump(id: "lawn-scrub-2", size: 1.2, crowns: 4)
   mossyRock(id: "lawn-boulder-0", colors: canyonRock)
-  mossyRock(id: "lawn-boulder-1", colors: ["#B9724C", "#D9A47A", "#64713A"])
+  mossyRock(id: "lawn-boulder-1", colors: ["#A85E3C", "#C88459", "#64713A"])
   flowerCluster(id: "lawn-flowers-0")
   flowerCluster(id: "lawn-flowers-1", head: "#F1EDE0", accent: "#F2D257", count: 5)
   grassTuft(id: "lawn-tuft")

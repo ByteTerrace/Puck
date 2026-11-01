@@ -21,7 +21,7 @@ let meadowBlades = map(range(0, 144), i => {
 
 // Stone palettes for mossyRock: the stone, its shoulder and the moss cap.
 let limestoneRock = ["#888778", "#A7A28B", "#657044"]
-let canyonRock = ["#A9573A", "#C9825A", "#5E6E36"]
+let canyonRock = ["#9A4A2E", "#B8653F", "#5E6E36"]
 
 template mossyRock(id, colors = limestoneRock) {
   prototype $"{id}" {
@@ -80,8 +80,9 @@ template mossyRock(id, colors = limestoneRock) {
 }
 
 // One grouped-shape tree: a trunk, roots and branches in bark, and a handful of overlapping rounded crown masses in
-// flat leaf values, with no relief noise. Rows are authored upright; `lean` (radians about the author Z axis, through
-// the trunk's foot) tips the trunk, branches and crowns, never the roots.
+// flat leaf values. Rows are authored upright; `lean` (radians about the author Z axis, through the trunk's foot) tips
+// the trunk, branches and crowns, never the roots. The faint relief keeps the creation in one field scope: unscoped,
+// a solid flat-crown copy read as an obstruction to the chase camera's clearance at every position in the valley.
 // trunk { radius, center, half }; roots [{ position, r, yaw }]; branches [{ position, yaw, tilt, r, h }], each a
 // Capsule rising from its position; crowns [{ position, r }], material cycling through the leaves.
 template groupedTree(id, name, bark, branchBark, leaves, trunk, roots, branches, crowns, lean = 0, smooth = 0.25) {
@@ -93,6 +94,13 @@ template groupedTree(id, name, bark, branchBark, leaves, trunk, roots, branches,
         [bark, branchBark],
         map(leaves, color => { color: color, roughness: 0.93, specular: 0.03, wrap: 0.3 })
       )
+      noise {
+        frequency: 1.6
+        amplitude: 0.025
+        octaves: 2
+        gain: 0.4
+        seed: 5123
+      }
       shape Cylinder "trunk" {
         position [-trunk.center * sine(lean), trunk.center * cosine(lean), 0]
         scale [trunk.radius, trunk.half, trunk.radius]
@@ -592,19 +600,16 @@ template sceneryScatter(id, prototype, rows, origin = [0, 0, 0], contact = null)
   }
 }
 
-// A ground of flat painted turf: a disc in the outer turf value and a raised field in the inner value, 1.5 mm proud
-// of it so neither surface ties, carrying painted paths. A paint is colour at the hit, never relief, so the paths
-// cost no draw, bake or contact and keep the art direction's sharp edges. `field` is { position [x, z], r [rx, rz] }
-// in world X/Z; each path is { a [x, z], b [x, z], c [x, z] }, a quadratic Bézier of `pathWidth` in world X/Z,
-// at most eight. Paint positions on a static placement are in the frame of the slot that wins the hit, which for
-// static geometry is world space, so the ground is placed at the origin.
-template paintedGround(id, radius, ground, turf, field, paving, paths = [], pathWidth = 2.4, depth = 0.2) {
+// A ground disc of flat turf whose paths are paints: colour drawn at the hit, never relief, so a path costs no draw,
+// bake or contact and keeps the art direction's sharp edge. Each path is { a [x, z], b [x, z], c [x, z] }, a quadratic
+// Bezier of `pathWidth` in world X/Z, at most eight (a palette slot's paint limit). A paint on a static placement is in
+// world space, so the ground is placed at the origin.
+template paintedGround(id, radius, turf, paving, paths = [], pathWidth = 2.4, depth = 0.2) {
   prototype $"{id}" {
     document {
       schema: "puck.creation.v1"
       name: id
       palette [
-        { color: ground, roughness: 0.95, specular: 0.02 }
         {
           color: turf
           roughness: 0.95
@@ -626,16 +631,6 @@ template paintedGround(id, radius, ground, turf, field, paving, paths = [], path
         material: 0
         position [0, -depth, 0]
         scale [radius, depth, radius]
-      }
-      // An elliptical prism extruded along Y, so its top is flat; its position is negated into the author frame.
-      shape Prism "field" {
-        profile {
-          kind: "Ellipse"
-        }
-        material: 1
-        position [-field.position[0], 0.0015 - depth, -field.position[1]]
-        scale [field.r[0], field.r[1], depth]
-        rotation [-0.70710678, 0, 0, 0.70710678]
       }
     }
   }
