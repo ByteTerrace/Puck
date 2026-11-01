@@ -169,15 +169,14 @@ public sealed record WorldViewLayout(string Name, IReadOnlyList<WorldViewSlot> S
 /// <see cref="WorldSeatYawReference.World"/> — a body-relative yaw already rides the body.</param>
 /// <param name="ClearanceMode">The author's tight-space behavior, <see cref="WorldCameraClearanceChoice.Fade"/> or
 /// <see cref="WorldCameraClearanceChoice.Cutaway"/>; players may override it.</param>
-/// <param name="ClearanceMaxElevation">The cutaway boom's highest elevation above the seat's level plane, in radians,
-/// within [0, π/2]. Fade never rises, so only cutaway reads it.</param>
+/// <param name="MaxRise">The most the boom rises above the rig's own elevation, in radians, for each treatment.</param>
 /// <param name="CharacterFade">The full-size fade distances; absent, fade never dissolves the body and holds no
 /// minimum boom.</param>
 /// <param name="AutoFirstPerson">The automatic pull-in policy; absent, automatic pull-in is unavailable whatever a
 /// player or session asks.</param>
 /// <param name="Boom">Optional authored distance limits and input step for the interactive orbit.</param>
 public sealed record WorldSeatViewControl(WorldSeatYawReference YawReference, float MinPitch, float MaxPitch,
-    WorldCameraClearanceChoice ClearanceMode, float ClearanceMaxElevation,
+    WorldCameraClearanceChoice ClearanceMode, WorldCameraClearanceRise MaxRise,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldSeatFollow? Follow = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldCameraCharacterFade? CharacterFade = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldCameraAutoFirstPerson? AutoFirstPerson = null,
@@ -275,8 +274,8 @@ public sealed record WorldViewDefaults(IReadOnlyList<WorldViewLayout>? Layouts =
             ]
         ),
         SeatControlRaw: new WorldSeatViewControl(
-            ClearanceMaxElevation: 0f,
             ClearanceMode: WorldCameraClearanceChoice.Fade,
+            MaxRise: new WorldCameraClearanceRise(Fade: 0f, Cutaway: 0f),
             MaxPitch: 0f,
             MinPitch: 0f,
             YawReference: WorldSeatYawReference.World

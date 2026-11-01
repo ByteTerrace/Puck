@@ -236,8 +236,12 @@ public static partial class WorldDefinitionValidator {
                         errors.Add(item: $"{opPath}.closeTargetFullFraction must be less than closeTargetStartFraction.");
                     }
                     if (lookAt.CloseTargetOffset is { } closeTarget) {
-                        if (!VectorFunctions.IsFinite(vector: closeTarget)) {
-                            errors.Add(item: $"{opPath}.closeTargetOffset must contain finite coordinates.");
+                        if (
+                            (closeTarget.Fade is null) || (closeTarget.Cutaway is null) ||
+                            !VectorFunctions.IsFinite(vector: closeTarget.Fade) ||
+                            !VectorFunctions.IsFinite(vector: closeTarget.Cutaway)
+                        ) {
+                            errors.Add(item: $"{opPath}.closeTargetOffset must name a fade and a cutaway target with finite coordinates.");
                         }
                         if (lookAt.Subject is null) {
                             errors.Add(item: $"{opPath}.closeTargetOffset requires a subject.");
@@ -916,7 +920,12 @@ public static partial class WorldDefinitionValidator {
         if (!Enum.IsDefined(value: control.ClearanceMode) || (control.ClearanceMode == WorldCameraClearanceChoice.Auto)) {
             errors.Add(item: $"{path}.clearanceMode must be Fade or Cutaway.");
         }
-        RequireRange(value: control.ClearanceMaxElevation, min: 0f, max: (MathF.PI / 2f), name: $"{path}.clearanceMaxElevation", errors: errors);
+        if (control.MaxRise is not { } maxRise) {
+            errors.Add(item: $"{path}.maxRise is required.");
+        } else {
+            RequireRange(value: maxRise.Fade, min: 0f, max: (MathF.PI / 2f), name: $"{path}.maxRise.fade", errors: errors);
+            RequireRange(value: maxRise.Cutaway, min: 0f, max: (MathF.PI / 2f), name: $"{path}.maxRise.cutaway", errors: errors);
+        }
         if (control.AutoFirstPerson is { } automatic) {
             RequirePositive(value: automatic.EntryDistance, name: $"{path}.autoFirstPerson.entryDistance", errors: errors);
             RequirePositive(value: automatic.ExitDistance, name: $"{path}.autoFirstPerson.exitDistance", errors: errors);

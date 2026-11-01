@@ -14,22 +14,24 @@ public enum WorldCameraClearanceMode {
     Open,
     /// <summary>Geometry shortens the boom along the rig's own elevation.</summary>
     Shortened,
-    /// <summary>No length of the rig's own boom clears both the geometry and the body, so the boom rises over it.</summary>
+    /// <summary>No length of the rig's own boom keeps the eye far enough out (past the body in cutaway, past the
+    /// character fade's minimum boom in fade), so the boom rises over the obstruction.</summary>
     Risen,
-    /// <summary>No rise up to the authored elevation ceiling clears both, so the boom rises to the ceiling, the eye
+    /// <summary>No rise up to the treatment's ceiling clears both in cutaway, so the boom rises to the ceiling, the eye
     /// stands just outside the body there, and the near plane cuts away the geometry between them
     /// (<see cref="WorldCameraClearance.Near"/>).</summary>
     Crowded,
 }
 /// <summary>
-/// <para>Places one seat's chase eye as a spring arm, migrating its target toward the authored close target as it
-/// compresses. Fade preserves the room and the rig's elevation, fading the subject in this seat's view as the eye
-/// approaches. Cutaway keeps the eye outside the subject: out of rendered static
-/// geometry, out of the framed body (its collider and the shapes it is drawn with), with a clear sightline to the
-/// target. Obstruction first shortens the boom along its own direction. When no length of that boom clears both the
-/// geometry and the body, as with the body backed into a wall or a corner, the boom rises toward the seat's up, at most
-/// to the authored elevation ceiling, until one does. The boom's heading never changes, so the frame the player steers
-/// in stays the frame the player sees.</para>
+/// <para>Places one seat's chase eye as a spring arm, migrating its target toward the treatment's authored close target
+/// as it compresses. One solver serves both treatments of a close obstruction, each with its own authored rise ceiling
+/// and close target. Fade preserves the room, fading the subject in this seat's view as the eye approaches, and keeps
+/// the eye past the character fade's minimum boom where a rise allows it. Cutaway keeps the eye outside the subject:
+/// out of rendered static geometry, out of the framed body (its collider and the shapes it is drawn with), with a clear
+/// sightline to the target. Obstruction first shortens the boom along its own direction. When no length of that boom
+/// keeps the eye far enough out, as with the body backed into a wall or a corner, the boom rises toward the seat's up,
+/// at most the treatment's ceiling above the rig's own elevation, until one does. The boom's heading never changes, so
+/// the frame the player steers in stays the frame the player sees.</para>
 /// <para>The arm holds its state across frames as a fraction of the authored boom and a rise above the rig's own
 /// elevation, never as a length, and both ease toward each frame's answer on the rig's own boom dynamics: a pull-in
 /// and a rise are smoothed rather than cut, and the arm eases back out to the authored boom once the obstruction
@@ -52,6 +54,9 @@ public sealed class WorldCameraClearance {
     private const int LiftSteps = 6;
     // A boom shorter than this has no direction to clear along.
     private const float MinimumBoom = 1e-4f;
+    // The highest elevation, in radians, a rise lifts the boom to: short of straight up, where the boom has no heading
+    // and the view's up flips.
+    private const float MaximumElevation = 1.5f;
     // How far short of the body's nearest surface a cutaway's near plane stops.
     private const float NearMargin = 0.05f;
     // RetractionSkin as a length: how far short of a hit Clear reports the room.
@@ -203,12 +208,14 @@ public sealed class WorldCameraClearance {
 
     // One frame's clearance question, asked of the geometry and the body along any direction of the boom.
     private readonly ref struct Probe {
+        private readonly float? m_fadeKeepOut;
         private readonly SdfFieldEvaluator? m_field;
         private readonly WorldChaseBody m_subject;
         private readonly Vector3 m_target;
         private readonly bool m_targetObstructed;
 
-        public Probe(SdfFieldEvaluator? field, bool targetObstructed, Vector3 target, in WorldChaseBody subject, float length, float scale) {
+        public Probe(SdfFieldEvaluator? field, bool targetObstructed, Vector3 target, in WorldChaseBody subject, float length, float scale, float? fadeKeepOut = null) {
+            m_fadeKeepOut = fadeKeepOut;
             m_field = field;
             m_subject = subject;
             m_target = target;
@@ -220,8 +227,8 @@ public sealed class WorldCameraClearance {
         public float Length { get; }
         public float Scale { get; }
 
-        // How far out the eye must stand to clear the body.
-        public float KeepOut(Vector3 direction) => m_subject.Exit(
+        // How far out the eye must stand: past the body in cutaway, past the fade's minimum boom in fade.
+        public float KeepOut(Vector3 direction) => m_fadeKeepOut ?? m_subject.Exit(
             direction: direction,
             origin: m_target,
             radius: (EyeRadius * Scale)
@@ -251,7 +258,7 @@ public sealed class WorldCameraClearance {
         return (room >= probe.KeepOut(direction: direction));
     }
     // Where the eye belongs this frame before easing: the lowest rise at which it fits, and how far out it stands there.
-    private static (WorldCameraClearanceMode Mode, float Rise, float Length) Goal(in Probe probe, Vector3 direction, Vector3 level, Vector3 up, float elevation, float maxRise) {
+    private static (WorldCameraClearanceMode Mode, float Rise, float Length) Goal(in Probe probe, Vector3 direction, Vector3 level, Vector3 up, float elevation, float maxRise, bool crowds) {
         var fits = Fits(
             direction: direction,
             probe: in probe,
@@ -306,9 +313,12 @@ public sealed class WorldCameraClearance {
             below = candidate;
         }
 
-        // Nothing fits, so the eye goes up and over at the ceiling, just outside the body, and the near plane cuts away
-        // whatever stands between: looking down over the body frames it where a level boom this short would not.
-        return (WorldCameraClearanceMode.Crowded, maxRise, 0f);
+        // Nothing fits. A cutaway goes up and over at the ceiling, just outside the body, and the near plane cuts away
+        // whatever stands between: looking down over the body frames it where a level boom this short would not. A fade
+        // cuts nothing away, so it stays level, as far out as the room and its minimum boom allow.
+        return (crowds
+            ? (WorldCameraClearanceMode.Crowded, maxRise, 0f)
+            : (WorldCameraClearanceMode.Shortened, 0f, Math.Min(val1: probe.Length, val2: Math.Max(val1: room, val2: probe.KeepOut(direction: direction)))));
     }
 
     /// <summary>Drops the arm's eased state, so the next <see cref="Resolve"/> places the eye at that frame's answer
@@ -332,14 +342,16 @@ public sealed class WorldCameraClearance {
     /// <param name="deltaSeconds">The frame step, in seconds.</param>
     /// <returns><paramref name="desiredEye"/> itself when nothing obstructs it, the eye is outside the body and the arm
     /// rests at the authored boom; otherwise the eased, shortened or risen eye.</returns>
-    /// <param name="targetShift">The program's close-target displacement, already in the seat's axes and live scale.</param>
+    /// <param name="targetShift">The program's close-target displacements, already in the seat's axes and live scale; the
+    /// solver migrates toward <paramref name="choice"/>'s.</param>
     /// <param name="choice">The resolved author/player clearance choice.</param>
     /// <param name="characterFade">The authored full-size fading distances, or <see langword="null"/> for a fade that
     /// never dissolves the body and holds no minimum boom.</param>
     /// <param name="scale">The body's live scale, applied to fading distances.</param>
-    /// <param name="maxElevation">The highest cutaway elevation above the seat's level plane, in radians.</param>
+    /// <param name="maxRise">The treatment's rise ceiling above the rig's own elevation, in radians; the boom never
+    /// rises past <see cref="MaximumElevation"/> whatever it says.</param>
     public Vector3 Resolve(SdfFieldEvaluator? field, Vector3 desiredEye, Vector3 target, in WorldChaseBody subject, Vector3 up, in SdfCameraDynamics dynamics, float deltaSeconds,
-        WorldCameraClearanceChoice choice, float maxElevation, SdfCameraTargetShift targetShift = default,
+        WorldCameraClearanceChoice choice, float maxRise, SdfCameraTargetShift targetShift = default,
         WorldCameraCharacterFade? characterFade = null, float scale = 1f) {
         var offset = (desiredEye - target);
         var length = offset.Length();
@@ -360,18 +372,20 @@ public sealed class WorldCameraClearance {
         }
 
         var direction = (offset / length);
+        var cutaway = (choice == WorldCameraClearanceChoice.Cutaway);
+        var closeOffset = targetShift.Offset.Of(cutaway: cutaway);
         // Measure compression at the authored pivot, independently of the shifted target. Feeding the migrated
         // target back into this measurement would pump the framing under lintels and overhead stair slabs.
         scale = ((float.IsFinite(f: scale) && (scale > 0f)) ? scale : 1f);
         var restProbe = new Probe(field: field, length: length, scale: scale, subject: in subject, target: target, targetObstructed: false);
-        var fraction = ((targetShift.Offset == Vector3.Zero) ? 1f : (restProbe.Room(direction: direction, radius: FixedQ4816.FromDouble(value: (EyeRadius * scale))) / length));
+        var fraction = ((closeOffset == Vector3.Zero) ? 1f : (restProbe.Room(direction: direction, radius: FixedQ4816.FromDouble(value: (EyeRadius * scale))) / length));
         var shiftWeight = ((targetShift.StartFraction > targetShift.FullFraction)
             ? Math.Clamp(((targetShift.StartFraction - fraction) / (targetShift.StartFraction - targetShift.FullFraction)), 0f, 1f)
             : 0f);
 
         shiftWeight = ((shiftWeight * shiftWeight) * (3f - (2f * shiftWeight)));
         var shift = Ease(dynamics: in dynamics, deltaSeconds: deltaSeconds, goal: new Vector3(x: shiftWeight, y: 0f, z: 0f), follower: ref m_targetShift);
-        var displacement = (targetShift.Offset * Math.Clamp(max: 1f, min: 0f, value: shift.X));
+        var displacement = (closeOffset * Math.Clamp(max: 1f, min: 0f, value: shift.X));
 
         target += displacement;
         desiredEye += displacement;
@@ -391,11 +405,12 @@ public sealed class WorldCameraClearance {
             min: -1f,
             value: lift
         ));
-        // A boom already straight up or past the ceiling has no rise left to take.
-        var maxRise = ((levelLength > MinimumBoom)
-            ? MathF.Max(
-                x: 0f,
-                y: (maxElevation - elevation)
+        // A boom already straight up, or at the highest elevation, has no rise left to take.
+        maxRise = ((levelLength > MinimumBoom)
+            ? Math.Clamp(
+                max: MathF.Max(x: 0f, y: (MaximumElevation - elevation)),
+                min: 0f,
+                value: (float.IsFinite(f: maxRise) ? maxRise : 0f)
             )
             : 0f
         );
@@ -411,23 +426,13 @@ public sealed class WorldCameraClearance {
             length: length,
             subject: in subject,
             target: target,
-            targetObstructed: ((choice == WorldCameraClearanceChoice.Cutaway) && (field is not null) && field.Overlap(
+            fadeKeepOut: (cutaway ? null : ((characterFade?.MinimumBoom ?? 0f) * scale)),
+            targetObstructed: (cutaway && (field is not null) && field.Overlap(
                 center: FixedPosition.FromLocal(local: FixedVector3.FromVector3(value: target)),
                 radius: FixedQ4816.FromDouble(value: (EyeRadius * scale))
             ))
         );
-        WorldCameraClearanceMode mode;
-        float goalRise;
-        float goalLength;
-        if (choice == WorldCameraClearanceChoice.Fade) {
-            var room = probe.Room(direction: direction, radius: FixedQ4816.FromDouble(value: (EyeRadius * scale)));
-
-            mode = ((room >= length) ? WorldCameraClearanceMode.Open : WorldCameraClearanceMode.Shortened);
-            goalRise = 0f;
-            goalLength = Math.Min(val1: length, val2: Math.Max(val1: room, val2: ((characterFade?.MinimumBoom ?? 0f) * scale)));
-        } else {
-            (mode, goalRise, goalLength) = Goal(direction: direction, elevation: elevation, level: level, maxRise: maxRise, probe: in probe, up: upAxis);
-        }
+        var (mode, goalRise, goalLength) = Goal(crowds: cutaway, direction: direction, elevation: elevation, level: level, maxRise: maxRise, probe: in probe, up: upAxis);
         var eased = Ease(
             follower: ref m_arm,
             deltaSeconds: deltaSeconds,
@@ -438,11 +443,11 @@ public sealed class WorldCameraClearance {
                 z: 0f
             )
         );
-        var rise = ((choice == WorldCameraClearanceChoice.Fade) ? 0f : Math.Clamp(
+        var rise = Math.Clamp(
             max: maxRise,
             min: 0f,
             value: eased.Y
-        ));
+        );
         var presented = ((rise > 0f)
             ? Lifted(
                 elevation: (elevation + rise),
@@ -451,7 +456,8 @@ public sealed class WorldCameraClearance {
             )
             : direction
         );
-        var keepOut = ((choice == WorldCameraClearanceChoice.Fade) ? 0f : probe.KeepOut(direction: presented));
+        // In cutaway the body outranks geometry; fade allows the eye into the body's shell while preserving the room.
+        var keepOut = (cutaway ? probe.KeepOut(direction: presented) : 0f);
         var held = MathF.Min(
             x: (Math.Clamp(
                 max: 1f,
@@ -463,11 +469,10 @@ public sealed class WorldCameraClearance {
                 radius: FixedQ4816.FromDouble(value: (SurfaceSkin * scale))
             )
         );
-        // In cutaway the body outranks geometry; fade allows the eye into the body's shell while preserving the room.
-        var placed = ((choice == WorldCameraClearanceChoice.Fade) ? MathF.Max(x: 0f, y: held) : MathF.Max(
+        var placed = MathF.Max(
             x: held,
             y: keepOut
-        ));
+        );
 
         if ((placed / length) != eased.X) {
             // A limit moved the eye, so the arm eases on from where the eye is rather than from where it was going.
@@ -477,12 +482,12 @@ public sealed class WorldCameraClearance {
 
         // Geometry between the eye and the target's side of it (an eye the body put beyond a wall) is cut away: the image
         // begins at the face nearest the target, and the near plane stops short of every part of the body in view.
-        var face = ((choice == WorldCameraClearanceChoice.Fade) ? length : probe.Room(
+        var face = ((!cutaway) ? length : probe.Room(
             direction: presented,
             radius: FixedQ4816.Zero
         ));
 
-        Near = (((choice == WorldCameraClearanceChoice.Cutaway) && (face < length) && ((face + (RetractionSkinLength * scale)) < placed))
+        Near = ((cutaway && (face < length) && ((face + (RetractionSkinLength * scale)) < placed))
             ? Math.Clamp(
                 max: MathF.Max(
                     x: 0f,
@@ -499,7 +504,7 @@ public sealed class WorldCameraClearance {
         Mode = mode;
         Rise = rise;
         Length = placed;
-        if ((choice == WorldCameraClearanceChoice.Fade) && (characterFade is { } fade)) {
+        if ((!cutaway) && (characterFade is { } fade)) {
             var opacity = Math.Clamp((((placed / scale) - fade.EndDistance) / (fade.StartDistance - fade.EndDistance)), 0f, 1f);
 
             BodyOpacity = ((opacity * opacity) * (3f - (2f * opacity)));

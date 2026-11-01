@@ -345,7 +345,7 @@ public sealed class WorldSeatViewState {
                 choice: choice,
                 characterFade: control.CharacterFade,
                 scale: scale,
-                maxElevation: control.ClearanceMaxElevation
+                maxRise: control.MaxRise.Of(choice: choice)
             );
             if (firstPerson is { } destination) {
                 var head = subject.Point(local: destination.EyePoint);
