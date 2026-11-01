@@ -899,8 +899,18 @@ public sealed class SdfSampledLattice {
     /// <summary>Temporary fine-sample indexing retained by one refinement worker. A call to <see cref="Refine"/>
     /// borrows it exclusively until return; the lattice copies every index it keeps.</summary>
     public sealed class RefinementScratch {
-        internal readonly List<int> Keys = [];
-        internal readonly Dictionary<int, int> Slots = [];
+        internal List<int> Keys = [];
+        internal Dictionary<int, int> Slots = [];
+
+        /// <summary>Ends a worker's borrow and bounds aggregate idle index storage to one fine-sample budget.
+        /// Larger one-off workspaces are released; common jobs reuse their slot's retained capacity.</summary>
+        /// <param name="workers">The number of slots sharing that retention budget.</param>
+        public void TrimForWorkers(int workers) {
+            var limit = (MaxFineSamples / Math.Max(val1: 1, val2: workers));
+
+            if (Keys.Capacity > limit) { Keys = []; } else { Keys.Clear(); }
+            if (Slots.EnsureCapacity(capacity: 0) > limit) { Slots = []; } else { Slots.Clear(); }
+        }
     }
 
     /// <summary>Returns, per sample of a lattice, whether it is one of a pair along an axis that a sheet or gap thinner

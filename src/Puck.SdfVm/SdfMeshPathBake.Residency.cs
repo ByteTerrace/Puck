@@ -209,6 +209,8 @@ public sealed partial class SdfMeshPathBake {
                     work(slot.Scratch);
                 } catch (Exception exception) when ((exception is not OutOfMemoryException)) {
                     Console.Error.WriteLine(value: $"[sdf.mesh-bake] work failed: {exception}");
+                } finally {
+                    slot.Scratch.TrimForWorkers(workers: WorkerSlots.Length);
                 }
             }
         } finally {
