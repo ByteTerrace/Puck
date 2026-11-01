@@ -26,7 +26,12 @@ to create work.
 
 Writing is cheap and verifying is expensive: builds, boots, suites and GPU
 windows on one shared machine set the pace, so the work in flight is bounded by
-what the machine can verify. The owner's direction:
+what the machine can verify. How many lanes run at once has no fixed maximum
+or minimum (the owner's ruling): the lead judges it each time from the work in
+hand (concurrent builds, measuring lanes that load would skew, GPU legs,
+shared files, its own capacity to inspect and merge) and launches more only
+when that judgement says the machine and the lead can absorb them. The owner's
+direction:
 
 - **Review before landing where a defect does damage before review lands.** Code
   that deletes files, crosses a trust boundary (grants, federation, admission,
