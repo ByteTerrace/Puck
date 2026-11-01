@@ -5,7 +5,23 @@ namespace Puck.Maths;
 /// <summary>
 /// Provides unbiased bounded integer sampling routines over 32-bit draw generators.
 /// </summary>
-internal static class BoundedRandomSampling {
+public static class BoundedRandomSampling {
+    /// <summary>Maps one uniform raw word to an unbiased bounded result, or rejects the biased window.</summary>
+    /// <param name="word">The raw word. A rejection still consumes this word.</param>
+    /// <param name="exclusiveHigh">The nonzero exclusive upper bound.</param>
+    /// <param name="value">The bounded result, valid only on success.</param>
+    /// <returns>Whether the word is accepted. The caller owns retries, source failure and work accounting.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The bound is zero.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool TryMap(uint word, uint exclusiveHigh, out uint value) {
+        ArgumentOutOfRangeException.ThrowIfZero(exclusiveHigh);
+        var product = unchecked((((ulong)word) * exclusiveHigh));
+        var low = unchecked((uint)product);
+
+        value = ((uint)(product >> 32));
+        return ((low >= exclusiveHigh) || (low >= (unchecked((0U - exclusiveHigh)) % exclusiveHigh)));
+    }
+
     /// <summary>Lemire's nearly divisionless bounded draw at 64 bits, over a bound fixed for the request.</summary>
     /// <param name="exclusiveHigh">The exclusive bound, at least two.</param>
     /// <remarks>
@@ -66,20 +82,10 @@ internal static class BoundedRandomSampling {
     /// <param name="exclusiveHigh">The upper bound (exclusive).</param>
     /// <returns>A uniformly distributed value in <c>[0, exclusiveHigh)</c>.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static uint Sample<TGenerator>(ref TGenerator generator, uint exclusiveHigh) where TGenerator : struct, IDrawGenerator {
-        var product = unchecked((((ulong)generator.NextUInt32()) * exclusiveHigh));
-        var lowBits = unchecked((uint)product);
-
-        if (lowBits < exclusiveHigh) {
-            var threshold = unchecked((((uint)(-((int)exclusiveHigh))) % exclusiveHigh));
-
-            while (lowBits < threshold) {
-                product = unchecked((((ulong)generator.NextUInt32()) * exclusiveHigh));
-                lowBits = unchecked((uint)product);
-            }
+    internal static uint Sample<TGenerator>(ref TGenerator generator, uint exclusiveHigh) where TGenerator : struct, IDrawGenerator {
+        while (true) {
+            if (TryMap(generator.NextUInt32(), exclusiveHigh, out var value)) { return value; }
         }
-
-        return ((uint)(product >> 32));
     }
     /// <summary>
     /// Draws a uniformly random value from an inclusive range.
@@ -90,7 +96,7 @@ internal static class BoundedRandomSampling {
     /// <param name="maximum">The other end of the inclusive range.</param>
     /// <returns>A uniformly distributed value in the inclusive range.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static uint SampleRange<TGenerator>(ref TGenerator generator, uint minimum, uint maximum) where TGenerator : struct, IDrawGenerator {
+    internal static uint SampleRange<TGenerator>(ref TGenerator generator, uint minimum, uint maximum) where TGenerator : struct, IDrawGenerator {
         if (maximum < minimum) {
             (minimum, maximum) = (maximum, minimum);
         }
