@@ -202,7 +202,7 @@ public static partial class CreationCommand {
         _ = CliWorldVocabulary.EnsureInstalled();
 
         try {
-            definition = WorldDefinitionSerialization.Deserialize(utf8Json: JsonSerializer.SerializeToUtf8Bytes(value: working));
+            definition = WorldDefinitionSerialization.Deserialize(utf8Json: System.Text.Encoding.UTF8.GetBytes(s: working.ToJsonString()));
         } catch (Exception exception) when ((exception is InvalidDataException or InvalidOperationException)) {
             Console.Error.WriteLine(value: $"creation sculpt: refused — {exception.Message.ReplaceLineEndings(replacementText: " ")}");
 

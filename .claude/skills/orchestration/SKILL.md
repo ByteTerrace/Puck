@@ -126,6 +126,11 @@ brief:
   one-line reason: a batch the lead briefs entirely to one family is a
   lapse to correct, not a default;
 - the base commit, verified by the lead before the brief goes out;
+- the task's premise, checked in the code by the lead before the brief goes
+  out (rule 7). A packet's claim of what is missing or what causes a cost is
+  a lead to verify, not a fact. One lane was sent to add a source-generated
+  JSON context that already existed, because the packet said none did;
+
 - a fresh read of the worktree's AGENTS.md and owning skill, correcting stale
   startup repository text while preserving current owner and system precedence.
 

@@ -50,6 +50,7 @@ import "guide"
 import "machine-debugger"
 import "range"
 import "valley"
+import "meadow"
 
 // The test room's palette slots.
 let roomWhite = 0 // #E6E2DA
@@ -180,8 +181,8 @@ placements {
     candidateCap: 1
     candidateRadius: 1
     derivedFaceScreens: 12
-    maxPlacementScale: 1
-    minPlacementScale: 1
+    maxPlacementScale: 1.45
+    minPlacementScale: 0.46
     previewDeadlineFrames: 1
   }
 

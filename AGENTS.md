@@ -166,7 +166,12 @@ agent works in that mode by default, without asking:
     Every plan proves itself there, never on a world in `experimental/`.
     Features the experimental worlds (the quilt, the island) have that the
     debug world lacks are ported into it, not re-admitted as worlds of their
-    own.
+    own. Each place is the forcing function for its whole domain, not one
+    feature. The meadow, for example, pushes everything foliage and ground
+    cover: grasses, flowers, shrubs and trees. The places compose into one
+    cohesive world under the selected valley-and-gallery art direction
+    ([references](docs/game/art/valley-and-gallery.md)), so features meet at
+    their seams instead of standing apart.
 - The gates, ledgers and red-leg proofs described in this file and the skills
   were written by agents, not ordered by the owner. They are tools to use when
   they pay for themselves, never preconditions for landing. An engine change's
