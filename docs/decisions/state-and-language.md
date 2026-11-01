@@ -510,6 +510,12 @@ requires matching operand kinds. Both operands must still name declared values
 at compile time. Other arithmetic keeps its existing absence propagation; use `??` to
 provide a missing value or `isAbsent` to test it.
 
+A fault in an evaluated gate conjunct closes the whole gate, under negation and
+disjunction too, through the shared gate evaluator. Ordinary rules, group
+triggers and conditional effects obey the same verdict. Thus `(not (1 / a > 0))
+!= 0` and its printed truth condition both stay closed with `a = 0`, reporting
+`Arithmetic`; printing cannot turn a failed comparison into a firing.
+
 From weakest to strongest, operators bind as: conditional `?:`, `??`, `or`,
 `and`, prefix `not`, equality, ordering, `|`, `^`, `&`, shifts, addition and
 subtraction, multiplication and division, arithmetic prefix operators. Thus
