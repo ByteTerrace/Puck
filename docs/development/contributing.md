@@ -961,7 +961,14 @@ unverified when no device run exists.
   Log Sensors, Run On Windows Startup and Start Minimized ticked (they persist
   in `LibreHardwareMonitor.config` beside the executable; with no such file it
   has never logged). System event 41 with `BugcheckCode=0`, no power-button
-  timestamp, no WHEA record and no minidump is the trip's signature. A trip
+  timestamp, no WHEA record and no minidump is the trip's signature.
+  One trip's last logged rows point at sustained CPU load at its thermal limit
+  rather than the GPU: five lanes were building, baking and measuring, with no
+  windowed World. CPU Total read 100 % then 83 %, `Core (Tctl/Tdie)` 90 then
+  88.75 °C (the 7800X3D's limit is 89 °C), Package power 77 W, and GPU board
+  power 19 to 47 W. A short Python `csv` reader prints those columns faster
+  than PowerShell string handling; LibreHardwareMonitor rotates its log into
+  small files, so the trip's file is the last one written before the reboot. A trip
   zero-fills files whose data had not reached the disk: in one, `.git/config`,
   `.git/index`, the integration branch's ref file and every file of an
   in-progress merge read as NUL bytes. Recovery: find them
