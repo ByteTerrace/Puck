@@ -25,7 +25,17 @@ and [ARM resource pipeline](https://learn.microsoft.com/en-us/dotnet/api/azure.r
 
 This is an installed [extension](../../docs/reference/extensions.md), not a
 reference any host carries: publish it into a host's
-`extensions/Puck.World.Azure` directory. `AzureWorldExtension` then contributes
+`extensions/Puck.World.Azure` directory. A World or silo searches `extensions`
+under its working directory, then beside its own assemblies; the silo image
+publishes it under `/app/worlds/extensions`. For a World run from the repository
+root:
+
+```text
+dotnet publish src/Puck.World.Azure -c Release -nodeReuse:false -o extensions/Puck.World.Azure
+```
+
+Publish it again after the engine's sources change: the installation loads
+against the World's own copy of every assembly they share. `AzureWorldExtension` then contributes
 `azure.blob` storage, the `azure.scheduled-events` retirement observer,
 `azure.api-users` authentication, the `azure.resource` operation provider and the
 `/livez/azure` health endpoint. Registration performs no cloud access; a

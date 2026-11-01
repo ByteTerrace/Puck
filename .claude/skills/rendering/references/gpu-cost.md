@@ -67,9 +67,14 @@ their percentiles. Install the console build with `winget install --id
 Intel.PresentMon.Console --exact` (no elevation needed); it lands on the PATH
 as `presentmon`. Capture a running World with `presentmon --process_id <pid>
 --timed 20 --terminate_after_timed --output_file <csv> --no_console_stats
---stop_existing_session`. The capture reads ETW, so the user must be in the
-Performance Log Users group (the lead machine's user is) or the capture runs
-elevated.
+--stop_existing_session --no_track_gpu --no_track_display`. The capture reads
+ETW. Without elevation (the lead machine's user is in Performance Log Users),
+GPU and display tracking fail silently and leave the CSV empty, so pass the
+two `--no_track_*` flags. The capture then gives present-to-present only. That
+is a weak proxy on Direct3D 12: it is bimodal (8 to 12 ms and 20 to 24 ms),
+because each present lands at the end of an iteration's work and alternates
+with tick and non-tick frames. The time a frame reaches the display needs an
+elevated capture.
 
 **RenderDoc (Vulkan).** From a build that carries SPIR-V (a solution build, or
 `-p:PuckShaderSpirvEnabled=true`; [kernels](kernels.md#building)), boot with
@@ -290,6 +295,12 @@ large blocks.
 - **Record only what changed.** Session and window views whose residencies
   move with the tick record on tick frames only (`RenderFrame` 2.8 ms there
   against 0.9 ms between).
+- **Keep rated work off the step's frame.** A `world.rates` floor updates early
+  on a frame that runs no simulation step when the next one runs a step
+  (`PresentationRate.Holds`, `FrameContext.StepsNext`), so rated bodies, views,
+  screens and the far cascade land between ticks; a body no view or shadow
+  cascade may show holds (`SdfUpdateRateTiers.HeldHertz`). New rated work
+  decides through the same floor rather than a schedule of its own.
 
 Sources: minimal fences and no fence where a barrier serves ([NV-SYNC]); heaps
 sub-allocated and residency managed per heap ([AMD-RDNA], [MS-RESIDENCY]).
@@ -309,7 +320,8 @@ batches into one submission ([AMD-RDNA]); Puck submits 5 to 9 a frame.
   program region waits for the device to go idle
   ([rendering plan](../../../../docs/plans/rendering.md#gpu-submission-and-routed-worlds),
   [hot reload](../../../../docs/plans/open-items.md#edit-to-running-hot-reload-and-boot)).
-- **Views record on tick frames** ([simulation tick](../../../../docs/plans/open-items.md#engine-job-system)).
+- **Tick-bound views record on tick frames,** beside the tick itself; rated
+  views and screens still share one phase ([simulation tick](../../../../docs/plans/open-items.md#engine-job-system)).
 - **The sky reduction's bank conflict,** **the views filter tile's 2-way
   conflict** and **the bake's `SdfBakeTaps`,**
   indexed by the `[loop]` counter, the shape the local-array rule forbids,

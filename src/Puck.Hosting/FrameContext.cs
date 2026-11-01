@@ -33,6 +33,9 @@ namespace Puck.Hosting;
 /// <param name="GridHertz">The rate presented frames land on a whole number of steps of, which a rated update's period
 /// rounds to (<see cref="PresentationRate"/>): a fixed display signal's refresh rate, or the simulation's tick rate under
 /// lockstep; zero when frames land at any time, as on a variable-refresh display, or when the display is unknown.</param>
+/// <param name="StepsNext">Whether the host expects its next iteration to run a simulation step: the step's period has
+/// come due once the accumulated time and one more interval like this one pass it. Presentation only: a rated update keeps
+/// off the frame a step weighs on (<see cref="PresentationRate.Holds"/>); nothing simulated reads it.</param>
 public readonly record struct FrameContext(
     IHostContext Host,
     ulong ElapsedTicks,
@@ -45,8 +48,11 @@ public readonly record struct FrameContext(
     int DisplayHertz = 0,
     double GridHertz = 0d,
     long Tick = 0L,
-    ulong PresentedTicks = 0UL
+    ulong PresentedTicks = 0UL,
+    bool StepsNext = false
 ) {
+    /// <summary>Gets whether the frame's host iteration ran a simulation step: <see cref="DeltaTicks"/> above zero.</summary>
+    public bool Steps => (DeltaTicks > 0UL);
     /// <summary>Gets the seconds the simulation advances this frame (<see cref="DeltaTicks"/> as seconds).</summary>
     public double DeltaSeconds =>
         FixedTickConversion.ToSeconds(ticks: DeltaTicks);

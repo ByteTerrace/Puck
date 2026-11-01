@@ -560,6 +560,7 @@ public sealed class WindowHostPresentation {
                                     GridHertz: PresentPacingControl.GridOf(displayGridHertz: gridHertz, simulates: iteration.HasSimulation, stepTicks: stepTicks, tickLocked: tickLocked),
                                     Host: m_rootHostContext,
                                     StepTicks: stepTicks,
+                                    StepsNext: iteration.StepsNext,
                                     Tick: iteration.Tick,
                                     TargetHeight: height,
                                     TargetWidth: width

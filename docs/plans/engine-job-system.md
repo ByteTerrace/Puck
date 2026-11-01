@@ -177,9 +177,8 @@ after 60 consecutive iterations under the budget by at least 1 ms, and tick
 iterations and non-tick iterations keep separate records, so a clean non-tick
 frame cannot raise the cap a tick frame then misses. The budget and the work
 time are `HostFrameTimeline`'s, judged with the paced wait excluded as `Scan`
-already does (`HostFrameTimeline.cs:168-171`; the `host.frames` reading at `:250`
-is the scheduling lane's fix). During the pacer wait (`:109`) every worker is
-open to background, and a unit does not start within one unit bound of the
+and `host.frames` both do (`HostFrameTimeline.WorkOf`). During the pacer wait
+(`:109`) every worker is open to background, and a unit does not start within one unit bound of the
 pacer's deadline, which the loop computes (`:109-110`), so the wake finds no
 worker mid-unit. The cap exists because the bounded unit protects the frame
 from waiting but not from sharing cache, memory bandwidth and SMT siblings
@@ -274,20 +273,19 @@ Not moved, and why:
 
 ### The scheduling stage is the first policy
 
-The scheduling lane is building, with no new thread, the stage that keeps the
-15 Hz rated burst off tick frames, holds the bodies no view can see, and spreads
-rated packs over their period (`SdfUpdateRates.cs:82-84`,
-`WorldCreationInstances.Rates.cs:71-73`, `WorldCreationInstances.Pack.cs:228-270`).
-Decision: that stage is the `Frame` class's placement policy, and the scheduler
-re-decides none of it. It is one object the frame thread reads once per
+The scheduling stage, with no new thread, keeps rated work off the frames that
+run a step (`PresentationRate.Holds` with `FrameContext.StepsNext`), holds the
+bodies no view or shadow cascade can show (`SdfUpdateRateTiers.HeldHertz`), and
+staggers the bodies that take a tier together by half its period
+(`WorldCreationInstances.Rates.cs`). Decision: that stage is the `Frame`
+class's placement policy, and the scheduler re-decides none of it. It is one object the frame thread reads once per
 iteration, the frame plan: whether this iteration carries a tick, which rated
 tier is due, and which bodies pose. The job system's `Frame` forks (the pose
 pack, the view recording) take their work from the plan: a view the plan rates
 off this frame is not recorded, a body the plan holds is not packed. When view
 recording goes parallel (section 3), the plan is what says which views record;
-nothing in the scheduler decides a rate. The 30 and 15 Hz tiers becoming a
-continuous rate is the lead's call in the packet and changes the plan's
-contents, not its place.
+nothing in the scheduler decides a rate. The 30 and 15 Hz tiers stay tiers
+(the packet records why).
 
 ## 2. The deterministic parallel tick
 
@@ -703,7 +701,7 @@ portions can be built first, before their J1 consumers.
 
 | Step | Lands | Check on `worlds/debug` that catches its failure |
 |---|---|---|
-| **S1 Scheduling stage** (the scheduling lane, in flight) | Rated work off tick frames, unseen bodies held, rated packs spread, `host.frames` judging work time. | `host.frames` standing at `debug.go desktop` and `debug.go overlook`: no iteration over 16.7 ms of work from a tick meeting the burst. |
+| **S1 Scheduling stage** (landed but for the rated views' and screens' phase spread) | Rated work off tick frames, unseen bodies held, rated packs spread, `host.frames` judging work time. | `host.frames` standing at `debug.go desktop` and `debug.go overlook`: no iteration over 16.7 ms of work from a tick meeting the burst. |
 | **M1 The memory account** | `MemoryAccount`, `host.memory` readings by category, the mesh library's and residency's budgets as reservations. | `host.memory` before and after a cold bake balances live, reserved and cached against the process; a bake under a budget lowered by `host.memory budget` defers (a `[sdf.mesh-bake] deferred` line) and never refuses or fails. |
 | **M2a Native movers 1 and 2** | Mesh payloads and bake workspaces on `IAllocator`. | Collections during a cold bake (`host.frames`) against 345; a windowed still at `debug.go desktop` byte-identical before and after on both backends; `host.memory collect` after `world.reload` of a one-group edit shows the replaced group's bytes released. |
 | **J1 The pool and the channels** | `Puck.Hosting.Jobs`: classes with their comparers, bounded units, the dependency rules, the cap with hysteresis, per-owner channels drained at each owner's install point, parking, shutdown settlement; every site in section 1's table moved; the bake's static pool, the irradiance worker counts and the engine's `Parallel.For` deleted. | A cold bake with `host.frames` sampled through it against 96 / 183 ms, and the process's thread count at `workers + 2` plus the dedicated threads. A lockstep `world.at` still after a `world.reload` traces its own scene (`[sdf.mesh-gi]` reports the frame's draw count). A channel forced full by a scratch world with more groups than its capacity lands every group (`[sdf.mesh-bake] done` counts match). A headless boot with a reflow verb answers it. `quit` during a cold bake exits cleanly with no device-after-dispose message in stderr on both backends. The first visible group bakes before any unseen one (`[sdf.mesh-bake]` order against `world.view.pick`). |

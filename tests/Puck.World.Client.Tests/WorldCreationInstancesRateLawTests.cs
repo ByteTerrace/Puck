@@ -274,9 +274,11 @@ public sealed class WorldCreationInstancesRateLawTests {
         Assert.Equal(expected: SdfUpdateRateCode.Every, actual: SdfUpdateRateTiers.CodeOf(hertz: 60, updated: false));
         Assert.Equal(expected: SdfUpdateRateCode.Half, actual: SdfUpdateRateTiers.CodeOf(hertz: 30, updated: false));
         Assert.Equal(expected: ((SdfUpdateRateCode)7), actual: SdfUpdateRateTiers.CodeOf(hertz: 15, updated: true));
-        Assert.Equal(expected: 60, actual: SdfUpdateRateTiers.BodyHertz(pixelsPerMetre: 31f));
-        Assert.Equal(expected: 30, actual: SdfUpdateRateTiers.BodyHertz(pixelsPerMetre: 30f));
-        Assert.Equal(expected: 15, actual: SdfUpdateRateTiers.BodyHertz(pixelsPerMetre: 15f));
+        Assert.Equal(expected: 60, actual: SdfUpdateRateTiers.BodyHertz(pixelsPerMetre: 31f, shadowShown: false));
+        Assert.Equal(expected: 30, actual: SdfUpdateRateTiers.BodyHertz(pixelsPerMetre: 30f, shadowShown: false));
+        Assert.Equal(expected: 15, actual: SdfUpdateRateTiers.BodyHertz(pixelsPerMetre: 15f, shadowShown: false));
+        Assert.Equal(expected: 15, actual: SdfUpdateRateTiers.BodyHertz(pixelsPerMetre: 0f, shadowShown: true));
+        Assert.Equal(expected: SdfUpdateRateTiers.HeldHertz, actual: SdfUpdateRateTiers.BodyHertz(pixelsPerMetre: 0f, shadowShown: false));
         Assert.Equal(expected: 60, actual: SdfUpdateRateTiers.ViewHertz(pixels: 121d));
         Assert.Equal(expected: 30, actual: SdfUpdateRateTiers.ViewHertz(pixels: 120d));
         Assert.Equal(expected: 15, actual: SdfUpdateRateTiers.ViewHertz(pixels: 60d));
