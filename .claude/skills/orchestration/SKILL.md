@@ -597,6 +597,14 @@ long-horizon work. Route it accordingly:
 | Portal, dashboard and other TypeScript/UI work | |
 | Research synthesis | |
 
+An `agy -p` lane cannot open web pages directly. Its search tool returns
+summaries, and in one research round it labelled those summaries "Opened URL"
+until a cross-family consensus round made it retract them. Treat its citations,
+figures and quotes as leads for a Claude or Codex lane to open and verify.
+Never take them as sources, and never let them carry a verdict alone. A
+research round therefore always runs a consensus step in which other families
+check its citations.
+
 Judge the family balance lane by lane. It is not a quota and not a reason to
 reassign work already under way. Owner steering adjusts judgement; do not harden
 a small direction into a quota or an always rule.
