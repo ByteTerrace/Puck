@@ -179,11 +179,82 @@ left the well and the snake field undrawn and read through the console.
 
 ### 9. Meadow and foliage
 
-| Feature | Source | Support | Place and why | Size |
-|---|---|---|---|---|
-| A wind meadow of 1,994 two-part blades in sixteen tiles, gusts phased by world position | `moth-courtyard.puck`, `moth-courtyard.md` (`meadow*` rows) | wire; "no distance LOD" is a possible gap in instanced animated creations, so measure the cold bake (a one-minute ruling) and frame time before naming one | Open ground near the spawn; the heaviest animated-geometry workload on offer | medium |
-| Trees, mossy rocks, banks and sand patches with noise relief (`landscapeExponent = 2.05`) | the same | wire; standard: a scatter template beside `worlds/standard/terrain.puck` | The same ground | medium |
-| Eight pose stations driving one avatar creation | the same (`stations` table) | wire | Folds into the studio's pose study; low priority | small |
+**Done:** [the debug meadow](../../worlds/debug/meadow.md), reached with
+`debug.go meadow`, centers the sixteen tiles and 1,994 two-part blades at
+`(119.5, 0, -55.3)`, east of the hero studio and about 72 m from its spawn.
+Six trees, seven mossy rocks, five banks, eight sand caps and thirteen tuft
+clusters use the standard's new `foliage.puck` library and table scatter.
+The debug module owns the placement tables. The eight pose stations are skipped.
+The prior art is `experimental/src/Puck.World/Assets/worlds/moth-courtyard.puck`
+and its adjacent `moth-courtyard.md`; neither was edited, built or run.
+
+The before/after measurements use one Release engine build, RTX 4070, the
+authored 1280×900 view and high quality, `--devices none`, and a GPU lease per
+leg. Each cold leg starts with its own empty cache; the shared store is left
+alone. Cold time is the main residency's `sdf.mesh-bake done seconds`, followed
+by successful `world.wait bakes 600` settlement of every residency. Builds,
+boot and post-bake GI settlement are outside that clock. Other lanes build
+during these runs: these are loaded-machine observations, not quiet speed claims.
+
+| Reading | Before | After |
+|---|---:|---:|
+| Direct3D 12 cold bake | 209.996 s | 306.639 s |
+| Vulkan cold bake | 321.246 s | 499.573 s |
+| Direct3D 12 standing, avg / p99 | 23.49 / 42.71 ms | 46.59 / 73.94 ms |
+| Direct3D 12 walking, avg / p99 | 24.38 / 52.67 ms | 55.21 / 82.89 ms |
+| Vulkan standing, avg / p99 | 23.50 / 48.18 ms | 63.11 / 102.76 ms |
+
+The Direct3D reads each cover 600 host iterations. Walking alternates
+`player.move 0.2 0` and `player.move -0.2 0` twenty times, 45 ticks per leg,
+through the patch. The initial before readings follow 900 post-bake ticks;
+the after readings allow another 1,800 ticks for GI first and reset the frame
+window. Vulkan's after window contains 479 iterations after that reset;
+the before contains 600. `world.cadence off` keeps both views rendering.
+`world.rates` keeps bodies, views, screens and far shadows on. Its 30/15 Hz
+periods are 33.3/66.7 ms; the after Direct3D longest screen/far-shadow intervals
+reach 77.0/76.2 ms, Vulkan 78.0/78.0 ms. These are frame overruns, not lower
+authored quality. Every cold bake misses the one-minute ruling and the frame
+observations miss the 16.7 ms bar.
+
+`host.memory`, immediately after the cold bake and before collection:
+
+| Backend | Working set, before → after | Private, before → after | Managed heap, before → after | Account live bytes, before → after |
+|---|---:|---:|---:|---:|
+| Direct3D 12 | 7,812 → 7,779 MiB | 14,807 → 15,032 MiB | 3,024 → 2,913 MiB | 1,526,790,926 → 1,746,075,254 B |
+| Vulkan | 7,365 → 7,536 MiB | 14,382 → 14,768 MiB | 2,923 → 3,000 MiB | 1,526,473,676 → 1,745,713,084 B |
+
+The live-account increase is about 209 MiB per backend. Working set and
+managed garbage depend on collection timing; private bytes include driver heaps.
+
+`world.budget`, `world.counters` and the cold bake plan show the work added:
+
+| Count | Before | After | Added |
+|---|---:|---:|---:|
+| Placement rows | 1,173 | 1,294 | 121 |
+| Field instances | 2,842 | 7,403 | 4,561 |
+| Dynamic transform slots | 990 | 4,994 | 4,004 |
+| Retained mesh draws | 3,363 | 7,578 | 4,215 |
+| Bake groups | 2,090 | 6,183 | 4,093 |
+| Unique cold bakes | 975 | 1,368 | 393 |
+| Groups sharing a bake | 1,115 | 4,815 | 3,700 |
+
+The blades share repeated geometry across tiles, rather than one bake for all
+blades: 144 varying stems and 144 tips account for 288 unique blade geometries;
+the other 105 new bakes are scenery. Each blade part keeps its own motion
+slot and draw. Direct3D's sampled primary mesh pass rises to 3,906 draws and
+5,547,060 vertices; the whole primary node reads 12,467 draws across its passes.
+The retained mesh region grows from 1,346,365,816 to 1,588,961,748 B.
+Cold field samples rise from 999,550,075 to 1,101,618,980 on Direct3D and from
+999,477,183 to 1,101,543,801 on Vulkan. Moving exhibit poses account for small
+backend differences; these counts are observations, not recorded expectations.
+
+Triangle LOD already exists. The named gap is that animated placements bypass
+body pose-rate holds and readings (`WorldCreationInstances.Pack.cs:247`,
+`WorldCreationInstances.Rates.cs:193`). The
+[Engine job system packet](open-items.md#engine-job-system) owns measuring
+and reducing that cost through the existing generic machinery. No engine code
+is added here. Direct3D and Vulkan settled captures are inspected; the new
+meadow contact scenarios and the two input-clock fixtures pass `--reproduce`.
 
 ### 10. Packages as worked examples
 

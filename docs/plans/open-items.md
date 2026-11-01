@@ -608,6 +608,22 @@ system can take, from `dotnet-trace` thread-time samples of the frame thread
 
 #### Other frame-time findings
 
+- [high] The meadow is now a forcing workload in the real debug world
+  (`debug.go meadow`): 1,994 two-part blades add 4,004 dynamic slots and
+  4,215 retained mesh draws. Direct3D 12's 600-iteration standing/walking
+  observations are 46.59/55.21 ms, produce 35.79/40.54 ms. Whole-world
+  cold-bake observations are 209.996 → 306.639 s on Direct3D 12 and
+  321.246 → 499.573 s on Vulkan, all past the 60 s ruling. Animated placement
+  registrations cannot use the existing pose-rate holds:
+  `WorldCreationInstances.Pack.cs:247` requires `BodyIndex`, and
+  `WorldCreationInstances.Rates.cs:193` omits them from readings. Owner:
+  rendering/job-system lane. Extend the same projection/consumer-based rate
+  mechanism to placement roots, measure pose packing and draw recording, and
+  preserve planted roots, continuous world-phased gusts and independent tip
+  flutter. Triangle detail already exists (`SdfWorldPassRecorder.cs:886`);
+  do not infer that triangle LOD is missing. The controlled-engine-build
+  before/after observations and their machine-load limits are in
+  [port lane 9](port-experimental.md#9-meadow-and-foliage).
 - [medium] `SdfMeshPathBake.Dress` rebuilds every draw of every group whenever
   one dynamic slot moved, and for each dynamic group scans `MeshAssetSlots`
   (`Enumerable.Contains` over an `IReadOnlyList<int>`) and every mesh instance
@@ -1179,8 +1195,8 @@ worlds in place is rewritten.
   it (wire, standard or gap), its place in the debug world and its size, plus
   what the debug world already has in another form. Almost every feature is
   already built and tested, so a port is wiring documents to what exists; the
-  gaps it names are a region-scoped pair primitive (the combat yard) and, only
-  if measured, a level of detail for instanced animated geometry (the meadow).
+  gaps it names are a region-scoped pair primitive (the combat yard) and the
+  meadow's measured animated-placement pose cost in the Engine job system packet.
   The lanes, ordered by the engine systems the debug world does not yet
   exercise:
   1. Authored render passes: a state-bound HLSL pass, a compare studio (medium).
@@ -1193,7 +1209,6 @@ worlds in place is rewritten.
   6. Traversal course: kart, ledge course, planetoids, grapple (large).
   7. Rules arcade: tetromino as rules, snake, rulepush (large; needs lane 1).
   8. Physical judges: billiards, bowling, dominoes, paddleball (medium).
-  9. Meadow and foliage: the wind meadow, trees and rocks (medium).
   10. Packages as examples: the familiars rules module (large).
   11. Board tables II: Chinese checkers, hex lines, mancala, tic-tac-toe,
       backgammon (large).
@@ -2435,6 +2450,15 @@ the completed 70-stop comparison manifest.
 
 Owner: language lane (transpiler) · medium · Next: the inline console command
 hang, then the pre-`main` language findings.
+
+- [medium] A solid creation shape without `position` throws instead of giving
+  an authoring diagnostic. Removing `position [0, 0, 0]` from
+  `worlds/standard/foliage.puck`'s `sceneryPatch` makes both `compile --validate`
+  and a headless debug boot throw `NullReferenceException` at
+  `WorldDefinitionValidator.Placements.cs:1723`, through
+  `DocumentSpatialValues.cs:143`. Owner: language/validation lane. Default or
+  refuse the missing position before the domain-expansion walk. The port
+  authors the explicit position and boots successfully. (from: meadow)
 
 - [low] An imported module named `roles` changes how its importer lints. Add a
   file `worlds/standard/roles.puck` holding only a `roles [ { name: "companion"
