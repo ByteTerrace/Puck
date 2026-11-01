@@ -334,45 +334,41 @@ template scrubClump(id, size = 1, crowns = 3, colors = ["#2D4A3B", "#3A5D47", "#
   }
 }
 
-// A clump of flowers: grass blades at the foot and stems carrying grouped round heads in two colours.
+// A clump of flowers as painted masses: a low leafy mound carrying grouped round heads in two colours. It has no thin
+// stems or blades, whose millimetre depth would set the bake's cell for the whole clump.
 template flowerCluster(id, head = "#F0CF45", accent = "#E8A93A", stem = "#5A7A35", count = 6) {
   prototype $"{id}" {
     document {
       schema: "puck.creation.v1"
       name: "flower-cluster"
       palette [
-        { color: stem, roughness: 0.97, specular: 0.01 }
+        { color: stem, roughness: 0.97, specular: 0.01, wrap: 0.3 }
         { color: head, roughness: 0.9, specular: 0.02, wrap: 0.4 }
         { color: accent, roughness: 0.9, specular: 0.02, wrap: 0.4 }
       ]
-      for i in range(0, 4) {
-        shape Prism $"leaf-{i}" {
-          position [0.07 * cosine(i * 1.5707963 + 0.4), 0.08, 0.07 * sine(i * 1.5707963 + 0.4)]
-          scale [0.022, 0.1, 0.008]
-          taper: 0
-          rotation [0, sine(i * 0.7853982 + 0.2), 0, cosine(i * 0.7853982 + 0.2)]
-          material: 0
-        }
+      shape Superellipsoid "mound" {
+        exponent: landscapeExponent
+        position [0, 0.02, 0]
+        scale [0.2, 0.11, 0.18]
+        material: 0
+      }
+      shape Superellipsoid "mound-side" {
+        exponent: landscapeExponent
+        position [0.12, 0.01, 0.06]
+        scale [0.12, 0.08, 0.11]
+        material: 0
+        blend: SmoothUnion
+        smooth: 0.04
       }
       for k in range(0, count) {
-        shape Prism $"stem-{k}" {
-          position [
-            (0.04 + 0.03 * k) * cosine(k * 2.39996323),
-            (0.2 + 0.05 * (k % 3)) / 2,
-            (0.04 + 0.03 * k) * sine(k * 2.39996323),
-          ]
-          scale [0.012, (0.2 + 0.05 * (k % 3)) / 2, 0.006]
-          taper: 0.6
-          material: 0
-        }
         shape Superellipsoid $"head-{k}" {
           exponent: landscapeExponent
           position [
-            (0.04 + 0.03 * k) * cosine(k * 2.39996323),
-            0.2 + 0.05 * (k % 3),
-            (0.04 + 0.03 * k) * sine(k * 2.39996323),
+            (0.03 + 0.025 * k) * cosine(k * 2.39996323),
+            0.12 + 0.03 * (k % 3),
+            (0.03 + 0.025 * k) * sine(k * 2.39996323),
           ]
-          scale [0.05, 0.03, 0.05]
+          scale [0.055, 0.035, 0.055]
           material: 1 + floor(k % 3 / 2)
         }
       }
