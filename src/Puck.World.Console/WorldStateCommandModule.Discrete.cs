@@ -241,18 +241,12 @@ public sealed partial class WorldStateCommandModule {
                 var pattern = args[0].ToString();
                 var row = args[1].ToString();
 
-                // The walk reads the live store, which the view cannot narrow, so it runs only over rows the reader's
-                // disclosure carries whole: the word's row and, for a keyed walk, the attribute row it reads per token.
-                foreach (var read in ((args.Count == 3)
-                    ? new[] { row, args[2].ToString() }
-                    : new[] { row })) {
-                    if (view.Withheld(row: read) is not null) {
-                        return CommandResult.Error(output: view.Refusal(
-                            key: null,
-                            row: read,
-                            verb: "world.match"
-                        ));
-                    }
+                if (!view.IsOperator) {
+                    return new CommandResult(Output: WorldRuleHost.DescribeDisclosedMatch(
+                        view: view, patternName: pattern, rowName: row,
+                        attribute: args.Count == 3 ? args[2].ToString() : null,
+                        key: args.Count == 4 ? args[2].ToString() : null,
+                        direction: args.Count == 4 ? args[3].ToString() : null));
                 }
                 if (!authority.TryResolveServer(
                     context: context,

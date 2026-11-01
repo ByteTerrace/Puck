@@ -15,13 +15,18 @@ public sealed class WorldStateReadView {
     private WorldStateReadView(Principal reader, WorldStateDisclosed disclosed, ulong completedTick, ulong completedEngineTick, long arenaBytes) {
         Reader = reader;
         Definition = disclosed.Definition;
+        if (reader.Kind != PrincipalKind.Console && Definition.StateRaw is { } state) {
+            Definition = Definition with { StateRaw = state with {
+                World = Definition.AuthoredState.Select(WorldStateDisclosure.WithoutStorageMetadata).ToArray()
+            } };
+        }
         m_withheld = disclosed.Withheld;
         CompletedTick = completedTick;
         CompletedEngineTick = completedEngineTick;
-        ArenaBytes = arenaBytes;
+        ArenaBytes = reader.Kind == PrincipalKind.Console ? arenaBytes : 0L;
     }
 
-    /// <summary>Gets the live store's size, in bytes, as of the read.</summary>
+    /// <summary>Gets the operator's live store size, or zero for a restricted reader: reservations reveal hidden membership.</summary>
     public long ArenaBytes { get; }
     /// <summary>Gets the last completed simulation tick the read answers as of.</summary>
     public ulong CompletedTick { get; }
