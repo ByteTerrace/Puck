@@ -71,6 +71,7 @@ public sealed class WorldEditorFrameLawTests {
     }
 
     private const float DestinationPitch = 2f;
+    private static readonly WorldEditorSnap Snap = new(AngleStepDegrees: 15f, Enabled: false, ObjectPatchRadius: 2.5f, Surface: true);
     private const string North = "north";
 
     // The slab's centre in the destination's own coordinates; its top face stands a quarter above.
@@ -138,7 +139,14 @@ public sealed class WorldEditorFrameLawTests {
     private static WorldDefinition Destination(WorldDefinition basis) => (basis with {
         CreationsRaw = [Crate, SlabCreation],
         DocumentId = "away",
-        EditorRaw = new WorldEditorDefaults(Grid: new WorldEditorGrid(Pitch: new Vector3(value: DestinationPitch))),
+        EditorRaw = new WorldEditorDefaults(
+            Bar: WorldBindingBarAuthoring.Absent,
+            Camera: new WorldEditorCamera(FlyRate: 6f, MaxDistance: 14f, MaxPitch: 1.35f, MinDistance: 0.5f, MinPitch: 0.05f, OrbitRate: 2.4f, PanRate: 3f, ZoomRate: 1.2f),
+            Grid: new WorldEditorGrid(LineWidth: 1.5f, Mode: WorldEditorGridMode.Surface, Pitch: new Vector3(value: DestinationPitch), PlaneY: 0f, Visible: false),
+            ReadOnlyLabel: "read-only",
+            Snap: Snap,
+            Toggle: new Puck.Commands.BindingPageEntryDefinition(Command: "player.build", Id: "editor.toggle", Sources: ["keyboard.f2"])
+        ),
         PlacementRowsRaw = [SlabAt(position: Slab)],
     });
     // A seat routed to the destination and drawn in the boot frame across the adjacency, whose boot-frame field holds the
@@ -182,10 +190,10 @@ public sealed class WorldEditorFrameLawTests {
         // The grid composed in the destination's frame, as the boot view draws it: its lattice's axes are the
         // destination's axes carried through the adjacency (a quarter turn), and its origin the destination's origin.
         var composed = WorldEditorGeometry.Overlay(
-            grid: new WorldEditorGrid(Pitch: new Vector3(value: DestinationPitch), Visible: true),
+            grid: new WorldEditorGrid(LineWidth: 1.5f, Mode: WorldEditorGridMode.Surface, Pitch: new Vector3(value: DestinationPitch), PlaneY: 0f, Visible: true),
             planeY: 0.25f,
             reference: null,
-            snap: WorldEditorDefaults.Default.ResolvedSnap
+            snap: Snap
         );
         var drawn = WorldEditorGeometry.InViewFrame(grid: composed, path: path);
         var destinationX = WorldAdjacencyPath.MapVectorIntoSource(path: path, value: new FixedVector3(X: FixedQ4816.One, Y: FixedQ4816.Zero, Z: FixedQ4816.Zero)).ToVector3();

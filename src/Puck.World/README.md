@@ -553,22 +553,26 @@ changes, held commands and chord/page latches from the old group are cleared.
 
 ## Build mode
 
-Every seat can build in any world that binds anything. `player.build [seat]`
-(F2, or Back on a pad) flips the seat between the `play` and `build` states of
-the built-in `editor` context family; `player.mode editor build|play` makes the
-same flip. The engine composes a build layer beneath the world's own binding
-layers (`WorldEditorBindings`): the toggle rides the resting page of every group
-the world binds, and a `build` group whose page binds the editor verbs is
-selected by the context row `{editor, build, build}` while the seat builds. The
-build page replaces the seat's play page, so the movement keys nudge instead of
-walking. A world that binds a build key keeps its own meaning, and a world may
-extend or rebind the build page like any other.
+Build mode is authored: the standard's `worlds/standard/editor.puck` gives a
+world its `editor` section and build page, and a world without the section has
+no build controls (its editor verbs refuse by name). `player.build [seat]`
+(F2, or Back on a pad, in the standard) flips the seat between the `play` and
+`build` states of the built-in `editor` context family; `player.mode editor
+build|play` makes the same flip. The engine composes the section's `toggle`
+entry beneath the resting page of every group the world binds
+(`WorldEditorBindings`), and the standard's `editor` binding overlay selects its
+`build` group, whose page binds the editor verbs, with the context row
+`{editor, build, build}` while the seat builds. The build page replaces the
+seat's play page, so the movement keys nudge instead of walking. A world that
+binds a toggle source keeps its own meaning, and a world may extend or rebind
+the build page by id like any other.
 
 While a seat builds, its binding bar shows the build page: the world's own bar
-when it has a bank for the `build` page, otherwise the engine's build bar, one
-row of keyboard plates above one of pad plates. A seat whose principal may not
-mutate placements still builds; its bar reads `Build (read-only)`, and its edits
-are refused by name at the tick boundary as they are from the console.
+when it places a bank for a page the section's `bar` shows, otherwise that
+`bar` (the standard's: one row of keyboard plates above one of pad plates). A
+seat whose principal may not mutate placements still builds; its bar reads the
+section's `readOnlyLabel` (`Build (read-only)`), and its edits are refused by
+name at the tick boundary as they are from the console.
 
 | Verb | Build page | What it does |
 |---|---|---|
@@ -2255,7 +2259,7 @@ The `render.skyFieldScale` boot value and a preset's `skyFieldScale` default
 to one; preset application and `world.save` retain the selected fraction. The names are
 the engine's one quality vocabulary (`QualityTiers`), and a preset the world
 does not author is refused by name. The shipped worlds share one table,
-`worlds/debug/quality.puck`: the Moth basis imports it, and a world on
+`worlds/standard/quality.puck`: the standard and the Moth basis import it, and a world on
 another basis imports it by name, so every presenting world answers each tier
 without moving its own boot levers. Render scale applies
 to both seat views and named cameras as each view's ceiling. A layout

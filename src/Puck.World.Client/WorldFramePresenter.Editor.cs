@@ -23,7 +23,11 @@ public sealed partial class WorldFramePresenter {
         var definition = (string.Equals(a: world, b: WorldDefinitionLoader.BootInstanceName, comparisonType: StringComparison.Ordinal)
             ? m_client.Definition
             : endpoint.Definition);
-        var grid = Editor.GridOf(document: definition.Editor, slot: slot);
+        if (definition.EditorRaw is not { } editor) {
+            return GridOverlayState.Hidden;
+        }
+
+        var grid = Editor.GridOf(document: editor, slot: slot);
 
         // The frame the seat's view draws the edited world in: the same frame, or across an adjacency. A seat whose view
         // nothing relates to the world it edits draws no grid rather than one in the wrong frame.
@@ -31,7 +35,7 @@ public sealed partial class WorldFramePresenter {
             return GridOverlayState.Hidden;
         }
 
-        var snap = Editor.SnapOf(document: definition.Editor, slot: slot);
+        var snap = Editor.SnapOf(document: editor, slot: slot);
         var planeY = grid.PlaneY;
 
         // Heights here are the edited world's own: the pointer probe answers in that world's frame.
@@ -48,7 +52,7 @@ public sealed partial class WorldFramePresenter {
                 grid: grid,
                 planeY: planeY,
                 reference: (((Editor.ReferenceOf(slot: slot, world: world) is { } id) && (WorldDefinitionRows.FindPlacement(id: id, placements: definition.Placements) is { } placement))
-                    ? WorldEditorGeometry.ReferenceOf(definition: definition, pitch: grid.ResolvedPitch, placement: placement)
+                    ? WorldEditorGeometry.ReferenceOf(definition: definition, pitch: grid.Pitch.Value, placement: placement)
                     : null),
                 snap: snap
             ),

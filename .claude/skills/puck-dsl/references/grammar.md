@@ -96,7 +96,7 @@ export read|action|binding name, name2         // names may wrap across indented
 ```
 
 An import has one spelling: the name of a source or document beside the
-importer, never its file (`import "skies"`, `import "../quality"`). A file
+importer, never its file (`import "skies"`, `import "../standard/quality"`). A file
 spelling (`import "skies.puck"`, `import "theme.world.json"`) is **PUCK121**.
 What the import brings in is the named file's to say, never the spelling's
 (`IDocumentVocabulary.TryResolveImport`):
@@ -111,6 +111,17 @@ What the import brings in is the named file's to say, never the spelling's
 
 A library imports only libraries: a document imported from a library would
 compose into nothing, so the import walk refuses it by name (PUCK017).
+
+A template expands rules, rows and whole sections, but an `enum` it emits does
+not bind its members as constants: the emitter indexes enum declarations from
+the source's own statements before templates expand
+(`WorldDocumentEmitter.IndexTypesAndDerivedState`), so a template body reading
+`MoveKind.Castle` folds only when the expanding source declares that enum itself
+(`worlds/games/chess.puck`'s header shows the pattern). Two blocks of one
+section in one source (a template's `views { }` beside another) do not merge
+deeply: a later block's member replaces the same member of an earlier one (a
+second `seatControl` drops the first's `boom`), so a template carries the whole
+member it writes.
 
 Each `let`'s unit conversion is checked separately per destination field.
 Duplicate declarations, missing/duplicate template arguments, unknown

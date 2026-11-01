@@ -138,7 +138,7 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
         layers[index++] = profile;
         // Live session rebinds compose LAST — the freshest authoring wins within every group.
         layers[index] = session;
-        layers[0] = WorldEditorBindings.Layer(worldLayers: layers.AsSpan(start: 1));
+        layers[0] = WorldEditorBindings.Layer(toggle: definition.EditorRaw?.Toggle, worldLayers: layers.AsSpan(start: 1));
 
         return layers;
     }

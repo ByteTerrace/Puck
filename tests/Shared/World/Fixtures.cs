@@ -925,6 +925,8 @@ internal static partial class Fixtures {
     private static WorldViewDefaults StandardViews { get; } = new(
         SeatRigRaw: StandardSeatRig,
         SeatControlRaw: new WorldSeatViewControl(
+            ClearanceMaxElevation: 1.1f,
+            ClearanceMode: WorldCameraClearanceChoice.Cutaway,
             MaxPitch: 1.2f,
             MinPitch: -0.35f,
             YawReference: WorldSeatYawReference.World

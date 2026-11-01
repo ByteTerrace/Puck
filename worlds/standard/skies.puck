@@ -1,9 +1,9 @@
-// The sky presets every shipped world can draw from: each template lowers to the ordinary `render.sky` or
-// `render.atmosphere` rows it spells, so a look needs no runtime concept and a world overrides any field after applying
-// one. Import the module and expand a sky preset inside a world's `sky` block, which then holds the preset's layers, and
-// its air inside the `atmosphere` block:
+// The standard's sky presets, a library: each template lowers to the ordinary `render.sky` or `render.atmosphere` rows
+// it spells, so a look needs no runtime concept and a world overrides any field after applying one. Import the module
+// and expand a sky preset inside a world's `sky` block, which then holds the preset's layers, and its air inside the
+// `atmosphere` block:
 //
-//   import "skies"
+//   import "../standard/skies"
 //   render {
 //     sky { clearDay(cloudiness: 0.4) }
 //     atmosphere { clearDayAir() }
@@ -92,8 +92,8 @@ template overcast(cover = 0.85, luminance = 3200) {
   ]
 }
 
-// A clear day's air: a light fog in-scattering the sky, thin enough that the valley's rim (valley.puck) 500 to 750 m out
-// keeps about two thirds of its light and the draw distance's 6 km fades to sky.
+// A clear day's air: a light fog in-scattering the sky, thin enough that terrain 500 to 750 m out keeps about two thirds
+// of its light and a 6 km draw distance fades to sky.
 template clearDayAir() {
   fog {
     density: 0.0006

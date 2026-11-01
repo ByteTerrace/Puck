@@ -1,0 +1,219 @@
+// The standard editor: what a seat in build mode works with. `player.build` (or `player.mode editor build`) flips a
+// seat into the engine's `editor` context family; this document authors everything that seat then has: the grid and
+// snapping it starts from, the editor camera's feel, the toggle every resting page carries, the build page the
+// `editor` overlay's context row selects while the seat builds, and the bar that shows the page. `standard.puck`
+// imports it; a world refines any row by id (`editor { snap { angleStepDegrees: 45 } }`) or replaces the page.
+
+// The build page's sources in page order, one row of plates per device family on the bar: the keyboard's above the
+// gamepad's, each row centred on the bar's anchor. The left mouse button scrubs the history row and has no plate.
+let buildKeys = [
+  "keyboard.f2", "keyboard.g", "keyboard.h", "keyboard.minus", "keyboard.equals", "keyboard.n", "keyboard.c",
+  "keyboard.enter", "keyboard.a", "keyboard.d", "keyboard.s", "keyboard.w", "keyboard.r", "keyboard.f", "keyboard.q",
+  "keyboard.e", "keyboard.z", "keyboard.x", "keyboard.v", "keyboard.b"
+]
+let buildPads = [
+  "gamepad.back", "gamepad.buttonNorth", "gamepad.buttonWest", "gamepad.buttonSouth", "gamepad.dpadLeft",
+  "gamepad.dpadRight", "gamepad.dpadDown", "gamepad.dpadUp", "gamepad.leftShoulder", "gamepad.rightShoulder"
+]
+let toggleSources = ["keyboard.f2", "gamepad.back"]
+
+editor {
+  grid {
+    visible: false
+    mode: Surface
+    pitch [0.5, 0.5, 0.5]
+    planeY: 0
+    lineWidth: 1.5
+  }
+  snap {
+    enabled: false
+    angleStepDegrees: 15
+    surface: true
+    objectPatchRadius: 2.5
+  }
+  camera {
+    orbitRate: 2.4
+    panRate: 3
+    zoomRate: 1.2
+    flyRate: 6
+    minPitch: 0.05
+    maxPitch: 1.35
+    minDistance: 0.5
+    maxDistance: 14
+  }
+  toggle {
+    command: "player.build"
+    id: "editor.toggle"
+    label: "Build"
+    sources: toggleSources
+  }
+  readOnlyLabel: "Build (read-only)"
+  bar {
+    slotSet: concat(buildKeys, buildPads, ["mouse.button1"])
+    banks [{ alpha: 1, id: "build", pageId: "build" }]
+    layout: "build"
+    layouts {
+      build {
+        banks {
+          build {
+            pieces [{ table: "keyboard" }, { table: "gamepad" }]
+          }
+        }
+        tables {
+          keyboard: map(buildKeys, (source, i) => { source: source, x: i - 0.5 * (length(buildKeys) - 1), y: 1 })
+          gamepad: map(buildPads, (source, i) => { source: source, x: i - 0.5 * (length(buildPads) - 1), y: 0 })
+        }
+      }
+    }
+  }
+}
+
+// The build page: the toggle back to play, the grid and snapping, placing, nudging and turning the seat's current
+// placement by whole grid and angle steps, and scrubbing the in-session history: a tick back or on, resume, keep the
+// future as the `kept` branch, and a left-button drag along the scrubber row.
+bindingOverlays [
+  {
+    id: "editor"
+    document {
+      version: "puck.input.bindings.v1"
+      modifiers []
+      contexts [
+        { family: "editor", state: "build", group: "build" }
+      ]
+      chords [
+        {
+          chord []
+          group: "build"
+          page {
+            id: "build"
+            label: "Build"
+            entries [
+              { command: "player.build", id: "editor.toggle", label: "Play", sources: toggleSources }
+              {
+                command: "world.grid"
+                id: "editor.grid"
+                label: "Grid"
+                text: "toggle"
+                sources ["keyboard.g", "gamepad.buttonNorth"]
+              }
+              {
+                command: "world.grid"
+                id: "editor.grid.mode"
+                label: "Grid mode"
+                text: "next"
+                sources ["keyboard.h"]
+              }
+              {
+                command: "world.grid"
+                id: "editor.grid.finer"
+                label: "Finer"
+                text: "pitch down"
+                sources ["keyboard.minus"]
+              }
+              {
+                command: "world.grid"
+                id: "editor.grid.coarser"
+                label: "Coarser"
+                text: "pitch up"
+                sources ["keyboard.equals"]
+              }
+              {
+                command: "world.snap"
+                id: "editor.snap"
+                label: "Snap"
+                text: "toggle"
+                sources ["keyboard.n", "gamepad.buttonWest"]
+              }
+              {
+                command: "world.snap"
+                id: "editor.snap.reference"
+                label: "Align"
+                text: "reference"
+                sources ["keyboard.c"]
+              }
+              {
+                command: "world.place"
+                id: "editor.place"
+                label: "Place"
+                sources ["keyboard.enter", "gamepad.buttonSouth"]
+              }
+              {
+                command: "world.nudge"
+                id: "editor.nudge.left"
+                label: "Left"
+                text: "x -1"
+                sources ["keyboard.a", "gamepad.dpadLeft"]
+              }
+              {
+                command: "world.nudge"
+                id: "editor.nudge.right"
+                label: "Right"
+                text: "x 1"
+                sources ["keyboard.d", "gamepad.dpadRight"]
+              }
+              {
+                command: "world.nudge"
+                id: "editor.nudge.back"
+                label: "Back"
+                text: "z 1"
+                sources ["keyboard.s", "gamepad.dpadDown"]
+              }
+              {
+                command: "world.nudge"
+                id: "editor.nudge.forward"
+                label: "Forward"
+                text: "z -1"
+                sources ["keyboard.w", "gamepad.dpadUp"]
+              }
+              { command: "world.nudge", id: "editor.nudge.up", label: "Up", text: "y 1", sources ["keyboard.r"] }
+              { command: "world.nudge", id: "editor.nudge.down", label: "Down", text: "y -1", sources ["keyboard.f"] }
+              {
+                command: "world.turn"
+                id: "editor.turn.left"
+                label: "Turn left"
+                text: "-1"
+                sources ["keyboard.q", "gamepad.leftShoulder"]
+              }
+              {
+                command: "world.turn"
+                id: "editor.turn.right"
+                label: "Turn right"
+                text: "1"
+                sources ["keyboard.e", "gamepad.rightShoulder"]
+              }
+              {
+                command: "world.history"
+                id: "editor.history.back"
+                label: "Tick back"
+                text: "step -1"
+                sources ["keyboard.z"]
+              }
+              {
+                command: "world.history"
+                id: "editor.history.forward"
+                label: "Tick on"
+                text: "step 1"
+                sources ["keyboard.x"]
+              }
+              {
+                command: "world.history"
+                id: "editor.history.resume"
+                label: "Resume"
+                text: "resume"
+                sources ["keyboard.v"]
+              }
+              {
+                command: "world.history"
+                id: "editor.history.keep"
+                label: "Keep"
+                text: "branch kept"
+                sources ["keyboard.b"]
+              }
+              { command: "world.history.drag", id: "editor.history.drag", label: "Scrub", sources ["mouse.button1"] }
+            ]
+          }
+        }
+      ]
+    }
+  }
+]

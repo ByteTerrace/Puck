@@ -161,8 +161,8 @@ public sealed partial class WorldEditorCommandModule {
 
         return EditPlacement(
             change: (definition, placement) => {
-                var pitch = seats.GridOf(document: definition.Editor, slot: slot).ResolvedPitch;
-                var snap = seats.SnapOf(document: definition.Editor, slot: slot);
+                var pitch = seats.GridOf(document: (definition.EditorRaw ?? world.Editor), slot: slot).Pitch.Value;
+                var snap = seats.SnapOf(document: (definition.EditorRaw ?? world.Editor), slot: slot);
                 var position = ((Vector3)placement.Position);
                 Vector3 moved;
 
@@ -247,8 +247,8 @@ public sealed partial class WorldEditorCommandModule {
                     ? current
                     : definition.Placements.FirstOrDefault(predicate: placement => string.Equals(a: placement.PrototypeId, b: prototype, comparisonType: StringComparison.Ordinal)));
                 var scale = (template?.Scale ?? 1f);
-                var pitch = seats.GridOf(document: definition.Editor, slot: slot).ResolvedPitch;
-                var snap = seats.SnapOf(document: definition.Editor, slot: slot);
+                var pitch = seats.GridOf(document: (definition.EditorRaw ?? world.Editor), slot: slot).Pitch.Value;
+                var snap = seats.SnapOf(document: (definition.EditorRaw ?? world.Editor), slot: slot);
                 var yaw = (template?.YawDegrees ?? 0f);
 
                 return ComposeEdit(
@@ -322,7 +322,7 @@ public sealed partial class WorldEditorCommandModule {
 
         return EditPlacement(
             change: (definition, placement) => {
-                var snap = seats.SnapOf(document: definition.Editor, slot: slot);
+                var snap = seats.SnapOf(document: (definition.EditorRaw ?? world.Editor), slot: slot);
                 var yaw = (placement.YawDegrees + (steps * snap.AngleStepDegrees));
 
                 if (snap.Enabled) {

@@ -1,5 +1,11 @@
-// The standard package: a fragment that refines its importer's rows by id. It declares nothing of its own.
+// The standard package: a fragment that refines its importer's rows by id. Beside the documents it imports, it authors
+// the shared camera feel through camera.puck's library.
+import "inputs"
+import "quality"
 import "skin"
 import "controls"
 import "camera"
+import "editor"
 import "companions"
+
+cameraFeel()

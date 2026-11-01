@@ -12541,686 +12541,6 @@
                 "additionalProperties": false,
                 "default": null,
                 "title": "CameraBloom"
-              },
-              "anchorOp": {
-                "description": "Gets the program\u0027s Anchor op, or null when absent (an absent anchor starts from Reference implicitly).",
-                "type": [
-                  "object",
-                  "null"
-                ],
-                "properties": {
-                  "subject": {
-                    "$ref": "#/properties/cameras/items/properties/rig/properties/operations/items/anyOf/0/properties/subject"
-                  },
-                  "opcode": {
-                    "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
-                    "type": [
-                      "string",
-                      "null"
-                    ]
-                  }
-                },
-                "required": [
-                  "subject"
-                ],
-                "additionalProperties": false,
-                "title": "WorldCameraProgramOpAnchor"
-              },
-              "blendOp": {
-                "description": "Gets the program\u0027s Blend op, or null.",
-                "type": [
-                  "object",
-                  "null"
-                ],
-                "properties": {
-                  "a": {
-                    "description": "The program resolved at Weight 0.",
-                    "type": "string"
-                  },
-                  "b": {
-                    "description": "The program resolved at Weight 1.",
-                    "type": "string"
-                  },
-                  "weight": {
-                    "description": "The blend weight in [0, 1] \u2014 a literal, or a state binding.",
-                    "title": "BindableScalar",
-                    "anyOf": [
-                      {
-                        "type": "number"
-                      },
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "object",
-                        "properties": {
-                          "clock": {
-                            "type": "string"
-                          },
-                          "keys": {
-                            "type": "array",
-                            "items": {
-                              "type": "object",
-                              "properties": {
-                                "at": {
-                                  "type": "number"
-                                },
-                                "value": {
-                                  "type": "number"
-                                },
-                                "ease": {
-                                  "type": "string",
-                                  "enum": [
-                                    "Linear",
-                                    "Smooth",
-                                    "Step"
-                                  ]
-                                }
-                              },
-                              "required": [
-                                "at",
-                                "value"
-                              ],
-                              "additionalProperties": false
-                            }
-                          }
-                        },
-                        "required": [
-                          "clock",
-                          "keys"
-                        ],
-                        "additionalProperties": false
-                      }
-                    ]
-                  },
-                  "opcode": {
-                    "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
-                    "type": [
-                      "string",
-                      "null"
-                    ]
-                  }
-                },
-                "required": [
-                  "a",
-                  "b",
-                  "weight"
-                ],
-                "additionalProperties": false,
-                "title": "WorldCameraProgramOpBlend"
-              },
-              "clampPitchOp": {
-                "description": "Gets the program\u0027s ClampPitch op, or null.",
-                "type": [
-                  "object",
-                  "null"
-                ],
-                "properties": {
-                  "minPitch": {
-                    "description": "The minimum pitch, radians.",
-                    "type": "number"
-                  },
-                  "maxPitch": {
-                    "description": "The maximum pitch, radians.",
-                    "type": "number"
-                  },
-                  "opcode": {
-                    "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
-                    "type": [
-                      "string",
-                      "null"
-                    ]
-                  }
-                },
-                "required": [
-                  "minPitch",
-                  "maxPitch"
-                ],
-                "additionalProperties": false,
-                "title": "WorldCameraProgramOpClampPitch"
-              },
-              "dynamicsOp": {
-                "description": "Gets the program\u0027s Dynamics op, or null.",
-                "type": [
-                  "object",
-                  "null"
-                ],
-                "properties": {
-                  "row": {
-                    "description": "The referenced dynamics row name; must resolve.",
-                    "type": "string"
-                  },
-                  "opcode": {
-                    "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
-                    "type": [
-                      "string",
-                      "null"
-                    ]
-                  }
-                },
-                "required": [
-                  "row"
-                ],
-                "additionalProperties": false,
-                "title": "WorldCameraProgramOpDynamics"
-              },
-              "fovOp": {
-                "description": "Gets the program\u0027s FieldOfView op, or null.",
-                "type": [
-                  "object",
-                  "null"
-                ],
-                "properties": {
-                  "fieldOfViewRadians": {
-                    "description": "The field of view.",
-                    "title": "BindableScalar",
-                    "anyOf": [
-                      {
-                        "type": "number"
-                      },
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "object",
-                        "properties": {
-                          "clock": {
-                            "type": "string"
-                          },
-                          "keys": {
-                            "type": "array",
-                            "items": {
-                              "type": "object",
-                              "properties": {
-                                "at": {
-                                  "type": "number"
-                                },
-                                "value": {
-                                  "type": "number"
-                                },
-                                "ease": {
-                                  "type": "string",
-                                  "enum": [
-                                    "Linear",
-                                    "Smooth",
-                                    "Step"
-                                  ]
-                                }
-                              },
-                              "required": [
-                                "at",
-                                "value"
-                              ],
-                              "additionalProperties": false
-                            }
-                          }
-                        },
-                        "required": [
-                          "clock",
-                          "keys"
-                        ],
-                        "additionalProperties": false
-                      }
-                    ]
-                  },
-                  "opcode": {
-                    "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
-                    "type": [
-                      "string",
-                      "null"
-                    ]
-                  }
-                },
-                "required": [
-                  "fieldOfViewRadians"
-                ],
-                "additionalProperties": false,
-                "title": "WorldCameraProgramOpFieldOfView"
-              },
-              "lookAtOp": {
-                "description": "Gets the program\u0027s LookAt op, or null.",
-                "type": [
-                  "object",
-                  "null"
-                ],
-                "properties": {
-                  "subject": {
-                    "$ref": "#/properties/cameras/items/properties/rig/properties/operations/items/anyOf/2/properties/subject"
-                  },
-                  "targetOffset": {
-                    "description": "An offset from the resolved Subject\u0027s pose; ignored when Subject is null.",
-                    "default": null,
-                    "title": "DocumentVector3",
-                    "anyOf": [
-                      {
-                        "type": "array",
-                        "items": {
-                          "type": "number"
-                        },
-                        "minItems": 3,
-                        "maxItems": 3
-                      },
-                      {
-                        "type": "string",
-                        "minLength": 1,
-                        "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
-                      }
-                    ]
-                  },
-                  "worldAxes": {
-                    "description": "Whether TargetOffset uses world axes rather than the subject\u0027s own.",
-                    "type": "boolean",
-                    "default": false
-                  },
-                  "focusDistance": {
-                    "description": "The finite target distance along the current subject\u0027s forward axis, used only when Subject is null.",
-                    "type": "number",
-                    "default": 6
-                  },
-                  "closeTargetOffset": {
-                    "description": "The target offset approached as collision shortens a seat\u0027s boom; absent keeps the rest target.",
-                    "default": null,
-                    "title": "DocumentVector3",
-                    "anyOf": [
-                      {
-                        "type": "array",
-                        "items": {
-                          "type": "number"
-                        },
-                        "minItems": 3,
-                        "maxItems": 3
-                      },
-                      {
-                        "type": "string",
-                        "minLength": 1,
-                        "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
-                      }
-                    ]
-                  },
-                  "closeTargetStartFraction": {
-                    "description": "The boom fraction below which target migration begins.",
-                    "type": "number",
-                    "default": 0.6
-                  },
-                  "closeTargetFullFraction": {
-                    "description": "The boom fraction at which migration reaches the close target.",
-                    "type": "number",
-                    "default": 0.2
-                  },
-                  "opcode": {
-                    "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
-                    "type": [
-                      "string",
-                      "null"
-                    ]
-                  }
-                },
-                "required": [
-                  "subject"
-                ],
-                "additionalProperties": false,
-                "title": "WorldCameraProgramOpLookAt"
-              },
-              "offsetOp": {
-                "description": "Gets the program\u0027s Offset op, or null.",
-                "type": [
-                  "object",
-                  "null"
-                ],
-                "properties": {
-                  "value": {
-                    "description": "The offset.",
-                    "title": "DocumentVector3",
-                    "anyOf": [
-                      {
-                        "type": "array",
-                        "items": {
-                          "type": "number"
-                        },
-                        "minItems": 3,
-                        "maxItems": 3
-                      },
-                      {
-                        "type": "string",
-                        "minLength": 1,
-                        "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
-                      }
-                    ]
-                  },
-                  "worldAxes": {
-                    "description": "Whether Value uses world axes rather than the subject\u0027s own.",
-                    "type": "boolean",
-                    "default": false
-                  },
-                  "spreadPullback": {
-                    "description": "The group-spread multiplier applied to the offset \u2014 meaningful only when the program\u0027s OWN externally supplied reference is a Group establishing shot (zero, and thus inert, everywhere else).",
-                    "type": "number",
-                    "default": 0
-                  },
-                  "opcode": {
-                    "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
-                    "type": [
-                      "string",
-                      "null"
-                    ]
-                  }
-                },
-                "required": [
-                  "value"
-                ],
-                "additionalProperties": false,
-                "title": "WorldCameraProgramOpOffset"
-              },
-              "orbitOp": {
-                "description": "Gets the program\u0027s Orbit op, or null.",
-                "type": [
-                  "object",
-                  "null"
-                ],
-                "properties": {
-                  "distance": {
-                    "description": "The finite positive orbit distance.",
-                    "type": "number"
-                  },
-                  "yaw": {
-                    "description": "The orbit heading in radians, as a literal, a numeric state binding, or keys on a clock that turn along the shorter arc.",
-                    "title": "BindableAngle",
-                    "anyOf": [
-                      {
-                        "type": "number"
-                      },
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "object",
-                        "properties": {
-                          "clock": {
-                            "type": "string"
-                          },
-                          "keys": {
-                            "type": "array",
-                            "items": {
-                              "type": "object",
-                              "properties": {
-                                "at": {
-                                  "type": "number"
-                                },
-                                "value": {
-                                  "type": "number"
-                                },
-                                "ease": {
-                                  "type": "string",
-                                  "enum": [
-                                    "Linear",
-                                    "Smooth",
-                                    "Step"
-                                  ]
-                                }
-                              },
-                              "required": [
-                                "at",
-                                "value"
-                              ],
-                              "additionalProperties": false
-                            }
-                          }
-                        },
-                        "required": [
-                          "clock",
-                          "keys"
-                        ],
-                        "additionalProperties": false
-                      }
-                    ]
-                  },
-                  "pitch": {
-                    "description": "The orbit tilt in radians, as a literal, a numeric state binding, or keys on a clock.",
-                    "title": "BindableAngle",
-                    "anyOf": [
-                      {
-                        "type": "number"
-                      },
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "object",
-                        "properties": {
-                          "clock": {
-                            "type": "string"
-                          },
-                          "keys": {
-                            "type": "array",
-                            "items": {
-                              "type": "object",
-                              "properties": {
-                                "at": {
-                                  "type": "number"
-                                },
-                                "value": {
-                                  "type": "number"
-                                },
-                                "ease": {
-                                  "type": "string",
-                                  "enum": [
-                                    "Linear",
-                                    "Smooth",
-                                    "Step"
-                                  ]
-                                }
-                              },
-                              "required": [
-                                "at",
-                                "value"
-                              ],
-                              "additionalProperties": false
-                            }
-                          }
-                        },
-                        "required": [
-                          "clock",
-                          "keys"
-                        ],
-                        "additionalProperties": false
-                      }
-                    ]
-                  },
-                  "pivotOffset": {
-                    "description": "The world-axis offset from the current subject\u0027s origin to the pivot.",
-                    "default": null,
-                    "title": "DocumentVector3",
-                    "anyOf": [
-                      {
-                        "type": "array",
-                        "items": {
-                          "type": "number"
-                        },
-                        "minItems": 3,
-                        "maxItems": 3
-                      },
-                      {
-                        "type": "string",
-                        "minLength": 1,
-                        "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
-                      }
-                    ]
-                  },
-                  "opcode": {
-                    "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
-                    "type": [
-                      "string",
-                      "null"
-                    ]
-                  }
-                },
-                "required": [
-                  "distance",
-                  "yaw",
-                  "pitch"
-                ],
-                "additionalProperties": false,
-                "title": "WorldCameraProgramOpOrbit"
-              },
-              "pathOp": {
-                "description": "Gets the program\u0027s Path op, or null.",
-                "type": [
-                  "object",
-                  "null"
-                ],
-                "properties": {
-                  "curve": {
-                    "description": "The referenced curves row name; must resolve.",
-                    "type": "string"
-                  },
-                  "fraction": {
-                    "description": "The curve\u0027s arc-length fraction to sample, in [0, 1] for an open row (values outside clamp) or unrestricted for a closed row (values wrap) \u2014 a literal, or a state binding.",
-                    "title": "BindableScalar",
-                    "anyOf": [
-                      {
-                        "type": "number"
-                      },
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "object",
-                        "properties": {
-                          "clock": {
-                            "type": "string"
-                          },
-                          "keys": {
-                            "type": "array",
-                            "items": {
-                              "type": "object",
-                              "properties": {
-                                "at": {
-                                  "type": "number"
-                                },
-                                "value": {
-                                  "type": "number"
-                                },
-                                "ease": {
-                                  "type": "string",
-                                  "enum": [
-                                    "Linear",
-                                    "Smooth",
-                                    "Step"
-                                  ]
-                                }
-                              },
-                              "required": [
-                                "at",
-                                "value"
-                              ],
-                              "additionalProperties": false
-                            }
-                          }
-                        },
-                        "required": [
-                          "clock",
-                          "keys"
-                        ],
-                        "additionalProperties": false
-                      }
-                    ]
-                  },
-                  "opcode": {
-                    "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
-                    "type": [
-                      "string",
-                      "null"
-                    ]
-                  }
-                },
-                "required": [
-                  "curve",
-                  "fraction"
-                ],
-                "additionalProperties": false,
-                "title": "WorldCameraProgramOpPath"
-              },
-              "selectOp": {
-                "description": "Gets the program\u0027s SelectProgram op, or null.",
-                "type": [
-                  "object",
-                  "null"
-                ],
-                "properties": {
-                  "key": {
-                    "description": "The selecting value \u2014 a literal, or (the intended use) a state.\u003Crow\u003E[.\u003Ckey\u003E] binding \u2014 rounded to the nearest whole number and matched against Cases.",
-                    "title": "BindableScalar",
-                    "anyOf": [
-                      {
-                        "type": "number"
-                      },
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "object",
-                        "properties": {
-                          "clock": {
-                            "type": "string"
-                          },
-                          "keys": {
-                            "type": "array",
-                            "items": {
-                              "type": "object",
-                              "properties": {
-                                "at": {
-                                  "type": "number"
-                                },
-                                "value": {
-                                  "type": "number"
-                                },
-                                "ease": {
-                                  "type": "string",
-                                  "enum": [
-                                    "Linear",
-                                    "Smooth",
-                                    "Step"
-                                  ]
-                                }
-                              },
-                              "required": [
-                                "at",
-                                "value"
-                              ],
-                              "additionalProperties": false
-                            }
-                          }
-                        },
-                        "required": [
-                          "clock",
-                          "keys"
-                        ],
-                        "additionalProperties": false
-                      }
-                    ]
-                  },
-                  "cases": {
-                    "$ref": "#/properties/cameras/items/properties/rig/properties/operations/items/anyOf/9/properties/cases"
-                  },
-                  "default": {
-                    "description": "The program resolved when no case\u0027s value matches Key.",
-                    "type": "string"
-                  },
-                  "opcode": {
-                    "description": "Gets this op\u0027s authored $type token \u2014 the one spelling a refusal, a read-back, and the document all use.",
-                    "type": [
-                      "string",
-                      "null"
-                    ]
-                  }
-                },
-                "required": [
-                  "key",
-                  "cases",
-                  "default"
-                ],
-                "additionalProperties": false,
-                "title": "WorldCameraProgramOpSelectProgram"
               }
             },
             "required": [
@@ -27573,36 +26893,6 @@
             "bloom": {
               "$ref": "#/properties/cameras/items/properties/rig/properties/bloom",
               "default": null
-            },
-            "anchorOp": {
-              "$ref": "#/properties/cameras/items/properties/rig/properties/anchorOp"
-            },
-            "blendOp": {
-              "$ref": "#/properties/cameras/items/properties/rig/properties/blendOp"
-            },
-            "clampPitchOp": {
-              "$ref": "#/properties/cameras/items/properties/rig/properties/clampPitchOp"
-            },
-            "dynamicsOp": {
-              "$ref": "#/properties/cameras/items/properties/rig/properties/dynamicsOp"
-            },
-            "fovOp": {
-              "$ref": "#/properties/cameras/items/properties/rig/properties/fovOp"
-            },
-            "lookAtOp": {
-              "$ref": "#/properties/cameras/items/properties/rig/properties/lookAtOp"
-            },
-            "offsetOp": {
-              "$ref": "#/properties/cameras/items/properties/rig/properties/offsetOp"
-            },
-            "orbitOp": {
-              "$ref": "#/properties/cameras/items/properties/rig/properties/orbitOp"
-            },
-            "pathOp": {
-              "$ref": "#/properties/cameras/items/properties/rig/properties/pathOp"
-            },
-            "selectOp": {
-              "$ref": "#/properties/cameras/items/properties/rig/properties/selectOp"
             }
           },
           "required": [
@@ -27637,6 +26927,19 @@
               "description": "The maximum live pitch offset in radians.",
               "type": "number"
             },
+            "clearanceMode": {
+              "description": "The author\u0027s tight-space behavior, Fade or Cutaway; players may override it.",
+              "enum": [
+                "Auto",
+                "Cutaway",
+                "Fade"
+              ],
+              "title": "WorldCameraClearanceChoice"
+            },
+            "clearanceMaxElevation": {
+              "description": "The cutaway boom\u0027s highest elevation above the seat\u0027s level plane, in radians, within [0, \u03C0/2]. Fade never rises, so only cutaway reads it.",
+              "type": "number"
+            },
             "follow": {
               "description": "The follow camera: with no look input the camera yaw eases in behind the body\u0027s heading; any look input (a deflected look stick, a held orbit/steer) is free-look and the follow yields for as long as it lasts. Optional; absent is a still camera that goes only where look input sends it. Needs World \u2014 a body-relative yaw already rides the body.",
               "type": [
@@ -27661,18 +26964,8 @@
               "default": null,
               "title": "WorldSeatFollow"
             },
-            "clearanceMode": {
-              "description": "The author\u0027s tight-space behavior; players may override it.",
-              "enum": [
-                "Auto",
-                "Cutaway",
-                "Fade"
-              ],
-              "default": "Cutaway",
-              "title": "WorldCameraClearanceChoice"
-            },
             "characterFade": {
-              "description": "The full-size fade distances; absent uses the standard distances.",
+              "description": "The full-size fade distances; absent, fade never dissolves the body and holds no minimum boom.",
               "type": [
                 "object",
                 "null"
@@ -27680,31 +26973,28 @@
               "properties": {
                 "startDistance": {
                   "description": "The boom distance at which the body starts dissolving.",
-                  "type": "number",
-                  "default": 1.25
+                  "type": "number"
                 },
                 "endDistance": {
                   "description": "The distance at which the body is completely hidden.",
-                  "type": "number",
-                  "default": 0.45
+                  "type": "number"
                 },
                 "minimumBoom": {
                   "description": "The preferred shortest boom; a nearer wall takes precedence.",
-                  "type": "number",
-                  "default": 0.35
+                  "type": "number"
                 }
               },
+              "required": [
+                "startDistance",
+                "endDistance",
+                "minimumBoom"
+              ],
               "additionalProperties": false,
               "default": null,
               "title": "WorldCameraCharacterFade"
             },
-            "clearanceMaxElevation": {
-              "description": "The cutaway boom\u0027s highest elevation above the seat\u0027s level plane, in radians.",
-              "type": "number",
-              "default": 1.1
-            },
             "autoFirstPerson": {
-              "description": "The optional automatic pull-in policy; absent is off with standard hysteresis.",
+              "description": "The automatic pull-in policy; absent, automatic pull-in is unavailable whatever a player or session asks.",
               "type": [
                 "object",
                 "null"
@@ -27712,30 +27002,32 @@
               "properties": {
                 "enabled": {
                   "description": "Whether automatic pull-in is the author\u0027s default.",
-                  "type": "boolean",
-                  "default": false
+                  "type": "boolean"
                 },
                 "entryDistance": {
                   "description": "Maximum constrained room for entry.",
-                  "type": "number",
-                  "default": 0.85
+                  "type": "number"
                 },
                 "entrySeconds": {
                   "description": "Continuous constrained time before entry.",
-                  "type": "number",
-                  "default": 0.2
+                  "type": "number"
                 },
                 "exitDistance": {
                   "description": "Minimum open room for exit, greater than entry.",
-                  "type": "number",
-                  "default": 1.35
+                  "type": "number"
                 },
                 "exitSeconds": {
                   "description": "Continuous clear time before exit.",
-                  "type": "number",
-                  "default": 0.15
+                  "type": "number"
                 }
               },
+              "required": [
+                "enabled",
+                "entryDistance",
+                "entrySeconds",
+                "exitDistance",
+                "exitSeconds"
+              ],
               "additionalProperties": false,
               "default": null,
               "title": "WorldCameraAutoFirstPerson"
@@ -27773,7 +27065,9 @@
           "required": [
             "yawReference",
             "minPitch",
-            "maxPitch"
+            "maxPitch",
+            "clearanceMode",
+            "clearanceMaxElevation"
           ],
           "additionalProperties": false,
           "default": null,
@@ -27800,36 +27094,6 @@
             "bloom": {
               "$ref": "#/properties/cameras/items/properties/rig/properties/bloom",
               "default": null
-            },
-            "anchorOp": {
-              "$ref": "#/properties/cameras/items/properties/rig/properties/anchorOp"
-            },
-            "blendOp": {
-              "$ref": "#/properties/cameras/items/properties/rig/properties/blendOp"
-            },
-            "clampPitchOp": {
-              "$ref": "#/properties/cameras/items/properties/rig/properties/clampPitchOp"
-            },
-            "dynamicsOp": {
-              "$ref": "#/properties/cameras/items/properties/rig/properties/dynamicsOp"
-            },
-            "fovOp": {
-              "$ref": "#/properties/cameras/items/properties/rig/properties/fovOp"
-            },
-            "lookAtOp": {
-              "$ref": "#/properties/cameras/items/properties/rig/properties/lookAtOp"
-            },
-            "offsetOp": {
-              "$ref": "#/properties/cameras/items/properties/rig/properties/offsetOp"
-            },
-            "orbitOp": {
-              "$ref": "#/properties/cameras/items/properties/rig/properties/orbitOp"
-            },
-            "pathOp": {
-              "$ref": "#/properties/cameras/items/properties/rig/properties/pathOp"
-            },
-            "selectOp": {
-              "$ref": "#/properties/cameras/items/properties/rig/properties/selectOp"
             }
           },
           "required": [

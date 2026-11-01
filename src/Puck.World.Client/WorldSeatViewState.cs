@@ -23,8 +23,6 @@ public sealed class WorldSeatViewState {
     private readonly WorldCameraClearance m_clearance = new();
     private readonly WorldCameraViewTransition m_viewTransition = new();
 
-    private static readonly WorldCameraAutoFirstPerson DefaultAutomatic = new();
-
     private Quaternion m_upAlignment = Quaternion.Identity;
     private Vector3 m_alignedUp = Vector3.UnitY;
     private readonly WorldCameraRigCompiler.Cache m_rigCache = new();
@@ -318,9 +316,12 @@ public sealed class WorldSeatViewState {
     /// <param name="firstPerson">The resolved program's authored first-person destination.</param>
     /// <param name="feel">The portable automatic pull-in preference.</param>
     /// <param name="viewForward">The rig's look direction before boom smoothing.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="control"/> is <see langword="null"/>.</exception>
     public float Clear(bool enabled, SdfFieldEvaluator? field, ref Vector3 eye, ref Vector3 target, in WorldChaseBody subject, Vector3 up, in SdfCameraDynamics dynamics, float deltaSeconds,
-        SdfCameraTargetShift targetShift = default, WorldCameraClearanceChoice choice = WorldCameraClearanceChoice.Cutaway, WorldSeatViewControl? control = null, float scale = 1f,
+        WorldCameraClearanceChoice choice, WorldSeatViewControl control, SdfCameraTargetShift targetShift = default, float scale = 1f,
         SdfCameraFirstPerson? firstPerson = null, WorldSeatCameraFeel? feel = null, Vector3? viewForward = null) {
+        ArgumentNullException.ThrowIfNull(argument: control);
+
         lock (m_gate) {
             if (!enabled) {
                 m_clearance.Reset();
@@ -342,15 +343,15 @@ public sealed class WorldSeatViewState {
                 up: up,
                 targetShift: targetShift,
                 choice: choice,
-                characterFade: control?.CharacterFade,
+                characterFade: control.CharacterFade,
                 scale: scale,
-                maxElevation: (control?.ClearanceMaxElevation ?? WorldCameraClearance.LiftCeiling)
+                maxElevation: control.ClearanceMaxElevation
             );
-            if ((firstPerson is { } destination) && (control is not null)) {
+            if (firstPerson is { } destination) {
                 var head = subject.Point(local: destination.EyePoint);
                 var room = (WorldCameraClearance.AvailableRoom(backward: -forward, field: field, head: head, length: authoredLength, scale: scale) / scale);
 
-                m_viewTransition.Advance(destination, (control.AutoFirstPerson ?? DefaultAutomatic),
+                m_viewTransition.Advance(destination, control.AutoFirstPerson,
                     m_viewTransition.Automatic(control: control, feel: (feel ?? WorldSeatCameraFeel.Default)), room, deltaSeconds);
                 m_clearance.ApplyView(m_viewTransition, head, forward, (destination.HideRadius * scale));
                 eye = m_clearance.Eye;

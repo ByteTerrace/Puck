@@ -28,9 +28,10 @@ public sealed class WorldCameraViewTransition {
     public void SetView(bool? first) => m_override = first;
     /// <summary>Sets automatic pull-in; null restores the portable/author preference.</summary>
     public void SetAutomatic(bool? enabled) => m_autoOverride = enabled;
-    /// <summary>Resolves the session, portable and author automatic preference, in that order.</summary>
+    /// <summary>Resolves the session, portable and author automatic preference, in that order; always off where the
+    /// world authors no automatic policy.</summary>
     public bool Automatic(WorldSeatViewControl control, WorldSeatCameraFeel feel) =>
-        (m_autoOverride ?? feel.AutoFirstPerson ?? control.AutoFirstPerson?.Enabled ?? false);
+        ((control.AutoFirstPerson is { } policy) && (m_autoOverride ?? feel.AutoFirstPerson ?? policy.Enabled));
 
     /// <summary>Drops transient presentation state when this seat no longer frames its body.</summary>
     public void Reset() {
@@ -42,11 +43,11 @@ public sealed class WorldCameraViewTransition {
 
     /// <summary>Steps the request and transition. Clearance is measured at the head independently of the
     /// current camera, so being in first person cannot manufacture its own reason to remain there.</summary>
-    public void Advance(in SdfCameraFirstPerson authored, WorldCameraAutoFirstPerson automatic, bool enabled,
+    public void Advance(in SdfCameraFirstPerson authored, WorldCameraAutoFirstPerson? automatic, bool enabled,
         float room, float deltaSeconds) {
         Room = room;
         var dt = (float.IsFinite(deltaSeconds) ? MathF.Max(0f, deltaSeconds) : 0f);
-        if (!enabled || m_override.HasValue || authored.Active) {
+        if (!enabled || (automatic is null) || m_override.HasValue || authored.Active) {
             m_automaticFirst = false;
             m_dwell = 0f;
         } else {

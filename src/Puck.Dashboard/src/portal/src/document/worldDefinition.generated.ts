@@ -730,7 +730,7 @@ export type BindingPageDefinition = {
 };
 
 export type BindingPageEntryDefinition = {
-  sources: (string | null)[] | null;
+  sources: StringListNullable | null;
   command?: string | null;
   channel?: ChannelRef | null;
   scale?: number | null;
@@ -1359,6 +1359,10 @@ export type HiddenCells = "Omit" | "Count" | "Placeholder";
 
 export type IReadOnlyDictionaryStringJsonElement = {
   [k: string]: unknown;
+};
+
+export type IReadOnlyDictionaryStringWorldBindingBarLayout = {
+  [k: string]: WorldBindingBarLayout | null;
 };
 
 export type Int32List = number[];
@@ -3042,6 +3046,8 @@ export type StateVisibility = {
 
 export type StringList = (string | null)[];
 
+export type StringListNullable = (string | null)[];
+
 export type TableRow = {
   /**
    * The row's stable name.
@@ -3463,11 +3469,11 @@ export type WorldBindingBarAuthoring = {
   /**
    * The physical controls this bar shows, by input source id (gamepad.buttonSouth, mouse.button1, …) — the same vocabulary a binding entry's sources speak, every id validated against the engine's input-source catalog, unique, at most MaxSlots. A layout's bank places these; one it does not place is not shown on that bank.
    */
-  slotSet: (string | null)[];
+  slotSet: StringList;
   /**
    * The stacked banks — at least one, at most MaxBanks, unique ids, each naming a page the composed binding profile actually declares. List order is draw order.
    */
-  banks: (WorldBindingBarBank | null)[];
+  banks: WorldBindingBarBankList;
   /**
    * Whether the bar is shown when no live override hides it.
    */
@@ -3503,9 +3509,7 @@ export type WorldBindingBarAuthoring = {
   /**
    * The bar's layouts by name — a crossbar, a strip, whatever an author adds next — each a whole WorldBindingBarLayout.
    */
-  layouts?: {
-    [k: string]: WorldBindingBarLayout | null;
-  } | null;
+  layouts?: IReadOnlyDictionaryStringWorldBindingBarLayout | null;
   /**
    * The name of the layout drawn when LayoutCell is absent or names none.
    */
@@ -3524,6 +3528,9 @@ export type WorldBindingBarAuthoring = {
   visible?: OverlayPredicateNullable | null;
 };
 
+/**
+ * One stacked binding-bar bank: what it is — the page it renders and its opacities. Several banks of the same slot set render simultaneously, each showing what that bank's OWN page binds. Where a bank sits, and which plates it shows, is each layout's banks table's to say; draw order is this list's order (later draws on top).
+ */
 export type WorldBindingBarBank = {
   /**
    * The bank's stable id — its mutation address and its key in every layout's bank table.
@@ -3543,6 +3550,11 @@ export type WorldBindingBarBank = {
   activeAlpha?: number | null;
 };
 
+export type WorldBindingBarBankList = (WorldBindingBarBank | null)[];
+
+/**
+ * One bank's place on a layout — a bank is a bar: where it hangs and the pieces it is made of. A control in the slot set that no piece places is not shown on this bank; a source placed by two pieces takes the later one.
+ */
 export type WorldBindingBarBankPlacement = {
   /**
    * The placed tables, in order.
@@ -3554,6 +3566,9 @@ export type WorldBindingBarBankPlacement = {
   anchor?: WorldBindingBarAnchor | null;
 };
 
+/**
+ * The authored layout of one on-screen binding bar: its tables, its banks, and its size tuning. Every tuning field is an optional override of the engine's resolved default (the Default* constants below): lengths are fractions of the seat viewport's height, every *Ratio is a multiple of the button size, and every *MinPx is a device-pixel floor.
+ */
 export type WorldBindingBarLayout = {
   /**
    * The plate tables by name — a cross, a strip, a column — each authored once and placed by the banks' pieces as many times as the layout needs.
@@ -3625,6 +3640,9 @@ export type WorldBindingBarLayout = {
   hintBaseGapRatio?: number | null;
 };
 
+/**
+ * One placed table: a named table of the layout, moved by At.
+ */
 export type WorldBindingBarPiece = {
   /**
    * The key of a table in the layout's tables.
@@ -3640,6 +3658,9 @@ export type WorldBindingBarPiece = {
   badge?: number[] | null;
 };
 
+/**
+ * One physical control's plate on a bank, in button pitches from the bank's anchor — x right, y UP.
+ */
 export type WorldBindingBarSlotPlacement = {
   /**
    * The physical control's input source id (a slotSet member).
@@ -3801,23 +3822,23 @@ export type WorldCameraAutoFirstPerson = {
   /**
    * Whether automatic pull-in is the author's default.
    */
-  enabled?: boolean;
+  enabled: boolean;
   /**
    * Maximum constrained room for entry.
    */
-  entryDistance?: number;
+  entryDistance: number;
   /**
    * Continuous constrained time before entry.
    */
-  entrySeconds?: number;
+  entrySeconds: number;
   /**
    * Minimum open room for exit, greater than entry.
    */
-  exitDistance?: number;
+  exitDistance: number;
   /**
    * Continuous clear time before exit.
    */
-  exitSeconds?: number;
+  exitSeconds: number;
 };
 
 export type WorldCameraBoom = {
@@ -3839,15 +3860,15 @@ export type WorldCameraCharacterFade = {
   /**
    * The boom distance at which the body starts dissolving.
    */
-  startDistance?: number;
+  startDistance: number;
   /**
    * The distance at which the body is completely hidden.
    */
-  endDistance?: number;
+  endDistance: number;
   /**
    * The preferred shortest boom; a nearer wall takes precedence.
    */
-  minimumBoom?: number;
+  minimumBoom: number;
 };
 
 /**
@@ -3875,46 +3896,6 @@ export type WorldCameraProgram = {
    * The camera's optical scatter override; absent inherits the world.
    */
   bloom?: CameraBloom | null;
-  /**
-   * Gets the program's Anchor op, or null when absent (an absent anchor starts from Reference implicitly).
-   */
-  anchorOp?: WorldCameraProgramOpAnchorNullable | null;
-  /**
-   * Gets the program's Blend op, or null.
-   */
-  blendOp?: WorldCameraProgramOpBlendNullable | null;
-  /**
-   * Gets the program's ClampPitch op, or null.
-   */
-  clampPitchOp?: WorldCameraProgramOpClampPitchNullable | null;
-  /**
-   * Gets the program's Dynamics op, or null.
-   */
-  dynamicsOp?: WorldCameraProgramOpDynamicsNullable | null;
-  /**
-   * Gets the program's FieldOfView op, or null.
-   */
-  fovOp?: WorldCameraProgramOpFieldOfViewNullable | null;
-  /**
-   * Gets the program's LookAt op, or null.
-   */
-  lookAtOp?: WorldCameraProgramOpLookAtNullable | null;
-  /**
-   * Gets the program's Offset op, or null.
-   */
-  offsetOp?: WorldCameraProgramOpOffsetNullable | null;
-  /**
-   * Gets the program's Orbit op, or null.
-   */
-  orbitOp?: WorldCameraProgramOpOrbitNullable | null;
-  /**
-   * Gets the program's Path op, or null.
-   */
-  pathOp?: WorldCameraProgramOpPathNullable | null;
-  /**
-   * Gets the program's SelectProgram op, or null.
-   */
-  selectOp?: WorldCameraProgramOpSelectProgramNullable | null;
 };
 
 /**
@@ -3938,46 +3919,10 @@ export type WorldCameraProgramOpAnchor = {
 };
 
 /**
- * Establishes the CURRENT subject — the pose Offset/Orbit place the eye relative to, and LookAt aims along the facing of when it names no subject of its own. Also re-seeds the eye at the resolved subject's own position (the "first person" default before any Offset/Orbit runs). At most one per program, and it must be the first operation when present; a program that omits it starts from Reference implicitly.
- */
-export type WorldCameraProgramOpAnchorNullable = {
-  /**
-   * The subject to resolve.
-   */
-  subject: WorldCameraSubject;
-  /**
-   * Gets this op's authored $type token — the one spelling a refusal, a read-back, and the document all use.
-   */
-  opcode?: string | null;
-};
-
-/**
  * Evaluates two other authored programs by name and linearly interpolates their resolved eye, target, and field of view — the whole document's camera-program table (every cameras[].rig plus views.seatRig/views.cameraRig) is the namespace A/B resolve against. At most one per program; refused when it would create a reference cycle.
  */
 export type WorldCameraProgramOpBlend = {
   $type?: "blend";
-  /**
-   * The program resolved at Weight 0.
-   */
-  a: string;
-  /**
-   * The program resolved at Weight 1.
-   */
-  b: string;
-  /**
-   * The blend weight in [0, 1] — a literal, or a state binding.
-   */
-  weight: BindableScalar;
-  /**
-   * Gets this op's authored $type token — the one spelling a refusal, a read-back, and the document all use.
-   */
-  opcode?: string | null;
-};
-
-/**
- * Evaluates two other authored programs by name and linearly interpolates their resolved eye, target, and field of view — the whole document's camera-program table (every cameras[].rig plus views.seatRig/views.cameraRig) is the namespace A/B resolve against. At most one per program; refused when it would create a reference cycle.
- */
-export type WorldCameraProgramOpBlendNullable = {
   /**
    * The program resolved at Weight 0.
    */
@@ -4016,24 +3961,6 @@ export type WorldCameraProgramOpClampPitch = {
 };
 
 /**
- * Clamps the effective pitch the NEXT Orbit op resolves with (its authored Pitch plus any live seat delta) to [MinPitch, MaxPitch]. At most one per program; must precede the Orbit op it governs. A joined seat's own views.seatControl band already clamps its LIVE delta before this ever runs — this op exists for a program with no seat behind it (a named camera orbiting a state-bound pitch).
- */
-export type WorldCameraProgramOpClampPitchNullable = {
-  /**
-   * The minimum pitch, radians.
-   */
-  minPitch: number;
-  /**
-   * The maximum pitch, radians.
-   */
-  maxPitch: number;
-  /**
-   * Gets this op's authored $type token — the one spelling a refusal, a read-back, and the document all use.
-   */
-  opcode?: string | null;
-};
-
-/**
  * Sets the second-order response the resolved eye/target boom eases through. Read by the caller after resolving a frame — never affects the resolved pose itself. At most one per program.
  */
 export type WorldCameraProgramOpDynamics = {
@@ -4049,38 +3976,10 @@ export type WorldCameraProgramOpDynamics = {
 };
 
 /**
- * Sets the second-order response the resolved eye/target boom eases through. Read by the caller after resolving a frame — never affects the resolved pose itself. At most one per program.
- */
-export type WorldCameraProgramOpDynamicsNullable = {
-  /**
-   * The referenced dynamics row name; must resolve.
-   */
-  row: string;
-  /**
-   * Gets this op's authored $type token — the one spelling a refusal, a read-back, and the document all use.
-   */
-  opcode?: string | null;
-};
-
-/**
  * Sets the rendered vertical field of view, radians — a literal, or a state.<row>[.<key>] binding so a world rule can pull focus or frame a moment (decisions in the sim, framing in presentation). At most one per program.
  */
 export type WorldCameraProgramOpFieldOfView = {
   $type?: "fieldOfView";
-  /**
-   * The field of view.
-   */
-  fieldOfViewRadians: BindableScalar;
-  /**
-   * Gets this op's authored $type token — the one spelling a refusal, a read-back, and the document all use.
-   */
-  opcode?: string | null;
-};
-
-/**
- * Sets the rendered vertical field of view, radians — a literal, or a state.<row>[.<key>] binding so a world rule can pull focus or frame a moment (decisions in the sim, framing in presentation). At most one per program.
- */
-export type WorldCameraProgramOpFieldOfViewNullable = {
   /**
    * The field of view.
    */
@@ -4160,70 +4059,10 @@ export type WorldCameraProgramOpLookAt = {
 };
 
 /**
- * Sets the aim target.
- */
-export type WorldCameraProgramOpLookAtNullable = {
-  /**
-   * The subject to look at, or null to look along the current subject's own forward axis from the eye, at FocusDistance.
-   */
-  subject: WorldCameraSubjectNullable | null;
-  /**
-   * An offset from the resolved Subject's pose; ignored when Subject is null.
-   */
-  targetOffset?: DocumentVector3;
-  /**
-   * Whether TargetOffset uses world axes rather than the subject's own.
-   */
-  worldAxes?: boolean;
-  /**
-   * The finite target distance along the current subject's forward axis, used only when Subject is null.
-   */
-  focusDistance?: number;
-  /**
-   * The target offset approached as collision shortens a seat's boom; absent keeps the rest target.
-   */
-  closeTargetOffset?: DocumentVector3;
-  /**
-   * The boom fraction below which target migration begins.
-   */
-  closeTargetStartFraction?: number;
-  /**
-   * The boom fraction at which migration reaches the close target.
-   */
-  closeTargetFullFraction?: number;
-  /**
-   * Gets this op's authored $type token — the one spelling a refusal, a read-back, and the document all use.
-   */
-  opcode?: string | null;
-};
-
-/**
  * Places the eye at an offset from the current subject's pose.
  */
 export type WorldCameraProgramOpOffset = {
   $type?: "offset";
-  /**
-   * The offset.
-   */
-  value: DocumentVector3;
-  /**
-   * Whether Value uses world axes rather than the subject's own.
-   */
-  worldAxes?: boolean;
-  /**
-   * The group-spread multiplier applied to the offset — meaningful only when the program's OWN externally supplied reference is a Group establishing shot (zero, and thus inert, everywhere else).
-   */
-  spreadPullback?: number;
-  /**
-   * Gets this op's authored $type token — the one spelling a refusal, a read-back, and the document all use.
-   */
-  opcode?: string | null;
-};
-
-/**
- * Places the eye at an offset from the current subject's pose.
- */
-export type WorldCameraProgramOpOffsetNullable = {
   /**
    * The offset.
    */
@@ -4270,54 +4109,10 @@ export type WorldCameraProgramOpOrbit = {
 };
 
 /**
- * Orbits the eye about its pivot. Yaw and Pitch are live-bindable like FieldOfView's field of view: a seat rig whose yaw reads a state cell turns the CAMERA when that cell changes — look behind is state.look.behind flipping between 0 and π — while the seat's facing (what steering and movement resolve against) is untouched, because the facing never includes the rig's offsets.
- */
-export type WorldCameraProgramOpOrbitNullable = {
-  /**
-   * The finite positive orbit distance.
-   */
-  distance: number;
-  /**
-   * The orbit heading in radians, as a literal, a numeric state binding, or keys on a clock that turn along the shorter arc.
-   */
-  yaw: BindableAngle;
-  /**
-   * The orbit tilt in radians, as a literal, a numeric state binding, or keys on a clock.
-   */
-  pitch: BindableAngle;
-  /**
-   * The world-axis offset from the current subject's origin to the pivot.
-   */
-  pivotOffset?: DocumentVector3;
-  /**
-   * Gets this op's authored $type token — the one spelling a refusal, a read-back, and the document all use.
-   */
-  opcode?: string | null;
-};
-
-/**
  * Establishes the CURRENT subject at a point sampled from a named curves row by arc-length fraction, and re-seeds the eye there — the same subject-seeding role Anchor plays, so at most one of the two may appear in a program, and when present this must be the first operation. The sampled subject's orientation faces the curve's own tangent direction at that point. A following Offset with WorldAxes: false (the default) rotates its offset into that tangent frame, and a following LookAt with no subject of its own looks ahead along it; a following Orbit pivots at the traveling point but resolves its own yaw/pitch as literal world-frame angles regardless of the tangent — it never reads the subject's orientation. A dollied eye is path + LookAt + FieldOfView; a dollied pivot is path + Orbit with an authored yaw that already accounts for the curve's own heading. Composes with Dynamics's boom follower untouched. Carries no rate field: a constant-rate dolly binds Fraction to a state row carrying the advance trait (base + rate·ticks) rather than duplicating a rate spelling here.
  */
 export type WorldCameraProgramOpPath = {
   $type?: "path";
-  /**
-   * The referenced curves row name; must resolve.
-   */
-  curve: string;
-  /**
-   * The curve's arc-length fraction to sample, in [0, 1] for an open row (values outside clamp) or unrestricted for a closed row (values wrap) — a literal, or a state binding.
-   */
-  fraction: BindableScalar;
-  /**
-   * Gets this op's authored $type token — the one spelling a refusal, a read-back, and the document all use.
-   */
-  opcode?: string | null;
-};
-
-/**
- * Establishes the CURRENT subject at a point sampled from a named curves row by arc-length fraction, and re-seeds the eye there — the same subject-seeding role Anchor plays, so at most one of the two may appear in a program, and when present this must be the first operation. The sampled subject's orientation faces the curve's own tangent direction at that point. A following Offset with WorldAxes: false (the default) rotates its offset into that tangent frame, and a following LookAt with no subject of its own looks ahead along it; a following Orbit pivots at the traveling point but resolves its own yaw/pitch as literal world-frame angles regardless of the tangent — it never reads the subject's orientation. A dollied eye is path + LookAt + FieldOfView; a dollied pivot is path + Orbit with an authored yaw that already accounts for the curve's own heading. Composes with Dynamics's boom follower untouched. Carries no rate field: a constant-rate dolly binds Fraction to a state row carrying the advance trait (base + rate·ticks) rather than duplicating a rate spelling here.
- */
-export type WorldCameraProgramOpPathNullable = {
   /**
    * The referenced curves row name; must resolve.
    */
@@ -4344,29 +4139,7 @@ export type WorldCameraProgramOpSelectProgram = {
   /**
    * The candidate programs, keyed by Value. At most one case per value.
    */
-  cases: WorldCameraSelectCaseList;
-  /**
-   * The program resolved when no case's value matches Key.
-   */
-  default: string;
-  /**
-   * Gets this op's authored $type token — the one spelling a refusal, a read-back, and the document all use.
-   */
-  opcode?: string | null;
-};
-
-/**
- * Evaluates exactly one of several other named programs, chosen by a live key — the state-driven counterpart of Blend's two-way continuous mix: a rule-advanced integer row selects a whole framing outright rather than easing toward one, so a document can drive which of N stations a single camera program shows without a per-frame console override. The winning program's eye, target, field of view, and dynamics response pass through unchanged (no lerp). At most one per program; refused when it would create a reference cycle.
- */
-export type WorldCameraProgramOpSelectProgramNullable = {
-  /**
-   * The selecting value — a literal, or (the intended use) a state.<row>[.<key>] binding — rounded to the nearest whole number and matched against Cases.
-   */
-  key: BindableScalar;
-  /**
-   * The candidate programs, keyed by Value. At most one case per value.
-   */
-  cases: WorldCameraSelectCaseList;
+  cases: (WorldCameraSelectCase | null)[];
   /**
    * The program resolved when no case's value matches Key.
    */
@@ -4390,8 +4163,6 @@ export type WorldCameraSelectCase = {
    */
   program: string;
 };
-
-export type WorldCameraSelectCaseList = (WorldCameraSelectCase | null)[];
 
 /**
  * The subject an Anchor/LookAt op resolves against — the closed "what a camera program can key off" vocabulary. Distinct from WorldAnchor (WHERE a whole placeable camera or speaker rides, resolved OUTSIDE the program and handed in as one reference pose): this is presentation math INSIDE the program, so it stays float and needs no live entity table — a placement's pose resolves through the same static stamped-transform math a placeable camera's own anchor and a speaker read (Puck.World.Client.WorldAnchorGeometry).
@@ -5056,73 +4827,85 @@ export type WorldEditorCamera = {
   /**
    * The orbit rate at full input, in radians per second; positive.
    */
-  orbitRate?: number;
+  orbitRate: number;
   /**
    * The pan rate at full input, in world units per second; positive.
    */
-  panRate?: number;
+  panRate: number;
   /**
    * The exponential dolly rate at full input, per second; positive.
    */
-  zoomRate?: number;
+  zoomRate: number;
   /**
    * The fly rate at full input, in world units per second; positive.
    */
-  flyRate?: number;
+  flyRate: number;
   /**
    * The lowest orbit pitch, in radians; above -π/2 and below MaxPitch.
    */
-  minPitch?: number;
+  minPitch: number;
   /**
    * The highest orbit pitch, in radians; below π/2.
    */
-  maxPitch?: number;
+  maxPitch: number;
   /**
    * The nearest orbit distance, in world units; positive and below MaxDistance.
    */
-  minDistance?: number;
+  minDistance: number;
   /**
    * The farthest orbit distance, in world units.
    */
-  maxDistance?: number;
+  maxDistance: number;
 };
 
 export type WorldEditorDefaults = {
   /**
-   * The grid; absent takes every grid default.
+   * The grid a building seat starts from.
    */
-  grid?: WorldEditorGrid | null;
+  grid: WorldEditorGrid;
   /**
-   * The snapping; absent takes every snapping default.
+   * The snapping a building seat starts from.
    */
-  snap?: WorldEditorSnap | null;
+  snap: WorldEditorSnap;
   /**
-   * The editor camera's feel; absent takes every camera default.
+   * The editor camera's feel.
    */
-  camera?: WorldEditorCamera | null;
+  camera: WorldEditorCamera;
+  /**
+   * The binding entry that flips a seat between playing and building, composed beneath the resting page of every group the world's binding layers declare, so a seat reaches build mode from wherever it rests. The world's own layers compose over it, so a page that binds the entry's id or one of its sources keeps its own meaning.
+   */
+  toggle: BindingPageEntryDefinition;
+  /**
+   * The binding bar a building seat shows when its own bar places no bank for a page this bar shows.
+   */
+  bar: WorldBindingBarAuthoring;
+  /**
+   * The page label a building seat's bar shows in place of its page's own when the seat's principal may not edit placements.
+   */
+  readOnlyLabel: string;
 };
 
 export type WorldEditorGrid = {
   /**
    * Whether the grid draws.
    */
-  visible?: boolean;
+  visible: boolean;
   /**
    * Where the world grid draws.
    */
-  mode?: WorldEditorGridMode;
+  mode: WorldEditorGridMode;
   /**
    * The world lattice's pitch on X, Y and Z, in world units; every component positive.
    */
-  pitch?: DocumentVector3;
+  pitch: DocumentVector3;
   /**
    * The working plane's height, in world units, when the mode is Plane.
    */
-  planeY?: number;
+  planeY: number;
   /**
    * The drawn line's width, in pixels; positive.
    */
-  lineWidth?: number;
+  lineWidth: number;
 };
 
 export type WorldEditorGridMode = "Surface" | "Follow" | "Plane";
@@ -5131,19 +4914,19 @@ export type WorldEditorSnap = {
   /**
    * Whether positions snap to the grid.
    */
-  enabled?: boolean;
+  enabled: boolean;
   /**
    * The angle a turn steps and a rotation snaps to, in degrees; in (0, 180].
    */
-  angleStepDegrees?: number;
+  angleStepDegrees: number;
   /**
    * Whether a placement rests on the surface under the pointer.
    */
-  surface?: boolean;
+  surface: boolean;
   /**
    * How far a captured reference's own grid reaches around it, in multiples of its largest half extent; positive.
    */
-  objectPatchRadius?: number;
+  objectPatchRadius: number;
 };
 
 /**
@@ -12160,23 +11943,23 @@ export type WorldSeatViewControl = {
    */
   maxPitch: number;
   /**
+   * The author's tight-space behavior, Fade or Cutaway; players may override it.
+   */
+  clearanceMode: WorldCameraClearanceChoice;
+  /**
+   * The cutaway boom's highest elevation above the seat's level plane, in radians, within [0, π/2]. Fade never rises, so only cutaway reads it.
+   */
+  clearanceMaxElevation: number;
+  /**
    * The follow camera: with no look input the camera yaw eases in behind the body's heading; any look input (a deflected look stick, a held orbit/steer) is free-look and the follow yields for as long as it lasts. Optional; absent is a still camera that goes only where look input sends it. Needs World — a body-relative yaw already rides the body.
    */
   follow?: WorldSeatFollow | null;
   /**
-   * The author's tight-space behavior; players may override it.
-   */
-  clearanceMode?: WorldCameraClearanceChoice;
-  /**
-   * The full-size fade distances; absent uses the standard distances.
+   * The full-size fade distances; absent, fade never dissolves the body and holds no minimum boom.
    */
   characterFade?: WorldCameraCharacterFade | null;
   /**
-   * The cutaway boom's highest elevation above the seat's level plane, in radians.
-   */
-  clearanceMaxElevation?: number;
-  /**
-   * The optional automatic pull-in policy; absent is off with standard hysteresis.
+   * The automatic pull-in policy; absent, automatic pull-in is unavailable whatever a player or session asks.
    */
   autoFirstPerson?: WorldCameraAutoFirstPerson | null;
   /**
