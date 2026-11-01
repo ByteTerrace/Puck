@@ -20,7 +20,7 @@ public sealed record SdfMeshInstance(int AssetSlot, object Identity, DynamicTran
     public int Material { get; init; }
 
     /// <summary>Returns whether a bake group is one of this asset's local surfaces.</summary>
-    public bool UsesSlot(int slot) => ((AssetSlot == slot) || OtherAssetSlots.Contains(slot));
+    public bool UsesSlot(int slot) => ((AssetSlot == slot) || OtherAssetSlots.Contains(value: slot));
 
     /// <summary>Gets the portal plane the copy straddles, before its frame slot is assigned.</summary>
     public SdfSlotClip? Clip { get; init; }
@@ -29,8 +29,16 @@ public sealed record SdfMeshInstance(int AssetSlot, object Identity, DynamicTran
     /// <summary>Gets the template's first program instance, filled by the bake's dressing for material lookup.</summary>
     public int FirstInstance { get; internal set; } = -1;
     /// <summary>Gets the copy's root matrix.</summary>
-    public Matrix4x4 Matrix => ((Matrix4x4.CreateScale(Scale) * Matrix4x4.CreateFromQuaternion(Transform.Orientation)) * Matrix4x4.CreateTranslation(Transform.Position));
+    public Matrix4x4 Matrix => ((Matrix4x4.CreateScale(scale: Scale) * Matrix4x4.CreateFromQuaternion(quaternion: Transform.Orientation)) * Matrix4x4.CreateTranslation(position: Transform.Position));
 
     /// <summary>Compares the host pose independently of frame-assigned lookup metadata.</summary>
-    public bool SamePose(SdfMeshInstance other) => ((AssetSlot == other.AssetSlot) && Equals(Identity, other.Identity) && Equals(MotionIdentity, other.MotionIdentity) && (Transform == other.Transform) && (Scale == other.Scale) && (Clip == other.Clip) && ReferenceEquals(Mesh, other.Mesh) && (Material == other.Material) && OtherAssetSlots.SequenceEqual(other.OtherAssetSlots));
+    public bool SamePose(SdfMeshInstance other) => SamePose(other.AssetSlot, other.Identity, other.MotionIdentity, other.Transform, other.Scale, other.Clip, other.Mesh, other.Material, other.OtherAssetSlots);
+    /// <summary>Compares a candidate pose before allocating its immutable frame record.</summary>
+    public bool SamePose(int assetSlot, object identity, object? motionIdentity, DynamicTransform transform, float scale, SdfSlotClip? clip, SdfMesh? mesh, int material, IReadOnlyList<int> otherAssetSlots) {
+        if ((AssetSlot != assetSlot) || !Equals(objA: Identity, objB: identity) || !Equals(objA: MotionIdentity, objB: motionIdentity) || (Transform != transform) || (Scale != scale) || (Clip != clip) || !ReferenceEquals(objA: Mesh, objB: mesh) || (Material != material) || (OtherAssetSlots.Count != otherAssetSlots.Count)) { return false; }
+        for (var index = 0; (index < OtherAssetSlots.Count); index++) {
+            if (OtherAssetSlots[index] != otherAssetSlots[index]) { return false; }
+        }
+        return true;
+    }
 }

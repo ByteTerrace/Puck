@@ -15,11 +15,28 @@ public sealed class WorldRigidAssets {
     private static readonly Puck.Abstractions.CodeDerivedTable<WorldPrototype, AssetMetadata> MetadataCache = new();
 
     private readonly List<WorldPrototype> m_assets = [];
-    private readonly Dictionary<string, int> m_indices = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, int> m_indices = new(comparer: StringComparer.Ordinal);
     private readonly List<int> m_slots = [];
     private readonly List<int> m_offsets = [];
     private readonly List<int> m_materials = [];
     private readonly List<float> m_reaches = [];
+    // Templates borrow the builder only during emission; retained instructions and profiles are immutable.
+    private readonly Puck.Abstractions.CodeDerivedTable<WorldPrototype, TemplateScratch> m_templates = new();
+
+    private sealed class TemplateScratch {
+        public int[] Palette = [];
+        public SdfProgramBuilder.Emission? Emission;
+        public PackedFontAtlasCatalog? Text;
+        public bool[]? Hidden;
+        public int Slot;
+        public int Surfaces;
+
+        public readonly WorldPickTarget Target;
+
+        public TemplateScratch(WorldPrototype creation) {
+            Target = new WorldPickTarget(BodyIndex: null, Placement: null) { Prototype = creation.Id };
+        }
+    }
 
     private int m_slotCount;
 
@@ -55,14 +72,14 @@ public sealed class WorldRigidAssets {
     public IReadOnlyList<SdfVolume> Volumes {
         get {
             m_volumes.Clear();
-            foreach (var entry in m_rootVolumes) { m_volumes.Add(entry.Volume with { DynamicSlot = m_copies[entry.Copy].FrameSlot }); }
+            foreach (var entry in m_rootVolumes) { m_volumes.Add(item: entry.Volume with { DynamicSlot = m_copies[entry.Copy].FrameSlot }); }
             return m_volumes;
         }
     }
 
     /// <summary>Returns whether geometry has no independently changing fields or parts.</summary>
     public static bool IsRigid(WorldPrototype creation, WorldLook? look = null) {
-        return (Metadata(creation).Rigid && ((look is null) || (look.Motion.PartDynamics is not { Count: > 0 })));
+        return (Metadata(creation: creation).Rigid && ((look is null) || (look.Motion.PartDynamics is not { Count: > 0 })));
     }
 
     // Definitions are immutable. Inspect their fields once, rather than once per wearing body per frame.
@@ -72,20 +89,20 @@ public sealed class WorldRigidAssets {
         var rigid = ((document.Frames is not { Count: > 0 }) && (document.Drivers is not { Count: > 0 }) &&
             (document.Effectors is not { Count: > 0 }) && (document.Cameras is not { Count: > 0 }) &&
             (document.Behavior?.Faces is not { Count: > 0 }) &&
-            shapes.All(shape => ((shape.Swings is not { Count: > 0 }) && (shape.Slides is not { Count: > 0 }) && (shape.Erode is null) && (shape.Morph is null))));
-        var mixed = (shapes.Any(shape => document.IsGlassShape(shape)) && shapes.Any(shape => !document.IsGlassShape(shape)));
+            shapes.All(predicate: shape => ((shape.Swings is not { Count: > 0 }) && (shape.Slides is not { Count: > 0 }) && (shape.Erode is null) && (shape.Morph is null))));
+        var mixed = (shapes.Any(predicate: shape => document.IsGlassShape(shape: shape)) && shapes.Any(predicate: shape => !document.IsGlassShape(shape: shape)));
 
         return new AssetMetadata(rigid, (rigid ? CreationStampEmitter.RenderReach(document, 1, null, composeBlends: true) : 0), (mixed ? 2 : 1));
     });
 
     /// <summary>Retains one template per eligible definition and the live body's lightweight occurrences.</summary>
     public void Reconcile(IReadOnlyList<WorldPrototype> creations, IReadOnlyList<WorldCreationInstances.BodyStamp> bodies, IReadOnlyList<WorldLook>? looks, IReadOnlyList<WorldPlacement> placements) {
-        var used = new HashSet<string>(StringComparer.Ordinal);
+        var used = new HashSet<string>(comparer: StringComparer.Ordinal);
 
-        foreach (var body in bodies) { used.Add(body.Creation.Id); }
-        foreach (var placement in placements) { if (placement.Inhabit is not null) { used.Add(placement.PrototypeId); } }
+        foreach (var body in bodies) { used.Add(item: body.Creation.Id); }
+        foreach (var placement in placements) { if (placement.Inhabit is not null) { used.Add(item: placement.PrototypeId); } }
         foreach (var look in (looks ?? [])) {
-            if (look.Source is WorldLookSource.Creation creation) { used.Add(creation.PrototypeId); }
+            if (look.Source is WorldLookSource.Creation creation) { used.Add(item: creation.PrototypeId); }
         }
         m_assets.Clear();
         m_indices.Clear();
@@ -93,23 +110,23 @@ public sealed class WorldRigidAssets {
         m_reaches.Clear();
         m_slotCount = 0;
         foreach (var creation in creations) {
-            if (!used.Contains(creation.Id) || !IsRigid(creation)) { continue; }
-            m_indices.Add(creation.Id, m_assets.Count);
-            m_assets.Add(creation);
-            var metadata = Metadata(creation);
+            if (!used.Contains(item: creation.Id) || !IsRigid(creation)) { continue; }
+            m_indices.Add(key: creation.Id, value: m_assets.Count);
+            m_assets.Add(item: creation);
+            var metadata = Metadata(creation: creation);
 
-            m_reaches.Add(metadata.Reach);
-            m_offsets.Add(m_slotCount);
+            m_reaches.Add(item: metadata.Reach);
+            m_offsets.Add(item: m_slotCount);
             m_slotCount += metadata.Slots;
         }
         m_bodies.Clear();
         m_liveBodies.Clear();
         foreach (var body in bodies) {
-            if (IsRigid(body.Creation, body.Look)) { m_bodies.Add(body); m_liveBodies.Add(body.BodyIndex); }
+            if (IsRigid(creation: body.Creation, look: body.Look)) { m_bodies.Add(item: body); m_liveBodies.Add(item: body.BodyIndex); }
         }
-        foreach (var retired in m_motion.Keys.Where(body => !ContainsBody(body)).ToArray()) { m_motion[retired].Reads.Release(); m_motion.Remove(retired); m_targets.Remove(retired); }
+        foreach (var retired in m_motion.Keys.Where(predicate: body => !ContainsBody(body: body)).ToArray()) { m_motion[retired].Reads.Release(); m_motion.Remove(key: retired); m_targets.Remove(key: retired); }
         // PrepareFrame reads this count before the first pack sizes the root table.
-        while (m_copies.Count < m_bodies.Count) { m_copies.Add(new SdfMeshInstance(0, new object(), new DynamicTransform(Position: Vector3.Zero, Orientation: Quaternion.Identity), 1)); }
+        while (m_copies.Count < m_bodies.Count) { m_copies.Add(item: new SdfMeshInstance(0, new object(), new DynamicTransform(Position: Vector3.Zero, Orientation: Quaternion.Identity), 1)); }
         if (m_copies.Count > m_bodies.Count) { m_copies.RemoveRange(m_bodies.Count, (m_copies.Count - m_bodies.Count)); }
     }
     /// <summary>Emits each local template once. Body membership and styling do not affect this program.</summary>
@@ -123,135 +140,169 @@ public sealed class WorldRigidAssets {
             var document = creation.EngineDocument;
             var slot = (slotBase + m_offsets[index]);
             var isolated = isolation?.HiddenFor(creation.Id, document);
-            var palette = WorldPlacementStamper.RegisterPalette(builder, colors, document, tint: null, pool: (slot, 1f), hidden: isolated);
+            var scratch = m_templates.GetValue(creation, static creation => new TemplateScratch(creation: creation));
+            var paletteLength = WorldPlacementStamper.PaletteLength(document: document);
 
-            m_materials.Add(palette[Math.Clamp((creation.Mesh?.Material ?? 0), 0, (palette.Length - 1))]);
+            if (scratch.Palette.Length != paletteLength) { scratch.Palette = new int[paletteLength]; }
+            var palette = scratch.Palette;
+
+            WorldPlacementStamper.FillPalette(builder, colors, document, tint: null, ids: palette, pool: (slot, 1f), hidden: isolated);
+
+            m_materials.Add(item: palette[Math.Clamp((creation.Mesh?.Material ?? 0), 0, (palette.Length - 1))]);
             picks.Materials(creation.Id, palette);
-            var materials = new Dictionary<(int Shape, int Material), int>();
-
-            int MaterialFor(ShapeDocument shape) {
-                var key = (shape.Id, (shape.Material ?? 0));
-
-                if (!materials.TryGetValue(key, out var material)) { material = WorldPlacementStamper.MaterialForShape(builder, palette[Math.Clamp(key.Item2, 0, (palette.Length - 1))], shape, 1, rigid: true); materials.Add(key, material); }
-                return material;
-            }
             var first = builder.InstanceCount;
-            var shapes = (document.Shapes ?? []);
 
-            if ((shapes.Count == 0) && (document.TextRuns is not { Count: > 0 })) { continue; }
-            var hasGlass = shapes.Any(shape => document.IsGlassShape(shape));
-            var mixed = (hasGlass && shapes.Any(shape => !document.IsGlassShape(shape)));
-
-            EmitSurface(slot, hidden: (mixed ? shapes.Select((shape, index) => (document.IsGlassShape(shape) || (isolated?[index] ?? false))).ToArray() : isolated), textRuns: ((isolated is null) && (!hasGlass || mixed)));
-            if (mixed) { EmitSurface((slot + 1), hidden: shapes.Select((shape, index) => (!document.IsGlassShape(shape) || (isolated?[index] ?? false))).ToArray(), textRuns: false); }
-            picks.Instances(first, builder.InstanceCount, new WorldPickTarget(null, null) { Prototype = creation.Id });
-            void EmitSurface(int surfaceSlot, bool[]? hidden, bool textRuns) {
-                m_slots.Add(surfaceSlot);
-                builder.BeginInstanceDynamic(surfaceSlot, Vector3.Zero, (CreationStampEmitter.RenderReach(document, 1, ((text is null) ? null : text.Resolve), composeBlends: true) + 0.4f));
-                var scoped = CreationStampEmitter.ComposesInternally(document);
-
-                if (scoped) { builder.PushField(SdfBlendOp.Union); }
-                var transform = new CreationStampTransform(Vector3.Zero, Quaternion.Identity, 1, null, DynamicSlot: surfaceSlot);
-
-                CreationStampEmitter.Emit(builder, document, transform, MaterialFor, inScope: scoped, hidden: hidden);
-                if (document.Noise is { } noise) { CreationStampEmitter.EmitNoise(builder, noise, transform); }
-                if (textRuns && (text is not null) && (document.TextRuns is { Count: > 0 })) {
-                    CreationStampEmitter.EmitText(builder, document, transform, text!.Resolve, run => palette[Math.Clamp((run.Material ?? 0), 0, (palette.Length - 1))]);
-                }
-                if (scoped) { builder.PopField(); }
-                builder.EndInstance();
+            if ((scratch.Emission is { } held) && (scratch.Slot == slot) && ReferenceEquals(objA: scratch.Text, objB: text) && ReferenceEquals(objA: scratch.Hidden, objB: isolated) && builder.CanAppendEmission(emission: held)) {
+                builder.AppendEmission(emission: held);
+                for (var surface = 0; (surface < scratch.Surfaces); surface++) { m_slots.Add(item: (slot + surface)); }
+            } else {
+                EmitTemplate(builder: builder, colors: colors, creation: creation, isolated: isolated, scratch: scratch, slot: slot, text: text);
             }
+            picks.Instances(first, builder.InstanceCount, scratch.Target);
         }
     }
+
+    // Keep the closure-bearing rebuild out of the retained-template path.
+    private void EmitTemplate(SdfProgramBuilder builder, WorldBakedColors colors, PackedFontAtlasCatalog? text, TemplateScratch scratch, WorldPrototype creation, int slot, bool[]? isolated) {
+        var document = creation.EngineDocument;
+        var palette = scratch.Palette;
+        var mark = builder.MarkEmission();
+        var firstSurface = m_slots.Count;
+        var materials = new Dictionary<(int Shape, int Material), int>();
+
+        int MaterialFor(ShapeDocument shape) {
+            var key = (shape.Id, (shape.Material ?? 0));
+
+            if (!materials.TryGetValue(key: key, value: out var material)) { material = WorldPlacementStamper.MaterialForShape(builder, palette[Math.Clamp(key.Item2, 0, (palette.Length - 1))], shape, 1, rigid: true); materials.Add(key: key, value: material); }
+            return material;
+        }
+        var shapes = (document.Shapes ?? []);
+
+        if ((shapes.Count == 0) && (document.TextRuns is not { Count: > 0 })) { return; }
+        var hasGlass = shapes.Any(predicate: shape => document.IsGlassShape(shape: shape));
+        var mixed = (hasGlass && shapes.Any(predicate: shape => !document.IsGlassShape(shape: shape)));
+
+        EmitSurface(slot, hidden: (mixed ? shapes.Select(selector: (shape, index) => (document.IsGlassShape(shape: shape) || (isolated?[index] ?? false))).ToArray() : isolated), textRuns: ((isolated is null) && (!hasGlass || mixed)));
+        if (mixed) { EmitSurface((slot + 1), hidden: shapes.Select(selector: (shape, index) => (!document.IsGlassShape(shape: shape) || (isolated?[index] ?? false))).ToArray(), textRuns: false); }
+        // A per-shape material registers more palette rows. Such a template stays on the normal emission path;
+        // the retained-emission contract deliberately names only materials registered before its mark.
+        scratch.Emission = ((builder.MaterialCount == mark.Materials) ? builder.RetainEmission(mark: mark) : null);
+        scratch.Slot = slot;
+        scratch.Text = text;
+        scratch.Hidden = isolated;
+        scratch.Surfaces = (m_slots.Count - firstSurface);
+        void EmitSurface(int surfaceSlot, bool[]? hidden, bool textRuns) {
+            m_slots.Add(item: surfaceSlot);
+            builder.BeginInstanceDynamic(surfaceSlot, Vector3.Zero, (CreationStampEmitter.RenderReach(document, 1, ((text is null) ? null : text.Resolve), composeBlends: true) + 0.4f));
+            var scoped = CreationStampEmitter.ComposesInternally(document: document);
+
+            if (scoped) { builder.PushField(SdfBlendOp.Union); }
+            var transform = new CreationStampTransform(Vector3.Zero, Quaternion.Identity, 1, null, DynamicSlot: surfaceSlot);
+
+            CreationStampEmitter.Emit(builder, document, transform, MaterialFor, inScope: scoped, hidden: hidden);
+            if (document.Noise is { } noise) { CreationStampEmitter.EmitNoise(builder: builder, noise: noise, transform: transform); }
+            if (textRuns && (text is not null) && (document.TextRuns is { Count: > 0 })) {
+                CreationStampEmitter.EmitText(builder, document, transform, text!.Resolve, run => palette[Math.Clamp((run.Material ?? 0), 0, (palette.Length - 1))]);
+            }
+            if (scoped) { builder.PopField(); }
+            builder.EndInstance();
+        }
+    }
+
     /// <summary>Writes identity template poses and supplies current per-copy roots without touching the program.</summary>
     public void Pack(Span<DynamicTransform> transforms, IWorldStampSource source, int slotBase, float deltaSeconds = 0) {
-        var doors = WorldPortalStraddle.Doors(source.Definition);
+        var doors = WorldPortalStraddle.Doors(definition: source.Definition);
 
         m_rootVolumes.Clear();
         for (var index = 0; (index < m_slotCount); index++) { transforms[(slotBase + index)] = new DynamicTransform(Position: Vector3.Zero, Orientation: Quaternion.Identity); }
         for (var index = 0; (index < m_bodies.Count); index++) {
             var body = m_bodies[index];
 
-            if (!m_targets.TryGetValue(body.BodyIndex, out var target) || (target.Prototype != body.Creation.Id)) {
+            if (!m_targets.TryGetValue(key: body.BodyIndex, value: out var target) || (target.Prototype != body.Creation.Id)) {
                 target = new WorldPickTarget(null, body.BodyIndex) { CreationSlots = 1, Prototype = body.Creation.Id };
                 m_targets[body.BodyIndex] = target;
             }
-            var position = source.Position(body.BodyIndex);
-            var orientation = source.Orientation(body.BodyIndex);
+            var position = source.Position(index: body.BodyIndex);
+            var orientation = source.Orientation(index: body.BodyIndex);
 
-            if (!m_motion.TryGetValue(body.BodyIndex, out var motion)) { m_motion.Add(body.BodyIndex, motion = new()); }
+            if (!m_motion.TryGetValue(key: body.BodyIndex, value: out var motion)) { m_motion.Add(key: body.BodyIndex, value: motion = new()); }
             motion.Reads.Bind(mirror: source.StateMirror, bodyIndex: body.BodyIndex);
-            motion.Reads.Arrive(body.Creation, body.Look);
-            var lanes = WorldLookLaneEvaluator.EvaluateLanes(body.Look.Motion.Lanes, motion.Reads);
+            motion.Reads.Arrive(first: body.Creation, second: body.Look);
+            var lanes = WorldLookLaneEvaluator.EvaluateLanes(expressions: body.Look.Motion.Lanes, reads: motion.Reads);
 
             if (WorldDynamicsResponse.TryResolveResponse(rows: source.Definition.Dynamics, name: body.Look.Motion.Dynamics, response: out var response)) {
-                var address = source.EntityAddress(body.BodyIndex);
-                var epoch = source.PoseEpoch(body.BodyIndex);
-                var crossings = source.Carries.Epoch(body.BodyIndex);
+                var address = source.EntityAddress(index: body.BodyIndex);
+                var epoch = source.PoseEpoch(index: body.BodyIndex);
+                var crossings = source.Carries.Epoch(index: body.BodyIndex);
 
                 if ((motion.Address == address) && (motion.Epoch == epoch) && (motion.CarryEpoch != crossings)) {
                     if (source.Carries.TrySince(index: body.BodyIndex, since: motion.CarryEpoch, carry: out var carry)) {
-                        motion.Position.Carry(carry.Rotation, carry.Translation);
-                        motion.Orientation.Carry(carry.Rotation);
+                        motion.Position.Carry(rotation: carry.Rotation, translation: carry.Translation);
+                        motion.Orientation.Carry(rotation: carry.Rotation);
                     } else { motion.Epoch = -1; }
                 }
                 motion.CarryEpoch = crossings;
                 if ((motion.Address != address) || (motion.Epoch != epoch)) { motion.Position.Reseed(); motion.Orientation.Reseed(); motion.Address = address; motion.Epoch = epoch; }
-                (position, orientation) = SecondOrderPoseFollower.StepPose(ref motion.Position, ref motion.Orientation, in response, deltaSeconds, position, orientation);
+                (position, orientation) = SecondOrderPoseFollower.StepPose(deltaSeconds: deltaSeconds, orientation: ref motion.Orientation, position: ref motion.Position, response: in response, targetOrientation: orientation, targetPosition: position);
             }
             var asset = m_indices[body.Creation.Id];
             var hidden = m_isolation?.HiddenFor(body.Creation.Id, body.Creation.EngineDocument);
             var firstSlot = (slotBase + m_offsets[asset]);
             var endSlot = (slotBase + (((asset + 1) < m_offsets.Count) ? m_offsets[(asset + 1)] : m_slotCount));
-            var copy = new SdfMeshInstance(firstSlot, target,
-                new DynamicTransform(Position: position, Orientation: orientation, Lanes: lanes) { MaterialScale = body.Scale }, body.Scale) {
-                MotionIdentity = (target, source.EntityAddress(body.BodyIndex), source.PoseEpoch(body.BodyIndex)),
-                OtherAssetSlots = ((endSlot > (firstSlot + 1)) ? new[] { (firstSlot + 1) } : []),
-                Mesh = (((hidden is null) && (body.Creation.Mesh is { } mesh)) ? WorldPlacementStamper.MeshOf(mesh) : null),
-                Material = ((asset < m_materials.Count) ? m_materials[asset] : 0),
-                Clip = WorldPortalStraddle.Clip(doors: doors, center: position, radius: (m_reaches[asset] * body.Scale), firstSlot: 0, slotCount: 1),
-            };
+            var previous = m_copies[index];
+            var addressKey = source.EntityAddress(index: body.BodyIndex);
+            var epochKey = source.PoseEpoch(index: body.BodyIndex);
+            var motionIdentity = (((previous.MotionIdentity is ValueTuple<WorldPickTarget, WorldEntityAddress, int> key) && ReferenceEquals(objA: key.Item1, objB: target) && (key.Item2 == addressKey) && (key.Item3 == epochKey))
+                ? previous.MotionIdentity : (target, addressKey, epochKey));
+            var otherSlots = ((endSlot > (firstSlot + 1))
+                ? (((previous.OtherAssetSlots.Count == 1) && (previous.OtherAssetSlots[0] == (firstSlot + 1))) ? previous.OtherAssetSlots : new[] { (firstSlot + 1) }) : []);
+            var transform = new DynamicTransform(Lanes: lanes, Orientation: orientation, Position: position) { MaterialScale = body.Scale };
+            var mesh = (((hidden is null) && (body.Creation.Mesh is { } authored)) ? WorldPlacementStamper.MeshOf(mesh: authored) : null);
+            var material = ((asset < m_materials.Count) ? m_materials[asset] : 0);
+            var clip = WorldPortalStraddle.Clip(doors: doors, center: position, radius: (m_reaches[asset] * body.Scale), firstSlot: 0, slotCount: 1);
 
-            if (!m_copies[index].SamePose(copy)) { m_copies[index] = copy; }
+            if (!previous.SamePose(firstSlot, target, motionIdentity, transform, body.Scale, clip, mesh, material, otherSlots)) {
+                m_copies[index] = new SdfMeshInstance(firstSlot, target, transform, body.Scale) { Clip = clip, Material = material, Mesh = mesh, MotionIdentity = motionIdentity, OtherAssetSlots = otherSlots };
+            }
             foreach (var volume in (body.Creation.EngineDocument.Volumes ?? [])) {
                 if (!volume.Enabled) { continue; }
                 if ((volume.Parent is { } parentName) && WorldShapeIsolation.IsHidden(hidden: hidden, name: parentName, shapes: (body.Creation.EngineDocument.Shapes ?? []))) { continue; }
-                if (m_rootVolumes.Count == SdfProgramBuilder.MaxVolumes) { throw new InvalidOperationException($"Creation '{body.Creation.Id}' on body {body.BodyIndex} exceeds the {SdfProgramBuilder.MaxVolumes}-volume frame capacity."); }
-                var parent = body.Creation.EngineDocument.Shapes?.FirstOrDefault(shape => (shape.Name?.Value == volume.Parent));
+                if (m_rootVolumes.Count == SdfProgramBuilder.MaxVolumes) { throw new InvalidOperationException(message: $"Creation '{body.Creation.Id}' on body {body.BodyIndex} exceeds the {SdfProgramBuilder.MaxVolumes}-volume frame capacity."); }
+                var parent = body.Creation.EngineDocument.Shapes?.FirstOrDefault(predicate: shape => (shape.Name?.Value == volume.Parent));
 
-                m_rootVolumes.Add((index, volume.ToVolume(dynamicSlot: 0, origin: ((parent?.Position.Value ?? Vector3.Zero) * body.Scale), rotation: (parent?.Rotation.Value ?? Quaternion.Identity), scale: body.Scale)));
+                m_rootVolumes.Add(item: (index, volume.ToVolume(dynamicSlot: 0, origin: ((parent?.Position.Value ?? Vector3.Zero) * body.Scale), rotation: (parent?.Rotation.Value ?? Quaternion.Identity), scale: body.Scale)));
             }
         }
     }
     /// <summary>Returns whether this live body is represented by a rigid copy.</summary>
-    public bool ContainsBody(int body) => m_liveBodies.Contains(body);
+    public bool ContainsBody(int body) => m_liveBodies.Contains(item: body);
     /// <summary>Resolves a rigid body's authored part in its current root pose.</summary>
     public bool TryPartPose(int body, string partId, IWorldStampSource? source, out SdfAnchor pose) {
-        var stamp = m_bodies.FirstOrDefault(stamp => (stamp.BodyIndex == body));
+        var stamp = m_bodies.FirstOrDefault(predicate: stamp => (stamp.BodyIndex == body));
 
-        if ((stamp.Creation is null) || !CreationPartCompiler.Compile(stamp.Creation.Document).TryResolve(partId, out var shape)) { pose = default; return false; }
+        if ((stamp.Creation is null) || !CreationPartCompiler.Compile(document: stamp.Creation.Document).TryResolve(partId: partId, transformSlot: out var shape)) { pose = default; return false; }
         return TryShapePose(body, stamp.Creation.EngineDocument.Shapes![shape].Id, source, out pose);
     }
     /// <summary>Resolves a rigid shape or root without allocating shape transforms.</summary>
     public bool TryShapePose(int body, int? shapeId, IWorldStampSource? source, out SdfAnchor pose) {
-        var stamp = m_bodies.FirstOrDefault(stamp => (stamp.BodyIndex == body));
+        var stamp = m_bodies.FirstOrDefault(predicate: stamp => (stamp.BodyIndex == body));
 
         if (stamp.Creation is null) { pose = default; return false; }
-        var copy = m_copies.FirstOrDefault(copy => ((copy.Identity is WorldPickTarget { BodyIndex: var index }) && (index == body)));
+        var copy = m_copies.FirstOrDefault(predicate: copy => ((copy.Identity is WorldPickTarget { BodyIndex: var index }) && (index == body)));
 
         if ((copy is null) && (source is null)) { pose = default; return false; }
-        var position = (copy?.Transform.Position ?? source!.Position(body));
-        var orientation = (copy?.Transform.Orientation ?? source!.Orientation(body));
-        var shape = ((shapeId is null) ? null : stamp.Creation.EngineDocument.Shapes?.FirstOrDefault(shape => (shape.Id == shapeId)));
+        var position = (copy?.Transform.Position ?? source!.Position(index: body));
+        var orientation = (copy?.Transform.Orientation ?? source!.Orientation(index: body));
+        var shape = ((shapeId is null) ? null : stamp.Creation.EngineDocument.Shapes?.FirstOrDefault(predicate: shape => (shape.Id == shapeId)));
 
-        pose = new SdfAnchor((position + Vector3.Transform(((shape?.Position.Value ?? Vector3.Zero) * stamp.Scale), orientation)), Quaternion.Normalize((orientation * (shape?.Rotation.Value ?? Quaternion.Identity))));
+        pose = new SdfAnchor((position + Vector3.Transform(((shape?.Position.Value ?? Vector3.Zero) * stamp.Scale), orientation)), Quaternion.Normalize(value: (orientation * (shape?.Rotation.Value ?? Quaternion.Identity))));
         return true;
     }
     /// <summary>Returns whether a rigid body publishes a part.</summary>
     public bool TryPartSlot(int body, string partId, out int slot) {
-        var stamp = m_bodies.FirstOrDefault(stamp => (stamp.BodyIndex == body));
+        var stamp = m_bodies.FirstOrDefault(predicate: stamp => (stamp.BodyIndex == body));
 
-        if ((stamp.Creation is not null) && CreationPartCompiler.Compile(stamp.Creation.Document).TryResolve(partId, out _)) { return TryRootSlot(body, out slot); }
+        if ((stamp.Creation is not null) && CreationPartCompiler.Compile(document: stamp.Creation.Document).TryResolve(partId: partId, transformSlot: out _)) { return TryRootSlot(body: body, slot: out slot); }
         slot = -1; return false;
     }
     /// <summary>Finds a live copy's packed root slot.</summary>
