@@ -324,7 +324,11 @@ keep their existing owners; the allocation-review items above still apply.
 - Four debug replay sources (`input-clock30`, `input-clock60`, `input-history`,
   `controls-dash`), eight scenarios, pass `--reproduce --jobs 2`; all per-tick
   reproduction files are byte-identical to their pre-edit copies, including
-  the rebuild after power loss. Evidence is under `.claude/scratch/mem-m1-*`.
+  the rebuild after power loss. After merging integration tip `16db8704f0`,
+  its authoring/schema changes move the old hashes: all eight merged-native
+  reproduction files instead match the separate integration-only artifact
+  (`Puck.SourceRevision=16db8704f0`) byte for byte. That artifact excludes
+  the memory commits. Evidence is under `.claude/scratch/mem-m1-*`.
 
 - Ownership and borrowing: authoritative ownership stays in an existing arena,
   scratch pool, job slot, mesh or host service, and its private record holds
