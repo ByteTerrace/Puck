@@ -2,14 +2,13 @@ using System.Numerics;
 using Puck.Commands;
 using Puck.Hosting;
 using Puck.World.Client;
-using Puck.World.Server;
 
 namespace Puck.World;
 
 /// <summary>Evaluates <see cref="OverlayPredicate"/>s per local seat over the presentation facts an overlay element
 /// may read (<see cref="OverlayFact"/>). Facts come straight from their owners each evaluation — nothing is
 /// duplicated here — except the recency clocks, which remember the last tick each fact held. Simulation ticks
-/// (<see cref="WorldServer.NextInputTick"/>) are the time base; presentation converts the elapsed integer tick
+/// (<see cref="WorldClient.Tick"/>) are the time base; presentation converts the elapsed integer tick
 /// distance to seconds only when resolving a fade. Subject-bearing predicates (<see cref="OverlayPredicate.Speaking"/>,
 /// <see cref="OverlayPredicate.Near"/>) resolve their subject to a body through <see cref="WorldPerceptionAnchor"/>
 /// so possession follows, and to a position off the client's render poses or the stamp pool.</summary>
@@ -23,7 +22,6 @@ internal sealed class WorldOverlayFacts : IOverlayPredicateEvaluator {
     private readonly PlayerRoster m_roster;
     private readonly Func<InputRouter> m_router;
     private readonly WorldSeatBindings m_seatBindings;
-    private readonly WorldServer m_server;
     private readonly WorldSpeechClock m_speech;
     private readonly WorldCreationInstances m_stamps;
     private readonly Func<WorldWheelFeed?> m_wheel;
@@ -36,10 +34,9 @@ internal sealed class WorldOverlayFacts : IOverlayPredicateEvaluator {
 
     /// <summary>Initializes the evaluator over the fact owners. Presentation-only owners are optional: a headless
     /// composition has no pointer, wheel, or console, and their facts read false there.</summary>
-    public WorldOverlayFacts(WorldClient client, PlayerRoster roster, WorldServer server, WorldSeatBindings seatBindings, WorldPerceptionAnchor perception, WorldCreationInstances stamps, WorldSpeechClock speech, Func<InputRouter> router, Func<WorldWheelFeed?> wheel, WorldPointer? pointer, IConsoleSessions? consoles) {
+    public WorldOverlayFacts(WorldClient client, PlayerRoster roster, WorldSeatBindings seatBindings, WorldPerceptionAnchor perception, WorldCreationInstances stamps, WorldSpeechClock speech, Func<InputRouter> router, Func<WorldWheelFeed?> wheel, WorldPointer? pointer, IConsoleSessions? consoles) {
         ArgumentNullException.ThrowIfNull(client);
         ArgumentNullException.ThrowIfNull(roster);
-        ArgumentNullException.ThrowIfNull(server);
         ArgumentNullException.ThrowIfNull(seatBindings);
         ArgumentNullException.ThrowIfNull(perception);
         ArgumentNullException.ThrowIfNull(stamps);
@@ -51,23 +48,11 @@ internal sealed class WorldOverlayFacts : IOverlayPredicateEvaluator {
         m_stamps = stamps;
         m_speech = speech;
         m_roster = roster;
-        m_server = server;
         m_seatBindings = seatBindings;
         m_router = router;
         m_wheel = wheel;
         m_pointer = pointer;
         m_consoles = consoles;
-    }
-
-    private ulong CompletedTick {
-        get {
-            var next = m_server.NextInputTick;
-
-            return ((next == 0UL)
-                ? 0UL
-                : (next - 1UL)
-            );
-        }
     }
 
     /// <summary>The body that most recently spoke, or -1 when nothing has.</summary>
@@ -136,7 +121,7 @@ internal sealed class WorldOverlayFacts : IOverlayPredicateEvaluator {
     }
     // A fact's recency clock: refreshed to the current tick while it holds. Sampling is idempotent within a tick.
     private bool Holds(int slot, OverlayFact fact, out ulong lastHeldTick) {
-        var tick = CompletedTick;
+        var tick = m_client.Tick;
         var index = ((slot * FactCount) + ((int)fact));
         var holds = Sample(
             fact: fact,
@@ -188,7 +173,7 @@ internal sealed class WorldOverlayFacts : IOverlayPredicateEvaluator {
         );
     }
     private float RecentPresence(ulong lastHeldTick, float windowSeconds, float fadeSeconds) => OverlayRecency.Presence(
-        completedTick: CompletedTick,
+        completedTick: m_client.Tick,
         fadeSeconds: fadeSeconds,
         lastHeldTick: lastHeldTick,
         rateHz: m_client.Definition.SimulationRateHz,
@@ -434,7 +419,7 @@ internal sealed class WorldOverlayFacts : IOverlayPredicateEvaluator {
     /// <param name="bodyIndex">The 0-based body index.</param>
     public void NoteSpoke(int bodyIndex) => NoteSpoke(
         bodyIndex: bodyIndex,
-        tick: CompletedTick
+        tick: m_client.Tick
     );
     /// <summary>Stamps that <paramref name="bodyIndex"/> spoke on <paramref name="tick"/>.</summary>
     /// <param name="bodyIndex">The 0-based body index.</param>

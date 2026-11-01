@@ -18,7 +18,8 @@ namespace Puck.Hosting;
 /// observation only: the clamped wall interval between presented frames on a host paced to a display, and the
 /// simulation time the frame advanced (<paramref name="DeltaTicks"/>) on the offscreen host, whose time is its tick count.
 /// Authoritative simulation must use <paramref name="DeltaTicks"/> / fixed steps.</param>
-/// <param name="AccumulatorTicks">The engine ticks elapsed but not yet consumed by a fixed step; the render interpolation numerator.</param>
+/// <param name="AccumulatorTicks">The presentation offset through the last delivered step; the render interpolation
+/// numerator. The World fills it from snapshot arrival, independently of the pump's scheduling accumulator.</param>
 /// <param name="StepTicks">The fixed update period in engine ticks; the render interpolation denominator.</param>
 /// <param name="TargetWidth">The pixel width the parent is asking this node to fill.</param>
 /// <param name="TargetHeight">The pixel height the parent is asking this node to fill.</param>
@@ -48,7 +49,7 @@ public readonly record struct FrameContext(
     /// <summary>Gets <see cref="FrameDeltaTicks"/> in seconds: the interval this frame's presentation spans. Presentation-only; never simulation time.</summary>
     public double FrameDeltaSeconds =>
         FixedTickConversion.ToSeconds(ticks: FrameDeltaTicks);
-    /// <summary>Gets how far this frame sits between the last and next fixed update, in <c>[0, 1)</c>, for interpolating render state.</summary>
+    /// <summary>Gets how far this frame sits through its delivered update interval, in <c>[0, 1]</c>, for interpolating render state.</summary>
     public double InterpolationAlpha =>
         ((StepTicks == 0UL)
             ? 0.0
@@ -57,7 +58,7 @@ public readonly record struct FrameContext(
     /// <summary>Gets the continuous render-time clock in seconds (<see cref="RenderTicks"/> as seconds).</summary>
     public double RenderSeconds =>
         FixedTickConversion.ToSeconds(ticks: RenderTicks);
-    /// <summary>Gets the continuous render-time clock in engine ticks (the fixed-step <see cref="ElapsedTicks"/> plus the unconsumed <see cref="AccumulatorTicks"/>).</summary>
+    /// <summary>Gets the continuous render-time clock in engine ticks (the delivered <see cref="ElapsedTicks"/> plus its presentation offset).</summary>
     public ulong RenderTicks =>
         (ElapsedTicks + AccumulatorTicks);
 }

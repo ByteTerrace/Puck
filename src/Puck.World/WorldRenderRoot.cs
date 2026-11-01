@@ -350,6 +350,27 @@ public static class WorldRenderRoot {
             root: () => runtime.NodeOf(instance: WorldViewGraphs.MainInstance)
         );
 
-        return root;
+        return new WorldPresentationRoot(root, client, () => frameSource.PinsPresentation);
+    }
+
+    // All graph consumers see the clock of the snapshot the client actually received, including after replay
+    // restoration or a paused boot. Host pump elapsed time is only a scheduling coordinate.
+    private sealed class WorldPresentationRoot(RenderGraphRuntimeNode root, WorldClient client, Func<bool> pinned) : IRenderRoot, ICaptureRequestTarget {
+        public string? PendingCapturePath => root.PendingCapturePath;
+
+        public void RequestCapture(FrameCaptureRequest request) => root.RequestCapture(request: request);
+        public void Dispose() => root.Dispose();
+        public void OnDeviceLost() => root.OnDeviceLost();
+        public RootFrame ProduceFrame(in FrameContext context) {
+            var stepTicks = client.StepTicks;
+            var fraction = (pinned() ? 1f : client.InterpolationAlpha);
+            var delivered = context with {
+                ElapsedTicks = client.EngineTick,
+                StepTicks = stepTicks,
+                AccumulatorTicks = ((ulong)(fraction * stepTicks)),
+            };
+
+            return root.ProduceFrame(context: in delivered);
+        }
     }
 }

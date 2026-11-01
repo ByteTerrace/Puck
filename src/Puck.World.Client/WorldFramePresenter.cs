@@ -116,7 +116,6 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     // the last frame, so an unmoved drag on a stationary body costs no per-frame rig recompile — see
     // WorldSeatCameraResolver.ResolveChase, the single shared path every traveling seat uses.
     // Slot-indexed, PlayerRoster.MaxSlots entries — one live rig per seat, never shared.
-    private readonly IWorldSimulationClock m_simulation;
     private readonly WorldSpeechClock m_speech;
     private readonly WorldTextCatalog m_text;
     // The per-seat viewport + camera publication (the cursor feed's unproject seam): republished every dressed
@@ -131,14 +130,18 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
 
     // The definition delivery and neighbour revision the presentation field was built from (RebuildStaticField).
     private int m_staticFieldDefinition = -1;
+
     private int m_staticFieldCode;
+
     private int m_staticFieldNeighbours = -1;
     private int m_staticFieldResponses = -1;
 
     // The presentation field's evaluator under construction off the frame thread, until a frame adopts it.
     private Task<SdfFieldEvaluator>? m_staticFieldBuild;
+
     // Each placement exclusion the presentation field has narrated, so a rebuild repeats none of them.
     private readonly HashSet<(string Placement, string Reason)> m_reportedFieldExclusions = [];
+
     // The no-local-seats fallback's own narration edge (see Dress's tail): true once the "presenting the world
     // camera" line has fired for the CURRENT empty stretch, cleared the instant a seat's view fills m_views again,
     // so a later departure re-narrates instead of staying silent forever.
@@ -687,7 +690,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
 
         var clock = new SdfCameraClock(
             PresentationSeconds: m_elapsedSeconds,
-            AuthoritativeTick: m_simulation.Tick
+            AuthoritativeTick: m_client.Tick
         );
 
         (eye, target, fieldOfView) = rig.Resolve(
@@ -954,7 +957,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         );
         var clock = new SdfCameraClock(
             PresentationSeconds: m_elapsedSeconds,
-            AuthoritativeTick: m_simulation.Tick
+            AuthoritativeTick: m_client.Tick
         );
 
         var (eye, target, fieldOfView) = rig.Resolve(
@@ -1224,7 +1227,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         );
         var clock = new SdfCameraClock(
             PresentationSeconds: m_elapsedSeconds,
-            AuthoritativeTick: m_simulation.Tick
+            AuthoritativeTick: m_client.Tick
         );
 
         var (eye, target, fieldOfView) = rig.Resolve(
@@ -1599,11 +1602,12 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     /// animation by the ticks completed since the last frame captured rather than by the host frame's interval.
     /// <see langword="null"/> is never.</summary>
     public Func<bool>? HistoryFree { get; set; }
-
     // A lockstep frame presents the completed tick itself, as an offscreen one does: interpolating from the tick before
     // would show that tick again on a frame that steps nothing, and the presentation animation would read the step back
     // and forth there on some runs and not others.
-    private bool PinsPresentation => (PinsStateFraction || SettlesCapture || TickLocked);
+    /// <summary>Whether this frame presents the completed tick without interpolation.</summary>
+    public bool PinsPresentation => (PinsStateFraction || SettlesCapture || TickLocked);
+
     // Whether this frame is held for a settled capture.
     private bool SettlesCapture => (CapturePending?.Invoke() ?? false);
     // Whether presentation runs in lockstep with the ticks.
@@ -2110,7 +2114,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         m_frameViews.AddRange(collection: m_views);
         m_filmedViewNames.Clear();
         m_binder.FilmViews(
-            authoritativeTick: m_simulation.Tick,
+            authoritativeTick: m_client.Tick,
             names: m_filmedViewNames,
             presentationSeconds: m_elapsedSeconds,
             transforms: transforms,
@@ -2223,7 +2227,6 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     /// and the first program declare the boot seats and census active).</summary>
     /// <param name="frameRate">The frame-rate witness sampled once per captured frame (the <c>world.fps</c> verb reads it).</param>
     /// <param name="client">The snapshot-fed entity view every pose, color, and active flag is read from.</param>
-    /// <param name="simulation">The host-ticked simulation whose completed tick drives presentation sources.</param>
     /// <param name="settings">The live render settings read every captured frame (console-mutated in real time).</param>
     /// <param name="binder">The screen binder owning the declared screens' CPU-fed GPU sources, published each frame.</param>
     /// <param name="envelope">The boot scene's envelope: the headroom the construction probe reserves, and the count a
@@ -2259,7 +2262,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     /// <param name="editor">Each seat's editor state, or <see langword="null"/> for a fresh one with nothing moved.</param>
     /// <param name="domains">The guard that holds the last valid value of a bound value and reports its transitions.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldFramePresenter(FrameRateMonitor frameRate, WorldClient client, IWorldSimulationClock simulation, WorldRenderSettings settings, IWorldScreenPresenter binder, WorldSceneEnvelope envelope, WorldSeatBindings seatBindings, WorldCreationInstances animator, IWorldAudioFrameFeed audio, WorldPerceptionAnchor anchor, WorldCompositionState composition, WorldViewComposer composer, WorldSdfDocumentEmitter sdfDocuments, WorldSeatViewports viewports, WorldContinuum continuum, WorldTextCatalog text, IWorldAdjacencySource adjacencies, MarkerStore markers, Func<string, OverlayResolvedGlyph> resolveIcon, WorldSpeechClock speech, WorldValueDomainGuard domains, IOverlayPredicateEvaluator? overlayFacts = null, WorldViewGraphHost? graphs = null, WorldEditorSeats? editor = null) {
+    public WorldFramePresenter(FrameRateMonitor frameRate, WorldClient client, WorldRenderSettings settings, IWorldScreenPresenter binder, WorldSceneEnvelope envelope, WorldSeatBindings seatBindings, WorldCreationInstances animator, IWorldAudioFrameFeed audio, WorldPerceptionAnchor anchor, WorldCompositionState composition, WorldViewComposer composer, WorldSdfDocumentEmitter sdfDocuments, WorldSeatViewports viewports, WorldContinuum continuum, WorldTextCatalog text, IWorldAdjacencySource adjacencies, MarkerStore markers, Func<string, OverlayResolvedGlyph> resolveIcon, WorldSpeechClock speech, WorldValueDomainGuard domains, IOverlayPredicateEvaluator? overlayFacts = null, WorldViewGraphHost? graphs = null, WorldEditorSeats? editor = null) {
         ArgumentNullException.ThrowIfNull(argument: domains);
         ArgumentNullException.ThrowIfNull(argument: frameRate);
         Editor = (editor ?? new WorldEditorSeats());
@@ -2268,7 +2271,6 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         ArgumentNullException.ThrowIfNull(argument: speech);
         ArgumentNullException.ThrowIfNull(argument: continuum);
         ArgumentNullException.ThrowIfNull(argument: text);
-        ArgumentNullException.ThrowIfNull(argument: simulation);
         ArgumentNullException.ThrowIfNull(argument: settings);
         ArgumentNullException.ThrowIfNull(argument: binder);
         ArgumentNullException.ThrowIfNull(argument: envelope);
@@ -2317,7 +2319,6 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         m_speech = speech;
         m_overlayFacts = overlayFacts;
         m_roster = client.Roster;
-        m_simulation = simulation;
         m_settings = settings;
         m_binder = binder;
         m_seatBindings = seatBindings;
