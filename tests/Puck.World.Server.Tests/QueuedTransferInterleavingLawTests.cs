@@ -220,7 +220,7 @@ public sealed class QueuedTransferInterleavingLawTests {
                 Assert.True(condition: Host.TryStart(instance: out _, name: name, path: m_document, reason: out var reason), userMessage: reason);
             }
         }
-        public void Stop(string name) => Assert.True(condition: Host.TryStop(name: name, reason: out var reason), userMessage: reason);
+        public void Stop(string name) => Assert.True(condition: Host.TryRetire(name: name, reason: out var reason), userMessage: reason);
         public void Seat(string label, string instance, int slot) {
             var row = Row(name: instance);
 

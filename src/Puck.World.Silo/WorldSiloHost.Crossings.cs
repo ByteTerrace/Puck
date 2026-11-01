@@ -129,7 +129,7 @@ public sealed partial class WorldSiloHost {
     // Runs on the mailbox: an activation that admitted its row but cannot finish leaves no row and no bookkeeping.
     private void DiscardActivation(WorldInstance row) {
         row.Server.FreezeForRetirement();
-        if (!Instances.TryStop(
+        if (!Instances.TryRetire(
             name: row.Name,
             reason: out _
         )) {

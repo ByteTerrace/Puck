@@ -32,7 +32,7 @@ namespace Puck.World;
 /// (<see cref="Server.WorldOwnedWorlds.TryReadDurableState"/>) the boot row's own session-join already stages with —
 /// a snapshot taken once at entry; the instance then advances its own copy. <see cref="ReapIfEmpty"/> is the
 /// lifetime rule over that occupancy: a caller that just vacated an instance's last active entry reaps it through
-/// the same door <see cref="TryStop"/> already exposes by name. A live QUIC peer entering a spawned instance
+/// the same door <see cref="TryRetire"/> already exposes by name. A live QUIC peer entering a spawned instance
 /// (composing the existing peer-admission door with this same seating seam) remains an unbuilt stretch — see
 /// <c>WorldInstanceCommandModule</c>'s own remarks.</para>
 /// <para>The 24 lines this engine used to call directly into a desktop's client/roster/seat-router/input-router now
@@ -96,7 +96,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     private readonly Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, WorldOutputHub?, IWorldMachineHost> m_machineHostFactory;
     // The transport-neutral local resolver ResolveAndEnqueueCoalescedTransfers consumes to turn a
     // destinations row plus a traveling cohort into a scoped generation/instance name — see
-    // WorldSessionResolver. TryStop notifies it so a reaped/stopped instance's cache entry does not
+    // WorldSessionResolver. TryRetire notifies it so a reaped/stopped instance's cache entry does not
     // outlive the instance.
     private readonly WorldSessionResolver m_resolver;
     // The local seats this host embodies — the ONE seam into a desktop's client/roster/seat-router/input-router.
@@ -156,7 +156,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     // Names a persistent-lifetime transfer has resolved at least once — retained through an occupancy dip to zero
     // (ReapIfEmpty refuses them by name) so a second traveler's transfer still finds the first traveler's instance
     // standing. Marked in TryResolveDestination whether that call started the instance or found it already running;
-    // cleared by an explicit TryStop, which always wins over retention.
+    // cleared by retirement, which always wins over retention.
     private readonly HashSet<string> m_retainedInstances = new(comparer: StringComparer.Ordinal);
     // Test-only substitution point (§2.4's "the ONE seam a test may decorate"): a row named here has its LOCAL peer
     // call wrapped by the given decorator instead of calling straight through to its own server — see
@@ -329,7 +329,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     // The ONE local-roster departure transaction. PlayerRoster routes both explicit leaves and device-orphan
     // dissolves here after its ordinary slot/occupancy guard. The authoritative body leaves the CURRENT routed
     // instance first; only an accepted reply clears held input, vacates the local participant, and resets the
-    // presentation route. Reaping runs last, after the route no longer makes TryStop's traveler guard fire.
+    // presentation route. Reaping runs last, after the route no longer makes TryRetire's traveler guard fire.
     private bool LeaveRosterSeat(int rosterSlot, Principal actingPrincipal) {
         // Only ever wired through m_seats.ConfigureLeave, and only AdmitBoot ever calls that — a boot-free host
         // installs no leave callback, so this can only fire once a boot row is admitted.
@@ -502,14 +502,14 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     /// <summary>Reaps a running instance whose seat occupancy just hit zero — a lifetime rule over the occupancy fact
     /// <see cref="Server.WorldPopulation.ActiveCount"/> already reports (see that member's own remarks on why it is
     /// already per-instance scoped, which is what makes reading it here honest), never bespoke teardown: any caller
-    /// that just vacated an instance's last occupied slot calls this, and it is the same <see cref="TryStop"/> path
-    /// <c>world.instance.stop</c> uses, applied by rule instead of by name. A no-op — never a refusal — for the boot
-    /// instance (which <see cref="TryStop"/> refuses outright), a retained instance (see <see cref="m_retainedInstances"/>
-    /// — a <c>persistent</c>-lifetime transfer destination stays up through an occupancy dip to zero, by design), an
-    /// unknown name, an instance that still holds an active entry, an authority that still forwards departed
-    /// travelers, or an instance a queued transfer is bound for. Forwarding authorities remain available until
-    /// explicitly stopped; an instance spared for a queued arrival is reaped by the drain after which nothing queued
-    /// names it, if it is still empty then.</summary>
+    /// that just vacated an instance's last occupied slot calls this, and it retires through <see cref="TryRetire"/>,
+    /// applied by rule instead of by name. A no-op — never a refusal — for the boot instance, a retained instance (see
+    /// <see cref="m_retainedInstances"/> — a <c>persistent</c>-lifetime transfer destination stays up through an
+    /// occupancy dip to zero, by design), an unknown name, an instance that still holds an active entry, an authority
+    /// that still forwards departed travelers, one whose custody still holds (the guard <see cref="Stop"/> applies
+    /// too), or an instance a queued transfer is bound for. Forwarding authorities remain available until explicitly
+    /// stopped; an instance spared for its custody or a queued arrival is reaped by the drain after which neither
+    /// holds it, if it is still empty then.</summary>
     /// <param name="name">The instance name to reap if now empty.</param>
     /// <returns><see langword="true"/> when the instance was reaped.</returns>
     public bool ReapIfEmpty(string name) {
@@ -537,10 +537,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
 
         if (HasForwardingFrom(source: instance.Server)) { return false; }
 
-        // Titles abroad and unresolved departures keep their authority alive even after its last body leaves.
-        // A settled crossing may still owe a source restoration, held by the host rather than the custody fold.
-        if (instance.Server.ExecuteAuthorityOperation(operation: () => instance.Server.TransferEscrow.Custody.HoldsCustody) ||
-            m_inDoubtTransfers.Any(predicate: pending => string.Equals(a: pending.Transfer.SourceInstance, b: name, comparisonType: StringComparison.Ordinal))) {
+        if (CustodyHeldBy(instance: instance).Holds) {
             _ = m_deferredReaps.Add(item: name);
 
             return false;
@@ -554,7 +551,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
             return false;
         }
 
-        return TryStop(
+        return TryRetire(
             name: name,
             reason: out _
         );
@@ -1331,17 +1328,30 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
         return true;
     }
 
-    /// <summary>Retires a running instance and disposes what it owned. The boot instance is refused: retiring it
-    /// would leave the container's client, seats, tape and console verbs holding a server nothing steps.</summary>
+    /// <summary>Retires a running instance now and disposes what it owned, whatever custody it holds: for a row whose
+    /// durable image already carries everything it holds (a silo row after its final checkpoint), one that committed
+    /// nothing (a failed activation), or a crashed authority's stale object that a restart replaces from its image and
+    /// crossing log. An operator's stop is <see cref="Stop"/>, which never discards custody. The boot instance is
+    /// refused: retiring it would leave the container's client, seats, tape and console verbs holding a server nothing
+    /// steps.</summary>
     /// <param name="name">The console-facing instance name.</param>
     /// <param name="reason">The refusal reason on failure.</param>
     /// <returns><see langword="true"/> when the instance was retired.</returns>
-    public bool TryStop(string name, out string reason) {
+    public bool TryRetire(string name, out string reason) {
+        if (!TryRetirable(instance: out var instance, name: name, reason: out reason)) {
+            return false;
+        }
+        Retire(instance: instance);
+        return true;
+    }
+    // The refusals every retirement shares: the boot instance, an unknown name, and a row presenting a local seat.
+    private bool TryRetirable(string name, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out WorldInstance? instance, out string reason) {
         if (string.Equals(
             a: name,
             b: BootInstanceName,
             comparisonType: StringComparison.Ordinal
         )) {
+            instance = null;
             reason = $"'{BootInstanceName}' is the world this process booted with — close the process to stop it";
 
             return false;
@@ -1349,7 +1359,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
 
         if (!m_instances.TryGetValue(
             key: name,
-            value: out var instance
+            value: out instance
         )) {
             reason = $"no instance named '{name}'";
 
@@ -1370,17 +1380,23 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
                 comparisonType: StringComparison.Ordinal
             )
             ) {
+                instance = null;
                 reason = $"'{name}' is presenting local seat {(slot + 1)} — transfer that traveler out before stopping the instance";
 
                 return false;
             }
         }
+        reason = string.Empty;
+        return true;
+    }
+    // Removes a row from every host table and disposes it.
+    private void Retire(WorldInstance instance) {
+        var name = instance.Name;
 
-        if (m_instances.TryGetValue(key: name, value: out var stopping)) {
-            _ = m_custodyPeers.TryRemove(item: new KeyValuePair<string, IWorldCustodyPeer>(key: stopping.Server.AuthorityIdentity, value: stopping.Server));
-        }
+        _ = m_custodyPeers.TryRemove(item: new KeyValuePair<string, IWorldCustodyPeer>(key: instance.Server.AuthorityIdentity, value: instance.Server));
         _ = m_instances.Remove(key: name);
         _ = m_deferredReaps.Remove(item: name);
+        _ = m_stopping.Remove(item: name);
         ForgetResolvedDocuments();
         _ = m_documentShared.Remove(key: name);
         // A stopped row answers for no transfer. An in-doubt transfer addressed to it waits, by authority, for the
@@ -1409,7 +1425,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
             retiredEndpoint.Dispose();
         }
 
-        // An explicit stop clears retention once the local-follow guard above proves it cannot orphan presentation.
+        // Retirement clears retention once TryRetirable's local-follow guard proves it cannot orphan presentation.
         // A later name reuse (a fresh world.instance.start under the same spelling) starts out with ordinary
         // reap-on-empty rather than inheriting a persistence flag from an instance that no longer exists.
         m_retainedInstances.Remove(item: name);
@@ -1421,9 +1437,6 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
         m_resolver.NotifyInstanceRetired(instanceName: name);
         CloseScreenSessions(owner: name);
         instance.Dispose();
-        reason = string.Empty;
-
-        return true;
     }
 
     /// <summary>The boot row this host currently steps, or <see langword="null"/> for a boot-free host (a hosted

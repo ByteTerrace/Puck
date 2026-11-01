@@ -178,7 +178,7 @@ public sealed class WorldInstance : IDisposable {
 
     /// <summary>This instance's portal-crossing edge state, read and written by <see cref="WorldInstanceHost"/>'s
     /// diegetic boundary scan. Scoped to this instance object — a name reused after
-    /// <see cref="WorldInstanceHost.TryStop"/> starts a brand-new instance with a brand-new latch rather than
+    /// <see cref="WorldInstanceHost.TryRetire"/> starts a brand-new instance with a brand-new latch rather than
     /// inheriting a departed instance's occupancy, exactly like every other per-instance table here.</summary>
     public WorldPortalOccupancy PortalOccupancy { get; } = new();
     /// <summary>Called with this row's own completed tick count after every step — a console wait gate's tick clock

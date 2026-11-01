@@ -159,7 +159,7 @@ public sealed partial class PortalInputLawTests {
             observation: observation
         ));
         Assert.True(
-            condition: scene.Host.TryStop(
+            condition: scene.Host.TryRetire(
                 name: name,
                 reason: out var reason
             ),

@@ -1987,6 +1987,7 @@ public sealed partial class WorldInstanceHost {
 
         SettleOwnHops();
         NotifySettledHops();
+        CompleteStops();
         ReapDeferred();
     }
     /// <summary>Queues a same-process transfer for this host's next <see cref="DrainPendingTransfers"/> call —

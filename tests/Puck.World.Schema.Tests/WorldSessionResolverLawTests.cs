@@ -234,7 +234,7 @@ public sealed class WorldSessionResolverLawTests {
             sourceDefinition: definition
         ));
 
-        // The instance the first resolution named just went away (WorldInstanceHost.TryStop/ReapIfEmpty's apply
+        // The instance the first resolution named just went away (WorldInstanceHost.TryRetire/ReapIfEmpty's apply
         // path, mirrored here by calling the notification directly) — the resolver's cache entry for this
         // (destination, scope key) must clear, so the NEXT resolution is a genuinely new generation, never a stale
         // reuse of a name nothing answers to any more.

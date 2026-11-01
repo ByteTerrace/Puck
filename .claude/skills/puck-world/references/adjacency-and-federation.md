@@ -321,7 +321,7 @@ destination narrates `UNCERTAIN` on `world.transfer`. The source keeps an
 `Uncertain` answer in doubt exactly like an `Unreachable` one, so it neither
 settles home nor completes. Only the destination's recovery resolves it: the
 recovered log either lands the arrival again (`Committed`) or does not hold it
-(`Missing`). `WorldInstanceHost.TryStop` unbinds in-doubt transfers addressed
+(`Missing`). Retiring a row (`WorldInstanceHost.TryRetire`) unbinds in-doubt transfers addressed
 to the stopped row so they bind by authority to its recovered successor. In a
 silo, `RowCrossingLog` maps a store `RecoveryRequired` (a root CAS it could not
 reconcile) to `Uncertain`, which also blocks the activation; a store throw is a
@@ -398,7 +398,15 @@ answer alone. A notice for a hop home never recorded cancels it. A granted
 onward hop the crossing did not depart with is given up the same way when the
 crossing ends. A home with a pending or away title, or any source with an
 in-doubt departure, stays reachable even with an empty population; owed notices
-and settlements also prevent reaping. A rollback retains only members it has
+and settlements also prevent reaping. An operator's stop (`WorldInstanceHost.Stop`,
+`world.instance.stop`) reads the same custody guard (`CustodyHeldBy`): it sends
+visiting companions home and retires after the drain, writing a final checkpoint
+through `FinalCheckpoints` that carries whatever is still abroad or in doubt; a
+host without durable images (the World process) refuses to stop a home with a
+title abroad and waits while a row owes drain steps. `TryRetire` is the unguarded
+removal for a row whose durable image already carries it (the silo after its
+final checkpoint), a failed activation, or a crashed authority a restart replaces.
+Laws: `CompanionStopLawTests`. A rollback retains only members it has
 not restored, in a restore-only row; a later durable home release ends that
 obligation before any image is restored. Once commit was confirmed, a contradictory
 Missing answer cannot authorize restoration. A partial settlement must persist

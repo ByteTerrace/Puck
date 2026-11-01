@@ -421,7 +421,7 @@ public sealed partial class WorldInstanceHost {
     // Reuse-if-running exactly like Persistent (only the retention rule differs — see
     // TransferDestination.Resolved) unless the resolver-minted name is no longer running. Reaching TryStart
     // under that stale name directly, the way the Persistent path always has, would restart an instance
-    // behind the resolver's own back: whatever TryStop call retired the original already cleared
+    // behind the resolver's own back: whatever TryRetire call retired the original already cleared
     // WorldSessionResolver's cache entry via NotifyInstanceRetired, so a blind restart would make one live
     // again with the resolver never told, and the next traveler's resolve would mint a second, different
     // generation for what should be one scoped session. Re-resolving through the resolver instead — using
@@ -501,7 +501,7 @@ public sealed partial class WorldInstanceHost {
     // destination's, through the same WorldFileOrigin.TryResolveCanonicalPath probes ResolveByStableName's name-collision
     // fence already uses, so a spelling difference alone never false-refuses or false-matches. Names order
     // (ordinal) for determinism; a stopped instance is invisible by construction (removed from m_instances
-    // by TryStop already). Two or more matches is reported ambiguous rather than adopting one arbitrarily.
+    // by TryRetire already). Two or more matches is reported ambiguous rather than adopting one arbitrarily.
     private bool TryFindRunningInstanceByOrigin(string documentPath, out string matchedName, out IReadOnlyList<string>? ambiguous) {
         matchedName = string.Empty;
         ambiguous = null;

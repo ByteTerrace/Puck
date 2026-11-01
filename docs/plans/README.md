@@ -58,7 +58,8 @@ The gallery in a deep valley under moons reached by flight, as an inventory of w
 
 Durable GPU fixtures, per-pass work counters, general graphics attachments, shared mesh-and-SDF visibility, reproducible shader authoring, how authored world data reaches the GPU, and the frame graph that hosts rendering: nested views, image sources, hit-to-source mapping, temporal reconstruction, HDR output, sky and atmosphere, wallpaper-fold bounds, and visibility, areas and residency over baked SDF meshes; the frame walks no field. P17 is withdrawn. Its foundation packages share no code with the other programmes; the state mirror that carries bound rows to a pass reads the state substrate and the presentation view, so those packages are scheduled against both. Its decisions are in [the register](../decisions/rendering.md).
 
-- [The simulation step off the frame thread](simulation-thread.md)—the tick-to-produce handoff design: thread ownership, what produce reads, the record, determinism and commands. It is an input to the engine job system's memo ([the packet](open-items.md#engine-job-system)); phases 2 and 3 stay as work, and the pipelined worker is withdrawn.
+- [The engine job system](engine-job-system.md)—the design memo: one scheduler and its classes, the deterministic parallel tick's phases and contract, parallel view recording, memory ownership, background work proportional to change, and the build order with each step's check on the debug world.
+- [The simulation step off the frame thread](simulation-thread.md)—the tick-to-produce handoff design: thread ownership, what produce reads, the record, determinism and commands. It is an input to the engine job system's memo, which drops its phase 2 and merges its phase 3 into the presentation view; the pipelined worker is withdrawn.
 
 ## [Editor](editor.md)
 

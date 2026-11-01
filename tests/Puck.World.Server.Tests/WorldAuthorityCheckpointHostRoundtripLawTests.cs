@@ -423,7 +423,7 @@ public sealed class WorldAuthorityCheckpointHostRoundtripLawTests {
         );
 
         Assert.True(condition: host.TryStart(instance: out _, name: "row-a", path: documentPath, reason: out var startReason), userMessage: startReason);
-        Assert.True(condition: host.TryStop(name: "row-a", reason: out var stopReason), userMessage: stopReason);
+        Assert.True(condition: host.TryRetire(name: "row-a", reason: out var stopReason), userMessage: stopReason);
         Assert.True(condition: host.TryStart(instance: out var restartedA, name: "row-a", path: documentPath, reason: out startReason), userMessage: startReason);
         Assert.True(condition: host.TryStart(instance: out var rowB, name: "row-b", path: documentPath, reason: out startReason), userMessage: startReason);
         Assert.Equal(expected: "row-a~1", actual: restartedA!.Server.AuthorityIdentity);
@@ -498,7 +498,7 @@ public sealed class WorldAuthorityCheckpointHostRoundtripLawTests {
         using var restoredBoot = HostRow.Build(name: WorldInstanceHost.BootInstanceName);
 
         restoredHost.Admit(row: restoredBoot.Instance);
-        Assert.True(condition: restoredHost.TryStop(name: "row-a", reason: out stopReason), userMessage: stopReason);
+        Assert.True(condition: restoredHost.TryRetire(name: "row-a", reason: out stopReason), userMessage: stopReason);
         Assert.True(condition: restoredHost.TryStart(instance: out var thirdA, name: "row-a", path: documentPath, reason: out startReason), userMessage: startReason);
         Assert.Equal(expected: "row-a~2", actual: thirdA!.Server.AuthorityIdentity);
     }
