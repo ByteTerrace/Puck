@@ -496,6 +496,19 @@ system can take, from `dotnet-trace` thread-time samples of the frame thread
   (52 %), of which the per-body pose pack (`WorldCreationInstances.PackTransforms`,
   effectors included) is 0.89 / 0.78 ms and partitions by registration; graph
   preparation and scheduling are about 0.5 ms.
+- **The creature garden, the parallel tick's forcing workload**
+  (`worlds/debug/garden-crowd.puck`, 128 flocking, stalking and rumouring kit
+  bodies; [port lane 4](port-experimental.md#4-creature-garden--done)). Headless
+  unpaced, on the lead machine with other lanes holding the CPU at 100 %,
+  `host.frames` tick avg / p50: 12 creatures 1.37 / 1.29 ms, 32 (the garden)
+  1.65 to 1.96 / 1.39 to 1.43, 128 3.72 to 3.83 / 3.20 to 3.49 (about 11 % of a
+  30 Hz period), 256 4.88 / 3.90, 512 5.78 / 5.69. By sampled thread time, as a
+  share of `WorldTick.StepCore` at 32 / 128: body advance 89 / 80 % (motion
+  programs 50 / 33 %, their contact sweeps 48 / 30 %; producers 13 / 17 %,
+  flock steering and navigation under 2 %), `WorldEventFeed.Collect` 2.7 /
+  9.0 %, snapshot 2.5 / 3.8 %, the rule VM 1.7 / 1.1 %, pair contacts under
+  1 %, no crossing scan. None of the bodies is rigid, so E1 partitions none of
+  this; it is the measured case for the kit-body item above.
 
 - [high] Steady 60 FPS is not held where a 30 Hz tick and the 15 Hz rated
   presentation burst land on the same frame. Quiet lead machine (the World the
@@ -1187,7 +1200,7 @@ worlds in place is rewritten.
   2. Seamless topology and carried identity: the quilt, a closing seam, a pitched
      seam, `border` composition, an identity gate (medium).
   3. Water and fields: a medium pool, flow across basins (medium).
-  4. Creature garden: flocks, a stalker, wall crawling, rumor (large).
+  4. Creature garden: flocks, a stalker, wall crawling, rumor (done).
   5. Second seat and hidden information: two seats, Lineup, hidden ranks, Word
      spy (large).
   6. Traversal course: kart, ledge course, planetoids, grapple (large).

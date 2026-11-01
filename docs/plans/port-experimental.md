@@ -70,10 +70,11 @@ The rest (lanes 6, 8, 10, 11, 12 and 14) is content, taken after the
 fundamentals ([job system](engine-job-system.md#6-build-order)).
 
 Within that, order is value to the proving ground: lanes that exercise engine
-systems the debug world does not touch come first. A search of `worlds/` finds no
-`interactions`, `navigation`, `adjacencies`, `curves` track, `region(` trigger,
-medium or `Pull` hold, `field` lattice, flock program, authored HLSL package,
-row `visibility` audience, `embeds` row or identity fact.
+systems the debug world does not touch come first. Beyond the garden's pond
+plot (lane 4: `interactions`, `navigation`, flocks, a `Pull` hold), a search of
+`worlds/` finds no `adjacencies`, `curves` track, `region(` trigger, medium,
+`field` lattice, authored HLSL package, row `visibility` audience, `embeds` row
+or identity fact.
 
 ### 1. Authored render passes
 
@@ -113,12 +114,47 @@ authority handoff) and identity facts carried across a crossing are built
 | A pool whose `field` lattice is a medium: swimming, buoyancy, depth rows read from regions | `modules/dive.puck` (`lattices field(name: "pool"...)`, `bond: Medium` holds, `dive-depth-*` rules); canaries `dive-medium`, `medium-submersion` | wire ([documents-motion](../../.claude/skills/puck-world/references/documents-motion.md)); standard: a swim hold row the Moth refines, as `abilities.puck` holds `dashAbility` | A courtyard pool; the first `field` lattice and `Medium` hold in the debug world, and the base the climate wing's wetness and puddles stand on | medium |
 | Flow across basins: a source topped up each step, boundary spill, a drawn whole-field pass | canaries `flow-conservation-live`, `lattice-draw-fill` | wire | The pool's inflow; proves reactions run live | small |
 
-### 4. Creature garden
+### 4. Creature garden — done
 
-The debug world has the wander producer (`worlds/debug/range.puck:112`) and one
-companion, and no flock, no navigation domain, no body-pair rules. The island's
-garden district holds the rest, as Puck programs the engine only schedules
-(`Puck.Physics.FixedFlockSteering`, the `ProduceFlockIntent`,
+Ported into the garden destination's pond plot ([garden.md](../../worlds/debug/garden.md),
+[pond.puck](../../worlds/debug/pond.puck)), all four rows wired: the hound pack
+flocks round its designated companion (the visitor, or the pack-mate it trusts
+most), the spiders stalk the visitor over the `plot` navigation domain and face
+her, the dragonflies flock over the pond, and the rumour rules run as the
+island wrote them, translated through `puck decompile`. The fish school in air
+inside the pond's walls on a full-lift hold until lane 3 gives the garden a
+water field. The crawl is the standard's `crawlHold`
+(`worlds/standard/abilities.puck`), which the spiders expand; the Moth can
+expand it for her walker as she does `dashAbility`, but does not yet (a feel
+decision for the owner). No engine code was needed.
+
+The body count is one parameter, `pondFlocks(creatures)`, and
+`worlds/debug/garden-crowd.puck` is the garden at 128 creatures, the parallel
+tick's forcing workload. `puck test --reproduce` passes on
+`worlds/debug/garden-tests.puck` (the pack and the bone, the stalker, the
+crawl) and on the crowd's own scenario.
+
+The tick, headless and unpaced on the lead machine while other lanes held the
+CPU at 100 % (so read the ratios over the absolutes), over 900 ticks after a
+300-tick warmup, `host.frames` simulate avg / p50:
+
+| Creatures | 12 | 32 (the garden) | 128 | 256 | 512 |
+|---|---|---|---|---|---|
+| Tick, ms | 1.37 / 1.29 | 1.65 to 1.96 / 1.39 to 1.43 | 3.72 to 3.83 / 3.20 to 3.49 | 4.88 / 3.90 | 5.78 / 5.69 |
+
+At 128 creatures the tick is about 11 % of a 30 Hz period. By `dotnet-trace`
+sampled thread time over 30 s of the unpaced run (32 / 128 creatures), as a
+share of `WorldTick.StepCore`: body advance 89 / 80 % (motion programs 50 /
+33 %, of which contact sweeps 48 / 30 %; producers 13 / 17 %, of which flock
+steering 1.1 / 1.7 % and navigation 0.3 / 0.2 %), the event feed 2.7 / 9.0 %,
+snapshot 2.5 / 3.8 %, the rule VM 1.7 / 1.1 % (decisions 0.3 / 0.1 %), pair
+contacts 0.8 / 0.6 %, and no crossing scan (the scenarios drop the frames).
+Every body is a kit body and none is rigid, so the parallel tick's E1 (rigid
+advance) takes none of it; this workload is the case for partitioning kit
+bodies ([job system packet](open-items.md#engine-job-system)).
+
+The source was the island's garden district, Puck programs the engine only
+schedules (`Puck.Physics.FixedFlockSteering`, the `ProduceFlockIntent`,
 `SenseNearestInCone` and `FaceSensorTarget` motion operations).
 
 | Feature | Source | Support | Place and why | Size |

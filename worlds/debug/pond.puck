@@ -1977,10 +1977,10 @@ template pond() {
   }
 }
 
-// The plot's count: `creatures` hounds, spiders, dragonflies and fish in all. The hounds and spiders are fixed (pond());
-// the dragonflies and the fish share the rest. Expand it in a document of its own that the plot's document imports, so
-// its inhabited placements come first and take the highest numbers, leaving the lowest to the rule-keyed hounds and
-// spiders; a document over the garden expands it again in its own body to change the count.
+// The plot's count: `creatures` hounds, spiders, dragonflies and fish in all, at least 12. The hounds and spiders are
+// fixed (pond()); the dragonflies and the fish share the rest. Expand it in a document of its own that the plot's
+// document imports, so its inhabited placements come first and take the highest numbers, leaving the lowest to the
+// rule-keyed hounds and spiders; a document over the garden expands it again in its own body to change the count.
 template pondFlocks(creatures = 32) {
   let flockCount = creatures - houndCount - spiderCount
   let dragonflyCount = floorDivide(flockCount, 2)
