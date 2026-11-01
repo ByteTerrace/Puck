@@ -15,7 +15,7 @@ before code.
 | Smooth blends | `CreationDocument.MaxSmooth` | 0.5 m, so a 400 m wall is hard-unioned masses. |
 | The valley | `worlds/debug/valley.puck`, `worlds/standard/terrain.puck` | Eight sectors of three superellipsoids, 4 m fBm at 0.02 cycles/m, one palette slot. `terrainFloorCut` keeps buried halves off the lattice. |
 | Bake detail | `CreationNoiseDocument.DetailSpacing`, `WorldPlacementStamper.ReliefDetail` | Declares 1.56 m, but the scoped bound is a 770 m sphere about the ring's centre and refinement stops at eight cells a coarse axis, so sectors bake at 2.8 m ([mesh bake](../../.claude/skills/rendering/references/mesh-bake.md#groups-poses-and-materials)): the metre-scale grain. |
-| Contact | `WorldColliderSet`, `FixedStaticCollider` (analytic convex kinds and the relief's field collider); `FixedFieldContactSolver`, the world-wide field provider the debug world does not select | Relieved copies use field colliders, including their authored blends; unrelieved copies keep analytic primitive unions. Conservative relief contact remains open ([findings](open-items.md#the-valleys-terrain)). |
+| Contact | `WorldColliderSet`, `FixedStaticCollider` (analytic convex kinds and the relief's field collider); `FixedFieldContactSolver`, the world-wide field provider the debug world does not select | Relieved copies use field colliders, including their authored blends; unrelieved copies keep analytic primitive unions. Both field paths read one certified surface solve; what remains of it is in [certified field contact](open-items.md#certified-field-contact). |
 | Materials | `shade/shade-weathering.hlsli`, `shade/shade-layers.hlsli`, called from `passes/sdf-light-stage.hlsli` | No slope, altitude or curvature rule, though weathering's up-facing `deposit` and its curvature edges are such rules in fragment form. |
 | Atmosphere | `SdfSky.PackAtmosphere`, `shade/sdf-atmosphere.hlsli`, CPU twin `SdfAir` | Height fog and haze, scalar extinction; haze extinction is `-log(1 - amount) / farDistance`. The valley's fog (`clearDayAir`) fades rock toward a white sky, not toward blue. |
 | Far shadows | `SdfMeshShadowCascades` | Splits at 16 and 120 m: every wall beyond 120 m is fully sunlit, with no ridge shadows. |
@@ -71,19 +71,14 @@ Landed for relief (`FixedStaticColliderKind.Field`, `FixedColliderField`,
 contact shapes and `NoiseDisplace` in one scope, read by the contact
 `SdfFieldEvaluator` (the op is a contact op, and the field provider emits the
 same relief), with the fixed-point fBm in `Pcg3dLatticeNoise.Fbm3`. The
-narrowphase is not `FixedFieldContactSolver`'s solve verbatim: that solve reads
-the field's value as the distance, which over a scope divided by its `L` holds
-a body up to `L` times its skin off the rock, and spends up to 1,033 samples a
-capsule. The field collider estimates distance as the value over the
-gradient's length (a four-tap tetrahedral difference), at the core point where
-the field reads least, and proves a body clear first from the shapes'
-unrelieved union grown by the amplitude, then from one relieved sample
-when the compiled field retains its Lipschitz bound. The gradient quotient is
-only a local estimate, not a clearance certificate; quantized scope scales,
-curved relief, narrow features and degenerate gradients have open contact
-findings in the [terrain packet](open-items.md#the-valleys-terrain). A local
-normal cannot select a capsule endpoint for a nonconvex union, so the contact
-search samples the whole core and refines its least reading. A smooth blend
+narrowphase is the one certified surface solve the field provider's
+`FixedFieldContactSolver` reads too (`FixedFieldColliderContact.Solve`): the
+shapes' unrelieved union grown by the amplitude, then the evaluator's certified
+step scale less its value error, prove a body clear, whole or per core piece no
+longer than its radius; otherwise a converged surface solve measures the
+Euclidean distance from the core to a bracketed surface point. A union scope's
+`1/L` is carried in that certified scale rather than applied to its values, so
+a scale under the Q48.16 grid keeps the field's resolution. A smooth blend
 over the cap reuses the collider by compiling its creation the same way; `TerrainRelief` replaces `NoiseDisplace`
 inside the same program.
 
@@ -215,7 +210,7 @@ bake numbers come from `puck mesh audit --cpu --group "(valley-"`.
 | 2. Aerial perspective | rendering B | 0 | `SdfAir` and the kernel agree as today. At `valley-draw-distance`, rock 700 m out shifts measurably toward the sky's hue and the rim keeps its silhouette. Changing `farDistance` changes no pixel nearer than it. |
 | 3. `TerrainRelief` op | field/maths C | [bake fundamental](open-items.md#bake-proportional-to-change), kernel edits batched | Fixed-point and kernel bakes of one sector match to the triangle (`--cpu` against a stored bake). The exact noise result is pinned by one Maths law. Sector CPU bake time at the same cell is within 1.5× of today's 24 to 43 s. |
 | 4. Relative caps, shape bound, tiles | authoring/bake D | 3 for relief; the bound fix none | A sector bakes at its declared spacing (cell under 1.6 m before tiles). With tiles, demanded triangles at any valley stop stay under today's 2.16 M plus 1.5 M, and the mesh region grows under 150 MB. Warm boot is unchanged; time to the demanded set after a sector edit is under today's sector bake. |
-| 5. Certified field contact | physics E | [certified field contact](open-items.md#certified-field-contact), with 3's relief | One certified solve for both contact paths closes R4 to R8; the valley witnesses report 0 red, feet stay within skin plus bake error on the 58° face, creep is 0, and replay agrees after deliberate corrections are re-recorded. No coarser contact cut is allowed. |
+| 5. Certified field contact | physics E | [certified field contact](open-items.md#certified-field-contact), with 3's relief | One certified solve for both contact paths closes R4 to R8; the valley witnesses report 0 red, feet stay within skin plus bake error on the 58° face, creep is 0, and replay agrees after deliberate corrections are re-recorded. No coarser contact cut is allowed. Landed: the one solve, R4 to R8 closed, replay agreeing, 0 red at the rim; the 58° face and the rim's creep remain (packet). |
 | 6. Material layers, deposit migrated | rendering/shading F | none | Views pass GPU ms rises at most 10% at `valley-slope`. The register count on Direct3D 12 does not exceed today's. The weathering exhibits' stills are unchanged within the 2% threshold. |
 | 7. Far shadows | rendering A, after 1 | 0 | `valley-rim` shows ridge shadows on the far walls. The shadow passes cost at most 0.5 ms more with the sun still. |
 | 8. The sets and the valley | content G | 3, 4, 6 (2 for the haze presets) | Both sets compile and lint clean under `--strict`. Six stills demonstrate each set; the valley wears the painterly set under the owner's ruling. |
@@ -236,11 +231,13 @@ Risks:
   readings, not quiet-machine qualification. Batch step 3 behind the
   [bake fundamental](open-items.md#bake-proportional-to-change) and land kernel
   edits together. A relief edit afterwards rebakes its own tiles, nearest first.
-- **Field contact cost.** The field solve's worst case is 1,033 samples a
-  capsule, each about twelve octaves of eight hashes, against about 50 convex
-  queries on a slope today. If step 5 misses its p99, fix cost through a
-  closed-form gradient, cached samples, and the job system's parallel contact
-  work. Contact keeps every geometric octave and its declared precision.
+- **Field contact cost.** At the rim the certified solve reads the field about
+  70 times a tick at about 18.5 samples a read, each six octaves; lattice
+  corners are cached per cell, so relief contact holds its share of a headless
+  tick. If a denser relief or more bodies on it miss the p99, the next cuts are
+  the noise's gradient in closed form beside its value and the job system's
+  parallel contact work. Contact keeps every geometric octave and its declared
+  precision.
 - **Loose fields.** Warp and amplitude raise the step factor, slowing the bake
   and the sweep; the erosion mask and relative cap hold it.
 - **Views-pass registers** (168 on Direct3D 12 drove paints out of the

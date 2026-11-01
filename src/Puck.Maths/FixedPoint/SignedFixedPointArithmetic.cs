@@ -134,6 +134,22 @@ internal static class SignedFixedPointArithmetic {
         // range before the multiply even runs. One combine, one round-and-shift back to the caller's scale
         // (ScaleProductSum), so the whole expression rounds once. Nothing here depends on the binary point beyond f.
         var fractionBitCount = TSelf.FractionBitCount;
+
+        // Narrow lane: all three magnitudes below 2^30 and a split of at most 32 bits keep from·2^f below 2^62 and each
+        // product below 2^60, so the exact sum fits a signed long and rounds on machine words. Bit-identical to the
+        // wide lane: the same exact sum, the same ties-to-even shift on its magnitude.
+        const ulong NarrowLimit = (1UL << 30);
+
+        if (
+            (fractionBitCount is >= 1 and <= 32) &&
+            ((FusedArithmetic.RawMagnitude(value: from.Value) | FusedArithmetic.RawMagnitude(value: to.Value) | FusedArithmetic.RawMagnitude(value: amount.Value)) < NarrowLimit)
+        ) {
+            return TSelf.FromRawBits(value: RoundProductNarrow(
+                fractionBitCount: fractionBitCount,
+                product: unchecked(((from.Value << fractionBitCount) + (to.Value * amount.Value)) - (from.Value * amount.Value))
+            ));
+        }
+
         var rawOne = (1L << fractionBitCount); // the raw representation of 1.0, in the value domain
         var scaledFrom = FusedArithmetic.Product(
             left: from.Value,

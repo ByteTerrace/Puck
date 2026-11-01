@@ -1,5 +1,4 @@
 using System.Text.Json;
-using System.Text.Json.Serialization.Metadata;
 using System.Text.Json.Nodes;
 using Puck.State;
 using Puck.Transpiler.Ast;
@@ -9,9 +8,6 @@ using Puck.Transpiler.Lowering;
 namespace Puck.World.Transpiler.Lowering;
 
 public static partial class WorldDocumentEmitter {
-    private static readonly JsonTypeInfo<CellSetExpression> CellSetTypeInfo =
-        ((JsonTypeInfo<CellSetExpression>)WorldJsonContext.Default.Options.GetTypeInfo(type: typeof(CellSetExpression)));
-
     /// <summary>Lowers a <c>set</c> declaration into one row of the document's <c>sets</c> member.</summary>
     /// <remarks>The expression is parsed and re-serialized through <see cref="CellSetSpelling"/> and
     /// <see cref="WorldJsonContext"/>, so a spelling the algebra refuses is refused here, at the declaring line,
@@ -47,7 +43,7 @@ public static partial class WorldDocumentEmitter {
         rows.AppendNode(item: new JsonObject {
             ["name"] = JsonValue.Create(value: setNode.Name),
             ["set"] = JsonSerializer.SerializeToNode(
-                jsonTypeInfo: CellSetTypeInfo,
+                jsonTypeInfo: WorldJsonContext.Default.CellSetExpression,
                 value: expression!
             ),
         });

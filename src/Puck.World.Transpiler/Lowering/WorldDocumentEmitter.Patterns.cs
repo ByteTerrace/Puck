@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using System.Text.Json.Serialization.Metadata;
 using Puck.State;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Diagnostics;
@@ -14,9 +13,6 @@ namespace Puck.World.Transpiler.Lowering;
 // row is compiled here so an author reads the state-budget refusal against the line that declared it rather than
 // against a validation run.
 public static partial class WorldDocumentEmitter {
-    private static readonly JsonTypeInfo<PatternNode> PatternNodeTypeInfo =
-        ((JsonTypeInfo<PatternNode>)WorldJsonContext.Default.Options.GetTypeInfo(type: typeof(PatternNode)));
-
     private static void LowerPatternDeclaration(PatternDeclarationNode pattern, JsonObject parent, DocumentScope scope) {
         if (parent["patterns"] is not JsonArray patterns) {
             patterns = [];
@@ -39,7 +35,7 @@ public static partial class WorldDocumentEmitter {
 
         row["symbols"] = symbols;
         row["pattern"] = JsonSerializer.SerializeToNode(
-            jsonTypeInfo: PatternNodeTypeInfo,
+            jsonTypeInfo: WorldJsonContext.Default.PatternNode,
             value: pattern.Match
         );
 

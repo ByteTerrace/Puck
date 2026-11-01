@@ -30,6 +30,13 @@ The debug world's Go and Tour pages, Places ring and gallery icons live in
 [`../debug/controls.puck`](../debug/controls.puck), which refines this package.
 The garden and night field import the standard directly.
 
+`terrain.puck` and `foliage.puck` are optional libraries. Foliage supplies
+`broadleafTree`, `mossyRock`, `grassTuft`, `sceneryPatch`, `sceneryScatter` and
+`windMeadowTile`; import it with `import "../standard/foliage"` and expand its
+templates inside `prototypes` or `placements`. `sceneryScatter` translates a
+table of positions, scales and yaws by an origin, with optional solid contact.
+The [debug meadow](../debug/meadow.md) is the worked placement and wind example.
+
 `camera.puck` is a library. `cameraFeel()` authors the shared input feel, the `camera-boom` response and the
 zoom bounds/step in `views.seatControl.boom`; `chaseCamera(rig, ...)` authors a seated body's whole chase camera
 (seat control, clearance mode, character fade, automatic first person, the boom and the rig) from the body's own

@@ -450,15 +450,14 @@ public sealed partial class SdfFieldEvaluator {
         _ => (resultDistance - instruction.Data0X),
     };
     // A scope's pop: its candidate, scaled by the scope's baked 1/L, joins the field the scope saved. Data1.y is that
-    // candidate scale on every pop, and a stairs pop carries its step count in Data1.z, as mapCore's pop and
+    // candidate scale on every pop (read on its finer compiled grid, ScopeScale), and a stairs pop carries its step count in Data1.z, as mapCore's pop and
     // AnalyzeLipschitz read them.
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static (FixedQ4816 Distance, int Material) PopScope(in CompiledInstruction instruction, FixedQ4816 savedFieldDistance, int savedFieldMaterial, FixedQ4816 candidateDistance, int candidateMaterial) {
         var isStairs = (instruction.Blend is ((uint)SdfBlendOp.StairsUnion) or ((uint)SdfBlendOp.StairsSubtraction));
-        var candidateScale = instruction.Data1Y;
 
-        if (candidateScale > FixedQ4816.Zero) {
-            candidateDistance *= candidateScale;
+        if (instruction.ScopeScale > 0L) {
+            candidateDistance = ScaleScope(candidate: candidateDistance, scale: instruction.ScopeScale);
         }
 
         if (instruction.Blend == ((uint)SdfBlendOp.Morph)) {

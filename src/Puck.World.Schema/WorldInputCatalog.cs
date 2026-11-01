@@ -91,7 +91,7 @@ public sealed class WorldInputCatalog {
 
     private static bool Same<T>(T left, T right) {
         if (ReferenceEquals(objA: left, objB: right)) { return true; }
-        var info = ((System.Text.Json.Serialization.Metadata.JsonTypeInfo<T>)WorldJsonContext.Default.Options.GetTypeInfo(type: typeof(T)));
+        var info = WorldJsonContext.Default.For<T>();
 
         return System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(jsonTypeInfo: info, value: left).AsSpan().SequenceEqual(
             other: System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(jsonTypeInfo: info, value: right));

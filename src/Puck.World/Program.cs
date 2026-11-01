@@ -22,6 +22,9 @@ if (!Puck.Confinement.InstallRegistration.TryRegisterProcess(refusal: out var in
     Console.Error.WriteLine(value: installRefusal);
     return 2;
 }
+// The world document's serializer metadata configures beside the boot's composition and compilation rather than
+// ahead of its first parse; a test batch's later boots find it configured.
+_ = WorldJsonContext.StartPreparing();
 // Under `dotnet watch`, each edit the runtime applies says what it changed; the caches it invalidated derive again on
 // their next read (CodeRevision). An edit the runtime refuses never reaches here: dotnet watch rebuilds and reboots.
 CodeRevision.Applied += static types => Console.Error.WriteLine(value: $"[world.hot-reload] applied revision {CodeRevision.Current}: {((types is null) ? "the runtime named no types" : string.Join(separator: ", ", values: types.Take(count: 8).Select(selector: static type => type.FullName)))}{(((types?.Length ?? 0) > 8) ? $" and {(types!.Length - 8)} more" : "")}; derived presentation and camera rigs rebuild on the next frame");
