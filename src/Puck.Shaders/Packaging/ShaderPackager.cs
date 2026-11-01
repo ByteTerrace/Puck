@@ -3,6 +3,7 @@ using System.Text.Json;
 using Puck.Abstractions;
 using Puck.Abstractions.Presentation;
 using Puck.Assets;
+using Puck.Confinement;
 using Puck.Hosting;
 
 namespace Puck.Shaders;
@@ -1408,20 +1409,10 @@ public sealed partial class ShaderPackager {
                 throw;
             }
         } finally {
-            if (Directory.Exists(path: staging)) {
-                Directory.Delete(
-                    path: staging,
-                    recursive: true
-                );
-            }
+            ConfinedDirectory.RemoveTree(path: staging);
         }
 
-        if (Directory.Exists(path: replaced)) {
-            Directory.Delete(
-                path: replaced,
-                recursive: true
-            );
-        }
+        ConfinedDirectory.RemoveTree(path: replaced);
 
         return true;
     }

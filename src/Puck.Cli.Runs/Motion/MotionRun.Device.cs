@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Globalization;
+using Puck.Confinement;
 
 namespace Puck.Cli.Motion;
 
@@ -25,9 +26,7 @@ public static class MotionRun {
             return Run(progress: progress, request: request);
         } finally {
             try {
-                if (Directory.Exists(path: request.StateDirectory)) {
-                    Directory.Delete(path: request.StateDirectory, recursive: true);
-                }
+                ConfinedDirectory.RemoveTree(path: request.StateDirectory);
             } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
                 progress.WriteLine(value: $"motion: the World state directory {request.StateDirectory} was not removed: {exception.Message}");
             }

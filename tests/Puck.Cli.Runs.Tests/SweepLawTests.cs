@@ -1,4 +1,5 @@
 using Puck.Cli.Sweep;
+using Puck.Confinement;
 
 using Xunit;
 
@@ -166,7 +167,7 @@ public sealed class SweepLawTests {
             Assert.False(condition: SweepBaseline.TryRead(baseline: out _, error: out refusal, path: still));
             Assert.Contains(expectedSubstring: "is not a puck.sweep.v1 report", actualString: refusal);
         } finally {
-            Directory.Delete(path: directory, recursive: true);
+            ConfinedDirectory.RemoveTree(path: directory);
         }
     }
     [Fact]

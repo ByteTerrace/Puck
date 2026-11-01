@@ -1,4 +1,5 @@
 using System.Xml.Linq;
+using Puck.Confinement;
 
 namespace Puck.Cli.Format;
 
@@ -211,12 +212,7 @@ public static class FormatFileProject {
             }
             return result;
         } finally {
-            if (Directory.Exists(path: scratch)) {
-                Directory.Delete(
-                    path: scratch,
-                    recursive: true
-                );
-            }
+            ConfinedDirectory.RemoveTree(path: scratch);
         }
     }
 

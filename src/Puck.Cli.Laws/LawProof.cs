@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
+using Puck.Confinement;
 using Puck.Hosting;
 
 namespace Puck.Cli.Laws;
@@ -239,11 +240,7 @@ public static partial class LawProof {
             }
 
             operation = $"remove proof scratch directory {CliPaths.ToDisplay(fullPath: scratch)}";
-            try {
-                Directory.Delete(path: scratch, recursive: true);
-            } catch (DirectoryNotFoundException) {
-                // The scratch directory is already gone; its registration was handled above.
-            }
+            ConfinedDirectory.RemoveTree(path: scratch);
 
             return null;
         } catch (Exception exception) {
@@ -252,7 +249,7 @@ public static partial class LawProof {
     }
     private static string? TryRemoveScratch(string scratch) {
         try {
-            CliTreeFiles.DeleteTree(path: scratch);
+            ConfinedDirectory.RemoveTree(path: scratch);
             return null;
         } catch (Exception exception) {
             return $"cannot remove proof scratch directory {CliPaths.ToDisplay(fullPath: scratch)}: {exception.Message.ReplaceLineEndings(replacementText: " ")}";

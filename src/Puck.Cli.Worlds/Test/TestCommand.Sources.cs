@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Puck.Assets.Documents;
+using Puck.Confinement;
 using Puck.World.Transpiler.Composition;
 using Puck.World.Transpiler.Lowering;
 using Puck.World;
@@ -269,12 +270,7 @@ public static partial class TestCommand {
         path = string.Empty;
 
         // A kept run directory staged before holds this world's last staging, which this one replaces whole.
-        if (Directory.Exists(path: directory)) {
-            Directory.Delete(
-                path: directory,
-                recursive: true
-            );
-        }
+        ConfinedDirectory.RemoveTree(path: directory);
 
         // Test worlds are temporary JSON documents, staged flattened so the executable boots the exact composed source
         // without depending on the temporary file's location.

@@ -273,7 +273,7 @@ process id that a later process reuses is told apart by its start time. The
 it and the directories that are deleted whatever the outcome.
 
 Confined removal supports Windows and Linux x64. On other hosts, direct
-`RunDirectory.Delete` throws `PlatformNotSupportedException`; best-effort
+`ConfinedDirectory.RemoveTree` throws `PlatformNotSupportedException`; best-effort
 `TryDelete` returns false immediately, and a sweep reports the refusal. Optional
 cleanup therefore preserves the run's result. Read-only attributes are handled
 through the remover's held handles, without walking paths outside its tree.

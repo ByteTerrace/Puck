@@ -4,6 +4,7 @@ using System.Text.Json;
 using Puck.Abstractions.Cameras;
 using Puck.Abstractions.Presentation;
 using Puck.Commands;
+using Puck.Confinement;
 using Puck.World.Client;
 
 using Xunit;
@@ -78,7 +79,7 @@ public sealed class WorldFlagCommandModuleLawTests {
             Assert.Equal(expected: JsonValueKind.Object, actual: record.RootElement.GetProperty(propertyName: "camera").ValueKind);
             Assert.Equal(expected: JsonValueKind.Null, actual: record.RootElement.GetProperty(propertyName: "capture").ValueKind);
         } finally {
-            package.Delete(recursive: true);
+            ConfinedDirectory.RemoveTree(path: package.FullName);
         }
     }
     [Fact]
@@ -106,7 +107,7 @@ public sealed class WorldFlagCommandModuleLawTests {
             _ = Directory.CreateDirectory(path: Path.Combine(path1: package.FullName, path2: WorldFlagCommandModule.FolderName, path3: "y.json"));
             Assert.StartsWith(expectedStartString: "[world.flag: could not write", actualString: building.Submit(line: "world.flag y").Output, comparisonType: StringComparison.Ordinal);
         } finally {
-            package.Delete(recursive: true);
+            ConfinedDirectory.RemoveTree(path: package.FullName);
         }
     }
 }
