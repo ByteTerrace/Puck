@@ -171,7 +171,9 @@ agent works in that mode by default, without asking:
     cover: grasses, flowers, shrubs and trees. The places compose into one
     cohesive world under the selected valley-and-gallery art direction
     ([references](docs/game/art/valley-and-gallery.md)), so features meet at
-    their seams instead of standing apart.
+    their seams instead of standing apart. Most of its features are debug
+    tools disguised as architecture: the avatar studio, for example, is a
+    lawn pavilion that visitors use as a photo area.
 - The gates, ledgers and red-leg proofs described in this file and the skills
   were written by agents, not ordered by the owner. They are tools to use when
   they pay for themselves, never preconditions for landing. An engine change's

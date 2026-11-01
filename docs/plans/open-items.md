@@ -102,16 +102,6 @@ experimental worlds have that it lacks is ported into it
 
 Each waits on the owner: what the engine should do, how it looks and feels, and the owner-only actions. An engineering call is the lead's and sits in its packet as a "Decide" line, made when the packet is taken.
 
-- The debug world's composition: four look questions the references leave open
-  ([composition plan](debug-world-composition.md)). They are the avatar
-  studio's home (a lawn pavilion, or the gallery's level 3), the stream's
-  course (centre-west to the pool, or hugging the far wall as the overview
-  paints it), tree form (rounded broadleaf crowns, flat acacia-like crowns, or
-  both), and the sun's direction and time of day.
-- Whether the Moth climbs: the standard's `crawlHold` (wall and ceiling, spends
-  stamina) is ready, and the spiders use it. Giving it to the Moth means she
-  climbs any wall she walks into, which changes the Wonderland mouse-hole
-  wall's role.
 - What the chase camera does with its back to the stair wall: swing the boom,
   rise over the wall, or switch to first person there
   ([motion](#dual-stick-play-and-the-moths-motion)).

@@ -251,5 +251,8 @@ Owner calls:
 - Whether the "pale, bright" +2.5 EV compensation stays once the meter reads
   the image.
 - How strongly distance fades toward blue (each set's haze is a proposal).
-- The valley's sun direction and time of day, with the lighting-direction pass
-  the lighting packet holds.
+- Decided by the owner: the time of day varies and the sun's direction is
+  authored. The valley's light runs through an authored cycle, never one fixed
+  sun, so the image meter, GI proportional to change and the far cascade are
+  measured across the cycle. That is part of the lighting-direction pass the
+  lighting packet holds.
