@@ -67,10 +67,12 @@ The primitives:
    also hands the selector a *mapped demand point*: the viewer's eye taken
    through the face's isometry into its destination, in the same world or a
    routed one.
-3. **Residency selector** (new, one per presentation across its residencies):
-   turns demand points into one priority per group and level, which orders
-   bake, store loads and landing, places the GI window, and decides eviction
-   under one machine byte budget.
+3. **Residency selector** (policy, one per presentation across its residencies):
+   turns demand points into priority per group and level for bake, store loads,
+   landing, GI placement, and eviction. It feeds the engine job scheduler; its
+   machine-byte budget is a reservation from the job system's single physical
+   byte-accounting owner. Demand snapshots are published safely for parallel
+   view recording; workers never read a selector while it mutates.
 4. **Area** (new, optional, authored): a named volume with openings, its members
    found by containment, an opening being an aperture or a portal face. It
    reuses an existing volume vocabulary rather than adding a kind of volume.
@@ -80,8 +82,10 @@ whose opening a state binding closes.
 
 ## One selector, passive by default, explicit by choice
 
-There is one scheduler; rings, areas and portals are inputs to it, never
-separate systems.
+The selector supplies residency policy to the
+[engine job system](../plans/open-items.md#engine-job-system), which owns
+scheduling and physical byte accounting. Rings, areas, and portals contribute
+demand and priority rather than creating executors.
 
 - **Demand points** are every view's camera, every seat, every mapped eye
   through a portal face, each led along its velocity by the landing latency
@@ -111,8 +115,9 @@ separate systems.
   quarter-scale room is ready at its frame though it lies far away in world
   coordinates. A routed residency keeps its session-driven lifetime; demand
   only orders its work, and replaces rendering a hidden view to make it bake.
-- **One budget**, applied in the selector, across every live residency. Eviction
-  goes by priority, never wholesale and never refused on a miss
+- **One reservation** across every live residency, granted from the job
+  system's physical byte-accounting owner and applied by selector policy.
+  Eviction goes by priority, never wholesale and never refused on a miss
   ([machine budgets are bytes](rendering.md)), which removes today's throw past
   `GpuRegion.MaxByteCount`.
 - **Residency is broader than visibility.** Shadow casters and GI blockers
@@ -145,10 +150,10 @@ Each step is taken when the measured need appears:
    mesh bytes by level, `ProbeCache` bytes after a walk and a valley flight,
    program build and replan time against placement count, and store read rate
    against the landing rate.
-2. **Near-first:** order lattices, store loads and owed meshes by priority from
-   demand points (`SdfMeshPathBake.TryTakeForFrame`, the bake's work queue,
-   `SdfWorldTables.WriteOwedMeshes`). Small, and it serves the edit-to-run
-   target: the room you stand in returns first.
+2. **Near-first is delivered:** `SdfMeshDemand` ranks demand by pixels per metre
+   at the nearest demand point, and `SdfMeshPathBake.Residency` applies it to
+   groups and store loads. This is the base policy for the engine scheduler;
+   the occupied room returns first.
 3. **GI on the same demand points:** the probe window follows every view, not
    `Views[0]` alone, the irradiance scene and its pending gate are scoped to what
    the window reaches, and `ProbeCache` is byte-bounded.
