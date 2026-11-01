@@ -356,11 +356,11 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
         // of the live facts a trait carries (a clock, a draw cursor or drawn mask, a ring cursor, a phase sequence),
         // since each of those is a reading of the cells it withheld.
         if (view.Withheld(row: row.Name.Value) is { } withheld) {
+            var disclosure = withheld.WholeRow ? " withheld=row" : withheld.Policy == HiddenCells.Omit
+                ? string.Empty : $" withheld={withheld.Count.ToString(provider: CultureInfo.InvariantCulture)}";
             return $"{head}{(row.IsSlot
                 ? " value=withheld"
-                : $" cells={(row.Cells?.Count ?? 0)}")} withheld={(withheld.WholeRow
-                ? "row"
-                : withheld.Count.ToString(provider: CultureInfo.InvariantCulture))}{range}]";
+                : $" cells={(row.Cells?.Count ?? 0)}")}{disclosure}{range}]";
         }
 
         // A row-level default's epoch is a per-cell fact, not the row's — a slot row has exactly one cell to read it
@@ -487,7 +487,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
     private static string DescribeState(WorldStateReadView view) {
         var rows = view.Definition.State;
         var lines = new List<string>(capacity: (1 + rows.Count)) {
-            $"[world.state: rows {rows.Count}/{StateCapacity.MaxRows}, arena {view.ArenaBytes}/{ArenaCapacity.MaxBytes} bytes]",
+            $"[world.state: rows {rows.Count}/{StateCapacity.MaxRows}{(view.IsOperator ? $", arena {view.ArenaBytes}/{ArenaCapacity.MaxBytes} bytes" : string.Empty)}]",
         };
 
         foreach (var row in rows) {
@@ -1136,10 +1136,10 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             name: "world.state.similar",
             description: "Ranks cells of a target vector row against a query vector by cosine similarity and dot product (Immediate): world.state.similar <row> <key> <table> [top]. Reads through the caller's visibility; never writes.",
             handler: (context, args) => {
-                if (!authority.TryResolveServer(
+                if (!authority.TryResolveReadView(
                     context: context,
                     error: out var error,
-                    server: out var server,
+                    view: out var view,
                     verb: "world.state.similar"
                 )) {
                     return error;
@@ -1147,15 +1147,23 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
 
                 return HandleStateSimilar(
                     args: args,
-                    context: context,
-                    server: server
+                    view: view
                 );
             },
             routing: CommandRouting.Immediate
         );
+        yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Operator,
+            bindability: CommandBindability.Unbindable,
+            name: "world.state.hash",
+            description: "Reads an operator-only live deterministic state hash (Immediate): world.state.hash [capture|pose|world|authoritative]. The default capture scope matches capture manifests; authoritative includes rule latches, body and identity action state, and field-lattice cells.",
+            handler: (context, args) => authority.TryResolveServer(context: context, error: out var error, server: out var server, verb: "world.state.hash")
+                ? DescribeHash(server: server, args: args) : error,
+            routing: CommandRouting.Immediate
+        );
     }
 
-    private static CommandResult HandleStateSimilar(WorldServer server, CommandContext context, WireArgs args) {
+    private static CommandResult HandleStateSimilar(WorldStateReadView view, WireArgs args) {
         if ((args.Count != 3) && (args.Count != 4)) {
             return CommandResult.Usage(
                 form: "<row> <key> <table> [top]",
@@ -1174,7 +1182,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             }
         }
 
-        var queryRow = FindRow(name: queryRowName, server: server);
+        var queryRow = WorldDefinitionRows.FindStateRow(name: queryRowName, rows: view.Definition.State);
 
         if (queryRow is null) {
             return CommandResult.Error(output: $"[world.state.similar: no such query row '{queryRowName}']");
@@ -1194,13 +1202,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             return CommandResult.Error(output: $"[world.state.similar: no such query vector '{queryRowName}.{queryKeyName}']");
         }
 
-        var principal = context.Principal;
-
-        if (!WorldStateDisclosure.CanRead(arena: server.Arena, definition: server.Definition, key: queryCell.Key, row: queryRow, recipient: principal)) {
-            return CommandResult.Error(output: $"[world.state.similar: query cell '{queryRowName}.{queryKeyName}' is hidden]");
-        }
-
-        var targetRow = FindRow(name: tableRowName, server: server);
+        var targetRow = WorldDefinitionRows.FindStateRow(name: tableRowName, rows: view.Definition.State);
 
         if (targetRow is null) {
             return CommandResult.Error(output: $"[world.state.similar: no such table row '{tableRowName}']");
@@ -1216,10 +1218,6 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
 
         foreach (var cell in candidateCells) {
             if (!cell.Value.HasValue) {
-                continue;
-            }
-
-            if (!WorldStateDisclosure.CanRead(arena: server.Arena, definition: server.Definition, key: cell.Key, row: targetRow, recipient: principal)) {
                 continue;
             }
 

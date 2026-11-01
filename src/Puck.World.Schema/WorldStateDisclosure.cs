@@ -411,6 +411,8 @@ public static class WorldStateDisclosure {
             // The row's own draw and ring bookkeeping is a reading of the cells withheld from it, so it goes too.
             rows[index] = (row with {
                 Cells = kept,
+                Domain = row.Domain ?? row.InferDomain(),
+                ReservedCapacity = null,
                 DrawCursor = 0L,
                 DrawnMasks = null,
                 HistoryCursor = 0L,

@@ -484,6 +484,11 @@ it draws the one shared screen, and the world's author chooses what it shows. Th
 [World guide](../../../src/Puck.World/README.md) covers running a world and
 scripting it through stdin.
 
+Similarity query lookup and candidate enumeration use that same disclosed view:
+an existing hidden query key answers exactly like a missing key. `Omit` never
+prints a withheld count. Arena byte totals and `world.state.hash` are operator
+diagnostics because they can reveal changes in undisclosed state.
+
 ## Hashes, checkpoints, and replay
 
 An authored `replays` row records and replays a selected scope while the rest of

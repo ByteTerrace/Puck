@@ -18,10 +18,10 @@ public sealed class WorldStateReadView {
         m_withheld = disclosed.Withheld;
         CompletedTick = completedTick;
         CompletedEngineTick = completedEngineTick;
-        ArenaBytes = arenaBytes;
+        ArenaBytes = reader.Kind == PrincipalKind.Console ? arenaBytes : 0L;
     }
 
-    /// <summary>Gets the live store's size, in bytes, as of the read.</summary>
+    /// <summary>Gets the operator's live store size, or zero for a restricted reader: reservations reveal hidden membership.</summary>
     public long ArenaBytes { get; }
     /// <summary>Gets the last completed simulation tick the read answers as of.</summary>
     public ulong CompletedTick { get; }

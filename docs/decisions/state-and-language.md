@@ -556,6 +556,9 @@ defect was found; the weaknesses are structural and economic.
   deliveries (sound, network) are named as such. Reads use bound handles, and
   every addon read and change delivery is checked against per-recipient
   disclosure. A bound address never caches authorization.
+- **Readback answers from the reader's projection.** Query existence, candidate
+  counts and row summaries carry only disclosed cells. `Omit` hides counts too;
+  authoritative arena sizes and hashes are operator diagnostics.
 - **Appearance chosen by state is a projection,** never a document edit:
   placement responses and deals derive from state, and only colliders whose
   geometry changes are updated.
