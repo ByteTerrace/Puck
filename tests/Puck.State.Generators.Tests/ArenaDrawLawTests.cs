@@ -43,7 +43,7 @@ public sealed class ArenaDrawLawTests {
 
         Assert.Equal(
             actual: arena.DrawCursor(rowOrdinal: TopologyArenaFixture.Deal),
-            expected: 1L
+            expected: 2L
         );
         Assert.Equal(
             actual: arena.DrawnMask(

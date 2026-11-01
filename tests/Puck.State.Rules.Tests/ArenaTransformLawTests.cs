@@ -166,7 +166,7 @@ public sealed class ArenaTransformLawTests {
         );
     }
     [Fact]
-    public void ARandomTransferConsumesOneDrawPerTokenAndAdvancesTheSitesCursor() {
+    public void ARandomTransferRecordsTheSeededWordsAndCursor() {
         var (host, context) = Arrange();
         var coin = TransformFixture.Ordinal(
             context: context,
@@ -291,7 +291,7 @@ public sealed class ArenaTransformLawTests {
         );
     }
     [Fact]
-    public void AShuffleConsumesOneSamplePerPositionButTheLast() {
+    public void ASeededShuffleRecordsItsActualRawCursor() {
         var (host, context) = Arrange();
         var coin = TransformFixture.Ordinal(
             context: context,

@@ -523,15 +523,29 @@ public static partial class TestCommand {
             DefaultValueFactory = static _ => Math.Clamp(value: (Environment.ProcessorCount / 2), min: 1, max: 2),
             Description = "Maximum concurrent worker processes (default: at most 2). Each worker process stays alive across its scenarios and boots each one fresh. Output remains in authored order.",
         };
+        var workersOption = new Option<string?>(name: "--workers") {
+            DefaultValueFactory = static _ => null,
+            Description = "Run every scenario once per worker count in this comma-separated list (Puck.World --workers; 0 is the machine's logical processor count), each a full authored host run, and require every count's per-tick authority hashes, exports and crossing log to match. Example: --workers 1,2,0.",
+        };
+        var recordOption = new Option<string?>(name: "--record") {
+            DefaultValueFactory = static _ => null,
+            Description = "Write each world's per-tick authority hashes, exports and crossing log (from the first worker count) under <dir>/<world>, replacing an earlier recording. A lane-local before-and-after oracle: keep it in scratch, never commit it.",
+        };
+        var compareOption = new Option<string?>(name: "--compare") {
+            DefaultValueFactory = static _ => null,
+            Description = "Require each world's per-tick authority hashes, exports and crossing log to match the recording --record wrote under <dir>/<world>.",
+        };
         var command = new Command(
             description: """
             Boots each test world through the real Puck.World executable, headless and unpaced, to the tick its own
             schedule section declares its state export at, then reads that export's verdict rows: one line per verdict
             naming the gate and the values it saw. A `.puck` source is compiled first and the worlds its `test`
-            blocks generate are what run. --reproduce restores the starting checkpoint and replays recorded input. Exit
-            codes are 0 for every verdict passing, 1 for a failing verdict, and 2 for usage, a world declaring no
-            schedule or no verdict row, a source that does not compile, a build or boot refusal, or a reproduction
-            mismatch.
+            blocks generate are what run. --reproduce restores the starting checkpoint and replays recorded input.
+            --workers runs every scenario at each worker count and requires the counts to agree; --record and --compare
+            keep a run's hashes, exports and crossing log and compare a later run against them. Exit codes are 0 for
+            every verdict passing, 1 for a failing verdict, and 2 for usage, a world declaring no schedule or no verdict
+            row, a source that does not compile, a build or boot refusal, a reproduction mismatch, or worker counts or a
+            recording that disagree.
             """,
             name: "test"
         ) {
@@ -542,10 +556,16 @@ public static partial class TestCommand {
             pathArgument,
             reproduceOption,
             worldArtifactOption,
+            workersOption,
+            recordOption,
+            compareOption,
         };
 
         command.SetAction(action: parseResult => Run(
             cacheDirectory: parseResult.GetValue(option: cacheOption),
+            compare: parseResult.GetValue(option: compareOption),
+            record: parseResult.GetValue(option: recordOption),
+            workers: parseResult.GetValue(option: workersOption),
             host: parseResult.GetValue(option: hostOption),
             jobs: parseResult.GetValue(option: jobsOption),
             keep: parseResult.GetValue(option: keepOption),

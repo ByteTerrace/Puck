@@ -2,6 +2,8 @@ namespace Puck.Maths.Tests;
 
 internal static partial class LawRegistry {
     private static LawCase[] PcgExtendedCases() => [
+        ClaimCase(claim: Subjects.BoundedWordExactRejection, id: "sampling.bounded-word-exact-rejection"),
+        ClaimCase(claim: Subjects.BoundedBudgetedRejection, id: "sampling.bounded-budgeted-rejection"),
         // ---- sampling: the extended PCG generator, distance and preimage ----
         ClaimCase(
             claim: Subjects.PcgExtendedReferenceVectors,

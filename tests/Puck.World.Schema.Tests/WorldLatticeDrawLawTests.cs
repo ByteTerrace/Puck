@@ -136,6 +136,7 @@ public sealed class WorldLatticeDrawLawTests {
                     masks: null,
                     values: cells,
                     masksAfter: out var masksAfter,
+                advances: out var advances,
                     reason: out var reason
                 ),
                 userMessage: reason
@@ -150,6 +151,7 @@ public sealed class WorldLatticeDrawLawTests {
                     masks: null,
                     sampleCount: cells.Length,
                     masksAfter: out var advancedMasks,
+                    advances: out var advancedCount,
                     reason: out var advanceReason
                 ),
                 userMessage: advanceReason
@@ -169,7 +171,7 @@ public sealed class WorldLatticeDrawLawTests {
                     expected: single.Numeric,
                     actual: cells[cell]
                 );
-                cursor += single.Samples;
+                cursor += single.Advances;
                 masks = single.Masks;
             }
 
@@ -198,11 +200,12 @@ public sealed class WorldLatticeDrawLawTests {
             masks: null,
             values: new long[2],
             masksAfter: out _,
+                advances: out _,
             reason: out var textReason
         ));
         Assert.Contains(
             actualString: textReason,
-            expectedSubstring: "cannot fill cells"
+            expectedSubstring: "writes text"
         );
     }
     [Fact]
@@ -222,7 +225,7 @@ public sealed class WorldLatticeDrawLawTests {
                 );
 
                 drawn.Add(item: fired.Numeric!.Value);
-                cursor += fired.Samples;
+                cursor += fired.Advances;
                 masks = fired.Masks;
             }
 
@@ -245,7 +248,7 @@ public sealed class WorldLatticeDrawLawTests {
                 masks: masks
             );
 
-            cursor += fired.Samples;
+            cursor += fired.Advances;
             masks = fired.Masks;
         }
 
@@ -312,7 +315,7 @@ public sealed class WorldLatticeDrawLawTests {
             );
 
             drawn.Add(item: fired.Text!);
-            cursor += fired.Samples;
+            cursor += fired.Advances;
             masks = fired.Masks;
         }
 

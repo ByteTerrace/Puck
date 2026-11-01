@@ -283,7 +283,22 @@ host or re-submits the schedule. Its manifest describes the authored run;
 contains only exports and command outcomes. A second hash list in `WorldTestRun`
 duplicates the probe's most expensive work during reproduction; a check that needs
 per-tick hashes outside `--reproduce` (the fresh-process versus worker law) takes
-them from a probe in each process, not from the manifest. Each batch leg also writes `timing.json`
+them from a probe in each process, not from the manifest.
+`puck test --workers 1,2,0` is the parallel tick's proof: each count is a full
+authored host run (batch host, instance host, portal scan) booted with
+`Puck.World --workers <count>` (threads running partitions, frame thread
+included; `0` is `Environment.ProcessorCount`; the one setting is
+`Puck.Hosting.Jobs.JobWorkers`, registered by `AddWorldBoot`). Each leg records
+its probes' hashes in `reproduction.json` (`divergence` null unless
+`--reproduce`), the instance host's crossing narration with ticks in
+`crossings.json`, and its `out` exports; every count must match the first,
+and a mismatch names the first differing recorded tick, export JSON path and
+crossing entry. `--record <dir>` keeps the first count's recording per world and
+`--compare <dir>` checks a later run against it, the before-and-after oracle
+for a step that must not change semantics; recordings stay in lane scratch,
+never committed or gated. The in-place probe never runs the portal scan, so
+cross-count agreement proves crossing partitions only through `--workers`.
+Each batch leg also writes `timing.json`
 beside its transcripts: boot, arming, authored execution (including export),
 first completed tick, export, reproduction and other overhead in milliseconds, plus the authority-tick
 observations across running instances. These are diagnostic readings, kept outside

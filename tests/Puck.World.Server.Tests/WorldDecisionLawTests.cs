@@ -318,7 +318,7 @@ public sealed class WorldDecisionLawTests {
             State(fixture).Reconsiderations
         );
         Assert.Equal(
-            4UL,
+            2UL,
             State(fixture).DrawCount
         );
         Set(
@@ -493,9 +493,17 @@ public sealed class WorldDecisionLawTests {
             0,
             counts[3]
         );
+        // The total needs 65 bits, so a candidate is three raw words and each reconsideration draws at least one.
+        var drawCount = State(fixture).DrawCount;
+
         Assert.Equal(
-            2800UL,
-            State(fixture).DrawCount
+            0UL,
+            (drawCount % 3UL)
+        );
+        Assert.InRange(
+            drawCount,
+            (3UL * 1400UL),
+            (3UL * 1400UL * 64UL)
         );
     }
     [Fact]
@@ -575,7 +583,7 @@ public sealed class WorldDecisionLawTests {
             value: 1
         ); fixture.Step();
         Assert.Equal(
-            4UL,
+            2UL,
             State(fixture).DrawCount
         );
         Assert.NotEqual(

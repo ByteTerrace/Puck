@@ -29,7 +29,10 @@ rounded edge), and a device's bezel is geometry it authors round the face.
 declares its own actions beside them (the debug world's `suit` and `noclip`). `quality.puck` authors the
 `world.quality low|medium|high` presets; until initial development is done every machine runs `high`. `skies.puck` is
 a library of sky and air presets (`clearDay`, `overcast`, `starryNight`, `polarNight`, `clearDayAir`,
-`overcastAir`) a world expands inside its `render.sky` and `render.atmosphere` blocks.
+`overcastAir`) a world expands inside its `render.sky` and `render.atmosphere` blocks, and the day cycle
+(`dayCycle`), which a world expands at the top of a fragment of its own: a state clock whose row holds the day's phase,
+and on it the `key` light's direction, colour and illuminance and a clear sky that turns to night
+(`worlds/debug/day.puck` is the worked example).
 
 `editor.puck` authors build mode: the `editor` section (the grid, snapping, editor-camera feel, the build toggle every
 resting page carries, the read-only label and the build bar) and the `editor` binding overlay, whose context row

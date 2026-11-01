@@ -180,8 +180,9 @@ float2 sdfMeshShadowGap(uint cascade, SdfMeshCascade c, float2 texel, float2 off
     );
 }
 // A shadowed light's visibility at a surface point from the first of its cascades [first, end) that holds it: a blocker
-// search sizes the penumbra from the light's penumbra slope and the gap to the average blocker, and a percentage-closer
-// filter of that width answers. Both disks follow the pixel's pattern (sdfMeshPattern), and views averages the answer
+// search sizes the penumbra from the light's penumbra slope and the gap to the nearest blocker inside the light's cone
+// over the point (the nearest outside it when the search finds none in the cone), and a percentage-closer filter of
+// that width answers. Both disks follow the pixel's pattern (sdfMeshPattern), and views averages the answer
 // over the pattern's window (sdfViewsFilter). `face` is the hit triangle's own normal: the cascade holds the triangle,
 // not the shading normal's smoothed surface, which tilts away from it across a crease the bake rounded.
 float sdfMeshShadow(SdfPixel p, float3 surfacePoint, float3 face, uint first, uint end, float slope) {

@@ -9,6 +9,47 @@ namespace Puck.World.Transpiler.Tests;
 /// <summary><see cref="PuckPrinter"/> against the `.puck` DSL sugar wave's new constructs: reserved-channel
 /// tokens stay intact, and formatting the decompiled form of every shipped world is idempotent.</summary>
 public class FormatterSugarTests {
+    [InlineData("(not (1 / a > 0)) != 0")]
+    [InlineData("not (1 / a > 0)")]
+    [InlineData("not (1 / a > 0) or 1")]
+    [InlineData("(1 / a > 0) != 0")]
+    [Theory]
+    public void FormattingAFaultedGatePreservesItsClosedVerdict(string condition) {
+        var source = $$"""
+            schema: "puck.world.definition.v1"
+            state {
+                world {
+                    slot a = 0
+                    slot fired = 0
+                }
+            }
+            rule "fault" {
+                when {{condition}}
+                fired = 1
+            }
+            """;
+        var formatted = PuckFormat.Format(source: source);
+        foreach (var text in new[] { source, formatted }) {
+            var (json, diagnostics) = WorldSources.LowerSource(source: text);
+            Assert.False(diagnostics.HasErrors, diagnostics.FormatReport());
+            var definition = System.Text.Json.JsonSerializer.Deserialize(json.ToJsonString(), WorldJsonContext.Default.WorldDefinition)!;
+            var (rules, _) = WorldFactsCompiler.CompileDocument(definition: definition);
+            var arena = new StateArena(catalog: definition.StateCatalog, section: definition.StateRaw, time: ArenaTime.Origin);
+            var host = new Puck.State.Rules.ArenaEffectHost(arena: arena);
+            host.Advance(engineTick: 1, tick: 1);
+            var evaluator = new Puck.State.Rules.RuleEvaluator(host: host);
+            _ = evaluator.Evaluate(rules: rules, latch: new Puck.State.Rules.RuleLatch(), stepTicks: 1);
+            Assert.Equal(RuleEffectRefusal.Arithmetic, Assert.Single(evaluator.Diagnostics()).Refusal);
+            Assert.False(Puck.State.Rules.RuleEvaluation.GateHolds(reader: host, gate: rules[0].Gate, fault: out var fault));
+            Assert.Equal(Puck.State.Rules.ExpressionFault.Domain, fault);
+            Assert.True(arena.Catalog.TryResolve(lane: StateLane.Document, name: "fired", handle: out var fired));
+            Assert.True(arena.TryReadRawAt(rowOrdinal: fired.Ordinal, position: 0, raw: out var value));
+            Assert.True(value == 0, $"Effect ran for:\n{text}");
+        }
+        Assert.Equal(formatted, PuckFormat.Format(source: formatted));
+        PuckFormat.AssertStable(source: source);
+    }
+
     private static IEnumerable<string> ExtractDollarTokens(string line) {
         var start = -1;
 

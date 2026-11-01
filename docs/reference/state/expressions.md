@@ -293,9 +293,13 @@ fold members, and call arguments stay live, as do folds themselves. A subtree
 longer than `RuleWorkBudget.MaxFoldSteps` (65,536 tokens) isn't folded; the work
 sheet prices it instead.
 
-A constant subexpression that fails keeps its failure. Expressions are eager,
-so an invalid expression still fails at run time even inside the unselected arm
-of a conditional. Work budgets price the program after folding.
+A constant subexpression that fails keeps its failure. Conditional expressions
+are eager, so an invalid expression still fails at run time even inside the
+unselected arm: `a != 0 ? 1 / a : 0` faults when `a` is zero. The linter warns
+with `PUCK_LINT_011` about `/` or `%` by a potentially zero divisor in a ternary
+arm. This warning covers that common trap, not every possible domain or overflow
+fault. Use an `if`/`else` effect or `and`/`or` short-circuiting to guard an operation.
+Work budgets price the program after folding.
 
 An expression that fails reports one of these `ExpressionFault` values:
 

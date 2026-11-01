@@ -65,6 +65,9 @@ public sealed record WorldBootInputs(
     public string? StorageUserId { get; init; }
     /// <summary>Gets whether the headless tick host runs without pacing (<c>--unpaced</c>).</summary>
     public bool Unpaced { get; init; }
+    /// <summary>Gets the worker count the job system runs (<c>--workers</c>), the frame thread included; absent, the
+    /// host's logical processor count.</summary>
+    public Puck.Hosting.Jobs.JobWorkers Workers { get; init; } = new(requested: 0);
     /// <summary>Gets how much of its backend's validation the device is created with (<c>--debug-layers
     /// [basic|full]</c>); <see cref="GpuValidation.Off"/> when the flag is absent.</summary>
     public GpuValidation Validation { get; init; }

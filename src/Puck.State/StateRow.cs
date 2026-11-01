@@ -164,9 +164,8 @@ public sealed record StateCell(CellName Key, CellValue Value, StateAdvance? Adva
 /// write (<see cref="CellKind.Text"/> for a Markov source, <see cref="CellKind.Int"/>/<see cref="CellKind.Fixed"/>
 /// for a numeric one); it may declare no <see cref="Capacity"/>, and is mutually exclusive with
 /// <see cref="Advance"/>.</param>
-/// <param name="DrawCursor">How many samples this site's <see cref="Draw"/> has ever consumed — engine-minted
-/// bookkeeping and the position the engine re-seeks to (<c>GeneratorEngine.AdvancesPerSample</c> scales it into
-/// <c>Pcg32XshRr</c> advances, so resuming is an exact O(1) advance rather than a replay of the earlier draws).
+/// <param name="DrawCursor">How many raw words this site's <see cref="Draw"/> has consumed, including rejections.
+/// Resuming seeks directly to that position rather than replaying earlier results.
 /// Stored in the document, so <c>world.undo</c>, <c>world.save</c>, and replay rewind a site's draw position with
 /// the same whole-document restore that rewinds an ordinary counter. Zero when <see cref="Draw"/> is
 /// <see langword="null"/>; refused negative.</param>

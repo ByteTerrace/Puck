@@ -476,13 +476,24 @@ document. A seat's own console, a bound input, an addon or a peer reads through
 its visibility: `world.state`, `world.row state`, `world.tabletop` and
 `world.hud.template` show only the cells the caller may read, and a direct read of
 a withheld cell is refused by name, the same way whether the cell is withheld or
-absent. `world.match` refuses a row anything is withheld from. The evaluation
+absent. `world.match` walks the caller's disclosed rows and dependencies through
+the same pattern evaluator; its answer cannot reveal omitted membership. The evaluation
 diagnostics (`world.rule.trace`, `world.rule.failures`, `world.search`,
 `world.decisions`, `world.responses`, `world.rules`, `world.verdicts`) print values
 the rules computed, so they answer the console alone. The local HUD is not filtered:
 it draws the one shared screen, and the world's author chooses what it shows. The
 [World guide](../../../src/Puck.World/README.md) covers running a world and
 scripting it through stdin.
+
+Similarity query lookup and candidate enumeration use that same disclosed view:
+an existing hidden query key answers exactly like a missing key. `Omit` never
+prints a withheld count. Arena byte totals and `world.state.hash` are operator
+diagnostics because they can reveal changes in undisclosed state.
+State summaries enumerate authored rows, as named lookups do; generated pool
+storage remains internal.
+Restricted readback always omits storage reservations and row cursor metadata,
+including when no cell is currently hidden, so the formatting cannot distinguish
+an empty hidden inventory from a nonempty one.
 
 ## Hashes, checkpoints, and replay
 
@@ -493,6 +504,11 @@ drive derives a tape through the live mutation door; later drives restore only
 its starting rows and bodies, feed the recorded inputs through the same doors,
 and compare every resulting scope hash. State rows include their storage
 continuation, and bodies include the population continuation codec's state.
+Growing a selected keyed row does not invalidate its starting image: restoration
+reinstalls the captured reservation through the full snapshot relayout path,
+including an empty row captured with no explicit capacity. Unrelated rows keep
+their live reservations and contents. A refused restore ends the drive; it never
+leaves an active recording or replay waiting indefinitely.
 Compiled row write sets and body-effect targets also select rule and interaction
 edge latches and the progress of groups writing those rows or bodies; restoring
 a table leaves other rules' continuations live. Body ownership includes nested

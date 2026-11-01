@@ -2936,7 +2936,7 @@ export type StateTransformSetRay = {
 };
 
 /**
- * Reorders a row's cells by value in place by one Fisher-Yates pass over the named redrawable integer streamDraw site: n cells consume n - 1 samples, so the site's cursor advances by exactly that and a replay reproduces the permutation.
+ * Reorders a row's cells by value in place by one Fisher-Yates pass over the named redrawable integer streamDraw site: n cells make n - 1 unbiased bounded selections. The cursor counts every raw word, including rejections, so reopening it reproduces the permutation.
  */
 export type StateTransformShuffle = {
   $type?: "shuffle";
@@ -12452,12 +12452,12 @@ export type WorldStateRow = {
      */
     secret?: ClosedBitset256 | null;
     /**
-     * An authored seek, non-negative, default 0: a rebuild advances the generator by (skip + cursor) * cost rather than cursor * cost. Authored data, the same class as the seed ladder's own rungs — it never writes the persisted DrawCursor, which keeps counting samples from zero exactly as an unskipped site's does.
+     * An authored seek, non-negative, default 0: a rebuild advances the generator by skip + cursor rather than cursor. Authored data, the same class as the seed ladder's own rungs — it never writes the persisted DrawCursor, which keeps counting raw words from zero exactly as an unskipped site's does.
      */
     skip?: number;
   };
   /**
-   * How many samples this site's Draw has ever consumed — engine-minted bookkeeping and the position the engine re-seeks to (GeneratorEngine.AdvancesPerSample scales it into Pcg32XshRr advances, so resuming is an exact O(1) advance rather than a replay of the earlier draws). Stored in the document, so world.undo, world.save, and replay rewind a site's draw position with the same whole-document restore that rewinds an ordinary counter. Zero when Draw is null; refused negative.
+   * How many raw words this site's Draw has consumed, including rejections. Resuming seeks directly to that position rather than replaying earlier results. Stored in the document, so world.undo, world.save, and replay rewind a site's draw position with the same whole-document restore that rewinds an ordinary counter. Zero when Draw is null; refused negative.
    */
   drawCursor?: number;
   /**

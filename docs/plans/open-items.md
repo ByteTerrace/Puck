@@ -1164,6 +1164,16 @@ The engine provides mechanisms; every concrete design is `.puck` data in
 `worlds/standard/`, which the debug world imports and develops. Each item below is
 a design built into C# or living only in the debug world.
 
+- The leaks-2 review (Codex Astra; the leaks3 lane is fixing all four):
+  [medium] Presentation-tier projection and hydration drop the screen-material
+  table (`src/Puck.World.Schema/WorldProjection.cs:115`, `:316`, `:792`), so a
+  disclosed world's screens render untreated; [medium] screen material ids and
+  both reference sites are absent from `WorldNameRegistry`, so aliased modules
+  collide on a material id; [medium] a neutral or scanline-only material drops
+  the screen edge's footprint protection
+  (`src/Puck.SdfVm/Assets/Shaders/Sdf/shade/sdf-environment.hlsli:312`);
+  [low] `worlds/standard/walker.puck:22` copies the Moth's `walk` program
+  (`worlds/debug/avatars/moth.puck:223`).
 - [low] Flight and fuel are authored only in the Moth
   (`worlds/debug/avatars/moth.puck:1860-1925`). When the assisted-flight pass
   comes it is a standard ability template, with `dashAbility` in
@@ -1701,17 +1711,52 @@ them verbatim repeats) under-use the language:
 
 ### Lighting and GI
 
-- [high · unconfirmed] A sun that moves every frame freezes indirect light.
-  Each direction change starts a new lighting generation
-  (`SdfMeshIrradiance.cs:759-779`), and a trace batch landing after a
-  generation change is discarded (`:1067`), so GI sticks at the last sun that
-  held still. The debug world's sun is static (`worlds/debug/hall.puck:1413`),
-  so nothing has exercised it; the owner's authored day cycle will. Confirm
-  with a run that binds the key light to a clock, then fix it with the
-  illumination research's plan. (from: research-claude)
+The [illumination plan](illumination.md) holds the research round's decisions
+and the order they land in; the items below are its findings and checks.
+
+- [high] A sun that moves every frame freezes indirect light. Each direction
+  change starts a new lighting generation (`SdfMeshIrradiance.RefreshLighting`
+  hashes every directional and traced light record), and a trace batch landing
+  after a generation change is discarded (the `generation != m_generation`
+  test after the parallel trace). Confirmed on both backends with the debug
+  world's day cycle (`worlds/debug/day.puck`): at High the main residency
+  printed no `[sdf.mesh-gi] done`, `sdf.mesh-gi.probes` held still,
+  `world.probe` answered `unsettled` with nothing published, and the camera
+  meter retraced every frame (`camera-traces` about 300 a second); holding the
+  sun let the window finish ([step 0](illumination.md#step-0-what-the-run-showed)).
+  The fix is the plan's [first decision](illumination.md#1-split-each-probe-into-cached-hits-and-a-budgeted-gpu-relight).
+  (from: research-claude; confirmed by illum-step0)
+- [medium] The exposure meter follows the stale volume: at night (0.95 of the
+  day) with the noon volume still published, the debug view metered
+  `ev100=12.20 meter=3171 nits source=probes` and drew black. Step 2's GPU
+  meter read removes the cause; the night look also sits under the basis's
+  exposure floor of EV 7 against the day cycle's 2-nit night sky, which is a
+  look for the owner to set. (from: illum-step0)
 - The probe trace casts two ray sets from one origin: 128 for radiance
-  (`SdfMeshIrradiance.cs:1245`) and 144 for depth (`SdfMeshProbeDepth.cs:19`).
-  This is duplication to converge into one hit buffer. (from: research-claude)
+  (`SdfMeshIrradiance.TraceProbe`) and 144 for depth
+  (`SdfMeshProbeDepth.Trace`). This is duplication the plan's step 2
+  converges into one hit buffer. (from: research-claude)
+- [medium] `RefreshLighting` does not hash the sky, so a sky-only change
+  leaves the bounced sky baked into the radiance cube stale while the
+  zero-bounce term relights; and a lighting change resets sweeps to zero, so
+  it re-places every probe and re-traces the geometry-only depth rays. Both
+  confirmed by step 0's run (a muted sky gradient left a probe's cube at
+  10,477 nits until an unrelated retrace took it to 9,212; a held-sun move
+  re-traced 4,796,784 depth rays at Medium) and written into the mesh-GI
+  reference; step 2's relight removes both. (from: consensus-agy; confirmed by
+  illum-step0)
+- [medium · unconfirmed cause] The baseline's resolve pass read 6.5 to 17.9 ms
+  on the main view (Vulkan `overlook` 6.51, `portals` 9.41; Direct3D 12
+  `gallery` 17.88) against the 0.41 to 0.44 ms the GPU cost reference
+  records, on a machine whose CPU other lanes held at 100 %. Repeat on a quiet
+  machine before attributing it ([step 0](illumination.md#step-0-what-the-run-showed)).
+  (from: illum-step0)
+- The day cycle's hold is `world.row.set state day advance …`, which no
+  authored command may run (`world.row.set` is unbindable), so the hold cannot
+  be a `commands` row or a binding. A rule effect that writes a row's advance
+  rate would make it one. (from: illum-step0)
+- The Deck leg of step 0 is unmeasured: no Deck or remote target is reachable
+  from the repository. (from: illum-step0)
 
 Owner: next lighting batch (rendering, principal-grade review) · medium · Next:
 light a cold area from the coarser levels or the sky term the moment a view
@@ -2232,6 +2277,13 @@ or deletes tests freely.
   first four expect addon and history messages that the addon-checkpoint and
   history work changed. They are triaged with the shards below. (from:
   field-contact)
+- Three more laws fail beside those five: `WorldConsoleAddressLawTests`
+  ("editor.bar.banks must declare at least one bank", after the standard's
+  editor moved to `.puck`), `WorldInstanceStopLawTests` (after the custody stop
+  work) and `WorldNameRegistryLawTests` (`screenMaterials` and
+  `editor.bar.iconRow` uncovered; the leaks3 lane registers the materials).
+  `WorldInstanceStopLawTests` is the one that may hide a real custody
+  regression: run the stop path by hand before deleting it. (from: unbiased-2)
 - [medium] The first main run after the fundamentals landing fails all four
   Windows test shards, where earlier runs failed only shard 3. Tests do not gate
   deploy during the refactoring campaign, but the jump may hide real regressions
@@ -2563,6 +2615,18 @@ the completed 70-stop comparison manifest.
 Owner: language lane (transpiler) · medium · Next: the inline console command
 hang, then the pre-`main` language findings.
 
+- [medium] A literal read from an initially empty ordered pile is refused even
+  when its key belongs to the declared `KeysOf` token domain. `RuleCompileContext.cs:242`
+  admits authored cells and `CellsOf` topology cells only;
+  `RuleCompiler.Operands.cs:365` then reports `StateCellUndeclared`. Reproduce by
+  adding `hand["c"] == 1` to `worlds/debug/unbiased-draws-tests.puck` after its
+  transfer: the real host refuses before running, although the transfer can
+  install that member. Admit literal keys from the declared token domain while
+  retaining refusal of out-of-domain keys; cover absence before transfer and
+  presence afterward. The sampling fixture checks counts and the remaining
+  source member, and its C# transform laws check transferred identities.
+  (from: unbiased-draws)
+
 - Decide (the language lane's call): whether a rule's effect list merges by
   `key` when a template is re-expanded over a basis. Today a rule whose effects
   write one key twice (`claim-expire` in `worlds/debug/pond.puck`) refuses with
@@ -2684,6 +2748,27 @@ step's completion criteria; C1 to C7 are in.
 Owner: an independent reviewer (Argon) · unconfirmed · Next: the researcher
 brief's priorities ([security review](../development/security-review.md)).
 
+- [high, the disclosure-2 lane is fixing] The state-correctness review
+  (Claude) found doors that decide "restricted for this reader" from live
+  membership instead of declared policy, so a non-operator seat can count or
+  locate hidden cells: `world.row state` prints `cellSlots`
+  (`src/Puck.World.Schema/WorldStateDisclosure.cs:440`); `world.hud.template`
+  answers hidden and absent differently (`src/Puck.World/WorldHudCommandModule.cs:236-249`);
+  observations list a row only when a restricted cell exists
+  (`WorldStateDisclosure.cs:219-227`). Mediums on the same cause: row edits,
+  `world.projection` bindings, replica deltas; plus arithmetic faults in a
+  dynamic key or ring age read as absent instead of faulting, and a derived
+  board outside a replay scope going stale on restore. All of it is in the
+  lane's brief. (from: statecorr-review)
+- [low] `world.identify` exposes a SHA-256 of the definition, authored hidden
+  seeds included, to a seat with Control over a screen. Closing a gate on a
+  fault re-arms an Edge rule after a one-tick fault and fires a decision's
+  `OnNoChoice`; decide whether a fault should hold the previous state instead.
+  `WorldBody.GateOpen` and `MotionGateOpen` are near-copies. (from: statecorr-review)
+- [unconfirmed] `ArenaSearchEffectHost` (`src/Puck.State.Search/ArenaSearchEffectHost.cs:30-32`)
+  is documented to reproduce the live host's draws, so a search over an arena
+  holding private (keyed) sites may compute the private outcomes. Confirm
+  whether a search can run where the secret is not granted. (from: unbiased-review)
 - [low] `worlds/hosting/granaries.extensions.json` grants its `console` client
   `mutate` over `section:state` to write six feed rows; scope it to those rows if
   the extension grant vocabulary allows. (from: the lead, landing granaries)
@@ -2737,6 +2822,18 @@ Owner: maths lane · ordinary · Next: the segment durations' wire double (`Worl
 `WorldCommand.EnqueueSegment.Seconds` through `FromDouble`), then the float
 duration fields' schema migration.
 
+- [low] `Pcg3dLatticeNoise.ScatterPoint`
+  (`src/Puck.Maths/Sampling/Pcg3dLatticeNoise.cs:78`) reduces a stateless hash
+  with `hash % inset`, a bias of inset/2^32; and a lattice's boot-time paint
+  still throws on draw exhaustion where compose now refuses (about 1e-14 a
+  generate at the worst bound). (from: unbiased-2)
+- [low] The alias table rounds each threshold to 32 fractional bits
+  (`src/Puck.Maths/Sampling/WeightedSampler.cs:84`), so `weightedNumeric`,
+  `symmetryOrbit` and Markov draws keep a bias of the order the bounded-draw
+  change removed (three equal weights give 5726623061, 5726623062 and
+  5726623061 out of 2^34). Exact alias thresholds (an integer remainder with a
+  bounded rejection through `BoundedRandomSampling`) would remove it.
+  (from: unbiased-review)
 - Decide (the lead's call): Production `IsPrime`: whether a hashed-witness
   table may decide primes below 2^47 in one strong round. machine-prime's
   512 KiB table is why it leads Puck there (about 1.5x on primes); a table is
@@ -2941,6 +3038,10 @@ ordinary · Next: new content and art on the owner's call.
 
 Owner: the lead · ordinary · Next: the Monitor hook check.
 
+- [low] The build lease cannot nest: `src/Puck.Cli.Harness/WorldArtifactBuild.cs:199`
+  acquires it with no `ancestor` recognizer, so a `puck test` run under `puck
+  lease build` waits on itself. Pass `ProcessInspection.IsAncestor` as the
+  heavy lease does. (from: test-lease)
 - The agent-policy hook may not cover Claude Code's `Monitor` tool:
   `.claude/settings.json` matches `Bash|PowerShell`, and whether a Monitor
   PreToolUse payload carries `tool_input.command` is unverified. Log one

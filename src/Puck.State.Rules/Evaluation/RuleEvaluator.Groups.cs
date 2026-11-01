@@ -89,13 +89,11 @@ public sealed partial class RuleEvaluator {
             return false;
         }
 
-        var open = GateOpen(
-            faulted: out var faulted,
+        return GateOpen(
+            faulted: out _,
             gate: group.Trigger,
             ruleName: group.Name
         );
-
-        return (open && !faulted);
     }
     // One pass per tick over every member, in authored order. The pass closes the group when no row of its write
     // set differs from what it held when the pass began. Each member commits on its own, so RowVersion only answers

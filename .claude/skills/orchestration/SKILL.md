@@ -142,6 +142,23 @@ every lane that received it. When a brief proves wrong, recall every lane workin
 from the same premise before replying to the lane that found it, and say that a
 stop is a stop, not a pause.
 
+A brief also names the existing mechanisms its change must reuse (found with
+`puck references` and `puck declarations` while checking the premise) and
+says no second one may be added. Reviews kept finding duplicates that lanes
+had just written, a second retry loop in a change built to remove one among
+them, so duplicates were created about as fast as they were found; naming the
+mechanism up front is cheaper than the review that catches it.
+
+Before briefing a step that decides how a pipeline works (what the renderer
+draws and submits, how the tick schedules, a camera or physics model), ask
+whether a research round has covered that design, even when the step arrives
+as a row in another plan. A plan written for one purpose (the job-system memo's
+R2, "move level selection to the GPU", written to free the frame thread) carries
+an unexamined design for another (what visibility should be): that lane moved
+the work without reducing it. If no round covers it, run one first (AGENTS.md,
+"Regular research is worth it"); the round costs an hour beside other lanes, a
+wrong design costs a lane, its review and the redo.
+
 Verify any base claim yourself with
 `git merge-base --is-ancestor <base> <integration-head>`, checking its exit
 status, and count the commits behind with
@@ -436,6 +453,13 @@ watcher, `puck host load --watch` prints one line per transition (`CAPACITY`,
   around each heavy suite, sample headroom while holding it, and release it on
   every exit. Nested runs under `puck lease heavy` serialize on child leases
   after validating the ancestor holder's process identity.
+- A lane never runs a full `puck test worlds/debug` sweep (112 worlds, 30 to 60
+  minutes, several GB per world process): the brief names the test files its
+  change can reach, and the lead runs one full sweep on the integrated head.
+  Two lanes' full sweeps once ran together, one outside the heavy lease, while
+  four GPU waiters and an hour-long heavy ticket queued behind them. A lane
+  waiting on a lease keeps working (code, docs, its hand-back) instead of
+  idling on the ticket.
 - Lease admission is a queue that rotates between lanes, not a race:
   `puck lease` waiters take tickets, and the lease goes to the oldest ticket of
   the lane that held it least recently. A lane is the first word of `--holder`
