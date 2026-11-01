@@ -134,6 +134,16 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
         DefaultValueFactory = static _ => false,
         Description = "Advance a headless world on its fixed simulation tick grid without wall-clock pacing. Intended for an armed authored schedule or another offline run; refused for presented hosts.",
     };
+    // A host choice, never world-authored: how many threads may run the engine's parallel partitions on this machine.
+    var workersOption = new Option<int?>(name: "--workers") {
+        DefaultValueFactory = static _ => null,
+        Description = "The threads that run the engine's parallel partitions, the frame thread included: 1 runs every partition on the frame thread, and 0 (the default) uses the machine's logical processor count. State is identical at every count; puck test --workers compares counts.",
+    };
+    workersOption.Validators.Add(item: static result => {
+        if (result.GetValueOrDefault<int?>() is < 0) {
+            result.AddError(errorMessage: "--workers must be 0 (the machine's logical processor count) or a positive thread count.");
+        }
+    });
     // A DEVELOPER REFLECTION of the document's host.presentation field, not a separate product (the unification
     // contract): absent lets the document decide; a bare --headless (or --headless true) forces host.presentation=none
     // for this run only (no window, no GPU device, no swapchain, no audio device); --headless false forces windowed.
@@ -201,6 +211,7 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
         softwareGpuOption,
         scheduleDirOption,
         unpacedOption,
+        workersOption,
         pausedOption,
         exitAfterSecondsOption,
         headlessOption,
@@ -500,6 +511,11 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
             ? "[world.host] physical input devices are off (--devices none): no gamepad is opened, and no key, text or pointer event from the OS reaches a seat; scripted input still drives the World."
             : "[world.host] physical input devices are off (--devices none); this boot shape opens none either way."));
     }
+    var workers = new Puck.Hosting.Jobs.JobWorkers(requested: (parseResult.GetValue(option: workersOption) ?? 0));
+
+    if (parseResult.GetResult(option: workersOption) is { Implicit: false }) {
+        Console.Error.WriteLine(value: $"[world.host] workers={workers.Count} (--workers {workers.Requested}){(workers.Serial ? "; every partition runs on the frame thread" : string.Empty)}");
+    }
     var builder = Host.CreateApplicationBuilder(args: args);
     // Standard output carries the console's read-back answers, which a script parses; every log line, whatever its level
     // and whichever thread writes it, goes to standard error beside the narration.
@@ -554,6 +570,7 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
         StorageEndpoint = parseResult.GetValue(option: storageUriOption),
         StorageUserId = parseResult.GetValue(option: userIdOption),
         Unpaced = unpaced,
+        Workers = workers,
     });
     // Self-update: channel/cacheRoot/checkInterval/keepVersions come from the world document's own update section
     // (WorldUpdateDefaults) — a deployment-facet field carrying no simulation-state weight, matching WorldHostDefaults'

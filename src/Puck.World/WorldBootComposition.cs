@@ -1025,6 +1025,8 @@ public static class WorldBootComposition {
         services.AddWorldMachineCatalog(machineCatalog: inputs.MachineCatalog);
         services.AddSingleton(implementationInstance: inputs.StateRoot);
         services.AddSingleton(implementationInstance: inputs.Caches);
+        // The one worker-count setting: the job system sizes its partition forks from it.
+        services.AddSingleton(implementationInstance: inputs.Workers);
         services.AddSingleton(implementationInstance: new WorldCaptureRoot(path: inputs.CaptureDirectory));
         services.AddSingleton(implementationInstance: new WorldScheduleRoot(path: inputs.ScheduleDirectory));
         services.AddSingleton(implementationInstance: worldSource);
