@@ -1181,14 +1181,21 @@ public static class WorldBootComposition {
 
         services.AddSingleton<WorldHostStep>();
         services.AddSingleton(implementationFactory: sp => {
-            Action postStep;
+            // Every shape derives its seats' routes and contexts each tick, so a seat sitting at a board switches to the
+            // board's page headless exactly as it does in a window.
+            var postStep = CreateSeatPostStep(sp: sp);
 
             if (hostSettings.Headless || hostSettings.Offscreen) {
-                postStep = sp.GetRequiredService<WorldWheelFeed>().TickLogical;
+                var seats = postStep;
+                var wheel = sp.GetRequiredService<WorldWheelFeed>();
+
+                postStep = () => {
+                    seats();
+                    wheel.TickLogical();
+                };
             } else {
                 // Constructing the runtime mounts the guests for the presented shape.
                 _ = sp.GetRequiredService<WorldAddonRuntime>();
-                postStep = CreateSeatPostStep(sp: sp);
             }
             return new WorldSimulation(sp.GetRequiredService<WorldHostStep>(), postStep);
         });

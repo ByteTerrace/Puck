@@ -107,7 +107,7 @@ public static class WorldPostBuildWiring {
         // The crossing's binding swap, wired here rather than in a presentation-only composition method because
         // bindings and channels resolve on the console and peer input path in every boot shape, headless included.
         // A changed claim recomposes that one seat from its new route's document; WorldSimulation's per-tick
-        // PublishSeats (windowed only) reaches the same state one step later. The edge is delivered by WorldHostStep
+        // seat post-step reaches the same state one step later. The edge is delivered by WorldHostStep
         // on the pump thread, whichever thread published the claim.
         var seatRouter = services.GetRequiredService<WorldSeatAuthorityRouter>();
 

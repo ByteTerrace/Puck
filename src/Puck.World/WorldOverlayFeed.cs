@@ -196,8 +196,8 @@ internal sealed class WorldOverlayFeed {
 
             m_currentSlot = slot;
 
-            var view = m_bindings.PageView(slot: slot);
             var barStatus = m_bindingBar.Status(slot: slot);
+            var view = barStatus.ActivePage;
             var authoring = barStatus.Authoring;
             // The authored text policy resolves ONCE per seat here and shapes what the feed publishes — the writer
             // stays dumb: a suppressed badge is OverlayResolvedGlyph.None, a suppressed label is the empty string,
@@ -222,49 +222,42 @@ internal sealed class WorldOverlayFeed {
                 (slotSet.Count > 0) &&
                 (banks.Count > 0)
             ) {
-                // A player's own "stacked off" preference still needs SOME bank to show — fall back to the full
-                // stack when no authored bank actually names the seat's current page, rather than drawing nothing.
-                var hasActiveBank = false;
+                // The model is the seat's preference alone: whatever page is active (a context group's own page
+                // included), single draws that page and stacked draws every bank with it active.
+                var stacked = barStatus.Stacked;
+                var activeBank = barStatus.ActiveBank;
 
-                for (var bankIndex = 0; ((bankIndex < banks.Count) && !hasActiveBank); bankIndex++) {
-                    hasActiveBank = string.Equals(
-                        a: banks[bankIndex].PageId,
-                        b: view.PageId,
-                        comparisonType: StringComparison.Ordinal
+                var draws = (stacked
+                    ? banks.Count
+                    : 1
+                );
+
+                for (var draw = 0; ((draw < draws) && (writeOffset < destination.Length)); draw++) {
+                    // Single draws the active page once, with the opacities of the bank it stands in.
+                    var bankIndex = (stacked
+                        ? draw
+                        : Math.Max(val1: activeBank, val2: 0)
                     );
-                }
-
-                var stacked = (barStatus.Stacked || !hasActiveBank);
-
-                for (var bankIndex = 0; ((bankIndex < banks.Count) && (writeOffset < destination.Length)); bankIndex++) {
                     var bank = banks[bankIndex];
-                    var isActiveBank = string.Equals(
-                        a: bank.PageId,
-                        b: view.PageId,
-                        comparisonType: StringComparison.Ordinal
-                    );
+                    var isActiveBank = (!stacked || (bankIndex == activeBank));
+                    BindingPageView bankView;
 
-                    if (!m_bindings.TryPageView(
+                    if (isActiveBank) {
+                        bankView = view;
+                    } else if (!m_bindings.TryPageView(
                         pageId: bank.PageId,
                         slot: slot,
-                        view: out var bankView
+                        view: out bankView
                     )) {
-                        continue;
-                    }
-
-                    if (
-                        !stacked &&
-                        !isActiveBank
-                    ) {
                         continue;
                     }
 
                     var bankAlpha = (barAlpha * (isActiveBank
                         ? (bank.ActiveAlpha ?? 1f)
                         : bank.Alpha));
-                    // Single: one bar that swaps in place — the active bank's page drawn in the first authored
-                    // bank's frame and plates; its frame already carries the extent every bank gives it, so nothing
-                    // moves between the models. Multi: every bank the live layout places, where it places it.
+                    // Single: one bar that swaps in place — the active page drawn in the first authored bank's frame
+                    // and plates; its frame already carries the extent every bank gives it, so nothing moves between
+                    // the models. Multi: every bank the live layout places, where it places it.
                     var placementId = (stacked
                         ? bank.Id
                         : banks[0].Id
