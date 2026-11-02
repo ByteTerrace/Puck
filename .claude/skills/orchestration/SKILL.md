@@ -219,10 +219,10 @@ own scratch checklists under `<worktree>/.claude/scratch/<lane>-*`. A scratch
 checklist holds only what the next hour needs. Plans another session would need
 to continue on another machine go into `docs/plans/` and are pushed: wave
 plans, grounding reports, pending notes and owner answers. A session's job
-directory and scratch are lost with the machine or the session. A finished lane
-branch the lead has not merged is pushed to `origin` as `lane/<id>`; a
-`companion-build` lane once sat finished and unmerged, on one machine only, for
-days. The repository's documents,
+directory and scratch are lost with the machine or the session. A lane branch
+is merged, pushed to `origin` as `lane/<id>` while it waits, or deleted once a
+later design supersedes it, so no machine holds a branch whose fate only one
+session knew. The repository's documents,
 `docs/plans/open-items.md` and the plans under `docs/plans` among them, belong
 to no one lane: a delegate edits them for what its change delivers, deleting an
 item it closed (after moving the durable fact it carries to its owning home),

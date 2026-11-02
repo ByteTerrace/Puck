@@ -56,28 +56,6 @@ Later, with their designs done: the [rule-faults](rule-faults.md) steps, the
 [transmission](transmission.md) lanes, and [disclosure](disclosure.md) steps
 1-6 and 0b.
 
-## Unlanded branches to triage first
-
-Two finished-looking branches were found only on the lead machine and are
-backed up on `origin`:
-
-- `lane/companion-build` (its last commit says `Brief: companion-build
-  done`): 61 files and about 2,800 lines. It carries:
-  - role bindings and role-checked reservations;
-  - a companion that follows its player across worlds and comes home as
-    itself;
-  - the pre-landing review's eleven findings fixed;
-  - derived role-driver authority, and HMAC custody tokens for home
-    re-adoption.
-
-  It was merged with `lead/catch-up` at the time and has never reached
-  integration. Likely [Next](open-items.md#next) item 10's companion steps:
-  diff it against [the custody protocol](companion-redesign.md), merge the
-  integration tip and land it, or record why not.
-- `rtx4070/item2-wip`: two old WIP commits (a growable
-  bake table with caps lifted, a display share). Probably superseded by the
-  bake work since; confirm, then delete it.
-
 ## The settle window that closes the wave
 
 It measures:

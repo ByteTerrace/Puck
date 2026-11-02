@@ -96,8 +96,7 @@ word.
 9. [Certified field contact](#certified-field-contact): box and ellipsoid
    bodies, then clearance on slopes within a third of a metre.
 10. [Transfers](#transfers-federation-and-server) [high]: the companion steps 6
-   to 10. A finished, never-landed companion build is on `lane/companion-build`;
-   triage it first ([the next wave](next-wave.md#unlanded-branches-to-triage-first)).
+   to 10.
 11. [Language and authoring](#language-and-authoring) and [author leaks to the
    standard](#author-leaks-to-the-standard): what lang-2 leaves of S11, the
    cost corpus, the overlay text advance.
