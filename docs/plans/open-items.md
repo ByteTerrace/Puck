@@ -1841,12 +1841,17 @@ and the order they land in; the items below are its findings and checks.
   (`sdf-surface-stage.hlsli` ~:214, :232-234), multi-shell meshes oriented by
   one signed volume (`WorldPlacementStamper.cs` ~:398, :411), T-junctions
   demoting a solid to a thin caster, and skins whose deformation inverts
-  winding while `EnclosesSolid` holds. The
-  [transmission plan](transmission.md) replaces the exit layer with the
-  nearest surface and a depth peel of it, read by one per-mesh `Solid` bit
-  whose inference errs only toward shadow, and lists its lanes; the packet's
-  exit-layer items below close with it. (from: illum1fix2-astra,
-  transmit-design)
+  winding while `EnclosesSolid` holds. A depth-order replacement (the
+  nearest surface and a peel of it, read by a closed bit) failed its design
+  review on the same point: two depth layers cannot say which body a surface
+  belongs to (a clipped receiver reads a sheet 2 m ahead as its own entry; a
+  3 mm panel behind a sheet loses it inside the bias; a tolerance merges a
+  sheet with a box front; a doubled triangle passes edge pairing). The
+  [transmission plan](transmission.md) now records a body identity per
+  cascade texel beside the depth, peels by identity, and shadows a wrapped
+  receiver by any other body in front and by its own body's second chord;
+  the packet's exit-layer items below close with it. (from: illum1fix2-astra,
+  transmit-astra, transmit-design)
 - From illum1-fix: the cascades' exit layer doubles each cascade pass's draws
   and vertices (`world.counters gpu pass sdf.world$shadow-near` at the stage:
   460 draws and 2.62 M vertices on Direct3D 12, two render passes) and adds a

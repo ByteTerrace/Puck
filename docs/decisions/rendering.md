@@ -157,10 +157,13 @@ owner ruled the second (a style per material, not one look per world).
   Review of the exit layer found its reading of winding as facing rests on
   closure, consistent orientation, a rigid transform and no clip, none of
   which the raster path guarantees for an authored, clipped, mirrored or
-  deformed mesh, and the depth peel's closed-receiver flag errs only toward
-  shadow where the exit layer's missing exit leaks light. The
+  deformed mesh; review of a depth-order replacement found that two depth
+  layers cannot say which body a surface belongs to. The
   [transmission plan](../plans/transmission.md) therefore replaces the exit
-  layer with the peel and that flag; this entry is rewritten when it lands.
+  layer with a body identity per cascade texel beside the depth, a peel keyed
+  by that identity, and the rule that any other body in front of a wrapped
+  receiver shadows it while its own body shadows it only by a second chord;
+  this entry is rewritten when it lands.
 - **The band shapes the light, not the shadow.** A cel style bands a light's
   cosine and keeps its visibility as a separate factor,
   `band(cosine) × visibility`, so the filtered penumbra keeps its softness and
