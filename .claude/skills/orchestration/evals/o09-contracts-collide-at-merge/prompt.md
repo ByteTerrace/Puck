@@ -1,4 +1,5 @@
 ---
+description: "orchestration 'Rule on collisions': bisect a contract collision to the exact field and rule from the principle (a replay is a function of its tape), writing the ruling into the contract's owning document."
 max_turns: 8
 allowed_tools: [Read, Glob, Grep, Skill]
 tags: [regression]

@@ -5,4 +5,4 @@ match: contains
 flags: i
 ---
 
-Brief:
+Brief:\s*(L7|<id>)\s+done

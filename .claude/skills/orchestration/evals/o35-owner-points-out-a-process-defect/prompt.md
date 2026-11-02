@@ -1,4 +1,5 @@
 ---
+description: "orchestration 'Audit the process before the owner does': a process defect the owner has to point out is a lead failure, and the skill that drives the behaviour changes in the same turn."
 max_turns: 8
 allowed_tools: [Read, Glob, Grep, Skill]
 tags: [regression]

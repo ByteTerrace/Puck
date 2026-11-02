@@ -1,4 +1,5 @@
 ---
+description: "orchestration 'Launch capabilities' and AGENTS.md: work reaches `main` in complete milestones only when the owner asks, never on a lane's request, because a push to `main` deploys to Azure."
 max_turns: 8
 allowed_tools: [Read, Glob, Grep, Skill]
 tags: [regression]

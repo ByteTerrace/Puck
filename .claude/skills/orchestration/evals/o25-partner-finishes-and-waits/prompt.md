@@ -1,4 +1,5 @@
 ---
+description: "orchestration 'Own tracks, not tasks': every brief ends with the partner's next items, the partner works its queue without waiting, and a queue partners cannot read is no queue."
 max_turns: 8
 allowed_tools: [Read, Glob, Grep, Skill]
 tags: [regression]

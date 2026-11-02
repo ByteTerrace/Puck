@@ -5,4 +5,4 @@ match: contains
 flags: i
 ---
 
-scout
+(tally|tallying|caller)[^\n]{0,80}scout

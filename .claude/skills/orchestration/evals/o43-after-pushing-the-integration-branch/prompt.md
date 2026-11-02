@@ -1,5 +1,6 @@
 ---
 description: "orchestration 'Land in batches': Claude Code loads agents, hooks and skills from the main checkout, not the lead's worktree; one session's agent fixes did nothing for its lanes until this was found. After each push the lead fast-forwards the main checkout."
+runs: 5
 max_turns: 8
 allowed_tools: [Read, Glob, Grep, Skill]
 tags: [capability]

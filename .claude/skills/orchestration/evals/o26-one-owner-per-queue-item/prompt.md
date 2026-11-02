@@ -1,4 +1,5 @@
 ---
+description: "orchestration 'Own tracks, not tasks': every queue item has exactly one recorded owner, a handoff records the new one, and an item with two owners is resolved before either partner continues."
 max_turns: 8
 allowed_tools: [Read, Glob, Grep, Skill]
 tags: [regression]

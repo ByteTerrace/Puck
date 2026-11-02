@@ -1,4 +1,5 @@
 ---
+description: "orchestration 'Select models and route findings': route reviews by where the work lives; a pushed branch can be reviewed in any machine's Codex slot, a local-only lane needs the lead's own."
 max_turns: 8
 allowed_tools: [Read, Glob, Grep, Skill]
 tags: [regression]

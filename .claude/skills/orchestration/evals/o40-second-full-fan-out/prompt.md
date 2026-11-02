@@ -1,4 +1,5 @@
 ---
+description: "orchestration 'Select models and route findings': delegating needs no one's permission, but a follow-on wave much larger than the last is a spend decision stated to the owner in one sentence."
 max_turns: 8
 allowed_tools: [Read, Glob, Grep, Skill]
 tags: [regression]

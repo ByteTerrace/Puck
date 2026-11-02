@@ -1,4 +1,5 @@
 ---
+description: "orchestration 'Write and track assignments': the message is the notification and git is the record; only the assignment's last commit carries `Brief: <id> done`, and the lead inspects the diff and what the lane ran before merging."
 max_turns: 8
 allowed_tools: [Read, Glob, Grep, Skill]
 tags: [regression]
