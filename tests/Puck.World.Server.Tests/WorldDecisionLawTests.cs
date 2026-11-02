@@ -175,11 +175,13 @@ public sealed class WorldDecisionLawTests {
         );
     }
     [Fact]
-    public void InvalidScoreCannotWinOrCrashTheDecision() {
+    public void AFaultingScoreHoldsTheChoiceRatherThanSkippingItsOption() {
+        // A fault is not a false: a decision that faults keeps its choice and runs no onNoChoice, so a faulting
+        // score neither wins nor hands the choice to the next option.
         var broken = new WorldDecisionOption(
             Name(value: "broken"),
             new(Instructions: [Instruction.Constant(value: 1),
-            Instruction.Constant(value: 0), Instruction.Of(operation: ExpressionOp.Divide)]),
+            Instruction.Operand(name: "divisor"), Instruction.Of(operation: ExpressionOp.Divide)]),
             []
         );
         using var fixture = Fixtures.FreshServer(Document(Rule(Policy(
@@ -188,13 +190,20 @@ public sealed class WorldDecisionLawTests {
                 "valid",
                 -1
             )
-        ))));
+        ) with { OnNoChoice = [new ActionEffect.AddState("empty", Value: 1)] }), Slot("divisor", 1), Slot("empty")));
 
-        fixture.Step();
-        Assert.Equal(
-            1,
-            State(fixture).Selected
-        );
+        fixture.Step(stepTicks: 504);
+        Assert.Equal(0, State(fixture).Selected);
+        Set(fixture: fixture, row: "divisor", value: 0);
+        fixture.Step(stepTicks: 504);
+        fixture.Step(stepTicks: 504);
+        Assert.Equal(0, State(fixture).Selected);
+        Assert.Equal(1, State(fixture).LastScore);
+        Assert.Equal(0, Value(fixture: fixture, row: "empty"));
+        var diagnostic = Assert.Single(collection: fixture.Server.RuleRuntimeDiagnostics());
+
+        Assert.Equal(RuleEffectRefusal.Arithmetic, diagnostic.Refusal);
+        Assert.Contains("kept its choice", diagnostic.Detail);
     }
     [Fact]
     public void StayingDoesNotRepeatEffectsOrRenewCommitment() {

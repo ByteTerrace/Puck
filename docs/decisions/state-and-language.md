@@ -521,7 +521,11 @@ one it read successfully. An `Edge` rule whose gate faults neither fires nor
 re-arms (treating the fault as false would re-arm it and fire on recovery), and
 a world decision that faults keeps its choice and its interrupt edge and runs
 no `onNoChoice` (treating the fault as "no choice" would turn it into an
-answer). An effect that faults refuses the whole firing, and a firing's
+answer). An effect that faults refuses the whole firing, except inside a
+`transaction`: there the fault is a refusal of the savepoint as D4 describes,
+so the savepoint rewinds, its `onFailure` runs and the firing can commit; a
+fault in `onFailure` refuses the whole firing. `onFailure` is the authored
+refusal arm, not a reading of the fault as false. A firing's
 verdict covers everything the firing decides: the arena scope, the edge latch,
 a decision's choice and the arms it queued commit through one door after the
 verdict is in, or not at all.

@@ -693,11 +693,17 @@ public sealed partial class RuleEvaluator {
     }
     // A savepoint is a nested scope inside the firing. A refused step rewinds it, so earlier siblings survive;
     // onFailure then runs in the firing's own scope and later siblings continue. With no onFailure the refusal
-    // propagates, since the firing already rewinds as one.
+    // propagates, since the firing already rewinds as one. A fault raised in the body is the savepoint's refusal,
+    // whatever the step that met it made of it, and the savepoint answers it: the firing's scope never sees it, so
+    // onFailure runs and the firing can commit. A fault in onFailure is the firing's.
     private bool FireSavepoint(TransactionEffect effect, in EffectFiring firing, out bool moved) {
         var arena = m_host.Arena;
+        var scratch = m_host.Scratch;
         var queued = m_deferred.Count;
+        var serial = m_refusalSerial;
         var mark = arena.BeginScope();
+        var faults = scratch.EnterFaultScope();
+        var fault = ExpressionFault.None;
 
         moved = false;
 
@@ -716,6 +722,21 @@ public sealed partial class RuleEvaluator {
             DiscardQueued(from: queued);
 
             throw;
+        } finally {
+            fault = scratch.AnswerFaultScope(scope: faults);
+        }
+
+        if (held && (fault != ExpressionFault.None)) {
+            held = false;
+            if (m_refusalSerial == serial) {
+                ReportRefusal(
+                    detail: $"{RuleEvaluation.DescribeFault(fault: fault)}; the transaction refused",
+                    effect: effect.Describe,
+                    refusal: RuleEffectRefusal.Arithmetic,
+                    ruleName: firing.RuleName,
+                    tick: firing.Tick
+                );
+            }
         }
 
         if (held) {

@@ -138,8 +138,8 @@ dynamic key reads as absent: a gate or expression over it reads false and
 refuses as `Arithmetic` unless `isAbsent`/`??` answer it. A rule firing is atomic:
 any refused effect rewinds the whole firing. A `transaction`
 (`ActionEffect.Transaction`: `effects`, optional `onFailure`, each 1..`RuleCapacity.MaxTransactionEffects`) is
-a savepoint inside the firing: when a main-branch effect refuses, the savepoint rewinds so none of its effects
-apply and `onFailure` runs instead. The compiler refuses an empty main branch and a transaction anywhere inside
+a savepoint inside the firing: when a main-branch effect refuses, or anything it evaluates faults, the savepoint
+rewinds so none of its effects apply and `onFailure` runs instead; a fault in `onFailure` rewinds the whole firing. The compiler refuses an empty main branch and a transaction anywhere inside
 another, including through an intervening `if` (`RuleCompiler.Effects.cs`).
 `if` (`{"$type":"if","condition":<predicate>,"then":[...],"else":[...]}`) branches a rule's own effects on the SAME
 predicate grammar a gate compiles: `then` fires when it holds, `else` (optional) when it does not — a false
