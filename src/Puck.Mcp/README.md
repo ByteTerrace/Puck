@@ -185,12 +185,13 @@ than writing a boot line:
   Release build of a `checkout`'s current `src/Puck.World` sources, headless
   unless `windowed`. The build comes from the CLI's World build store, one
   build per source state: an unchanged checkout builds nothing, a changed one
-  is built first (inside `timeoutSeconds`, before any GPU lease is taken), so a
+  is built first (before any GPU lease is taken, under the build's own timeout), so a
   start never boots a binary older than its sources and the checkout's
   `bin/Release` is neither read nor written. A build that fails refuses the
   start with its first errors and the log's path. Builds of different source
   states take the machine's `build` lease (`puck lease build`) one at a time,
-  waiting inside `timeoutSeconds`. `backend` (`directx` or `vulkan`) is passed
+  waiting there as long as the CLI's lease wait allows (two hours), which
+  `timeoutSeconds` never shortens. `backend` (`directx` or `vulkan`) is passed
   to the World as `--backend`; `vulkan` also builds with SPIR-V, a separate
   build in the store, since the default build carries Direct3D 12 bytecode
   alone.
@@ -203,8 +204,10 @@ than writing a boot line:
   `--control`. A windowed start first takes the machine's GPU lease (the one
   `puck lease gpu` takes, recorded under `holder`, admitted in rotation between
   `lane`s: the holder's first word, or the checkout's directory name when a start
-  names neither) and holds it until the World exits. `timeoutSeconds` (1–1800, default 900) bounds the whole job, including
-  build, lease wait and boot. The job continues between calls and across
+  names neither) and holds it until the World exits, waiting for it as long as the CLI's lease wait
+  allows. `timeoutSeconds` (1–7200, default 900) bounds only the World's boot, until it
+  accepts an attachment; the build and each lease queue have their own limits, so a
+  deep queue never uses up the boot. The job continues between calls and across
   activated adapter versions; a client's short call deadline does not bound
   a cold build. It runs from the build store, leaving the checkout free to rebuild.
   Worktree discovery runs Git with its own closed stdin, because Git for Windows
@@ -398,7 +401,7 @@ also limits headers to 16 KiB and connections to 64, with a ten-second header de
 |---|---|---|
 | `puck_adapter` | None (local stdio only). | The answering backend's `processId`, `moduleId`, installed `directory`, live `ownedWorlds` (process/attachment IDs) and `pendingStarts` (start IDs). |
 | `puck_worlds` | None (local stdio only). | Structured `worlds`: each running World's `attachmentId`, `processId`, `document`, `startedUtc`, and `current` or `started` when true. |
-| `puck_world_start` | Optional `document` (default `worlds/debug`), `checkout` (absolute path; default the adapter's), `backend` (`directx` or `vulkan`), `windowed`, `ownerPlay`, `holder`, `lane` and `timeoutSeconds` (1–1800, default 900). Local stdio only. | `status: pending` and `startId`, or a validation refusal (`output`, `isError: true`). Poll the id instead of repeating the start. |
+| `puck_world_start` | Optional `document` (default `worlds/debug`), `checkout` (absolute path; default the adapter's), `backend` (`directx` or `vulkan`), `windowed`, `ownerPlay`, `holder`, `lane` and `timeoutSeconds` (1–7200, default 900; the boot only). Local stdio only. | `status: pending` and `startId`, or a validation refusal (`output`, `isError: true`). Poll the id instead of repeating the start. |
 | `puck_world_start_wait` | Required `startId`. Optional `timeoutMs` (1–120000, default 20000) and `cancel`. Local stdio only. | Structured `status` (`pending`, `started` or `refused`), `startId`, `stage` and `elapsedSeconds` while pending, `world`, `processId`, `stdoutLog` and `stderrLog` once started, and `output`, `isError: true` (plus `checkout`, `build`, `stateDirectory`, logs and exit fields if launched) when refused. Completed results repeat. |
 | `puck_world_stop` | Required `world`: the `processId` or `attachmentId` the start returned. Optional `timeoutMs` before the kill, same range/default. Local stdio only. | The same shape with `status` `stopped` or `refused`, plus `exitCode` and, when true, `killed` and `leaseReleased`. |
 | `puck_exec` | Required `command`: a console line or newline-separated script, at most 8192 characters total and 64 nonblank, noncomment lines. Optional integer `timeoutMs`: 1–120000 for the whole script, default 30000. Optional output filters, applied to each line's answer and never changing what the command does: `lines` (one-based ranges such as `1-20,40,60-`), `match` (keep lines containing the text, ignoring case), `fields` (array of names: the keys of a `key=value` answer, or property names anywhere in a JSON answer) and integer `maxBytes` (256–1048576; a cut ends in an explicit mark and sets `truncated`). Optional `world` (local stdio only): an attachment id or process id from `puck_worlds`. | Structured decimal-string `requestId`, `status`, `world`, and `output` (single-line text), `data` (single-line JSON) or `commands` (multi-line script), plus `isError`, `clearTranscript` and `truncated` when true. Empty output is `submitted`, not authoritative application. |

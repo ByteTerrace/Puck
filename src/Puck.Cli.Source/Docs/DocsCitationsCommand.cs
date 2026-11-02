@@ -497,7 +497,7 @@ public static class DocsCitationsCommand {
             error: out error,
             logDirectory: runDirectory,
             repositoryRoot: root,
-            timeout: TimeSpan.FromSeconds(value: 300),
+            timeout: WorldArtifactBuild.BuildTimeout,
             verb: Verb
         )) {
             return false;

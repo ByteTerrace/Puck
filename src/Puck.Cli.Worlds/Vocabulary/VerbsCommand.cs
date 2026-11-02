@@ -79,7 +79,7 @@ public static class VerbsCommand {
                 error: out var error,
                 logDirectory: runDirectory,
                 repositoryRoot: repositoryRoot,
-                timeout: TimeSpan.FromSeconds(value: 300),
+                timeout: WorldArtifactBuild.BuildTimeout,
                 verb: Verb
             )) {
                 Console.Error.WriteLine(value: $"{Verb}: {error}");

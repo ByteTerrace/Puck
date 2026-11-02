@@ -152,7 +152,7 @@ public static partial class SweepCommand {
         IDisposable? build = null;
 
         if (!noHeadless || (windowed && (attach is null))) {
-            if (!WorldArtifactBuild.TryResolveNamed(error: out var buildError, lease: out var lease, logDirectory: directory, named: artifact, path: out var resolved, repositoryRoot: repositoryRoot, timeout: TimeSpan.FromMinutes(value: 30), verb: Verb)) {
+            if (!WorldArtifactBuild.TryResolveNamed(error: out var buildError, lease: out var lease, logDirectory: directory, named: artifact, path: out var resolved, repositoryRoot: repositoryRoot, timeout: WorldArtifactBuild.BuildTimeout, verb: Verb)) {
                 return CliExit.Refuse(verb: Verb, what: "the World build", why: buildError.ReplaceLineEndings(replacementText: " "));
             }
 
@@ -160,7 +160,7 @@ public static partial class SweepCommand {
             build = lease;
         }
 
-        // The whole sweep, a build excepted, is bounded by one budget, and an interrupt ends it the same way: every
+        // The whole sweep, a build and its lease waits excepted, is bounded by one budget, and an interrupt ends it the same way: every
         // wait of a World, a lease or a scenario honours it, and the Worlds, leases and processes below are released by
         // the scopes that own them, in order.
         using var budget = new SweepBudget(caller: cancellation, total: TimeSpan.FromMinutes(value: timeoutMinutes));
@@ -211,16 +211,19 @@ public static partial class SweepCommand {
                     CliLease? gpu = null;
 
                     try {
-                        gpu = CliLease.AcquireAsync(
-                            ancestor: ProcessInspection.IsAncestor,
-                            cancellationToken: budget.Token,
-                            clock: TimeProvider.System,
-                            holder: Verb,
-                            lane: CliLease.LaneOf(checkout: repositoryRoot),
-                            name: "gpu",
-                            root: CliLease.RootAsync(cancellationToken: budget.Token, checkout: repositoryRoot).GetAwaiter().GetResult(),
-                            wait: budget.Bound(wait: TimeSpan.FromMinutes(value: 20))
-                        ).GetAwaiter().GetResult();
+                        // Waiting in the GPU queue is other runs' time, so the sweep's own budget stands still for it.
+                        using (budget.Pause()) {
+                            gpu = CliLease.AcquireAsync(
+                                ancestor: ProcessInspection.IsAncestor,
+                                cancellationToken: cancellation,
+                                clock: TimeProvider.System,
+                                holder: Verb,
+                                lane: CliLease.LaneOf(checkout: repositoryRoot),
+                                name: "gpu",
+                                root: CliLease.RootAsync(cancellationToken: cancellation, checkout: repositoryRoot).GetAwaiter().GetResult(),
+                                wait: CliLease.DefaultWait
+                            ).GetAwaiter().GetResult();
+                        }
                     } catch (Exception exception) when ((exception is TimeoutException or OperationCanceledException)) {
                         signals.Add(item: WindowedNotRun(reason: $"the GPU lease was not acquired: {exception.Message}"));
                     }

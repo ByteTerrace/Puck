@@ -24,17 +24,16 @@ public static class WorldOffscreenLeg {
     /// <param name="verb">The calling verb, which prefixes progress and refusal lines.</param>
     /// <param name="repositoryRoot">The checkout whose sources are built.</param>
     /// <param name="runDirectory">The run's scratch directory.</param>
-    /// <param name="timeout">How long resolving may take.</param>
     /// <param name="artifact">The leased build, which the caller disposes after its last leg.</param>
     /// <returns><see langword="true"/> when a build is available; otherwise the refusal is already on standard
     /// error.</returns>
-    public static bool TryResolveWorld(string verb, string repositoryRoot, string runDirectory, TimeSpan timeout, [NotNullWhen(returnValue: true)] out WorldArtifact? artifact) {
+    public static bool TryResolveWorld(string verb, string repositoryRoot, string runDirectory, [NotNullWhen(returnValue: true)] out WorldArtifact? artifact) {
         var built = WorldArtifactBuild.TryResolve(
             artifact: out artifact,
             error: out var buildError,
             logDirectory: runDirectory,
             repositoryRoot: repositoryRoot,
-            timeout: timeout,
+            timeout: WorldArtifactBuild.BuildTimeout,
             verb: verb
         );
 

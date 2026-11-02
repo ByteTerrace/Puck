@@ -73,7 +73,7 @@ public static partial class TestCommand {
             named: worldArtifact,
             path: out artifact,
             repositoryRoot: repositoryRoot,
-            timeout: BuildBudget,
+            timeout: WorldArtifactBuild.BuildTimeout,
             verb: "test"
         )) {
             return true;
