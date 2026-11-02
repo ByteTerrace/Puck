@@ -46,19 +46,24 @@ public sealed class SdfKernelInterfaces {
     public const string BakePool = "brickPool";
     /// <summary>The bit the level of detail starts at in the index a <see cref="Mesh"/> draw call pushes, and in a counted
     /// indirect draw's identity; the bits below it name the draw. A draw of level <c>L</c> above zero draws the triangles
-    /// from the one its record names (<see cref="SdfMeshRecord.LevelTriangleWord"/>). The occlusion kernel's pushed index
+    /// from the one its record names (<see cref="SdfMeshRecord.LevelTableWord"/>). The occlusion kernel's pushed index
     /// holds its step from this bit up and the pyramid level it writes below it.</summary>
     public const int MeshLevelShift = 24;
-    /// <summary>The mesh pass occlusion's candidates, a <see cref="Mesh"/> table of <c>uint4</c>s the host writes each
-    /// frame: a header (the candidates, the depth pyramid's levels), then four rows a candidate, its draw, its vertex
-    /// count and its world box (<c>SdfMeshOcclusion</c> in <c>Puck.SdfVm</c>).</summary>
+    /// <summary>The selection kernel's threads per group.</summary>
+    public const uint MeshSelectionGroupSize = 64u;
+    /// <summary>The selection dispatch's groups per row, within both backends' per-axis limit.</summary>
+    public const uint MeshSelectionGroupsPerRow = 65535u;
+    /// <summary>The raster pass's GPU selection controls: one header, three level-choice rows and ten cull rows.
+    /// Draw bounds and mesh level metadata are retained in the shared mesh region.</summary>
     public const string MeshOcclusionCandidates = "sdfMeshOcclusionCandidates";
-    /// <summary>The mesh pass occlusion's visible set: one word a draw, nonzero for a draw its latest test found
-    /// visible, which the next frame's first phase draws.</summary>
+    /// <summary>The raster pass's per-draw retained state: visibility, previous level, mesh reference identity and
+    /// whether this frame's box cull kept the draw. The level survives buffer growth and resets on a mesh change.</summary>
     public const string MeshOcclusionVisibleWritten = "sdfMeshOcclusionVisibleRW";
     /// <summary>The mesh pass occlusion's indirect draws: the first phase's records, then the second's, each
     /// <c>GpuDrawIndirectCommand</c> records long.</summary>
     public const string MeshOcclusionDrawsWritten = "sdfMeshOcclusionDrawsRW";
+    /// <summary>The indirect commands read by Vulkan vertex stages through their draw index, including the fixed-count fallback.</summary>
+    public const string MeshIndirectCommands = "sdfMeshIndirectCommands";
     /// <summary>The mesh pass occlusion's draw counts: the first phase's, then the second's.</summary>
     public const string MeshOcclusionCountsWritten = "sdfMeshOcclusionCountsRW";
     /// <summary>The mesh pass occlusion's depth pyramid: from level one up, each texel the farthest forward depth of its
@@ -177,10 +182,11 @@ public sealed class SdfKernelInterfaces {
                 // indirect draws; every other raster part binds the tables' filler and dummy at them.
                 ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: SdfWorldPackage.MeshVisibility, type: ShaderValueType.Float4),
                 Read(element: ShaderValueType.Uint4, name: MeshOcclusionCandidates),
-                Written(element: ShaderValueType.Uint, name: MeshOcclusionVisibleWritten),
+                Written(element: ShaderValueType.Uint4, name: MeshOcclusionVisibleWritten),
                 Written(element: ShaderValueType.Uint, name: MeshOcclusionDrawsWritten),
                 Written(element: ShaderValueType.Uint, name: MeshOcclusionCountsWritten),
                 Written(element: ShaderValueType.Uint, name: MeshOcclusionDepthWritten),
+                Read(element: ShaderValueType.Uint, name: MeshIndirectCommands),
             ],
             name: "sdf-mesh",
             pushesIndex: true

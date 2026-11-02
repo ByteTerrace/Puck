@@ -37,6 +37,21 @@ public readonly struct SdfMeshCull {
     /// <summary>Gets the cull that keeps every draw.</summary>
     public static SdfMeshCull None => default;
 
+    // GPU selection's pass controls; KEEP IN SYNC with sdf-mesh-selection.hlsli. The camera here is the unjittered
+    // camera used by the host cull, including NearKeeps, rather than the raster projection's temporal sample.
+    internal void WriteGpu(Span<System.Numerics.Vector4> rows) {
+        rows[0] = new(m_kind, 0f, 0f, 0f);
+        rows[1] = new(m_camera.Position, m_far);
+        rows[2] = new(m_camera.Right, m_camera.TanHalfFieldOfView);
+        rows[3] = new(m_camera.Up, m_camera.AspectRatio);
+        rows[4] = new(m_camera.Forward, m_camera.Near);
+        rows[5] = new(m_camera.FrustumOffset.X, m_camera.FrustumOffset.Y, m_margin, m_reach);
+        rows[6] = new(m_cascade.Position, m_cascade.HalfHeight);
+        rows[7] = new(m_cascade.Right, m_cascade.Near);
+        rows[8] = new(m_cascade.Up, m_cascade.Far);
+        rows[9] = new(m_cascade.Forward, 0f);
+    }
+
     /// <summary>Returns the cull of a view's mesh or glass pass.</summary>
     /// <param name="camera">The view's camera.</param>
     /// <param name="far">The frame's far distance, in world units.</param>

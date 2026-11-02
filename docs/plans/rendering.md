@@ -173,9 +173,32 @@ owns the implemented path. Remaining slices are:
 The [engine job system](open-items.md#engine-job-system) owns frame scheduling
 and recording. The remaining GPU and routed-world investigations are:
 
+R2 extends `SdfMeshOcclusion`'s existing indirect mechanism to opaque, every
+shadow cascade and glass. Its compute kernel selects bounds and mesh levels
+from the shared retained mesh records; a pass uploads only 224 bytes of
+controls. Each pass retains visibility, level and mesh identity per draw on
+the GPU, preserving the 1/1.1 display-pixel band and resetting level history
+when the mesh changes or a settled capture holds the frame. Buffer growth
+copies that history. Opaque occlusion keeps its early/late phases; glass uses
+one. A cascade selects once into entry, solid-exit and thin-exit argument
+phases, recording one counted call per phase. CPU `Choose` and per-draw recording
+are removed. Vulkan's native-count fallback reads the same initialized
+argument slots through `vkCmdDrawIndirect`; `DrawIndex` reads their identities
+without the optional first-instance feature. Hardware observations are
+recorded in the memo's R2 row.
+
+Shared geometry instancing remains a separate extension: the meadow has
+4,215 draws for 288 geometries (14.6 draws per geometry). Sparse visibility,
+per-draw level choice and stable depth-tie ordering require an instance map
+and per-geometry/per-level ranges, rather than changing `instanceCount`
+alone. Preserve draw identity, materials, transforms, carry and clip planes
+through that map, and measure it through this same indirect mechanism. The
+lead's [visibility plan](visibility.md#the-build-order) owns ordered
+compaction and these instance buckets after R2.
+
 - Re-measure RTX 2060 pixel passes at matched clocks before attributing a
   Vulkan/Direct3D 12 gap. Inspect surface and resolve register pressure and
-  occupancy; measure multi-draw indirect against the current draws rather
+  occupancy; measure geometry instancing in R2's indirect records rather
   than repeating the slower one-draw vertex-search experiment.
 - Reopen either unattributed Vulkan device-loss case on recurrence: the
   first-frame fault whose last checkpoint is `glass-clear`, or the fault as

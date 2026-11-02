@@ -731,14 +731,16 @@ system can take, from `dotnet-trace` thread-time samples of the frame thread
   mechanism to placement roots, measure pose packing and draw recording, and
   preserve planted roots, continuous world-phased gusts and independent tip
   flutter (the [visibility plan](visibility.md#v2-instance-updates-proportional-to-change-and-authored-motion-on-the-gpu)'s
-  step V2a). Triangle detail already exists (`SdfWorldPassRecorder.cs:886`);
-  do not infer that triangle LOD is missing. Draw count is the other cost:
-  4,215 draws for 288 unique blade geometries, one draw per blade part. Its
-  cause fix (ordered compaction and (geometry, level) instance buckets on R2's
-  counted indirect path, with every consumer of per-draw identity moved) is
-  the visibility plan's V1, not fewer blades. The meadow is also R1's forcing
-  workload: measure produce's draw-recording share before and after. The
-  controlled-engine-build
+  step V2a). R2 moves raster culling and existing triangle detail into
+  `frame/sdf-mesh-selection.hlsli`, through the same counted indirect path;
+  [R2 observations](engine-job-system.md#r2-observations) holds its measurements.
+  Draw count is the other cost: 4,215 draws for 288 unique blade geometries,
+  one draw per blade part, or 14.6 draws per geometry. Its cause fix (ordered
+  compaction and (geometry, level) instance buckets, with every consumer of
+  per-draw identity moved and depth-tie order preserved) is the visibility
+  plan's V1, beyond R2's constant CPU recording, not fewer blades. The meadow
+  is also R1's forcing workload: measure produce's draw-recording share before
+  and after. The controlled-engine-build
   before/after observations and their machine-load limits are in
   [port lane 9](port-experimental.md#9-meadow-and-foliage).
 - [high] Measure the meadow before ordering the visibility work, in the lead's
@@ -751,6 +753,12 @@ system can take, from `dotnet-trace` thread-time samples of the frame thread
   part at `world.detail 0`, `1` and `2`, on the RTX 2060 and at the Deck's
   resolution; it decides whether V3 and V4 come ahead of V2 there. Every
   frame number taken so far, R2's included, is load-bound and ranks nothing.
+  Include R2's unresolved Direct3D 12 lobby reading (68.78 ms produce against
+  39.25–40.16 ms CPU controls) in that quiet-window trace; [R2 observations](engine-job-system.md#r2-observations)
+  holds the paired counters and GPU pass costs.
+  Include the unmatched final-merge draw-count variance there too: after
+  `5a73e11295`, Vulkan / Direct3D 12 meadow validation reads 2,506 / 26,657
+  draws at high/native settings; its cause is unconfirmed (same observations).
   Owner: the lead.
 - [medium] `SdfMeshPathBake.Dress` rebuilds every draw of every group whenever
   one dynamic slot moved, and for each dynamic group scans `MeshAssetSlots`
@@ -3416,6 +3424,21 @@ ordinary · Next: new content and art on the owner's call.
 ### Agent tooling and skills
 
 Owner: the lead · ordinary · Next: the Monitor hook check.
+
+- After the first settle window: give Antigravity (Gemini Argon) a fair
+  coding trial before deciding its role (the owner's direction: it has so far
+  done research only, where its code citations were unreliable). Two bounded
+  issue fixes from this file, each in its own worktree with a mechanical check:
+  the four duplicate `HeapAllocator` test allocators and `IAllocator`'s untrue
+  documentation (small), and the Superellipsoid's loose far field plus its
+  small-radius CPU/GPU disagreement in both interpreters (medium, with laws
+  shown failing first). Score each objectively, beside comparable Claude and
+  Codex lanes: does it build and pass what it claims (the lead reruns every
+  command); high and medium findings from a Claude and a Codex review; brief
+  adherence (scope, reuse of existing mechanisms, no shared-state git); report
+  honesty (every claimed file:line and result checked); and whether its runs
+  finish headless without stalling. Record the verdict in the orchestration
+  skill's routing table either way.
 
 - The agent-policy hook may not cover Claude Code's `Monitor` tool:
   `.claude/settings.json` matches `Bash|PowerShell`, and whether a Monitor

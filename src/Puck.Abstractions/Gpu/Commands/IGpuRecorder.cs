@@ -110,17 +110,19 @@ public interface IGpuRecorder {
 
     /// <summary>Gets whether the device records <see cref="DrawIndirectCount"/>: always on Direct3D 12, and on Vulkan
     /// when the device enables <c>multiDrawIndirect</c>, <c>drawIndirectFirstInstance</c> and
-    /// <c>VK_KHR_draw_indirect_count</c>. A caller that finds it <see langword="false"/> draws from the host.</summary>
+    /// <c>VK_KHR_draw_indirect_count</c>. Otherwise <see cref="DrawIndirectCount"/> issues fixed records from the same
+    /// GPU-written argument buffer; rejected records have zero vertex and instance counts.</summary>
     bool CanDrawIndirectCount { get; }
 
     /// <summary>Records a counted indirect draw: up to <paramref name="maxDrawCount"/> non-indexed draws whose arguments
     /// the GPU reads from consecutive <see cref="GpuDrawIndirectCommand"/> records of an argument buffer, as many as the
     /// <see langword="uint"/> at <paramref name="countBufferOffset"/> of a count buffer holds. Each record's identity
-    /// reaches the vertex stage as its pushed index's first word plus <c>SV_InstanceID</c>: Direct3D 12 sets that word
-    /// to the identity before each draw and starts instances at zero, and Vulkan starts instances at the record's first
-    /// instance, which the record sets to the identity, leaving the word as last pushed, so the caller pushes zero before
-    /// the call. Both buffers reach <see cref="GpuAccess.IndirectCommandRead"/> at <see cref="GpuStage.DrawIndirect"/>
-    /// through the caller's <see cref="TransitionBuffer"/>.</summary>
+    /// reaches the vertex stage through root constants on Direct3D 12. Vulkan pushes the first record's index, and the
+    /// vertex stage reads the argument buffer at that base plus <c>DrawIndex</c>. When native counting is unavailable,
+    /// Vulkan issues every initialized record up to <paramref name="maxDrawCount"/>, one native call per record;
+    /// rejected records must be empty. Arguments reach indirect-command and vertex-shader read access through the
+    /// caller's <see cref="TransitionBuffer"/>; counts reach indirect-command read access. No host selection or readback
+    /// is involved.</summary>
     /// <param name="commandBufferHandle">The command buffer being recorded, inside a render pass.</param>
     /// <param name="pipelineLayoutHandle">The bound graphics pipeline's layout, whose pushed index the identity is
     /// written into.</param>
@@ -129,7 +131,6 @@ public interface IGpuRecorder {
     /// <param name="countBufferHandle">The count buffer, created with <see cref="GpuBufferUsage.Indirect"/>.</param>
     /// <param name="countBufferOffset">The byte offset of the count, a multiple of four.</param>
     /// <param name="maxDrawCount">The most records drawn, whatever the count holds.</param>
-    /// <exception cref="NotSupportedException">The device does not record it (<see cref="CanDrawIndirectCount"/>).</exception>
     void DrawIndirectCount(nint commandBufferHandle, nint pipelineLayoutHandle, nint argumentBufferHandle, ulong argumentBufferOffset, nint countBufferHandle, ulong countBufferOffset, uint maxDrawCount);
     /// <summary>Records a zero clear of a color image in <see cref="GpuImageLayout.General"/>.</summary>
     /// <param name="commandBufferHandle">The command buffer being recorded.</param>

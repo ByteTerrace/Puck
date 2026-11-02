@@ -316,13 +316,16 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_MESH_CARRY_TRANSLATION_WORD", value: SdfMeshRecord.CarryTranslationWord);
         declarations.Count(name: "SDF_MESH_CARRY_SCALE_WORD", value: SdfMeshRecord.CarryScaleWord);
         declarations.Count(name: "SDF_MESH_CLIP_PLANE_WORD", value: SdfMeshRecord.ClipPlaneWord);
-        declarations.Count(name: "SDF_MESH_LEVEL_TRIANGLE_WORD", value: SdfMeshRecord.LevelTriangleWord);
+        declarations.Count(name: "SDF_MESH_LEVEL_TABLE_WORD", value: SdfMeshRecord.LevelTableWord);
+        declarations.Count(name: "SDF_MESH_SELECTION_WORD", value: SdfMeshRecord.SelectionWord);
         declarations.Count(name: "SDF_MESH_VERTEX_WORDS", value: SdfMeshRecord.VertexWords);
         declarations.Count(name: "SDF_MESH_MEMBER_WORDS", value: SdfMeshRecord.MemberWords);
         declarations.Bits(name: "SDF_MESH_NORMALS_FLAG", value: SdfMeshRecord.NormalsFlag);
         declarations.Bits(name: "SDF_MESH_MATERIALS_FLAG", value: SdfMeshRecord.MaterialsFlag);
         declarations.Bits(name: "SDF_MESH_SKIN_FLAG", value: SdfMeshRecord.SkinFlag);
         declarations.Count(name: "SDF_MESH_LEVEL_SHIFT", value: SdfKernelInterfaces.MeshLevelShift);
+        declarations.Count(name: "SDF_MESH_SELECTION_GROUP_SIZE", value: SdfKernelInterfaces.MeshSelectionGroupSize);
+        declarations.Count(name: "SDF_MESH_SELECTION_GROUPS_PER_ROW", value: SdfKernelInterfaces.MeshSelectionGroupsPerRow);
         declarations.Section(title: "The irradiance volume's probe record and read (SdfMeshIrradianceProbe).");
         declarations.Count(name: "SDF_MESH_IRRADIANCE_PROBE_WORDS", value: SdfMeshIrradianceProbe.ProbeWords);
         declarations.Count(name: "SDF_MESH_IRRADIANCE_LEVELS", value: SdfMeshIrradianceProbe.Levels);
