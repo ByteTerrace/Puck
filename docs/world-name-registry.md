@@ -2962,7 +2962,6 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `screens[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `screens[].magazine.entries[][producer].id` | `WorldScreenSource.Producer.Id` | an image producer id |
 | `screens[].magazine.entries[][probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
-| `screenMaterials[].id` | `WorldScreenMaterial.Id` | a screen material id |
 | `cameras[].name` | `WorldCamera.Name` | a camera name |
 | `cameras[].rig.name` | `WorldCameraProgram.Name` | a camera program name |
 | `cameras[].rig.operations[][path].curve` | `WorldCameraProgramOp.Path.Curve` | a curve name |
