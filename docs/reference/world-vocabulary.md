@@ -381,6 +381,9 @@ shape Type ["name"] { … }
 | `id:` | property | number | — | `id` | `$index` | The shape's stable identity inside its document. |
 | `blend:` | property | name | — | `blend` | `"Union"` | How the shape combines with what is already there. |
 | `smooth:` | property | fixed | — | `smooth` | `0` | The blend's smoothing radius. |
+| `group:` | property | number | — | `group` | `0` | The pooled blend group the shape bakes in. |
+| `material:` | property | number | — | `material` | `0` | The palette slot the shape is painted from. |
+| `position:` | property | value | — | `position` | `[0, 0, 0]` | The shape's position in its creation's frame, in metres; a binding reference in its place never elides. |
 | `rotation:` | property | value | — | `rotation` | `[0, 0, 0, 1]` | The shape's orientation quaternion; a binding reference in its place never elides. |
 | `scale:` | property | value | — | `scale` | `[1, 1, 1]` | The shape's per-axis scale. |
 
@@ -431,15 +434,15 @@ Printed back as `state`; otherwise the generic value path, which carries every m
 ### `test`
 
 ```puck
-test "name" [with module(arguments)] { given { row = literal | world { row = literal … } … } when { ticks n | seatN [refused ["text"]]: command | world { seatN: command … } … } expect { gate | world { gate … } … } }
+test "name" [with module(arguments)] { given { row = literal | world { row = literal … } | for item in [ … ] { … } … } when { ticks n | seatN [refused ["text"]]: command | world { seatN: command … } | for item in [ … ] { … } | repeat n { … } … } expect { gate | world { gate … } … } }
 ```
 
 | Member | Written | Kind | Admitted on | Lowers to | Default | Means |
 |---|---|---|---|---|---|---|
 | `name` (required) | header | text | — | the generated test world's file name, its verdict row names and its rule names | — | The test's name, which is what a failing verdict is addressed by. |
 | `subject` | header | value | — | the whole generated test world: the named module expanded with these arguments, standing alone rather than inside the enclosing document | — | The module the test is about, written `with module(arguments)`; omitted for a test whose subject is the world it stands in. |
-| `given` | body | cells | — | the generated test world's own `state.world[].cells[].value`, kind-checked against the row each names | — | The cells the generated test world boots at, one `row = literal` or `row[key] = literal` per line. |
-| `when` | body | statements | — | the generated test world's `schedule` section: one row per seat step at the tick the preceding `ticks` reached, a `refused` step carrying `expect: Refused` and its `refusal` text, and the export tick the grid ends on | — | The tick grid and the commands along it: `ticks n` carries the cursor, `seatN: <command line>` submits one admitted step or read verb at it, and `seatN refused "text": <command line>` claims the world refuses it, the recorded refusal containing the text when one is written. |
+| `given` | body | cells | — | the generated test world's own `state.world[].cells[].value`, kind-checked against the row each names | — | The cells the generated test world boots at, one `row = literal` or `row[key] = literal` per line; `for item in [ … ] { row[item] = literal }` writes its lines once per element, the bound names read in each key and value, as the lines written out would. |
+| `when` | body | statements | — | the generated test world's `schedule` section: one row per seat step at the tick the preceding `ticks` reached, a `refused` step carrying `expect: Refused` and its `refusal` text, and the export tick the grid ends on | — | The tick grid and the commands along it: `ticks n` carries the cursor, `seatN: <command line>` submits one admitted step or read verb at it, and `seatN refused "text": <command line>` claims the world refuses it, the recorded refusal containing the text when one is written. `repeat n { … }` runs its steps n times and `for item in [ … ] { … }` once per element, substituting `{item}` in each command line (`{{` and `}}` are literal braces), as the steps written out would. |
 | `expect` (required) | body | statements | — | one generated `state.world[]` verdict row and one generated `rules[]` entry per line: the rule fires on the last reached tick alone, and its effect writes pass or fail from the expectation beside the values it read | — | What the test claims, one rule-gate expression per line. |
 | `world block` | body | statements | — | one generated document per world of the composition, its entry world carrying the `schedule` section whose `instances` arm the rest and whose rows address them by name; a far world's own verdict rule fires one tick before the booted world's export tick, which is where that world stands at the shared export step | — | Inside `given`, `when` or `expect` at the root of a source that emits several worlds: `<world> { … }` addresses one of them by its own name. There is no default world, so every line of such a test stands inside one; `ticks` stays outside, since one grid carries the whole composed run. |
 

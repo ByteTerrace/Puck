@@ -1,0 +1,23 @@
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+state {
+  world {
+    table board {
+      a = 0
+      b = 0
+      c = 0
+    }
+  }
+}
+
+
+test "cells" {
+  given {
+    board[a] = 2
+    board[c] = 2
+  }
+  expect {
+    board.a == 2
+  }
+}

@@ -63,6 +63,33 @@ public abstract record StatementNode(int Offset = 0, int Length = 0, int Line = 
     Length,
     Line,
     Column
+) {
+    /// <summary>Gets the <c>allow</c> lines written directly before this statement, each acknowledging one
+    /// diagnostic the author means to keep. They cover this statement's span and nothing else, never reach the
+    /// lowered document, and change nothing a source means; only the diagnostics a compile reports read them
+    /// (<see cref="Diagnostics.SourceAcknowledgements"/>).</summary>
+    public IReadOnlyList<AllowNode> Allows { get; init; } = [];
+}
+/// <summary>One acknowledged diagnostic: <c>allow PUCK122 "why"</c>, written on the line before the row, <c>let</c>
+/// or other statement it covers.</summary>
+/// <param name="Code">The diagnostic code acknowledged (<see cref="Diagnostics.PuckDiagnosticCodes"/>).</param>
+/// <param name="Reason">Why the author keeps what the diagnostic reports.</param>
+/// <param name="Offset">The character offset within the source text.</param>
+/// <param name="Length">The character length of the node span.</param>
+/// <param name="Line">The 1-based line number in source text.</param>
+/// <param name="Column">The 1-based column number in source text.</param>
+public sealed record AllowNode(
+    string Code,
+    string Reason,
+    int Offset = 0,
+    int Length = 0,
+    int Line = 1,
+    int Column = 1
+) : SyntaxNode(
+    Offset,
+    Length,
+    Line,
+    Column
 );
 /// <summary>An expression used as a statement: e.g., a template invocation or call expression.</summary>
 /// <param name="Expression">The evaluated expression.</param>

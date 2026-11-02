@@ -1,0 +1,21 @@
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+kits [
+  {
+    name: "walker"
+    bodyMotionProgram: "walk"
+    collider: capsule(endpoint: [0, 1.1, 0], radius: 0.3)
+    motion {
+      holds [
+        {
+          name: "ground"
+          bond: Surface
+          hold: Gravity
+          forward: Heading
+          reach: 1.2
+        }
+      ]
+    }
+  }
+]

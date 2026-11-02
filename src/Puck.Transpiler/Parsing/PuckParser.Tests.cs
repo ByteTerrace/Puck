@@ -184,10 +184,31 @@ public static partial class PuckParser {
             throw CreateException(context: context, message: "Expected '{' starting a test's 'given' block");
         }
 
+        var items = ParseTestGivenItems(context: context, diagnostics: diagnostics);
+
+        if (!TryConsume(c: '}', context: context)) {
+            throw CreateException(context: context, message: "Expected '}' closing a test's 'given' block");
+        }
+
+        return new TestGivenBlockNode(
+            Cells: items,
+            Column: col,
+            Length: (cursor.Offset - startOffset),
+            Line: line,
+            Offset: startOffset
+        );
+    }
+    // The entries of a `given` block or of a `for` inside one, up to the closing brace, which is left unconsumed.
+    private static List<TestGivenItemNode> ParseTestGivenItems(ParseContext context, DiagnosticBag? diagnostics) {
+        var cursor = context.Scanner.Cursor;
         var items = new List<TestGivenItemNode>();
 
         SkipWhiteSpace(context: context);
         while (!cursor.Eof && (cursor.Current != '}')) {
+            var itemStart = cursor.Offset;
+
+            var (itemLine, itemColumn) = GetLineAndColumn(buffer: context.Scanner.Buffer, offset: itemStart);
+
             if (TryMatchTestWorldHeader(
                 context: context,
                 span: out var header,
@@ -216,6 +237,38 @@ public static partial class PuckParser {
                 continue;
             }
 
+            if (TryMatchStatementKeyword(context: context, keyword: "for")) {
+                var (item, index, sequence) = ParseForHead(context: context);
+                var body = ParseTestGivenItems(context: context, diagnostics: diagnostics);
+
+                if (!TryConsume(c: '}', context: context)) {
+                    throw CreateException(context: context, message: "Expected '}' closing a 'for' inside a test's 'given' block");
+                }
+                items.Add(item: new TestGivenForNode(Body: body, Column: itemColumn, Index: index, Item: item, Length: (cursor.Offset - itemStart), Line: itemLine, Offset: itemStart, Sequence: sequence));
+                ConsumeSeparator(context: context);
+                SkipWhiteSpace(context: context);
+
+                continue;
+            }
+
+            if (TryMatchStatementKeyword(context: context, keyword: "repeat")) {
+                diagnostics?.ReportError(
+                    code: PuckDiagnosticCodes.TestStepInadmissible,
+                    message: "'repeat' inside a test's given block has nothing to repeat — a cell boots at one value however often it is written; write a cell per element with 'for item in [...] { row[item] = literal }'",
+                    span: new SourceSpan(itemStart, (cursor.Offset - itemStart), itemLine, itemColumn)
+                );
+                _ = ParseExpression(context: context);
+                SkipWhiteSpace(context: context);
+                if (TryConsume(c: '{', context: context)) {
+                    _ = ParseTestGivenItems(context: context, diagnostics: null);
+                    _ = TryConsume(c: '}', context: context);
+                }
+                ConsumeSeparator(context: context);
+                SkipWhiteSpace(context: context);
+
+                continue;
+            }
+
             if (ParseTestGivenCell(
                 context: context,
                 diagnostics: diagnostics
@@ -224,17 +277,7 @@ public static partial class PuckParser {
             }
         }
 
-        if (!TryConsume(c: '}', context: context)) {
-            throw CreateException(context: context, message: "Expected '}' closing a test's 'given' block");
-        }
-
-        return new TestGivenBlockNode(
-            Cells: items,
-            Column: col,
-            Length: (cursor.Offset - startOffset),
-            Line: line,
-            Offset: startOffset
-        );
+        return items;
     }
     // One line of a `when` block. `ticks` is the grid's own cursor and belongs to the whole run, so it is admitted
     // only outside a world block.
@@ -390,10 +433,31 @@ public static partial class PuckParser {
             throw CreateException(context: context, message: "Expected '{' starting a test's 'when' block");
         }
 
+        var steps = ParseTestWhenItems(context: context, diagnostics: diagnostics);
+
+        if (!TryConsume(c: '}', context: context)) {
+            throw CreateException(context: context, message: "Expected '}' closing a test's 'when' block");
+        }
+
+        return new TestWhenBlockNode(
+            Column: col,
+            Length: (cursor.Offset - startOffset),
+            Line: line,
+            Offset: startOffset,
+            Steps: steps
+        );
+    }
+    // The steps of a `when` block or of a loop inside one, up to the closing brace, which is left unconsumed.
+    private static List<TestStepNode> ParseTestWhenItems(ParseContext context, DiagnosticBag? diagnostics) {
+        var cursor = context.Scanner.Cursor;
         var steps = new List<TestStepNode>();
 
         SkipWhiteSpace(context: context);
         while (!cursor.Eof && (cursor.Current != '}')) {
+            var itemStart = cursor.Offset;
+
+            var (itemLine, itemColumn) = GetLineAndColumn(buffer: context.Scanner.Buffer, offset: itemStart);
+
             if (TryMatchTestWorldHeader(
                 context: context,
                 span: out var header,
@@ -422,6 +486,33 @@ public static partial class PuckParser {
                 continue;
             }
 
+            string? item = null;
+            string? index = null;
+            ExpressionNode? sequence = null;
+
+            if (TryMatchStatementKeyword(context: context, keyword: "for")) {
+                (item, index, sequence) = ParseForHead(context: context);
+            } else if (TryMatchStatementKeyword(context: context, keyword: "repeat")) {
+                sequence = ParseExpression(context: context);
+                SkipWhiteSpace(context: context);
+                if (!TryConsume(c: '{', context: context)) {
+                    throw CreateException(context: context, message: "Expected '{' starting a 'repeat' body inside a test's 'when' block");
+                }
+            }
+
+            if (sequence is not null) {
+                var body = ParseTestWhenItems(context: context, diagnostics: diagnostics);
+
+                if (!TryConsume(c: '}', context: context)) {
+                    throw CreateException(context: context, message: $"Expected '}}' closing a '{((item is null) ? "repeat" : "for")}' inside a test's 'when' block");
+                }
+                steps.Add(item: new TestWhenLoopNode(Body: body, Column: itemColumn, Index: index, Item: item, Length: (cursor.Offset - itemStart), Line: itemLine, Offset: itemStart, Sequence: sequence));
+                ConsumeSeparator(context: context);
+                SkipWhiteSpace(context: context);
+
+                continue;
+            }
+
             if (ParseTestWhenStep(
                 context: context,
                 diagnostics: diagnostics,
@@ -431,17 +522,7 @@ public static partial class PuckParser {
             }
         }
 
-        if (!TryConsume(c: '}', context: context)) {
-            throw CreateException(context: context, message: "Expected '}' closing a test's 'when' block");
-        }
-
-        return new TestWhenBlockNode(
-            Column: col,
-            Length: (cursor.Offset - startOffset),
-            Line: line,
-            Offset: startOffset,
-            Steps: steps
-        );
+        return steps;
     }
     private static TestExpectationNode ParseTestExpectation(ParseContext context, DiagnosticBag? diagnostics) {
         var cursor = context.Scanner.Cursor;

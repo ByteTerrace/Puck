@@ -73,6 +73,7 @@ public static partial class WorldDocumentEmitter {
                 );
             }
         }
+        WorldDocumentRowDefaults.CanonicalizeRotation(row: shapeObj);
 
         shapesArr.AppendNode(item: shapeObj);
 

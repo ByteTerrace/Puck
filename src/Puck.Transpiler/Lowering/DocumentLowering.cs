@@ -1590,7 +1590,9 @@ public static partial class DocumentLowering {
     /// argument bindings are live in, for a section whose rows a dedicated dispatcher reads.</summary>
     /// <param name="call">The invocation as written.</param>
     /// <param name="scope">The invoking scope.</param>
-    /// <returns>Each produced statement and the scope to lower it under; nothing when no template bears the name.</returns>
+    /// <returns>Each produced statement and the scope to lower it under; nothing when no template bears the name. While
+    /// the caller lowers a produced statement, the source map registers under the template's defining source, as it
+    /// does inside <see cref="ExpandTemplate"/>, so a row an imported template produced reads against that file.</returns>
     public static IEnumerable<(StatementNode Statement, DocumentScope Scope)> ExpandTemplateStatements(CallExpressionNode call, DocumentScope scope) {
         ArgumentNullException.ThrowIfNull(call);
         ArgumentNullException.ThrowIfNull(scope);
@@ -1604,7 +1606,15 @@ public static partial class DocumentLowering {
             sink: (statement, _, invocationScope) => captured.Add(item: (statement, invocationScope))
         );
 
-        return captured;
+        return Produced(captured: captured, definitionPath: (scope.Templates.TryGetValue(key: call.Name, value: out var template) ? template.DefinitionPath : null), sourceMap: scope.SourceMap);
+
+        static IEnumerable<(StatementNode Statement, DocumentScope Scope)> Produced(List<(StatementNode, DocumentScope)> captured, string? definitionPath, SourceMap? sourceMap) {
+            using var origin = sourceMap?.PushOrigin(sourcePath: definitionPath);
+
+            foreach (var produced in captured) {
+                yield return produced;
+            }
+        }
     }
     /// <summary>Reads a node as a truth value: the condition a conditional branches on and `filter` keeps by. A boolean is
     /// itself; a number is true when non-zero, which is how a comparison's 1/0 reads; a string is true when non-empty;
