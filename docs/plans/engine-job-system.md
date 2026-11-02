@@ -778,10 +778,20 @@ shadow variation, including nearly black interiors in one unchanged CPU run;
 no geometry mismatch has been identified. This is not an image-equivalence
 verdict. Tick-pinned comparisons are pending. The initial cold/incomplete
 baseline legs and the stopped Direct3D 12 validation attempt support no pass
-claim. Final Direct3D 12 validation and tick-pinned image comparisons remain
-open behind the shared GPU lease. Release builds for both backends pass; input allocation
+claim. Matched Direct3D 12 performance and image controls remain open behind
+the shared GPU lease. Release builds for both backends pass; input allocation
 (two fixtures) and granaries (five) pass `--reproduce` after the integration
 merge. Scratch transcripts and images carry the `r2-cull-` prefix.
+
+Full Direct3D 12 GPU-based validation subsequently passes on integration
+merge `c72a9b3a3c` and the current debug package. The layer reports GPU-based
+validation with state tracking and synchronized queue validation live; bakes
+settle at tick 2,289, and lobby / rim / gallery / meadow read 6,749 / 470 /
+7,892 / 11,967 root draws. No validation warning or error is reported. The
+leg takes about 576 seconds, including a slow native resolve pipeline bind
+and cache misses. Its transcript is `r2-cull-gpu-directx-20`. The following
+CPU performance control exceeded its shorter bake wait with two jobs still
+pending and is excluded; it does not replace the matched performance runs.
 
 The subsequent Vulkan comparison freezes the same debug documents and uses
 matched CPU and GPU controls: both include the integration's memory and camera
