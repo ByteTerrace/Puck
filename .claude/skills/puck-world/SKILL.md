@@ -510,6 +510,12 @@ dotnet run --project src/Puck.World -c Release -- --world worlds/debug --devices
 
 ### An agent's World opens no physical device
 
+A World the owner plays in boots from the main checkout (`puck_world_start` with
+`checkout` set to it, synced to the integration tip), never a worktree. Local,
+uncommitted content lives only there, such as the commercial ROMs under `roms/`
+that the devices' `contentFolders` name. A worktree boot falls back to the
+committed test cartridges.
+
 The owner's ruling: any World an agent boots passes `--devices none`; a World the
 owner asked to play in passes `--devices all` explicitly, and the
 `world-devices` hook refuses a boot that names neither. Without the flag
