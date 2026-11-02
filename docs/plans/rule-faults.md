@@ -1,34 +1,46 @@
-# Rule faults: one outcome, one interpreter, one commit
+# Rule faults: one outcome, one interpreter, one journal
 
-A design review of rule-fault propagation after four review rounds, and the
-design that closes the class by construction. The contract it serves is in
+A design review of rule-fault propagation after four review rounds, the design
+that closes the class, and a plain account of what each part of it is enforced
+by and where its guarantee stops. The contract it serves is in
 [the register](../decisions/state-and-language.md#expression-semantics): a
 fault in an evaluated gate conjunct closes the whole gate, under negation and
 disjunction too; a fault is not a false, so anything that remembers a verdict
 keeps the last one it read successfully; an effect that faults refuses the
-whole firing. Read-only review: every claim below cites the code it rests on at
-the integration tip this lane merged (`lead/fundamentals`).
+whole firing. Read-only review: every claim below cites the code it rests on
+at the integration tip this lane merged. A design review of the first draft
+(twelve findings) is answered in [the last section](#the-design-review-answered).
+
+Three kinds of enforcement are named throughout, and nothing here claims a
+stronger one than it has:
+
+- **Structure**: the invalid state has no representation (no field, no case,
+  no call site), so the code that would produce it does not compile or does
+  not exist.
+- **One door**: the state is written by exactly one method, and every other
+  path to it is deleted; a grep for the store's writers is the check.
+- **An analyzer**: a `puck scan` rule over the source refuses a spelling the
+  structure cannot exclude; it runs in the landing bar, not in the compiler.
+
+Where none of the three applies, the plan says "runtime refusal" or "review",
+and means it.
 
 ## The verdict on the approach
 
 The fault register on `ArenaScratch` (`src/Puck.State/Arena/ArenaScratch.cs:24-80`)
-is the right *contract* (one place a fault lands, read by the one caller that
-decides) built on the wrong *mechanism*: an out-of-band sticky flag beside the
-value, on an object that is not the evaluation. It cannot be closed, for four
+is the right contract (one place a fault lands, read by the one caller that
+decides) on the wrong mechanism: an out-of-band sticky flag beside the value,
+on an object that is not the evaluation. It cannot be closed, for four
 structural reasons, each of which the rounds found one instance of:
 
 1. **Two channels that must agree by convention.** `RuleExpressions.Run`
    reports failure through a `bool` return plus `out ExpressionFault fault`
    (`src/Puck.State.Rules/RuleExpressions.cs:90-91`), and `TryEvaluate` raises
    into the register only when that out-parameter says `Domain` or `Forever`
-   (`:44-45`). Every failure exit must leave the right value in `fault`. A
-   nested `Run` or `TryFold` is handed the caller's own `fault` variable
-   (`:215`, `:250`, `:504`); a nested success writes `None` into it; a later
-   arithmetic failure returns `false` without reassigning (`:437`, `:445`,
-   `:548`). Round 3's first finding is exactly this: the chokepoint depends on
-   about twenty failure exits each assigning the right out-parameter. A flag
-   beside a value is the IEEE 754 status-flag protocol, whose known hazard is
-   precisely that an intermediate computation clears or fails to set the flag.
+   (`:44-45`). A nested `Run` or `TryFold` is handed the caller's own `fault`
+   variable (`:215`, `:250`, `:504`); a nested success writes `None` into it;
+   a later arithmetic failure returns `false` without reassigning (`:437`,
+   `:445`, `:548`). Round 3's first finding is exactly this.
 2. **The register lives on a replaceable object.** `IStateReader.Scratch`
    resolves `Arena.Scratch` (`src/Puck.State/IStateReader.cs:68`);
    `WorldRuleHost.Arena` resolves `m_host.Arena` (`src/Puck.World.Server/WorldRuleHost.cs:143`),
@@ -37,89 +49,140 @@ structural reasons, each of which the rounds found one instance of:
    in the middle of `FireEffects`, which captured `scratch` once
    (`src/Puck.State.Rules/Evaluation/RuleEvaluator.Effects.cs:70`) and opens
    its delivery scopes on the captured object (`:140`) while every raise
-   resolves the new one. Fault state is per evaluation; the arena is per
-   document. The round-3 throw is the register's lifetime, not an API misuse.
+   resolves the new one.
 3. **Deciding places must remember to read it.** `RuleEvaluator.cs:575` and
    `:636`, `WorldRuleHost.Decisions.cs:214` and `:257`, `RuleEvaluation.cs:133`
    and `:179` each poll `RaisedFault`; `GateOpen(faulted: out _)` discards its
    fault at `WorldRuleHost.Decisions.cs:190`, `:195`,
    `WorldRuleHost.DecisionNeighbors.cs:98`, `:324` and `RuleEvaluator.Groups.cs:100`
-   on the strength of an enclosing scope. "Every caller remembers" moved up
-   one level; it did not go away.
+   on the strength of an enclosing scope.
 4. **A read-side register cannot order writes.** The Edge latch is written
    before the firing (`RuleEvaluator.cs:585` then `:613`), a decision's choice,
    timers and candidate before its effects (`WorldRuleHost.Decisions.cs:320-334`
    then `:342`, `:366`), and an arm is evaluated twice, once in preflight on
    the old arena and again in delivery on the new one
    (`RuleEvaluator.Effects.cs:82`, `:145`; `WorldRuleHost.Arms.cs:263-277`).
-   Round 3's last three findings are all "decided state installed before the
-   verdict was in". No fault channel fixes that; only a firing whose every
-   state transition waits for one verdict does.
 
-So the approach is fundamentally not closed, and the fix is not a fifth
-patching round. Three things change, each removing a whole class rather than an
-instance: the fault travels **in the value**, so no out-parameter or register
-can disagree with it; **one interpreter** produces every evaluated value and
-operands cannot read state except through the addresses it resolved, so no
-operand or host can turn a faulted address into a number; and a firing is
-**transactional over everything it decides**, so the latch, the choice, the
-arena scope and the arms commit through one door after one verdict, or not at
-all.
+So the approach is not closed and a fifth patching round would not close it.
+Three things change, each removing a mechanism rather than an instance: the
+fault travels **in the value**, so no out-parameter or register can disagree
+with it; **one interpreter** produces every evaluated value and resolves every
+address before an operand reads through it, with the addresses lowered into
+the program so they have no second evaluator; and everything a firing decides
+is **journaled in the one arena journal**, so a rewind at any nesting depth
+restores the latch and the decision's choice with the cells, and the firing's
+verdict is read once by one door.
 
 ## The design
 
 ### The invariant
 
 > Every evaluation of authored text yields an `Outcome` whose fault is a case
-> of the value, not a flag beside it; the only code that produces an `Outcome`
-> from tokens is `RuleExpressions.Evaluate`; the only code that turns a set of
-> outcomes into installed simulation state is `RuleEvaluator.Commit`, which
-> installs nothing when any outcome in the firing faulted.
+> of the value; the only code that produces an `Outcome` from tokens is the
+> interpreter; every store a firing changes is written through the arena
+> journal, so one rewind undoes all of it; and the firing's verdict is read by
+> one door, which commits the journal scope only when no outcome in the firing
+> faulted.
 
-What enforces each clause:
-
-| Clause | Enforcement |
-|---|---|
-| A fault is a case of the value | The shape of `Outcome`, `Fact`, `Resolved<T>` and `Verdict`: no `Value` property; the number is reachable only through `TryFinite(out long)`, which answers `false` for `Absent`, `Forever` and `Faulted`. There is no API that reads a faulted value as a number, so the compiler refuses the code that would. |
-| No nested evaluation can erase a fault | `Run` returns its `Outcome`; a nested call's outcome is a local the caller combines. There is no shared `out` variable. The combining rule is total and absorbing (below), so a fault in any operand is the result. |
-| Only one interpreter evaluates tokens | `RuleExpressions.Evaluate(ref EvaluationFrame frame, …)` takes a `ref struct` frame only `RuleEvaluator` constructs. Host arms, operands and world code hold no frame, so they cannot call it; the compiler refuses the call. The compiled form inlines every dynamic key, live row index and ring age into the program it addresses, so those expressions have no evaluator but the one loop. |
-| Operands cannot read through a faulted address | The interpreter resolves an operand's declared addresses before calling it and passes `ReadOnlySpan<ResolvedKey>` whose cases are `Named(key)` and `Nothing`; `Faulted` never reaches an operand because the interpreter already returned `Outcome.Faulted` for the token. |
-| One commit door | `RuleLatch.Held`, `DecisionBinding`, the arena scope and the arm queue are written only by `RuleEvaluator.Commit(in Proposal)`; the proposal is produced by the read phase and carries a `Verdict`. The stores' mutators are `internal` to the evaluator's commit path. A proposal whose verdict is `Faulted` has no `Fires`/`Idle` case to install, so the install code does not type-check against it. |
-| Nothing discards an outcome | A `puck scan --only outcomes` analyzer (`src/Puck.Cli.Source/Scan/Analyzers/`, beside `LockAnalyzer`) refuses an expression statement or `_ =` discard whose type is `Outcome`, `Fact`, `Resolved<T>`, `Verdict` or `RuleOutcome`. This is the outer fence, the same kind of check as `IVT001` and `PUCKARCH00n` in `build/PuckBuildTasks.cs`; the inner fences above make the hot paths unable to need it. |
-
-Where the guarantee stops is stated at the end of this section.
+| Clause | Enforced by | Where it stops |
+|---|---|---|
+| A fault is a case of the value | Structure: `Outcome` and `Resolved<T>` are non-positional structs with private fields; the number or key is reachable only through `TryFinite(out long)` / `TryNamed(out T)`; `default` is the faulted case. | A caller can call `TryFinite` and ignore its `false`. The analyzer refuses an unconsumed `TryFinite`/`TryNamed` result (`OUTCOME002`); inside the interpreter and the door there is no such call, because they switch on the case. |
+| No nested evaluation can erase a fault | Structure: `Run` returns its `Outcome`; a nested call's outcome is a local the caller combines by a total rule. No shared `out` variable exists. | None: the mechanism is gone. A wrong *finite* answer from a correct evaluation is a logic defect, not a lost fault. |
+| Only the interpreter evaluates tokens | One door plus structure: `RuleExpressions.Evaluate` takes a `ref EvaluationFrame`, a `ref struct` with no public constructor; `RuleEvaluator` constructs it. Dynamic keys, live row indices, ring ages and pattern letters are tokens of the enclosing program, so they have no evaluator of their own to lose a fault in. | `default(EvaluationFrame)` is forgeable; `Evaluate` refuses a frame with no reader at runtime (a throw, a defect). `EvaluateDetached` exists for the closed list of detached consumers below; a new caller of it is an analyzer finding (`OUTCOME003`) until it is added to the list. |
+| Operands cannot read through a faulted address | Structure: the interpreter resolves every declared address first and passes `ReadOnlySpan<ResolvedKey>` whose cases are `Named` and `Nothing`; `Faulted` returned from the token before the operand ran. | An operand still receives the `IStateReader` and could read the arena under a key of its own making. The analyzer refuses an `IRuleOperand` holding a `CompiledCellRef`, `LiveRow` or `CompiledExpressionToken[]` field (`OUTCOME004`), so the only addresses an operand has are the ones it declared; a hand-written arena read with a literal key is review territory and is not a fault path. |
+| Everything a firing decides rewinds with the firing | Structure: the latch's held bits, the decision bindings and the group progress write their previous value into the arena journal through one participant interface before they change; `StateArena.Rewind(mark)` restores them with the cells at any nesting depth. | Writes outside any scope (checkpoint restore, scoped-replay restore, sweep removal) are not journaled: they run between ticks under the authority gate with no scope open, and the journal refuses a participant record when no scope is open (runtime refusal). |
+| One door reads the verdict | One door: `RuleEvaluator.Commit(ref Proposal)` is the only caller of `CommitStateTransaction` and `RewindStateTransaction` for a firing; `Proposal.Decision` is one four-case enum, so "faulted and fires" has no representation. | Code after the arena commit (document install, input resynchronisation, deliveries) cannot be rewound; see [the install boundary](#the-install-boundary). |
+| Nothing drops an outcome | Analyzer (`OUTCOME001`): an expression statement or discard of `Outcome`, `Resolved<T>`, `Verdict` or `RuleOutcome`. | A detached consumer that handles `Faulted` wrongly is a logic defect the analyzer cannot see; the closed list below names each one's `Faulted` arm. |
 
 ### The shapes
 
 ```csharp
-public enum FaultCase : byte { Finite, Absent, Forever, Faulted }
+public enum FaultCase : byte { Faulted = 0, Finite, Absent, Forever }
 
-// What one evaluation answered. 16 bytes; no Value accessor.
-public readonly record struct Outcome(long Raw, FaultCase Case, ExpressionFault Fault) {
+/// What one evaluation answered. 16 bytes. default(Outcome) is Faulted(Domain).
+public readonly struct Outcome {
+    private readonly long m_raw;
+    private readonly FaultCase m_case;
+    private readonly ExpressionFault m_fault;   // Domain or Forever when Faulted
     public static Outcome Finite(long raw);
-    public static Outcome Absent;                       // a value, answered by isAbsent and ??
-    public static Outcome Forever;                      // a value a comparison reads as +inf; arithmetic faults on it
-    public static Outcome Faulted(ExpressionFault why); // Domain only, today
+    public static readonly Outcome Absent;
+    public static readonly Outcome Forever;
+    public static Outcome Faulted(ExpressionFault why);
+    public FaultCase Case { get; }
+    public ExpressionFault Fault { get; }       // None unless Faulted
     public bool TryFinite(out long raw);
-    public bool IsFaulted => Case == FaultCase.Faulted;
 }
 
-// What one operand read. Fact is Outcome plus the encoding; today's RuleFact with its two bools folded into Case.
-public readonly record struct Fact(Outcome Outcome, CellKind Kind);
+/// What one operand read: an Outcome in a cell encoding. Replaces RuleFact.
+public readonly struct Fact { public Outcome Outcome { get; } public CellKind Kind { get; } }
 
-// What an address named. Replaces KeyNaming and every (CellKey, out KeyNaming) pair.
-public readonly record struct Resolved<T>(T Value, FaultCase Case) { public bool TryNamed(out T value); }
+/// What an address named. Replaces KeyNaming and every (CellKey, out KeyNaming) pair. default is Faulted.
+public readonly struct Resolved<T> {
+    public FaultCase Case { get; }                 // Named is spelled Finite; Nothing is spelled Absent
+    public bool TryNamed(out T value);
+}
 
-// What a gate, a rule, a decision or a group trigger decided. Replaces every (bool, out bool faulted) pair.
-public enum Verdict : byte { Closed, Open, Faulted }
+/// What the interpreter hands an operand: Named(key) or Nothing. There is no Faulted case to receive.
+public readonly record struct ResolvedKey(CellKey Key, bool Named);
+
+/// What a gate decided. Replaces every (bool, out bool faulted) pair.
+public enum Verdict : byte { Faulted = 0, Closed, Open }
+
+/// What a firing decided, read by the one door. There is no (Faulted, fires) combination.
+public enum FiringDecision : byte { Faulted = 0, Closed, Held, Fires }
+
+/// What one evaluation of one rule did. Faulted is distinct from Refused: a group's Skip policy skips a refusal
+/// and holds on a fault.
+public enum RuleOutcome : byte { Idle, Fired, Refused, Faulted }
 ```
 
-`ExpressionFault.Absent` leaves the enum: absence is a `FaultCase`, never a
-fault, which the register's own remarks already say
-(`src/Puck.State/ExpressionFault.cs:6-8`). `KeyNaming`, `RuleFact.IsAbsent`,
-`RuleFact.IsFaulted`, `ArenaScratch.RaiseFault`, `EnterFaultScope`,
-`LeaveFaultScope`, `RaisedFault`, `FaultScope`, `TryEvaluateAlone` and the
-`out ExpressionFault` parameters are deleted with their callers.
+The zero value is the faulted case everywhere, so an uninitialised or
+defaulted outcome refuses rather than reads as zero; `ExpressionFault.Absent`
+leaves the enum, because absence is a `FaultCase`, which the register's own
+remarks already say (`src/Puck.State/ExpressionFault.cs:6-8`). Deleted with
+their callers: `KeyNaming`, `RuleFact`, `ArenaScratch.RaiseFault`,
+`EnterFaultScope`, `LeaveFaultScope`, `RaisedFault`, `FaultScope`,
+`TryEvaluate`, `TryEvaluateAlone`, every `out ExpressionFault` and
+`out KeyNaming` parameter, and `RuleEvaluator.HoldOnFault`.
+
+### Absence and the combining rule
+
+Absence keeps the semantics the register describes
+(`docs/decisions/state-and-language.md:504-511`, `expressions.md:205-208`,
+`:273-286`); only the carrier changes. Inside one program:
+
+- `Faulted` absorbs: any operation consuming a `Faulted` operand returns
+  `Outcome.Faulted` from the loop at once, as every failure exit does today
+  (`RuleExpressions.cs:155`, `:437`). `Faulted` never lives on the stack.
+- `Absent` is a value on the stack (the mark today, `:158-162`). `IsAbsent`
+  and `Coalesce` consume it (`:166-174`, `:201-211`); `Not` converts it to
+  true and `And`/`Or` to false, then short-circuit (`:184`, `:189`); every
+  other operation consuming it makes the program's outcome `Absent` (today's
+  `ExpressionFault.Absent` return, `:240-243`, `:271-276`, `:452`). Nothing
+  promotes `Absent` to `Faulted`.
+- An operand a `ShortCircuit` skips is not evaluated, so it neither reads nor
+  faults.
+
+Between programs, at a gate conjunct: the left source and the right source
+are each a whole program evaluated to completion (a literal, an operand or an
+expression; `TryReadSource`'s three arms, `RuleEvaluation.cs:202-259`, become
+three ways to obtain an `Outcome`). Then: either `Faulted` makes the gate
+`Faulted` and the fold returns ahead of `Not`, `All`, `Any` and the next
+conjunct; otherwise either `Absent` makes the conjunct false (no comparison
+holds against an absence, `:153-155`); otherwise the comparison holds or not
+under the fact rules, `Forever` included. This is the current rule with the
+two sources' order of evaluation pinned: the absent left program returns from
+*its* loop, never from the conjunct's, so `not (cards[zone(hand, last)] + 0 == cards[1 / zero])`
+evaluates the right program and faults. A text conjunct differs only in its
+comparator and in reading a text rather than a number; its two addresses go
+through the same resolution, and a faulted address is a `Faulted` verdict.
+
+An effect source that is `Absent` refuses the effect, as today
+(`RuleEvaluator.Effects.cs:1161-1172`). A local that is `Absent` ends the
+evaluation `Closed` and leaves the latch entry to the sweep; a local that is
+`Faulted` ends it `Faulted` and the entry holds. Whether an absent local
+should hold instead is the open question at `open-items.md:3148-3157` and is
+not decided here.
 
 ### One interpreter
 
@@ -127,356 +190,535 @@ fault, which the register's own remarks already say
 is the one loop. Inside it:
 
 - The value stack keeps today's shape (`long[]` plus a mark per slot,
-  `RuleExpressions.cs:97-103`), with the `bool absent` mark widened to a
-  `FaultCase` byte. `Faulted` never lives on the stack: the token that yields
-  it returns `Outcome.Faulted` from the loop at once, which is what every
-  failure exit does today (`:155`, `:437`). The change is only in what returns:
-  an `Outcome` the caller cannot misassign.
-- The combining rule is strict and absorbing. Any operation consuming a
-  `Faulted` operand is `Faulted`; `Not`, `And`, `Or`, `Select`, `Coalesce` and
-  the folds included. `Absent` is absorbed only by `IsAbsent` and `Coalesce`;
-  every other consumer turns it into `Faulted(Domain)` as today
-  (`:240-243`, `:271-276`). An operand a `ShortCircuit` skips is not evaluated,
-  so it neither reads nor faults, which keeps `expressions.md:205-208`. This is
-  deliberately not Kleene's three-valued logic (SQL's `TRUE OR NULL = TRUE`):
-  round 1's G1 and round 2's third finding are both an `or` or a `not`
-  recovering a fault, and the contract forbids it.
+  `RuleExpressions.cs:97-103`); the mark widens from `bool` to `FaultCase`
+  and holds only `Finite`/`Absent`.
 - **Addresses are program.** The compiler lowers `cards[expr]` to
   `[expr…, Operand(cards, keyFromStack)]`, `hist[age]` to
   `[age…, HistoryOperand(popAge)]`, `$zones[idx]` to `[idx…, Operand(rowFromStack)]`,
   and a pattern's `value:` token expression to a `Word` fold whose body runs
   once per token with `$token`/`$previous` bound and whose accumulator is the
   pattern word. `EffectKeyFact.ResolveIndex` (`ZoneTable.cs:302-318`),
-  `HistoryOperand.Read`'s nested `TryEvaluate` (`Operands.cs:421-435`) and
+  `HistoryOperand.Read`'s nested evaluation (`Operands.cs:421-435`) and
   `PatternOperand.ReadTupleWord` (`Operands.Patterns.cs:306-351`) are deleted:
-  the expression they ran is now tokens of the enclosing program, evaluated
-  by the one loop, and its poison propagates on the stack. A key or age that
-  faults never reaches the operand; the operand token is never executed.
-- **Operands read only through resolved addresses.** `IRuleOperand` declares
-  its addresses (`ReadOnlySpan<CompiledCellRef?> Addresses`, with `RowFrom` an
-  address too) and reads through `Read(IStateReader reader, ReadOnlySpan<ResolvedKey> keys) : Fact`.
-  The interpreter resolves every address first; a `Faulted` resolution returns
-  `Outcome.Faulted` for the token and the operand is not called. `ResolvedKey`
-  has the cases `Named(key)` and `Nothing` only, so the per-operand meaning of
-  "nothing" (a board origin of -1 at `Operands.cs:554`, a start position of 0
-  at `Operands.Patterns.cs:361-363`, `$previous` on a first token reading the
-  unheld cell at `RuleReads.cs:282-296`) is kept where it is authored, while
-  "fault" has no representation there. The same holds for `CompiledVector`
+  the expression they ran is tokens of the enclosing program, and its poison
+  propagates on the stack. The `Word` fold is also what `world.match` reads
+  through (`WorldRuleHost.Patterns.cs:192-222` calls `PatternOperand.ReadWord`
+  today), as a detached evaluation over the caller's disclosed reader
+  (`:51-58`); that boundary is kept as it is.
+- **Operands read through resolved addresses.** `IRuleOperand` declares its
+  addresses (`ReadOnlySpan<CompiledCellRef?> Addresses`, with `RowFrom` an
+  address) and reads through `Read(IStateReader reader, ReadOnlySpan<ResolvedKey> keys) : Fact`.
+  The interpreter resolves every address first; a `Faulted` resolution is
+  `Outcome.Faulted` for the token and the operand is not called. The
+  per-operand meaning of `Nothing` (a board origin of -1 at `Operands.cs:554`,
+  a start position of 0 at `Operands.Patterns.cs:361-363`, `$previous` on a
+  first token reading the unheld cell at `RuleReads.cs:282-296`) is kept
+  where it is authored. The same holds for `CompiledVector`
   (`Operands.Vectors.cs:79-107`), `LiveRow`, text reads
   (`RuleEvaluation.cs:287-336`) and effect destinations.
-- **Host facets answer facts.** `OperandFact<TFacet>.Read` already returns a
-  `RuleFact` (`src/Puck.State/OperandFact.cs:37`); it returns a `Fact`, so a
-  world fact that cannot answer (`Forever`, an absent body) is in-band too.
-  Host facets never evaluate programs: `WorldFactOperand` reads values
-  (`src/Puck.World.Schema/WorldFactOperands.cs:29-37`), and the four host
-  sites that evaluate a program today (`WorldRuleHost.Arms.cs:547`, `:657`,
-  `:724`; `WorldRuleHost.DecisionNeighbors.cs:331`) become declared
-  `CompiledValueSource`s the evaluator reads in the firing's read phase; the
-  arm receives a `long`.
+- **Host facets answer facts.** `OperandFact<TFacet>.Read` returns a `Fact`
+  (`src/Puck.State/OperandFact.cs:37`), so a world fact that cannot answer is
+  in-band. Host code evaluates no program and reads no operand: the host
+  sites that do today, program evaluations at `WorldRuleHost.Arms.cs:547`,
+  `:657`, `:724` and `WorldRuleHost.DecisionNeighbors.cs:331`, and the
+  operand read at `WorldRuleHost.Arms.cs:431` (`effect.Magnitude.Read`),
+  become declared `Sources` on the effect that the evaluator reads before
+  the arm runs. The inventory of host reads is the `puck references` list for
+  `RuleExpressions.TryEvaluate`, `IRuleOperand.Read` and
+  `RuleReads.ResolveKey` outside `Puck.State.Rules` at the time of the step,
+  not these five lines.
 - **The capability frame.** `EvaluationFrame` is a `ref struct` holding the
   reader, the bound keys and the scratch lease; `RuleEvaluator` constructs it
-  at the start of an evaluation and nothing else can. The constant folder
-  (`RuleCompiler.Expressions.cs:138`) and the two read-back consumers
-  (`WorldRuleHost.FlockAffinities.cs:14`, `src/Puck.World.Browser/Engine/BrowserSession.cs:716`)
-  use `RuleExpressions.EvaluateDetached(...)`, a second entry to the same loop
-  that returns the same `Outcome` and is what a console read, a perception
-  sample or a fold on literals uses: it decides for itself what the outcome
-  means, and it installs no simulation state.
+  at the start of an evaluation and nothing else can. It is forgeable as
+  `default`, which `Evaluate` refuses at runtime; the frame's job is to make a
+  stray evaluation a visible call, not to be cryptographically unforgeable.
+
+### The detached consumers
+
+`RuleExpressions.EvaluateDetached(IStateReader reader, program, kind) : Outcome`
+is the second entry to the same loop, for a caller that is not a firing. The
+list is closed; each entry names its `Faulted` arm, and the analyzer refuses a
+caller outside the list (`OUTCOME003`):
+
+| Caller | Writes simulation state? | `Faulted` arm |
+|---|---|---|
+| The constant folder (`RuleCompiler.Expressions.cs:138-153`) | Indirectly: a folded constant enters a program. | The subtree stays unfolded, as `:93-95` requires; `Absent` likewise. |
+| The search score (`RuleArenaSearchJudge.Score`, `:80-101`) | Yes: it ranks what `ArenaSearch.Land` installs. | Not detached after step 4: the judge returns a `JudgeOutcome` (below). |
+| The flock affinity (`WorldRuleHost.FlockAffinities.cs:14`; consumed at `WorldPopulation.FlockAffinities.cs:44-67`) | Yes: a steering weight. | A non-finite outcome is a counted `AffinityFailures` and weight zero, as today (`:55-66`). The affinity is a perception, not a firing; it has no latch to hold. |
+| `world.match` over a disclosed reader (`WorldRuleHost.Patterns.cs:51-58`, `:192-214`) | No. | The word spells nothing and the answer says why, as today (`:212-214`). |
+| The browser read-back (`src/Puck.World.Browser/Engine/BrowserSession.cs:716-725`) | No. | The read refuses with the fault's description, as today. |
 
 ### The gate
 
-`RuleEvaluation.GateHolds` becomes `RuleEvaluation.Decide(ref frame, GateToken[] gate) : Verdict`.
-A conjunct's two sources are evaluated by the one loop (`TryReadSource` goes
-away: a literal, an operand and an expression are all `Outcome`s). A `Faulted`
-source makes the gate `Faulted` and the fold returns at once, ahead of `Not`,
-`All`, `Any` and the next conjunct, which is what `RuleEvaluation.cs:178-181`
-does by polling today. Both sides of a comparison are always tokens evaluated
-before the compare, so an absent side can never hide a faulting side (round
-2's third finding) without the compiler having emitted a `ShortCircuit`, and
-a `ShortCircuit` skip is the documented semantics. A text conjunct differs only
-in its comparator: its two addresses go through the same resolution, and a
-faulted address is a `Faulted` verdict; the separate text branch with its own
-register poll (`RuleEvaluation.cs:123-136`) is deleted.
+`RuleEvaluation.Decide(ref frame, GateToken[] gate) : Verdict` replaces
+`GateHolds`, `TryReadSource` and `RuleEvaluator.GateOpen(out bool faulted)`;
+the separate text branch with its register poll (`RuleEvaluation.cs:123-136`)
+is folded in. A `Verdict` is three-valued, so `verdict == Verdict.Open` is
+legal C# and reads a fault as closed; what prevents that is that no deciding
+place compares a verdict: each hands it to the proposal, and the one door
+switches on it. The analyzer (`OUTCOME002`) refuses an equality comparison of
+a `Verdict` or `FiringDecision` against one case; a `switch` with every case
+is the spelling.
 
-A `Verdict` is a three-case enum, so a caller cannot read it as a `bool`; it
-has to write the `Faulted` arm, and the only thing that arm can do with a
-verdict inside a firing is put it in the proposal.
+### The journaled firing
 
-### The transactional firing
+Everything a firing decides is simulation state (the latch "hashes and
+checkpoints", `RuleLatch.cs:26`; the decision binding hashes at
+`WorldRuleHost.Decisions.cs:465-484`; group progress hashes at
+`WorldScopedReplayRuntime.Rules.cs:62`). Today only the arena's cells are
+journaled; the rest is written in place and cannot be rewound, which is why a
+faulted effect consumes an Edge crossing and a faulted option effect leaves a
+chosen decision. The design puts the rest in the same journal.
 
-One evaluation of any rule kind (an ordinary rule, an iterated binding, a pool
-binding, an interaction, a decision binding, a group trigger, a search judge
-step) is two phases with one door between them.
-
-**Read phase** (`RuleEvaluator.Propose`): opens the arena scope
-(`BeginStateTransaction`, `IEffectHost.cs:277`), evaluates locals, selects
-live rows, decides the gate, and when it fires runs the effect sequence into
-the open scope exactly as `FireSequence` does today, with each effect's
-sources evaluated by the interpreter just before it (so a later effect still
-reads what an earlier one wrote in the scope, `rules.md:284`). Arms are
-**prepared once**: an arm's `Prepare(ref frame) : Resolved<PreparedArm>`
-evaluates its addresses and values and stores the resolved body index, cue
-payload, pose cell or document row into the queue; preflight checks the
-prepared form. The phase produces a `Proposal`:
+**The journal participant.** `ArenaJournal` records one entry per overwritten
+position (`ArenaJournalEntry(Column, Index, Number, Reference)`,
+`src/Puck.State/Arena/ArenaJournal.cs:9`, `:117-135`). It gains one more entry
+shape: `Column = ArenaColumn.Participant`, `Reference = IJournalParticipant`,
+`Index`/`Number` the participant's own undo record. `StateArena.Rewind`
+dispatches it to `participant.Undo(index, number)` beside `Restore(entry)`
+(`StateArena.cs:660-674`); `Commit` of the outermost scope discards it with
+the rest. A participant records before it writes:
 
 ```csharp
-ref struct Proposal {
-    Verdict Verdict;             // Closed, Open, Faulted
-    bool Fires;                  // Open and (Level or a new Edge crossing)
-    int ArenaMark;               // the open scope
-    Range Arms;                  // prepared arms queued by this evaluation
-    LatchEntry Latch;            // the entry this evaluation would install (binding, held)
-    DecisionBinding? Decision;   // the decision state this evaluation would install
-    ExpressionFault Fault;       // when Faulted
-}
+public interface IJournalParticipant { void Undo(int index, long number); }
+// RuleLatch: before Held[binding] = open, journal.RecordParticipant(this, slot, previous bits)
+// DecisionStore: before state = next, journal.RecordParticipant(this, bindingSlot, previous copy's index)
+// RuleGroupState: before progress = next, journal.RecordParticipant(this, groupOrdinal, packed progress)
 ```
 
-Nothing durable is written in this phase: the latch dictionary, the decision
-binding, the interrupt edge, the schedule caches and every store outside the
-journaled arena are read into the proposal and left as they were.
+`RuleLatch`, the decision store and `RuleGroupState` take the arena's journal
+at construction and write through it. A record with no scope open is refused
+at runtime (`InvalidOperationException`), which is what makes the lifecycle
+writers below explicit. Turn undo (`ArenaUndo.cs:665`) replays the same
+entries, so a `rewindGroup` now restores the latch bits its turn moved, which
+`InvalidateScheduler` at `WorldRuleHost.Undo.cs:33` only approximated; this is
+the direction S10's "rewind as a complete continuation" names.
 
-**Commit phase** (`RuleEvaluator.Commit(ref Proposal)`), the one door:
+What this buys over a proposal copy installed by the door: nested scopes. The
+search opens scopes around judge firings (`ArenaSearch.Candidates.cs:16`,
+`:35`), a savepoint opens one inside a firing (`RuleEvaluator.Effects.cs:688`),
+and the job-system memo will open more. A latch written in place inside a
+child scope survives the parent's rewind; a journaled one does not. The door
+does not have to know what a decision binding is (it is a private type of the
+world host, `WorldRuleHost.Decisions.cs:24`, which `Puck.State.Rules` cannot
+name); the participant interface is the generic shape.
 
-- `Faulted`: rewind the scope, discard the prepared arms, install nothing,
-  report one `Arithmetic` refusal naming the fault, and touch the latch
-  binding so the sweep keeps its entry (`HoldOnFault`'s job today,
-  `RuleEvaluator.cs:635-642`). The latch keeps its last verdict, the decision
-  its choice and interrupt edge, the group its progress.
-- `Closed` or `Open` without firing: commit the (empty) scope, install the
-  latch entry and the decision state, capture the scheduler's versions.
-- `Open` and fires: preflight the prepared arms as a sequence, prepare the
-  transactional unit, `PrepareStateCommit`, then commit the scope, install the
-  latch entry and the decision state, install the unit, deliver the prepared
-  arms. A refusal anywhere before the commit is `Refused`: rewind, discard,
-  install nothing, as `FireEffects` does today (`RuleEvaluator.Effects.cs:111-117`).
+**Two phases and one door.** One evaluation of any rule kind (an ordinary
+rule, an iterated or pool binding, an interaction, a decision binding, a group
+trigger, a search judge rule) is:
 
-A delivery evaluates nothing (it delivers the prepared form), so a document
-install that replaces the arena between the commit and the delivery
-(`WorldRuleHost.Arms.cs:119-128`) changes no value a delivery reads; round 3's
-second finding has no evaluation left to go wrong, with or without a register.
+*Propose* (`RuleEvaluator.Propose(...) : Proposal`): open the scope, evaluate
+locals, select live rows, decide the gate, write the latch entry through the
+journal, and when the rule fires run the effect sequence into the scope with
+each effect's declared sources evaluated by the interpreter just before it (so
+a later effect still reads what an earlier one wrote, `rules.md:284`), queue
+arms **prepared once** (an arm's `Prepare(ReadOnlySpan<long> values, ReadOnlySpan<ResolvedKey> keys) : Resolved<PreparedArm>`
+receives values the evaluator read; the arm never holds a frame), and fold
+every step's outcome into one `FiringDecision`. A decision binding's phase
+also writes its next binding state through the journal and fires its common
+and option effects into the same scope. Nothing outside the journal is
+written.
 
-A decision binding is one such evaluation: locals, interrupt gate, gate,
-option gates and scores in the read phase, the winner computed into
-`Proposal.Decision`, the common effects and the chosen option's effects fired
-into the same open scope, and the whole installed by `Commit`. The two
-separately scoped `FireDecisionEffects` calls (`WorldRuleHost.Decisions.cs:342`,
-`:366`) become one firing, which also closes "a fault in the common effects
-does not stop the option effects from committing".
+*Commit* (`RuleEvaluator.Commit(ref Proposal)`), the one door, switching on
+`FiringDecision`:
 
-This is the atomicity the firing already promises for arena writes
-(`rules.md:441-448`), widened to the simulation state outside the arena that
-a firing decides. The Puck-native direction beyond this plan is to move the
-latch and decision bindings into the arena as engine rows so the journal
-itself rewinds them and checkpoints carry them for free (they are already
-hashed and checkpointed as simulation state, `RuleLatch.cs:26`,
-`WorldRuleHost.Decisions.cs:465-484`); the proposal-and-commit door is complete
-without that move and does not preclude it.
+- `Faulted`: `RewindStateTransaction(mark)` restores cells, latch bits,
+  decision state and group progress together; the prepared arms are
+  discarded; one `Arithmetic` refusal is reported naming the fault; the latch
+  binding is touched so the sweep keeps its entry.
+- `Closed`, `Held`: `CommitStateTransaction(mark)` (the scope holds only the
+  latch and scheduler records).
+- `Fires`: preflight the prepared arms as a sequence, `PrepareTransactional`,
+  `PrepareStateCommit`; a refusal is `Refused` and rewinds exactly as
+  `Faulted` does; otherwise `CommitStateTransaction(mark)`, then the install
+  sequence below.
 
-### What goes away
+`Propose` and `Commit` are the only callers of `BeginStateTransaction`,
+`CommitStateTransaction` and `RewindStateTransaction` in `Puck.State.Rules`
+(the console's cell commands and the addon runtime have doors of their own,
+`WorldDocument.StateCommands.cs:22-30`, `WorldAddonRuntime.Cells.cs:58-75`).
 
-`ArenaScratch`'s register and scopes (`ArenaScratch.cs:19-80`); `KeyNaming`
-and every `out KeyNaming` (`CompiledFacts.cs:53-63`); `RuleFact`'s two bools
-(`src/Puck.State/RuleFact.cs:22`); `ExpressionFault.Absent`;
-`RuleExpressions.TryEvaluate`, `TryEvaluateAlone` and `Run`'s out-parameters;
-`RuleEvaluation.GateHolds`, `TryReadSource`, `ReadText`'s register raise;
-`RuleEvaluator.GateOpen(out bool faulted)`, `HoldOnFault`, the `RaisedFault`
-polls; `EffectKeyFact.ResolveIndex`'s nested evaluation,
-`HistoryOperand.AgeExpression`'s nested evaluation, `PatternOperand.ReadTupleWord`;
-the second locals evaluator `RuleEvaluator.Groups.TryEvaluateLocals`
-(`RuleEvaluator.Groups.cs:284-310`), a duplicate of `EvaluateBindings`
-(`RuleEvaluator.cs:694-773`) that the one read phase replaces; the host's four
-program evaluations in arms; the decision's pre-effect state mutation. The
-search's fault scope (`src/Puck.State.Search/ArenaSearch.cs:525-564`) becomes a
-`Verdict` the step returns.
+### The install boundary
 
-### Where the guarantee stops
+`CommitStateTransaction` closes the arena scope at
+`WorldServer.StateTransactions.cs:30` and then does fallible work: it
+resynchronises grants, body cells and input owners and **throws** when input
+synchronisation refuses (`:35-38`). `CommitTransactional` then adopts the
+proposed publication and installs the prepared document
+(`WorldRuleHost.Arms.cs:119-128`), and the deliveries run. Nothing after
+`:30` can be rewound, and the catch around `Propose`
+(`RuleEvaluator.Effects.cs:89-94`) never covered it. The design does not
+pretend otherwise. It draws the boundary and moves what can refuse to the
+right side of it:
 
-- **Detached evaluation decides for itself.** `EvaluateDetached` serves the
-  constant folder, console read-backs, the browser session and perception
-  samples. Its `Outcome` is in-band and cannot be read as a number without
-  matching, but what a detached caller does with `Faulted` is that caller's
-  decision, outside the firing door. None of them installs simulation state;
-  the analyzer's discard rule still applies to them.
-- **A host that throws** is handled as today: `FireEffects`' `catch` rewinds
-  the scope (`RuleEvaluator.Effects.cs:89-94`), and the commit door keeps
-  that. A throw is not a fault; it is a defect, and it still propagates.
-- **Absence keeps today's meaning.** A gate reads an absent comparison as
-  false; an effect source that is absent refuses; a local that is absent ends
-  the evaluation as `Closed` (the latch entry is left for the sweep, as
-  `HoldOnFault`'s remark says). Whether an absent local should instead hold
-  the latch is the open item at `open-items.md:3148-3157`, unchanged here.
-- **The scheduler's skip** (`RuleEvaluator.cs:534-551`) reuses a `Closed`
-  verdict when nothing read has changed; it never caches a `Faulted` one, and
-  the commit door captures versions only on `Closed`. A fault tick therefore
-  re-evaluates next tick, as it should.
-- **Checkpoints** carry the latch and decision bindings as they do; the design
-  changes when they are written, not what they hold.
-- **The analyzer is a fence, not the floor.** Code that matches an `Outcome`
-  and substitutes a number in the `Faulted` arm is still writable in a
-  detached caller. Inside the simulation it is not, because the only numeric
-  consumers of outcomes are the interpreter's own combining rule and the commit
-  door, and neither has such an arm.
+- **Before the arena commit, everything that can refuse has run.**
+  `PrepareStateCommit` already runs `ValidateStateTransaction`
+  (`WorldRuleHost.Arms.cs:32-35`), which validates the touched bodies' input
+  selections (`StateTransactions.cs:62`). The design makes
+  `Input.TrySynchronizeBodies` a two-step prepare/apply: the prepare runs in
+  `PrepareStateCommit` and can refuse (rewinding the firing); the apply after
+  the arena commit cannot. The `throw` at `:37` becomes unreachable by
+  construction of the two-step and is kept as the defect report it is.
+- **After the arena commit, the install sequence is non-refusing by
+  contract**: latch and decision state are already committed with the cells
+  (they were in the journal), the document unit was prepared and
+  `InstallPrepared` cannot refuse (`WorldRuleHost.Arms.cs:19-20`), and each
+  delivery is a counted refusal that undoes nothing (`rules.md:472`).
+- **A throw after the boundary is a defect that leaves the authority
+  inconsistent**, exactly as today; the design makes it one place
+  (`RuleEvaluator.Commit`, after `CommitStateTransaction`) and names it.
+  There is no second rollback mechanism, because none can roll back a
+  delivered cue or an installed document; AGENTS.md rule 4 wants the defect
+  fixed, not masked.
+
+### Prepared arms and their targets
+
+A prepared arm carries the values the read phase computed and the identity
+they denote: a body index **with its population generation**
+(`Host.Population.Generation(index)`, as `DecisionBodyLive` reads it,
+`WorldRuleHost.DecisionNeighbors.cs:87-88`), a placement ordinal with the
+proposed definition it was composed against, a pose cell with its topology.
+Delivery checks the generation and refuses the arm as `BodyInactive` when it
+moved, the refusal already delivered for an inactive body today
+(`WorldRuleHost.Arms.cs:646-652`); the document unit is composed against the
+proposed definition and installed as that unit (`:15-20`), so its identities
+are its own. A proposal never crosses an authority boundary: `Propose` and
+`Commit` run back to back on the tick thread under the authority gate
+(`WorldTick.Step.cs:74`), and a checkpoint, a scoped-replay restore or a
+transfer runs between ticks, when no proposal exists and no scope is open.
+
+A decision's liveness recheck between its common and option effects
+(`WorldRuleHost.Decisions.cs:348-357`) is kept as a declared step of the
+decision's read phase, evaluated against the **proposed** population (the
+common effects' placement removal is a transactional arm, so `Proposed()`
+knows the neighbour is gone): when it fails, the option effects are not fired
+and the common effects stand, which is today's outcome; the firing is not
+refused for it.
+
+### Aggregation to the step
+
+A `FiringDecision` of `Faulted` becomes `RuleOutcome.Faulted` for the
+evaluation, and it must reach every aggregate that decides something:
+
+- `RuleEvaluator.Evaluate(rules, …)` returns `RuleOutcome` for the family
+  (`Faulted` if any evaluation faulted, else `Refused` if any refused, else
+  `Fired` if any fired, else `Idle`) and `applied` beside it; the
+  `bool`-returning overloads (`RuleEvaluator.cs:322-353`) are deleted.
+- `IArenaSearchJudge.Judge` returns `JudgeOutcome { Applied; Faulted }`;
+  `PushScope` and the candidate replay (`ArenaSearch.Candidates.cs:35`,
+  `:138`) carry it into the job; `Score` returns `Outcome`; `StepJob` folds
+  both into the step's verdict and restarts the step on `Faulted`
+  (`ArenaSearch.cs:557-564` does this on the register today) before any
+  answer is adopted. A judge whose first rule writes a win marker and whose
+  later rule faults is a faulted candidate, not a scored one.
+- A staged group advances on `Fired`, skips a `Refused` step under
+  `RuleGroupStepPolicy.Skip`, and holds its cursor on `Faulted`
+  (`RuleEvaluator.Groups.cs:242` reads the two-case outcome today). A
+  fixpoint pass whose member faulted counts no progress for that pass and
+  leaves the pass count where it was; the group's trigger is one `Verdict`,
+  `Faulted` leaving progress untouched (`Armed`, `:85-107`). Group progress
+  is a journal participant, so a member's faulted firing rewinds whatever
+  progress the member's own scope wrote.
+- `WorldRuleHost.EvaluateDecisionBinding` and `EvaluateInteraction` return
+  the same `RuleOutcome`.
+
+### Lifecycle writers
+
+Four writers of latch and decision state are not firings and stay:
+`RuleLatch.EndSweep` removal (`RuleLatch.cs:244-258`), `RuleLatch.Restore`
+(`:317-321`), the decision store's `Restore` (`WorldRuleHost.Decisions.cs:541-569`)
+and the scoped-replay restore (`WorldScopedReplayRuntime.Rules.cs:74-81`).
+They run with no scope open: the sweep's end after `EvaluateRule`'s loop has
+committed every proposal (`RuleEvaluator.cs:482`), the restores between
+ticks. The participant's journal write refuses when a scope is open at those
+moments (runtime refusal), which is the "no outstanding proposal" rule made
+mechanical: a restore inside a firing throws. The `Reset` the search judge
+performs per candidate (`RuleArenaSearchJudge.cs:65`) runs inside the search's
+scope and is journaled like any write, so a rewound candidate's latch state
+comes back.
+
+### Serial ownership
+
+`Propose` writes the shared arena journal and reads shared binding scratch
+(`m_boundLeft`/`m_boundRight`, `Locals`, `InstanceBindings`, the pattern word,
+the host's preflight scratch at `WorldRuleHost.Arms.cs:44-50`). The design
+requires what holds today and states it: one proposal in flight per arena at a
+time, on the tick thread under the authority gate (`WorldTick.Step.cs:74`),
+and no proposal straddling snapshot publication. The host's preflight scratch
+moves into the proposal (it is per firing already by intent, `:41-43`). A
+parallel tick is the job-system memo's design
+([the memo](engine-job-system.md)); it owes a partition-owned frame, journal
+and scratch per worker and an ordered merge, and this plan hands it a
+proposal that is already a value with one writer, which is the shape a
+partition needs.
+
+### Pricing
+
+The work sheet charges a `StateCellOperand` one unit whatever its key
+expression (`Operands.cs:51`; `RuleWorkBudget.ExpressionCost` charges an
+operand through `operand.Cost`, `RuleWorkBudget.cs:95-96`), so a computed key
+such as `cards[sum(values, x -> x)]` is undercharged today. A history age's
+expression is charged inside `HistoryOperand.Cost` (`Operands.cs:405-412`),
+and a tuple pattern's token expression inside `PatternOperand.Cost`
+(`Operands.Patterns.cs:411-417`). After lowering, every one of these is tokens
+of the enclosing program and `ExpressionCost` prices it once; `HistoryOperand`
+and `PatternOperand` drop their internal expression charge so nothing is
+counted twice. The price of a computed key **rises** to its real work, which
+is the correction, and a document near its limit may stop admitting with
+unchanged source; that document was over its limit. Ergonomic-is-optimal is
+checked by spelling equivalence (`let k = …; cards[k]` and `cards[…]` compile
+to the same tokens and the same units), not by "unchanged or lower".
+
+### Cost
+
+The rule VM's per-tick budget is the constraint; the claims below are
+estimates until step 3's measurements, and the benchmark that settles them is
+specified there.
+
+- **Returning `Outcome` instead of `bool` plus two `out` parameters.** `Run`
+  is called once per program plus once per `Call`, fold member,
+  `Not`-with-body and `And`/`Or` right operand (`RuleExpressions.cs:177`,
+  `:191`, `:248`, `:502`), never per arithmetic token. The JIT's return
+  convention for a 16-byte struct is observed, not inferred: the
+  `DisassemblyDiagnoser` on `StateExpressionKernels`
+  (`src/Puck.Cli.Bench/StateKernelBenchmarks.cs:223`) shows it.
+- **The stack mark** widens from `bool` to a byte of the same width; the
+  branch on it gains one case. Not zero; small.
+- **Addresses as program.** A computed key today runs a nested `TryEvaluate`
+  with its own `Run` frame, two `Rent` leases and a `stackalloc`
+  (`RuleExpressions.cs:95-105`); a bound-key or cell-pointer indirection
+  (`RuleReads.cs:281-371`) runs no VM and gains nothing. The saving is per
+  *computed* key read, not per dynamic key.
+- **Journal participants.** One 24-byte entry per latch bit, decision state
+  or group progress write (`ArenaJournal.EntryBytes`), in a scope that
+  already journals the firing's cells; the decision's previous state is one
+  struct copy into the store's undo slot.
+- **Arms prepared once** replace two evaluations (preflight and delivery)
+  with one plus a generation compare.
+
+### Where the whole design stops
+
+- Disclosure is outside it. Round 1's report also holds eight disclosure
+  findings; an outcome, a frame and a journal impose no policy on what a
+  reader may see, and [the disclosure plan](disclosure.md) owns them.
+- A throw after the arena commit is a defect that leaves the authority
+  inconsistent; the design names the one place it can happen and makes the
+  input resynchronisation unable to refuse there, and claims nothing more.
+- A detached consumer's `Faulted` arm is reviewed code, listed above.
+- An operand's hand-written arena read under a literal key, and a wrong finite
+  answer from a correct evaluation, are logic defects, not fault paths.
+- Determinism holds as a property (rule 4): the fault paths are deterministic,
+  and the serial-ownership precondition is what today's tick provides.
 
 ## Research weighed
 
 | Source | What it supports here |
 |---|---|
-| IEEE 754-2008, clause 7 (default exception handling; status flags are raised and stay raised until explicitly cleared) | The register is the status-flag protocol. Its documented failure mode, an intermediate computation clearing or failing to raise a flag the final consumer tests, is round 3's first finding. A flag beside a value needs every producer to cooperate; a case of the value needs none. |
-| LLVM Language Reference, "Poison Values" (poison propagates through dependent instructions; `freeze` is the one instruction that stops it) | The absorbing in-band value, with named escape hatches. Puck's analogue: `Faulted` propagates through every operation and has no escape; `Absent` propagates and has two (`isAbsent`, `??`). |
-| Rust `Result<T, E>` with `#[must_use]` and `?` (the compiler warns on a dropped `Result`; `?` propagates the error case) | The outer fence: a dropped outcome is a compile-time diagnostic, not a runtime throw. Puck's `puck scan --only outcomes` is the same rule over C#. |
-| Alexis King, "Parse, don't validate" (2019) | The inner fence: put the proof in the type. `Outcome` has no `Value`; obtaining a number requires matching `Finite`, so the invalid read is unrepresentable rather than checked. |
-| ISO SQL three-valued logic over `NULL` (`TRUE OR NULL` is `TRUE`; `NOT NULL` is `NULL`) and C. J. Date's critique of it | The semantics to refuse. Kleene logic lets a disjunction or a negation recover an unknown; the contract (and rounds 1 and 2) require `Faulted` to absorb, which is strictness, not Kleene. |
-| Jim Gray, "The Transaction Concept: Virtues and Limitations" (1981) | Atomicity is of the whole unit, or it is not atomicity. A firing that journals its arena writes but installs its latch and choice outside the journal is not atomic, which rounds 2 and 3 observed as the consumed Edge crossing and the half-installed decision. |
-| Puck itself: the arena journal scope (`StateArena.BeginScope`/`Commit`/`Rewind`, `src/Puck.State/Arena/StateArena.cs:568-593`, `:653-680`) and the "one write door" convergence in [the state plan](state-and-language.md#s1--the-projection-law-and-the-one-door) | The Puck-native combination beats the borrowed one: the transaction already exists; the design widens what passes through its door rather than adding a second mechanism. |
+| IEEE 754-2008, clause 7 (status flags are raised and stay raised until explicitly cleared) | The register is the status-flag protocol, and its documented hazard, an intermediate computation clearing or failing to raise a flag the final consumer tests, is round 3's first finding. |
+| LLVM Language Reference, "Poison Values" (poison propagates through dependent instructions; `freeze` is the one instruction that stops it) | The absorbing in-band value with named escape hatches: `Faulted` propagates with no escape; `Absent` propagates with `isAbsent` and `??`. |
+| Rust `Result<T, E>` with `#[must_use]` (a dropped `Result` is a compiler diagnostic) | The outer fence is a diagnostic over the source, not a runtime throw. Puck's is `puck scan --only outcomes`. Rust's is also not a proof: `let _ = result;` is legal there too, which is why this plan names what the analyzer does not catch. |
+| Alexis King, "Parse, don't validate" (2019) | The inner fence: no `Value` accessor; obtaining a number requires the finite case. The review's point that `TryFinite(out n)` with an ignored `bool` defeats it is correct, and the analyzer's `OUTCOME002` is the answer the type cannot give. |
+| ISO SQL three-valued logic over `NULL` and C. J. Date's critique | The semantics to refuse for faults: Kleene logic lets a disjunction recover an unknown; `Faulted` absorbs. Absence, by contrast, keeps its own conversion rules, which are not Kleene either (an absent `not` is true, an absent arithmetic is absent). |
+| Jim Gray, "The Transaction Concept: Virtues and Limitations" (1981) | Atomicity is of the whole unit. A firing that journals its cells but writes its latch and choice in place is not atomic under any nesting; one journal for every participant is. |
+| Puck itself: the arena journal (`StateArena.cs:568-593`, `:653-680`) and the one-write-door convergence in [S1](state-and-language.md#s1--the-projection-law-and-the-one-door) | The Puck-native combination: the transaction exists and nests; the design enlists the remaining stores in it rather than adding a second mechanism beside it. |
 
 ## Every finding, one by one
 
-Each row says why the finding is impossible under the design (not fixed at
-its site) and names the fault-injection witness in the witness file below.
+Each row says what closes the finding and by which of the three
+enforcements; "structure" is claimed only where the invalid state has no
+representation. The witnesses are `test` blocks of
+`worlds/debug/rule-faults-tests.puck`.
 
-| Round | Finding | Why it cannot recur | Witness |
-|---|---|---|---|
-| 1 (disc2 §9) | A faulting remove key was treated as success through a `ResolveKey` overload that discarded `KeyNaming` (`RuleEvaluator.Effects.cs:723` then). | There is no key without matching `Resolved<CellKey>.TryNamed`; a `Faulted` resolution yields no key to remove with, and the effect's step returns `Faulted` into the proposal, so the firing's earlier `score` write rewinds at the door. | W1 |
-| 1 (disc2 §10) | Vector, board-origin, symmetry and pattern reads erased key faults and answered a number (`Operands.Vectors.cs:87`, `Operands.cs:534-554`, `:660`, `Operands.Patterns.cs:88`, `:212`). | Operands receive `ReadOnlySpan<ResolvedKey>` with cases `Named` and `Nothing` only; the interpreter returned `Outcome.Faulted` before the operand ran. An operand has no faulted key to turn into `-1` or `0`. | W2 |
-| 1 (statecorr G1) | Arithmetic faults in a dynamic key or ring age became absence then truth under `not` (`ZoneTable.cs:301-310`, `Operands.cs:412-423`). | The key and age expressions are tokens of the enclosing program; their poison is the program's outcome. There is no second evaluator to drop it. | W3 |
-| 1 (statecorr G2) | Closing on a fault re-armed an Edge latch, cleared an interrupt, fired `onNoChoice`. | `Proposal.Verdict == Faulted` has no install arm: latch, interrupt edge and decision binding are written only by `Commit` and only on `Closed`/`Open`. | W4 |
-| 2 (t1rf B1) | Dynamic cue keys skipped resolution because the arm tested `effect.Key != default` (`WorldRuleHost.Arms.cs:263` then). | Arms do not resolve; the evaluator resolves every declared address in `Prepare`. A declared address with `KeyFrom` and no literal key is still an address, and an undeclared one cannot be read. | W5 |
-| 2 (t1rf B2) | Pattern token expressions substituted `0L` for a faulting letter (`Operands.Patterns.cs:315-323`). | The token expression is the body of a `Word` fold run by the interpreter; a faulting body makes the fold, and so the match, `Faulted`. There is no word buffer slot for a letter that did not evaluate. | W6 |
-| 2 (t1rf B3) | An absent left expression short-circuited the right read, hiding its faulting key (`RuleEvaluation.cs:139` then). | Both comparison operands are tokens evaluated before the compare; only a compiler-emitted `ShortCircuit` skips evaluation, and it is the authored `and`/`or` semantics. | W7 |
-| 2 (t1rf low) | A newly faulting read still synthesised Edge transitions and decision no-choice effects. | Same as G2: no install without a non-faulted verdict. | W4 |
-| 3 (rf3 §1) | A successful nested evaluation set the shared out-parameter to `None`, so a later arithmetic failure raised nothing (`RuleExpressions.cs:215`, `:250`, `:437`, `:445`, `:504`, `:548`). | `Run` returns an `Outcome`; nested calls return their own; every failure exit constructs `Outcome.Faulted(Domain)` at the site. No variable exists that a nested success could leave stale. | W8 |
-| 3 (rf3 §2) | A document commit swapped the arena, so a delivery's raise reached a register with no open scope and threw (`RuleEvaluator.Effects.cs:70`, `:140`; `WorldRuleHost.Arms.cs:125`). | There is no register, and a delivery evaluates nothing: it delivers the form prepared in the read phase. The population change the finding relies on is read once, before the commit. | W9 |
-| 3 (rf3 §3) | An effect fault consumed an Edge crossing because the latch was written before `FireRule` (`RuleEvaluator.cs:585`, `:613`). | The latch entry is in the proposal and installed by `Commit` after the effects' outcomes are in; a `Faulted` or `Refused` firing installs nothing, so the crossing is still pending next tick. | W10 |
-| 3 (rf3 §4) | A decision installed its choice, candidate and timers before its effects faulted (`WorldRuleHost.Decisions.cs:320-334`, `:342`, `:366`). | The decision binding is a proposal copy installed by `Commit`; common and option effects are one firing in one scope. A faulted effect leaves `Selected`, `Candidate`, `CommitmentRemaining` and `Reconsiderations` as they were. | W11 |
-| open items `:3148` | A search score and a flock affinity read an absent expression as 0. | `Outcome` forces the choice: a `Faulted` or `Absent` score makes the judge step's verdict `Faulted` (the step decides nothing and restarts, as a thrown one does today, `ArenaSearch.cs:522-564`); a flock affinity that is not `Finite` is a counted perception failure as today. Both are detached callers, recorded as such. | W12 |
+| Round | Finding | What closes it | Enforcement | Witness |
+|---|---|---|---|---|
+| 1 (disc2 §9) | A faulting remove key was treated as success through a `ResolveKey` overload that discarded `KeyNaming`. | The remove's address is resolved by the interpreter into `Resolved<CellKey>`; a `Faulted` resolution makes the step `Faulted` and the door rewinds the earlier `score` write with it. | Structure for the resolution (no overload without the case); one door for the rewind; analyzer for an ignored `TryNamed`. | W1 |
+| 1 (disc2 §10) | Vector, board-origin, symmetry and pattern reads answered a number for a faulted key. | Operands receive `ResolvedKey` (`Named`/`Nothing`); the interpreter already returned `Faulted`. | Structure for the declared addresses; analyzer `OUTCOME004` against an operand keeping an address of its own; text routing lands with the gate in step 3. | W2 |
+| 1 (statecorr G1) | Faults in a dynamic key or ring age became absence then truth under `not`. | The key and age expressions are tokens of the enclosing program. | Structure: no second evaluator exists. | W3 |
+| 1 (statecorr G2) | Closing on a fault re-armed an Edge latch, cleared an interrupt, fired `onNoChoice`. | Latch bits and decision state are journaled; a `Faulted` decision rewinds them with the scope. | Structure (journal) plus one door (`FiringDecision` has no faulted-and-fires case). | W4 |
+| 2 (t1rf B1) | Dynamic cue keys skipped resolution because the arm tested `effect.Key != default`. | Arms declare addresses and receive resolved ones; a declared `KeyFrom` with no literal key is an address. | One door (the evaluator resolves; arms cannot) plus review of the declaration being complete. A valid dynamic key keeps its body (W5 checks both arms). | W5 |
+| 2 (t1rf B2) | Pattern token expressions substituted `0L` for a faulting letter. | The token expression is a `Word` fold body; a faulting body makes the fold `Faulted`. | Structure for the fold; the `world.match` read-back uses the same fold detached. | W6 |
+| 2 (t1rf B3) | An absent left expression short-circuited the right read. | Both conjunct sources are whole programs evaluated before combination; an absent program returns from its own loop only. | One door (`Decide`); lands in step 3. | W7 |
+| 2 (t1rf low) | A faulting read synthesised Edge transitions and decision no-choice effects. | Same as G2. | Same as G2. | W4 |
+| 3 (rf3 §1) | A nested success set the shared out-parameter to `None`. | `Run` returns an `Outcome`; nested calls return their own. | Structure: the variable is gone. | W8 |
+| 3 (rf3 §2) | A document commit swapped the arena and a delivery's raise threw. | No register; delivery evaluates nothing (prepared arms). | Structure for the register; one door for preparation. Target validity after the install is the generation check (runtime refusal). | W9 |
+| 3 (rf3 §3) | An effect fault consumed an Edge crossing. | The latch write is journaled in the firing's scope and rewinds with it at any nesting depth. | Structure (journal). | W10, L1 |
+| 3 (rf3 §4) | A decision installed its choice before its effects faulted. | The decision's next state (selected, candidate, generation, timers, random state, draw count, reconsiderations, last score, interrupt edge) is written through the journal and its common and option effects fire in the same scope. | Structure (journal) plus one door. | W11 |
+| open items `:3148` | A search score and a flock affinity read a failed expression as 0. | `JudgeOutcome` and `Outcome` force the choice: a faulted candidate restarts the step; a non-finite affinity is a counted failure. | One door for the search step; listed detached arm for the affinity. | W12, W13 |
 
 ## Implementation steps
 
-Each step is one lane's brief, builds what it touches
-(`dotnet build <project> -c Release -m:2 -nodeReuse:false`), and has a
-mechanical check. The witness file is `worlds/debug/rule-faults-tests.puck`,
-one `test` block per witness, run with `puck test worlds/debug/rule-faults-tests.puck --jobs 1`;
-a witness is written in step 1 against the construction in its finding and is
-expected red until the step that closes it lands. The steps are ordered so the
-tree builds after each.
+Nine steps, each a vertically coherent slice: one producer and every consumer
+it affects land together, every bridge is named with the step that removes
+it, and the check proves what the step establishes. Each step builds what it
+touches (`dotnet build <project> -c Release -m:2 -nodeReuse:false`) and lands
+on a working integration branch. The witness file is
+`worlds/debug/rule-faults-tests.puck`, run with
+`puck test worlds/debug/rule-faults-tests.puck --jobs 1`; it is written in
+step 1 with each block's expected verdict, and a block for a still-open
+finding is red until its step.
 
-1. **Shapes and the witness file.** Add `Outcome`, `Fact`, `Resolved<T>`,
-   `Verdict` and `FaultCase` to `Puck.State`; make `RuleFact` a thin alias of
-   `Fact` for this step only; write W1 to W12 as `test` blocks. Check: the
-   solution builds; `puck test worlds/debug/rule-faults-tests.puck --jobs 1`
-   runs every witness and the ones for still-open findings are red (the
-   witness proves the escape before the fix).
-2. **`Run` returns `Outcome`.** Rewrite `RuleExpressions.Run` to return
-   `Outcome`, with every failure exit constructing its own case and nested
-   calls combined by value; delete the `out` parameters; `TryEvaluate` and
-   `TryEvaluateAlone` become `Evaluate(ref frame, …)` and `EvaluateDetached`.
-   Keep the register one more step so the tree builds. Check: W8 green;
-   `puck search "out ExpressionFault" src/Puck.State.Rules` returns no line;
-   `puck bench kernels --filter '*StateExpressionKernels*'` within noise of the
-   recorded tip on `DependentChain` and `Direct`.
-3. **Addresses are program.** Compiler lowering of dynamic keys, live row
-   indices, ring ages and pattern token expressions into the enclosing program
-   (`RuleCompiler.Operands.cs`, `RuleCompiler.Patterns.cs`); `IRuleOperand`
-   gains `Addresses` and `Read(reader, ReadOnlySpan<ResolvedKey>)`; the
-   interpreter resolves addresses before the operand token; delete
-   `EffectKeyFact.ResolveIndex`'s evaluation, `HistoryOperand.AgeExpression`'s
-   evaluation and `PatternOperand.ReadTupleWord`. Spelling equivalence: the
-   `.puck` source is unchanged; `puck compile` of `worlds/debug` and
-   `worlds/standard` succeeds and `world.budget`'s per-rule units are unchanged
-   or lower (the key expression's tokens were already priced through
-   `CollectFacts`, `CompiledFacts.cs:306-327`). Check: W2, W3, W6, W7 green;
-   `puck search "KeyNaming" src` returns no line; `puck bench kernels --filter '*StateExpressionKernels*'`
-   on `Indirect` is not slower than the tip (one nested `Run` and two leases
-   per dynamic key are removed).
-4. **The gate decides a `Verdict`.** `RuleEvaluation.Decide`, both conjunct
-   sources through the interpreter, the text branch folded in, `GateOpen(out bool)`
-   deleted, every caller matching the three cases. Check: W7 green;
-   `puck search "faulted: out _" src` returns no line.
-5. **Proposal and the commit door.** `RuleEvaluator.Propose`/`Commit`;
-   `RuleLatch.Held` and the scheduler captures written only by `Commit`; arms
-   `Prepare` once and deliver the prepared form; `FireEffects` becomes the
-   read phase's effect sequence; delete `HoldOnFault` and every `RaisedFault`
-   poll in `Puck.State.Rules`. Check: W1, W5, W9, W10 green; `puck search
-   "Held\[" src/Puck.State.Rules` finds writes only in the commit path;
-   `puck test --reproduce` over `worlds/debug` agrees across two runs.
-6. **The decision is one firing.** `DecideBinding` fills `Proposal.Decision`
-   and fires common and option effects into the proposal's scope; the four
-   host program evaluations become declared value sources read by the
-   evaluator; group triggers and interactions go through the same
-   `Propose`/`Commit`; delete `TryEvaluateLocals`. Check: W4, W11 green;
-   `puck search "RuleExpressions.Evaluate" src/Puck.World.Server` finds only
-   `EvaluateDetached` in `WorldRuleHost.FlockAffinities.cs`.
-7. **Delete the register, close the search and the detached callers.** Remove
-   `ArenaScratch`'s fault members and `FaultScope`; `RuleArenaSearchJudge.Score`
-   returns `Outcome` and `ArenaSearch.StepJob` reads a `Verdict`;
-   `ExpressionFault.Absent` deleted; `RuleFact` deleted in favour of `Fact`.
-   Check: W12 green; `puck search "EnterFaultScope|RaisedFault|RaiseFault|LeaveFaultScope" src`
+1. **Representation, no semantics.** Add `Outcome`, `Fact`, `Resolved<T>`,
+   `ResolvedKey`, `Verdict`, `FiringDecision` and `RuleOutcome.Faulted`
+   (unused yet) to `Puck.State`; replace `RuleFact` with `Fact` and
+   `KeyNaming` with `Resolved<T>` at every caller, mechanically, keeping
+   today's behaviour (a faulted fact still raises into the register where it
+   does today). Write W1 to W13 and L1. Check: the solution builds;
+   `puck search "RuleFact|KeyNaming" src` returns no line; `puck test
+   --reproduce` over `worlds/debug` reports hashes identical to the tip (a
+   representation change moves nothing); the witness file runs, with the
+   open findings red.
+2. **Addresses are program.** Lowering of computed keys, live row indices,
+   ring ages and token expressions; `IRuleOperand.Addresses` and `Read(reader, keys)`;
+   `world.match` reads through the detached `Word` fold; pricing corrected
+   (the lowered tokens priced once, `HistoryOperand`/`PatternOperand` internal
+   charges removed). The interpreter still has its `out` parameters and still
+   raises into the register. Check: W2, W3, W6 green; `puck search
+   "ReadTupleWord|AgeExpression|EffectKeyFact.ResolveIndex" src` returns no
+   line; a spelling-equivalence check that `let k = <expr>; cards[k]` and
+   `cards[<expr>]` compile to equal tokens and equal `world.budget` units;
+   the debug and standard packages compile and `world.budget` is re-recorded
+   where a computed key's price rose; the `ComputedKey` kernel (below) shows
+   the nested frame and its leases gone.
+3. **The interpreter returns `Outcome`; the gate decides a `Verdict`.**
+   `Evaluate(ref frame)` and `EvaluateDetached`; `Run` with no `out`;
+   `Decide` replacing `GateHolds`/`TryReadSource`/`GateOpen`, text conjuncts
+   included; every caller of the old entries migrated (bindings, effect
+   sources, decisions, groups, search score, arms, browser, constant folder).
+   **Bridge:** `Evaluate` and `Decide` still raise a `Faulted` result into the
+   register, so the deciding places that poll it keep working unchanged until
+   step 4 removes both. Check: W7, W8 green; `puck search "TryEvaluate\(|TryEvaluateAlone\(|GateHolds\(|TryReadSource\(" src`
+   returns no line; the kernels in the cost section within their stated
+   bounds.
+4. **Verdicts at every deciding place; the register goes.** `RuleOutcome.Faulted`
+   produced by `EvaluateOnce` and aggregated by `Evaluate`; `JudgeOutcome`
+   through `PushScope`, the replay and `StepJob`; group policies on the
+   three-way outcome; decisions and interactions returning `RuleOutcome`;
+   every `RaisedFault` poll replaced by the value in hand; the bridge of step
+   3, `ArenaScratch`'s fault members and `FaultScope` deleted. Check: W12,
+   W13 green; `puck search "EnterFaultScope|RaisedFault|RaiseFault|LeaveFaultScope|FaultScope" src`
    returns no line; the solution builds.
-8. **The outcomes analyzer.** `puck scan --only outcomes` over `src/`: an
-   expression statement or discard whose type is `Outcome`, `Fact`,
-   `Resolved<T>`, `Verdict` or `RuleOutcome` is a finding. Check: the scan
-   over the tree after step 7 reports zero findings; a scratch file with
-   `_ = RuleExpressions.EvaluateDetached(...)` reports one.
-9. **Documents.** `docs/reference/state/expressions.md:305-320`,
-   `rules.md:224-276` and `:441-499`, `patterns.md:102-110`, the state README
-   and the `puck-world` skill's rule paragraph describe the outcome, the one
-   interpreter and the two-phase firing; the register's paragraphs go.
-   `puck docs citations` passes.
+5. **Journal participants.** `IJournalParticipant`, the `Participant` entry,
+   `Rewind` and turn-undo dispatch; `RuleLatch`, the decision store and
+   `RuleGroupState` write through the journal; the no-open-scope refusal for
+   lifecycle writers; `Propose`/`Commit` as the only transaction callers in
+   `Puck.State.Rules`, with `FiringDecision`. Check: W4, W10, W11 green; L1
+   green (a nested-scope law: open a scope, commit a child Edge firing, rewind
+   the parent, the child's latch bit is back); `puck references
+   CommitStateTransaction` and `RewindStateTransaction` list only `Commit`
+   inside `Puck.State.Rules`; `puck test --reproduce` agrees across two runs.
+6. **Arms prepared once; host reads as sources.** `Prepare(values, keys)` on
+   arms with generation-carrying targets; the five host reads become declared
+   `Sources`; the host's preflight scratch moves into the proposal; the
+   input resynchronisation split into prepare (before the arena commit, can
+   refuse) and apply (after, cannot). Check: W5, W9 green; `puck references
+   RuleExpressions.Evaluate` and `IRuleOperand.Read` outside `Puck.State.Rules`
+   list only the detached table's entries; a fault-injection run with a host
+   that refuses input synchronisation in prepare shows the firing refused and
+   rewound, and the `throw` at `WorldServer.StateTransactions.cs:37` has no
+   caller path that can reach it (`puck references Input.TrySynchronizeBodies`
+   shows the prepare/apply pair).
+7. **The decision as one firing.** Common and option effects in one scope,
+   the liveness step against the proposed population, no-choice in the same
+   proposal. Check: W11 extended to faulting neighbour candidates, common,
+   option and no-choice effects, all green; the decision checkpoint
+   round-trips (`WorldRuleHost.Decisions.cs:485-540` validation passes on a
+   checkpoint taken after a faulted decision tick).
+8. **The outcomes analyzer.** `puck scan --only outcomes`: `OUTCOME001` (a
+   discarded `Outcome`/`Resolved<T>`/`Verdict`/`RuleOutcome`), `OUTCOME002`
+   (an unconsumed `TryFinite`/`TryNamed` result, or a `Verdict`/`FiringDecision`
+   compared to one case), `OUTCOME003` (an `EvaluateDetached` caller outside
+   the listed files), `OUTCOME004` (an `IRuleOperand` holding a
+   `CompiledCellRef`, `LiveRow` or `CompiledExpressionToken[]` field). Check:
+   zero findings over the tree; a scratch file exhibiting each of the four
+   reports exactly that code; the scan is a landing-bar step in
+   `docs/development/ci.md`.
+9. **Documents.** `expressions.md:305-320`, `rules.md:224-276` and
+   `:441-499`, `patterns.md:102-110`, `hosting.md`, the state README and the
+   `puck-world` skill's rule paragraph describe the outcome, the absence
+   rules, the one interpreter, the journaled firing and the install boundary;
+   the register's paragraphs go. Check: `puck docs citations` passes, and the
+   W1 to W13 blocks are cited from the reference as the behaviour's examples.
+
+**Benchmarks.** The existing `Indirect` kernel reads through a cell pointer
+(`StateKernelFixture.cs:123-137`) and never runs the nested VM this plan
+removes, so it cannot show the saving. Step 2 adds `KernelRead.ComputedKey`:
+before, a `StateCellOperand` whose `KeyFrom.Custom` is an `EffectKeyFact`
+over a small program; after, the lowered tokens; the same authored work on
+both sides, consumed so a failure cannot read as a speedup. Steps 2 and 3
+measure `StateExpressionKernels` on `Literal`, `Direct` and `ComputedKey` for
+`DependentChain` and `IndependentEvaluations` at the token breakpoints, with
+successful, absent, faulted and short-circuited variants, allocations and the
+disassembly's return convention recorded, on Windows and Linux. Step 5
+measures an effects-and-decision-heavy headless debug run's `host.frames`
+simulate time with firings that succeed, refuse and fault. No step lands
+slower than the tip on `DependentChain`/`Literal`; the `ComputedKey` kernel
+after step 2 shows no nested `Run` and no nested leases.
 
 Determinism (AGENTS.md rule 4): every previously lost fault now closes a gate,
-holds a latch or refuses a firing that used to proceed, so any recorded replay
-or hash that reached one of those paths moves. Each step re-records what it
-invalidates in the same change; the witness worlds are new and record nothing.
+holds a latch or refuses a firing that used to proceed, so a recorded replay
+or hash that reached one of those paths moves; each step re-records what it
+invalidates. Step 1 is the exception and the control: it moves nothing.
 
-## Cost
+## The design review answered
 
-The rule VM's per-tick budget is the constraint; the design is cost-neutral
-on the dependent-arithmetic path and cheaper on the dynamic-key path.
+The first draft's review raised twelve findings. Each is answered here by the
+section that changed.
 
-- **Returning `Outcome` instead of `bool` + two `out` parameters.** `Run` today
-  writes two out-slots on every exit and reads them in the caller; the
-  16-byte struct is returned in a register pair on SysV x64 and through a
-  return buffer on Windows x64, one store and one load per call. `Run` is
-  called once per program plus once per `Call`, fold member, `Not`-with-body
-  and `And`/`Or` right operand (`RuleExpressions.cs:177`, `:191`, `:248`,
-  `:502`), never per arithmetic token, so the delta is a few nanoseconds per
-  nested construct. Estimate: within measurement noise on
-  `StateExpressionKernels` for `DependentChain`.
-- **The stack mark.** `bool absent` becomes a `FaultCase` byte of the same
-  width; `Faulted` never lives on the stack. Zero delta.
-- **Addresses as program.** Today each dynamic key read runs a nested
-  `TryEvaluate`: a second `Run` frame, two `Rent` leases and a `stackalloc`
-  frame (`RuleExpressions.cs:95-105`) per key per read. Inlining removes all
-  of that; the key expression's tokens were already in the budget's price.
-  Estimate: a saving of one call frame and two lease round-trips per dynamic
-  key read, measurable on `StateExpressionKernels` with `Read = Indirect`.
-- **The gate.** A `Verdict` byte stack replaces a `bool` stack; `Faulted`
-  returns early as today. Zero delta.
-- **The proposal and commit door.** The latch write moves after the effects
-  (same write); the decision proposal is one struct copy of about 80 bytes
-  per decision evaluation; `Proposal` is a `ref struct` on the machine stack.
-  Arms are evaluated once instead of twice (preflight and delivery), a saving
-  of one evaluation per queued arm per firing.
-- **The analyzer** runs under `puck scan`, not in the build; zero tick cost.
-
-The implementer measures steps 2 and 3 with
-`puck bench kernels --filter '*StateExpressionKernels*'` against the recorded
-tip, and a headless debug-world run's `host.frames` simulate time before and
-after step 5, as the mechanical checks say. No step may land slower than the
-tip on `DependentChain`.
-
-## Open decisions
-
-None are the owner's: the semantics are the register's own contract, restated.
-Two engine decisions the implementing lanes make and report:
-
-- Whether the latch and decision bindings move into the arena as engine rows
-  (so the journal rewinds them) in step 5, or stay in their stores behind the
-  commit door. The door is complete either way; the arena move removes the
-  separate checkpoint codec paths (`WorldPersistence.Checkpoint.cs:664`,
-  `WorldAuthorityCheckpointCodec.Server.cs:623`) and is the one-write-door
-  direction of [S1](state-and-language.md#s1--the-projection-law-and-the-one-door).
-- Whether `EvaluateDetached` keeps its own `Outcome` or the detached callers
-  (search score, flock affinity, console match, browser read) share one small
-  `DetachedReading` helper that spells the `Faulted` case for them. One helper
-  is the vigilance-against-duplication answer if a third consumer appears.
+1. *The types expose the unchecked values; `Proposal` can be faulted and
+   firing; `internal` is not a door.* Correct on every point. The shapes are
+   now non-positional with private fields, `default` is the faulted case,
+   `FiringDecision` is one enum, and the invariant table says which clauses
+   are structure, which are one door and which are the analyzer, with
+   `OUTCOME002` for the ignored `TryFinite`.
+2. *The reader and the detached evaluator are escapes; detached consumers
+   include simulation producers; `Prepare(ref frame)` contradicts "arms hold
+   no frame"; `effect.Magnitude.Read` was missed.* Correct. The frame is
+   described as a visible-call device, not a proof; `OUTCOME003`/`OUTCOME004`
+   fence the two escapes; the detached list is closed with each `Faulted` arm
+   and the search is taken out of it; arms receive values, not a frame; the
+   host-read inventory is a `puck references` list, not five lines.
+3. *The absorbing rule changed absence semantics.* Correct, and the draft's
+   sentence was wrong. [Absence and the combining rule](#absence-and-the-combining-rule)
+   now restates today's conversions and pins the conjunct's evaluation order,
+   which is what W7 needs.
+4. *The exception rollback ends before the commit's fallible work.* Correct.
+   [The install boundary](#the-install-boundary) names the boundary, moves
+   the input resynchronisation's refusal before it, declares the install
+   sequence non-refusing by contract, and says plainly that a throw after it
+   is an unrecovered defect.
+5. *Prepared targets lack a lifetime contract; merged decision effects cross
+   the liveness recheck.* Correct. Prepared arms carry the population
+   generation and are refused on a mismatch; the liveness step is kept and
+   evaluated against the proposed population; proposals do not cross
+   authority boundaries.
+6. *Search-judge faults are lost unless aggregation changes through candidate
+   replay.* Correct. [Aggregation to the step](#aggregation-to-the-step)
+   carries `JudgeOutcome` through `PushScope`, the replay and `StepJob`; W13
+   is a faulting judge with a successful score.
+7. *A door is not a transaction model for nested scopes, groups and
+   restoration.* Correct, and it changed the design: the latch, decision and
+   group stores are journal participants, so nesting and turn undo are the
+   arena's; group policy on the three-way outcome is specified; lifecycle
+   writers are named with the no-open-scope refusal.
+8. *Propose is serial and mutating; a stack frame is not a concurrency
+   design.* Correct. [Serial ownership](#serial-ownership) states the
+   precondition and hands the parallel design to the job-system memo.
+9. *"Already priced through CollectFacts" is false.* Correct: `CollectFacts`
+   collects scheduling facts and `StateCellOperand.Cost` is 1. [Pricing](#pricing)
+   states the undercharge, the correction, the double-count to remove and the
+   spelling-equivalence check in place of "unchanged or lower".
+10. *The named benchmark cannot show the saving; the cost claims are
+    estimates.* Correct. The `ComputedKey` kernel is specified, the
+    measurements enumerated, and the cost section says "estimate" where it
+    is one.
+11. *The steps do not leave working branches and several checks prove the
+    wrong thing.* Correct. The steps are re-cut: representation first with a
+    hash-identity check, lowering before the `Outcome` return so no operand
+    needs a frame, the register kept as a named bridge through step 3 and
+    deleted with its last reader in step 4, the journal before the door, and
+    checks that are `puck references` lists or witnesses rather than greps
+    that miss `CollectionsMarshal` writes.
+12. *The closure table overstated type-level closure; disclosure is outside.*
+    Correct. The table now carries an enforcement column with the three
+    levels, and the disclosure findings are named as out of scope with their
+    owner.

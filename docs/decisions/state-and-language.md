@@ -528,10 +528,14 @@ verdict is in, or not at all.
 
 The mechanism that carries this is decided in
 [the rule-faults plan](../plans/rule-faults.md): the fault is a case of the
-value every evaluation returns (`Outcome`, with no numeric accessor outside a
-match on the finite case), one interpreter produces every evaluated value and
-resolves every address before an operand reads through it, and a firing is a
-read phase producing a proposal that one commit door installs. A fault
+value every evaluation returns (`Outcome`, whose number is reachable only
+through the finite case), one interpreter produces every evaluated value and
+resolves every address before an operand reads through it, every store a
+firing decides (the latch, a decision's state, group progress) writes through
+the arena journal so one rewind at any nesting depth undoes all of it, and one
+door reads the firing's verdict. The plan names what enforces each clause
+(structure, one door, or a `puck scan` analyzer) and where the guarantee stops
+(a throw after the arena commit, a detached consumer's own fault arm). A fault
 register beside the value, read by each deciding place within its own scope,
 was the mechanism under review; four review rounds showed it cannot be closed
 (a nested success can clear it, it lives on a replaceable arena, every deciding
