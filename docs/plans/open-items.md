@@ -2412,6 +2412,29 @@ no sooner than in plan order (near 4 m: 47 of 135 at 160 s, all at 434 s).
 
 ### Vulkan regressions and GPU robustness
 
+- [medium, before V1] Draw identity is tracked twice and the occlusion visible
+  bit uses neither: R2's per-mesh identity counter (`SdfMesh.cs:331-335`,
+  `:612`, read at `sdf-mesh-selection.hlsli:79`) beside the residency's
+  per-index identity for motion history (`SdfWorldTables.MeshRegion.cs:280-293`),
+  while `sdf-mesh-occlusion.comp.hlsl:208-227` checks no identity. A
+  renumbering at the meadow (an inserted draw, or the landing subset at
+  `MeshRegion.cs:201-207`) hands each blade a neighbour's level and visible bit:
+  a cost spike and a pop in the 1.0-1.1 band. One per-record generation checked
+  for both; V1 swaps it for instance identity. (from: r2-review)
+- [low] R2's lows (r2-review): the box cull exists in C# (`SdfMeshCull.Keeps`,
+  now only the pose rates) and HLSL with nothing keeping them equal; Vulkan
+  never checks `maxDrawIndirectCount` (`VulkanGpuRecorder.cs:285-296`), so a
+  world past 65,535 draws breaks on a spec-minimum driver; the single-slot
+  Vulkan fallback grows CPU recording with candidates and hard-codes the mesh
+  push stages in the generic backend (`:291`); the wave-sum proof assumes 64
+  lanes; per-geometry facts are copied into every draw record and the level
+  count is stored twice (`SdfMesh.cs:603`, `:614`); a mesh with 256 or more
+  levels throws at staging (`:553`) instead of being refused where it is
+  built; `IGpuRecorder.CanDrawIndirectCount` is dead; stale docs at
+  `SdfMeshOcclusion.cs:11`, `SdfWorldPassRecorder.cs:755`, `SdfMesh.cs:322-324`,
+  `sdf-mesh-shadow.vert.hlsl:8-9`, `IGpuRecorder.cs:111-122`; and, unconfirmed,
+  a discarded recording that grew history leaves it uninitialized.
+
 - [low · unconfirmed] The bake's output may differ by backend. One after-run
   read 1,101,923,007 samples and 45,044,555 triangles on Vulkan against
   999,550,075 and 38,652,955 on Direct3D 12, but those runs straddled the
