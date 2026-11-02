@@ -216,6 +216,14 @@ record of when this repository changed:
   [the AGB firmware README](../../src/Puck.AdvancedGamingBrick/Firmware/README.md).
 - An external protocol's version string, such as MCP's `2026-07-28`, which is
   the protocol's own name for the revision Puck speaks.
+- A date of history before the repository existed, such as a famous chess
+  game's.
+
+`puck docs links` recognizes each exemption from the tree, never from a list:
+the legal pages are outside its corpus, a provenance pin is one
+[the third-party notices](../../THIRD-PARTY-NOTICES.md) carry, a protocol
+version is a date the code spells in a string literal, and history falls before
+the first commit.
 
 ## Keep documents from rotting
 

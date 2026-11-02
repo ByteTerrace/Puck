@@ -13,23 +13,27 @@ internal sealed class SourceCorpus {
     public int FileCount => Files.Count;
     public IReadOnlyList<ParsedFile> Files { get; }
 
-    // An already-enumerated file set, with the base its display paths are shown against.
+    // An already-enumerated file set, with the base its display paths are shown against. Files parse in parallel, each
+    // into its own slot, so the corpus keeps the enumeration's order whatever order the parses finish in.
     public static SourceCorpus Parse(IReadOnlyList<string> files, string relativeTo) {
-        var parsed = new List<ParsedFile>(capacity: files.Count);
+        var parsed = new ParsedFile[files.Count];
 
-        foreach (var file in files) {
-            var text = File.ReadAllText(path: file);
-            var root = CSharpSyntaxTree.ParseText(text: text).GetRoot();
+        Parallel.For(
+            body: index => {
+                var text = File.ReadAllText(path: files[index]);
 
-            parsed.Add(item: new ParsedFile(
-                Relative: CliPaths.ToDisplay(
-                    fullPath: file,
-                    relativeTo: relativeTo
-                ),
-                Root: root,
-                Text: text
-            ));
-        }
+                parsed[index] = new ParsedFile(
+                    Relative: CliPaths.ToDisplay(
+                        fullPath: files[index],
+                        relativeTo: relativeTo
+                    ),
+                    Root: CSharpSyntaxTree.ParseText(text: text).GetRoot(),
+                    Text: text
+                );
+            },
+            fromInclusive: 0,
+            toExclusive: files.Count
+        );
 
         return new SourceCorpus(files: parsed);
     }

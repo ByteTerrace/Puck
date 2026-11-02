@@ -806,6 +806,10 @@ base, so passing both is refused.
   selects none.
 - **Worlds**: a changed `.puck` source that declares `test` blocks is run with
   [`puck test`](#puck-testtest-worlds).
+- **Documentation**: a changed page of the documentation corpus, a C# change
+  under `src/` or `tests/` that is not trivia alone, or any deleted file
+  prints a `docs-links` line and `puck docs links`, which `--run` runs over the
+  whole corpus ([`docs links`](#docs-linksthe-documentation-rot-check)).
 - **Canaries** follow what they exercise. A canary is chosen when a changed
   file lies in its directory, is a world, script or fixture its manifest
   names, or is a source file the canary executed when coverage was last
@@ -845,7 +849,7 @@ base, so passing both is refused.
   `canary-check <id>` and the shared `puck canary --list <id...>` command;
   `--run` executes it without building or booting a World. Invalid prose still
   fails strict loading. An execution or verdict field change chooses the run.
-  These rules leave the gate's repository checks intact: docs links, format
+  These rules leave the gate's repository checks intact: format
   for changed C# sources, and docs citations in the GPU gate. JSON manifests are not formatter inputs.
 - A file no canary can execute is placed through the indexed C# sources it
   stands for. A project file or `NativeMethods.txt` stands for its project's
@@ -974,26 +978,26 @@ could know it. The plan runs serially in this order:
 4. `copy CLI`: copy the freshly built CLI into the run's own directory.
    Subsequent puck steps use this candidate copy.
 5. `affected`: `puck affected --merge-base <merge base> --run --suite-jobs <n>`
-   for the selected suites, side by side, and worlds. The gate's
+   for the selected suites, side by side, and worlds, and `puck docs links`
+   when the change reaches the documentation corpus. The gate's
    `--suite-jobs` sets the bound.
 6. `format`: `puck format --check --file-list <file list>` over changed C# and
    `.puck` sources; skipped when no such source changed.
-7. `docs links`: `puck docs links`.
-8. `schema`: `puck schema --check`.
-9. `architecture`: `puck architecture --check`.
-10. `registry`: `puck registry --check`.
-11. `vocabulary`: `puck vocabulary --check`.
-12. `shaders generate`: `puck shaders generate --check`.
-13. `branding`: `puck branding --check`.
-14. `baselines browser-parity`: `puck baselines browser-parity --check` when reached.
-15. `affected canaries`: `puck canary --gpu-jobs <n> <canaries>` for the selected canaries, side by side, only with `--gpu`.
-16. `parity`: `puck parity` when selected, only with `--gpu`.
-17. `Puck.World.Tests`: device suite, only with `--gpu`.
-19. `Puck.DirectX.Tests`: device suite, only with `--gpu`.
-20. `Puck.Vulkan.Tests`: device suite, only with `--gpu`.
-21. `Puck.Platform.Windows.Tests`: device suite, only with `--gpu`.
-22. `docs citations`: `puck docs citations`, only with `--gpu`.
-23. `affected record`: `puck affected --record`, only with `--gpu --record`
+7. `schema`: `puck schema --check`.
+8. `architecture`: `puck architecture --check`.
+9. `registry`: `puck registry --check`.
+10. `vocabulary`: `puck vocabulary --check`.
+11. `shaders generate`: `puck shaders generate --check`.
+12. `branding`: `puck branding --check`.
+13. `baselines browser-parity`: `puck baselines browser-parity --check` when reached.
+14. `affected canaries`: `puck canary --gpu-jobs <n> <canaries>` for the selected canaries, side by side, only with `--gpu`.
+15. `parity`: `puck parity` when selected, only with `--gpu`.
+16. `Puck.World.Tests`: device suite, only with `--gpu`.
+17. `Puck.DirectX.Tests`: device suite, only with `--gpu`.
+18. `Puck.Vulkan.Tests`: device suite, only with `--gpu`.
+19. `Puck.Platform.Windows.Tests`: device suite, only with `--gpu`.
+20. `docs citations`: `puck docs citations`, only with `--gpu`.
+21. `affected record`: `puck affected --record`, only with `--gpu --record`
     and only after every earlier step passes. It refreshes canary coverage.
 
 The device suites run `dotnet test --project <suite> -c Release --no-build` over the
@@ -1048,7 +1052,7 @@ to run, but prevent recording. Checks leave their ledgers untouched;
 at each start and exit, naming the step, its exit code (`-` until it exits),
 elapsed whole seconds and an ISO-8601 UTC time from the CLI host's clock. The
 console summary names both files. The CLI copy and format list are removed. Each
-step's console verdict carries its wall time (`gate: docs links passed (3s)`), the
+step's console verdict carries its wall time (`gate: schema passed (3s)`), the
 canary step echoes each canary's `PASS`/`FAIL` verdict as it lands, and a wait for
 host capacity names what holds it back: the process holding the GPU, named again
 when it changes, or the CPU and memory reading.
@@ -2498,7 +2502,7 @@ refused profile, package or plan, or for a blocked check when nothing failed.
 ```text
 puck docs build [--output <directory>] [--site <path>]
                                             stage the website reference (default <repo>/artifacts/docs)
-puck docs links [<document> ...]            check relative links, heading anchors, and cited repository paths
+puck docs links [<document> ...]            check links, anchors, cited paths and symbols, and rot markers
 puck docs citations [--enumeration <path>]  check the console-verb tokens skills and XML docs cite
 ```
 
@@ -2515,16 +2519,66 @@ without `index.html` is refused, and so is an archive that is not a zip; the
 application bundle stages the documentation workflow's site this way
 (`puck azure build --documentation`).
 
-### `docs links`—relative link and path check
+### `docs links`—the documentation rot check
 
-Checks a fixed documentation set (the world-project READMEs, the repository
-root README, and the engine manual's entry and topic pages) for citations that
-stopped resolving: relative markdown links, backticked rooted repository
-paths (`src/...`, `docs/...`, `tests/...`, `build/...`), and backticked bare
-filenames (looked up in an index swept from `src/`, `docs/`, `tests/`,
-`build/`, `worlds/`, and `.claude/skills/`—enforced under `src/`, advisory elsewhere,
-since a `docs/` document legitimately names out-of-repo files). Naming
-repository-relative markdown files checks exactly those instead.
+The check that keeps the hand-written pages from rotting
+([the rules it holds](../development/documentation.md#keep-documents-from-rotting)).
+CI's `verify.yml` runs it on every push (`documents` job), and `puck affected`
+selects it when a change touches a corpus page, a C# source under `src/` or
+`tests/`, or deletes a file. With no document named it checks the whole corpus,
+derived from the tree rather than listed: `AGENTS.md` and `README.md` at the
+root, every markdown file under `docs/` (not the image packs in the
+subdirectories of `docs/game/art/`), under `.claude/skills/` (not `evals/`) and
+under `worlds/`, and every `README.md` under `src/` and `tests/`. A page whose
+opening lines say it is generated and not hand-edited (`docs/world-name-registry.md`)
+is left to its generator's own check. Naming repository-relative markdown files
+checks exactly those instead.
+
+Each page is checked for citations that stopped resolving: relative markdown
+links, backticked rooted repository paths (`src/...`, `docs/...`, `tests/...`,
+`build/...`), and backticked bare filenames (looked up in an index swept from
+`src/`, `docs/`, `tests/`, `build/`, `worlds/`, and `.claude/skills/`—enforced
+under `src/` and `tests/`, advisory elsewhere, since a `docs/` document
+legitimately names out-of-repo files).
+
+A code span outside a fenced block that is shaped like a dotted C# name—two or
+more segments, each opening with a capital, optionally ending in an argument
+list, type arguments dropped (`RuleCapacity.MaxWorkUnitsPerTick`,
+`DocsCommand.Create()`)—must resolve. It resolves to a type, member, namespace,
+project, package id or source-file stem declared under `src/` or `tests/`, read
+from the syntax index `puck declarations` uses; to a dotted name the code spells
+as a string literal; to a type of the .NET runtime the CLI runs on, read from
+metadata; or, for a chain through a member (`WorldDefinition.Simulation.RateHz`),
+when its longest declared prefix is followed only by declared names. A name
+whose head is a Puck type or root namespace and that does not resolve fails, and
+so does one whose head nothing declares when its last segment is a member name
+only Puck declares (a renamed type). A name neither Puck's nor the runtime's (a
+package's type, a permission scope) is noted, not failed. Lowercase heads
+(console verbs, `.puck` field paths, file names), an argument list before the
+last segment (`Matches(...).Count`), a one-letter head and an all-capital
+segment longer than three characters are not read as names.
+
+Rot markers fail the run, each read from current state with nothing recorded:
+
+- a date, ISO or a month and a day, unless the code spells it in a string
+  literal under `src/` (a protocol revision) or it falls before the
+  repository's first commit (history, which a shallow clone cannot tell);
+- a commit SHA, a run of 7 to 40 lowercase hex characters with a digit and a
+  letter on a line that speaks of commits, merges, tips or revisions, unless
+  `THIRD-PARTY-NOTICES.md` pins it;
+- a path to a concrete entry under `.claude/scratch/`, `.claude/jobs/`,
+  `.codex/jobs/` or `AppData/Local/Temp`, outside a fenced block (the directory
+  alone, or a placeholder such as `<lane>-*`, states the convention);
+- a code span naming a branch that exists neither locally nor on a remote,
+  where a branch name opens with a remote or a namespace an existing branch
+  uses (`lane/`), or extends a family of existing names (`worktree-agent-…`);
+  not checked when no remote-tracking branch exists;
+- outside `docs/plans/`, a `file:line` or `file#Lline` citation in prose, where
+  the extension is one the tree holds.
+
+Dates and SHAs count in fenced blocks too; scratch paths and `file:line`
+citations in a fenced block are example commands and tool output. Each failure
+names its category, and the summary line counts them with the run's wall time.
 
 A link's `#fragment` into a markdown file, or a bare `#fragment` into the
 document itself, must name one of that file's heading anchors. Anchors are
@@ -2536,13 +2590,15 @@ in document order, and a `#` line inside a code fence is not a heading. So
 `` ### `puck scan`—source sweep `` answers to `#puck-scansource-sweep`. A
 fragment on a link to anything other than a markdown file is not checked.
 
-Two controls run before any document—a deliberately nonexistent path must
-fail resolution, and a deliberately absent fragment must miss a heading's
-anchors—so a green run proves the checker can turn red. Unlike
-`docs citations`, this covers file/path citations, never console-verb tokens.
+Three controls run before any document—a deliberately nonexistent path must
+fail resolution, a deliberately absent fragment must miss a heading's
+anchors, and the verb's own entry point must resolve while a member it lacks
+does not—so a green run proves the checker can turn red. Unlike
+`docs citations`, this covers file, path and C# citations, never console-verb
+tokens.
 
-Exit codes: 0 every citation resolved, 1 one or more citations did not
-resolve, 2 usage or no repository root.
+Exit codes: 0 every check passed, 1 one or more failed, 2 usage, no
+repository root, or a control or corpus listing refused.
 
 ### `docs citations`—cited verb token check
 
