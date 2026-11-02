@@ -48,8 +48,10 @@ function Resolve-PolicyPath {
     return [IO.Path]::GetFullPath($Path, $Cwd)
 }
 
+# Writes lists the files a command's output redirections open for writing, each @{ Value; Dynamic }. A command's
+# redirections arrive as an invocation of their own, named ':', so a policy reads them without reading every program.
 function New-PolicyInvocation {
-    param([string[]] $Argv, [bool[]] $Dynamic, [hashtable] $Env, [string] $Cwd, [string] $Text, [string] $Dialect, [string] $Opaque, [hashtable] $EnvDynamic = @{})
+    param([string[]] $Argv, [bool[]] $Dynamic, [hashtable] $Env, [string] $Cwd, [string] $Text, [string] $Dialect, [string] $Opaque, [hashtable] $EnvDynamic = @{}, [object[]] $Writes = @())
     [pscustomobject]@{
         Argv    = $Argv
         Dynamic = $Dynamic
@@ -60,6 +62,7 @@ function New-PolicyInvocation {
         Text    = $Text.Trim()
         Dialect = $Dialect
         Opaque  = $Opaque ? $Opaque : $null
+        Writes  = $Writes
     }
 }
 
@@ -335,6 +338,10 @@ function Get-PolicyPosixInvocations {
     $word = [Text.StringBuilder]::new()
     $started = $false; $dynamic = $false; $quoted = $false
     $redirectTarget = $false; $heredocNext = $false
+    # What the pending redirection target is: 'file' for an output file, 'dup' for >& (a file unless the target is a
+    # descriptor or -), or $false for input.
+    $redirectWrite = $false
+    $writes = [Collections.Generic.List[object]]::new()
     $pending = [Collections.Generic.List[object]]::new()
     $commandStart = 0
     $i = 0
@@ -342,7 +349,12 @@ function Get-PolicyPosixInvocations {
     $endWord = {
         if ($started) {
             $value = $word.ToString()
-            if ($redirectTarget) { $redirectTarget = $false }
+            if ($redirectTarget) {
+                if ($redirectWrite -eq 'file' -or ($redirectWrite -eq 'dup' -and $value -notmatch '^(\d+-?|-)$')) {
+                    $writes.Add([pscustomobject]@{ Value = $value; Dynamic = $dynamic })
+                }
+                $redirectTarget = $false; $redirectWrite = $false
+            }
             elseif ($heredocNext) { $pending.Add(@{ Delimiter = $value; Quoted = $quoted }); $heredocNext = $false }
             else { $words.Add([pscustomobject]@{ Value = $value; Dynamic = $dynamic }) }
         }
@@ -354,6 +366,10 @@ function Get-PolicyPosixInvocations {
         $words.Clear()
         $source = $Text.Substring($commandStart, [Math]::Min($i, $n) - $commandStart)
         $commandStart = [Math]::Min($i + 1, $n)
+        if ($writes.Count) {
+            New-PolicyInvocation @(':') @($false) @{} $Cwd $source 'posix' $null @{} @($writes)
+            $writes.Clear()
+        }
         while ($list.Count -and -not $list[0].Dynamic -and $list[0].Value -in $script:PolicyReservedWords) { $list = @($list | Select-Object -Skip 1) }
         if ($list.Count -and $list[0].Value -in $script:PolicySkippedForms) { $list = @() }
         $prefix = @{}
@@ -484,7 +500,7 @@ function Get-PolicyPosixInvocations {
             . $endWord
             $i++
             if ($i + 1 -lt $n -and $Text[$i + 1] -eq '>') { $i++ }
-            $redirectTarget = $true
+            $redirectTarget = $true; $redirectWrite = 'file'
             continue
         }
         if ($c -in @(';', '&', '|', '(', ')')) {
@@ -502,6 +518,7 @@ function Get-PolicyPosixInvocations {
                 $heredocNext = $true
                 continue
             }
+            $redirectWrite = if ($c -eq '>') { ($next -eq '&') ? 'dup' : 'file' } else { ($next -eq '>') ? 'file' : $false }
             if ($next -in @('>', '&', '|') -or ($c -eq '<' -and $next -eq '>')) { $i++ }
             $redirectTarget = $true
             continue
@@ -562,11 +579,26 @@ function Get-PolicyPwshInvocations {
         Get-PolicyPosixInvocations $Text $Cwd $Depth
         return
     }
+    # A file redirection on a command or an expression (`"x" > f`, `2>$null`) writes its target; $null discards.
+    $redirectionWrites = {
+        param($Node, [string] $Here)
+        $targets = @(foreach ($redirection in $Node.Redirections) {
+            if ($redirection -isnot [Management.Automation.Language.FileRedirectionAst]) { continue }
+            $location = $redirection.Location
+            if ($location -is [Management.Automation.Language.VariableExpressionAst] -and $location.VariablePath.UserPath -eq 'null') { continue }
+            @(ConvertFrom-PolicyPwshElement $location)[0]
+        })
+        if ($targets.Count) { New-PolicyInvocation @(':') @($false) @{} $Here $Node.Extent.Text 'powershell' $null @{} $targets }
+    }
+    foreach ($expression in $ast.FindAll({ param($node) $node -is [Management.Automation.Language.CommandExpressionAst] -and $node.Redirections.Count }, $true)) {
+        & $redirectionWrites $expression $Cwd
+    }
     $commands = $ast.FindAll({ param($node) $node -is [Management.Automation.Language.CommandAst] }, $true)
     foreach ($command in $commands) {
         $elements = $command.CommandElements
         $head = $elements[0]
         $source = $command.Extent.Text
+        & $redirectionWrites $command $Cwd
         # & { ... } runs a script block whose own commands are found separately.
         if ($head -is [Management.Automation.Language.ScriptBlockExpressionAst]) { continue }
         $headWords = @(ConvertFrom-PolicyPwshElement $head)

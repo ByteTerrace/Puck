@@ -12,8 +12,8 @@ command passes through untouched.
 
 Claude matches its permission rules against the rewritten input and shows that input in the prompt, so a moved
 command's ask rules see only the `.` line. Before rewriting, the shared classifier reads the original command;
-when it finds a git push, a codex exec, a Codex launch that changes its permissions, a form it cannot see into, or
-anything git-safety would refuse, the hook asks and its reason quotes those invocations whole.
+when it finds a git push, a codex exec, anything session-launch or git-safety would refuse or ask about, or a form it
+cannot see into, the hook asks and its reason quotes those invocations whole.
 #>
 
 [CmdletBinding()]
@@ -54,8 +54,8 @@ function Get-TransportAskingInvocations {
         }
         if ($invocation.Name -eq 'codex') {
             $asks = $asks -or $invocation.Argv -contains 'exec' -or ($invocation.Argv.Count -gt 1 -and $invocation.Argv[1] -eq 'e')
-            $asks = $asks -or $null -ne (Test-CodexLaunchPolicy $Context $invocation)
         }
+        $asks = $asks -or $null -ne (Test-SessionLaunchPolicy $Context $invocation)
         $asks = $asks -or $null -ne (Test-GitSafetyPolicy $Context $invocation)
         if ($asks) { $invocation }
     }
