@@ -1814,6 +1814,13 @@ and the order they land in; the items below are its findings and checks.
 - [low] The CPU cache holds 2,200 bytes a probe (the hit buffer beside the
   record), about twice what it held, and keeps every cell a window visited
   until the layout changes. (from: illum-step2)
+- [medium · unmeasured] The debug world's night floor (EV 2, keyed on `day`)
+  lengthens every point and spot light's range by about five stops of
+  exposure, day and night, since ranges follow the darkest exposure any key
+  reaches (`WorldRenderExposure.Resolve`). More fixtures reach each view's
+  frustum and each probe's hits; measure the views pass and the relight's
+  local part against an EV 7 floor on a quiet machine, and size ranges by the
+  live floor if the cost shows. (from: illum-step2)
 - [low · unconfirmed] `render.indirect.bounces` is now an on/off switch:
   bounce converges over relights toward the multi-bounce limit rather than
   stopping at the tier's two or three sweeps, so interiors lit mostly by

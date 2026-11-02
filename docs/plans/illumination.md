@@ -623,9 +623,18 @@ other lanes' work loading its CPU (frame times are evidence, not verdicts):
   a geometry change too. It retraced 8,294 of the window's 61,440 probes and
   relit 89,683 (`done … traced=8294 relit=89683 lights=96 seconds=39.680`);
   before the change sets it retraced the whole window.
-- Night at 0.95 of the day meters `0.208 nits source=probes` on the main view,
-  which then sits on the basis's EV 7 floor; step 0 read 3171 nits from the
-  stale noon volume.
+- Night at 0.95 of the day meters `0.208 nits source=probes` on the main view
+  under the former fixed EV 7 floor; step 0 read 3171 nits from the stale noon
+  volume. The night look is now authored (the owner's ruling: exposure is the
+  author's to style): `render.exposure`'s `ev100`, `minimum`, `maximum` and
+  `compensation` take keys on a clock, the standard's `dayCycle` gains a moon
+  opposite the sun and a night sky luminance, and the debug world keys the
+  hall's floor from EV 7 by day to EV 2 at night under a deep-blue 6-lux moon
+  and a 1-nit sky with stars. At 0.95 the main view then reads
+  `ev100=2.00 minimum=2 meter=0.465 nits source=probes`, a readable blue night
+  (the lane's captures). The light ranges follow the darkest exposure any key
+  reaches, so the debug world's point and spot lights now reach as far as an
+  EV 2 night shows them, day and night.
 - `host.frames` with the sun moving: `gallery` 54.4 ms average, 53.8 p50,
   118 p99, 160 max; `overlook` 37.1, 35.7, 51.9, 57.0. These are not compared
   with step 0's table: the load differed.
@@ -647,7 +656,22 @@ Open in step 2:
   live; in the hall the lamps are white and the default style's tint is cool,
   so the band brightens without warming. Whether it should warm is the style's
   authoring.
-- **Vulkan** and the **lockstep pair** are recorded in the lane's hand-back.
+- **Vulkan**, windowed on the same machine and load, after its cold bake
+  (during which `behind` printed while the pending scenes retraced): with the
+  day running at `gallery` the relight ran at 13,081 to 13,328 probes a second,
+  the age at a median of 2.1 to 2.5 s and an oldest of 4.4 to 4.5 s, and no
+  `behind` line printed over about a minute and a half; `local-version` held at
+  4 while `lighting-version` passed 998. Jumping from 0.45 to 0.95 relit
+  442,742 probes and traced none (`traced` 99,392 before and after), and the
+  night metered `ev100=2.00 meter=0.65 nits source=probes`. `host.frames` at
+  `gallery`: 91.6 ms average, 88.8 p50, 126.8 p99, 159.9 max.
+- **The lockstep pair** held: two Direct3D 12 Worlds booted on one build ran
+  one script (sun held at 0.3, the outdoor control pose, `world.lockstep on`)
+  and took a settled still at tick 700. The stills differ only on the Moth
+  and the grass tuft beside her (0.76 % of pixels past 8 levels), whose
+  simulation states differed (state and pose hashes did, the commands having
+  landed on different ticks); the lit scene, its indirect light and its
+  exposure matched to the level everywhere else.
 
 ## Corrections
 
