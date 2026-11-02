@@ -86,6 +86,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     // The host-selected machine metadata used by every live instance load, neighbour composition, and reload.
     private readonly string m_catalogFingerprint;
     private readonly IMachineValidationCatalog? m_machineCatalog;
+    private readonly Puck.Hosting.Jobs.JobPool? m_jobs;
     // Every instance shares the host's own persisted id — it identifies the MACHINE/PROCESS, not a world, so minting
     // a fresh one per instance would both misreport the host and put a Guid.NewGuid() on an admission path.
     private readonly Guid m_machineId;
@@ -1293,7 +1294,8 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
                 // to prove it.
                 admission: (admission!.AppliesTo(definition: definition!, machines: machines.ValidationCatalog)
                     ? admission
-                    : null)
+                    : null),
+                jobs: m_jobs
             );
 
             adjacencies = new WorldAdjacencyFields(
@@ -1505,8 +1507,11 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     /// <param name="pacing">The live host pacing policy shared by every instance's replay stepper. A non-launcher
     /// host defaults to inline wall-clock pacing.</param>
     /// <param name="addonHostFactory">The composition root's shared addon mount path for spawned rows.</param>
-    public WorldInstanceHost(IWorldEmbodiedSeats seats, WorldSessionResolver resolver, Guid machineId, WorldStateRoot stateRoot, CancellationToken applicationStopping, Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, WorldOutputHub?, IWorldMachineHost> machineHostFactory, bool admitsSpawn = true, string catalogFingerprint = "", IMachineValidationCatalog? machineCatalog = null, Action<WorldRemoteAuthority>? travelerRouteStarted = null, HostPacing? pacing = null, Func<WorldDefinition, WorldServer, IWorldAddonHost>? addonHostFactory = null) {
+    /// <param name="jobs">The engine's job pool every spawned row's server forks its partitioned tick phases onto, or
+    /// <see langword="null"/> for serial servers.</param>
+    public WorldInstanceHost(IWorldEmbodiedSeats seats, WorldSessionResolver resolver, Guid machineId, WorldStateRoot stateRoot, CancellationToken applicationStopping, Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, WorldOutputHub?, IWorldMachineHost> machineHostFactory, bool admitsSpawn = true, string catalogFingerprint = "", IMachineValidationCatalog? machineCatalog = null, Action<WorldRemoteAuthority>? travelerRouteStarted = null, HostPacing? pacing = null, Func<WorldDefinition, WorldServer, IWorldAddonHost>? addonHostFactory = null, Puck.Hosting.Jobs.JobPool? jobs = null) {
         m_pacing = (pacing ?? HostPacing.WallClockInline);
+        m_jobs = jobs;
         ArgumentNullException.ThrowIfNull(argument: seats);
         ArgumentNullException.ThrowIfNull(argument: resolver);
         ArgumentNullException.ThrowIfNull(argument: stateRoot);

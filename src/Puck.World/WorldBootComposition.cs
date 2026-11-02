@@ -841,7 +841,8 @@ public static class WorldBootComposition {
                 addonHostFactory: sp.GetRequiredService<Func<WorldDefinition, WorldServer, IWorldAddonHost>>(),
                 catalogFingerprint: MachineCatalogFingerprint(machineCatalog: sp.GetRequiredService<WorldMachineCatalog>()),
                 machineCatalog: sp.GetRequiredService<WorldMachineCatalog>(),
-                pacing: sp.GetRequiredService<HostPacing>()
+                pacing: sp.GetRequiredService<HostPacing>(),
+                jobs: sp.GetRequiredService<Puck.Hosting.Jobs.JobPool>()
             );
             var bootOrigin = sp.GetRequiredService<WorldDefinitionSource>();
             var bootServer = sp.GetRequiredService<WorldServer>();
@@ -1026,8 +1027,10 @@ public static class WorldBootComposition {
         services.AddWorldMachineCatalog(machineCatalog: inputs.MachineCatalog);
         services.AddSingleton(implementationInstance: inputs.StateRoot);
         services.AddSingleton(implementationInstance: inputs.Caches);
-        // The one worker-count setting: the job system sizes its partition forks from it.
+        // The one worker-count setting, and the pool sized from it that every authority's partitioned tick phases fork
+        // onto (the container disposes it, joining its threads).
         services.AddSingleton(implementationInstance: inputs.Workers);
+        services.AddSingleton<Puck.Hosting.Jobs.JobPool>();
         services.AddSingleton(implementationInstance: new WorldCaptureRoot(path: inputs.CaptureDirectory));
         services.AddSingleton(implementationInstance: new WorldScheduleRoot(path: inputs.ScheduleDirectory));
         services.AddSingleton(implementationInstance: worldSource);
