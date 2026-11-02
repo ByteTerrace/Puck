@@ -803,6 +803,12 @@ not a spiral:
   at a fundamental flaw rather than a list of fixes, as a way to climb a
   steep hill; it never does the hard labor of implementing,
   measuring or bisecting, which goes to specialist or implementer.
+- Before putting a semantics question to the owner, look for the decision it
+  follows from (`docs/decisions/`, the plan's requirements). A behaviour a
+  recorded contract implies is derived, written down with its derivation, and
+  never asked about or labelled the owner's ruling; the owner decides only
+  what no requirement settles. (The lead once put "a faulted Edge rule holds
+  its latch" to the owner; the fault contract already implied it.)
 - A defect the owner can see (a walkthrough, a sweep still, a capture) ranks
   at the top of Next and gets a lane at once, aimed at the root cause, not a
   packet line: the hall stairs' holes sat as "dark patches" in the sweep packet
