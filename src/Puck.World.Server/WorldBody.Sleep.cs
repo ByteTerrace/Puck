@@ -16,11 +16,23 @@ public sealed partial class WorldBody {
     internal bool PopulationSleeping => (m_rigidSleepRootPlusOne != 0);
     internal int RigidSleepRootPlusOne => m_rigidSleepRootPlusOne;
 
+    // Moves whenever the body comes to rest or leaves it, and whenever a pose, a restore or a transfer replaces what
+    // it rests with. While the body rests (AtRest) and this has not moved, nothing in its continuation can have changed
+    // but what the population keys its continuation digest by beside it (the contact-field version, the admission
+    // revision and the action-state lane values), so the digest WorldPopulation.AppendContinuationHash cached stands.
+    private ulong m_restEpoch;
+
+    internal ulong RestEpoch => m_restEpoch;
+    internal bool AtRest => ((m_asleepSinceTick != 0UL) || (m_rigidSleepRootPlusOne != 0));
+
+    private void MoveRestEpoch() => m_restEpoch++;
+
     internal void BindPopulationWake(int index, Action<int>? observer) {
         m_populationIndex = index;
         m_populationWake = observer;
     }
     internal void ParkRigidIsland(int rootPlusOne, ulong contactFieldVersion) {
+        MoveRestEpoch();
         m_rigidSleepRootPlusOne = rootPlusOne;
         m_lastContactFieldVersion = contactFieldVersion;
         RigidStaticSubstepsThisTick = 0;
@@ -29,6 +41,7 @@ public sealed partial class WorldBody {
     // A parked rigid body that a contact-field change provably cannot reach observes it without waking.
     internal void ObserveContactField(ulong contactFieldVersion) => m_lastContactFieldVersion = contactFieldVersion;
     internal void WakeRigidIsland() {
+        MoveRestEpoch();
         m_rigidSleepRootPlusOne = 0;
         InvalidateRigidRest();
         // PrepareBodyStep fixes this tick's integration roster. A later wake joins the contact solve immediately,
@@ -66,6 +79,7 @@ public sealed partial class WorldBody {
     /// (<see cref="ApplyTransferState"/>), an admission change resuming a parked body, or a targeted effect
     /// (<see cref="ApplyTargetedEffect"/>). A no-op while already awake.</summary>
     internal void WakeUp() {
+        MoveRestEpoch();
         NotifyPopulationWake();
         m_asleepSinceTick = 0UL;
         m_sleepIdleTicks = 0UL;
@@ -115,6 +129,7 @@ public sealed partial class WorldBody {
         m_sleepIdleTicks += stepTicks;
 
         if (m_sleepIdleTicks >= sleepAfterTicks) {
+            MoveRestEpoch();
             m_asleepSinceTick = tick;
         }
     }

@@ -14,10 +14,11 @@ namespace Puck.World;
 internal sealed class WorldTestBatch {
     // Workers is the --workers count the leg boots with (absent, the host's own); Record writes the leg's per-tick
     // authority hashes and crossing log beside its exports, which a worker-count or oracle comparison reads.
+    // VerifyHash checks each recorded tick's incremental hash against a full recompute during the authored run.
     // Disclosure makes the leg one world of a noninterference pair (WorldDisclosureRun), which writes what its observed
     // principals received beside the exports.
     private sealed record Leg(string World, string Directory, int ExitAfterSeconds, bool Reproduce = false, string? CacheDirectory = null, int? Workers = null, bool Record = false,
-        WorldDisclosureLeg? Disclosure = null) {
+        bool VerifyHash = false, WorldDisclosureLeg? Disclosure = null) {
         public bool Probed => (Reproduce || Record);
     }
 
@@ -149,7 +150,12 @@ internal sealed class WorldTestBatch {
     }
     private void Observe(WorldInstance instance) {
         if (m_observing && m_legs[m_index].Probed && m_observed.Add(item: instance)) {
-            try { m_probes.Add(item: (instance.Name, Get<WorldReplayTape>().ObserveReplay(instance: instance))); } catch (InvalidOperationException exception) { m_legFailure = $"cannot capture '{instance.Name}': {exception.Message}"; }
+            try {
+                var probe = Get<WorldReplayTape>().ObserveReplay(instance: instance);
+
+                probe.VerifiesIncrementalHash = m_legs[m_index].VerifyHash;
+                m_probes.Add(item: (instance.Name, probe));
+            } catch (InvalidOperationException exception) { m_legFailure = $"cannot capture '{instance.Name}': {exception.Message}"; }
         }
     }
     private void StartLeg() {
@@ -215,6 +221,8 @@ internal sealed class WorldTestBatch {
             foreach (var (name, probe) in m_probes) {
                 int? divergence = null;
 
+                if (probe.StaleDigest is { } stale) { throw new InvalidOperationException(message: $"'{name}': {stale}"); }
+
                 if (leg.Reproduce) {
                     try {
                         Console.WriteLine(value: $"[test.batch: tick replay {name} 0]");
@@ -235,7 +243,15 @@ internal sealed class WorldTestBatch {
             var run = Get<WorldTestRun>();
 
             static double Milliseconds(long ticks) => ((1000.0 * ticks) / Stopwatch.Frequency);
+            var server = Get<WorldServer>();
+
             File.WriteAllText(Path.Combine(path1: leg.Directory, path2: "timing.json"), JsonSerializer.Serialize(new {
+                // The boot authority's incremental hash work beside what a whole fold would have done: rows and body
+                // slots refolded against the arena's rows and the population's slots.
+                arenaRows = server.Arena.Layout.RowCount,
+                arenaRowFolds = server.Arena.RowDigestFolds,
+                populationSlots = server.Population.Capacity,
+                continuationFolds = server.Population.ContinuationFolds,
                 authorityTicks = run.AuthorityTicks,
                 bootMilliseconds = Milliseconds(ticks: m_bootTicks),
                 armMilliseconds = Milliseconds(ticks: m_armTicks),
