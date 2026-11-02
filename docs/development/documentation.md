@@ -472,7 +472,10 @@ directory resolves as a plugin, and the run adds a no-skill baseline arm.
 **Writing graders:**
 
 - Write every criterion as a statement about what the reply contains, one
-  fact per grader.
+  fact per grader, as a `PASS if` rule and a `FAIL if` rule, each with an
+  example reply. The sandboxed agent only advises, so a rubric worded as an
+  action ("fixes", "runs", "commits") fails a correct reply that recommends
+  the action.
 - Prefer a deterministic grader. Use a `regex` for anything a token settles,
   and `llm` only where meaning needs judging.
 - Read the transcripts of a sample of runs and check each LLM grader's verdict
@@ -486,8 +489,20 @@ directory resolves as a plugin, and the run adds a no-skill baseline arm.
   (default 1.0: every run passes every grader).
 - **Noise:** one run swings by about 0.2, so a delta under about 0.1 is
   noise.
-- **Judge:** the LLM judge defaults to Haiku. Set `--judge-model` to a model
-  other than the one under test where the cost allows.
+- **Judge:** the LLM judge defaults to Haiku, which failed correct replies
+  against action-worded rubrics ("makes the commit", "runs the script"). Set
+  `--judge-model` to a model at least as strong as the one under test: Sonnet
+  for a Sonnet suite, and Opus for the judgement-heavy `delegate`,
+  `orchestration` and `review-passes` suites. Judge calls are a small share of
+  a run's cost.
+- **Tags:** every case's `prompt.md` carries `tags: [regression]` or
+  `tags: [capability]`, so `--tag` runs one kind. A regression case is
+  teaching the skill already carries reliably: run it at threshold 1.0 over
+  three runs, and treat any failing run as a stop to investigate. A capability
+  case grades teaching that is new or still failing: run it five times and
+  report its score with the per-run vector, with no threshold. A capability
+  case that passes every run on every model that loads the skill becomes a
+  regression case. A case's `description` names the incident it came from.
 - **Load and cost:** keep `-j` at 4 or below on a shared machine, and set
   `--max-cost-usd` for any suite run. A Sonnet case costs about $0.20 per run
   with both arms.
