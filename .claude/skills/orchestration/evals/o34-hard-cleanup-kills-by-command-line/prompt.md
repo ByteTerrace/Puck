@@ -1,4 +1,6 @@
 ---
+description: "orchestration 'Schedule machines': an agent stops only the processes it started, by recorded PID, never by a command-line pattern; lanes whose runs failed during such a kill re-run their legs alone."
+runs: 5
 max_turns: 8
 allowed_tools: [Read, Glob, Grep, Skill]
 tags: [capability]

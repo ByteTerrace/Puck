@@ -16,7 +16,9 @@ Procedures loaded by [orchestration](../SKILL.md) for branches, delegation and l
   A ready lane (its own focused checks hold on that merged head) joins the
   integration lane's next batch, and the lead handles any push
   ([land in batches](../SKILL.md#land-in-batches)).
-- Create no per-lane, per-review or per-batch remote branch. A review pass runs
+- Create no per-review or per-batch remote branch, and no per-lane one except
+  the backup of a finished lane branch that waits to merge (`lane/<id>`,
+  [land in batches](../SKILL.md#land-in-batches)), deleted once it lands. A review pass runs
   in its own worktree detached at the lane's head, and its fixes become a
   follow-up branch for the next batch, never commits on the author's branch
   ([`review-passes`](../../../../.claude/skills/review-passes/SKILL.md)). A local

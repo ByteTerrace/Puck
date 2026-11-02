@@ -5,4 +5,4 @@ match: contains
 flags: i
 ---
 
-canary|parity|device test host
+GPU\b[^\n]{0,40}(grant|none|lease)

@@ -1,4 +1,5 @@
 ---
+description: "orchestration 'Plan from the milestone': plan backward from the critical path and put the best-fit partner on its least-prepared item; busy is not progress and no filler is queued."
 max_turns: 8
 allowed_tools: [Read, Glob, Grep, Skill]
 tags: [regression]

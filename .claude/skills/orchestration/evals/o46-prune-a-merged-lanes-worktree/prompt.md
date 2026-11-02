@@ -1,5 +1,6 @@
 ---
 description: "orchestration 'Land in batches': keep a merged lane's worktree until its cross-family review is back; most review highs go back to the lane that wrote the code, which resumes in place with its context."
+runs: 5
 max_turns: 8
 allowed_tools: [Read, Glob, Grep, Skill]
 tags: [capability]

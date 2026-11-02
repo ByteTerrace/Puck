@@ -565,8 +565,9 @@ puck evals compare <with-without>/aggregate-result.json <after>/aggregate-result
 `claude plugin eval` runs a bare skills directory as a plugin, and adds a
 no-skill baseline arm. A case is one directory under the skill's `evals/`:
 
-- `prompt.md`: frontmatter `tags`, `runs` (default 3), `max_turns`,
-  `timeout_seconds`, `allowed_tools` and `model`, then a realistic task.
+- `prompt.md`: frontmatter `description`, `tags`, `runs` (default 3),
+  `max_turns`, `timeout_seconds`, `allowed_tools` and `model`, then a
+  realistic task, which `run` puts the fixture ahead of.
 - `graders/*.md`: each grader one of `regex`, `tool_used`, `tool_order`,
   `file_exists`, `llm` or `baseline`. There are no custom-code graders.
 - `case.yaml`, when the case needs `context` fields (`scaffold_script`,
@@ -582,6 +583,12 @@ real failures.
   fact per grader. Grade the behaviour Puck needs, never the skill's own
   wording: a grader that a correct reply in other words would fail is
   deleted.
+- Grade what the prompt's situation calls for. A grader for a rule the
+  prompt never raises (where `main` goes, in a case about a denied merge)
+  fails a correct reply that stays on the question. A grader for a rule the
+  skill only routes to another skill (orchestration sends GPU classification
+  to `verification`) cannot pass in a sandbox that loads only the skill under
+  test; grade that rule in the owning skill's suite.
 - A sandboxed agent only advises; its reply cannot fix, run or commit
   anything. A rubric worded as an action ("fixes", "runs", "commits") fails a
   correct reply that recommends the action, so a rubric says what the reply

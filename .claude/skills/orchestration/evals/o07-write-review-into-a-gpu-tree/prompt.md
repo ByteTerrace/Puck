@@ -1,4 +1,5 @@
 ---
+description: "orchestration 'Land in batches' and verification: nothing edits or merges into a tree while a canary, parity or test run reads it, so an editing review pass runs in its own worktree."
 max_turns: 8
 allowed_tools: [Read, Glob, Grep, Skill]
 tags: [regression]

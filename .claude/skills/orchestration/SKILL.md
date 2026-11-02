@@ -1,6 +1,6 @@
 ---
 name: orchestration
-description: "Leads Puck lanes and partners. Use for briefs, choosing agents or Codex models, landing lanes, Antigravity, GPU and build scheduling, idle partners, routing findings; review-passes runs passes."
+description: "Leads Puck lanes: briefs, agent and model choice, landing, branch and worktree cleanup, GPU and build scheduling, settle windows, owner questions, routing findings; review-passes runs reviews."
 ---
 
 # Orchestration
@@ -117,8 +117,10 @@ constraints, never the method, the design or the order of the edits. A partner
 picks its next work from its track or a shared ready queue and announces it. The
 lead keeps cross-track conflicts, merges, owner-level calls, and scope and
 order. Every brief ends with the partner's own next one or two items, and the
-partner works its queue without waiting for the lead between items. A wait (a
-GPU leg, the next batch) blocks the lane, never the partner: the
+partner works its queue without waiting for the lead between items. A lane
+waits for its own evidence (its GPU leg) before it is ready, and once ready it
+waits for nothing ([land in batches](#land-in-batches)). Neither wait blocks
+the partner: the
 partner takes its next item from its track or the ready queue and announces
 it. A queue the
 partners cannot read is no queue: keep the lead's queue where partners can reach
@@ -651,8 +653,10 @@ verdicts that are not evidence, so a lane that failed while the kill ran re-runs
 its failed legs alone before anyone acts on them. A brief that starts background
 work says to record each PID and to stop only those.
 
-Every build, a Codex brief's included, passes `-nodeReuse:false`
-([`verification`](../verification/SKILL.md#build-before-you-test) says why).
+Every `dotnet build`, `msbuild`, restore, pack and publish passes
+`-nodeReuse:false`, a Codex brief's included, because a reused MSBuild node
+outlives the build and holds memory. `dotnet test` never takes it, since it
+rejects the flag ([`verification`](../verification/SKILL.md#build-before-you-test)).
 
 ## Select models and route findings
 
@@ -894,9 +898,11 @@ and not a spiral:
 - Before putting a semantics question to the owner, look for the decision it
   follows from (`docs/decisions/`, the plan's requirements). A behaviour a
   recorded contract implies is derived, written down with its derivation, and
-  never asked about or labelled the owner's ruling; the owner decides only
-  what no requirement settles. (The lead once put "a faulted Edge rule holds
-  its latch" to the owner; the fault contract already implied it.)
+  never asked about or labelled the owner's ruling. A question two contracts
+  answer differently is the lead's to rule ([rule on collisions](#rule-on-collisions)).
+  Only what the engine should do or how it should look, where no requirement
+  speaks, goes to the owner. (The lead once put "a faulted Edge rule holds its
+  latch" to the owner; the fault contract already implied it.)
 - A defect the owner can see (a walkthrough, a sweep still, a capture) ranks
   at the top of Next and gets a lane at once, aimed at the root cause, not a
   packet line: the hall stairs' holes sat as "dark patches" in the sweep packet

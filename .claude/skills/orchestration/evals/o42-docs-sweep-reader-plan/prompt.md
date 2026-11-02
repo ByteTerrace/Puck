@@ -1,5 +1,6 @@
 ---
 description: "orchestration 'Schedule machines', settle windows: the closing window sweeps the documentation; the least reliable family's area gets a second full reader, and the report states each area's reader count, because consensus on findings is not coverage of pages. Antigravity's citations and code readings have been retracted when other families checked them."
+runs: 5
 max_turns: 8
 allowed_tools: [Read, Glob, Grep, Skill]
 tags: [capability]

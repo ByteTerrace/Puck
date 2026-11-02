@@ -1,4 +1,5 @@
 ---
+description: "orchestration 'Launch capabilities': partners cannot see unpushed lanes, so the lead sends them the contracts and answers their questions from the local code; a stale remote makes false 'failing' claims."
 max_turns: 8
 allowed_tools: [Read, Glob, Grep, Skill]
 tags: [regression]

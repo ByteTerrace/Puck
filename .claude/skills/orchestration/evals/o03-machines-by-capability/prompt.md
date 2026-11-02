@@ -1,4 +1,5 @@
 ---
+description: "orchestration 'Schedule machines': allocate by fixed capability, never a free-memory snapshot; one GPU leg per GPU, and CPU work, builds included, may run beside it."
 max_turns: 8
 allowed_tools: [Read, Glob, Grep, Skill]
 tags: [regression]

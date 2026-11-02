@@ -1,4 +1,5 @@
 ---
+description: "orchestration 'Launch capabilities': the lead machine's local agents can build on an unpushed lane head, so a dependent lane starts there and merges the landed head afterwards."
 max_turns: 8
 allowed_tools: [Read, Glob, Grep, Skill]
 tags: [regression]

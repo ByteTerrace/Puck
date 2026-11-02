@@ -1,4 +1,5 @@
 ---
+description: "orchestration 'Select models and route findings' and lane-work 'Delegated work': a reported defect is checked against the current files before ruling, and a finding is never reclassified on a peer's recommendation so a lane can land."
 max_turns: 8
 allowed_tools: [Read, Glob, Grep, Skill]
 tags: [regression]

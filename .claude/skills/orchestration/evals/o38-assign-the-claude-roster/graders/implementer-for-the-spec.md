@@ -5,4 +5,4 @@ match: contains
 flags: i
 ---
 
-implementer
+(HUD|label)[^\n]{0,80}implementer
