@@ -1077,7 +1077,15 @@ model is not known until a row reads it (the `enum-word-in-let` pair holds:
 fix: a `let`'s object refuses the quoted word too, once lowering can type the
 let's value where a row reads it, or the row admits the quoted word and the
 printer writes it bare. Decided: refuse it in the `let` (PUCK110 names
-the bare spelling), migrating the standard's lets with `puck migrate`.
+the bare spelling), migrating the standard's lets with `puck migrate`. Landed:
+a `let` holding a record lowers where it lands at that position, as the
+record written there would (`DocumentScope.TryLowerBindingAt`, once per
+position), so its members take a row's refusals (a quoted closed word is
+PUCK110, attributed to the `let`'s own source) and its bare words read as the
+position's words: before, a `let`'s bare `hold: None` read the chess `None`
+enum member as 0. Only `worlds/standard/kits.puck`'s holds quoted their words;
+they are bare now. The corpus holds `enum-word-in-let` (now bare) and
+`let-word-at-position`.
 
 **G16 — The Moth's mirrored halves.** The right half of `moth.puck` (from about
 `:2508`) restates the left. Of 114 left/right shape pairs the right id is the

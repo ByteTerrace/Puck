@@ -112,6 +112,14 @@ public static partial class DocumentLowering {
 
                     return placeholder;
                 }
+                // A let holding a record lands where it is read as the record written there: its members take a row's
+                // spelling and lower at their own positions.
+                if (!scope.Locals.ContainsKey(key: ident.Name) && scope.Constants.TryGetValue(key: ident.Name, value: out var declared) &&
+                    (declared is ObjectExpressionNode or ArrayExpressionNode or WithExpressionNode) && (MemberContext(scope: scope) is { } position)) {
+                    if (scope.TryLowerBindingAt(fieldKey: fieldKey, name: ident.Name, position: position, value: out var placed)) {
+                        return placed;
+                    }
+                }
                 if (scope.TryEvaluateBinding(
                     ident.Name,
                     fieldKey,

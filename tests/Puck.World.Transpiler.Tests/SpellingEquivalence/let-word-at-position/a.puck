@@ -1,0 +1,21 @@
+// A let's bare closed word lowers where the let lands, as the word written in the row does, even when an enum of the
+// world declares a member of the same name.
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+enum Seat {
+  None
+  Taken
+}
+
+let held = { name: "held", bond: Free, hold: None }
+
+kits [
+  {
+    name: "cursor"
+    bodyMotionProgram: "walk"
+    motion {
+      holds [held]
+    }
+  }
+]
