@@ -143,6 +143,13 @@ agent works in that mode by default, without asking:
     far behind on the lead machine: a change to rendering or GPU code also gets a
     windowed Vulkan boot of the debug world, and a Vulkan regression is fixed as
     ordinary work. Full parity qualification waits for the owner's call.
+  - Changes pay dividends (the owner's ruling). Every change is measured,
+    but none is judged by its isolated delta alone: a small measured gain is
+    kept when it simplifies, unifies or opens a design the next step builds
+    on, because Puck's code and processes should pay dividends, not incur
+    debt. Practices from established projects that exist for compatibility
+    (no API or behaviour change, the smallest possible change) do not carry
+    over; their evidence practices do.
   - Ergonomic is optimal (the owner's ruling). Cost depends on what a
     document means, never on how it is spelled: a `for`/`map`, a template, a
     fold or a `let` costs no more than the hand-unrolled, pasted or literal
