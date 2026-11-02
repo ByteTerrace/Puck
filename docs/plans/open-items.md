@@ -1863,11 +1863,6 @@ them verbatim repeats) under-use the language:
 The [illumination plan](illumination.md) holds the research round's decisions
 and the order they land in; the items below are its findings and checks.
 
-- [medium] The standard's `dayCycle` (`worlds/standard/skies.puck`) now needs
-  every world that expands it to author a light named `moon`. A standard
-  template that only works once an author adds a named row is a trap: the
-  template emits its own moon light, overridable by id like any standard row.
-  (from: illum-step2)
 
 - [high, the illum1-fix lane is fixing] Step 1's self-transmission allowance
   (`passes/sdf-surface-stage.hlsli:219,282`) estimates thickness from
@@ -1933,7 +1928,7 @@ and the order they land in; the items below are its findings and checks.
   bounce converges over relights toward the multi-bounce limit rather than
   stopping at the tier's two or three sweeps, so interiors lit mostly by
   bounce may read brighter than step 1's stills. A switched-off lamp's bounce
-  fades over up to sixteen relights rather than vanishing. Compare the gather
+  fades over the bounce sweeps rather than vanishing. Compare the gather
   stops with step 1's stills on a quiet machine. (from: illum-step2)
 - [high] The wrapped side's self-shadow term has failed three reviews, each
   in a new mesh-topology case: curvature transmission, then the exit layer,

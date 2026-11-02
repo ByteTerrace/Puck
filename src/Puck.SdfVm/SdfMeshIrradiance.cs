@@ -202,7 +202,7 @@ public sealed class SdfMeshIrradiance : IDisposable {
     private static readonly TimeSpan LightingInterval = TimeSpan.FromSeconds(value: 0.1d);
     // The most relights a probe takes under one lighting while its bounce converges, and the change a relight may make
     // to an axis's luminance, as a share of it plus a floor in nits, for the bounce to count as converged.
-    private const int MaxRelights = 16;
+    private const int MaxSweeps = 32;
     // The geometry changes the volume remembers; a probe traced before the oldest traces again.
     private const int MaxChanges = 16;
     // The metres a changed draw's box grows by, and a ray's recorded hit extends by at least, so a hit on the draw's
@@ -212,7 +212,8 @@ public sealed class SdfMeshIrradiance : IDisposable {
     private const int MaxVersionTimes = 4096;
     private const float ConvergedShare = 0.02f;
     private const float ConvergedFloor = 1.0e-3f;
-    // The share of the largest projected sky coefficient a sky change must move one by before the probes are relit.
+    // The share of a colour channel's largest projected sky coefficient a sky change must move one of that channel's by
+    // before the probes are relit.
     private const float SkyTolerance = 1.0e-3f;
     // The least wall time between two behind lines.
     private static readonly TimeSpan BehindInterval = TimeSpan.FromSeconds(value: 10d);
@@ -257,6 +258,7 @@ public sealed class SdfMeshIrradiance : IDisposable {
     private int m_listGeometry;
     private int m_listWindow;
     private Layout m_listLayout;
+    private int m_listSweep;
     // The worker's store of a batch's landed probes (StoreLanded): the cells that landed, the window cells they restore,
     // and the slot words composed for those.
     private readonly List<(int Level, (int X, int Y, int Z) Cell)> m_landed = [];
@@ -348,6 +350,14 @@ public sealed class SdfMeshIrradiance : IDisposable {
     // a geometry change owes: probes not yet traced against the current scene.
     private bool m_owed;
     private bool m_traceOwed;
+    // The bounce iteration: the sweep the worker is relighting the windows in (every probe once a sweep), whether a
+    // probe of this sweep moved past the convergence bound, the sweeps since the inputs last changed, and whether a
+    // lockstep frame waits for the worker to yield. Under the gate.
+    private int m_sweep = 1;
+    private bool m_sweepMoved;
+    private int m_sweepsSince;
+    private bool m_yield;
+    private bool m_unconvergedReported;
     // The state the cache's light was drained for, cleared once asynchronous work relights any of it: a lockstep frame
     // whose state differs drains, so its light never carries the bounce asynchronous frames left.
     private (int Geometry, int Lighting, int Windows, Layout Layout) m_drained;
@@ -539,11 +549,14 @@ public sealed class SdfMeshIrradiance : IDisposable {
         // bounce earlier frames left in the cache. The drain takes the gate itself, so it runs outside it, after the
         // worker in flight, which may hold it, has finished.
         if (drain) {
+            // The worker returns at its next batch, so the drain takes over whatever budgeted work it had left.
+            lock (m_gate) { m_yield = true; }
             try {
                 m_worker?.Wait();
             } catch (AggregateException) {
                 // A faulted worker is reported below, as it is for any frame.
             }
+            lock (m_gate) { m_yield = false; }
             if (m_worker is not { IsFaulted: true }) {
                 Drain();
             }
@@ -575,6 +588,8 @@ public sealed class SdfMeshIrradiance : IDisposable {
     }
     // Owes the worker work; the clock the done line reports starts when the volume leaves its settled state.
     private void Owe() {
+        m_sweepsSince = 0;
+        m_unconvergedReported = false;
         if (!m_owed) {
             m_clock.Restart();
             m_traced = 0;
@@ -902,8 +917,10 @@ public sealed class SdfMeshIrradiance : IDisposable {
             }
             if (!reuse) { continue; }
             if (!sample.Invalid && ((sample.Lighting != lighting.Version) || (sample.Settled != !m_owed))) {
+                // The hits were traced from the sample's own origin, so it is relit there, however far within its cell the
+                // camera now stands.
                 Relight(feedback: (lighting.Feedback && m_layout.Bounce), hits: sample.Hits, layout: m_layout, lighting: lighting, lights: default, local: sample.Local,
-                    lows: lows, origin: position, radiance: sample.Radiance, reuseLocal: (sample.LocalVersion == lighting.LocalVersion), scene: scene);
+                    lows: lows, origin: sample.Position, radiance: sample.Radiance, reuseLocal: (sample.LocalVersion == lighting.LocalVersion), scene: scene);
                 sample.Lighting = lighting.Version;
                 sample.LocalVersion = lighting.LocalVersion;
                 sample.Settled = !m_owed;
@@ -1284,45 +1301,63 @@ public sealed class SdfMeshIrradiance : IDisposable {
 
     // The state a worker reads under the gate before it lists or processes probes.
     private readonly record struct Snapshot(SdfMeshIrradianceScene Scene, Lighting Lighting, Layout Layout, (int X, int Y, int Z)[] Lows, Vector3 Camera, int Geometry, int WindowVersion,
-        (int Geometry, Box[]? Boxes)[] Changes, long[] VersionTimes, int VersionBase);
+        (int Geometry, Box[]? Boxes)[] Changes, long[] VersionTimes, int VersionBase, int Sweep);
 
     private Snapshot? TakeSnapshot() {
         lock (m_gate) {
             if (m_disposed || (m_scene is null) || (m_lighting is null)) { return null; }
             return new Snapshot(Camera: m_camera, Changes: [.. m_changes], Geometry: m_geometry, Layout: m_layout, Lighting: m_lighting, Lows: Lows(), Scene: m_scene.Acquire(),
-                VersionBase: m_versionBase, VersionTimes: [.. m_versionTimes], WindowVersion: m_windowVersion);
+                Sweep: m_sweep, VersionBase: m_versionBase, VersionTimes: [.. m_versionTimes], WindowVersion: m_windowVersion);
         }
     }
     // Whether the windows, the layout and the geometry a worker listed its probes for still stand.
     private bool Stands(in Snapshot snapshot) =>
         ((snapshot.Geometry == m_geometry) && (snapshot.WindowVersion == m_windowVersion) && (snapshot.Layout == m_layout));
 
-    // The background worker: lists the windows' probes that lack a trace against the current geometry (finest level and
-    // nearest the camera first) and those whose lighting is stale or whose bounce has not yet taken every sweep (oldest
-    // lighting first), then works through the list a batch at a time while the frames' budget grants it, taking the
-    // latest lighting for each batch. A list is worked through even while the lighting changes; the next one lists the
-    // probes the change left stale. It returns once the budget is spent, to be started again by a frame that grants
-    // more, or once nothing is left to do.
+    // The background worker. The bounce is one iteration over the windows: a sweep relights every probe once (those
+    // lacking a trace against the current geometry first, finest level and nearest the camera first, then the oldest
+    // lighting first), each reading the volume about its hits as it stands; when a sweep ends, another starts while any
+    // probe of it moved past the convergence bound or was relit under a lighting since replaced, so a change anywhere in
+    // what a probe reads wakes it through the next sweep, and the iteration stops only when a whole sweep under
+    // unchanged inputs moved nothing (or after MaxSweeps). The worker works through its list a batch at a time while the
+    // frames' budget grants it, taking the latest lighting for each batch; it returns once the budget is spent (a probe
+    // whose trace the budget cannot fund waits for the next grant), when a lockstep frame asks it to yield, or once
+    // nothing is left to do.
     private void Work() {
         var parallel = new ParallelOptions { MaxDegreeOfParallelism = BackgroundWorkers };
 
         while (true) {
+            lock (m_gate) {
+                if (m_yield) { return; }
+            }
             if (TakeSnapshot() is not { } snapshot) { return; }
             using var sceneBorrow = snapshot.Scene;
             var candidates = m_candidates;
 
-            // A list the budget interrupted resumes where it stopped while its geometry and windows stand: listing and
-            // ordering a window's probes is itself work a frame's grant should not repeat.
-            if (!m_listed || (m_listGeometry != snapshot.Geometry) || (m_listWindow != snapshot.WindowVersion) || (m_listLayout != snapshot.Layout) || (m_listCursor >= candidates.Count)) {
+            // A list the budget interrupted resumes where it stopped while its geometry, windows and sweep stand:
+            // listing and ordering a window's probes is itself work a frame's grant should not repeat.
+            if (!m_listed || (m_listGeometry != snapshot.Geometry) || (m_listWindow != snapshot.WindowVersion) || (m_listLayout != snapshot.Layout) ||
+                (m_listSweep != snapshot.Sweep) || (m_listCursor >= candidates.Count)) {
                 var now = Stopwatch.GetTimestamp();
+                var stale = List(snapshot: snapshot, all: false, candidates: candidates, ages: m_ages);
 
-                List(snapshot: snapshot, all: false, candidates: candidates, ages: m_ages);
                 lock (m_gate) {
-                    if (!Stands(snapshot: in snapshot)) { continue; }
+                    if (!Stands(snapshot: in snapshot) || (snapshot.Sweep != m_sweep)) { continue; }
                     Measure(now: now);
                     if (candidates.Count == 0) {
                         m_listed = false;
-                        if (snapshot.Lighting.Version != m_lightingVersion) { continue; }
+                        if (stale || m_sweepMoved || (snapshot.Lighting.Version != m_lightingVersion)) {
+                            if (m_sweepsSince < MaxSweeps) {
+                                m_sweep++;
+                                m_sweepsSince++;
+                                m_sweepMoved = false;
+                                continue;
+                            }
+                            if (!m_unconvergedReported) {
+                                m_unconvergedReported = true;
+                                Console.Error.WriteLine(value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"[sdf.mesh-gi] unconverged sweeps={m_sweepsSince}: the bounce still moved past its bound; the volume stops until its inputs change"));
+                            }
+                        }
                         m_owed = false;
                         m_traceOwed = false;
                         Report(snapshot: in snapshot);
@@ -1334,10 +1369,12 @@ public sealed class SdfMeshIrradiance : IDisposable {
                 m_listGeometry = snapshot.Geometry;
                 m_listWindow = snapshot.WindowVersion;
                 m_listLayout = snapshot.Layout;
+                m_listSweep = snapshot.Sweep;
                 m_listCursor = 0;
             }
 
             var index = m_listCursor;
+            var starved = false;
 
             while (index < candidates.Count) {
                 Lighting lighting;
@@ -1345,6 +1382,10 @@ public sealed class SdfMeshIrradiance : IDisposable {
 
                 lock (m_gate) {
                     if (m_disposed || !Stands(snapshot: in snapshot)) { break; }
+                    if (m_yield) {
+                        m_listed = false;
+                        return;
+                    }
                     lighting = m_lighting!;
 
                     var trace = candidates[index].Trace;
@@ -1353,8 +1394,10 @@ public sealed class SdfMeshIrradiance : IDisposable {
                     if (credits <= 0) {
                         if (!trace) {
                             m_listCursor = index;
+                            if (starved) { m_listed = false; }
                             return;
                         }
+                        starved = true;
                         while ((index < candidates.Count) && candidates[index].Trace) { index++; }
                         continue;
                     }
@@ -1370,12 +1413,15 @@ public sealed class SdfMeshIrradiance : IDisposable {
                 index += take;
             }
             m_listed = false;
+            // Probes whose traces the budget could not fund wait for the next grant; listing again now would find them
+            // unfunded and spin.
+            if (starved) { return; }
         }
     }
     // A lockstep frame's work: every probe of the windows traced against the current geometry where it is not already,
-    // then the whole window relit from no bounce, each later pass reflecting the bounce the one before left, until every
-    // probe's bounce converges or MaxRelights passes, so the light it renders is a function of its scene, lighting and
-    // windows alone and never of the bounce earlier frames left in the cache.
+    // then the whole window relit from no bounce, each later pass relighting every probe from the bounce the one before
+    // left, until a whole pass moves no probe past the convergence bound (or MaxSweeps passes), so the light it renders
+    // is a function of its scene, lighting and windows alone and never of the bounce earlier frames left in the cache.
     private void Drain() {
         if (TakeSnapshot() is not { } snapshot) { return; }
         using var sceneBorrow = snapshot.Scene;
@@ -1384,24 +1430,21 @@ public sealed class SdfMeshIrradiance : IDisposable {
 
         m_listed = false;
 
-        List(snapshot: snapshot, all: true, candidates: candidates, ages: null);
-        for (var pass = 0; ((pass < MaxRelights) && (candidates.Count > 0)); pass++) {
+        _ = List(snapshot: snapshot, all: true, candidates: candidates, ages: null);
+        for (var pass = 0; (pass < MaxSweeps); pass++) {
+            bool moved;
+
+            lock (m_gate) { m_sweepMoved = false; }
             for (var index = 0; (index < candidates.Count); index += BatchProbes) {
                 Batch(candidates: candidates, count: Math.Min(val1: BatchProbes, val2: (candidates.Count - index)), first: index, lighting: snapshot.Lighting, parallel: parallel, pass: pass, snapshot: in snapshot);
             }
-            // Every probe holds a trace now; later passes relight those whose bounce has yet to converge.
-            var kept = 0;
-
-            for (var index = 0; (index < candidates.Count); index++) {
-                var candidate = candidates[index];
-
-                if (m_levels[candidate.Level].Cache.TryGetValue(key: candidate.Cell, value: out var probe) && !probe.Invalid && !probe.Converged) {
-                    candidates[kept++] = (candidate with { Trace = false });
-                }
-            }
-            candidates.RemoveRange(index: kept, count: (candidates.Count - kept));
+            // Every probe holds a trace now; later passes relight them all from the bounce this one left.
+            for (var index = 0; (index < candidates.Count); index++) { candidates[index] = (candidates[index] with { Trace = false }); }
+            lock (m_gate) { moved = m_sweepMoved; }
+            if (!(snapshot.Lighting.Feedback && snapshot.Layout.Bounce) || ((pass > 0) && !moved)) { break; }
         }
         lock (m_gate) {
+            m_sweepMoved = false;
             if (!Stands(snapshot: in snapshot) || (snapshot.Lighting.Version != m_lightingVersion)) { return; }
             m_drained = DrainKey();
             m_owed = false;
@@ -1420,9 +1463,11 @@ public sealed class SdfMeshIrradiance : IDisposable {
         Console.Error.WriteLine(value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"[sdf.mesh-gi] done probes={probes} traced={m_traced} relit={m_relit} rays={m_rays} triangles={snapshot.Scene.TriangleCount} lights={snapshot.Lighting.Points.Length} seconds={m_clock.Elapsed.TotalSeconds:0.000}"));
     }
     // Lists the windows' probes a worker owes, every one of them for a drain, in the order it takes them: those to trace
-    // first, finest level and nearest the camera first; then those to relight, oldest lighting first, then fewest sweeps,
-    // finest level and nearest. Each probe of the windows that holds a relight adds its lighting's age to ages.
-    private void List(in Snapshot snapshot, bool all, List<Candidate> candidates, List<float>? ages) {
+    // first, finest level and nearest the camera first; then those this sweep has not relit, oldest lighting first,
+    // finest level and nearest. Each probe of the windows that holds a relight adds its lighting's age to ages. Returns
+    // whether a probe this sweep already relit holds a lighting since replaced.
+    private bool List(in Snapshot snapshot, bool all, List<Candidate> candidates, List<float>? ages) {
+        var stale = false;
         var layout = snapshot.Layout;
         var lighting = snapshot.Lighting;
         var now = Stopwatch.GetTimestamp();
@@ -1448,23 +1493,25 @@ public sealed class SdfMeshIrradiance : IDisposable {
                         if (present) {
                             ages?.Add(item: (current ? 0f : ((float)Stopwatch.GetElapsedTime(startingTimestamp: StaleSince(lighting: probe.Lighting, snapshot: in snapshot), endingTimestamp: now).TotalSeconds)));
                         }
-                        if (!all && !trace && !rebase && current && (probe.Converged || (probe.Passes >= MaxRelights))) { continue; }
-                        candidates.Add(item: new Candidate(Cell: (x, y, z), Distance: distance, Level: level, LitAt: (present ? probe.LitAt : 0L),
-                            Passes: (current ? probe.Passes : 0), Trace: trace));
+                        if (!all && !trace && !rebase && (probe.Sweep == snapshot.Sweep)) {
+                            stale |= !current;
+                            continue;
+                        }
+                        candidates.Add(item: new Candidate(Cell: (x, y, z), Distance: distance, Level: level, LitAt: (present ? probe.LitAt : 0L), Trace: trace));
                     }
                 }
             }
         }
         if (all) {
             candidates.Sort(comparison: static (a, b) => ((a.Level != b.Level) ? a.Level.CompareTo(value: b.Level) : a.Distance.CompareTo(value: b.Distance)));
-            return;
+            return stale;
         }
         candidates.Sort(comparison: static (a, b) =>
             (a.Trace != b.Trace) ? (a.Trace ? -1 : 1) :
             a.Trace ? ((a.Level != b.Level) ? a.Level.CompareTo(value: b.Level) : a.Distance.CompareTo(value: b.Distance)) :
             (a.LitAt != b.LitAt) ? a.LitAt.CompareTo(value: b.LitAt) :
-            (a.Passes != b.Passes) ? a.Passes.CompareTo(value: b.Passes) :
             (a.Level != b.Level) ? a.Level.CompareTo(value: b.Level) : a.Distance.CompareTo(value: b.Distance));
+        return stale;
     }
     // When a probe's lighting went stale: the capture of the version after its own, or the oldest capture remembered.
     private static long StaleSince(int lighting, in Snapshot snapshot) {
@@ -1523,12 +1570,13 @@ public sealed class SdfMeshIrradiance : IDisposable {
         var lows = snapshot.Lows;
         var scene = snapshot.Scene;
         var geometry = snapshot.Geometry;
+        var sweep = snapshot.Sweep;
 
         _ = Parallel.For(fromInclusive: 0, toExclusive: count, parallelOptions: parallel, body: index => {
             var candidate = candidates[(first + index)];
 
             results[index] = Process(candidate: candidate, feedback: feedback, geometry: geometry, hits: hits, index: index, layout: layout, lighting: lighting,
-                lights: lights, lows: lows, scene: scene);
+                lights: lights, lows: lows, scene: scene, sweep: sweep);
         });
 
         m_landed.Clear();
@@ -1539,6 +1587,7 @@ public sealed class SdfMeshIrradiance : IDisposable {
             }
             var traced = 0;
             var relit = 0;
+            var moved = false;
 
             for (var index = 0; (index < count); index++) {
                 var candidate = candidates[(first + index)];
@@ -1548,11 +1597,12 @@ public sealed class SdfMeshIrradiance : IDisposable {
                 relit++;
                 if (pass < 0) { m_drained = default; }
                 if (candidate.Trace) { traced++; }
-                if (pass >= 0) { result = (result with { Passes = (pass + 1) }); }
+                moved |= result.Moved;
                 m_levels[candidate.Level].Cache[candidate.Cell] = result;
                 m_landed.Add(item: (candidate.Level, candidate.Cell));
             }
             m_traced += traced;
+            m_sweepMoved |= moved;
             m_tracedLanded |= (traced > 0);
             m_relit += relit;
             m_rays += (((long)traced) * SdfMeshProbeDepth.HitCount);
@@ -1613,7 +1663,7 @@ public sealed class SdfMeshIrradiance : IDisposable {
     // One probe of a batch: its placement and hit buffer, when it lacks a trace against the current geometry, then its
     // relight under the batch's lighting. An invalid probe takes no relight: no view reads it.
     private ProbeData Process(in Candidate candidate, int geometry, Layout layout, Lighting lighting, (int X, int Y, int Z)[] lows, SdfMeshIrradianceScene scene,
-        bool feedback, ProbeBlock? hits, LightBlock lights, int index) {
+        bool feedback, ProbeBlock? hits, LightBlock lights, int index, int sweep) {
         var cache = m_levels[candidate.Level].Cache;
         ProbeData probe;
 
@@ -1639,7 +1689,7 @@ public sealed class SdfMeshIrradiance : IDisposable {
         var previous = probe;
 
         // A listed probe either traced against this geometry or holds hits no change since its own geometry reaches.
-        probe = (probe with { Converged = true, Geometry = geometry, LightIndex = index, Lighting = lighting.Version, LocalVersion = lighting.LocalVersion, LitAt = lighting.CapturedAt, Passes = passes, Shading = lights });
+        probe = (probe with { Geometry = geometry, LightIndex = index, Moved = false, Sweep = sweep, Lighting = lighting.Version, LocalVersion = lighting.LocalVersion, LitAt = lighting.CapturedAt, Passes = passes, Shading = lights });
         if (!probe.Invalid) {
             var origin = ((new Vector3(x: (candidate.Cell.X + 0.5f), y: (candidate.Cell.Y + 0.5f), z: (candidate.Cell.Z + 0.5f)) * layout.SpacingOf(level: candidate.Level)) + probe.Offset);
 
@@ -1652,23 +1702,21 @@ public sealed class SdfMeshIrradiance : IDisposable {
             }
             Relight(feedback: feedback, hits: probe.HitWords, layout: layout, lighting: lighting, lights: lights.Lights(index: index), local: lights.Local(index: index),
                 lows: lows, origin: origin, radiance: lights.Radiance(index: index), reuseLocal: reuseLocal, scene: scene);
-            // Bounce read from the cache converges over successive relights: a probe is relit again until a relight
-            // moves its cube by at most ConvergedShare. A relight with no bounce to read has nothing left to converge
-            // only when bounce is off.
-            probe = (probe with { Converged = (lighting.Feedback && layout.Bounce)
-                ? (feedback && (previous.Shading is not null) && !candidate.Trace && Settled(after: lights.Radiance(index: index), before: previous.Radiance))
-                : true });
+            // A probe that moved past the convergence bound keeps the bounce iteration going (Work, Drain).
+            probe = (probe with { Moved = (candidate.Trace || (previous.Shading is null) || !Settled(after: lights.Radiance(index: index), before: previous.Radiance)) });
         }
         return probe;
     }
-    // Whether a relight left a cube within ConvergedShare of the one before it on every axis, or within ConvergedFloor
-    // nits where both are dark.
+    // Whether a relight left a cube within ConvergedShare of the one before it in every colour channel of every axis, or
+    // within ConvergedFloor nits where a channel is dark: a change of colour at one luminance still moves it.
     private static bool Settled(ReadOnlySpan<Vector3> after, ReadOnlySpan<Vector3> before) {
         for (var axis = 0; (axis < 6); axis++) {
-            var now = SdfPhotometry.LuminanceOf(color: after[axis]);
-            var then = SdfPhotometry.LuminanceOf(color: before[axis]);
+            var now = after[axis];
+            var then = before[axis];
+            var bound = ((ConvergedShare * Vector3.Max(value1: Vector3.Abs(value: now), value2: Vector3.Abs(value: then))) + new Vector3(value: ConvergedFloor));
+            var change = Vector3.Abs(value: (now - then));
 
-            if (MathF.Abs(x: (now - then)) > ((ConvergedShare * MathF.Max(x: now, y: then)) + ConvergedFloor)) { return false; }
+            if ((change.X > bound.X) || (change.Y > bound.Y) || (change.Z > bound.Z)) { return false; }
         }
         return true;
     }
@@ -2165,16 +2213,17 @@ public sealed class SdfMeshIrradiance : IDisposable {
     // A probe the worker lists: its level and cell, whether it lacks a trace against the current geometry, the capture
     // time of the lighting it was last relit under (zero for none), the relights it holds under the current lighting,
     // and its squared distance from the camera.
-    private readonly record struct Candidate(int Level, (int X, int Y, int Z) Cell, bool Trace, long LitAt, int Passes, float Distance);
+    private readonly record struct Candidate(int Level, (int X, int Y, int Z) Cell, bool Trace, long LitAt, float Distance);
 
     // One probe: its geometry (where it stands relative to its cell's centre, the share of its rays that met back faces,
     // whether it lies inside geometry, the geometry it was traced against, and its hit buffer, sky shares and surface map
     // in a trace batch's ProbeBlock), and its light (its radiance cube and traced-light visibility in a relight batch's
     // LightBlock, the lighting version and capture time it was relit under, and the relights it holds under that
-    // version, and whether its last relight left its bounce converged). A batch allocates one block of each rather than arrays a probe; a landed block is never written again, so
+    // version, the sweep it was last relit in and whether that relight moved it past the convergence bound). A batch
+    // allocates one block of each rather than arrays a probe; a landed block is never written again, so
     // readers outside the gate read it whole.
     private readonly record struct ProbeData(int Geometry, ProbeBlock? Hits, int HitIndex, bool Invalid, Vector3 Offset, float Inside,
-        LightBlock? Shading = null, int LightIndex = 0, int Lighting = 0, long LitAt = 0L, int Passes = 0, bool Converged = false, int LocalVersion = 0) {
+        LightBlock? Shading = null, int LightIndex = 0, int Lighting = 0, long LitAt = 0L, int Passes = 0, int Sweep = 0, bool Moved = false, int LocalVersion = 0) {
         public ReadOnlySpan<float> Sky => Hits!.Sky(index: HitIndex);
         public ReadOnlySpan<uint> HitWords => Hits!.Hits(index: HitIndex);
         public ReadOnlySpan<uint> Depth => Hits!.Depth(index: HitIndex);
@@ -2442,18 +2491,24 @@ public sealed class SdfMeshIrradiance : IDisposable {
 
         public SdfMaterial MaterialAt(int index) =>
             (((index >= 0) && (index < Materials.Length)) ? Materials[index] : new SdfMaterial(Albedo: new Vector3(value: 0.5f)));
-        // Whether another capture's sky lights the probes as this one's does: each projected coefficient within
-        // SkyTolerance of the largest.
+        // Whether another capture's sky lights the probes as this one's does: in each colour channel apart, every projected
+        // coefficient within SkyTolerance of that channel's own largest in either capture, so a dim channel's change
+        // counts however bright the others are, since a material that rejects the bright channels sees only it.
         public bool SkyMatches(Lighting other) {
             if (Sky != other.Sky) { return false; }
 
-            var largest = 0f;
+            var largest = Vector3.Zero;
 
-            foreach (var coefficient in other.SkyCoefficients) { largest = MathF.Max(x: largest, y: MathF.Max(x: MathF.Abs(x: coefficient.X), y: MathF.Max(x: MathF.Abs(x: coefficient.Y), y: MathF.Abs(x: coefficient.Z)))); }
+            for (var index = 0; (index < SkyCoefficients.Length); index++) {
+                largest = Vector3.Max(value1: largest, value2: Vector3.Max(value1: Vector3.Abs(value: SkyCoefficients[index]), value2: Vector3.Abs(value: other.SkyCoefficients[index])));
+            }
+
+            var bound = (largest * SkyTolerance);
+
             for (var index = 0; (index < SkyCoefficients.Length); index++) {
                 var difference = Vector3.Abs(value: (SkyCoefficients[index] - other.SkyCoefficients[index]));
 
-                if (MathF.Max(x: difference.X, y: MathF.Max(x: difference.Y, y: difference.Z)) > (SkyTolerance * largest)) { return false; }
+                if ((difference.X > bound.X) || (difference.Y > bound.Y) || (difference.Z > bound.Z)) { return false; }
             }
             return true;
         }
