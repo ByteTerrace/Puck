@@ -52,10 +52,11 @@ structural reasons, each of which the rounds found one instance of:
    resolved the new one, so an authored delivery fault after a document
    install threw in a live World. Until step 4 deletes the register,
    `RuleEvaluator.Deliver` opens each delivery's scope on the scratch the host
-   serves after the commit; the `gate-fault-tests.puck` block "a delivery that
-   faults after its firing installs a document is refused, not thrown" is the
-   witness. The register still lives on a replaceable object, so the reason
-   stands for the design.
+   serves after the commit; the block "a delivery that faults after its firing
+   installs a document is refused, not thrown" in
+   `worlds/debug/rule-faults-tests.puck` is the witness W9 grows from. The
+   register still lives on a replaceable object, so the reason stands for the
+   design.
 3. **Deciding places must remember to read it.** `RuleEvaluator.cs:575` and
    `:636`, `WorldRuleHost.Decisions.cs:214` and `:257`, `RuleEvaluation.cs:133`
    and `:179` each poll `RaisedFault`; `GateOpen(faulted: out _)` discards its

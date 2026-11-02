@@ -1,0 +1,82 @@
+// What a rule fault does at the edges of a firing:
+// `puck test worlds/debug/rule-faults-tests.puck`. A delivery runs after its firing's commit, and a firing whose rows
+// change the document installs that document before any delivery. Here the firing removes an inhabited placement, so
+// the install leaves the active population one smaller, and the cue key that divided by one when the firing checked
+// it divides by zero when the cue is delivered: the delivery is refused and counted, and the committed firing stands.
+
+schema: "puck.world.definition.v1"
+basis: "avatars/moth"
+documentId: "rule-faults-tests"
+
+import "stand-in"
+
+state {
+  world {
+    // The active population as the tick's rules began reading it, until tick 6, and how far tick 6 lowered it.
+    row {
+      name: "populationSeen"
+      kind: "Int"
+      value: 0
+    }
+    row {
+      name: "populationDrop"
+      kind: "Int"
+      value: 0
+    }
+    row {
+      name: "afterInstall"
+      kind: "Int"
+      value: 0
+    }
+  }
+}
+
+placements {
+  placement "rule-faults-inhabited" {
+    prototype: "standIn"
+    position [0, 0.05, 0]
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "walker"
+      look: "standIn"
+      source: "Idle"
+    }
+  }
+}
+
+// Rules run in document order, so the install rule reads the population the tick began with.
+rule "population-drop" {
+  when $tick == 8
+  mode: Level
+  populationDrop = populationSeen - $population
+}
+rule "population-seen" {
+  when $tick < 7
+  mode: Level
+  populationSeen = $population
+}
+rule "install-delivery-fault" {
+  when $tick == 6
+  mode: Level
+  afterInstall += 1
+  removePlacement(id: `rule-faults-inhabited`)
+  emitCue(name: "ruleFaultProbe", key: 1 / ($population - populationSeen + 1))
+}
+
+test "a delivery that faults after its firing installs a document is refused, not thrown" {
+  when {
+    ticks 10
+  }
+  expect {
+    afterInstall == 1
+    populationDrop == 1
+  }
+}

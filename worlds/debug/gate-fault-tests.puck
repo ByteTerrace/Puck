@@ -10,8 +10,6 @@ schema: "puck.world.definition.v1"
 basis: "avatars/moth"
 documentId: "gate-fault-tests"
 
-import "stand-in"
-
 let faultAlphabet = [
   { name: "one", min: 1, max: 1 }
 ]
@@ -204,17 +202,6 @@ state {
       kind: "Int"
       value: 1
     }
-    // The active population as the tick's rules began reading it, until tick 6, and how far tick 6 lowered it.
-    row {
-      name: "populationSeen"
-      kind: "Int"
-      value: 0
-    }
-    row {
-      name: "populationDrop"
-      kind: "Int"
-      value: 0
-    }
     table fired {
       cue = 0
       token = 0
@@ -222,7 +209,6 @@ state {
       edge = 0
       decisionPicked = 0
       decisionEmpty = 0
-      afterInstall = 0
     }
     table control {
       cue = 0
@@ -236,42 +222,10 @@ state {
   }
 }
 
-// One inhabited placement, which the install-fault rule removes on tick 6 and so lowers the active population by one.
-placements {
-  placement "gate-fault-inhabited" {
-    prototype: "standIn"
-    position [0, 0.05, 0]
-    inhabit {
-      count: 1
-      distribution {
-        fill {
-          name: "additive"
-          offset: 0
-          step: 0.001
-        }
-        region: disc(radius: 0.01)
-      }
-      kit: "walker"
-      look: "standIn"
-      source: "Idle"
-    }
-  }
-}
-
-// Rules run in document order, so every rule below reads this tick's divisor and the population the tick began with.
+// Rules run in document order, so every rule below reads this tick's divisor.
 rule "divisor-pulse" {
   mode: Level
   divisor = 1 - ($tick == 4)
-}
-rule "population-drop" {
-  when $tick == 8
-  mode: Level
-  populationDrop = populationSeen - $population
-}
-rule "population-seen" {
-  when $tick < 7
-  mode: Level
-  populationSeen = $population
 }
 
 rule "dynamic-key-fault" {
@@ -388,17 +342,6 @@ rule "cue-key-computed" {
   emitCue(name: "gateFaultProbe", key: b - 5)
 }
 
-// A delivery runs after its firing's document installs. The removal commits with the firing and installs the
-// population one smaller, so the cue key, which divided by one when the firing checked it, divides by zero when the cue
-// is delivered: the delivery is refused and counted, and the committed firing stands.
-rule "install-delivery-fault" {
-  when $tick == 6
-  mode: Level
-  fired.afterInstall += 1
-  removePlacement(id: `gate-fault-inhabited`)
-  emitCue(name: "gateFaultProbe", key: 1 / ($population - populationSeen + 1))
-}
-
 rule "token-fault" {
   when match(tokenFault, deck) == 1
   mode: Level
@@ -511,16 +454,6 @@ test "a faulting effect key refuses its whole firing" {
     removeControl > 0
     fired.cue == 0
     control.cue > 0
-  }
-}
-
-test "a delivery that faults after its firing installs a document is refused, not thrown" {
-  when {
-    ticks 10
-  }
-  expect {
-    fired.afterInstall == 1
-    populationDrop == 1
   }
 }
 
