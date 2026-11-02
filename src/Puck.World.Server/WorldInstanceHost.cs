@@ -82,6 +82,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     // the only mint doors); false for a hosted silo, where a row exists only through the grain activation door — a
     // `destinations` row can never mint a doorless, keyless row Orleans never placed.
     private readonly bool m_admitsSpawn;
+    private readonly bool m_presents;
     private readonly CancellationToken m_applicationStopping;
     // The host-selected machine metadata used by every live instance load, neighbour composition, and reload.
     private readonly string m_catalogFingerprint;
@@ -1507,9 +1508,12 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     /// <param name="pacing">The live host pacing policy shared by every instance's replay stepper. A non-launcher
     /// host defaults to inline wall-clock pacing.</param>
     /// <param name="addonHostFactory">The composition root's shared addon mount path for spawned rows.</param>
+    /// <param name="presents">Whether a presentation reads the host's screen sessions; a headless host passes
+    /// <see langword="false"/>, and its session mirrors drop the snapshots their destinations send.</param>
     /// <param name="jobs">The engine's job pool every spawned row's server forks its partitioned tick phases onto, or
     /// <see langword="null"/> for serial servers.</param>
-    public WorldInstanceHost(IWorldEmbodiedSeats seats, WorldSessionResolver resolver, Guid machineId, WorldStateRoot stateRoot, CancellationToken applicationStopping, Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, WorldOutputHub?, IWorldMachineHost> machineHostFactory, bool admitsSpawn = true, string catalogFingerprint = "", IMachineValidationCatalog? machineCatalog = null, Action<WorldRemoteAuthority>? travelerRouteStarted = null, HostPacing? pacing = null, Func<WorldDefinition, WorldServer, IWorldAddonHost>? addonHostFactory = null, Puck.Hosting.Jobs.JobPool? jobs = null) {
+    public WorldInstanceHost(IWorldEmbodiedSeats seats, WorldSessionResolver resolver, Guid machineId, WorldStateRoot stateRoot, CancellationToken applicationStopping, Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, WorldOutputHub?, IWorldMachineHost> machineHostFactory, bool admitsSpawn = true, string catalogFingerprint = "", IMachineValidationCatalog? machineCatalog = null, Action<WorldRemoteAuthority>? travelerRouteStarted = null, HostPacing? pacing = null, Func<WorldDefinition, WorldServer, IWorldAddonHost>? addonHostFactory = null, bool presents = true, Puck.Hosting.Jobs.JobPool? jobs = null) {
+        m_presents = presents;
         m_pacing = (pacing ?? HostPacing.WallClockInline);
         m_jobs = jobs;
         ArgumentNullException.ThrowIfNull(argument: seats);

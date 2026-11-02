@@ -76,44 +76,14 @@ public sealed partial class WorldScopedReplayRuntime {
         }
     }
 
-    // The fold of the scope's rows, refolded only when one of them may have changed: the arena or its layout was
-    // replaced (a reservation moves capacities without a version), or a row's version moved. Every column write
-    // that changes a value moves its row's version, so an unchanged version set folds the same bytes. An open arena
-    // transaction journals writes without moving versions until its outermost commit, and a rewind restores bytes
-    // without moving them, so inside one the rows are folded afresh and the cache is neither read nor updated.
+    // The scope's rows, each through the arena's own version-cached row digest.
     private Fnv1aHash RowsHash() {
         var arena = m_server.Arena;
-
-        if (arena.Journal.Scopes != 0) {
-            var live = Fnv1aHash.Create();
-
-            foreach (var row in m_orderedRows) { arena.AddRowTo(hash: ref live, rowOrdinal: row); }
-            return live;
-        }
-
-        var versions = (m_rowVersions ??= new ulong[m_orderedRows.Length]);
-        var current = (ReferenceEquals(objA: m_rowsArena, objB: arena) && ReferenceEquals(objA: m_rowsLayout, objB: arena.Layout));
-
-        for (var index = 0; (index < m_orderedRows.Length); index++) {
-            var version = arena.RowVersion(rowOrdinal: m_orderedRows[index]);
-
-            current &= (versions[index] == version);
-            versions[index] = version;
-        }
-        if (current) { return m_rowsHash; }
         var hash = Fnv1aHash.Create();
 
-        foreach (var row in m_orderedRows) { arena.AddRowTo(hash: ref hash, rowOrdinal: row); }
-        m_rowsHash = hash;
-        m_rowsArena = arena;
-        m_rowsLayout = arena.Layout;
+        foreach (var row in m_orderedRows) { hash.Add(value: arena.RowDigest(rowOrdinal: row)); }
         return hash;
     }
-
-    private ulong[]? m_rowVersions;
-    private Fnv1aHash m_rowsHash;
-    private StateArena? m_rowsArena;
-    private object? m_rowsLayout;
 
     private void Capture() {
         var start = m_server.Arena.CaptureScope(rows: m_rows);

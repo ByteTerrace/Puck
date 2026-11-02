@@ -434,10 +434,61 @@ worker or one partition, is the same `WriteSnapshotRows` over every row, so the
 delivered sequence is byte-identical to the serial code's at any count.
 
 Serial phases stay serial: the kit bodies and seats, rigid pair contacts,
-`EvaluateWorldRules` whole (below), the scoped replay hash
-(`WorldScopedReplayRuntime.cs:68`; the [test runner](open-items.md#test-runner-and-replay)
-packet's incremental hash designs its digest segments over these same
-partitions), events, addons, machines and the shell.
+`EvaluateWorldRules` whole (below), the authority hash, events, addons,
+machines and the shell.
+
+### The incremental state hash
+
+The per-tick authority hash a recording, `--reproduce` and `--workers` take
+(`WorldStateHashComposition.HashAuthoritative`) is a combination of digests
+whose segments are this section's partitions, so a later step can fold them in
+parallel without changing a value:
+
+- **Components.** Each component of `Authoritative` folds into its own fresh
+  hash and the scope folds those digests in order; `AuthoritativeComponents`
+  returns exactly the digests the scope combines.
+- **Arena.** `StateArena.ComputeHash` folds one digest per segment of
+  `HashSegmentRows` (32) catalog rows, each over its rows' `RowDigest`, then
+  the positions no row owns (the lane roster), the key ledger and the undo
+  history. A row digest is cached by `RowVersion`, which every committed write
+  that changes a row's bytes moves (number, text, vector, visibility and
+  observation columns through one door each; growth, snapshot and scope
+  restore, undo and adoption move it or replace the layout, which drops the
+  cache). Inside an open scope the arena folds afresh. The scoped replay
+  runtime folds its rows through the same `RowDigest`, so there is one cache.
+- **Body continuations.** `WorldPopulation.AppendContinuationHash` folds one
+  digest per segment of `HashSegmentSlots` (32) entity slots, the E1 body
+  partition, which divides E4's 256-row partition evenly. A slot's digest is
+  cached only while its body rests (asleep, or parked in a rigid island) and
+  stands while the body's rest epoch (moved by every wake, park, sleep, pose,
+  restore and transfer), its generation, the population's admission revision,
+  the contact-field version and the body's action-state lane values hold. A
+  body with an identity is never cached, since a fact or record written on the
+  identity moves its continuation without touching the body. A moving body
+  encodes every tick, as before. Over go-tests (15 worlds, 18,204 ticks, about
+  368 rows and 559 slots each) a tick refolds 1.6 rows and 22 slots.
+- **The recompute check.** A write that changes state without moving the
+  version its digest is keyed by would hide a divergence, so
+  `StateArena.RecomputeHash`, `AppendContinuationHash(recompute: true)` and
+  `WorldStateHashComposition.RecomputeAuthoritative` give the same value with
+  nothing cached, and `DescribeStaleDigest` names the stale component.
+  `puck test --reproduce` checks every replayed tick and the first count of
+  `--workers` every recorded tick; a mismatch fails the leg by name. Plain
+  `--record` legs and later `--workers` counts take only the incremental hash.
+
+A headless host also stops delivering snapshots to its screen-session mirrors
+(`WorldSessionMirror(unread: true)`), which only a presentation reads; the
+destination still runs and discloses.
+
+Measured on go-tests at `--jobs 1` under the heavy lease, authored seconds
+summed from each leg's `timing.json`, the build before against the build
+after: plain 256.7 s against 180.4 s (the mirrors), recorded (`--record`)
+441.4 s against 247.1 s, so the recording's own cost fell from 184.7 s to
+66.7 s. `--reproduce` after: 228.6 s authored and 415.7 s replay, the replay
+paying the full recompute every tick; `--workers 1,2,0` after: 346.9 s at the
+checked first count, 254.7 s and 265.2 s at the others. What the recording
+still costs is the components that fold whole every tick (poses, body action
+state, navigation, flock and input), unprofiled.
 
 ### Rule evaluation stays serial
 

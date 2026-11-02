@@ -79,5 +79,9 @@ internal static partial class LawRegistry {
             claim: Subjects.FixedIntervalEdges,
             id: "interval.edges"
         ),
+        ClaimCase(
+            claim: Subjects.FixedIntervalRoundedProductIsThePointHull,
+            id: "interval.rounded-product-is-the-point-hull"
+        ),
     ];
 }

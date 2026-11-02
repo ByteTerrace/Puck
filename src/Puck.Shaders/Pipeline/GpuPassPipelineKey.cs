@@ -186,6 +186,7 @@ public sealed class GpuPassPipelineKey : IEquatable<GpuPassPipelineKey> {
         }
 
         Write(value: ((description.DepthCompare is { } compare) ? (((uint)compare) + 1u) : 0u), writer: writer);
+        Write(value: ((uint)description.Cull), writer: writer);
         Write(
             layout: description.Layout,
             writer: writer

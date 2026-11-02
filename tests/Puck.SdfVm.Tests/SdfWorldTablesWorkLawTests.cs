@@ -433,6 +433,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
                 pipelines: Pipelines,
                 meshRaster: MeshRaster,
                 shadowRaster: ShadowRaster,
+                shadowExitRaster: ShadowRaster,
                 glassRaster: GlassRaster,
                 occlusion: Occlusion,
                 regionCopy: RegionCopy.Compute!

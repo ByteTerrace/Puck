@@ -842,6 +842,7 @@ public static class WorldBootComposition {
                 catalogFingerprint: MachineCatalogFingerprint(machineCatalog: sp.GetRequiredService<WorldMachineCatalog>()),
                 machineCatalog: sp.GetRequiredService<WorldMachineCatalog>(),
                 pacing: sp.GetRequiredService<HostPacing>(),
+                presents: (sp.GetService<WorldHostSettings>() is not { Headless: true }),
                 jobs: sp.GetRequiredService<Puck.Hosting.Jobs.JobPool>()
             );
             var bootOrigin = sp.GetRequiredService<WorldDefinitionSource>();
