@@ -106,13 +106,15 @@ public sealed class CliLease : IDisposable {
     /// <param name="Ahead">How many admissions come before this ticket's.</param>
     /// <param name="Position">The ticket's lane's turn among the queued lanes in the current round.</param>
     /// <param name="Lanes">How many lanes are queued.</param>
-    public sealed record LeaseTicket(string Id, string Holder, string Lane, int Ahead, int Position, int Lanes);
+    /// <param name="Since">When the waiter took the ticket, or null when its time is unreadable.</param>
+    public sealed record LeaseTicket(string Id, string Holder, string Lane, int Ahead, int Position, int Lanes, DateTimeOffset? Since = null);
     /// <summary>What a lease directory shows at one moment.</summary>
     /// <param name="Holder">The holder name, or null when nothing holds the lease.</param>
     /// <param name="Lane">The holder's lane, or null when nothing holds the lease.</param>
     /// <param name="HolderAlive">Whether the holder's process still runs; false for a holder file left by an exited process.</param>
     /// <param name="Queue">The live waiters in queue order.</param>
-    public sealed record LeaseState(string? Holder, string? Lane, bool HolderAlive, IReadOnlyList<LeaseTicket> Queue);
+    /// <param name="Since">When the holder acquired the lease, or null when nothing holds it or its time is unreadable.</param>
+    public sealed record LeaseState(string? Holder, string? Lane, bool HolderAlive, IReadOnlyList<LeaseTicket> Queue, DateTimeOffset? Since = null);
 
     /// <summary>Reads a lease without changing it: no ticket is taken, no dead ticket or stale holder is removed, no rotation serial is written.</summary>
     /// <param name="root">The shared lease directory.</param>
@@ -152,13 +154,16 @@ public sealed class CliLease : IDisposable {
                     Id: Path.GetFileName(path: file).TrimStart(trimChar: '0'),
                     Lane: ((lines.Length == 5) ? lines[4] : DefaultLane(holder: lines[0])),
                     Lanes: place.Lanes,
-                    Position: place.Position
+                    Position: place.Position,
+                    Since: Stamped(lines: lines)
                 ));
             }
         }
-        return new LeaseState(Holder: holderName, HolderAlive: alive, Lane: holderLane, Queue: tickets);
+        return new LeaseState(Holder: holderName, HolderAlive: alive, Lane: holderLane, Queue: tickets, Since: ((holder is { Length: > 0 }) ? Stamped(lines: holder) : null));
     }
 
+    /// <summary>The acquisition or ticket time a holder file or ticket records on its second line.</summary>
+    private static DateTimeOffset? Stamped(string[] lines) => (((lines.Length > 1) && DateTimeOffset.TryParse(input: lines[1], formatProvider: CultureInfo.InvariantCulture, styles: DateTimeStyles.RoundtripKind, result: out var at)) ? at : null);
     /// <summary>The lane a holder works for when none is named: the first word of its name.</summary>
     private static string DefaultLane(string holder) => holder.Split(options: StringSplitOptions.RemoveEmptyEntries, separator: ((char[]?)null))[0];
     /// <summary>The metadata a holder file and a ticket share: holder, UTC time, process id and process start ticks, then the lane

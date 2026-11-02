@@ -2518,19 +2518,13 @@ or deletes tests freely.
 - Four `Puck.SdfVm.Tests` laws fail on the integration head with or without
   the memory fixes: store repeated load, skinned settle, cubic lattice and
   static union copy. The settle-cap law fails intermittently. (from: mem-fixes)
-- After the job-system batch's merges, five server tests fail:
-  `HistoryRefusalLawTests`, `CellBurstLawTests`, `InhabitCountLawTests`,
-  `WorldExtensionLawTests`, and `AddonGuestLawTests` (a 30 s timeout). The
-  first four expect addon and history messages that the addon-checkpoint and
-  history work changed. They are triaged with the shards below. (from:
-  field-contact)
-- Three more laws fail beside those five: `WorldConsoleAddressLawTests`
-  ("editor.bar.banks must declare at least one bank", after the standard's
-  editor moved to `.puck`), `WorldInstanceStopLawTests` (after the custody stop
-  work) and `WorldNameRegistryLawTests` (`screenMaterials` and
-  `editor.bar.iconRow` uncovered; the leaks3 lane registers the materials).
-  `WorldInstanceStopLawTests` is the one that may hide a real custody
-  regression: run the stop path by hand before deleting it. (from: unbiased-2)
+- The thirteen standing red `Puck.World.Server.Tests` laws pass. The editor fixture now declares the one-bank bar the validator
+  requires; guest writes no longer enter the recovery journal (the laws read
+  echoes instead); a replay drive builds its boot image on a shadow server; a
+  load past the compilation bound waits rather than refusing. The remaining red
+  law of that batch is `WorldNameRegistryLawTests` in `Puck.World.Schema.Tests`
+  (`screenMaterials` and `editor.bar.iconRow` uncovered; the leaks3 lane
+  registers the materials). (from: unbiased-2)
 - [medium] The first main run after the fundamentals landing fails all four
   Windows test shards, where earlier runs failed only shard 3. Tests do not gate
   deploy during the refactoring campaign, but the jump may hide real regressions

@@ -111,7 +111,7 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck landing`](#puck-landinggit-loss-check) | refuses a commit that silently drops content its author never worked from. |
 | [`puck lanes`](#puck-lanesone-line-per-worktree) | prints one line per worktree: branch, commits ahead, changes, last commit, newest write, log, lease and stall state; `--watch` prints only the changes. |
 | [`puck laws`](#puck-laws-provea-law-against-its-fix) | `laws prove` shows, in an isolated proof tree, that a law fails with its fix withheld and passes with it, and prints the evidence for a commit body. |
-| [`puck lease`](#puck-leaseexclusive-machine-work) | run a command while exclusively holding the shared GPU, heavy-work or World-build resource, or all three once the machine is idle (`lease quiet`, the settle window for timing measurements). |
+| [`puck lease`](#puck-leaseexclusive-machine-work) | run a command while exclusively holding the shared GPU, heavy-work or World-build resource, or all three once the machine is idle (`lease quiet`, the settle window for timing measurements); `lease list` prints each lease's holder and queue. |
 | [`puck lint`](#the-puck-dsl-verbs) | static analysis and symbol resolution over a `.puck` document, composed the same way `compile --validate` composes it. |
 | [`puck locks`](#puck-locksrestore-lock-files) | re-records the solution's `packages.lock.json` files after a reference change, takes newer packages with `--update`, or with `--check` runs a locked restore and names each project whose lock file drifted, writing nothing. |
 | [`puck lsp`](#the-puck-dsl-verbs) | the `.puck` language server over stdio: completion, hover, document symbols, formatting, semantic tokens, and diagnostics published once the input goes quiet. |
@@ -4513,6 +4513,18 @@ in `gate` and `affected`, a multi-world `puck test`, the World build store's
 windowed World the MCP server starts all pass the ancestor recognizer
 (`ProcessInspection.IsAncestor`), so a command run under `puck lease <name>`
 that takes the same lease waits on a sibling, never on itself.
+
+### `puck lease list`—who holds what and who waits
+
+Run `puck lease list` to read the shared lease directory without changing it. For each of `build`, `gpu` and `heavy` it prints one line, `idle` or `held by <holder> (lane <lane>) for <time>` (with `, stale: its process has exited` for a holder file whose process is gone, which the next acquisition replaces), followed by the queued count. Under it, one line per live waiter in admission order, the order the lease will be granted in: its holder, lane, how long it has waited, its lane's turn among the queued lanes, and how many admissions come before it. The verb takes no ticket, deletes no dead ticket, and writes no rotation serial, so it can run at any time beside any lease (it reads through `CliLease.Inspect`, the reader `puck lanes` uses). A lease a holder's descendants hold as a `child` of it is not shown. The lead reads it for lease pressure ([orchestration](../../.claude/skills/orchestration/SKILL.md#schedule-machines)).
+
+```text
+build: idle
+gpu: held by probe-depth-fix timing run (lane probe-depth-fix) for 3m 5s; 2 queued
+  1. meadow gpu (lane meadow) waiting 2m 40s; lane 1 of 2 in the round, 0 ahead
+  2. probe-depth-fix retime (lane probe-depth-fix) waiting 1m 2s; lane 2 of 2 in the round, 1 ahead
+heavy: idle
+```
 
 ### `puck lease quiet`—a settle window
 

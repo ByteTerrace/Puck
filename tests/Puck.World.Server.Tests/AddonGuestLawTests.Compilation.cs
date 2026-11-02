@@ -18,7 +18,7 @@ public sealed partial class AddonGuestLawTests {
     }
 
     [Fact]
-    public async Task ConcurrentNativeCompilationIsBoundedAcrossLoadersAndFailuresReleaseCapacity() {
+    public async Task ConcurrentNativeCompilationWaitsForCapacityAcrossLoadersAndFailuresReleaseIt() {
         using var engine = new ScriptingEngine(options: ScriptingEngineOptions.Deterministic);
         using var entered = new CountdownEvent(initialCount: AddonModuleLimits.ConcurrentCompilations);
         using var release = new ManualResetEventSlim();
@@ -28,8 +28,16 @@ public sealed partial class AddonGuestLawTests {
 
         try {
             Assert.True(condition: entered.Wait(TimeSpan.FromSeconds(seconds: 15), TestContext.Current.CancellationToken), userMessage: "Admitted loads did not reach their source.");
-            Assert.Contains("compilation capacity", Assert.Throws<InvalidDataException>(testCode: () =>
-                Load(engine, Encoding.UTF8.GetBytes(s: Quiet))).Message);
+            // A load past the bound waits for a permit rather than refusing, so it finishes only once an admitted one does.
+            var waiting = Task.Factory.StartNew(() => Load(engine, Encoding.UTF8.GetBytes(s: Quiet)),
+                TestContext.Current.CancellationToken, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+
+            var pause = Task.Delay(TimeSpan.FromMilliseconds(milliseconds: 250), TestContext.Current.CancellationToken);
+
+            Assert.Same(expected: pause, actual: await Task.WhenAny(task1: waiting, task2: pause));
+            release.Set();
+            await Task.WhenAll(tasks);
+            Assert.NotNull(@object: await waiting);
         } finally {
             release.Set();
             await Task.WhenAll(tasks);

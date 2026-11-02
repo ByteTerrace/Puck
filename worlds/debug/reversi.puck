@@ -445,9 +445,9 @@ rules "" when reversiHold == reversiSettleTicks and search(ply) == 0 {
   // Anything else that changed is illegal, and is put right below: a disc showing a face the position does not give
   // its cell is turned over (so a missing flip is no illegality, only a change put right), a stray goes back.
   rule "reversi-read-illegal" {
-    when ((reversiChangedCount > 0 or reversiCollisions > 0) and
-      reversiLegal == 0 and
-      (board(mask, reversiSeen, 1, 2) & ~((board(mask, reversiBoard, 1, 2)))) != 0)
+    when (reversiChangedCount > 0 or reversiCollisions > 0) and reversiLegal == 0 and (
+        board(mask, reversiSeen, 1, 2) & ~((board(mask, reversiBoard, 1, 2)))
+      ) != 0
     reversiIllegal += 1
   }
 
