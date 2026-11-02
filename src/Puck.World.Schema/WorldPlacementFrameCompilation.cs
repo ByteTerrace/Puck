@@ -163,7 +163,8 @@ public static class WorldPlacementFrameCompilation {
     }
     /// <summary>Validates every placement's <see cref="WorldPlacement.Parent"/> chain, refusing BY NAME the first bad
     /// edge found in authored order: an unknown parent, a self-parent, a parent cycle, a distributed/mirrored parent
-    /// (an expanded row has no single frame), or a non-unit-scale parent (composition rotates and translates only).</summary>
+    /// (an expanded row has no single frame), or a non-unit-scale parent (composition rotates and translates only)
+    /// other than a deal template parenting its own dealt children, whose scale each child carries.</summary>
     public static bool TryValidate(IReadOnlyList<WorldPlacement>? placements, out string reason) {
         reason = string.Empty;
 
@@ -215,7 +216,9 @@ public static class WorldPlacementFrameCompilation {
                 return false;
             }
 
-            if (parent.Scale != 1f) {
+            // A dealt template's scale is stamped on its children as its prototype is (each child carries it), and
+            // their offsets are metres in its frame, so it scales no child's offset.
+            if ((parent.Scale != 1f) && !WorldPlacementDeal.IsChild(parent: parent, placement: placement)) {
                 reason = $"placement '{placement.Id}' names parent '{parentId}', whose scale ({parent.Scale}) is not 1 — composition rotates and translates only, never a parent's scale into a child's local offset.";
 
                 return false;

@@ -560,7 +560,7 @@ public sealed partial class WorldTick {
         PrototypeId: prototype,
         Position: offset,
         YawDegrees: 0f,
-        Scale: 1f,
+        Scale: template.Scale,
         Emission: template.Emission,
         Solid: template.Solid,
         Region: template.Region,
