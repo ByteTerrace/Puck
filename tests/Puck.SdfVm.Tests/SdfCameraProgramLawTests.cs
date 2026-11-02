@@ -30,23 +30,46 @@ public sealed class SdfCameraProgramLawTests {
         Assert.False(rig.ResolvePose(new SdfAnchor(Vector3.Zero, Quaternion.Identity), default).FirstPerson!.Value.Active);
     }
     [Fact]
-    public void ASelectedAndBlendedLookAtCarriesItsCloseTargetInTheSubjectsFrame() {
+    public void ASelectCarriesItsCaseClearanceAndABlendLerpsTheCloseTargetInTheSubjectsFrame() {
         var anchor = new SdfAnchor(new Vector3(x: 3f, y: 5f, z: 7f), Quaternion.CreateFromAxisAngle(Vector3.UnitZ, (MathF.PI / 2f)));
+        static SdfCameraOp.Clearance Clearance(float cutaway, float maxRise, Vector3 close) => new(
+            Cutaway: SdfCameraScalar.FromLiteral(value: cutaway), EyeRadius: SdfCameraScalar.FromLiteral(value: 0.3f),
+            SurfaceSkin: SdfCameraScalar.FromLiteral(value: 0.1f), MaxRise: SdfCameraScalar.FromLiteral(value: maxRise),
+            MinimumBoom: SdfCameraScalar.FromLiteral(value: 0f), FadeStart: SdfCameraScalar.FromLiteral(value: 0f),
+            FadeEnd: SdfCameraScalar.FromLiteral(value: 0f), CloseTargetOffset: close,
+            CloseTargetStartFraction: SdfCameraScalar.FromLiteral(value: 0.6f), CloseTargetFullFraction: SdfCameraScalar.FromLiteral(value: 0.2f),
+            NearMargin: SdfCameraScalar.FromLiteral(value: 0.05f), RetractionSkin: SdfCameraScalar.FromLiteral(value: 0.05f),
+            ObstructedTargetSkin: SdfCameraScalar.FromLiteral(value: 0f));
+        static SdfCameraOp.LookAt Aim() => new(SdfCameraProgram.ReferenceSubject, Vector3.UnitY, false, SdfCameraScalar.FromLiteral(value: 4f));
         var set = new SdfCameraProgramSet(Programs: [
-            new SdfCameraProgram(Name: "select", Operations: [new SdfCameraOp.Select(SdfCameraScalar.FromLiteral(value: 1f), [new SdfCameraSelectCase(Program: 1, Value: 1)], 2)]),
+            new SdfCameraProgram(Name: "select", Operations: [new SdfCameraOp.Select(SdfCameraScalar.FromSlot(slot: 0), [new SdfCameraSelectCase(Program: 1, Value: 1), new SdfCameraSelectCase(Program: 4, Value: 2)], 5)]),
             new SdfCameraProgram(Name: "blend", Operations: [new SdfCameraOp.Blend(ProgramA: 2, ProgramB: 3, Weight: SdfCameraScalar.FromLiteral(value: 0.5f))]),
-            new SdfCameraProgram(Name: "low", Operations: [new SdfCameraOp.LookAt(SdfCameraProgram.ReferenceSubject, Vector3.UnitY, false, SdfCameraScalar.FromLiteral(value: 4f), new SdfCameraClearanceOffsets(Fade: new Vector3(x: 0f, y: 1.4f, z: 0f), Cutaway: new Vector3(x: 0f, y: 1.2f, z: 0f)))]),
-            new SdfCameraProgram(Name: "high", Operations: [new SdfCameraOp.LookAt(SdfCameraProgram.ReferenceSubject, Vector3.UnitY, false, SdfCameraScalar.FromLiteral(value: 4f), new SdfCameraClearanceOffsets(Fade: new Vector3(x: 0f, y: 1.8f, z: 0f), Cutaway: new Vector3(x: 0f, y: 1.6f, z: 0f)))]),
+            new SdfCameraProgram(Name: "low", Operations: [Aim(), Clearance(cutaway: 0f, maxRise: 0.2f, close: new Vector3(x: 0f, y: 1.4f, z: 0f))]),
+            new SdfCameraProgram(Name: "high", Operations: [Aim(), Clearance(cutaway: 1f, maxRise: 0.6f, close: new Vector3(x: 0f, y: 1.8f, z: 0f))]),
+            new SdfCameraProgram(Name: "cutaway", Operations: [Aim(), Clearance(cutaway: 1f, maxRise: 1.1f, close: new Vector3(x: 0f, y: 1.55f, z: 0f))]),
+            new SdfCameraProgram(Name: "bare", Operations: [Aim()]),
         ]);
-        var rig = new SdfCameraProgramRig(set, scalarCount: 0, subjectCount: 0);
-        var pose = rig.ResolvePose(anchor: anchor, clock: default);
+        var rig = new SdfCameraProgramRig(set, scalarCount: 1, subjectCount: 0);
 
-        Assert.Equal(-0.6f, pose.TargetShift.Offset.Fade.X, tolerance: 1e-5f);
-        Assert.Equal(0f, pose.TargetShift.Offset.Fade.Y, tolerance: 1e-5f);
-        Assert.Equal(-0.4f, pose.TargetShift.Offset.Cutaway.X, tolerance: 1e-5f);
-        Assert.Equal(0.6f, pose.TargetShift.StartFraction);
-        Assert.Equal(0.2f, pose.TargetShift.FullFraction);
-        Assert.Equal(pose.TargetShift, rig.TargetShift);
+        rig.Scalars[0] = 1f;
+        var blended = rig.ResolvePose(anchor: anchor, clock: default).Clearance!.Value;
+
+        // The close target is placed in the subject's frame, turned a quarter about Z: up becomes -X.
+        Assert.Equal(-0.6f, blended.CloseTarget.X, tolerance: 1e-5f);
+        Assert.Equal(0f, blended.CloseTarget.Y, tolerance: 1e-5f);
+        Assert.Equal(0.4f, blended.MaxRise, tolerance: 1e-6f);
+        Assert.True(blended.Cutaway);
+        Assert.Equal(blended, rig.Clearance);
+
+        rig.Scalars[0] = 2f;
+        var selected = rig.ResolvePose(anchor: anchor, clock: default).Clearance!.Value;
+
+        Assert.True(selected.Cutaway);
+        Assert.Equal(1.1f, selected.MaxRise);
+        Assert.Equal(-0.55f, selected.CloseTarget.X, tolerance: 1e-5f);
+
+        rig.Scalars[0] = 0f;
+        Assert.Null(rig.ResolvePose(anchor: anchor, clock: default).Clearance);
     }
 
     // The framing the island's seatRig authors (puck.world.json), transcribed op for op.

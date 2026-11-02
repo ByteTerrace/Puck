@@ -1,0 +1,55 @@
+// A key or ring age whose arithmetic faults is a fault of the read, never an absence a gate can negate into truth:
+// `puck test worlds/debug/gate-fault-tests.puck --reproduce`. With `a` at zero, `1 / a` divides by zero, so each
+// faulting rule's gate closes on the arithmetic and never fires. The control rules read through an address that names
+// no cell (`b` keys nothing the rows hold), an absence that converts to false at a gate, so their negations fire:
+// the gates are evaluated, and only the fault keeps the others shut.
+
+schema: "puck.world.definition.v1"
+basis: "avatars/moth"
+documentId: "gate-fault-tests"
+
+state {
+  world {
+    row { name: "a", kind: "Int", value: 0 }
+    row { name: "b", kind: "Int", value: 5 }
+    row { name: "cards", kind: "Int", cells [{ key: "1", value: 3 }] }
+    row { name: "hist", kind: "Int", domain: ring(capacity: 4, empty: -1) }
+    row { name: "keyFired", kind: "Int", value: 0 }
+    row { name: "ageFired", kind: "Int", value: 0 }
+    row { name: "keyControl", kind: "Int", value: 0 }
+    row { name: "ageControl", kind: "Int", value: 0 }
+  }
+}
+
+rule "dynamic-key-fault" {
+  when not (cards[1 / a] == 3)
+  mode: Level
+  keyFired += 1
+}
+rule "ring-age-fault" {
+  when not (history(hist, 1 / a) > 5)
+  mode: Level
+  ageFired += 1
+}
+rule "dynamic-key-absent" {
+  when not (cards[b] == 3)
+  mode: Level
+  keyControl += 1
+}
+rule "ring-age-absent" {
+  when not (history(hist, b) > 5)
+  mode: Level
+  ageControl += 1
+}
+
+test "a faulting key or ring age closes its gate" {
+  when {
+    ticks 10
+  }
+  expect {
+    keyFired == 0
+    ageFired == 0
+    keyControl > 0
+    ageControl > 0
+  }
+}

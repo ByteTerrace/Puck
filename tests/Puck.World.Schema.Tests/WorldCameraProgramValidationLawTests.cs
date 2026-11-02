@@ -23,13 +23,25 @@ public sealed class WorldCameraProgramValidationLawTests {
         Refuses(Program("eye", eye, eye, Fov()), control, "second 'firstPerson'");
     }
     [Fact]
-    public void CloseTargetsRequireFiniteCoordinatesAndAnOrderedCompressionBand() {
-        var aim = new WorldCameraProgramOp.LookAt(new WorldCameraSubject.Reference(), CloseTargetOffset: new WorldCameraCloseTarget(Fade: new Vector3(x: 0f, y: 1.74f, z: 0f), Cutaway: new Vector3(x: 0f, y: 1.55f, z: 0f)));
-        var control = Program("close", aim, Fov());
+    public void AClearanceAuthorsEveryParameterInItsDomainAndAnOrderedBandAfterAnAimedLookAt() {
+        var aim = new WorldCameraProgramOp.LookAt(new WorldCameraSubject.Reference(), TargetOffset: new Vector3(x: 0f, y: 1f, z: 0f));
+        var clearance = new WorldCameraProgramOp.Clearance(
+            Cutaway: new BindableScalar(0f), EyeRadius: new BindableScalar(0.3f), SurfaceSkin: new BindableScalar(0.1f),
+            MaxRise: new BindableScalar(0.35f), MinimumBoom: new BindableScalar(0.35f), FadeStart: new BindableScalar(1.25f),
+            FadeEnd: new BindableScalar(0.45f), CloseTargetStartFraction: new BindableScalar(0.6f), CloseTargetFullFraction: new BindableScalar(0.2f),
+            NearMargin: new BindableScalar(0.05f), RetractionSkin: new BindableScalar(0.05f), ObstructedTargetSkin: new BindableScalar(0f),
+            CloseTargetOffset: new Vector3(x: 0f, y: 1.74f, z: 0f));
+        var control = Program("close", aim, clearance, Fov());
 
-        Refuses(Program("close", aim with { CloseTargetFullFraction = 0.7f }, Fov()), control, "closeTargetFullFraction");
-        Refuses(Program("close", aim with { CloseTargetOffset = new WorldCameraCloseTarget(Fade: new Vector3(x: 0f, y: float.NaN, z: 0f), Cutaway: new Vector3(x: 0f, y: 1.55f, z: 0f)) }, Fov()), control, "closeTargetOffset");
-        Refuses(Program("close", aim with { Subject = null }, Fov()), control, "requires a subject");
+        Refuses(Program("close", aim, clearance with { CloseTargetFullFraction = new BindableScalar(0.7f) }, Fov()), control, "closeTargetFullFraction");
+        Refuses(Program("close", aim, clearance with { FadeEnd = new BindableScalar(2f) }, Fov()), control, "fadeEnd");
+        Refuses(Program("close", aim, clearance with { MaxRise = new BindableScalar(2f) }, Fov()), control, "maxRise");
+        Refuses(Program("close", aim, clearance with { EyeRadius = new BindableScalar(0f) }, Fov()), control, "eyeRadius");
+        Refuses(Program("close", aim, clearance with { Cutaway = default }, Fov()), control, "cutaway");
+        Refuses(Program("close", aim, clearance with { CloseTargetOffset = new Vector3(x: 0f, y: float.NaN, z: 0f) }, Fov()), control, "closeTargetOffset");
+        Refuses(Program("close", aim with { Subject = null }, clearance, Fov()), control, "needs a 'lookAt'");
+        Refuses(Program("close", clearance, aim, Fov()), control, "needs a 'lookAt'");
+        Refuses(Program("close", aim, clearance, clearance, Fov()), control, "second 'clearance'");
     }
 
     // A document carrying ONE authored camera whose rig is the program under test. A camera row imposes no
@@ -480,7 +492,7 @@ public sealed class WorldCameraProgramValidationLawTests {
         Assert.Contains(
             actualString: reason,
             comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "views.seatRig must contain an 'orbit' op"
+            expectedSubstring: "views.seatRig must reach an 'orbit' op"
         );
         Assert.True(
             condition: WorldDefinitionValidator.TryValidateLocally(

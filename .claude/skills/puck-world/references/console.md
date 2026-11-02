@@ -740,7 +740,11 @@ responsive placement whose `respond` conditions read a row withholding a cell fr
 the principal handed its `holding` mask without the entries that read a withheld
 cell, so it shows the first entry left, or its authored prototype. `world.state`,
 `world.row`, `world.tabletop`, `world.hud.template` and `world.placements` read through it; `world.match`
-refuses a row the view withholds anything from. A direct read of a withheld cell is
+refuses a row the view withholds anything from. Whether a row withholds is decided by its declaration
+(`WorldStateDisclosure.ReadsWholeRow`: its policy, a cell policy its storage admits, a containing zone), never by
+which cells are hidden now, so every door (`view.Withheld`, observations, whole-row edits, HUD template
+placeholders, presentation bindings, replica row replacements) answers zero, one and many hidden cells alike.
+`worlds/debug/disclosure-probe.puck` runs a second seat through those doors with a `--schedule-dir`. A direct read of a withheld cell is
 refused by name — `[world.state: 'vault'.'$value' is not disclosed to seat2 — its
 visibility withholds it]` — alike for a withheld key and an absent one, so a refusal
 never says which keys exist; a listing shows the row's `hidden` policy (nothing, a

@@ -41,23 +41,9 @@ public static class WorldDefinitionRows {
     /// <c>Path</c> locates the specific reference within it, and <c>RowName</c> is the <c>curves</c> row name it
     /// names.</returns>
     public static IEnumerable<(string Section, string Path, string RowName)> EnumerateCurveReferences(WorldDefinition definition) {
-        foreach (var camera in definition.Cameras) {
-            if (camera is null) {
-                continue;
-            }
-
-            if (camera.Rig.PathOp is { } cameraOp) {
-                yield return ("cameras", $"cameras.{camera.Name}", cameraOp.Curve);
-            }
-        }
-
-        if (definition.ViewsRaw is { } views) {
-            if (views.SeatRig.PathOp is { } seatOp) {
-                yield return ("cameras", "views.seatRig", seatOp.Curve);
-            }
-
-            if (views.CameraRig?.PathOp is { } viewCameraOp) {
-                yield return ("cameras", "views.cameraRig", viewCameraOp.Curve);
+        foreach (var (path, program) in WorldCameraPrograms.Declared(definition: definition)) {
+            if (program.PathOp is { } pathOp) {
+                yield return ("cameras", path, pathOp.Curve);
             }
         }
 
@@ -148,23 +134,9 @@ public static class WorldDefinitionRows {
     /// <c>Path</c> locates the specific reference within it, and <c>RowName</c> is the <c>dynamics</c> row name it
     /// names.</returns>
     public static IEnumerable<(string Section, string Path, string RowName)> EnumerateDynamicsReferences(WorldDefinition definition) {
-        foreach (var camera in definition.Cameras) {
-            if (camera is null) {
-                continue;
-            }
-
-            if (camera.Rig.DynamicsOp is { } cameraOp) {
-                yield return ("cameras", $"cameras.{camera.Name}", cameraOp.Row);
-            }
-        }
-
-        if (definition.ViewsRaw is { } views) {
-            if (views.SeatRig.DynamicsOp is { } seatOp) {
-                yield return ("cameras", "views.seatRig", seatOp.Row);
-            }
-
-            if (views.CameraRig?.DynamicsOp is { } viewCameraOp) {
-                yield return ("cameras", "views.cameraRig", viewCameraOp.Row);
+        foreach (var (path, program) in WorldCameraPrograms.Declared(definition: definition)) {
+            if (program.DynamicsOp is { } dynamicsOp) {
+                yield return ("cameras", path, dynamicsOp.Row);
             }
         }
 
