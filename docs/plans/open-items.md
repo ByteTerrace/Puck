@@ -1293,7 +1293,7 @@ then CI's steady state, the shader cache and the GC-hole retirement.
 Owner: UI lane, with the play-feel and editor lanes · ordinary, each leak fixed
 when it is found (AGENTS.md) · Next: the overlay text advance and the helper
 templates. The engine's neutral default theme (`WorldThemeSection.Default`; no
-phosphor role in `WorldTheme`), the CRT as the standard's authored screen
+phosphor role in `WorldTheme.cs`), the CRT as the standard's authored screen
 material, the chase camera's clearance as an authored camera-program operation,
 and a standard that boots alone (`worlds/minimal`) are in; [UI step 1](ui.md)
 is this packet's remainder.
@@ -1883,7 +1883,6 @@ under-use the language where the shared libraries (`worlds/standard/bounds.puck`
 
 The [illumination plan](illumination.md) holds the research round's decisions
 and the order they land in; the items below are its findings and checks.
-
 
 - From step 1 (illum-step1): stretching the far cascade to cover the valley
   costs too much (at `valley-rim`, 120 m against 480 m: 208 against 7,170 draws,
