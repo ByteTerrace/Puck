@@ -156,6 +156,14 @@ Each waits on the owner: what the engine should do, how it looks and feels, and 
   playtesting the way binding layouts are, through a generic material-style
   switch: a palette row's `toonSelect` binds its style to a state cell, and
   `moth.style Cel|Plain` swaps it with no rebake.
+- Which of the Moth's halves is right where they do not mirror (S11 G16 holds
+  the measurement): the right back pod's 40 parts (ids 1200-1240) are rotated
+  differently from the left pod's (1100-1140), and `sideLock`'s position,
+  `blinkCrease`'s position and `kneeGuard`'s profile differ. Once chosen, the
+  right half becomes the left's exact mirror through a `side` template.
+- Whether `motion-pulse`'s new look reads right: its petals and core now blend
+  in their own groups (no stretched seams), so the petals no longer smooth into
+  the core.
 - Which of the Moth's slots band under Cel: today all 31 palette slots do,
   skin, hair and eyes included; removing `toonSelect` from a slot in
   `worlds/debug/avatars/moth.puck` keeps it continuous.
