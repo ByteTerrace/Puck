@@ -1325,7 +1325,7 @@ Still open from the companion build:
   the model's source never gives a reservation up, it only re-sends. Step 8
   bounds the retries by the lease deadline; the model then needs the matching
   give-up move.
-- [low] Branch `worktree-agent-aefc6b37a2b3dc11c` (companions v1) is superseded
+- [low] Branch `lane/companion-v1` on `origin` (companions v1) is superseded
   for custody and trust by the protocol build, but holds step 9 and 10 prior art
   no other branch has: `WorldServer.Roles.cs` (`TryRoleVerdict`, visiting
   drivers mounted per pin under `accept`), the `WorldRole` driver, accept, fuel
