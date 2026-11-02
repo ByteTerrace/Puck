@@ -1228,6 +1228,15 @@ Still open from the companion build:
 Owner: delivery lane · medium · Next: the silo's cold activation,
 then CI's steady state, the shader cache and the GC-hole retirement.
 
+- [medium] A solution build intermittently fails in `Puck.Azure.Functions`:
+  the Functions worker's generated `obj/azure_functions/azure_functions.g.csproj`
+  cannot resolve `Azure.Functions.Sdk` ("no version specified in the project or
+  global.json"), and an identical retry builds clean. Seen twice in one session
+  on the lead machine while several lanes restored at once; find whether it is
+  a restore race on the generated project, pin the SDK where it resolves, and
+  name the hazard in contributing's machine hazards. (from: the lead's
+  integration builds)
+
 - [medium] Cold debug-world silo activation still spends most of its time before
   checkpoint decode. Construction leaves the Orleans scheduler explicitly
   (`src/Puck.World.Silo/WorldSiloHost.cs:1196`); both container boots now pass
