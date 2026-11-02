@@ -97,15 +97,15 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
     // read/write without a shader format qualifier (shaderStorageImage*WithoutFormat), needed to write
     // image views whose format (commonly BGRA8) has no GLSL format qualifier, and dynamic indexing of storage-image
     // arrays; callers that need those probe separately and fall back otherwise.
-    // multiDrawIndirect and drawIndirectFirstInstance, which a counted indirect draw needs beside
-    // VK_KHR_draw_indirect_count: several draws in one call, each starting its instances at its own record's identity.
+    // Multi-draw permits native counted drawing and the batched fixed-count fallback. First-instance support is
+    // optional too; GPU mesh identities use DrawIndex instead and keep firstInstance zero.
     private const uint MultiDrawIndirectFeatureIndex = 9u;
     private const uint DrawIndirectFirstInstanceFeatureIndex = 10u;
     private static readonly uint[] OptionalBaseFeatureIndices = [MultiDrawIndirectFeatureIndex, DrawIndirectFirstInstanceFeatureIndex, 31u, 32u, 36u];
 
-    // Whether a device reports both base features a counted indirect draw needs.
+    // Whether the device permits several indirect records in one call.
     private static bool SupportsIndirectDrawFeatures(IReadOnlyList<bool> support) =>
-        ((DrawIndirectFirstInstanceFeatureIndex < support.Count) && support[((int)MultiDrawIndirectFeatureIndex)] && support[((int)DrawIndirectFirstInstanceFeatureIndex)]);
+        ((MultiDrawIndirectFeatureIndex < support.Count) && support[((int)MultiDrawIndirectFeatureIndex)]);
 
     private readonly IVulkanLogicalDeviceApi m_logicalDeviceApi;
     private readonly IVulkanPhysicalDeviceApi m_physicalDeviceApi;
@@ -193,6 +193,13 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
             throw VulkanResultExtensions.Unavailable(reason: "The Vulkan device does not report shaderDemoteToHelperInvocation, which the view-local character fade needs to discard fragments.");
         }
         featureStructureTypes.Add(item: StructureTypePhysicalDeviceShaderDemoteToHelperInvocationFeatures);
+        // Core in Vulkan 1.1; DrawIndex lets every indirect record carry its own identity without requiring the optional
+        // drawIndirectFirstInstance base feature. Query support before enabling it for the vertex pipelines.
+        const uint ShaderDrawParameters = 1000063000u;
+        if (!m_physicalDeviceApi.IsExtensionFeatureSupported(instance: instance, physicalDeviceHandle: physicalDeviceHandle, structureType: ShaderDrawParameters)) {
+            throw VulkanResultExtensions.Unavailable(reason: "The Vulkan device does not report shaderDrawParameters, which GPU mesh selection needs to read indirect draw identities.");
+        }
+        featureStructureTypes.Add(item: ShaderDrawParameters);
         var drawIndirectCount = (SupportsIndirectDrawFeatures(support: support) && m_physicalDeviceApi.HasDeviceExtension(
             extensionName: VulkanDeviceCommands.DrawIndirectCountExtension, instance: instance, physicalDeviceHandle: physicalDeviceHandle));
 

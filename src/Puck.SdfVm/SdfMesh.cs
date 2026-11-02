@@ -326,6 +326,13 @@ public readonly record struct SdfMeshDraw(SdfMesh Mesh, Matrix4x4 ObjectToWorld,
 /// </para>
 /// </summary>
 public static class SdfMeshRegion {
+    // Reference identity, as the former per-pass level history used, independent of arena relocation. Weak keys do not
+    // extend a geometry's lifetime; assignment order is presentation-only and never enters simulation or stored meshes.
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<SdfMesh, SelectionIdentity> SelectionIdentities = new();
+    private static int SelectionSequence;
+    private sealed class SelectionIdentity {
+        public readonly uint Value = unchecked((uint)Interlocked.Increment(ref SelectionSequence));
+    }
     /// <summary>The bytes of one draw's record (<see cref="SdfMeshRecord.DrawWords"/> words).</summary>
     public const int DrawBytes = (SdfMeshRecord.DrawWords * sizeof(uint));
     /// <summary>The most draws one region holds: the mesh pass pushes a draw's index in the bits below
@@ -428,16 +435,15 @@ public static class SdfMeshRegion {
 
         return checked(((((mesh.Positions.Length * SdfMeshRecord.VertexWords) + MaterialWordsOf(mesh: mesh)) + IndexWordsOf(mesh: mesh)) + SkinWordsOf(mesh: mesh)));
     }
-    /// <summary>The index words a mesh takes: its own triangles' (level zero), then each of its
-    /// <see cref="SdfMesh.Levels"/>' in order, so a level's triangle <c>k</c> is the mesh's triangle
-    /// <c>FirstTriangleOf(level) + k</c> for every reader of the region.</summary>
+    /// <summary>The index section's words: all levelled triangles' indices, then one three-word row per level, including
+    /// zero, holding its first triangle, vertex count and error.</summary>
     /// <param name="mesh">The mesh.</param>
     /// <returns>Its index words.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="mesh"/> is <see langword="null"/>.</exception>
     public static int IndexWordsOf(SdfMesh mesh) {
         ArgumentNullException.ThrowIfNull(mesh);
 
-        return checked((3 * mesh.LevelledTriangleCount));
+        return checked((3 * mesh.LevelledTriangleCount) + (3 * (mesh.Levels.Count + 1)));
     }
     /// <summary>The triangle-material words a mesh takes: one a triangle of every level, laid out as its indices are, or
     /// none for a mesh without them.</summary>
@@ -454,7 +460,7 @@ public static class SdfMeshRegion {
     /// <param name="level">The level: zero for the mesh's own triangles, one for its first coarser level; a level past its
     /// coarsest is its coarsest.</param>
     /// <returns>The level's first triangle among the mesh's levelled triangles, which the draw's record holds
-    /// (<see cref="SdfMeshRecord.LevelTriangleWord"/>), and its triangle count; a draw of the level draws three vertices
+    /// (<see cref="SdfMeshRecord.LevelTableWord"/>), and its triangle count; a draw of the level draws three vertices
     /// a triangle, its vertex stage adding the first triangle.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="mesh"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="level"/> is negative.</exception>
@@ -540,8 +546,13 @@ public static class SdfMeshRegion {
     /// <param name="draw">The draw.</param>
     /// <param name="placement">Where the draw's mesh lies in the region.</param>
     /// <param name="record">The record's words; at least <see cref="SdfMeshRecord.DrawWords"/>.</param>
+    /// <exception cref="ArgumentException">The mesh's levels exceed the indirect identity's level field.</exception>
     public static void WriteDraw(in SdfMeshDraw draw, SdfMeshRegionMesh placement, Span<uint> record) {
         var (mesh, matrix, material, _) = draw;
+
+        if (mesh.Levels.Count >= (1 << (32 - SdfKernelInterfaces.MeshLevelShift))) {
+            throw new ArgumentException(message: "The mesh's levels exceed the indirect draw identity's level field.", paramName: nameof(draw));
+        }
 
         record[0] = BitConverter.SingleToUInt32Bits(value: matrix.M11);
         record[1] = BitConverter.SingleToUInt32Bits(value: matrix.M12);
@@ -588,8 +599,24 @@ public static class SdfMeshRegion {
         record[(SdfMeshRecord.ClipPlaneWord + 1)] = BitConverter.SingleToUInt32Bits(value: clip.Y);
         record[(SdfMeshRecord.ClipPlaneWord + 2)] = BitConverter.SingleToUInt32Bits(value: clip.Z);
         record[(SdfMeshRecord.ClipPlaneWord + 3)] = BitConverter.SingleToUInt32Bits(value: clip.W);
-        record[SdfMeshRecord.LevelTriangleWord] = ((uint)LevelOf(level: 1, mesh: mesh).FirstTriangle);
-        record[(SdfMeshRecord.LevelTriangleWord + 1)] = ((uint)LevelOf(level: 2, mesh: mesh).FirstTriangle);
+        record[SdfMeshRecord.LevelTableWord] = (uint)(placement.IndexWord + (3 * mesh.LevelledTriangleCount));
+        record[SdfMeshRecord.LevelTableWord + 1] = (uint)mesh.Levels.Count;
+        var boxed = SdfMeshBox.TryOf(draw: in draw, box: out var box);
+        var selection = record.Slice(start: SdfMeshRecord.SelectionWord, length: 16);
+        selection.Clear();
+        WriteSelectionVector(words: selection, value: box.Center);
+        selection[3] = (boxed ? 0u : 1u) | (draw.Glass ? 2u : 0u) | (draw.EnclosesSolid ? 4u : 0u);
+        WriteSelectionVector(words: selection[4..], value: box.HalfX);
+        selection[7] = BitConverter.SingleToUInt32Bits(box.Stretch);
+        WriteSelectionVector(words: selection[8..], value: box.HalfY);
+        selection[11] = SelectionIdentities.GetValue(key: mesh, createValueCallback: static _ => new SelectionIdentity()).Value;
+        WriteSelectionVector(words: selection[12..], value: box.HalfZ);
+        selection[15] = (uint)mesh.Levels.Count;
+    }
+    private static void WriteSelectionVector(Span<uint> words, Vector3 value) {
+        words[0] = BitConverter.SingleToUInt32Bits(value.X);
+        words[1] = BitConverter.SingleToUInt32Bits(value.Y);
+        words[2] = BitConverter.SingleToUInt32Bits(value.Z);
     }
     /// <summary>Writes only the meshes a list of draws names, every word past the draw records, as <see cref="Write"/>
     /// writes them.</summary>
@@ -649,6 +676,15 @@ public static class SdfMeshRegion {
             level.Indices.Span.CopyTo(destination: destination[indexWord..]);
             materialWord += level.TriangleMaterials.Length;
             indexWord += level.Indices.Length;
+        }
+        // A shared table after this mesh's indices, independent of draw count and of the baker's current two levels.
+        var firstTriangle = 0;
+        for (var level = 0; level <= mesh.Levels.Count; level++) {
+            var triangles = level == 0 ? mesh.TriangleCount : mesh.Levels[level - 1].TriangleCount;
+            destination[indexWord++] = (uint)firstTriangle;
+            destination[indexWord++] = (uint)(3 * triangles);
+            destination[indexWord++] = BitConverter.SingleToUInt32Bits(level == 0 ? 0f : mesh.Levels[level - 1].Error);
+            firstTriangle += triangles;
         }
         if (mesh.VertexMembers.IsEmpty) { return; }
 

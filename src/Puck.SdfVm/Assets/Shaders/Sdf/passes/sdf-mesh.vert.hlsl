@@ -13,10 +13,10 @@
 #include "../frame/sdf-mesh.hlsli"
 #include "../frame/sdf-mesh-raster.hlsli"
 
-MeshRasterVertex VSMain(uint vertexId : SV_VertexID, uint instanceId : SV_InstanceID) {
-    uint draw = sdfMeshRasterDraw(instanceId);
+MeshRasterVertex VSMain(uint vertexId : SV_VertexID SDF_MESH_DRAW_INPUT) {
+    uint draw = sdfMeshRasterDraw(drawId);
     uint record = sdfMeshRecord(draw);
-    uint k = (vertexId + sdfMeshLevelIndex(record, sdfMeshRasterLevel(instanceId)));
+    uint k = (vertexId + sdfMeshLevelIndex(record, sdfMeshRasterLevel(drawId)));
     ViewportData view = worldView();
     float3 world = sdfMeshWorldPosition(record, k);
     float3 relative = (world - view.position.xyz);
