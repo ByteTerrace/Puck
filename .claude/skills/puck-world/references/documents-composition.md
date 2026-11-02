@@ -305,7 +305,8 @@ owned worlds share a basis. An entry's `as` composes the fragment under a namesp
 `docs/world-name-registry.md`, `puck registry --check`) becomes the generated name `<alias>$<name>` and every other
 registered site in the fragment — bare name positions, `$` channel segments, `$cell:`/`cell:`/`$expr:` keys, infix and
 postfix expressions, `state.<row>` bindings — is rewritten to match (`WorldModuleNamespace`); names the fragment does
-not declare stay as written. Placements and prototypes are namespaced too, each in its own namespace; spawn points,
+not declare stay as written. Placements, prototypes, clocks and screen materials are namespaced too, each in its own
+namespace (a material is a `bindings` export, which a screen's or face's `material` names); spawn points,
 kits, looks and cameras stay flat. A host writes the document spelling (`world.state kart$lap`, a restated court
 `{"id": "dive$diveCourt", ...}`); a `.puck` source writes `alias.name` (`puck-dsl`). An alias is a bare identifier (letter or underscore, then letters, digits, underscores).
 One fragment composes twice under two aliases; an entry with no `as` composes its names unchanged. A fragment's

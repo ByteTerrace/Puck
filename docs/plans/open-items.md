@@ -1194,16 +1194,6 @@ The engine provides mechanisms; every concrete design is `.puck` data in
 `worlds/standard/`, which the debug world imports and develops. Each item below is
 a design built into C# or living only in the debug world.
 
-- The leaks-2 review (Codex Astra; the leaks3 lane is fixing all four):
-  [medium] Presentation-tier projection and hydration drop the screen-material
-  table (`src/Puck.World.Schema/WorldProjection.cs:115`, `:316`, `:792`), so a
-  disclosed world's screens render untreated; [medium] screen material ids and
-  both reference sites are absent from `WorldNameRegistry`, so aliased modules
-  collide on a material id; [medium] a neutral or scanline-only material drops
-  the screen edge's footprint protection
-  (`src/Puck.SdfVm/Assets/Shaders/Sdf/shade/sdf-environment.hlsli:312`);
-  [low] `worlds/standard/walker.puck:22` copies the Moth's `walk` program
-  (`worlds/debug/avatars/moth.puck:223`).
 - [low] Flight and fuel are authored only in the Moth
   (`worlds/debug/avatars/moth.puck:1860-1925`). When the assisted-flight pass
   comes it is a standard ability template, with `dashAbility` in
@@ -1224,6 +1214,12 @@ a design built into C# or living only in the debug world.
   preference needs a camera program's `state.<row>.$body` binding to resolve
   against the framed body (`StateBinding.BodyKey`), which the rig compiler's
   scalar slots (`WorldCameraRigCompiler`, `CompiledRig.Refresh`) do not do.
+- [low] `screenMaterials` has no `world.row` section
+  (`src/Puck.World.Console/WorldRowCommandModule.cs` refuses the path), so a
+  material is read back and tuned only through its source and `world.reload`.
+  Add the row section with an upsert/remove mutation kind
+  ([mutations](../../.claude/skills/puck-world/references/mutations.md)), keyed
+  by `id`.
 - The standard's binding bar slot set (`worlds/standard/controls.puck`, the
   `bare` overlay) still lists keys only the Moth binds (1 to 5 and F4); they
   show as unbound plates in a world without her controls.
@@ -2735,6 +2731,18 @@ hang, then the pre-`main` language findings.
   refuse the missing position before the domain-expansion walk. The port
   authors the explicit position and boots successfully. (from: meadow)
 
+- [low] Two `exports { … }` blocks in one document keep only the later block's
+  lists (the object section replaces, where the `export <facet> <names>`
+  statement appends, `WorldDocumentEmitter.cs` `ExportNode`), and `export` does
+  not parse inside a template, so a template that exports
+  (`cameraResponse` in `worlds/standard/camera.puck`) makes every document
+  expanding it write its own exports as statements after the expansion
+  (`worlds/standard/standard.puck`, `walker.puck`). Merge repeated `exports`
+  blocks the way the statement does, or admit `export` in a template body.
+  Related: a material the standard's skin declares is re-exported by every
+  document a world imports in the skin's place (`standard.puck`, `walker.puck`,
+  `worlds/debug/moth-controls.puck`, `controls.puck`); decide whether an
+  import's surface should carry its own imports' exports. (from: leaks3)
 - [low] An imported module named `roles` changes how its importer lints. Add a
   file `worlds/standard/roles.puck` holding only a `roles [ { name: "companion"
   accept: true } ]` section and append `import "roles"` to
@@ -3068,13 +3076,8 @@ Owner: specialist lane (puck-world, build and hot reload, input) · ordinary · 
 Owner: debug-world content lanes, each started by the owner's direction ·
 ordinary · Next: new content and art on the owner's call.
 
-- [medium] `worlds/debug/controls-dash-tests.puck` fails on its own: booted
-  alone it reports binding group `$empty`, because the Moth basis
-  (`worlds/debug/avatars/moth.puck`) no longer imports bindings since they
-  moved to `moth-controls.puck` (leaks-2), so its keyboard input does nothing.
-  In the full debug world D plus J still dashes. Make the fixture import the
-  controls it exercises. Also owed: `puck verbs --check` with a windowed boot
-  after clearance-op removed `player.camera.clearance` by hand. (from: clearance-op)
+- Owed: `puck verbs --check` with a windowed boot after clearance-op removed
+  `player.camera.clearance` by hand (the first settle window runs it). (from: clearance-op)
 - The faerie: the companion becomes small, abstract and original (nothing that
   reads as Ocarina of Time's) beside the moth, its animation rich, varied and
   reactive, dodging a swat through one generic threat input (a point and

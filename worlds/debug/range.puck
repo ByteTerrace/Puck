@@ -230,7 +230,7 @@ screens: map(televisions, tv => {
   // exposure.
   luminance: 10000nit
   // Each is a tube television: its picture fills the glass through the standard's CRT material.
-  material: "crt"
+  material: crt
   // Nobody plays them: the ball bounces by itself.
   route {
     engageable: false
