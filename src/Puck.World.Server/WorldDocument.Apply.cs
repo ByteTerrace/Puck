@@ -1201,7 +1201,8 @@ public sealed partial class WorldDocument {
         Host.GrantTable.ApplyLifecycleEvents(
             admitted: admitted,
             disconnected: disconnected,
-            ordered: true
+            ordered: true,
+            input: false
         );
     }
 
@@ -1259,7 +1260,8 @@ public sealed partial class WorldDocument {
             Host.GrantTable.ApplyLifecycleEvents(
                 admitted: m_inhabitCountAdmitted,
                 disconnected: m_inhabitCountDisconnected,
-                ordered: true
+                ordered: true,
+                input: false
             );
         }
 

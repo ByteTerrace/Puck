@@ -70,15 +70,26 @@ public sealed partial class WorldTick {
     /// <summary>Dispatches one server-authored event, either inline or through the ordered domain.</summary>
     /// <param name="serverEvent">The event.</param>
     /// <param name="ordered">Whether to enqueue it on the ordered domain rather than apply it inline.</param>
-    internal void DispatchServerEvent(WorldServerEvent serverEvent, bool ordered) {
+    /// <param name="input">Whether the event is an authority input: a connection, disconnection or session that no
+    /// other recorded entry causes, which the tape records and a replay re-applies. An event that a document install,
+    /// a census change, a boot or a landing produces is <see langword="false"/>: its cause is what the tape records,
+    /// and re-executing that cause dispatches the event again at the same point of the tick, so taping it too would
+    /// apply it twice and the second time ahead of its cause.</param>
+    internal void DispatchServerEvent(WorldServerEvent serverEvent, bool ordered, bool input) {
         lock (Host.AuthorityGate) {
             if (Host.AuthorityRetiring) {
                 return;
             }
             if (ordered) {
-                EnqueueOrdered(entry: new WorldOrderedEntry.ServerEvent(Value: serverEvent));
+                EnqueueOrdered(entry: new WorldOrderedEntry.ServerEvent(
+                    Input: input,
+                    Value: serverEvent
+                ));
             } else {
-                ApplyServerEvent(serverEvent: serverEvent);
+                ApplyServerEvent(
+                    input: input,
+                    serverEvent: serverEvent
+                );
             }
         }
     }
@@ -107,7 +118,10 @@ public sealed partial class WorldTick {
                         }
                         break;
                     case WorldOrderedEntry.ServerEvent serverEvent:
-                        ApplyServerEvent(serverEvent: serverEvent.Value);
+                        ApplyServerEvent(
+                            input: serverEvent.Input,
+                            serverEvent: serverEvent.Value
+                        );
                         break;
                 }
             }
@@ -816,8 +830,10 @@ public sealed partial class WorldTick {
     /// <summary>Re-applies a server-authored event through the population and grant doors. Replay calls this same
     /// method; there is no state-install bypass.</summary>
     /// <param name="serverEvent">The ordered event.</param>
+    /// <param name="input">Whether the event is an authority input the tape records (see
+    /// <see cref="DispatchServerEvent"/>).</param>
     /// <exception cref="ArgumentNullException"><paramref name="serverEvent"/> is <see langword="null"/>.</exception>
-    internal void ApplyServerEvent(WorldServerEvent serverEvent) {
+    internal void ApplyServerEvent(WorldServerEvent serverEvent, bool input) {
         ArgumentNullException.ThrowIfNull(argument: serverEvent);
 
         switch (serverEvent) {
@@ -918,8 +934,7 @@ public sealed partial class WorldTick {
                 return;
         }
 
-        // An arrival's own admissions are re-derived when its tape entry lands it again, so they are not taped twice.
-        if (!Host.LandingArrival) {
+        if (input) {
             Host.ServerEventTap?.Invoke(obj: serverEvent);
         }
     }

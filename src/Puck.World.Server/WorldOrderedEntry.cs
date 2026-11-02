@@ -12,5 +12,7 @@ public abstract record WorldOrderedEntry {
     public sealed record Submission(SubmissionEnvelope Envelope, Action<WorldSubmissionResult>? Completion) : WorldOrderedEntry;
     /// <summary>One server-authored event ordered against the submissions around it.</summary>
     /// <param name="Value">The event.</param>
-    public sealed record ServerEvent(WorldServerEvent Value) : WorldOrderedEntry;
+    /// <param name="Input">Whether the event is an authority input the tape records (see
+    /// <see cref="WorldServer.DispatchServerEvent"/>).</param>
+    public sealed record ServerEvent(WorldServerEvent Value, bool Input) : WorldOrderedEntry;
 }

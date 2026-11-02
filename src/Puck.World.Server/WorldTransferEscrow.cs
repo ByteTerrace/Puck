@@ -920,8 +920,6 @@ public sealed partial class WorldTransferEscrow {
             }
         }
 
-        m_server.LandingArrival = true;
-
         try {
             return CommitLease(
             key: key,
@@ -930,7 +928,6 @@ public sealed partial class WorldTransferEscrow {
             reason: out reason
         );
         } finally {
-            m_server.LandingArrival = false;
             ReleaseLease(key: key);
         }
     }

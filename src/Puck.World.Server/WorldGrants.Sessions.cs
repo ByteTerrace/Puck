@@ -208,6 +208,7 @@ public sealed partial class WorldGrants {
         );
         Host.DispatchServerEvent(
             ordered: false,
+            input: true,
             serverEvent: new WorldServerEvent.SessionAdmitted(
                 MintedGrants: BuildSessionGrants(
                     session: session,
@@ -261,6 +262,7 @@ public sealed partial class WorldGrants {
 
         Host.DispatchServerEvent(
             ordered: false,
+            input: true,
             serverEvent: new WorldServerEvent.SessionEmbodied(
                 BodyGeneration: Host.Population.Generation(index: bodyIndex),
                 BodyIndex: bodyIndex,
@@ -290,6 +292,7 @@ public sealed partial class WorldGrants {
 
         Host.DispatchServerEvent(
             ordered: false,
+            input: true,
             serverEvent: new WorldServerEvent.SessionEnded(
                 RevokedGrants: [.. Rows(principal: session)],
                 Session: session

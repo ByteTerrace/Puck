@@ -46,8 +46,13 @@ public sealed partial class WorldServer {
             body: body,
             submission: in submission
         );
-    /// <inheritdoc cref="WorldTick.ApplyServerEvent"/>
-    public void ApplyServerEvent(WorldServerEvent serverEvent) => m_tick.ApplyServerEvent(serverEvent: serverEvent);
+    /// <summary>Re-applies a recorded server event, an authority input, through the population and grant doors.</summary>
+    /// <param name="serverEvent">The recorded event.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="serverEvent"/> is <see langword="null"/>.</exception>
+    public void ApplyServerEvent(WorldServerEvent serverEvent) => m_tick.ApplyServerEvent(
+        input: true,
+        serverEvent: serverEvent
+    );
     /// <inheritdoc cref="WorldTick.CheckEngagePolicy"/>
     public bool CheckEngagePolicy(int entityIndex, GrantSubject target, out string reason) =>
         m_tick.CheckEngagePolicy(
@@ -91,8 +96,9 @@ public sealed partial class WorldServer {
     /// <inheritdoc cref="WorldTick.DescribeResponses"/>
     public string DescribeResponses() => m_tick.DescribeResponses();
     /// <inheritdoc cref="WorldTick.DispatchServerEvent"/>
-    public void DispatchServerEvent(WorldServerEvent serverEvent, bool ordered) =>
+    public void DispatchServerEvent(WorldServerEvent serverEvent, bool ordered, bool input) =>
         m_tick.DispatchServerEvent(
+            input: input,
             ordered: ordered,
             serverEvent: serverEvent
         );

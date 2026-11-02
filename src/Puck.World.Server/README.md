@@ -90,7 +90,9 @@ without the grant rows its own queued event carries.
 The same queue also carries the server-authored `PeerAdmitted` and
 `PeerDisconnected` entries; clients cannot submit those events. They apply
 through the population/grant doors and are exposed to the replay tape only
-after their point of effect.
+after their point of effect, and only when they are authority inputs (a peer
+connection opened or closed): an event a recorded cause produces, such as an
+install reconciling inhabitants, is re-derived by re-executing that cause.
 On the in-process loopback that drain runs inline on the tick thread before
 the `Submit*` call returns, so commands, grants, session requests, and queries
 apply synchronously at submit, while definition swaps and mutations buffer to
