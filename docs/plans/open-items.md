@@ -33,7 +33,9 @@ on an invariant is designed and reviewed before code
 ([orchestration](../../.claude/skills/orchestration/SKILL.md)). The debug
 world is the proving ground, so every plan's checks run on it, and what the
 experimental worlds have that it lacks is ported into it
-([port](#port-the-experimental-worlds-missing-features)).
+([port](#port-the-experimental-worlds-missing-features)). Items 0 to 3 are
+planned as lanes in [the next wave](next-wave.md), which starts on the owner's
+word.
 
 0. [The frame thread's CPU field queries](engine-job-system.md#the-frame-bar-at-the-standard-stops)
    [high, the frame bar]: the first settle window found every stop failing
@@ -94,7 +96,8 @@ experimental worlds have that it lacks is ported into it
 9. [Certified field contact](#certified-field-contact): box and ellipsoid
    bodies, then clearance on slopes within a third of a metre.
 10. [Transfers](#transfers-federation-and-server) [high]: the companion steps 6
-   to 10.
+   to 10. A finished, never-landed companion build is on `lane/companion-build`;
+   triage it first ([the next wave](next-wave.md#unlanded-branches-to-triage-first)).
 11. [Language and authoring](#language-and-authoring) and [author leaks to the
    standard](#author-leaks-to-the-standard): what lang-2 leaves of S11, the
    cost corpus, the overlay text advance.
@@ -3822,7 +3825,12 @@ Owner: the lead · ordinary · Next: the Monitor hook check.
 
 - After the first settle window: give Antigravity (Gemini Argon) a fair
   coding trial before deciding its role (the owner's direction: it has so far
-  done research only, where its code citations were unreliable). Two bounded
+  done research only, where its code citations were unreliable). Its research
+  record before the trial: the aspnetcore#70219 second opinion audited 28 PRs,
+  found real errors in Claude's report, and caught compatibility imports and
+  the wall-clock-in-parallel-lanes hazard; the lead's 3/3 spot checks held. It
+  also invented one figure ("194.2 ms vs 11.1 ms") and misread one PR (#70158),
+  so its numbers are checked before use. Two bounded
   issue fixes from this file, each in its own worktree with a mechanical check:
   the five duplicate `HeapAllocator` test allocators and `IAllocator`'s untrue
   documentation (small), and the Superellipsoid's loose far field plus its

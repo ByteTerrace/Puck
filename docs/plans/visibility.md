@@ -30,8 +30,8 @@ none is a prediction for Puck.
 ## Where visibility stands
 
 The round read the code, and the plan rests on these facts. Paths are under
-`src/Puck.SdfVm/` unless another root is given; R2's code is on its lane's
-branch until it lands.
+`src/Puck.SdfVm/` unless another root is given. R2 has landed; its code is
+in the tree.
 
 - **R2** compiles the box cull and the level choice into a compute kernel
   (`Assets/Shaders/Sdf/frame/sdf-mesh-selection.hlsli`) that feeds

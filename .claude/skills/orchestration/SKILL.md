@@ -215,7 +215,14 @@ follows `Brief: <id>`. The lead checks the final commit's trailer and subject
 format before merging a lane.
 
 The lead's ledger and plan files that a delegate never writes are the lead's
-own scratch checklists under `<worktree>/.claude/scratch/<lane>-*`. The repository's documents,
+own scratch checklists under `<worktree>/.claude/scratch/<lane>-*`. A scratch
+checklist holds only what the next hour needs. Plans another session would need
+to continue on another machine go into `docs/plans/` and are pushed: wave
+plans, grounding reports, pending notes and owner answers. A session's job
+directory and scratch are lost with the machine or the session. A finished lane
+branch the lead has not merged is pushed to `origin` as `lane/<id>`; a
+`companion-build` lane once sat finished and unmerged, on one machine only, for
+days. The repository's documents,
 `docs/plans/open-items.md` and the plans under `docs/plans` among them, belong
 to no one lane: a delegate edits them for what its change delivers, deleting an
 item it closed (after moving the durable fact it carries to its owning home),
