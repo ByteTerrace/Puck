@@ -810,10 +810,31 @@ real motion-history copy write-after-write dependency and overlapping upload
 ranges. The unpinned image comparison flags 16 lobby regions, none at the rim,
 54 in the gallery and 122 at the meadow. Inspected lobby/gallery regions show
 lighting differences; meadow regions show grass pose and lighting differences.
-Tick-pinned controls are still required to distinguish these from selection
-changes. Two single-World debug fixtures, `input-clock30-tests.puck` (four
-verdicts) and `unbiased-draws-tests.puck` (six), pass `--reproduce` after the
-same integration merge; presentation selection does not enter simulation state.
+The subsequent lockstep controls capture ticks 150 / 300 / 450 / 600 after
+bakes settle at tick zero. Both CPU runs and the GPU run have identical
+authority hashes and camera/pose stamps at every capture. Vulkan synchronization
+validation is clean for this GPU run too.
+
+| Pinned Vulkan place | CPU mean region noise | CPU/GPU mean region difference | Regions above noise |
+|---|---:|---:|---:|
+| Lobby | 0.00004015 | 0.00098606 | 103 |
+| Rim | 0 | 0 | 0 |
+| Gallery interior | 0.00008735 | 0.00013238 | 96 |
+| Meadow | 0.00000109 | 0.00000109 | 0 |
+
+These are mean absolute RGB channel steps (0–255) per 64×64 region, with
+every positive excess flagged. All four image pairs and enlarged monitor
+crops were inspected. The gallery's 428 changed pixels differ in one channel
+by one step; the meadow's four such pixels are within the CPU noise. The
+lobby has 633 changed pixels. Its 339 channel differences larger than one
+step (maximum 48) all lie on the striped monitor face, x269–323 / y391–490;
+its geometry aligns in the enlarged crops. The sampled stripe difference
+exceeds this unusually small pinned noise and its cause remains unconfirmed;
+it is not a claim of pixel equivalence. No missing geometry was identified.
+
+Two single-World debug fixtures, `input-clock30-tests.puck` (four verdicts)
+and `unbiased-draws-tests.puck` (six), pass `--reproduce` again after integration
+merge `207f6d511`; presentation selection does not enter simulation state.
 
 ### What becomes of the tick-to-produce memo's phases
 
