@@ -109,10 +109,79 @@ meets it on either backend, and the presenter never waits on the GPU (`begin`
   behind`, about 4,000 of the 7,680 probes a second it needs) runs on the
   background workers and is not what holds the frame over the bar.
 - **Off the root queue**, the screen and portal sessions add timed GPU work
-  the root's means leave out: their per-node means sum to 31 to 36 ms on
-  Direct3D 12 against 16 to 21 on Vulkan at the same stops (Vulkan's first
-  stop timed fewer nodes). Rated nodes submit less often than every frame, so
-  the sum overstates a frame's share; `world.gpu-timing timeline` places them.
+  the root's means leave out; their per-node means overstate a frame's share,
+  since rated nodes submit less often than every frame. The timeline below
+  places them per frame.
+
+#### The GPU queue per frame
+
+`world.gpu-timing timeline` lists each node's latest span on the queue's
+clock; a frame is the root `world` node's span with every span that started
+within 40 ms before it, and a node whose latest span is older did not submit
+that frame. Three timelines a stop, two seconds apart, on each backend
+(`world.quality high`, 1280×900, the day cycle running):
+
+| Stop | Backend | Root `world`, ms | Session frames: sessions + nested views + beacon, ms | Busy on a session frame, ms | Busy on a root-only frame, ms |
+|---|---|---:|---:|---:|---:|
+| `stage` | Direct3D 12 | 11.9–12.1 | 3.6–4.0 (6–11 nodes) + 0.8 + 0.8 | 17.4–17.7 | 12.4 |
+| `stage` | Vulkan | 11.1 | 2.5 (11) + 0.5 + 0.7 | 14.9 | 11.2 |
+| `valley-rim` | Direct3D 12 | 15.0–16.1 | 4.5–4.6 (11) + 1.4 when the beacon submits | 19.7–21.7 | — |
+| `valley-rim` | Vulkan | 14.9–15.0 | 3.0 (11) | 18.0–18.1 | — |
+| `meadow` | Direct3D 12 | 21.3–21.6 | 6.1 (11) + 2.7 (6 nested) | 30.3 | 21.5–22.9 |
+| `meadow` | Vulkan | 19.4–19.8 | — (none submitted in the three reads) | — | 19.5–19.9 |
+
+- **At the meadow the GPU alone misses the bar**: the root's own frame is 19.4
+  to 21.6 ms on both backends, and a frame on which the eleven screen and
+  portal sessions and six nested views also submit is busy 30.3 ms on
+  Direct3D 12. At the rim every read frame carried the sessions, 18 to 22 ms.
+  At the stage the GPU fits (11 to 18 ms) and the frame is the CPU's (40 ms).
+- **The sessions are a rated burst**, 0.4 to 0.6 ms each on Direct3D 12 and
+  about 0.23 on Vulkan, carried by 11 of the 18 frames read. When they land
+  on one frame they add 3 to 9 ms to it, which the scheduling section's rated
+  burst spreading should take as GPU work too, not only CPU recording.
+
+#### Where the frame thread goes
+
+Direct3D 12, a 15 s `dotnet-trace` (`dotnet-sampled-thread-time`) of each
+stop, classified by caller over the frame thread's stacks; frames per trace
+from `host.frames` over the same window (stage 417 iterations at 40.5 ms,
+meadow 228 at 73.9 ms). Query counts and cache use come from the frame
+thread's two answer rings (`WorldEffectorSolver`'s 64 surface answers,
+`WorldCameraClearance`'s 32 clearance answers), read four times a second
+apart through ClrMD; an answer is written only on a miss.
+
+| Caller | Stage, share / ms a frame | Meadow, share / ms a frame | Queries a frame (misses) | Cost a query | Inputs unchanged from the last frame |
+|---|---:|---:|---|---:|---|
+| Creation effectors' surface probes (`WorldEffectorSolver.Probe`) | 34.5 % / 14.0 | 27.0 % / 19.9 | 64 misses: 8 to 10 over the static field (the four rate-range Moths' feet at x ≈ −100 and, at the stage, the player's) and about 56 with no field (bodies in routed scenes, which publish no static field) | 1.4 ms (stage), 2.5 ms (meadow) a field-backed probe: 76 % the hit's gradient (`TryFieldGradient`, axis differences), 24 % the march | None reused: the null-field probes never match (`SurfaceQuery.Matches` requires a field) and evict the 64-entry ring every frame, so a still body's bit-identical probe finds its answer gone |
+| Chase camera's clearance (`WorldCameraClearance.March`, sphere casts) | 0.0 % | 17.3 % / 12.8 | 0 at the stage; 4 at the meadow | 3.2 ms a sphere cast at the meadow | Stage: all (a still camera's four sweeps hit). Meadow: none; the boom target moves by about 0.1 mm a frame (`(119.5, 1.3671 … 1.3674, −55.3)`), so bit-identical matching never hits |
+| Presenter's `Dress` other than the camera | 0.7 % | 0.5 % | — | — | — |
+| `SdfMeshPathBake.Dress` | 6.4 % / 2.6 | 4.3 % / 3.2 | — | — | Self 1.7 %, `SdfMeshClaims.Update` 0.7 %, `Enumerable.Contains` 0.5 %, `Settle` 0.5 %, `SdfDressedPickMap` 0.4 % (meadow) |
+| `SdfWorldTables.StageChangedDraws` | 7.3 % / 3.0 | 4.6 % / 3.4 | — | — | — |
+| `PackTransforms` other than effectors | 6.8 % / 2.8 | 3.9 % / 2.9 | — | — | — |
+| `SdfWorldResidency.PrepareOnce` | 8.2 % / 3.3 | 6.4 % / 4.7 | — | — | — |
+| Command recording | 6.6 % / 2.7 | 4.5 % / 3.3 | — | — | — |
+| The tick (`FixedStepPump`) | 25.0 % / 10.1 | 28.8 % / 21.3 | — | — | — |
+
+Every probe and sweep runs over one evaluator, the client's static field: 7,610
+instructions, 555 cull bounds and members, 624 segment bounds, step scale 1.0
+(certified, no global clamp), 512 march iterations, not primeable, frame
+2^22 m. What the trace and the rings say for the design of Next item 0:
+
+- **Most of the effector cost is probes nobody sees.** The rate-range Moths
+  stand more than 220 m from the meadow and are posed and probed every frame; a probe's
+  cost is three quarters the gradient at its hit (`TryFieldGradient`'s three
+  axis differences, six full `TryDistance` evaluations of a 7,610-instruction
+  program), at a point the march has just evaluated.
+- **The answer caches cannot work as built.** Null-field probes fill the
+  surface ring, and a target that breathes by 0.1 mm defeats the clearance
+  ring's bit-identical match. A cache keyed by what changed (the body's pose
+  against the field's revision, a tolerance the probe's own skin admits)
+  serves both; so does skipping a probe with no field before it reaches the
+  ring.
+- **The trace files** are in the settle lane's scratch:
+  `settle-2-frame-stage.nettrace`, `settle-2-frame-meadow.nettrace`, their
+  `.classified.txt` breakdowns, and `settle-2-rings-stage.txt` /
+  `settle-2-rings-meadow.txt`.
 
 ## 1. The scheduler
 

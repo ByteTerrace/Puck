@@ -543,11 +543,30 @@ The exit layer's quiet baseline, from the lead's settle window (RTX 4070,
 | `debug.go portals` | Vulkan | 0.625 | 0.842 | 0.804 | 2.27 | 0.373 |
 
 On the 4070 the three cascades already reach or pass the 2060's 1.5 ms budget
-below at every stop but the Vulkan rim. These are the before readings; the
-redesign's after readings follow the plan below, which also wants the
-per-cascade draw and vertex counts (`world.counters gpu pass
-sdf.world$shadow-near`; a pass label is matched by whole segments, so
-`sdf.world$shadow` names no pass), the 2060 and the Deck. The plan:
+below at every stop but the Vulkan rim.
+
+Each cascade's counted work, from `world.counters gpu pass
+sdf.world$shadow-near` (and `-far`, `-second`) on the root node, read twice
+ten ticks apart with the second kept; both render passes of a cascade are in
+the counts, and each cascade issues three indirect draws:
+
+| Stop | Cascade | D3D12 draws / vertices / texels written | D3D12 GPU, ms | Vulkan draws / vertices / texels written | Vulkan GPU, ms |
+|---|---|---|---:|---|---:|
+| `stage` | near | 2,056 / 4,158,558 / 12,110,462 | 0.676 | 2,056 / 4,151,172 / 12,107,721 | 0.552 |
+| `stage` | far | 10,918 / 10,153,830 / 14,572,937 | 1.121 | 10,918 / 10,173,534 / 14,576,201 | 1.031 |
+| `stage` | second | 2,204 / 4,184,412 / 10,090,411 | 0.734 | 2,204 / 4,187,682 / 10,084,751 | 0.587 |
+| `valley-rim` | near | 392 / 863,154 / 4,138,005 | 0.510 | 392 / 863,778 / 3,939,147 | 0.270 |
+| `valley-rim` | far | 414 / 1,133,064 / 2,675,647 | 0.511 | 410 / 1,065,564 / 2,381,170 | 0.259 |
+| `valley-rim` | second | 410 / 1,062,978 / 8,453,797 | 0.523 | 416 / 1,065,372 / 11,687,751 | 0.363 |
+| `meadow` | near | 8,496 / 4,224,756 / 16,156,499 | 1.018 | 8,520 / 4,689,438 / 12,709,921 | 0.938 |
+| `meadow` | far | 8,640 / 5,401,740 / 16,331,097 | 1.258 | 8,650 / 5,565,312 / 16,561,625 | 1.198 |
+| `meadow` | second | 8,594 / 4,706,232 / 11,758,364 | 1.045 | 8,600 / 4,632,084 / 11,341,447 | 0.959 |
+
+At the stage the far cascade draws five times the near cascade's casters for
+2.4 times its vertices; at the meadow every cascade draws the blades, about
+8,500 draws against the mesh pass's 3,846. These are the before readings; the
+redesign's after readings follow the plan below, with the 2060 and the Deck.
+The plan:
 
 - **Devices and tiers.** The bar is the highest quality on every bar device
   ([the register](../decisions/rendering.md#the-pipeline-foundation)), so the
