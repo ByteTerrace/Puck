@@ -30,9 +30,9 @@ overrides this skill and is written into it in that session.
   [work packets](../../../docs/plans/open-items.md#work-packets), each with its
   severity, one owner, its file and line and its failing case, in the packet
   that shares its cause or area or in a new one; a high finding goes to the top
-  of Next and so into the next integration batch. A pass's fixes are a
-  follow-up branch of their own in that batch, never edits to the author's
-  branch.
+  of Next and so into the next integration batch. A review-and-fix pass's
+  fixes are a follow-up branch of their own in that batch, never edits to the
+  author's branch.
 - The brief chooses one of two modes, and a pass never turns into the other:
   - **Findings-only** reads the named revisions and reports, changing no
     source, merging nothing and committing nothing: the `reviewer` agent, or a

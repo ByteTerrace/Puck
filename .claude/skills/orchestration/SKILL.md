@@ -82,10 +82,9 @@ direction:
     new packet with an owner role and a next action, never a list of its own. A
     high finding goes to the top of [Next](../../../docs/plans/open-items.md#next)
     and so into the next integration batch.
-  - The brief picks the [review mode](../review-passes/SKILL.md#when-a-lane-gets-a-review).
-    A review-and-fix pass's fixes are a follow-up branch of their own in that
-    batch, never edits to the author's branch; a findings-only review's highs
-    go back to the lane that wrote the code or to their packet's owner.
+  - The brief picks the [review mode](../review-passes/SKILL.md#when-a-lane-gets-a-review),
+    findings-only or review-and-fix, which also decides who fixes what the
+    review finds; the author's branch is never edited by a reviewer.
   - The integration lane may revert a landed change when leaving it in is worse
     than removing it.
   - The only blocking review gate is before the owner pushes `main`: every high
