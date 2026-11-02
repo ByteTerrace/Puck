@@ -1780,6 +1780,21 @@ and the order they land in; the items below are its findings and checks.
   pixels white like lit ones; at the noon sun the meadow lies in the east
   wall's shadow. Step 1's checks and the frame bar are owed again on the moving
   day cycle, with a low-sun cel style for the dawn penumbra check.
+- From illum1-fix: the cascades' exit layer doubles each cascade pass's draws
+  and vertices (`world.counters gpu pass sdf.world$shadow-near` at the stage:
+  460 draws and 2.62 M vertices on Direct3D 12, two render passes) and adds a
+  depth image per cascade (16 MiB each at 2048 texels); its frame time is owed
+  on a quiet machine. At a grazing light (a wrapped side at n·l = -0.25) the
+  filter's slope clearance (`SdfMeshShadowSlopeBias`, 2.5 texels of depth per
+  texel of lateral distance) still lets a parallel slab within about 0.1 m
+  along the light half through; the exit layer removed the leak beyond that.
+  The debug world authors no `render.toon`, so `world.toon on` there bands only
+  materials with styles of their own until a default style is authored there,
+  which takes either a copy of `celStyle`'s values with `enabled: false` or a
+  `.puck` way to override one field of an imported value.
+  `SdfPassPlanLawTests.ATemporalViewAddsOnlyItsHistoryAndReactivityOverTheSpatialGraph`
+  fails on its own constant (201,139,200 bytes against 1,221,350,400 from the
+  current `HistorySurfaceWords`), unrelated to the cascades.
 - [high] A sun that moves every frame freezes indirect light. Each direction
   change starts a new lighting generation (`SdfMeshIrradiance.RefreshLighting`
   hashes every directional and traced light record), and a trace batch landing

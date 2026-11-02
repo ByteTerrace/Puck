@@ -8,4 +8,6 @@ public enum GpuCullMode : uint {
     None = 0,
     /// <summary>A back face is discarded.</summary>
     Back = 1,
+    /// <summary>A front face is discarded.</summary>
+    Front = 2,
 }

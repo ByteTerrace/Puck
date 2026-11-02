@@ -1344,6 +1344,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
                 ),
                 pipelines: m_pipelines,
                 shadowRaster: m_shadowRaster,
+                shadowExitRaster: m_shadowRaster,
                 glassRaster: m_glassRaster,
                 occlusion: m_occlusion,
                 meshRaster: m_meshRaster,

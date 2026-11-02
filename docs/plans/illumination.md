@@ -63,7 +63,9 @@ The research round read the code, and the plan rests on these facts:
   by `world.budget` with each cascade's texel. The surface pass queries them
   wherever a light's diffuse response is non-zero, a wrapped material's side
   past the terminator included (`passes/sdf-surface-stage.hlsli`,
-  `sdfMaterialWrap` and `sdfMeshShadowTransmission`).
+  `sdfMaterialWrap`); a triangle turned from the light reads the cascade's exit
+  layer, so only its own body lets the wrap's light through
+  ([decision](../decisions/rendering.md#a-light-is-shadowed-wherever-it-lights-and-cel-shading-is-a-style-per-material)).
 
 ## The five decisions
 
@@ -523,8 +525,8 @@ from these.
 
 Landed and checked on the debug world on Direct3D 12, and by eye on Vulkan:
 
-- The wrapped-diffuse query, with casters within the receiver's own depth
-  transmitting. Indoors under the slab beside the PRIMITIVES plinths, the
+- The wrapped-diffuse query, with the receiver's own body transmitting through
+  the cascades' exit layer. Indoors under the slab beside the PRIMITIVES plinths, the
   Moth's cheek past the terminator no longer takes the 100 klx sun: one World,
   the surface kernel hot-swapped between the old and new query, differs only
   in the two 32-pixel tiles over her cheek; outdoors at the stage no tile

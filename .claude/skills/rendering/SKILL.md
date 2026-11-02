@@ -218,6 +218,16 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   blocker's. `world.debug-view ao`
   and `world.debug-view shadow` show the filtered values, and `world.ao` toggles
   the occlusion live.
+- **A cascade has two layers.** Each cascade pass draws its depth (every face,
+  `SdfMeshRasterPass.ShadowDescription`) and its exit layer (faces toward the
+  light culled, `ShadowExitDescription`) into its two outputs. A triangle the
+  surface pass sees turned from the light compares against the exit layer, so
+  its own body lets a wrapped material's light through while any other solid in
+  front shadows it; one facing the light keeps the depth, which holds no wall's
+  far face to leak light along the wall's foot. A pipeline description field
+  that changes the pipeline must enter `GpuPassPipelineKey`: the cache shares one
+  pipeline per key, so a lease differing only in an unkeyed field silently gets
+  the other's pipeline (the exit layer then holds the depth's faces).
 - **Every raster pass culls draws by a host box** (`SdfMeshBox`, `SdfMeshCull`,
   tested by `frame/sdf-mesh-selection.hlsli` through `SdfMeshOcclusion`): a
   view's frustum, a
@@ -655,8 +665,8 @@ wrong. The contracts that bite most often:
   faces counter-clockwise (`SdfDualContouring`), both backends declare a
   counter-clockwise face front (`GpuGraphicsPipelineDescription`, the two
   pipeline factories), and the opaque mesh pass culls back faces
-  (`SdfMeshRasterPass.Description`; the shadow and glass pipelines cull
-  nothing). A mesh not from the bake is drawn in both windings
+  (`SdfMeshRasterPass.Description`; a cascade's exit layer culls front faces
+  seen from the light, and its depth and the glass pipeline cull nothing). A mesh not from the bake is drawn in both windings
   (`WorldPlacementStamper.MeshOf`). Probe facing with `SV_IsFrontFace` in the
   mesh fragment stage and `world.debug-view depth`, on both backends.
 - **A mesh is a function of its geometry.** Groups are keyed by

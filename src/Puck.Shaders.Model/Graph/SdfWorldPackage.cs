@@ -425,6 +425,9 @@ public static partial class SdfWorldPackage {
         ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: MeshShadowNear, type: ShaderValueType.Float4),
         ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: MeshShadowFar, type: ShaderValueType.Float4),
         ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: MeshShadowSecond, type: ShaderValueType.Float4),
+        ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: MeshShadowNearExit, type: ShaderValueType.Float4),
+        ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: MeshShadowFarExit, type: ShaderValueType.Float4),
+        ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: MeshShadowSecondExit, type: ShaderValueType.Float4),
         ShaderWorkCounters.BufferMember,
         Read(element: ShaderValueType.Uint, name: MeshPyramid),
         Written(element: ShaderValueType.Uint, name: MeshPyramidWritten),
@@ -444,15 +447,18 @@ public static partial class SdfWorldPackage {
         Passes: [
             Pass(name: Parts.Mask, outputs: [Parts.InstanceMasks]) with { Members = BakeMembers },
             Pass(inputs: [Parts.InstanceMasks], name: Parts.Bake, outputs: [Parts.BakeSamples]) with { Members = BakeMembers },
-            ShadowRaster(depth: Parts.ShadowNearDepth, name: Parts.ShadowNear),
-            ShadowRaster(depth: Parts.ShadowFarDepth, name: Parts.ShadowFar),
-            ShadowRaster(depth: Parts.ShadowSecondDepth, name: Parts.ShadowSecond),
+            ShadowRaster(depth: Parts.ShadowNearDepth, exit: Parts.ShadowNearExit, name: Parts.ShadowNear),
+            ShadowRaster(depth: Parts.ShadowFarDepth, exit: Parts.ShadowFarExit, name: Parts.ShadowFar),
+            ShadowRaster(depth: Parts.ShadowSecondDepth, exit: Parts.ShadowSecondExit, name: Parts.ShadowSecond),
             Raster(depth: Parts.MeshDepth, name: Parts.Mesh, target: Parts.MeshTarget),
             Pass(inputs: [Parts.MeshTarget], name: Parts.Pyramid, outputs: [Parts.MeshPyramid]),
             // The surface pass reads the bake samples it never touches so the bake pass, whose samples only the host reads
             // back, stays live in the planned graph.
             Pass(
-                inputs: [Parts.MeshTarget, Parts.MeshPyramid, Parts.ShadowNearDepth, Parts.ShadowFarDepth, Parts.ShadowSecondDepth, Parts.BakeSamples],
+                inputs: [
+                    Parts.MeshTarget, Parts.MeshPyramid, Parts.ShadowNearDepth, Parts.ShadowFarDepth, Parts.ShadowSecondDepth,
+                    Parts.ShadowNearExit, Parts.ShadowFarExit, Parts.ShadowSecondExit, Parts.BakeSamples,
+                ],
                 name: Parts.Surface,
                 outputs: [Parts.Visibility]
             ),
@@ -479,6 +485,9 @@ public static partial class SdfWorldPackage {
             ShadowDepth(name: Parts.ShadowNearDepth, texels: MeshShadowResolution),
             ShadowDepth(name: Parts.ShadowFarDepth, texels: MeshShadowResolution),
             ShadowDepth(name: Parts.ShadowSecondDepth, texels: MeshShadowResolution),
+            ShadowDepth(name: Parts.ShadowNearExit, texels: MeshShadowResolution),
+            ShadowDepth(name: Parts.ShadowFarExit, texels: MeshShadowResolution),
+            ShadowDepth(name: Parts.ShadowSecondExit, texels: MeshShadowResolution),
             Image(format: MeshTargetFormat, from: null, name: Parts.MeshTarget, retained: true),
             // Two words a pyramid texel; the levels one up hold under a third of the extent's texels, with their tiles'
             // padding, and the kernels bound every level by the buffer's length.
@@ -570,15 +579,16 @@ public static partial class SdfWorldPackage {
         OutputAccesses: [RenderGraphPortAccess.ColorAttachmentWrite, RenderGraphPortAccess.ColorAttachmentWrite],
         Outputs: [new ResourceReference(Name: target), new ResourceReference(Name: depth)]
     );
-    // A shadow cascade's raster pass, drawing the frame's mesh draws through the shadow pipeline into the cascade's depth
-    // alone.
-    private static RenderGraphFragmentPass ShadowRaster(string name, string depth) => new(
+    // A shadow cascade's raster pass, drawing the frame's mesh draws from the cascade's light camera into its two layers:
+    // the depth, the nearest face of any facing (where the light enters the first solid it crosses), and the exit layer,
+    // the nearest face turned from the light (where it leaves the first solid it crosses).
+    private static RenderGraphFragmentPass ShadowRaster(string name, string depth, string exit) => new(
         CountsKernelWork: true,
         InputAccesses: [],
         Inputs: [],
         Name: name,
-        OutputAccesses: [RenderGraphPortAccess.ColorAttachmentWrite],
-        Outputs: [new ResourceReference(Name: depth)]
+        OutputAccesses: [RenderGraphPortAccess.ColorAttachmentWrite, RenderGraphPortAccess.ColorAttachmentWrite],
+        Outputs: [new ResourceReference(Name: depth), new ResourceReference(Name: exit)]
     );
     // A cascade's depth, texels a side, which its raster pass writes and the surface pass samples.
     private static ShaderPipelineResource ShadowDepth(string name, int texels) => new(
@@ -611,6 +621,15 @@ public static partial class SdfWorldPackage {
         public const string ShadowFarDepth = "shadowFarDepth";
         /// <summary>The second slot's cascade depth.</summary>
         public const string ShadowSecondDepth = "shadowSecondDepth";
+        /// <summary>The near cascade's exit layer: per texel the reversed-Z orthographic depth of the nearest face turned
+        /// from the light, zero (the far plane) where none was drawn. A receiver turned from the light compares against it,
+        /// so the body the light crosses to reach that receiver lets it through while any solid in front of that body
+        /// still shadows it.</summary>
+        public const string ShadowNearExit = "shadowNearExit";
+        /// <summary>The far cascade's exit layer.</summary>
+        public const string ShadowFarExit = "shadowFarExit";
+        /// <summary>The second slot's cascade exit layer.</summary>
+        public const string ShadowSecondExit = "shadowSecondExit";
         /// <summary>The mesh pass drawing the frame's mesh draws into the mesh visibility target.</summary>
         public const string Mesh = "mesh";
         /// <summary>The pyramid pass, writing the mesh depth pyramid the surface pass's occlusion reads from the mesh
