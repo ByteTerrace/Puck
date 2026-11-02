@@ -100,6 +100,7 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck declarations`](#puck-declarationsdeclaration-inventory) | declaration inventory read off the parsed syntax, with no build. |
 | [`puck decompile`](#the-puck-dsl-verbs) | renders a world JSON document back as `.puck` source—a one-time import, not a synced mirror; optionally resolves companion vector locks with `--embeddings`. |
 | [`puck determinism`](#puck-determinismcross-host-determinism-attestation) | boots the scenarios of a determinism manifest headless in-process and records per-tick, per-system state hashes and document-level hashes into a strict stream; `determinism compare` names the first tick and system, or document hash, where two hosts' streams differ. |
+| [`puck disclosure`](#puck-disclosurethe-noninterference-harness) | boots one headless world per variant of a world's `<stem>.disclosure.json` fixture (and the first again as the control), drives the same non-operator principals with the same scripted and seeded inputs in each, and names every door at which a principal was told something different. |
 | [`puck docs`](#puck-docsthe-documentation-family) | the documentation family: `build` stages the website reference, `links` checks relative links and cited repository paths, and `citations` checks the console-verb tokens skills and XML docs cite, including a live `Puck.World` console boot. |
 | [`puck embed`](#the-puck-dsl-verbs) | resolves authored `embed(...)` text into committed `.embeddings.json` lock files, or probes cosine similarity rankings. |
 | [`puck firmware`](#puck-firmwarebundled-boot-images) | rebuilds or verifies the HGB boot ROMs and AGB BIOS from their maintained sources. |
@@ -2026,6 +2027,51 @@ The worlds are under [`experimental/tests/Puck.World.Verdicts`](../../experiment
 the pairs reproducing each repaired hole are in
 [`proofs/`](../../experimental/tests/Puck.World.Verdicts/proofs/README.md) beside them, run by
 law rather than by a directory sweep.
+
+---
+
+## `puck disclosure`—the noninterference harness
+
+```text
+puck disclosure <world.puck | world.disclosure.json> [--keep <dir>] [--seed <n>] [--lines <n>] [--actions <n>]
+    [--world-artifact <dll>] [--cache-dir <dir>]
+```
+
+A world hides cells from some readers; the guarantee is that a reader the policy
+excludes cannot tell the world from the same world without them
+([the plan](../plans/disclosure.md)). This verb checks it the only way that
+covers every door at once: it boots worlds identical but for hidden state,
+drives the same non-operator principals with the same inputs in each, and
+compares what each principal received, byte for byte.
+
+The fixture is `<stem>.disclosure.json` beside the world
+(`puck.disclosure.fixture.v1`; its contract is
+[step 0 of the plan](../plans/disclosure.md#the-harnesss-fixture-contract)). The
+verb compiles and stages the world as `puck test` does, then runs one worker
+process holding the heavy lease, booting one headless world per variant plus the
+first variant again as the control, each through the real `Puck.World`
+executable. In each world the variant's operator steps author the hidden state;
+the observed seat runs the world's own schedule rows, the fixture's script and
+the drawn console lines; and each session the fixture names is admitted
+in-process and performs its drawn actions. Each world writes a
+`disclosure.json` transcript (`WorldDisclosureTranscript`) beside its exports.
+
+`WorldDisclosureComparison` compares the transcripts door by door: a console
+verb, `deliver.definition`, `deliver.state`, `deliver.snapshot`,
+`deliver.answer`, a `query.*`, an `outcome.*` (the typed mutation outcome) or
+`lifetime` (a stream's attach and end). A door differs when it answered
+different bytes, at another tick, or a different number of times, so count and
+size per tick are compared with content. Each leak names its door, the
+principal, the first tick, the ordinal of the answer, the byte offset (and the
+JSON path inside a delivered document) and both answers. An activation id is a
+per-run nonce and is named by the order it first appeared.
+
+Exit codes are 0 when no principal can tell any variant from the first, 1 for
+a leak, and 2 for usage, a fixture or world that does not load, a world that did
+not finish, or a control that differs from the first variant: such a door
+answers differently with no hidden difference at all, so the run judges
+nothing. `--seed`, `--lines` and `--actions` override the fixture's draws;
+`--keep` keeps the staged world, every world's transcripts and exports.
 
 ---
 

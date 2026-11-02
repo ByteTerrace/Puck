@@ -14,7 +14,10 @@ namespace Puck.World;
 internal sealed class WorldTestBatch {
     // Workers is the --workers count the leg boots with (absent, the host's own); Record writes the leg's per-tick
     // authority hashes and crossing log beside its exports, which a worker-count or oracle comparison reads.
-    private sealed record Leg(string World, string Directory, int ExitAfterSeconds, bool Reproduce = false, string? CacheDirectory = null, int? Workers = null, bool Record = false) {
+    // Disclosure makes the leg one world of a noninterference pair (WorldDisclosureRun), which writes what its observed
+    // principals received beside the exports.
+    private sealed record Leg(string World, string Directory, int ExitAfterSeconds, bool Reproduce = false, string? CacheDirectory = null, int? Workers = null, bool Record = false,
+        WorldDisclosureLeg? Disclosure = null) {
         public bool Probed => (Reproduce || Record);
     }
 
@@ -38,7 +41,8 @@ internal sealed class WorldTestBatch {
     private int m_reportedBoots;
 
     private Timer? m_legDeadline;
-    private string? m_reproductionFailure;
+    private string? m_legFailure;
+    private WorldDisclosureRun? m_disclosure;
     private CrossingLog m_crossings = null!;
 
     private string m_workingDirectory = string.Empty;
@@ -145,7 +149,7 @@ internal sealed class WorldTestBatch {
     }
     private void Observe(WorldInstance instance) {
         if (m_observing && m_legs[m_index].Probed && m_observed.Add(item: instance)) {
-            try { m_probes.Add(item: (instance.Name, Get<WorldReplayTape>().ObserveReplay(instance: instance))); } catch (InvalidOperationException exception) { m_reproductionFailure = $"cannot capture '{instance.Name}': {exception.Message}"; }
+            try { m_probes.Add(item: (instance.Name, Get<WorldReplayTape>().ObserveReplay(instance: instance))); } catch (InvalidOperationException exception) { m_legFailure = $"cannot capture '{instance.Name}': {exception.Message}"; }
         }
     }
     private void StartLeg() {
@@ -154,7 +158,7 @@ internal sealed class WorldTestBatch {
         m_bootTicks = (started - m_legStarted);
         var leg = m_legs[m_index];
 
-        m_reproductionFailure = null;
+        m_legFailure = null;
         m_observing = false;
         m_observed.Clear();
         var index = m_index;
@@ -166,6 +170,10 @@ internal sealed class WorldTestBatch {
         }, null, TimeSpan.FromSeconds(seconds: leg.ExitAfterSeconds), Timeout.InfiniteTimeSpan);
         Get<WorldDefinitionSource>().SourcePath = WorkingWorld;
         Get<WorldTestRun>().Reset(WorkingWorld, Path.Combine(path1: leg.Directory, path2: "out"));
+        m_disclosure = null;
+        if (leg.Disclosure is { } disclosure) {
+            try { m_disclosure = WorldDisclosureRun.Start(leg: disclosure, services: m_services); } catch (InvalidOperationException exception) { m_legFailure = exception.Message; }
+        }
         m_observing = true;
         m_crossings.Recording = leg.Record;
         foreach (var name in Get<WorldInstanceHost>().Names) {
@@ -180,7 +188,9 @@ internal sealed class WorldTestBatch {
         m_observing = false;
         m_crossings.Recording = false;
         foreach (var (_, probe) in m_probes) { probe.Dispose(); }
-        try { ArchiveStateFiles(directory: m_legs[m_index].Directory); } catch (IOException exception) { m_reproductionFailure = $"cannot archive authored state: {exception.Message}"; }
+        try { m_disclosure?.Write(directory: Path.Combine(path1: m_legs[m_index].Directory, path2: "out")); } catch (IOException exception) { m_legFailure = $"cannot write the disclosure transcript: {exception.Message}"; }
+        m_disclosure = null;
+        try { ArchiveStateFiles(directory: m_legs[m_index].Directory); } catch (IOException exception) { m_legFailure = $"cannot archive authored state: {exception.Message}"; }
         _ = m_control.InvokeAsync(operation: CompleteLegSafely);
     }
     // The session owns the returned task. No reporting failure may escape it and strand an unpaced worker
@@ -201,7 +211,7 @@ internal sealed class WorldTestBatch {
         try {
             var results = new List<object>();
 
-            if (m_reproductionFailure is not null) { throw new InvalidOperationException(message: m_reproductionFailure); }
+            if (m_legFailure is not null) { throw new InvalidOperationException(message: m_legFailure); }
             foreach (var (name, probe) in m_probes) {
                 int? divergence = null;
 
