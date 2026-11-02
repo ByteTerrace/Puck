@@ -1502,6 +1502,25 @@ the order they land in, and the
 [mesh-GI reference](../../.claude/skills/rendering/references/mesh-gi.md) holds
 the fixed poses and the approaches already rejected.
 
+- [high] Night lighting, from the owner's walkthrough at the lawn's trees:
+  - **The jump to night is wrong.** Forcing midnight
+    (`world.state.cell.set day $value 0.0`) leaves the scene near-black for
+    seconds while the tree canopies glow green from inside. Daytime bounce
+    stays in the probes while exposure adapts.
+  - **The settled night reads as a dim overcast day.** Greens stay
+    saturated, the deep-blue moon barely tints anything, and the EV 2
+    exposure floor lifts the scene to dusk brightness. The night look is an
+    authored standard style (exposure curve, low-light desaturation and
+    blue shift, the moon's colour and strength), never an engine default;
+    the owner left the night exposure to the lead.
+  - **A brief bright glow around 20:00** is visible only at a particular
+    moment and angle. The owner saw it; a 120-frame burst through
+    19:30-20:55 at the owner's position did not catch it.
+  - **The same burst shows near-whole-frame changes about every 2.4 s**
+    (frames 28, 46, 64, 82, 100, 118, at small mean luma). This is probably
+    stepped relighting or exposure updates. Check it against the lockstep
+    relight work below.
+
 - [high] Under lockstep a moving sun relights the whole probe window every tick
   from no bounce: a lockstep frame drains the irradiance relight to the end
   before it renders (`SdfMeshIrradiance.Stage`, `SdfMeshIrradiance.cs:538-563`),
@@ -2864,6 +2883,34 @@ Owner: specialist lane (puck-world, build and hot reload, input) · ordinary · 
 
 Owner: debug-world content lanes, each started by the owner's direction ·
 ordinary · Next: new content and art on the owner's call.
+
+- [high] The trees read as inflatable toys (owner's walkthrough, the lawn).
+  - Canopies are a few smooth, drooping blended lobes, with no branch
+    structure, leaf clumps, gaps or silhouette breakup.
+  - Trunks are clean tubes with flared feet.
+  - Each canopy is one flat green.
+  - One species repeats, against the owner's "interestingly varied AND
+    distinct".
+  - A dark speck sits on one canopy.
+
+  The meadow is the foliage forcing ground. Do a research round first (how
+  good stylized and realistic trees get their structure, through Puck's SDF
+  bake), then author the trees in `worlds/standard/foliage.puck`.
+- [medium] The lift (`worlds/debug/hall.puck`) is the owner's example for
+  "polish is engine systems doing real work" (AGENTS.md). Both halves wait
+  for the owner's go:
+  - **The displays:** one emulated machine running an authored cartridge,
+    mirrored to every panel and driven by the lift's state cells
+    (`liftFloor`, `liftArrow`, the calls and the dwell). First confirm a
+    generic world-to-machine channel; the emulated link port is a candidate.
+  - **The ride:** an authored motion profile, with easing and a settle, in
+    place of a constant 1/16 m per tick.
+
+  Today the panels are baked SDF variants that swap lit and unlit material
+  slots, a choice the slow text bake forced (`hall.puck:971-975`).
+- In progress: boards switch to the Board page without changing the seat's
+  bar preference (bar-engage), and board controls and layouts are made
+  relative to the seat's facing across every tabletop (board-frame).
 
 - Owed: `puck verbs` with a windowed boot (the first settle window runs it).
   The checked-in catalog is stale: clearance-op removed
