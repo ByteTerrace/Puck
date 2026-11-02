@@ -37,17 +37,16 @@ The research round read the code, and the plan rests on these facts:
   term already relights for free at zero bounces. The sun, the static point and
   spot lights and every emissive surface are baked into the radiance cube at
   trace time, and later bounce sweeps bake the sky's colour too.
-- `RefreshLighting` hashes every directional light record and every traced
-  light; any change advances the generation and restarts the trace
-  (`src/Puck.SdfVm/SdfMeshIrradiance.cs`, `RefreshLighting`), and a batch
-  that lands after a generation change is thrown away (the `generation !=
-  m_generation` test after the parallel trace). The debug world's `key` light
-  follows the authored day (`worlds/debug/day.puck`), and step 0's run showed
-  the volume never publishing while it moves ([step 0](#step-0-what-the-run-showed)).
-  This is the [high] moving-sun finding in the
-  [Lighting and GI packet](open-items.md#lighting-and-gi).
-- Each probe traces two ray sets from one origin: 128 full-reach radiance rays
-  and 144 bounded depth rays. Both record first hits.
+- Since step 2 a probe is a hit buffer and a relight
+  ([step 2](#step-2-status)): one full-reach closest hit per octahedral texel,
+  from which its sky shares and surface map derive, traced once per geometry;
+  and its radiance cube and light bits, relit from those hits when the lighting
+  version advances (`SdfMeshIrradiance.RefreshLighting`, which now hashes the
+  sky too). Before it, any light change restarted the trace and discarded every
+  batch that landed after it, so the volume never published while the day's sun
+  moved ([step 0](#step-0-what-the-run-showed)).
+- The two former ray sets (128 or 96 Fibonacci radiance rays and 144 bounded
+  depth rays) are one set of 144 octahedral rays at full reach.
 - Only static opaque draws cast into the volume (`SdfMeshIrradianceScene`
   admits `!IsDynamic && !Glass`). A moving body receives light and casts none;
   a lane-driven emissive reads zero in the trace.

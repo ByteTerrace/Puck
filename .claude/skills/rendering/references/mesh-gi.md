@@ -92,6 +92,23 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   under a thousandth of the lit value in the point-light law, rather than
   vanishing in one. `render.indirect.bounces` zero switches the bounce off; any
   other value switches it on.
+- The cube is two parts. The local part (the traced point and spot lights'
+  bounce under their shadow rays, and emission) is kept per probe with the
+  lighting's local version, which advances only when those lights, the gains,
+  the sources or the materials change; a relight under a moving sun reuses it
+  and traces no shadow ray toward a point light. The directional lights and the
+  bounce are shaded every relight. A probe rebased across a scene change (its
+  hits kept) shades its local part again, since its point-light shadow rays may
+  cross the change. `world.probe`'s volume line prints `lighting-version` and
+  `local-version`.
+- A scene build records the world boxes of the static draws it added or
+  removed (`ChangedBoxes`). A probe traced against an earlier geometry is
+  retraced only when one overlaps its placement region (the cell ± 1.5 spacings
+  and the clearance) or meets one of its rays before the hit the ray recorded
+  (`Affected`, with a millimetre margin so a hit on the draw's own face counts);
+  every other probe keeps its hits and is relit. A layout or reach change, a
+  draw with no box, or a probe older than the last `MaxChanges` changes
+  retraces.
 - Four reflected angular taps reconstruct local surface patches from first-hit
   positions and signed octahedral normal bytes. Join taps only when their normals
   agree and the symmetric point/normal residual is within `DepthSurfaceJoinGap`:
@@ -231,8 +248,8 @@ changing indirect light, probe visibility, the volume boundary or exposure.
 - A record is 235 words (940 bytes): 19 header/cube/light/origin words, 144
   packed first-hit surface words and 72 packed normal-gradient words.
   Medium's three levels hold 36,864 probes in 33.046875 MiB; High's 61,440 in
-  55.078125 MiB. The CPU cache holds each probe's hit buffer beside it: 1,950
-  geometry floats and 22 light floats a probe (`world.budget` prints the
+  55.078125 MiB. The CPU cache holds each probe's hit buffer beside it: 510
+  geometry words and 40 light words a probe, 2,200 bytes (`world.budget` prints the
   bytes), about twice the record.
   The table starts at one inert record and both
   it and CPU staging fit the published tier. Reuse `GpuRegion` grow/shrink and

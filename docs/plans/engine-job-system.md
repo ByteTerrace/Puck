@@ -683,18 +683,22 @@ each light; hit shading traces shadows from the hit; and later sweeps read
 neighbouring cached probes (`:1287-1303`), so a change propagates through bounce
 feedback.
 
-Decision: a scene rebuild computes a **change set** of instances (added,
-removed, or moved, by comparing the new and previous instance lists, each with
-its old and new bounds) and materials. The invalidated probes are the closure:
-every probe whose cell lies within `lighting.Reach` of any changed instance's
-old or new bounds, or whose light rays or shadow traces could cross them (a
-segment test against the bounds), then expanded by one neighbour ring per sweep
-of the layout for the bounce feedback. Those probes drop their generation; the
-rest keep theirs. A light, layout or window change still invalidates the window.
-The first implementation is checked against a full retrace: the probe tables
-and a windowed still after a removal and a move must match the full retrace's
-within the trace's own noise, and the closure is widened until they do. Fewer
-probes traced is the cost reading, never the correctness reading.
+Illumination step 2 split each probe into a hit buffer and a relight
+([illumination](illumination.md#step-2-status)), which settles most of this.
+A light change invalidates no hits: it advances the lighting version and the
+probes are relit from their cached hits under the frame's budget. A scene
+rebuild computes a **change set**, the world boxes of the static draws it added
+or removed (a moved draw is both), and retraces only the probes whose
+placement region one overlaps or whose rays meet one before the hit they
+recorded (`SdfMeshIrradiance.Affected`); the rest keep their hits, which a
+trace would reproduce, and are relit, so bounce and shadow rays through the
+change are recomputed without a closure over them. A layout or reach change
+still retraces the window. The CPU law
+`ALockstepFrameRendersTheWindowTracedToTheEnd` checks a removal's probe table
+against a fresh volume's word for word. What remains for B1 is the jobs: the
+trace and relight batches under `Lighting`, and the windowed check against a
+full retrace after a `world.reload` that removes a wall and one that moves a
+draw. Fewer probes traced is the cost reading, never the correctness reading.
 
 The trace's unit is one probe; its comparer is the existing `(sweeps, level,
 distance)` key; its class is `Lighting`, under the frame and the bake. The scene
