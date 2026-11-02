@@ -290,7 +290,8 @@ authored host run (batch host, instance host, portal scan) booted with
 included; `0` is `Environment.ProcessorCount`; the one setting is
 `Puck.Hosting.Jobs.JobWorkers`, registered by `AddWorldBoot`). Each leg records
 its probes' hashes in `reproduction.json` (`divergence` null unless
-`--reproduce`), the instance host's crossing narration with ticks in
+`--reproduce`), its delivered snapshots' entity entries hashed per tick in
+`snapshots.json`, the instance host's crossing narration with ticks in
 `crossings.json`, and its `out` exports; every count must match the first,
 and a mismatch names the first differing recorded tick, export JSON path and
 crossing entry. `--record <dir>` keeps the first count's recording per world and

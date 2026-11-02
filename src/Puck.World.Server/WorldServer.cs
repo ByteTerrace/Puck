@@ -334,6 +334,9 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// <c>GeneratorEngine.ComputeSeedState</c>). A live redraw folds the same value the boot/first-fill resolver
     /// used, so a site's first fill and its later redraws share one deterministic stream per instance.</summary>
     public string InstanceIdentity { get; }
+    /// <summary>Gets the job pool the tick's partitioned phases fork onto, or <see langword="null"/> when every phase
+    /// runs serially.</summary>
+    public Puck.Hosting.Jobs.JobPool? Jobs { get; }
     /// <summary>Gets the journal length — the number of applied mutations over the base (the <c>world.status</c> dirty
     /// count).</summary>
     public int JournalLength => m_document.JournalLength;
@@ -521,8 +524,10 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// document names no <c>host.authority</c>, or <see langword="null"/> for <paramref name="instanceIdentity"/>. A
     /// host starting a name again passes a fresh one, so the incarnations of the bodies the new lifetime seats never
     /// equal an incarnation the earlier lifetime minted; a replay or history shadow passes the live authority's.</param>
+    /// <param name="jobs">The engine's job pool the tick's partitioned phases fork onto, or <see langword="null"/> to
+    /// run every phase serially. Shared, not owned: the composition root disposes it.</param>
     public WorldServer(WorldDefinition definition, WorldPopulation population, WorldOwnedWorlds profiles, WorldRenderEnvelope envelope, IWorldMachineHost machines, string instanceIdentity = "boot", IWorldNarrationSink? narrationSink = null,
-        WorldDefinitionAdmission? admission = null, Func<int, string?>? landingRefusal = null, string? authorityIdentity = null) {
+        WorldDefinitionAdmission? admission = null, Func<int, string?>? landingRefusal = null, string? authorityIdentity = null, Puck.Hosting.Jobs.JobPool? jobs = null) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: population);
         ArgumentNullException.ThrowIfNull(argument: profiles);
@@ -557,6 +562,7 @@ public sealed partial class WorldServer : IWorldServerHost {
         }
 
         Extensions = new WorldExtensions(server: this);
+        Jobs = jobs;
         InstanceIdentity = instanceIdentity;
         AuthorityIdentity = ((definition.Host.Authority is { Length: > 0 } authority)
             ? authority
