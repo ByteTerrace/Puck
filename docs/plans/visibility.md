@@ -378,7 +378,10 @@ pyramid may be dropped from the depth pass and never from the peel, and no
 earlier frame's second layer may cull the peel: the peel's target reports
 nothing about what became a second surface. The receiver mask and the box
 cull apply to both passes alike, and a cached cascade caches all three
-images together.
+images together and is a hold the residency's body table accounts for: a
+body index is never reused while a cached or held cascade that names it may
+be read, and V1's per-instance record carries the body word beside the
+instance's identity and generation.
 
 ## What serves authors
 
