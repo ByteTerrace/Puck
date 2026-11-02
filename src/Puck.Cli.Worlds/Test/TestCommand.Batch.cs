@@ -34,8 +34,11 @@ public static partial class TestCommand {
                 VerifyHash = verifyHash,
             });
         }
-        var batch = Path.Combine(path1: runDirectory, path2: $"batch-{chunk}-{leg.Name}.json");
-
+        return RunWorker(artifact: artifact, batch: Path.Combine(path1: runDirectory, path2: $"batch-{chunk}-{leg.Name}.json"), legs: legs);
+    }
+    // Writes the legs to `batch` and runs them in one worker process, its streams beside the batch file. A worker that
+    // stops advancing (no leg begun or tick reported within the budgets) is cancelled.
+    private static bool RunWorker(string artifact, string batch, IReadOnlyList<object> legs) {
         File.WriteAllText(path: batch, contents: JsonSerializer.Serialize(value: legs));
         using var watchdog = new CancellationTokenSource(delay: StartupBudget);
         using var output = new StreamWriter(path: (batch + ".stdout.log"));

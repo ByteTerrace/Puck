@@ -121,7 +121,11 @@ Each waits on the owner: what the engine should do, how it looks and feels, and 
   keyable on the day clock; the debug world authors a readable deep-blue
   night). The Moth supports both cel and plain styles, swappable live for
   playtesting the way binding layouts are, through a generic material-style
-  switch (the illum1-fix2 lane).
+  switch: a palette row's `toonSelect` binds its style to a state cell, and
+  `moth.style Cel|Plain` swaps it with no rebake.
+- Which of the Moth's slots band under Cel: today all 31 palette slots do,
+  skin, hair and eyes included; removing `toonSelect` from a slot in
+  `worlds/debug/avatars/moth.puck` keeps it continuous.
 - Mesh shipping: nothing is built until a presenting client downloads packages,
   and then on a self-hosted GPU runner (the owner's deferral;
   [rendering plan](rendering.md)).
@@ -1046,6 +1050,20 @@ Remaining:
   (from: field-contact)
 - The terrain pass's step 5 face check (58°) is not yet run on the certified
   solve. (from: field-contact)
+- [medium] `world.collision.probe` (`FixedFieldContactSolver.Probe`, through
+  `FixedColliderField.TryMeasure`) answers nothing at 36 of 105 points of a
+  1 m grid around a lawn flat-crown tree (x 6 to 20, y 0.5 to 6.5, z -27.3 in
+  the debug world), and beside a crown it can read the floor 6 m below instead
+  of the crown 0.3 m away. Contact resolution does not read it; the measure's
+  projection and bracketing need a look against the Superellipsoid's
+  lower-bound field. (from: far-hit)
+- [medium] The Superellipsoid's field (`SdfFieldEvaluator`, `mapCore`) is a
+  1-Lipschitz lower bound whose far value is about its least radius over its
+  greatest times the true distance (0.24 for a 2.3 × 0.55 m crown): a sphere
+  cast accepts a hit up to four eye radii from a flat crown, and the cull
+  certificates (`TryShapeSphere`) cover no Superellipsoid, so no tree instance
+  is ever skipped. A maximum with the bounding sphere's distance keeps the
+  zero set and tightens the far field in both interpreters. (from: far-hit)
 
 ### Transfers, federation and server
 
@@ -1492,16 +1510,6 @@ and warm builds measured.
   shader package directory holding binaries but no manifest; clearing
   `src/Puck.World/obj/Release/net11.0/worlds` and building again passed.
   Unconfirmed as a packaging race.
-- [high] A windowed Direct3D 12 debug World died on its sixth `world.reload` in
-  about ten minutes with an access violation in the native allocator, on a
-  bake worker loading a stored mesh: `MimallocAllocator.mi_malloc` ←
-  `OwnedBuffer<Vector3>.Resize` ← `SdfMesh.NativeCopy` ←
-  `SdfMeshLibrary.TryLoad` ← `SdfMeshPathBake.Load` ← `SdfMeshPathBake.Work`
-  (exit 139, `0xC0000005`, right after the reload's `[sdf.mesh-gi] scene`
-  line; the machine was short of memory, its working set paged down to
-  1.4 GB). Reproduce with repeated reloads under `world.wait bakes`, and check
-  whether a load can run against a mimalloc heap another thread owns or one a
-  reload has torn down. (from: c1-groundcover)
 
 ### The valley's terrain
 
@@ -1547,6 +1555,12 @@ lowers it to the same JSON as before, except where the look changes on purpose.
 
 Code that grew a second implementation (AGENTS.md rule 7) or costs velocity:
 
+- [low] Four copies of a `NativeMemory`-backed test `IAllocator` named `HeapAllocator`
+  (`tests/Puck.Vulkan.Tests/VulkanIndirectCountLawTests.cs:117`,
+  `VulkanValidationLivenessTests.cs:247`, `VulkanGroupedPipelineLayoutLawTests.cs:233`,
+  `VulkanGroupedBindingLawTests.cs:206`), while `IAllocator`'s documentation names a
+  `NativeMemory`-backed implementation that `src` does not have. One shared allocator
+  serves them, and `GuardedAllocator` can wrap it where a suite wants misuse checks.
 - Make `GpuRegion.Grow` the only way to grow a GPU region, and enforce the uniform
   view limit there (one lane):
   - [low] Growing the program region on `world.reload` waits for the device to go
@@ -1824,18 +1838,29 @@ and the order they land in; the items below are its findings and checks.
   pixels white like lit ones; at the noon sun the meadow lies in the east
   wall's shadow. Step 1's checks and the frame bar are owed again on the moving
   day cycle, with a low-sun cel style for the dawn penumbra check.
+- [high] The wrapped side's self-shadow term has failed three reviews, each
+  in a new mesh-topology case: curvature transmission, then the exit layer,
+  then the exit layer with closed/open classification. The last review found
+  grazing self-shadowing from the receiver-plane clamp
+  (`sdf-surface-stage.hlsli` ~:214, :232-234), multi-shell meshes oriented by
+  one signed volume (`WorldPlacementStamper.cs` ~:398, :411), T-junctions
+  demoting a solid to a thin caster, and skins whose deformation inverts
+  winding while `EnclosesSolid` holds. A design pass (transmit-design) replaces
+  class-by-class patching with a term correct by construction; implementation
+  follows its plan. (from: illum1fix2-astra)
 - From illum1-fix: the cascades' exit layer doubles each cascade pass's draws
   and vertices (`world.counters gpu pass sdf.world$shadow-near` at the stage:
   460 draws and 2.62 M vertices on Direct3D 12, two render passes) and adds a
   depth image per cascade (16 MiB each at 2048 texels); its frame time is owed
   on a quiet machine. At a grazing light (a wrapped side at n·l = -0.25) the
   filter's slope clearance (`SdfMeshShadowSlopeBias`, 2.5 texels of depth per
-  texel of lateral distance) still lets a parallel slab within about 0.1 m
-  along the light half through; the exit layer removed the leak beyond that.
-  The debug world authors no `render.toon`, so `world.toon on` there bands only
-  materials with styles of their own until a default style is authored there,
-  which takes either a copy of `celStyle`'s values with `enabled: false` or a
-  `.puck` way to override one field of an imported value.
+  texel of lateral distance) still clears a parallel blocker that stands within
+  a few texels of depth of a receiver turned from the light: a 2 cm slab 0.10 m
+  along the light from a 3 mm panel at n·l = -0.25 shadows only speckles of it
+  on both backends, where 0.3 m at n·l = -0.45 shadows it whole.
+  A body clipped at a portal's glass or drawn under a mirror is a thin caster in
+  the exit layer (`SdfMeshDraw.EnclosesSolid`), so its own wrapped side past
+  the terminator is shadowed by its own lit side while it straddles the glass.
   `SdfPassPlanLawTests.ATemporalViewAddsOnlyItsHistoryAndReactivityOverTheSpatialGraph`
   fails on its own constant (201,139,200 bytes against 1,221,350,400 from the
   current `HistorySurfaceWords`), unrelated to the cascades.
@@ -2695,22 +2720,6 @@ movement-facing scheme returns.
   the room-first `fade` hides her, the design working as built).
 - The tight-space camera course's three-up `camera-compare` layout and a live
   mode toggle on the Debug page remain to author (`camera-course.puck`).
-- [high] Solid copies of an unscoped flat-crown tree (the standard's
-  `flatCrownTree` without its relief noise: a trunk, three yawed Capsule
-  branches and six flat `SmoothUnion` Superellipsoid crowns) made the chase
-  camera's clearance read an obstruction with nothing near: at the stage
-  `world.view.camera` read `boom=2.144/4.2 clearance=shortened`, and at
-  (0, 0, 150), (-150, 0, 0) and (60, 0, -100) the eye sat on the target. With
-  the lawn's solids off it read `clearance=open` at 4.012; bisecting by kind
-  with `world.reload` left the flat crowns (oak and boulder solids alone kept
-  it open or nearly so), and straightening their branches or thickening their
-  crowns live did not clear it. The clearance sphere-casts the presentation
-  field of every solid placement (`WorldCameraClearance.cs:186`, built at
-  `WorldFramePresenter.cs:480-511`), so one creation's field poisons the
-  camera valley-wide. The lawn keeps the trees in one scope with a 2.5 cm
-  relief; find why the unscoped creation's field answers a hit far from it
-  (a sphere cast through the fixed-point evaluator with smooth unions joining
-  the global accumulator is the first suspect). (from: c1-groundcover)
 
 ### Temporal shimmer and cadence flicker
 
@@ -2756,6 +2765,12 @@ the completed 70-stop comparison manifest.
 Owner: language lane (transpiler) · medium · Next: the inline console command
 hang, then the pre-`main` language findings.
 
+- [medium] `.puck` has no way to take an imported value and override one field
+  of it (`celStyle` with `enabled: false`), so a world that wants the standard's
+  cel style as a default that boots off copies all eleven values
+  (`worlds/debug/debug.puck`'s `render.toon`). Add the override (an object
+  update over a `let`, or a merge builtin beside `concat`), then point the
+  debug world's default at `celStyle`. (from: illum1-fix2)
 - [medium] An `enum` block inside a template is silently dropped from the
   compiled document, so a row naming the enum fails with PUCK119; the
   standard's `chaseCamera` writes its enum as a `state.enums` row to work around

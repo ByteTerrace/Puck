@@ -18,6 +18,8 @@
 // Both faces of a same-world pair name the destination `self`, which references the debug world's own document, so the
 // transfer resolves to the running World rather than a second copy of it.
 
+import "../standard/bounds"
+import "painting-kit"
 import "shapes"
 
 // The wing's shell bounds: the walls' inner faces and the slab above (hall.puck: level 0's floor top 0.05, level 1's
@@ -41,7 +43,6 @@ let canvasProud = 0.03
 // What a glass shows past the deepest level of windows inside windows, by destination.
 let fallbackGarden = "#FF9A4D"
 let fallbackNight = "#070B16"
-let fallbackSelf = "#10141B"
 
 // Shape rotations, as authored quaternions [x, y, z, w]: a quarter turn about +X lays a canvas (its +Z face) flat. The
 // floor turns it to face up and the ceiling to face down; the ceiling placement's half turn about up then lines its right
@@ -58,13 +59,13 @@ let paintBrass = 4
 let paintBoard = 5
 let paintInk = 6
 let paintingPalette = [
-  { color: "#C9A43A", roughness: 0.4, specular: 0.4 }
-  { color: "#5C2B26", roughness: 0.55, specular: 0.2 }
-  { color: "#15171B", roughness: 0.45, specular: 0.2 }
+  paintingGiltRow
+  paintingLipRow
+  paintingBlackRow
   { color: "#EDEAE3", roughness: 0.7 }
   { color: "#B58F4F", roughness: 0.35, specular: 0.5 }
-  { color: "#F2EEE4", roughness: 0.6 }
-  { color: "#3A3F47", roughness: 0.6 }
+  paintingBoardRow
+  paintingInkRow
 ]
 
 // The frames: a dark lip against the canvas, an optional mat, then the border, each a ring of the given width.
@@ -99,26 +100,10 @@ let fallHalf = 1.12
 let railGap = 0.15
 let railTop = 5.5
 
-template paintBox(label, x0, x1, y0, y1, z0, z1, slot) {
-  shape Box $"{label}" {
-    material: slot
-    position [((x0 + x1) / 2), ((y0 + y1) / 2), ((z0 + z1) / 2)]
-    scale [((x1 - x0) / 2), ((y1 - y0) / 2), ((z1 - z0) / 2)]
-  }
-}
-
-// Three bars round a wall painting's canvas, from `y0` up to `y1` and out by `w`, standing `depth` proud of the wall;
-// the floor closes the fourth side.
-template wallRing(label, ix, y0, y1, w, depth, slot) {
-  paintBox(label: $"{label}-left", x0: (0 - (ix + w)), x1: (0 - ix), y0: y0, y1: (y1 + w), z0: 0, z1: depth, slot: slot)
-  paintBox(label: $"{label}-right", x0: ix, x1: (ix + w), y0: y0, y1: (y1 + w), z0: 0, z1: depth, slot: slot)
-  paintBox(label: $"{label}-top", x0: (0 - ix), x1: ix, y0: y1, y1: (y1 + w), z0: 0, z1: depth, slot: slot)
-}
-
 // Four bars lying flat round a square canvas of half-extent `ix`, `w` wide, from height `y0` to `y1`.
 template flatRing(label, ix, w, y0, y1, slot) {
-  paintBox(label: $"{label}-north", x0: (0 - (ix + w)), x1: (ix + w), y0: y0, y1: y1, z0: ix, z1: (ix + w), slot: slot)
-  paintBox(
+  localBox(label: $"{label}-north", x0: (0 - (ix + w)), x1: (ix + w), y0: y0, y1: y1, z0: ix, z1: (ix + w), slot: slot)
+  localBox(
     label: $"{label}-south",
     x0: (0 - (ix + w)),
     x1: (ix + w),
@@ -128,8 +113,8 @@ template flatRing(label, ix, w, y0, y1, slot) {
     z1: (0 - ix),
     slot: slot
   )
-  paintBox(label: $"{label}-east", x0: ix, x1: (ix + w), y0: y0, y1: y1, z0: (0 - ix), z1: ix, slot: slot)
-  paintBox(label: $"{label}-west", x0: (0 - (ix + w)), x1: (0 - ix), y0: y0, y1: y1, z0: (0 - ix), z1: ix, slot: slot)
+  localBox(label: $"{label}-east", x0: ix, x1: (ix + w), y0: y0, y1: y1, z0: (0 - ix), z1: ix, slot: slot)
+  localBox(label: $"{label}-west", x0: (0 - (ix + w)), x1: (0 - ix), y0: y0, y1: y1, z0: (0 - ix), z1: ix, slot: slot)
 }
 
 // A wall painting: face 0, the rim, names the glass, which stands `canvasProud` out from the wall; the frame is the
@@ -153,7 +138,7 @@ template wallPainting(label, frame, title, note) {
     scale [(canvasHalfWidth - canvasRim), (canvasHalfHeight - canvasRim), 0.3]
   }
   for width in ((frame.lipWidth > 0) ? [frame.lipWidth] : []) {
-    wallRing(
+    barRing(
       label: "lip",
       ix: canvasHalfWidth,
       y0: (canvasCenter - canvasHalfHeight),
@@ -164,7 +149,7 @@ template wallPainting(label, frame, title, note) {
     )
   }
   for width in ((frame.matWidth > 0) ? [frame.matWidth] : []) {
-    wallRing(
+    barRing(
       label: "mat",
       ix: (canvasHalfWidth + frame.lipWidth),
       y0: (canvasCenter - canvasHalfHeight),
@@ -174,7 +159,7 @@ template wallPainting(label, frame, title, note) {
       slot: frame.mat
     )
   }
-  wallRing(
+  barRing(
     label: "border",
     ix: (canvasHalfWidth + frame.lipWidth + frame.matWidth),
     y0: (canvasCenter - canvasHalfHeight),
@@ -184,7 +169,7 @@ template wallPainting(label, frame, title, note) {
     slot: frame.border
   )
   // The plaque: a cream board on the wall, a hand's width beyond the frame.
-  paintBox(
+  localBox(
     label: "plaque",
     x0: (canvasHalfWidth + frame.lipWidth + frame.matWidth + frame.borderWidth + 0.15),
     x1: (canvasHalfWidth + frame.lipWidth + frame.matWidth + frame.borderWidth + 1.15),
@@ -217,31 +202,6 @@ template wallPainting(label, frame, title, note) {
       align: "center"
       maxWidth: 0.94
       lineSpacing: 1.15
-    }
-  ]
-}
-
-// A door onto `destination` and a window showing what lies past it, rippling like an event horizon: a slow shimmer all
-// the time and rings from every body that touches or passes through. A crossing arrives out of `counterpart`, a face of
-// the destination's document, or of this world's own for the destination `self`.
-template paintingFace(destination, counterpart, fallback) {
-  faceSources [
-    {
-      face: "glass"
-      filter: linear
-      portal {
-        arrival: "mapped"
-        counterpart: counterpart
-        destination: destination
-        travel: "body"
-      }
-      source {
-        $type: "session"
-        destination: destination
-        fallback: fallback
-        projection: window
-        ripple: true
-      }
     }
   ]
 }
@@ -287,7 +247,7 @@ prototypes {
       schema: "puck.creation.v1"
       palette: wingPalette
       // The partition: x 51 .. 51.3, solid but for the doorway.
-      hallBox(
+      boundsBox(
         label: "partition-south",
         x0: 51,
         x1: wingX0,
@@ -297,7 +257,7 @@ prototypes {
         z1: doorZ0,
         slot: wingWall
       )
-      hallBox(
+      boundsBox(
         label: "partition-north",
         x0: 51,
         x1: wingX0,
@@ -307,7 +267,7 @@ prototypes {
         z1: 39.7,
         slot: wingWall
       )
-      hallBox(
+      boundsBox(
         label: "partition-lintel",
         x0: 51,
         x1: wingX0,
@@ -318,7 +278,7 @@ prototypes {
         slot: wingWall
       )
       // The lining over the three outer walls.
-      hallBox(
+      boundsBox(
         label: "lining-south",
         x0: wingX0,
         x1: 69.7,
@@ -328,7 +288,7 @@ prototypes {
         z1: wingZ0,
         slot: wingWall
       )
-      hallBox(
+      boundsBox(
         label: "lining-north",
         x0: wingX0,
         x1: 69.7,
@@ -338,7 +298,7 @@ prototypes {
         z1: 39.7,
         slot: wingWall
       )
-      hallBox(
+      boundsBox(
         label: "lining-east",
         x0: wingX1,
         x1: 69.7,
@@ -349,7 +309,7 @@ prototypes {
         slot: wingWall
       )
       // Skirting along the inside of every wall.
-      hallBox(
+      boundsBox(
         label: "skirting-south",
         x0: wingX0,
         x1: wingX1,
@@ -359,7 +319,7 @@ prototypes {
         z1: 12.7,
         slot: wingTrim
       )
-      hallBox(
+      boundsBox(
         label: "skirting-north",
         x0: wingX0,
         x1: wingX1,
@@ -369,7 +329,7 @@ prototypes {
         z1: wingZ1,
         slot: wingTrim
       )
-      hallBox(
+      boundsBox(
         label: "skirting-east",
         x0: 69.3,
         x1: wingX1,
@@ -379,7 +339,7 @@ prototypes {
         z1: wingZ1,
         slot: wingTrim
       )
-      hallBox(
+      boundsBox(
         label: "skirting-west",
         x0: wingX0,
         x1: 51.4,
@@ -390,7 +350,7 @@ prototypes {
         slot: wingTrim
       )
       // The board over the doorway, on the partition's west face.
-      hallBox(label: "doorboard", x0: 50.97, x1: 51, y0: 3.25, y1: 3.95, z0: 24.2, z1: 27.8, slot: wingBoard)
+      boundsBox(label: "doorboard", x0: 50.97, x1: 51, y0: 3.25, y1: 3.95, z0: 24.2, z1: 27.8, slot: wingBoard)
       textRuns [
         {
           text: "PAINTING WING"
@@ -454,7 +414,7 @@ prototypes {
       }
       flatRing(label: "lip", ix: fallHalf, w: 0.05, y0: 0, y1: 0.05, slot: paintLip)
       flatRing(label: "border", ix: (fallHalf + 0.05), w: 0.22, y0: 0, y1: 0.07, slot: paintGilt)
-      paintBox(label: "plaque", x0: -0.5, x1: 0.5, y0: 0, y1: 0.02, z0: 1.55, z1: 2.15, slot: paintBoard)
+      localBox(label: "plaque", x0: -0.5, x1: 0.5, y0: 0, y1: 0.02, z0: 1.55, z1: 2.15, slot: paintBoard)
       textRuns [
         {
           text: "THE ENDLESS FALL"
@@ -484,13 +444,13 @@ prototypes {
   }
 
   // The rail round the hole over the ceiling painting on level 1: a black parapet with a gilt cap, so nobody drops into
-  // the wing by accident, and a line of text on its south face. Written in world bounds (hallBox), solid.
+  // the wing by accident, and a line of text on its south face. Written in world bounds (boundsBox), solid.
   prototype "painting-fall-rail" {
     document {
       name: "painting-fall-rail"
       schema: "puck.creation.v1"
       palette: paintingPalette
-      hallBox(
+      boundsBox(
         label: "north",
         x0: (fallX - fallHole - railGap),
         x1: (fallX + fallHole + railGap),
@@ -500,7 +460,7 @@ prototypes {
         z1: (fallZ + fallHole + railGap),
         slot: paintBlack
       )
-      hallBox(
+      boundsBox(
         label: "south",
         x0: (fallX - fallHole - railGap),
         x1: (fallX + fallHole + railGap),
@@ -510,7 +470,7 @@ prototypes {
         z1: (fallZ - fallHole),
         slot: paintBlack
       )
-      hallBox(
+      boundsBox(
         label: "east",
         x0: (fallX + fallHole),
         x1: (fallX + fallHole + railGap),
@@ -520,7 +480,7 @@ prototypes {
         z1: (fallZ + fallHole),
         slot: paintBlack
       )
-      hallBox(
+      boundsBox(
         label: "west",
         x0: (fallX - fallHole - railGap),
         x1: (fallX - fallHole),
@@ -530,7 +490,7 @@ prototypes {
         z1: (fallZ + fallHole),
         slot: paintBlack
       )
-      hallBox(
+      boundsBox(
         label: "cap",
         x0: (fallX - fallHole - railGap - 0.03),
         x1: (fallX + fallHole + railGap + 0.03),

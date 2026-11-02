@@ -280,22 +280,9 @@ template freecellGather(step, pile) {
   }
 }
 
-freecellGather(step: 0, pile: solitaireFreecellPile0)
-freecellGather(step: 1, pile: solitaireFreecellPile1)
-freecellGather(step: 2, pile: solitaireFreecellPile2)
-freecellGather(step: 3, pile: solitaireFreecellPile3)
-freecellGather(step: 4, pile: solitaireFreecellPile4)
-freecellGather(step: 5, pile: solitaireFreecellPile5)
-freecellGather(step: 6, pile: solitaireFreecellPile6)
-freecellGather(step: 7, pile: solitaireFreecellPile7)
-freecellGather(step: 8, pile: solitaireFreecellPile8)
-freecellGather(step: 9, pile: solitaireFreecellPile9)
-freecellGather(step: 10, pile: solitaireFreecellPile10)
-freecellGather(step: 11, pile: solitaireFreecellPile11)
-freecellGather(step: 12, pile: solitaireFreecellPile12)
-freecellGather(step: 13, pile: solitaireFreecellPile13)
-freecellGather(step: 14, pile: solitaireFreecellPile14)
-freecellGather(step: 15, pile: solitaireFreecellPile15)
+for k in range(0, 16) {
+  freecellGather(step: k, pile: $"solitaireFreecellPile{k}")
+}
 
 rule "solitaireFreecell-gather-reset" {
   when solitaire.table == 2 and solitaireFreecell.stage == 0
