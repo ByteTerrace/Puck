@@ -3,7 +3,7 @@
 This memo designs the engine job system the [packet](open-items.md#engine-job-system)
 asks for: one scheduler for frame-critical work, the tick, the bake and GI; a
 deterministic parallel tick; parallel view recording on both backends; memory
-ownership; and background work proportional to change. M1, M2a and T0 are built;
+ownership; and background work proportional to change. M1, M2a, T0 and T1 are built;
 the build table tracks the remaining work. Every
 decision names the code it rests on, so a reviewer can check it against the
 source before anything is built; a builder re-reads each citation first. The
@@ -85,6 +85,18 @@ their own and move with them: the pipeline cache's `BuildConcurrency`
 `JobWorkers`, which T0 registers from `Puck.World --workers`; the pool reads
 it rather than a count of its own. The pool never oversubscribes the machine, which is what today's
 three independent worker counts do during a cold bake.
+
+T1 built the pool's first part, the one the tick needs: `JobPool`
+(`Puck.Hosting.Jobs`, a container singleton `AddWorldBoot` registers and every
+authority's server receives) holds `JobWorkers.Count - 1` threads at normal
+priority, idle on an operating-system semaphore, and its `Fork(partitions,
+IJobPartitions)` hands out partition indices from one counter to those
+threads and the forking thread, which then waits on an event for the
+partitions others still hold. One fork runs at a time; a second concurrent
+fork, a fork of one partition and every fork of a serial pool run inline in
+partition order. J1 grows this object into the class-ordered pool above (the
+classes and comparers, bounded background units, channels, and `0`'s count
+reconciled with `max(2, ProcessorCount - 2)`); it does not add another.
 
 The pool lives in `Puck.Hosting` because every consumer already reaches it:
 `Puck.Shaders` (`Puck.Shaders.csproj:14`), `Puck.SdfVm` (`Puck.SdfVm.csproj:24`),
@@ -316,10 +328,14 @@ checked against:
    cache the arena builds lazily on a read is built on the frame thread before
    the fork: `CellSlotAt` allocates and fills a row's positional array on first
    read and publishes it by generation (`StateArena.Order.cs:30-43`), which two
-   first readers would race, so the arena gains a `PrepareReads` that fills
-   every row's positions before a partitioned phase and a partition never
-   builds one. Every write a partition would make goes into a partition-owned
-   log, replayed at the join.
+   first readers would race, so a partitioned phase whose reads reach a linked
+   row by position needs the arena to gain a `PrepareReads` that fills every
+   row's positions before the fork, and a partition never builds one. E4 needs
+   none: its only arena reads are participant lane slots
+   (`StateArena.TryReadSlot`, `StateArena.Participants.cs:128-235`), which
+   address a column directly and build no cache, so T1 built no
+   `PrepareReads`; the first phase that reads a linked row builds it. Every write
+   a partition would make goes into a partition-owned log, replayed at the join.
 3. **Partition-owned scratch.** Scratch is owned by the partition index and
    retained between ticks: a `WorldBody.StepScratch` per partition in place of
    the population's one (`WorldPopulation.cs:332`), a collider candidate list per
@@ -330,8 +346,8 @@ checked against:
    indexed by the thread.
 4. **A stable commit order that is today's execution order.** The join merges
    partition logs by a commit key of (loop, entity index), where the loop order
-   is the step's: simulated bodies first (`WorldTick.Step.cs:413`), then local
-   seats (`:418`). Seats occupy the lowest indices (`WorldPopulation.cs:412-414`)
+   is the step's: simulated bodies first (`WorldTick.Step.cs:421`), then local
+   seats (`:426`). Seats occupy the lowest indices (`WorldPopulation.cs:412-414`)
    and the simulated loop skips them (`WorldPopulation.Step.cs:855-858`), so an
    ascending-index merge alone would put seat 0's outputs before a peer's where
    today they follow; the loop component of the key keeps today's order exactly.
@@ -342,23 +358,23 @@ checked against:
    order is positional: the pose pack writes a registration's slots at fixed
    positions, so recording order does not change what the GPU reads.
 6. **Snapshots only at publication boundaries.** `EmitSnapshot` runs once at the
-   step's end (`WorldTick.Step.cs:638`), after every join.
+   step's end (`WorldTick.Step.cs:646`), after every join.
 
 ### The step's phases
 
-Today's step order is `StepCore` (`WorldTick.Step.cs:304-644`): input and drains,
-`AdvanceSimulated` (`:413`), `AdvanceSeats` (`:418`), `ResolveDynamicContacts`
-(`:425`), tethers and carried bodies, `CompleteStep`, outputs applied, events,
-`EvaluateWorldRules` (`:590`), the serial tail (`SyncBodyCells`, grants, board,
+Today's step order is `StepCore` (`WorldTick.Step.cs:307-653`): input and drains,
+`AdvanceSimulated` (`:421`), `AdvanceSeats` (`:426`), `ResolveDynamicContacts`
+(`:433`), tethers and carried bodies, `CompleteStep`, outputs applied, events,
+`EvaluateWorldRules` (`:598`), the serial tail (`SyncBodyCells`, grants, board,
 search, fields, deadlines, responses, deals, addons, engagement, machines) and
-`EmitSnapshot` (`:638`); the instance host's portal scan runs after the server's
+`EmitSnapshot` (`:646`); the instance host's portal scan runs after the server's
 step. The parallel tick keeps that order and forks three phases:
 
 | Phase | Epoch (reads) | Writes during the phase | Join |
 |---|---|---|---|
 | **E1 rigid advance** (the bodies whose kit is rigid, `WorldBody.Step.cs:60-70`, by entity partition, inside `AdvanceSimulated`'s order) | The contact fields and collider set as `RefreshAttached` left them (`WorldPopulation.Step.cs:826`); the body's own fields. `AdvanceRigid` reads no other body and no arena (`WorldBody.Rigid.cs:635-692`): it writes its own velocity, pose and support flags and captures into the partition's scratch. | The body's own fields; the partition's work counters. | Counters summed in partition order; then the kit bodies and seats advance serially as today, reading the rigid bodies' new poses as a lower-index body's would today (below). |
 | **E3 crossing scan** (seats by partition, per instance) | Every body's final pose for the tick (`FixedPreviousPosition`, `FixedPosition`), the face catalog, the occupancy as the phase started. | The seat's winner (`winners[seat]`, `WorldInstanceHost.Adjacency.cs:423-432`) and an occupancy delta per partition: the `(placement, face, seat, inside)` rows `Observe` would write and the rows `Forget` would remove. | Deltas applied to the one occupancy dictionary in seat order, then `ResolveAndEnqueueCoalescedTransfers` over the winners, serial (`:355-369`). |
-| **E4 snapshot** (entity rows by partition) | The final state, through the prepared arena. | Positional writes into `SnapshotEntries` at offsets a prefix sum assigns (below). | `DeliverSnapshot`, serial, with the field and input tail (`WorldDocument.Apply.cs:965-1020`) unchanged. |
+| **E4 snapshot** (entity rows by partition; built) | The final state: population entries, each body's own fields, and participant lane slots, which build no arena cache (contract rule 2). | Positional writes into `SnapshotEntries` at offsets a prefix sum assigns (below); each row's register-file range of the snapshot's state scratch; the body's own continuity hint. | The field and input tail of `BuildSnapshotCore` (`WorldDocument.Apply.cs:940-997`) and `DeliverSnapshot`, serial and unchanged. |
 
 **E1's scope.** Only rigid bodies partition. A rigid kit "hands the whole step to
 the rigid solver instead of the grounded/free motion program: no intent, action
@@ -403,11 +419,15 @@ claim's own parameter and document identity (`WorldFaceFrame.cs:277`), not on
 scan order.
 
 **E4's offsets.** The snapshot is compact: inactive slots are skipped and each
-active body writes at `count++` (`WorldDocument.Apply.cs:922-942`), and only that
-prefix is delivered (`:1008-1015`). Each partition first counts its active rows;
-a serial exclusive prefix sum over the partition counts gives each partition
-its first offset; partitions then write their rows in index order from that
-offset. The delivered sequence is byte-identical to today's at any count.
+active body writes at `count++` (`WriteSnapshotRows`, `WorldDocument.Apply.cs:1013-1059`),
+and only that prefix is delivered (`:987`). A serial pass on the forking thread
+counts each partition's delivered rows and assigns each partition the running
+total before it, an exclusive prefix sum (`:922-933`); the fork then has each
+partition write its rows in index order from that offset (`SnapshotRows`,
+`:1068-1077`). The count pass reads two fields per slot, so it stays serial
+rather than costing a second fork and join. The serial path, taken at one
+worker or one partition, is the same `WriteSnapshotRows` over every row, so the
+delivered sequence is byte-identical to the serial code's at any count.
 
 Serial phases stay serial: the kit bodies and seats, rigid pair contacts,
 `EvaluateWorldRules` whole (below), the scoped replay hash
