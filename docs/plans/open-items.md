@@ -2537,6 +2537,14 @@ Owner: suites lane · dormant until the owner restores test requirements (AGENTS
 suspends them for the refactoring campaign) · Next: triage the failing Windows
 shards by cause.
 
+- [low] `SdfWorldPassesLawTests` holds laws that fail under machine load and
+  pass alone (`ATemporalViewRunsTheTemporalFragmentWithHistoryAtItsOutput`,
+  `CadenceVisualChangesLeaveConvergedHistoryAndItsRingStanding`,
+  `AGridMoveSettlesForOnePeriodWithoutDiscardingHistoryOrRebuilding`): each waits
+  for a graph rebuild the thread pool runs. Wait on the graph's install signal,
+  never on elapsed frames or time, so the class passes under any load. (from:
+  sdfvm-signal, the lead's integration runs)
+
 The suite target (100 % line coverage plus the keep-list) and CI's `coverage` job
 are suspended; a red test or coverage job is not a stop, and a refactor rewrites
 or deletes tests freely.
