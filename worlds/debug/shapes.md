@@ -309,7 +309,7 @@ The inventory comes from the code: `SdfSolidPrimitive`, `SdfBlendOp`,
 | SmoothUnion, SmoothSubtraction, SmoothIntersection | `shape-smooth-union`, `-subtraction`, `-intersection` |
 | ChamferUnion, ChamferSubtraction, ChamferIntersection | `shape-chamfer-union`, `-subtraction`, `-intersection` |
 | GrooveUnion, PipeUnion, GrooveSubtraction, PipeSubtraction | `shape-groove-union`, `shape-pipe-union`, `shape-groove-subtraction`, `shape-pipe-subtraction` |
-| Blends between moving shapes (pooled `group`) | `motion-smooth-blend`, `motion-carve`, `motion-pulse` |
+| Blends between moving shapes (pooled `group`) | `motion-smooth-blend`, `motion-carve` |
 | StairsUnion, StairsSubtraction (`steps`), Morph (`morph { lane, from, to }`) | `shape-stairs-union`, `shape-stairs-subtraction`, `shape-morph`: each composes at the pop of a scope the shape opens for itself, inside its creation's or group's scope too; a static placement reads the morph's lane as zero, halfway through its −1..1 window |
 
 ### Per-shape facets
@@ -582,10 +582,10 @@ Each of these was seen in a Direct3D 12 capture of the gallery or in
   clusters inside the lattice at tumbled boxes' corners rather than at the
   clip.
 
-- **Moving blends stretch while they move.** `motion-smooth-blend`,
-  `motion-carve` and `motion-pulse` join shapes that move independently
-  (PUCK122 names each at authoring time) and skin one baked seam while they
-  run: the seam stretches, and the pulse's petals stay fused into the core's
-  baked silhouette as they slide. Paused or scrubbed, the pose settles and the
-  group bakes again there within about a second (`world.counters
-  sdf.mesh-settle`).
+- **Moving blends stretch while they move.** `motion-smooth-blend` and
+  `motion-carve` join shapes that move independently (PUCK122 names each at
+  authoring time, and they acknowledge it with `allow`) and skin one baked seam
+  while they run: the seam stretches. Paused or scrubbed, the pose settles and
+  the group bakes again there within about a second (`world.counters
+  sdf.mesh-settle`). `motion-pulse` gives the core and each petal a group of
+  its own, so its petals slide clear of the core with no seam to stretch.
