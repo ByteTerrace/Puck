@@ -49,7 +49,7 @@ public static partial class EvalsRun {
         var revisionOption = new Option<string>(name: "--revision") { DefaultValueFactory = static _ => "HEAD", Description = "The revision whose skill runs; HEAD's evals/ replace that revision's, so both sides of an edit run identical cases." };
         var modelOption = new Option<string>(name: "--model") { DefaultValueFactory = static _ => DefaultModel, Description = "The full model ID under test, such as claude-sonnet-5-5; an alias is refused." };
         var judgeOption = new Option<string?>(name: "--judge") { Description = "The full judge model ID; defaults to the model under test, and a weaker tier is refused." };
-        var runsOption = new Option<int?>(name: "--runs") { Description = "Runs per case per arm; defaults to each case's runs (3)." };
+        var runsOption = new Option<int?>(name: "--runs") { Description = "Runs per case per arm; defaults to each case's own runs (a capability case sets 5, the runner's default is 3)." };
         var ablationOption = new Option<string>(name: "--ablation") { DefaultValueFactory = static _ => "with-without", Description = "with-without adds the no-skill arm; none runs the with-arm only." };
         var costOption = new Option<double>(name: "--max-cost-usd") { DefaultValueFactory = static _ => 20, Description = "The list-price ceiling for the run, in US dollars." };
         var concurrencyOption = new Option<int>(name: "--concurrency", aliases: ["-j"]) { DefaultValueFactory = static _ => 4, Description = "Agent runs at once, 1 to 8." };
@@ -127,7 +127,7 @@ public static partial class EvalsRun {
         "You are working in the Puck repository, and every session there has its rules file, AGENTS.md, loaded. " +
         $"A copy of it is AGENTS.md in the additional working directory named {FixtureDirectory}" +
         (withDelegate ? "; beside it, delegate-SKILL.md is the delegate skill every Puck lane preloads, and you are such a lane" : string.Empty) +
-        ". Read it before you answer, and follow it.";
+        (withDelegate ? ". Read both before you answer, and follow them." : ". Read it before you answer, and follow it.");
 
     private static async Task<int> RunAsync(Settings settings, TimeProvider clock, CancellationToken cancellationToken) {
         if (!SkillName().IsMatch(input: settings.Skill)) { return CliExit.Refuse(verb: Verb, what: settings.Skill, why: "is not a skill directory name."); }

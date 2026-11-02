@@ -102,6 +102,7 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck determinism`](#puck-determinismcross-host-determinism-attestation) | boots the scenarios of a determinism manifest headless in-process and records per-tick, per-system state hashes and document-level hashes into a strict stream; `determinism compare` names the first tick and system, or document hash, where two hosts' streams differ. |
 | [`puck disclosure`](#puck-disclosurethe-noninterference-harness) | boots one headless world per variant of a world's `<stem>.disclosure.json` fixture (and the first again as the control), drives the same non-operator principals with the same scripted and seeded inputs in each, and names every principal whose ordered stream of received events differs, where it first differs and at which doors. |
 | [`puck docs`](#puck-docsthe-documentation-family) | the documentation family: `build` stages the website reference, `links` checks relative links and cited repository paths, and `citations` checks the console-verb tokens skills and XML docs cite, including a live `Puck.World` console boot. |
+| [`puck evals`](#puck-evalsskill-evaluation) | the skill evaluation family over `claude plugin eval`: `evals run` runs a skill's suite on a frozen worktree with the rules-file fixture, `evals compare` compares two results on the comparable score, and `evals graders` lists the graders to hand-label. |
 | [`puck embed`](#the-puck-dsl-verbs) | resolves authored `embed(...)` text into committed `.embeddings.json` lock files, or probes cosine similarity rankings. |
 | [`puck firmware`](#puck-firmwarebundled-boot-images) | rebuilds or verifies the HGB boot ROMs and AGB BIOS from their maintained sources. |
 | [`puck font-atlas`](#puck-font-atlasmanaged-sdf-font-artifacts) | generates loader-compatible SDF metadata and pixels with Puck's production managed font path. |
@@ -2651,6 +2652,40 @@ Exit codes: 0 every citation resolved, 1 unresolved citations (each named on
 standard output), 2 usage error, no repository root, the enumeration
 boot/build refused, or an enumeration provably incomplete, with nothing
 reported against it.
+
+---
+
+## `puck evals`—skill evaluation
+
+The family the [skill evaluation procedure](../development/documentation.md#evaluate-an-agent-skill)
+runs on. Each verb's `--help` holds its full contract.
+
+- `puck evals run <skill> [--cases <glob>] [--tag <tag>...] [--revision <rev>] [--model <id>] [--judge <id>] [--runs n] [--ablation with-without|none] [--max-cost-usd x] [-j n] [--dry-run]`
+  checks `<rev>` (default HEAD) out as a detached worktree, copies HEAD's
+  `evals/` into it when `<rev>` is older, adds the `puck-rules/` fixture
+  (HEAD's `AGENTS.md`, and the delegate skill for a skill a lane loads) to
+  every case through `case.yaml` `context.add_dirs`, and runs
+  `claude plugin eval` on that tree's skill with full model IDs and a judge no
+  weaker than the model. The result, report, `run.json` manifest and each run's
+  trace go under `.claude/skills/<skill>/evals/results/<stamp>/`, and the
+  worktree is removed. `--dry-run` prints the plan and the `claude` command
+  line and creates nothing. A lane is refused this verb, except `--dry-run`
+  and help, by the session-launch hook. Exit codes: 0 every run completed;
+  1 a load or API error, or a partial run; 2 invalid input or a refusal;
+  130 interrupted.
+- `puck evals compare <a.json> <b.json> [--a-arm with|without] [--b-arm with|without]`
+  recomputes each run's score with activation graders left out on both sides
+  and only executed graders counted, leaves out and lists runs that reached
+  `max_turns`, errored, were aborted or had judge graders skipped, and
+  reports regression cases by pass^k and capability cases by mean and per-run
+  vector, marking a difference real when it exceeds one grader's share and the
+  vectors do not overlap. Exit codes: 0 compared; 1 a regression case
+  regressed; 2 a document could not be read.
+- `puck evals graders <result.json> [--arm with|without] [--evidence-chars n]`
+  lists every comparable grader that fails at least one executed run, with its
+  rubric and each run's verdict, votes, explanation, trace and judged excerpt,
+  as the hand-labelling work list. Exit codes: 0 listed; 2 the document could
+  not be read.
 
 ---
 

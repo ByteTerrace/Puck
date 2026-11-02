@@ -7,5 +7,6 @@ Puck.Cli.Source holds the source and repository verbs: `search`, `scan`, `refere
 - [`puck search`](../../docs/reference/cli.md#puck-searchcontent-search)
 - [`puck references`](../../docs/reference/cli.md#puck-referencessemantic-symbol-queries) and [`puck declarations`](../../docs/reference/cli.md#puck-declarationsdeclaration-inventory)
 - [`puck docs`](../../docs/reference/cli.md#puck-docsthe-documentation-family)
+- [`puck landing`](../../docs/reference/cli.md#puck-landingthe-leads-landing-checks)
 - [Puck.Cli.Source.Tests](../../tests/Puck.Cli.Source.Tests/README.md) — the laws that hold this assembly's verbs.
 - [Puck.Cli](../Puck.Cli/README.md) — the `puck` root that composes every verb assembly.
