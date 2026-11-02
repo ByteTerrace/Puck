@@ -57,6 +57,20 @@ Later, with their designs done: the [rule-faults](rule-faults.md) steps, the
 [transmission](transmission.md) lanes, and [disclosure](disclosure.md) steps
 1-6 and 0b.
 
+## Before the owner's go
+
+- Prune the merged lanes' worktrees (`git worktree list`; delete a branch
+  only after searching `docs/` and `.claude/` for its name).
+- Add the production deploy fix as a small lane: ask for the known image tag
+  instead of listing the registry
+  ([Delivery](open-items.md#delivery-launcher-and-ci)).
+- Fold the owner's night-lighting notes into relight-lockstep's brief: the
+  jump to night, the dim-day look, the authored night style, the dusk glow
+  ([Lighting and GI](open-items.md#lighting-and-gi)).
+- Run a read-only tree research round beside the wave, so a foliage lane
+  starts from references ([Debug world content](open-items.md#debug-world-content)).
+- The lift waits on the owner's go.
+
 ## The settle window that closes the wave
 
 It measures:

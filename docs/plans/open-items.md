@@ -3031,7 +3031,39 @@ ordinary · Next: new content and art on the owner's call.
 
 ### Agent tooling and skills
 
-Owner: the lead · ordinary · Next: the Monitor hook check.
+Owner: the lead · ordinary · Next: finish the skill-eval program below, then
+the Monitor hook check.
+
+- [high] The skill-eval program
+  ([evaluate an agent skill](../development/documentation.md#evaluate-an-agent-skill),
+  run with `puck evals`). The lead runs every suite; lanes write cases.
+  Results stay on disk under each skill's git-ignored `evals/results/`, with
+  traces.
+  - **Done:**
+    - `delegate` on Sonnet, Opus and Fable, judged by Opus and Fable;
+    - `orchestration` on Opus.
+  - **To run:** the six skills whose graders were repaired (boy-scout,
+    content-search, dotnet-performance, gaming-bricks, maths-laws and
+    maths-usage), on Sonnet with a Sonnet judge. Use the `puck evals run`
+    loop the lead ran: `--ablation with-without`, `-j 4`, a cost ceiling per
+    suite.
+  - **Next:**
+    1. Validate every below-ceiling grader against its traces
+       (`puck evals graders`).
+    2. Fix the real gaps:
+       - delegate d14 (one chokepoint), d16 (a design lane measures
+         nothing), and on Sonnet d03 (set aside) and d15 (finish line);
+       - Fable's one failed d01 run with the skill.
+    3. Cut the delegate text that only restates AGENTS.md (d06-d08 and d13
+       score the same in both arms).
+    4. Measure each edit before and after with `--revision`.
+    5. Run review-passes on Opus and Haiku.
+    6. A Fable review of the results before anything is called proven.
+  - **Harness limits on Windows (Claude Code 2.1.316):**
+    - `case.yaml` `context.add_dirs` grants nothing;
+    - `append_system_prompt` travels on the command line and overflows it.
+
+    The AGENTS.md fixture therefore rides ahead of each prompt.
 
 - [low] The hazard detectors' follow-ups ([hazards](../development/hazards.md)):
   turn STALE001 into an error once `RuleEvaluator.EvaluateOnce` and
