@@ -57,7 +57,9 @@ public readonly record struct FixedCreationStampTransform(
 /// <param name="LocalHalfExtents">The primitive's bound half-extents along its own axes, scaled: with
 /// <paramref name="Rotation"/> and <paramref name="Center"/>, the oriented box that encloses it, never larger than
 /// the world-axis bound.</param>
-public readonly record struct FixedCreationStampPrimitiveCopy(ShapeDocument Shape, FixedVector3 Center, FixedVector3 HalfExtents, FixedQ4816 UniformScale, FixedVector3 PlaneNormal, FixedQuaternion Rotation, FixedVector3 LocalHalfExtents);
+/// <param name="StampScale">The stamp's own uniform scale, exact: a shape dimension in creation units times it is that
+/// dimension in world units. A quotient of a scaled extent by the shape's scale would carry the extent's rounding.</param>
+public readonly record struct FixedCreationStampPrimitiveCopy(ShapeDocument Shape, FixedVector3 Center, FixedVector3 HalfExtents, FixedQ4816 UniformScale, FixedVector3 PlaneNormal, FixedQuaternion Rotation, FixedVector3 LocalHalfExtents, FixedQ4816 StampScale);
 /// <summary>
 /// Emits and expands <c>puck.creation.v1</c> shape geometry under one materialized stamp transform.
 /// </summary>
@@ -1612,7 +1614,8 @@ public static class CreationStampEmitter {
                     : FixedVector3.Zero),
                     Rotation: (stampRotation * placed.Rotation).Normalize(),
                     Shape: shape,
-                    UniformScale: uniformScale
+                    UniformScale: uniformScale,
+                    StampScale: stampScale
                 ));
             }
         }

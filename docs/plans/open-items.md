@@ -2066,6 +2066,17 @@ colliders report's only red findings left are the valley's relief
   'desk-chair' ... RepeatPolar]`, now narrated once per placement), so the chase
   camera and limb probes see no chair. Give the fixed-point query twin the
   fold, or bound the folded shape.
+- A creation whose contact shapes blend other than by hard union collides as
+  its composed field (`WorldColliderSet.CollidesAsField`), relieved or not: 78
+  of the debug world's 612 static colliders. Its cost, sampled thread time under
+  `FixedStepPump.Step` (`dotnet-trace`, headless, 40 s of the Moth strafing
+  through the flat-crown group at (8..16.5, -24)): `FixedFieldColliderContact.Solve`
+  3.5 % and the whole static sweep 13.5 % with the lawn trees unrelieved, against
+  2.7 % and 14.4 % with their former 2.5 cm relief, one run each on a shared
+  machine. Walking the rim at (0, 376, 470), whose relief is unchanged, Solve is
+  19.4 % and the sweep 30.6 %, the step-up's landing probes (`FixedStepUp.TrySnap`)
+  30.9 %. A cheaper exact join would be a smooth-union primitive pair with its
+  k/4 seam bound, if the field's cost ever becomes the limit. (from: far-hit)
 - The bake-side causes live in the [rendering plan's](rendering.md)
   bake items: a long thin member of a static union baking at the union's capped
   lattice, the sharp-edge rounding of about a tenth of a cell, and the Moth's
