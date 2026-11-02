@@ -469,49 +469,6 @@ None of these is a leak of a blocker at a distance.
 | Baked thin foliage (closed slabs) | Entry and exit; thinner than `ε` along the light, one surface | `Solid`; another placement's leaf is another body |
 | Glass | Skipped by the cascades, as today | — |
 
-## What the review rounds' findings become
-
-Rounds 1 to 3 and the first design review: as before. The curvature estimate
-is gone; the wrap-in-identity medium is fixed (`m_wrapSignature`); the cel
-mediums stay in the [Lighting and GI packet](open-items.md#lighting-and-gi);
-the normal offset and its inverse-cosine leak are gone with the offsets; open,
-clipped, two-sided and multi-shell meshes count as bodies with surfaces; the
-clamp is removed; no orientation is computed anywhere; the first draft's six
-cases are in the table.
-
-The second design review:
-
-1. Frame-local indices against a held cascade: the
-   [lifetime rule](#the-body-index-and-its-lifetime).
-2. `MotionIdentity` as the body: the [canonical key](#a-body), carried as
-   the draw's `Body` and V1's instance field.
-3. The chord rule beyond what two surfaces tell: the rule is
-   [the body's next surface](#what-next-surface-can-and-cannot-mean), exact
-   for field-contoured geometry and over-shadowing for overlapping authored
-   components; the hollow-box row is corrected.
-4. The bounded reference leaking at grazing: the bound is gone; the
-   [resolution rule](#the-receiver-plane-and-the-unresolved-footprint) trusts
-   the exact plane where it can and reads shadow where it cannot.
-5. Signed curvature as uncertainty: `u1` is a non-negative bound from the
-   triangle's own normals and the level's recorded error, projected onto the
-   light's axis, with its assumptions stated and a cap past which a tap is
-   Far.
-6. GI without the receiver's identity and a self-hitting origin: the
-   [GI section](#gi).
-7. The history-only peel footprint: removed; the current-frame B1 tile mask
-   is the measured option in its place.
-8. The views filter mixing bodies: the [views section](#the-views-filter).
-9. The closure test's guarantees and T-split cost: narrowed and the spatial
-   hash specified, above; the thin-box witness is a check of the authored
-   lane.
-10. `ε` against pipeline variation: invariance required, the envelope stated,
-    the witness extended, above.
-11. The atomic peel's encoding: specified in the
-    [cost plan](#cost-a-measurement-plan).
-12. Deck at Half and nested-view memory: the Deck qualifies at Full; the
-    portal stop gets a live-byte budget, in the cost plan.
-13. The R16 fallback: removed; the body attachment is `R32_UINT`.
-14. Format plumbing: in the identity lane's steps.
 
 ## Cost: a measurement plan
 

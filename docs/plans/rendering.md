@@ -12,7 +12,7 @@ owns pipeline authoring, and the [frame handbook](../rendering/sdf/handbook/fram
 and [rendering skill](../../.claude/skills/rendering/SKILL.md) own the implemented
 contracts. Delivered package history belongs in git.
 
-## Implementation status
+## Where each package stands
 
 A landed package can still have a hardware observation owed below. The
 [shared queue](open-items.md#next) ranks work across programmes.
@@ -21,16 +21,9 @@ A landed package can still have a hardware observation owed below. The
 |---|---|---|
 | P1a, durable functional fixtures | open; software landed | [No-driver boot](#deferred-to-the-end) |
 | P1b, foundation qualification | open | [Reference devices and driver removal](#p1b--foundation-qualification) |
-| P2, work counters | landed | None |
-| P3, attachments and indexed geometry | landed | None |
 | P4, shared opaque visibility | landed; field-marching path retired | [Baked frame](#p4--shared-opaque-visibility) |
-| P5, authoring and packaged dependencies | landed | None |
 | P6, representation experiments | withdrawn except GI | [Lighting and GI](#p6--representation-experiments) |
-| P7, binding and memory profile | landed | None |
-| P8, shader packages and source language | landed | None |
-| P9, state mirror and presentation time | landed | None |
 | P10, bound rows and tiers | open; software landed | [Hardware qualification at high](#deferred-to-the-end) |
-| P11, frame graph and nested views | landed | None |
 | P12, image sources | open; software landed | [Real camera](#deferred-to-the-end) |
 | P13, hit-to-source mapping and input | open; software landed | [Windows passthrough click](#p13--hit-to-source-mapping-and-input-destinations) |
 | P14, SDF pass package | landed | [Rendering follow-ups](#p14--the-sdf-engine-as-a-pass-package) |

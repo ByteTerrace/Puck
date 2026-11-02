@@ -12,45 +12,19 @@ console. The authored experience is [the reference game design](../game/design.m
 the reasoning behind every decision is in
 [the decisions register](../decisions/play.md).
 
-## Implementation status
+## What stands
 
-- **Landed:** seamless crossing; per-body scale, decision commitment and rising-edge interruption, flock
-  profiles and affinities, per-cell provenance, `WorldEntityAddress`, kit speed envelopes; the local group, role-aware
-  grant, transfer, and external-operation foundation; the MCP host extension,
-  the Operator profile's `puck_worlds`, `puck_exec`, `puck_capture_frame` and
-  `puck_state_vector_write` tools over local stdio, remote HTTP with OAuth and
-  the Entra on-behalf-of services provider (owned by
-  [`Puck.Mcp`](../../src/Puck.Mcp/README.md) and
-  [`Puck.Mcp.Azure`](../../src/Puck.Mcp.Azure/README.md)); the typed agent
-  bridge, its Harness and the hosted participant
-  ([`WorldAgentBridge`](../../src/Puck.World.AgentBridge/README.md),
-  [`Puck.World.AgentHarness`](../../src/Puck.World.AgentHarness/README.md));
-  the audio core (the mixer, the voice synth, `MusicClock`, `MusicDirector`,
-  `VoiceBabbler` and their playback wiring, the diegetic tune instrument); the
-  parlor package (physical chess with a `search` opponent, which is the debug
-  world's chess table, and Chinese checkers, Hearts and Lineup under
-  `experimental/worlds/parlor`); every tabletop primitive and the shipped
-  `games/` fragments.
-- **Quarantined:** the four ground corner authorities, the island, and the
-  canaries that prove them and the audio core
-  (`four-corners-sharded`, `seamless-adjacency`,
-  `seamless-four-corners-circuit`, `quilt-nw-gap-edge-carry`, `voice-babble`,
-  `music-conditional-layer-and-embellishment`, `instrument-clock-source`) sit
-  under `experimental/tests/Puck.World.Canaries/` and
-  [`experimental/worlds`](../../experimental/README.md). They are not
-  re-admitted. The debug world is the proving ground, and the features these
-  worlds hold that it lacks are ported into it by the
-  [porting packet](open-items.md#port-the-experimental-worlds-missing-features), not revived in place.
-- **Not started:** the content and federation
-  waves, namespace normalization, the frames document, the neighbour tape,
-  the finder's units A to C and its slices, the Participant
-  profile and the document, recording and rule-cost tools of MCP's local surface,
-  the remote surface's parity job and approved device handles, composed play's
-  chess outcomes and two-table compositions, the audio remainder, and the
-  few-thousand-creature acceptance workload. One security claim is open rather
-  than unverified: nothing yet witnesses that a binding cannot escalate its
-  destination beyond what its grant allows, so the claim is treated as false
-  until a signal shows it.
+What landed is owned by its code's README: [`Puck.Mcp`](../../src/Puck.Mcp/README.md),
+[`Puck.Mcp.Azure`](../../src/Puck.Mcp.Azure/README.md), the
+[agent bridge](../../src/Puck.World.AgentBridge/README.md) and its
+[Harness](../../src/Puck.World.AgentHarness/README.md). The quilt's and the
+island's worlds and canaries stay quarantined under
+[`experimental/`](../../experimental/README.md); what they hold that the debug
+world lacks is ported by the
+[porting packet](open-items.md#port-the-experimental-worlds-missing-features).
+One security claim is open rather than unverified: nothing yet witnesses that a
+binding cannot escalate its destination beyond what its grant allows, so the
+claim is treated as false until a signal shows it.
 
 ## The forcing artifact
 
@@ -266,8 +240,9 @@ law tests or `puck` verbs, so `experimental/scripts` holds no sole coverage.
 **Owns:** the `Puck.World.Client` seam (`PlayerRoster` reading the live server
 through a link query, remote-default), the self-update signing chain
 (`puck publish --sign` and upload; the launcher installs a refusing placeholder
-verifier today), namespace normalization, and the human-at-a-window procedures
-under `docs/verification/manual`.
+verifier today), namespace normalization, and the human-at-a-window checks
+in [the manual verification README](../verification/manual/README.md), run
+over the `puck` MCP World tools.
 
 **Delivers:** each once, over the settled tree, after the splits.
 
@@ -604,10 +579,6 @@ leg), read and mutate it with `puck_exec`, and capture a frame with
 
 ```bash
 puck sweep
-```
-
-```bash
-puck parity
 ```
 
 ```bash

@@ -13,46 +13,20 @@ needs. The reasoning behind every decision is in
 machine family, the NES and Famicom core, has its own page:
 [Humble Gaming Deck](humble-gaming-deck.md).
 
-## Implementation status
+## Where it stands
 
-- **Landed:** the machine host described by
-  [its README](../../src/Puck.World.Machines/README.md). Named `machines`
-  declarations construct independently of screens, carry a running flag, and
-  replace atomically under a new generation; `machine.state` reports them and
-  `machine.operation <instance> <generation> <operationId> <json>` submits a
-  descriptor-validated provider operation through the ordered authority domain
-  (`screen.insert`, `forge.play` and `machine.swap` use that path, and every
-  mount names a file in the machine's `contentFolders`). A screen owns no
-  machine: the screen-owned lifecycle (`WorldScreenOp` insert, eject and
-  options, and the machine host's `TryInsert`) is deleted. Named memory bindings
-  declare space, format, access (inspect, patch or bus), update (on change or
-  every tick) and conversion (checked by default); addresses are unsigned, a
-  failed read keeps the last accepted value and exposes availability, and
-  overlapping writes refuse. They synchronize after rules and before machine
-  advance, in authored order, with a generation-aware on-change memo.
-  A cable port is declared on the machine row and cable groups derive from
-  those declarations. A host-selected content-admission policy
-  (`IMachineContentAdmissionPolicy`) checks the exact source and executable
-  bytes when the host prepares a machine's content, at boot and at every
-  replacement; the `puck.cartridge.v1` preset `GamingBrickContentPolicies` has
-  tests and no production consumer, and the composition registers the open
-  policy. A world checkpoint carries named handheld machine cores, held input,
-  pacing, instance generations and the binding memos, and restores only against
-  the same firmware, cartridge and core identity. The mirror source
-  (`hgb-mirror.puck`) drives five machine-owned bindings and reads a sixth
-  back; the arcade module declares three named producers. On the cartridge
-  side, `Sm83Emitter` emits `Call`, `Return`, and `ReturnFromInterrupt`,
-  `ThumbEmitter` emits `Call`, `CartridgeExpressions.Reads` consumes
-  `Puck.State`'s expression, and `scene` partitions the frame.
-- **Open:** screens are index-addressed (`WorldScreen.Index`), and a cable
-  group lists screen indices; no rule effect invokes a machine operation, no
-  execution or content receipt exists, and a tape arms only before any cabinet
-  has stepped; checkpoints still refuse pumped addon guests, applied screen
-  operations, live coupled links and enabled rewind history; addon memory
-  watches are keyed by screen; no reusable cabinet module exists; `Puck.World`
-  references both bricks and the three forges directly; the cartridge document
-  declares no procedure, typed region, or interrupt body, and every
-  frame-shaped ceiling stands. Each package below names its part.
+The machine host is described by [its README](../../src/Puck.World.Machines/README.md).
+Open across the packages below: screens are index-addressed
+(`WorldScreen.Index`), and a cable group lists screen indices; no rule effect
+invokes a machine operation, no execution or content receipt exists, and a tape
+arms only before any cabinet has stepped; checkpoints still refuse pumped addon
+guests, applied screen operations, live coupled links and enabled rewind
+history; addon memory watches are keyed by screen; no reusable cabinet module
+exists; `Puck.World` references both bricks and the three forges directly; the
+`puck.cartridge.v1` content-admission preset (`GamingBrickContentPolicies`) has
+no production consumer; the cartridge document declares no procedure, typed
+region, or interrupt body, and every frame-shaped ceiling stands. Each package
+below names its part.
 
 ## The forcing artifact
 
@@ -426,21 +400,15 @@ The Humble Gaming Deck's packages are in [its plan](humble-gaming-deck.md#open-i
      beyond documented contracts, since the retail-BIOS comparison ran only
      against a supplied image (a retail-BIOS control still runs inside several
      Advanced Tier A stages when `--bios` names one by hand).
-- Low priority: shorten the two emulator batteries the CPU suites run.
-  `Puck.HumbleGamingBrick.Tests` runs the Humble battery with an empty corpus
-  cache (about 15 s of its 25 s) and `Puck.HumbleGamingDeck.Tests` runs the
-  Deck's Tier A (its 28 s), each in a child process; each self-contained stage
-  reaches lines no other stage or suite does, so neither run narrows to a
-  subset. Without coverage their wall time is the longest stage:
-  `queued-host-time-travel`, `bundled-firmware` and `boot-rom-handoff` at 7 to
-  8 s each in the Humble battery, `queued-host-time-travel` and
-  `queued-host-memory` in the Deck's. Under coverage, as every CI shard runs a
-  suite, the instrumented emulator loops run about twenty times slower and the
-  stages' summed CPU sets the time: about 230 s for the Humble suite and 97 s
-  for the Deck's on a shared six-core machine, led in the Humble battery by
-  `bundled-firmware` (158 s), `queued-host-time-travel` (136 s),
-  `boot-rom-handoff` (126 s) and `queued-host-memory-access` (112 s). Fewer
-  emulated frames in those stages, with the same checks, is what shortens both.
+- Low priority: shorten the two emulator batteries. `Puck.HumbleGamingBrick.Tests`
+  runs the Humble battery with an empty corpus cache and
+  `Puck.HumbleGamingDeck.Tests` runs the Deck's Tier A, each in a child process;
+  each self-contained stage reaches lines no other stage does, so neither run
+  narrows to a subset. Their cost is the longest stages
+  (`queued-host-time-travel`, `bundled-firmware`, `boot-rom-handoff`,
+  `queued-host-memory-access`), and under instrumentation the emulator loops
+  slow by an order of magnitude. Fewer emulated frames in those stages, with the
+  same checks, is what shortens both.
 - `QueuedMachineWorker` frame-tracking locals are not reset on checkpoint
   restore or rewind, and `HgdMachine`'s reset keeps a latched bus write (read from
   the code in a pre-`main` review, not reproduced; confirm with a failing test

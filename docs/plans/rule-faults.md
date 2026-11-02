@@ -7,9 +7,8 @@ by and where its guarantee stops. The contract it serves is in
 fault in an evaluated gate conjunct closes the whole gate, under negation and
 disjunction too; a fault is not a false, so anything that remembers a verdict
 keeps the last one it read successfully; an effect that faults refuses the
-whole firing. Read-only review: every claim below cites the code it rests on
-at the integration tip this lane merged. A design review of the first draft
-(twelve findings) is answered in [the last section](#the-design-review-answered).
+whole firing. Every claim below cites the code it rests on; a design review
+of the first draft shaped it.
 
 Three kinds of enforcement are named throughout, and nothing here claims a
 stronger one than it has:
@@ -675,66 +674,3 @@ holds a latch or refuses a firing that used to proceed, so a recorded replay
 or hash that reached one of those paths moves; each step re-records what it
 invalidates. Step 1 is the exception and the control: it moves nothing.
 
-## The design review answered
-
-The first draft's review raised twelve findings. Each is answered here by the
-section that changed.
-
-1. *The types expose the unchecked values; `Proposal` can be faulted and
-   firing; `internal` is not a door.* Correct on every point. The shapes are
-   now non-positional with private fields, `default` is the faulted case,
-   `FiringDecision` is one enum, and the invariant table says which clauses
-   are structure, which are one door and which are the analyzer, with
-   `OUTCOME002` for the ignored `TryFinite`.
-2. *The reader and the detached evaluator are escapes; detached consumers
-   include simulation producers; `Prepare(ref frame)` contradicts "arms hold
-   no frame"; `effect.Magnitude.Read` was missed.* Correct. The frame is
-   described as a visible-call device, not a proof; `OUTCOME003`/`OUTCOME004`
-   fence the two escapes; the detached list is closed with each `Faulted` arm
-   and the search is taken out of it; arms receive values, not a frame; the
-   host-read inventory is a `puck references` list, not five lines.
-3. *The absorbing rule changed absence semantics.* Correct, and the draft's
-   sentence was wrong. [Absence and the combining rule](#absence-and-the-combining-rule)
-   now restates today's conversions and pins the conjunct's evaluation order,
-   which is what W7 needs.
-4. *The exception rollback ends before the commit's fallible work.* Correct.
-   [The install boundary](#the-install-boundary) names the boundary, moves
-   the input resynchronisation's refusal before it, declares the install
-   sequence non-refusing by contract, and says plainly that a throw after it
-   is an unrecovered defect.
-5. *Prepared targets lack a lifetime contract; merged decision effects cross
-   the liveness recheck.* Correct. Prepared arms carry the population
-   generation and are refused on a mismatch; the liveness step is kept and
-   evaluated against the proposed population; proposals do not cross
-   authority boundaries.
-6. *Search-judge faults are lost unless aggregation changes through candidate
-   replay.* Correct. [Aggregation to the step](#aggregation-to-the-step)
-   carries `JudgeOutcome` through `PushScope`, the replay and `StepJob`; W13
-   is a faulting judge with a successful score.
-7. *A door is not a transaction model for nested scopes, groups and
-   restoration.* Correct, and it changed the design: the latch, decision and
-   group stores are journal participants, so nesting and turn undo are the
-   arena's; group policy on the three-way outcome is specified; lifecycle
-   writers are named with the no-open-scope refusal.
-8. *Propose is serial and mutating; a stack frame is not a concurrency
-   design.* Correct. [Serial ownership](#serial-ownership) states the
-   precondition and hands the parallel design to the job-system memo.
-9. *"Already priced through CollectFacts" is false.* Correct: `CollectFacts`
-   collects scheduling facts and `StateCellOperand.Cost` is 1. [Pricing](#pricing)
-   states the undercharge, the correction, the double-count to remove and the
-   spelling-equivalence check in place of "unchanged or lower".
-10. *The named benchmark cannot show the saving; the cost claims are
-    estimates.* Correct. The `ComputedKey` kernel is specified, the
-    measurements enumerated, and the cost section says "estimate" where it
-    is one.
-11. *The steps do not leave working branches and several checks prove the
-    wrong thing.* Correct. The steps are re-cut: representation first with a
-    hash-identity check, lowering before the `Outcome` return so no operand
-    needs a frame, the register kept as a named bridge through step 3 and
-    deleted with its last reader in step 4, the journal before the door, and
-    checks that are `puck references` lists or witnesses rather than greps
-    that miss `CollectionsMarshal` writes.
-12. *The closure table overstated type-level closure; disclosure is outside.*
-    Correct. The table now carries an enforcement column with the three
-    levels, and the disclosure findings are named as out of scope with their
-    owner.
