@@ -768,7 +768,7 @@ for hosts with no GPU.
 **The SDF VM is the one GPU interpreter.** A world's signed-distance program runs
 in `Puck.SdfVm`'s kernels, and any other GPU effect is a pipeline pass compiled
 from HLSL. A second, general-purpose bytecode interpreter, the removed
-`Puck.ShaderVm`, is rejected. It had no consumer but its own tests, no kernel
+the shader VM project, is rejected. It had no consumer but its own tests, no kernel
 included its GPU half, and nothing compared its host and GPU interpreters. It
 therefore added a C#/HLSL contract that no check held and a second copy of the
 PCG3D hash. It also duplicated work each existing path already owns: an authored

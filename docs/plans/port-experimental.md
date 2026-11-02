@@ -222,9 +222,9 @@ memo.
 ## Not ported here
 
 The quarantined gates, canary runner, parity and counters fixtures
-(`experimental/tests/Puck.Parity`, `Puck.Counters`, `Puck.Determinism`, the CLI
+(`experimental/tests/Puck.Parity`, `experimental/tests/Puck.Counters`, `experimental/tests/Puck.Determinism`, the CLI
 test projects) test tools and engine seams, not world features; the
 [quarantined gates](open-items.md#quarantined-gates) packet owns them. The
 canaries listed above are prior art for each lane's own `test` blocks, which
-run in the debug package with `puck test`. `Puck.Post`, `Puck.Bench` and
-`Puck.BareMetal` hold no world.
+run in the debug package with `puck test`. The `experimental/Puck.Post` and
+`experimental/Puck.Bench` projects hold no world.

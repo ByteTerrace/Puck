@@ -117,7 +117,7 @@ on the rule that an id names one live object:
 
 **The contract it proves:** the reservation reads the mobility credential
 without minting it, and only the departure's detach mints it, which the replay's
-re-driven departure also calls ([G3](#g3-a-reservation-mints-mobility-the-tape-never-sees)).
+re-driven departure also calls (G3, `CrossingTapeOrderLawTests`).
 The authoritative hash folds the credential every recorded tick, so any
 divergence shows in the hash trace.
 
@@ -173,7 +173,7 @@ The contract it proves:
 - This holds on every restore door: in-place and load-door history seeks,
   `FromCheckpoint` (a silo activation, the history shadow), and `replay.drive`,
   whose unstepped shadow starts with an empty memo
-  ([G5](#g5-a-checkpoint-forgets-what-the-bindings-last-saw)).
+  (G5, `MachineBindingCheckpointLawTests`).
 
 **Not a duplicate of.** The cartridge laws prove that a world checkpoint
 preserves a stepped machine and its continuation, but in a world with no memory
@@ -263,7 +263,7 @@ keep the source bound.
 is an explicit bind of the original source, which proves a rebind, not a return
 to what the row authored. The law uses the return seam G7 added:
 `screen.source <index> row` drops the live bind and the screen shows its row's
-own source again ([gap G7](#g7-a-screen-has-no-way-back-to-its-authored-source)).
+own source again (gap G7, `screen.source <index> row`).
 
 **As implemented.** The fixture boots headless, where the offscreen boot's
 composition is unavailable on a host without a GPU device. Headless, only screen
@@ -355,7 +355,7 @@ state change.
 
 **Scenario.** One theory over every refusal the engine classifies as an
 intentionally unsupported operation. The classification lives on the refusal in
-code (see [G6](#g6-the-catalogue-is-assembled-by-hand)), and the theory's rows are
+code (`RefusalAttribute.Unsupported`), and the theory's rows are
 enumerated from it, so a new unsupported operation joins the law by being
 declared, and one with no arrangement fails the law by name. Each row carries its
 name, how to arrange it, the operation, and the refusal it expects. For each row,

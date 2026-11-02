@@ -334,7 +334,7 @@ held.
   history and state projections are engine mechanisms. Elements, vitality,
   statuses, abilities, recipes, art and the faerie's reactions are world
   content, authored as states and tags, never engine enums.
-- **Pairs are found by a bounded spatial query.** `WorldInteraction.Distance`
+- **Pairs are found by a bounded spatial query.** `WorldInteraction`'s `Distance` kind
   runs over `FixedSpatialNeighborhood` and replaces the Cartesian scan; targeting
   and area effects reuse the same compiled query. An author bounds the
   candidates inspected and the results kept separately, and may ask for the

@@ -237,7 +237,7 @@ landed geometry).
   cameras resolve after the pack. (from: slow-frames)
 - The effector solver passes the "Puck code over engine code" check except for
   two engine constants: an effector's ease in and out uses the drivers' default
-  blend (`WorldGaitDrivers.WeightBlend`, `CreationAnimation.WeightSeconds`) with
+  blend (`WorldGaitDrivers.WeightBlend`, `WeightSeconds` in `CreationAnimation.cs`) with
   no authored time of its own, and `ProbeBackoff` is 5 cm whatever the body's
   scale (`WorldEffectorSolver.cs:28`). The surface probe also runs while the
   effector's gate is shut and its weight at rest
@@ -670,7 +670,7 @@ Remaining:
 - The terrain pass's step 5 face check (58°) is not yet run on the certified
   solve. (from: field-contact)
 - [medium] `world.collision.probe` (`FixedFieldContactSolver.Probe`, through
-  `FixedColliderField.TryMeasure`) answers nothing at 36 of 105 points of a
+  `FixedFieldColliderContact.TryMeasure`) answers nothing at 36 of 105 points of a
   1 m grid around a lawn flat-crown tree (x 6 to 20, y 0.5 to 6.5, z -27.3 in
   the debug world), and beside a crown it can read the floor 6 m below instead
   of the crown 0.3 m away. Contact resolution does not read it; the measure's
@@ -1108,7 +1108,7 @@ certified-contact packet and step 8 closes. The measured state is in the
   (about 3.5 times a sector's 266,000).
 - Creation limits sized for props bound terrain: noise amplitude at most 4 m
   (`CreationNoiseDocument.MaxAmplitude`) and smooth blends at most 0.5 m
-  (`CreationDocument.MaxSmooth`), so a 300 to 430 m wall reads as a few smooth
+  (`ShapeDocument.MaxSmooth`), so a 300 to 430 m wall reads as a few smooth
   masses with metre-scale rock.
 - The CPU evaluator's capsule reads its segment parameter through a Q16 inverse
   squared length (`SdfCapsule`), the precision loss the superellipsoid had for a
@@ -1169,7 +1169,7 @@ Code that grew a second implementation (AGENTS.md rule 7) or costs velocity:
     (`tests/Puck.SdfVm.Tests/SdfFieldSliceLawTests.cs:33`,
     `SdfMeshPathBakeLawTests.Settle.cs:204`, `SdfMeshPathBakeLawTests.cs:579`,
     `:617`); the sample position beside them is already one
-    `SdfMeshPathBake.SampleAt`. Check the HLSL tap set against the same constant.
+    `SampleAt` (`SdfMeshPathBake.cs:44`). Check the HLSL tap set against the same constant.
   - [low] `FixedQ3232` and `FixedQ4816` carry the same generic-math body
     (`Puck.Maths/FixedPoint/FixedQ3232.GenericMath.cs:6`,
     `FixedQ4816.GenericMath.cs:6`, about 1,000 tokens each).
@@ -1247,7 +1247,7 @@ Code that grew a second implementation (AGENTS.md rule 7) or costs velocity:
   in the rendering plan and `frame-rendering.md`. Not run.
   (from: docsverify-claude)
 - [medium] `puck gate`'s default `--merge-base` names a deleted branch:
-  `GateRun.DefaultTarget` is `origin/features/gfx-pipeline`
+  its `DefaultTarget` names `features/gfx-pipeline` on `origin`
   (`src/Puck.Cli.Gate/Gate/GateRun.cs:29`), which no longer exists, so a gate
   run without the option compares against nothing. Default it to the
   integration branch or make the option required, and correct
@@ -1816,7 +1816,7 @@ reproduce worker for what remains.
   `TestCommand.Leg.cs:515` and `docs/reference/cli.md`. (from: reproduce-cost
   review)
 - `replay.record` mid-session re-grants document grants revoked at runtime
-  (`Host.Addons.Finish` after the checkpoint captures grants), and refuses
+  (the host's addon `Finish` after the checkpoint captures grants), and refuses
   `StartNotCheckpointable` after every pumped addon was removed
   (`WorldPersistence.Checkpoint`). Read from the code in a pre-`main` review and
   not reproduced; confirm with a failing test before fixing.
@@ -2329,7 +2329,7 @@ movement-facing scheme returns.
   singel` echoes `model=singel` and `world.binding-bar` reads `stacked true` on
   a headless debug World. Refuse an unknown model by name.
 - [low · owner: play-feel lane] A requested boom distance replaces the orbit
-  op's distance outright (`SdfCameraProgram.Evaluate`, `look.Distance ??
+  op's distance outright (`SdfCameraProgram`'s `Evaluate`, `look.Distance ??
   orbit.Distance.Resolve`), and `WorldSeatViewState.AuthoredDistance` reads the
   first orbit op's literal. A scalar-bound orbit distance stops responding after
   the first scroll; the Moth's is a literal 4.2. Unconfirmed in a world: none
@@ -2671,7 +2671,7 @@ brief's priorities ([security review](../development/security-review.md)).
   - Steps 5 and 6, the compiler and the deletion of every other predicate
     ([decision 6](disclosure.md#6-the-compiler-holds-the-line)): the authority
     `internal` to `Puck.World.Server` (`WorldServer.RuleHostSeam.cs:8,23` are
-    public routes today), `WorldOperatorAuthority`, `CommandDefinition.Operator`,
+    public routes today), `WorldOperatorAuthority`, an operator factory on `CommandDefinition`,
     DISC001 over module declarations, the public-surface law,
     `WorldStateDisclosure` deleted. Step 7, the red-team extension.
 - [low] Three consumers still turn an absent expression into a number, which
@@ -2901,7 +2901,7 @@ ordinary · Next: new content and art on the owner's call.
   [job-system memo](#engine-job-system))
   ([combat decision](../decisions/engine-design.md#combat-is-world-content-on-generic-queries-fields-and-input);
   the quarantined `arena.puck` district is the rules' prior art):
-  - spatially scoped pair queries on `WorldInteraction.Distance` over
+  - spatially scoped pair queries on `WorldInteraction`'s `Distance` kind over
     `FixedSpatialNeighborhood`, replacing the Cartesian scan, reused by targeting
     and area effects;
   - action input on the 32-axis, 64-button wire through the ordered events,

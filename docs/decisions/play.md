@@ -157,7 +157,7 @@ allocation. Hard eligibility, trust, blocks, and content compatibility never
 relax with time.
 
 **Storage stays `IWorldAuthorityStore` and `IObjectBlobStore`**; no Redis,
-Cosmos, party mirror, or new package (`Puck.Matchmaking`, `Puck.Groups`).
+Cosmos, party mirror, or new package (a new matchmaking or groups project).
 Memory holds indexes and scratch; accepted membership, roles, requests,
 credit, consent, claims, and outcomes persist. An ETag compare-and-swap does
 not stop an old authority from writing again, so the activation epoch stays at

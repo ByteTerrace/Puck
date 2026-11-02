@@ -24,7 +24,7 @@ machine family, the NES and Famicom core, has its own page:
   (`screen.insert`, `forge.play` and `machine.swap` use that path, and every
   mount names a file in the machine's `contentFolders`). A screen owns no
   machine: the screen-owned lifecycle (`WorldScreenOp` insert, eject and
-  options, and `WorldMachineHost.TryInsert`) is deleted. Named memory bindings
+  options, and the machine host's `TryInsert`) is deleted. Named memory bindings
   declare space, format, access (inspect, patch or bus), update (on change or
   every tick) and conversion (checked by default); addresses are unsigned, a
   failed read keeps the last accepted value and exposes availability, and
@@ -442,7 +442,7 @@ The Humble Gaming Deck's packages are in [its plan](humble-gaming-deck.md#open-i
   `boot-rom-handoff` (126 s) and `queued-host-memory-access` (112 s). Fewer
   emulated frames in those stages, with the same checks, is what shortens both.
 - `QueuedMachineWorker` frame-tracking locals are not reset on checkpoint
-  restore or rewind, and `HgdMachine.Reset` keeps a latched bus write (read from
+  restore or rewind, and `HgdMachine`'s reset keeps a latched bus write (read from
   the code in a pre-`main` review, not reproduced; confirm with a failing test
   before fixing).
 

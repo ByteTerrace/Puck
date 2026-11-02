@@ -144,7 +144,7 @@ scheduling a step:
   `WorldFederationProjectionSink` forgets the same cache at `:156`;
   `WorldFederationCodec.Observation` composes from `server.Definition` for a
   recipient (`src/Puck.World.Server/WorldFederationCodec.Observation.cs:104-105`);
-  `WorldRuleHost.AnswerStateObservations` composes from `Host.Arena` and
+  `WorldRuleHost.AnswerStateObservations` composes from the host's arena and
   `Host.Definition` (`src/Puck.World.Server/WorldRuleHost.Queries.cs:114-119`).
   Every composer takes `(definition, arena, recipient)` as three separate
   arguments, so nothing stops a caller passing the authority with a recipient
@@ -336,7 +336,7 @@ actual outcome, so the typed completion (`Refused`, code
 `world.mutation.undisclosed`, the one text), the replay tape's recorded
 outcome and the echo all say the same thing and nothing else, and the recipient
 is shown its own stream's version ([decision 5](#5-a-delta-is-a-difference-of-views-owned-by-the-stream)),
-never the authority's. `WorldRecipientView.Admits(mutation)` is the one
+never the authority's. The view's `Admits(mutation)` is the one
 predicate, used by `TryAdmitCompleteMutation` ahead of grants, by the compose
 arms, by `WorldServer.WriteStateCell` and the addon runtime's bind, and by the
 forwarded submission door, replacing `ReadsThroughDisclosure`,
@@ -520,9 +520,9 @@ analyzer only what it can decide soundly.
   replay and the benches), handed out exactly twice: to whoever constructs the
   server (the composition roots, the silo grain, a test) by the factory that
   constructs it, and to an Operator-audience handler through `OperatorContext`.
-- **The operator shape.** `IWorldConsoleAuthority.TryResolveServer` is deleted.
+- **The operator shape.** `IWorldConsoleAuthority`'s `TryResolveServer` is deleted.
   A handler registered with `CommandAudience.Operator` is built through
-  `CommandDefinition.Operator(...)`, whose handler delegate receives an
+  an operator factory on `CommandDefinition`, whose handler delegate receives an
   `OperatorContext` carrying the `WorldOperatorAuthority`; `OperatorContext`'s
   constructor is `internal` to `Puck.Commands`, so only the registry mints one,
   and only for a verb it refuses to every principal but the console before the
@@ -832,7 +832,7 @@ one wins.
 | 2. Reads through the view | Every non-operator read door reads the view at its ceiling: `world.budget`, `world.placements`, `world.reflow.preview` (over the view's placements), `world.topologies`, `world.timeline`, `world.projection` composed for the caller, `world.identify`, `world.hud.template`, `world.state.similar`, `AnswerStateObservations`, `WorldFederationCodec.Observation`, the prototype fetch, `WorldTravelerProjection`; sessions read through the view's ceiling in place of `ReadSessionDefinition`; the skirmish's `search` doors confirmed | Harness: every read door the fuzzer reaches compares equal except the layout doors step 4 owns; `ConsoleDisclosureLawTests` green; `puck references` shows no `server.Definition` in `Puck.World` or `Puck.World.Console` outside operator verbs and boot |
 | 3. The write door refuses by policy | `Admits` and `Refusal` on the view; every mutation touching a restricted row refused by policy for every recipient, seats included, batches and guards (`ExpectedCells`, `ExpectedSpatialReads` through `Fingerprint`) included; the typed completion's code and text; the addon's `NotDisclosed` verdict on bind and write; the forwarded submission door; the `sealedInbox` template in `worlds/standard/` the auction imports; the seven old predicates deleted | Harness: every write the fuzzer makes (set, add, remove, transform, generate, guarded batches, addon binds and writes) compares equal in reply, typed outcome and later deliveries; the auction plays to its reveal with each bidder's receipts on its own row; `TransformDisclosureLawTests` updated to the one text |
 | 4. The layout | The view re-deals restricted templates with base and displacement split; `$back` children under `Placeholder` with their pick and submission contract; the validator's refusal of `Solid`, `Grip`, `Spatial`, `Region` and `Emission` on a restricted template; `world.placements`, the projection and reflow from the re-deal | Harness: the card game's and the skirmish's `world.placements`, `world.reflow.preview`, picks and projections compare equal across their pairs, the displaced card included; `puck compile --validate` refuses the card game's template with `solid` by name; `PlacementResponseDisclosureLawTests` and `WorldDeckAndDisclosureLawTests` updated to the renumbered slots |
-| 5. The compiler | The authority `internal`; `WorldOperatorAuthority` and the two doors; `CommandDefinition.Operator` and `OperatorContext`; `TryResolveServer` deleted; every module's constructor rewired (the 47 files); DISC001 with `Puck.Analyzers.Tests` fixtures for a module taking a `WorldServer`, one taking the view, and an operator handler; the public-surface law | The analyzer test is red on a planted `WorldServer` constructor parameter and green on the view; the surface law green; `dotnet build Puck.slnx` zero warnings; the harness still green |
+| 5. The compiler | The authority `internal`; `WorldOperatorAuthority` and the two doors; an operator factory on `CommandDefinition` and `OperatorContext`; `TryResolveServer` deleted; every module's constructor rewired (the 47 files); DISC001 with `Puck.Analyzers.Tests` fixtures for a module taking a `WorldServer`, one taking the view, and an operator handler; the public-surface law | The analyzer test is red on a planted `WorldServer` constructor parameter and green on the view; the surface law green; `dotnet build Puck.slnx` zero warnings; the harness still green |
 | 6. Nothing else decides | `WorldStateDisclosure` the class and `WorldStateReadView` deleted; `view.Withheld` where `ReadsWhole` serves and the timeline's lambda gone; the documents updated: [console](../../.claude/skills/puck-world/references/console.md) "Disclosure chokepoint", [traits](../reference/state/traits.md#control-what-observers-learn), [documents-state](../../.claude/skills/puck-world/references/documents-state.md), the Schema and Server READMEs, [worlds](../reference/state/worlds.md) | `puck references WorldStateDisclosure` answers nothing; the harness green over the five fixtures and the fuzzer: done |
 | 7. Red team | The extension that seats AI agents as players over the harness (an `IPuckExtension`, [hosting](../../.claude/skills/puck-world/references/hosting-and-release.md)), each agent driving one principal in both worlds of a pair with inputs it invents, `world.state.similar` among its doors; a difference it finds becomes an authored script in the fixture | A red-team run over the five fixtures adds no new script, or every script it adds is green after its fix |
 

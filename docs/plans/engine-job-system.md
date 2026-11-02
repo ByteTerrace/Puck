@@ -664,7 +664,7 @@ second, and recording third; recording alone would not reach it.
 
 ### The cause fix beside it
 
-Before R2, `SdfWorldPassRecorder.Choose` culled and levelled
+Before R2, the recorder's CPU `Choose` culled and levelled
 every draw for every pass on the CPU, and 160,000 draws took 700 ms a frame.
 Threads would divide that, not remove it. R2 extends the existing opaque
 occlusion mechanism, `SdfMeshOcclusion.RecordDraws`, through `ExecuteIndirect`

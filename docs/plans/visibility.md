@@ -49,7 +49,7 @@ in the tree.
   geometry. Its mesh pass reads 3,906 draws and 5.55 M vertices, drawn
   non-indexed, three vertex invocations a triangle
   (`Assets/Shaders/Sdf/passes/sdf-mesh.vert.hlsl:1`;
-  [port lane 9](port-experimental.md#9-meadow-and-foliage)).
+  [the meadow](../../worlds/debug/meadow.md)).
 - **A blade's pose is an authored program**: three or four `swings` per part
   driven by state cells (`worlds/standard/foliage.puck:409-554`). Animated
   placements bypass the pose-rate holds

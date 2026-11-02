@@ -94,7 +94,7 @@ names a placement id they had to look up.
 
 **Delivers:**
 
-1. **A line primitive.** `OverlayFrameBuilder.WriteSegment` (endpoints,
+1. **A line primitive.** A `WriteSegment` on `OverlayFrameBuilder` (endpoints,
    thickness, role, alpha), drawn by the overlay kernel as an antialiased
    capsule distance, charged to a new `Editor` overlay channel leased in
    `OverlayChannelLeases`. A world-space polyline projects through the seat's

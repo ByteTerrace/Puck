@@ -146,8 +146,8 @@ block. Host-lifetime tables need a bootstrap provider before their first static
 initialization; DI cannot be assumed to run before a numeric type initializer.
 
 The custom system module owns compiler-required object/array layout and
-allocation hooks and never depends on the engine pool. `Puck.Runtime` and
-`Puck.Platform.BareMetal` are proposed live homes. Their initial builds contain
+allocation hooks and never depends on the engine pool. A runtime project and a
+bare-metal platform project are proposed live homes. Their initial builds contain
 only what the allocation probe reaches. Keep every live project in the solution
 with explicit custom-system-module targets that cannot leak well-known `System`
 types into the desktop reference graph.

@@ -100,10 +100,10 @@ verdict is read once by one door.
 |---|---|---|
 | A fault is a case of the value | Structure: `Outcome` and `Resolved<T>` are non-positional structs with private fields; the number or key is reachable only through `TryFinite(out long)` / `TryNamed(out T)`; `default` is the faulted case. | A caller can call `TryFinite` and ignore its `false`. The analyzer refuses an unconsumed `TryFinite`/`TryNamed` result (`OUTCOME002`); inside the interpreter and the door there is no such call, because they switch on the case. |
 | No nested evaluation can erase a fault | Structure: `Run` returns its `Outcome`; a nested call's outcome is a local the caller combines by a total rule. No shared `out` variable exists. | None: the mechanism is gone. A wrong *finite* answer from a correct evaluation is a logic defect, not a lost fault. |
-| Only the interpreter evaluates tokens | One door plus structure: `RuleExpressions.Evaluate` takes a `ref EvaluationFrame`, a `ref struct` with no public constructor; `RuleEvaluator` constructs it. Dynamic keys, live row indices, ring ages and pattern letters are tokens of the enclosing program, so they have no evaluator of their own to lose a fault in. | `default(EvaluationFrame)` is forgeable; `Evaluate` refuses a frame with no reader at runtime (a throw, a defect). `EvaluateDetached` exists for the closed list of detached consumers below; a new caller of it is an analyzer finding (`OUTCOME003`) until it is added to the list. |
+| Only the interpreter evaluates tokens | One door plus structure: `RuleExpressions`' `Evaluate` takes a `ref EvaluationFrame`, a `ref struct` with no public constructor; `RuleEvaluator` constructs it. Dynamic keys, live row indices, ring ages and pattern letters are tokens of the enclosing program, so they have no evaluator of their own to lose a fault in. | `default(EvaluationFrame)` is forgeable; `Evaluate` refuses a frame with no reader at runtime (a throw, a defect). `EvaluateDetached` exists for the closed list of detached consumers below; a new caller of it is an analyzer finding (`OUTCOME003`) until it is added to the list. |
 | Operands cannot read through a faulted address | Structure: the interpreter resolves every declared address first and passes `ReadOnlySpan<ResolvedKey>` whose cases are `Named` and `Nothing`; `Faulted` returned from the token before the operand ran. | An operand still receives the `IStateReader` and could read the arena under a key of its own making. The analyzer refuses an `IRuleOperand` holding a `CompiledCellRef`, `LiveRow` or `CompiledExpressionToken[]` field (`OUTCOME004`), so the only addresses an operand has are the ones it declared; a hand-written arena read with a literal key is review territory and is not a fault path. |
 | Everything a firing decides rewinds with the firing | Structure: the latch's held bits, the decision bindings and the group progress write their previous value into the arena journal through one participant interface before they change; `StateArena.Rewind(mark)` restores them with the cells at any nesting depth. | Writes outside any scope (checkpoint restore, scoped-replay restore, sweep removal) are not journaled: they run between ticks under the authority gate with no scope open, and the journal refuses a participant record when no scope is open (runtime refusal). |
-| One door reads the verdict | One door: `RuleEvaluator.Commit(ref Proposal)` is the only caller of `CommitStateTransaction` and `RewindStateTransaction` for a firing; `Proposal.Decision` is one four-case enum, so "faulted and fires" has no representation. | Code after the arena commit (document install, input resynchronisation, deliveries) cannot be rewound; see [the install boundary](#the-install-boundary). |
+| One door reads the verdict | One door: `RuleEvaluator`'s `Commit(ref Proposal)` is the only caller of `CommitStateTransaction` and `RewindStateTransaction` for a firing; a proposal's `Decision` is one four-case enum, so "faulted and fires" has no representation. | Code after the arena commit (document install, input resynchronisation, deliveries) cannot be rewound; see [the install boundary](#the-install-boundary). |
 | Nothing drops an outcome | Analyzer (`OUTCOME001`): an expression statement or discard of `Outcome`, `Resolved<T>`, `Verdict` or `RuleOutcome`. | A detached consumer that handles `Faulted` wrongly is a logic defect the analyzer cannot see; the closed list below names each one's `Faulted` arm. |
 
 ### The shapes
@@ -335,7 +335,7 @@ also writes its next binding state through the journal and fires its common
 and option effects into the same scope. Nothing outside the journal is
 written.
 
-*Commit* (`RuleEvaluator.Commit(ref Proposal)`), the one door, switching on
+*Commit* (`RuleEvaluator`'s `Commit(ref Proposal)`), the one door, switching on
 `FiringDecision`:
 
 - `Faulted`: `RewindStateTransaction(mark)` restores cells, latch bits,
@@ -382,7 +382,7 @@ right side of it:
   delivery is a counted refusal that undoes nothing (`rules.md:472`).
 - **A throw after the boundary is a defect that leaves the authority
   inconsistent**, exactly as today; the design makes it one place
-  (`RuleEvaluator.Commit`, after `CommitStateTransaction`) and names it.
+  (`RuleEvaluator`'s `Commit`, after `CommitStateTransaction`) and names it.
   There is no second rollback mechanism, because none can roll back a
   delivered cue or an installed document; AGENTS.md rule 4 wants the defect
   fixed, not masked.
@@ -391,7 +391,7 @@ right side of it:
 
 A prepared arm carries the values the read phase computed and the identity
 they denote: a body index **with its population generation**
-(`Host.Population.Generation(index)`, as `DecisionBodyLive` reads it,
+(the host population's `Generation(index)`, as `DecisionBodyLive` reads it,
 `WorldRuleHost.DecisionNeighbors.cs:87-88`), a placement ordinal with the
 proposed definition it was composed against, a pose cell with its topology.
 Delivery checks the generation and refuses the arm as `BodyInactive` when it
@@ -413,7 +413,7 @@ refused for it.
 
 ### Aggregation to the step
 
-A `FiringDecision` of `Faulted` becomes `RuleOutcome.Faulted` for the
+A `FiringDecision` of `Faulted` becomes `RuleOutcome`'s `Faulted` for the
 evaluation, and it must reach every aggregate that decides something:
 
 - `RuleEvaluator.Evaluate(rules, …)` returns `RuleOutcome` for the family
@@ -536,7 +536,7 @@ specified there.
 | Alexis King, "Parse, don't validate" (2019) | The inner fence: no `Value` accessor; obtaining a number requires the finite case. The review's point that `TryFinite(out n)` with an ignored `bool` defeats it is correct, and the analyzer's `OUTCOME002` is the answer the type cannot give. |
 | ISO SQL three-valued logic over `NULL` and C. J. Date's critique | The semantics to refuse for faults: Kleene logic lets a disjunction recover an unknown; `Faulted` absorbs. Absence, by contrast, keeps its own conversion rules, which are not Kleene either (an absent `not` is true, an absent arithmetic is absent). |
 | Jim Gray, "The Transaction Concept: Virtues and Limitations" (1981) | Atomicity is of the whole unit. A firing that journals its cells but writes its latch and choice in place is not atomic under any nesting; one journal for every participant is. |
-| Puck itself: the arena journal (`StateArena.cs:569-594`, `:654-681`) and the one-write-door convergence in [S1](state-and-language.md#s1--the-projection-law-and-the-one-door) | The Puck-native combination: the transaction exists and nests; the design enlists the remaining stores in it rather than adding a second mechanism beside it. |
+| Puck itself: the arena journal (`StateArena.cs:569-594`, `:654-681`) and the one-write-door convergence in [S10 step 3](state-and-language.md#s10--the-state-review) | The Puck-native combination: the transaction exists and nests; the design enlists the remaining stores in it rather than adding a second mechanism beside it. |
 
 ## Every finding, one by one
 
@@ -574,7 +574,7 @@ step 1 with each block's expected verdict, and a block for a still-open
 finding is red until its step.
 
 1. **Representation, no semantics.** Add `Outcome`, `Fact`, `Resolved<T>`,
-   `ResolvedKey`, `Verdict`, `FiringDecision` and `RuleOutcome.Faulted`
+   `ResolvedKey`, `Verdict`, `FiringDecision` and `RuleOutcome`'s `Faulted`
    (unused yet) to `Puck.State`; replace `RuleFact` with `Fact` and
    `KeyNaming` with `Resolved<T>` at every caller, mechanically, keeping
    today's behaviour (a faulted fact still raises into the register where it
@@ -584,7 +584,7 @@ finding is red until its step.
    representation change moves nothing); the witness file runs, with the
    open findings red.
 2. **Addresses are program.** Lowering of computed keys, live row indices,
-   ring ages and token expressions; `IRuleOperand.Addresses` and `Read(reader, keys)`;
+   ring ages and token expressions; `IRuleOperand`'s `Addresses` and `Read(reader, keys)`;
    `world.match` reads through the detached `Word` fold; pricing corrected
    (the lowered tokens priced once, `HistoryOperand`/`PatternOperand` internal
    charges removed). The interpreter still has its `out` parameters and still
@@ -605,7 +605,7 @@ finding is red until its step.
    step 4 removes both. Check: W7, W8 green; `puck search "TryEvaluate\(|TryEvaluateAlone\(|GateHolds\(|TryReadSource\(" src`
    returns no line; the kernels in the cost section within their stated
    bounds.
-4. **Verdicts at every deciding place; the register goes.** `RuleOutcome.Faulted`
+4. **Verdicts at every deciding place; the register goes.** `RuleOutcome`'s `Faulted`
    produced by `EvaluateOnce` and aggregated by `Evaluate`; `JudgeOutcome`
    through `PushScope`, the replay and `StepJob`; group policies on the
    three-way outcome; decisions and interactions returning `RuleOutcome`;
@@ -657,7 +657,7 @@ finding is red until its step.
 
 **Benchmarks.** The existing `Indirect` kernel reads through a cell pointer
 (`StateKernelFixture.cs:123-137`) and never runs the nested VM this plan
-removes, so it cannot show the saving. Step 2 adds `KernelRead.ComputedKey`:
+removes, so it cannot show the saving. Step 2 adds a `ComputedKey` kernel read:
 before, a `StateCellOperand` whose `KeyFrom.Custom` is an `EffectKeyFact`
 over a small program; after, the lowered tokens; the same authored work on
 both sides, consumed so a failure cannot read as a speedup. Steps 2 and 3

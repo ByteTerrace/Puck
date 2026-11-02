@@ -422,7 +422,7 @@ refused, since no return obligation could be recorded for it.
   survive filtering. At home the binding is the placement's: it follows whoever holds the
   home seat, at any generation, so a player who reconnects at home after the companion came
   back still has it (the visiting binding stays generation-bound).
-- **What its driver may observe**: derived at every check (`WorldServer.TryRoleVerdict`
+- **What its driver may observe**: derived at every check (`TryRoleVerdict` on `lane/companion-v1`
   before stored grants): Drive and Observe over the companion bodies bound to the driver at
   their landed generation, Observe over each followed slot while it holds the followed
   member, nothing else; `TryGrant` refuses body, Control, Mutate and Edit grants to a role
