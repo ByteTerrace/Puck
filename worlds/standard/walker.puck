@@ -9,6 +9,7 @@
 //
 // Distances are full-size metres: the capsule stands 1.7 m, its eye at 1.6 m.
 import "standard"
+import "motion"
 import "camera"
 
 chaseCamera(
@@ -19,28 +20,8 @@ chaseCamera(
   eyePoint: [0, 1.6, 0.2]
 )
 
-bodyMotionPrograms [
-  {
-    kind: Motion
-    name: "walk"
-    operations [
-      ResolveYawAttitudeAndPlanarFrame
-      ResolveHold
-      ComputePlanarTargetVelocity
-      ShapeVelocity
-      SnapYawToPlanarIntent
-      RunActionTriggers
-      ApplyHold
-      IntegratePlanarAndVerticalVelocity
-      CommitPose
-    ]
-    planarTarget {
-      backward: 0.7
-      strafe: 0.85
-    }
-    version: "puck.body.program.v1"
-  }
-]
+// The standard's screen material, re-exported so a world importing the walker names it.
+export binding crt
 
 defaultSeatKit: "walker"
 

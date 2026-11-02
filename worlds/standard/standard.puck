@@ -9,3 +9,6 @@ import "editor"
 import "companions"
 
 cameraFeel()
+
+// The skin's screen material, re-exported so a world importing the standard names it.
+export binding crt
