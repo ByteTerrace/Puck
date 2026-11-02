@@ -583,7 +583,7 @@ allows, in order of rising cost:
 | `scout` | Haiku 5.5 | medium | Read-only search, log triage, live-World probes and captures. No source edits or commits; authorized CLI bootstrap is allowed. |
 | `implementer` | Sonnet 5.5 | high | A specified brief with a finish line. It is the default writer. |
 | `specialist` | Opus 5.5 | high | Design judgement across projects, diagnosis of an unknown cause, review-and-fix passes. |
-| `principal` | Fable 5.1 | high | Correctness-critical or long-horizon work: determinism and fixed-point maths, the bake and its kernels, renderer architecture, a defect other lanes failed to crack. |
+| `principal` | Fable 5.1 | high | Design only, sparingly: a design memo, an architecture or a design review (determinism and fixed-point maths, the bake, renderer architecture, a design review keeps breaking). Never implementing, measuring or bisecting. |
 
 Route each brief to the cheapest role that fits it (the owner's ruling): a
 brief with a known cause or a specified result, such as content, a document
