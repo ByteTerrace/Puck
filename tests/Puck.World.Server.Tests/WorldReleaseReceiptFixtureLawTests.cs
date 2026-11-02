@@ -362,7 +362,7 @@ public sealed class WorldReleaseReceiptFixtureLawTests {
         public DirectoryObjectStorageTarget Target { get; }
 
         private Scenario() {
-            Target = new(Path.Combine(
+            Target = WorldAuthorityBlobStore.DirectoryTarget(rootPath: Path.Combine(
                 path1: m_directory.RootPath,
                 path2: "fixture"
             ));
