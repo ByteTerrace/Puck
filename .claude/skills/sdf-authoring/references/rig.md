@@ -113,7 +113,9 @@ When every surface effector reports `target=none`, check the presentation query
 field before changing probe reach or geometry. `WorldFramePresenter` builds the
 field used by camera clearance and limb probes; `WorldPlacementStamper.Queryable`
 excludes unsupported placements individually, as the motion CLI's camera check
-does. The log names each excluded placement and reports a combined-field failure
+does: one the contact evaluator refuses, or one whose own field cannot answer at
+its copies (its frame stops short of them), which would otherwise shrink the
+combined field's frame and refuse every query. The log names each excluded placement and reports a combined-field failure
 as `[world.presentation-field: unavailable; ...]`. An excluded prop has no query
 surface, but cannot remove the supported floor and other placements. `body.rig`
 reads the last packed rig; a read scheduled before a screenshot is not a read of

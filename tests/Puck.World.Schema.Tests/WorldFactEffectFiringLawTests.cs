@@ -16,10 +16,9 @@ public sealed class WorldFactEffectFiringLawTests {
         Tick: 0UL
     );
     private static WorldCueEffect Cue() => new(
+        body: null,
         cue: "ping",
         describe: "cue 'ping'",
-        key: default,
-        keyFrom: null,
         payload: null
     );
     private static StateSection Section() => new(Rows: [new StateRow(

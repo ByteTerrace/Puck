@@ -158,20 +158,68 @@ public sealed partial class WorldRuleHost : IWorldPersistedDecisions {
             step: stepTicks,
             value: state.CommitmentRemaining
         );
+        // Everything the decision reads (bindings, interrupt, gate, option gates, scores) faults into this scope, and a
+        // fault decides nothing: the decision keeps its choice and its interrupt edge, and runs no onNoChoice.
+        var scratch = Arena.Scratch;
+        var faults = scratch.EnterFaultScope();
+
+        try {
+            return DecideBinding(key: key, runtime: runtime, scratch: scratch, state: ref state, stepTicks: stepTicks);
+        } finally {
+            _ = scratch.LeaveFaultScope(scope: faults);
+        }
+    }
+    private bool HoldDecision(CompiledWorldFactsRule rule, ExpressionFault fault) {
+        m_evaluator.ReportRefusal(
+            detail: $"{RuleEvaluation.DescribeFault(fault: fault)}; the decision kept its choice",
+            effect: "decision",
+            refusal: RuleEffectRefusal.Arithmetic,
+            ruleName: rule.Name,
+            tick: Tick
+        );
+
+        return false;
+    }
+    private bool DecideBinding(DecisionRuntime runtime, int key, ArenaScratch scratch, ref DecisionBinding state, ulong stepTicks) {
+        var rule = runtime.Rule;
+        var policy = rule.Decision!;
+        var generation = state.Generation;
+
         if (!m_evaluator.EvaluateBindings(rule: rule)) { return false; }
         var interruptOpen = ((policy.Interrupt is { } interrupt) && m_evaluator.GateOpen(
             faulted: out _,
             gate: interrupt,
             ruleName: rule.Name
         ));
-        var interrupted = (interruptOpen && !state.InterruptHeld);
-
-        state.InterruptHeld = interruptOpen;
-        if (!m_evaluator.GateOpen(
+        var open = m_evaluator.GateOpen(
             faulted: out _,
             gate: rule.Gate,
             ruleName: rule.Name
-        )) {
+        );
+        var lostEligibility = (open && (state.Selected >= 0) &&
+            (((state.Candidate >= 0) && (!DecisionBodyLive(
+            generation: state.Generation,
+            index: key
+        ) || !DecisionBodyLive(
+            generation: state.CandidateGeneration,
+            index: state.Candidate
+        ))) ||
+             !DecisionOptionGate(
+            candidate: state.Candidate,
+            key: key,
+            option: policy.Options[state.Selected],
+            ruleName: rule.Name
+        )));
+
+        if (scratch.RaisedFault != ExpressionFault.None) {
+            return HoldDecision(fault: scratch.RaisedFault, rule: rule);
+        }
+
+        var interruptWasHeld = state.InterruptHeld;
+        var interrupted = (interruptOpen && !interruptWasHeld);
+
+        state.InterruptHeld = interruptOpen;
+        if (!open) {
             var hadChoice = (state.Selected >= 0);
 
             state.Selected = -1;
@@ -190,21 +238,6 @@ public sealed partial class WorldRuleHost : IWorldPersistedDecisions {
             )
             );
         }
-        var lostEligibility = ((state.Selected >= 0) &&
-            (((state.Candidate >= 0) && (!DecisionBodyLive(
-            generation: state.Generation,
-            index: key
-        ) || !DecisionBodyLive(
-            generation: state.CandidateGeneration,
-            index: state.Candidate
-        ))) ||
-             !DecisionOptionGate(
-            candidate: state.Candidate,
-            key: key,
-            option: policy.Options[state.Selected],
-            ruleName: rule.Name
-        )));
-
         if (
             state.Evaluated &&
             !interrupted &&
@@ -218,6 +251,14 @@ public sealed partial class WorldRuleHost : IWorldPersistedDecisions {
             runtime: runtime,
             state: state
         );
+
+        // An option gate or score that faulted while gathering decides nothing either, so the interrupt edge read this
+        // tick is put back too.
+        if (scratch.RaisedFault != ExpressionFault.None) {
+            state.InterruptHeld = interruptWasHeld;
+            return HoldDecision(fault: scratch.RaisedFault, rule: rule);
+        }
+
         var winner = -1;
         var winnerScore = long.MinValue;
         var total = UInt128.Zero;

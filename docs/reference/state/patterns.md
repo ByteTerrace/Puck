@@ -102,8 +102,12 @@ names both:
 - **`value`** is an expression, in the pattern's kind, evaluated once per token
   in pile order. Inside it, `$token` keys the current token and `$previous` the
   token before it, and each must address a row keyed over the pile's token
-  domain. `$previous` names no cell on the first token, so a read through it is
-  absent there. An expression that fails on a token reads that letter as 0.
+  domain. `$previous` on the first token reads the cell no row holds, which is
+  0. A letter is always the number its expression computed. A token whose
+  expression reads an absence leaves the word spelling nothing, so the match is
+  absent and no comparison against it holds. A token whose expression faults
+  faults the match, which a gate or a firing answers like any other fault: see
+  [Rules and firing](rules.md#follow-one-evaluation).
 
 A `value` expression can combine several attributes into one letter, such as
 `suit * 16 + rank`, or compare neighbors. This pattern accepts a run: any first
@@ -111,7 +115,7 @@ card, then one or two cards each one rank above the card before it.
 
 ```puck
 pattern run: Int {
-  value: "rank[$token] - (rank[$previous] ?? 0)"
+  value: "rank[$token] - rank[$previous]"
   symbols {
     step = 1
   }
@@ -119,9 +123,9 @@ pattern run: Int {
 }
 ```
 
-The first token has no previous card, so `?? 0` makes its letter its own rank,
-and `any` accepts it. How `??` and absent reads work is described in
-[Reads and expressions](expressions.md).
+The first token has no previous card, so `rank[$previous]` reads 0, its letter
+is its own rank, and `any` accepts it. How absent reads work, and the `??` that
+answers one, is described in [Reads and expressions](expressions.md).
 
 ## What a word matches
 

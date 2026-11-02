@@ -260,11 +260,11 @@ public sealed partial class WorldRuleHost {
         int? body = null;
 
         refusal = EffectRefusal.None;
-        if (effect.Key != default) {
+        if (effect.Body is { } address) {
             if (!TryResolveBodyKeyIndex(
                 bodyIndex: out var index,
-                key: effect.Key,
-                keyFrom: effect.KeyFrom,
+                key: address.Key,
+                keyFrom: address.KeyFrom,
                 refusal: out refusal
             )) {
                 return false;
@@ -541,7 +541,13 @@ public sealed partial class WorldRuleHost {
         if (Host.Body(index: index) is not { } body) {
             return Refuse(code: WorldRuleEffectRefusal.BodyInactive, reason: $"body:{index} is inactive", refusal: out refusal);
         }
-        if ((topology is null) || !RuleExpressions.TryEvaluate(fault: out _, kind: CellKind.Int, program: effect.Expression, reader: this, value: out var cell) || (cell < 0) || (cell >= topology.CellCount)) {
+        if (topology is null) {
+            return Refuse(code: WorldRuleEffectRefusal.BodyTargetInvalid, reason: "poseCell target is outside its topology", refusal: out refusal);
+        }
+        if (!RuleExpressions.TryEvaluate(fault: out var fault, kind: CellKind.Int, program: effect.Expression, reader: this, value: out var cell)) {
+            return Refuse(code: RuleEffectRefusal.Arithmetic, reason: $"the poseCell cell did not evaluate: {RuleEvaluation.DescribeFault(fault: fault)}", refusal: out refusal);
+        }
+        if ((cell < 0) || (cell >= topology.CellCount)) {
             return Refuse(code: WorldRuleEffectRefusal.BodyTargetInvalid, reason: "poseCell target is outside its topology", refusal: out refusal);
         }
         refusal = EffectRefusal.None;

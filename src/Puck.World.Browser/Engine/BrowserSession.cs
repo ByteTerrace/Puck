@@ -713,7 +713,7 @@ public sealed class BrowserSession {
             tick: tick
         );
 
-        if (!Puck.State.Rules.RuleExpressions.TryEvaluate(
+        if (!Puck.State.Rules.RuleExpressions.TryEvaluateAlone(
             fault: out var fault,
             kind: kind,
             program: compiled,

@@ -9,8 +9,9 @@ public sealed partial class WorldRuleHost {
         m_boundRight = neighbor;
         try {
             // A compiled affinity operand reads only state-backed facts, which cannot change during population
-            // movement, so a body observation stays in the population's frozen spatial image.
-            return RuleExpressions.TryEvaluate(
+            // movement, so a body observation stays in the population's frozen spatial image. An affinity that
+            // faults or reads an absence fails: the population counts it in AffinityFailures and perceives none.
+            return RuleExpressions.TryEvaluateAlone(
                 fault: out _,
                 kind: CellKind.Fixed,
                 program: program,

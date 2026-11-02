@@ -232,7 +232,8 @@ happens for one rule, or for one key of a rule that iterates.
 ```mermaid
 flowchart TD
     Start["Next rule, or next snapshotted key"] --> Locals["Evaluate locals in order"]
-    Locals -->|a local faults| Idle["Report it; skip this evaluation"]
+    Locals -->|a local is absent| Idle["Report it; skip this evaluation"]
+    Locals -->|anything faults| Hold["Report it; the latch keeps its last verdict"]
     Locals --> Zones{"Every live zone selects a row?"}
     Zones -- No --> Closed["Gate reads closed"]
     Zones -- Yes --> Gate{"Gate holds?"}
@@ -247,18 +248,24 @@ Step by step:
 1. **Bind.** For an iterating rule, the evaluator binds the next key it
    snapshotted before the sweep began.
 1. **Evaluate locals.** Each local runs in declared order and can read the ones
-   before it. A local that faults (overflow, division by zero, an absent read)
-   is reported as `RuleEffectRefusal.Arithmetic`, and this evaluation stops. A
-   local can fault even when the gate would have been closed.
+   before it. A local that can't evaluate (overflow, division by zero, an absent
+   read) is reported as `RuleEffectRefusal.Arithmetic`, and this evaluation
+   stops. A local can fail even when the gate would have been closed.
 1. **Select live zones.** Every `$zones[…]` spelling in the rule resolves to a
    row. If any selects nothing, the gate reads closed without being consulted
-   and nothing is reported.
-1. **Test the gate.** A conjunct that faults closes the whole gate and is
-   reported as `Arithmetic`. Negation never turns a fault into true, and an
-   `or` cannot recover it. An operand skipped by short-circuiting does not fault.
+   and nothing is reported. An index whose arithmetic faults is reported.
+1. **Test the gate.** A conjunct that faults stops the gate and is reported as
+   `Arithmetic`. Negation never turns a fault into true, and an `or` cannot
+   recover it. Both sides of a comparison are read, so an absent side never
+   hides a faulting one. An operand skipped by short-circuiting does not fault.
 1. **Check the mode.** The latch records whether the gate held. A `Level` rule
    fires whenever the gate holds; an `Edge` rule fires only when the previous
-   evaluation of the same binding didn't hold.
+   evaluation of the same binding didn't hold. An evaluation that faulted
+   anywhere (a local, a live zone index, or the gate) decides nothing: the latch
+   keeps the verdict it last held, so an `Edge` rule neither fires nor re-arms
+   on a fault tick. A group trigger that faults likewise leaves its group's
+   progress as it was, and a world's `decision` keeps its choice and runs no
+   `onNoChoice`.
 1. **Fire.** The effects run in authored order inside one journal scope, as
    described in [Make a firing atomic](#make-a-firing-atomic).
 
@@ -367,10 +374,11 @@ re-arms a key that left the row.
 The latch records the opening before any effect runs. If the firing is refused,
 a gate that stays open is still not a new crossing on the next tick, so an
 `Edge` rule doesn't retry. A gate closed by an unselected zone counts as closed.
-When a local faults, the evaluation ends before the latch is updated. For a rule
-evaluated once, the latch keeps its previous entry. For an iterating rule, the
-faulted binding counts as unvisited, so the end of the sweep drops it and the
-next open gate for that key is a first crossing.
+When a local can't evaluate, the evaluation ends before the latch is updated.
+For a rule evaluated once, the latch keeps its previous entry. For an iterating
+rule, a local that faulted (`Domain` or `Forever`) keeps the binding's entry
+too, while one that read an absence counts as unvisited, so the end of the
+sweep drops it and the next open gate for that key is a first crossing.
 
 Two common patterns use `Edge` with the clock:
 
@@ -562,10 +570,10 @@ rule claimBonus {
 
 The condition reads the state at the `if`'s own position, so it sees the
 writes of earlier effects in the same firing. `then` fires when the condition
-holds, and `else` when it doesn't. A condition that can't evaluate (an
-arithmetic fault or an absent read) runs neither branch and is reported the way
-a gate conjunct is; the firing continues. A false condition with no `else` isn't
-a failure. An `else if` chain lowers to one nested `if` per level.
+holds, and `else` when it doesn't; an absent read makes it false, as in a gate.
+A condition that faults runs neither branch, is reported the way a gate
+conjunct is, and refuses the firing, which rewinds. A false condition with no
+`else` isn't a failure. An `else if` chain lowers to one nested `if` per level.
 
 A branch isn't a savepoint. An effect inside a branch that refuses rewinds the
 firing, the same as a top-level effect. A `transaction` may sit inside a branch
@@ -710,7 +718,7 @@ rule revealLast {
 
 | Operation on an absent read | Result |
 |---|---|
-| Compare it in a gate or condition | No comparison holds, including `NotEqual`. The conjunct faults and the refusal names `isAbsent` and `??`. |
+| Compare it in a gate or condition | No comparison holds, including `NotEqual`: the conjunct reads false, and `not` turns it true. A fault on the comparison's other side still faults the gate. |
 | Use it in an expression | The expression faults, naming the same two operations. In a local, the evaluation stops; in an effect source, the firing rewinds. |
 | Copy it with `fromState` | The copy is refused and the firing rewinds. |
 | Write to the cell it names | The write addresses no cell and is skipped. |
@@ -844,7 +852,7 @@ decisions](../../decisions/state-and-language.md).
 | `RuleLatch`, `LatchKey` | `Puck.State.Rules` | Edge history and scheduler caches. |
 | `RuleTraceEvaluation`, `RuleRuntimeDiagnostic`, `IRuleRefusalSink` | `Puck.State.Rules` | Tracing and the refusal ledger. |
 | `RuleEffectRefusal` | `Puck.State` | Runtime refusal categories. |
-| `ExpressionFault` | `Puck.State.Rules` | Why an expression failed. |
+| `ExpressionFault` | `Puck.State` | Why an expression failed. |
 | `IEffectHost`, `Mutation`, `EffectNeeds`, `EffectFiring` | `Puck.State` | The host boundary a firing writes through. |
 | `ArenaEffectHost` | `Puck.State.Rules` | A host for rules that touch the arena and nothing else. |
 

@@ -29,11 +29,13 @@ namespace Puck.State;
 /// <param name="HasOutcome">Whether the job's method backpropagates an outcome rather than a score.</param>
 /// <param name="TreeNodes">How many nodes of its pool a tree job's tree holds, the root included; zero for a job that
 /// grows no tree.</param>
+/// <param name="Faults">How many steps a judge rule or score faulted in, each rewound and landing nothing, since the
+/// job was installed or restored.</param>
 public readonly record struct ArenaSearchStatus(
     string Name, bool Running, bool Done, int Token, int Tokens, int Target, int Cells, long Count, long Nodes, int NodesPerStep, long JudgeCost,
     long Allowance, long PeakStepWork, long Work,
     bool HasScore, int Depth, int PassDepth, long BestScore, int BestToken, int BestTarget, int Iteration, int Iterations,
-    int JudgeRules = 0, bool HasOutcome = false, int TreeNodes = 0
+    int JudgeRules = 0, bool HasOutcome = false, int TreeNodes = 0, long Faults = 0
 );
 /// <summary>
 /// Runs a set of search jobs over one <see cref="StateArena"/>: each candidate is a journal scope holding the
@@ -137,6 +139,8 @@ public sealed partial class ArenaSearch {
         }
 
         public int Active { get; set; }
+        // Steps that faulted and landed nothing; a diagnostic, never part of the job's answer.
+        public long Faults;
         public long Alpha { get => Root.Alpha; set => Root.Alpha = value; }
         public long BaseTurn { get => Root.BaseTurn; set => Root.BaseTurn = value; }
         public long Best { get => Root.Best; set => Root.Best = value; }
@@ -516,6 +520,12 @@ public sealed partial class ArenaSearch {
             spent += work.Restart;
         }
         if (job.Running) {
+            // A judge rule or score that faults anywhere in the step decides nothing: the step rewinds and restarts as
+            // a thrown one does, and lands nothing, so the job's last answer stands.
+            var scratch = m_arena.Scratch;
+            var faults = scratch.EnterFaultScope();
+            var fault = ExpressionFault.None;
+
             try {
                 spent += work.Replay(scopes: job.ScopeCount);
                 if (!Replay(job: job)) {
@@ -540,9 +550,18 @@ public sealed partial class ArenaSearch {
                 );
 
                 throw;
+            } finally {
+                fault = scratch.LeaveFaultScope(scope: faults);
             }
 
             Suspend(job: job);
+            if (fault != ExpressionFault.None) {
+                Restart(
+                    job: job,
+                    stamp: jobStamp
+                );
+                job.Faults++;
+            }
         }
 
         job.PeakStepWork = Math.Max(
@@ -611,7 +630,8 @@ public sealed partial class ArenaSearch {
             Iterations: plan.Iterations,
             JudgeRules: job.Judge.RuleCount,
             HasOutcome: (plan.Method == SearchMethod.MonteCarlo),
-            TreeNodes: job.TreeCount
+            TreeNodes: job.TreeCount,
+            Faults: job.Faults
         );
     }
 

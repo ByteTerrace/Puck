@@ -72,7 +72,7 @@ public sealed class ExpressionFunctionLawTests {
     }
     private static string Fixed(double value) => FixedQ4816.FromDouble(value: value).Value.ToString(provider: System.Globalization.CultureInfo.InvariantCulture);
     private static bool TryEval(string text, out long value, CellKind kind = CellKind.Int) =>
-        Rules.RuleExpressions.TryEvaluate(
+        Rules.RuleExpressions.TryEvaluateAlone(
             fault: out _,
             kind: kind,
             program: Compile(

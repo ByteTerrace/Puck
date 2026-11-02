@@ -49,7 +49,7 @@ public static class DocsLinksCommand {
     // that where it names them, so their non-resolution is correct, not a broken citation.
     private static readonly string[] HistoricalCitations = ["src/Puck", "src/Puck.Avatars"];
     // A file a build writes into its own output rather than one the checkout holds: cited by name, never tracked.
-    private static readonly string[] ProducedFileNames = ["dotnet.native.wasm"];
+    private static readonly string[] ProducedFileNames = ["dotnet.native.wasm", "summary.json", "install-intent.json", "folder.json"];
     private static readonly string[] IndexedTrees = ["src", "docs", "tests", "build", "worlds", ".claude/skills"];
     private static readonly Regex MarkdownLink = new(
         options: RegexOptions.Compiled,

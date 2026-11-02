@@ -1057,8 +1057,9 @@ replace interactive browser or GPU qualification.
 
 ## Repository automation
 
-Every repository operation is a verb on the one `puck` root
-(`src/Puck.Cli/PuckRootCommand.cs`). Write automation as a verb, never as a
+Maintained repository automation is a verb on the one `puck` root
+(`src/Puck.Cli/PuckRootCommand.cs`); ordinary Git commands and reading the
+source are normal work, not automation. Write automation as a verb, never as a
 script, and never as inline PowerShell in a workflow. Workflows orchestrate
 `puck` verbs and the bash composite actions under `.github/actions/`, and every
 CI job installs the run's own candidate CLI. Formatting of PR branches is

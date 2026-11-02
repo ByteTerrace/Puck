@@ -38,7 +38,18 @@ public static class WorldPlacementStamper {
                     var builder = new SdfProgramBuilder();
 
                     EmitStatic(builder: builder, creations: definition.Creations, definition: definition, placements: [placement]);
-                    _ = new SdfFieldEvaluator(program: builder.Build());
+
+                    var program = builder.Build();
+                    var frame = (double)new SdfFieldEvaluator(program: program).Frame;
+
+                    // The composed field answers only inside the least of its parts' frames, so a placement its own
+                    // field cannot answer at would refuse every query in the world.
+                    foreach (var instance in program.Instances) {
+                        if ((Math.Abs(value: instance.Center.X) > frame) || (Math.Abs(value: instance.Center.Y) > frame) || (Math.Abs(value: instance.Center.Z) > frame)) {
+                            refusal = $"its field answers only within {frame.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)} of the origin, short of the copy at {instance.Center.ToString(format: null, formatProvider: System.Globalization.CultureInfo.InvariantCulture)}";
+                            break;
+                        }
+                    }
                 } catch (ArgumentException exception) {
                     refusal = exception.Message.ReplaceLineEndings(replacementText: " ");
                 }

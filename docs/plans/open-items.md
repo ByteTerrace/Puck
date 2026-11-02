@@ -2621,6 +2621,14 @@ Owner: debug-world content lane (puck-world, puck-dsl, sdf-authoring) ·
 ordinary, the owner's direction · Next: the windowed look at the Klondike and FreeCell tables
 (`worlds/debug/cardtable.md`), then Spider (step 1).
 
+- [medium] The deal sweep never validates what it installs: `WorldTick.Deals.cs`
+  sets `var applied = true;`, so its "refused as one" branch is dead, and a
+  template that deals an invalid child poisons the whole document; every
+  validated transaction is then refused (the shedding racks did this to the
+  granaries until dealt children carried their template's scale). Validate a
+  deal's children as one install and refuse the deal, not the document.
+  (from: motion-clear)
+
 The owner wants proper card tables in the gallery: physical cards on a table,
 played by sitting at it like the chess, Go, Reversi and Alchemy tables. The
 Klondike table stands north of the Go table in the board game room
@@ -3137,10 +3145,16 @@ brief's priorities ([security review](../development/security-review.md)).
     public routes today), `WorldOperatorAuthority`, `CommandDefinition.Operator`,
     DISC001 over module declarations, the public-surface law,
     `WorldStateDisclosure` deleted. Step 7, the red-team extension.
-- [low] Closing a gate on a fault re-arms an Edge rule after a one-tick fault
-  and fires a decision's `OnNoChoice`; decide whether a fault should hold the
-  previous state instead. `WorldBody.GateOpen` and `MotionGateOpen` are
-  near-copies. (from: statecorr-review)
+- [low] Three consumers still turn an absent expression into a number, which
+  `RuleFact`'s contract says an absence never is: a search job's score reads 0
+  (`src/Puck.State.Search/RuleArenaSearchJudge.cs`, `Score`), a flock affinity
+  reads zero affinity and counts a failure
+  (`src/Puck.World.Server/WorldPopulation.FlockAffinities.cs`,
+  `ReadFlockAffinity`), and a binding whose local is absent is dropped at its
+  sweep's end, re-arming an Edge rule
+  (`src/Puck.State.Rules/Evaluation/RuleEvaluator.cs`, `HoldOnFault`). Faults
+  on all three are held or refused; decide what each absence means. (from:
+  rule-faults-2)
 - [low] `worlds/hosting/granaries.extensions.json` grants its `console` client
   `mutate` over `section:state` to write six feed rows; scope it to those rows if
   the extension grant vocabulary allows. (from: the lead, landing granaries)

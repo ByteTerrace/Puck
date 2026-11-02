@@ -837,7 +837,7 @@ public sealed class ExpressionIrLawTests {
                 program: ExpressionProgram.Parse(text: text)
             );
         public long Evaluate(ExpressionProgram program, CellKind kind = CellKind.Int) {
-            Assert.True(condition: Rules.RuleExpressions.TryEvaluate(
+            Assert.True(condition: Rules.RuleExpressions.TryEvaluateAlone(
                 fault: out var fault,
                 kind: kind,
                 program: Compile(
