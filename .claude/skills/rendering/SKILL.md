@@ -254,11 +254,17 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   argument buffer through its pushed word base plus `DrawIndex`
   (`sdfMeshRasterIdentity`); first instance stays zero. When
   `CanDrawIndirectCount` is false, the recorder issues those same initialized
-  slots individually with `vkCmdDrawIndirect`, including empty rejected slots;
+  slots in one fixed `vkCmdDrawIndirect` when multi-draw is available; otherwise
+  it advances the word base for each individual slot, including empty rejected slots;
   no raster CPU cull or level path remains. Keep command-to-vertex read barriers and
   preserve level state when buffers grow. Compute binds the read-only command
   alias to the dummy, while raster binds its real command buffer; binding it
   alongside the compute writer would demand conflicting resource states.
+  `SdfMeshCull.Keeps` remains a live host query: `WorldCreationInstances.Rates.Shown`
+  uses it to keep an off-camera body's pose updating when its shadow is visible.
+  It does not select raster arguments. Include that downstream World consumer
+  when checking references; the SdfVm test project's dependency closure alone
+  cannot establish that a helper is unused.
 - **Reprojection interpolates displacement.** `sdfPreviousPoint` in
   `frame/sdf-reprojection.hlsli` adds the triangle's weighted vertex movements
   to the current hit. Unchanged vertices return that hit exactly before any
