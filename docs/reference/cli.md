@@ -102,13 +102,14 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck determinism`](#puck-determinismcross-host-determinism-attestation) | boots the scenarios of a determinism manifest headless in-process and records per-tick, per-system state hashes and document-level hashes into a strict stream; `determinism compare` names the first tick and system, or document hash, where two hosts' streams differ. |
 | [`puck disclosure`](#puck-disclosurethe-noninterference-harness) | boots one headless world per variant of a world's `<stem>.disclosure.json` fixture (and the first again as the control), drives the same non-operator principals with the same scripted and seeded inputs in each, and names every principal whose ordered stream of received events differs, where it first differs and at which doors. |
 | [`puck docs`](#puck-docsthe-documentation-family) | the documentation family: `build` stages the website reference, `links` checks relative links and cited repository paths, and `citations` checks the console-verb tokens skills and XML docs cite, including a live `Puck.World` console boot. |
+| [`puck evals`](#puck-evalsskill-evaluation) | the skill evaluation family over `claude plugin eval`: `evals run` runs a skill's suite on a frozen worktree with the rules-file fixture, `evals compare` compares two results on the comparable score, and `evals graders` lists the graders to hand-label. |
 | [`puck embed`](#the-puck-dsl-verbs) | resolves authored `embed(...)` text into committed `.embeddings.json` lock files, or probes cosine similarity rankings. |
 | [`puck firmware`](#puck-firmwarebundled-boot-images) | rebuilds or verifies the HGB boot ROMs and AGB BIOS from their maintained sources. |
 | [`puck font-atlas`](#puck-font-atlasmanaged-sdf-font-artifacts) | generates loader-compatible SDF metadata and pixels with Puck's production managed font path. |
 | [`puck format`](#puck-formatthe-one-formatter) | formats every source kind Puck owns, C# and `.puck`, to its one canonical form. |
 | [`puck gate`](#puck-gatethe-change-scoped-gate) | the change-scoped gate for a branch: checks the lock files with a locked restore, builds the solution and the file app, copies the CLI it built, and runs the affected suites and the repository checks against the merge base with the target; `--gpu` adds canaries, parity, device suites, all recorded counters workloads and citations; `--record` refreshes coverage after a green GPU qualification. |
 | [`puck host`](#puck-host-loadadmission-lines-for-the-machine) | the machine-admission family: `host load` reports the machine's CPU, memory, disk and GPU busyness as `GPU busy`/`GPU idle`, `PRESSURE`, `CAPACITY` and `LOADED` lines an agent admits or holds work by; `--watch` streams each line when due. |
-| [`puck landing`](#puck-landinggit-loss-check) | refuses a commit that silently drops content its author never worked from. |
+| [`puck landing`](#puck-landingthe-leads-landing-checks) | the lead's checks before landing a lane: `landing loss` refuses a commit that silently drops content its author never worked from, and `landing handback` checks a lane branch's commits against the hand-back contract (the `Brief:` line, subjects, trailers, plumbing and docs links). |
 | [`puck lanes`](#puck-lanesone-line-per-worktree) | prints one line per worktree: branch, commits ahead, changes, last commit, newest write, log, lease and stall state; `--watch` prints only the changes. |
 | [`puck laws`](#puck-laws-provea-law-against-its-fix) | `laws prove` shows, in an isolated proof tree, that a law fails with its fix withheld and passes with it, and prints the evidence for a commit body. |
 | [`puck lease`](#puck-leaseexclusive-machine-work) | run a command while exclusively holding the shared GPU, heavy-work or World-build resource, or all three once the machine is idle (`lease quiet`, the settle window for timing measurements); `lease list` prints each lease's holder and queue. |
@@ -1456,9 +1457,12 @@ dotnet src/Puck.Cli/bin/Release/net11.0/Puck.Cli.dll canary self-update
 
 ---
 
-## `puck landing`—git-loss check
+## `puck landing`—the lead's landing checks
 
-`puck landing --against <tip> --base <authoring-base>` refuses a commit that
+The lead runs two checks before landing a lane. Both read Git state only, build
+nothing and boot no World.
+
+`puck landing loss --against <tip> --base <authoring-base>` refuses a commit that
 drops content its author never worked from — the shape a `git reset --soft
 <tip>` before a squash produces, which re-parents the author's own tree onto
 a newer tip and silently reverts everything that tip added. It compares the
@@ -1472,9 +1476,29 @@ the same reason.
 
 Preserve the authoring base across integration merges. Merge the integration
 tip and inspect deleted content; reconstruct a re-parented tree from the
-intended change instead of guessing a new base. The verb reads Git state only,
-builds nothing and boots no World. Exit codes: 0 deletions accounted for;
-1 unaccounted deletions; 2 invalid input or Git refusal.
+intended change instead of guessing a new base. Exit codes: 0 deletions
+accounted for; 1 unaccounted deletions; 2 invalid input or Git refusal.
+
+`puck landing handback --against <integration tip> [--base <rev>] [--checkout <lane worktree>]`
+checks the commits a lane wrote against the hand-back contract the
+[`delegate` skill](../../.claude/skills/delegate/SKILL.md#finish) states. The
+lane's commits are the first-parent chain from the checkout's HEAD back to the
+integration tip and the branch's creation point (its reflog's creation entry,
+or `--base`), less what a fast-forward or reset brought onto that chain. A merge
+of the integration tip keeps the lane as first parent, so what it brings in is
+not judged. It prints one verdict line per leg:
+
+| Leg | Passes when |
+|---|---|
+| `brief` | HEAD carries `Brief: <id> done` or `Brief: <id> blocked: <question>`, and no other lane commit carries a `Brief:` line. |
+| `subjects` | Every non-merge lane commit's subject is a lowercase `area: sentence`. |
+| `coauthor` | No lane commit carries a `Co-Authored-By` trailer. |
+| `plumbing` | Every lane commit is the new value of a `commit`, `merge`, `cherry-pick` or `revert` entry in the branch reflog, and none records the empty tree. A branch with no reflog fails the leg as unverifiable. |
+| `docs` | The checkout is clean, so its files are HEAD's, and `puck docs links` passes on the whole corpus there. |
+
+A lane runs it after its final commit and amends that commit to fix a finding.
+Exit codes: 0 every leg passed; 1 a leg failed; 2 invalid input or a Git
+refusal.
 
 ---
 
@@ -2628,6 +2652,40 @@ Exit codes: 0 every citation resolved, 1 unresolved citations (each named on
 standard output), 2 usage error, no repository root, the enumeration
 boot/build refused, or an enumeration provably incomplete, with nothing
 reported against it.
+
+---
+
+## `puck evals`—skill evaluation
+
+The family the [skill evaluation procedure](../development/documentation.md#evaluate-an-agent-skill)
+runs on. Each verb's `--help` holds its full contract.
+
+- `puck evals run <skill> [--cases <glob>] [--tag <tag>...] [--revision <rev>] [--model <id>] [--judge <id>] [--runs n] [--ablation with-without|none] [--max-cost-usd x] [-j n] [--dry-run]`
+  checks `<rev>` (default HEAD) out as a detached worktree, copies HEAD's
+  `evals/` into it when `<rev>` is older, adds the `puck-rules/` fixture
+  (HEAD's `AGENTS.md`, and the delegate skill for a skill a lane loads) to
+  every case through `case.yaml` `context.add_dirs`, and runs
+  `claude plugin eval` on that tree's skill with full model IDs and a judge no
+  weaker than the model. The result, report, `run.json` manifest and each run's
+  trace go under `.claude/skills/<skill>/evals/results/<stamp>/`, and the
+  worktree is removed. `--dry-run` prints the plan and the `claude` command
+  line and creates nothing. A lane is refused this verb, except `--dry-run`
+  and help, by the session-launch hook. Exit codes: 0 every run completed;
+  1 a load or API error, or a partial run; 2 invalid input or a refusal;
+  130 interrupted.
+- `puck evals compare <a.json> <b.json> [--a-arm with|without] [--b-arm with|without]`
+  recomputes each run's score with activation graders left out on both sides
+  and only executed graders counted, leaves out and lists runs that reached
+  `max_turns`, errored, were aborted or had judge graders skipped, and
+  reports regression cases by pass^k and capability cases by mean and per-run
+  vector, marking a difference real when it exceeds one grader's share and the
+  vectors do not overlap. Exit codes: 0 compared; 1 a regression case
+  regressed; 2 a document could not be read.
+- `puck evals graders <result.json> [--arm with|without] [--evidence-chars n]`
+  lists every comparable grader that fails at least one executed run, with its
+  rubric and each run's verdict, votes, explanation, trace and judged excerpt,
+  as the hand-labelling work list. Exit codes: 0 listed; 2 the document could
+  not be read.
 
 ---
 

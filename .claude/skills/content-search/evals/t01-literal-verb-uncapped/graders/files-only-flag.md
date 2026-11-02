@@ -2,7 +2,6 @@
 type: regex
 weight: 1
 match: contains
-flags: i
 ---
 
-\s-l\b
+search\b[^\n]*[ \t](-l|--files-with-matches)\b
