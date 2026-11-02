@@ -43,4 +43,59 @@ internal static partial class Oracles {
 
         return (((uint)wideX), ((uint)wideY), ((uint)wideZ));
     }
+    /// <summary>The quintic fade <c>6t⁵ − 15t⁴ + 10t³</c> at a Q16 fraction, formed exactly in <see cref="BigInteger"/>
+    /// and rounded once to nearest, ties to even.</summary>
+    /// <param name="raw">The fraction's raw, <c>t·2¹⁶</c>.</param>
+    /// <returns>The rounded fade's raw.</returns>
+    public static long QuinticFadeReference(long raw) {
+        BigInteger t = raw;
+        var exact = (((6 * BigInteger.Pow(value: t, exponent: 5)) - ((15 * BigInteger.Pow(value: t, exponent: 4)) << 16)) + ((10 * BigInteger.Pow(value: t, exponent: 3)) << 32));
+        var quotient = BigInteger.DivRem(dividend: exact, divisor: (BigInteger.One << 64), remainder: out var remainder);
+        var twice = (remainder << 1);
+        var divisor = (BigInteger.One << 64);
+
+        if ((twice > divisor) || ((twice == divisor) && !quotient.IsEven)) {
+            quotient += 1;
+        }
+
+        return ((long)quotient);
+    }
+    /// <summary>The exact trilinear blend <see cref="Pcg3dLatticeNoise.ValueNoise3"/> rounds: the eight corners' fractions
+    /// from <see cref="Pcg3dReference"/> weighed by <see cref="QuinticFadeReference"/>'s fades at the point's fractions,
+    /// in <see cref="BigInteger"/>, without rounding.</summary>
+    /// <param name="q">The point in lattice cells.</param>
+    /// <param name="seedX">The seed each corner's X lane is keyed with.</param>
+    /// <param name="seedY">The seed each corner's Y lane is keyed with.</param>
+    /// <param name="seedZ">The seed each corner's Z lane is keyed with.</param>
+    /// <returns>The blend in raws times <c>2⁴⁸</c>.</returns>
+    public static BigInteger ValueNoise3ExactBlend(FixedVector3 q, uint seedX, uint seedY, uint seedZ) {
+        var cells = new[] { (q.X.Value >> 16), (q.Y.Value >> 16), (q.Z.Value >> 16) };
+        var fades = new[] {
+            ((BigInteger)QuinticFadeReference(raw: (q.X.Value - (cells[0] << 16)))),
+            ((BigInteger)QuinticFadeReference(raw: (q.Y.Value - (cells[1] << 16)))),
+            ((BigInteger)QuinticFadeReference(raw: (q.Z.Value - (cells[2] << 16)))),
+        };
+        var one = (BigInteger.One << 16);
+        var blend = BigInteger.Zero;
+
+        for (var corner = 0; (corner < 8); corner++) {
+            var weight = BigInteger.One;
+            var offsets = new long[3];
+
+            for (var axis = 0; (axis < 3); axis++) {
+                offsets[axis] = ((corner >> axis) & 1);
+                weight *= ((offsets[axis] == 0) ? (one - fades[axis]) : fades[axis]);
+            }
+
+            var hash = Pcg3dReference(
+                x: (unchecked((uint)(cells[0] + offsets[0])) ^ seedX),
+                y: (unchecked((uint)(cells[1] + offsets[1])) ^ seedY),
+                z: (unchecked((uint)(cells[2] + offsets[2])) ^ seedZ)
+            );
+
+            blend += (weight * (hash.X >> 16));
+        }
+
+        return blend;
+    }
 }
