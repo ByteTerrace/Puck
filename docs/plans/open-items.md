@@ -2871,8 +2871,9 @@ minutes of GPU) when no lane holds the GPU, compared stop by stop, with
   windowed leg with the sun held, `--no-headless --no-scenarios`): per backend,
   `settle-2-sweep-<backend>-main/report.json` (74 stops: every stop but
   `night-field`) and `settle-2-sweep-<backend>-night/report.json`
-  (`night-field` alone), in the settle lane's scratch; the landing commit's
-  message names the absolute path. The headless leg and the scenarios last ran
+  (`night-field` alone), kept on the lead machine under
+  `%LOCALAPPDATA%/Puck/sweep-baselines/settle-2/` (outside the repository,
+  like any derived product; a later window replaces it). The headless leg and the scenarios last ran
   whole in settle-1's owned Direct3D 12 sweep (tools clean, scenarios clean).
   The next window reproduces the split and compares each part with its own
   counterpart: boot `--paused --control`, hold the sun
