@@ -15,6 +15,8 @@ public static class ScanCommand {
         ("comment-smells", static () => new CommentSmellScan()),
         ("locks", static () => new LockAnalyzer()),
         ("clones", static () => new CloneAnalyzer()),
+        ("identity-counters", static () => new IdentityCounterAnalyzer()),
+        ("exact-keys", static () => new ExactKeyAnalyzer()),
     ];
 
     // The requested analyzers in canonical order, all of them when --only is absent, or null (with an
@@ -59,7 +61,7 @@ public static class ScanCommand {
 
         return known.Where(predicate: requested.Contains).ToList();
     }
-    private static int Run(bool grouped, int maxPerChunk, int minStatements, int minTokens, bool noBlocks, string? only, string? outDirectory, string root) {
+    private static int Run(bool grouped, int maxPerChunk, int minExpressionTokens, int minStatements, int minTokens, bool noBlocks, string? only, string? outDirectory, string root) {
         var selected = ResolveSelection(only: only);
 
         if (selected is null) {
@@ -81,6 +83,7 @@ public static class ScanCommand {
         var options = ScanOptions.Create(
             grouped: grouped,
             maxPerChunk: maxPerChunk,
+            minExpressionTokens: minExpressionTokens,
             minStatements: minStatements,
             minTokens: minTokens,
             noBlocks: noBlocks,
@@ -120,6 +123,7 @@ public static class ScanCommand {
     public static Command Create() {
         var groupedOption = new Option<bool>(name: "--grouped") { Description = "Also write <name>.grouped.json, the per-file work list." };
         var maxPerChunkOption = new Option<int>(name: "--max-per-chunk") { DefaultValueFactory = _ => ScanOptions.DefaultMaxPerChunk, Description = "Entries per grouped chunk." };
+        var minExpressionTokensOption = new Option<int>(name: "--min-expression-tokens") { DefaultValueFactory = _ => ScanOptions.DefaultMinExpressionTokens, Description = "clones: minimum token count of a cloned expression; 0 skips the expression pass." };
         var minStatementsOption = new Option<int>(name: "--min-statements") { DefaultValueFactory = _ => ScanOptions.DefaultMinStatements, Description = "clones: minimum statement count." };
         var minTokensOption = new Option<int>(name: "--min-tokens") { DefaultValueFactory = _ => ScanOptions.DefaultMinTokens, Description = "clones: minimum token count." };
         var noBlocksOption = new Option<bool>(name: "--no-blocks") { Description = "clones: skip the nested-block pass." };
@@ -127,11 +131,12 @@ public static class ScanCommand {
         var outputOption = CliOptions.Output(description: "The directory each analyzer's <name>.jsonl is written to (default <repo>/artifacts/scan).");
         var rootArgument = new Argument<string>(name: "root") { Arity = ArgumentArity.ZeroOrOne, DefaultValueFactory = _ => "src", Description = "The tree to parse, resolved against the working directory." };
         var command = new Command(
-            description: "Sweep the parsed C# tree for comments, comment smells, locks, and clones.",
+            description: "Sweep the parsed C# tree for comments, comment smells, locks, clones, identity counters, and exact cache keys.",
             name: "scan"
         ) {
             groupedOption,
             maxPerChunkOption,
+            minExpressionTokensOption,
             minStatementsOption,
             minTokensOption,
             noBlocksOption,
@@ -153,6 +158,7 @@ public static class ScanCommand {
         command.SetAction(action: parseResult => Run(
             grouped: parseResult.GetValue(option: groupedOption),
             maxPerChunk: parseResult.GetRequiredValue(option: maxPerChunkOption),
+            minExpressionTokens: parseResult.GetRequiredValue(option: minExpressionTokensOption),
             minStatements: parseResult.GetRequiredValue(option: minStatementsOption),
             minTokens: parseResult.GetRequiredValue(option: minTokensOption),
             noBlocks: parseResult.GetValue(option: noBlocksOption),

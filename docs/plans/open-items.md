@@ -610,10 +610,10 @@ system can take, from `dotnet-trace` thread-time samples of the frame thread
   the sweeps through `WorldColliderSet.ResolveSweep` (`WorldColliderSet.cs:1086`)
   and `WorldSolidField.ResolveSweep` (`WorldSolidField.cs:333`), and the step's
   `CaptureMotion` (`WorldBody.SweepRefusal.cs:71`, 0.4 to 0.5 ms a tick alone).
-  The rule VM, `RuleEvaluator.Evaluate` (`RuleEvaluator.cs:313`): 1.77 / 1.66 ms
-  (28 / 25 %), of which gate and binding expression reads (`GateOpen`, `:624`;
+  The rule VM, `RuleEvaluator.Evaluate` (`RuleEvaluator.cs:314`): 1.77 / 1.66 ms
+  (28 / 25 %), of which gate and binding expression reads (`GateOpen`, `:629`;
   `RuleExpressions.Run`) are about 0.7 ms, firings into the transaction
-  (`FireEffects`, `RuleEvaluator.Effects.cs:47`) about 0.3 ms and latch
+  (`FireEffects`, `RuleEvaluator.Effects.cs:48`) about 0.3 ms and latch
   scheduling (dictionary lookups, `RuleLatch.EndSweep`, key walks) the rest.
   The portal crossing scan, per seat and face
   (`WorldInstanceHost.Adjacency.cs:294-434`): 1.17 / 1.11 ms (19 / 16 %). Snapshot emission (`WorldTick.EmitSnapshot`,
@@ -1780,6 +1780,56 @@ Code that grew a second implementation (AGENTS.md rule 7) or costs velocity:
   `VulkanGroupedBindingLawTests.cs:206`, `tests/Puck.World.Tests/SharedFenceLawTests.cs:350`), while `IAllocator`'s documentation names a
   `NativeMemory`-backed implementation that `src` does not have. One shared allocator
   serves them, and `GuardedAllocator` can wrap it where a suite wants misuse checks.
+  `puck scan --only clones` finds them as one `type` cluster.
+- Duplicates the clone scan's type and expression passes found (the
+  [hazards page](../development/hazards.md#two-copies-of-one-computation) says
+  how the passes work; paths under `src/` unless named). One implementation each
+  (from: roslyn-hazards):
+  - [low] The oriented box's world half-extents (the absolute rotation times the
+    half-size) three times, twice fixed and once float:
+    `Puck.Physics/FixedStaticCollider.cs:221`,
+    `Puck.SdfVm/SdfMeshPathBake.Residency.cs:355`,
+    `Puck.World.Authoring/Authoring/CreationStampEmitter.cs:1602`.
+  - [low] A quaternion from a right/up/forward basis through a `Matrix4x4`,
+    three times: `Puck.SignedDistance/SdfProgramBuilder.Text.cs:225`,
+    `Puck.World.Client/WorldFramePresenter.cs:951`,
+    `Puck.World.Client/WorldScreenStamper.cs:23`.
+  - [low] The bake's tetrahedral gradient taps, written out in
+    `Puck.Cli.Worlds/Mesh/MeshCpuBake.cs:30` and four `SdfVm` test helpers
+    (`tests/Puck.SdfVm.Tests/SdfFieldSliceLawTests.cs:33`,
+    `SdfMeshPathBakeLawTests.Settle.cs:204`, `SdfMeshPathBakeLawTests.cs:579`,
+    `:617`); the sample position beside them is already one
+    `SdfMeshPathBake.SampleAt`. Check the HLSL tap set against the same constant.
+  - [low] `FixedQ3232` and `FixedQ4816` carry the same generic-math body
+    (`Puck.Maths/FixedPoint/FixedQ3232.GenericMath.cs:6`,
+    `FixedQ4816.GenericMath.cs:6`, about 1,000 tokens each).
+  - [low] JSON converters written once per type: `BindableDirectionJsonConverter`
+    and two siblings (`Puck.World.Schema/BindableValue.cs:627`, `:682`, `:737`),
+    `DocumentVector2JsonConverter` and two siblings
+    (`Puck.Assets/Documents/DocumentSpatialValues.cs:253`, `:278`, `:303`), six
+    enum converters from `WorldBackendPreferenceJsonConverter`
+    (`Puck.World.Schema/WorldDefinitionSerialization.cs:964`).
+  - [low] Three work-kind registries with one body (`Puck.State.Rules/Evaluation/RuleWorkKinds.cs:10`,
+    `Puck.State.Search/SearchWorkKinds.cs:11`, `Puck.State/Arena/ArenaWork.cs:10`), two GPU
+    work registrations (`Puck.Abstractions/Gpu/Counters/GpuDeviceMemoryWorkRegistration.cs:12`,
+    `GpuPipelineCacheWorkRegistration.cs:12`), and five overlay stores
+    (`Puck.Overlays/BindingBarStore.cs:135`, `CursorStore.cs:51`, `HudStore.cs:173`,
+    `MarkerStore.cs:64`, `WheelStore.cs:91`).
+  - [low] Test helpers pasted instead of shared (`tests/Shared` holds the one
+    copy): `FixedAuthority` eighteen times (first `tests/Puck.Mcp.Tests/RemoteMcpFixture.cs:474`),
+    `NoNeighbours` ten times (first `tests/Puck.World.Client.Tests/PrototypeMeshLawTests.cs:382`),
+    a `Vector` helper sixteen times in fourteen files (first
+    `tests/Puck.Maths.Tests/MoveTowardAndEmitterClaims.cs:82`), `Position` twelve
+    times (first `tests/Puck.SignedDistance.Tests/BakedWorldQueryTests.cs:86`),
+    `Space` seventeen times (first `tests/Puck.Maths.Tests/Subjects.FixedVectors.cs:13`),
+    and a `FaultingDevice` five times (first
+    `tests/Puck.SdfVm.Tests/SdfWorldResidencyBuildRefusalLawTests.cs:339`).
+  - [low] The camera clearance's and the effector solver's answer rings are one
+    mechanism written twice (`Puck.World.Client/WorldCameraClearance.cs:128-165`,
+    `Puck.World.Client/WorldEffectorSolver.cs:242-280`), and both key on exact
+    float bits, so a moving query never hits
+    ([hazards](../development/hazards.md#a-cache-that-cannot-help)); quantize the
+    key or delete the rings once one counter shows their hit rate.
 - Make `GpuRegion.Grow` the only way to grow a GPU region, and enforce the uniform
   view limit there (one lane):
   - [low] Growing the program region on `world.reload` waits for the device to go
@@ -3716,6 +3766,17 @@ ordinary · Next: new content and art on the owner's call.
 ### Agent tooling and skills
 
 Owner: the lead · ordinary · Next: the Monitor hook check.
+
+- [low] The hazard detectors' follow-ups ([hazards](../development/hazards.md)):
+  turn STALE001 into an error once `RuleEvaluator.EvaluateOnce` and
+  `RunFixpoint` stop reading a captured scratch and arena (the rule-faults
+  plan's step 4 removes the first); mark the next replaceable family when one
+  appears (a GPU device lost and recreated is the likely one); and triage the
+  rest of `puck scan --only clones` below the heaviest thirty clusters of `src`
+  and `tests`, which this pass did not read. A C# and HLSL formula pair has no
+  detector: the two languages share no tree, so an agreement law per pair
+  (evaluate both on the same inputs) is the check that would hold it.
+  (from: roslyn-hazards)
 
 - [medium] The lead session's own `puck` MCP server may run a stale CLI: the
   project root's build is never checked against its HEAD (the fallback now is,

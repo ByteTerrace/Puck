@@ -26,6 +26,7 @@ public interface IRuleOwner {
     /// <param name="applied">Whether any effect moved the arena.</param>
     /// <returns><see langword="true"/> when the host evaluated the rule; <see langword="false"/> hands it to the
     /// library's own iterate-or-once evaluation.</returns>
+    [Replaces(root: typeof(StateArena))]
     bool TryEvaluateOwn(RuleEvaluator evaluator, CompiledRule rule, RuleLatch latch, ulong stepTicks, out bool applied);
 }
 /// <summary>Evaluates compiled rules over a host: gates in document order, edge latching per binding, bindings
@@ -319,6 +320,7 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
     /// <param name="latch">The family's edge latch.</param>
     /// <param name="stepTicks">How many engine ticks the simulation step spans.</param>
     /// <returns><see langword="true"/> when any firing moved the arena.</returns>
+    [Replaces(root: typeof(StateArena))]
     public bool Evaluate(CompiledRule[] rules, RuleLatch latch, ulong stepTicks) {
         ArgumentNullException.ThrowIfNull(argument: latch);
         ArgumentNullException.ThrowIfNull(argument: rules);
@@ -341,6 +343,7 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
     /// <param name="latch">The family's edge latch.</param>
     /// <param name="stepTicks">How many engine ticks the simulation step spans.</param>
     /// <returns><see langword="true"/> when any firing moved the arena.</returns>
+    [Replaces(root: typeof(StateArena))]
     public bool EvaluateRule(CompiledRule rule, RuleLatch latch, ulong stepTicks) {
         _ = EvaluateRule(
             applied: out var applied,
@@ -358,6 +361,7 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
     /// <param name="stepTicks">How many engine ticks the simulation step spans.</param>
     /// <param name="applied">Whether any firing moved the arena.</param>
     /// <returns>The aggregate outcome.</returns>
+    [Replaces(root: typeof(StateArena))]
     public RuleOutcome EvaluateRule(CompiledRule rule, RuleLatch latch, ulong stepTicks, out bool applied) {
         ArgumentNullException.ThrowIfNull(argument: latch);
         ArgumentNullException.ThrowIfNull(argument: rule);
@@ -495,6 +499,7 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
     /// <param name="stepTicks">How many engine ticks the simulation step spans.</param>
     /// <param name="applied">Whether the firing moved the arena or emitted through the host.</param>
     /// <returns>What the evaluation did.</returns>
+    [Replaces(root: typeof(StateArena))]
     public RuleOutcome EvaluateOnce(CompiledRule rule, RuleLatch latch, RuleLatch.RuleState state, LatchKey binding, ulong stepTicks, out bool applied) {
         var scratch = m_host.Scratch;
         var faults = scratch.EnterFaultScope();

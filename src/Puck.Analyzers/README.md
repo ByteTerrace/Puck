@@ -2,8 +2,8 @@
 
 Puck.Analyzers provides the Roslyn analyzers used when building the repository.
 It checks strict-enum usage, unmanaged function-pointer calls, environment
-reads, any-address listeners, the GPU trait on test classes, and
-`InternalsVisibleTo` grants. It is a
+reads, any-address listeners, the GPU trait on test classes, references read
+after their replacement, and `InternalsVisibleTo` grants. It is a
 compiler extension, not an engine runtime dependency or a published package.
 
 ## Usage
@@ -58,6 +58,26 @@ mentions a type parameter anywhere but behind a pointer, because that call throw
 `MarshalDirectiveException` at run time. The
 [code conventions](../../docs/development/contributing.md#code-and-documentation-conventions)
 state the rule.
+
+STALE001 warns where a local or parameter of a `[Replaceable]` type (the state
+arena, and the scratch and journal replaced with it) is read after a call that
+can replace it, on a path of the method's control flow graph that writes no new
+value to it: the reference names the old instance. A call replaces when its
+member, or a member it overrides or implements, carries
+`[Replaces(typeof(Root))]` (or `typeof(object)`, from an assembly that cannot
+see the root), or when a method of the same compilation reaches such a call. A
+variable handed to the call is the replacement and is exempt, and a test
+assembly is not held to the rule. The marks are `build/ReplacementAttributes.cs`,
+linked into every project like the GPU mark. STALE002 keeps them complete across
+assemblies: a member that reaches a replacement and is reached by dispatch has
+the mark on the member it overrides or implements, and a public member of a type
+that hands out the root carries it. STALE003 holds a method that assigns a field
+a property serves (the live pointer, as `WorldServer.Arena` serves `m_arena`)
+outside a constructor to the mark. A replacement reached through a delegate, an
+event, reflection, a constructor or a framework interface, and a capture held in
+another object's field, are outside what the rule sees. STALE001 is a warning,
+kept out of `TreatWarningsAsErrors`, while its open findings stand
+([hazards](../../docs/development/hazards.md#a-reference-captured-across-a-replacement)).
 
 IVT001 refuses every `InternalsVisibleTo` grant, a test assembly included. It
 reads the compiled assembly's attributes, so it sees an

@@ -9,6 +9,7 @@ public sealed partial class WorldServer {
     public WorldPersistence Persistence => m_persistence;
 
     /// <inheritdoc cref="WorldPersistence.FromCheckpoint"/>
+    [Replaces(root: typeof(StateArena))]
     public static (WorldServer Server, WorldPopulation Population) FromCheckpoint(WorldAuthorityCheckpoint checkpoint, WorldOwnedWorlds profiles, IWorldMachineHost machines, string instanceIdentity, IWorldAdjacencySource? adjacencies = null, string? documentDirectory = null, bool restoreOwnedIdentities = true, string? authorityIdentity = null) =>
         WorldPersistence.FromCheckpoint(
             adjacencies: adjacencies,
@@ -31,8 +32,10 @@ public sealed partial class WorldServer {
             principal: principal
         );
     /// <inheritdoc cref="WorldPersistence.RestoreCheckpoint"/>
+    [Replaces(root: typeof(StateArena))]
     public void RestoreCheckpoint(WorldAuthorityCheckpoint checkpoint) => m_persistence.RestoreCheckpoint(checkpoint: checkpoint);
     /// <inheritdoc cref="WorldPersistence.TryApplyJournalTailMutation"/>
+    [Replaces(root: typeof(StateArena))]
     public bool TryApplyJournalTailMutation(WorldMutation mutation, ulong tick, ulong engineTick) =>
         m_persistence.TryApplyJournalTailMutation(
             engineTick: engineTick,

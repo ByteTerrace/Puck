@@ -129,7 +129,7 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck references`](#puck-referencessemantic-symbol-queries) | semantic symbol queries: references, implementers, overrides, derived types. |
 | [`puck refusals`](#puck-refusalsrefusal-census) | the source census of the refusals `world.refusals` lists, which the refusal-catalog-census canary holds the running World's scan to. |
 | [`puck registry`](#puck-registryworld-name-registry) | the world name registry `docs/world-name-registry.md`, generated from `WorldNameRegistry` over the document model and checked against it. |
-| [`puck scan`](#puck-scansource-sweep) | source sweep over the parsed tree: comments, comment smells, synchronization sites, clones. |
+| [`puck scan`](#puck-scansource-sweep) | source sweep over the parsed tree: comments, comment smells, synchronization sites, clones, identity counters, exact cache keys. |
 | [`puck schema`](#puck-schemaworlddef-json-schema) | the generated JSON Schema for `puck.world.definition.v1` and the dashboard portal's TypeScript types derived from it, checked and regenerated. |
 | [`puck search`](#puck-searchcontent-search) | ripgrep-shaped content search over a linear-time symbolic-derivatives regex engine ([RE#](../../ACKNOWLEDGMENTS.md)). |
 | [`puck shaders`](#puck-shadersshader-compilation) | `shaders cache prune` removes shader cache entries no compile has used within a bound; `shaders collect` and `shaders compare` hand one host's SPIR-V to another and compare it byte for byte; `shaders compile` compiles a source stage; `shaders generate` writes or checks the HLSL includes generated from the C# model, every generated shader interface among them; `shaders interface` prints or writes the frame-block declarations a pipeline or engine package reads; `shaders package` writes a pipeline's package with its binaries; `shaders pipeline` validates or compiles connected passes, or loads a package, for both GPU backends. |
@@ -3336,9 +3336,10 @@ runs the selected analyzers over that one shared corpus, so a full sweep parses
 the tree a single time rather than once per analyzer.
 
 ```text
-puck scan [<root=src>] [--only comments,comment-smells,locks,clones]
+puck scan [<root=src>] [--only comments,comment-smells,locks,clones,identity-counters,exact-keys]
           [--output <dir>] [--grouped] [--max-per-chunk N]
-          [--min-tokens N] [--min-statements N] [--no-blocks] [-h]
+          [--min-tokens N] [--min-statements N] [--min-expression-tokens N]
+          [--no-blocks] [-h]
 ```
 
 | Analyzer | Emits |
@@ -3346,7 +3347,12 @@ puck scan [<root=src>] [--only comments,comment-smells,locks,clones]
 | `comments` | every non-XML inline comment (`//` and `/* */`). |
 | `comment-smells` | those comments bucketed by weakness (sync-coupling / debt-marker / banner-divider / commented-out-code / narrative-history / dead-provenance / unclassified), plus each cross-artifact referent (a shader file name or an `UPPER_SNAKE` define) tagged resolved or dangling. |
 | `locks` | synchronization sites, kind-tagged: `lock` statements, lock-primitive declarations, `Monitor.*`/`Interlocked.*` calls, `[MethodImpl(Synchronized)]`. |
-| `clones` | structurally identical callable bodies and nested blocks, Type-1/Type-2 fingerprinted; gated by `--min-tokens`/`--min-statements`, and `--no-blocks` drops the block pass. |
+| `clones` | structurally identical code, Type-1/Type-2 fingerprinted, in four passes that each leave what an earlier one holds: whole type bodies (a helper type pasted into several files), callable bodies, nested blocks of at least `--min-statements` statements, and outermost expressions of at least `--min-expression-tokens` tokens (a formula copied into callers whose statements differ; `0` skips the pass). `--min-tokens` gates the first three, and `--no-blocks` drops the block pass. |
+| `identity-counters` | integer fields of the simulation projects (`Puck.State*`, `Puck.World.Server`, `Puck.World.Schema`) incremented to mint an identity (`mint`: the increment's value is used; `bump`: a statement increment of a field named for identity) that no checkpoint, snapshot or codec member of the same type mentions. |
+| `exact-keys` | exact comparisons of continuous inputs where a cache or memo decides: a key type (named as one, or a dictionary's or set's key) comparing float, vector or fixed-point members exactly (`key-type`), an equality of two float bit patterns (`bit-equality`), and an `==` against a remembered continuous field (`cached-compare`). |
+
+The [hazards page](../development/hazards.md) says which recurring defect each
+analyzer looks for and how its findings are triaged.
 
 ### Output modes
 

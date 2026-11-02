@@ -6,6 +6,9 @@ deploying Puck.
 - [Contributing to Puck](contributing.md) explains how to set up a machine,
   find code, change world documents, run the relevant verification commands,
   and account for hardware and toolchain constraints.
+- [Recurring hazards](hazards.md) names the code shapes most review findings
+  come from, with real instances, the fix that closes each, and the analyzer or
+  `puck scan` heuristic that detects it.
 - [Writing documentation](documentation.md) describes the shared prose, naming,
   navigation, README ownership, and example conventions.
 - [Security review](security-review.md) gives an external researcher the context,

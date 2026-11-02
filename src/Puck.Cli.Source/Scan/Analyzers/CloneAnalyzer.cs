@@ -10,13 +10,18 @@ using Puck.Cli.Source;
 namespace Puck.Cli.Scan.Analyzers;
 
 // The duplicate-code detector — the refactor-target sibling of the other analyzers. Clusters
-// structurally identical code, two passes deep:
-//   unit  — a whole callable body (method / ctor / dtor / operator / conversion / property-or-indexer-
-//           or-event accessor / local function), block- or expression-bodied.
-//   block — a nested `{...}` (an if/else/loop/using/lock/try/switch-section body) of >= --min-statements
-//           statements, reported ONLY when its enclosing unit is NOT itself a clone (partial
-//           copy-paste) and only at the OUTERMOST duplicated nesting level, so a method's inner blocks
-//           never double-count.
+// structurally identical code, four passes deep, each leaving what an earlier pass already holds:
+//   type       — a whole class, struct or record body (its members, not its modifiers, name or base
+//                list), so a helper type pasted into several files clusters even when each of its
+//                members is under the token floor alone.
+//   unit       — a whole callable body (method / ctor / dtor / operator / conversion / property-or-
+//                indexer-or-event accessor / local function), block- or expression-bodied.
+//   block      — a nested `{...}` (an if/else/loop/using/lock/try/switch-section body) of >=
+//                --min-statements statements, reported ONLY when its enclosing unit is NOT itself a
+//                clone (partial copy-paste) and only at the OUTERMOST duplicated nesting level, so a
+//                method's inner blocks never double-count.
+//   expression — an outermost expression of >= --min-expression-tokens tokens outside every clone
+//                above: a formula copied into callers whose surrounding statements differ.
 // Each body is fingerprinted twice over its token stream (trivia-, whitespace- and comment-insensitive):
 // a STRUCTURAL hash that abstracts every identifier and literal to a placeholder (so renamed-variable /
 // changed-constant copies — Type-2 clones — still collide) and an EXACT hash over the raw token text
@@ -56,7 +61,7 @@ internal sealed class CloneAnalyzer : ISourceAnalyzer {
     }
     // The body spans of clustered units, per file — a block inside one of these is redundant with the
     // unit clone, so the block pass skips it.
-    private static Dictionary<string, List<(int Start, int End)>> BodySpansByFile(List<List<Member>> clusters) {
+    private static Dictionary<string, List<(int Start, int End)>> BodySpansByFile(IEnumerable<List<Member>> clusters) {
         var spansByFile = new Dictionary<string, List<(int Start, int End)>>(comparer: StringComparer.Ordinal);
 
         foreach (var cluster in clusters) {
@@ -245,17 +250,8 @@ internal sealed class CloneAnalyzer : ISourceAnalyzer {
             foreach (var block in treeRoot.DescendantNodes().OfType<BlockSyntax>()) {
                 if (
                     unitBodies.Contains(item: block) ||
-                    (block.Statements.Count < minStatements)
-                ) {
-                    continue;
-                }
-
-                var start = block.Span.Start;
-                var end = block.Span.End;
-
-                if (
-                    (bodies is not null) &&
-                    bodies.Any(predicate: span => ((span.Start <= start) && (end <= span.End)))
+                    (block.Statements.Count < minStatements) ||
+                    Inside(spans: bodies, node: block)
                 ) {
                     continue;
                 }
@@ -277,6 +273,84 @@ internal sealed class CloneAnalyzer : ISourceAnalyzer {
             }
         }
 
+        return ClusterOutermost(candidates: candidates);
+    }
+    // Pass 3: outermost expressions of >= minTokens tokens outside every clustered type, unit and block. A formula
+    // copied into callers whose surrounding statements differ (a sample position spelled again in each test that
+    // needs it) clusters here, where neither the unit nor the block pass can see it.
+    private static List<List<Member>> CollectExpressionClusters(
+        List<(string Relative, SyntaxNode Root)> trees,
+        Dictionary<string, List<(int Start, int End)>> clusteredBodies,
+        int minTokens
+    ) {
+        var candidates = new List<(SyntaxNode Node, Member Member)>();
+        // A token is at least one character, so a span shorter than the floor cannot carry it; the check saves walking
+        // the tokens of every small expression.
+        var minLength = minTokens;
+
+        foreach (var (relative, treeRoot) in trees) {
+            var bodies = clusteredBodies.GetValueOrDefault(key: relative);
+
+            foreach (var expression in treeRoot.DescendantNodes(descendIntoChildren: node => !Inside(spans: bodies, node: node)).OfType<ExpressionSyntax>()) {
+                if ((expression.Span.Length < minLength) || (expression.Parent is ExpressionSyntax)) {
+                    continue;
+                }
+
+                var (structural, exact, weight) = Fingerprint(body: expression);
+
+                if (weight < minTokens) {
+                    continue;
+                }
+
+                // A table of literals has the structure of every other table its size, so data clusters only with an
+                // exact copy of itself (the same tap set pasted into five files), never with an unrelated table.
+                candidates.Add(item: (expression, CreateMember(
+                    body: expression,
+                    exact: exact,
+                    node: expression,
+                    relative: relative,
+                    structural: (IsData(expression: expression) ? exact : structural),
+                    weight: weight
+                )));
+            }
+        }
+
+        return ClusterOutermost(candidates: candidates);
+    }
+    // Pass 0: whole type bodies (the members between a class, struct or record's braces, without its modifiers or
+    // base list), so a small helper type pasted into several files, each of whose members is under the token floor
+    // alone, clusters as one copy.
+    private static List<List<Member>> CollectTypeClusters(List<(string Relative, SyntaxNode Root)> trees, int minTokens) {
+        var candidates = new List<(SyntaxNode Node, Member Member)>();
+
+        foreach (var (relative, treeRoot) in trees) {
+            foreach (var type in treeRoot.DescendantNodes().OfType<TypeDeclarationSyntax>()) {
+                if (type.Members.Count == 0) {
+                    continue;
+                }
+
+                var (structural, exact, weight) = Fingerprint(body: type, members: type.Members);
+
+                if (weight < minTokens) {
+                    continue;
+                }
+
+                candidates.Add(item: (type, CreateMember(
+                    body: type,
+                    exact: exact,
+                    node: type,
+                    relative: relative,
+                    structural: structural,
+                    weight: weight
+                )));
+            }
+        }
+
+        return ClusterOutermost(candidates: candidates);
+    }
+    // Groups candidates by structural fingerprint and keeps a cluster member only when no ancestor of it is itself a
+    // clustered candidate, so a duplicated outer node never re-reports its duplicated insides.
+    private static List<List<Member>> ClusterOutermost(List<(SyntaxNode Node, Member Member)> candidates) {
         var counts = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
 
         foreach (var candidate in candidates) {
@@ -396,6 +470,16 @@ internal sealed class CloneAnalyzer : ISourceAnalyzer {
                 var line = (block.GetLocation().GetLineSpan().StartLinePosition.Line + 1);
 
                 return (typeName, $"{ownerName} block@{line}");
+            case TypeDeclarationSyntax type:
+                return (typeName, $"type:{type.Identifier.ValueText}");
+            case ExpressionSyntax expression:
+                var holder = expression.Ancestors().FirstOrDefault(predicate: IsUnitNode);
+                var holderName = ((holder is null)
+                    ? ""
+                    : Describe(node: holder).Member
+                );
+
+                return (typeName, $"{holderName} expr@{(expression.GetLocation().GetLineSpan().StartLinePosition.Line + 1)}");
             default:
                 return (typeName, "");
         }
@@ -403,12 +487,19 @@ internal sealed class CloneAnalyzer : ISourceAnalyzer {
     // Two hashes over the body's token stream (trivia excluded, so whitespace and comments never
     // matter): STRUCTURAL abstracts identifiers and literals to a placeholder (Type-2 clones collide),
     // EXACT keeps the raw token text (Type-1).
-    private static (string Structural, string Exact, int Weight) Fingerprint(SyntaxNode body) {
+    private static (string Structural, string Exact, int Weight) Fingerprint(SyntaxNode body) =>
+        Fingerprint(body: body, members: null);
+    // A type is fingerprinted over its members alone, so two copies that differ only in modifiers, name or base list
+    // (`unsafe`, a qualified interface name) still collide.
+    private static (string Structural, string Exact, int Weight) Fingerprint(SyntaxNode body, SyntaxList<MemberDeclarationSyntax>? members) {
         var structural = new StringBuilder();
         var exact = new StringBuilder();
         var weight = 0;
+        var tokens = ((members is { } list)
+            ? list.SelectMany(selector: static member => member.DescendantTokens())
+            : body.DescendantTokens());
 
-        foreach (var token in body.DescendantTokens()) {
+        foreach (var token in tokens) {
             structural.Append(value: CanonicalToken(token: token)).Append(value: TokenSeparator);
             exact.Append(value: token.Text).Append(value: TokenSeparator);
             weight++;
@@ -433,6 +524,18 @@ internal sealed class CloneAnalyzer : ISourceAnalyzer {
             comparisonType: StringComparison.Ordinal,
             value: "Vk"
         ));
+    // Whether an expression only spells values: no operator, condition, call or indexing anywhere in it.
+    private static bool IsData(ExpressionSyntax expression) =>
+        !expression.DescendantNodesAndSelf().Any(predicate: static node => node is BinaryExpressionSyntax or ConditionalExpressionSyntax or InvocationExpressionSyntax or ElementAccessExpressionSyntax or AssignmentExpressionSyntax or LambdaExpressionSyntax);
+    // Whether a file is generator output, whose repetition is its generator's to remove.
+    private static bool IsGenerated(string relative, SyntaxNode root) =>
+        relative.EndsWith(value: ".generated.cs", comparisonType: StringComparison.OrdinalIgnoreCase) ||
+        relative.EndsWith(value: ".g.cs", comparisonType: StringComparison.OrdinalIgnoreCase) ||
+        relative.EndsWith(value: ".designer.cs", comparisonType: StringComparison.OrdinalIgnoreCase) ||
+        root.GetLeadingTrivia().ToString().Contains(value: "<auto-generated", comparisonType: StringComparison.Ordinal);
+    // Whether a node lies within one of a file's clustered spans, so a later pass leaves it to the clone that holds it.
+    private static bool Inside(List<(int Start, int End)>? spans, SyntaxNode node) =>
+        ((spans is not null) && spans.Any(predicate: span => ((span.Start <= node.Span.Start) && (node.Span.End <= span.End))));
     private static bool IsUnitNode(SyntaxNode node) => (node
         is MethodDeclarationSyntax
         or ConstructorDeclarationSyntax
@@ -459,14 +562,16 @@ internal sealed class CloneAnalyzer : ISourceAnalyzer {
 
         return ordered;
     }
-    private static void PrintSummary(List<Cluster> clusters, int minTokens, int minStatements, bool includeBlocks, int filesScanned) {
-        var unitClusterCount = clusters.Count(predicate: static cluster => (cluster.Kind == "unit"));
-        var blockClusterCount = clusters.Count(predicate: static cluster => (cluster.Kind == "block"));
+    private static void PrintSummary(List<Cluster> clusters, int minTokens, int minStatements, int minExpressionTokens, bool includeBlocks, int filesScanned) {
+        var byKind = string.Join(
+            separator: ", ",
+            values: new[] { "type", "unit", "block", "expression" }.Select(selector: kind => $"{clusters.Count(predicate: cluster => (cluster.Kind == kind))} {kind}")
+        );
         var siteCount = clusters.Sum(selector: static cluster => cluster.Members.Count);
         var redundantMass = clusters.Sum(selector: static cluster => ((cluster.Members.Count - 1) * cluster.Weight));
         var abiClusters = clusters.Count(predicate: static cluster => cluster.Abi);
 
-        Console.Error.WriteLine(value: $"scan[clones]: {clusters.Count} clone clusters ({unitClusterCount} unit, {blockClusterCount} block; {abiClusters} abi-tainted) over {siteCount} sites; redundant token mass ~{redundantMass} (minTokens={minTokens}, minStatements={minStatements}, blocks={(includeBlocks
+        Console.Error.WriteLine(value: $"scan[clones]: {clusters.Count} clone clusters ({byKind}; {abiClusters} abi-tainted) over {siteCount} sites; redundant token mass ~{redundantMass} (minTokens={minTokens}, minStatements={minStatements}, minExpressionTokens={minExpressionTokens}, blocks={(includeBlocks
             ? "on"
             : "off")}, files scanned={filesScanned}).");
 
@@ -501,15 +606,28 @@ internal sealed class CloneAnalyzer : ISourceAnalyzer {
     };
 
     public (string Jsonl, string Grouped) Analyze(SourceCorpus corpus, ScanOptions options) {
-        var trees = corpus.Files.Select(selector: static file => (file.Relative, file.Root)).ToList();
+        var trees = corpus.Files
+            .Where(predicate: static file => !IsGenerated(relative: file.Relative, root: file.Root))
+            .Select(selector: static file => (file.Relative, file.Root))
+            .ToList();
 
+        // Each pass leaves what an earlier, larger clone already holds: whole types, then callable bodies, then
+        // nested blocks, then expressions.
+        var typeClusters = CollectTypeClusters(
+            minTokens: options.MinTokens,
+            trees: trees
+        );
+        var typeSpans = BodySpansByFile(clusters: typeClusters);
         var unitBodies = new HashSet<SyntaxNode>();
         var units = CollectUnits(
             trees: trees,
             unitBodies: unitBodies
         );
         var unitClusters = units
-            .Where(predicate: member => (member.Weight >= options.MinTokens))
+            .Where(predicate: member => (
+                (member.Weight >= options.MinTokens) &&
+                !(typeSpans.GetValueOrDefault(key: member.File)?.Any(predicate: span => ((span.Start <= member.BodyStart) && (member.BodyEnd <= span.End))) ?? false)
+            ))
             .GroupBy(
             keySelector: static member => member.Structural,
             comparer: StringComparer.Ordinal
@@ -518,7 +636,7 @@ internal sealed class CloneAnalyzer : ISourceAnalyzer {
             .Select(selector: static group => group.ToList())
             .ToList();
 
-        var clusteredBodies = BodySpansByFile(clusters: unitClusters);
+        var clusteredBodies = BodySpansByFile(clusters: typeClusters.Concat(second: unitClusters));
         var blockClusters = (options.IncludeBlocks
             ? CollectBlockClusters(
                 trees: trees,
@@ -529,27 +647,31 @@ internal sealed class CloneAnalyzer : ISourceAnalyzer {
             )
             : []
         );
+        var expressionClusters = ((options.MinExpressionTokens > 0)
+            ? CollectExpressionClusters(
+                clusteredBodies: BodySpansByFile(clusters: typeClusters.Concat(second: unitClusters).Concat(second: blockClusters)),
+                minTokens: options.MinExpressionTokens,
+                trees: trees
+            )
+            : []
+        );
 
         var clusters = new List<Cluster>();
 
-        foreach (var group in unitClusters) {
-            clusters.Add(item: BuildCluster(
-                kind: "unit",
-                members: group
-            ));
-        }
-
-        foreach (var group in blockClusters) {
-            clusters.Add(item: BuildCluster(
-                kind: "block",
-                members: group
-            ));
+        foreach (var (kind, groups) in new[] { ("type", typeClusters), ("unit", unitClusters), ("block", blockClusters), ("expression", expressionClusters) }) {
+            foreach (var group in groups) {
+                clusters.Add(item: BuildCluster(
+                    kind: kind,
+                    members: group
+                ));
+            }
         }
 
         clusters = OrderAndNumber(clusters: clusters);
 
         PrintSummary(
             clusters: clusters,
+            minExpressionTokens: options.MinExpressionTokens,
             minTokens: options.MinTokens,
             minStatements: options.MinStatements,
             includeBlocks: options.IncludeBlocks,

@@ -31,6 +31,7 @@ public interface IArenaSearchJudge {
     /// scope.</summary>
     /// <param name="view">The scoped arena and the tick pair the judge reads as of.</param>
     /// <returns><see langword="true"/> when the judge wrote the arena.</returns>
+    [Replaces(root: typeof(StateArena))]
     bool Judge(in ArenaSearchView view);
     /// <summary>Returns the score of the position the arena holds, from the perspective of the side that moved into
     /// it.</summary>

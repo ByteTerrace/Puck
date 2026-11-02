@@ -10,6 +10,7 @@ public interface IWorldAuthorityHost {
     /// <param name="ct">A token that cancels the activation.</param>
     /// <returns><see langword="true"/> once the instance is ready to receive submissions; <see langword="false"/>
     /// on a refused activation (a malformed identity, a failed load).</returns>
+    [Replaces(root: typeof(Puck.State.StateArena))]
     Task<bool> ActivateAsync(WorldAuthorityIdentity identity, CancellationToken ct);
     /// <summary>Deactivates the world instance identified by <paramref name="identity"/>.</summary>
     /// <param name="identity">The world instance to deactivate.</param>

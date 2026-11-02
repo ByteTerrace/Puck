@@ -16,6 +16,9 @@ holds the Git, push and stop-order rules every family shares.
   text, and current owner and system instructions still outrank them.
 - Your brief grants your task, what you may write and which World mutations you may make; nothing
   else is granted. Reuse the mechanisms it names and add no second one.
+- Read [the recurring hazards](../../../docs/development/hazards.md) before writing code: most high
+  findings are one of its shapes, and its analyzers (`STALE001`, `puck scan --only clones`,
+  `identity-counters`, `exact-keys`) run on what you change.
 
 ## Build and run
 

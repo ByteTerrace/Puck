@@ -44,6 +44,7 @@ public sealed partial class RuleEvaluator {
     /// <returns><see cref="RuleOutcome.Fired"/> when the scope committed; otherwise <see cref="RuleOutcome.Refused"/>.</returns>
     /// <remarks>A host evaluating a rule kind of its own — a decision's option or its no-choice arm — fires through
     /// here so its effects are one scope, exactly as a rule's own are.</remarks>
+    [Replaces(root: typeof(StateArena))]
     public RuleOutcome FireEffects(IRuleEffect[] effects, string ruleName, ulong tick, ulong stepTicks, out bool applied) {
         ArgumentNullException.ThrowIfNull(argument: effects);
 

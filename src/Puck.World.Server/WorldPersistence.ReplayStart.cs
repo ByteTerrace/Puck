@@ -32,6 +32,7 @@ public sealed partial class WorldPersistence {
     /// <param name="checkpoint">The checkpoint captured when the replay probe attached.</param>
     /// <param name="restoreOwnedIdentities">Whether to restore owned documents; tapes retain only projected identities.</param>
     /// <param name="documentDirectory">The tape's asset directory, or null to use this authority's directory.</param>
+    [Replaces(root: typeof(StateArena))]
     public void RestoreReplayStart(WorldAuthorityCheckpoint checkpoint, bool restoreOwnedIdentities = true, string? documentDirectory = null) {
         lock (Host.AuthorityGate) {
             var admission = ((documentDirectory is null) ? CheckpointAdmission(json: checkpoint.Server.DefinitionJson)

@@ -745,6 +745,7 @@ public sealed partial class WorldPersistence {
     /// <param name="checkpoint">The captured image to restore.</param>
     /// <param name="restoreOwnedIdentities">Whether to restore the catalog and bind its home seats. A live replay's
     /// boot image keeps its pinned identities detached and leaves the live catalog alone.</param>
+    [Replaces(root: typeof(StateArena))]
     public void RestoreCheckpoint(WorldAuthorityCheckpoint checkpoint, bool restoreOwnedIdentities = true) {
         ArgumentNullException.ThrowIfNull(argument: checkpoint);
         var admission = WorldDefinitionSerialization.DeserializeForAdmission(

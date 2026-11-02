@@ -21,6 +21,7 @@ public readonly record struct ArenaJournalEntry(ArenaColumn Column, int Index, l
 /// rewound scope hands back exactly the components it snapshotted, so nested savepoints rewound inside one firing
 /// reuse one region instead of walking the buffer forward.</para>
 /// </remarks>
+[Replaceable(root: typeof(StateArena))]
 public sealed class ArenaJournal {
     /// <summary>The bytes one entry occupies: a column, an index, a number and a reference, padded to the word.</summary>
     public const int EntryBytes = 24;

@@ -308,6 +308,7 @@ public interface IEffectHost : IStateReader {
     /// queued a transactional arm, after <see cref="Committed"/> and before any delivered arm fires. It has no way
     /// to refuse: a host that could not promise the install refused the preparation.</summary>
     /// <param name="firing">The evaluation the arms fired under.</param>
+    [Replaces(root: typeof(StateArena))]
     void CommitTransactional(in EffectFiring firing) { }
     /// <summary>Observes a firing whose journal scope has just committed, so a host can install its own side of it.
     /// Called once per committed firing, before any irreversible arm fires.</summary>

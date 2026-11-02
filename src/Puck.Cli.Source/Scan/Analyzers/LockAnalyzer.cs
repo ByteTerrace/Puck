@@ -1,4 +1,3 @@
-using System.Text;
 using System.Text.RegularExpressions;
 
 using Microsoft.CodeAnalysis;
@@ -149,62 +148,27 @@ internal sealed class LockAnalyzer : ISourceAnalyzer {
     }
 
     public (string Jsonl, string Grouped) Analyze(SourceCorpus corpus, ScanOptions options) {
-        var jsonl = new StringBuilder();
-        var perFile = new Dictionary<string, int>();
-        var byFile = new Dictionary<string, List<(int Line, string Text)>>();
-        var kindCounts = new SortedDictionary<string, int>(comparer: StringComparer.Ordinal);
+        var sites = new ScanSites();
 
         foreach (var parsed in corpus.Files) {
-            var relative = parsed.Relative;
-
             foreach (var node in parsed.Root.DescendantNodes()) {
                 if (Classify(node: node) is not { } site) {
                     continue;
                 }
 
-                var (kind, text, startLine, endLine) = site;
-
-                jsonl.Append(value: '{')
-                    .Append(value: "\"file\":").Append(value: ScanJsonl.JsonString(value: relative)).Append(value: ',')
-                    .Append(value: "\"line\":").Append(value: startLine).Append(value: ',')
-                    .Append(value: "\"endLine\":").Append(value: endLine).Append(value: ',')
-                    .Append(value: "\"kind\":").Append(value: ScanJsonl.JsonString(value: kind)).Append(value: ',')
-                    .Append(value: "\"text\":").Append(value: ScanJsonl.JsonString(value: text))
-                    .Append(value: "}\n");
-
-                kindCounts[kind] = (kindCounts.GetValueOrDefault(key: kind) + 1);
-                perFile[relative] = (perFile.GetValueOrDefault(key: relative) + 1);
-
-                if (!byFile.TryGetValue(
-                    key: relative,
-                    value: out var sites
-                )) {
-                    sites = [];
-                    byFile[relative] = sites;
-                }
-
-                sites.Add(item: (startLine, text));
+                sites.Add(
+                    endLine: site.EndLine,
+                    file: parsed.Relative,
+                    kind: site.Kind,
+                    line: site.StartLine,
+                    text: site.Text
+                );
             }
         }
 
-        var total = kindCounts.Values.Sum();
-        var breakdown = ((total == 0)
-            ? "none"
-            : string.Join(
-                separator: ", ",
-                values: kindCounts.Select(selector: static pair => $"{pair.Value} {pair.Key}")
-            )
-        );
-
-        Console.Error.WriteLine(value: $"scan[locks]: {total} lock sites ({breakdown}) across {perFile.Count} files (of {corpus.FileCount} scanned).");
-
-        foreach (var line in ScanJsonl.TopFiles(perFile: perFile)) {
-            Console.Error.WriteLine(value: line);
-        }
-
-        return (jsonl.ToString(), ScanJsonl.BuildGroupedChunks(
-            byFile: byFile,
+        return sites.Finish(
+            digest: $"scan[locks]: {sites.Count} lock sites ({sites.Breakdown()}) across {sites.FileCount} files (of {corpus.FileCount} scanned).",
             maxPerChunk: options.MaxPerChunk
-        ));
+        );
     }
 }
