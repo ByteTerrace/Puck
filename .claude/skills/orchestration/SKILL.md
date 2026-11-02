@@ -219,6 +219,13 @@ report. A finding read and left in the hand-back is lost: one about authors'
 worlds failing to boot on the standard sat unrouted until a side observer
 caught it.
 
+Keep a merged lane's worktree until its cross-family review is back. Most
+review highs go back to the lane that wrote the code, which keeps its context
+and resumes in place (`SendMessage`); once its worktree is removed, a fresh
+lane must rebuild that context from the brief and the findings. Prune after
+the review's findings are routed, and delete the lane branch once its fix
+round is merged too.
+
 The sweep is the batch's proof: the whole debug world, every signal compared with
 the previous sweep ([decision](../../../docs/decisions/engine-design.md#the-debug-world-is-the-engines-instrument)).
 `puck sweep --tour --baseline <previous report.json>` runs it under the GPU lease

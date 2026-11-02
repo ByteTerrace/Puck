@@ -1,0 +1,31 @@
+// Boxes given their bounds, for shells, furniture and frames built from boxes. A module library: it hands its
+// importers templates and emits no document.
+
+// One box given its world bounds, for a creation standing at the origin with no yaw: the author frame is turned 180
+// degrees about up from the world's, so the row negates x and z. `bevel` chamfers it (0 leaves the box's own fillet).
+template boundsBox(label, x0, x1, y0, y1, z0, z1, slot, bevel = 0) {
+  shape Box $"{label}" {
+    material: slot
+    position [(0 - ((x0 + x1) / 2)), ((y0 + y1) / 2), (0 - ((z0 + z1) / 2))]
+    scale [((x1 - x0) / 2), ((y1 - y0) / 2), ((z1 - z0) / 2)]
+    chamfer: bevel
+  }
+}
+
+// One box given its bounds in the creation's own frame, with no conversion: a painting's, whose x runs across the canvas,
+// y up and z out of the wall.
+template localBox(label, x0, x1, y0, y1, z0, z1, slot) {
+  shape Box $"{label}" {
+    material: slot
+    position [((x0 + x1) / 2), ((y0 + y1) / 2), ((z0 + z1) / 2)]
+    scale [((x1 - x0) / 2), ((y1 - y0) / 2), ((z1 - z0) / 2)]
+  }
+}
+
+// Three bars (left, right and top) round a canvas of half-width `ix` in the creation's own frame, from `y0` up to `y1`
+// and out by `w`, standing `depth` proud of the wall; the floor closes the fourth side.
+template barRing(label, ix, y0, y1, w, depth, slot) {
+  localBox(label: $"{label}-left", x0: (0 - (ix + w)), x1: (0 - ix), y0: y0, y1: (y1 + w), z0: 0, z1: depth, slot: slot)
+  localBox(label: $"{label}-right", x0: ix, x1: (ix + w), y0: y0, y1: (y1 + w), z0: 0, z1: depth, slot: slot)
+  localBox(label: $"{label}-top", x0: (0 - ix), x1: ix, y0: y1, y1: (y1 + w), z0: 0, z1: depth, slot: slot)
+}

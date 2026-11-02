@@ -58,11 +58,18 @@ until the cosine reaches `-wrap`, so the pass reads the material's wrap
 (`sdfMaterialWrap`) and queries that side too: an unqueried slot decodes as
 fully visible, which would light a skin's far side with the sun under a roof. Past the
 terminator the receiver's own lit side stands in front of it toward the light,
-so the query lets a caster within the receiver's own depth transmit
-(`sdfMeshShadowTransmission`): a sphere of radius r lies `2 r |n·l|` behind its
-lit side, r is the surface's own curvature radius and at most half a metre for a
-flat or concave one. The wrap's light survives on a body in the open, and a
-roof or wall farther off still shadows it.
+so each shadow cascade holds two layers: its depth, the first face the light
+meets, and its exit layer, the first face where the light leaves a solid. A
+triangle facing the light compares against the depth; one turned from it
+compares against the exit layer, where its own face is the first exit unless
+another solid stands in front of its body. The exit layer draws a draw that
+encloses a solid (`SdfMeshDraw.EnclosesSolid`: a baked mesh, or an authored
+mesh whose triangles close a volume, unclipped and unmirrored) with its faces
+toward the light culled, and every other draw (an authored sheet, a body
+clipped at a portal's glass, a mirrored draw) whole, as a thin caster. The
+wrap's light survives on a body in the open however thin or thick it is, and a
+roof, a wall or a single sheet farther off still shadows it; a thin caster's
+own wrapped side is shadowed by its own lit side.
 `world.debug-view shadow` shows the key light's filtered visibility. The
 ambient term still fills shadowed regions, so shadows read soft and colored,
 never black.
@@ -494,6 +501,15 @@ data in `worlds/standard/styles.puck` (`celStyle`, `celHardStyle`,
 `render { toon: celStyle }`. The engine holds no look of its own: a style that
 bands authors every value below, and validation names each one it leaves out;
 a style that says `enabled: false` needs none.
+
+A palette row can also choose its style live from a state cell, the way a
+camera case or a binding layout is chosen: `toonSelect { state:
+"state.<row>[.<key>]", cases [ ... ] }` shades the row with the case the cell's
+whole value names (an enum member's ordinal, an integer, or a boolean as zero or
+one), and with its `toon` while the cell names none. A command that writes the
+cell swaps the look; only the material's style rows change, so nothing bakes.
+The debug world's Moth reads her `mothStyle` row this way, and `moth.style
+Plain|Cel` swaps her between continuous shading and the standard's `celStyle`.
 
 `world.toon on|off|toggle` is the live lever over the world's default style.
 With no argument it echoes the choice. It uses the same render-section grant and

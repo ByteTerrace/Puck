@@ -122,31 +122,22 @@ public sealed partial class SdfFieldEvaluator {
 
         return new IntervalVector3(X: folded, Y: folded, Z: folded);
     }
-    // The render reading's field ops over a box: a relief of at most its amplitude either way. A noise relief is bounded
-    // from the point rule's own arithmetic (NoiseReach), not its authored amplitude.
+    // The render reading's sine displacement over a box: a relief of at most its amplitude either way.
     private static FixedInterval RenderEditFieldBounds(in CompiledInstruction instruction, FixedInterval result) {
-        var amplitude = ((instruction.Op == SdfOp.NoiseDisplace)
-            ? NoiseReach(instruction: in instruction)
-            : (FixedQ4816.Abs(value: instruction.Data0W) + RenderBoundSlack));
+        var amplitude = (FixedQ4816.Abs(value: instruction.Data0W) + RenderBoundSlack);
 
         return (result + new FixedInterval(lower: -amplitude, upper: amplitude));
     }
-    // The most a NoiseDisplace moves the field at any point, as EditField computes it: each octave's value noise lies
-    // within [-1, 1] but for a quintic fade rounded a raw past one, which a blend of corners in [0, 1) carries out to
-    // under two raws and its doubling to four; it joins the sum through one rounded product with its weight, the weights
-    // following Fbm3's own rounded products; and the sum meets the amplitude times the normalization through one more
-    // rounded product. Each rounding is charged a raw.
-    private static FixedQ4816 NoiseReach(in CompiledInstruction instruction) {
-        var weight = FixedQ4816.One;
-        var sum = FixedQ4816.Zero;
-        var unit = (FixedQ4816.One + FixedQ4816.FromRawBits(value: 4L));
+    // EditField's fBm relief over a box: the point rule's own steps, its lattice point rounded as the point rule rounds
+    // it and the sum of octaves enclosed over the box's lattice points (Pcg3dLatticeNoise.Fbm3Bounds), so the relief is
+    // charged what it can reach inside this box rather than its whole amplitude.
+    private static FixedInterval NoiseDisplaceBounds(in CompiledInstruction instruction, IntervalVector3 local, FixedInterval result) {
+        var frequency = instruction.Data0X;
+        var relief = Pcg3dLatticeNoise.Fbm3Bounds(gain: instruction.Data0Z, lacunarity: instruction.Data0W, octaves: ((int)instruction.Blend), seed: instruction.Shape,
+            x: FixedInterval.RoundedProduct(factor: frequency, value: local.X), y: FixedInterval.RoundedProduct(factor: frequency, value: local.Y),
+            z: FixedInterval.RoundedProduct(factor: frequency, value: local.Z));
 
-        for (var octave = 0u; (octave < instruction.Blend); octave++) {
-            sum += ((FixedQ4816.Abs(value: weight) * unit) + FixedQ4816.Epsilon);
-            weight *= instruction.Data0Z;
-        }
-
-        return (((FixedQ4816.Abs(value: (instruction.Data0Y * instruction.Data1X)) * sum) + FixedQ4816.Epsilon) + FixedQ4816.Epsilon);
+        return (result + (Point(value: (instruction.Data0Y * instruction.Data1X)) * relief));
     }
     // A LaneErode's effect on the next shape over a box: skipped outright, or eroded by any share of its reach.
     private static FixedInterval? LaneErodeBounds(in CompiledInstruction instruction) {

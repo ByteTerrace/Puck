@@ -19,17 +19,21 @@ public sealed class SdfFieldBoundsLawTests {
     // A point box's interval spans its one answer plus the outward raws of every step between: a rotation's two fused
     // stages, a blend's few products and a norm's root add a handful each.
     private const long PointBoxWidthRaw = 96L;
+    // A smooth union's bound widens by four rounding allowances of eight raws, so a run of sixteen (SmoothChain) may span
+    // that much more.
+    private const long ChainPointBoxWidthRaw = (PointBoxWidthRaw + (16L * 4L * 8L));
     private const int BoxesPerCase = 48;
     private const int InteriorPointsPerBox = 12;
 
     // The cases whose rule encloses a search, a hashed choice or a bounded move instead of mirroring a step, so a point
-    // box is not a few raws wide: the sweeps and every render op but the shear.
+    // box is not a few raws wide: the sweeps and every render op but the shear and the noise relief; and the reliefs
+    // whose finest octave multiplies the rotation's few raws of slack by thousands of lattice cells a unit.
     private static readonly HashSet<string> EnclosingCases = [
         "shape Sweep", "shape Sweep bulged and twisted", "shape Sweep three strands", "shape Path stroke",
         "op AxialProfile", "op RotatePlane", "op GaussianPush", "op DomainWarp", "op RepeatPolar", "op RepeatPolar mirrored",
         "op WallpaperFold Pmm", "op WallpaperFold P4M", "op WallpaperFold P3M1", "op WallpaperFold P6M", "op LogSphere",
         "op CellJitter White", "op CellJitter Blue", "op CellJitter Gaussian", "op CellJitter tumbled", "op LaneErode", "op LaneErode skipped",
-        "op Displace", "op NoiseDisplace",
+        "op Displace", "op NoiseDisplace terrain", "op NoiseDisplace rough",
     ];
 
     public static TheoryData<string> Cases() {
@@ -83,9 +87,11 @@ public sealed class SdfFieldBoundsLawTests {
                 );
 
                 if ((lower == upper) && !EnclosingCases.Contains(item: name)) {
+                    var allowed = (name.StartsWith(value: "chain ", comparisonType: StringComparison.Ordinal) ? ChainPointBoxWidthRaw : PointBoxWidthRaw);
+
                     Assert.True(
-                        condition: ((((Int128)bounds.Upper.Value) - bounds.Lower.Value) <= PointBoxWidthRaw),
-                        userMessage: $"{name}: the point box at {point} answers {distance} but bounds it by {bounds}, wider than {PointBoxWidthRaw} raws"
+                        condition: ((((Int128)bounds.Upper.Value) - bounds.Lower.Value) <= allowed),
+                        userMessage: $"{name}: the point box at {point} answers {distance} but bounds it by {bounds}, wider than {allowed} raws"
                     );
                 }
             }
@@ -130,6 +136,24 @@ public sealed class SdfFieldBoundsLawTests {
         foreach (var blend in Enum.GetValues<SdfBlendOp>()) {
             Assert.True(condition: Programs.ContainsKey(key: $"blend {blend}"), userMessage: $"blend {blend} has no case in the sweep");
         }
+    }
+    /// <summary>The frame rests on the box walk staying bounded over a cube, so a smooth union's bound must not compound
+    /// along a run of them: sixty-four on one accumulator, spread over a few trees' worth of space, still answer a
+    /// kilometre out.</summary>
+    [Fact]
+    public void ALongSmoothUnionRunKeepsTheFrame() {
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+        for (var tree = 0; (tree < 4); tree++) {
+            _ = SmoothChain(builder: builder, carve: false, material: material, origin: new Vector3(x: (12f * tree), y: 0f, z: (-7f * tree)));
+        }
+
+        var evaluator = new SdfFieldEvaluator(program: builder.Build());
+
+        Assert.True(condition: (evaluator.Frame >= FixedQ4816.FromInteger(value: 1L << 20)), userMessage: $"the frame is {evaluator.Frame}");
+        Assert.True(condition: evaluator.TryDistance(distance: out var distance, material: out _, position: FixedPosition.FromLocal(local: Fixed(value: new Vector3(x: 0f, y: 1f, z: 1000f)))));
+        Assert.True(condition: (distance > FixedQ4816.FromInteger(value: 100L)), userMessage: $"the far answer is {distance}");
     }
     [Fact]
     public void MorphBoundsEncloseTheExactWeightAtSurfaceContact() {
@@ -297,6 +321,15 @@ public sealed class SdfFieldBoundsLawTests {
         Shape(name: "op LaneErode skipped", emit: (b, m) => b.LaneErode(from: -2f, lane: 1, noiseScale: 3f, reach: 0.4f, to: -1f).Sphere(material: m, radius: 0.8f).ResetPoint().Box(halfExtents: new Vector3(x: 0.4f, y: 0.4f, z: 0.4f), material: m, round: 0f));
         Shape(name: "op Displace", emit: (b, m) => b.Sphere(material: m, radius: 0.8f).Displace(amplitude: 0.1f, frequency: new Vector3(x: 5f, y: 6f, z: 7f)));
         Shape(name: "op NoiseDisplace", emit: (b, m) => b.Sphere(material: m, radius: 0.8f).NoiseDisplace(amplitude: 0.1f, frequency: 2f, octaves: 3, seed: 4u));
+        Shape(name: "op NoiseDisplace terrain", emit: (b, m) => b.Translate(offset: new Vector3(x: 0f, y: -1f, z: 0f)).Scale(scale: new Vector3(value: 0.8f)).Rotate(rotation: Quaternion.CreateFromYawPitchRoll(yaw: 0.7f, pitch: 0f, roll: 0f))
+            .Sphere(material: m, radius: 2f).NoiseDisplace(amplitude: 1.5f, frequency: 0.9f, octaves: 6, seed: 11u));
+        Shape(name: "op NoiseDisplace rough", emit: (b, m) => b.Plane(material: m, normal: Vector3.UnitY, offset: 0f).NoiseDisplace(amplitude: 0.6f, frequency: 3.3f, gain: 0.9f, lacunarity: 2.7f, octaves: 8, seed: 0xFFFFFFF0u));
+
+        // Runs of smooth unions on one accumulator, whose operands crowd within a radius of each other so each blend
+        // sinks the answer: alone, broken by carves and intersections, and inside a scope.
+        Shape(name: "chain SmoothUnion", emit: (b, m) => SmoothChain(builder: b, carve: false, material: m));
+        Shape(name: "chain SmoothUnion carved", emit: (b, m) => SmoothChain(builder: b, carve: true, material: m));
+        Shape(name: "chain SmoothUnion scoped", emit: (b, m) => SmoothChain(builder: b.PushField(compose: SdfBlendOp.SmoothUnion, smooth: 0.2f), carve: true, material: m).PopField());
 
         foreach (var blend in ((SdfBlendOp[])[
             SdfBlendOp.Union, SdfBlendOp.SmoothUnion, SdfBlendOp.Subtraction, SdfBlendOp.Intersection,
@@ -343,6 +376,27 @@ public sealed class SdfFieldBoundsLawTests {
     }
     private static FixedQ4816 Between(FixedQ4816 lower, FixedQ4816 upper, Random random) =>
         FixedQ4816.FromRawBits(value: (lower.Value + random.NextInt64(minValue: 0L, maxValue: ((upper.Value - lower.Value) + 1L))));
+    // Sixteen flat superellipsoids a few centimetres apart, each smooth-unioned onto the one accumulator; carved, a small
+    // sphere is subtracted after the fifth and a wide one smoothly intersected after the tenth.
+    private static SdfProgramBuilder SmoothChain(SdfProgramBuilder builder, int material, bool carve, Vector3 origin = default) {
+        for (var index = 0; (index < 16); index++) {
+            var angle = (index * 0.4f);
+
+            _ = builder.ResetPoint()
+                .Translate(offset: (origin + new Vector3(x: (0.12f * MathF.Cos(x: angle)), y: (0.02f * index), z: (0.12f * MathF.Sin(x: angle)))))
+                .Superellipsoid(blend: SdfBlendOp.SmoothUnion, exponent: 2.05f, material: material, radii: new Vector3(x: 1.2f, y: 0.3f, z: 1f), smooth: (0.2f + (0.02f * index)));
+
+            if (carve && (index == 5)) {
+                _ = builder.ResetPoint().Translate(offset: new Vector3(x: 0.9f, y: 0f, z: 0f)).Sphere(blend: SdfBlendOp.Subtraction, material: material, radius: 0.3f);
+            }
+
+            if (carve && (index == 10)) {
+                _ = builder.ResetPoint().Sphere(blend: SdfBlendOp.SmoothIntersection, material: material, radius: 2.5f, smooth: 0.3f);
+            }
+        }
+
+        return builder;
+    }
     private static FixedVector3 Fixed(Vector3 value) =>
         new(
             X: FixedQ4816.FromDouble(value: value.X),

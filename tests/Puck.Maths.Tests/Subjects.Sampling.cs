@@ -1245,6 +1245,111 @@ internal static partial class Subjects {
         return null;
     }
 
+    /// <summary>QuinticFade at every Q16 fraction against the exact polynomial rounded once; ValueNoise3 within a raw and
+    /// a half of the exact blend at its own fades, the allowance its box bounds charge; ValueNoise3Bounds and Fbm3Bounds
+    /// holding every point answer of drawn boxes, a point box within ten raws a term, and a box inside another answering
+    /// inside the other's interval.</summary>
+    /// <returns>The counterexample, or <see langword="null"/>.</returns>
+    public static string? LatticeNoiseFadeAndBoxBounds() {
+        var previous = long.MinValue;
+
+        for (var raw = 0L; (raw <= 65536L); raw++) {
+            var fade = Pcg3dLatticeNoise.QuinticFade(t: FixedQ4816.FromRawBits(value: raw)).Value;
+            var expected = Oracles.QuinticFadeReference(raw: raw);
+
+            if (fade != expected) { return $"QuinticFade at raw {raw} is {fade}, not the exact fade rounded once, {expected}"; }
+            if (fade < previous) { return $"QuinticFade falls from {previous} to {fade} at raw {raw}"; }
+
+            previous = fade;
+        }
+
+        foreach (var outside in (ReadOnlySpan<long>)[-1L, 65537L, long.MinValue]) {
+            try {
+                _ = Pcg3dLatticeNoise.QuinticFade(t: FixedQ4816.FromRawBits(value: outside));
+                return $"QuinticFade at raw {outside}, outside [0, 1], answered";
+            } catch (ArgumentOutOfRangeException) {
+            }
+        }
+
+        var generator = Pcg32XshRr.Create(state: 0x5EED_B0C5UL, stream: 23UL);
+        var halfRaw = (BigInteger.One << 47);
+
+        // The point blend rounds three nested lerps once each: within a raw and a half of the exact blend.
+        for (var draw = 0; (draw < 512); ++draw) {
+            var point = DrawLatticePoint(generator: ref generator, spread: 30);
+            var (seedX, seedY, seedZ) = (generator.NextUInt32(), generator.NextUInt32(), generator.NextUInt32());
+            var noise = Pcg3dLatticeNoise.ValueNoise3(q: point, seedX: seedX, seedY: seedY, seedZ: seedZ);
+            var blendRaw = ((BigInteger)(noise.Value + 65536L) << 47);
+            var exact = Oracles.ValueNoise3ExactBlend(q: point, seedX: seedX, seedY: seedY, seedZ: seedZ);
+
+            if (BigInteger.Abs(value: (blendRaw - exact)) > (3 * halfRaw)) {
+                return $"ValueNoise3({point}) blends to {(double)blendRaw / (1L << 48)} raws, more than a raw and a half from the exact {(double)exact / (1L << 48)}";
+            }
+        }
+
+        if (Pcg3dLatticeNoise.ValueNoise3Bounds(seedX: 1U, seedY: 2U, seedZ: 3U, x: FixedInterval.Entire, y: FixedInterval.Entire, z: FixedInterval.Entire)
+            != new FixedInterval(lower: -FixedQ4816.One, upper: FixedQ4816.One)) { return "ValueNoise3Bounds over an unbounded box is not [-1, 1]"; }
+
+        for (var draw = 0; (draw < 384); ++draw) {
+            var centre = DrawLatticePoint(generator: ref generator, spread: 20);
+            // Half sizes from a point through a few cells, log-spread.
+            var half = new FixedVector3(X: DrawHalf(generator: ref generator, draw: draw), Y: DrawHalf(generator: ref generator, draw: draw),
+                Z: DrawHalf(generator: ref generator, draw: draw));
+            var (lower, upper) = ((centre - half), (centre + half));
+            var box = (X: new FixedInterval(lower: lower.X, upper: upper.X), Y: new FixedInterval(lower: lower.Y, upper: upper.Y),
+                Z: new FixedInterval(lower: lower.Z, upper: upper.Z));
+            var (seedX, seedY, seedZ) = (generator.NextUInt32(), generator.NextUInt32(), generator.NextUInt32());
+            var octaves = ((int)(generator.NextUInt32() % 9U));
+            var gain = FixedQ4816.FromRawBits(value: (generator.NextUInt32() % 65537U));
+            var lacunarity = FixedQ4816.FromRawBits(value: (65536L + (generator.NextUInt32() % 196609U)));
+            var noiseBounds = Pcg3dLatticeNoise.ValueNoise3Bounds(seedX: seedX, seedY: seedY, seedZ: seedZ, x: box.X, y: box.Y, z: box.Z);
+            var fbmBounds = Pcg3dLatticeNoise.Fbm3Bounds(gain: gain, lacunarity: lacunarity, octaves: octaves, seed: seedX, x: box.X, y: box.Y, z: box.Z);
+
+            for (var sample = 0; (sample < 24); ++sample) {
+                var at = ((sample < 8)
+                    ? new FixedVector3(X: (((sample & 1) == 0) ? lower.X : upper.X), Y: (((sample & 2) == 0) ? lower.Y : upper.Y), Z: (((sample & 4) == 0) ? lower.Z : upper.Z))
+                    : new FixedVector3(X: Inside(generator: ref generator, interval: box.X), Y: Inside(generator: ref generator, interval: box.Y), Z: Inside(generator: ref generator, interval: box.Z)));
+                var noise = Pcg3dLatticeNoise.ValueNoise3(q: at, seedX: seedX, seedY: seedY, seedZ: seedZ);
+                var fbm = Pcg3dLatticeNoise.Fbm3(gain: gain, lacunarity: lacunarity, octaves: octaves, q: at, seed: seedX);
+
+                if (!noiseBounds.Contains(value: noise)) { return $"ValueNoise3({at}) = {noise} lies outside its box's bounds {noiseBounds}, box [{lower}, {upper}]"; }
+                if (!fbmBounds.Contains(value: fbm)) { return $"Fbm3({at}, {octaves} octaves, gain {gain}, lacunarity {lacunarity}) = {fbm} lies outside its box's bounds {fbmBounds}, box [{lower}, {upper}]"; }
+            }
+
+            if ((half == FixedVector3.Zero) && ((noiseBounds.Upper.Value - noiseBounds.Lower.Value) > 10L)) {
+                return $"ValueNoise3Bounds over the point {centre} spans {noiseBounds}, wider than ten raws";
+            }
+
+            // A box inside the box answers inside its interval.
+            var innerLower = new FixedVector3(X: Inside(generator: ref generator, interval: box.X), Y: Inside(generator: ref generator, interval: box.Y), Z: Inside(generator: ref generator, interval: box.Z));
+            var inner = (X: new FixedInterval(lower: innerLower.X, upper: Inside(generator: ref generator, interval: new FixedInterval(lower: innerLower.X, upper: upper.X))),
+                Y: new FixedInterval(lower: innerLower.Y, upper: Inside(generator: ref generator, interval: new FixedInterval(lower: innerLower.Y, upper: upper.Y))),
+                Z: new FixedInterval(lower: innerLower.Z, upper: Inside(generator: ref generator, interval: new FixedInterval(lower: innerLower.Z, upper: upper.Z))));
+
+            if (!noiseBounds.Contains(other: Pcg3dLatticeNoise.ValueNoise3Bounds(seedX: seedX, seedY: seedY, seedZ: seedZ, x: inner.X, y: inner.Y, z: inner.Z))) {
+                return $"ValueNoise3Bounds over a box inside [{lower}, {upper}] answers outside its {noiseBounds}";
+            }
+            if (!fbmBounds.Contains(other: Pcg3dLatticeNoise.Fbm3Bounds(gain: gain, lacunarity: lacunarity, octaves: octaves, seed: seedX, x: inner.X, y: inner.Y, z: inner.Z))) {
+                return $"Fbm3Bounds over a box inside [{lower}, {upper}] answers outside its {fbmBounds}";
+            }
+        }
+
+        return null;
+
+        static FixedVector3 DrawLatticePoint(ref Pcg32XshRr generator, int spread) => new(
+            X: FixedQ4816.FromRawBits(value: (((long)(int)generator.NextUInt32()) >> (31 - spread))),
+            Y: FixedQ4816.FromRawBits(value: (((long)(int)generator.NextUInt32()) >> (31 - spread))),
+            Z: FixedQ4816.FromRawBits(value: (((long)(int)generator.NextUInt32()) >> (31 - spread)))
+        );
+        static FixedQ4816 DrawHalf(ref Pcg32XshRr generator, int draw) => (((draw % 6) == 0)
+            ? FixedQ4816.Zero
+            : FixedQ4816.FromRawBits(value: ((long)(generator.NextUInt32() % (1U << ((int)(generator.NextUInt32() % 19U)))))));
+        static FixedQ4816 Inside(ref Pcg32XshRr generator, FixedInterval interval) {
+            var draw = ((((ulong)generator.NextUInt32()) << 32) | generator.NextUInt32());
+
+            return FixedQ4816.FromRawBits(value: (interval.Lower.Value + ((long)(draw % (((ulong)(interval.Upper.Value - interval.Lower.Value)) + 1UL)))));
+        }
+    }
     // Pcg3d against Oracles.Pcg3dReference — the identical Jarzynski & Olano mix, formed independently in
     // BigInteger with the carrier reduction taken explicitly, where the subject relies on unchecked uint wrap.
     private static string? Pcg3dAgreesWithReference(uint x, uint y, uint z) {

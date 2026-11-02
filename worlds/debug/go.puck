@@ -1,4 +1,5 @@
 import "../standard/inputs"
+import "../standard/kits"
 import "shapes"
 // Physical Go on a 19x19 board: 361 rigid stones on a goban in the gallery hall's board game room (hall.puck), whose every
 // settled arrangement is judged against the position the rules last accepted, and a computer opponent. The debug
@@ -87,50 +88,7 @@ looks: map(["goStoneBlack", "goStoneWhite", "goCursor"], name => {
   source: creation(prototypeId: name)
 })
 
-kits [
-  {
-    bodyContact: Solid
-    bodyMotionProgram: "walk"
-    collider: fromCreation(prototypeId: goStoneBlack)
-    motion {
-      facingSnap: true
-      holds [
-        {
-          bond: Free
-          envelope {
-            sinkSpeed: 40
-          }
-          gravity {
-            fall: 46
-            rise: 28
-          }
-          hold: Gravity
-          name: "air"
-        }
-      ]
-      shaping [
-        {
-          along {}
-        }
-      ]
-      speed {
-        value: 0.001
-      }
-      turn {
-        rate: 0.001
-      }
-    }
-    name: "goStone"
-    rigid {
-      angularDamping: 0.05
-      friction: 0.6
-      linearDamping: 0.05
-      mass: 0.05
-      restitution: 0.05
-      rollingFriction: 0.2
-    }
-  }
-]
+pieceKit(name: "goStone", collider: fromCreation(prototypeId: goStoneBlack), mass: 0.05)
 
 placements {
   placement "goTable" {
@@ -211,6 +169,64 @@ spawnPoints [
   { id: "go", position [goTable[0], galleryFloor[2], (goTable[2] - 1.6)], yawDegrees: 180 }
 ]
 
+// The grid is painted onto the board's sixteen faces. Paints on static geometry are authored in world space, so every
+// position reads goTable (and goSurface); the shape rows below are in the author frame, a 180 degree yaw from it, so
+// face-r-c stands at world offset (0.4 c - 0.6, 0.4 r - 0.6) and wears palette slot 3 + 4 r + c. The lines are 8 cm
+// apart (goCellSize), nineteen a side, and each paint is a thin box whose two walls are two lines (a face's x paints
+// run the length of the board, its z paints the width). A face wears its three boxes along each axis (in centimetres
+// from the board's centre: the centre of the box, its half-width) and its one star point (the hoshi at 3, 9 and 15
+// lines in: -48, 0 and 48 cm; the centre line is on the border of the two middle faces, so both wear it).
+let goGridBoxes = [
+  [-80, 8]
+  [-60, 4]
+  [-44, 4]
+  [-36, 4]
+  [-20, 4]
+  [-4, 4]
+  [4, 4]
+  [20, 4]
+  [36, 4]
+  [44, 4]
+  [60, 4]
+  [80, 8]
+]
+let goGridStars = [-48, 0, 0, 48]
+let goFaceSlots = reduce(
+  range(0, 4),
+  [],
+  (slots, r) => concat(
+    slots,
+    map(range(0, 4), c => {
+      color: "#D9B26F"
+      roughness: 0.6
+      specular: 0.12
+      paints: concat(
+        map(range(3 * c, 3), j => {
+          type: Box
+          color: "#1E1A16"
+          position [goTable[0] + goGridBoxes[j][0] / 100, goTable[1] + goSurface, goTable[2]]
+          scale [goGridBoxes[j][1] / 100, 1, 2]
+          stroke: 0.0007
+        }),
+        map(range(3 * r, 3), j => {
+          type: Box
+          color: "#1E1A16"
+          position [goTable[0], goTable[1] + goSurface, goTable[2] + goGridBoxes[j][0] / 100]
+          scale [2, 1, goGridBoxes[j][1] / 100]
+          stroke: 0.0007
+        }),
+        [
+          {
+            type: Sphere
+            color: "#1E1A16"
+            position [goTable[0] + goGridStars[c] / 100, goTable[1] + goSurface, goTable[2] + goGridStars[r] / 100]
+            scale [0.004, 0.03, 0.004]
+          }
+        ]
+      )
+    })
+  )
+)
 let goWood = 0
 let goLine = 1
 let goLid = 2
@@ -218,315 +234,14 @@ prototypes {
   prototype "goTable" {
     document {
       name: "goTable"
-      palette [
-        { color: "#8A6A45" }
-        { color: "#1E1A16", roughness: 0.7 }
-        { color: "#4A3526", roughness: 0.8, specular: 0.05 }
-        {color: "#D9B26F", roughness: 0.6, specular: 0.12, paints [
-            { type: Box, color: "#1E1A16", position [55.7, 9.905, 30.6], scale [0.08, 1, 2], stroke: 0.0007 }
-            { type: Box, color: "#1E1A16", position [55.9, 9.905, 30.6], scale [0.04, 1, 2], stroke: 0.0007 }
-            { type: Box, color: "#1E1A16", position [56.06, 9.905, 30.6], scale [0.04, 1, 2], stroke: 0.0007 }
-            { type: Box, color: "#1E1A16", position [56.5, 9.905, 29.8], scale [2, 1, 0.08], stroke: 0.0007 }
-            { type: Box, color: "#1E1A16", position [56.5, 9.905, 30], scale [2, 1, 0.04], stroke: 0.0007 }
-            { type: Box, color: "#1E1A16", position [56.5, 9.905, 30.16], scale [2, 1, 0.04], stroke: 0.0007 }
-            { type: Sphere, color: "#1E1A16", position [56.02, 9.905, 30.12], scale [0.004, 0.03, 0.004] }
-          ]
-        }
-        {color: "#D9B26F", roughness: 0.6, specular: 0.12, paints [
-            { type: Box, color: "#1E1A16", position [56.14, 9.905, 30.6], scale [0.04, 1, 2], stroke: 0.0007 }
-            { type: Box, color: "#1E1A16", position [56.3, 9.905, 30.6], scale [0.04, 1, 2], stroke: 0.0007 }
-            { type: Box, color: "#1E1A16", position [56.46, 9.905, 30.6], scale [0.04, 1, 2], stroke: 0.0007 }
-            { type: Box, color: "#1E1A16", position [56.5, 9.905, 29.8], scale [2, 1, 0.08], stroke: 0.0007 }
-            { type: Box, color: "#1E1A16", position [56.5, 9.905, 30], scale [2, 1, 0.04], stroke: 0.0007 }
-            { type: Box, color: "#1E1A16", position [56.5, 9.905, 30.16], scale [2, 1, 0.04], stroke: 0.0007 }
-            { type: Sphere, color: "#1E1A16", position [56.5, 9.905, 30.12], scale [0.004, 0.03, 0.004] }
-          ]
-        }
-        {color: "#D9B26F", roughness: 0.6, specular: 0.12, paints [
-            { type: Box, color: "#1E1A16", position [56.54, 9.905, 30.6], scale [0.04, 1, 2], stroke: 0.0007 }
-            { type: Box, color: "#1E1A16", position [56.7, 9.905, 30.6], scale [0.04, 1, 2], stroke: 0.0007 }
-            { type: Box, color: "#1E1A16", position [56.86, 9.905, 30.6], scale [0.04, 1, 2], stroke: 0.0007 }
-            { type: Box, color: "#1E1A16", position [56.5, 9.905, 29.8], scale [2, 1, 0.08], stroke: 0.0007 }
-            { type: Box, color: "#1E1A16", position [56.5, 9.905, 30], scale [2, 1, 0.04], stroke: 0.0007 }
-            { type: Box, color: "#1E1A16", position [56.5, 9.905, 30.16], scale [2, 1, 0.04], stroke: 0.0007 }
-            { type: Sphere, color: "#1E1A16", position [56.5, 9.905, 30.12], scale [0.004, 0.03, 0.004] }
-          ]
-        }
-        {color: "#D9B26F", roughness: 0.6, specular: 0.12, paints [
-            { type: Box, color: "#1E1A16", position [56.94, 9.905, 30.6], scale [0.04, 1, 2], stroke: 0.0007 }
-            { type: Box, color: "#1E1A16", position [57.1, 9.905, 30.6], scale [0.04, 1, 2], stroke: 0.0007 }
-            { type: Box, color: "#1E1A16", position [57.3, 9.905, 30.6], scale [0.08, 1, 2], stroke: 0.0007 }
-            { type: Box, color: "#1E1A16", position [56.5, 9.905, 29.8], scale [2, 1, 0.08], stroke: 0.0007 }
-            { type: Box, color: "#1E1A16", position [56.5, 9.905, 30], scale [2, 1, 0.04], stroke: 0.0007 }
-            { type: Box, color: "#1E1A16", position [56.5, 9.905, 30.16], scale [2, 1, 0.04], stroke: 0.0007 }
-            { type: Sphere, color: "#1E1A16", position [56.98, 9.905, 30.12], scale [0.004, 0.03, 0.004] }
-          ]
-        }
-        {color: "#D9B26F", roughness: 0.6, specular: 0.12, paints [
-            { type: Box, color: "#1E1A16", position [55.7, 9.905, 30.6], scale [0.08, 1, 2], stroke: 0.0007 }
-            { type: Box, color: "#1E1A16", position [55.9, 9.905, 30.6], scale [0.04, 1, 2], stroke: 0.0007 }
-            { type: Box, color: "#1E1A16", position [56.06, 9.905, 30.6], scale [0.04, 1, 2], stroke: 0.0007 }
-            {
-              type: Box
-              color: "#1E1A16"
-              position [56.5, 9.905, 30.240000000000002]
-              scale [2, 1, 0.04]
-              stroke: 0.0007
-            }
-            {
-              type: Box
-              color: "#1E1A16"
-              position [56.5, 9.905, 30.400000000000002]
-              scale [2, 1, 0.04]
-              stroke: 0.0007
-            }
-            {
-              type: Box
-              color: "#1E1A16"
-              position [56.5, 9.905, 30.560000000000002]
-              scale [2, 1, 0.04]
-              stroke: 0.0007
-            }
-            { type: Sphere, color: "#1E1A16", position [56.02, 9.905, 30.6], scale [0.004, 0.03, 0.004] }
-          ]
-        }
-        {color: "#D9B26F", roughness: 0.6, specular: 0.12, paints [
-            { type: Box, color: "#1E1A16", position [56.14, 9.905, 30.6], scale [0.04, 1, 2], stroke: 0.0007 }
-            { type: Box, color: "#1E1A16", position [56.3, 9.905, 30.6], scale [0.04, 1, 2], stroke: 0.0007 }
-            { type: Box, color: "#1E1A16", position [56.46, 9.905, 30.6], scale [0.04, 1, 2], stroke: 0.0007 }
-            {
-              type: Box
-              color: "#1E1A16"
-              position [56.5, 9.905, 30.240000000000002]
-              scale [2, 1, 0.04]
-              stroke: 0.0007
-            }
-            {
-              type: Box
-              color: "#1E1A16"
-              position [56.5, 9.905, 30.400000000000002]
-              scale [2, 1, 0.04]
-              stroke: 0.0007
-            }
-            {
-              type: Box
-              color: "#1E1A16"
-              position [56.5, 9.905, 30.560000000000002]
-              scale [2, 1, 0.04]
-              stroke: 0.0007
-            }
-            { type: Sphere, color: "#1E1A16", position [56.5, 9.905, 30.6], scale [0.004, 0.03, 0.004] }
-          ]
-        }
-        {color: "#D9B26F", roughness: 0.6, specular: 0.12, paints [
-            { type: Box, color: "#1E1A16", position [56.54, 9.905, 30.6], scale [0.04, 1, 2], stroke: 0.0007 }
-            { type: Box, color: "#1E1A16", position [56.7, 9.905, 30.6], scale [0.04, 1, 2], stroke: 0.0007 }
-            { type: Box, color: "#1E1A16", position [56.86, 9.905, 30.6], scale [0.04, 1, 2], stroke: 0.0007 }
-            {
-              type: Box
-              color: "#1E1A16"
-              position [56.5, 9.905, 30.240000000000002]
-              scale [2, 1, 0.04]
-              stroke: 0.0007
-            }
-            {
-              type: Box
-              color: "#1E1A16"
-              position [56.5, 9.905, 30.400000000000002]
-              scale [2, 1, 0.04]
-              stroke: 0.0007
-            }
-            {
-              type: Box
-              color: "#1E1A16"
-              position [56.5, 9.905, 30.560000000000002]
-              scale [2, 1, 0.04]
-              stroke: 0.0007
-            }
-            { type: Sphere, color: "#1E1A16", position [56.5, 9.905, 30.6], scale [0.004, 0.03, 0.004] }
-          ]
-        }
-        {color: "#D9B26F", roughness: 0.6, specular: 0.12, paints [
-            { type: Box, color: "#1E1A16", position [56.94, 9.905, 30.6], scale [0.04, 1, 2], stroke: 0.0007 }
-            { type: Box, color: "#1E1A16", position [57.1, 9.905, 30.6], scale [0.04, 1, 2], stroke: 0.0007 }
-            { type: Box, color: "#1E1A16", position [57.3, 9.905, 30.6], scale [0.08, 1, 2], stroke: 0.0007 }
-            {
-              type: Box
-              color: "#1E1A16"
-              position [56.5, 9.905, 30.240000000000002]
-              scale [2, 1, 0.04]
-              stroke: 0.0007
-            }
-            {
-              type: Box
-              color: "#1E1A16"
-              position [56.5, 9.905, 30.400000000000002]
-              scale [2, 1, 0.04]
-              stroke: 0.0007
-            }
-            {
-              type: Box
-              color: "#1E1A16"
-              position [56.5, 9.905, 30.560000000000002]
-              scale [2, 1, 0.04]
-              stroke: 0.0007
-            }
-            { type: Sphere, color: "#1E1A16", position [56.98, 9.905, 30.6], scale [0.004, 0.03, 0.004] }
-          ]
-        }
-        {color: "#D9B26F", roughness: 0.6, specular: 0.12, paints [
-            { type: Box, color: "#1E1A16", position [55.7, 9.905, 30.6], scale [0.08, 1, 2], stroke: 0.0007 }
-            { type: Box, color: "#1E1A16", position [55.9, 9.905, 30.6], scale [0.04, 1, 2], stroke: 0.0007 }
-            { type: Box, color: "#1E1A16", position [56.06, 9.905, 30.6], scale [0.04, 1, 2], stroke: 0.0007 }
-            { type: Box, color: "#1E1A16", position [56.5, 9.905, 30.64], scale [2, 1, 0.04], stroke: 0.0007 }
-            { type: Box, color: "#1E1A16", position [56.5, 9.905, 30.8], scale [2, 1, 0.04], stroke: 0.0007 }
-            { type: Box, color: "#1E1A16", position [56.5, 9.905, 30.96], scale [2, 1, 0.04], stroke: 0.0007 }
-            { type: Sphere, color: "#1E1A16", position [56.02, 9.905, 30.6], scale [0.004, 0.03, 0.004] }
-          ]
-        }
-        {color: "#D9B26F", roughness: 0.6, specular: 0.12, paints [
-            { type: Box, color: "#1E1A16", position [56.14, 9.905, 30.6], scale [0.04, 1, 2], stroke: 0.0007 }
-            { type: Box, color: "#1E1A16", position [56.3, 9.905, 30.6], scale [0.04, 1, 2], stroke: 0.0007 }
-            { type: Box, color: "#1E1A16", position [56.46, 9.905, 30.6], scale [0.04, 1, 2], stroke: 0.0007 }
-            { type: Box, color: "#1E1A16", position [56.5, 9.905, 30.64], scale [2, 1, 0.04], stroke: 0.0007 }
-            { type: Box, color: "#1E1A16", position [56.5, 9.905, 30.8], scale [2, 1, 0.04], stroke: 0.0007 }
-            { type: Box, color: "#1E1A16", position [56.5, 9.905, 30.96], scale [2, 1, 0.04], stroke: 0.0007 }
-            { type: Sphere, color: "#1E1A16", position [56.5, 9.905, 30.6], scale [0.004, 0.03, 0.004] }
-          ]
-        }
-        {color: "#D9B26F", roughness: 0.6, specular: 0.12, paints [
-            { type: Box, color: "#1E1A16", position [56.54, 9.905, 30.6], scale [0.04, 1, 2], stroke: 0.0007 }
-            { type: Box, color: "#1E1A16", position [56.7, 9.905, 30.6], scale [0.04, 1, 2], stroke: 0.0007 }
-            { type: Box, color: "#1E1A16", position [56.86, 9.905, 30.6], scale [0.04, 1, 2], stroke: 0.0007 }
-            { type: Box, color: "#1E1A16", position [56.5, 9.905, 30.64], scale [2, 1, 0.04], stroke: 0.0007 }
-            { type: Box, color: "#1E1A16", position [56.5, 9.905, 30.8], scale [2, 1, 0.04], stroke: 0.0007 }
-            { type: Box, color: "#1E1A16", position [56.5, 9.905, 30.96], scale [2, 1, 0.04], stroke: 0.0007 }
-            { type: Sphere, color: "#1E1A16", position [56.5, 9.905, 30.6], scale [0.004, 0.03, 0.004] }
-          ]
-        }
-        {color: "#D9B26F", roughness: 0.6, specular: 0.12, paints [
-            { type: Box, color: "#1E1A16", position [56.94, 9.905, 30.6], scale [0.04, 1, 2], stroke: 0.0007 }
-            { type: Box, color: "#1E1A16", position [57.1, 9.905, 30.6], scale [0.04, 1, 2], stroke: 0.0007 }
-            { type: Box, color: "#1E1A16", position [57.3, 9.905, 30.6], scale [0.08, 1, 2], stroke: 0.0007 }
-            { type: Box, color: "#1E1A16", position [56.5, 9.905, 30.64], scale [2, 1, 0.04], stroke: 0.0007 }
-            { type: Box, color: "#1E1A16", position [56.5, 9.905, 30.8], scale [2, 1, 0.04], stroke: 0.0007 }
-            { type: Box, color: "#1E1A16", position [56.5, 9.905, 30.96], scale [2, 1, 0.04], stroke: 0.0007 }
-            { type: Sphere, color: "#1E1A16", position [56.98, 9.905, 30.6], scale [0.004, 0.03, 0.004] }
-          ]
-        }
-        {color: "#D9B26F", roughness: 0.6, specular: 0.12, paints [
-            { type: Box, color: "#1E1A16", position [55.7, 9.905, 30.6], scale [0.08, 1, 2], stroke: 0.0007 }
-            { type: Box, color: "#1E1A16", position [55.9, 9.905, 30.6], scale [0.04, 1, 2], stroke: 0.0007 }
-            { type: Box, color: "#1E1A16", position [56.06, 9.905, 30.6], scale [0.04, 1, 2], stroke: 0.0007 }
-            {
-              type: Box
-              color: "#1E1A16"
-              position [56.5, 9.905, 31.040000000000003]
-              scale [2, 1, 0.04]
-              stroke: 0.0007
-            }
-            {
-              type: Box
-              color: "#1E1A16"
-              position [56.5, 9.905, 31.200000000000003]
-              scale [2, 1, 0.04]
-              stroke: 0.0007
-            }
-            {
-              type: Box
-              color: "#1E1A16"
-              position [56.5, 9.905, 31.400000000000002]
-              scale [2, 1, 0.08]
-              stroke: 0.0007
-            }
-            { type: Sphere, color: "#1E1A16", position [56.02, 9.905, 31.080000000000002], scale [0.004, 0.03, 0.004] }
-          ]
-        }
-        {color: "#D9B26F", roughness: 0.6, specular: 0.12, paints [
-            { type: Box, color: "#1E1A16", position [56.14, 9.905, 30.6], scale [0.04, 1, 2], stroke: 0.0007 }
-            { type: Box, color: "#1E1A16", position [56.3, 9.905, 30.6], scale [0.04, 1, 2], stroke: 0.0007 }
-            { type: Box, color: "#1E1A16", position [56.46, 9.905, 30.6], scale [0.04, 1, 2], stroke: 0.0007 }
-            {
-              type: Box
-              color: "#1E1A16"
-              position [56.5, 9.905, 31.040000000000003]
-              scale [2, 1, 0.04]
-              stroke: 0.0007
-            }
-            {
-              type: Box
-              color: "#1E1A16"
-              position [56.5, 9.905, 31.200000000000003]
-              scale [2, 1, 0.04]
-              stroke: 0.0007
-            }
-            {
-              type: Box
-              color: "#1E1A16"
-              position [56.5, 9.905, 31.400000000000002]
-              scale [2, 1, 0.08]
-              stroke: 0.0007
-            }
-            { type: Sphere, color: "#1E1A16", position [56.5, 9.905, 31.080000000000002], scale [0.004, 0.03, 0.004] }
-          ]
-        }
-        {color: "#D9B26F", roughness: 0.6, specular: 0.12, paints [
-            { type: Box, color: "#1E1A16", position [56.54, 9.905, 30.6], scale [0.04, 1, 2], stroke: 0.0007 }
-            { type: Box, color: "#1E1A16", position [56.7, 9.905, 30.6], scale [0.04, 1, 2], stroke: 0.0007 }
-            { type: Box, color: "#1E1A16", position [56.86, 9.905, 30.6], scale [0.04, 1, 2], stroke: 0.0007 }
-            {
-              type: Box
-              color: "#1E1A16"
-              position [56.5, 9.905, 31.040000000000003]
-              scale [2, 1, 0.04]
-              stroke: 0.0007
-            }
-            {
-              type: Box
-              color: "#1E1A16"
-              position [56.5, 9.905, 31.200000000000003]
-              scale [2, 1, 0.04]
-              stroke: 0.0007
-            }
-            {
-              type: Box
-              color: "#1E1A16"
-              position [56.5, 9.905, 31.400000000000002]
-              scale [2, 1, 0.08]
-              stroke: 0.0007
-            }
-            { type: Sphere, color: "#1E1A16", position [56.5, 9.905, 31.080000000000002], scale [0.004, 0.03, 0.004] }
-          ]
-        }
-        {color: "#D9B26F", roughness: 0.6, specular: 0.12, paints [
-            { type: Box, color: "#1E1A16", position [56.94, 9.905, 30.6], scale [0.04, 1, 2], stroke: 0.0007 }
-            { type: Box, color: "#1E1A16", position [57.1, 9.905, 30.6], scale [0.04, 1, 2], stroke: 0.0007 }
-            { type: Box, color: "#1E1A16", position [57.3, 9.905, 30.6], scale [0.08, 1, 2], stroke: 0.0007 }
-            {
-              type: Box
-              color: "#1E1A16"
-              position [56.5, 9.905, 31.040000000000003]
-              scale [2, 1, 0.04]
-              stroke: 0.0007
-            }
-            {
-              type: Box
-              color: "#1E1A16"
-              position [56.5, 9.905, 31.200000000000003]
-              scale [2, 1, 0.04]
-              stroke: 0.0007
-            }
-            {
-              type: Box
-              color: "#1E1A16"
-              position [56.5, 9.905, 31.400000000000002]
-              scale [2, 1, 0.08]
-              stroke: 0.0007
-            }
-            { type: Sphere, color: "#1E1A16", position [56.98, 9.905, 31.080000000000002], scale [0.004, 0.03, 0.004] }
-          ]
-        }
-      ]
+      palette: concat(
+        [
+          { color: "#8A6A45" },
+          { color: "#1E1A16", roughness: 0.7 },
+          { color: "#4A3526", roughness: 0.8, specular: 0.05 }
+        ],
+        goFaceSlots
+      )
       schema: "puck.creation.v1"
       shape Box "top" {
         material: goWood

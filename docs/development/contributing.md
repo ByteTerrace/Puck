@@ -1145,6 +1145,18 @@ unverified when no device run exists.
   `mov byte ptr [rN+4],0` (the frame going preemptive) followed by `call`. A
   callee-saved register listed live at the instruction after that call is the
   defect. Remove the attribute only when no such site remains with it gone.
+- An access violation inside `MimallocAllocator.mi_malloc` (exit `0xC0000005`,
+  coreclr named as the faulting module, any managed caller) is first a question
+  of which thread loaded mimalloc: the loader is its main thread, and once that
+  thread exits a later thread on a reused TEB address faults in `mi_thread_init`
+  on the torn-down static main theap
+  ([memory plan](../plans/memory-pooling.md#mimalloc-integration)).
+  `MimallocAllocator` loads it on its own owner thread; a dump whose faulting
+  thread's TLS slot points into `mimalloc.dll`'s image at a theap whose first
+  word is zero is this case. Native heap misuse (a double free, an overrun, a
+  write after free) is the other: boot `Puck.World --debug-allocator`, which
+  wraps the allocator in `GuardedAllocator` and ends the run at the misuse with
+  `[memory.guard]`, the block and the stack that freed it.
 - Incremental builds can retain corrupted reference assemblies. Confirm
   suspicious behavior in a fresh worktree before attributing it to source
   changes, then clean only the affected `bin`/`obj` directories.

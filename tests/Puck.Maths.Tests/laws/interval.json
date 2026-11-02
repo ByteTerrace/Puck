@@ -307,6 +307,36 @@
     ]
   },
   {
+    "Id": "interval.rounded-product-is-the-point-hull",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedInterval",
+        "Name": "RoundedProduct"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedInterval.RoundedProduct over 2048 drawn intervals up to 2^40 raws with spans up to 2^32 raws and drawn signed factors: eight interior points' FixedQ4816 products lie inside it and within half a raw of the exact product",
+        "Against": "the exact product of each point's raw and the factor's raw, formed in BigInteger",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the answer is exactly the hull of the two ends' FixedQ4816 products, in either order for a negative factor; the whole carrier doubled and the unbounded interval answer the top; zero times the whole carrier is exactly zero",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
     "Id": "interval.pow-encloses-the-series",
     "Tier": "Default",
     "Members": [

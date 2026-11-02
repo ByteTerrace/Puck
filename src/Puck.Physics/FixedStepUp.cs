@@ -51,9 +51,12 @@ public static class FixedStepUp {
     /// <param name="up">The body's unit up axis.</param>
     /// <param name="distance">The greatest permitted descent.</param>
     /// <param name="result">The accepted landing.</param>
+    /// <param name="uncertain">Whether the pose lowered from is already uncertain (<see cref="ContactResolution.Unproved"/>).
+    /// Its landing may then be uncertain too, so long as it grounds: the snap moves the body only onto support it
+    /// proves, and lowering it adds no uncertainty the pose did not carry.</param>
     /// <returns>Whether the search found proven walkable support.</returns>
     public static bool TrySnap<TStep>(ref TStep step, in FixedVector3 start, in FixedVector3 velocity,
-        in FixedVector3 up, FixedQ4816 distance, out FixedStepUpResult result)
+        in FixedVector3 up, FixedQ4816 distance, out FixedStepUpResult result, bool uncertain = false)
         where TStep : IFixedContactStep, allows ref struct {
         result = default;
         if ((distance <= FixedQ4816.Zero) || !Meets(above: in start, descent: distance, step: ref step,
@@ -76,7 +79,7 @@ public static class FixedStepUp {
         var moved = velocity;
         var landing = step.Sweep(position: ref landed, previousPosition: in start, velocity: ref moved);
 
-        if ((landing.Refusal != ContactRefusal.None) || landing.Unproved || !landing.Grounded) {
+        if ((landing.Refusal != ContactRefusal.None) || (landing.Unproved && !uncertain) || !landing.Grounded) {
             return false;
         }
         result = new FixedStepUpResult(Position: landed,

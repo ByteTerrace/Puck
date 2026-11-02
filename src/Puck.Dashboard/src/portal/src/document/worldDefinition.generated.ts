@@ -8501,6 +8501,68 @@ export type WorldPrototype = {
          */
         band?: "Visibility" | "Combined";
       } | null;
+      /**
+       * The slot's styles chosen live by a state cell (PaletteToonSelectDocument), whose case replaces Toon while the cell names one; null keeps Toon.
+       */
+      toonSelect?: {
+        /**
+         * The state.<row>[.<key>] binding naming the cell.
+         */
+        state: string;
+        /**
+         * The styles, the first for the value zero; each is a whole style (ToonStyleDocument), enabled: false keeping the slot continuous.
+         */
+        cases: ({
+          /**
+           * Whether the style bands; absent is on. False on a palette row keeps that material continuous whatever the world's default is; false on render.toon boots the world's default off until the lever turns it on, which a style with every value then bands with.
+           */
+          enabled?: boolean | null;
+          /**
+           * Diffuse band threshold in [0, 1].
+           */
+          threshold?: number | null;
+          /**
+           * Full terminator width in [0.001, 0.5].
+           */
+          softness?: number | null;
+          /**
+           * Shadow-band reflectance, three linear RGB values in [0, 1].
+           */
+          shadowTint?: unknown;
+          /**
+           * Close outline radius in output pixels, in [0, 4]; zero disables outlines.
+           */
+          outlineWidth?: number | null;
+          /**
+           * Distance in metres at which the outline radius halves, in [0.1, 1000].
+           */
+          outlineDistance?: number | null;
+          /**
+           * Crease normal cosine in [0, 0.95].
+           */
+          outlineNormal?: number | null;
+          /**
+           * Outline multiplier, three linear RGB values in [0, 1].
+           */
+          outlineTint?: unknown;
+          /**
+           * Highlight size as one minus the half-vector cosine, in [0.001, 0.25].
+           */
+          specularSize?: number | null;
+          /**
+           * Reflected-light exposure compensation in stops, in [-4, 4].
+           */
+          exposure?: number | null;
+          /**
+           * Hue-preserving highlight compression in [0, 2]; zero disables it.
+           */
+          shoulder?: number | null;
+          /**
+           * How the band treats a light's shadow visibility: Visibility (the default) keeps the penumbra, Combined snaps it to the band's edge.
+           */
+          band?: "Visibility" | "Combined";
+        } | null)[];
+      } | null;
     } | null)[] | null;
     /**
      * The authored shapes (null = empty).

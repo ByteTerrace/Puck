@@ -358,3 +358,20 @@ presence claim (`size == 1`). The instance must outlive the visit
 (`durability: persisted`). Anything outside a block reads the booted world. `puck test` takes
 the `.puck` source directly and runs the worlds its tests generated — see
 [Testing a world](../../../../docs/authoring/testing-a-world.md).
+
+## The noninterference harness
+
+`puck disclosure <world>` reuses the test worker: one batch of legs, one per
+variant of `<stem>.disclosure.json` plus the first variant again as the
+control, each leg carrying a `WorldDisclosureLeg` that `WorldTestBatch` hands to
+`WorldDisclosureRun` after `WorldTestRun.Reset` (which clears the tick script,
+so arming before it loses the lines). The run arms the variant's operator steps
+with `WorldTickScript.Arm`, the observer's script and drawn lines with
+`ArmSeat`, admits `WorldDisclosureSession`s through `TryObserveAsSession`, acts
+for them on `WorldTestRun.Ticked`, and writes `disclosure.json` at the export.
+The schedule's rows of the observer join the transcript from
+`WorldTestRun.Lines`. The fixture contract is in
+[the disclosure plan](../../../../docs/plans/disclosure.md#the-harnesss-fixture-contract).
+A control that differs means a door answers with a per-run value: name it by
+first appearance (`WorldDisclosureTranscript.Nonce`, as activation ids are) if
+it is a nonce, and treat it as a finding otherwise.
