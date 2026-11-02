@@ -402,9 +402,9 @@ public sealed unsafe class VulkanDeviceChainCleanupLawTests {
             (IndirectDraws && (extensionName == VulkanDeviceCommands.DrawIndirectCountExtension));
         public bool HasInstanceExtension(string extensionName, string? layerName) =>
             false;
-        // The required fragment-demotion feature, and no optional feature.
+        // Required fragment demotion and draw parameters, and no optional feature.
         public bool IsExtensionFeatureSupported(VulkanInstanceCommands instance, nint physicalDeviceHandle, uint structureType) =>
-            (structureType == 1000276000);
+            (structureType is 1000276000 or 1000063000);
         public VkResult WaitIdle(VulkanDeviceCommands device) =>
             VkResult.Success;
     }

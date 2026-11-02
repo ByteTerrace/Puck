@@ -639,23 +639,29 @@ second, and recording third; recording alone would not reach it.
 
 ### The cause fix beside it
 
-`SdfWorldPassRecorder.Choose` culls and levels every draw for every pass on the
-CPU (`SdfWorldPassRecorder.cs:752`, `:886`), and 160,000 draws took 700 ms a
-frame. Threads would divide that, not remove it. The engine already records
-counted indirect draws for opaque occlusion: `SdfMeshOcclusion.RecordDraws`
-(`SdfMeshOcclusion.cs:185-193`) through `ExecuteIndirect` on Direct3D 12
-(`DirectXGpuRecorder.Device.cs:18-29`) and non-indexed `DrawIndirectCount` on
-Vulkan (`VulkanGpuRecorder.cs:277-282`), matching the vertex-pulling draw
-(`SdfWorldPassRecorder.cs:912-933`), in an early phase of last frame's visible
-draws and a late phase of newly visible ones (`:839-864`). Decision: extend that
-mechanism, not build a second indirect path. A compute cull-and-level pass
-writes the per-phase argument buffers for every pass kind (opaque, shadow
-cascades, glass), carrying the level hysteresis `Choose` keeps today
-(`:902-907`, a draw keeps its level while its mesh is unchanged) as a per-draw
-previous-level buffer the pass reads and writes, so the CPU records one counted
-indirect draw per phase per pass whatever the draw count. This is a rendering
-change the [rendering plan](rendering.md) owns; the memo names it so parallel
-recording is not asked to hide it.
+At R2's input (`997fb2d002`), `SdfWorldPassRecorder.Choose` culled and levelled
+every draw for every pass on the CPU, and 160,000 draws took 700 ms a frame.
+Threads would divide that, not remove it. R2 extends the existing opaque
+occlusion mechanism, `SdfMeshOcclusion.RecordDraws`, through `ExecuteIndirect`
+on Direct3D 12 and non-indexed `DrawIndirectCount` on Vulkan. Its existing
+compute kernel now writes the per-phase arguments for opaque, every shadow
+cascade and glass. Each pass uploads 224 bytes of controls; bounds and the
+complete shared geometry level table live in the retained mesh region.
+
+The per-draw GPU history carries visibility, the previous level and mesh
+identity, keeps the 1/1.1 display-pixel band while the mesh is unchanged,
+survives buffer growth and ignores prior levels for a settled still. Rejected
+commands are empty slots, preserving staged order and depth ties. Opaque
+occlusion retains its early and late phases; glass uses one. Each cascade
+selects once, emitting entry, solid-exit and thin-exit argument phases. Entry
+uses one counted call; exit uses one per pipeline bucket, with no intervening
+selection or history write.
+The CPU records one counted indirect call per phase regardless of draw count;
+CPU `Choose` and its direct-draw loop are deleted. Vulkan without native
+counting consumes the same initialized arguments, in one multi-draw where
+available or individual slots otherwise. This is a rendering change the
+[rendering plan](rendering.md) owns; parallel recording need not hide the
+removed per-pass walk.
 
 ## 4. Memory ownership
 
@@ -832,10 +838,120 @@ as `puck mesh audit` for bake defects.
 | **T3 Crossing scan partitions** | E3 by seat partition with occupancy deltas. | T0 on a fixture of 40 seats where two seats enter one party-travel door on one tick and seats straddle the 32-seat boundary; the crossing log (transfer tick, cohort) identical across counts and against the recording. |
 | **T2 Rigid advance partitions** | E1 for rigid bodies with partition scratch; the rigid share measured first; the one pose-read change re-recorded. | T0 on a fixture of 200 rigid bodies (a rack and a domino line) beside kit bodies whose producers target a rigid body; hashes identical across counts; `puck bench world` at 0 B median a tick; a standing `host.frames` simulate read against 6.3 ms. |
 | **R1 Parallel recording in waves** | Waves, prepare-before-fork with the fence first, residency upload and extent in preparation, in-order submission; the pose pack fork. Direct3D 12 and a windowed Vulkan boot. | `host.frames` produce avg at the lobby against 6.5 ms; a `world.at` script that moves a portal view and changes a screen's source every frame for 120 frames, with stills at three ticks compared as above with the serial build's on both backends (a one-frame-late read or a descriptor overwritten under a slot in flight shows as a localized difference beyond the noise); GPU-based validation clean on Direct3D 12 and the validation layer clean on Vulkan. |
-| **R2 GPU culling in the indirect path** | `Choose` on the GPU through `SdfMeshOcclusion`'s counted indirect draws, every pass kind, hysteresis kept. Owned by the rendering plan; ordered here because R1 exposes it. It moves the work rather than reducing it; the next steps (ordered compaction, (geometry, level) instance buckets, instance updates proportional to change and authored motion on the GPU) are the [visibility plan](visibility.md#the-build-order)'s. | The 160,000-draw scene's produce time; stills compared as above with the CPU `Choose` build at the lobby, the rim and inside the gallery (where hysteresis holds levels). |
+| **R2 GPU culling in the indirect path — built, checks recorded** | GPU selection through `SdfMeshOcclusion`'s counted indirect draws for every raster pass, with persistent level history; CPU `Choose` removed. Cascades select once into entry and solid/thin exit phases. Ordered compaction, (geometry, level) instance buckets and proportional updates follow in the [visibility plan](visibility.md#the-build-order). | Settled meadow produce CPU → GPU: Direct3D 12 59.53–59.76 → 50.75 ms; Vulkan 58.41–59.43 → 51.82 ms. Full Direct3D 12 GPU validation and Vulkan synchronization validation clean; tolerant still comparisons inspected. [R2 observations](#r2-observations) records the counts, pass costs, unresolved Direct3D 12 lobby outlier and monitor residual. |
 | **B1 GI proportional to change** | The change-set closure; GI jobs under `Lighting`. | After a `world.reload` that removes a wall and one that moves a draw: the probe tables and a still compared with a full retrace's; `[sdf.mesh-gi]` probes traced against the whole window; the cold bake's GI seconds against 201 to 222. |
 | **M2b Probe block ownership** | Blocks owned by the cache with live-slice counts, native. | A walk into an untraced area for 60 s with `host.memory collect` every 10 s: managed heap flat, native blocks freed as sweeps converge (block count printed by `[sdf.mesh-gi]`); stills before and after compared as above. |
 | **M3 Native movers 4 and 5** | Unmanaged scratch leases, the split journal, numeric columns; the tick's deliveries. | T0 at every count; `puck bench world` unchanged; a scratch world whose rules overwrite text cells and rewind (`world.undo`) reads the restored text. |
+
+### R2 observations
+
+November 1, RTX 4070, 1280×900, highest quality, native render scale, temporal
+accumulation and AO on. Bakes settle before the paired readings. CPU controls
+10 and 11 restore CPU `Choose` while retaining the same memory/camera work,
+complete geometry tables and motion-copy fix as GPU run 10. Both use the same
+frozen debug documents. These pairs precede integration's new shadow exit
+layers; their purpose is to isolate R2. Shared-machine load prevents causal
+ranking. Quality was not reduced and the 60 FPS bar remains unmet.
+
+| Backend / place | CPU produce avg, ms | GPU produce avg, ms | CPU root draws, all passes | GPU root draws, all passes |
+|---|---:|---:|---:|---:|
+| Direct3D 12 lobby | 39.25–40.16 | 68.78 | 5,649–5,650 | 5,646 |
+| Direct3D 12 rim | 22.81–41.23 | 21.83 | 465 | 465 |
+| Direct3D 12 gallery | 36.86–39.35 | 30.32 | 6,659 | 6,659 |
+| Direct3D 12 meadow | 59.53–59.76 | 50.75 | 11,862–12,022 | 11,813 |
+| Vulkan lobby | 34.53–40.21 | 38.12 | 5,650 | 5,647 |
+| Vulkan rim | 21.40–24.62 | 26.56 | 465 | 465 |
+| Vulkan gallery | 29.68–36.50 | 33.84 | 6,659 | 6,659 |
+| Vulkan meadow | 58.41–59.43 | 51.82 | 11,821–11,890 | 12,069 |
+
+The slower Direct3D 12 GPU lobby reading is unresolved, not discarded: produce
+p99 is 216.56 ms against the CPU controls' 54.48–54.82 ms. The lead's quiet
+settle window must measure it before attributing it to R2 or machine load.
+Animated poses also vary the draw/vertex totals. Root vertices at the meadow:
+Direct3D 12 CPU 9,536,304–9,681,789 / GPU 9,515,166; Vulkan CPU
+9,596,163–9,641,541 / GPU 9,762,255. CPU root dispatches are 31, GPU 34.
+
+Root raster GPU timestamps, 32 samples per reading; each cell is CPU range
+then GPU, in milliseconds:
+
+| Backend / place | Near shadow | Far shadow | Opaque | Glass |
+|---|---:|---:|---:|---:|
+| Direct3D 12 lobby | 0.506–0.594 → 0.422 | 1.208–1.293 → 0.812 | 0.467–0.528 → 0.511 | 0.009–0.013 → 0.163 |
+| Direct3D 12 meadow | 1.827–1.887 → 0.537 | 2.023–2.068 → 0.675 | 3.771–3.783 → 1.232 | 0.018–0.022 → 0.166 |
+| Vulkan lobby | 0.369–0.437 → 0.495 | 0.936–1.262 → 1.206 | 0.399–0.559 → 0.592 | 0.014–0.023 → 0.066 |
+| Vulkan meadow | 1.239–1.473 → 0.555 | 1.586–1.798 → 0.772 | 2.907–3.195 → 1.386 | 0.022–0.027 → 0.067 |
+
+The unused third root cascade has no samples. The complete render-graph pass
+readings and counters are in scratch `r2-cull-performance-directx.json` and
+`r2-cull-performance-vulkan.json`. Selection and empty-command scanning add
+GPU work, visible especially in glass. Ordered compaction and instance
+buckets remain [visibility V1](visibility.md#the-build-order). The meadow's
+4,215 blade draws share 288 geometries (14.6 draws/geometry); grouping needs
+a sparse per-geometry/per-level instance map and every draw-identity consumer
+moved while preserving depth ties, beyond a small argument extension.
+
+Stills use mean absolute RGB channel differences per 64×64 region against
+two CPU runs. Every positive excess over that region's measured noise is
+flagged, as section 6 specifies. Normal Direct3D 12 flags lobby / rim /
+gallery / meadow regions 122 / 0 / 0 / 90; Vulkan flags 16 / 0 / 54 / 122.
+All image pairs were inspected: flagged lobby regions include the Moth's
+head and monitor, meadow regions the animated grass; normal gallery lighting
+varies broadly even between CPU controls. No missing geometry was identified.
+These flags are reported, not a pixel-equivalence claim.
+
+The additional Vulkan lockstep controls capture ticks 150 / 300 / 450 / 600
+after bakes settle at tick zero. Both CPU runs and the GPU run have identical
+authority hashes and camera/pose stamps at every capture:
+
+| Pinned Vulkan place | CPU mean region noise | CPU/GPU mean region difference | Regions above noise |
+|---|---:|---:|---:|
+| Lobby | 0.00004015 | 0.00098606 | 103 |
+| Rim | 0 | 0 | 0 |
+| Gallery | 0.00008735 | 0.00013238 | 96 |
+| Meadow | 0.00000109 | 0.00000109 | 0 |
+
+Units are 0–255 channel steps. The gallery's 428 changed pixels differ in one
+channel by one step; the meadow's four such pixels are within CPU noise. The
+lobby has 633 changed pixels. Its 339 channel differences larger than one
+step (maximum 48) all lie on the static striped monitor face, x269–323 /
+y391–490. Enlarged CPU/GPU crops align geometrically. The sampled stripe
+difference exceeds the small pinned noise and its cause remains unconfirmed.
+
+R2's shadow integration (`b63e7191e`, then `d6f1624dfa`) carries the solid
+versus thin/clipped shadow-exit rule. One selection emits entry, solid-exit
+and thin-exit argument phases; each kept draw contributes an entry and exactly
+one exit to the generated statistics. `d231e5bec` counts the two executions
+with separate wave reductions: 64 lanes of a legal maximum mesh fit a uint
+sum, twice that does not; the existing accumulator carries each addition
+into 64 bits. Selection, arguments and history are unchanged by this fix.
+
+Final handback merge `5a73e11295` includes lead `5679a09f1a`'s GI, job-pool,
+language and simulation work; R2's selection, layout and backend sources are
+unchanged. Vulkan synchronization validation and full Direct3D 12 GPU-based
+validation (state tracking and synchronized queues) pass at all four places
+after bakes settle, without warnings or errors:
+
+| Backend | Bakes settled, tick | Lobby draws | Rim draws | Gallery draws | Meadow draws |
+|---|---:|---:|---:|---:|---:|
+| Vulkan | 369 | 7,186 | 1,298 | 8,925 | 2,506 |
+| Direct3D 12 | 388 | 15,143 | 1,290 | 18,070 | 26,657 |
+
+These current-world validation reads follow each pose by 12 ticks, with the
+same spawn positions and high/native settings; they are not a new matched
+timing pair. Their variance, especially the Vulkan meadow count, remains
+unexplained and belongs in the lead's quiet-window trace. Before this last
+integration, the corrected R2 artifact read 20,675 Vulkan / 20,484 Direct3D 12
+meadow draws. Do not attribute the later count change to an R2 speedup.
+The final full Direct3D leg takes about 394 seconds; both native legs fit
+one 850-second batch. Earlier cold preparation rebuilt 7,242 groups.
+
+Final Release CLI and dual-backend World builds pass with zero warnings/errors.
+Two debug fixtures pass `--reproduce` on the final artifact:
+`input-clock30-tests.puck` (four verdicts) and `unbiased-draws-tests.puck` (six).
+Presentation selection does not enter simulation state. Incomplete controls,
+time-boxed cold/full-validation attempts and an initial private Windows
+artifact refused for missing SPIR-V are excluded from the results.
+
 
 ### What becomes of the tick-to-produce memo's phases
 

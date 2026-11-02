@@ -19,6 +19,13 @@ public sealed class DirectXBufferStatesLawTests {
     private const D3D12_RESOURCE_STATES NonPixelShaderResource = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
 
     [Fact]
+    public void IndirectArgumentsMayAlsoBeReadByTheVertexStage() {
+        var reads = DirectXBufferStates.RequiredState(access: GpuAccess.IndirectCommandRead | GpuAccess.ShaderRead,
+            stages: GpuStage.DrawIndirect | GpuStage.VertexShader);
+        Assert.Equal(expected: IndirectArgument | NonPixelShaderResource, actual: reads);
+    }
+
+    [Fact]
     public void AStorageHistoryCopyUsesCopyDestinationAndReturnsToShaderRead() {
         var states = new DirectXBufferStates();
         var write = DirectXBufferStates.RequiredState(access: GpuAccess.CopyWrite, stages: GpuStage.Transfer);
