@@ -13,8 +13,10 @@ load.
 
 ## The measurement loop
 
-Performance is judged by code, disassembly, and deterministic work counters —
-never by wall-clock or GPU timestamps. Measure in a running `Puck.World`
+The outcome is elapsed time: the delivered frame rate and worst frame against
+the frame bar, read from `host.frames` and `world.gpu-timing` on a quiet
+machine. The deterministic work counters and the kernel disassembly explain
+where the time went and what a change moved. Measure in a running `Puck.World`
 session, before and after a change, on the same scene and camera pose:
 
 ```text
@@ -37,8 +39,8 @@ world.budget
   render-graph instance's node, `owned-bytes`, the GPU memory the node holds
   now. The recorded counts are exact and the same on every backend for the same
   inputs, and the kernels' counts the same on every run of one backend, so a
-  change that moves one is a real change in work — no averaging or
-  band-trusting needed the way a wall-clock sample would require. The section's
+  change that moves one is a real change in work, with none of the averaging
+  a timing sample needs. The section's
   header names the device (backend, adapter, PCI ids, driver and API versions),
   so a reading carries the machine that made it. Without the `gpu` filter,
   `world.counters` also prints every other counter source the World
@@ -60,10 +62,10 @@ world.budget
   bytes and draws. Confirm that the scene submits the geometry you think it
   does before you believe a count.
 
-Compare the whole frame, not one pass. When a counted-work comparison alone
-cannot answer the question (e.g. two dispatches with the same counts but
-different code), read the kernel disassembly or trace the code path instead of
-reaching for a stopwatch.
+Compare the whole frame, not one pass. Counted work says what changed and
+timing says whether it paid. When a counted-work comparison alone cannot
+answer the question (e.g. two dispatches with the same counts but different
+code), read the kernel disassembly, trace the code path, or time the frame.
 
 `gpu.shapes.evaluated` and `gpu.march.steps` measure the bake's field work,
 which a settled frame does not do; the raster passes' `texels.written` count
@@ -148,10 +150,10 @@ The same discipline applies whenever you compare `world.counters gpu` counts by 
   state a build reads, even though `world.counters gpu`'s counts are unaffected by
   concurrent load; the supported hardware floor is in the
   [contributing guide](../../../development/contributing.md).
-- **Read `world.fps` for the delivered rate.** It is a runtime product signal
-  (the present pacer), not a performance-comparison tool: under vsync it
-  reports your monitor's cadence, not the engine's cost — compare `world.counters gpu`
-  counts instead.
+- **Read `world.fps` for the delivered rate.** It is the present pacer's
+  signal: under vsync it reports your monitor's cadence rather than the
+  engine's cost, so uncap the pacer or read `world.gpu-timing` and the counts
+  to see the cost beneath it.
 - **Read `host.frames` for the worst frame.** The windowed host keeps a
   timeline of its last 4,096 iterations; `host.frames reset`, a wait, then
   `host.frames 600` gives the interval's distribution, the most work an

@@ -565,17 +565,13 @@ reports a device the host cannot create. Its device laws run on a software
 (WARP) device without the debug layer, and skip on a host without one: the
 teardown's memory entries and the shader-visible heaps
 (`DirectXShaderVisibleHeapsLawTests`).
-Driver behavior is verified by running the engine on Direct3D 12 and by
-`puck parity`, which boots the authored parity world
-(`experimental/tests/Puck.Parity/parity.puck`) offscreen once per backend and gives
-each of the world's scheduled captures three verdicts: its content gate, its
-exact `stateHash`, and per-tile pixels under the contract versioned beside
-the world:
+Driver behavior is verified by running the debug world on Direct3D 12, the
+primary backend (`puck_world_start`, windowed under a granted GPU lease for a
+GPU change), and reading its captures and counters. Full cross-backend parity
+qualification waits for the owner's call:
 
 ```powershell
 dotnet test tests/Puck.DirectX.Tests/Puck.DirectX.Tests.csproj -c Release
-dotnet build Puck.slnx -c Release
-dotnet src/Puck.Cli/bin/Release/net11.0/Puck.Cli.dll parity
 ```
 
 ## Packaging

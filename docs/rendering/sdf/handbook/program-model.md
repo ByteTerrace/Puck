@@ -1,7 +1,8 @@
 # SDF program model
 
-Puck represents an SDF scene as a short program that the GPU interprets per
-pixel. Four instruction families operate on one running accumulator: union
+Puck represents an SDF scene as a short program. The GPU interprets it on bake
+lattice samples while a mesh bake is pending, and the CPU evaluates it for
+queries. Four instruction families operate on one running accumulator: union
 can add a candidate without disturbing earlier geometry, while intersection
 can discard it. Field scopes isolate operations that need their own accumulator;
 instances and materials travel in the same stream. A Lipschitz step clamp keeps
@@ -23,10 +24,10 @@ So the interesting question becomes: how do you *describe* that distance
 function? In Puck the answer is a small **program**. A scene is a flat list of
 instructions—`SdfProgram` on the C# side, a packed word buffer the shader
 decodes—and evaluating the field means running that program once, at one
-point, top to bottom. The GPU runs it millions of times per frame, once per
-sample per pixel, but the program is the same tiny thing each time. This is why
-the engine is "everything-as-data": the scene is not a loaded asset, it is
-interpreted bytecode.
+point, top to bottom. The mesh bake runs it once per lattice sample while a bake
+is pending, and a CPU query runs it once per query point, but the program is the
+same tiny thing each time. This is why the engine is "everything-as-data": the
+scene is not a loaded asset, it is interpreted bytecode.
 
 That framing pays off everywhere. A program is cheap to build, cheap to diff,
 trivially serializable, and—because it is a pure function of position—it
@@ -208,22 +209,20 @@ of the program with a transform and a cull bound. Three lifecycles matter:
 - **Dynamic** instances read their transform from a per-frame buffer slot
   (`TransformDynamic`): a walking player, a moving screen. The static scene
   program never changes; only a small transform buffer updates each frame.
-- **Parked** instances are reserved-but-inactive slots. A pool (players,
-  companions, the creator's authoring set) reserves its worst-case instance count
-  up front so capacities can freeze at construction, then marks slots active or
-  parked per rebuild. A parked slot packs a negative-radius bound sentinel that
-  every cull test skips with one branch, so reserved-but-unused capacity costs
-  essentially nothing per frame. (Placing an instance *without* clearing its
-  active flag—hiding it below the floor instead of parking it—is a classic
-  bug: it stays in every cull test and the cost tracks reserved capacity instead
-  of live content.)
+- **Parked** instances are slots whose owner left them unused. A slot an owner
+  vacates holds the park position, never a stale or zero transform, so it reads
+  as hidden rather than as identity-posed geometry at the origin. (Hiding an
+  instance below the floor instead of parking it is a classic bug: it stays in
+  every cull test and the cost tracks hidden content instead of live content.)
 
-The guiding principle: **cost tracks live, on-screen content, not reserved
-capacity.** A frame source declares an initial reserve with a worst-case
-*probe* program. `UploadProgram` grows program and instance buffers when a
-live edit exceeds that reserve, after waiting for in-flight frames. Dynamic
-slots remain fixed. Edits within the reserve need no buffer allocation;
-structural engine limits still apply beyond it.
+The guiding principle: **cost tracks live, on-screen content.** Each frame the
+composition host asks every emitter to reconcile its live state
+(`ISdfSceneEmitter.PrepareFrame`), reads each emitter's actual
+`DynamicSlotCount`, and lays the slots out contiguously. It resizes the
+transform table to the new total and rebuilds the program when the layout or
+any revision counter changed. `UploadProgram` grows the program and instance
+buffers when a live edit exceeds their size, after waiting for in-flight frames,
+so an author never reserves a worst-case instance count.
 
 ## Lipschitz bounds keep marching safe
 
@@ -269,14 +268,13 @@ The instruction set is deliberately lean, governed by one owner-ratified rule:
 > emits existing ops.**
 
 The reason is that every real opcode costs register pressure in the hottest
-kernel on the GPU—the per-pixel interpreter runs the op switch millions of
-times a frame, and each case is live cost whether or not a given program uses it.
+kernel on the GPU—the bake interpreter runs the op switch on every lattice
+sample, and each case is live cost whether or not a given program uses it.
 So a capability that *can* be expressed with what already exists should be a
 convenience method on the builder, not a new case in the interpreter. The current
 ISA still includes `RegularPolygon` and `Star`; they remain candidates for exact
 `RepeatPolar`-based builder macros. `Ellipse` needs an exact curve that no existing
-composition provides and therefore earns a real case. The compiled core-ops views
-variant strips unused exotic vocabulary for programs that do not reference it.
+composition provides and therefore earns a real case.
 
 The operations and shapes are numbered densely in declaration order, and no id is
 reserved: removing an operation renumbers the ones after it, and regenerating the
@@ -284,7 +282,7 @@ kernel declarations carries the new numbers to the GPU. The three axis-aligned
 symmetry folds, for example, are builder methods that emit the general
 `SymmetryPlane` operation. The instruction set grows only
 when a capability is genuinely *uncomposable*—the discipline that keeps the
-per-pixel interpreter fast.
+bake interpreter fast.
 
 ---
 
@@ -301,5 +299,5 @@ per-pixel interpreter fast.
 - The ISA admission rule and the partners a new instruction touches:
   "Changing the instruction set" in [the rendering skill](../../../../.claude/skills/rendering/SKILL.md),
   with every C#↔HLSL coupling in its [sync pairs](../../../../.claude/skills/rendering/references/sync-pairs.md).
-- Capacity growth and the composition probe: "Capacity and emission" in the
-  same skill.
+- Slot layout, revision counters and buffer growth: "Capacity and emission" in
+  the same skill.

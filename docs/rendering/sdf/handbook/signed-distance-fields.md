@@ -5,7 +5,7 @@ A point in space can be inside or outside a sphere. For a sphere of radius
 the point is from the surface: positive outside, zero on the surface, and
 negative inside. That expression is a signed distance field (SDF). Puck uses
 the same question for every shape and combines the answers into a program the
-GPU can evaluate for each ray.
+GPU samples on bake lattices and the CPU evaluates for exact queries.
 
 This chapter builds that idea from the sphere through composition and sphere
 tracing, then shows how the program reaches the engine's passes and pixels.
@@ -49,13 +49,17 @@ cases—more on that in [SDF program model](program-model.md)), so it can feed
 right back into another combinator. A floor, a wall, a stack of shaped
 objects, a repeated colonnade, a carved doorway—a whole scene is built the
 same way a spreadsheet is built: small formulas referencing the results of
-other small formulas. There is never a moment where the world becomes a
-mesh. It stays one function, evaluated fresh at whatever point you ask
-about, for as long as it exists.
+other small formulas. The authoritative world is never a mesh. It stays one
+function, evaluated fresh at whatever point you ask about, for as long as it
+exists. The renderer contours that function into cached meshes to draw
+([the bake](frame-rendering.md#the-bake)), but those meshes are derived from the
+field and rebuilt when it changes.
 
 This is also why deformation is cheap conceptually: twisting, bending,
 repeating, or warping space *before* evaluating a shape's formula bends the
-shape without touching any stored geometry—there is no geometry to touch.
+shape without touching any stored geometry. A field edit can require its
+derived meshes to bake again, and the field itself needs no edit to its
+geometry.
 
 ## Sphere tracing walks a ray to the surface
 
@@ -162,8 +166,8 @@ Four layers, each one built from the layer below it:
                               │ per frame
  ┌───────────────────────────▼───────────────────────────────────┐
  │  PASSES                                                        │
- │  mask → bake → shadow cascades → mesh → surface → views       │
- │  → sky → composite, once per view                              │
+ │  mask → bake → shadow cascades → mesh → pyramid → surface →    │
+ │  views → sky → composite, once per view                        │
  │  (sample the field into meshes while a bake is pending →       │
  │  rasterize the meshes from the lights and the camera →         │
  │  surface, occlusion, shadow and shading → sky and fog into     │

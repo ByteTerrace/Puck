@@ -1,8 +1,8 @@
 # Rejected and conditional SDF techniques
 
 This page records current non-goals and the evidence required to reconsider
-them. It is not a chronology and it is not a work list—nothing tracks open
-SDF implementation work today.
+them. It is not a chronology and it is not a work list; open rendering work
+lives in the [rendering programme](../../../plans/rendering.md).
 
 ## Global voxel representation
 

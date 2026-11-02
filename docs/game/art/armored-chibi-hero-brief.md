@@ -111,8 +111,7 @@ These are implementation entry points inspected while preparing this brief, not 
 | Foot and hand constraints | [CreationEffector](../../../src/Puck.World.Authoring/Authoring/CreationEffector.cs) |
 | Dynamic emission, palette handling, body registration, transform packing and bounds | [WorldCreationInstances](../../../src/Puck.World.Client/WorldCreationInstances.cs) |
 | Primitive composition and scope behavior | [CreationStampEmitter](../../../src/Puck.World.Authoring/Authoring/CreationStampEmitter.cs) |
-| Existing humanoid content example; inspect and validate before reuse | [adventurer.creation.json](../../examples/creations/adventurer.creation.json) |
-| Existing studio district for staging | [studio.puck](../../../worlds/debug/studio.puck) |
+| Studio inspection and motion-bench staging module, imported by the debug world | [studio.puck](../../../worlds/debug/studio.puck) |
 | Production world integration | [debug.puck](../../../worlds/debug/debug.puck) |
 | Shared material and lighting implementation | [SdfMaterial](../../../src/Puck.SignedDistance/SdfMaterial.cs), [sdf-material.hlsli](../../../src/Puck.SdfVm/Assets/Shaders/Sdf/shade/sdf-material.hlsli), [sdf-lighting.hlsli](../../../src/Puck.SdfVm/Assets/Shaders/Sdf/shade/sdf-lighting.hlsli) |
 
@@ -124,7 +123,7 @@ Use document-authored dimensions, colors, pivots, animation parameters, and look
 
 ### Initial geometry budget
 
-Aim for 36–44 authored shapes, keeping headroom beneath the live stamp limit. Confirm the current validator and pool limits before authoring; do not raise them as the first response to a crowded design. Palette and driver limits must also be checked at execution time.
+Aim for 36–44 authored shapes, keeping bake work (`CreationDocument.StampShapeCount`) and dynamic-slot counts modest; a creation has no shape-count ceiling. Check palette and driver limits at execution time.
 
 | Region | Initial shape allocation |
 |---|---:|
