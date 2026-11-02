@@ -9,42 +9,14 @@ still fails. These six laws are the proof that Milestone 1, the pipeline
 foundation, holds together on the integration head, and they are written to
 fail if any one system drifts from the others.
 
-This page specifies the six laws: the claim, the exact scenario, the observable
-that decides it, the systems it crosses, what it adds over the laws that already
-exist, where it lives, and whether it needs a GPU. It also names the gaps found
-while designing them. The projection, time-travel and portal-unification lanes
-have landed, so every entry point named here exists, and all seven gaps
-are fixed with laws of their own.
-
-## Implementation status
-
-Law 1 is implemented, in `tests/Puck.World.Presentation.Tests/ProjectionAnchorLawTests.Seek.cs`;
-law 2's local walked crossing in
-`tests/Puck.World.Server.Tests/CrossingReplayTravellerLawTests.cs` and its identity
-sequences, without its federated, rollback and shared-identity variants;
-law 3's write, read and collision legs in
-`tests/Puck.World.Server.Tests/MachineRestoreContinuityLawTests.cs`; law 4's headless
-legs in `experimental/tests/Puck.World.Tests/DisplayedSourceLawTests.cs`; law 5 in
-`tests/Puck.World.Presentation.Tests/FederatedCommitPrivacyLawTests.cs`; and law 6 in
-`tests/Puck.World.Tests/UnsupportedOperationLawTests.cs`, over the refusals
-classified so far. The design was read against the integration branch, and a
-review checked that no law can pass while its claim is false. Designing the laws
-found seven gaps. All are fixed in code, each held by laws of
-its own, so the six laws are written against the fixed contracts:
-
-- G1 and G2 decide law 1: a seek delivers once
-  (`HistorySeekDeliveryLawTests`), and a viewer never keeps a future clock
-  anchor (`ProjectionAnchorLawTests`).
-- G3 decides law 2: a crossing's mobility credential is minted where the tape
-  sees it (`CrossingTapeOrderLawTests`).
-- G4 decides law 5: only the identity projection crosses a seam
-  (`CrossingIdentityPrivacyLawTests`).
-- G5 decides law 3: a checkpoint carries what the bindings last saw
-  (`MachineBindingCheckpointLawTests`).
-
-Each law, once written, also confirms its gap's fix on the integration head.
-G6 is held by law 6, which enumerates the classification the refusals declare in code. G7 is the return seam held by law 4: releasing a displayed source rebinds the existing view to the root. The law variants and arrangements still unstarted are this page's
-[open items](#open-items).
+This page specifies the laws whose variants or arrangements are still unbuilt:
+the claim, the exact scenario, the observable that decides it, the systems it
+crosses, what it adds over the laws that already exist, where it lives, and
+whether it needs a GPU. Law 1 (a rewind reaches an existing viewer) and the
+repairs the design found (G1 to G5 and G7) are built, each held by laws of its
+own in the test projects. Test requirements are suspended for the refactoring
+campaign (AGENTS.md), so this page is dormant until the owner restores them; its
+[open items](#open-items) are the inventory.
 
 ## How each law is stated
 
@@ -60,107 +32,6 @@ re-deriving the design:
 | Not a duplicate of | The existing laws that cover a part, and what this law adds. |
 | Lives in | The test project. |
 | GPU | Whether a device is needed. None of the six is; each runs headless on the fake device the World tests already use. |
-
-Each law is proved red the usual way: withhold the behavior it guards and show
-it fails at its assertion, not by a skip.
-
-## Law 1: a rewind reaches an existing viewer
-
-**Claim.** Restore or seek, then delivery to an existing viewer: the projection,
-time travel and recipients agree.
-
-**Scenario.** A world with one clock row that advances every tick, a fog
-density bound to it, and a row only another seat may read. At tick 0 a
-federation projection sink attaches at the Presentation tier, the way the
-other `ProjectionAnchorLawTests` laws attach theirs, and is drained as the world steps
-past the history's second keyframe. `world.history seek` then returns to that
-keyframe, and the sink's stream is decoded into a projection hold.
-
-What the seek discards depends on the door. A journaled write between the
-keyframe and the seek changes the history's fingerprint and sends the restore
-through the load door. So the in-place variants discard only the clock's own
-advance, and the load-door variants journal a write.
-
-The viewer is a sink. A keyframe carries session state, but a live session
-observes from another authority whose timeline the seek does not rewind
-(`WorldHistory.UncapturableLiveState`). That external observation is why a
-session cannot witness the seek.
-
-Four variants run the same steps:
-
-- the keyframe restores in place;
-- a structural edit between keyframe and seek forces the restore through the
-  load door;
-- the clock row holds no number at the keyframe and a number after it, which
-  is [gap G2](#g2-a-rewound-clock-can-leave-the-viewer-a-future-anchor)'s case;
-- the seek targets a tick between keyframes, so the restore re-simulates
-  intermediate ticks before the target, which is where a seek could deliver
-  more than once.
-
-**Decided by.**
-
-- The sink is still attached: its detach reason is empty.
-- The hold presents what the authority presents at the restored tick: the
-  clock's phase and the keyed fog. The authority's value there differs from
-  the one the seek discarded. A clock with no number at the keyframe presents
-  what a fresh viewer presents, its seed.
-- The anchor the hold carries is at or before the authority's engine tick, so
-  the viewer is never left predicting from a future anchor.
-- The authoritative hash after the seek equals the hash the live run recorded
-  at that tick.
-- A row whose visibility the viewer may not read never appears in the hold,
-  before or after the seek.
-- The sink receives one definition and one snapshot for the seek's target
-  tick, through either restore door, and nothing for any re-simulated tick
-  before it. The non-keyframe variant is the one that exercises this.
-- The hold's whole structural projection (its row set, each row's members and
-  kinds, and the definition it was built from) equals the projection a fresh
-  sink receives when it attaches after the seek. Correct counts and a correct
-  clock are not enough: a hold that kept a row the structural edit added, or
-  lost one it removed, fails here. Clock anchors are compared by what they
-  present, not by value: the authority replaces a recipient's anchor only when
-  its prediction misses, so a held anchor and a fresh one may differ while
-  presenting the same phase.
-
-**Crosses.**
-
-- Time travel: `WorldHistory.TrySeek`, which restores a keyframe through
-  `RestoreCheckpoint`, re-simulates the recorded ticks and presents the
-  restored timeline (`WorldTick.PresentRestoredTimeline`).
-- Delivery: the one delivery door in `WorldDocument.Delivery.cs`
-  (`MarkDefinitionDeliveryPending`, `DeliverPending`). Every jump of the
-  authoritative state is delivered through one mark.
-- The recipient: `WorldFederationProjectionSink`, `WorldProjectionFeed.Compose`
-  (a whole projection first, member deltas after), and the clock anchors in
-  `WorldClockAnchorLedger`.
-
-The contract it proves:
-
-- `PresentRestoredTimeline` is a seek's single delivery point, with one
-  definition and one snapshot at the target tick through either restore door
-  ([G1](#g1-a-seek-delivers-more-than-once)).
-- An anchor the recipient holds ahead of the authority's tick is stale, and is
-  dropped and re-seeded as for a fresh recipient
-  ([G2](#g2-a-rewound-clock-can-leave-the-viewer-a-future-anchor)).
-
-**Not a duplicate of.**
-
-- The projection anchor jump laws (`ProjectionAnchorLawTests`) prove that a bare
-  restore, reset, load, reload, undo or replay reaches an attached observer.
-- The history seek laws prove that a seek reproduces every recorded tick.
-  `HistorySeekDeliveryLawTests` attaches a counting sink and holds that a seek
-  delivers once through both restore doors, and a `ProjectionAnchorLawTests` law
-  attaches a federation projection sink, seeks to a keyframe and holds that the
-  decoded hold keeps no future anchor.
-
-This law adds the composed scenario: the federation sink through all four
-variants, the eased value and the authoritative hash against the live run,
-disclosure after the jump, and the structural projection equal to a fresh
-sink's.
-
-**Lives in** `tests/Puck.World.Presentation.Tests`, as a partial of the projection anchor laws
-so it reuses their document and anchor helpers, driven by `WorldHistoryHarness`.
-**GPU:** none.
 
 ## Law 2: a crossing replays to the same traveller
 
@@ -244,7 +115,7 @@ on the rule that an id names one live object:
 
 **The contract it proves:** the reservation reads the mobility credential
 without minting it, and only the departure's detach mints it, which the replay's
-re-driven departure also calls ([G3](#g3-a-reservation-mints-mobility-the-tape-never-sees)).
+re-driven departure also calls (G3, `CrossingTapeOrderLawTests`).
 The authoritative hash folds the credential every recorded tick, so any
 divergence shows in the hash trace.
 
@@ -300,7 +171,7 @@ The contract it proves:
 - This holds on every restore door: in-place and load-door history seeks,
   `FromCheckpoint` (a silo activation, the history shadow), and `replay.drive`,
   whose unstepped shadow starts with an empty memo
-  ([G5](#g5-a-checkpoint-forgets-what-the-bindings-last-saw)).
+  (G5, `MachineBindingCheckpointLawTests`).
 
 **Not a duplicate of.** The cartridge laws prove that a world checkpoint
 preserves a stepped machine and its continuation, but in a world with no memory
@@ -390,7 +261,7 @@ keep the source bound.
 is an explicit bind of the original source, which proves a rebind, not a return
 to what the row authored. The law uses the return seam G7 added:
 `screen.source <index> row` drops the live bind and the screen shows its row's
-own source again ([gap G7](#g7-a-screen-has-no-way-back-to-its-authored-source)).
+own source again (gap G7, `screen.source <index> row`).
 
 **As implemented.** The fixture boots headless, where the offscreen boot's
 composition is unavailable on a host without a GPU device. Headless, only screen
@@ -482,7 +353,7 @@ state change.
 
 **Scenario.** One theory over every refusal the engine classifies as an
 intentionally unsupported operation. The classification lives on the refusal in
-code (see [G6](#g6-the-catalogue-is-assembled-by-hand)), and the theory's rows are
+code (`RefusalAttribute.Unsupported`), and the theory's rows are
 enumerated from it, so a new unsupported operation joins the law by being
 declared, and one with no arrangement fails the law by name. Each row carries its
 name, how to arrange it, the operation, and the refusal it expects. For each row,
@@ -569,140 +440,6 @@ a field paint, a save) are outside the atomic promise by contract: they fire
 after the commit, and a refusal there is one counted `IrreversibleArmFailed`
 that undoes nothing. They are not classified as unsupported operations, and the
 classification says so for each of their refusals.
-
-## Gaps found while designing the laws
-
-### G1: a seek delivers more than once
-
-Fixed. A seek that restored a keyframe delivered repeatedly:
-
-- the definition at the keyframe, inside the checkpoint restore, and again
-  through the load door's install;
-- a snapshot for every re-simulated tick;
-- then the restored timeline's presentation sent the definition again and
-  repeated the target tick's snapshot.
-
-`PresentRestoredTimeline` is now the single delivery point: one definition and
-one snapshot at the target tick, through both restore doors, with the seek's
-span withheld from every viewer (`WorldOutputHub.WithholdsTimeline`). A law with
-a counting sink holds it (`HistorySeekDeliveryLawTests`). Law 1 checks the same
-count from an existing viewer.
-
-### G2: a rewound clock can leave the viewer a future anchor
-
-Fixed. Suppose a clock row holds no number at the keyframe, and the viewer
-already holds an anchor sent after it. A seek back used to leave that anchor in
-place: the ledger carried a held anchor it had no newer number to replace, and
-stepped over a clock with no number. The viewer held an anchor later than the
-authority's engine tick and presented a frozen phase.
-
-`WorldClockAnchorLedger` now treats a held anchor ahead of the authority's tick
-as stale: it is dropped and re-seeded the way a fresh recipient is, on the next
-composition or step. `ProjectionAnchorLawTests` holds it at the ledger and
-end to end through a seek. Law 1's third variant composes it with the other
-systems.
-
-### G3: a reservation mints mobility the tape never sees
-
-Fixed. `WorldPopulation.EnsureMobility` stores a body's mobility credential and
-its generation. A crossing's reservation used to call it before `Reserve`, in its
-own authority operation, so no tape recorded it. Neither detach nor admission
-cleared it. It was harmless while the mint and the detach fell in the same
-`ApplyTransfer` call. They separate when:
-
-- a reservation is refused with retry, so the mint stays on a body that has not
-  left;
-- the transfer aborts after the reservation and before the detach (a standing
-  denial, a counterpart failure, a member that cannot detach);
-- an in-doubt departure is restored ticks later, where the live restore installs
-  the credential and the re-driven restore installs none;
-- a slot is reused after a committed departure, with the stale credential still
-  in its entry (inferred).
-
-The authoritative hash folds a slot's mobility and its generation every recorded
-tick, so each case diverged in replay. The fix re-derives the credential:
-
-- the reservation reads it without minting it (`WorldPopulation.ReadMobility`),
-  as `ResolveIncarnation` computes it;
-- only the departure's detach mints it, and the replay's re-driven departure
-  calls the same detach;
-- `CrossingTapeOrderLawTests` covers each case above, matching the re-drive to
-  the live run.
-
-Law 2's rollback variant composes it with a walked crossing.
-
-### G4: the commit carries the private profile
-
-Fixed. The reservation carried only the identity projection, as its contract
-says, but the commit did not:
-
-- The source put the body's live `WorldIdentity` into
-  `WorldTransferCommitMember.Profile`.
-- The federation codec serialized that identity's whole owned document into the
-  commit: the chat allow-list, the chat log and inbox rows, controller history,
-  bindings and the private HUD panel.
-- At the destination, the escrow seated `member.Profile` ahead of the
-  reservation's redacted identity, so the full document won.
-- A colocated crossing handed over the same object directly.
-
-The federation identity privacy lane fixed it at every seam: the commit member
-carries a `WorldIdentityProjection`, written through
-`WorldIdentityProjectionWire`, and a destination never saves a foreign identity
-(`CrossingIdentityPrivacyLawTests`). The federation transfer laws no longer
-assert a full profile. Law 5 adds the commit's own bytes on the wire.
-
-### G5: a checkpoint forgets what the bindings last saw
-
-Fixed. The named-binding observations, the memo that lets an onChange binding
-skip a value it has already seen, live only in the server. The world checkpoint
-did not capture them, and a restore did not touch them.
-
-A restore built a fresh server, so every observation started unavailable:
-
-- every onChange Write binding fired again, overwriting any guest edit (the
-  restored guest read 99 where the uninterrupted one read 7), and a bus write's
-  side effects repeated;
-- every Read binding issued a same-value state upsert, which the journal and the
-  tape recorded.
-
-An in-place history restore without the fix was worse: it kept the memo from the
-future, so a Write whose restored world value equalled a value only the future
-saw was skipped against hardware that differed.
-
-The server checkpoint now carries the observations (`WorldMachineBindingEntry`,
-in binding order) and every restore door replaces the memo, as
-[law 3](#law-3-a-restored-machine-runs-on-as-if-never-restored) states.
-`MachineBindingCheckpointLawTests` pins the divergence it removes for Write
-bindings.
-
-### G6: the catalogue is assembled by hand
-
-Refusal tagging runs one way, from a refusal to its code. Nothing classifies a
-refusal as "intentionally unsupported", so law 6's catalogue is assembled by
-hand and a new unsupported operation could be missed. Many refusals are free
-text rather than codes, and the code spelling moved from underscores to hyphens
-when the projection lane landed (`world.transport.operation-metadata-unsupported`).
-
-The fix is part of law 6, not follow-up work. Every refusal declares in code
-whether it is an intentionally unsupported operation: one classification on the
-refusal's declaration (alongside `RefusalAttribute` and `RefusalKind`), which
-`RefusalCatalog` exposes and the law reads. Law 6 enumerates the classified set
-mechanically, so the universal claim is enforced rather than sampled, and the
-table above becomes the set the classification must reproduce. A classified
-refusal with no arrangement in the law fails it by name. Free-text refusals in
-the set gain codes as they are classified.
-
-### G7: a screen has no way back to its authored source
-
-`screen.source` binds a camera view, a QR source or another source.
-`screen.eject` returns a screen showing external content (a camera, a capture, a
-desktop or a probe output) to its row's source, but refuses a screen showing a
-camera view or a QR source, so a return from those was an explicit bind of the
-original source, which a law cannot tell apart from a rebind.
-`screen.source <index> row` is the return seam: it drops the live bind, releases
-a camera view the bind registered, and re-binds the row's own view when the row
-authors one (`WorldScreenBinder.TryShowRow`). Law 4 proves a retarget undone
-through it.
 
 ## Open items
 

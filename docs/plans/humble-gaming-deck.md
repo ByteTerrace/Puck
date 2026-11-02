@@ -18,67 +18,26 @@ snapshots, forks, rewind, runahead, and replay. This page belongs to
 the Deck (a 6502 emitter in the forge) is a separate, later decision and is out
 of scope here.
 
-## Implementation status
+## Where it stands
 
-- **Landed:** the shared-layer rename. The hardware-free layer the bricks
-  share is `Puck.Machines`, with its scaffold `Puck.Machines.Post` and its tests
-  `Puck.Machines.Tests`; the forge, the transpiler, and their tests keep the
-  `GamingBricks` name because they serve the bricks' cartridge format. Its
-  hosting, pacing, snapshot, fork, and time-travel machinery is hardware-free,
-  and the Advanced Gaming Brick already showed that a very different CPU fits on
-  it. Machine clocks are rational: a core reports a `MachineCycleRate` of whole
-  cycles every whole number of seconds, and the durable checkpoint carries its
-  phase at that rate's scale. A queued host declares one input port per seat,
-  and a `MachinePads` seat image carries every port's state through queueing,
-  checkpoints, and replay.
-- **Landed:** the CPU and the bus. `Puck.HumbleGamingDeck` steps the NTSC
-  master clock one tick at a time and runs a per-cycle 2A03 with every official,
-  unofficial, unstable, and JAM opcode, an RDY input, and the real reset and
-  interrupt sequences; the NES CPU address map with open bus; an iNES and NES 2.0
-  loader that refuses what it cannot run by name; NROM; the named power-on
-  profile; and mid-instruction snapshots and forks. Its battery,
-  `Puck.HumbleGamingDeck.Post`, passes every SingleStepTests `nes6502` vector
-  bus cycle by bus cycle and nestest's log from `$C000`; the
-  [Deck manual](../emulation/hgd/README.md) describes it.
-- **Landed:** a complete NTSC machine. A dot-exact RP2C02G PPU with its
-  background and sprite pipelines, the APU's five channels and frame counter as
-  integer levels, the DMA unit for OAM and DMC transfers, two standard
-  controllers, and console nametable RAM routed through the board; the
-  `humble-gaming-deck` engine, `DeckMachineHost` with two controller ports, and a
-  synchronous core with a palette decoded from the composite signal and a
-  presentation-side mixer. The battery adds the shared host-contract probes, a
-  rendered picture compared pixel for pixel with an independent reference
-  renderer, controller, OAM DMA and APU fixtures, nestest's PPU column, and a
-  nestest boot driven through the controller.
-- **In progress:** NTSC accuracy. AccuracyCoin runs in the battery and reports
+The shared layer (`Puck.Machines`), the per-cycle 2A03, the dot-exact PPU, the
+APU, DMA, controllers, NROM and the `humble-gaming-deck` engine are in; the
+[Deck manual](../emulation/hgd/README.md) describes them. In progress:
+
+- **NTSC accuracy** (package 1). AccuracyCoin runs in the battery and reports
   every test's own result, so the stage fails while any test fails, and those
   failures are the package's work list.
-- **In progress:** common boards (package 2). MMC1 (mapper 1) and MMC3
-  (mapper 4, with the MMC3A's IRQ behaviour as submapper 4) run beside NROM
-  over one owner of board memory, `HgdBoardMemory`: MMC1's serial port with its
-  reset write and consecutive-cycle rule, every PRG and CHR mode, one-screen
-  and switchable mirroring, PRG-RAM enable, and the SUROM, SOROM and SXROM
-  outer-bank and PRG-RAM-bank bits; MMC3's bank select and data, mirroring,
-  PRG-RAM protection, and the scanline counter clocked by PPU A12 rises
-  filtered against M2. Battery PRG-RAM persists through the core's save file.
-  Hardware-behaviour laws in `Puck.HumbleGamingDeck.Tests` pin each board, and
-  the battery's determinism, fork and mid-instruction replay stages run an MMC1
-  fixture mid-serial-write and an MMC3 fixture across a counter IRQ. UxROM,
-  CNROM, AxROM, MMC6, bus conflicts, the public board test ROMs and the
-  co-simulation remain.
-- **In progress:** World cabinets (package 8). `HumbleGamingDeckEngine`
-  (`humble-gaming-deck`) is registered by `Puck.HumbleGamingDeck.Forge`'s
-  extension, which the World and the CLI compose as a built-in and the silo
-  installs, and a world screen hosts a Deck machine that mounts a raw `.nes`
-  image from its `contentFolders`. A screen route names the input port its
-  engaged seat drives (`route.port`), so the two controller ports route
-  explicitly. The debug world's device row runs the Deck on two test
-  cartridges, `colour-bars.nes` and `moving-sprite.nes`. They are derived
-  products: the forge's `DeckProgram` assembles them on demand
-  (`puck cartridges deck`), so they are built when needed and not kept in git
-  (removing the committed copies is an engine work item). Ordered operations
-  while recording and replay receipts remain.
-- **Not started:** every other package below NTSC accuracy.
+- **Common boards** (package 2). MMC1 and MMC3 run beside NROM over one owner
+  of board memory, `HgdBoardMemory`; UxROM, CNROM, AxROM, MMC6, bus conflicts,
+  the public board test ROMs and the co-simulation remain.
+- **World cabinets** (package 8). A world screen hosts a Deck machine that
+  mounts a raw `.nes` image from its `contentFolders`, and the debug world's
+  device row runs it on two test cartridges the forge's `DeckProgram`
+  assembles; removing their committed copies is the
+  [derived-products packet](open-items.md#derived-products-are-caches)'s.
+  Ordered operations while recording and replay receipts remain.
+
+Every other package below is not started.
 
 ## What state of the art means here
 

@@ -24,7 +24,8 @@ How the file stays usable:
 ## Next
 
 Ranked by payoff at the latest batch. Lanes in flight are named; the lead
-resolves their edits to this file at merge.
+resolves their edits to this file at merge. Each item names and links its
+packet; the packet holds the citations.
 
 The owner's direction: fundamentals first, known or found along the way
 (AGENTS.md), with vigilance against duplication. The frame bar, the cold-bake
@@ -37,42 +38,16 @@ experimental worlds have that it lacks is ported into it
 planned as lanes in [the next wave](next-wave.md), which starts on the owner's
 word.
 
-0. [The frame thread's CPU field queries](engine-job-system.md#the-frame-bar-at-the-standard-stops)
-   [high, the frame bar]: the first settle window found every stop failing
-   60 FPS on both backends with the frame bound by CPU work on the frame
-   thread, not the GPU (meadow 67 ms against 8-22 ms of GPU). Half the meadow's
-   frame thread is `CaptureFrame`, chiefly CPU SDF field queries: creation-effector
-   surface probes (27 %) and the chase camera's clearance march (18 %), about
-   31 ms of 70 (the presenter's `Dress`, 18.6 %, is that clearance march); the
-   draw list's dressing and staging are 9 % (its per-group scans and boxed
-   motion identities are under [other frame-time findings](#other-frame-time-findings))
-   and the tick 23-28 %. Grounded in the code: the effector ring is flushed every
-   frame by 56 fieldless probes that can never match (`WorldEffectorSolver.cs:239-280`,
-   sourced at `WorldSessionStampSource.cs:33`); probes also run for planted feet
-   and failed conditions and are discarded (`WorldCreationInstances.Effectors.cs:82-98`,
-   `:419-424`); the clearance cache matches bit for bit (`WorldCameraClearance.cs:118-166`);
-   the two answer rings are one copied pattern to replace once. Distance rating
-   exists but its 15 Hz floor never holds a pose at 67-74 ms frames
-   (`PresentationRate.cs:60-72`). The gradient's six taps are not the marched
-   point and are shared with physics (bit-identical per point), so batching
-   them is a design step.
-1. [Memory](#residency-and-streaming) [high, the Deck]: the debug world's
-   process plus GPU memory stays at or under 10 GB on the Deck tier (the lead's
-   budget; the owner set no figure), measured in every settle window. A
-   windowed World holds 10.5-14.5 GB, a tour doubles it and the cold bake passes
-   16 GB; headless is 0.55 GB, so nearly all of it is presentation a player's
-   build carries. Grounded: the mesh library budgets meshes residencies still
-   hold and forgets them, so a re-plan reloads a second copy (`SdfMeshLibrary.cs:32`,
-   `:285-304`); the GI probe cache has no byte bound (`SdfMeshIrradiance.cs:2266-2417`);
-   the memory account sees little of the process and Puck reads no device memory;
-   about 8.4 GB is unattributed, so attribution comes first. A prewarmed mesh
-   store may ship in a player's build (AGENTS.md).
+0. [The frame thread's CPU field queries](#other-frame-time-findings) [high,
+   the frame bar]: every standard stop fails 60 FPS on both backends, bound by
+   the frame thread, and at the meadow half of it is creation-effector surface
+   probes and the chase camera's clearance march.
+1. [Memory](#memory-on-the-deck-tier) [high, the Deck]: the debug world's
+   process plus GPU memory at or under 10 GB on the Deck tier, attribution
+   first.
 2. [Lighting and GI](#lighting-and-gi) [high]: under lockstep a moving sun
-   relights the whole probe window every tick from no bounce (61,440 probes at
-   High, up to 32 passes; `SdfMeshIrradiance.cs:538-563`, `:578`, the capture
-   limit skipped at `:1084`), so the sweep's windowed leg cannot run with the
-   day cycle. Quantize the sun on a fixed grid under lockstep (never against
-   the last capture, which would make the image depend on when a run started).
+   relights the whole probe window every tick, so the sweep's windowed leg
+   cannot run with the day cycle; quantize the sun on a fixed grid.
 3. [Visibility](visibility.md): V2's first steps (V2a, V2b) ahead of V1a, as
    M1 read, after the draw-identity fix R2's review found
    ([GPU robustness](#vulkan-regressions-and-gpu-robustness)).
@@ -85,52 +60,47 @@ word.
 6. [Disclosure](disclosure.md#the-build-order) [high, the long pole before
    `main`]: steps 1-6 behind the harness, step 0b's principals, and the
    owner's search-output decision.
-7. [Rule faults](rule-faults.md) [high, before `main`]: the class is not
-   closed by the register (a fourth review found escapes); build the designed
+7. [Rule faults](rule-faults.md) [high, before `main`]: build the designed
    outcome type, single interpreter and journal-backed firing in its steps,
    each reviewed.
-8. [Engine job system](#engine-job-system) [high]: scheduling (spread the
-   rated views and the tick frame's tick-bound recording), the
-   garbage-collection cuts, then J1 with T1's measurements; profile snapshot
-   emission before T3.
+8. [Engine job system](#engine-job-system) [high]: scheduling, the
+   garbage-collection cuts, then J1; the replay burst's tick budget and F17 as
+   ordinary work.
 9. [Certified field contact](#certified-field-contact): box and ellipsoid
    bodies, then clearance on slopes within a third of a metre.
 10. [Transfers](#transfers-federation-and-server) [high]: the companion steps 6
-   to 10.
+    to 10.
 11. [Language and authoring](#language-and-authoring) and [author leaks to the
-   standard](#author-leaks-to-the-standard): what lang-2 leaves of S11, the
-   cost corpus, the overlay text advance.
+    standard](#author-leaks-to-the-standard): what lang-2 leaves of S11, the
+    cost corpus, the overlay text advance.
 12. Antigravity's coding trial ([agent tooling](#agent-tooling-and-skills)),
-   after the settle window.
-13. [Delivery](#delivery-launcher-and-ci): CI's steady state, the shader cache
-    and the GC-hole retirement.
+    after the settle window.
+13. [Delivery](#delivery-launcher-and-ci): the production deploy, CI's steady
+    state, the shader cache and the GC-hole retirement.
 14. [Port the experimental worlds' missing features](#port-the-experimental-worlds-missing-features):
-   the meadow and the creature garden now, as the bake's and the parallel
-   tick's forcing workloads; the second seat, the authored passes and the
-   quilt each ahead of the job-system step they prove (the owner's ruling,
-   [order](port-experimental.md#lanes-in-order)).
+    the meadow (lane 9) now; then the second seat, the authored passes and the
+    quilt, each ahead of the job-system step it proves.
 15. [Edit to running, hot reload and boot](#edit-to-running-hot-reload-and-boot):
-    the boot's JSON round trip in `BindLive` (about 0.7 s), then a reboot for
-    an edit outside `PuckHotReload`; measure the cold and warm builds.
+    the boot's JSON round trip in `BindLive`, then a reboot for an edit outside
+    `PuckHotReload`; measure the cold and warm builds.
 16. [The valley's terrain](#the-valleys-terrain): terrain pass step 1 (the image
     meter), with steps 2, 3, 6 and step 4's bound fix in parallel.
 17. [Refactoring campaign](#refactoring-campaign): `GpuRegion.Grow` as the only
     growth path with the uniform view limit enforced there, the two overlay
     writers, the survey's remaining groups.
 18. [Collision versus drawn mesh](#collision-versus-drawn-mesh): the groups sharp
-    boxes left worse (the board game room's table, gallery floors 0, 2 and 3,
-    the Wonderland room, the lift doors, the deck television).
+    boxes left worse.
 19. [Lighting and GI](#lighting-and-gi): light a cold area from the coarser
     levels or the sky term the moment a view arrives; the rest after the image
     meter.
 20. [Derived products are caches](#derived-products-are-caches): build the
-    generated `.nes` cartridges and firmware images on demand and remove the
-    bytes from git; narrow the compiled-world key; measure the wasm modules.
+    generated cartridges and firmware images on demand and remove the bytes
+    from git; narrow the compiled-world key; measure the wasm modules.
 21. [Test runner and replay](#test-runner-and-replay): profile what recording
     still folds whole every tick before choosing the next segment.
 22. [Bake detail](#bake-detail): measure the static round-section term.
 23. [Residency and streaming](#residency-and-streaming): step 2 after the memo
-    names GI's work units; re-measure with the display on.
+    names GI's work units.
 24. [Vulkan regressions and GPU robustness](#vulkan-regressions-and-gpu-robustness):
     the crossing frame and the pixel-pass gap.
 25. [MCP and the operator attachment](#mcp-and-the-operator-attachment): the
@@ -146,14 +116,14 @@ word.
 
 Each waits on the owner: what the engine should do, how it looks and feels, and the owner-only actions. An engineering call is the lead's and sits in its packet as a "Decide" line, made when the packet is taken.
 
-- Decided by the owner for the landing of `lead/fundamentals` on `main`: these
-  highs are deferred, not resolved, and stay first in Next: the disclosure
-  leaks the harness shows; transmission's remaining exit-layer highs; the
-  lockstep relight under a moving sun; the tour's and the cold bake's memory;
-  and the frame bar failing at every stop. The rule-fault register's throw in
-  a live World is fixed before the landing, and the release is rehearsed on
-  the hosted runners first.
-
+- Deferred by the owner at the fundamentals landing on `main`, not resolved,
+  and first in Next: the disclosure leaks the harness shows
+  ([disclosure](disclosure.md#the-build-order)); transmission's remaining
+  exit-layer highs ([transmission](transmission.md)); the lockstep relight
+  under a moving sun ([lighting](#lighting-and-gi)); the tour's and the cold
+  bake's memory ([memory](#memory-on-the-deck-tier),
+  [sweep](#sweep-and-visual-checks)); and the frame bar failing at every stop
+  ([frame-time findings](#other-frame-time-findings)).
 - What the chase camera does with its back to the stair wall: swing the boom,
   rise over the wall, or switch to first person there
   ([motion](#dual-stick-play-and-the-moths-motion)).
@@ -169,10 +139,8 @@ Each waits on the owner: what the engine should do, how it looks and feels, and 
   ([disclosure](disclosure.md#open-items)): in the skirmish, blue's job scoring
   over red's fogged positions writes a public best move whose destination
   shows which side of the board the hidden unit stands on and whose score
-  gives its exact distance (cell 25 at -4, 26 at -7, 24 at -4, 24 at -5 for
-  four fog positions); the harness sees it at `world.state` and
-  `deliver.snapshot`. The honest twin scoring over blue's own memory answers
-  the same every time. No engine check stands between the restricted read and
+  gives its exact distance; the harness sees it at `world.state` and
+  `deliver.snapshot`. No engine check stands between the restricted read and
   the public write today (transforms have `TransformWidensAudience`; search
   outputs do not).
 - Looks in the transmission design ([transmission](transmission.md)), each
@@ -187,12 +155,11 @@ Each waits on the owner: what the engine should do, how it looks and feels, and 
   - A receiver the shadow map cannot resolve reads from same-body neighbours,
     or dark, never lit: about 2.5° of surface on smooth baked bodies (under a
     millimetre on the Moth), wider on authored meshes without vertex normals.
-    Reading lit there is the leak every earlier round chased.
   - Wrap stays independent of thickness; light passing through a thick body
     can come later as a separate material term.
-  - The Steam Deck is measured at Full quality, the bar's highest quality:
-    3.5 ms for three cascades inside its 22.2 ms frame, with a live-byte budget
-    at the portal stop. Confirm or set the budgets.
+  - The Steam Deck is measured at Full quality, the bar's highest quality, for
+    three cascades inside its 22.2 ms frame, with a live-byte budget at the
+    portal stop. Confirm or set the budgets.
 - Decided by the owner: night exposure is the lead's call, provided authors can
   style it as their vision demands (the floor and curve stay authored data,
   keyable on the day clock; the debug world authors a readable deep-blue
@@ -233,123 +200,66 @@ Each waits on the owner: what the engine should do, how it looks and feels, and 
 
 Owner: principal designs (design only), Codex Astra reviews the design before
 any build, specialist builds · high · Next, in three stages: scheduling (no new
-thread), then the garbage-collection cuts on today's runtime, then the design
-memo; phase 3 and F17 of [the tick-to-produce memo](simulation-thread.md) now,
-its phase 2 after the job-system memo. The memo is
-[engine-job-system.md](engine-job-system.md), reviewed with dispositions;
-M1 and M2a are built.
-
-- [medium] T1's snapshot row phase is about 0.21 ms of a debug tick, so most of
-  the memo's 9-13 % snapshot-emission share lies elsewhere (the serial tail or
-  the subscribers' `DeliverSnapshot`); profile it before T3 or any R step
-  assumes otherwise. The snapshot now writes serially under two full
-  partitions (512 delivered rows), where T1 measured no gain from a fork. J1
-  inherits the other measurement: a preempted worker holding a partition holds
-  the join (mean up to 836 µs against a 125 µs median). Smaller partitions do
-  not bound it: 128-row partitions lowered the debug world's median from 123 to
-  129 µs to 78 to 86 µs while their means stayed 205 to 794 µs, because the tail
-  is the host's preemption, not the partition's work. Bounding it is a pool
-  matter for J1 (its cap against oversubscription), measured on a quiet machine
-  before anything else is tried. The headless debug world also builds
-  snapshots for its night and garden session instances every tick.
-  (from: t1-snapshot)
+thread), then the garbage-collection cuts on today's runtime, then J1 and the
+rest of [the memo](engine-job-system.md)'s build order. The replay burst's tick
+budget and `CodeDerivedTable`'s generations (F17) run now as ordinary work
+([memo](engine-job-system.md#what-the-job-system-leaves-to-ordinary-work)); the
+tick-to-produce memo's phase 2 is dropped, and its phase 3 merges into the
+presentation view's last cut ([runtime plan](runtime-and-delivery.md#the-presentation-view)).
 
 The owner's direction: performance with quality means removing a cost at its
 cause, never trading latency or lighting quality for frame time. The engine
 runs its heavy work serially on one or two threads while most of the lead
-machine's cores idle: the frame thread runs the tick and then records every
-view, and the bake and the irradiance preview compete with each other and the
-frame for cores with no priority (frames run about 82 ms during a cold bake).
-One engine-wide job system answers all of it:
-- frame-critical work first, then the tick, then background bake and GI, each
-  under a budget that protects the frame;
-- a deterministic parallel tick: per-body advance, contact queries and rule
-  reads over fixed partitions, committed in a fixed order, so state is
-  bit-identical at any thread count, with no added latency, and headless
-  servers, the silo, lockstep and `--reproduce` runs get faster too;
-- parallel view recording (Direct3D 12 and Vulkan record command lists on many
-  threads), shrinking produce (6 to 11 ms) and the tick frame's view recording;
-- background work proportional to change: the cold bake rebaking only what an
-  edit touched (per-group content keys, the bake closure narrowed, one store
-  for both backends), and GI re-measuring only the probes that can see newly
-  landed geometry (`SdfMeshIrradiance` rebuilds its scene incrementally, but
-  its comment says each landed set is measured whole; confirm in the code first).
+machine's cores idle, and the bake and the irradiance preview compete with each
+other and the frame for cores with no priority. One engine-wide job system
+answers all of it: frame-critical work first, then the tick, then background
+bake and GI, each under a budget that protects the frame; a deterministic
+parallel tick, bit-identical at any thread count; parallel view recording on
+both backends; and background work proportional to change (the bake rebaking
+only what an edit touched, GI re-measuring only the probes that can see newly
+landed geometry).
 
-- **Schedule as well as spread**, what remains [high]. Rated work keeps off the
-  frames that run a step: `PresentationRate.Holds` (the one floor every lever
-  decides through) updates early on a frame without a step when the next frame
-  runs one (`FrameContext.StepsNext`, from the pump's remainder in `HostLoop`);
-  the stamp pool takes this frame's flags and levers before it packs
-  (`WorldCreationInstances.PresentAt`, from `PrepareGraph`), none for a settled
-  capture. A body nothing may show or read holds (`SdfUpdateRateTiers.HeldHertz`):
-  no camera of any view, displayed or not, no shadow cascade (the renderer's own
-  `SdfMeshCull`, fitted on the frame just dressed), and no consumer of its parts
-  since the previous pack (lights, camera anchors, audio emitters and overlay
-  facts all read through the pool's part accessors, which record the read,
-  `NotePoseRead`). Its bound is the larger of the rest reach and the farthest
-  any pack posed a part (`MotionReach`). It resumes as a continuity cut, and
-  bodies taking a tier together alternate their phase by half its period. Open:
-  a held body's motion no pack has posed yet (a slide first driven while held)
-  is outside its bound. The rated views and
-  screens (eight machine sources and a session at 15 Hz in the lobby) still
-  share one phase, since the render graph's history keeps none to stagger; a
-  tick frame's own work (a 6 to 9 ms tick plus the tick-bound session views'
-  recording, produce 12 to 16 ms) is what still crosses 16.7 ms, which parallel
-  recording and the parallel tick take. A held body shows its held pose for the
-  one frame the rate views lag behind a camera cut, since the cameras resolve
-  after the pack. (from: slow-frames)
-- The effector solver passes the "Puck code over engine code" check: which
-  effectors, chain, tip, target kind, reach, standoff, direction, gate, plant
-  window, replant and weight are authored `CreationEffectorDocument` data, and
-  `WorldEffectorSolver` executes them. Two decisions are still engine
-  constants: an effector's ease in and out uses the drivers' default blend
-  (`WorldGaitDrivers.WeightBlend`, `CreationAnimation.WeightSeconds`) with no
-  authored time of its own, and `ProbeBackoff` is 5 cm whatever the body's scale
-  (`WorldEffectorSolver.cs:28`). The surface probe also runs while the
+- [medium] Snapshot emission's entity rows, which T1 partitioned, are a small
+  share of its cost, so most of it lies in the serial tail or the subscribers'
+  `DeliverSnapshot`; profile it before T3 or any R step assumes otherwise. The
+  headless debug world also builds snapshots for its night and garden session
+  instances every tick. (from: t1-snapshot)
+- [high] **Schedule as well as spread**, what remains. Rated work keeps off the
+  frames that run a step and a body nothing may show or read holds
+  (`PresentationRate.Holds`, `SdfUpdateRateTiers.HeldHertz`, `MotionReach`).
+  Open: the rated views and screens (eight machine sources and a session at
+  15 Hz in the lobby) still share one phase, since the render graph's history
+  keeps none to stagger; a tick frame's own work (the tick plus the tick-bound
+  session views' recording) still crosses 16.7 ms, which parallel recording and
+  the parallel tick take; a held body's motion no pack has posed yet (a slide
+  first driven while held) is outside its bound; a held body shows its held
+  pose for the one frame the rate views lag behind a camera cut, since the
+  cameras resolve after the pack. (from: slow-frames)
+- The effector solver passes the "Puck code over engine code" check except for
+  two engine constants: an effector's ease in and out uses the drivers' default
+  blend (`WorldGaitDrivers.WeightBlend`, `WeightSeconds` in `CreationAnimation.cs`) with
+  no authored time of its own, and `ProbeBackoff` is 5 cm whatever the body's
+  scale (`WorldEffectorSolver.cs:28`). The surface probe also runs while the
   effector's gate is shut and its weight at rest
   (`WorldCreationInstances.Effectors.cs:82-93`).
-- [high] Remaining managed allocation churn, measured by `gc-cuts` on the
-  Release .NET 11 debug World, before any custom runtime:
-  - `puck bench world`'s `WorldSceneEmitter.Emit` window (builder construction
-    excluded) falls from 5,471,368 to 460,880 B/call unchanged, and 5,539,488 to
-    529,000 after a hall-light change. Rigid templates reuse retained emissions;
-    composition owns its builder and avatar scratch. Residual emission includes
-    pick material labels (`WorldPickMap.cs:64`) and shape-specific materials.
-  - Direct3D standing (300 ticks) and walking (290 ticks) gen0 increments from
-    `host.memory` fall from 4/4 to 1/1 (`host.frames` printed 5/4 before while
-    it summed the inclusive generation counters); pauses are 18.85/26.19 ms
-    before and 18.41/12.12 ms after. The 23 s steady trace tail falls from 499.4
-    to 169.2 MiB sampled; remaining sites are irradiance probe blocks, 103.3 MiB
-    (`SdfMeshIrradiance`), dressed-pick arrays, 32.0 MiB
-    (`SdfDressedPickMap.cs:24-25`), and dressed motion identities, 9.1 MiB
-    (`SdfMeshPathBake.cs:408, :425`; the `Dress` item under
-    [other frame-time findings](#other-frame-time-findings)). Zero steady gen0
-    is not yet reached.
-  - Empty, lane-owned `--cache-dir` boots through bake settlement sample
-    174,453 to 159,435 MiB, but collections increase from 555 to 619 and GC
-    suspension from 12,813 to 15,083 ms. Counts include higher generations and
-    startup; these loaded-machine observations establish no pause gain.
-    Main bake counts agree: 999,550,075 samples and 38,652,955 triangles.
-    Remaining sampled sites include readback-copy byte arrays, 12,350 MiB
-    (`SdfMeshPathBake.cs:691`), fine-key dictionary entries, 14,669 MiB across
-    inlined/non-inlined stacks (`SdfSampledLattice.cs:861`), and contour merge
-    doubles, 5,022 MiB (`SdfDualContouring.cs:702`). The frame thread decodes
-    each readback once into native answer buffers its group's job owns; final
-    lattices reuse point-conversion storage. Worker-slot index retention is
-    bounded to one fine-sample budget across slots, reported to the account and
-    released when a bake settles: retaining every slot's maximum grew standing
-    LOH to 8,530 MiB; bounded retention reads 5,404 MiB versus the baseline's
-    6,222 MiB.
-    Continue with owned storage, through `IAllocator` and `MimallocAllocator`
-    where it goes native; a shared cross-thread pool belongs to the memo.
-- What remains of the allocation cuts' cross-family review (the gate, decode
-  buffer and worker-scratch items are fixed; see Memory ownership):
-  - [medium] The cold-bake pause comparison needs at least 3 alternating A/B
-    runs on a quiet machine, with GC events read from the trace. No quiet
-    machine was available to `mem-fixes`: four Direct3D 12 cold bakes ran at 86
-    to 100 % CPU from other lanes, and GC pause per collection read 22 ms in
-    one run and 40 to 83 ms in the others with no change between them that
-    explains it. Retained large arrays compacted by `ConserveMemory=5`
+- [high] Remaining managed allocation churn, read by `gc-cuts` on the Release
+  debug World, before any custom runtime. Zero steady gen0 is not reached. The
+  steady frame's remaining sites are irradiance probe blocks
+  (`SdfMeshIrradiance`), dressed-pick arrays (`SdfDressedPickMap.cs:24-25`) and
+  dressed motion identities (`SdfMeshPathBake.cs:408, :425`; the `Dress` item
+  under [other frame-time findings](#other-frame-time-findings)); scene
+  emission's residue includes pick material labels (`WorldPickMap.cs:64`) and
+  shape-specific materials. A cold bake's remaining sites are readback-copy
+  byte arrays (`SdfMeshPathBake.cs:691`), fine-key dictionary entries
+  (`SdfSampledLattice.cs:861`) and contour merge doubles
+  (`SdfDualContouring.cs:702`). Continue with owned storage, through
+  `IAllocator` and `MimallocAllocator` where it goes native; a shared
+  cross-thread pool belongs to the memo.
+- What remains of the allocation cuts' cross-family review:
+  - [medium] The cold-bake pause comparison needs at least three alternating
+    A/B runs on a quiet machine, with GC events read from the trace; loaded runs
+    read pauses per collection that varied by a factor of four with no change
+    between them. Retained large arrays compacted by `ConserveMemory=5`
     (`Puck.World.csproj:30`) remain the likelier cause of long suspensions; the
     settled LOH still reads about 1.5 GB after `host.memory collect`.
   - [low] `SdfProgramBuilder.Clear` (`SdfProgramBuilder.cs:164-180`) leaves
@@ -369,466 +279,104 @@ One engine-wide job system answers all of it:
   - [low] `TemplateScratch` (`WorldRigidAssets.cs:24-39`) is a second cache of
     retained emissions beside `WorldPlacementStamper`'s (`:983-985`), which is
     duplication to converge.
-- Decided: the 30 and 15 Hz tiers stay tiers. On a fixed grid a floor's period
-  is whole refreshes (`PresentationRate.GridSteps`), and with a 30 Hz tick on a
-  60 Hz display only every other refresh is free of a step, so the useful
-  periods are two and four refreshes, which the tiers already are; a continuous
-  rate would be quantized back to them and adds no placement freedom.
-- [high] The creature garden, the parallel tick's forcing workload, is all kit
-  bodies. At 128 creatures a tick is about 3.7 ms, and body advance is 80 % of
-  it (motion programs 33 %, their contact sweeps 30 %, producers 17 %). The
-  planned rigid-body step (T2) takes none of that, so this item, not T2,
-  carries the parallel tick's main gain. It follows T1 and T3 in the memo's
-  order. (from: garden, `worlds/debug/garden-crowd.puck`)
-  Kit bodies' advance stays serial, so the parallel tick partitions
-  only the snapshot, the crossing scan and the rigid bodies, which is less than
-  the measured 70 %. A kit body's advance is one arena transaction on the one
-  journal: `BeginKitStep` opens a scope (`WorldInputRuntime.Effects.cs:18-24`),
-  validation writes and rewinds the arena (`:101-132`), foreign effects mutate
-  another body at once (`:58-71`), and selector commits synchronize every owner
-  (`:74-83`). Partitioning it is the per-partition kit transaction the
-  [memo](engine-job-system.md) names under "What partitioning kit bodies would
-  need". It is a State and Server design with its own cross-family review,
-  taken after T1 to T3 measure what remains serial.
+- [high] The creature garden (`worlds/debug/garden-crowd.puck`), the parallel
+  tick's forcing workload, is all kit bodies, and body advance is most of its
+  tick (motion programs, their contact sweeps, producers). The planned
+  rigid-body step (T2) takes none of that, so this item, not T2, carries the
+  parallel tick's main gain; it follows T1 and T3 in the memo's order. Kit
+  bodies' advance stays serial, so the parallel tick partitions only the
+  snapshot, the crossing scan and the rigid bodies. A kit body's advance is one
+  arena transaction on the one journal: `BeginKitStep` opens a scope
+  (`WorldInputRuntime.Effects.cs:18-24`), validation writes and rewinds the
+  arena (`:101-132`), foreign effects mutate another body at once (`:58-71`),
+  and selector commits synchronize every owner (`:74-83`). Partitioning it is
+  the per-partition kit transaction the memo names under "What partitioning kit
+  bodies would need": a State and Server design with its own cross-family
+  review, taken after T1 to T3 measure what remains serial. (from: garden)
+- A remote `WorldSessionMirror`'s per-property pose reads
+  (`WorldSessionSceneEmitter.cs:693-705`) against its socket thread's in-place
+  delivery (`WorldSessionMirror.cs:533-594`) can compose a frame from two ticks;
+  the fix is the coherent-copy path the adjacency pin already uses
+  (`CopySnapshotTo`). Owner: the federation lane.
 
 #### Memory ownership
 
-The job system owns memory as well as scheduling, and the memo fixes both
-together. The work builds on today's runtime through `IAllocator`
-(`src/Puck.Abstractions/Memory/IAllocator.cs:8`) and `MimallocAllocator`
-(`src/Puck.Platform/Memory/MimallocAllocator.cs:14`), the allocator every native
-move goes through. The custom no-GC runtime port stays later work, on the
-[memory-pooling page](memory-pooling.md), after the fundamentals.
+The job system owns memory as well as scheduling, and
+[the memo's section 4](engine-job-system.md#4-memory-ownership) designs both;
+the account itself is described in the
+[dotnet-performance reference](../../.claude/skills/dotnet-performance/references/data-and-memory.md#owned-storage-and-byte-admission).
+The custom no-GC runtime port stays later work, on the
+[memory-pooling page](memory-pooling.md). Still open from the memory review:
 
-M1 and M2a are built (`mem-m1`), with both cross-family reviews' findings on
-the bake, memory and library files fixed by `mem-fixes`. `MemoryAccount` owns
-admission and category totals. Admission paces and always progresses: a bake
-group's peak is its own final lattice plus the fine samples its refinement
-factor can measure (`SdfSampledLattice.FineSampleBound`), narrowed once
-measured; the first deferred group holds its place; a group with nothing else
-of its bake admitted is admitted alone; free physical memory is read outside
-the account and only paces; and admission waits while the pool's queue holds
-a round of every worker's stages. The library reserves nothing and evicts by
-its meshes' charged storage. Published mesh payloads, decoded readback
-answers, lattice storage and point workspaces use the injected allocator, and
-a chunked mesh stores its attributes once. No array-sized work runs under the
-bake gate the frame thread takes. Managed contour roots and worker refinement
-indexes keep their existing owners; the worker slots report theirs to the
-account and release them when a bake settles.
-
-- `mem-fixes` Direct3D 12 cold bakes of `worlds/debug`, windowed, empty private
-  cache, at 86 to 100 % CPU from other lanes: before the fixes the world bake
-  took 271 s with 962 deferrals and the frame thread waited on the bake gate up
-  to 179 ms, 15.6 s in total, 1,929 times over 1 ms; after, 185 s with 122
-  deferrals and none stalled, gate waits up to 136 ms (a collection while a
-  worker held it), 1.35 s in total, 35 over 1 ms, with identical samples and
-  triangles. Live payload after `host.memory collect` fell from 1,526,790,926
-  to 1,409,528,905 B (chunked attributes stored once). Frame times during the
-  bake (p99 per minute 186 to 307 ms before, 233 to 398 ms after) are not
-  comparable: GC pause per collection read 22 ms in the before run and 40 to
-  83 ms in three after runs as the machine load rose. The after build's Vulkan
-  cold bake settled in 525 s with 346 deferrals, gate waits up to 149 ms and
-  64 over 1 ms, and live payload 1,607,238,606 B after collection; it baked
-  1,101,923,007 samples and 45,044,555 triangles against Direct3D 12's
-  999,550,075 and 38,652,955. No before Vulkan run was taken, so whether that
-  backend difference predates these changes is unconfirmed; the changes are
-  CPU-side and left Direct3D 12's counts identical. Both backends stay far
-  past the one-minute cold-bake ruling on this loaded machine.
-- Still open from the memory review:
-  - [medium] Managed working memory per admitted group (contour lists,
-    refinement masks and `Vector3[]` point rounds: `SdfSampledLattice.cs:439`
-    onward, `SdfMeshPathBake.cs` `ChooseCrossingPoints`) is not in a group's
-    peak, so the account cannot pace the collections it causes; the settled
-    LOH still reads about 1.5 GB after `host.memory collect`. The cure is the
-    next native movers (the contour and the refinement's per-cell masks), not
-    a count cap.
-  - [low] A chunked mesh still stores its triangles' indices twice: the
-    parent's joined indices for whole-group queries and each chunk's own
-    (`SdfMesh.Storage.cs`, `NativeCopy`). Dropping the parent's needs its
-    readers (the irradiance scene, `SdfMeshAudit`, the diagnostics' nearest
-    query) to walk the chunks.
-  - [low] The library releases evicted claims, which frees native payloads,
-    under its own gate (`SdfMeshLibrary.cs` `Retain`), the gate the frame
-    thread takes in `Restart` through `TryTake`.
-  - [low] `HostMemory.AvailablePhysicalBytes` on Linux reads `/proc/meminfo`
-    with LINQ and `string.Split` (`HostMemory.cs:29-39`); the bake reads it at
-    most every 0.25 s.
-  - [low] `GpuRegion` grows its host copy with `NativeMemory.Alloc*`
-    (`GpuRegion.cs:331,760,854,980`), the same allocate/copy/publish growth as
-    `OwnedBuffer`, outside `IAllocator` and the account.
-  - Declined: one claim holder bridging `Dress` to the mesh region. The two
-    claim sets cover the same list at different times (from dressing until the
-    region stages it, and from staging until the next list stages), and both
-    now claim only the meshes entering their list (`SdfMeshClaims.Update`).
-
-- Empty private-cache cold bakes, before/after: Direct3D 12 gen0 increments
-  683/481, Vulkan 711/536, from `host.memory` before and after settlement.
-  The saved `host.frames` binaries predate the inclusive-counter correction:
-  their printed 1360/949 and 1420/1145 totals double-count higher generations.
-  Frame windows differ, machines were loaded and moving bodies baked different
-  poses; these are observations, not a quiet speed or pause comparison against
-  the memo's 345. After `host.memory collect`, LOH fell from 2838 to 1475 MiB
-  on Direct3D 12 and 2945 to 1534 MiB on Vulkan.
-- The Direct3D cold bake read live 1,526,650,491 B, cached 819,879 B,
-  reserved 715,136 B and metadata 2212 B; collection left the same live bytes
-  with the other categories zero. Allocator commit/reservation, managed commit
-  and process private bytes are separate observations: payload totals are
-  already inside allocator commit, promises are not allocated, and process
-  private bytes also include driver heaps and unmigrated storage.
-- On an uncached desk edit in `worlds/debug`, `host.memory budget 1` emitted
-  `[sdf.mesh-bake] deferred ... group=-122 ... budget=1`; restoring `auto`
-  settled the bake and `quit` exited 0, with no worker failure or bake refusal.
-  A preceding whole-world cold attempt reached its 600 s wait limit with 260
-  groups pending at 0.2 GB free RAM: every group's fixed 384 MB peak and the
-  reserved cache allowance deferred them all, with no progress rule. That is
-  the admission defect `mem-fixes` removed: a whole-world cold bake under
-  `host.memory budget 2000000000` and `world.lockstep on`, at 0.4 to 1.4 GB
-  free, deferred 493 times and settled in 809 s with the unbudgeted bake's
-  999,550,075 samples and 38,652,955 triangles; the lockstep World then
-  stepped 30 ticks and quit with exit 0.
-- A desk extent edit rebuilt exactly one group (23 dispatches, 1,399,082
-  samples); GI built one geometry and retained the old 15,368-triangle one.
-  `host.memory collect` released 606,352 cached bytes and 536,229,256 reserved
-  bytes, leaving retirement and metadata zero too; the next collection held
-  live bytes at 1,424,482,976. The authored edit was restored after the run.
-- A tolerant still comparison replaces byte-identical stills as the job
-  system's image check ([how a step's image is
-  checked](engine-job-system.md#6-build-order)). Image quality is meant to
-  improve through this work, so no step requires identical pixels. Run-to-run
-  noise is measured, not assumed: at the pinned `debug.go desktop` camera and
-  tick 12, with lockstep on and temporal resolve off, two captures of one
-  unchanged build differ on 314 (Direct3D 12) and 340 (Vulkan) pixels of
-  1280×900, by one channel level at most. M2a's before and after differed on
-  39 and 44. Next: a verb, or an option on the capture path, that compares two
-  stills against a noise floor measured from repeat captures and reports the
-  regions beyond it, so that R1, R2 and M2b can use it.
-- Four debug replay sources (`input-clock30`, `input-clock60`, `input-history`,
-  `controls-dash`), eight scenarios, pass `--reproduce --jobs 2`; all per-tick
-  reproduction files are byte-identical to their pre-edit copies, including
-  the rebuild after power loss. After merging the integration tip, its
-  authoring/schema changes move the old hashes: all eight merged-native
-  reproduction files instead match a separate integration-only artifact
-  (without the memory commits) byte for byte, and again after the final
-  silo-recovery merge. Final Direct3D 12 and Vulkan boots settle at tick 12,
-  capture and exit 0 without worker/device failures.
-
-- Ownership and borrowing: authoritative ownership stays in an existing arena,
-  scratch pool, job slot, mesh or host service, and its private record holds
-  allocation and capacity. A borrow is a span with a logical length, with no
-  reference count and no universal registry slot. Transfer is an explicit move
-  that empties the source as it installs the destination; growth allocates,
-  initialises and copies, publishes, then releases the old storage after the old
-  views end, and a failure before publication releases only the candidate.
-  Generation handles belong where consumers finish independently and stale-handle
-  detection matters (GPU images and meshes), in that resource's lifecycle. End
-  borrows before return, transfer, growth, reset or disposal, and join users
-  before freeing an owner; C# enforces none of it, so no wrapper pretends to. No
-  tracing collector, universal reference counting or finalizer recovery is
-  introduced.
-- Per-job and per-partition scratch: a job's or partition's scratch has one
-  owner, which keeps it between runs; nothing is shared across partitions, so the
-  parallel tick shares no allocator state. An owner-retained workspace moves only
-  without active borrowers, and storage handed off but not yet released stays
-  live and accounted rather than promised as reclaimable cache.
-- Shared reuse and handoff: begin with no hidden managed thread-local cache. The
-  first shared cache serves variable temporary buffers under a short lock and an
-  aggregate byte limit, keyed by representation, element type, capacity class
-  and alignment; a rent removes an idle entry under the lock and initialises
-  outside it, and a trim detaches under the lock and frees outside it. A return
-  from another thread needs no contact with the renting worker. A worker-local
-  fast path waits for measured contention.
-- One byte-accounting owner: account for each physical allocation once, by owner
-  (payload, slack, headers, metadata, scratch, retirement, cache contents), with
-  allocator overhead and fragmentation as separate headroom. Admission reserves
-  the simultaneous peak of an operation (old and candidate definitions,
-  allocate-and-copy overlap, exports, checkpoints, cancelled jobs whose
-  callbacks still run, queued results, decoder workspace, uploads, fence
-  retirement) from one authority, so concurrent jobs cannot reserve the same
-  spare bytes; a unified-memory CPU and device share one physical budget, and
-  discrete device and host-staging memory are separate constraints. Residency's
-  machine byte budget
-  ([decision](../decisions/residency.md)) and the mesh caches
-  (`src/Puck.SdfVm/SdfMeshLibrary.cs:26, 233`) are reservations from this owner.
-  Keep a reserve for reporting failure, cancellation and retirement; defer new
-  work before consuming it; a job never holds partial resources while it waits
-  on another job that needs the same exhausted resource. Cache limits come from
-  measured working sets, not guessed constants. Report live, reserved, cached,
-  retirement, metadata and allocator committed and reserved bytes separately.
-- Consumer migration (the native-storage list is a memo output): start at the
-  existing lifecycles, not by replacing every `new T[]`. `ArenaScratch`
-  (`src/Puck.State/Arena/ArenaScratch.cs:16`) keeps its nesting and zeroed
-  logical spans; migrate one reference-free State column or scratch path first,
-  then journals, indexes, undo and reference storage. `Adopt(source)` moves and
-  detaches the owned fields, invalidates old views and retires replaced fields,
-  and snapshots or exported graphs need independent owners or retained leases.
-  `BackgroundBuild` (`src/Puck.Hosting/BackgroundBuild.cs:4-19`) keeps its
-  candidate lifecycle as a consumer, with its `Task.Run` calls (`:134, 149`)
-  replaced by the scheduler. Mesh eviction drops only the cache claim; active
-  residencies and uploads retain theirs, with backend retirement for GPU use.
-
-#### The state/jobs contract
-
-The memo fixes this before any parallel tick, because parallel evaluation changes
-rule-read semantics and that mapping is chosen, not inherited (determinism pins
-the mapping, AGENTS.md rule 4): fixed partitions independent of the worker count,
-declared read epochs, partition-owned scratch, a stable commit order, and a fixed
-order for slot allocation, key minting and draw order; snapshots are taken only at
-publication boundaries. The single-owner assumptions to replace:
-`WorldRuleHost.Evaluation.cs:217-254`, `ArenaScratch.cs:16` and
-`StateArena.Pools.cs:24-61`. State is bit-identical at any thread count.
-
-#### Memo inputs
-
-- GI's work units and priority: the irradiance volume's preview trace ran 201 to
-  222 s of a cold bake on its four background workers (about 800 thread seconds
-  beside the bake's 1,670), rebuilding from the landed meshes every four seconds
-  (`SdfMeshIrradiance.PendingSceneInterval`). The scheduler gives GI a priority
-  and a budget under the frame and the bake, and GI re-measures only the probes
-  that see newly landed geometry ([lighting](#lighting-and-gi),
-  [residency](#residency-and-streaming) step 2).
-- Machine stepping and parking: "observed" comes from authoritative state only
-  (seats, bindings and engagement), never from who looks, because presentation
-  must not change simulation state ([machines plan](machines-and-cartridges.md)).
-- The creature workload: the population's few-thousand-creature acceptance
-  workload is a sizing input ([play plan](play.md)).
-- The presentation view's cut 5 merges with phase 3 of the tick-to-produce memo
-  ([runtime plan](runtime-and-delivery.md#the-presentation-view),
-  [simulation thread](simulation-thread.md)).
-- One handoff into the frame thread. Background work reaches the frame through
-  a different hand-rolled path at each site. Kernel loads use `ConcurrentQueue`
-  (`SdfKernelTreeLoad.cs:16`). The composition build polls a `Task`
-  (`SdfCompositionFrameSource.cs:268`). The irradiance worker, scene build and
-  refill each use their own `Task.Run` (`SdfMeshIrradiance.cs:558,1011,1147`),
-  and the bake uses fire-and-forget `Task.Run` (`SdfMeshPathBake.cs:1099`,
-  `SdfMeshPathBake.Residency.cs:278`). The memo names one completion
-  primitive the scheduler owns: a bounded `System.Threading.Channels` channel
-  with the frame thread as its single reader, drained with `TryRead` at a fixed
-  point in the frame. Every site moves onto it. Channels stay off the parallel
-  tick's hot path. A frame-scale fork and join over fixed partitions wants
-  preallocated work ranges, a counter join and an ordered merge for
-  determinism, never per-item queueing or async continuations. The machine
-  worker's request and reply (`QueuedWorkerLifecycle`, a `Monitor` queue with a
-  new `ManualResetEventSlim` per synchronous request) is a dedicated-thread
-  rendezvous rather than a stream, and the memo decides whether its
-  per-request allocation is worth pooling. Channels already serve the
-  asynchronous I/O streams (`PersistentRequestLane`, `PeerLink`,
-  `WorldSiloHost.Mailbox`, `WorldAgentMailbox`), where they fit.
-
-#### Measurements and evidence
-
-Measured on the quiet lead machine (RTX 4070, Direct3D 12, bakes and GI
-settled; the attribution is in the evidence below):
-a slow frame is a 30 Hz tick (about 6.3 ms) on the same frame as the 15 Hz
-rated presentation burst (about 2.4 ms of CPU effector probes plus the rated
-views' recording), never the GPU
-(`begin` 0.00 on every slow frame) and rarely a collection. What the job
-system can take, from `dotnet-trace` thread-time samples of the frame thread
-(20 s standing at the lobby and at the rim, 600 ticks each):
-- **The tick is mostly program execution over entities.** Per tick (lobby /
-  rim): 6.26 / 6.77 ms, of which running authored programs (the rule VM, the
-  motion programs and their solvers, machine stepping) is 3.5 / 4.3 ms (56 /
-  63 %) and the engine's own crossing scan and snapshot the rest. Motion
-  programs and their contact solvers, per body: 1.68 / 2.55 ms (27 / 38 %): `WorldPopulation.AdvanceSimulated`
-  (`WorldPopulation.Step.cs:820`), `AdvanceSeats` (`:687`) and `StageProducer`
-  (`:550`) into `WorldBody.Advance` (`WorldBody.Step.cs:41`), the motion-program
-  interpreter `ExecuteProgram` (`:704`) and producer `ExecuteProducer` (`:286`),
-  the sweeps through `WorldColliderSet.ResolveSweep` (`WorldColliderSet.cs:1086`)
-  and `WorldSolidField.ResolveSweep` (`WorldSolidField.cs:333`), and the step's
-  `CaptureMotion` (`WorldBody.SweepRefusal.cs:71`, 0.4 to 0.5 ms a tick alone).
-  The rule VM, `RuleEvaluator.Evaluate` (`RuleEvaluator.cs:314`): 1.77 / 1.66 ms
-  (28 / 25 %), of which gate and binding expression reads (`GateOpen`, `:629`;
-  `RuleExpressions.Run`) are about 0.7 ms, firings into the transaction
-  (`FireEffects`, `RuleEvaluator.Effects.cs:48`) about 0.3 ms and latch
-  scheduling (dictionary lookups, `RuleLatch.EndSweep`, key walks) the rest.
-  The portal crossing scan, per seat and face
-  (`WorldInstanceHost.Adjacency.cs:294-434`): 1.17 / 1.11 ms (19 / 16 %). Snapshot emission (`WorldTick.EmitSnapshot`,
-  `WorldTick.Step.cs:244`): 0.80 / 0.60 ms (13 / 9 %). Machine stepping on the
-  frame thread (`WorldMachineHost.Advance`): 0.04 to 0.06 ms (1 %).
-- **Partitionable share of a tick: about 70 %.** Body advance, the portal scan
-  (each seat's winner is its own), the rule VM's reads against the tick's
-  frozen arena and the snapshot's rows all run over fixed partitions with an
-  ordered commit: about 4.35 ms lobby (69 %), 4.9 ms rim (72 %). Serial: firing
-  commits and latch scheduling (about 1.0 ms), the scoped replay's hash
-  (`WorldScopedReplayRuntime`, 0.4 ms, 6 to 7 %), the event feed, addons and
-  the host step shell (about 0.5 ms), and pairwise rigid contacts
-  (`WorldPopulation.ResolveDynamicContacts`, `WorldPopulation.Resolve.cs:803`,
-  0.03 to 0.06 ms). At eight workers that is about 2.5 ms a tick.
-- **Produce: about 36 % is per-view recording.** Per iteration (lobby / rim):
-  produce 6.5 / 5.5 ms; each render-graph node's own command list
-  (`ShaderPipelineRenderNode.RenderFrame`, `ShaderPipelineRenderNode.cs:1727`;
-  `RecordPasses`, `ShaderPipelineRenderNode.Work.cs:81`; `SubmitCounted`, `:159`)
-  2.39 / 1.91 ms (37 / 35 %), and 5.3 ms of a slow frame's 14.8. The shared
-  residency preparation before it (`SdfWorldPasses.BeginFrame`: transforms,
-  mesh dress, table pack, irradiance and exposure staging) is 3.38 / 2.89 ms
-  (52 %), of which the per-body pose pack (`WorldCreationInstances.PackTransforms`,
-  effectors included) is 0.89 / 0.78 ms and partitions by registration; graph
-  preparation and scheduling are about 0.5 ms.
-- **The creature garden, the parallel tick's forcing workload**
-  (`worlds/debug/garden-crowd.puck`, 128 flocking, stalking and rumouring kit
-  bodies; [port lane 4](port-experimental.md#4-creature-garden--done)). Headless
-  unpaced, on the lead machine with other lanes holding the CPU at 100 %,
-  `host.frames` tick avg / p50: 12 creatures 1.37 / 1.29 ms, 32 (the garden)
-  1.65 to 1.96 / 1.39 to 1.43, 128 3.72 to 3.83 / 3.20 to 3.49 (about 11 % of a
-  30 Hz period), 256 4.88 / 3.90, 512 5.78 / 5.69. By sampled thread time, as a
-  share of `WorldTick.StepCore` at 32 / 128: body advance 89 / 80 % (motion
-  programs 50 / 33 %, their contact sweeps 48 / 30 %; producers 13 / 17 %,
-  flock steering and navigation under 2 %), `WorldEventFeed.Collect` 2.7 /
-  9.0 %, snapshot 2.5 / 3.8 %, the rule VM 1.7 / 1.1 %, pair contacts under
-  1 %, no crossing scan. None of the bodies is rigid, so E1 partitions none of
-  this; it is the measured case for the kit-body item above.
-
-- [high] Steady 60 FPS is not held where a 30 Hz tick and the 15 Hz rated
-  presentation burst land on the same frame. Quiet lead machine (the World the
-  only load, 1.8 of 16 cores), RTX 4070, display at 60 Hz, windowed, highest
-  settings (shadows high, temporal on, native scale), bakes and GI settled,
-  `host.frames` over 600 iterations untraced:
-
-  | Reading | avg | p50 | p99 | max | over 16.7 | over 17.5 | over 20 | collections |
-  |---|---|---|---|---|---|---|---|---|
-  | Direct3D 12 lobby standing, first | 16.84 | 16.66 | 24.53 | 31.54 | 249 | 81 (over 18) | 48 | 4, 4.94 ms |
-  | Direct3D 12 lobby standing, second | 17.14 | 16.67 | 24.87 | 26.97 | 293 | | | 5, 5.03 ms |
-  | Direct3D 12 lobby walk (300 frames) | 16.66 | 16.66 | 17.99 | 18.49 | 110 | 5 | 0 | 3, 2.73 ms |
-  | Direct3D 12 rim standing | 16.66 | 16.66 | 17.89 | 22.22 | 244 | 7 | 2 | 5, 13.36 ms |
-  | Direct3D 12 rim walk (240 frames) | 16.66 | 16.66 | 18.32 | 19.87 | 93 | 4 | 0 | 3, 1.99 ms |
-  | Vulkan lobby standing | 16.66 | 16.56 | 18.50 | 19.51 | 234 | 72 | 0 | 6, 16.78 ms |
-  | Vulkan rim standing | 16.66 | 16.75 | 18.20 | 19.56 | 305 | 124 | 0 | 5, 10.65 ms |
-
-  The lobby is `debug.go desktop`, the rim `debug.go overlook`; the walks are
-  `player.move` a tick through `world.at` (from `debug.go gallery` at 5 m/s, and
-  along the overlook deck). What makes a slow frame slow, by thread-time traces
-  of the frame thread (`dotnet-trace` sampled thread time, 20 s standing and
-  9 to 12 s walking at each stop; every iteration split into its phases and
-  classed by whether it ticked and whether it carried the rated burst):
-  - **A tick and the rated burst on one frame.** At the lobby, 71 of the 86
-    iterations over 16.7 ms of work carried both: work 21 to 27 ms (simulate
-    6.4, produce 15.4) against 11.5 ms for a tick frame without the burst and
-    8.4 to 9.1 ms for the burst without a tick. The burst is every body the
-    rates lever holds at 15 Hz posing in full on one frame, every fourth
-    frame: at the lobby and the rim those are bodies 2 to 7, which no view can
-    see (0.0 px/m), yet each runs its drivers and its effectors' surface probes,
-    a CPU march and gradient of the field per foot (`WorldEffectorSolver.Probe`,
-    `WorldEffectorSolver.cs:281`, through `WorldCreationInstances.TryResolveTarget`,
-    `WorldCreationInstances.Effectors.cs:676`), 2.3 to 2.6 ms a burst; the views
-    and screens rated at 15 Hz record on the same frame (1.4 to 2.8 ms). A body
-    no view may see is rated 15 Hz, not held (`SdfUpdateRates.BodyHertz`,
-    `SdfUpdateRates.cs:82-84`; `WorldCreationInstances.Rates.cs:71-73`), and all
-    six accumulate the same held seconds, so they pack together
-    (`WorldCreationInstances.Pack.cs:228-270`). The tick runs every other frame
-    and the burst every fourth on the same 60 Hz grid, so whether they meet is a
-    phase that holds for seconds and flips when an iteration takes 0 or 2 steps:
-    a standing reading is either nearly clean (the rim: 13 such iterations in
-    1,309) or 6 to 7 % slow (the lobby). Decide whether a body no view can see
-    poses at all (it may still cast a shadow into a view), spread rated packs
-    over the frames of their period, and put rated presentation work on frames
-    without a tick.
-  - **A sustained overload at the chess demo's cycle boundary.** In the second
-    lobby reading, iterations 461 to 530 (about 1.2 s around
-    `[replay.scope: chess-demo RECORDED 3330 ticks]`) ran with no pacer wait:
-    simulate 9 to 10 ms instead of 6, and produce 13 to 17.7 ms even on
-    iterations without a tick. Each long iteration owes the next tick sooner, so
-    ticks fell on consecutive iterations (473 and 474, 513 and 514 at 24.96 and
-    26.20 ms). Not traced; trace it across the demo's restore.
-  - **Walking.** The rim walk's slow iterations (38 of 537 traced) are tick
-    frames with the session views' recording (19) or the burst (16); the seat
-    camera's clearance march against the relief
-    (`WorldCameraClearance.March` under `WorldSeatViewState.Clear`) takes 1.7 ms
-    on them against 0.4 ms elsewhere.
-  - **Collections** are 1 to 6 a reading at 0.4 to 4.7 ms each (a gen0 3.7 ms,
-    a gen1 4.7 ms); one pushed a rim frame to 20.84 ms. Not the cause of the
-    slow frames.
-  - **Not the GPU, present or pacing waits.** `begin` (the wait for the previous
-    frame's GPU work) reads 0.00 on every slow iteration; the GPU's frame is
-    about 10 to 11 ms (`world.gpu-timing timeline`: `world` 8.1 to 9.0 ms, views
-    3.3 and resolve 3.5 of it at the lobby, the session views about 1.5 ms,
-    `beacon-eye` 0.3); `present` is 0.1 to 0.4 ms.
-  - **Most "over 16.7 ms" iterations in the table are on time.** It counts
-    intervals, and with a 16.6667 ms budget a vsync-paced iteration of 16.67 to
-    16.75 ms counted: at the rim 244 are over 16.7 ms and 7 over 17.5.
-    `host.frames` now counts work (the interval less the pacer's wait), as
-    `Scan` does. The Direct3D 12 swap chain holds one presented frame queued
-    (`DirectXSurfaceCompositor.cs:51-58`), so a lone iteration of up to about 30 ms still shows on its refresh, and the next one
-    starts at once and catches up; a refresh repeats only when consecutive
-    iterations overrun together, as at the chess boundary. Vulkan's present-wait
-    pacing (`VulkanSurfacePresenter.cs:98-113`) alternates intervals of about
-    18.5 and 14.8 ms around the 16.66 mean with 4 to 9 ms of work and 9 to 14 ms
-    of wait, so its 72 to 124 iterations over 17.5 ms are pacing jitter, not
-    missed refreshes. Vulkan's produce (avg 5.4 to 6.2, p99 10.1 to 11.1 ms)
-    now matches Direct3D 12's.
-  (from: slow-frames)
-- The scheduling stage, read back to back before (A) and after (B) on a machine
-  other lanes loaded (ticks 6.6 to 8.8 ms against the quiet 6.3), `host.frames`
-  counting work; "with a step" is produce on the iterations that ran one;
-  PresentMon present-to-present (display tracking needs elevation):
-
-  | Reading | p99 | max | work over 16.7 | produce with a step p99 | PresentMon p99 / max |
-  |---|---|---|---|---|---|
-  | Direct3D 12 lobby standing, A | 24.08 | 28.26 | 94 of 600 | 14.96 | 34.5 / 44.4 |
-  | Direct3D 12 lobby standing, B | 21.19 | 22.79 | 93 of 600 | 12.59 | 30.7 / 35.7 |
-  | Direct3D 12 gallery walk, A | 39.76 | 57.86 | 136 of 273 | 31.03 | 39.7 / 57.8 |
-  | Direct3D 12 gallery walk, B | 26.11 | 30.54 | 72 of 315 | 16.29 | 32.1 / 36.9 |
-  | Vulkan lobby standing, B with the collection cuts | 18.11 | 19.32 | 4 of 600 | 9.93 | 43.2 / 57.5 |
-
-  The first B read its step flags a frame late (the pool packed before `Dress`
-  handed it the frame's rate), so its bodies packed on step frames. With this
-  frame's flags (B2 against that build, A2, on a machine more loaded still,
-  ticks 6.7 to 9.0 ms), the walk's "produce with a step" falls below the frames
-  without one:
-
-  | Reading | p99 | max | work over 16.7 | produce with / without a step, avg |
-  |---|---|---|---|---|
-  | Direct3D 12 lobby standing, A2 | 34.99 | 51.64 | 198 of 600 | 8.91 / 7.70 |
-  | Direct3D 12 lobby standing, B2 | 25.19 | 32.92 | 214 of 600 | 9.39 / 9.28 |
-  | Direct3D 12 gallery walk, A2 | 26.66 | 28.72 | 72 of 313 | 8.96 / 8.61 |
-  | Direct3D 12 gallery walk, B2 | 22.42 | 22.80 | 40 of 320 | 7.86 / 9.17 |
-
-  The standing iterations still over 16.7 ms are tick frames: a 7 to 9 ms tick
-  plus 12 to 13.6 ms of produce, the tick-bound views (above). Present-to-present
-  on Direct3D 12 is bimodal (8 to 12 and 20 to 24 ms) because the present call
-  lands at the end of each iteration's work, not because a refresh repeats.
+- [medium] Managed working memory per admitted group (contour lists,
+  refinement masks and `Vector3[]` point rounds: `SdfSampledLattice.cs:439`
+  onward, `SdfMeshPathBake.cs` `ChooseCrossingPoints`) is not in a group's
+  peak, so the account cannot pace the collections it causes. The cure is the
+  next native movers (the contour and the refinement's per-cell masks), not a
+  count cap.
+- [low] A chunked mesh stores its triangles' indices twice: the parent's
+  joined indices for whole-group queries and each chunk's own
+  (`SdfMesh.Storage.cs`, `NativeCopy`). Dropping the parent's needs its readers
+  (the irradiance scene, `SdfMeshAudit`, the diagnostics' nearest query) to
+  walk the chunks.
+- [low] The library releases evicted claims, which frees native payloads,
+  under its own gate (`SdfMeshLibrary.cs` `Retain`), the gate the frame thread
+  takes in `Restart` through `TryTake`.
+- [low] `HostMemory.AvailablePhysicalBytes` on Linux reads `/proc/meminfo`
+  with LINQ and `string.Split` (`HostMemory.cs:29-39`); the bake reads it at
+  most every 0.25 s.
+- [low] `GpuRegion` grows its host copy with `NativeMemory.Alloc*`
+  (`GpuRegion.cs:331,760,854,980`), the same allocate/copy/publish growth as
+  `OwnedBuffer`, outside `IAllocator` and the account.
+- Whether a Vulkan cold bake baking more samples and triangles than Direct3D
+  12's predates the memory changes is unconfirmed (no before Vulkan run was
+  taken); the [bake-by-backend item](#vulkan-regressions-and-gpu-robustness)
+  owns the difference.
+- The job system's image check is a tolerant still comparison
+  ([how a step's image is checked](engine-job-system.md#6-build-order)), with
+  run-to-run noise measured from repeat captures rather than assumed. Next: a
+  verb, or an option on the capture path, that compares two stills against a
+  noise floor measured from repeat captures and reports the regions beyond it,
+  so that R1 and M2b can use it; the tick-exact motion comparison's tolerance
+  ([motion](#dual-stick-play-and-the-moths-motion)) is the mechanism to reuse.
 
 #### Other frame-time findings
 
-- [high] The frame thread's field-query answer caches never answer where they
-  matter ([where the frame thread goes](engine-job-system.md#where-the-frame-thread-goes)).
-  `WorldEffectorSolver.TryProbeSurface` writes a probe with no field (a body
-  in a routed scene, whose client publishes no static field) into its 64-entry
-  ring though `SurfaceQuery.Matches` can never match it
-  (`WorldEffectorSolver.cs:242-257`, `:270-272`): about 56 such probes a frame
-  evict the field-backed answers every frame. The rate-range Moths, more than
-  220 m from the meadow, are posed and probed every frame at 1.4 to 2.5 ms a probe, three
-  quarters of it the hit's six-evaluation gradient. The camera's clearance
-  ring matches bit-identical inputs (`WorldCameraClearance.cs:149-160`), and a
-  boom target that moves 0.1 mm a frame misses it every frame at the meadow:
-  four sphere casts at 3.2 ms each. Together about 33 ms of the meadow's 74.
-  Fold into Next item 0's design: skip a fieldless probe before the ring, key
-  answers by what changed rather than by bits, and rate the posing and
-  probing of bodies far from every view the way presentation work is already
-  rated. (from: settle-2)
-- [high] The meadow is now a forcing workload in the real debug world
-  (`debug.go meadow`): 1,994 two-part blades add 4,004 dynamic slots and
-  4,215 retained mesh draws. Direct3D 12's 600-iteration standing/walking
-  observations are 46.59/55.21 ms, produce 35.79/40.54 ms. Whole-world
-  cold-bake observations are 209.996 → 306.639 s on Direct3D 12 and
-  321.246 → 499.573 s on Vulkan, all past the 60 s ruling. Animated placement
-  registrations cannot use the existing pose-rate holds:
+- [high] The frame thread's CPU field queries (Next item 0;
+  [where the frame thread goes](engine-job-system.md#where-the-frame-thread-goes)).
+  `WorldEffectorSolver.TryProbeSurface` writes a probe with no field (a body in
+  a routed scene, whose client publishes no static field, sourced at
+  `WorldSessionStampSource.cs:33`) into its 64-entry ring though
+  `SurfaceQuery.Matches` can never match it (`WorldEffectorSolver.cs:239-280`):
+  about 56 such probes a frame evict the field-backed answers every frame.
+  Probes also run for planted feet and failed conditions and are discarded
+  (`WorldCreationInstances.Effectors.cs:82-98`, `:419-424`). The rate-range
+  Moths, more than 220 m from the meadow, are posed and probed every frame,
+  three quarters of each probe the hit's six-evaluation gradient; distance
+  rating exists, but its 15 Hz floor never holds a pose at the meadow's frame
+  times (`PresentationRate.cs:60-72`). The camera's clearance ring matches
+  bit-identical inputs (`WorldCameraClearance.cs:118-166`), and a boom target
+  that moves 0.1 mm a frame misses it every frame at the meadow. Skip a
+  fieldless probe before the ring, key answers by what changed rather than by
+  bits, and rate the posing and probing of bodies far from every view the way
+  presentation work is already rated; the two answer rings are one copied
+  pattern to replace once ([refactoring](#refactoring-campaign)). The
+  gradient's six taps are not the marched point and are shared with physics
+  (bit-identical per point), so batching them is a design step. (from: settle-2)
+- [high] The meadow (`debug.go meadow`) is a forcing workload in the real debug
+  world: its two-part blades add thousands of dynamic slots and retained mesh
+  draws, and its frame and cold bake are far past both bars. Animated
+  placement registrations cannot use the existing pose-rate holds:
   `WorldCreationInstances.Pack.cs:247` requires `BodyIndex`, and
   `WorldCreationInstances.Rates.cs:193` omits them from readings. Owner:
-  rendering lane. Extend the same projection/consumer-based rate
-  mechanism to placement roots, measure pose packing and draw recording, and
-  preserve planted roots, continuous world-phased gusts and independent tip
-  flutter (the [visibility plan](visibility.md#v2-instance-updates-proportional-to-change-and-authored-motion-on-the-gpu)'s
-  step V2a). R2 moves raster culling and existing triangle detail into
-  `frame/sdf-mesh-selection.hlsli`, through the same counted indirect path;
-  [R2 observations](engine-job-system.md#r2-observations) holds its measurements.
-  Draw count is the other cost: 4,215 draws for 288 unique blade geometries,
-  one draw per blade part, or 14.6 draws per geometry. Its cause fix (ordered
-  compaction and (geometry, level) instance buckets, with every consumer of
-  per-draw identity moved and depth-tie order preserved) is the visibility
-  plan's V1, beyond R2's constant CPU recording, not fewer blades. The meadow
-  is also R1's forcing workload: measure produce's draw-recording share before
-  and after. The controlled-engine-build
-  before/after observations and their machine-load limits are in
-  [port lane 9](port-experimental.md#9-meadow-and-foliage).
+  rendering lane. Extend the same projection- and consumer-based rate mechanism
+  to placement roots, measure pose packing and draw recording, and preserve
+  planted roots, continuous world-phased gusts and independent tip flutter (the
+  [visibility plan](visibility.md#v2-instance-updates-proportional-to-change-and-authored-motion-on-the-gpu)'s
+  step V2a). Draw count is the other cost, one draw per blade part over a few
+  hundred unique geometries; its cause fix is the visibility plan's V1. The
+  meadow is also R1's forcing workload: measure produce's draw-recording share
+  before and after.
 - [high] Measure the meadow before ordering the visibility work, in the lead's
   settle window (the [visibility plan](visibility.md#measure-first)). M1:
   `debug.go meadow` on Direct3D 12 and a windowed Vulkan leg with
@@ -837,43 +385,39 @@ system can take, from `dotnet-trace` thread-time samples of the frame thread
   `dotnet-trace` of the frame thread; it orders V1 against V2. M2: mesh-pass
   and cascade GPU time beside draws and vertices, and triangles per blade
   part at `world.detail 0`, `1` and `2`, on the RTX 2060 and at the Deck's
-  resolution; it decides whether V3 and V4 come ahead of V2 there. Every
-  frame number taken so far, R2's included, is load-bound and ranks nothing.
-  Include R2's unresolved Direct3D 12 lobby reading (68.78 ms produce against
-  39.25–40.16 ms CPU controls) in that quiet-window trace; [R2 observations](engine-job-system.md#r2-observations)
-  holds the paired counters and GPU pass costs.
-  Include the unmatched final-merge draw-count variance there too: after
-  R2's final merge, Vulkan / Direct3D 12 meadow validation reads 2,506 / 26,657
-  draws at high/native settings; its cause is unconfirmed (same observations).
-  Owner: the lead.
+  resolution; it decides whether V3 and V4 come ahead of V2 there. Every frame
+  number taken so far is load-bound and ranks nothing. Include R2's two
+  unexplained readings in that quiet-window trace: a Direct3D 12 lobby produce
+  well above its CPU-selection controls, and a stripe difference beyond the
+  pinned noise on the lobby's static striped monitor face. Include the
+  final-merge draw-count variance too: after R2's final merge the meadow's
+  validation reads differed by an order of magnitude between Vulkan and
+  Direct3D 12 at high/native settings, with its cause unconfirmed (a later leg
+  did not reproduce it). Owner: the lead.
 - [medium] `SdfMeshPathBake.Dress` rebuilds every draw of every group whenever
   one dynamic slot moved, and for each dynamic group scans `MeshAssetSlots`
   (`Enumerable.Contains` over an `IReadOnlyList<int>`, `SdfMeshPathBake.cs:404`)
-  and every mesh instance (`:405-406`, again at `:424`): 0.6 to 1.2 ms a frame
-  at the lobby and the rim, `Enumerable.Contains` alone 0.45 to 0.62 ms. Each
-  rebuild also boxes a fresh `ValueTuple` motion identity per dynamic draw
-  (`:408`, `:425`; `SdfMesh.cs:255` types it `object?`), which the staging
-  compares by virtual `object.Equals` per draw (`SdfWorldTables.Motion.cs:214`,
+  and every mesh instance (`:405-406`, again at `:424`). Each rebuild also
+  boxes a fresh `ValueTuple` motion identity per dynamic draw (`:408`, `:425`;
+  `SdfMesh.cs:255` types it `object?`), which the staging compares by virtual
+  `object.Equals` per draw (`SdfWorldTables.Motion.cs:214`,
   `SdfWorldTables.MeshRegion.cs:286`), and copies the instance list
-  (`SdfMeshPathBake.cs:434`); every frame that misses the early return at `:395` allocates a
-  new `SdfFrame` record (`:458`). Index
-  the frame's instances by slot once, redress only the moved groups, and give
-  motion identity a typed, equatable key cached per copy and selector; this is
-  the first cut of the [visibility plan](visibility.md#the-build-order)'s V2b,
-  which retains the instance table and stops the rebuild. In the World process
-  (no dynamic PGO, `Puck.World.csproj:20`) the `foreach` over
+  (`SdfMeshPathBake.cs:434`); every frame that misses the early return at
+  `:395` allocates a new `SdfFrame` record (`:458`). Index the frame's
+  instances by slot once, redress only the moved groups, and give motion
+  identity a typed, equatable key cached per copy and selector; this is the
+  first cut of the [visibility plan](visibility.md#the-build-order)'s V2b. In
+  the World process (no dynamic PGO, `Puck.World.csproj:20`) the `foreach` over
   `IReadOnlyList<SdfMeshInstance>` may box its enumerator: read the
   disassembly. (from: slow-frames, perf-guidance)
 - [medium] The portal crossing scan visits every population slot for every
   portal face each tick, with an occupancy dictionary `Observe` or `Forget` per
-  pair (`WorldInstanceHost.Adjacency.cs:294-434`): 1.1 to 1.2 ms, 16 to 19 % of
-  a tick standing still. A body-major loop with a bounds test before the
-  occupancy write cuts it. (from: slow-frames)
-- [low] The rule VM's latch scheduling, what remains of
-  `RuleEvaluator.Evaluate`'s 1.66 to 1.77 ms a tick after gates and firings
-  ([measurements](#measurements-and-evidence)), hashes each rule's name every
-  tick (`RuleLatch.Rule`, `RuleLatch.cs:181-189`, from `RuleEvaluator.cs:385`)
-  and keeps a binding in two dictionaries: `Held` (`TryGetValue` at
+  pair (`WorldInstanceHost.Adjacency.cs:294-434`), a sixth of a standing tick.
+  A body-major loop with a bounds test before the occupancy write cuts it.
+  (from: slow-frames)
+- [low] The rule VM's latch scheduling hashes each rule's name every tick
+  (`RuleLatch.Rule`, `RuleLatch.cs:181-189`, from `RuleEvaluator.cs:385`) and
+  keeps a binding in two dictionaries: `Held` (`TryGetValue` at
   `RuleEvaluator.cs:523`, `GetValueRefOrAddDefault` at `:579`) and `Scheduling`
   (`RuleLatch.cs:66`), both walked by `EndSweep` after each swept rule
   (`RuleLatch.cs:244-257`). Resolve each compiled rule's `RuleState` once, when
@@ -881,126 +425,82 @@ system can take, from `dotnet-trace` thread-time samples of the frame thread
   of one table. The state hash sorts the bindings and folds only the edge bit
   (`RuleLatch.cs:109-165`), so the merge leaves it unchanged, provided the
   hashed, checkpointed bit stays apart from the unhashed schedule cache.
-  Unmeasured. (from: perf-guidance)
-- [low] `PaintLatticeDraw` rents its draw buffer from `ArrayPool<long>.Shared`
-  (`WorldTick.LatticeDraws.cs:51`) and paints from it. That is safe because
-  `GeneratorEngine.TryRunBatch` writes every index below `values.Length` on
-  success (`GeneratorEngine.cs:567-569`, `sampleCount: values.Length` at
-  `:1407`) and the caller slices to the lattice's cell count (`:54-57`), but a
-  rented array holds an earlier owner's bytes, so the determinism of the paint
-  rests on that loop. It runs at server construction and after a `Generate`
-  advances a row's pass, not every tick. Keep the buffer with the lattice that
-  owns the row, sized once: whatever it holds is then that row's own earlier
-  paint, a function of the simulation, never another caller's bytes.
   (from: perf-guidance)
+- [low] `PaintLatticeDraw` rents its draw buffer from `ArrayPool<long>.Shared`
+  (`WorldTick.LatticeDraws.cs:51`). That is safe because
+  `GeneratorEngine.TryRunBatch` writes every index below `values.Length` on
+  success (`GeneratorEngine.cs:567-569`, `:1407`) and the caller slices to the
+  lattice's cell count (`:54-57`), but the determinism of the paint rests on
+  that loop. Keep the buffer with the lattice that owns the row, sized once, so
+  whatever it holds is that row's own earlier paint. (from: perf-guidance)
 - [low] A body resting at the overlook pays two ground snaps a tick (ten
   sweeps each): `WorldBody.IntegratePlanarAndVerticalVelocity` searches for
   support whenever the body is grounded, and `ResolveProgramContacts`'s own
-  sweep at rest does not report it grounded, so its snap runs too. Counted at
-  191 resolves a tick for the whole population; a resting body with an exactly
-  zero velocity now skips the first search, which did not move the count there,
-  so her velocity at rest is not exactly zero. Find whether the support normal's
-  tilt leaves a residue the contact write-back keeps, and why the resting sweep
-  misses the ground the snap lands on. (from: tick-cost)
-- [low] `WorldPopulation.SyncBodyCells` resyncs every body's scale, kit and look
-  (and resolves each register by name, `WorldBodyStateReads.TryResolveSlot`, a
-  linear scan, per body) whenever one body's register moves, so a commit that
-  writes one body's `form` costs the population's capacity; the work sheet now
-  prices it so. Resync only the bodies whose lane cells the commit touched
-  (`StateArena.CollectOpenLaneOrdinals`), as the input runtime does.
+  sweep at rest does not report it grounded, so its snap runs too; her velocity
+  at rest is not exactly zero. Find whether the support normal's tilt leaves a
+  residue the contact write-back keeps, and why the resting sweep misses the
+  ground the snap lands on. (from: tick-cost)
+- [low] `WorldPopulation.SyncBodyCells` resyncs every body's scale, kit and
+  look (and resolves each register by name,
+  `WorldBodyStateReads.TryResolveSlot`, a linear scan, per body) whenever one
+  body's register moves. Resync only the bodies whose lane cells the commit
+  touched (`StateArena.CollectOpenLaneOrdinals`), as the input runtime does.
   (from: tick-cost)
 - [low] A reading taken while the compositor is not composing still looks like
-  a slow frame. `GUID_CONSOLE_DISPLAY_STATE` read "off" for whole readings at
-  60 FPS, so it cannot flag one; a present-side signal (the frame-latency wait
-  reaching its bound, or the queue idle behind the back buffer) would. The
-  Linux windows hold no display request (Wayland's idle inhibit, X11's
-  screensaver suspend). (from: frame-time)
+  a slow frame. `GUID_CONSOLE_DISPLAY_STATE` cannot flag one; a present-side
+  signal (the frame-latency wait reaching its bound, or the queue idle behind
+  the back buffer) would. The Linux windows hold no display request (Wayland's
+  idle inhibit, X11's screensaver suspend). (from: frame-time)
 - [low · unconfirmed] A windowed Direct3D 12 debug World started with
   `--exit-after-seconds 840` and a stdin script ran about 25 minutes until it
   was stopped by PID, through its whole cold bake. Find whether the auto-exit
   counts wall time, ticks the bake starved, or nothing once stdin closes.
 - [low · unmeasured] `SdfMeshPathBake.IrradiancePending` walks every group once
   a frame per residency after the bake settles (`SdfMeshPathBake.cs:306`,
-  called from `SdfWorldResidency.cs:570`), the scan `Pending` dropped for a
-  done-through cursor when it touched all 2,596 groups per call. Give it the
-  same cursor over the opaque static groups. (from: perf-guidance)
+  called from `SdfWorldResidency.cs:570`); give it the done-through cursor
+  `Pending` uses, over the opaque static groups. (from: perf-guidance)
 - [low] The sky environment reduction reads `sdfSkyReduce[row][added]` with 28
   lanes on rows 64 words apart
   (`sdf-sky-environment-reduce.comp.hlsl:13,49`), a 28-way groupshared bank
-  conflict on each of 64 reads; pad the row to 65 words. It runs one group only
-  when the environment refreshes. (from: perf-guidance)
+  conflict on each of 64 reads; pad the row to 65 words. (from: perf-guidance)
 - [low · unmeasured] The views filter tile is 11 words wide, so an 8x4-lane
   warp reading `sdfViewsFilterShadows` and `sdfViewsFilterNormals` at
-  `(lane.y + y) * 11 + lane.x + x` puts rows 0 and 3 on the same banks 1 to 7,
-  a 2-way groupshared bank conflict on 32 `uint` reads a pixel
+  `(lane.y + y) * 11 + lane.x + x` puts rows 0 and 3 on the same banks 1 to 7
   (`sdf-views-stage.hlsli:13-15,77-82`). Read GPU Trace's shared-memory bank
-  conflicts for views, then try a row stride that clears it. (from:
-  perf-guidance-fixes)
-- [low] The hall lift ride's `host.frames` (owed by the sim-bounds lane) is still
-  unread: `gallery.level 0` stands her before the door, not in the car, so the
-  reading taken (`gallery.lift 3`, 300 ticks: 128 ms average, simulate up to 4
-  steps and 44 ms) is the lift travelling without her. Pose her inside the car
-  first. (from: quiet-measure)
-
-#### From the tick-off-the-frame-thread packet
-
-Phase 1 of [the tick-to-produce memo](simulation-thread.md) delivered the shared
-host loop, shell, console operation, client clock, arrival interpolation and
-tick/shed diagnostics. Phase 3 (the produce path reads no server state, proven by
-a rehearsal guard) and F17 (`CodeDerivedTable`'s stale-generation insert) run
-now; phase 2 (the tick record) waits for the memo to decide whether the tick and
-the views overlap.
-
-- Filed by the review, outside this design: a remote `WorldSessionMirror`'s
-  per-property pose reads (`WorldSessionSceneEmitter.cs:693-705`) against its
-  socket thread's in-place delivery (`WorldSessionMirror.cs:533-594`) can
-  compose a frame from two ticks; the fix is the coherent-copy path the
-  adjacency pin already uses (`CopySnapshotTo`). Pre-existing; owner: the
-  federation lane. `CodeDerivedTable`'s stale-generation insert is F17, its own step in
-  the memo, run now.
-- What lands on a stepping frame today holds the standing p99 near 10 ms:
-  simulate itself (2-4 ms a tick standing still: contact sweeps and rules;
-  `ResolveSweep` is 23.4 % of `FixedStepPump.Step` in the gallery walk), and the
-  session and window views whose residencies change with the tick (about 100
-  view nodes), which record on tick frames only
-  (`ShaderPipelineRenderNode.RenderFrame` 2.8 ms on a stepping frame against
-  0.9 ms between). Read the walk's simulate wall clock on a quiet machine.
-- Walking the Moth among the gallery exhibits holds every presented frame under
-  16.7 ms (`body.pose 30 - 22 90 - -`, `player.move 1 0` for 60 ticks,
-  `host.frames`; RTX 4070, Direct3D 12, bakes settled): on a machine other lanes
-  held at 80-93 % CPU, warm walks read p99 19.8-23.7 ms, max 22-41 ms.
-- The endless fall's first visit (`body.pose 66 - 22.6 0 - -`, fresh windowed
-  World) holds no frame over 33.4 ms of work, later crossings none over 16.7 ms;
-  it reads a worst frame of 38.9-41.7 ms and a second visit 16.3-16.5 ms:
-  - its first frame or two produce 20-30 ms in pieces of 2-6 ms (the window
-    feeds' first binding, `WriteOwedMeshes`, `PackDynamicTransforms`, the
-    exposure meter's camera trace); trace at a finer interval before naming one;
-  - frames 27-40, where the floor and ceiling windows first render at full
-    size, read 20-28 ms (produce 16-27 ms);
-  - frames whose work is 9-14 ms but whose pacer waits 17-20 ms, or whose
-    `Present` blocks 18-26 ms: the GPU reads 76 % busy there (the floor and
-    ceiling paintings each draw the world); measure its GPU time per view
-    (`world.counters gpu`) and render each painting view at the resolution its projected glass demands.
-- Young collections: on a loaded machine a gen0 paused 10-12 ms with 4 MB
-  promoted (2.6 ms marking through cards, about 7.7 ms planning and compacting);
-  on the quiet lead machine with bakes settled a gen0 pauses about 3.7 ms and a
-  gen1 4.7 ms, 1 to 6 collections in 600 frames
-  (see the evidence above). Server GC with four heaps
-  collected rarely but paused 27 ms, so it was not kept; fewer young objects
-  referenced from old containers (the server's `StateCell`, `WorldStateRow`,
-  `UpsertStateRow` and their strings, the state journal) is what shortens it.
-  On a quiet machine one gen0 pauses 10 ms in 1,800 standing frames, and a gen1
-  pauses 13 ms on both visits to the endless fall.
+  conflicts for views, then try a row stride that clears it.
+  (from: perf-guidance-fixes)
+- [low] The hall lift ride's `host.frames` is still unread: `gallery.level 0`
+  stands her before the door, not in the car. Pose her inside the car first.
+  (from: quiet-measure)
+- [medium] A sustained overload at the chess demo's cycle boundary: around
+  `[replay.scope: chess-demo RECORDED …]` iterations ran with no pacer wait,
+  simulate and produce both rising even on iterations without a tick, so ticks
+  fell on consecutive iterations. Trace it across the demo's restore.
+  (from: slow-frames)
+- The seat camera's clearance march against the relief
+  (`WorldCameraClearance.March` under `WorldSeatViewState.Clear`) is several
+  times dearer on the rim walk's slow frames than elsewhere; read it with the
+  field-query item above. (from: slow-frames)
+- The endless fall's first visit: its first frames produce in pieces (the
+  window feeds' first binding, `WriteOwedMeshes`, `PackDynamicTransforms`, the
+  exposure meter's camera trace), so trace at a finer interval before naming
+  one; the frames where the floor and ceiling windows first render at full size
+  are slow; and some frames' `Present` blocks with the GPU busy (each painting
+  draws the world). Measure GPU time per view (`world.counters gpu`) and render
+  each painting view at the resolution its projected glass demands.
+- Young collections: fewer young objects referenced from old containers (the
+  server's `StateCell`, `WorldStateRow`, `UpsertStateRow` and their strings, the
+  state journal) is what shortens a gen0 pause; server GC with four heaps
+  collected rarely but paused longer, so it was not kept.
 - A window's glass resize allocates managed memory: on a long approach to a
-  painting the glass resizes about 22 times and one gen2 collection pauses the
-  frame thread about 12 ms (RTX 4070, inside the 32 Hz pacing wait). Make the
-  resize path allocation-free or step the glass extent with hysteresis, and
-  re-measure the approach on the RTX 2060.
+  painting the glass resizes many times and a gen2 collection pauses the frame
+  thread. Make the resize path allocation-free or step the glass extent with
+  hysteresis, and re-measure the approach on the RTX 2060.
 - [low] Every rigid advance zero-fills the step's capture snapshot
-  (`WorldBody.CaptureMotion` → `CaptureIntegrationResidue`, about 7 % of a rigid
-  body's advance in an EventPipe sample of a lift ride).
+  (`WorldBody.CaptureMotion` → `CaptureIntegrationResidue`, a visible share of
+  a rigid body's advance in a lift ride's EventPipe sample).
 - Pacing at 120 Hz with Windows' Dynamic Refresh Rate (the lead machine's
-  display now runs 120 Hz with DRR on, VRR 48 to 120 Hz): confirm the 60 FPS bar
+  display runs 120 Hz with DRR on, VRR 48 to 120 Hz): confirm the 60 FPS bar
   and VRR pacing hold in front of and behind another window, and that
   `world.target display` reaches 120 Hz.
 
@@ -1029,42 +529,17 @@ store (AGENTS.md), and work proportional to change.
   hash the HLSL source closure of `MeshBake` and `MeshBakeMask` instead and share
   one store, which halves the cold cost of using both. (from: refactoring survey,
   hot reload)
-- The cold bake on the quiet lead machine (the lead's settle window: RTX 4070,
-  windowed, `--devices none`, an empty `--cache-dir`, nothing else running),
-  against the one-minute bar:
-
-  | | Direct3D 12 | Vulkan |
-  |---|---:|---:|
-  | Launch to `[engine: ready]` | 26.4 s | 27.6 s |
-  | Launch to `[bakes: settled]` | 154.8 s | 250.3 s |
-  | The `world` residency's bake (`done … seconds=`) | 135.4 s | 229.7 s |
-  | Groups (baked / shared / dynamic) | 7,254 (1,689 / 5,565 / 6,178) | the same |
-  | Samples / triangles | 1,364,275,957 / 56,281,322 | 1,364,454,930 / 56,265,909 |
-  | Bake frames | 744 | 705 |
-  | Thread seconds: crossings / land / contour / prepare / store / split / answer | 649 / 525 / 166 / 140 / 42 / 35 / 31 | 389 / 341 / 112 / 96 / 17 / 24 / 24 |
-
-  Crossings (`CloseSheets`, `CrossingEdges`) and land (`SdfMeshCollapse`) are
-  74 % of Direct3D 12's 1,593 thread seconds; the kinds counted are fine
-  423 M, crossing 344 M, material 208 M, slab 137 M, gradient 125 M and refine
-  113 M samples. Vulkan spends fewer thread seconds and takes 70 % longer: its
-  bake frames are slower (the earlier produce reading below), so the bake is
-  bound by how often a frame admits work. The same tree's first boot of the
-  merged tip, as a sweep's warm-up, baked in 136.8 s (Direct3D 12) and
-  230.5 s (Vulkan). The bar fails on both backends by more than double.
+- The cold bake fails the one-minute bar on both backends by more than double
+  on the quiet lead machine. Crossings (`CloseSheets`, `CrossingEdges`) and land
+  (`SdfMeshCollapse`) are about three quarters of its thread seconds, and Vulkan
+  spends fewer thread seconds yet takes longer, because its bake frames are
+  slower and the bake is bound by how often a frame admits work.
 - [high] A cold bake's private memory climbs past 16 GB within its first
-  minute, which is what the thread-time split of the bake still waits on. The
-  second settle window's Direct3D 12 cold bake, from an empty `--cache-dir`
-  under a `dotnet-trace` thread-time session, read private 11,175 MiB at
-  `[engine: ready]` (27.6 s), 14,379 MiB 30 s later and 16,161 MiB at 83 s,
-  when the window's memory rule (stop a World past 15,000 MiB, so the
-  session's memory reaper does not take the whole window) stopped it with the
-  bake unfinished; the trace, cut off with its World, does not parse
-  (`Read past end of stream`). Over those 83 s the frame ran 325 iterations
-  at 199 ms on average, with 313 collections pausing 4.4 s in all, so the
-  bake's allocation is a cost on the frame as well as on memory. The split of
-  the bake into contour, prepare, land and store CPU, GPU dispatch waits and
-  idle frames needs either a cold bake that stays under the machine's memory
-  or the window's memory rule raised for that leg. (from: settle-2)
+  minute, and its allocation is a cost on the frame as well as on memory (the
+  frame ran near 200 ms with hundreds of collections over the first 83 s). The
+  split of the bake into contour, prepare, land and store CPU, GPU dispatch
+  waits and idle frames needs either a cold bake that stays under the machine's
+  memory or the settle window's memory rule raised for that leg. (from: settle-2)
 - [medium] Per-group allocation in the contour stages that the sampled sites
   (the allocation churn item under [engine job system](#engine-job-system))
   have not ranked, read from source and unmeasured:
@@ -1081,44 +556,10 @@ store (AGENTS.md), and work proportional to change.
   each into storage its worker owns: one `float` buffer filled once, appends
   without the wrapper, and a projection workspace per worker.
   (from: perf-guidance)
-- The earlier readings (other lanes building beside them): Direct3D 12's `world`
-  residency bakes its 2,090 groups in 132.0 s on the cuts merged with the
-  integration tip (170.5 s before that merge, the same session's base 259.0 s;
-  446 s before the shared pool, 384 s when the owner set the bar), and Vulkan in
-  226.9 s (305.3 s before the cuts; produce 118 ms a frame against Direct3D
-  12's 68 ms, so fewer dispatches answer a second). The cuts, each measured cold: a two-trial bracketed crossing
-  search (`CrossingRoot`: 364 million crossing samples to 241 million, at most
-  eleven readback rounds a group in place of thirteen); fine-sample signs kept
-  in bits (`SdfSampledLattice.FineInside`: contour thread seconds 316 to 124,
-  crossings 934 to 515 with the search); single shapes of 131,072 contour
-  triangles or more chunked as unions are, at most 64 chunks a mesh; a
-  dispatch filled past a lattice too large for what it has left (472,000
-  samples a frame to 599,000); and dispatches of 2^21 samples (186.2 s to
-  170.5 s, the frames that stopped at the sample limit 1,290 of 1,613 to 343 of
-  1,392).
-- Thread seconds by stage in the 132.0 s run: crossings 411 (`CloseSheets`,
-  `CrossingEdges` and the rounds), land 318 (`SdfMeshCollapse`), contour 96,
-  answer 87, prepare 81, store 13. With the dispatches no longer full, the
-  frames that took no lattice because every group was on a worker or in flight
-  are 851 of 1,227: the bake is CPU-bound again. The `[sdf.mesh-bake] slow`
-  lines name each long stage's group.
-- Next cuts, measured, largest first: `CloseSheets`' pair scan and face passes
-  still read `FineValue` (slot lookup and interpolation) for every magnitude
-  they test; `SdfMeshCollapse`'s passes re-cost every free place each pass;
-  the answer stage decodes on the workers at 76 thread seconds.
-- `puck mesh audit` over the 803 audited groups, the cuts' store against the
-  base store: score 2,442,906 to 2,425,159, off-surface samples 87,743 to
-  87,556, turned faces 310,043 to 306,836, folds 13,316 to 13,286, flips 8,010
-  to 7,802, non-manifold edges 241 to 236, uncovered 1,514 to 1,512. Open edges
-  rose 97,851 to 98,198: 684 on the television and 132 on `gallery-map`, which
-  the cuts newly chunk, whose seam edges the audit's joined view counts open
-  though neighbouring chunks share them; the rest fell by 469. At a
-  4,096th-of-an-edge search tolerance open edges rose to 103,684 and turned
-  faces to 330,860, which the 8,192th answers. The run with the tighter
-  tolerance baked in 230.6 s while another lane compiled: every stage's thread
-  seconds rose with it, those the tolerance cannot touch (prepare 91 to 177,
-  land 452 to 574) included, so its time is the machine's, and it wants a
-  quiet re-measure.
+- Next cuts, largest first: `CloseSheets`' pair scan and face passes still read
+  `FineValue` (slot lookup and interpolation) for every magnitude they test;
+  `SdfMeshCollapse`'s passes re-cost every free place each pass; the answer
+  stage decodes on the workers.
 - [low] The audit counts a chunked mesh's seam edges as open edges: weld the
   joined query view's coincident seam vertices, or skip edges two chunks share,
   so a chunked group's open edges mean holes.
@@ -1181,26 +622,10 @@ metre. The terrain pass's step 5 is this packet
 ([terrain pass](terrain-pass.md#order-of-work)).
 
 Relief colliders and the field provider read one certified surface solve
-(`FixedFieldColliderContact.Solve`, `src/Puck.Physics/FixedColliderField.cs`).
-Review findings R4 to R8 and the second review's five soundness findings are
-closed in it, each pinned in its stated case by `CertifiedFieldContactLawTests`:
-clearance rests only on the evaluator's box bounds, the core's pieces cover it end
-to end, a union scope's scale is kept wherever a later operator reads its
-magnitude, an unproved or stuck volume reaches both contact paths' resolutions,
-and every blend's outward growth comes from `SdfBoundAlgebra.Growth`. The box
-bounds charge a relief only what it reaches inside the box
-(`SdfFieldEvaluator.NoiseDisplaceBounds`, `Pcg3dLatticeNoise.Fbm3Bounds`: per
-octave the exact trilinear range at the vertices of the box's fade range, its
-rounding allowance pinned against an exact oracle by
-`sampling.lattice-noise-fade-and-box-bounds`), so a capsule half a metre above
-the valley's relief is proved clear by its first box. The ground snap acts on an
-unproved step and lands it on support it proves. A resolution names the volume
-and collider pairs it left uncertain (`ContactResolution.Uncertainty`, up to
-four by name, otherwise unnamed), and the landing may leave uncertain only pairs
-the step already did (`ContactUncertainty.IsWithin`): a pair still in the band
-no longer lifts a walking body off its ground, and a field clear at the start
-and newly unproved at the landing refuses it
-(`ASnapRefusesALandingThatOverlapsAFieldClearAtItsStart`).
+(`FixedFieldColliderContact.Solve`, `src/Puck.Physics/FixedColliderField.cs`),
+whose clearance rests only on the evaluator's box bounds; a resolution names
+the pairs it left uncertain (`ContactResolution.Uncertainty`), and a landing may
+leave uncertain only pairs the step already did (`ContactUncertainty.IsWithin`).
 Remaining:
 
 - **[medium] Clearance within about a third of a metre of a slope is
@@ -1226,20 +651,13 @@ Remaining:
   by its gauge and every blend's growth is charged, but a primitive whose field
   reads under its distance (the cone family) grows only by the reach. Take each
   shape's gain from the evaluator's reach certificates.
-- Cost at the valley rim, the Moth standing at (0, 376, 470) for 1,200
-  headless unpaced ticks among 500 bodies (`dotnet-trace` sampled thread time,
-  `FixedFieldColliderContact.Solve` under `FixedStepPump.Step`): 7.0 % of a
-  tick, from 15.7 % with the relief charged its whole reach on the same
-  workload. The proofs ask about 615 boxes a tick, and each relief collider's
-  `SdfBoundsCache` answers 84 % of them from an identical earlier box (a body at
-  rest asks the same box every tick), so about 100 box walks a tick run; the
-  field is read 59 times a tick at 14 samples a read (71 at 17.5 before). A
-  relief bound walks each octave's cells, about two fifths of a walk's time.
-  Further cuts: contact over the job system's parallel partitions. A gradient
-  in closed form would not tighten the enclosure, which is already the exact
-  range of each octave's blend over the box, and the solve's direction taps
-  read the whole field, not the relief alone. An octave cut is only the drawn
-  relief's own cut (the terrain pass's step 3), never a contact approximation.
+- Contact cost at the valley rim: each relief collider's `SdfBoundsCache`
+  answers most proofs from an identical earlier box (a body at rest asks the
+  same box every tick), and a relief bound walks each octave's cells. Further
+  cuts: contact over the job system's parallel partitions. A gradient in closed
+  form would not tighten the enclosure, which is already the exact range of
+  each octave's blend over the box, and an octave cut is only the drawn relief's
+  own cut (the terrain pass's step 3), never a contact approximation.
 - `FixedStepUp.TrySnap`'s landing probes issue most relief contact queries while
   walking, and the snap now also runs on unproved steps. Measure whether each
   probe is needed before cutting the solve itself. (from: field-contact)
@@ -1252,7 +670,7 @@ Remaining:
 - The terrain pass's step 5 face check (58°) is not yet run on the certified
   solve. (from: field-contact)
 - [medium] `world.collision.probe` (`FixedFieldContactSolver.Probe`, through
-  `FixedColliderField.TryMeasure`) answers nothing at 36 of 105 points of a
+  `FixedFieldColliderContact.TryMeasure`) answers nothing at 36 of 105 points of a
   1 m grid around a lawn flat-crown tree (x 6 to 20, y 0.5 to 6.5, z -27.3 in
   the debug world), and beside a crown it can read the floor 6 m below instead
   of the crown 0.3 m away. Contact resolution does not read it; the measure's
@@ -1270,23 +688,15 @@ Remaining:
 
 Owner: specialist, transfers and server · high · Next: build the companion
 decision along the [custody protocol](companion-redesign.md) from step 6 of its
-build plan (separation sweep, stranding, shed and retire). Steps 1 to 5 stand:
-the custody records and their reducer, member ids and per-member verdicts, hop
-authorization and verification, settlement by the destination's word, and the
-return with re-adoption into the held slot (laws in `CompanionCustodyLawTests`,
-`CompanionCrossingLawTests`, `CompanionReturnLawTests`). For retained authorities
-with local player seats, the engine is checked against the model: `CompanionCustodyRefinementLawTests` runs real authorities under every
-single-fault schedule and requires each peer call and log append to be an
-enabled model transition, comparing the derived state at every drain boundary
-and after each restart; its "deferred" moves are the unbuilt steps. Until the
-later steps land: a separated companion goes home only through
-`TryEnqueueCompanionReturn` (step 6 builds the sweep); a custodian's settlement
-notice is derived from its records and re-sent every drain, but nothing bounds
-the re-sending by the lease deadline (step 8); an arriving companion has no
-driver and wears the default kit and look (step 9); a custodian reaches a remote
-home only through a remote authority its host already opened. The debug world's
-faerie declares no role yet, so it does not travel. Then the uncertain
-crossing, opened by a two-silo failover witness.
+build plan (separation sweep, stranding, shed and retire), then the uncertain
+crossing, opened by a two-silo failover witness. Until the later steps land: a
+separated companion goes home only through `TryEnqueueCompanionReturn` (step 6
+builds the sweep); a custodian's settlement notice is re-sent every drain with
+nothing bounding the re-sending by the lease deadline (step 8); an arriving
+companion has no driver and wears the default kit and look (step 9); a
+custodian reaches a remote home only through a remote authority its host
+already opened. The debug world's faerie declares no role yet, so it does not
+travel.
 
 Still open from the companion build:
 
@@ -1411,23 +821,13 @@ retirement.
   integration builds)
 
 - [medium] Cold debug-world silo activation still spends most of its time before
-  checkpoint decode. Construction leaves the Orleans scheduler explicitly
-  (`src/Puck.World.Silo/WorldSiloHost.cs:1196`); both container boots now pass
-  without long-turn warnings. Before the standard-authoring merge, per-step timers
-  (`WorldSiloHost.cs:1202`) measured a portable fresh boot at 10.865 s:
-  storage/definition admission 8.866 s,
-  checkpoint decode 0.001 s, authority construction 1.876 s, addon wiring 0.122 s.
-  A new-process recovery took 14.851 s (10.267 / 1.165 / 3.209 / 0.210 s).
-  Rebuilding with the authored-standard content gave 15.260 / 12.807 s for fresh
-  and new-process recovery; both passed health and authenticated QUIC again.
-  The storage phase includes root-qualified definition admission
-  (`src/Puck.World.Server/WorldAuthorityBlobStore.cs:1065`); it is not an I/O-only
-  measurement. A framework-dependent ReadyToRun experiment took 13.797 / 18.009 s
-  for fresh/recovery boots; its no-build publish took 144.5 s. It is not enabled.
-  These were contended runs (73–100% CPU, 1.3–2.7 GB free RAM), so they establish
-  neither a speedup nor the review's inferred ten seconds of JIT. Profile that
-  admission phase and compare cold/warm activations in one process in the lead's
-  quiet window before choosing a publish or cache change. (from: silo-fixes)
+  checkpoint decode, in storage and definition admission (per-step timers at
+  `src/Puck.World.Silo/WorldSiloHost.cs:1202`; the phase includes root-qualified
+  definition admission, `WorldAuthorityBlobStore.cs:1065`, so it is not I/O
+  alone). A non-composite ReadyToRun publish showed no proven gain under load
+  and is not enabled. Profile that admission phase and compare cold and warm
+  activations in one process in the lead's quiet window before choosing a
+  publish or cache change. (from: silo-fixes)
 - [medium] A checkpoint carries the whole world document, twice once the base
   and the live document differ (`WorldServerCheckpoint.DefinitionJson` and
   `BaseDefinitionJson`, written by `WorldPersistence.Checkpoint.cs` through
@@ -1468,19 +868,17 @@ retirement.
   path (`File.Delete(ContentAddressedStore.ObjectPath(...))`) and
   `ContentAddressedStore` writes objects by path, both under `update.lock`.
   (owner: delivery; from: prune-redesign)
-- CI's steady state is about twenty minutes end to end: the producer is one
-  serial job of about seventeen minutes (SDK and `wasm-tools` installs about 3.5,
-  the solution compile 5 to 16 by shader cache hits, derivations, packing,
-  publishing and the startup check about 4.5, the capture of compiled outputs
-  0.5 to 2.5), then four shards of 6 to 8 minutes each. Packing, publishing and
-  the determinism record could overlap, and a shard could restore only its own
-  assemblies' outputs ([CI and releases](../development/ci.md#build-and-validate)).
+- CI's steady state: the producer is one serial job (SDK and `wasm-tools`
+  installs, the solution compile, derivations, packing, publishing, the startup
+  check and the capture of compiled outputs), then four shards. Packing,
+  publishing and the determinism record could overlap, and a shard could restore
+  only its own assemblies' outputs
+  ([CI and releases](../development/ci.md#build-and-validate)).
 - Finish the shared shader cache ([freshness](../reference/shaders.md#freshness)):
   no GitHub run has yet shown the restored Windows build, the silo image build
   and a repeated `shader-bytecode` job compiling nothing (`0 compiled`); a local
   cache evicts only when someone runs `puck shaders cache prune`; toolchain
-  identity covers standard release locations, not every native-loader override;
-  the cache laws' red legs are proved by hand, not yet through `puck laws prove`.
+  identity covers standard release locations, not every native-loader override.
 - Retire the JIT GC-hole workaround: `DirectXCommandListRecorder.RecordBackBuffer`
   is compiled with `NoOptimization` until the pinned SDK carries a JIT without
   the defect ([toolchain cautions](../development/contributing.md#hardware-and-toolchain-cautions));
@@ -1513,8 +911,8 @@ a design built into C# or living only in the debug world.
   `surfaceSkin` fall back to zero (`WorldCameraRigCompiler.cs:349-350`);
   `closeTargetOffset` is not bindable (`WorldCameraProgram.cs:152`); a selected
   case's zoom and pitch limits follow the default case
-  (`WorldCameraPrograms.cs:100`, `WorldSeatViewState.cs:52,120`). Full text:
-  the review's findings, kept by the lead. (from: clearance-astra)
+  (`WorldCameraPrograms.cs:100`, `WorldSeatViewState.cs:52,120`).
+  (from: clearance-astra)
 - [medium, was low; lost behaviour] The chase camera's tight-space preference is one world-wide row
   (`cameraClearance`, `worlds/standard/camera.puck`), so every seat in a world
   shares it, and it no longer travels with a joined identity. A per-seat
@@ -1568,43 +966,24 @@ that another table could reuse are a library in `worlds/games/` (`chess.puck`).
 ### Port the experimental worlds' missing features
 
 Owner: debug-world content lane (puck-world, puck-dsl, sdf-authoring) ·
-ordinary, the owner's direction · Next: lane 1 (authored render passes), then
-the others in the order below; each lane opens by confirming its site in the
-debug world and its work-budget share.
+ordinary, the owner's direction · Next: the authored render passes (lane 1) and
+the second seat (lane 5) ahead of parallel view recording, then the quilt
+(lane 2) with residency step 2, in [the plan's order](port-experimental.md#lanes-in-order);
+each lane opens by confirming its site in the debug world and its work-budget
+share.
 
-The debug world is the proving ground (AGENTS.md): the benchmark that shows the
-engine's features compose and run well on the target machines, and the
-inspiration authors draw on to build their own worlds. The owner's ruling: the
+The debug world is the proving ground (AGENTS.md). The owner's ruling: the
 quilt, the island and the One World are not re-admitted. What they have that the
 debug world lacks is ported into the debug world, every plan's forcing artifacts
 and checks target `worlds/debug`, and plan text that migrates or revives those
 worlds in place is rewritten.
 
-- The inventory is [port-experimental](port-experimental.md): each feature with
-  its experimental source, whether the engine and the standard already support
-  it (wire, standard or gap), its place in the debug world and its size, plus
-  what the debug world already has in another form. Almost every feature is
-  already built and tested, so a port is wiring documents to what exists; the
-  gaps it names are a region-scoped pair primitive (the combat yard) and the
-  meadow's measured animated-placement pose cost in the Engine job system packet.
-  The lanes, ordered by the engine systems the debug world does not yet
-  exercise:
-  1. Authored render passes: a state-bound HLSL pass, a compare studio (medium).
-  2. Seamless topology and carried identity: the quilt, a closing seam, a pitched
-     seam, `border` composition, an identity gate (medium).
-  3. Water and fields: a medium pool, flow across basins (medium).
-  4. Creature garden: flocks, a stalker, wall crawling, rumor (done).
-  5. Second seat and hidden information: two seats, Lineup, hidden ranks, Word
-     spy (large).
-  6. Traversal course: kart, ledge course, planetoids, grapple (large).
-  7. Rules arcade: tetromino as rules, snake, rulepush (large; needs lane 1).
-  8. Physical judges: billiards, bowling, dominoes, paddleball (medium).
-  10. Packages as examples: the familiars rules module (large).
-  11. Board tables II: Chinese checkers, hex lines, mancala, tic-tac-toe,
-      backgammon (large).
-  12. Card tables: Spider, poker, Hearts (needs lane 5 for the last two).
-  13. Combat yard: the arena modules (large; the job-system memo first).
-  14. Small items: the head-track probe, the studio gate.
+- The inventory and the lanes are [port-experimental](port-experimental.md):
+  each feature with its experimental source, whether the engine and the
+  standard already support it (wire, standard or gap), its place in the debug
+  world and its size. Almost every feature is already built and tested, so a
+  port is wiring documents to what exists; the one gap it names is a
+  region-scoped pair primitive (the combat yard).
 - Ports: each group lands as `.puck` content in `worlds/debug/`, or in
   `worlds/standard/` where it is a reusable design, and is verified by running
   the debug world (`puck_world_start`, captures, `puck sweep` signals). New engine
@@ -1622,73 +1001,50 @@ JSON round trip in `BindLive`, then a reboot for an edit outside
 `PuckHotReload`, then the windowed C# loop timed on a quiet machine and the cold
 and warm builds measured.
 
-- The boot's `System.Text.Json` JIT is the source-generated context's own
-  generic instantiations, not reflection: the world document already rides one
-  generated context (`WorldJsonSourceContext` behind `WorldJsonContext`) with no
-  reflection fallback, and its metadata instantiates the serializer's generics
-  once per value type in the graph. A headless IL boot of the debug world to
-  `world.status` compiles 43,820 methods first (50,153 with tier-ups;
-  `DOTNET_JitDisasmSummary`), 15,341 of them `System.Text.Json`'s:
-  `JsonPropertyInfoValues<T>` 5,568, `JsonPropertyInfo<T>` 2,462,
-  `JsonConverter<T>` 1,227, `JsonMetadataServices` 1,035, and the enum converter
-  family behind `StrictEnumConverter<T>` (`EnumConverter<T>`, its field info,
-  `JsonStringEnumConverter<T>`, the factory helpers) 1,758. `host.memory` reads
-  42,000 to 43,200 `jit methods` and 3.1 to 4.5 s of `compile` there. A
-  ReadyToRun publish leaves them (15,786 of its 24,248), since its version
-  bubble excludes the framework that defines the generics; only the composite
-  publish decided below, or fewer instantiations, removes them. Configuring
-  that metadata cost the boot's main thread 1,513 ms (892 of it JIT and type
-  loading) before its first parse; `WorldJsonContext.StartPreparing` now runs
-  it on a background thread from the World's first line, the main thread waits
-  912 ms for it under load from other lanes, and a boot with an empty compile
-  cache (the edit loop after a Schema, Transpiler or State edit, which moves
-  the compiler identity) reached `world.status` in 14.8 and 15.0 s against
-  16.2 and 15.8 s.
 - `WorldStateDocumentValues.BindLive` (and `TryRehydrate`) copy the whole
-  definition by serializing and parsing it: 323 ms plus 371 ms of a warm boot's
-  main thread, and the boot's only full serialize, so it pays every write
-  path's JIT too. Copy only the mutable value holders the document walker
-  reaches.
-- A cold compile of the debug world spends 8.6 s of the main thread in the
-  composer's `JsonNode` merge (`WorldDocumentBasis`): `DeepEquals` about
-  840 ms, `OrderedDictionary.IndexOf` 366 ms, `RowIdentity` 259 ms and 1.5 s
-  of GC polls under its clones.
-- A strict enum converter of Puck's own would replace the 1,758 enum-family
-  methods and 142 ms of converter creation; it must keep the schema's `enum`
-  lists (the exporter reads `EnumConverter<T>` natively),
-  `JsonStringEnumMemberName` and flags spellings, and the read side's
-  case rules.
-- Two boot reads still resolve by reflection, a few milliseconds each:
-  `WorldSubmissionCodec` reaches its protocol union records through a
-  `DefaultJsonTypeInfoResolver` combined after the world context, and
-  `WorldAssetRowLoader` parses music, table, tune and patch documents through
-  `DocumentJsonOptions.Shared`.
+  definition by serializing and parsing it, the boot's only full serialize, so
+  a warm boot's main thread pays every write path's JIT too. Copy only the
+  mutable value holders the document walker reaches.
+- The boot's `System.Text.Json` JIT is the source-generated context's own
+  generic instantiations (`WorldJsonSourceContext` behind `WorldJsonContext`),
+  not reflection: its metadata instantiates the serializer's generics once per
+  value type in the graph, about a third of a headless boot's first-compiled
+  methods (`DOTNET_JitDisasmSummary`; `host.memory` reads `jit methods`).
+  `WorldJsonContext.StartPreparing` takes their configuration off the main
+  thread. A per-assembly ReadyToRun publish leaves them, since its version
+  bubble excludes the framework that defines the generics; only the composite
+  publish below, or fewer instantiations, removes them.
+- A cold compile of the debug world spends seconds of the main thread in the
+  composer's `JsonNode` merge (`WorldDocumentBasis`): `DeepEquals`,
+  `OrderedDictionary.IndexOf`, `RowIdentity` and GC polls under its clones.
+- A strict enum converter of Puck's own would replace the enum converter family
+  behind `StrictEnumConverter<T>`; it must keep the schema's `enum` lists (the
+  exporter reads `EnumConverter<T>` natively), `JsonStringEnumMemberName` and
+  flags spellings, and the read side's case rules.
+- Two boot reads still resolve by reflection: `WorldSubmissionCodec` reaches
+  its protocol union records through a `DefaultJsonTypeInfoResolver` combined
+  after the world context, and `WorldAssetRowLoader` parses music, table, tune
+  and patch documents through `DocumentJsonOptions.Shared`.
 - [medium] The seeded `World` Edit grant is lost across a load or a reload. A
   `world.load` from debug into a same-capacity input fixture leaves authored
-  state-writing rules refused with `the live edit grant refuses state:blink` (and
-  the fixture's counters stay zero), where a fresh boot of that fixture runs them
-  (reproduced in C7 with `input-genre-controls.puck` temporarily set to the debug
-  world's capacity); after a full `world.reload` a debug World refused
-  `blink-close`'s state transaction on the same grant, and the companion's sensory
-  and glow rows stayed at their reload seeds while the guest flew on. Fresh boots
-  and an addon-row replacement worked. The cause is an inference, not confirmed.
-  Owner: boot/reload lane. C7's genre sweeps boot each source fresh.
+  state-writing rules refused with `the live edit grant refuses state:blink`,
+  where a fresh boot of that fixture runs them; after a full `world.reload` a
+  debug World refused `blink-close`'s state transaction on the same grant, and
+  the companion's sensory and glow rows stayed at their reload seeds. Fresh
+  boots and an addon-row replacement worked. The cause is an inference, not
+  confirmed. Owner: boot/reload lane.
 - [low · unconfirmed] `world.reload` of a debug document that raises
   `bodies.capacity` validates an `inhabit.count` against the raised capacity,
-  then narrates `inhabited '<row>' has no free entity slot — the 559-slot table
-  is full` and spawns only what the boot's entity table holds. Decide whether a
-  reload grows the live entity table or refuses the raised capacity by name.
+  then narrates `inhabited '<row>' has no free entity slot` and spawns only what
+  the boot's entity table holds. Decide whether a reload grows the live entity
+  table or refuses the raised capacity by name.
 - A self-contained composite ReadyToRun publish for the published World and
   the silo (decided by the lead). Composite brings the framework into the
   version bubble, so it removes the cause of both first-use JIT costs: the
-  first crossing's 639 methods, and the 15,341 `System.Text.Json` generic
-  instantiations of the source-generated `WorldJsonSourceContext`, which a
-  per-assembly ReadyToRun publish cannot precompile. A rehearsal transfer at
-  boot would hide only the first. Local builds stay IL for the edit loop.
-  Measure before and after: JIT count to `world.status` (`host.memory` prints
-  it), the first crossing's frame, boot wall time, publish size and publish
-  time. The silo lane's non-composite ReadyToRun showed no proven gain under
-  load, so composite is the test.
+  first crossing's methods and the `System.Text.Json` generic instantiations.
+  Local builds stay IL for the edit loop. Measure before and after: JIT count to
+  `world.status`, the first crossing's frame, boot wall time, publish size and
+  publish time.
 - [low] The silo activates worlds without calling
   `WorldJsonContext.StartPreparing()`, which takes the document metadata's
   configuration off the activation path as `Puck.World`'s `Program.cs` does.
@@ -1700,54 +1056,27 @@ and warm builds measured.
 - An applied update leaves the installed SDF pipeline set as it is: the
   pass-pipeline cache is keyed by bytecode, so an edit to the C# that describes
   a pipeline shows only after a reboot.
-- HLSL on a quiet lead machine is inside the 30 s ruling: in a windowed
-  Direct3D 12 World, a new constant in `passes/sdf-light-stage.hlsli` went from
-  save to `world.shaders.reload` answering `state=applied` (`sdf-world-views`
-  alone) in 8.04 and 8.24 s, harness round trips of about 1-1.5 s included; a
-  revert to bytecode already in the shader cache took 2.65 s. The windowed C#
-  loop (`dotnet watch`) was not reached in that window and is still owed. On a
-  loaded machine, headless, a `Puck.World.Transpiler` body edit went from save
-  to `[world.hot-reload] applied revision 1` in under 1.5 s (`changes applied in
-  876ms`; the next edit 61 ms, under 1.2 s end to end), and the next
-  `world.reload` compiled the debug world under the edited code.
-- Re-measure the C# loops on an idle machine against the targets: a
-  `Puck.World.Client` edit to ready under 20 s, boot to ready under 6 s. On the
-  loaded lead machine a hot-reloaded
-  Client body edit applies in 45-54 ms after the watch's first edit (14.3 s), a
-  light-stage constant edit settles through `world.shaders.reload` in 11.8 s, a
-  headless boot reaches `world.status` in 4.6-4.8 s, and the `dotnet run` loop
-  after a Client edit took 30.5-42.4 s at 100 % load, 22 s of it the build.
-  With cold nodes (`-nodeReuse:false`) under load from other lanes, a no-op
-  build of `src/Puck.World` now takes 14.3 s (60 projects, every `CoreCompile`
-  skipped, no copy) and a build after a commit and a Client body edit 20.2 s
-  (one `CoreCompile`, Client's 3.4 s; 6 files copied). What is left of a cold
-  build is per-node startup: the first project a fresh node builds spends 1.5
-  to 3.8 s of self time in the SDK's own targets. A warm SdfVm body edit spent
-  about 3 s evaluating the World's projects and 5 to 6 s checking the projects
-  below the edit; re-measure it warm. The project-reference closure's
-  `GetCopyToOutputDirectoryItems` walk sums 15 to 39 s of yielded wall over the
-  60 projects; read whether `MSBuildCopyContentTransitively` can be turned off
-  without losing content the World ships.
-- Measure on an idle machine, serially: the cold and the warm local build, the
-  cold and the warm test pass
-  ([verification](../../.claude/skills/verification/SKILL.md)).
+- Time the windowed C# loop (`dotnet watch`) on an idle machine against the
+  targets: a `Puck.World.Client` edit to ready under 20 s, boot to ready under
+  6 s. HLSL on the quiet lead machine is already inside the 30 s ruling through
+  `world.shaders.reload`.
+- Measure on an idle machine, serially, the cold and the warm local build. What
+  is left of a cold build is per-node startup (the first project a fresh node
+  builds spends seconds in the SDK's own targets), and the project-reference
+  closure's `GetCopyToOutputDirectoryItems` walk yields seconds of wall over the
+  World's projects; read whether `MSBuildCopyContentTransitively` can be turned
+  off without losing content the World ships.
 - Prepare machine content once per input: every boot compiles the debug world's
   `.puck` cartridges again (`CartridgeSource.Prepare` through
-  `HgbCartridgeCompiler`, about 4 % of a headless boot), though the image is a
-  pure function of the source, its imports and the compiler. Key a cache by the
-  inputs the compile read, as `WorldCompileCache` keys a world compile. Measured
-  in a scratch app calling `IMachineContentProvider.Prepare` on the loaded lead
-  machine: the boot's `tetromino.cgb.puck` costs 108 ms cold and 100 ms warm,
-  `pip.agb.puck` 12 ms and 8 ms; all nine debug cartridges 547 ms cold, 304 ms
-  warm. Deferred by the build-time lane for that cost (about 0.1 to 0.3 s a
-  boot) against a cache that needs `ModuleResolver.ImportModules` to report the
-  files it read and the compiler's module identity.
-- The boot's first guide write cost about 27-30 ms of simulate in a rendering
-  World; `WorldCodeWarmer` took the first endless-fall crossing from 20-24 ms to
-  8-10 ms and the watchdog's first write from 30-37 ms to 12-19 ms. Recheck the
-  original windowed cold-write cost; one earlier warm walk's single 32.4 ms
-  simulate frame wants a `dotnet-trace` (`dotnet-sampled-thread-time`) capture
-  before it is named.
+  `HgbCartridgeCompiler`), though the image is a pure function of the source,
+  its imports and the compiler. Key a cache by the inputs the compile read, as
+  `WorldCompileCache` keys a world compile; it needs
+  `ModuleResolver.ImportModules` to report the files it read and the compiler's
+  module identity, against a cost of a few tenths of a second a boot.
+- `WorldCodeWarmer` takes the first crossing's and the watchdog's first write's
+  JIT off their frames. Recheck the original windowed cold-write cost; a single
+  slow simulate frame on a warm walk wants a `dotnet-trace`
+  (`dotnet-sampled-thread-time`) capture before it is named.
 - A `--no-incremental` Release build once failed `SHADERPKG_OUTPUT` with a World
   shader package directory holding binaries but no manifest; clearing
   `src/Puck.World/obj/Release/net11.0/worlds` and building again passed.
@@ -1779,7 +1108,7 @@ certified-contact packet and step 8 closes. The measured state is in the
   (about 3.5 times a sector's 266,000).
 - Creation limits sized for props bound terrain: noise amplitude at most 4 m
   (`CreationNoiseDocument.MaxAmplitude`) and smooth blends at most 0.5 m
-  (`CreationDocument.MaxSmooth`), so a 300 to 430 m wall reads as a few smooth
+  (`ShapeDocument.MaxSmooth`), so a 300 to 430 m wall reads as a few smooth
   masses with metre-scale rock.
 - The CPU evaluator's capsule reads its segment parameter through a Q16 inverse
   squared length (`SdfCapsule`), the precision loss the superellipsoid had for a
@@ -1790,7 +1119,8 @@ certified-contact packet and step 8 closes. The measured state is in the
 Owner: the next session's lead · Next: take the GPU region
 growth merge (with the uniform view limit enforced in `Grow`) as one lane, then
 the two overlay writers, the retired march-step budget and the survey's groups,
-largest payoff first; the mirrors wait for the job-system memo. The owner lifted test requirements for this campaign (AGENTS.md):
+largest payoff first; the mirrors wait for the presentation view. The owner
+lifted test requirements for this campaign (AGENTS.md):
 a refactor rewrites or deletes tests freely and is verified by building and
 running what it changed. A `.puck` rewrite proves itself cheaply: `puck compile`
 lowers it to the same JSON as before, except where the look changes on purpose.
@@ -1839,7 +1169,7 @@ Code that grew a second implementation (AGENTS.md rule 7) or costs velocity:
     (`tests/Puck.SdfVm.Tests/SdfFieldSliceLawTests.cs:33`,
     `SdfMeshPathBakeLawTests.Settle.cs:204`, `SdfMeshPathBakeLawTests.cs:579`,
     `:617`); the sample position beside them is already one
-    `SdfMeshPathBake.SampleAt`. Check the HLSL tap set against the same constant.
+    `SampleAt` (`SdfMeshPathBake.cs:44`). Check the HLSL tap set against the same constant.
   - [low] `FixedQ3232` and `FixedQ4816` carry the same generic-math body
     (`Puck.Maths/FixedPoint/FixedQ3232.GenericMath.cs:6`,
     `FixedQ4816.GenericMath.cs:6`, about 1,000 tokens each).
@@ -1902,13 +1232,26 @@ Code that grew a second implementation (AGENTS.md rule 7) or costs velocity:
   `AnnotationWriter` (`src/Puck.Overlays/AnnotationWriter.cs:45`) are two writers
   of overlay content. Keep one; editor E6 ([editor](editor.md#open-items)) and the
   debug tools' `view.annotate` name it.
-- Delete the retired march-step budget: `WorldDynamicResolutionSignal.Steps` and
-  `WorldDynamicResolution.StepBudgetPerPixel = 552_762 / (1920 * 1080)`
+- [medium] Delete the retired march-step budget, a dead fallback:
+  `WorldDynamicResolutionSignal.Steps` and
+  `WorldDynamicResolution.StepBudgetPerPixel`
   (`src/Puck.World.Client/WorldDynamicResolution.cs:18, 98`, read through
-  `MarchStepBudgetPerPixel`, `src/Puck.World/WorldFrameLoadSource.cs:52`) are
-  calibrated against the deleted per-pixel march, and the frame walks no field.
-  Delete both with the load signal that reads them, and the mentions in the
-  rendering plan.
+  `MarchStepBudgetPerPixel`, `src/Puck.World/WorldFrameLoadSource.cs:52`, and
+  turned into the controller's step budget at
+  `WorldDynamicResolution.cs:207`) are calibrated against the deleted
+  per-pixel march. The offscreen fallback, taken when neither the GPU's nor
+  the present's timing is available, budgets march steps per pixel, but march
+  steps are bake-only now, so the signal reads near zero on a settled frame and
+  the grid never falls. Rebase that fallback on a per-frame signal the frame
+  still has, or delete it with the load signal that reads it and the mentions
+  in the rendering plan and `frame-rendering.md`. Not run.
+  (from: docsverify-claude)
+- [medium] `puck gate`'s default `--merge-base` names a deleted branch:
+  its `DefaultTarget` names `features/gfx-pipeline` on `origin`
+  (`src/Puck.Cli.Gate/Gate/GateRun.cs:29`), which no longer exists, so a gate
+  run without the option compares against nothing. Default it to the
+  integration branch or make the option required, and correct
+  `docs/reference/cli.md`'s `puck gate` section with it. (from: docsverify-claude)
 - Recursive `Directory.Delete` remains in the assemblies the browser payload
   links: `CacheRetention` (`Puck.Abstractions`), `ConsoleControlSession`
   (`Puck.Hosting`) and `WorldStaging` (`Puck.World.Transpiler`, twice). Route them
@@ -1921,9 +1264,9 @@ Code that grew a second implementation (AGENTS.md rule 7) or costs velocity:
   entry per tick: `WorldClient` (presentation) and the boot endpoint's
   `WorldSessionMirror` (`WorldAuthorityEndpoint.cs:122`); and three per-sink
   redaction scratch buffers (`WorldOutputHub.cs:71`, `WorldSessionSink.cs:29`,
-  `WorldFederationProjectionSink.cs:42`). Larger than the tick-to-produce
-  handoff's packet; take them after the [job-system memo](#engine-job-system),
-  which fixes the tick-to-produce handoff and where the fold sits.
+  `WorldFederationProjectionSink.cs:42`). Take them with the presentation
+  view's last cut ([runtime plan](runtime-and-delivery.md#the-presentation-view)),
+  which decides what the frame receives and where the fold sits.
 
 - `puck locks` re-resolves floating packages throughout an affected lock file
   after a reference change, even without `--update`
@@ -2130,228 +1473,185 @@ under-use the language where the shared libraries (`worlds/standard/bounds.puck`
 
 ### Lighting and GI
 
-The [illumination plan](illumination.md) holds the research round's decisions
-and the order they land in; the items below are its findings and checks.
+Owner: next lighting batch (rendering, principal-grade review) · high · Next:
+the lockstep relight under a moving sun, then light a cold area from the coarser
+levels or the sky term the moment a view arrives (shading-side); the exposure
+meter is the [terrain pass](terrain-pass.md#exposure-at-its-cause)'s step 1, and
+the coverage, enclosure and wrapped-diffuse findings follow it. The
+[illumination plan](illumination.md) holds the research round's decisions and
+the order they land in, and the
+[mesh-GI reference](../../.claude/skills/rendering/references/mesh-gi.md) holds
+the fixed poses and the approaches already rejected.
 
-- From step 1 (illum-step1): stretching the far cascade to cover the valley
-  costs too much (at `valley-rim`, 120 m against 480 m: 208 against 7,170 draws,
-  0.24 against 8.4 ms, 13.9 against 55.3 cm texels), so the valley waits for the
-  terrain pass's step 7 static cascade; indoors a cel style tints bounced light
-  as its shadow band, so banded materials in the hall read as shadow tone until
-  step 2 feeds GI to the style; `world.debug-view shadow` paints unqueried
-  pixels white like lit ones; at the noon sun the meadow lies in the east
-  wall's shadow. Step 1's checks and the frame bar are owed again on the moving
-  day cycle, with a low-sun cel style for the dawn penumbra check.
-- Step 2 (illum-step2) fixed the moving sun's frozen volume, the meter's stale
-  night, the two ray sets and the unhashed sky: a probe is a hit buffer traced
-  once per geometry and a relight under the frame's budget
-  ([step 2's status](illumination.md#step-2-status)). The night look is
-  authored: the exposure's bounds key on the day clock, and the debug world
-  keys an EV 2 night floor under a deep-blue moon. What it left:
+- [high] Under lockstep a moving sun relights the whole probe window every tick
+  from no bounce: a lockstep frame drains the irradiance relight to the end
+  before it renders (`SdfMeshIrradiance.Stage`, `SdfMeshIrradiance.cs:538-563`),
+  and the day cycle moves the lighting version in `DrainKey()` (`:578`) every
+  tick, the capture limit skipped at `:1084`. A lockstep tick with the day
+  running therefore takes seconds, so the sweep's windowed leg cannot run with
+  the day cycle ([sweep](#sweep-and-visual-checks)). Fix at the cause: quantize
+  the sun on a fixed grid under lockstep (never against the last capture, which
+  would make the image depend on when a run started), so a lockstep frame
+  relights only what its own time moved. (from: illum-step2, settle-1)
+- From step 1: stretching the far cascade to cover the valley costs too much,
+  so the valley waits for the terrain pass's step 7 static cascade; indoors a
+  cel style tints bounced light as its shadow band, so banded materials in the
+  hall read as shadow tone; `world.debug-view shadow` paints unqueried pixels
+  white like lit ones; at the noon sun the meadow lies in the east wall's
+  shadow. Step 1's checks and the frame bar are owed again on the moving day
+  cycle, with a low-sun cel style for the dawn penumbra check.
 - [medium] The debug world's light switch is a geometry change as well as a
   lighting change: `gallery.lights.all` swaps the hall's dark prototypes for
-  lit ones (`world.respond: 'hall-floor-1' hall-floor-1-dark -> hall-floor-1`,
-  34 static draws), so it retraced 8,294 of 61,440 probes. A lamp authored as
-  a lane-driven emissive would be a relight alone, but the relight reads a
-  lane-driven emissive as zero (`SdfMeshIrradiance.Shade`: a static draw has
-  no frame slot); read the lane's value in the relight, then author the
-  switch as a lane. (from: illum-step2)
+  lit ones (`world.respond: 'hall-floor-1' hall-floor-1-dark -> hall-floor-1`),
+  so it retraces probes. A lamp authored as a lane-driven emissive would be a
+  relight alone, but the relight reads a lane-driven emissive as zero
+  (`SdfMeshIrradiance.Shade`: a static draw has no frame slot); read the lane's
+  value in the relight, then author the switch as a lane. (from: illum-step2)
 - [medium] A camera sample is relit on the frame thread, under the volume's
   gate, whenever the lighting version advances (`SdfMeshIrradiance.CameraRadiance`
   from `TryMeter`), outside the relight budget: the debug world's forty-odd
-  screen-camera views meter by camera sample, so each lighting capture (about
-  ten a second under the day) relights them on the frame thread
-  (`camera-relights` counts them). Move them into the worker's batches.
+  screen-camera views meter by camera sample, so each lighting capture relights
+  them on the frame thread (`camera-relights` counts them). Move them into the
+  worker's batches. (from: illum-step2)
+- [low] The relight budget is per rendered frame, so the relight's rate follows
+  the frame rate until the background workers bound it; at a low frame rate it
+  cannot hold the 8 s age. A rate in probes a second would decouple them.
   (from: illum-step2)
-- [medium] A lockstep frame whose lighting or windows changed relights the
-  whole window until it converges: 61,440 probes about four times, 11 to 24 s
-  a tick on Direct3D 12 under load. Lockstep with the day running is that slow
-  every tick. (from: illum-step2)
-- [low] The budget is per rendered frame, so the relight's rate follows the
-  frame rate until the four background workers bound it (about 10,000 to
-  11,000 probes a second under load at `gallery`); at six frames a second, 1024
-  a frame could not hold the 8 s age. A rate in probes a second would decouple
-  them. (from: illum-step2)
-- [low] A teleport brings cached cells relit long ago back into the window,
-  and the next cycle prints `behind` with their age (98 and 140 s seen); they
-  are stale, but the line reads as overload. (from: illum-step2)
-- [low] The CPU cache holds 2,200 bytes a probe (the hit buffer beside the
-  record), about twice what it held, and keeps every cell a window visited
-  until the layout changes. (from: illum-step2)
+- [low] A teleport brings cached cells relit long ago back into the window, and
+  the next cycle prints `behind` with their age; they are stale, but the line
+  reads as overload. (from: illum-step2)
+- [low] The CPU cache holds about twice the bytes a probe it held before the
+  hit buffer, and keeps every cell a window visited until the layout changes;
+  its byte bound is the [memory item's](#memory-on-the-deck-tier).
+  (from: illum-step2)
 - [medium · unmeasured] The debug world's night floor (EV 2, keyed on `day`)
   lengthens every point and spot light's range by about five stops of
   exposure, day and night, since ranges follow the darkest exposure any key
-  reaches (`WorldRenderExposure.Resolve`). More fixtures reach each view's
-  frustum and each probe's hits; measure the views pass and the relight's
-  local part against an EV 7 floor on a quiet machine, and size ranges by the
-  live floor if the cost shows. (from: illum-step2)
-- [low · unconfirmed] `render.indirect.bounces` is now an on/off switch:
-  bounce converges over relights toward the multi-bounce limit rather than
-  stopping at the tier's two or three sweeps, so interiors lit mostly by
-  bounce may read brighter than step 1's stills. A switched-off lamp's bounce
-  fades over the bounce sweeps rather than vanishing. Compare the gather
-  stops with step 1's stills on a quiet machine. (from: illum-step2)
-- [high] The wrapped side's self-shadow term has failed three reviews, each
-  in a new mesh-topology case: curvature transmission, then the exit layer,
-  then the exit layer with closed/open classification. The last review found
-  grazing self-shadowing from the receiver-plane clamp
-  (`sdf-surface-stage.hlsli` ~:214, :232-234), multi-shell meshes oriented by
-  one signed volume (`WorldPlacementStamper.cs` ~:398, :411), T-junctions
-  demoting a solid to a thin caster, and skins whose deformation inverts
-  winding while `EnclosesSolid` holds. A depth-order replacement (the
-  nearest surface and a peel of it, read by a closed bit) failed its design
-  review on the same point: two depth layers cannot say which body a surface
-  belongs to (a clipped receiver reads a sheet 2 m ahead as its own entry; a
-  3 mm panel behind a sheet loses it inside the bias; a tolerance merges a
-  sheet with a box front; a doubled triangle passes edge pairing). The
-  [transmission plan](transmission.md) now records a body identity per
-  cascade texel beside the depth, peels by identity, and shadows a wrapped
-  receiver by any other body in front and by its own body's next surface
-  along the light. Its second review settled the body index's lifetime (one
-  table per residency, no reuse under a held cascade, a generation in the
-  word), a canonical body key apart from `MotionIdentity`, that two surfaces
-  cannot infer occupancy (overlapping authored components over-shadow), an
-  unresolved-footprint policy that never reads a distant blocker absent, a
-  receiver handle in the GI's cached hits, and the Deck measured at Full; its
-  remaining mediums are the implementation lanes' checks. The packet's
-  exit-layer items below close with it. (from: illum1fix2-astra,
+  reaches (`WorldRenderExposure.Resolve`). Measure the views pass and the
+  relight's local part against an EV 7 floor on a quiet machine, and size
+  ranges by the live floor if the cost shows. (from: illum-step2)
+- [low · unconfirmed] `render.indirect.bounces` is an on/off switch: bounce
+  converges over relights toward the multi-bounce limit rather than stopping at
+  the tier's sweeps, so interiors lit mostly by bounce may read brighter than
+  step 1's stills, and a switched-off lamp's bounce fades over the sweeps.
+  Compare the gather stops with step 1's stills on a quiet machine.
+  (from: illum-step2)
+- [high] The wrapped side's self-shadow term has failed three reviews, each in a
+  new mesh-topology case (grazing self-shadowing from the receiver-plane clamp,
+  `sdf-surface-stage.hlsli` ~:214, :232-234; multi-shell meshes oriented by one
+  signed volume, `WorldPlacementStamper.cs` ~:398, :411; T-junctions demoting a
+  solid to a thin caster; skins whose deformation inverts winding while
+  `EnclosesSolid` holds), and a depth-order replacement failed its design review
+  on the same point. The [transmission plan](transmission.md) records a body
+  identity per cascade texel beside the depth, peels by identity, and shadows a
+  wrapped receiver by any other body in front and by its own body's next
+  surface along the light; its remaining mediums are its implementation lanes'
+  checks. The exit-layer items below close with it. (from: illum1fix2-astra,
   transmit-astra, transmit2-astra, transmit-design)
-- From illum1-fix: the cascades' exit layer doubles each cascade pass's draws
-  and vertices (`world.counters gpu pass sdf.world$shadow-near` at the stage:
-  460 draws and 2.62 M vertices on Direct3D 12, two render passes) and adds a
-  depth image per cascade (16 MiB each at 2048 texels); its frame time is owed
-  on a quiet machine. At a grazing light (a wrapped side at n·l = -0.25) the
-  filter's slope clearance (`SdfMeshShadowSlopeBias`, 2.5 texels of depth per
-  texel of lateral distance) still clears a parallel blocker that stands within
-  a few texels of depth of a receiver turned from the light: a 2 cm slab 0.10 m
-  along the light from a 3 mm panel at n·l = -0.25 shadows only speckles of it
-  on both backends, where 0.3 m at n·l = -0.45 shadows it whole.
-  A body clipped at a portal's glass or drawn under a mirror is a thin caster in
-  the exit layer (`SdfMeshDraw.EnclosesSolid`), so its own wrapped side past
-  the terminator is shadowed by its own lit side while it straddles the glass.
-  `SdfPassPlanLawTests.ATemporalViewAddsOnlyItsHistoryAndReactivityOverTheSpatialGraph`
-  fails on its own constant (201,139,200 bytes against 1,221,350,400 from the
-  current `HistorySurfaceWords`), unrelated to the cascades.
-- [medium · unconfirmed cause] The baseline's resolve pass read 6.5 to 17.9 ms
-  on the main view (Vulkan `overlook` 6.51, `portals` 9.41; Direct3D 12
-  `gallery` 17.88) against the 0.41 to 0.44 ms the GPU cost reference
-  records, on a machine whose CPU other lanes held at 100 %. Repeat on a quiet
-  machine before attributing it ([step 0](illumination.md#step-0-what-the-run-showed)).
-  (from: illum-step0)
+- The cascades' exit layer doubles each cascade pass's draws and vertices
+  (`world.counters gpu pass sdf.world$shadow-near`) and adds a depth image per
+  cascade; its frame time is owed on a quiet machine. At a grazing light the
+  filter's slope clearance (`SdfMeshShadowSlopeBias`) still clears a parallel
+  blocker within a few texels of depth of a receiver turned from the light. A
+  body clipped at a portal's glass or drawn under a mirror is a thin caster in
+  the exit layer (`SdfMeshDraw.EnclosesSolid`), so its own wrapped side past the
+  terminator is shadowed by its own lit side while it straddles the glass.
+  (from: illum1-fix)
+- [medium · unconfirmed cause] The resolve pass read many times the GPU cost
+  reference's figure on the main view on a machine whose CPU other lanes held
+  at 100 %. Repeat on a quiet machine before attributing it
+  ([step 0](illumination.md#step-0-what-the-run-showed)). (from: illum-step0)
 - The day cycle's hold is `world.row.set state day advance …`, which no
   authored command may run (`world.row.set` is unbindable), so the hold cannot
   be a `commands` row or a binding. A rule effect that writes a row's advance
   rate would make it one. (from: illum-step0)
 - The Deck leg of step 0 is unmeasured: no Deck or remote target is reachable
   from the repository. (from: illum-step0)
-
-Owner: next lighting batch (rendering, principal-grade review) · medium · Next:
-light a cold area from the coarser levels or the sky term the moment a view
-arrives (shading-side, now); the exposure meter is the
-[terrain pass](terrain-pass.md#exposure-at-its-cause)'s step 1, and the coverage,
-enclosure and wrapped-diffuse findings follow it. The
-[mesh-GI reference](../../.claude/skills/rendering/references/mesh-gi.md) holds
-the fixed poses and the approaches already rejected.
-
-- [medium] A cold area lights as without the irradiance volume until its first level publishes: on gallery level 2, arriving by `debug.go`, the Moth and the hall read near-black for about 20 s on both backends, then light correctly (the meter already answers from probes meanwhile). Light from the coarser levels or the sky term the moment a view arrives, so no cut shows a dark interval; then re-confirm the owner's far-east level-2 view at (47.6, 9.1, 23.3) and the valley summit on both backends, which the landing check did not revisit. (from: the lighting-robust landing check)
-- [medium] The outdoor lighting has no direction: a pale grey-blue sky, a white sun key, hard black shadows with no sky fill, no rim and no aerial haze. A lighting-direction pass (sky colour and fill, sun colour and height, shadow softness, haze) with the owner, after exposure meters; the [terrain pass](terrain-pass.md) covers materials, haze, far shadows and the image meter. (from: the owner's walkthrough)
-- [medium] After bake-scale, member normals stay unit length while root normals receive the inverse scale, so a triangle spanning root and animated-member vertices interpolates a lighting that changes with body scale (at 0.25 the root normal weighs four times the member's) (`src/Puck.SdfVm/Assets/Shaders/Sdf/frame/sdf-mesh.hlsli:147-157`). Likely the cause of the thin bright lines under the quarter-size Moth's back-plate edges filed by the same lane: normalize both after the scale, or apply the same transform to both. (from: bake-scale review)
-
-- Owner walkthrough, depth visibility: both poses checked on probe-depth-fix's
-  settled Vulkan build. At (1) `body.pose 66.24 4.57 14.73 329`, eye
-  (64.061, 5.331, 18.308), target (66.241, 5.57, 14.726), the original large
-  corner zig-zag and ceiling saw-tooth are no longer visible, but ceiling
-  hotspots remain and the wall clips white in `indirect`; this is not a clean
-  exposure qualification. At (2) `body.pose 58.17 4.57 30.87 180`, eye
-  (58.16, 8.403, 29.767), target (58.168, 5.57, 30.868), hard diamond/star
-  patterns remain around the NOISE and ERODE plinths in `indirect`. Whole
-  octahedral texels switching was a hypothesis, not an established cause; the
-  current local reconstruction still needs this case isolated. Original
-  captures w01-*, w02-* are in the lead's walkthrough scratch; the new
-  `owner-corner-vulkan` and `owner-noise-erode-vulkan` captures are in the
-  probe-depth-fix hand-back. Keep the floor finding open.
-
-- [low] A quarter-size Moth (Wonderland) shows thin bright lines under her back
-  band plates' lower edges that the full-size Moth at the same relative framing
-  does not, though both draw one mesh (`world.debug-view normals` matches): a
-  shading length in world units does not follow a body's scale (candidates: the
-  cascades' depth bias and texel, the surface pass's AO and shadow tap radii,
-  `SdfMeshIrradianceProbe.NormalBias`). Pose `body.pose 6.16 0.07 30.43 23 0 0`
-  at scale 0.25 with `view.override camera look 6.40 0.30 31.05 6.16 0.24 30.43`;
-  the full-size twin is `view.override camera look 7.12 0.99 32.91 6.16 0.75 30.43`
-  at scale 1. (from: bake-scale)
+- [medium] A cold area lights as without the irradiance volume until its first
+  level publishes: on gallery level 2, arriving by `debug.go`, the Moth and the
+  hall read near-black for about 20 s on both backends, then light correctly.
+  Light from the coarser levels or the sky term the moment a view arrives, so no
+  cut shows a dark interval; then re-confirm the owner's far-east level-2 view
+  at (47.6, 9.1, 23.3) and the valley summit on both backends. (from: the
+  lighting-robust landing check)
+- [medium] The outdoor lighting has no direction: a pale grey-blue sky, a white
+  sun key, hard black shadows with no sky fill, no rim and no aerial haze. A
+  lighting-direction pass (sky colour and fill, sun colour and height, shadow
+  softness, haze) with the owner, after exposure meters; the
+  [terrain pass](terrain-pass.md) covers materials, haze, far shadows and the
+  image meter. (from: the owner's walkthrough)
+- [medium] After bake-scale, member normals stay unit length while root normals
+  receive the inverse scale, so a triangle spanning root and animated-member
+  vertices interpolates a lighting that changes with body scale
+  (`src/Puck.SdfVm/Assets/Shaders/Sdf/frame/sdf-mesh.hlsli:147-157`). Likely
+  the cause of the thin bright lines under a quarter-size Moth's back band
+  plates' lower edges, which the full-size Moth at the same framing does not
+  show though both draw one mesh: normalize both after the scale, or apply the
+  same transform to both. Repro: `body.pose 6.16 0.07 30.43 23 0 0` at scale
+  0.25 with `view.override camera look 6.40 0.30 31.05 6.16 0.24 30.43`; the
+  full-size twin is `view.override camera look 7.12 0.99 32.91 6.16 0.75 30.43`
+  at scale 1. Other candidates are shading lengths in world units that do not
+  follow a body's scale (the cascades' depth bias and texel, the surface pass's
+  AO and shadow tap radii, `SdfMeshIrradianceProbe.NormalBias`). (from:
+  bake-scale)
+- The owner's depth-visibility walkthrough poses still show artefacts in
+  `indirect`: at `body.pose 66.24 4.57 14.73 329` ceiling hotspots remain and
+  the wall clips white; at `body.pose 58.17 4.57 30.87 180` hard diamond and star
+  patterns remain around the NOISE and ERODE plinths. Whole octahedral texels
+  switching was a hypothesis, not an established cause; isolate the current
+  local reconstruction on these poses. Keep the floor finding open.
 - Decide (the lead's call): the coat layer's F0 semantic, chosen consistently
   with the material model; and whether baked static copies occupy SDF instances
   at all, the copies represented independently of the bake program's limits.
-- Depth visibility is delivered (explicit misses, a distance-based hemisphere
-  fade, shared radiance quadrature). Bounded depth work removes 85.94 % of its
-  depth rays, and one probe table now fits its tier: 11.02 MiB Medium, 33.05 MiB
-  High (Direct3D 12 High GI trace 11.487 to 7.437 s, Medium 1.698 to 1.032 s).
-  These figures await a home in the mesh-GI reference.
+- Depth visibility's bounded depth work and per-tier probe table sizes await a
+  home in the mesh-GI reference.
 - [medium] The stairwell's flight B enclosure reads black on its side walls in
   `indirect` while its treads and landings are lit
   (`gather-stairwell-flight-b-0-indirect`). Coverage is not the cause:
-  `world.probe 12.3 3 37 1 0 0` (the divider's east face) answers with weight
-  0.81 from the valid probe of cell (6, 1, 18), whose own cubes read
-  `luminance=4.3` beside 40 to 60 across the divider and hundreds in the hall,
-  so the enclosure measures almost no bounced light at the medium tier's two
-  bounces (its pendant `state.hallLamps.stairs` is off in the sweep). More
-  bounces or a finer lattice there, judged with `world.probe`'s cube readings.
+  `world.probe 12.3 3 37 1 0 0` answers from a valid probe whose own cubes read
+  far darker than across the divider, so the enclosure measures almost no
+  bounced light at the medium tier's two bounces (its pendant
+  `state.hallLamps.stairs` is off in the sweep). More bounces or a finer lattice
+  there, judged with `world.probe`'s cube readings.
 - GI visibility remainder: settlement is configured sweeps, not
   history-independent global convergence (a full tour and direct teleports have
-  different window and bounce histories; repeating the teleport order on
-  Direct3D 12 removes the apparent stairwell backend difference). Also open: a
-  general refusal of lighting-finding captures before every bake and the
-  irradiance have settled; grazing marks at the teal vertical corner, the Moth
-  backdrop and the boardroom jamb feet; bright bands in the painting wing and
-  camera-bay roof; curved bands on the level-3 stairwell wall (finite angular
-  sampling is a hypothesis, not an established cause for every pixel); the
-  garden portal's dark horizontal strip in the probe-depth sweep; the REVOLVED
-  floor's diagonal patches and black rectangle, which reproduce in `indirect`
-  while that floor reads shadowed in the shadow view; and the wing's
-  north-east corner remnants ([rendering plan](rendering.md)).
-- [medium] The controlled final Vulkan stairwell lit/indirect pair has a sharp
-  dark bow-tie patch on a middle tread, absent in its baseline. The original
-  east-wall squares are no longer distinct, but the enclosure is darker.
-  Isolate geometry/moving bake from probe interpolation before attributing the
-  tread patch. All requested captures report settled bakes and irradiance;
-  the Vulkan sweep nevertheless flags the cumulative moving-bake cap counter
-  increasing from 3 to 41. Its cause is unisolated. Evidence:
-  `capture-vulkan/report.json` and `tour/probe-stairwell-*.png` in the
-  probe-depth-fix hand-back.
+  different window and bounce histories). Also open: a general refusal of
+  lighting-finding captures before every bake and the irradiance have settled;
+  grazing marks at the teal vertical corner, the Moth backdrop and the
+  boardroom jamb feet; bright bands in the painting wing and camera-bay roof;
+  curved bands on the level-3 stairwell wall; the garden portal's dark
+  horizontal strip; the REVOLVED floor's diagonal patches and black rectangle,
+  which reproduce in `indirect` while that floor reads shadowed in the shadow
+  view; and the wing's north-east corner remnants ([rendering plan](rendering.md)).
+- [medium] The Vulkan stairwell lit/indirect pair has a sharp dark bow-tie patch
+  on a middle tread, absent in its baseline, and the enclosure is darker.
+  Isolate geometry and the moving bake from probe interpolation before
+  attributing it. The Vulkan sweep also flags the cumulative moving-bake cap
+  counter rising; its cause is unisolated.
 - [medium] Far-field irradiance coverage: bounded local depth support exposes
-  unmeasured distant surfaces beyond the camera's probe window. The matched
-  probe-depth-fix tour shows black far walls at `finding-teal-roof`,
-  `gallery-entrance`, `devices`, `desktop`, `rate-range`, `camera-course`,
-  `stage`, `jump`, `flight` and `noclip`, and a larger dark pane through the
-  `garden` return portal. Several gallery/window views show the same far wall.
-  Live Vulkan readback confirms one authored south-wall receiver (69.5, 4, 12),
-  normal (0, 0, -1), answers with weight 0 although its boundary probes at
-  x=31 are bright and reference-clear=1. Their roughly 38.5 m separation is
-  beyond the 5.246 m local support. The near receiver (18.5, 4, 12) answers
-  with weight 0.525. The far wall also reads black in a fixed indirect view;
-  this isolates missing coverage for that receiver. Collision probing was
-  unavailable in that World's contact configuration. Supply coarse far-field
-  coverage while retaining local visibility. Not every changed tour pixel,
-  nor the garden return's scope/history, has been separately isolated.
-- The SPIN exhibit (`gallery.go motion-spin`): a dotted bright seam at the level 3
-  ceiling and wall junction reproduces in beauty but not in `indirect`,
-  `normals` or `shadow`; behind it at level 2 (chase view) a dotted bright line
-  runs along the wall's foot and the window blinds' left edges draw bright
-  vertical lines, on both backends. Keeping unqueried shadow slots out of the
-  filter left them unchanged, so the cause is elsewhere; geometry and direct
-  light are next.
+  unmeasured distant surfaces beyond the camera's probe window. Far walls read
+  black at `finding-teal-roof`, `gallery-entrance`, `devices`, `desktop`,
+  `rate-range`, `camera-course`, `stage`, `jump`, `flight` and `noclip`, and
+  through the `garden` return portal. A south-wall receiver at (69.5, 4, 12),
+  normal (0, 0, -1), answers with weight 0 although its boundary probes at x=31
+  are bright, being beyond the local support, while the near receiver
+  (18.5, 4, 12) answers. Supply coarse far-field coverage while retaining local
+  visibility.
+- The SPIN exhibit (`gallery.go motion-spin`): a dotted bright seam at the level
+  3 ceiling and wall junction reproduces in beauty but not in `indirect`,
+  `normals` or `shadow`; behind it at level 2 a dotted bright line runs along
+  the wall's foot and the window blinds' left edges draw bright vertical lines,
+  on both backends. Keeping unqueried shadow slots out of the filter left them
+  unchanged; geometry and direct light are next.
 - The black lift and hanging-sign interiors the owner reported: settled
   medium-GI checks with every gallery light on read both interiors without the
-  camera-meter fallback, and the meter now traces at a camera with no visible
-  lattice probe, but the earlier blackout's cause is not established; reproduce
-  it with the original camera and lighting state.
+  camera-meter fallback, but the earlier blackout's cause is not established;
+  reproduce it with the original camera and lighting state.
 - The plinths' box edges read about 45 degrees of shading error in the GPU bake
-  while `puck mesh audit --cpu` scores them clean: `--group "shape-box ("` shows
-  the top edges equally clean in the store and the CPU bake (worst corner 45
-  and 46 degrees), and what the GPU bake adds is a 1.1 m cluster of 32-degree
-  shading normals along the bottom back edge (y 0.051, z 15.756), the face that
-  rests on the floor.
+  while `puck mesh audit --cpu` scores them clean: what the GPU bake adds is a
+  1.1 m cluster of 32-degree shading normals along the bottom back edge
+  (y 0.051, z 15.756) of `--group "shape-box ("`, the face that rests on the
+  floor.
 
 ### Collision versus drawn mesh
 
@@ -2371,40 +1671,27 @@ colliders report's only red findings left are the valley's relief
   `puck_world_start`; give the headless host a way to admit a crowd for
   measurement. (from: far-hit)
 
-- [medium] Sub-cell features draw badly across the gallery (the root is addressed
-  by the delivered work below; the regressions it left are the Next; the owner's
-  walkthrough screenshots): holes and flipped faces where stair boxes touch (hall and Wonderland stairs), the window blinds' thin slats as sawtooth teeth and speckled patches (`hall-blind-3-*`), `hall-shell` edges as broken dashes and jagged teeth, a bright fleck on `hall-floor-3`. One root: features thinner than a bake cell (fillet crevices between touching boxes, thin slabs, edges). (from: the owner's walkthrough)
-  Delivered (bake-seams): boxes are sharp unless authored `rounding`; a union's
-  refinement budget serves its thin members' own boxes, smallest first; a
-  transition ring's crossings are searched; the field correction keeps a vertex
-  off a seam's gradient; the cassettes bake as rows of their own. `puck mesh
-  audit --cpu`, tip to delivered: `hall-stairs` 12,251 (1,557 flipped, 84 open
-  edges) to 217 (10 flipped, 0 open); `hall-shell` 9,264 (24 open) to 236 (0
-  open), every `hall-cassettes-*` row 0; `hall-floor-1-dark` 21,124 to 55;
-  `hall-roof` 44 to 0; `wonderland-stairs` 50 to 7; store-wide 473,056 to
-  424,147. `hall-blind-3-north` audits clean, so the blinds' speckle is shading
-  (paint or GI), not the bake.
-  Left, worse than the tip by the audit (the next lane's work): `goTable` 4,213
-  to 15,026 (its flush face prisms' seams: 2,929 flipped), `hall-floor-2` and
-  `-3` 20 to 6,295 (a 3 mm sliver and a shading band a cell wide where the
-  strip at z 30.4 meets the slab, the strip's side against the slab's 2 cm
-  ceiling finish), `wonderland-room` 1,163 to 7,232 and `hall-floor-0` 0 to
-  1,606 (flat floors the budget now refines: their tops read turned 180 degrees
-  against the audit's gradient at y 0.05 and 0.001, unexplained), the lift
-  doors 27 to 2,137, and `device-humble-gaming-deck-television` 0 to 5,010 open
-  edges with sharp boxes. Store-wide open edges rose from 52,181 to 63,591 with
-  sharp boxes alone (63,947 before this lane's refinement work). Every one is a
+- [medium] Sub-cell features (thinner than a bake cell: fillet crevices between
+  touching boxes, thin slabs, edges) drew badly across the gallery; boxes are now
+  sharp unless authored `rounding`, which fixed the stairs, shells and
+  cassettes, and the blinds' speckle is shading (paint or GI), not the bake
+  (`hall-blind-3-north` audits clean). Left worse than before by
+  `puck mesh audit --cpu` (the Next): `goTable` (its flush face prisms' seams,
+  mostly flipped faces), `hall-floor-2` and `-3` (a 3 mm sliver and a shading
+  band a cell wide where the strip at z 30.4 meets the slab's 2 cm ceiling
+  finish), `wonderland-room` and `hall-floor-0` (flat floors the budget now
+  refines: their tops read turned 180 degrees against the audit's gradient at
+  y 0.05 and 0.001, unexplained), the lift doors, and
+  `device-humble-gaming-deck-television`'s open edges. Every one is a
   touching-box seam or a thin layer inside a union, whose interior field
-  measures to the seam: the contour's interpolated normals (`TryNormal`) and
-  the ring's crossing gradients still read it. Contour patches that rewrite gap
-  samples (`GapFill`) or drop seam-pointing corners (`SeamGradient`) were
-  measured store-wide and opened more holes than they closed, so they are gone;
-  the fix is a field that is a distance across a seam, or crossings and
-  normals that never read an interior sample. Not yet run: `puck test
-  worlds/debug --jobs 1 --reproduce` (sharp-box colliders change contact at box
-  edges) and a lit, settled windowed look at the stairs (the boot's cold bake
-  ran past the GPU batch; windowed Direct3D 12 and Vulkan boots of this head
-  ran with no fault or refusal in stderr).
+  measures to the seam: the contour's interpolated normals (`TryNormal`) and the
+  ring's crossing gradients still read it. Contour patches that rewrite gap
+  samples or drop seam-pointing corners opened more holes than they closed; the
+  fix is a field that is a distance across a seam, or crossings and normals
+  that never read an interior sample. Not yet run: `puck test worlds/debug
+  --jobs 1 --reproduce` (sharp-box colliders change contact at box edges) and a
+  lit, settled windowed look at the stairs. (from: the owner's walkthrough,
+  bake-seams)
 - The 178 witnesses the colliders report counts as `mesh correspondence
   uncertified` all lie on the valley sectors' terrain masses (`main`,
   `shoulder-left`, `shoulder-right` of every `valley-*` sector, y between about
@@ -2426,16 +1713,11 @@ colliders report's only red findings left are the valley's relief
   camera and limb probes see no chair. Give the fixed-point query twin the
   fold, or bound the folded shape.
 - A creation whose contact shapes blend other than by hard union collides as
-  its composed field (`WorldColliderSet.CollidesAsField`), relieved or not: 78
-  of the debug world's 612 static colliders. Its cost, sampled thread time under
-  `FixedStepPump.Step` (`dotnet-trace`, headless, 40 s of the Moth strafing
-  through the flat-crown group at (8..16.5, -24)): `FixedFieldColliderContact.Solve`
-  3.5 % and the whole static sweep 13.5 % with the lawn trees unrelieved, against
-  2.7 % and 14.4 % with their former 2.5 cm relief, one run each on a shared
-  machine. Walking the rim at (0, 376, 470), whose relief is unchanged, Solve is
-  19.4 % and the sweep 30.6 %, the step-up's landing probes (`FixedStepUp.TrySnap`)
-  30.9 %. A cheaper exact join would be a smooth-union primitive pair with its
-  k/4 seam bound, if the field's cost ever becomes the limit. (from: far-hit)
+  its composed field (`WorldColliderSet.CollidesAsField`), relieved or not. A
+  cheaper exact join would be a smooth-union primitive pair with its k/4 seam
+  bound, if the field's cost ever becomes the limit; on the rim the step-up's
+  landing probes (`FixedStepUp.TrySnap`) are the larger share
+  ([certified field contact](#certified-field-contact)). (from: far-hit)
 - The bake-side causes live in the [rendering plan's](rendering.md)
   bake items: a long thin member of a static union baking at the union's capped
   lattice, the sharp-edge rounding of about a tenth of a cell, and the Moth's
@@ -2505,37 +1787,26 @@ reproduce worker for what remains.
   authored run. Not yet traced to the door that records or re-drives it.
   (from: fault-throw)
 - [low · fix when touched] `Fixtures.FreshServer` (`tests/Shared/World/Fixtures.Server.cs:112`) deserializes without `WorldStateSettlement.SettleBeforeAdmission`, so a boot from a raw document with a seeded responsive placement can show the response's prototype while colliding as the authored one, which the real loader never does. Settle in the fixture as the loader does. (from: the tip-reds lane)
-- [medium] Recording still costs about a third of the plain authored run.
-  The per-tick authority hash folds the arena from `RowVersion`-cached row
-  digests in 32-row segments, and every body slot's continuation afresh in
-  32-slot segments; the scoped replay runtime reads the same row digests
-  ([design and measurements](engine-job-system.md#the-incremental-state-hash)).
-  Hashes fold under the authority gate. `--reproduce` checks every replayed
-  tick against a full recompute and the first `--workers` count every recorded
-  tick; every other hash samples one row and one segment of the cache. A
-  headless host's screen-session mirrors drop their snapshots. Go's authored
-  seconds at `--jobs 1`: plain 256.7 s to 180.4 s, recorded 441.4 s to 247.1 s
-  with a body cache since deleted, which a back-to-back pair put at 21 s of a
-  310 s recording; the [packet](#refactoring-campaign) holds the body
-  write-door redesign a sound one needs. Left: the components that still fold whole every tick (body
-  continuations, `PopulationPose`, `BodyActionState`, `Navigation`, `Flock`,
-  `Input`) and the probe's per-tick input copy, unprofiled; `--reproduce`'s
-  replay pays the full recompute every tick, which is the check's price; a
-  replica's fixed 2.4-4 s floor per scenario is unmeasured since. Re-profile
-  Go's reproduce worker (`dotnet-sampled-thread-time`) before choosing the
-  next segment. (from: quiet-measure, tick-cost-2, incr-hash)
+- [medium] Recording still costs about a third of the plain authored run. The
+  per-tick authority hash folds the arena from `RowVersion`-cached row digests
+  in 32-row segments, and every body slot's continuation afresh in 32-slot
+  segments; the scoped replay runtime reads the same row digests
+  ([design](engine-job-system.md#the-incremental-state-hash)). The body
+  continuation's cache needs the write-door redesign in the
+  [refactoring packet](#refactoring-campaign). Left: the components that still
+  fold whole every tick (body continuations, `PopulationPose`,
+  `BodyActionState`, `Navigation`, `Flock`, `Input`) and the probe's per-tick
+  input copy, unprofiled; `--reproduce`'s replay pays the full recompute every
+  tick, which is the check's price; a replica's fixed floor per scenario is
+  unmeasured. Re-profile Go's reproduce worker (`dotnet-sampled-thread-time`)
+  before choosing the next segment. (from: quiet-measure, tick-cost-2, incr-hash)
 - [medium] Hall's test fixture uses `documentId: "hall-tests"`, so the garden
   and night references admit a separate full `debug` authority. Its root's
-  stopped-machines import does not stop that companion's six machines;
-  each root tick advances four authorities. Hall scenarios (each boots fresh;
-  the warm worker saves only the process's one-time start-up) were measured
-  reaching their first completed tick in tens of milliseconds under the former
-  host reuse, and Alchemy's one-tick cases spent 53–154 ms in authored work
-  excluding export: the measured seconds are not a fixed three-second authored
-  startup delay. Re-measure under the fresh boot. Have the scenario-fixture
-  lane remove the avoidable companion workload while preserving the scenarios'
-  claims, then measure its CPU contribution. (`worlds/debug/hall-tests.puck`;
-  from: boot-reuse profiling; the machine contribution is not isolated.)
+  stopped-machines import does not stop that companion's six machines, and
+  each root tick advances four authorities. Have the scenario-fixture lane
+  remove the avoidable companion workload while preserving the scenarios'
+  claims, then measure its CPU contribution under the fresh boot
+  (`worlds/debug/hall-tests.puck`; from: boot-reuse profiling).
 - [low] `--cache-dir` redirects only the `puck test` workers: the `puck test`
   process itself still persists compiles to the per-user `compilations`
   directory (`src/Puck.Cli.Worlds/WorldsRoot.cs:49`), and `TestCommandLawTests`
@@ -2545,7 +1816,7 @@ reproduce worker for what remains.
   `TestCommand.Leg.cs:515` and `docs/reference/cli.md`. (from: reproduce-cost
   review)
 - `replay.record` mid-session re-grants document grants revoked at runtime
-  (`Host.Addons.Finish` after the checkpoint captures grants), and refuses
+  (the host's addon `Finish` after the checkpoint captures grants), and refuses
   `StartNotCheckpointable` after every pumped addon was removed
   (`WorldPersistence.Checkpoint`). Read from the code in a pre-`main` review and
   not reproduced; confirm with a failing test before fixing.
@@ -2579,65 +1850,50 @@ the static round-section term's cost with `puck mesh audit --cpu`.
 
 ### Residency and streaming
 
-Owner: rendering lane (rendering, verification) · ordinary · Next: step 2, GI on
-the same demand points, after the [job-system memo](#engine-job-system) names GI's
-work units; re-measure the table below with the display on.
+Owner: rendering lane (rendering, verification) · ordinary, with the memory item
+high · Next: the memory item's attribution, then step 2, GI on the same demand
+points, after the [job-system memo](#engine-job-system) names GI's work units.
 
 The design is settled in [residency](../decisions/residency.md), from a
 three-family consensus: only presentation follows the observer; portals are
 edges, worlds and optional authored areas are nodes; one selector per
 presentation orders and bounds residency from every demand point; a door never
-waits for loading. Near-first ordering has landed (`SdfMeshDemand`, the
+waits for loading. Near-first ordering is in (`SdfMeshDemand`, the
 [mesh bake reference](../../.claude/skills/rendering/references/mesh-bake.md#groups-poses-and-materials)),
 and `world.residency [radius]` reads its measures.
 
-Measured on the lead machine, Direct3D 12, windowed debug world, spawn posed in
-the lobby (`debug.go desktop`), the machine shared with other lanes and the
-world running at 7 to 8 frames a second (re-measure with the display on); times are wall seconds from the bake's
-start, near is a group's planned box within the radius of the primary seat's
-eye (135 groups within 4 m, 264 within 8 m, of 2,078):
+#### Memory on the Deck tier
 
-| Cold bake (new bake identity) | near 4 m half / 90% / all | near 8 m half / 90% / all | all groups |
-|---|---|---|---|
-| Plan order (before) | 359 / 366 / 368 s | 359 / 366 / 430 s | 435 s |
-| Near-first (after) | 128 / 136 / 138 s | 136 / 151 / 180 s | 442 s |
+[high, the Deck] The debug world's process plus GPU memory stays at or under
+10 GB on the Deck tier (the lead's budget; the owner set no figure), measured in
+every settle window. A windowed World holds well past that, a tour roughly
+doubles it ([sweep](#sweep-and-visual-checks)) and the cold bake passes 16 GB
+([bake](#bake-proportional-to-change)); headless is a fraction of a gigabyte,
+so nearly all of it is presentation a player's build carries. Most of the
+process is unattributed, so attribution comes first: the memory account sees
+little of the process and Puck reads no device memory. Grounded causes:
 
-The card table on level 2 stands about 45 m from the lobby, outside both radii;
-its own landing time was not read apart. A first near-first build ranked by projected size alone;
-far terrain and shells outranked the lobby's small parts, and the lobby landed
-no sooner than in plan order (near 4 m: 47 of 135 at 160 s, all at 434 s).
+- The mesh library budgets meshes residencies still hold and forgets them, so a
+  re-plan reloads a second copy (`SdfMeshLibrary.cs:32`, `:285-304`).
+- The GI probe cache has no byte bound (`SdfMeshIrradiance.ProbeCache`,
+  `SdfMeshIrradiance.cs:2266`).
+- A prewarmed mesh store may ship in a player's build (AGENTS.md), so a player
+  need not bake cold.
 
-- Warm boot: the store loads 2,078 groups in 1.1 s (1,152 entries, 319 MB;
-  3.8 thread-seconds reading, 5.8 decoding, about 290 MB/s), and the near area
-  lands at 1.8 s whatever the order; the first staging writes the whole region
-  (1.37 GB) at once. A cold bake owes words on 22 to 35 frames, 2 MiB a frame
-  (`MeshLandingWords`).
-- Mesh bytes by level (region words): vertices 611 MB; level 0 39.6 M
-  triangles, 633 MB; level 1 5.7 M, 90 MB; level 2 2.5 M, 39 MB; 1.37 GB used.
-- `ProbeCache`: 20 MB after the bake at the lobby; 38 MB (30,008 probes: 8 MB
-  table, 30 MB probe blocks) after a nine-stop hall walk, 10 s a stop.
-- Program: 2,842 instances and 3.08 M words emit in 181 to 209 ms on the frame
-  thread and build in 192 to 209 ms; the bake's restart (replan) takes 81 to
-  143 ms on the frame thread.
-- The world's frame carries 53 demand points: the seats, and every camera
-  filmed for a screen or session, each measured in its own image's pixels
-  (`SdfViewSnapshot.DemandHeight`). A window nobody sees still demands
-  everything about its camera; step 3's mapped demand weighs it by its glass.
-- One group in the debug world has a mesh that no draw names, not yet
-  identified; `world.residency` counts it resident, since it costs the region
-  nothing.
+#### Steps
 
-1. Measure what the table leaves: `ProbeCache` after a valley flight, program
-   build and replan against more than one placement count, and time to the
-   occupied area after a document edit that renumbers materials (a code edit to
-   the bake closure is the cold row above). `world.residency` reads each.
+1. Measure what residency leaves unread: `ProbeCache` after a valley flight,
+   program build and replan against more than one placement count, and time to
+   the occupied area after a document edit that renumbers materials.
+   `world.residency` reads each, with the display on.
 2. GI on the same demand points, after the job-system memo names GI's work
-   units: the probe window follows every view, not
-   `Views[0]` (`SdfMeshIrradiance.cs:446-448`); the irradiance scene and its pending
-   gate are scoped to what the window reaches; `ProbeCache` (`:2217`) is
-   byte-bounded.
+   units: the probe window follows every view, not `Views[0]`
+   (`SdfMeshIrradiance.cs:456-458`, `WindowCamera`); the irradiance scene and
+   its pending gate are scoped to what the window reaches; `ProbeCache`'s byte
+   bound is the [memory item](#memory-on-the-deck-tier)'s.
 3. Mapped demand through portal faces, replacing the blanket baking share
-   (`WorldViewGraphHost.ResetFootprints`).
+   (`WorldViewGraphHost.ResetFootprints`). A window nobody sees still demands
+   everything about its camera; mapped demand weighs it by its glass.
 4. Eviction under one byte budget across residencies, with coarse levels owning
    compacted vertices; removes the throw past `GpuRegion.MaxByteCount`.
 5. Authored areas (a volume with openings, on an existing volume vocabulary),
@@ -2647,6 +1903,12 @@ no sooner than in plan order (near 4 m: 47 of 135 at 160 s, all at 434 s).
    budget.
 6. Terrain tiles as selector units ([valley](valley-and-moons.md) step 4), then
    the moons.
+
+- One group in the debug world has a mesh that no draw names, not yet
+  identified; `world.residency` counts it resident, since it costs the region
+  nothing.
+- A cold bake's first staging writes the whole mesh region at once; measure it
+  against step 4's budget.
 
 ### Vulkan regressions and GPU robustness
 
@@ -2683,18 +1945,6 @@ no sooner than in plan order (near 4 m: 47 of 135 at 160 s, all at 434 s).
   or a float reduction's); find it with the two runs' `[sdf.mesh-bake] slow`
   and per-group counts. A bake whose geometry depends on the backend or the
   run is a defect. (from: mem-fixes, meadow, settle-1)
-- Vulkan's draw-count gap is gone. At fifteen stops on one tree, root draws
-  across every pass agree within 1 % (stage 16,239 / 16,240, meadow 29,556 /
-  29,659, gallery 12,652 / 12,652, rim 1,571 / 1,572), and so do the mesh
-  pass's (1,061 / 1,062 at the stage, 3,782 / 3,887 at the meadow, where the
-  wind moves which blades a box keeps). Both backends bake the same 1,689
-  groups and the trace scene holds the same 2,041 static draws, where Vulkan
-  once counted 2,033 static draws against 1,689. The one stop apart is the
-  camera course, 7,612 / 10,401 with the mesh pass equal (282 / 281): the
-  difference is in the cascades, whose refresh frames a single counter read
-  catches or misses, so read it as two windows before calling it a gap.
-  R2's meadow 2,506 against 26,657 does not reproduce (29,590 / 29,668 in M1's
-  leg 1). (from: settle-1)
 
 Owner: rendering (GPU leg, lead GPU scheduling) · ordinary · Next: Vulkan's
 crossing frame (52.5 ms of produce) and the pixel-pass gap at locked clocks.
@@ -2774,7 +2024,7 @@ lease holder.
   exclusive probe confirmed its GPU guard remained held. No foreign process or
   lease file was changed. The cause is unconfirmed; inspect the owning session
   and the `OperatorWorlds.WatchAsync`/`Stop` lifecycle, then release it through
-  that session. Evidence and start ids are in the controls hand-back. The sweep's paired-tour
+  that session. The sweep's paired-tour
   qualification hit the same wait: its second tour and its retry each expired after
   1,200 s of GPU acquisition without starting a World and exited 1 with the windowed
   leg unmeasured.
@@ -2803,40 +2053,23 @@ Owner: suites lane · dormant until the owner restores test requirements (AGENTS
 suspends them for the refactoring campaign) · Next: triage the failing Windows
 shards by cause.
 
-- [low] `SdfWorldPassesLawTests` holds laws that fail under machine load and
-  pass alone (`ATemporalViewRunsTheTemporalFragmentWithHistoryAtItsOutput`,
-  `CadenceVisualChangesLeaveConvergedHistoryAndItsRingStanding`,
-  `AGridMoveSettlesForOnePeriodWithoutDiscardingHistoryOrRebuilding`): each waits
-  for a graph rebuild the thread pool runs. Wait on the graph's install signal,
-  never on elapsed frames or time, so the class passes under any load. (from:
-  sdfvm-signal, the lead's integration runs)
-
 The suite target (100 % line coverage plus the keep-list) and CI's `coverage` job
 are suspended; a red test or coverage job is not a stop, and a refactor rewrites
 or deletes tests freely.
 
-- `Puck.SdfVm.Tests` is green (478 laws) after the sdfvm-signal lane: three
-  engine regressions fixed (a refused build retried once on an unchanged frame,
-  a repeated library load re-read the store, settle accounting lost to the
-  native-ownership `Draw`), the rest updated to R2, the exit layer, the cold
-  bake's slab sampling and frame share, and the 2^21-sample dispatch.
-  `ATemporalViewRunsTheTemporalFragmentWithHistoryAtItsOutput` and
-  `CadenceVisualChangesLeaveConvergedHistoryAndItsRingStanding` each failed
-  once beside a World build and passed alone and in two class runs; both wait
-  on a thread-pool graph rebuild. (from: sdfvm-signal)
-- The thirteen standing red `Puck.World.Server.Tests` laws pass. The editor fixture now declares the one-bank bar the validator
-  requires; guest writes no longer enter the recovery journal (the laws read
-  echoes instead); a replay drive builds its boot image on a shadow server; a
-  load past the compilation bound waits rather than refusing. The editor
-  fixtures share `EditorBarFixtures` (a one-bank bar and its resting-page
-  overlay). `WorldNameRegistryLawTests` passes once `docs/world-name-registry.md`
-  is regenerated. (from: unbiased-2)
 - [medium] The first main run after the fundamentals landing fails all four
   Windows test shards, where earlier runs failed only shard 3. Tests do not gate
   deploy during the refactoring campaign, but the jump may hide real regressions
   among stale tests. Triage the failing tests by cause: stale after a deliberate
   change, update or delete; timing-dependent, fix or delete; a real regression,
   fix. Read the failures with `gh run view --log-failed` on that run.
+- [low] `SdfWorldPassesLawTests` holds laws that fail under machine load and
+  pass alone (`ATemporalViewRunsTheTemporalFragmentWithHistoryAtItsOutput`,
+  `CadenceVisualChangesLeaveConvergedHistoryAndItsRingStanding`,
+  `AGridMoveSettlesForOnePeriodWithoutDiscardingHistoryOrRebuilding`): each waits
+  for a graph rebuild the thread pool runs. Wait on the graph's install signal,
+  never on elapsed frames or time, or delete them. (from: sdfvm-signal, the
+  lead's integration runs)
 - The keep-list (owner approval): exact results and determinism
   (`Puck.Maths.Tests` `LawTests`; World.Server `MusicReplayReDerivabilityLawTests`,
   `CrossingReplayLawTests`, `ReplayForkLawTests`,
@@ -2856,14 +2089,12 @@ or deletes tests freely.
   owner says whether any return.
 - Find what removed live run directories during one concurrent CPU run: with
   every CPU suite under coverage four at a time, `Puck.World.Tests` and
-  `Puck.World.Silo.Tests` crashed at exit (exit `-532462766`) because their
+  `Puck.World.Silo.Tests` crashed at exit because their
   `puck-protoref-process-*` directories were gone when `VocabularyHooks`'
-  process-exit handler resolved them, and one
-  `WorldTransferTurnRecoveryLawTests` row failed the same way; four live
-  directories of four processes went within about three minutes. The
-  `build/RunDirectory.cs` sweep is not shown to be it (logged sweeps removed only
-  exited owners' directories). Next time, log every deletion under the temporary
-  root while the suites run before changing the policy.
+  process-exit handler resolved them. The `build/RunDirectory.cs` sweep is not
+  shown to be it (logged sweeps removed only exited owners' directories). Next
+  time, log every deletion under the temporary root while the suites run before
+  changing the policy.
 
 ### Debug tools
 
@@ -2930,10 +2161,6 @@ Klondike table stands north of the Go table in the board game room
 (`worlds/debug/shapes.md`); the look is the owner's review.
 
 - The lead's window over the Klondike table showed three defects (court figures standing through the cards laid over them, unreadable pips on the dark ground, a layout crammed at the far edge); the standard deck's two variants, the flattened court figures and the centred 10.6 cm layout answer them headless. Next: the lead's windowed look, close and wide, with the script in `worlds/debug/cardtable.md`.
-- Landed: the deck (`worlds/standard/cards.puck`, a library any author imports,
-  52 faces and a back as SDF creations), Klondike and the `solitaire.puck`
-  collection (`worlds/debug/klondike.puck`, `solitaire.puck`), the table
-  (`cardtable.puck`) and its `test` blocks (`cardtable-tests.puck`).
 - Prior art still quarantined for the next steps (the
   [port packet](#port-the-experimental-worlds-missing-features) inventories it): `experimental/src/Puck.World/Assets/worlds/games/`
   holds Spider (one, two or four suits), FreeCell and poker with a hand-strength
@@ -2946,12 +2173,10 @@ Klondike table stands north of the Go table in the board game room
   Letting a hand lift a card with `body.carry` and judging where it lands would
   be a second input path beside the cursor.
 - The rules' work-budget cost is the table's price: Klondike with its table is
-  about 200,000 units of the sheet. With the batched Go reads and the one-piece
-  chess moves priced by their `maxFirings`, the debug world's sheet is about
-  2,550,000 of the 4,250,000 ceiling; FreeCell and the game switch add about
-  215,000 (2,765,000 read from `world.budget` on a headless World), the chess
-  search needs about 600,000 of the remaining 1,485,000, which leaves Spider about
-  885,000.
+  about 200,000 units of the sheet and FreeCell with the game switch about
+  215,000. `world.budget` on a headless World reads the debug world's sheet
+  against the ceiling, `RuleCapacity.MaxWorkUnitsPerTick`; the chess search needs
+  about 600,000 of what remains, and Spider takes what is left after it.
   A transfer between named piles costs a few thousand where one between piles a
   live zone table picks costs about 140,000 (the disclosure term grows with the
   square of the piles the table reaches), so every deal step, gather step and
@@ -2989,134 +2214,87 @@ Klondike table stands north of the Go table in the board game room
 ### Sweep and visual checks
 
 Owner: sweep follow-up, with the lead scheduling the GPU slot · medium ·
-Next: reproduce the companion overlaps, then one paired windowed tour (about 18
-minutes of GPU) when no lane holds the GPU, compared stop by stop, with
-`--attach` on one World for both runs.
+Next: reproduce the companion overlaps, then one paired windowed tour when no
+lane holds the GPU, compared stop by stop, with `--attach` on one World for
+both runs.
 
 - [high] The windowed leg never reaches its tour while the day cycle runs.
   After settling, the sweep runs `world.rate resume`, `world.wait 300`,
   `world.rate pause` in one 120 s call (`SweepCommand.cs:267`) with lockstep on,
-  and a lockstep frame drains the irradiance relight to the end before it
-  renders (`SdfMeshIrradiance.Stage`, `SdfMeshIrradiance.cs:538-559`). The day
-  cycle moves the sun every tick, which moves the lighting version in
-  `DrainKey()` (`:578`), so every frame relights all 589,824 probes, about 10 s
-  (`[sdf.mesh-gi] done … traced=0 relit=589824 … seconds=9.8`). Reproduced on
-  Direct3D 12: with lockstep on and the day running, 3 ticks took 34.4 s; with
-  the sun held (`world.row.set state day advance
-  {"perSecondNumerator":0,"perSecondDenominator":1}`), 300 ticks took 22.2 s.
-  Both of the settle window's sweeps failed this way (owned on Direct3D 12,
-  attached on Vulkan: the call timed out and the attachment closed, so every
-  windowed signal and still is unmeasured). An attached Direct3D 12 tour with
-  the sun held before attaching passed the warm-up, read its signals and took
-  74 of the tour's 75 stills (all but `night-field`) before the session's
-  memory reaper stopped the run, so it wrote no report. Fix at the cause: a
-  lockstep frame relights only what the frame's own time moved (or holds the
-  sun at the tick it presents), rather than draining a full relight per tick;
-  holding the sun in the plan's prelude does not help, since the warm-up runs
-  before the prelude. (from: settle-1)
+  and every lockstep frame relights every probe under the moving sun, so the
+  call times out and every windowed signal and still goes unmeasured. The cause
+  is the [lockstep relight](#lighting-and-gi); holding the sun in the plan's
+  prelude does not help, since the warm-up runs before the prelude. Until it is
+  fixed, a tour runs attached with the sun held before attaching
+  (`world.row.set state day advance
+  {"perSecondNumerator":0,"perSecondDenominator":1}`). (from: settle-1)
 - [medium] `world.debug-view report colliders --json` throws
   `DivideByZeroException` (`[world.debug-view: handler threw
   DivideByZeroException: Attempted to divide by zero.]`) on the debug world,
   headless and windowed, so the sweep's colliders signal is red on a refusal;
   the answer carries no stack. Reproduce it in a headless World and fix the
   division. (from: settle-1)
-- [low] A sweep's `--baseline` names one report, but a split run (a headless
-  report and a windowed one, as the last kept baseline was) marks every signal
-  the other leg read as `baseline: new signal`, red. Keep each window's sweep as
-  one report, both legs together, so the next window compares whole.
-  (from: settle-1)
-- [high] The tour's last stop does not survive the lead machine's memory. Two
-  attached Direct3D 12 tours with the sun held reached all 74 stills through
+- [high] The tour's last stop does not survive the lead machine's memory: two
+  attached Direct3D 12 tours with the sun held reached every still through
   `garden`, then the session's memory reaper stopped the run during
-  `night-field`, before the sweep wrote its report; both times. The World
-  starts the tour at 13.9 to 14.5 GB private (`host.memory`: managed committed
-  3.2 GB, the native allocator 2.6 GB, the rest other native memory and the
-  device's mapped heaps) on a 31.7 GB machine. Crossing back from the garden re-plans the
-  `world` residency (7,101 then 7,113 groups) and loads 1,048 meshes while the
-  previous set is still held, and bakes 14 groups the store no longer holds: the
-  per-user mesh store sits at its cap (8,496,012,457 of 8,589,934,592 bytes,
-  32,866 entries in 20 identity sets), so a crossing evicts and re-bakes. Until
-  that peak falls, the tour completes only as two attached runs (`--stop` every
-  stop but `night-field`, then `night-field` on a fresh World). Find what the
-  crossing holds twice, and stop the store's cap from evicting the live
-  identity's meshes for older identities' entries. (from: settle-2)
-  - Measured as two runs on each backend (`host.memory` private): a fresh
-    World at 10,451 to 10,694 MiB before the 74-stop tour ends it at 22,197 MiB
-    (Direct3D 12) and 19,891 MiB (Vulkan), and `night-field` alone takes a
-    fresh World from 8,101 to 16,099 MiB (Direct3D 12) and from 10,590 to
-    15,855 MiB (Vulkan). The tour keeps what each stop loaded, and the one
-    crossing back from the garden adds 5,265 to 7,998 MiB by itself.
-    (from: settle-2)
-- **The sweep baseline is four reports** (each a `puck.sweep.v1` attached
-  windowed leg with the sun held, `--no-headless --no-scenarios`): per backend,
-  `settle-2-sweep-<backend>-main/report.json` (74 stops: every stop but
-  `night-field`) and `settle-2-sweep-<backend>-night/report.json`
-  (`night-field` alone), kept on the lead machine under
-  `%LOCALAPPDATA%/Puck/sweep-baselines/settle-2/` (outside the repository,
-  like any derived product; a later window replaces it). The headless leg and the scenarios last ran
-  whole in settle-1's owned Direct3D 12 sweep (tools clean, scenarios clean).
-  The next window reproduces the split and compares each part with its own
-  counterpart: boot `--paused --control`, hold the sun
-  (`world.row.set state day advance {"perSecondNumerator":0,"perSecondDenominator":1}`),
-  then `puck sweep --attach <attachment> --no-headless --no-scenarios
-  --stop <every stop but night-field> --baseline <...>-main/report.json`, and on
-  a fresh World `--stop night-field --baseline <...>-night/report.json`. Both
-  parts read 74 + 1 stills against settle-1's October baseline: 32 clean, 42
-  amber and the new `night-field` on each backend; the red signals are the
-  baseline's drift (placements 1,078 to 5,157, rules 735 to 1,426, private
-  6,668 to 13,310 MiB), the colliders refusal, the frames read under lockstep
-  (about 67 ms, each tick waiting for its frame, so they are not the frame
-  bar), and the watchdog's four `companion-overlap bodies=0+42` records.
+  `night-field`, before the sweep wrote its report. The tour keeps what each
+  stop loaded, and the one crossing back from the garden re-plans the `world`
+  residency and loads its meshes while the previous set is still held, adding
+  several gigabytes by itself; it also re-bakes groups the per-user mesh store
+  evicted at its cap for older identities' entries. Until that peak falls, the
+  tour completes only as two attached runs (`--stop` every stop but
+  `night-field`, then `night-field` on a fresh World). Find what the crossing
+  holds twice, and stop the store's cap from evicting the live identity's meshes
+  for older identities' entries ([memory](#memory-on-the-deck-tier)).
   (from: settle-2)
-- [medium · tool gap] `puck sweep --baseline` takes one report
-  (`SweepCommand.cs:28`, an `Option<string>`), so a tour split into parts
-  cannot be compared as one, and a report does not merge two runs. Accept
-  several `--baseline` reports, matching each stop and signal to the report
-  that holds it, or a `puck sweep merge` that writes one report from parts.
-  (from: settle-2)
-
-- [medium] The windowed `--tour` does not repeat to its 2 % threshold on a long-running World: an identical re-run of the same build on the same World put 17 stops past 2 % (wing-door-far 99.3 %, revolved-floor 41.7 %), and the GI counters differ with World history (`sdf.mesh-gi.camera-traces` 304 against 573), so a cross-build comparison through it cannot separate a change from lighting history. A difference in nearly every pixel looks like exposure: a camera moved by a stop's teleport is a cut, so the exposure jumps to the meter's target, and the meter's camera-trace sample ring (`SdfMeshIrradiance`) reused samples by where the camera stood before. A cut now meters fresh at the camera (`TryMeter(fresh:)`) and snaps to that first reading, so the cut's sample no longer depends on history; the probe reading still depends on which cells the trace has cached. The tour reads `world.exposure` at each held tick (`SweepStillResult.Exposure`) and a still past the amber fraction says whether its exposure differs from the baseline's; the paired tour on one `--attach`ed World confirms whether the remaining difference is the probe cache's. (from: bake-scale lane)
-- Finish sweep-honest's paired motion qualification: its first final tour
-  measures all 23 windowed signals and captures all 64 stops cleanly, and 62
-  unchanged stops' motion records match an earlier fresh tour exactly; the second
-  tour and its retry could not start a World for want of the GPU lease (see the
-  [stale lease holder](#mcp-and-the-operator-attachment)). Rendering and runner
-  integrations landed after the first tour, so the current-integration windowed
-  reading and the all-64 motion comparison are unconfirmed.
-- The windowed tour's pause: holds, a boot pause and a capture-tick pause are
-  implemented so that ambient bodies, the lift, the companion and the spin
-  exhibit land on the same ticks every run (`SweepRun.cs`); paired motion
-  captures have not shown it. A cold Direct3D 12 run stayed at tick 0 until its
-  nine-minute deadline with the render stack waiting on an upload fence; that
-  cold stall's cause is unconfirmed.
+- The sweep baseline is the four reports of the last settle window (a main tour
+  and a `night-field` part per backend, attached windowed legs with the sun
+  held, `--no-headless --no-scenarios`), kept on the lead machine outside the
+  repository like any derived product; a later window replaces them. The next
+  window reproduces the split and compares each part with its own counterpart.
+  Their red signals were the baseline's drift, the colliders refusal, frames
+  read under lockstep (each tick waiting for its frame, so not the frame bar),
+  and the watchdog's `companion-overlap` records. (from: settle-2)
+- [low] A sweep's `--baseline` names one report, but a split run (a headless
+  report and a windowed one, or a tour in parts) marks every signal the other
+  part read as `baseline: new signal`, red, and a report does not merge two runs
+  (`SweepCommand.cs:28`, an `Option<string>`). Accept several `--baseline`
+  reports, matching each stop and signal to the report that holds it, or a
+  `puck sweep merge` that writes one report from parts. (from: settle-1,
+  settle-2)
+- [medium] The windowed `--tour` does not repeat to its 2 % threshold on a
+  long-running World: an identical re-run of the same build on the same World
+  put many stops past 2 %, and the GI counters differ with World history
+  (`sdf.mesh-gi.camera-traces`), so a cross-build comparison through it cannot
+  separate a change from lighting history. A cut now meters fresh at the camera
+  (`TryMeter(fresh:)`), so the cut's exposure no longer depends on history; the
+  probe reading still depends on which cells the trace has cached. The tour
+  reads `world.exposure` at each held tick (`SweepStillResult.Exposure`); the
+  paired tour on one `--attach`ed World confirms whether the remaining
+  difference is the probe cache's. (from: bake-scale lane)
+- The paired motion qualification: the windowed tour's holds, boot pause and
+  capture-tick pause land ambient bodies, the lift, the companion and the spin
+  exhibit on the same ticks every run (`SweepRun.cs`), and paired motion
+  captures have not yet shown it on the current integration (the second tour
+  could not start for want of the GPU lease; see the
+  [stale lease holder](#mcp-and-the-operator-attachment)). A cold Direct3D 12
+  run once stayed at tick 0 until its deadline with the render stack waiting on
+  an upload fence; that cold stall's cause is unconfirmed.
 - [medium] The full windowed sweep records companion overlaps between bodies 0
-  and 42: the first recovered tour counted three events, at ticks 861 to 3997,
-  after a clean initial watchdog reading, and `watchdog.after-tour` correctly
-  turns red. Find which walking or pose transitions let the companion touch her
-  and fix its separation (`worlds/debug/addons/companion.wat`); no watchdog
-  exception or counter reset. Evidence:
-  `sweep-honest-recovered-tour-a/windowed/watchdog-log.after-tour.txt`.
-  (owner: companion/contact follow-up)
-- Measure boot-once's windowed workload through the integration sweep: its
-  qualification was headless, and the original state and physics timings
-  regressed, so keep per-file timing and boot and work counts when reading the
-  full sweep.
-- Temporal-shimmer's required cross-family renderer review and quiet-machine
-  frame/memory qualification remain with integration. Its C1 source captured
-  all 70 tour stops across three bounded Direct3D runs against the 64-stop base;
-  45 exceed 2 %. Every name, percentage and inspected explanation is in the
-  lane's `tour-final-comparison-notes.md`. New valley geometry, changed motion
-  ticks and a held-lift baseline explain some differences; broad static-lighting
-  differences remain unisolated. A same-World shader comparison at
-  `gather-teal-door-far` changed only 0.008941 % beyond 16 RGB levels between
-  original and current resolve, so that sampled broad lighting change is not
-  explained by the resolve alone. This is not attribution for every stop.
-  The final merge of `lead/catch-up` adds five granary stops beyond
-  that measured plan. Rerun the integrated tour, standing/walking frame readings
-  and gallery/lift body patrol. History grew from 6 to 47 uint words per output
-  pixel: 164 extra bytes per allocated history surface, or 180.18 MiB at
-  1280x900. Measure the actual view/slot allocation; the loaded paired shader
-  readings establish no quiet-machine 60 FPS or VRAM qualification.
+  and 42 after a clean initial watchdog reading, and `watchdog.after-tour`
+  correctly turns red. Find which walking or pose transitions let the companion
+  touch her and fix its separation (`worlds/debug/addons/companion.wat`); no
+  watchdog exception or counter reset. (owner: companion/contact follow-up)
+- Read boot-once's windowed workload through the integration sweep: its
+  qualification was headless, so keep per-file timing and boot and work counts
+  when reading the full sweep.
+- Temporal-shimmer's cross-family renderer review and quiet-machine frame and
+  memory qualification remain with integration. Its tour comparison left broad
+  static-lighting differences unisolated (new valley geometry, changed motion
+  ticks and a held-lift baseline explain some); rerun the integrated tour,
+  standing and walking frame readings and the gallery and lift body patrol.
+  History grew to 47 uint words per output pixel (`HistorySurfaceWords`);
+  measure the actual view and slot allocation against the frame's memory.
 
 ### Dual-stick play and the Moth's motion
 
@@ -3125,23 +2303,14 @@ reversal brake, then a sitting; the rate-limited facing op only if a
 movement-facing scheme returns.
 
 - [medium · owner: lead verification] Finish the controls visual checks in the
-  lead's windowed batch. The owner's controls brief makes this a GPU-free lane:
-  the earlier extraction comparison is owed alongside the new zoom/reset,
-  dash lean and thruster flare, all bar layouts, wings and compact/full stills;
-  it is no longer a prerequisite to implementing those controls. Headless
-  readbacks pass, all 23 input scenarios reproduce with their original 84
-  verdicts/export ticks, and the three dash scenarios reproduce including thin
-  wall contact. Run the saved before/after extraction scripts and the unrun
-  camera, bars and dash scripts under the controls worktree's
-  `.claude/scratch/controls-evidence/`; inspect the same workload on Vulkan,
-  read standing/walking frame time and patrol the stage. The hand-back is
-  .claude/scratch/controls-handback.md (lead checkout, ignored). Judge the dash's
-  feel. The owner tuned the bar live: the standard keeps two layouts, wings
-  (default one page at a time, or full wings) and sidebars, every page twelve
-  pad slots in both; the cluster, `keys` and `pad` layouts are deleted. Compact/full
-  and the dash's appearance remain unconfirmed. The durable
-  controls and commands live in the [standard package](../../worlds/standard/README.md)
-  and [Moth controls](../../worlds/debug/avatars/moth.md#controls).
+  lead's windowed batch: the extraction comparison beside the zoom and reset,
+  the dash lean and thruster flare, both bar layouts (wings, one page at a time
+  or full, and sidebars, every page twelve pad slots) and the compact and full
+  stills; inspect the same workload on Vulkan, read standing and walking frame
+  time and patrol the stage, and judge the dash's feel. Headless readbacks and
+  the input and dash scenarios already reproduce. The durable controls and
+  commands live in the [standard package](../../worlds/standard/README.md) and
+  [Moth controls](../../worlds/debug/avatars/moth.md#controls).
 - [low · owner: play-feel lane] A timed impulse integrates only inside
   `IntegratePlanarAndVerticalVelocity` and `IntegrateScratchVelocity`
   (`WorldBody.Step.cs`, `IntegrateOverlay`). On a body whose motion program has
@@ -3160,7 +2329,7 @@ movement-facing scheme returns.
   singel` echoes `model=singel` and `world.binding-bar` reads `stacked true` on
   a headless debug World. Refuse an unknown model by name.
 - [low · owner: play-feel lane] A requested boom distance replaces the orbit
-  op's distance outright (`SdfCameraProgram.Evaluate`, `look.Distance ??
+  op's distance outright (`SdfCameraProgram`'s `Evaluate`, `look.Distance ??
   orbit.Distance.Resolve`), and `WorldSeatViewState.AuthoredDistance` reads the
   first orbit op's literal. A scalar-bound orbit distance stops responding after
   the first scroll; the Moth's is a literal 4.2. Unconfirmed in a world: none
@@ -3223,41 +2392,27 @@ movement-facing scheme returns.
 ### Temporal shimmer and cadence flicker
 
 Owner: integration rendering follow-up · medium · Next: re-measure the original
-off-mode blink with the display on at a quiet cadence, refresh holds active, on both
-backends. The reconstruction
-item is closed: both windowed backends now converge at the packet's two poses;
-receiver-plane depth, exact stationary motion and the bounded eight-phase
-window are documented in the rendering skill. In 16 presented frames, gallery
-max mean abs dY fell from 1.2785 to 0.0049 on Direct3D and from 1.0677 to 0.0082
-on Vulkan, against adjacent off controls 0.0073 and 0.0093. On-mode changed-pixel
-maxima remain 414/0.945 % and 434/0.990 %, respectively; this is not exact zero.
-The corrected sill changes at most 1 pixel on/6 off on Direct3D, 3 on/4 off on
-Vulkan. The lane's `handback-current.md` retains all before/after bursts and
-the completed 70-stop comparison manifest.
+off-mode blink with the display on at a quiet cadence, refresh holds active, on
+both backends. The reconstruction converges at the packet's poses on both
+windowed backends (receiver-plane depth, exact stationary motion and the
+bounded eight-phase window are documented in the rendering skill); on-mode
+still changes a fraction of a percent of pixels, not exactly zero.
 
-- [medium] The original off-mode sill burst has two paired flashes 11
-  presentations apart, 3.18–3.42 % changed with max abs dY 26.28 (w06-burst-off
-  frames 1/2 and 12/13 under `D:/Source/ByteTerrace/Puck/.claude/scratch/walkthrough/`).
-  Region 0.36 0.78 0.32 0.1; `body.pose 16.15 13.57 37.28 191 0 0`;
+- [medium] The original off-mode sill burst had two paired flashes 11
+  presentations apart. Region 0.36 0.78 0.32 0.1;
+  `body.pose 16.15 13.57 37.28 191 0 0`;
   `view.override camera look 15.508 16.895 33.842 16.155 14.57 37.279 55`;
-  lift held open at level 3. The old shaft-lintel lids coincided with the slab
-  top. All 481 and 553 pixels with abs dY > 5 in the two original flashes lie
-  inside that projected lid (2-pixel filter margin). A matched material-ID
-  comparison, with temporal, shadows, AO and indirect off, shows triangular
-  competing material winners before separation and a uniform floor after it.
-  The authored lintels now end at the slab underside; their overlap is fixed.
-  The natural paired blink was not reproduced even in an old-geometry
-  120-frame burst under load. The final runs report `shadow-far.held=0`, so
-  they do not qualify a cadence refresh. Two events do not establish a period;
-  no particular far-shadow, GI or screen refresh is proved responsible.
-  A quiet Direct3D 12 run at this pose (lift at level 3, `world.temporal off`,
-  bakes settled) did not reproduce it: a 120-frame presented burst over that
-  region changed at most 5 pixels and max abs dY 0.72 in any frame (41 of 119
-  pairs changed at all). That World presented at 7-8 FPS, about 3.5 ticks a
-  frame ([the job system's scheduling](#engine-job-system)), so this is not yet the
-  refresh cadence the item asks for; one burst, Direct3D only. Re-run it on both
-  backends once the frame time is fixed, before closing the item. (from: owner
-  walkthrough; quiet-measure)
+  lift held open at level 3. Every bright pixel of the two flashes lay inside
+  the old shaft-lintel lids, which coincided with the slab top; the authored
+  lintels now end at the slab underside, and a matched material-ID comparison
+  shows a uniform floor after the separation. The natural paired blink was not
+  reproduced since, but no run qualified a cadence refresh
+  (`shadow-far.held=0`), and a quiet Direct3D 12 burst at this pose presented at
+  a few frames a second, not at the refresh cadence the item asks for. Two
+  events do not establish a period, and no particular far-shadow, GI or screen
+  refresh is proved responsible. Re-run it on both backends once the frame time
+  is fixed ([the job system's scheduling](#engine-job-system)), before closing
+  the item. (from: owner walkthrough; quiet-measure)
 
 ### Language and authoring
 
@@ -3295,9 +2450,6 @@ hang, then the pre-`main` language findings.
   "the basis list carries it more than once", so the garden's crowd fixture
   re-expands only `pondFlocks`. Effects are ordered actions, not a keyed set.
   (from: garden)
-- [low] The rule work-unit ceiling reads 4,250,000 on the port page and
-  4,000,000 in the valley plan. Reconcile both pages against `world.budget`.
-  (from: composition)
 - [medium] A solid creation shape without `position` throws instead of giving
   an authoring diagnostic: `WorldDefinitionValidator.Placements.cs:1723`,
   through `DocumentSpatialValues.cs:143`, throws `NullReferenceException`. A
@@ -3462,8 +2614,7 @@ brief's priorities ([security review](../development/security-review.md)).
   each review found more. [The disclosure plan](disclosure.md) is the structural
   fix; its [findings table](disclosure.md#the-findings-this-plan-answers) keeps
   every finding's file, line and step, and its [build order](disclosure.md#the-build-order)
-  is the queue; the adversarial review of its first draft is answered in its
-  [review table](disclosure.md#the-design-reviews-findings). Open by step:
+  is the queue. Open by step:
   - Step 0: the noninterference harness (`puck disclosure`) and the four
     authored games (`worlds/debug/auction.puck`, `shedding.puck`,
     `deduction.puck`, `skirmish.puck`, each with a `<game>-disclosure.puck`
@@ -3519,7 +2670,7 @@ brief's priorities ([security review](../development/security-review.md)).
   - Steps 5 and 6, the compiler and the deletion of every other predicate
     ([decision 6](disclosure.md#6-the-compiler-holds-the-line)): the authority
     `internal` to `Puck.World.Server` (`WorldServer.RuleHostSeam.cs:8,23` are
-    public routes today), `WorldOperatorAuthority`, `CommandDefinition.Operator`,
+    public routes today), `WorldOperatorAuthority`, an operator factory on `CommandDefinition`,
     DISC001 over module declarations, the public-surface law,
     `WorldStateDisclosure` deleted. Step 7, the red-team extension.
 - [low] Three consumers still turn an absent expression into a number, which
@@ -3749,7 +2900,7 @@ ordinary · Next: new content and art on the owner's call.
   [job-system memo](#engine-job-system))
   ([combat decision](../decisions/engine-design.md#combat-is-world-content-on-generic-queries-fields-and-input);
   the quarantined `arena.puck` district is the rules' prior art):
-  - spatially scoped pair queries on `WorldInteraction.Distance` over
+  - spatially scoped pair queries on `WorldInteraction`'s `Distance` kind over
     `FixedSpatialNeighborhood`, replacing the Cartesian scan, reused by targeting
     and area effects;
   - action input on the 32-axis, 64-button wire through the ordered events,
@@ -3880,17 +3031,15 @@ Owner: the lead · ordinary · Next: the Monitor hook check.
 
 - After the first settle window: give Antigravity (Gemini Argon) a fair
   coding trial before deciding its role (the owner's direction: it has so far
-  done research only, where its code citations were unreliable). Its research
-  record before the trial: the aspnetcore#70219 second opinion audited 28 PRs,
-  found real errors in Claude's report, and caught compatibility imports and
-  the wall-clock-in-parallel-lanes hazard; the lead's 3/3 spot checks held. It
-  also invented one figure ("194.2 ms vs 11.1 ms") and misread one PR (#70158),
-  so its numbers are checked before use. Two bounded
-  issue fixes from this file, each in its own worktree with a mechanical check:
-  the five duplicate `HeapAllocator` test allocators and `IAllocator`'s untrue
-  documentation (small), and the Superellipsoid's loose far field plus its
-  small-radius CPU/GPU disagreement in both interpreters (medium, with laws
-  shown failing first). Score each objectively, beside comparable Claude and
+  done research only, where its code citations were unreliable and one figure
+  was invented, so its numbers are checked before use). Two bounded issue fixes
+  from this file, each in its own worktree with a mechanical check: the five
+  duplicate `HeapAllocator` test allocators and `IAllocator`'s untrue
+  documentation (small, [refactoring](#refactoring-campaign)), and the
+  Superellipsoid's loose far field ([certified field contact](#certified-field-contact))
+  plus its small-radius CPU/GPU disagreement ([the valley's terrain](#the-valleys-terrain))
+  in both interpreters (medium, shown working by running both interpreters on
+  the failing inputs). Score each objectively, beside comparable Claude and
   Codex lanes: does it build and pass what it claims (the lead reruns every
   command); high and medium findings from a Claude and a Codex review; brief
   adherence (scope, reuse of existing mechanisms, no shared-state git); report
@@ -3921,6 +3070,20 @@ Owner: the lead · ordinary · Next: the Monitor hook check.
   v08 (`citations-boots-world`) and v12 (`shows-by-running`). Decide for each
   whether the skill lacks the teaching or the case is wrong, fix that, and rerun
   the suite with a budget that judges every run.
+- [medium] Generate `docs/reference/cli.md`'s verbs index and a synopsis per
+  verb from `PuckRootCommand`'s command tree: usage, arguments, options
+  (aliases, type, the `DefaultValueFactory` default, description) and
+  subcommands, written and `--check`ed by a docs verb as `puck vocabulary`,
+  `registry` and `verbs` do. It replaces the hand-typed option fences and default
+  paths (four of four checked had drifted, among them `puck bench`'s startup
+  default and `puck test`'s absent default path) and the eight copies of the
+  quarantine boilerplate, with a quarantine note only where code reads
+  `experimental/` (parity, canary and determinism). Hand-written text stays:
+  conventions, publishing and installing, each verb's purpose and what it
+  measures, how to read reports, format safety, and GPU and lease needs. Then
+  shrink the content-search reference's "Flags (as built)" and the
+  symbol-analysis reference's flag lists, which repeat the registered options.
+  (from: docsverify-claude)
 
 ### Quarantined gates
 
@@ -3932,9 +3095,9 @@ runs until the owner calls for qualification; then each is a packet.
 
 - Real-World canaries (`puck canary`, `experimental/tests/Puck.World.Canaries`):
   the behavioural proofs of the World's load-bearing seams on the real
-  executable, the one gate for game behaviour. With no canary directory,
-  `puck canary`, `puck affected` and `puck gate` select an empty set. The
-  coverage map waits at `experimental/tests/Puck.Affected/canary-coverage.json`.
+  executable, the one gate for game behaviour. One live canary remains,
+  `tests/Puck.World.Canaries/self-update` over the debug world (the launcher's
+  update and rollback); the rest wait under `experimental/`. The coverage map waits at `experimental/tests/Puck.Affected/canary-coverage.json`.
   When they return, the runner's listener work finishes: a single companion
   authority still receives a pre-picked UDP port, because its document names its
   own endpoint as `host.authority` before it boots (the World would adopt its
@@ -4049,11 +3212,10 @@ read one. The plans that keep open items:
   [the valley, the moons and the flight between](valley-and-moons.md#phases):
   the quality test at the bar, then eight phases from a measured baseline to the
   round trip.
-- [The simulation step off the frame thread](simulation-thread.md): the
-  tick-to-produce handoff, input to the job-system memo; phases 2 and 3.
 - [Companion custody protocol](companion-redesign.md): build steps 6 to 10.
 - [UI](ui.md#open-items): step 1's remainder, then steps 3 to 6 behind the
   fundamentals and step 2 after a GPU-cost measurement of the element walk.
 - [Editor](editor.md#open-items): E2 to E4, E6 to E8, E11 to E14's remainders.
-- [Milestone 1 acceptance laws](acceptance-laws.md#open-items): the inventory of
-  observable invariants and the scenarios still uncovered.
+- [Milestone 1 acceptance laws](acceptance-laws.md#open-items): the unbuilt
+  refusal arrangements and the crossing and restore variants, dormant while
+  test requirements are suspended.

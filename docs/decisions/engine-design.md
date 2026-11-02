@@ -224,6 +224,8 @@ fixtures moved (canaries, parity, determinism, the counters workloads other
 than the debug world's, the qualification profile and the world baselines)
 keep their verbs and wait, unrun, until the owner calls for qualification; the
 [open items](../plans/open-items.md#quarantined-gates) record what each covered.
+One live canary remains, `tests/Puck.World.Canaries/self-update`, over the
+debug world.
 A quarantined world does not return (the owner's ruling): what it has that the
 debug world lacks is ported into the debug world
 ([the port packet](../plans/open-items.md#port-the-experimental-worlds-missing-features)),
@@ -334,7 +336,7 @@ held.
   history and state projections are engine mechanisms. Elements, vitality,
   statuses, abilities, recipes, art and the faerie's reactions are world
   content, authored as states and tags, never engine enums.
-- **Pairs are found by a bounded spatial query.** `WorldInteraction.Distance`
+- **Pairs are found by a bounded spatial query.** `WorldInteraction`'s `Distance` kind
   runs over `FixedSpatialNeighborhood` and replaces the Cartesian scan; targeting
   and area effects reuse the same compiled query. An author bounds the
   candidates inspected and the results kept separately, and may ask for the

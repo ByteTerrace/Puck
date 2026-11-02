@@ -132,7 +132,7 @@ and every instance of one body carries one value.
 The residency's tables (`SdfWorldTables`, one per residency) own one body
 table: a map from body key to a **body index** with a **generation**, written
 into every draw's record as one word, `SDF_MESH_BODY_WORD`: the index in the
-low 24 bits (`SdfMesh.MaxDraws` bounds it, since bodies never outnumber
+low 24 bits (`SdfMeshRegion.MaxDraws` bounds it, since bodies never outnumber
 draws) and the generation in the high 8. The cascades' fragment stage writes
 that word into B1; the surface pass reads it from the hit draw's record and
 compares the whole word. The rules:
@@ -283,7 +283,7 @@ defect to fix, not a tolerance to widen.
 
 ### The `Solid` bit
 
-`SdfMesh.Encloses` becomes `SdfMesh.Solid`: a body whose surfaces along any
+`SdfMesh.Encloses` becomes a `Solid` property: a body whose surfaces along any
 ray come in entry and exit pairs, so its dark side is shadowed by its next
 surface. `SdfMeshDraw.EnclosesSolid` is deleted: the determinant and
 clip-plane tests served the exit layer and mean nothing here.
@@ -468,50 +468,6 @@ None of these is a leak of a blocker at a distance.
 | Mirrored draw | Its surfaces where drawn | Its mesh's `Solid`; no determinant test |
 | Baked thin foliage (closed slabs) | Entry and exit; thinner than `ε` along the light, one surface | `Solid`; another placement's leaf is another body |
 | Glass | Skipped by the cascades, as today | — |
-
-## What the review rounds' findings become
-
-Rounds 1 to 3 and the first design review: as before. The curvature estimate
-is gone; the wrap-in-identity medium is fixed (`m_wrapSignature`); the cel
-mediums stay in the [Lighting and GI packet](open-items.md#lighting-and-gi);
-the normal offset and its inverse-cosine leak are gone with the offsets; open,
-clipped, two-sided and multi-shell meshes count as bodies with surfaces; the
-clamp is removed; no orientation is computed anywhere; the first draft's six
-cases are in the table.
-
-The second design review:
-
-1. Frame-local indices against a held cascade: the
-   [lifetime rule](#the-body-index-and-its-lifetime).
-2. `MotionIdentity` as the body: the [canonical key](#a-body), carried as
-   `SdfMeshDraw.Body` and V1's instance field.
-3. The chord rule beyond what two surfaces tell: the rule is
-   [the body's next surface](#what-next-surface-can-and-cannot-mean), exact
-   for field-contoured geometry and over-shadowing for overlapping authored
-   components; the hollow-box row is corrected.
-4. The bounded reference leaking at grazing: the bound is gone; the
-   [resolution rule](#the-receiver-plane-and-the-unresolved-footprint) trusts
-   the exact plane where it can and reads shadow where it cannot.
-5. Signed curvature as uncertainty: `u1` is a non-negative bound from the
-   triangle's own normals and the level's recorded error, projected onto the
-   light's axis, with its assumptions stated and a cap past which a tap is
-   Far.
-6. GI without the receiver's identity and a self-hitting origin: the
-   [GI section](#gi).
-7. The history-only peel footprint: removed; the current-frame B1 tile mask
-   is the measured option in its place.
-8. The views filter mixing bodies: the [views section](#the-views-filter).
-9. The closure test's guarantees and T-split cost: narrowed and the spatial
-   hash specified, above; the thin-box witness is a check of the authored
-   lane.
-10. `ε` against pipeline variation: invariance required, the envelope stated,
-    the witness extended, above.
-11. The atomic peel's encoding: specified in the
-    [cost plan](#cost-a-measurement-plan).
-12. Deck at Half and nested-view memory: the Deck qualifies at Full; the
-    portal stop gets a live-byte budget, in the cost plan.
-13. The R16 fallback: removed; the body attachment is `R32_UINT`.
-14. Format plumbing: in the identity lane's steps.
 
 ## Cost: a measurement plan
 
@@ -751,9 +707,9 @@ Each is one lane with a mechanical check. The first two are serial; the
 others run beside the second. The remaining review mediums are checks here.
 
 1. **`transmit-identity`: the body key, the body table, the two layers and
-   the format path.** `SdfMeshDraw.Body` supplied by the stampers and the bake
+   the format path.** the draw's `Body` supplied by the stampers and the bake
    per the [key table](#a-body); the tables' body table with its lifetime
-   accounting and `SDF_MESH_BODY_WORD`; `GpuPixelFormat.R32Uint` with its
+   accounting and `SDF_MESH_BODY_WORD`; an `R32Uint` member of `GpuPixelFormat` with its
    texel size, both format adapters (`DirectXGpuFormats`,
    `VulkanGpuFormats`), an integer clear value on `GpuColorAttachment`, the
    cascade render pass gaining a colour attachment, the package's storages and
@@ -797,7 +753,7 @@ others run beside the second. The remaining review mediums are checks here.
    visibilities across their seam.
 3. **`transmit-authored`: authored meshes.** `MeshOf` draws every authored
    mesh two-sided and records the cascade's single-winding count; the closure
-   test with its spatial hash replaces `ClosedOutward`; `WorldPrototypeMesh.Solid`;
+   test with its spatial hash replaces `ClosedOutward`; a `Solid` on `WorldPrototypeMesh`;
    `puck schema`; the lint report.
    Checks: a scratch world with (a) two shells in one mesh, outward and
    inward wound, both showing every wall, the outer back shadowed by the inner

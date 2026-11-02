@@ -679,46 +679,13 @@ Held-note rules pair the hold's original press identity with its real release
 and read their separate timestamps; `inputHeldPress`/`inputHeldSince` expose a
 kept hold whose press predates the current epoch or ring retention window.
 
-## Migration of live documents and consumers
+## Debug-world transition policy
 
-The sixteen original channel rows and the restored cancel action are accounted
-for below. The debug package's
-other worlds inherit the Moth basis or the shared imports; no quarantined world
-is promoted to live status to demonstrate this work.
-
-| Existing declaration | Target meaning and owner |
-|---|---|
-| Moth `forward`, `strafe` | Shared directional axes; retain names and motion roles. Locomotion and tabletop cursor rules use different dispatch contracts, so engagement releases them even though names are shared. |
-| Moth `turn` | Shared normalized turn-rate axis; retain its role. It is distinct from relative look displacement. |
-| Moth `faceX`, `faceY`, `faceZ` | Shared fixed-point facing vector components; retain role names, charge three numeric slots. |
-| Moth `rise` | Shared vertical movement axis; keep its role and enable it in forms that use it. |
-| Moth `jump`, `flight`, `run` | Shared binary actions; kit/form modes determine their eligibility. |
-| Moth `start`, `select` | Machine input meanings, enabled by machine engagement; never board confirm/cancel aliases. |
-| Moth `interact` | Shared global context/leave action, retaining existing engagement interception. |
-| `suit.puck` `suit` | Named suit-toggle action, distinct from the `suit` body register; enabled where changing form is legal. |
-| `noclip.puck` `noclip` | Named debug traversal-toggle action, distinct from its register; enabled by authored debug modes. |
-| `chess.puck` `boardPick` | Shared `confirm`; rename all bindings, rule operands, tests, icons, and inspection expectations. |
-| Board cancel binding to Moth `select` | New shared `cancel` declaration; rewrite the board binding and its rule operand, delete the Select coupling and ceiling comment. |
-
-The initial typed-storage step therefore has seven numeric axes and ten
-buttons in the debug world. The shared vocabulary belongs in an imported
-`worlds/standard/inputs.puck`, consumed by the Moth, suit, noclip, and chess
-modules. World-specific `suit` and `noclip` declarations stay in debug. The
-package's basis, garden, night field, and standalone test compositions must
-resolve that owner without redeclaring channels. Confirm and cancel are reusable
-semantic names even before modal packing lands.
-
-Binding migration covers the Moth's base layer, the standard controls and
-pad-kit library, the debug control refinement, chess's tabletop context/page, device and desktop
-overlays, identity binding overlays, and live rebind validation. Preserve source
-lists, modifiers, held/chord ordering, inheritance, toggle ownership, label/icon
-resolution, and command grants. Update semantic destinations; do not turn page
-selection into simulation mode authority or rename commands merely because
-they eventually write a channel. Auto-run and auto-fly remain ordinary
+The shared input vocabulary lives in `worlds/standard/inputs.puck`, consumed by
+the Moth, suit, noclip and chess modules; world-specific `suit` and `noclip`
+declarations stay in debug. Auto-run and auto-fly are ordinary
 destination-owned toggles of `forward` and `rise`, and follow the same authored
-continuity as a held source. A page change alone leaves their latches intact.
-
-### Debug-world transition policy
+continuity as a held source; a page change alone leaves their latches intact.
 
 The debug world declares finite authoritative form,
 flight and engagement selections; an active kit alone cannot distinguish a

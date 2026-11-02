@@ -3,14 +3,12 @@
 This memo designs the engine job system the [packet](open-items.md#engine-job-system)
 asks for: one scheduler for frame-critical work, the tick, the bake and GI; a
 deterministic parallel tick; parallel view recording on both backends; memory
-ownership; and background work proportional to change. M1, M2a, T0 and T1 are built;
-the build table tracks the remaining work. Every
-decision names the code it rests on, so a reviewer can check it against the
-source before anything is built; a builder re-reads each citation first. The
-[tick-to-produce memo](simulation-thread.md) and the
-[memory page](memory-pooling.md) are its inputs, and the last sections say what
-becomes of their open phases and how the one adversarial review changed the
-design ([dispositions](#review-dispositions)).
+ownership; and background work proportional to change. The build table tracks
+the remaining work. Every decision names the code it rests on, so a reviewer can
+check it against the source before anything is built; a builder re-reads each
+citation first. The [memory page](memory-pooling.md) is an input, and the last
+sections say what the job system leaves to ordinary work and how the one
+adversarial review changed the design ([dispositions](#review-dispositions)).
 
 The owner's direction frames every choice: performance with quality, so no
 latency is added and no lighting or contact quality is traded; determinism as a
@@ -25,163 +23,64 @@ one.
 
 ## What the measurements say
 
-The numbers below are the packet's, measured on the quiet lead machine
-(RTX 4070, Direct3D 12) and recorded in its
-[evidence](open-items.md#measurements-and-evidence).
+The readings behind these conclusions were taken on the lead machine (RTX 4070)
+and are in the commits that landed them; a settle window re-reads them.
 
-- A slow frame is a 30 Hz tick (about 6.3 ms) meeting the 15 Hz rated
-  presentation burst (2.3 to 2.6 ms of CPU effector probes plus the rated
-  views' recording) on one frame: 21 to 27 ms of work against 11.5 ms for a
-  tick frame alone. Scheduling removes it before any parallelism; the
-  scheduling lane is building that now and this memo makes it the scheduler's
-  first policy (section 1).
-- About 70 % of a tick is work over independent elements: body advance (27 to
-  38 %), the rule VM's reads (0.7 ms of its 1.7), the portal crossing scan (16
-  to 19 %) and snapshot emission (9 to 13 %). What of it this memo partitions
-  now is smaller (section 2): the snapshot, the crossing scan and the rigid
-  bodies' advance. The kit bodies' advance and the rule gates run through one
-  arena transaction and shared host state, and partitioning them needs a
-  transaction redesign this memo names but does not build. The entity-row
-  phase E4 partitions is a small part of that emission share: T1 measured it at
-  about 0.21 ms of a 15 to 21 ms headless debug-world tick at one worker, so
-  the rest of the 9 to 13 % lies in what E4 keeps serial (the field and input
-  tail and the subscribers' `DeliverSnapshot`), which T1 did not separate.
-- About 36 % of produce is per-view command recording
-  (`ShaderPipelineRenderNode.RenderFrame`, 2.4 / 1.9 ms of 6.5 / 5.5; 5.3 ms of a
-  slow frame's 14.8). The shared residency preparation before it
-  (`SdfWorldPasses.BeginFrame`) is 52 %, of which the per-body pose pack
-  (`WorldCreationInstances.PackTransforms`) is 0.8 to 0.9 ms and partitions by
+- A slow frame was a 30 Hz tick meeting the 15 Hz rated presentation burst on
+  one frame. Scheduling removes that before any parallelism, and the scheduler
+  keeps it as its first policy (section 1).
+- About 70 % of a tick is work over independent elements: body advance, the
+  rule VM's reads, the portal crossing scan and snapshot emission. What this
+  memo partitions now is smaller (section 2): the snapshot, the crossing scan
+  and the rigid bodies' advance. The kit bodies' advance and the rule gates run
+  through one arena transaction and shared host state, and partitioning them
+  needs a transaction redesign this memo names but does not build. The entity
+  rows E4 partitions are a small part of snapshot emission; the rest lies in
+  what E4 keeps serial (the field and input tail and the subscribers'
+  `DeliverSnapshot`), which is profiled before T3 assumes otherwise.
+- About a third of produce is per-view command recording
+  (`ShaderPipelineRenderNode.RenderFrame`); the shared residency preparation
+  before it (`SdfWorldPasses.BeginFrame`) is about half, of which the per-body
+  pose pack (`WorldCreationInstances.PackTransforms`) partitions by
   registration.
-- A frame during a cold bake reads avg 96 ms and p99 183 ms. The bake runs one
-  worker per logical processor (`SdfMeshPathBake.Residency.cs:39`,
-  `Workers => Math.Max(1, Environment.ProcessorCount)`), the irradiance trace a
-  quarter of the processors more (`SdfMeshIrradiance.cs:127`, `BackgroundWorkers
-  = ProcessorCount / 4`; `:126`, `DrainWorkers = ProcessorCount - 2`), and the
-  frame thread runs beside both. On 16 logical processors that is 21 busy
-  threads: the machine is oversubscribed by construction, and no priority
-  separates the frame from the bake. GI's preview trace ran 201 to 222 s of a
-  cold bake (about 800 thread seconds beside the bake's 1,670).
-- Scene emission allocates 5.4 MB per call, a cold bake runs 345 collections
-  (2.9 s), and a gen0 pause on the lead machine is 10 to 12 ms with 4 MB
-  promoted ([data and memory](../../.claude/skills/dotnet-performance/references/data-and-memory.md#a-young-collection-costs-what-survives-and-what-old-objects-point-at)).
-  A collection suspends every managed thread, so background allocation is a
-  frame cost whichever thread allocates.
+- During a cold bake the machine is oversubscribed by construction: the bake
+  runs one worker per logical processor (`SdfMeshPathBake.Residency.cs:39`),
+  the irradiance trace a quarter of the processors more
+  (`SdfMeshIrradiance.cs:126-127`), the frame thread runs beside both, and no
+  priority separates the frame from the bake.
+- Background allocation is a frame cost whichever thread allocates, since a
+  collection suspends every managed thread
+  ([data and memory](../../.claude/skills/dotnet-performance/references/data-and-memory.md#a-young-collection-costs-what-survives-and-what-old-objects-point-at)).
 
 ### The frame bar at the standard stops
 
-The settle window's reading on the quiet lead machine (RTX 4070, 1280×900,
-`world.quality high`, the day cycle running, bakes settled, a fresh World per
-backend; `host.frames` over 10 s at each stop). The bar is 16.7 ms; no stop
-meets it on either backend, and the presenter never waits on the GPU (`begin`
-0), so every stop is bound by the frame thread:
+No standard stop of the debug world meets the 16.7 ms bar on either backend,
+and the presenter never waits on the GPU (`begin` reads 0), so every stop is
+bound by the frame thread: produce dominates, and the tick adds to it. At the
+meadow the GPU alone also misses the bar, and a frame on which the screen and
+portal sessions submit together is busier still, so the scheduler spreads the
+rated session burst as GPU work as well as CPU recording. Holding the sun saves
+only 1 to 3 ms: the day cycle's relight runs on background workers and is not
+what holds the frame over the bar.
 
-| Stop | D3D12 avg / p99, ms | Produce / simulate, ms | Vulkan avg / p99, ms | Produce / simulate, ms | Root GPU, D3D12 / Vulkan, ms | Largest root passes (D3D12, ms) |
-|---|---:|---:|---:|---:|---:|---|
-| `stage` | 38.7 / 56.1 | 29.2 / 9.3 | 39.1 / 59.2 | 29.3 / 9.6 | 11.8 / 12.5 | views 3.72, resolve 3.53, shadow-far 1.11 |
-| `hero` | 24.7 / 33.2 | 15.5 / 6.1 | 25.3 / 41.6 | 16.0 / 6.4 | 10.8 / 9.6 | resolve 3.43, views 3.22, shadow-far 0.86 |
-| `meadow` | 67.1 / 83.5 | 48.8 / 18.0 | 68.1 / 90.2 | 49.2 / 18.6 | 21.4 / 21.0 | views 8.76, resolve 4.66, composite 1.39 |
-| `range` | 47.4 / 67.9 | 34.5 / 12.6 | 43.8 / 63.3 | 32.9 / 10.8 | 13.4 / 13.6 | views 4.03, resolve 3.82, shadow-far 2.02 |
-| `camera-course` | 26.4 / 35.5 | 18.1 / 6.8 | 26.6 / 47.5 | 17.8 / 6.8 | 11.3 / 10.0 | views 3.54, resolve 3.50, shadow-far 1.03 |
-| `gallery` | 28.1 / 42.3 | 20.1 / 7.2 | 26.8 / 39.2 | 18.6 / 6.9 | 11.4 / 10.2 | views 3.54, resolve 3.48, shadow-far 1.07 |
-| `gallery-level-0` | 28.9 / 40.9 | 20.4 / 7.4 | 28.6 / 38.7 | 19.8 / 7.4 | 13.5 / 12.1 | views 3.65, resolve 3.46, shadow-far 1.88 |
-| `gallery-level-2` | 33.2 / 48.9 | 24.3 / 8.4 | 32.4 / 49.1 | 23.4 / 8.4 | 12.4 / 11.3 | views 3.29, resolve 3.03, shadow-far 1.71 |
-| `stairs` | 25.1 / 33.7 | 15.5 / 6.3 | 28.6 / 43.7 | 18.5 / 7.2 | 11.9 / 10.9 | views 3.73, shadow-far 1.91, resolve 1.88 |
-| `boardroom` | 27.5 / 41.7 | 19.6 / 7.0 | 27.3 / 41.2 | 19.0 / 7.0 | 12.5 / 11.1 | resolve 3.41, views 3.29, shadow-second 1.50 |
-| `wonderland-room` | 26.9 / 35.2 | 19.1 / 6.7 | 27.0 / 38.4 | 18.8 / 6.8 | 11.6 / 10.2 | views 3.83, resolve 3.45, shadow-far 0.87 |
-| `portals` | 34.9 / 64.8 | 25.3 / 8.9 | 31.8 / 61.9 | 22.9 / 7.9 | 12.0 / 10.7 | views 3.59, resolve 3.44, shadow-second 0.99 |
-| `valley-rim` | 74.7 / 140.9 | 48.2 / 26.1 | 57.5 / 139.3 | 40.3 / 17.0 | 15.4 / 16.5 | resolve 5.58, views 4.77, mesh 0.90 |
-| `overlook` | 31.1 / 74.3 | 20.3 / 9.5 | 26.3 / 44.1 | 17.3 / 6.8 | 9.2 / 8.2 | resolve 3.42, views 2.34, composite 0.54 |
-| valley draw distance | 44.9 / 63.4 | 34.5 / 10.1 | 46.1 / 69.0 | 34.6 / 11.2 | 10.0 / 11.5 | resolve 4.38, composite 1.12, mesh 0.81 |
+### Where the frame thread goes
 
-- **Produce dominates every stop**, 15 to 49 ms, and the tick adds 6 to 26 ms;
-  the root queue's GPU time (8 to 22 ms) is under produce everywhere. The
-  frame-thread trace at the meadow
-  ([visibility M1](visibility.md#what-the-first-settle-window-read)) puts 45 %
-  of the frame in CPU field queries inside `WorldFramePresenter.CaptureFrame`:
-  the creation effectors' surface probes (27 %) and the chase camera's
-  clearance march (18 %), about 31 ms. The tick-to-produce section's 2.4 ms of
-  effector probes at the lobby is about 19 ms at the meadow, where the field
-  holds the most shapes.
-- **Holding the sun saves 1 to 3 ms.** The same stops with the day cycle
-  running and then held (`world.row.set state day advance` to zero): stage 37.9
-  to 35.5 ms, gallery 26.0 to 24.7, meadow 65.6 to 62.6 on Direct3D 12, the same
-  on Vulkan. The day cycle's continuous irradiance relight (`[sdf.mesh-gi]
-  behind`, about 4,000 of the 7,680 probes a second it needs) runs on the
-  background workers and is not what holds the frame over the bar.
-- **Off the root queue**, the screen and portal sessions add timed GPU work
-  the root's means leave out; their per-node means overstate a frame's share,
-  since rated nodes submit less often than every frame. The timeline below
-  places them per frame.
+At the meadow nearly half the frame thread is CPU field queries inside
+`WorldFramePresenter.CaptureFrame`: the creation effectors' surface probes and
+the chase camera's clearance march, over one evaluator, the client's static
+field. What that means for the design of the packet's first item:
 
-#### The GPU queue per frame
-
-`world.gpu-timing timeline` lists each node's latest span on the queue's
-clock; a frame is the root `world` node's span with every span that started
-within 40 ms before it, and a node whose latest span is older did not submit
-that frame. Three timelines a stop, two seconds apart, on each backend
-(`world.quality high`, 1280×900, the day cycle running):
-
-| Stop | Backend | Root `world`, ms | Session frames: sessions + nested views + beacon, ms | Busy on a session frame, ms | Busy on a root-only frame, ms |
-|---|---|---:|---:|---:|---:|
-| `stage` | Direct3D 12 | 11.9–12.1 | 3.6–4.0 (6–11 nodes) + 0.8 + 0.8 | 17.4–17.7 | 12.4 |
-| `stage` | Vulkan | 11.1 | 2.5 (11) + 0.5 + 0.7 | 14.9 | 11.2 |
-| `valley-rim` | Direct3D 12 | 15.0–16.1 | 4.5–4.6 (11) + 1.4 when the beacon submits | 19.7–21.7 | — |
-| `valley-rim` | Vulkan | 14.9–15.0 | 3.0 (11) | 18.0–18.1 | — |
-| `meadow` | Direct3D 12 | 21.3–21.6 | 6.1 (11) + 2.7 (6 nested) | 30.3 | 21.5–22.9 |
-| `meadow` | Vulkan | 19.4–19.8 | — (none submitted in the three reads) | — | 19.5–19.9 |
-
-- **At the meadow the GPU alone misses the bar**: the root's own frame is 19.4
-  to 21.6 ms on both backends, and a frame on which the eleven screen and
-  portal sessions and six nested views also submit is busy 30.3 ms on
-  Direct3D 12. At the rim every read frame carried the sessions, 18 to 22 ms.
-  At the stage the GPU fits (11 to 18 ms) and the frame is the CPU's (40 ms).
-- **The sessions are a rated burst**, 0.4 to 0.6 ms each on Direct3D 12 and
-  about 0.23 on Vulkan, carried by 11 of the 18 frames read. When they land
-  on one frame they add 3 to 9 ms to it, which the scheduling section's rated
-  burst spreading should take as GPU work too, not only CPU recording.
-
-#### Where the frame thread goes
-
-Direct3D 12, a 15 s `dotnet-trace` (`dotnet-sampled-thread-time`) of each
-stop, classified by caller over the frame thread's stacks; frames per trace
-from `host.frames` over the same window (stage 417 iterations at 40.5 ms,
-meadow 228 at 73.9 ms). Query counts and cache use come from the frame
-thread's two answer rings (`WorldEffectorSolver`'s 64 surface answers,
-`WorldCameraClearance`'s 32 clearance answers), read four times a second
-apart through ClrMD; an answer is written only on a miss.
-
-| Caller | Stage, share / ms a frame | Meadow, share / ms a frame | Queries a frame (misses) | Cost a query | Inputs unchanged from the last frame |
-|---|---:|---:|---|---:|---|
-| Creation effectors' surface probes (`WorldEffectorSolver.Probe`) | 34.5 % / 14.0 | 27.0 % / 19.9 | 64 misses: 8 to 10 over the static field (the four rate-range Moths' feet at x ≈ −100 and, at the stage, the player's) and about 56 with no field (bodies in routed scenes, which publish no static field) | 1.4 ms (stage), 2.5 ms (meadow) a field-backed probe: 76 % the hit's gradient (`TryFieldGradient`, axis differences), 24 % the march | None reused: the null-field probes never match (`SurfaceQuery.Matches` requires a field) and evict the 64-entry ring every frame, so a still body's bit-identical probe finds its answer gone |
-| Chase camera's clearance (`WorldCameraClearance.March`, sphere casts) | 0.0 % | 17.3 % / 12.8 | 0 at the stage; 4 at the meadow | 3.2 ms a sphere cast at the meadow | Stage: all (a still camera's four sweeps hit). Meadow: none; the boom target moves by about 0.1 mm a frame (`(119.5, 1.3671 … 1.3674, −55.3)`), so bit-identical matching never hits |
-| Presenter's `Dress` other than the camera | 0.7 % | 0.5 % | — | — | — |
-| `SdfMeshPathBake.Dress` | 6.4 % / 2.6 | 4.3 % / 3.2 | — | — | Self 1.7 %, `SdfMeshClaims.Update` 0.7 %, `Enumerable.Contains` 0.5 %, `Settle` 0.5 %, `SdfDressedPickMap` 0.4 % (meadow) |
-| `SdfWorldTables.StageChangedDraws` | 7.3 % / 3.0 | 4.6 % / 3.4 | — | — | — |
-| `PackTransforms` other than effectors | 6.8 % / 2.8 | 3.9 % / 2.9 | — | — | — |
-| `SdfWorldResidency.PrepareOnce` | 8.2 % / 3.3 | 6.4 % / 4.7 | — | — | — |
-| Command recording | 6.6 % / 2.7 | 4.5 % / 3.3 | — | — | — |
-| The tick (`FixedStepPump`) | 25.0 % / 10.1 | 28.8 % / 21.3 | — | — | — |
-
-Every probe and sweep runs over one evaluator, the client's static field: 7,610
-instructions, 555 cull bounds and members, 624 segment bounds, step scale 1.0
-(certified, no global clamp), 512 march iterations, not primeable, frame
-2^22 m. What the trace and the rings say for the design of Next item 0:
-
-- **Most of the effector cost is probes nobody sees.** The rate-range Moths
-  stand more than 220 m from the meadow and are posed and probed every frame; a probe's
-  cost is three quarters the gradient at its hit (`TryFieldGradient`'s three
-  axis differences, six full `TryDistance` evaluations of a 7,610-instruction
-  program), at a point the march has just evaluated.
-- **The answer caches cannot work as built.** Null-field probes fill the
-  surface ring, and a target that breathes by 0.1 mm defeats the clearance
-  ring's bit-identical match. A cache keyed by what changed (the body's pose
-  against the field's revision, a tolerance the probe's own skin admits)
-  serves both; so does skipping a probe with no field before it reaches the
-  ring.
-- **The trace files** are in the settle lane's scratch:
-  `settle-2-frame-stage.nettrace`, `settle-2-frame-meadow.nettrace`, their
-  `.classified.txt` breakdowns, and `settle-2-rings-stage.txt` /
-  `settle-2-rings-meadow.txt`.
+- **Most of the effector cost is probes nobody sees.** Bodies far from every
+  view are posed and probed every frame, and three quarters of a probe's cost
+  is the gradient at its hit (`TryFieldGradient`'s six full distance
+  evaluations), at a point the march has just evaluated.
+- **The answer caches cannot work as built.** Probes with no field (bodies in
+  routed scenes) can never match (`SurfaceQuery.Matches` requires a field) and
+  evict `WorldEffectorSolver`'s ring every frame, and a camera target that
+  breathes by a tenth of a millimetre defeats `WorldCameraClearance`'s
+  bit-identical match. A cache keyed by what changed (the body's pose against
+  the field's revision, a tolerance the probe's own skin admits) serves both;
+  so does skipping a probe with no field before it reaches the ring.
 
 ## 1. The scheduler
 
@@ -206,7 +105,7 @@ their own and move with them: the pipeline cache's `BuildConcurrency`
 it rather than a count of its own. The pool never oversubscribes the machine, which is what today's
 three independent worker counts do during a cold bake.
 
-T1 built the pool's first part, the one the tick needs: `JobPool`
+The pool's first part, the one the tick needs, exists: `JobPool`
 (`Puck.Hosting.Jobs`, a container singleton `AddWorldBoot` registers and every
 authority's server receives) holds `JobWorkers.Count - 1` threads at normal
 priority, idle on an operating-system semaphore, and its `Fork(partitions,
@@ -765,7 +664,7 @@ second, and recording third; recording alone would not reach it.
 
 ### The cause fix beside it
 
-Before R2, `SdfWorldPassRecorder.Choose` culled and levelled
+Before R2, the recorder's CPU `Choose` culled and levelled
 every draw for every pass on the CPU, and 160,000 draws took 700 ms a frame.
 Threads would divide that, not remove it. R2 extends the existing opaque
 occlusion mechanism, `SdfMeshOcclusion.RecordDraws`, through `ExecuteIndirect`
@@ -939,9 +838,12 @@ its own point. A lockstep frame's wait becomes a `Frame` fork (section 1).
 Small steps, each landing on its own and checked on the debug world. Test
 requirements are lifted for the campaign (AGENTS.md); each step is verified by
 building what it touched and running the check named, and each check is chosen
-to fail when the step's main risk is real. The review's verdict stands: S1
-proceeds as written, and M1's accounting core and M2a's mesh and workspace
-portions can be built first, before their J1 consumers.
+to fail when the step's main risk is real. Built so far: the scheduling stage
+(S1) but for the rated views' and screens' phase spread, the memory account
+(M1), native movers 1 and 2 (M2a), the worker-count harness (T0,
+`--workers` and `puck test --workers`), snapshot partitions (T1) and GPU
+culling in the indirect path (R2). Their measurements are in their commits; the
+packet holds what they left open.
 
 **How a step's image is checked.** No step requires byte-identical stills,
 for three reasons:
@@ -961,146 +863,59 @@ as `puck mesh audit` for bake defects.
 
 | Step | Lands | Check on `worlds/debug` that catches its failure |
 |---|---|---|
-| **S1 Scheduling stage** (landed but for the rated views' and screens' phase spread) | Rated work off tick frames, unseen bodies held, rated packs spread, `host.frames` judging work time. | `host.frames` standing at `debug.go desktop` and `debug.go overlook`: no iteration over 16.7 ms of work from a tick meeting the burst. |
-| **M1 The memory account — built, check passed** | `MemoryAccount`, `host.memory` readings by category, residency bake peaks sized from each group's lattice and refinement as reservations, admission that paces and always progresses (F08), and the mesh library evicting by charged storage. | `host.memory` before and after a cold bake balances live, reserved and cached against the process; a bake under a budget lowered by `host.memory budget` defers (a `[sdf.mesh-bake] deferred` line) and never refuses or fails. Passed: a whole-world cold bake under `host.memory budget 2000000000` with `world.lockstep on`, on a machine with 0.4 to 1.4 GB free, deferred 493 times and settled with the same samples and triangles as an unbudgeted bake, and the lockstep World then stepped on. Measurements and scope are in the [packet](open-items.md#memory-ownership). |
-| **M2a Native movers 1 and 2 — built** | Published mesh payloads, readback copies, lattice storage and point workspaces on `IAllocator`; reference-bearing contour storage and worker-slot refinement indexes retain managed ownership. | Collections during a cold bake (`host.frames`) against 345; windowed stills at `debug.go desktop` before and after on both backends, compared as above; `host.memory collect` after `world.reload` of a one-group edit shows the replaced group's bytes released. The [packet](open-items.md#memory-ownership) records the measurements. |
-| **J1 The pool and the channels** | `Puck.Hosting.Jobs`: classes with their comparers, bounded units, the dependency rules, the cap with hysteresis, per-owner channels drained at each owner's install point, parking, shutdown settlement; every site in section 1's table moved; the bake's static pool, the irradiance worker counts and the engine's `Parallel.For` deleted. | A cold bake with `host.frames` sampled through it against 96 / 183 ms, and the process's thread count at `workers + 2` plus the dedicated threads. A lockstep `world.at` still after a `world.reload` traces its own scene (`[sdf.mesh-gi]` reports the frame's draw count). A channel forced full by a scratch world with more groups than its capacity lands every group (`[sdf.mesh-bake] done` counts match). A headless boot with a reflow verb answers it. `quit` during a cold bake exits cleanly with no device-after-dispose message in stderr on both backends. The first visible group bakes before any unseen one (`[sdf.mesh-bake]` order against `world.view.pick`). |
-| **T0 The worker-count harness — built** | `--workers N` on `Puck.World`, carried as `Puck.Hosting.Jobs.JobWorkers` (the one setting `AddWorldBoot` registers; `0` is `Environment.ProcessorCount`, frame thread included); `puck test --workers 1,2,0` as full host runs compared across counts, and `--record <dir>` / `--compare <dir>` as the recorded oracle ([CLI reference](../reference/cli.md#puck-testtest-worlds)). Deviations: the crossing log is the instance host's crossing narration (`world.transfer`, `world.portal`, `world.adjacency`, `world.continuum`) stamped with the booted authority's tick, since a `Puck.World` host installs no durable `IWorldCrossingLog`; the per-tick hashes reuse `reproduction.json` from the same replay probe; the focused fixtures are left to T1, T3 and T2, which name them; J1 reconciles `0`'s count with the pool's `max(2, ProcessorCount - 2)` workers plus the frame thread. Baseline: `puck test worlds/debug --workers 1,2,0` (106 worlds; the standard authors no test worlds) agrees at every count with the serial code, at 1,790 / 1,672 / 1,910 s per count with `--jobs 2` on a shared lead machine; the recording probe's per-tick authority hash roughly doubles a world's authored time (go-tests: 255 s plain, 478 s recorded, 18,204 ticks), and boots are about a quarter of the rest. | `puck test --workers 1,2,0` on the four debug sources and the standard's test worlds passes with the serial code (a baseline for the T-steps). |
-| **T1 Snapshot partitions — built, check passed** | E4 with the serial count pass and prefix sum, on `JobPool` (section 1). No `PrepareReads`: the row phase reads no linked row (contract rule 2). No semantic change. T0's legs gained `snapshots.json`, each delivered snapshot's tick and entity entries hashed per delivery, compared like the authority hashes. Measured (the row phase alone, boot authority, unpaced headless, p50 over 600-tick windows, shared lead machine): the garden crowd (`garden-crowd.puck`, 129 rows) is one partition and runs the serial path at every count (34 to 40 µs); a first 300-row fixture (two partitions) is within noise (42 to 61 µs serial, 37 to 56 µs at 0); the debug world (558 rows, three partitions) drops from 206 to 216 µs at one worker to 123 to 129 µs at 0, p90 233 to 262 against 147 to 166, and 78 to 86 µs with 128-row partitions; a 2,001-row scratch crowd drops from 297 to 329 µs to 119 to 140 µs. The debug world's saving is about 0.09 ms of a 15 to 21 ms headless tick. A fork's mean is worse than serial on the shared machine (182 to 836 µs against 209 to 351): a worker preempted while it holds a partition holds the join, which the memo's "bounded by one partition's work" does not account for. Forcing 64-row partitions on 129 rows costs about 6 µs at p50 and a long tail, so the fork pays at the median from about 500 rows and by a tenth of a millisecond only past about 1,500; the snapshot therefore forks only from 512 delivered rows (`SnapshotForkRows`), and the fixture grew to 619 stand-ins and a seat in 640 slots so it still forks. The cross-family review's two mediums on `JobPool` are fixed: the inline path ran no partition after the first that threw while the parallel path ran them all (so `JobWorkers(1)` left work undone that two workers completed, and a parallel fork rethrew whichever failure it recorded first), and every fork added wake signals that a busy or descheduled worker had not taken. Both paths now share one policy (every partition runs, the lowest-numbered failure is rethrown, inline state is local to the call), and a fork tops the untaken wake signals up to the workers it can use, never past the worker count. | Passed: `puck test worlds/debug/snapshot-partitions-tests.puck --workers 1,2,0 --compare <recording of the serial code>` agrees across counts and with the recording; `--workers 1,2,0` on `garden-tests`, `suit-tests` and `granaries-tests` agrees at every count, and again after merging the integration tip (whose own changes move the fixture's authority hash from tick 0 while its snapshot entries still match the recording). After the review fixes: `JobPoolLawTests` (`tests/Puck.Hosting.Tests`) pass, and three of them fail on the previous pool (at `JobWorkers(1)` the review's three-partition case leaves both later cells unwritten, and two workers rethrow partition 2 where partition 0 also failed); the 640-slot fixture and the three test files agree at `--workers 1,2,0`. |
+| **S1's remainder** | The rated views' and screens' phase spread. | `host.frames` standing at `debug.go desktop` and `debug.go overlook`: no iteration over 16.7 ms of work from a tick meeting the burst. |
+| **J1 The pool and the channels** | `Puck.Hosting.Jobs`: classes with their comparers, bounded units, the dependency rules, the cap with hysteresis, per-owner channels drained at each owner's install point, parking, shutdown settlement; every site in section 1's table moved; the bake's static pool, the irradiance worker counts and the engine's `Parallel.For` deleted; `JobWorkers`' `0` reconciled with the pool's `max(2, ProcessorCount - 2)` workers plus the frame thread. A worker preempted while it holds a partition holds the join (T1's fork mean ran past serial on a loaded machine), so the cap against oversubscription is measured on a quiet machine before smaller partitions are tried. | A cold bake with `host.frames` sampled through it, and the process's thread count at `workers + 2` plus the dedicated threads. A lockstep `world.at` still after a `world.reload` traces its own scene (`[sdf.mesh-gi]` reports the frame's draw count). A channel forced full by a scratch world with more groups than its capacity lands every group (`[sdf.mesh-bake] done` counts match). A headless boot with a reflow verb answers it. `quit` during a cold bake exits cleanly with no device-after-dispose message in stderr on both backends. The first visible group bakes before any unseen one (`[sdf.mesh-bake]` order against `world.view.pick`). |
 | **T3 Crossing scan partitions** | E3 by seat partition with occupancy deltas. | T0 on a fixture of 40 seats where two seats enter one party-travel door on one tick and seats straddle the 32-seat boundary; the crossing log (transfer tick, cohort) identical across counts and against the recording. |
-| **T2 Rigid advance partitions** | E1 for rigid bodies with partition scratch; the rigid share measured first; the one pose-read change re-recorded. | T0 on a fixture of 200 rigid bodies (a rack and a domino line) beside kit bodies whose producers target a rigid body; hashes identical across counts; `puck bench world` at 0 B median a tick; a standing `host.frames` simulate read against 6.3 ms. |
-| **R1 Parallel recording in waves** | Waves, prepare-before-fork with the fence first, residency upload and extent in preparation, in-order submission; the pose pack fork. Direct3D 12 and a windowed Vulkan boot. | `host.frames` produce avg at the lobby against 6.5 ms; a `world.at` script that moves a portal view and changes a screen's source every frame for 120 frames, with stills at three ticks compared as above with the serial build's on both backends (a one-frame-late read or a descriptor overwritten under a slot in flight shows as a localized difference beyond the noise); GPU-based validation clean on Direct3D 12 and the validation layer clean on Vulkan. |
-| **R2 GPU culling in the indirect path — built, checks recorded** | GPU selection through `SdfMeshOcclusion`'s counted indirect draws for every raster pass, with persistent level history; CPU `Choose` removed. Cascades select once into entry and solid/thin exit phases. Ordered compaction, (geometry, level) instance buckets and proportional updates follow in the [visibility plan](visibility.md#the-build-order). | Settled meadow produce CPU → GPU: Direct3D 12 59.53–59.76 → 50.75 ms; Vulkan 58.41–59.43 → 51.82 ms. Full Direct3D 12 GPU validation and Vulkan synchronization validation clean; tolerant still comparisons inspected. [R2 observations](#r2-observations) records the counts, pass costs, unresolved Direct3D 12 lobby outlier and monitor residual. |
-| **B1 GI proportional to change** | The change-set closure; GI jobs under `Lighting`. | After a `world.reload` that removes a wall and one that moves a draw: the probe tables and a still compared with a full retrace's; `[sdf.mesh-gi]` probes traced against the whole window; the cold bake's GI seconds against 201 to 222. |
+| **T2 Rigid advance partitions** | E1 for rigid bodies with partition scratch; the rigid share measured first; the one pose-read change re-recorded. | T0 on a fixture of 200 rigid bodies (a rack and a domino line) beside kit bodies whose producers target a rigid body; hashes identical across counts; `puck bench world` at 0 B median a tick; a standing `host.frames` simulate read. |
+| **R1 Parallel recording in waves** | Waves, prepare-before-fork with the fence first, residency upload and extent in preparation, in-order submission; the pose pack fork. Direct3D 12 and a windowed Vulkan boot. | `host.frames` produce avg at the lobby; a `world.at` script that moves a portal view and changes a screen's source every frame for 120 frames, with stills at three ticks compared as above with the serial build's on both backends (a one-frame-late read or a descriptor overwritten under a slot in flight shows as a localized difference beyond the noise); GPU-based validation clean on Direct3D 12 and the validation layer clean on Vulkan. |
+| **B1 GI proportional to change** | The change-set closure; GI jobs under `Lighting`. | After a `world.reload` that removes a wall and one that moves a draw: the probe tables and a still compared with a full retrace's; `[sdf.mesh-gi]` probes traced against the whole window; the cold bake's GI seconds. |
 | **M2b Probe block ownership** | Blocks owned by the cache with live-slice counts, native. | A walk into an untraced area for 60 s with `host.memory collect` every 10 s: managed heap flat, native blocks freed as sweeps converge (block count printed by `[sdf.mesh-gi]`); stills before and after compared as above. |
 | **M3 Native movers 4 and 5** | Unmanaged scratch leases, the split journal, numeric columns; the tick's deliveries. | T0 at every count; `puck bench world` unchanged; a scratch world whose rules overwrite text cells and rewind (`world.undo`) reads the restored text. |
 
-### R2 observations
+R2 left two readings unexplained, which the lead's quiet settle window reads
+before anything is attributed to R2 or to machine load (the
+[packet](open-items.md#other-frame-time-findings) holds them): a Direct3D 12
+lobby produce well above its CPU-selection controls, and a stripe difference on
+the lobby's static striped monitor face beyond the pinned noise. The meadow's
+blade draws share a few hundred geometries; grouping them needs ordered
+compaction and (geometry, level) instance buckets with every draw-identity
+consumer moved and depth ties preserved, which is
+[visibility V1](visibility.md#the-build-order).
 
-November 1, RTX 4070, 1280×900, highest quality, native render scale, temporal
-accumulation and AO on. Bakes settle before the paired readings. CPU controls
-10 and 11 restore CPU `Choose` while retaining the same memory/camera work,
-complete geometry tables and motion-copy fix as GPU run 10. Both use the same
-frozen debug documents. These pairs precede integration's new shadow exit
-layers; their purpose is to isolate R2. Shared-machine load prevents causal
-ranking. Quality was not reduced and the 60 FPS bar remains unmet.
-
-| Backend / place | CPU produce avg, ms | GPU produce avg, ms | CPU root draws, all passes | GPU root draws, all passes |
-|---|---:|---:|---:|---:|
-| Direct3D 12 lobby | 39.25–40.16 | 68.78 | 5,649–5,650 | 5,646 |
-| Direct3D 12 rim | 22.81–41.23 | 21.83 | 465 | 465 |
-| Direct3D 12 gallery | 36.86–39.35 | 30.32 | 6,659 | 6,659 |
-| Direct3D 12 meadow | 59.53–59.76 | 50.75 | 11,862–12,022 | 11,813 |
-| Vulkan lobby | 34.53–40.21 | 38.12 | 5,650 | 5,647 |
-| Vulkan rim | 21.40–24.62 | 26.56 | 465 | 465 |
-| Vulkan gallery | 29.68–36.50 | 33.84 | 6,659 | 6,659 |
-| Vulkan meadow | 58.41–59.43 | 51.82 | 11,821–11,890 | 12,069 |
-
-The slower Direct3D 12 GPU lobby reading is unresolved, not discarded: produce
-p99 is 216.56 ms against the CPU controls' 54.48–54.82 ms. The lead's quiet
-settle window must measure it before attributing it to R2 or machine load.
-Animated poses also vary the draw/vertex totals. Root vertices at the meadow:
-Direct3D 12 CPU 9,536,304–9,681,789 / GPU 9,515,166; Vulkan CPU
-9,596,163–9,641,541 / GPU 9,762,255. CPU root dispatches are 31, GPU 34.
-
-Root raster GPU timestamps, 32 samples per reading; each cell is CPU range
-then GPU, in milliseconds:
-
-| Backend / place | Near shadow | Far shadow | Opaque | Glass |
-|---|---:|---:|---:|---:|
-| Direct3D 12 lobby | 0.506–0.594 → 0.422 | 1.208–1.293 → 0.812 | 0.467–0.528 → 0.511 | 0.009–0.013 → 0.163 |
-| Direct3D 12 meadow | 1.827–1.887 → 0.537 | 2.023–2.068 → 0.675 | 3.771–3.783 → 1.232 | 0.018–0.022 → 0.166 |
-| Vulkan lobby | 0.369–0.437 → 0.495 | 0.936–1.262 → 1.206 | 0.399–0.559 → 0.592 | 0.014–0.023 → 0.066 |
-| Vulkan meadow | 1.239–1.473 → 0.555 | 1.586–1.798 → 0.772 | 2.907–3.195 → 1.386 | 0.022–0.027 → 0.067 |
-
-The unused third root cascade has no samples. The complete render-graph pass
-readings and counters are in scratch `r2-cull-performance-directx.json` and
-`r2-cull-performance-vulkan.json`. Selection and empty-command scanning add
-GPU work, visible especially in glass. Ordered compaction and instance
-buckets remain [visibility V1](visibility.md#the-build-order). The meadow's
-4,215 blade draws share 288 geometries (14.6 draws/geometry); grouping needs
-a sparse per-geometry/per-level instance map and every draw-identity consumer
-moved while preserving depth ties, beyond a small argument extension.
-
-Stills use mean absolute RGB channel differences per 64×64 region against
-two CPU runs. Every positive excess over that region's measured noise is
-flagged, as section 6 specifies. Normal Direct3D 12 flags lobby / rim /
-gallery / meadow regions 122 / 0 / 0 / 90; Vulkan flags 16 / 0 / 54 / 122.
-All image pairs were inspected: flagged lobby regions include the Moth's
-head and monitor, meadow regions the animated grass; normal gallery lighting
-varies broadly even between CPU controls. No missing geometry was identified.
-These flags are reported, not a pixel-equivalence claim.
-
-The additional Vulkan lockstep controls capture ticks 150 / 300 / 450 / 600
-after bakes settle at tick zero. Both CPU runs and the GPU run have identical
-authority hashes and camera/pose stamps at every capture:
-
-| Pinned Vulkan place | CPU mean region noise | CPU/GPU mean region difference | Regions above noise |
-|---|---:|---:|---:|
-| Lobby | 0.00004015 | 0.00098606 | 103 |
-| Rim | 0 | 0 | 0 |
-| Gallery | 0.00008735 | 0.00013238 | 96 |
-| Meadow | 0.00000109 | 0.00000109 | 0 |
-
-Units are 0–255 channel steps. The gallery's 428 changed pixels differ in one
-channel by one step; the meadow's four such pixels are within CPU noise. The
-lobby has 633 changed pixels. Its 339 channel differences larger than one
-step (maximum 48) all lie on the static striped monitor face, x269–323 /
-y391–490. Enlarged CPU/GPU crops align geometrically. The sampled stripe
-difference exceeds the small pinned noise and its cause remains unconfirmed.
-
-R2's shadow integration carries the solid versus thin/clipped shadow-exit
-rule. One selection emits entry, solid-exit and thin-exit argument phases;
-each kept draw contributes an entry and exactly one exit to the generated
-statistics, which count the two executions with separate wave reductions: 64 lanes of a legal maximum mesh fit a uint
-sum, twice that does not; the existing accumulator carries each addition
-into 64 bits. Selection, arguments and history are unchanged by this fix.
-
-With R2 merged beside the integration branch's GI, job-pool, language and
-simulation work (R2's selection, layout and backend sources unchanged by that
-merge), Vulkan synchronization validation and full Direct3D 12 GPU-based
-validation (state tracking and synchronized queues) pass at all four places
-after bakes settle, without warnings or errors:
-
-| Backend | Bakes settled, tick | Lobby draws | Rim draws | Gallery draws | Meadow draws |
-|---|---:|---:|---:|---:|---:|
-| Vulkan | 369 | 7,186 | 1,298 | 8,925 | 2,506 |
-| Direct3D 12 | 388 | 15,143 | 1,290 | 18,070 | 26,657 |
-
-These current-world validation reads follow each pose by 12 ticks, with the
-same spawn positions and high/native settings; they are not a new matched
-timing pair. Their variance, especially the Vulkan meadow count, remains
-unexplained and belongs in the lead's quiet-window trace. Before this last
-integration, the corrected R2 artifact read 20,675 Vulkan / 20,484 Direct3D 12
-meadow draws. Do not attribute the later count change to an R2 speedup.
-The final full Direct3D leg takes about 394 seconds; both native legs fit
-one 850-second batch. Earlier cold preparation rebuilt 7,242 groups.
-
-Final Release CLI and dual-backend World builds pass with zero warnings/errors.
-Two debug fixtures pass `--reproduce` on the final artifact:
-`input-clock30-tests.puck` (four verdicts) and `unbiased-draws-tests.puck` (six).
-Presentation selection does not enter simulation state. Incomplete controls,
-time-boxed cold/full-validation attempts and an initial private Windows
-artifact refused for missing SPIR-V are excluded from the results.
-
-
-### What becomes of the tick-to-produce memo's phases
+### What the job system leaves to ordinary work
 
 The job system overlaps nothing with the frame's views: the tick is a fork the
 frame thread joins inside the step, before produce, so no input latency is
-added and no tick runs under a produce. That decides the phases:
+added and no tick runs under a produce. The pipelined simulation worker the
+tick-to-produce memo first proposed, and its tick record, are withdrawn with
+it. The one host loop that memo delivered stays (`Puck.Launcher.HostLoop`, one
+shell over `WorldHostStep`, the client's arrival-form interpolation fraction).
+That fraction already adds about half a step of presentation latency against
+the old accumulator form, since the inline host stamps a tick's arrival just
+before producing the frame that shows it; nothing that overlaps work may add to
+it. Three items from that memo are ordinary work, independent of threading:
 
-- **Phase 2, the record, drops.** It existed to carry a body's deliveries across
-  a dispatch and join on another thread; with no such thread the hub delivers
-  synchronously as today. Its F14 second half, the shell's tick budget from the
-  hooks' `NextDueTick` so a replay burst never steps past a pinned line, is a
-  pre-existing defect fixed as ordinary work, independent of threading.
-- **F17 runs now**, as the memo already says (`CodeDerivedTable` generations).
-- **Phase 3 merges into the presentation view's cut 5**
-  ([runtime plan](runtime-and-delivery.md#the-presentation-view)) and leaves the
-  job system's path. Produce reading no server state is good hygiene for that
-  cut and for the silo; it is not a precondition for any step above, and the
-  rehearsal guard is not built for the job system.
+- **A replay burst stops at every due hook.** One outer step can advance many
+  replay ticks (`WorldServerStepShell`, the fast-forward in
+  `WorldReplayTape.Drive`), which can step past a pinned `world.at` line, a wait
+  release, a schedule step or a capture row. The shell takes a tick budget from
+  the frame thread, `min(FastForwardBurst, nextBarrier - completedTick)`, where
+  `nextBarrier` is the least `NextDueTick` the tick script, the wait gate, the
+  schedule runner and the capture scheduler each expose, and returns the ticks
+  it completed; the post-step hooks run per completed tick in order. Check: a
+  `world.at` line and a capture row inside a fast-forward each run at their own
+  tick.
+- **`CodeDerivedTable` ties each derivation to its generation.** A derivation
+  begun under code revision R can insert after the table cleared for R+1
+  (`CodeDerivedTable.GetValue` reads `Refresh`, then derives, then inserts into
+  the one table). `Refresh` returns a generation object owning its own weak
+  table, and `GetValue` inserts into that generation only. Check: a test that
+  bumps the revision between derive and insert reads the fresh derivation (the
+  one check running cannot show).
+- **A produce path that reads no server state** merges into the presentation
+  view's last cut ([runtime plan](runtime-and-delivery.md#the-presentation-view)).
+  It is good hygiene for that cut and for the silo, not a precondition for any
+  step above.
 
 ## Open questions
 
@@ -1156,5 +971,4 @@ no second review pass; the lead spot-checks these when each step is built.
 ---
 
 [Plans](README.md) · [Open items](open-items.md#engine-job-system) ·
-[The simulation step off the frame thread](simulation-thread.md) ·
 [Owned memory](memory-pooling.md)

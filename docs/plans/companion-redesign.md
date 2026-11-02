@@ -422,7 +422,7 @@ refused, since no return obligation could be recorded for it.
   survive filtering. At home the binding is the placement's: it follows whoever holds the
   home seat, at any generation, so a player who reconnects at home after the companion came
   back still has it (the visiting binding stays generation-bound).
-- **What its driver may observe**: derived at every check (`WorldServer.TryRoleVerdict`
+- **What its driver may observe**: derived at every check (`TryRoleVerdict` on `lane/companion-v1`
   before stored grants): Drive and Observe over the companion bodies bound to the driver at
   their landed generation, Observe over each followed slot while it holds the followed
   member, nothing else; `TryGrant` refuses body, Control, Mutate and Edit grants to a role
@@ -593,17 +593,10 @@ is the query).
 
 ## 9. Build plan
 
-Steps 1 to 5 are built: records and the reducer, member ids and tickets, hop
-authorization and verification, destination-word settlement, and return with
-re-adoption and the held slot. `WorldCrossingRecord.cs` holds allocation,
-lease, tombstone, departure, per-member settlement, hop, and hop-completion
-records; the protocol and refinement fixtures exercise those paths. Durable
-record kinds for later steps also exist; their presence does not complete the
-transitions below. `WritesAbroadComeHomeWithTheCompanion` still needs step 9's
-register writes.
-
-The remaining build work is steps 6 to 10, using the existing model and real
-authority fixtures as evidence:
+Steps 1 to 5 are built. Durable record kinds for later steps already exist in
+`WorldCrossingRecord.cs`; their presence does not complete the transitions
+below. The remaining build work is steps 6 to 10, using the existing model and
+real authority fixtures as evidence:
 
 6. **Separation, stranding, shed and retire.** The drain's sweep; `Stranded` and
    `GraceElapsed` with authored windows; the shed as allocate-then-depart under the common
