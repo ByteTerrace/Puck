@@ -450,15 +450,18 @@ better with it.
 
 ### Regression and capability cases
 
-Tag every case in its `prompt.md` frontmatter, `tags: [regression]` or
-`tags: [capability]`. The two answer different questions, and `compare`
-reports them apart:
+Every case's `prompt.md` frontmatter carries `tags: [regression]` or
+`tags: [capability]`, and a `description` naming the incident the case came
+from. The two kinds answer different questions: `run --tag` runs one kind, and
+`compare` reports them apart.
 
-- **Regression:** behavior the skill already teaches and must keep. Three
-  runs; the case holds when every run passes every grader (pass^k), and a case
-  that held and now fails is a stop until it is explained.
-- **Capability:** behavior the skill is learning. Five runs; report the mean
-  and the per-run vector, with no threshold.
+- **Regression:** teaching the skill already carries reliably. Three runs;
+  the case holds when every run passes every grader (pass^k), and any failing
+  run is a stop to investigate.
+- **Capability:** teaching that is new or still failing. Five runs; report
+  the mean and the per-run vector, with no threshold. A capability case that
+  passes every run on every model that loads the skill becomes a regression
+  case.
 
 Most saturated vocabulary regexes (every with-arm run passes, every
 without-arm run fails) are regression cases. The runner's `casesPassed` at
@@ -562,9 +565,10 @@ the test is the rule below, stated generally, and capability cases drawn from
 real failures.
 
 - Write every criterion as a statement about what the reply says, one fact
-  per grader, with an explicit PASS condition and FAIL condition. A sandboxed
-  reply cannot fix, run or commit anything, so a rubric that asks whether it
-  did fails correct replies.
+  per grader, as a `PASS if` rule and a `FAIL if` rule, each with an example
+  reply. The sandboxed agent only advises, so a rubric worded as an action
+  ("fixes", "runs", "commits") fails a correct reply that recommends the
+  action.
 - Key a rubric on meaning, never on the phrase the skill uses: a reply that
   gives the skill's answer in other words passes.
 - Prefer a deterministic grader. Use a `regex` for anything a token settles,
@@ -574,34 +578,31 @@ real failures.
   record your agreement with the judge, and repair the rubric where you
   disagree. About half the failing teaching in the first full round was
   grading.
+- A rule added to fix a failing case is stated generally, never as that
+  case's answer.
 
 **The sandbox:** the agent runs in an empty temporary workspace with your user
-settings, hooks, CLAUDE.md and MCP servers absent, so a case measures what the
-skill itself teaches.
+settings, hooks, CLAUDE.md and MCP servers absent; the fixture is the one
+context `run` adds.
 
 - Bash and Edit are denied unless `--allow-tools` grants them. A
   shell-granting suite needs WSL2 on Windows, since native Windows has no
   backend.
 - A case inlines any source it needs into its prompt and grades what the
   reply says.
-- `case.yaml` can add `add_dirs` or a `scaffold_script`. Never add the
-  repository: the baseline arm would then read `.claude/skills/` and the
-  ablation would measure nothing.
 - A prompt shaped as a bare order ("fix X") sends the agent searching the
   empty directory without loading the skill. Phrase it as the developer's
   question, naming the Puck files, verbs or symptoms involved, without stating
   the answer a grader checks.
 
-**Reading results:**
-
-- Re-run a reply that starts with "API Error"; never score one.
-- A rule added to fix a failing case is stated generally, never as that
-  case's answer.
-
 **Agent definitions:** plugin eval does not evaluate a standalone
 `.claude/agents/*.md`. An agent is evaluated through what it loads: its
-preloaded skills, run at the agent's model. Delegation reliability is not
-measured, because the lead names the agent explicitly.
+preloaded skills, run at the agent's model. Teaching written into an agent's
+body is therefore never measured, so it belongs in the skill the agent
+preloads (the reviewer's rule to read revisions through Git's object commands
+belongs in `review-passes`), and the body keeps only the role: its model, its
+tools and what its brief names. Delegation reliability is not measured,
+because the lead names the agent explicitly.
 
 **Two cheap checks beside the evals:**
 

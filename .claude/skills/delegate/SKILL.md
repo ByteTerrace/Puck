@@ -51,10 +51,23 @@ holds the Git, push and stop-order rules every family shares.
 
 ## Evidence
 
-- Show a change working by building what it touched and running what it changed. Work whose
-  correctness rests on an invariant (a cache's invalidation, an oracle's coverage, a geometric
-  assumption, a concurrency handoff) names the invariant and what enforces it (the compiler, one
-  door, a derived view) in its report; "every caller remembers" is not enforcement.
+- Show a change working by building what it touched and running what it changed.
+- Diagnose from evidence: reproduce a defect first, name its cause with the code, log line or
+  capture that shows it, and fix the cause, not its symptom. A change that makes a symptom go away
+  with its cause still unnamed is not a fix. Report what you reproduced or measured apart from what
+  you argued from the source.
+- Before writing code whose correctness rests on an invariant (a cache's invalidation, an oracle's
+  coverage, a geometric assumption, a concurrency handoff), write down the invariant and the one
+  place that enforces it (the compiler, a type, one door, a derived view), build behind it, and name
+  both in the commit body and the hand-back; "every caller remembers" is not enforcement, and saying
+  plainly that nothing enforces it yet is better than implying something does. When a fix needs the
+  same guard in several places, design the one chokepoint they all pass through instead of copying
+  the guard.
+- A design (a memo, an architecture, a design review) names its invariant and what enforces it,
+  states where its guarantee stops, and answers each finding its review raised, one by one. Its
+  implementation steps each carry a mechanical check. A question it cannot settle without a
+  measurement or a prototype becomes a step for another lane, named with what it would show: a
+  design lane builds, prototypes and measures nothing itself.
 - Showing a new check failing without the fix it guards (fault injection or the old code) is a
   technique for when it is cheap and telling, never a standing requirement: AGENTS.md suspends tests
   and red legs during the campaign. Commit the fix as WIP before injecting a fault.
@@ -66,13 +79,18 @@ holds the Git, push and stop-order rules every family shares.
   progress or blocked, never done. Keep one watcher per running job, ending on success, failure or
   exit; no `sleep` timers and no polling a job that reports its own exit
   ([your harness](../orchestration/references/lane-work.md#running-long-tasks)).
+- Once your finish line holds on the merged head, hand back. Start no review or hardening round of
+  your own (a self-review, extra guards, fuzzing beyond the brief): the lead's cross-family review
+  runs beside your next work, and what else you noticed goes under **Found**.
 - Before your final commit, run `puck docs links` from your CLI copy. Fix every failure your change
   introduced: a renamed symbol, a moved file, a closed plan item. A failure older than your change goes
   in your hand-back. Documents rot when the change that broke them does not fix them
   ([keep documents from rotting](../../../docs/development/documentation.md#keep-documents-from-rotting)).
 - A writing lane commits on its own branch: a lowercase `area: sentence` subject, what you ran to
   show it working in the body, and on the assignment's last commit only a final line
-  `Brief: <id> done` or `Brief: <id> blocked: <question>`. Never modify or push `main`.
+  `Brief: <id> done` or `Brief: <id> blocked: <question>`. A lane never pushes, whatever its brief
+  says (the lead pushes; AGENTS.md names the one exception, a remote partner's own branch), and
+  never modifies `main`.
 - Commit only with `git commit` over an index you inspected. Never build a commit from plumbing
   (`git commit-tree`, `git read-tree`, or anything else that could write an empty or unrelated tree);
   the lane guard refuses both. ASP.NET's agent effort (dotnet/aspnetcore#70219) pushed five
@@ -81,6 +99,7 @@ holds the Git, push and stop-order rules every family shares.
 - Hand back under **Needs you** (decisions you could not make and GPU legs you need, with options and
   their cost), **Changed** (what landed and what you ran; a read-only lane names its findings file)
   and **Found** (defects, risks and follow-ups with `file:line`, and what you could not confirm).
+  Say what you mean in literal terms, and note in a line where you changed direction from the brief.
 
 ## Route adjacent work
 

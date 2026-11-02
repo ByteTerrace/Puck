@@ -1,7 +1,7 @@
 {
   "seed": 4092083762,
   "rule": "A case is `train` when the first byte of sha256(\"<seed>:<case directory name>\") is below 154 (about 60%), else `test`. The rule depends on the case's name alone, so adding a case never moves another.",
-  "seed_note": "Drawn at random from 32 bits and redrawn (2 draws in all) until train held 6 or 7 of the 12 cases, on case counts only, before any case had been run. A split with an empty train side cannot drive a hill-climb, so the first suite is split by the rule; new cases go to test by hand until it holds about 10. Cases moved to train by hand after exposing a gap: r15-hard-pass-adds-a-compat-alias, r16-hard-pass-changed-nothing; replaced in test by a fresh harder case. Cases added by other sessions are assigned to test by hand. Cases rewritten for the narrow review rule were renamed where their names carried a retired term and keep their side. Cases r23 to r25 were added afterwards and assigned by the rule.",
+  "seed_note": "Drawn at random from 32 bits and redrawn (2 draws in all) until train held 6 or 7 of the 12 cases, on case counts only, before any case had been run. A split with an empty train side cannot drive a hill-climb, so the first suite is split by the rule; new cases go to test by hand until it holds about 10. Cases moved to train by hand after exposing a gap: r15-hard-pass-adds-a-compat-alias, r16-hard-pass-changed-nothing; replaced in test by a fresh harder case. Cases added by other sessions are assigned to test by hand. Cases rewritten for the narrow review rule were renamed where their names carried a retired term and keep their side. Cases r23 to r25 were added afterwards and assigned by the rule. Cases r26 to r30 were added afterwards and assigned by the rule.",
   "train": [
     "r01-brief-for-a-codex-pass",
     "r02-landing-a-codex-pass",
@@ -27,6 +27,11 @@
     "r18-scope-two-dot-log-versus-diff",
     "r20-pass-ends-on-a-question",
     "r21-write-pass-while-a-run-builds",
-    "r24-claude-pass-in-an-isolated-worktree"
+    "r24-claude-pass-in-an-isolated-worktree",
+    "r26-reviewer-in-the-lead-checkout",
+    "r27-review-brief-without-revisions",
+    "r28-findings-only-pass-suspects-a-race",
+    "r29-hunt-plan-for-a-cache-change",
+    "r30-findings-without-a-write-tool"
   ]
 }
