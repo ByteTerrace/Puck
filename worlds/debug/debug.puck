@@ -36,6 +36,12 @@ import "kinematics-scope"
 import "companion"
 import "hall"
 import "chess"
+// The board game room's hidden-information tables, which hold no bodies: the sealed-bid auction, the shedding card game,
+// social deduction and the fog-of-war skirmish (auction.puck, shedding.puck, deduction.puck, skirmish.puck).
+import "auction"
+import "shedding"
+import "deduction"
+import "skirmish"
 import "paintings"
 import "wonderland"
 import "camera-course"
@@ -184,7 +190,8 @@ placements {
     candidateRadius: 1
     derivedFaceScreens: 12
     maxPlacementScale: 1.45
-    minPlacementScale: 0.46
+    // The shedding table's racks stand the standard deck's cards at 0.06 (shedding.puck).
+    minPlacementScale: 0.06
     previewDeadlineFrames: 1
   }
 

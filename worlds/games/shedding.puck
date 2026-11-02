@@ -1,0 +1,267 @@
+import "../standard/sealed"
+
+// The rules of a shedding card game as a library: `seats` players (2 to 4) are dealt `handSize` cards each from a
+// 24-card deck (ace to six of four suits), one card turns up to start the discard pile, and in turn each plays a card of
+// the top card's suit or rank onto it, or draws one and passes. The first to empty their hand wins; once the draw pile
+// is empty and every seat has passed in a row, the fewest cards win (the lower seat on a tie). A table imports it and
+// expands `sheddingState` inside its `state { world { } }` block and `sheddingRules` at the document's top level:
+//
+//   import "../games/shedding"
+//   state { world { sheddingState(seats: 4, handSize: 5) } }
+//   sheddingRules(seats: 4, handSize: 5)
+//
+// Card `k` (0 to 23) is suit `k / 6` (spades, hearts, clubs, diamonds) and rank `k % 6 + 1`; its key is `k`.
+//
+// What each reader sees is decided by which pile holds a card, never by a card's own declaration:
+//
+// - `sheddingDeck`, the draw pile, declares `hidden: Count`: every seat reads how many cards it holds and nothing else,
+//   because every card in it is also in `sheddingSealed`, which only the world reads. The deck's order is the sealed
+//   pile's; `sheddingDeck` itself is never shuffled.
+// - `sheddingHand<s>`, seat `s`'s hand as the table shows it, declares `hidden: Placeholder`: every other seat reads a
+//   back for each card in it, in order, because each is also in `sheddingHeld<s>`, which only `seat<s>` reads. Its
+//   owner reads every card.
+// - `sheddingDiscard` is public.
+//
+// A card moves between piles by the rules' own writes, a key at a time (`zone(sheddingSealed, first)`), never by a
+// transfer, shuffle or deal transform: a transform that moves a card out of a pile some reader may not read into one it
+// may is refused as widening that pile's audience (TransformWidensAudience), so a deal into a hand is written as the
+// disclosure it is. The one transform is the shuffle of `sheddingSealed`, which nobody but the world reads.
+//
+// A seat acts through its own sealed inbox (../standard/sealed.puck): `sheddingAct<s>.play` names a card of its hand to
+// play, `draw` 1 draws, `show` turns a card of its hand face up where it stands; the rules answer in the same row
+// (`result` 1 done, -1 refused) and count `taken`. A refused play tells the other seats nothing: the inbox is the seat's
+// own. `shedding.phase` 4 gathers every card back into the deck and deals a new game.
+//
+// The disclosure fixture (../debug/shedding-disclosure.puck): the principals are `seat1` to `seat<seats>`; the hidden
+// cells are every member of `sheddingSealed` and `sheddingDeck` (their order and identity), every member of
+// `sheddingHeld<s>` and every unshown member of `sheddingHand<s>` for every seat but the reader's own, the inboxes
+// `sheddingAct<s>`, and `sheddingRank`/`sheddingSuit` of every card in those piles.
+
+let sheddingCardCount = 24
+
+template sheddingPile(name, visibility, cards = []) {
+  row {
+    name: name
+    kind: "Bool"
+    domain: keysOf(ordered: true, row: sheddingCards)
+    capacity: sheddingCardCount
+    cells: map(cards, k => { key: $"{k}", value: true })
+    visibility: visibility
+  }
+}
+
+template sheddingState(seats, handSize) {
+  row {
+    name: "sheddingCards"
+    kind: "Int"
+    capacity: sheddingCardCount
+    cells: map(range(0, sheddingCardCount), k => { key: $"{k}", value: k })
+  }
+
+  row {
+    name: "sheddingRank"
+    kind: "Int"
+    domain: keysOf(row: sheddingCards)
+    capacity: sheddingCardCount
+    cells: map(range(0, sheddingCardCount), k => { key: $"{k}", value: k % 6 + 1 })
+  }
+
+  row {
+    name: "sheddingSuit"
+    kind: "Int"
+    domain: keysOf(row: sheddingCards)
+    capacity: sheddingCardCount
+    cells: map(range(0, sheddingCardCount), k => { key: $"{k}", value: floor(k / 6) })
+  }
+
+  sheddingPile(name: "sheddingSealed", visibility: { readers [] }, cards: range(0, sheddingCardCount))
+  sheddingPile(name: "sheddingDeck", visibility: { hidden: "Count" }, cards: range(0, sheddingCardCount))
+  sheddingPile(name: "sheddingDiscard", visibility: {})
+
+  for s in range(1, seats) {
+    sheddingPile(name: $"sheddingHeld{s}", visibility: { readers [$"seat{s}"] })
+    sheddingPile(name: $"sheddingHand{s}", visibility: { hidden: "Placeholder" })
+  }
+
+  sealedInbox(name: "sheddingAct", seats: seats, fields: ["play", "draw", "show", "result"], empty: -1)
+
+  table shedding capacity(16) {
+    phase = 4
+    shuffled = 0
+    dealTurn = 1
+    dealt = 0
+    turn = 1
+    top = -1
+    passes = 0
+    winner = 0
+    fewest = 0
+    tallying = 0
+    plays = 0
+  }
+
+  row {
+    name: "sheddingStream"
+    kind: "Int"
+    draw {
+      generator {
+        source: "StreamDraw"
+      }
+      timing: "Event"
+    }
+    visibility {
+      readers []
+    }
+  }
+}
+
+template sheddingRules(seats, handSize) {
+  // Gathering: a card a tick from each pile back into the deck and its sealed twin, then a fresh shuffle and deal.
+  rule "shedding-gather-discard" {
+    when shedding.phase == 4 and count(sheddingDiscard) > 0
+    sheddingSealed[zone(sheddingDiscard, first)] = true
+    sheddingDeck[zone(sheddingDiscard, first)] = true
+    remove sheddingDiscard[zone(sheddingDiscard, first)]
+  }
+
+  for s in range(1, seats) {
+    rule $"shedding-gather-hand-{s}" {
+      when shedding.phase == 4 and count($"sheddingHand{s}") > 0
+      setState(state: sheddingSealed, key: zone($"sheddingHand{s}", first), expression: true)
+      setState(state: sheddingDeck, key: zone($"sheddingHand{s}", first), expression: true)
+      removeStateCell(state: $"sheddingHeld{s}", key: zone($"sheddingHand{s}", first))
+      removeStateCell(state: $"sheddingHand{s}", key: zone($"sheddingHand{s}", first))
+    }
+  }
+
+  rule "shedding-gathered" {
+    when shedding.phase == 4 and count(sheddingDeck) == sheddingCardCount
+    shedding.phase = 1
+    shedding.shuffled = 0
+    shedding.dealt = 0
+    shedding.dealTurn = 1
+    shedding.turn = 1
+    shedding.top = -1
+    shedding.passes = 0
+    shedding.winner = 0
+    shedding.fewest = 0
+    shedding.plays = 0
+  }
+
+  rule "shedding-shuffle" {
+    when shedding.phase == 1 and shedding.shuffled == 0
+    shuffle sheddingSealed with sheddingStream
+    shedding.shuffled = 1
+  }
+
+  // The deal: a card a tick, round the seats from seat 1, off the top of the sealed pile into a hand and its owner's
+  // private twin.
+  for s in range(1, seats) {
+    rule $"shedding-deal-{s}" {
+      when (shedding.phase == 1 and
+        shedding.shuffled == 1 and
+        shedding.dealTurn == s and
+        shedding.dealt < (seats * handSize))
+      setState(state: $"sheddingHeld{s}", key: zone(sheddingSealed, first), expression: true)
+      setState(state: $"sheddingHand{s}", key: zone(sheddingSealed, first), expression: true)
+      remove sheddingDeck[zone(sheddingSealed, first)]
+      remove sheddingSealed[zone(sheddingSealed, first)]
+      shedding.dealt += 1
+      shedding.dealTurn = s % seats + 1
+    }
+  }
+
+  rule "shedding-turn-up" {
+    when shedding.phase == 1 and shedding.shuffled == 1 and shedding.dealt == (seats * handSize)
+    shedding.top = sheddingCards[zone(sheddingSealed, first)]
+    sheddingDiscard[zone(sheddingSealed, first)] = true
+    remove sheddingDeck[zone(sheddingSealed, first)]
+    remove sheddingSealed[zone(sheddingSealed, first)]
+    shedding.phase = 2
+    shedding.turn = 1
+  }
+
+  for s in range(1, seats) {
+    // A play: a card of the seat's own hand matching the top card's suit or rank goes onto the discard pile. A
+    // call-form effect's `expr(...)` key reads the inbox row itself: a local there lowers as a row of that name.
+    rule $"shedding-play-{s}" {
+      local card = $"sheddingAct{s}".play
+      local held = $"sheddingHeld{s}"[card] ?? 0
+      local legal = (
+        held == 1 and
+        (sheddingRank[card] == sheddingRank[shedding.top] or sheddingSuit[card] == sheddingSuit[shedding.top])
+      )
+      local last = count($"sheddingHeld{s}") == 1
+      when shedding.phase == 2 and shedding.turn == s and card >= 0
+      if legal {
+        removeStateCell(state: $"sheddingHeld{s}", key: expr($"sheddingAct{s}".play))
+        removeStateCell(state: $"sheddingHand{s}", key: expr($"sheddingAct{s}".play))
+        sheddingDiscard[card] = true
+        shedding.top = card
+        shedding.plays += 1
+        shedding.passes = 0
+        shedding.turn = s % seats + 1
+        if last {
+          shedding.winner = s
+          shedding.phase = 3
+        }
+      }
+      setState(state: $"sheddingAct{s}", key: play, expression: -1)
+      setState(state: $"sheddingAct{s}", key: result, expression: legal ? 1 : -1)
+      addState(state: $"sheddingAct{s}", key: taken, expression: 1)
+    }
+
+    // A draw: the top of the sealed pile into the seat's hand, or a pass once the deck is empty; either ends the turn.
+    rule $"shedding-draw-{s}" {
+      local stock = count(sheddingSealed)
+      when shedding.phase == 2 and shedding.turn == s and $"sheddingAct{s}".draw > 0 and $"sheddingAct{s}".play < 0
+      if stock > 0 {
+        setState(state: $"sheddingHeld{s}", key: zone(sheddingSealed, first), expression: true)
+        setState(state: $"sheddingHand{s}", key: zone(sheddingSealed, first), expression: true)
+        remove sheddingDeck[zone(sheddingSealed, first)]
+        remove sheddingSealed[zone(sheddingSealed, first)]
+        shedding.passes = 0
+      } else {
+        shedding.passes += 1
+      }
+      shedding.turn = s % seats + 1
+      setState(state: $"sheddingAct{s}", key: draw, expression: -1)
+      setState(state: $"sheddingAct{s}", key: result, expression: 1)
+      addState(state: $"sheddingAct{s}", key: taken, expression: 1)
+    }
+
+    // A shown card: one of the seat's cards turned face up where it stands in the hand, at any time. Leaving the
+    // owner's private twin is what shows it: every seat now reads it in the hand, between the backs.
+    rule $"shedding-show-{s}" {
+      local card = $"sheddingAct{s}".show
+      local held = $"sheddingHeld{s}"[card] ?? 0
+      when shedding.phase == 2 and card >= 0
+      if held == 1 {
+        removeStateCell(state: $"sheddingHeld{s}", key: expr($"sheddingAct{s}".show))
+      }
+      setState(state: $"sheddingAct{s}", key: show, expression: -1)
+      setState(state: $"sheddingAct{s}", key: result, expression: held == 1 ? 1 : -1)
+      addState(state: $"sheddingAct{s}", key: taken, expression: 1)
+    }
+  }
+
+  // Blocked: the deck is empty and every seat passed in a row, so the fewest cards win, the lower seat on a tie.
+  rule "shedding-blocked" {
+    when shedding.phase == 2 and shedding.passes >= seats
+    shedding.phase = 3
+    shedding.fewest = sheddingCardCount + 1
+    shedding.tallying = 1
+  }
+
+  for s in range(1, seats) {
+    rule $"shedding-fewest-{s}" {
+      when shedding.tallying == 1 and count($"sheddingHand{s}") < shedding.fewest
+      shedding.fewest = count($"sheddingHand{s}")
+      shedding.winner = s
+    }
+  }
+
+  rule "shedding-tallied" {
+    when shedding.tallying == 1
+    shedding.tallying = 0
+  }
+}

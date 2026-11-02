@@ -1,0 +1,46 @@
+// The auction table (auction.puck) as a fixture of the noninterference harness: `puck disclosure
+// worlds/debug/auction-disclosure.puck` boots one world per variant of auction-disclosure.disclosure.json beside it. A lot
+// opens at tick 2 in every world; the variants seal seat 3's bid (or none, or another amount) through the operator, and
+// seat 2 bids, reads and is drawn on the same way in each, with a replica and a presentation session watching. The run
+// ends before the lot's close at tick 302, so nothing the game reveals on purpose differs between the worlds.
+
+schema: "puck.world.definition.v1"
+basis: "avatars/moth"
+documentId: "auction-disclosure"
+import "auction"
+
+bodies {
+  localSeats: 4
+  seatActivation [Eager, Eager, Eager, Eager]
+  seatSpawns ["stage", "stage", "stage", "stage"]
+}
+
+// The sessions the harness observes from: the authority's name decides the tier.
+admission [
+  {
+    disclosure: Replica
+    domain: "replica"
+    grants [{ budget: 64, capability: Observe, subject: "all" }]
+    mode: FederatedAuthority
+  }
+  {
+    disclosure: Presentation
+    domain: "presentation"
+    grants [{ budget: 64, capability: Observe, subject: "all" }]
+    mode: FederatedAuthority
+  }
+]
+
+schedule {
+  settleTicks: 4
+  rows [
+    { tick: 10, principal: "seat1", command: "world.state.cell.set auctionIn1 bid 30" }
+    { tick: 12, principal: "seat2", command: "world.state.cell.set auctionIn2 bid 45" }
+    { tick: 20, principal: "seat2", command: "world.state auctionIn2" }
+    { tick: 20, principal: "seat2", command: "world.state auctionBids" }
+    { tick: 20, principal: "seat2", command: "world.state auctionBids 3" }
+    { tick: 20, principal: "seat2", command: "world.state auctionIn3" }
+    { tick: 20, principal: "seat2", command: "world.hud.template b={state.auctionBids.3}" }
+    { tick: 80, principal: "seat2", command: "world.state auction" }
+  ]
+}

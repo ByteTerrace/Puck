@@ -1,0 +1,169 @@
+import "../games/shedding"
+import "gametable"
+
+// The shedding table: a card game for four seats (../games/shedding.puck) with 24 cards of the standard deck, at the
+// board game room's south table on level 2, east of the auction table. The debug world imports this file whole, and
+// cardtable.puck's `cardDeckPrototypes` gives it the faces; shedding-tests.puck boots it on its own as the disclosure
+// harness's fixture for piles under `Count` and `Placeholder`. The table deals at boot; a seat plays with
+// `shedding.play <seat> <card>` (card 0 to 23, suit * 6 + rank - 1, suits spades, hearts, clubs, diamonds) or draws with
+// `shedding.draw <seat>`, and `shedding.deal` gathers the cards and deals again.
+//
+// The cards stand upright in a rack along each seat's edge, faces toward their seat: a hand is a deal from that seat's
+// `sheddingHand<s>`, its variant read from `sheddingCards`, so a reader shown a card it may not read gets the template's
+// own prototype, the back. The discard pile stands in the middle, the draw pile beside it as one back.
+
+export action shedding, sheddingAct1, sheddingAct2, sheddingAct3, sheddingAct4
+export read shedding, sheddingCards, sheddingRank, sheddingSuit, sheddingSealed, sheddingDeck, sheddingDiscard
+export read sheddingHeld1, sheddingHeld2, sheddingHeld3, sheddingHeld4, sheddingHand1, sheddingHand2, sheddingHand3, sheddingHand4
+export read sheddingAct1, sheddingAct2, sheddingAct3, sheddingAct4
+
+let sheddingSeats = 4
+let sheddingHandSize = 5
+let sheddingTable = [60.8, boardRoomFloor - 0.5, 15.6]
+let sheddingCardScale = 0.06
+// The standing card's centre over the cloth: half the deck's 2.48 tall card at the table's scale.
+let sheddingCardRise = gameTableTop + 0.05 + 0.08
+// A dealt card's prototype by its card number (sheddingCards' value): the standard deck's ace to six of each suit.
+let sheddingFaces = {
+  "0": "card-s-a"
+  "1": "card-s-2"
+  "2": "card-s-3"
+  "3": "card-s-4"
+  "4": "card-s-5"
+  "5": "card-s-6"
+  "6": "card-h-a"
+  "7": "card-h-2"
+  "8": "card-h-3"
+  "9": "card-h-4"
+  "10": "card-h-5"
+  "11": "card-h-6"
+  "12": "card-c-a"
+  "13": "card-c-2"
+  "14": "card-c-3"
+  "15": "card-c-4"
+  "16": "card-c-5"
+  "17": "card-c-6"
+  "18": "card-d-a"
+  "19": "card-d-2"
+  "20": "card-d-3"
+  "21": "card-d-4"
+  "22": "card-d-5"
+  "23": "card-d-6"
+}
+// Each seat's rack: where along its edge the first card stands and the yaw that turns a face toward the seat (the deck's
+// face looks down -Z of its author frame). A dealt card's offset is in the rack's frame, which the rack's yaw turns and
+// its scale shrinks, so a card stands 0.75 card-units (4.5 cm) from the last along the rack's own +X.
+let sheddingRacks = [
+  { seat: 1, origin [-0.27, 0, -0.5], yaw: 0 }
+  { seat: 2, origin [0.27, 0, 0.5], yaw: 180 }
+  { seat: 3, origin [-0.5, 0, 0.27], yaw: 90 }
+  { seat: 4, origin [0.5, 0, -0.27], yaw: 270 }
+]
+
+state {
+  world {
+    sheddingState(seats: sheddingSeats, handSize: sheddingHandSize)
+  }
+}
+
+sheddingRules(seats: sheddingSeats, handSize: sheddingHandSize)
+
+commands [
+  {
+    name: "shedding.play"
+    help: "Plays a card (0 to 23) from a seat's hand (1 to 4) onto the shedding table's discard pile, on that seat's turn."
+    parameters [
+      { name: "seat", kind: Choice, values ["1", "2", "3", "4"] }
+      { name: "card", kind: Integer }
+    ]
+    lines [
+      "world.state.cell.set sheddingAct{seat} play {card}"
+    ]
+  }
+  {
+    name: "shedding.draw"
+    help: "Draws a card for a seat (1 to 4) on its turn, or passes once the draw pile is empty."
+    parameters [
+      { name: "seat", kind: Choice, values ["1", "2", "3", "4"] }
+    ]
+    lines [
+      "world.state.cell.set sheddingAct{seat} draw 1"
+    ]
+  }
+  {
+    name: "shedding.deal"
+    help: "Gathers every card at the shedding table, shuffles and deals a new game."
+    lines [
+      "world.state.cell.set shedding phase 4"
+    ]
+  }
+]
+
+// South of the table, at seat 1's edge, facing +Z across it.
+spawnPoints [
+  { id: "shedding", position [sheddingTable[0], boardRoomFloor, sheddingTable[2] - 1.6], yawDegrees: 180 }
+]
+
+prototypes {
+  gameTablePrototype(id: "sheddingTable", cloth: "#1F5A38")
+}
+
+placements {
+  placement "sheddingTable" {
+    prototype: "sheddingTable"
+    position: sheddingTable
+  }
+
+  placement "sheddingDrawPile" {
+    prototype: "card-back"
+    position [sheddingTable[0] - 0.12, sheddingTable[1] + sheddingCardRise, sheddingTable[2]]
+    scale: sheddingCardScale
+  }
+
+  placement "sheddingDiscardPile" {
+    prototype: "card-back"
+    position [sheddingTable[0] + 0.06, sheddingTable[1] + sheddingCardRise, sheddingTable[2] + 0.05]
+    scale: sheddingCardScale
+    distribution {
+      fill {
+        name: "none"
+        offset: 0
+        step: 0
+      }
+      region: lattice(stepA: [0, 0, -0.07], countA: 24, stepB: [0, 0, 0], countB: 1)
+    }
+    deal {
+      row: "sheddingDiscard"
+      variants {
+        row: "sheddingCards"
+        map: sheddingFaces
+      }
+    }
+  }
+
+  for rack in sheddingRacks {
+    placement $"sheddingRack{rack.seat}" {
+      prototype: "card-back"
+      position [
+        sheddingTable[0] + rack.origin[0], sheddingTable[1] + sheddingCardRise, sheddingTable[2] + rack.origin[2]
+      ]
+      yawDegrees: rack.yaw
+      scale: sheddingCardScale
+      distribution {
+        fill {
+          name: "none"
+          offset: 0
+          step: 0
+        }
+        region: lattice(stepA: [0, 0.33, 0], countA: 2, stepB: [0.75, 0, 0], countB: 12)
+      }
+      deal {
+        row: $"sheddingHand{rack.seat}"
+        variants {
+          row: "sheddingCards"
+          map: sheddingFaces
+        }
+      }
+    }
+  }
+}

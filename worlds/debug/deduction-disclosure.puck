@@ -1,0 +1,52 @@
+// The deduction table (deduction.puck) as a fixture of the noninterference harness: `puck disclosure
+// worlds/debug/deduction-disclosure.puck` boots one world per variant of deduction-disclosure.disclosure.json beside it.
+// A game starts at tick 2 in every world and the seeded draw makes seats 4 and 2 the moles; the variants then change
+// what seat 1, crew in every world, may not read (who the moles are, a whisper between two other seats, a line in the
+// den), while seat 1 talks, votes and reads the same way in each, with a replica and a presentation session watching.
+// The run ends long before the day's close, so nothing the game reveals on purpose differs between the worlds.
+
+schema: "puck.world.definition.v1"
+basis: "avatars/moth"
+documentId: "deduction-disclosure"
+import "deduction"
+
+bodies {
+  localSeats: 4
+  seatActivation [Eager, Eager, Eager, Eager]
+  seatSpawns ["stage", "stage", "stage", "stage"]
+}
+
+// The sessions the harness observes from: the authority's name decides the tier.
+admission [
+  {
+    disclosure: Replica
+    domain: "replica"
+    grants [{ budget: 64, capability: Observe, subject: "all" }]
+    mode: FederatedAuthority
+  }
+  {
+    disclosure: Presentation
+    domain: "presentation"
+    grants [{ budget: 64, capability: Observe, subject: "all" }]
+    mode: FederatedAuthority
+  }
+]
+
+schedule {
+  settleTicks: 4
+  rows [
+    { tick: 15, principal: "seat1", command: "world.state.cell.set deductionMailText1 text hello" }
+    { tick: 15, principal: "seat1", command: "world.state.cell.set deductionMail1 to 0" }
+    { tick: 18, principal: "seat1", command: "world.state.cell.set deductionMail1 vote 2" }
+    { tick: 20, principal: "seat3", command: "world.state.cell.set deductionMailText3 text who" }
+    { tick: 20, principal: "seat3", command: "world.state.cell.set deductionMail3 to 1" }
+    { tick: 30, principal: "seat1", command: "world.state deductionRole" }
+    { tick: 30, principal: "seat1", command: "world.state deductionRole 2" }
+    { tick: 30, principal: "seat1", command: "world.state deductionHeard1" }
+    { tick: 30, principal: "seat1", command: "world.state deductionHeard4" }
+    { tick: 30, principal: "seat1", command: "world.state deductionDen1" }
+    { tick: 30, principal: "seat1", command: "world.state deductionTalk" }
+    { tick: 30, principal: "seat1", command: "world.hud.template r={state.deductionRole.2}" }
+    { tick: 70, principal: "seat1", command: "world.state deductionLines" }
+  ]
+}

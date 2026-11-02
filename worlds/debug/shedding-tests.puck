@@ -1,0 +1,117 @@
+// The shedding table's scenarios (shedding.puck, ../games/shedding.puck), each booted as a small world of its own with
+// four seats: `puck test worlds/debug/shedding-tests.puck --reproduce`. The table gathers, shuffles from its seeded
+// stream and deals at boot, a card a tick, so every scenario sees the same deal by tick 30: seat 1 holds 2, 11, 20, 4
+// and 5, seat 2 holds 22, 6, 0, 21 and 3, the two of hearts (7) is turned up, and 1, 15 and 18 are left to draw, 1 on
+// top. Card `k` is suit `k / 6` (spades, hearts, clubs, diamonds) and rank `k % 6 + 1`.
+
+schema: "puck.world.definition.v1"
+basis: "avatars/moth"
+documentId: "shedding-tests"
+import "shedding"
+import "../standard/cards"
+
+bodies {
+  localSeats: 4
+  seatActivation [Eager, Eager, Eager, Eager]
+  seatSpawns ["stage", "stage", "stage", "stage"]
+}
+
+prototypes {
+  cardDeckPrototypes(variant: "light")
+}
+
+test "the deal leaves five cards a hand, one turned up and three to draw" {
+  when {
+    ticks 40
+  }
+  expect {
+    shedding.phase == 2
+    shedding.turn == 1
+    shedding.top == 7
+    count(sheddingHand1) == 5
+    count(sheddingHand4) == 5
+    count(sheddingHeld2) == 5
+    count(sheddingDiscard) == 1
+    count(sheddingDeck) == 3
+    count(sheddingSealed) == 3
+  }
+}
+
+// The three of spades (2) matches neither the two of hearts' suit nor its rank, so seat 1's play is refused in its own
+// inbox and the turn stays; the six of hearts (11) matches the suit and goes onto the discard pile.
+test "a matching card goes onto the discard pile and a refused one stays in the hand" {
+  when {
+    ticks 40
+    seat1: world.state.cell.set sheddingAct1 play 2
+    ticks 3
+    seat1: world.state.cell.set sheddingAct1 play 11
+    ticks 3
+  }
+  expect {
+    shedding.top == 11
+    shedding.turn == 2
+    shedding.plays == 1
+    count(sheddingHand1) == 4
+    count(sheddingHeld1) == 4
+    sheddingHeld1[2] == true
+    count(sheddingDiscard) == 2
+    sheddingAct1.result == 1
+    sheddingAct1.taken == 2
+  }
+}
+
+test "a draw takes the top of the sealed pile into the hand and its owner's twin" {
+  when {
+    ticks 40
+    seat1: world.state.cell.set sheddingAct1 draw 1
+    ticks 3
+  }
+  expect {
+    count(sheddingHand1) == 6
+    sheddingHeld1[1] == true
+    sheddingHand1[1] == true
+    count(sheddingDeck) == 2
+    count(sheddingSealed) == 2
+    shedding.turn == 2
+  }
+}
+
+// Seat 1 reads its own hand whole. To seat 2 a card of that hand, its rank and a card of the deck answer as cells that do
+// not exist, and the hand, the deck and seat 1's twin answer as rows withholding what the policy keeps (backs, a count,
+// the whole row); the step grammar records only whether a read was refused, so the answers themselves are the harness's.
+test "a hand reads whole to its owner and as backs to the other seats" {
+  when {
+    ticks 40
+    seat1: world.state sheddingHeld1
+    seat1: world.state sheddingHand1 11
+    seat2: world.state sheddingHand1
+    seat2: world.state sheddingDeck
+    seat2: world.state sheddingDiscard 7
+    seat2: world.state sheddingHeld1
+    seat2 refused "no such cell": world.state sheddingHand1 11
+    seat2 refused "no such cell": world.state sheddingRank 11
+    seat1: world.state sheddingSealed
+    seat1 refused "no such cell": world.state sheddingDeck 1
+    ticks 2
+  }
+  expect {
+    shedding.phase == 2
+  }
+}
+
+test "gathering deals a new game" {
+  when {
+    ticks 40
+    seat1: world.state.cell.set sheddingAct1 play 11
+    ticks 3
+    seat3: world.state.cell.set shedding phase 4
+    ticks 60
+  }
+  expect {
+    shedding.phase == 2
+    shedding.plays == 0
+    count(sheddingHand1) == 5
+    count(sheddingDiscard) == 1
+    count(sheddingDeck) == 3
+  }
+}

@@ -1,0 +1,349 @@
+import "../standard/sealed"
+
+// The rules of a fog-of-war skirmish as a library: two sides of three units on a 6 by 6 board with walls, red (seat 1)
+// and blue (seat 2), moving in turn. A unit steps to any of the eight cells around it that is on the board, not a wall
+// and not one of its own; stepping onto an enemy takes it. A side that loses its last unit loses. A table imports it
+// and expands `skirmishState` inside its `state { world { } }` block, and `skirmishRules` and `skirmishSearch` at the
+// document's top level:
+//
+//   import "../games/skirmish"
+//   state { world { skirmishState(origin: [0, 1, 0], cellSize: 0.1) } }
+//   skirmishRules()
+//   skirmishSearch()
+//
+// Units are keyed 1 to 6, 1 to 3 red and 4 to 6 blue. A cell is `row * 6 + column`, rows running +Z from red's edge.
+//
+// What each side sees:
+//
+// - `skirmishPos`, each unit's cell (-1 once taken): each cell reads only to its own side's seat.
+// - `skirmishSight` (public, fixed): the cells a unit standing on a cell sees, as a mask (bit `c` for cell `c`): the
+//   eight around it, and up to three along its row and column, stopped by a wall (`skirmishWalls`) standing between.
+// - `skirmishView`/`skirmishSeen<s>`: what side `s` sees now, as a mask and as a board; only its own seat reads them.
+// - `skirmishKnows<s>`: a `knowledge` row of side `s`'s, keyed by unit: the cell it last saw each unit on, which the
+//   `observe` transform refreshes from `skirmishPos` through `skirmishSeen<s>` every tick. Only its own seat reads it.
+//
+// A seat orders through its own sealed inbox (../standard/sealed.puck): `skirmishOrder<s>.unit` (1 to 3, its own
+// count) and `to` (a cell); the rules answer `result` 1 moved, -1 refused (not its turn, a dead unit, not a step, a wall,
+// its own unit). The judge (`skirmish-judge-<u>`) compares each unit's cell with `skirmishLast`, the last legal board,
+// which only the world reads; the search runs the same judge.
+//
+// Two computer players search blue's moves (`skirmishSearch`). `skirmishSharp` scores a move by how close blue's
+// first unit comes to red's first unit where it really stands; `skirmishFair` by how close it comes to where blue last
+// saw it. Their answers are the search's own writes into `skirmishSharpBest` (public) and `skirmishFairBest` (blue's).
+//
+// The disclosure fixture: the principals are `seat1` and `seat2`; the hidden cells are the other side's
+// `skirmishPos` cells, `skirmishLast`, the other side's `skirmishView`, `skirmishSeen<s>`, `skirmishKnows<s>` and inbox,
+// and `skirmishFairBest` for seat 1. `skirmishSharpBest` is public and judged over hidden cells: it is the fixture's
+// search door.
+
+let skirmishWidth = 6
+let skirmishCells = 36
+let skirmishWalls = [14, 21]
+let skirmishStart = [1, 2, 4, 31, 33, 34]
+// Unit `u`'s side-mates and enemies, by unit.
+let skirmishMates = [[], [2, 3], [1, 3], [1, 2], [5, 6], [4, 6], [4, 5]]
+let skirmishEnemies = [[], [4, 5, 6], [4, 5, 6], [4, 5, 6], [1, 2, 3], [1, 2, 3], [1, 2, 3]]
+
+// What a unit on cell `o` sees, bit `c` for cell `c`: the cells around it, and the cells up to three along its row or
+// column with no wall strictly between.
+let skirmishSightMasks = map(range(0, skirmishCells), o => reduce(range(0, skirmishCells), 0, (mask, c) => (mask |
+  (((absolute(floor(o / 6) - floor(c / 6)) <= 1 and absolute(o % 6 - c % 6) <= 1) or (floor(o / 6) == floor(c / 6) and
+    absolute(o % 6 - c % 6) <= 3 and length(
+    filter(skirmishWalls, w => floor(w / 6) == floor(o / 6) and (w % 6 - o % 6) * (w % 6 - c % 6) < 0)
+  ) == 0) or (o % 6 == c % 6 and absolute(floor(o / 6) - floor(c / 6)) <= 3 and length(
+    filter(skirmishWalls, w => w % 6 == o % 6 and (floor(w / 6) - floor(o / 6)) * (floor(w / 6) - floor(c / 6)) < 0)
+  ) == 0)) ? 1 << c : 0))))
+
+template skirmishState(origin, cellSize) {
+  sealedInbox(name: "skirmishOrder", seats: 2, fields: ["unit", "to", "result"], empty: -1)
+
+  grid skirmishBoard dimensions(width: skirmishWidth, depth: skirmishWidth) cellSize(cellSize) origin(
+    origin[0],
+    origin[1],
+    origin[2]
+  )
+
+  row {
+    name: "skirmishUnits"
+    kind: "Int"
+    capacity: 6
+    cells: map(range(1, 6), u => { key: $"{u}", value: u <= 3 ? 1 : 2 })
+  }
+
+  row {
+    name: "skirmishPos"
+    kind: "Int"
+    domain: keysOf(row: skirmishUnits)
+    capacity: 6
+    min: -1
+    max: skirmishCells - 1
+    cells: map(range(1, 6), u => {
+      key: $"{u}"
+      value: skirmishStart[u - 1]
+      visibility {
+        readers [u <= 3 ? "seat1" : "seat2"]
+      }
+    })
+    visibility {}
+  }
+
+  row {
+    name: "skirmishLast"
+    kind: "Int"
+    domain: keysOf(row: skirmishUnits)
+    capacity: 6
+    min: -1
+    max: skirmishCells - 1
+    cells: map(range(1, 6), u => { key: $"{u}", value: skirmishStart[u - 1] })
+    visibility {
+      readers []
+    }
+  }
+
+  row {
+    name: "skirmishWall"
+    kind: "Int"
+    capacity: skirmishCells
+    cells: map(range(0, skirmishCells), c => { key: $"{c}", value: length(filter(skirmishWalls, w => w == c)) })
+  }
+
+  row {
+    name: "skirmishSight"
+    kind: "Int"
+    capacity: skirmishCells
+    cells: map(range(0, skirmishCells), c => { key: $"{c}", value: skirmishSightMasks[c] })
+  }
+
+  row {
+    name: "skirmishView"
+    kind: "Int"
+    capacity: 2
+    cells: map(range(1, 2), s => { key: $"{s}", value: 0, visibility { readers [$"seat{s}"] } })
+    visibility {}
+  }
+
+  for s in range(1, 2) {
+    row {
+      name: $"skirmishSeen{s}"
+      kind: "Bool"
+      domain: cellsOf(topology: skirmishBoard)
+      visibility {
+        readers [$"seat{s}"]
+      }
+    }
+
+    row {
+      name: $"skirmishKnows{s}"
+      kind: "Int"
+      domain: keysOf(row: skirmishUnits)
+      capacity: 6
+      min: -1
+      max: skirmishCells - 1
+      cells: map(range(1, 6), u => { key: $"{u}", value: -1, observation { tick: 0, visible: false } })
+      knowledge {
+        source: "skirmishPos"
+        mask: $"skirmishSeen{s}"
+        positions: "skirmishPos"
+      }
+      visibility {
+        readers [$"seat{s}"]
+      }
+    }
+  }
+
+
+  // `ordered`: the side whose order this tick put a unit on a cell, for its receipt; `sighted`: one past the move the
+  // sight rules last refreshed after.
+  table skirmish capacity(5) {
+    winner = 0
+    moves = 0
+    ordered = 0
+    sighted = 0
+  }
+
+  slot skirmishTurn = 1 bounds(1..2)
+  slot skirmishVerdict = 0 bounds(0..1)
+
+  slot skirmishSharpOn = 0 bounds(0..1)
+  slot skirmishSharpRevision = 0 bounds(0..1000000)
+  slot skirmishFairOn = 0 bounds(0..1)
+  slot skirmishFairRevision = 0 bounds(0..1000000)
+
+  table skirmishSharpBest {
+    token = -1
+    to = -1
+    score = 0
+    revision = -1
+  }
+
+  row {
+    name: "skirmishFairBest"
+    kind: "Int"
+    capacity: 4
+    cells [
+      { key: "token", value: -1 }
+      { key: "to", value: -1 }
+      { key: "score", value: 0 }
+      { key: "revision", value: -1 }
+    ]
+    visibility {
+      readers ["seat2"]
+    }
+  }
+}
+
+template skirmishRules() {
+  // A seat's order puts its unit on the cell it names; the judge below accepts the step or puts the unit back.
+  for s in range(1, 2) {
+    for i in range(1, 3) {
+      rule $"skirmish-order-{s}-{i}" {
+        when (search(ply) == 0 and
+          skirmish.winner == 0 and
+          skirmishTurn == s and
+          $"skirmishOrder{s}".unit == i and
+          $"skirmishOrder{s}".to >= 0 and
+          $"skirmishOrder{s}".to < skirmishCells)
+        skirmishPos[$"{(s - 1) * 3 + i}"] = $"skirmishOrder{s}".to
+        skirmish.ordered = s
+      }
+    }
+  }
+
+  // A unit the search displaced onto -1 is off the board.
+  for u in range(1, 6) {
+    rule $"skirmish-taken-{u}" {
+      when skirmishPos[$"{u}"] < 0 and skirmishLast[$"{u}"] >= 0
+      skirmishLast[$"{u}"] = -1
+    }
+  }
+
+  // The judge: a moved unit's step from its last legal cell, one cell any way, onto no wall and no unit of its own;
+  // an enemy standing there is taken.
+  for u in range(1, 6) {
+    rule $"skirmish-judge-{u}" {
+      local from = skirmishLast[$"{u}"]
+      local to = skirmishPos[$"{u}"]
+      local step = maximum(absolute(to / 6 - from / 6), absolute(to % 6 - from % 6))
+      local mate1 = skirmishPos[$"{skirmishMates[u][0]}"]
+      local mate2 = skirmishPos[$"{skirmishMates[u][1]}"]
+      local legal = (
+        skirmishTurn == (u <= 3 ? 1 : 2) and
+        from >= 0 and
+        step == 1 and
+        skirmishWall[to] == 0 and
+        mate1 != to and
+        mate2 != to and
+        skirmish.winner == 0
+      )
+      when to != from and to >= 0
+      skirmishVerdict = legal
+      if legal {
+        skirmishLast[$"{u}"] = to
+        skirmishTurn = u <= 3 ? 2 : 1
+        skirmish.moves += 1
+        for e in skirmishEnemies[u] {
+          if skirmishPos[$"{e}"] == to {
+            skirmishPos[$"{e}"] = -1
+            skirmishLast[$"{e}"] = -1
+          }
+        }
+      } else {
+        skirmishPos[$"{u}"] = from
+      }
+    }
+  }
+
+  for s in range(1, 2) {
+    rule $"skirmish-receipt-{s}" {
+      local moved = skirmish.ordered == s and skirmishTurn != s
+      when search(ply) == 0 and $"skirmishOrder{s}".unit >= 0
+      setState(state: $"skirmishOrder{s}", key: result, expression: moved ? 1 : -1)
+      setState(state: $"skirmishOrder{s}", key: unit, expression: -1)
+      setState(state: $"skirmishOrder{s}", key: to, expression: -1)
+      addState(state: $"skirmishOrder{s}", key: taken, expression: 1)
+      skirmish.ordered = 0
+    }
+  }
+
+  // What each side sees: the union of its live units' sight, as a mask and a board, and what it remembers, refreshed
+  // once after each move. Refreshing every tick would restamp the knowledge rows, and a search job restarts whenever a
+  // row it reads changes, so a job reading them would never finish.
+  for s in range(1, 2) {
+    rule $"skirmish-sight-{s}" {
+      local first = skirmishPos[$"{(s - 1) * 3 + 1}"]
+      local second = skirmishPos[$"{(s - 1) * 3 + 2}"]
+      local third = skirmishPos[$"{(s - 1) * 3 + 3}"]
+      when search(ply) == 0 and skirmish.sighted <= skirmish.moves
+      skirmishView[$"{s}"] = (
+        (first >= 0 ? skirmishSight[maximum(first, 0)] : 0) |
+        (second >= 0 ? skirmishSight[maximum(second, 0)] : 0) |
+        (third >= 0 ? skirmishSight[maximum(third, 0)] : 0)
+      )
+      for c in range(0, skirmishCells) {
+        setState(state: $"skirmishSeen{s}", key: $"{c}", expression: (skirmishView[$"{s}"] >> c) & 1)
+      }
+      transform observe(row: $"skirmishKnows{s}")
+    }
+  }
+
+  rule "skirmish-sighted" {
+    when search(ply) == 0 and skirmish.sighted <= skirmish.moves
+    skirmish.sighted = skirmish.moves + 1
+  }
+
+  for s in range(1, 2) {
+    rule $"skirmish-lost-{s}" {
+      when (search(ply) == 0 and
+        skirmish.winner == 0 and
+        skirmishPos[$"{(s - 1) * 3 + 1}"] < 0 and
+        skirmishPos[$"{(s - 1) * 3 + 2}"] < 0 and
+        skirmishPos[$"{(s - 1) * 3 + 3}"] < 0)
+      skirmish.winner = 3 - s
+    }
+  }
+}
+
+// Blue's two computer players. Each walks every step of every unit through the judge, one ply deep, and lands its best
+// move in its own row. The score is read after blue's step, from blue's side: the nearer blue's first unit (4) stands
+// to red's first (1), the better. `skirmishSharp` reads red's real cell, which blue may not read; `skirmishFair` reads
+// the cell blue last saw it on (-1, read as a cell off the board's edge, when it never has).
+template skirmishSearch() {
+  search {
+    jobs [
+      {
+        name: "skirmishSharp"
+        tokens: skirmishPos
+        board: skirmishBoard
+        turn: skirmishTurn
+        verdict: skirmishVerdict
+        enabled: skirmishSharpOn
+        revision: skirmishSharpRevision
+        depth: 1
+        best: skirmishSharpBest
+        shapes [
+          relocate(displace: true)
+        ]
+        score: 0 - (absolute(skirmishPos["4"] / 6 - skirmishPos["1"] / 6) + absolute(
+          skirmishPos["4"] % 6 - skirmishPos["1"] % 6
+        ))
+      }
+      {
+        name: "skirmishFair"
+        tokens: skirmishPos
+        board: skirmishBoard
+        turn: skirmishTurn
+        verdict: skirmishVerdict
+        enabled: skirmishFairOn
+        revision: skirmishFairRevision
+        depth: 1
+        best: skirmishFairBest
+        shapes [
+          relocate(displace: true)
+        ]
+        score: 0 - (absolute(skirmishPos["4"] / 6 - skirmishKnows2["1"] / 6) + absolute(
+          skirmishPos["4"] % 6 - skirmishKnows2["1"] % 6
+        ))
+      }
+    ]
+  }
+}

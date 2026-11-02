@@ -1,0 +1,68 @@
+{
+  "schema": "puck.disclosure.fixture.v1",
+  "observer": "seat2",
+  "sessions": ["replica", "presentation"],
+  "variants": [
+    {
+      "name": "bid",
+      "steps": [
+        { "at": 2, "run": "world.state.cell.set auction open 1" },
+        { "at": 14, "run": "world.state.cell.set auctionIn3 bid 70" }
+      ]
+    },
+    {
+      "name": "none",
+      "steps": [
+        { "at": 2, "run": "world.state.cell.set auction open 1" }
+      ]
+    },
+    {
+      "name": "other-amount",
+      "steps": [
+        { "at": 2, "run": "world.state.cell.set auction open 1" },
+        { "at": 14, "run": "world.state.cell.set auctionIn3 bid 20" }
+      ]
+    },
+    {
+      "name": "over-purse",
+      "steps": [
+        { "at": 2, "run": "world.state.cell.set auction open 1" },
+        { "at": 14, "run": "world.state.cell.set auctionIn3 bid 150" }
+      ]
+    },
+    {
+      "name": "late-bid",
+      "steps": [
+        { "at": 2, "run": "world.state.cell.set auction open 1" },
+        { "at": 50, "run": "world.state.cell.set auctionIn3 bid 70" }
+      ]
+    }
+  ],
+  "script": [
+    { "at": 30, "run": "world.budget" },
+    { "at": 30, "run": "world.placements" },
+    { "at": 30, "run": "world.state auctionBids" },
+    { "at": 30, "run": "world.state auctionIn3 taken" },
+    { "at": 30, "run": "world.row state auctionBids" },
+    { "at": 30, "run": "world.projection" },
+    { "at": 30, "run": "world.identify" },
+    { "at": 60, "run": "world.state auctionBids" },
+    { "at": 60, "run": "world.state auctionPurse" },
+    { "at": 60, "run": "world.budget" },
+    { "at": 60, "run": "world.state.cell.set auctionIn3 bid 10" },
+    { "at": 62, "run": "world.state.cell.set auctionBids 3 0" }
+  ],
+  "fuzz": {
+    "seed": 1,
+    "lines": 64,
+    "actions": 16,
+    "from": 32,
+    "until": 76,
+    "words": [
+      "auction", "auctionBids", "auctionAudience", "auctionShown", "auctionPurse", "auctionWinner", "auctionPrice",
+      "auctionIn1", "auctionIn2", "auctionIn3", "auctionIn4", "auctionIn9", "bid", "result", "taken", "open", "closeAt",
+      "lot", "1", "2", "3", "4", "5", "0", "20", "70", "150", "seat1", "seat2", "seat3", "auctionChips", "auctionChips/3",
+      "auctionTable", "{state.auctionBids.3}", "{state.auctionIn3.bid}", "$value", "nothing"
+    ]
+  }
+}

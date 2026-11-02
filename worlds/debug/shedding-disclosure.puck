@@ -1,0 +1,55 @@
+// The shedding table (shedding.puck) as a fixture of the noninterference harness: `puck disclosure
+// worlds/debug/shedding-disclosure.puck` boots one world per variant of shedding-disclosure.disclosure.json beside it.
+// The table deals the same seeded game in every world by tick 30 (seat 1 holds 2, 11, 20, 4 and 5, the two of hearts is
+// turned up); the variants then change what only seat 1 and the world know (which cards seat 1 holds, the order and
+// slots they hold them in, what the deck holds), keeping every count the policies disclose. Seat 1 plays the six of
+// hearts and shows the five of spades (4) in every world, seat 2 draws, and seat 2 and a replica and a presentation
+// session read the same way in each.
+
+schema: "puck.world.definition.v1"
+basis: "avatars/moth"
+documentId: "shedding-disclosure"
+import "shedding"
+import "../standard/cards"
+
+bodies {
+  localSeats: 4
+  seatActivation [Eager, Eager, Eager, Eager]
+  seatSpawns ["stage", "stage", "stage", "stage"]
+}
+
+prototypes {
+  cardDeckPrototypes(variant: "light")
+}
+
+// The sessions the harness observes from: the authority's name decides the tier.
+admission [
+  {
+    disclosure: Replica
+    domain: "replica"
+    grants [{ budget: 64, capability: Observe, subject: "all" }]
+    mode: FederatedAuthority
+  }
+  {
+    disclosure: Presentation
+    domain: "presentation"
+    grants [{ budget: 64, capability: Observe, subject: "all" }]
+    mode: FederatedAuthority
+  }
+]
+
+schedule {
+  settleTicks: 4
+  rows [
+    { tick: 45, principal: "seat1", command: "world.state.cell.set sheddingAct1 play 11" }
+    { tick: 50, principal: "seat1", command: "world.state.cell.set sheddingAct1 show 4" }
+    { tick: 55, principal: "seat2", command: "world.state.cell.set sheddingAct2 draw 1" }
+    { tick: 60, principal: "seat2", command: "world.state sheddingHand1" }
+    { tick: 60, principal: "seat2", command: "world.state sheddingHand1 4" }
+    { tick: 60, principal: "seat2", command: "world.state sheddingRank 4" }
+    { tick: 60, principal: "seat2", command: "world.state sheddingDeck" }
+    { tick: 60, principal: "seat2", command: "world.state sheddingHeld2" }
+    { tick: 60, principal: "seat2", command: "world.hud.template h={state.sheddingHand1.2}" }
+    { tick: 90, principal: "seat2", command: "world.state sheddingHand1" }
+  ]
+}

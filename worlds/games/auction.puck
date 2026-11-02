@@ -1,0 +1,164 @@
+import "../standard/sealed"
+
+// The rules of a sealed-bid auction as a library: `seats` bidders, `lots` lots sold one after another, each seat
+// starting with `purse` coins. A table imports it and expands the two templates, `auctionState` inside its
+// `state { world { } }` block and `auctionRules` at the document's top level (the rules run in document order):
+//
+//   import "../games/auction"
+//   state { world { auctionState(seats: 4, lots: 3, purse: 100) } }
+//   auctionRules(seats: 4, lots: 3)
+//
+// A lot opens with `auction.open` 1 and closes 10 seconds later; nothing a seat does moves the close, so the moment of
+// the close says nothing about who bid. While it is open a seat bids by writing its own sealed inbox
+// (`auctionIn<s>.bid`, ../standard/sealed.puck), and the next tick a rule moves the bid into `auctionBids`, keyed by
+// seat (0 for no bid), which only the world reads; the seat's receipt is its own inbox (`result` 1 taken, -1 above its
+// purse, `taken` counting). A later bid replaces an earlier one. At the close `auctionAudience` lists every seat, which
+// widens `auctionBids` to all of them (its `readersFrom`): the bids reveal, `auctionShown` lists the seats that bid (the
+// table stands a chip for each), the highest takes the lot at its own price (the lower seat on a tie) and pays from its
+// purse, and `auctionWinner` and `auctionPrice` record the lot. Four seconds later the audience empties, the bids go
+// back to 0 and the next lot opens; after the last, `auction.done` is 1.
+//
+// The disclosure fixture: the principals are `seat1` to `seat<seats>`; the hidden cells are `auctionIn<s>.bid`,
+// `auctionIn<s>.result`, `auctionIn<s>.taken` (each `seat<s>`'s alone) and every `auctionBids` cell while the lot is open.
+
+template auctionState(seats, lots, purse) {
+  sealedInbox(name: "auctionIn", seats: seats, fields: ["bid", "result"])
+
+  table auction capacity(10) {
+    lot = 1
+    open = 0
+    closeAt = 0
+    nextAt = 0
+    revealed = 0
+    tallied = 0
+    winner = 0
+    price = 0
+    done = 0
+  }
+
+  row {
+    name: "auctionPurse"
+    kind: "Int"
+    capacity: seats
+    min: 0
+    cells: map(range(1, seats), s => { key: $"{s}", value: purse })
+  }
+
+  row {
+    name: "auctionBids"
+    kind: "Int"
+    capacity: seats
+    min: 0
+    cells: map(range(1, seats), s => { key: $"{s}", value: 0 })
+    visibility {
+      readers []
+      readersFrom: "auctionAudience"
+    }
+  }
+
+  // A rule's write never mints a key, so the audience holds a cell per seat, empty until the reveal names it.
+  row {
+    name: "auctionAudience"
+    kind: "Text"
+    capacity: seats
+    cells: map(range(1, seats), s => { key: $"{s}", value: "" })
+  }
+
+  // The seats that bid, as a pile over the purses' keys: a pile takes and gives up members as the rules write it.
+  row {
+    name: "auctionShown"
+    kind: "Bool"
+    domain: keysOf(ordered: true, row: auctionPurse)
+    capacity: seats
+  }
+
+  row {
+    name: "auctionWinner"
+    kind: "Int"
+    capacity: lots
+    cells: map(range(1, lots), lot => { key: $"{lot}", value: 0 })
+  }
+
+  row {
+    name: "auctionPrice"
+    kind: "Int"
+    capacity: lots
+    cells: map(range(1, lots), lot => { key: $"{lot}", value: 0 })
+  }
+}
+
+template auctionRules(seats, lots) {
+  rule "auction-open" {
+    when auction.open == 1 and auction.closeAt == 0 and auction.done == 0
+    mode: Edge
+    schedule auction.closeAt in 10s
+  }
+
+  // A seat's bid, collected the tick after it lands in its inbox while a lot is open.
+  for s in range(1, seats) {
+    rule $"auction-collect-{s}" {
+      local offer = $"auctionIn{s}".bid
+      local covered = offer <= auctionPurse[$"{s}"]
+      when auction.open == 1 and auction.closeAt > 0 and offer > 0
+      if covered {
+        auctionBids[$"{s}"] = offer
+      }
+      setState(state: $"auctionIn{s}", key: bid, expression: 0)
+      setState(state: $"auctionIn{s}", key: result, expression: covered ? 1 : -1)
+      addState(state: $"auctionIn{s}", key: taken, expression: 1)
+    }
+  }
+
+  // The close: the audience widens to every seat, so the bids reveal; then the highest bid, in seat order, leads.
+  rule "auction-close" {
+    when auction.open == 1 and auction.closeAt > 0 and $tick >= auction.closeAt
+    auction.open = 0
+    auction.revealed = 1
+    for s in range(1, seats) {
+      setState(state: auctionAudience, key: $"{s}", text: $"seat{s}")
+      if auctionBids[$"{s}"] > 0 {
+        auctionShown[$"{s}"] = true
+      }
+    }
+  }
+
+  for s in range(1, seats) {
+    rule $"auction-lead-{s}" {
+      when auction.revealed == 1 and auction.tallied == 0 and auctionBids[$"{s}"] > auction.price
+      auction.price = auctionBids[$"{s}"]
+      auction.winner = s
+    }
+  }
+
+  rule "auction-settle" {
+    when auction.revealed == 1 and auction.tallied == 0
+    auction.tallied = 1
+    auctionWinner[auction.lot] = auction.winner
+    auctionPrice[auction.lot] = auction.price
+    if auction.winner > 0 {
+      auctionPurse[auction.winner] -= auction.price
+    }
+    schedule auction.nextAt in 4s
+  }
+
+  // After the reveal the bids go back to 0 and hide again, and the next lot opens.
+  rule "auction-next" {
+    when auction.tallied == 1 and $tick >= auction.nextAt
+    for s in range(1, seats) {
+      auctionBids[$"{s}"] = 0
+      setState(state: auctionAudience, key: $"{s}", text: "")
+      remove auctionShown[$"{s}"]
+    }
+    auction.revealed = 0
+    auction.tallied = 0
+    auction.winner = 0
+    auction.price = 0
+    auction.closeAt = 0
+    if auction.lot < lots {
+      auction.lot += 1
+      auction.open = 1
+    } else {
+      auction.done = 1
+    }
+  }
+}

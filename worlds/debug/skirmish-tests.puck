@@ -1,0 +1,144 @@
+// The skirmish table's scenarios (skirmish.puck, ../games/skirmish.puck), each booted as a small world of its own with
+// two seats: `puck test worlds/debug/skirmish-tests.puck --reproduce`. Red starts on cells 1, 2 and 4, blue on 31, 33
+// and 34; the walls stand on 14 and 21. From its start blue sees rows 4 and 5, cells 13, 19, 16 and 22 up its first and
+// fifth columns and the wall on 21, so red's back two rows are fog to it.
+
+schema: "puck.world.definition.v1"
+basis: "avatars/moth"
+documentId: "skirmish-tests"
+import "skirmish"
+
+bodies {
+  localSeats: 2
+  seatActivation [Eager, Eager]
+  seatSpawns ["stage", "stage"]
+}
+
+test "a step moves a unit and hands blue the turn" {
+  when {
+    ticks 5
+    seat1: world.state.cell.set skirmishOrder1 to 8
+    seat1: world.state.cell.set skirmishOrder1 unit 1
+    ticks 5
+  }
+  expect {
+    skirmishPos[1] == 8
+    skirmishTurn == 2
+    skirmishOrder1.result == 1
+    skirmish.moves == 1
+  }
+}
+
+// Red's second unit steps beside the wall, blue answers, and red's step onto the wall is refused in red's own inbox: the
+// unit stays and the turn stays red's.
+test "a step onto a wall is refused and the turn stays" {
+  when {
+    ticks 5
+    seat1: world.state.cell.set skirmishOrder1 to 8
+    seat1: world.state.cell.set skirmishOrder1 unit 2
+    ticks 5
+    seat2: world.state.cell.set skirmishOrder2 to 25
+    seat2: world.state.cell.set skirmishOrder2 unit 1
+    ticks 5
+    seat1: world.state.cell.set skirmishOrder1 to 14
+    seat1: world.state.cell.set skirmishOrder1 unit 2
+    ticks 5
+  }
+  expect {
+    skirmishPos[2] == 8
+    skirmishPos[4] == 25
+    skirmishOrder1.result == -1
+    skirmishOrder1.taken == 2
+    skirmishTurn == 1
+  }
+}
+
+test "a step onto an enemy takes it" {
+  given {
+    skirmishPos[4] = 7
+    skirmishLast[4] = 7
+  }
+  when {
+    ticks 5
+    seat1: world.state.cell.set skirmishOrder1 to 7
+    seat1: world.state.cell.set skirmishOrder1 unit 1
+    ticks 5
+  }
+  expect {
+    skirmishPos[1] == 7
+    skirmishPos[4] == -1
+    skirmishLast[4] == -1
+    skirmish.winner == 0
+  }
+}
+
+// Red's first unit stands up blue's first column, in its sight: blue remembers the cell, and reads the memory but not
+// red's own row; red reads neither of blue's.
+test "blue sees a red unit in its line of sight and remembers its cell" {
+  given {
+    skirmishPos[1] = 19
+    skirmishLast[1] = 19
+  }
+  when {
+    ticks 5
+    seat2: world.state skirmishKnows2 1
+    seat2 refused "no such cell": world.state skirmishPos 1
+    seat1 refused "no such cell": world.state skirmishKnows2 1
+    seat1 refused "no such cell": world.state skirmishSeen2 19
+    ticks 2
+  }
+  expect {
+    skirmishKnows2[1] == 19
+    skirmishKnows2[2] == -1
+    skirmishSeen2[19] == true
+    skirmishSeen2[1] == false
+  }
+}
+
+// The search evidence: one pair, the same public script, red's first unit in the fog on cell 1 (A) or cell 5 (B). Blue's
+// two computer players work out its answer to red's first step. `skirmishSharpBest`, a public row, moves with the
+// fogged unit (A: unit 4 to 25, score -4; B: to 26, score -7), so every seat reads where it is; `skirmishFairBest`,
+// which reads only blue's memory, is the same in both.
+test "search evidence A: red's first unit in the fog on cell 1" {
+  when {
+    ticks 5
+    seat1: world.state.cell.set skirmishOrder1 to 8
+    seat1: world.state.cell.set skirmishOrder1 unit 2
+    ticks 3
+    seat2: world.state.cell.set skirmishSharpOn $value 1
+    seat2: world.state.cell.set skirmishFairOn $value 1
+    ticks 90
+    seat2: world.state skirmishSharpBest
+  }
+  expect {
+    skirmishSharpBest.token == 3
+    skirmishSharpBest.to == 25
+    skirmishSharpBest.score == -4
+    skirmishFairBest.to == 24
+    skirmishFairBest.score == -5
+  }
+}
+
+test "search evidence B: red's first unit in the fog on cell 5" {
+  given {
+    skirmishPos[1] = 5
+    skirmishLast[1] = 5
+  }
+  when {
+    ticks 5
+    seat1: world.state.cell.set skirmishOrder1 to 8
+    seat1: world.state.cell.set skirmishOrder1 unit 2
+    ticks 3
+    seat2: world.state.cell.set skirmishSharpOn $value 1
+    seat2: world.state.cell.set skirmishFairOn $value 1
+    ticks 90
+    seat2: world.state skirmishSharpBest
+  }
+  expect {
+    skirmishSharpBest.token == 3
+    skirmishSharpBest.to == 26
+    skirmishSharpBest.score == -7
+    skirmishFairBest.to == 24
+    skirmishFairBest.score == -5
+  }
+}

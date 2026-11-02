@@ -1,0 +1,69 @@
+{
+  "schema": "puck.disclosure.fixture.v1",
+  "observer": "seat2",
+  "sessions": ["replica", "presentation"],
+  "variants": [
+    {
+      "name": "cell1",
+      "steps": []
+    },
+    {
+      "name": "cell5",
+      "steps": [
+        { "at": 2, "run": "world.state.cell.set skirmishPos 1 5" },
+        { "at": 2, "run": "world.state.cell.set skirmishLast 1 5" }
+      ]
+    },
+    {
+      "name": "cell0",
+      "steps": [
+        { "at": 2, "run": "world.state.cell.set skirmishPos 1 0" },
+        { "at": 2, "run": "world.state.cell.set skirmishLast 1 0" }
+      ]
+    },
+    {
+      "name": "absent",
+      "steps": [
+        { "at": 2, "run": "world.state.cell.set skirmishPos 1 -1" },
+        { "at": 2, "run": "world.state.cell.set skirmishLast 1 -1" }
+      ]
+    },
+    {
+      "name": "late-move",
+      "steps": [
+        { "at": 80, "run": "world.state.cell.set skirmishPos 3 3" },
+        { "at": 80, "run": "world.state.cell.set skirmishLast 3 3" }
+      ]
+    }
+  ],
+  "script": [
+    { "at": 40, "run": "world.budget" },
+    { "at": 40, "run": "world.placements" },
+    { "at": 40, "run": "world.state skirmishSharpBest" },
+    { "at": 40, "run": "world.state skirmishFairBest" },
+    { "at": 40, "run": "world.state skirmishView" },
+    { "at": 40, "run": "world.state skirmishLast" },
+    { "at": 40, "run": "world.row state skirmishPos" },
+    { "at": 40, "run": "world.topologies" },
+    { "at": 40, "run": "world.projection" },
+    { "at": 40, "run": "world.identify" },
+    { "at": 40, "run": "world.search" },
+    { "at": 100, "run": "world.state skirmishKnows2" },
+    { "at": 100, "run": "world.budget" }
+  ],
+  "fuzz": {
+    "seed": 1,
+    "lines": 64,
+    "actions": 16,
+    "from": 42,
+    "until": 104,
+    "words": [
+      "skirmish", "skirmishTurn", "skirmishVerdict", "skirmishUnits", "skirmishPos", "skirmishLast", "skirmishWall",
+      "skirmishSight", "skirmishView", "skirmishSeen1", "skirmishSeen2", "skirmishKnows1", "skirmishKnows2",
+      "skirmishOrder1", "skirmishOrder2", "skirmishSharpOn", "skirmishSharpBest", "skirmishFairOn", "skirmishFairBest",
+      "skirmishBoard", "unit", "to", "result", "token", "score", "revision", "$value", "0", "1", "2", "3", "4", "5", "8",
+      "14", "19", "25", "26", "31", "-1", "99", "seat1", "seat2", "{state.skirmishPos.1}", "{state.skirmishSharpBest.to}",
+      "nothing"
+    ]
+  }
+}

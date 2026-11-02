@@ -716,12 +716,45 @@ source and what it changed. Line numbers are the sources the review named.
 ## Open items
 
 - Whether a `search` job whose outputs are public while its token or code rows
-  are restricted is refused, linted or left to the author: the skirmish
-  fixture (step 0) shows what such a search leaks through the harness, and the
-  owner decides the lint with that in hand.
-- Whether blind writes return: rejected here (decision 3); the auction fixture
-  reopens the question only if an authored private inbox cannot give a sealed
-  bid what it needs, with the requirement named.
+  are restricted is refused, linted or left to the author: the owner decides
+  with the skirmish's evidence in hand. The evidence
+  (`worlds/debug/skirmish-tests.puck`, the two `search evidence` scenarios):
+  today the engine admits such a job and lands its best move in a public row.
+  Blue's `skirmishSharp` scores its move by red's real `skirmishPos`, whose
+  cells only `seat1` reads; with red's first unit in blue's fog on cell 1 its
+  public `skirmishSharpBest` reads token 3 to cell 25 at score -4, on cell 5 it
+  reads cell 26 at score -7. Every seat reads both answers, so the destination
+  says which side of the board the hidden unit is on and the score says its
+  exact distance. Its twin `skirmishFair`, scored over blue's own `knowledge`
+  row and writing a row only `seat2` reads, answers cell 24 at score -5 in both.
+  Nothing in the engine stood between the restricted read and the public write:
+  a transform that reads a restricted row is refused when its destination's
+  audience is wider (`TransformWidensAudience`,
+  `src/Puck.State.Rules/Transforms/Disclosure.cs:120-143`), and a search's
+  outputs go through no such check. The fair job is honest only because its
+  score reads nothing but blue's memory: its candidates still step onto cells
+  where red's hidden units stand (`relocate(displace: true)` takes them), so a
+  score reading what the step changed (a capture count, a winner) would leak
+  the same way.
+- Whether blind writes return: rejected here (decision 3). The auction fixture
+  (`worlds/debug/auction.puck`, `worlds/standard/sealed.puck`'s `sealedInbox`)
+  needs nothing more: each bid lands in the bidder's own inbox, a rule moves
+  it into the authority's row, the bidder's receipt is its own row, and the
+  close's timing is a fixed deadline, so nothing public moves with a bid.
+  Until step 3 lands, a seat still writes another seat's inbox under the
+  seeded `Edit/all` grant (unread, but written), the seat write oracle that
+  step closes.
+- What the other fixtures settled. Social deduction: a `readersFrom` row must
+  itself be public (`WorldDefinitionValidator.Disclosure.cs:169-177`), so a
+  secret team's channel cannot be one row whose audience lists the team
+  without publishing who is on it; the game keeps a den row per mole instead,
+  and seeds every chat slot, so no eviction ever runs. The card game: a pile
+  that shows `Count` or `Placeholder` to readers who may not read its cards
+  needs a second, authority-only or owner-only pile holding the same cards
+  (`sheddingSealed`, `sheddingHeld<s>`), since no rule effect sets a cell's own
+  visibility and a transfer or shuffle out of a restricted pile into a wider
+  one is refused as widening; its deals are rule writes keyed by
+  `zone(pile, first)`.
 - Whether `world.identify` hashes the recipient's view or becomes operator-only
   (decided here: the view; the owner may prefer one QR per world).
 - Body disclosure (`WorldOutputHub.Redact`) joins the recipient view when its
