@@ -64,4 +64,12 @@ public sealed record WorldServerCheckpoint(
     WorldInputRuntimeCheckpoint? Input = null,
     IReadOnlyList<WorldScopedReplayCheckpoint>? ScopedReplays = null,
     string? AuthorityIdentity = null
-);
+) {
+    /// <summary>Serializes a document into the form <see cref="DefinitionJson"/> and <see cref="BaseDefinitionJson"/>
+    /// hold: the compact canonical bytes, the form a compiled world stores and a definition travels in. Every writer
+    /// of those fields goes through here, so a base byte-identical to the live document is still written once.</summary>
+    /// <param name="definition">The document to serialize.</param>
+    /// <returns>The compact canonical UTF-8 bytes.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
+    public static byte[] DocumentBytes(WorldDefinition definition) => WorldDefinitionSerialization.SerializeCompact(definition: definition);
+}

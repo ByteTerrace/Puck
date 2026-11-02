@@ -73,7 +73,7 @@ public sealed class WorldSiloDeadlineLawTests {
                 source: () => source,
                 tagging: new SiloConsoleTagging(output: output)
             ),
-            storageTarget: new DirectoryObjectStorageTarget(rootPath: directory),
+            storageTarget: WorldAuthorityBlobStore.DirectoryTarget(rootPath: directory),
             timeProvider: clock
         );
     }

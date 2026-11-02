@@ -25,7 +25,7 @@ public static class WorldReleaseMetadataTransition {
             machines: machines,
             reason: out var reason
         )) { throw new InvalidDataException(message: $"{scope} release definition is invalid: {reason}"); }
-        return WorldDefinitionSerialization.Serialize(definition: result);
+        return WorldServerCheckpoint.DocumentBytes(definition: result);
     }
     private static InvalidDataException Conflict(string path) => new(message: $"release metadata conflicts with current {path}");
     private static Member Merge(Member before, Member after, Member current, string path) {

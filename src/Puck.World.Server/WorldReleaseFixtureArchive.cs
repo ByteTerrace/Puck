@@ -25,7 +25,6 @@ public sealed record WorldReleaseFixtureManifest(string Schema, Guid RequestId, 
 public sealed class WorldReleaseFixtureArchive(IObjectBlobStore store, ObjectStorageTarget target, Guid owner) {
     private const long MaximumCaptureBytes = ((512L * 1024) * 1024);
 
-    public const int MaximumCheckpointBytes = ((128 * 1024) * 1024);
     public const string Schema = "puck.world.release-fixture.v1";
 
     internal static byte[] Canonicalize(WorldReleaseFixtureManifest manifest) => JsonSerializer.SerializeToUtf8Bytes(manifest with {
@@ -161,7 +160,7 @@ public sealed class WorldReleaseFixtureArchive(IObjectBlobStore store, ObjectSto
             ?? throw new InvalidDataException(message: "retained release checkpoint is missing"));
 
         if (
-            (result.Content.Length is 0 or > MaximumCheckpointBytes) ||
+            (result.Content.Length is 0 or > WorldAuthorityBlobStore.MaximumBlobBytes) ||
             (ContentPin.Compute(content: result.Content.Span).ToString() != row.Hash)
         ) {
             throw new InvalidDataException(message: "retained release checkpoint is corrupt or exceeds its byte budget");
@@ -231,7 +230,7 @@ public sealed class WorldReleaseFixtureArchive(IObjectBlobStore store, ObjectSto
         var rows = new SortedDictionary<string, WorldReleaseFixtureRow>(comparer: StringComparer.Ordinal);
 
         foreach (var row in captured) {
-            if (row.Value.Encoded.Length is 0 or > MaximumCheckpointBytes) { throw new InvalidDataException(message: "release fixture checkpoint exceeds its byte budget"); }
+            if (row.Value.Encoded.Length is 0 or > WorldAuthorityBlobStore.MaximumBlobBytes) { throw new InvalidDataException(message: "release fixture checkpoint exceeds its byte budget"); }
             rows.Add(
                 key: row.Key,
                 value: new(

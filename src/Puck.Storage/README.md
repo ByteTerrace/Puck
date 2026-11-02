@@ -75,7 +75,9 @@ atomically replace the destination. They never truncate the published blob.
 Readers take the same lock. Private lock and temporary files are excluded from
 listings. Byte and traversal limits bound individual reads, writes, and listings;
 these are not total storage quotas. The defaults are 64 MiB per blob and 100,000
-visited entries per listing. Storage calls can fail during competing filesystem
+visited entries per listing; a caller whose blobs have a larger codec bound sizes
+the target from that bound (a world authority store's directory target comes from
+`WorldAuthorityBlobStore.DirectoryTarget`). Storage calls can fail during competing filesystem
 changes; callers should treat an uncertain write as requiring read-back.
 
 The host must own the root and protect its ancestors and permissions. These

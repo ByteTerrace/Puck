@@ -39,7 +39,7 @@ public sealed class WorldSiloDocumentDirectoryLawTests {
                 source: () => source,
                 tagging: new SiloConsoleTagging(output: output)
             ),
-            new DirectoryObjectStorageTarget(stateDirectory),
+            WorldAuthorityBlobStore.DirectoryTarget(rootPath: stateDirectory),
             machineCatalog: TestMachines.Catalog(),
             timeProvider: new VirtualClock()
         );
@@ -98,7 +98,7 @@ public sealed class WorldSiloDocumentDirectoryLawTests {
         var store = PuckStorageTestComposition.BuildStore();
         var backend = new WorldAuthorityBlobStore(
             store: store,
-            target: new DirectoryObjectStorageTarget(directory.RootPath),
+            target: WorldAuthorityBlobStore.DirectoryTarget(rootPath: directory.RootPath),
             timeProvider: new VirtualClock()
         );
         var published = await backend.PublishDefinitionAsync(identity, WithRelativeCabinet(), TestContext.Current.CancellationToken);

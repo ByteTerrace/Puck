@@ -24,10 +24,23 @@ public sealed partial class WorldAuthorityBlobStore : IWorldAuthorityStore, IWor
     private readonly IObjectBlobStore m_store;
     private readonly ObjectStorageTarget m_target;
 
+    /// <summary>The per-blob budget, in bytes, a directory target serving this store must admit: the bound of an encoded
+    /// checkpoint (<see cref="WorldAuthorityCheckpointCodec.MaxEncodedBytes"/>).</summary>
+    public const int MaximumBlobBytes = WorldAuthorityCheckpointCodec.MaxEncodedBytes;
+
+    /// <summary>Creates a local directory target sized to hold every checkpoint an authority store writes.</summary>
+    /// <param name="rootPath">The root directory the blobs live under; it is resolved to an absolute path now.</param>
+    /// <returns>A target whose per-blob budget is <see cref="MaximumBlobBytes"/>.</returns>
+    /// <exception cref="ArgumentException"><paramref name="rootPath"/> is <see langword="null"/> or white space.</exception>
+    public static DirectoryObjectStorageTarget DirectoryTarget(string rootPath) => new(
+        maximumBlobBytes: MaximumBlobBytes,
+        rootPath: rootPath
+    );
+
     /// <summary>Initializes the store.</summary>
     /// <param name="store">The blob store.</param>
     /// <param name="target">The extension-supplied storage target — persistent storage in deployment, a directory for local runs and the
-    /// canary.</param>
+    /// canary. A directory target admits at least <see cref="MaximumBlobBytes"/> per blob.</param>
     /// <param name="machines">The catalog a recovery read validates a published definition against, so its receipt
     /// is one the hosting activation can accept; null defers provider checks and the activation admits for itself.</param>
     /// <param name="timeProvider">The host clock every <see cref="OperationTimeout"/> runs on; <see langword="null"/> is
@@ -36,9 +49,19 @@ public sealed partial class WorldAuthorityBlobStore : IWorldAuthorityStore, IWor
     /// (<see cref="WorldDefinition.DocumentDirectory"/>): the host's layout of the hosted documents, such as a silo
     /// document's <see cref="WorldSiloDefinition.DocumentDirectory"/>; <see langword="null"/> gives them none.</param>
     /// <exception cref="ArgumentNullException"><paramref name="store"/> or <paramref name="target"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="target"/> is a directory target whose per-blob budget is below
+    /// <see cref="MaximumBlobBytes"/>.</exception>
     public WorldAuthorityBlobStore(IObjectBlobStore store, ObjectStorageTarget target, IMachineValidationCatalog? machines = null, TimeProvider? timeProvider = null, string? documentDirectory = null) {
         ArgumentNullException.ThrowIfNull(argument: store);
         ArgumentNullException.ThrowIfNull(argument: target);
+        // The one door every authority store passes: a local target too small for the largest checkpoint the codec
+        // admits would refuse that checkpoint at its first write, long after the host reported ready.
+        if (target is DirectoryObjectStorageTarget { MaximumBlobBytes: < MaximumBlobBytes } local) {
+            throw new ArgumentException(
+                message: $"A world authority store's directory target admits {local.MaximumBlobBytes} bytes per blob; a checkpoint may take {MaximumBlobBytes}. Size it with {nameof(WorldAuthorityBlobStore)}.{nameof(DirectoryTarget)}.",
+                paramName: nameof(target)
+            );
+        }
 
         m_clock = (timeProvider ?? TimeProvider.System);
         m_documentDirectory = documentDirectory;

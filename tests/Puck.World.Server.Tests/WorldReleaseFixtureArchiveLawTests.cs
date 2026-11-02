@@ -10,7 +10,7 @@ public sealed class WorldReleaseFixtureArchiveLawTests {
         using var directory = new TemporaryDirectory();
         var owner = Guid.NewGuid();
         var blobs = PuckStorageTestComposition.BuildStore();
-        var target = new DirectoryObjectStorageTarget(directory.RootPath);
+        var target = WorldAuthorityBlobStore.DirectoryTarget(rootPath: directory.RootPath);
         var broken = new InterruptedStore(blobs);
         var archive = new WorldReleaseFixtureArchive(
             owner: owner,
@@ -127,7 +127,7 @@ public sealed class WorldReleaseFixtureArchiveLawTests {
         using var directory = new TemporaryDirectory();
         var owner = Guid.NewGuid();
         var blobs = PuckStorageTestComposition.BuildStore();
-        var target = new DirectoryObjectStorageTarget(directory.RootPath);
+        var target = WorldAuthorityBlobStore.DirectoryTarget(rootPath: directory.RootPath);
         var token = TestContext.Current.CancellationToken;
 
         var (receipt, history) = await CaptureReceiptsAsync(
