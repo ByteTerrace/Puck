@@ -81,8 +81,7 @@ template mossyRock(id, colors = limestoneRock) {
 
 // One grouped-shape tree: a trunk, roots and branches in bark, and a handful of overlapping rounded crown masses in
 // flat leaf values. Rows are authored upright; `lean` (radians about the author Z axis, through the trunk's foot) tips
-// the trunk, branches and crowns, never the roots. The faint relief keeps the creation in one field scope: unscoped,
-// a solid flat-crown copy read as an obstruction to the chase camera's clearance at every position in the valley.
+// the trunk, branches and crowns, never the roots.
 // trunk { radius, center, half }; roots [{ position, r, yaw }]; branches [{ position, yaw, tilt, r, h }], each a
 // Capsule rising from its position; crowns [{ position, r }], material cycling through the leaves.
 template groupedTree(id, name, bark, branchBark, leaves, trunk, roots, branches, crowns, lean = 0, smooth = 0.25) {
@@ -94,13 +93,6 @@ template groupedTree(id, name, bark, branchBark, leaves, trunk, roots, branches,
         [bark, branchBark],
         map(leaves, color => { color: color, roughness: 0.93, specular: 0.03, wrap: 0.3 })
       )
-      noise {
-        frequency: 1.6
-        amplitude: 0.025
-        octaves: 2
-        gain: 0.4
-        seed: 5123
-      }
       shape Cylinder "trunk" {
         position [-trunk.center * sine(lean), trunk.center * cosine(lean), 0]
         scale [trunk.radius, trunk.half, trunk.radius]

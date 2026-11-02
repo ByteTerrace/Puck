@@ -41,14 +41,12 @@ public sealed partial class SdfFieldEvaluator {
     private const double RotationBoxRaws = 9.0;
 
     // One shape's certificate in double, world units: point v ≥ Gain·D − Radius; box lower ≥ BoxGain·d − BoxRadius −
-    // BoxSpread·ω and width ≤ WidthConstant + WidthFar·d⁺ + WidthSpread·ω, the box terms meaningful only when Boxed and
-    // the box distances the centre's when BoxCentred.
+    // BoxSpread·ω, the box terms meaningful only when Boxed and the box distances the centre's when BoxCentred.
     private readonly record struct ShapeReach(
         double CenterX, double CenterY, double CenterZ,
         double Gain, double Radius,
         bool Boxed, bool BoxCentred,
-        double BoxGain, double BoxRadius, double BoxSpread,
-        double WidthConstant, double WidthFar, double WidthSpread
+        double BoxGain, double BoxRadius, double BoxSpread
     ) {
         // The same certificate for a candidate scaled by s > 0 and rounded once (a scope's pop), after subtracting a
         // blend slack from the field it scales.
@@ -64,12 +62,11 @@ public sealed partial class SdfFieldEvaluator {
     }
     // A shape's local geometry as the certificates read it: the local sphere its compiled geometry lies inside and how
     // far its point field falls below the exact signed distance to it; for the box walk, the radius its interval's lower
-    // end keeps from the least distance to the centre, how many local box half-diagonals that end may lose besides, and
-    // the interval's width as a constant plus a multiple of the local box's half-diagonal.
+    // end keeps from the least distance to the centre, and how many local box half-diagonals that end may lose besides.
     private readonly record struct ShapeSphere(
         double CenterX, double CenterY, double CenterZ,
         double Radius, double PointSlack,
-        bool Boxed, double BoxRadius, double BoxLoss, double BoxWidth, double BoxWidthFactor
+        bool Boxed, double BoxRadius, double BoxLoss
     );
     // The chain state the analysis follows: the forward map world = Origin + Frame·(Scale·local), the bounds on how far
     // the walks' local point (or box) can stray from that exact map's image, and the running distance scale's range.
@@ -239,13 +236,8 @@ public sealed partial class SdfFieldEvaluator {
                 return null;
             }
 
-            var span = (BoxScaleHigh - BoxScaleLow);
             var imageSpread = (Turned ? spreadNorm : NormBound(diagonal: reach));
             var lowRadius = ((((BoxA + ((Sqrt3 * loss) * BoxDA)) + (drift * localCentre)) + sphere.BoxRadius) * BoxScaleHigh);
-            var shapeWidth = (sphere.BoxWidth + ((sphere.BoxWidthFactor * Sqrt3) * (BoxDA + (BoxDB * localCentre))));
-            // The candidate's magnitude, which the distance scale's own width multiplies into the candidate's width: the
-            // farthest point of the box from the centre plus everything its lower end may lose.
-            var magnitude = ((((((BoxA + ((Sqrt3 * loss) * BoxDA)) + (drift * localCentre)) + sphere.BoxRadius) + sphere.Radius) + shapeWidth));
 
             return new ShapeReach(
                 BoxCentred: Turned,
@@ -257,10 +249,7 @@ public sealed partial class SdfFieldEvaluator {
                 CenterY: (OriginY + (((M10 * cx) + (M11 * cy)) + (M12 * cz))),
                 CenterZ: (OriginZ + (((M20 * cx) + (M21 * cy)) + (M22 * cz))),
                 Gain: (((1.0 - PointB) * reach) * PointScaleLow),
-                Radius: (((((PointA + (PointB * localCentre)) + sphere.Radius) + sphere.PointSlack) * PointScaleHigh) + (0.5 * RawUnit)),
-                WidthConstant: (((shapeWidth * BoxScaleHigh) + (magnitude * span)) + (2.0 * RawUnit)),
-                WidthFar: (((((sphere.BoxWidthFactor * Sqrt3) * BoxDB) * reach) * BoxScaleHigh) + (((reach * (1.0 + drift)) + (((sphere.BoxWidthFactor * Sqrt3) * BoxDB) * reach)) * span)),
-                WidthSpread: (((sphere.BoxWidthFactor * spreadNorm) * BoxScaleHigh) + ((imageSpread + (((1.0 + sphere.BoxLoss) + sphere.BoxWidthFactor) * spreadNorm)) * span))
+                Radius: (((((PointA + (PointB * localCentre)) + sphere.Radius) + sphere.PointSlack) * PointScaleHigh) + (0.5 * RawUnit))
             );
         }
 
@@ -339,7 +328,7 @@ public sealed partial class SdfFieldEvaluator {
     // A shape's local geometry (see ShapeSphere), or none for a shape the certificates do not cover. The exact signed
     // distance to a set inside a sphere is at least the distance to its centre less its radius. The box rules of
     // Sphere, Box, Cylinder and Torus read each coordinate's range once, so each endpoint of their interval is the exact
-    // field at a point of the box, rounded outward by a floor or ceiling root: their width is at most the box's diameter.
+    // field at a point of the box, rounded outward by a floor or ceiling root.
     private static ShapeSphere? TryShapeSphere(in CompiledInstruction instruction) {
         const double Slack = (4.0 * RawUnit);
 
@@ -380,8 +369,6 @@ public sealed partial class SdfFieldEvaluator {
                     return new ShapeSphere(
                         BoxLoss: 0.0,
                         BoxRadius: 0.0,
-                        BoxWidth: 0.0,
-                        BoxWidthFactor: 0.0,
                         Boxed: false,
                         CenterX: (0.5 * x),
                         CenterY: (0.5 * y),
@@ -401,8 +388,6 @@ public sealed partial class SdfFieldEvaluator {
         static ShapeSphere Separable(double radius) => new(
             BoxLoss: 0.0,
             BoxRadius: (radius + Slack),
-            BoxWidth: (2.0 * Slack),
-            BoxWidthFactor: 2.0,
             Boxed: true,
             CenterX: 0.0,
             CenterY: 0.0,
@@ -426,9 +411,7 @@ public sealed partial class SdfFieldEvaluator {
     // that root when it is surely outside, which holds unless Q reaches inside ρ0 = |(2·max r, h)| of the origin, and
     // otherwise its lower end is the negated upper root, at least −(far(Q, 0) + h) ≥ −(ρ0 + 2ω₂ + h). So the lower end is
     // at least gap(Q, 0) − r − 2ρ0 − h − 2ω₂. The revolution reads gap(Q, 0) ≥ gap(B, 0) − |lift|, the extrusion's plain
-    // join gap(B, 0) − |(r + 2ρ0 + h + 2ω₂, lift)|, and the chamfer's maximum only raises it. The surely-outside width is
-    // at most 6√2·ω₂ + |r2 − r1| (cb's components each read the box twice through the projection, ca's x the half-width's
-    // range where Q crosses y = 0) and the other at most 2(ρ0 + 2ω₂ + h); the extrusion at most doubles it and adds 4ω.
+    // join gap(B, 0) − |(r + 2ρ0 + h + 2ω₂, lift)|, and the chamfer's maximum only raises it.
     private static ShapeSphere? TryTrapezoidSphere(in CompiledInstruction instruction) {
         var (r1, r2, h) = (((double)instruction.Data0X), ((double)instruction.Data0Y), ((double)instruction.Data0Z));
         var (kx, ky) = ((r2 - r1), (2.0 * h));
@@ -450,13 +433,10 @@ public sealed partial class SdfFieldEvaluator {
         var rounding = Math.Abs(value: ((double)instruction.Data1W));
         var extruded = (instruction.Data1Y > Half);
         var margin = (((2.0 * inner) + h) + (16.0 * RawUnit));
-        var flatWidth = Math.Max(val1: Math.Abs(value: kx), val2: (2.0 * (inner + h)));
 
         return new ShapeSphere(
             BoxLoss: 2.0,
             BoxRadius: ((extruded ? Length(x: (profile + margin), y: lift, z: 0.0) : ((profile + margin) + lift)) + rounding),
-            BoxWidth: (((extruded ? 2.0 : 1.0) * flatWidth) + (32.0 * RawUnit)),
-            BoxWidthFactor: (extruded ? 26.0 : 13.0),
             Boxed: true,
             CenterX: 0.0,
             CenterY: 0.0,
@@ -641,8 +621,7 @@ public sealed partial class SdfFieldEvaluator {
     // The certificate around several, all in world units, about the members' mean centre or a given one: the least gain,
     // and each member's radius grown by its gain times its centre's distance from the centre, which the triangle
     // inequality allows. Its box terms read the box centre's distance when any member's do; a member that reads the gap
-    // then counts one more half-diagonal per unit of gain, since the gap is at least the centre's distance less it. It
-    // bounds no width.
+    // then counts one more half-diagonal per unit of gain, since the gap is at least the centre's distance less it.
     private static ShapeReach Enclose(IReadOnlyList<ShapeReach> members, (double X, double Y, double Z)? centre = null) {
         var (x, y, z) = (0.0, 0.0, 0.0);
         var centred = false;
@@ -666,10 +645,7 @@ public sealed partial class SdfFieldEvaluator {
             CenterY: y,
             CenterZ: z,
             Gain: double.MaxValue,
-            Radius: 0.0,
-            WidthConstant: 0.0,
-            WidthFar: 0.0,
-            WidthSpread: 0.0
+            Radius: 0.0
         );
 
         foreach (var member in members) {

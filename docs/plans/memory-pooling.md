@@ -212,6 +212,18 @@ pointer-sized. `mi_heap_delete` transfers live blocks to the main heap;
 `mi_heap_destroy` frees them. Probe the actual ABI, alignment, zero-size behavior,
 failed resize, and selected thread lifecycle.
 
+The thread that loads the DLL is mimalloc's main thread (`mi_tld_main_init`,
+`src/init.c`): its theap and tld are the static `theap_main`/`tld_main`, and its
+exit tears them down (`_mi_theap_free` leaves `theap_main.tld` null). Windows
+thread ids are TEB addresses, which a later thread reuses, and that thread then
+takes the main path onto the dead `theap_main` and faults inside `mi_malloc`
+(upstream calls the loader-thread rule intended:
+[mimalloc#1271](https://github.com/microsoft/mimalloc/issues/1271)). A .NET
+thread-pool worker retires when idle, so it must never be the loader:
+`MimallocAllocator`'s type initializer loads the library on a thread of its own
+that waits until process exit, and `MimallocThreadLifecycleLawTests` faults
+without it.
+
 Use a persistent default domain for general buffers. Add private heaps for
 actual independently retired graphs/resources. A world returns globally cached
 buffers to their persistent provider; it cannot destroy a world heap beneath

@@ -447,7 +447,7 @@ reservation and physical slot order, refuses a whole-row edit and a HUD template
 placeholder from that reader, keeps its place in the reader's observations, and
 is re-sent to a replica only when the cells the reader can read change. A cell
 the reader can't read and a cell that doesn't exist answer alike.
-`worlds/debug/disclosure-probe.puck` shows a second seat's answers with zero, one
+`puck disclosure worlds/debug/disclosure-probe.puck` compares a second seat's and two sessions' answers with zero, one
 and two hidden cells.
 [State in Puck.World](worlds.md) describes the disclosure tiers.
 

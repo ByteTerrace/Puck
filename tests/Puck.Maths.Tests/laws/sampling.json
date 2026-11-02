@@ -1333,6 +1333,53 @@
     ]
   },
   {
+    "Id": "sampling.lattice-noise-fade-and-box-bounds",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.Pcg3dLatticeNoise",
+        "Name": "QuinticFade"
+      },
+      {
+        "Type": "Puck.Maths.Pcg3dLatticeNoise",
+        "Name": "ValueNoise3Bounds"
+      },
+      {
+        "Type": "Puck.Maths.Pcg3dLatticeNoise",
+        "Name": "Fbm3Bounds"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "QuinticFade at every Q16 fraction from 0 to 1 inclusive, which also never falls; raws -1, 65537 and the carrier's minimum are refused",
+        "Against": "Oracles.QuinticFadeReference: 6t^5 - 15t^4 + 10t^3 formed exactly in BigInteger and rounded once to nearest, ties to even",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "ValueNoise3 at 512 drawn points across the signed lattice with drawn seeds lies within a raw and a half of the exact trilinear blend at its own fades, the rounding allowance ValueNoise3Bounds charges each side",
+        "Against": "Oracles.ValueNoise3ExactBlend: the eight corners' fractions from Oracles.Pcg3dReference weighed by Oracles.QuinticFadeReference's fades, summed exactly in BigInteger",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "over 384 drawn boxes from a point to a few hundred cells across, with drawn seeds, octave counts 0..8, gains in [0, 1] and lacunarities in [1, 4]: ValueNoise3 and Fbm3 at the eight corners and sixteen interior points lie inside ValueNoise3Bounds and Fbm3Bounds; a point box's noise bound spans at most ten raws; a box drawn inside each answers inside its interval; an unbounded box answers [-1, 1]",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
     "Id": "sampling.pcg-extended-reference-vectors",
     "Tier": "Default",
     "Members": [

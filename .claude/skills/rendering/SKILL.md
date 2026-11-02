@@ -562,6 +562,15 @@ compares and fails naming the file that drifted, it writes nothing.
   GPU cost.
 - **Unbounded is a state, not a number** (`SdfBoundAlgebra.Unbounded`); bounds
   compose through the set operations in `SdfBoundAlgebra`.
+- **An interval rule whose width compounds shrinks the whole evaluator.** The
+  CPU evaluator's frame (`SdfFieldEvaluator.Frame`) is the widest cube its box
+  walk keeps bounded, and every query outside it is refused, which a sphere
+  cast reads as an obstruction at its origin. A blend rule that reads its
+  operands twice grows geometrically along a chain on one accumulator: unscoped
+  smooth unions across a few trees once collapsed the presentation field's
+  frame to half a metre, so the chase camera sat on its target valley-wide.
+  Bound a monotone blend by its corners instead (`SmoothUnionBounds`), and
+  read `Frame` when every query far from geometry fails.
 - **Deterministic versus presentation geometry:** use
   [sdf-authoring](../sdf-authoring/SKILL.md#render-only-versus-deterministic);
   the fixed-point evaluator supports `SdfShapeType.Path` through `SdfPathSolid`.
