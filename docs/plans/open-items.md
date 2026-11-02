@@ -123,15 +123,24 @@ Each waits on the owner: what the engine should do, how it looks and feels, and 
   the same every time. No engine check stands between the restricted read and
   the public write today (transforms have `TransformWidensAudience`; search
   outputs do not).
-- Two looks in the transmission design ([transmission](transmission.md)):
-  whether a body's own overhang (the Moth's wing over her torso) shadows its
-  wrapped dark side continuously across the terminator (the design's choice,
-  two depth layers and an identity), or never (one layer and an identity,
-  showing a seam of about a quarter of the sun at `wrap: 0.35`); and whether
-  wrap stays independent of thickness (the design's choice) or a thick body's
-  dark side darkens as light passes through it, as a separate material term.
-  The resolution floors, stated in the plan, follow from the shadow map's
-  texel size; the grazing allowance `S` defaults to 4 texels.
+- Looks in the transmission design ([transmission](transmission.md)), each
+  with the design's choice first:
+  - A body's own overhangs and hollows shadow its wrapped dark side (the
+    next-surface rule): the Moth's wing shadows her torso's dark side as it
+    does her lit side; a hollow box's outer back reads dark; overlapping
+    components of one authored mesh over-shadow each other. The alternative,
+    own matter never shading its own dark side, costs one layer less and shows
+    a seam of `wrap/(1+wrap)` (about a quarter of the sun at `wrap: 0.35`) at
+    the terminator under every overhang.
+  - A receiver the shadow map cannot resolve reads from same-body neighbours,
+    or dark, never lit: about 2.5° of surface on smooth baked bodies (under a
+    millimetre on the Moth), wider on authored meshes without vertex normals.
+    Reading lit there is the leak every earlier round chased.
+  - Wrap stays independent of thickness; light passing through a thick body
+    can come later as a separate material term.
+  - The Steam Deck is measured at Full quality, the bar's highest quality:
+    3.5 ms for three cascades inside its 22.2 ms frame, with a live-byte budget
+    at the portal stop. Confirm or set the budgets.
 - Decided by the owner: night exposure is the lead's call, provided authors can
   style it as their vision demands (the floor and curve stay authored data,
   keyable on the day clock; the debug world authors a readable deep-blue
@@ -1958,9 +1967,16 @@ and the order they land in; the items below are its findings and checks.
   sheet with a box front; a doubled triangle passes edge pairing). The
   [transmission plan](transmission.md) now records a body identity per
   cascade texel beside the depth, peels by identity, and shadows a wrapped
-  receiver by any other body in front and by its own body's second chord;
-  the packet's exit-layer items below close with it. (from: illum1fix2-astra,
-  transmit-astra, transmit-design)
+  receiver by any other body in front and by its own body's next surface
+  along the light. Its second review settled the body index's lifetime (one
+  table per residency, no reuse under a held cascade, a generation in the
+  word), a canonical body key apart from `MotionIdentity`, that two surfaces
+  cannot infer occupancy (overlapping authored components over-shadow), an
+  unresolved-footprint policy that never reads a distant blocker absent, a
+  receiver handle in the GI's cached hits, and the Deck measured at Full; its
+  remaining mediums are the implementation lanes' checks. The packet's
+  exit-layer items below close with it. (from: illum1fix2-astra,
+  transmit-astra, transmit2-astra, transmit-design)
 - From illum1-fix: the cascades' exit layer doubles each cascade pass's draws
   and vertices (`world.counters gpu pass sdf.world$shadow-near` at the stage:
   460 draws and 2.62 M vertices on Direct3D 12, two render passes) and adds a
@@ -2395,6 +2411,29 @@ no sooner than in plan order (near 4 m: 47 of 135 at 160 s, all at 434 s).
    the moons.
 
 ### Vulkan regressions and GPU robustness
+
+- [medium, before V1] Draw identity is tracked twice and the occlusion visible
+  bit uses neither: R2's per-mesh identity counter (`SdfMesh.cs:331-335`,
+  `:612`, read at `sdf-mesh-selection.hlsli:79`) beside the residency's
+  per-index identity for motion history (`SdfWorldTables.MeshRegion.cs:280-293`),
+  while `sdf-mesh-occlusion.comp.hlsl:208-227` checks no identity. A
+  renumbering at the meadow (an inserted draw, or the landing subset at
+  `MeshRegion.cs:201-207`) hands each blade a neighbour's level and visible bit:
+  a cost spike and a pop in the 1.0-1.1 band. One per-record generation checked
+  for both; V1 swaps it for instance identity. (from: r2-review)
+- [low] R2's lows (r2-review): the box cull exists in C# (`SdfMeshCull.Keeps`,
+  now only the pose rates) and HLSL with nothing keeping them equal; Vulkan
+  never checks `maxDrawIndirectCount` (`VulkanGpuRecorder.cs:285-296`), so a
+  world past 65,535 draws breaks on a spec-minimum driver; the single-slot
+  Vulkan fallback grows CPU recording with candidates and hard-codes the mesh
+  push stages in the generic backend (`:291`); the wave-sum proof assumes 64
+  lanes; per-geometry facts are copied into every draw record and the level
+  count is stored twice (`SdfMesh.cs:603`, `:614`); a mesh with 256 or more
+  levels throws at staging (`:553`) instead of being refused where it is
+  built; `IGpuRecorder.CanDrawIndirectCount` is dead; stale docs at
+  `SdfMeshOcclusion.cs:11`, `SdfWorldPassRecorder.cs:755`, `SdfMesh.cs:322-324`,
+  `sdf-mesh-shadow.vert.hlsl:8-9`, `IGpuRecorder.cs:111-122`; and, unconfirmed,
+  a discarded recording that grew history leaves it uninitialized.
 
 - [low · unconfirmed] The bake's output may differ by backend. One after-run
   read 1,101,923,007 samples and 45,044,555 triangles on Vulkan against
@@ -3411,6 +3450,21 @@ ordinary · Next: new content and art on the owner's call.
 ### Agent tooling and skills
 
 Owner: the lead · ordinary · Next: the Monitor hook check.
+
+- After the first settle window: give Antigravity (Gemini Argon) a fair
+  coding trial before deciding its role (the owner's direction: it has so far
+  done research only, where its code citations were unreliable). Two bounded
+  issue fixes from this file, each in its own worktree with a mechanical check:
+  the four duplicate `HeapAllocator` test allocators and `IAllocator`'s untrue
+  documentation (small), and the Superellipsoid's loose far field plus its
+  small-radius CPU/GPU disagreement in both interpreters (medium, with laws
+  shown failing first). Score each objectively, beside comparable Claude and
+  Codex lanes: does it build and pass what it claims (the lead reruns every
+  command); high and medium findings from a Claude and a Codex review; brief
+  adherence (scope, reuse of existing mechanisms, no shared-state git); report
+  honesty (every claimed file:line and result checked); and whether its runs
+  finish headless without stalling. Record the verdict in the orchestration
+  skill's routing table either way.
 
 - The agent-policy hook may not cover Claude Code's `Monitor` tool:
   `.claude/settings.json` matches `Bash|PowerShell`, and whether a Monitor
