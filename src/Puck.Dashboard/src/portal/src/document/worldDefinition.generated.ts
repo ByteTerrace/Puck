@@ -3591,7 +3591,7 @@ export type WorldBindingBarBank = {
    */
   id: string;
   /**
-   * The BindingPageDefinition.Id this bank renders — validated to exist somewhere in the composed binding profile. While a context group (a board's) makes another page active that no bank names, that page renders in the first bank whose page the same held modifiers select, so the group's resting page takes the resting page's bank and the bar's layout and model stay as the seat set them.
+   * The BindingPageDefinition.Id this bank renders — validated to exist somewhere in the composed binding profile. A context overlay (a board's) replaces only the pages it declares, so a page no bank names can be active: it renders in the first bank whose page the same held modifiers select. The board's resting page takes the resting page's bank, the pages it leaves to the player stay in their own banks, and the bar's layout and model stay as the seat set them.
    */
   pageId: string;
   /**

@@ -85,7 +85,8 @@ public sealed class CompiledBindingProfile {
     internal IReadOnlyList<CompiledActivatorEntry> ActivatorsOf(int rowIndex) {
         return (((IReadOnlyList<CompiledActivatorEntry>?)m_rows[rowIndex].Activators) ?? []);
     }
-    /// <summary>Gets a group's command-meaning row indices, in profile order.</summary>
+    /// <summary>Gets a group's effective command-meaning row indices: its own in profile order, then the default
+    /// group's it leaves alone.</summary>
     /// <param name="groupIndex">The group index.</param>
     internal ReadOnlySpan<int> CommandRowsOf(int groupIndex) {
         return m_commandRowsByGroup[groupIndex];
@@ -135,9 +136,11 @@ public sealed class CompiledBindingProfile {
 
         return (matched == chord.Length);
     }
-    /// <summary>Resolves the active page row for a group and held-modifier order: the deepest page row
-    /// <see cref="Matches"/> accepts (most members; the first declared on a tie), falling back to the group's resting
-    /// page. Command rows never answer this — they fire edges, they do not table sources.</summary>
+    /// <summary>Resolves the active page row for a group and held-modifier order: the deepest page row of the group's
+    /// effective pages <see cref="Matches"/> accepts (most members; the group's own rows first, so its declaration
+    /// wins a tie), falling back to the group's resting page. A non-default group's effective pages are its own plus
+    /// the default group's pages it leaves alone (see <see cref="BindingProfile.Compile"/>). Command rows never answer
+    /// this — they fire edges, they do not table sources.</summary>
     /// <param name="groupIndex">The active group index.</param>
     /// <param name="heldOrder">The held modifier indices, in press order.</param>
     /// <returns>The resolved page row index.</returns>

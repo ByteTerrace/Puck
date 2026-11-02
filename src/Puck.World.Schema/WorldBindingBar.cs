@@ -284,9 +284,10 @@ public sealed record WorldBindingBarLayout(
 /// top).</summary>
 /// <param name="Id">The bank's stable id — its mutation address and its key in every layout's bank table.</param>
 /// <param name="PageId">The <c>BindingPageDefinition.Id</c> this bank renders — validated to exist somewhere in the
-/// composed binding profile. While a context group (a board's) makes another page active that no bank names, that
-/// page renders in the first bank whose page the same held modifiers select, so the group's resting page takes the
-/// resting page's bank and the bar's layout and model stay as the seat set them.</param>
+/// composed binding profile. A context overlay (a board's) replaces only the pages it declares, so a page no bank
+/// names can be active: it renders in the first bank whose page the same held modifiers select. The board's resting
+/// page takes the resting page's bank, the pages it leaves to the player stay in their own banks, and the bar's
+/// layout and model stay as the seat set them.</param>
 /// <param name="Alpha">This bank's opacity when it is NOT the seat's currently active page.</param>
 /// <param name="ActiveAlpha">This bank's opacity when it IS the seat's currently active page; <see langword="null"/>
 /// draws fully opaque (1.0) while active.</param>

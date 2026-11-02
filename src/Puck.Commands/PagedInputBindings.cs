@@ -737,6 +737,27 @@ public sealed class PagedInputBindings : IInputBindings, IChordEdgeSource, IInpu
         pageId: pageId,
         view: out view
     );
+    /// <summary>Gets a slot's active group: the group its context selects, or the profile's default group. The active
+    /// page can belong to the default group even while another group is active (a page the active group leaves to the
+    /// player), so this, not the page view's group, is what names the seat's group.</summary>
+    /// <param name="slot">The logical player slot.</param>
+    /// <returns>The active group's name.</returns>
+    public string ActiveGroupOf(int slot) {
+        var profile = m_profile;
+
+        return profile.Groups[((m_slots.TryGetValue(
+            key: slot,
+            value: out var state
+        ) && ReferenceEquals(
+            objA: state.Profile,
+            objB: profile
+        ))
+            ? state.GroupIndex
+            : ResolveGroupIndex(
+                profile: profile,
+                slot: slot
+            ))];
+    }
     /// <inheritdoc/>
     public object ContextToken(int slot) => ViewFor(slot: slot);
     /// <summary>Gets the immutable view of the page a slot's active group and held chord currently select.</summary>

@@ -202,7 +202,7 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
     // (BindingProfile.Compile refuses a contexts row naming an undeclared group).
     private void DeriveActiveGroup(int slot, bool releasePriorGroup = true) {
         var (_, _, winnerGroup) = FirstMatch(slot: slot);
-        var previousGroup = m_seats[slot].ViewFor(slot: slot).Group;
+        var previousGroup = m_seats[slot].ActiveGroupOf(slot: slot);
 
         _ = m_seats[slot].SetActiveGroup(
             group: winnerGroup,
@@ -213,7 +213,7 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
             releasePriorGroup &&
             !string.Equals(
             a: previousGroup,
-            b: m_seats[slot].ViewFor(slot: slot).Group,
+            b: m_seats[slot].ActiveGroupOf(slot: slot),
             comparisonType: StringComparison.Ordinal
         )
         ) {
@@ -1121,7 +1121,7 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
         }
 
         return new WorldContextDerivationEcho(
-            ActiveGroup: m_seats[slot].ViewFor(slot: slot).Group,
+            ActiveGroup: m_seats[slot].ActiveGroupOf(slot: slot),
             Families: families,
             Step: ((winnerFamily is not null)
             ? $"context {winnerFamily}={winnerState}"
@@ -1287,7 +1287,7 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
             : 0
         );
 
-        var group = m_seats[slot].ViewFor(slot: slot).Group;
+        var group = m_seats[slot].ActiveGroupOf(slot: slot);
 
         return (group, (m_seats[slot].RestingPageIdOf(group: group) ?? group));
     }
