@@ -15,6 +15,7 @@ namespace Puck.State;
 /// once at its widest allocates nothing afterwards. The storage is no part of simulation state: nothing hashes,
 /// exports, or checkpoints it. It is not thread-safe; it serves the one evaluation its owner has in flight.</para>
 /// </remarks>
+[Replaceable(root: typeof(StateArena))]
 public sealed class ArenaScratch {
     /// <summary>Gets or sets the destination key while a state write evaluates its value.</summary>
     public CellKey WriteKey { get; set; }

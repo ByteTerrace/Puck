@@ -16,6 +16,7 @@ public sealed partial class RuleEvaluator {
     /// <param name="latch">The family's edge latch.</param>
     /// <param name="stepTicks">How many engine ticks the simulation step spans.</param>
     /// <returns><see langword="true"/> when any member's firing moved the arena.</returns>
+    [Replaces(root: typeof(StateArena))]
     public bool EvaluateGroups(CompiledRule[] rules, CompiledRuleGroup[] groups, RuleGroupState state, RuleLatch latch, ulong stepTicks) {
         ArgumentNullException.ThrowIfNull(argument: groups);
         ArgumentNullException.ThrowIfNull(argument: latch);

@@ -33,6 +33,7 @@ public sealed partial class WorldServer {
             transferId: transferId
         );
     /// <inheritdoc cref="WorldTick.Advance"/>
+    [Replaces(root: typeof(StateArena))]
     public void Advance(ulong stepTicks) => m_tick.Advance(stepTicks: stepTicks);
 
     /// <summary>Gets a value indicating whether the next step replays recorded input: set by the replay tape as it feeds
@@ -103,6 +104,7 @@ public sealed partial class WorldServer {
             serverEvent: serverEvent
         );
     /// <inheritdoc cref="WorldTick.DrainAdministrative"/>
+    [Replaces(root: typeof(StateArena))]
     public bool DrainAdministrative() => m_tick.DrainAdministrative();
     /// <inheritdoc cref="WorldTick.EnqueueIntent"/>
     public void EnqueueIntent(in IntentSubmission submission) => m_tick.EnqueueIntent(submission: in submission);
@@ -158,6 +160,7 @@ public sealed partial class WorldServer {
     /// <inheritdoc cref="WorldTick.RetireTransferredMobility"/>
     public void RetireTransferredMobility(in WorldMobilityIdentity mobility) => m_tick.RetireTransferredMobility(mobility: in mobility);
     /// <inheritdoc cref="WorldTick.Step"/>
+    [Replaces(root: typeof(StateArena))]
     public void Step(in FixedStepContext context) => m_tick.Step(context: in context);
     /// <inheritdoc cref="WorldTick.Submit"/>
     public void Submit(SubmissionEnvelope envelope, Action<WorldSubmissionResult>? completion = null) =>

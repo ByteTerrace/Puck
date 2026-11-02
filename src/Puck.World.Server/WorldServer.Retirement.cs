@@ -23,6 +23,7 @@ public sealed partial class WorldServer {
     /// <exception cref="InvalidOperationException">A dispatched external operation has not settled yet.</exception>
     /// <remarks>Buffered intents remain checkpoint data; retirement does not invent an extra simulation tick.
     /// Repeated calls are harmless. Storage failure leaves the same frozen state available for another save.</remarks>
+    [Replaces(root: typeof(StateArena))]
     public void FreezeForRetirement() {
         lock (m_authorityGate) {
             if (m_authorityRetiring) { return; }
@@ -47,6 +48,7 @@ public sealed partial class WorldServer {
     /// <returns><see langword="true"/> once the activation is frozen; <see langword="false"/> when
     /// <paramref name="admits"/> refused or a dispatched external operation has not settled yet.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="admits"/> is <see langword="null"/>.</exception>
+    [Replaces(root: typeof(StateArena))]
     public bool TryFreezeForRetirement(Func<bool> admits) {
         ArgumentNullException.ThrowIfNull(argument: admits);
 

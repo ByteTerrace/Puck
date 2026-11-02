@@ -151,6 +151,7 @@ public sealed partial class WorldServer {
 
     // Refuses a document the arena cannot hold. A document the validator passed and the arena refuses is a
     // validator hole, never an authoring error reaching this far.
+    [Replaces(root: typeof(StateArena))]
     private void BuildArena(WorldDefinition definition) {
         var catalog = definition.StateCatalog;
         var time = m_ruleHost.Time;
@@ -220,6 +221,7 @@ public sealed partial class WorldServer {
         reason = string.Empty;
         return true;
     }
+    [Replaces(root: typeof(StateArena))]
     internal void AdoptPreparedArena(StateArena arena, WorldDefinition definition) {
         m_arena = arena;
         m_arenaWork.Retarget(target: arena);
@@ -293,6 +295,7 @@ public sealed partial class WorldServer {
     // identity lanes, and a row the document re-declares with another kind, shape or trait starts as the document
     // declares it. Generated pool rows take the same path, since they cannot pass through ordinary row import. A
     // refusal here is a door that did not prepare its replacement first (ApplyRebuild does), or a validator hole.
+    [Replaces(root: typeof(StateArena))]
     public void SyncArena(WorldDefinition definition) {
         if (!ReloadsArenaInPlace(definition: definition)) {
             if (!TryPrepareArenaReplacement(definition: definition, prepared: out var replacement,
@@ -630,6 +633,7 @@ public sealed partial class WorldServer {
         return best;
     }
 
+    [Replaces(root: typeof(StateArena))]
     public WorldDefinition RecompileRules(WorldDefinition definition, WorldRuleCompilation? compilation = null, StateArena? arena = null) {
         if (arena is null) {
             definition = SettleInstalledRows(definition: definition);

@@ -12,3 +12,6 @@ ENV001 | Puck.Environment | Error | EnvironmentReadAnalyzer, [Documentation not 
 GPU001 | Puck.Testing | Error | GpuTraitAnalyzer, [Documentation not provided]
 NET001 | Puck.Network | Error | AnyAddressBindAnalyzer, [Documentation not provided]
 IVT001 | Puck.Accessibility | Error | InternalsVisibleToAnalyzer, [Documentation not provided]
+STALE001 | Puck.Replacement | Warning | StaleCaptureAnalyzer, [Documentation not provided]
+STALE002 | Puck.Replacement | Warning | StaleCaptureAnalyzer, [Documentation not provided]
+STALE003 | Puck.Replacement | Warning | StaleCaptureAnalyzer, [Documentation not provided]

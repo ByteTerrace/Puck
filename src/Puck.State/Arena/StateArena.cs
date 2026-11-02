@@ -22,6 +22,7 @@ namespace Puck.State;
 /// refused by row and cell name rather than stored where nothing can reach or re-import it. Stored values then
 /// reach the derived boards a row feeds through one internal recompute, so no path can skip either.</para>
 /// </remarks>
+[Replaceable]
 public sealed partial class StateArena {
     private StateCatalog m_catalog;
     private CellKeyTable m_keys;

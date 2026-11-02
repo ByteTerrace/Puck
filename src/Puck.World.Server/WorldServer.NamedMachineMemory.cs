@@ -110,6 +110,7 @@ public sealed partial class WorldServer {
     /// Each hardware scalar crosses the provider barrier once, so a word cannot combine bytes from different guest
     /// steps. Read bindings mirror through the ordinary world-state mutation door.</summary>
     /// <param name="tick">The current simulation tick.</param>
+    [Replaces(root: typeof(StateArena))]
     public void SyncNamedMachineMemory(ulong tick) {
         if (!ReferenceEquals(
             objA: m_namedMemoryRows,

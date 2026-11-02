@@ -22,6 +22,7 @@ public interface IFieldLatticeHost {
     /// <param name="body">The body index used as the cell's key.</param>
     /// <param name="value">The value to write.</param>
     /// <param name="tick">The stepping tick.</param>
+    [Replaces(root: typeof(StateArena))]
     void WriteTag(StateHandle row, int body, long value, ulong tick);
     /// <summary>Reads a scalar fixed-kind state row's slot cell for a row-referenced reaction scalar (0 when absent
     /// or unwritten).</summary>
@@ -34,6 +35,7 @@ public interface IFieldLatticeHost {
     /// <param name="row">The compiled state row handle.</param>
     /// <param name="amount">The raw amount to add.</param>
     /// <param name="tick">The stepping tick.</param>
+    [Replaces(root: typeof(StateArena))]
     void AddScalar(StateHandle row, FixedQ4816 amount, ulong tick);
 }
 /// <summary>A field lattice's own free surface at one column — a point on it and the lattice's own frame normal
