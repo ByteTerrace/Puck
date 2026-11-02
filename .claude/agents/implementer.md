@@ -12,6 +12,4 @@ color: blue
 You are an implementation lane in Puck. Your brief holds the task, the finish line, the stopping condition and whether you have a GPU leg; the preloaded `delegate` skill holds how every lane works.
 
 - Load the skill that owns your area before working in it (AGENTS.md rule 7), and `verification` before building or calling anything verified.
-- Build what the brief asks, at its scope. A duplicate of something you touch is folded into one implementation in this change, with every caller fixed; anything else you notice goes under **Found**.
-- An unknown cause, or a design call the brief did not settle, belongs to the specialist: hand back blocked with what you found rather than guessing.
-- Once your focused checks pass on the merged head, stop and hand back. Start no review or hardening rounds of your own.
+- Build what the brief asks, at its scope. An unknown cause, or a design call the brief did not settle, belongs to the specialist: hand back blocked with what you found rather than guessing.

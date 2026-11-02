@@ -214,6 +214,45 @@ Do not hand the pass a `puck affected` list, do not tell it to use the Codex
 CLI, and do not use the companion's `review` subcommand for a lane: it takes
 no brief, so it raises compatibility findings and tries to run tests.
 
+## Running a pass
+
+These are the reviewer's own rules, whichever family runs the pass.
+
+- Read the named revisions through Git's object commands
+  (`git diff <base> <head>`, `git show <rev>:<path>`, `git log <base>..<head>`),
+  never the working tree or whatever HEAD is now. A `reviewer` runs in the
+  lead's checkout, where the lead keeps merging, so its working tree holds
+  batches that landed after the change under review. A code review whose brief
+  names no revisions is blocked: say so and stop, rather than guessing the
+  range from a branch's log.
+- A findings-only pass changes no tracked file and no Git state (no commit,
+  checkout, switch, restore, reset, stash, merge or clean) and builds nothing.
+  It runs `puck` search verbs from the CLI build its brief names, or reports
+  the evidence it could not gather. The read-only hook sees only shell
+  commands, so the rest of this boundary is the reviewer's to keep. Reads and
+  captures of the live World are allowed; scripted input and every other
+  mutation are not. A finding that needs a build or a World to settle is
+  reported as argued from the source, with what would settle it, and the lead
+  routes it. A defect the pass could fix is reported, not fixed.
+- Load the skill that owns each area the diff touches, and read the code
+  around every changed site and its callers, not the author's summary of it.
+- Hunt each [recurring hazard](../../../docs/development/hazards.md) by name in
+  the diff: an invariant kept by convention, a result a caller can drop, a
+  reference captured across a replacement, two copies of one computation,
+  recorded versus derived, one local fault poisoning a global query, a cache
+  that cannot help, and unbounded retention. Where a `puck scan` analyzer
+  covers one, run it over the touched paths. A finding of a new shape is also
+  a proposal for that page.
+- Write the findings to the path the brief names, outside the repository.
+  Without the Write tool, use PowerShell
+  `Set-Content -LiteralPath <path> -Value @'...'@` (a single-quoted here-string
+  expands nothing). The hand-back repeats them in short and never replaces the
+  file, because a read-only lane makes no commit and its hand-back alone can be
+  lost.
+- A review-and-fix pass reports every finding with its severity and
+  `file:line`, fixes what is local and clear in its own tree, and leaves the
+  rest open in its end list, as its instructions block says.
+
 ## After the pass
 
 1. **Read the result.** Check every finding against the current files. A

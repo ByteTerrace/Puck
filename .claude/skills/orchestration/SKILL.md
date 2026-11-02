@@ -222,9 +222,12 @@ plans, grounding reports, pending notes and owner answers. A session's job
 directory and scratch are lost with the machine or the session. A lane branch
 is merged, pushed to `origin` as `lane/<id>` while it waits, or deleted once a
 later design supersedes it, so no machine holds a branch whose fate only one
-session knew. Before deleting one, search `docs/` and `.claude/` for its name.
-A plan may keep a superseded branch as prior art: `open-items.md` kept
-companions v1 for its role-driver code, and the lead deleted it anyway. The repository's documents,
+session knew. Before deleting one, search `docs/` and `.claude/` for its name:
+a search of the code alone misses a plan that keeps a superseded branch as
+prior art for code no other branch holds. `open-items.md` kept companions v1
+for its role-driver code, and the lead deleted it anyway. A remote branch whose
+work never landed is the owner's to delete (AGENTS.md), so the lead brings the
+search's result to the owner rather than deleting it. The repository's documents,
 `docs/plans/open-items.md` and the plans under `docs/plans` among them, belong
 to no one lane: a delegate edits them for what its change delivers, deleting an
 item it closed (after moving the durable fact it carries to its owning home),

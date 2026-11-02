@@ -5,10 +5,21 @@
   "train": [
     "d01-clean-commit-past-a-dirty-index",
     "d04-rename-before-the-final-commit",
-    "d05-cache-hand-back-names-its-invariant"
+    "d05-cache-hand-back-names-its-invariant",
+    "d09-thorough-before-the-hand-back",
+    "d11-integration-tip-moved-before-the-hand-back",
+    "d13-symptom-patch-without-a-cause",
+    "d14-same-guard-in-five-reads"
   ],
   "test": [
     "d02-powershell-script-refused-in-bash",
-    "d03-set-aside-before-a-fault-injection"
+    "d03-set-aside-before-a-fault-injection",
+    "d06-brief-says-push-for-the-reviewer",
+    "d07-relayed-restart-after-a-stop-order",
+    "d08-merge-refused-and-an-old-worktree",
+    "d10-hand-back-while-the-test-runs",
+    "d12-brief-trailer-on-progress-commits",
+    "d15-finish-line-holds-with-budget-left",
+    "d16-design-memo-wants-a-prototype"
   ]
 }
