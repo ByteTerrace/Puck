@@ -439,8 +439,10 @@ parallel without changing a value:
   stands while the body's rest epoch (moved by every wake, park, sleep, pose,
   restore and transfer), its generation, the population's admission revision,
   the contact-field version and the body's action-state lane values hold. A
-  moving body encodes every tick, as before; the debug world's 361 Go stones,
-  64 discs and 52 cards rest most of the time.
+  body with an identity is never cached, since a fact or record written on the
+  identity moves its continuation without touching the body. A moving body
+  encodes every tick, as before. Over go-tests (15 worlds, 18,204 ticks, about
+  368 rows and 559 slots each) a tick refolds 1.6 rows and 22 slots.
 - **The recompute check.** A write that changes state without moving the
   version its digest is keyed by would hide a divergence, so
   `StateArena.RecomputeHash`, `AppendContinuationHash(recompute: true)` and
@@ -453,6 +455,16 @@ parallel without changing a value:
 A headless host also stops delivering snapshots to its screen-session mirrors
 (`WorldSessionMirror(unread: true)`), which only a presentation reads; the
 destination still runs and discloses.
+
+Measured on go-tests at `--jobs 1` under the heavy lease, authored seconds
+summed from each leg's `timing.json`, the build before against the build
+after: plain 256.7 s against 180.4 s (the mirrors), recorded (`--record`)
+441.4 s against 247.1 s, so the recording's own cost fell from 184.7 s to
+66.7 s. `--reproduce` after: 228.6 s authored and 415.7 s replay, the replay
+paying the full recompute every tick; `--workers 1,2,0` after: 346.9 s at the
+checked first count, 254.7 s and 265.2 s at the others. What the recording
+still costs is the components that fold whole every tick (poses, body action
+state, navigation, flock and input), unprofiled.
 
 ### Rule evaluation stays serial
 

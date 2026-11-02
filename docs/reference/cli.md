@@ -1941,7 +1941,11 @@ determinism qualification pass: the worker captures each authority's starting
 checkpoint and the tape's input stream, restores that checkpoint in place, then
 replays the input through the ordinary replay doors. Every completed tick's authority
 hash, final machine cores and final canonical state export must match. A mismatch
-names the authority and recorded tick. The authored
+names the authority and recorded tick. The authority hash is incremental (rows
+and resting bodies fold from digests cached by version), so every replayed tick
+is also compared with a full recompute of the same state, and a difference
+fails the leg naming the stale component (`differs from its full recompute in
+Arena`). The authored
 schedule runs once: its outcomes and edit echoes remain in
 `test-run.json`; replay consumes the resulting inputs instead of executing console
 commands again. External input is captured once, so this checks deterministic
@@ -1965,7 +1969,9 @@ the booted authority's completed tick) beside its `out` exports and manifest.
 Every count must match the first: a mismatch prints `DIVERGED` with the first
 recorded tick whose hash differs per authority, the first JSON path where an
 export differs, and the first differing crossing entry, and exits 2. Verdicts are
-read from the first count.
+read from the first count. The first count also compares every recorded tick's
+incremental authority hash with a full recompute, as `--reproduce` does for its
+replay; the other counts take the incremental hash alone.
 
 `--record <dir>` keeps the first count's `reproduction.json`,
 `crossings.json` and `out` under `<dir>/<world>`, and a later run with

@@ -1992,42 +1992,26 @@ Next: the per-tick authority hash is incremental
 reproduce worker for what remains.
 
 - [low · fix when touched] `Fixtures.FreshServer` (`tests/Shared/World/Fixtures.Server.cs:112`) deserializes without `WorldStateSettlement.SettleBeforeAdmission`, so a boot from a raw document with a seeded responsive placement can show the response's prototype while colliding as the authored one, which the real loader never does. Settle in the fixture as the loader does. (from: the tip-reds lane)
-- [medium] `--reproduce` costs about twice the ordinary run, and the cost is
-  per-tick hashing and recording, not host reuse. Recording slows the authored
-  phase itself (alchemy's 1,204-tick scenario 14.0 s ordinary against 20.1 s
-  recorded; Go's 2,804-tick scenarios 15 s against 31 s under the trace), the
-  replay then repeats it (replay time equals recorded authored time), and a
-  replica has a fixed 2.4-4 s floor even for a 16-tick scenario. A
-  `dotnet-sampled-thread-time` trace of Go's reproduce worker (481 CPU-s on the
-  tick threads) splits it: `WorldReplayProbe.Verify` 51 %, the authored steps 49 %;
-  `WorldPersistence.AppendStateHashComponent` 36.5 % of all of it
-  (`WorldPopulation.AppendContinuationHash` 16.4 %, `StateArena.ComputeHash`
-  13.9 %), `WorldReplayTape.NoteTick` 20.7 % (with
-  `WorldAuthorityCheckpointCodec.WritePopulationEntry` 10.3 %), the session
-  sinks' snapshot delivery to the garden and night mirrors 16.7 %
-  (`WorldDocumentStateView.ApplyFieldCells` 11.4 %), replica arena construction
-  and load 7 %, and the simulation itself (rules 13 %, bodies and contact sweeps
-  about 15 %) the rest. Make the per-tick hash incremental (fold only changed
-  arena columns and changed body continuations), and find whether a headless
-  test worker's session mirrors have any reader before delivering to them;
-  then re-time Go. The hash is one sequential FNV-1a stream over the
-  components in `WorldStateHashComposition.AuthoritativeOrder`, so an
-  incremental form changes its structure to a combination of per-segment
-  digests (hash values change, which rule 4 allows) and needs a change signal
-  at every write path: the arena's numeric columns are row-local
-  `ArenaColumnBuffer<T>` arrays but text, vector, visibility and observation
-  columns, import, restore, growth and relayout write beside them; a body's
-  continuation (`WorldAuthorityCheckpointCodec.WriteContinuationEntry`) has no
-  version at all. A missed signal makes the hash stale and a divergence
-  invisible, so land it with a law that compares the incremental digest against
-  a full recompute over the same states, tick by tick, in `--reproduce`.
-  Raw: `.claude/scratch/quiet-measure/` in the quiet-measure worktree (ignored).
-  (from: quiet-measure) A live scope's per-tick hash
-  (`WorldScopedReplayRuntime.Hash`) now refolds its rows only when the arena,
-  its layout or one of the rows' versions moved, which leaves its value
-  unchanged; its body continuations (`AppendContinuationHash`, about as costly
-  as the rows were) and rule latches still fold whole every tick, for want of a
-  body continuation version. (from: tick-cost-2)
+- [medium] Recording still costs about a third of the plain authored run.
+  The per-tick authority hash is incremental: the arena by `RowVersion`-cached
+  row digests in 32-row segments, resting identity-less bodies by rest epoch in
+  32-slot segments, the scoped replay runtime through the same row digests
+  ([design and measurements](engine-job-system.md#the-incremental-state-hash)),
+  checked against a full recompute on every replayed tick of `--reproduce` and
+  every recorded tick of the first `--workers` count. A headless host's
+  screen-session mirrors drop their snapshots. Go's authored seconds at
+  `--jobs 1`: plain 256.7 s to 180.4 s, recorded 441.4 s to 247.1 s; a tick
+  refolds 1.6 of about 368 rows and 22 of about 559 slots. Left: the
+  recording's 66.7 s over plain is the components that still fold whole every
+  tick (`PopulationPose`, `BodyActionState`, `Navigation`, `Flock`, `Input`)
+  and the probe's per-tick input copy, unprofiled; `--reproduce`'s replay
+  (415.7 s for Go) pays the full recompute every tick, which is the check's
+  price; a replica's fixed 2.4-4 s floor per scenario is unmeasured since.
+  Re-profile Go's reproduce worker (`dotnet-sampled-thread-time`) before
+  choosing the next segment. A moving body still encodes its whole
+  continuation every tick; a write-side version per body would cover it, and
+  is the larger change the measurement has to justify. (from: quiet-measure,
+  tick-cost-2, incr-hash)
 - [medium] Hall's test fixture uses `documentId: "hall-tests"`, so the garden
   and night references admit a separate full `debug` authority. Its root's
   stopped-machines import does not stop that companion's six machines;
