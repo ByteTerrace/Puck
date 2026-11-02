@@ -1419,6 +1419,15 @@ render {
           shadow: always,
           angularRadius: 0.2
         )
+        // The moon, which the day cycle (day.puck) turns opposite the sun and lights at night; it takes a shadow slot by
+        // its luminance once the sun has set.
+        directional(
+          name: "moon",
+          direction: [-3, 5, 4],
+          color: "#7088E8",
+          illuminance: 0lx,
+          shadow: auto
+        )
         // The inspection fill (`gallery.inspect`): five unshadowed neutral lights, one from overhead and four low
         // from the sides, each at the `galleryFill.fill` illuminance, zero while the lever is Off. They reach every
         // surface that faces them, shadowed or not, so no exhibit sits in the dark.
@@ -1518,9 +1527,20 @@ render {
     ambient: "state.galleryFill.ambient"
     reflection: 1
   }
+  // The exposure's floor follows the day (day.puck's `day` clock): EV 7 from dawn to dusk, the hall's lit rooms
+  // and the sunlit valley, down to EV 2 at night, so the moonlit valley reads deep blue and dark rather than black.
   exposure {
     mode: Auto
-    minimum: 7
+    minimum {
+      clock: day
+      keys [
+        { at: 0, value: 2 }
+        { at: 18900, value: 2 }
+        { at: 23400, value: 7 }
+        { at: 63000, value: 7 }
+        { at: 67500, value: 2 }
+      ]
+    }
     maximum: 16
     compensation: 2.5
     adaptation: 0.75

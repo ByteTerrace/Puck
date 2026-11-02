@@ -4,7 +4,7 @@ using Puck.SignedDistance;
 namespace Puck.World.Client;
 
 public sealed partial class WorldEnvironmentResolve {
-    private WorldResolvedIndirect m_indirect = new(SdfIndirectGains.One, null, SdfIndirectApplication.Default);
+    private WorldResolvedIndirect m_indirect = new(SdfIndirectGains.One, null, SdfIndirectApplication.Default, SdfIndirectBudget.Unbounded);
 
     private void WriteIndirect(WorldStateMirror mirror, WorldRenderIndirect? indirect) {
         var sources = indirect?.Sources;
@@ -21,11 +21,13 @@ public sealed partial class WorldEnvironmentResolve {
             new SdfIndirectApplication(
                 Intensity: Scalar(mirror, indirect?.Apply?.Intensity, 1f, WorldValueFields.IndirectIntensity, applySite),
                 Tint: Rgb(mirror, indirect?.Apply?.Tint, Vector3.One),
-                Contact: Scalar(mirror, indirect?.Apply?.Contact, 1f, WorldValueFields.IndirectContact, applySite)));
+                Contact: Scalar(mirror, indirect?.Apply?.Contact, 1f, WorldValueFields.IndirectContact, applySite)),
+            new SdfIndirectBudget(Relight: (indirect?.Budget?.Relight ?? 0), Trace: (indirect?.Budget?.Trace ?? 0), Age: (indirect?.Budget?.Age ?? 0f)));
     }
 }
 /// <summary>The immutable indirect controls resolved through the environment's existing bindings and clocks.</summary>
 /// <param name="Gains">Source gains applied at each origin.</param>
 /// <param name="Bounces">Requested finite feedback depth, or the selected tier's default.</param>
 /// <param name="Apply">Receiver-only controls.</param>
-public readonly record struct WorldResolvedIndirect(SdfIndirectGains Gains, int? Bounces, SdfIndirectApplication Apply);
+/// <param name="Budget">The irradiance work each frame grants the volume; zero members are unbounded.</param>
+public readonly record struct WorldResolvedIndirect(SdfIndirectGains Gains, int? Bounces, SdfIndirectApplication Apply, SdfIndirectBudget Budget);

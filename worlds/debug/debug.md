@@ -172,7 +172,10 @@ key (`world.rates toggle`, F7). [range.md](range.md) says how to use it.
 [skies.puck](../standard/skies.puck)): the sun (the `key` light), its colour and
 the sky follow the `day` state row, which holds the day's phase and advances one
 day every 24 minutes from ten in the morning. At noon the sun stands 46 degrees
-up toward +x and -z.
+up toward +x and -z. At night a deep-blue 6-lux moon (the `moon` light) stands
+opposite the sun under a 1-nit sky and its stars, and the hall's exposure floor
+(`render.exposure.minimum`, keyed on `day`) falls from EV 7 between 06:30 and
+17:30 to EV 2 at night.
 
 | To | Console line |
 |---|---|
