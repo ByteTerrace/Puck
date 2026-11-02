@@ -266,6 +266,10 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.indirect.apply.intensity` | State | Binding | Binding | `WorldRenderIndirectApply.Intensity` |
 | `render.indirect.apply.tint` | State | Binding | Binding | `WorldRenderIndirectApply.Tint` |
 | `render.indirect.apply.contact` | State | Binding | Binding | `WorldRenderIndirectApply.Contact` |
+| `render.exposure.ev100` | State | Binding | Binding | `WorldRenderExposure.Ev100` |
+| `render.exposure.minimum` | State | Binding | Binding | `WorldRenderExposure.Minimum` |
+| `render.exposure.maximum` | State | Binding | Binding | `WorldRenderExposure.Maximum` |
+| `render.exposure.compensation` | State | Binding | Binding | `WorldRenderExposure.Compensation` |
 | `render.exposure.hold` | State | Binding | Binding | `WorldRenderExposure.Hold` |
 | `screens[].source[machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |
 | `screens[].magazine.entries[][machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |

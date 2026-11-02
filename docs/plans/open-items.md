@@ -2563,10 +2563,10 @@ or deletes tests freely.
 - The thirteen standing red `Puck.World.Server.Tests` laws pass. The editor fixture now declares the one-bank bar the validator
   requires; guest writes no longer enter the recovery journal (the laws read
   echoes instead); a replay drive builds its boot image on a shadow server; a
-  load past the compilation bound waits rather than refusing. The remaining red
-  law of that batch is `WorldNameRegistryLawTests` in `Puck.World.Schema.Tests`
-  (`screenMaterials` and `editor.bar.iconRow` uncovered; the leaks3 lane
-  registers the materials). (from: unbiased-2)
+  load past the compilation bound waits rather than refusing. The editor
+  fixtures share `EditorBarFixtures` (a one-bank bar and its resting-page
+  overlay). `WorldNameRegistryLawTests` passes once `docs/world-name-registry.md`
+  is regenerated. (from: unbiased-2)
 - [medium] The first main run after the fundamentals landing fails all four
   Windows test shards, where earlier runs failed only shard 3. Tests do not gate
   deploy during the refactoring campaign, but the jump may hide real regressions

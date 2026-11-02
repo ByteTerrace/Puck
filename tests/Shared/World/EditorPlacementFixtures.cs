@@ -1,5 +1,4 @@
 using System.Numerics;
-using Puck.Commands;
 
 namespace Puck.World.Testing;
 
@@ -11,7 +10,6 @@ internal static class EditorPlacementFixtures {
 
         return HostRow.Build(
             definition: (document with {
-                BindingOverlaysRaw = [.. document.BindingOverlays, RestingPage],
                 CreationsRaw = [Crate],
                 EditorRaw = Editor,
                 PlacementsRaw = (document.PlacementsRaw! with {
@@ -23,31 +21,15 @@ internal static class EditorPlacementFixtures {
                         YawDegrees: 0f
                     )],
                 }),
-            }),
+            }).WithRestingPage(),
             name: "boot"
         );
     }
 
     internal static WorldPrototype Crate { get; } = CreationFixtures.UnitSphere(id: "crate");
-    // The resting page the editor's bar shows and its build toggle composes beneath: a world's editor bar must declare a
-    // bank, and a bank must name a page the composed bindings declare.
-    internal static WorldBindingOverlay RestingPage { get; } = new(
-        Document: new BindingProfileDocument(
-            Chords: [new BindingChordDefinition(
-                Group: "editorFixture",
-                Page: new BindingPageDefinition(Entries: [], Id: "base")
-            )],
-            Modifiers: [],
-            Version: BindingProfileDocument.CurrentVersion
-        ),
-        Id: "editor-fixture"
-    );
-    // The standard editor's values (worlds/standard/editor.puck), with a one-bank bar over the resting page.
+    // The standard editor's values (worlds/standard/editor.puck), with the one-bank bar the validator requires.
     internal static WorldEditorDefaults Editor { get; } = new(
-        Bar: new WorldBindingBarAuthoring(
-            Banks: [new WorldBindingBarBank(Alpha: 1f, Id: "resting", PageId: "base")],
-            SlotSet: ["keyboard.f2"]
-        ),
+        Bar: EditorBarFixtures.Bar,
         Camera: new WorldEditorCamera(FlyRate: 6f, MaxDistance: 14f, MaxPitch: 1.35f, MinDistance: 0.5f, MinPitch: 0.05f, OrbitRate: 2.4f, PanRate: 3f, ZoomRate: 1.2f),
         Grid: new WorldEditorGrid(LineWidth: 1.5f, Mode: WorldEditorGridMode.Surface, Pitch: new Vector3(value: 0.5f), PlaneY: 0f, Visible: false),
         ReadOnlyLabel: "Build (read-only)",

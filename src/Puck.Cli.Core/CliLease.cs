@@ -70,7 +70,10 @@ public sealed class CliLease : IDisposable {
                 // and within a lane first come, first served.
                 var queue = (directory + ".queue");
 
-                if ((ticket is null) || !File.Exists(path: ticket)) { ticket = Enqueue(clock: clock, holder: holder, lane: lane, queue: queue); }
+                if ((ticket is null) || !File.Exists(path: ticket)) {
+                    Stamp(lane: lane, rotation: (directory + ".rotation"));
+                    ticket = Enqueue(clock: clock, holder: holder, lane: lane, queue: queue);
+                }
                 var place = Admission(now: clock.GetUtcNow(), rotation: (directory + ".rotation"), ticket: ticket);
                 var ahead = place.Ahead;
 
@@ -280,6 +283,29 @@ public sealed class CliLease : IDisposable {
     /// <summary>Reads a lane's serial: the order in which it last held the lease; zero when it never has.</summary>
     private static long Served(string path) {
         try { return (long.TryParse(s: File.ReadLines(path: path).FirstOrDefault(), provider: CultureInfo.InvariantCulture, result: out var serial) ? serial : 0); } catch (Exception error) when ((error is IOException or UnauthorizedAccessException)) { return 0; }
+    }
+    /// <summary>Gives a lane that has no serial yet the highest serial any lane has had, as it first queues, so a lane that has
+    /// never held the lease ranks by when it arrived instead of ahead of every lane that has waited: it still ranks behind
+    /// each lane served longer ago, and ties with the lane served last, which the older ticket wins. The serial is created
+    /// whole and never replaces one a holder has written.</summary>
+    private static void Stamp(string rotation, string lane) {
+        var path = LanePath(lane: lane, rotation: rotation);
+        string? temporary = null;
+
+        try {
+            if (File.Exists(path: path)) { return; }
+            Directory.CreateDirectory(path: rotation);
+            var serial = Directory.EnumerateFiles(path: rotation).Where(predicate: file => (Path.GetExtension(path: file) != ".tmp")).Select(selector: Served).DefaultIfEmpty().Max();
+
+            temporary = $"{path}.{Guid.NewGuid():N}.tmp";
+            File.WriteAllText(path: temporary, contents: serial.ToString(provider: CultureInfo.InvariantCulture));
+            File.Move(destFileName: path, overwrite: false, sourceFileName: temporary);
+            temporary = null;
+        } catch (Exception error) when ((error is IOException or UnauthorizedAccessException)) {
+            // A holder wrote this lane's serial first, or the directory refuses: the lane ranks as it did.
+        } finally {
+            if (temporary is not null) { try { File.Delete(path: temporary); } catch (Exception error) when ((error is IOException or UnauthorizedAccessException)) { } }
+        }
     }
     /// <summary>Records that a lane holds the lease now, as the highest serial any lane has had. Only the guard's owner writes.</summary>
     private static void Serve(string rotation, string lane) {
