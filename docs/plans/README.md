@@ -28,7 +28,7 @@ Each programme is one page and opens with an implementation status. A status is 
 The state system, its ceilings and costs, the authoring language, and the games that prove them, as one page of packages. Forcing artifact: the debug world's rules, with Go at 19×19 and the card tables running in it. Its decisions are in [the register](../decisions/state-and-language.md).
 
 - [Records and pools](records-and-pools.md)—the contract for typed records and bounded pools: MaxLive-sized storage, explicit endpoints and generation-safe handles, and the representation S10 replaces.
-- [Disclosure](disclosure.md)—the structural fix for hidden state: one per-recipient view every read, write receipt, placement layout, delta and diagnostic derives from; blind writes for readers who cannot read; the layout following the row's hidden policy; deltas as a difference of views; an analyzer and an operator handler shape that keep the authority out of every other path; the build order checked on the disclosure probe.
+- [Disclosure](disclosure.md)—the structural fix for hidden state: what is guaranteed and to whom; one per-recipient view, with the session's ceiling, that every read, write admission, placement layout, projection and diagnostic derives from; no write to a row the writer cannot read whole, with sealed bids as an authored private-row pattern; the layout following the row's hidden policy with no physical facet on a restricted deal; deltas and versions as a difference of views owned by each delivery stream; the authority `internal` to the server behind two doors; a noninterference harness over four authored games with an input fuzzer as the mechanical definition of done.
 
 ## [Runtime and delivery](runtime-and-delivery.md)
 
