@@ -1834,6 +1834,16 @@ and the order they land in; the items below are its findings and checks.
   pixels white like lit ones; at the noon sun the meadow lies in the east
   wall's shadow. Step 1's checks and the frame bar are owed again on the moving
   day cycle, with a low-sun cel style for the dawn penumbra check.
+- [high] The wrapped side's self-shadow term has failed three reviews, each
+  in a new mesh-topology case: curvature transmission, then the exit layer,
+  then the exit layer with closed/open classification. The last review found
+  grazing self-shadowing from the receiver-plane clamp
+  (`sdf-surface-stage.hlsli` ~:214, :232-234), multi-shell meshes oriented by
+  one signed volume (`WorldPlacementStamper.cs` ~:398, :411), T-junctions
+  demoting a solid to a thin caster, and skins whose deformation inverts
+  winding while `EnclosesSolid` holds. A design pass (transmit-design) replaces
+  class-by-class patching with a term correct by construction; implementation
+  follows its plan. (from: illum1fix2-astra)
 - From illum1-fix: the cascades' exit layer doubles each cascade pass's draws
   and vertices (`world.counters gpu pass sdf.world$shadow-near` at the stage:
   460 draws and 2.62 M vertices on Direct3D 12, two render passes) and adds a
