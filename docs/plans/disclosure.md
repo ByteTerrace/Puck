@@ -802,15 +802,19 @@ from that tick the variants' worlds differ by what those blind writes did:
 | `world.placements` | seat2 | any hidden member dealt before `pub` | `pub`'s `dealSlot` and position | 4 |
 | `world.projection` | seat2 | any hidden member | the presentation projection's byte count | 2 |
 | `echo` | seat2 | any hidden member | `world.state.cell.remove hand secret0` answers `ran` with no text in both, and its echo says `applied` against `has no cell keyed 'secret0'`: a membership oracle a fire-and-forget verb carries only on the echo | 3 |
-| `wire.errors` | seat2 | any hidden member | the count of the seat's refused submissions follows that echo's verdict | 3 |
 | `deliver.state`, `deliver.definition` | every session | any hidden member | the re-deal after seat2's blind removal moves `pub`'s dealt position (`$.placements.rows[2].position[0]`) | 3, 4 |
 | `world.state.transform`, `world.state.act` | seat2 | two hidden members | after seat2 overwrites the hidden `secret1`, a transfer out of `hand` is refused as `state operation is not disclosed` against `not an ordered token zone` | 3 |
 | `outcome.transform`, `outcome.act` | writer | two hidden members | the same refusal texts on the typed outcome | 3 |
 | `deliver.snapshot`, `query.state` | every session | two hidden members | the field deltas and state observations after the blind overwrite | 1, 2, 3 |
+| `world.state.observe`, `world.observe`, `world.state` | seat2 | two hidden members | the observations of `hand` after the blind overwrite | 2, 3 |
 | `deliver.state`, `deliver.definition`, `deliver.snapshot` | every session | a hidden-only install mid-run (`late`) | a delivery in one world and none in the other at tick 40, the replica's moved-row list, and a field delta for the installed row | 1 |
 | `outcome.*`, `query.state` | every session | `late` | the typed outcome's document version, and the observations after the install | 1, 3 |
-| `echo` | seat2 | `late` | `Generate 'hand'` is refused as `draw site is not disclosed` against `requires a redrawable draw site` | 3 |
-| `world.projection`, `world.state`, `world.budget`, `world.placements` | seat2 | `late` | the install's bytes, counts and deal | 2, 4 |
+| `echo`, `world.state.transform` | seat2 | `late` | a drawn transfer out of `hand` is refused as `state operation is not disclosed` against `not an ordered token zone` (a drawn `Generate 'hand'` likewise as `draw site is not disclosed` against `requires a redrawable draw site`) | 3 |
+| `world.state`, `world.observe`, `world.budget`, `world.placements` | seat2 | `late` | the install's cells, counts and deal | 2, 4 |
+
+The drawn doors move with the registry, since the fuzzer draws over every verb
+anyone may run: a verb added or removed elsewhere changes which lines a seed
+draws. The authored rows (the schedule's and the script's) stay where they are.
 
 **No step opens a door before its protection lands.** The order puts the
 delivery protections (the cursor, recipient-scoped versions, the delta over
