@@ -123,6 +123,14 @@ experimental worlds have that it lacks is ported into it
 
 Each waits on the owner: what the engine should do, how it looks and feels, and the owner-only actions. An engineering call is the lead's and sits in its packet as a "Decide" line, made when the packet is taken.
 
+- Decided by the owner for the landing of `lead/fundamentals` on `main`: these
+  highs are deferred, not resolved, and stay first in Next: the disclosure
+  leaks the harness shows; transmission's remaining exit-layer highs; the
+  lockstep relight under a moving sun; the tour's and the cold bake's memory;
+  and the frame bar failing at every stop. The rule-fault register's throw in
+  a live World is fixed before the landing, and the release is rehearsed on
+  the hosted runners first.
+
 - What the chase camera does with its back to the stair wall: swing the boom,
   rise over the wall, or switch to first person there
   ([motion](#dual-stick-play-and-the-moths-motion)).
