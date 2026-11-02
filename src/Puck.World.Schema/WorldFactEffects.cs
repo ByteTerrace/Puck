@@ -122,22 +122,20 @@ public sealed class WorldCueEffect : WorldFactEffect {
     /// <summary>Initializes the effect.</summary>
     /// <param name="cue">The cue name.</param>
     /// <param name="payload">The cue payload, or <see langword="null"/>.</param>
-    /// <param name="key">The addressed body's literal key, or the invalid default.</param>
-    /// <param name="keyFrom">The addressed body's live indirection, or <see langword="null"/>.</param>
+    /// <param name="body">The addressed body — its literal key, or the live indirection that computes it — or
+    /// <see langword="null"/> for a cue about no body.</param>
     /// <param name="describe">The authored spelling, for the rules read-back.</param>
-    public WorldCueEffect(string cue, string? payload, CellKey key, CompiledCellRef? keyFrom, string describe) : base(describe: describe) {
+    public WorldCueEffect(string cue, string? payload, (CellKey Key, CompiledCellRef? KeyFrom)? body, string describe) : base(describe: describe) {
+        Body = body;
         Cue = cue;
-        Key = key;
-        KeyFrom = keyFrom;
         Payload = payload;
     }
 
     /// <summary>Gets the cue name.</summary>
     public string Cue { get; }
-    /// <summary>Gets the addressed body's literal key, or the invalid default.</summary>
-    public CellKey Key { get; }
-    /// <summary>Gets the addressed body's live indirection, or <see langword="null"/>.</summary>
-    public CompiledCellRef? KeyFrom { get; }
+    /// <summary>Gets the addressed body, or <see langword="null"/> for a cue about no body. One value carries both
+    /// spellings, so a live key is resolved exactly when a literal one is.</summary>
+    public (CellKey Key, CompiledCellRef? KeyFrom)? Body { get; }
     /// <summary>Gets the cue payload, or <see langword="null"/>.</summary>
     public string? Payload { get; }
     /// <inheritdoc/>
@@ -146,7 +144,7 @@ public sealed class WorldCueEffect : WorldFactEffect {
     /// <inheritdoc/>
     public override void CollectReads(List<CellAccess> into) => CompiledCellRef.CollectReference(
         into: into,
-        reference: KeyFrom
+        reference: Body?.KeyFrom
     );
     /// <inheritdoc/>
     public override RuleWork Cost(IRuleCostContext context) => 1L;

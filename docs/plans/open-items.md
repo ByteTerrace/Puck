@@ -3137,10 +3137,16 @@ brief's priorities ([security review](../development/security-review.md)).
     public routes today), `WorldOperatorAuthority`, `CommandDefinition.Operator`,
     DISC001 over module declarations, the public-surface law,
     `WorldStateDisclosure` deleted. Step 7, the red-team extension.
-- [low] Closing a gate on a fault re-arms an Edge rule after a one-tick fault
-  and fires a decision's `OnNoChoice`; decide whether a fault should hold the
-  previous state instead. `WorldBody.GateOpen` and `MotionGateOpen` are
-  near-copies. (from: statecorr-review)
+- [low] Three consumers still turn an absent expression into a number, which
+  `RuleFact`'s contract says an absence never is: a search job's score reads 0
+  (`src/Puck.State.Search/RuleArenaSearchJudge.cs`, `Score`), a flock affinity
+  reads zero affinity and counts a failure
+  (`src/Puck.World.Server/WorldPopulation.FlockAffinities.cs`,
+  `ReadFlockAffinity`), and a binding whose local is absent is dropped at its
+  sweep's end, re-arming an Edge rule
+  (`src/Puck.State.Rules/Evaluation/RuleEvaluator.cs`, `HoldOnFault`). Faults
+  on all three are held or refused; decide what each absence means. (from:
+  rule-faults-2)
 - [low] `worlds/hosting/granaries.extensions.json` grants its `console` client
   `mutate` over `section:state` to write six feed rows; scope it to those rows if
   the extension grant vocabulary allows. (from: the lead, landing granaries)

@@ -541,9 +541,9 @@ public sealed partial class WorldBody {
         }
         return -1;
     }
-    // The All/Any reduction both postfix gate evaluators (the action gate and the shaping gate) apply: pops the
-    // group's arity of operands and pushes their conjunction/disjunction — one fold, so the two gates cannot drift.
-    private bool GateOpen(CompiledPredicate[] gate, in LaneActionRuntime state) {
+    // The one postfix evaluator every body gate takes: an action trigger's gate reads its lane's recency clocks, a
+    // shaping row's the motion clocks. The validator decides which predicates each gate may name.
+    private bool GateOpen(CompiledPredicate[] gate, ulong[]? recency, in PlayerIntent intent) {
         if (gate.Length == 0) {
             return true;
         }
@@ -571,12 +571,14 @@ public sealed partial class WorldBody {
 
             var holds = predicate.Kind switch {
                 CompiledPredicateKind.Now => FactHolds(fact: predicate.Fact),
-                CompiledPredicateKind.Recently => (state.Recency![predicate.RecencySlot] > 0),
+                CompiledPredicateKind.Recently => (recency![predicate.RecencySlot] > 0),
                 CompiledPredicateKind.CompareState => predicate.Comparison.Holds(
                 value: StateCounter(slot: predicate.StateSlot),
                 expected: predicate.Value
             ),
-                _ => (StateTimer(slot: predicate.StateSlot) == 0),
+                CompiledPredicateKind.TimerElapsed => (StateTimer(slot: predicate.StateSlot) == 0),
+                CompiledPredicateKind.Held => (intent[predicate.ChannelOrdinal] >= m_channelThresholds[predicate.ChannelOrdinal]),
+                _ => false,
             };
 
             stack[top++] = holds;
@@ -665,49 +667,6 @@ public sealed partial class WorldBody {
             m_scriptActors[ordinal] = actor;
         }
     }
-    // A shaping-row gate: a postfix Boolean program of body-fact predicates plus 'held' (a live channel-threshold
-    // read — the validator admits no other action-state predicate on a shaping gate).
-    private bool MotionGateOpen(CompiledPredicate[] gate, in PlayerIntent intent) {
-        if (gate.Length == 0) {
-            return true;
-        }
-
-        Span<bool> stack = stackalloc bool[CompiledPredicateCapacity.MaxTokens];
-        var top = 0;
-
-        foreach (var predicate in gate) {
-            if (predicate.Kind == CompiledPredicateKind.Not) {
-                GateProgramEvaluator.Invert(
-                    stack: stack,
-                    top: top
-                );
-                continue;
-            }
-            if (predicate.Kind is CompiledPredicateKind.All or CompiledPredicateKind.Any) {
-                GateProgramEvaluator.FoldGroup(
-                    arity: predicate.Arity,
-                    isAll: (predicate.Kind == CompiledPredicateKind.All),
-                    stack: stack,
-                    top: ref top
-                );
-                continue;
-            }
-
-            var holds = predicate.Kind switch {
-                CompiledPredicateKind.Now => FactHolds(fact: predicate.Fact),
-                CompiledPredicateKind.Recently => (m_motionRecency[predicate.RecencySlot] > 0),
-                CompiledPredicateKind.Held => (intent[predicate.ChannelOrdinal] >= m_channelThresholds[predicate.ChannelOrdinal]),
-                _ => false,
-            };
-
-            stack[top++] = holds;
-        }
-
-        return (
-            (top == 1) &&
-            stack[0]
-        );
-    }
     // The first shaping row whose gate opens, or -1 when none does (an unmatched tick, or an empty/absent table).
     // ExecuteProgram calls this exactly once after refreshing recency clocks and stores the result in its scratch,
     // so turn, ShapeVelocity, and ApplyMedium share one pre-operation fact/channel snapshot for the whole tick.
@@ -715,9 +674,10 @@ public sealed partial class WorldBody {
         var shaping = m_tuning.Shaping;
 
         for (var index = 0; (index < shaping.Length); index++) {
-            if (MotionGateOpen(
+            if (GateOpen(
                 gate: shaping[index].When,
-                intent: in intent
+                intent: in intent,
+                recency: m_motionRecency
             )) {
                 return index;
             }
@@ -776,7 +736,8 @@ public sealed partial class WorldBody {
                     (pressed || (state.Latch > 0)) &&
                     GateOpen(
                     gate: press.Gate,
-                    state: in state
+                    intent: in scratch.Intent,
+                    recency: state.Recency
                 )
                 ) {
                     if (ApplyEffects(
@@ -795,7 +756,8 @@ public sealed partial class WorldBody {
                 (binding.OnRelease is { } release) &&
                 GateOpen(
                 gate: release.Gate,
-                state: in state
+                intent: in scratch.Intent,
+                recency: state.Recency
             )
             ) {
                 ApplyEffects(
@@ -810,7 +772,8 @@ public sealed partial class WorldBody {
                 var trigger = binding.OnFact[rule];
                 var holds = (FactHolds(fact: trigger.Fact) && GateOpen(
                     gate: trigger.Gate,
-                    state: in state
+                    intent: in scratch.Intent,
+                    recency: state.Recency
                 ));
                 var wasHeld = ((state.FactHeld & (1UL << rule)) != 0UL);
 
