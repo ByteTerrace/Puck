@@ -2,6 +2,7 @@ schema: "puck.world.definition.v1"
 import "../../standard/inputs"
 import "../../standard/quality"
 import "../../standard/motion"
+import "../../standard/kits"
 import "moth-head"
 import "moth-dash"
 import "moth-camera"
@@ -968,34 +969,15 @@ kits [
           cone [0, 60]
           reach: 1.2
           forward: Heading
-          gravity {
-            fall: 46
-            rise: 28
-          }
-          envelope {
-            sinkSpeed: 40
-          }
+          gravity: standardGravity
+          envelope: standardSink
           thrust: 1
           spend {
             state: "flightFuel"
             ratePerSecond: 0.001
           }
         }
-        {
-          name: "ground"
-          bond: Surface
-          hold: Gravity
-          cone [0, 60]
-          reach: 1.2
-          forward: Heading
-          gravity {
-            fall: 46
-            rise: 28
-          }
-          envelope {
-            sinkSpeed: 40
-          }
-        }
+        groundHold
         {
           name: "flight"
           bond: Free
@@ -1004,29 +986,14 @@ kits [
           lift: 1
           // She flies at her running pace, and running in the air doubles it.
           speed: 5
-          gravity {
-            fall: 46
-            rise: 28
-          }
+          gravity: standardGravity
           thrust: 1
           spend {
             state: "flightFuel"
             ratePerSecond: 0.001
           }
         }
-        {
-          name: "fall"
-          bond: Free
-          hold: Gravity
-          forward: Heading
-          gravity {
-            fall: 46
-            rise: 28
-          }
-          envelope {
-            sinkSpeed: 40
-          }
-        }
+        fallHold
       ]
       moveFrame: World
       shaping [

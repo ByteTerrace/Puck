@@ -1,4 +1,5 @@
 import "../standard/inputs"
+import "../standard/kits"
 import "shapes"
 // Physical Go on a 19x19 board: 361 rigid stones on a goban in the gallery hall's board game room (hall.puck), whose every
 // settled arrangement is judged against the position the rules last accepted, and a computer opponent. The debug
@@ -87,50 +88,7 @@ looks: map(["goStoneBlack", "goStoneWhite", "goCursor"], name => {
   source: creation(prototypeId: name)
 })
 
-kits [
-  {
-    bodyContact: Solid
-    bodyMotionProgram: "walk"
-    collider: fromCreation(prototypeId: goStoneBlack)
-    motion {
-      facingSnap: true
-      holds [
-        {
-          bond: Free
-          envelope {
-            sinkSpeed: 40
-          }
-          gravity {
-            fall: 46
-            rise: 28
-          }
-          hold: Gravity
-          name: "air"
-        }
-      ]
-      shaping [
-        {
-          along {}
-        }
-      ]
-      speed {
-        value: 0.001
-      }
-      turn {
-        rate: 0.001
-      }
-    }
-    name: "goStone"
-    rigid {
-      angularDamping: 0.05
-      friction: 0.6
-      linearDamping: 0.05
-      mass: 0.05
-      restitution: 0.05
-      rollingFriction: 0.2
-    }
-  }
-]
+pieceKit(name: "goStone", collider: fromCreation(prototypeId: goStoneBlack), mass: 0.05)
 
 placements {
   placement "goTable" {

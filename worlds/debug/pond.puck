@@ -13,6 +13,8 @@
 // hounds and spiders by body number, so they are the last placements: they sit just above the reserve and keep their
 // numbers at every count, while the flocks that read no rule, the dragonflies and the fish, take the rest above them.
 
+import "../standard/kits"
+
 // The basis's own room for seats and travellers, and the rule-keyed populations above it.
 let reserve = 8
 let houndCount = 6
@@ -375,15 +377,15 @@ template pond() {
             hold: Gravity
             cone [0, 60]
             reach: 0.8
-            gravity { fall: 46, rise: 28 }
-            envelope { sinkSpeed: 40 }
+            gravity: standardGravity
+            envelope: standardSink
           }
           {
             name: "air"
             bond: Free
             hold: Gravity
-            gravity { fall: 46, rise: 28 }
-            envelope { sinkSpeed: 40 }
+            gravity: standardGravity
+            envelope: standardSink
           }
         ]
         shaping [{ along {} }]
@@ -430,15 +432,15 @@ template pond() {
             hold: Gravity
             cone [0, 60]
             reach: 0.6
-            gravity { fall: 46, rise: 28 }
-            envelope { sinkSpeed: 40 }
+            gravity: standardGravity
+            envelope: standardSink
           }
           {
             name: "air"
             bond: Free
             hold: Gravity
-            gravity { fall: 46, rise: 28 }
-            envelope { sinkSpeed: 40 }
+            gravity: standardGravity
+            envelope: standardSink
           }
         ]
         shaping [{ along {} }]
@@ -496,7 +498,7 @@ template pond() {
             speed: 3
             thrust: 1
             upLean: 0
-            gravity { fall: 46, rise: 28 }
+            gravity: standardGravity
           }
         ]
         shaping [{ along {} }]
@@ -549,7 +551,7 @@ template pond() {
             speed: 1.2
             thrust: 1
             upLean: 0
-            gravity { fall: 46, rise: 28 }
+            gravity: standardGravity
           }
         ]
         shaping [{ along {} }]

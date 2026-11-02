@@ -2,6 +2,7 @@
 // and companion.wat. The engine supplies ordinary colliding free flight, Drive and Observe.
 // Imported before hall.puck: body 42 remains the companion and the lift keeps its own population slot.
 import "../standard/inputs"
+import "../standard/kits"
 import "companion-senses"
 
 let companionBody = 42
@@ -104,8 +105,8 @@ kits [
           cone [0, 60]
           reach: 0.3
           forward: Heading
-          gravity { fall: 46, rise: 28 }
-          envelope { sinkSpeed: 40 }
+          gravity: standardGravity
+          envelope: standardSink
           thrust: 1
         }
         {
@@ -115,7 +116,7 @@ kits [
           forward: Heading
           lift: 1
           speed: 11
-          gravity { fall: 46, rise: 28 }
+          gravity: standardGravity
           thrust: 1
         }
       ]

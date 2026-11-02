@@ -19,6 +19,7 @@
 // per metre are the display's height over 1.0432 times that depth. The thresholds fall at D = 27.6 and 57.7 m at
 // 1280x900, and at 69.7 and 142 m at 3840x2160.
 
+import "../standard/kits"
 import "pad-kit"
 
 let laneX = -100
@@ -125,34 +126,8 @@ kits [
       facingSnap: false
       groundSnap: 0.3
       holds [
-        {
-          name: "ground"
-          bond: Surface
-          hold: Gravity
-          cone [0, 60]
-          reach: 1.2
-          forward: Heading
-          gravity {
-            fall: 46
-            rise: 28
-          }
-          envelope {
-            sinkSpeed: 40
-          }
-        }
-        {
-          name: "fall"
-          bond: Free
-          hold: Gravity
-          forward: Heading
-          gravity {
-            fall: 46
-            rise: 28
-          }
-          envelope {
-            sinkSpeed: 40
-          }
-        }
+        groundHold
+        fallHold
       ]
       moveFrame: World
       shaping [

@@ -61,6 +61,10 @@ as its own (`toon: celStyle`) and a world names one as the default every other m
 `localBox` for one in the creation's own frame, `barRing` for the three bars round a canvas), for shells, furniture and
 frames built from boxes.
 
+`kits.puck` is a library of kit parts: the gravity and the ground, fall and air holds a body wears (`groundHold`,
+`fallHold`, `airHold`), and the kits of a piece that stays where it is put (`pieceKit` for a rigid piece the physics
+settles, `heldKit` for a cursor the rules pose).
+
 `terrain.puck` and `foliage.puck` are optional libraries. Foliage supplies
 `broadleafTree`, `mossyRock`, `grassTuft`, `sceneryPatch`, `sceneryScatter` and
 `windMeadowTile`; import it with `import "../standard/foliage"` and expand its
