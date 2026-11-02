@@ -170,15 +170,16 @@ placements {
       topology: "chessBoard"
       turn: "turn"
       verdict: "verdict"
-      // The context button within 2.5 m of the board's centre sits the seat down at the table and the next press
-      // stands it up; seated, the camera looks down on the board from the seat's side and the pointer picks squares
-      // on their tops, 6 cm above the board's frame.
+      // The context button within 2.5 m of the board's centre sits the seat down in the nearer chair, White's at the
+      // -Z edge or Black's at the +Z edge, and the next press stands it up; seated, the camera looks down on the board
+      // from the chair and the pointer picks squares on their tops, 6 cm above the board's frame.
       engage {
         channel: "interact"
         radius: 2.5
         pitch: 62
         margin: 0.12
         surface: 0.06
+        seats [{ yawDegrees: 180 }, { yawDegrees: 0 }]
       }
     }
     position: chessTable
@@ -415,24 +416,12 @@ rule "chess-play-point" {
   play.pointer = pointed
 }
 
-// A step moves the cursor one square in the seat's own frame: from the -Z side up the board is +row and right is
-// -column, toward the h-file (the camera's right is its forward crossed with up), and each other side turns both a
-// quarter.
+// A step moves the cursor one square in the seat's own frame (the standard seat library's step): from White's chair
+// ahead is toward Black and right is toward the h-file.
 rule "chess-play-step" {
-  local seatSide = board(side, board, 1)
-  local cursorColumn = (
-    play.cursor % 8 +
-    play.stepAhead * (seatSide == 3 ? 1 : seatSide == 1 ? -1 : 0) +
-    play.stepRight * (seatSide == 2 ? 1 : seatSide == 0 ? -1 : 0)
-  )
-  local cursorRow = (
-    play.cursor / 8 +
-    play.stepAhead * (seatSide == 0 ? 1 : seatSide == 2 ? -1 : 0) +
-    play.stepRight * (seatSide == 3 ? 1 : seatSide == 1 ? -1 : 0)
-  )
   when play.stepAhead or play.stepRight
   mode: Level
-  play.cursor = clamp(cursorRow, 0, 7) * 8 + clamp(cursorColumn, 0, 7)
+  play.cursor = seatStepCell(board, play.cursor, 8, 8, play.stepAhead, play.stepRight)
 }
 
 // A press lifts the side to move's piece under the cursor, once the board has rested and while no answer is moving.

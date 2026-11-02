@@ -127,7 +127,7 @@ Rule operands accept these bounded channels:
 | `$board:cellOf:<row>:<bodyRef>` | The Grid cell a body's resolved world position falls in, or -1 |
 | `$board:engaged:<row>:<seat>` | 1 while the 1-based local seat sits at the tabletop whose board facet anchors the row's topology (its control applications name that placement), 0 otherwise; `board(engaged, <row>, <seat>)` |
 | `$board:pointer:<row>:<seat>` | The cell the seat's pointer ray (`PlayerIntent.SourceRay`) meets on the tabletop's playing surface, in fixed point, or -1 for no ray or a miss; `board(pointer, <row>, <seat>)` |
-| `$board:side:<row>:<seat>` | The side of the board the seat's body stands on: 0 its -Z edge, 1 +X, 2 +Z, 3 -X (`WorldTabletopFrame.SideOf`), or -1 for no live body; `board(side, <row>, <seat>)` |
+| `$board:side:<row>:<seat>` | The side of the board the seat plays from, the edge of the authored chair nearest its body (`engage.seats`; every edge when absent): 0 its -Z edge, 1 +X, 2 +Z, 3 -X (`WorldTabletopFrame.SeatSide`), or -1 for no live body; `board(side, <row>, <seat>)`. The standard seat library's `seatStepCell` turns a seat's ahead and right presses into a cell step by it |
 | `$board:offset:<row>:<dx>:<dz>` | The cell reached by an arbitrary (dx, dz) grid step from the key cell, or -1 |
 | `$board:component:<row>:<min>:<max>:<maxVisits>` | The size of the connected component (along the topology's directions) of cells whose value lies in min..max that contains the key cell; 0 when the key cell is outside the range, -2 when the budget of settled cells runs out |
 | `$board:boundary:<row>:<min>:<max>:<boundaryMin>:<boundaryMax>:<maxVisits>` | The count of distinct cells adjacent to that component whose value lies in boundaryMin..boundaryMax (`1:1:0:0:<n>` counts the empty cells around a component of 1s on an empty-is-0 board), on the same terms |
@@ -421,15 +421,18 @@ value folds into the state hash and the checkpoint. `return` requires both
 `move` and `verdict` to be authored (validated).
 
 **Sitting down at a tabletop.** A board facet's optional `engage` block
-(`WorldTabletopEngage`: `channel`, `radius`, `pitch`, `margin`, `surface`)
-makes the table engageable like a device. The seat's context button (`channel`,
+(`WorldTabletopEngage`: `channel`, `radius`, `pitch`, `margin`, `surface`,
+`seats`) makes the table engageable like a device. The seat's context button (`channel`,
 a declared channel, the debug world's `interact`) within `radius` of the
 board's centre composes a capturing `control placement:<id>` application, so the
 avatar stands still, and the same button leaves (the context-button probe,
 nearest target first, screens and tabletops together; several seats may sit at
-one table). Seated, the seat's camera eases to the board view
-(`WorldTabletopFraming`): the whole board from the side the seat stands on, at
-`pitch` degrees above the horizontal with `margin` metres around it, and the
+one table). A seat sits in the authored chair (`seats`, each a `yawDegrees` facing
+in whole quarter turns, as a spawn point faces) that faces where it stands most
+squarely, so a board laid out for one player's view reads the right way round
+wherever the player walks up; absent, every edge is a chair. Seated, the seat's camera eases to the board view
+(`WorldTabletopFraming`): the whole board from the side of the chair it sits in,
+at `pitch` degrees above the horizontal with `margin` metres around it, and the
 seat's binding context family `engagement` reads `tabletop`, so a world's
 context row can give it the table's controls. The game stays rules: they read
 the seat's channels and the three `$board:` seat operands above

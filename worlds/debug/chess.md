@@ -40,9 +40,10 @@ progress, then moves its piece itself and puts a piece it takes beside the board
 ## Playing at the table
 
 Walk up to the table and press the context button (E, or the pad's RB) within
-2.5 m of the board's centre: the Moth sits down, stands still, and the camera
-eases to a view of the whole board from the side she stands on (White's side is
--Z, the side nearer the south windows). `debug.go chess` stands her at White's edge,
+2.5 m of the board's centre: the Moth sits down in the nearer of the table's two
+chairs (the engage block's `seats`), White's at the -Z edge nearer the south
+windows or Black's at the +Z edge, stands still, and the camera eases to a view of
+the whole board from that chair. `debug.go chess` stands her at White's edge,
 facing the board and close enough to sit. The controls switch to the board page
 while she sits; the same button stands her up again and the camera eases back.
 

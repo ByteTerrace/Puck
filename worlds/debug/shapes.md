@@ -164,7 +164,7 @@ the doorway, facing in.
 | (56.5, 30.6), 3.5 by 1.7 m | The Go table ([`go.md`](go.md)): Black on its -Z side, White on its +Z side; `debug.go go` |
 | (65, 30.6), 3.5 by 1.7 m | The Alchemy table ([`alchemy.md`](alchemy.md)): a cauldron with two hand wells, 31 element tokens and a lectern recipe-book screen; `debug.go alchemy` |
 | (65, 14.6), 3.5 by 1.7 m | The granary board ([`granaries.md`](granaries.md)): the platform's storage accounts as timber stores on a 4 by 4 board, with water and power providers and a lectern readout; `debug.go granaries` |
-| (60.8, 35.9), 1.6 by 1.5 m | The card table ([`cardtable.md`](cardtable.md)): Klondike with 52 physical cards of the standard deck, north of the Go table; she sits on its +Z side; `debug.go cards` |
+| (60.8, 35.9), 1.6 by 1.5 m | The card table ([`cardtable.md`](cardtable.md)): Klondike with 52 physical cards of the standard deck, north of the Go table; she sits on its -Z side; `debug.go cards` |
 | (56.5, 15.6), 1.2 m square | The auction table ([`auction.puck`](auction.puck)): a sealed-bid auction of three lots among four seats, a chip standing for each bid at the reveal; `debug.go auction` |
 | (60.8, 15.6), 1.2 m square | The shedding table ([`shedding.puck`](shedding.puck)): a card game for four seats, each hand standing in a rack along its seat's edge, faces toward its seat; `debug.go shedding` |
 | (55, 36.5), 1.2 m square | The deduction table ([`deduction.puck`](deduction.puck)): social deduction for four seats, two of them moles, its talk, whispers and den as state; `debug.go deduction` |

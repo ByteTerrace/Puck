@@ -2909,8 +2909,14 @@ ordinary · Next: new content and art on the owner's call.
   Today the panels are baked SDF variants that swap lit and unlit material
   slots, a choice the slow text bake forced (`hall.puck:971-975`).
 - In progress: boards switch to the Board page without changing the seat's
-  bar preference (bar-engage), and board controls and layouts are made
-  relative to the seat's facing across every tabletop (board-frame).
+  bar preference (bar-engage).
+- Tabletop chairs (`engage.seats`, `WorldTabletopFrame.SeatSide`) leave the
+  avatar where it stood: engaging from an edge with no chair frames the board
+  from the chair while the body stands beside it, possibly in the view's margin.
+  Sitting should pose the body at its chair. Two seats may also choose the same
+  chair; a chair has no occupant yet, which local and remote play at one table
+  needs. The granary board deals its pieces in cell order, which from its -Z
+  chair runs right to left (`granaries.puck`'s deal facet). (from: board-frame)
 
 - Owed: `puck verbs` with a windowed boot (the first settle window runs it).
   The checked-in catalog is stale: clearance-op removed

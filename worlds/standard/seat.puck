@@ -1,6 +1,6 @@
 // A seated player's buttons at a table game: which channel each reads and which way it is pressed, the test for one
-// held past half way, and the press it makes. A module library: it hands its importers lets, a function and a rule
-// template, and emits no document.
+// held past half way, the press it makes, and the step across the board a press makes from the seat's chair. A module
+// library: it hands its importers lets, functions and a rule template, and emits no document.
 
 // The buttons a table game reads, each a channel past half way in one direction: pick and cancel, and a step each way
 // across the board.
@@ -32,3 +32,31 @@ rule template seatPress(seat, boardName, button) {
     seat[$"{button.name}Down"] = 0
   }
 }
+
+// The value of four, one for each side of a board a chair can stand at (`board(side, …)`): 0 the -Z edge, 1 +X, 2 +Z,
+// 3 -X.
+function seatBySide(chairSide, negativeZ, positiveX, positiveZ, negativeX) = (
+  (chairSide == 0) ? negativeZ : (chairSide == 1) ? positiveX : (chairSide == 2) ? positiveZ : negativeX
+)
+
+// The columns (+X) and rows (+Z) a step moves across `boardName`'s world-axis-aligned grid, from this tick's ahead and
+// right presses (`aheadStep`, `rightStep`, each -1, 0 or 1) of seat 1 in its chair. The seat looks across the board from
+// its chair's side and its right is that forward crossed with up, as the board view's camera's is (WorldTabletopFrame in
+// Puck.World.Schema): from the -Z side ahead is +row and right is -column, and each side round the board turns both a
+// quarter.
+function seatColumnStep(boardName, aheadStep, rightStep) = (
+  seatBySide(board(side, boardName, 1), 0 - rightStep, 0 - aheadStep, rightStep, aheadStep)
+)
+function seatRowStep(boardName, aheadStep, rightStep) = (
+  seatBySide(board(side, boardName, 1), aheadStep, 0 - rightStep, 0 - aheadStep, rightStep)
+)
+
+// The cell a step moves a cursor to from `fromCell` on a grid `gridColumns` wide and `gridRows` deep, held at its edges.
+function seatStepCell(boardName, fromCell, gridColumns, gridRows, aheadStep, rightStep) = (
+  clamp(
+    (fromCell - fromCell % gridColumns) / gridColumns + seatRowStep(boardName, aheadStep, rightStep),
+    0,
+    gridRows - 1
+  ) * gridColumns +
+  clamp(fromCell % gridColumns + seatColumnStep(boardName, aheadStep, rightStep), 0, gridColumns - 1)
+)

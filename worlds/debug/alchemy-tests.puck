@@ -2,7 +2,7 @@
 // `puck test worlds/debug/alchemy-tests.puck --reproduce --jobs 1`.
 // Cells are named by ordinal on the 8x5 `alchemyGrid` (8 * row + column): cell 0 is the reset tile, cells 1 to 31 hold
 // the 31 element tokens (`alchemyToken1`..`alchemyToken31`, bodies 502..472), and row 4 holds the cauldron between the
-// left hand well (cell 34, world x = 64.79, z = 30.88) and right hand well (cell 37, world x = 65.21, z = 30.88).
+// left hand well (cell 37, world x = 65.21, z = 30.88) and right hand well (cell 34, world x = 64.79, z = 30.88).
 // Body indices follow shapes.puck's population counts: the cursor is 503, and token e is 503 - e.
 
 schema: "puck.world.definition.v1"

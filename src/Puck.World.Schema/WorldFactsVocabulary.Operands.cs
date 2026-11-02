@@ -1483,6 +1483,7 @@ public static partial class WorldFactsVocabulary {
             }
 
             var operand = new BoardSeatOperand(
+                engage: anchor.Board!.Engage!,
                 facet: facet,
                 placementId: anchor.Id,
                 row: row.Name.Value,

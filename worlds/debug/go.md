@@ -44,7 +44,8 @@ are filled from the lowest-numbered available stone, one point per reading.
 ## Playing
 
 `debug.go go` stands the Moth at Black's edge. Within 2.5 m, E (pad RB) sits
-her down and frames the tabletop; the same button stands her up.
+her down in the nearer of the table's two chairs, at its -Z and +Z edges, and
+frames the tabletop from it; the same button stands her up.
 
 | Device | Cursor | Play | Pass |
 |---|---|---|---|
@@ -52,8 +53,8 @@ her down and frames the tabletop; the same button stands her up.
 | Keyboard | W A S D or arrows | Space or Enter | Escape or Backspace |
 | Pad | Left stick or d-pad | South (A) | East (B) |
 
-The blue outline marks the cursor. Up is away from the seated side and right
-is the player's right. A play drops a stone 6 cm above its point and waits for
+The blue outline marks the cursor. Up is away from the chair and right is the
+player's right (the standard seat library's step, `worlds/standard/seat.puck`). A play drops a stone 6 cm above its point and waits for
 physics. Seat 1 plays every side the computer does not own.
 
 Point ordinal = 19 × row + column, along +Z and +X respectively. Point 0 is

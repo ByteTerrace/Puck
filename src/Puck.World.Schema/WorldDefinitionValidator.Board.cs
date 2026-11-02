@@ -130,5 +130,29 @@ public static partial class WorldDefinitionValidator {
         if (!(double.IsFinite(d: engage.Surface) && (engage.Surface >= 0d))) {
             errors.Add(item: $"{path}.surface must be a finite non-negative height, not {engage.Surface.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)}.");
         }
+
+        if (engage.Seats is not { } seats) {
+            return;
+        }
+
+        if (seats.Count == 0) {
+            errors.Add(item: $"{path}.seats must name at least one chair, or be absent for a chair at each edge.");
+        }
+
+        Span<bool> taken = stackalloc bool[4];
+
+        for (var index = 0; (index < seats.Count); index++) {
+            var yaw = seats[index].YawDegrees;
+
+            if (WorldTabletopFrame.TrySideOfYaw(yawDegrees: yaw, side: out var side)) {
+                if (taken[side]) {
+                    errors.Add(item: $"{path}.seats[{index}] faces across the same edge as an earlier chair (yawDegrees {yaw.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)}).");
+                }
+
+                taken[side] = true;
+            } else {
+                errors.Add(item: $"{path}.seats[{index}].yawDegrees must be a whole number of quarter turns (0, 90, 180 or 270 and their turns), not {yaw.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)}: a board's topology is world-axis-aligned, so a chair faces across one of its edges.");
+            }
+        }
     }
 }

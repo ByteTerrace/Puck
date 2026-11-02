@@ -37,7 +37,8 @@ one cell a reading, which is how the opening's four discs reach the board.
 ## Playing at the table
 
 Walk within 2.5 m of the board and press the context button (E, or the pad's
-RB): the Moth sits down and the camera eases to the board from her side.
+RB): the Moth sits down in the nearer of the table's two chairs, Black's at the
+-Z edge or White's at the +Z edge, and the camera eases to the board from it.
 `debug.go reversi` stands her at Black's edge, facing the board and close enough
 to sit. The controls switch to the board page chess declares while she sits.
 

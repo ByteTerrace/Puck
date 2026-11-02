@@ -5,8 +5,8 @@ using Puck.SdfVm.Views;
 namespace Puck.World.Client;
 
 /// <summary>
-/// The board view: a seat sitting at a tabletop looks down on the whole board from the side its body stands on, at the
-/// elevation the board's engage block authors (<see cref="WorldTabletopEngage.Pitch"/>), far enough back that the
+/// The board view: a seat sitting at a tabletop looks down on the whole board from the side of the chair it sits in
+/// (<see cref="WorldTabletopFrame.SeatSide"/>), at the elevation the board's engage block authors (<see cref="WorldTabletopEngage.Pitch"/>), far enough back that the
 /// board's footprint plus <see cref="WorldTabletopEngage.Margin"/> fits the viewport's limiting axis at the seat
 /// camera's field of view. The side and footprint come from <see cref="WorldTabletopFrame"/>, the same fixed-point
 /// frame the simulation reads the seat's side and pointed cell from, so the view and the rules agree on which way is
@@ -29,11 +29,11 @@ public sealed class WorldTabletopFraming {
     public float Weight => m_ease.Weight;
 
     /// <summary>Frames a tabletop's board from one side: the eye stands above the board's centre, back toward the side
-    /// <paramref name="seatPosition"/> stands on, at the authored elevation, far enough that a sphere around the
+    /// of the chair nearest <paramref name="seatPosition"/>, at the authored elevation, far enough that a sphere around the
     /// board's footprint (grown by the authored margin) fills the viewport's limiting axis.</summary>
     /// <param name="topology">The board's anchored topology.</param>
-    /// <param name="engage">The board's engage block, which authors the elevation, margin and playing surface.</param>
-    /// <param name="seatPosition">The seated body's position, in world units, which picks the side.</param>
+    /// <param name="engage">The board's engage block, which authors the elevation, margin, playing surface and chairs.</param>
+    /// <param name="seatPosition">The seated body's position, in world units, which picks the chair.</param>
     /// <param name="fieldOfViewRadians">The camera's vertical field of view, in radians; must be in (0, pi).</param>
     /// <param name="aspectRatio">The viewport's width over its height; must be positive.</param>
     /// <param name="eye">The framing eye, in world units.</param>
@@ -77,7 +77,8 @@ public sealed class WorldTabletopFraming {
             z: ((low.Z + high.Z) * 0.5f)
         );
 
-        var toward = WorldTabletopFrame.SideOf(
+        var toward = WorldTabletopFrame.SeatSide(
+            engage: engage,
             position: FixedVector3.FromVector3(value: seatPosition),
             topology: topology
         ) switch {

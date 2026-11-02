@@ -242,7 +242,7 @@ identical decision at the identical tick.
 ## Tabletops — the context button sits a seat at a board
 
 A placement's board facet may carry an `engage` block (`WorldTabletopEngage`:
-`channel`, `radius`, `pitch`, `margin`, `surface`). The same probe
+`channel`, `radius`, `pitch`, `margin`, `surface`, `seats`). The same probe
 (`ResolveEngageProbes`) considers it beside the screens and takes the nearest
 target on the ground plane (screens first on a tie): the board's centre
 (`WorldTabletopFrame.Centre`, the anchored topology's footprint) within
@@ -259,9 +259,16 @@ which read the seat's channels (`channel(<seat>, <name>)`) and three fixed-point
 seat operands — `board(engaged, <row>, <seat>)` (the set names the placement),
 `board(pointer, <row>, <seat>)` (the cell `PlayerIntent.SourceRay` meets on the
 plane `surface` above the topology origin, `WorldTabletopFrame.TryPointerCell`)
-and `board(side, <row>, <seat>)` (the board edge the body stands nearest,
-`SideOf`, 0 -Z, 1 +X, 2 +Z, 3 -X) — through `BoardSeatOperand`
-(`WorldRuleHost.ReadBoardSeat`). The windowed host casts the OS pointer whenever
+and `board(side, <row>, <seat>)` (the edge of the authored chair, `seats`, that
+faces the body most squarely, every edge when none is authored,
+`WorldTabletopFrame.SeatSide`, 0 -Z, 1 +X, 2 +Z, 3 -X) — through `BoardSeatOperand`
+(`WorldRuleHost.ReadBoardSeat`). A board laid out for one player's view authors
+the chair it is laid out for (the card table's one chair at -Z), so its layout,
+camera and controls agree wherever the player walks up. The one mapping from a
+seat's ahead and right presses to columns (+X) and rows (+Z) is the standard seat
+library's `seatStepCell` (`worlds/standard/seat.puck`), the right being forward
+crossed with up as the board view's camera has it; a board never turns presses
+by side itself. The windowed host casts the OS pointer whenever
 the world declares an engageable tabletop (`WorldPointerRayCapture`), so a
 seated seat's ray reaches the rules every tick.
 
@@ -270,7 +277,7 @@ Presentation: `WorldSeatContextSync` publishes the seated placement into
 `tabletop` state (instead of `engaged`), so a binding overlay's context row
 `{engagement, tabletop, <group>}` swaps the seat to the table's controls; the
 seat camera eases to `WorldTabletopFraming`'s board view (the whole board from
-the seat's side at `pitch`, near plane at the board) on the rig's dynamics
+the chair's side at `pitch`, near plane at the board) on the rig's dynamics
 through `WorldFramingEase`. `TabletopEngagementLawTests` (Server) and
 `WorldTabletopFramingLawTests` (Client) hold the probe, the reads and the view;
 the debug world's chess table (`worlds/debug/chess.puck`, `chess.md`) is the
@@ -751,7 +758,7 @@ So a seat whose authority holds it captured on a device composes the pair raw:
 `WorldEngagement.DrivesDevice` (the set omits its own body, names no other body,
 and names a screen the document declares or a tabletop placement). The rows and
 the stick then sum unrotated and no facing is written, so a screen's pad and a
-board's rules (`chess.puck` turns the seat's ahead and right by `board(side, …)`)
+board's rules (`seatStepCell` turns the seat's ahead and right by `board(side, …)`)
 read the keys as pressed. A mirrored set, a possession and a portal face (a
 screen with no row) keep camera-relative movement. A remote authority's endpoint
 carries no such read, so a seat engaged on a remote world still composes

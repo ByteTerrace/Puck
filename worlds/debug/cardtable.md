@@ -51,13 +51,14 @@ tableau a card a tick, so it takes about 100 ticks.
 ## Playing at the table
 
 Walk up to the table and press the context button (E, or the pad's RB) within
-2.5 m of the board's centre: the Moth sits down and the camera eases to the
-board from her side. `debug.go cards` stands her at the +Z edge, facing -Z
-across the board and close enough to sit. Sit on the +Z side: the cards lie
-upright for that seat, and the keys assume it. From there the top row runs
-left to right as the stock, the waste, a gap and the four foundations
-(spades, hearts, clubs, diamonds), and under it the seven tableau columns fan
-toward her.
+2.5 m of the board's centre: the Moth sits down in the table's one chair, at its
+-Z edge facing +Z (the engage block's `seats`), and the camera eases to the board
+from that chair wherever she stood. `debug.go cards` stands her at that edge,
+close enough to sit. Both games are laid out for the chair, so the cards lie
+upright and the keys move the cursor the way they point: the top row runs along
+the far side, left to right, as the stock, the waste, a gap and the four
+foundations (spades, hearts, clubs, diamonds), and nearer her the seven tableau
+columns fan toward her.
 
 | Device | Move the cursor | Lift, play or draw | Put the run back | Stand up |
 |---|---|---|---|---|
@@ -110,7 +111,7 @@ diamonds is 39).
 | Read a pile | `world.state solitaireKlondikePile2` (bottom to top) |
 | Read where the table put each card | `world.state kSlotOf` |
 | Read the seat's cursor and lifted run | `world.state kSeat` |
-| Frame the table from the seat | `view.override camera look 60.8 11.2 37.6 60.8 9.86 35.8`, then `view.override camera auto` |
+| Frame the table from the seat | `view.override camera look 60.8 11.2 34.2 60.8 9.86 36.0`, then `view.override camera auto` |
 
 ## Looking at the table
 
@@ -122,15 +123,15 @@ script on a windowed World booted with `puck_world_start` (the deal takes about
 debug.go cards
 world.wait bakes 180
 world.wait 160
-view.override camera look 60.8 11.0 37.9 60.8 9.86 35.75
+view.override camera look 60.8 11.0 33.9 60.8 9.86 36.05
 world.wait captures 30
 world.screenshot <abs-path>/cards-wide.png
 world.wait captures 30
-view.override camera look 60.8 10.35 37.1 60.8 9.86 35.6
+view.override camera look 60.8 10.35 34.7 60.8 9.86 36.2
 world.wait 10
 world.screenshot <abs-path>/cards-close.png
 world.wait captures 30
-view.override camera look 60.8 10.15 36.3 60.8 9.86 35.55
+view.override camera look 60.8 10.15 35.5 60.8 9.86 36.25
 world.wait 10
 world.screenshot <abs-path>/cards-fan.png
 world.wait captures 30

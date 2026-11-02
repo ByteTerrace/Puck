@@ -94,12 +94,14 @@ placements {
       verdict: "reversiVerdict"
       // The context button within 2.5 m of the board's centre sits the seat down at the table; seated, the camera
       // looks down on the board from the seat's side and the pointer picks cells 2 cm over the board's face.
+      // Two chairs face each other across the board, at its -Z and +Z edges.
       engage {
         channel: "interact"
         radius: 2.5
         pitch: 62
         margin: 0.12
         surface: 0.02
+        seats [{ yawDegrees: 180 }, { yawDegrees: 0 }]
       }
     }
     position: reversiTable
@@ -798,23 +800,13 @@ rule "reversi-seat-point" {
   reversiSeat.pointer = pointed
 }
 
-// A step moves the cursor one cell in the seat's own frame: from the -Z side up the board is +row and right is -column
-// (the camera's right is its forward crossed with up), and each other side turns both a quarter.
+// A step moves the cursor one cell in the seat's own frame (the standard seat library's step).
 rule "reversi-seat-step" {
-  local seatSide = board(side, reversiBoard, 1)
-  local cursorColumn = (
-    reversiSeat.cursor % reversiSize +
-    (reversiSeat.aheadEdge - reversiSeat.behindEdge) * (seatSide == 3 ? 1 : seatSide == 1 ? -1 : 0) +
-    (reversiSeat.rightEdge - reversiSeat.leftEdge) * (seatSide == 2 ? 1 : seatSide == 0 ? -1 : 0)
-  )
-  local cursorRow = (
-    reversiSeat.cursor / reversiSize +
-    (reversiSeat.aheadEdge - reversiSeat.behindEdge) * (seatSide == 0 ? 1 : seatSide == 2 ? -1 : 0) +
-    (reversiSeat.rightEdge - reversiSeat.leftEdge) * (seatSide == 3 ? 1 : seatSide == 1 ? -1 : 0)
-  )
-  when (reversiSeat.aheadEdge - reversiSeat.behindEdge) or (reversiSeat.rightEdge - reversiSeat.leftEdge)
+  local aheadStep = reversiSeat.aheadEdge - reversiSeat.behindEdge
+  local rightStep = reversiSeat.rightEdge - reversiSeat.leftEdge
+  when aheadStep or rightStep
   mode: Level
-  reversiSeat.cursor = clamp(cursorRow, 0, reversiSize - 1) * reversiSize + clamp(cursorColumn, 0, reversiSize - 1)
+  reversiSeat.cursor = seatStepCell(reversiBoard, reversiSeat.cursor, reversiSize, reversiSize, aheadStep, rightStep)
 }
 
 rule "reversi-seat-put" {

@@ -366,12 +366,13 @@ public sealed record WorldPlacementBoard(string Topology, string Occupancy, stri
     string? Move = null, string? Plan = null, WorldBoardEnforcement Enforcement = WorldBoardEnforcement.Record, long Accept = 1L,
     WorldTabletopEngage? Engage = null);
 /// <summary>A tabletop's engagement: a seat standing within <paramref name="Radius"/> of the board's centre presses
-/// <paramref name="Channel"/> (its context button) and sits down at the table. The seat is captured (its avatar
-/// stands still) on a <c>control placement:&lt;id&gt;</c> application, its camera eases to a view of the whole board
-/// from the side it stands on, and the same button leaves. While engaged, the world's rules read the seat's channels
-/// as play (<c>channel(...)</c>), and the board reads where the seat points
-/// (<c>board(pointer, &lt;row&gt;, &lt;seat&gt;)</c>), whether the seat sits at it (<c>board(engaged, …)</c>) and from
-/// which side (<c>board(side, …)</c>), so the game itself stays document rules.</summary>
+/// <paramref name="Channel"/> (its context button) and sits down at the table, in the authored chair nearest it
+/// (<paramref name="Seats"/>). The seat is captured (its avatar stands still) on a <c>control placement:&lt;id&gt;</c>
+/// application, its camera eases to a view of the whole board from that chair's side, and the same button leaves.
+/// While engaged, the world's rules read the seat's channels as play (<c>channel(...)</c>), and the board reads where
+/// the seat points (<c>board(pointer, &lt;row&gt;, &lt;seat&gt;)</c>), whether the seat sits at it
+/// (<c>board(engaged, …)</c>) and which chair's side it plays from (<c>board(side, …)</c>), so the game itself stays
+/// document rules.</summary>
 /// <param name="Channel">The declared channel whose press engages and leaves the table.</param>
 /// <param name="Radius">How near the board's centre, on the ground plane in world units, a seat must stand to
 /// engage. Positive.</param>
@@ -380,8 +381,17 @@ public sealed record WorldPlacementBoard(string Topology, string Occupancy, stri
 /// <param name="Margin">World units of room the board view leaves around the board's footprint. Non-negative.</param>
 /// <param name="Surface">The height above the topology's origin, in world units, of the plane a pointer ray meets
 /// when it picks a cell: the playing surface, so a cell under the pointer is the cell the eye sees. Non-negative.</param>
+/// <param name="Seats">The chairs a seat sits in, each at one edge of the board facing across it; a seat sits in
+/// the one nearest where it stands (<see cref="WorldTabletopFrame.SeatSide"/>). Absent, the table has a chair at each
+/// of its four edges. A board laid out for one player's view (a solitaire tableau, a lectern behind the board) names
+/// the chair it is laid out for, so its layout and controls read the right way round wherever the player walks up.</param>
 public sealed record WorldTabletopEngage(string Channel, double Radius = 2.5, double Pitch = 60, double Margin = 0.1,
-    double Surface = 0);
+    double Surface = 0, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldTabletopSeat>? Seats = null);
+/// <summary>One chair at a tabletop: the edge of the board a seat sits at, given as the way it faces.</summary>
+/// <param name="YawDegrees">The chair's facing, in the convention of a spawn point's and a body's yaw: 0 faces -Z (the
+/// chair stands at the board's +Z edge), 90 faces -X, 180 faces +Z and 270 faces +X. A board's topology is
+/// world-axis-aligned, so a chair faces across one of its four edges: a whole number of quarter turns.</param>
+public sealed record WorldTabletopSeat(double YawDegrees);
 /// <summary>A placement's grip facet — overrides the world's <see cref="WorldCollision.DefaultHold"/> hold
 /// policy for every collider this row compiles, composing as the tighter authoring layer: present, it decides;
 /// absent, the row's colliders fall back to the world default. Requires <see cref="WorldPlacement.Solid"/> (nothing

@@ -19,7 +19,7 @@ import "shapes"
 //
 // Over the rules lies the tabletop layer (`alchemyGrid`, 8 columns by 5 rows of 0.14 m cells): cells 1 to 31 hold the 31
 // element tokens in ordinal order (starters discovered-face up, undiscovered elements sealed-face up), cell 0 resets a
-// partial hand, and row 4 holds the cauldron between the left hand well (cell 34) and right hand well (cell 37). A
+// partial hand, and row 4 holds the cauldron between the left hand well (cell 37) and right hand well (cell 34). A
 // seated player moves the cursor across the grid and picks two elements with confirm; a player moving physical tokens
 // drops them into the hand wells, and once the table settles for `alchemySettleTicks` the rules read the wells, run the
 // mix, flip newly discovered tokens face-up on their shelf cells, and return displaced tokens home.
@@ -33,8 +33,9 @@ let alchemyCellSize = 0.14
 let alchemySurface = 1.355
 let alchemyOriginX = (0 - ((alchemyColumns * alchemyCellSize) / 2))
 let alchemyOriginZ = (0 - ((alchemyRows * alchemyCellSize) / 2))
-let alchemyLeftCell = 34
-let alchemyRightCell = 37
+// Seated at the -Z edge, the seat's left is +X: the left hand well is the cauldron row's higher column.
+let alchemyLeftCell = 37
+let alchemyRightCell = 34
 
 let alchemyWoodColor = "#8A6A45"
 let alchemySlateColor = "#141816"
@@ -124,12 +125,14 @@ placements {
       topology: "alchemyGrid"
       turn: "alchemyTurn"
       verdict: "alchemyVerdict"
+      // One chair, at the -Z edge facing the lectern across the board.
       engage {
         channel: "interact"
         radius: 2.5
         pitch: 62
         margin: 0.12
         surface: 0.02
+        seats [{ yawDegrees: 180 }]
       }
     }
     position: alchemyTable
@@ -290,7 +293,7 @@ prototypes {
     }
   }
 
-  // Row 4's cauldron (cells 35 and 36), its two brass hand wells (cell 34 left and cell 37 right), and the lectern
+  // Row 4's cauldron (cells 35 and 36), its two brass hand wells (cell 37 left and cell 34 right), and the lectern
   // behind them on the north (+Z) edge holding screen 7. Authored in creation space (x and z negated from world).
   prototype "alchemyCauldron" {
     document {
@@ -306,22 +309,22 @@ prototypes {
       schema: "puck.creation.v1"
       shape Cylinder "hand-left-plinth" {
         material: 3
-        position [0.21, 1.346, -0.28]
+        position [-0.21, 1.346, -0.28]
         scale [0.062, 0.006, 0.062]
       }
       shape Cylinder "hand-left-well" {
         material: 1
-        position [0.21, 1.352, -0.28]
+        position [-0.21, 1.352, -0.28]
         scale [0.05, 0.003, 0.05]
       }
       shape Cylinder "hand-right-plinth" {
         material: 3
-        position [-0.21, 1.346, -0.28]
+        position [0.21, 1.346, -0.28]
         scale [0.062, 0.006, 0.062]
       }
       shape Cylinder "hand-right-well" {
         material: 1
-        position [-0.21, 1.352, -0.28]
+        position [0.21, 1.352, -0.28]
         scale [0.05, 0.003, 0.05]
       }
       shape Cylinder "cauldron-foot" {
@@ -466,7 +469,7 @@ prototypes {
 
 // ---- Reading the physical table ----------------------------------------------------------------------------------
 // Whenever Alchemy's tokens have rested for `alchemySettleTicks`, the rules read each token's cell and face off the board. A
-// token dropped into the left hand well (cell 34) or right hand well (cell 37) loads that hand and triggers a sync back
+// token dropped into the left hand well (cell 37) or right hand well (cell 34) loads that hand and triggers a sync back
 // to its shelf cell; any other displacement or collision is counted as illegal and synced back.
 // The keyed `alchemyElement` roster contains only this table's 31 tokens; other tables cannot hold its reading up.
 
@@ -547,23 +550,13 @@ rule "alchemy-seat-point" {
   alchemySeat.pointer = pointed
 }
 
+// A step moves the cursor one cell in the seat's own frame (the standard seat library's step).
 rule "alchemy-seat-step" {
-  local seatSide = board(side, alchemyBoard, 1)
-  local cursorColumn = (
-    alchemySeat.cursor % alchemyColumns +
-    (alchemySeat.aheadEdge - alchemySeat.behindEdge) * (seatSide == 3 ? 1 : seatSide == 1 ? -1 : 0) +
-    (alchemySeat.rightEdge - alchemySeat.leftEdge) * (seatSide == 2 ? 1 : seatSide == 0 ? -1 : 0)
-  )
-  local cursorRow = (
-    alchemySeat.cursor / alchemyColumns +
-    (alchemySeat.aheadEdge - alchemySeat.behindEdge) * (seatSide == 0 ? 1 : seatSide == 2 ? -1 : 0) +
-    (alchemySeat.rightEdge - alchemySeat.leftEdge) * (seatSide == 3 ? 1 : seatSide == 1 ? -1 : 0)
-  )
-  when (alchemySeat.aheadEdge - alchemySeat.behindEdge) or (alchemySeat.rightEdge - alchemySeat.leftEdge)
+  local aheadStep = alchemySeat.aheadEdge - alchemySeat.behindEdge
+  local rightStep = alchemySeat.rightEdge - alchemySeat.leftEdge
+  when aheadStep or rightStep
   mode: Level
-  alchemySeat.cursor = (
-    clamp(cursorRow, 0, alchemyRows - 1) * alchemyColumns + clamp(cursorColumn, 0, alchemyColumns - 1)
-  )
+  alchemySeat.cursor = seatStepCell(alchemyBoard, alchemySeat.cursor, alchemyColumns, alchemyRows, aheadStep, rightStep)
 }
 
 rule "alchemy-seat-cancel" {

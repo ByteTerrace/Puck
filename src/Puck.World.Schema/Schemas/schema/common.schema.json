@@ -7719,8 +7719,26 @@
       ],
       "title": "WorldBoardEnforcement"
     },
+    "WorldTabletopSeat": {
+      "description": "One chair at a tabletop: the edge of the board a seat sits at, given as the way it faces.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "yawDegrees": {
+          "description": "The chair\u0027s facing, in the convention of a spawn point\u0027s and a body\u0027s yaw: 0 faces -Z (the chair stands at the board\u0027s \u002BZ edge), 90 faces -X, 180 faces \u002BZ and 270 faces \u002BX. A board\u0027s topology is world-axis-aligned, so a chair faces across one of its four edges: a whole number of quarter turns.",
+          "type": "number"
+        }
+      },
+      "required": [
+        "yawDegrees"
+      ],
+      "additionalProperties": false,
+      "title": "WorldTabletopSeat"
+    },
     "WorldTabletopEngage": {
-      "description": "A tabletop\u0027s engagement: a seat standing within Radius of the board\u0027s centre presses Channel (its context button) and sits down at the table. The seat is captured (its avatar stands still) on a control placement:\u003Cid\u003E application, its camera eases to a view of the whole board from the side it stands on, and the same button leaves. While engaged, the world\u0027s rules read the seat\u0027s channels as play (channel(...)), and the board reads where the seat points (board(pointer, \u003Crow\u003E, \u003Cseat\u003E)), whether the seat sits at it (board(engaged, \u2026)) and from which side (board(side, \u2026)), so the game itself stays document rules.",
+      "description": "A tabletop\u0027s engagement: a seat standing within Radius of the board\u0027s centre presses Channel (its context button) and sits down at the table, in the authored chair nearest it (Seats). The seat is captured (its avatar stands still) on a control placement:\u003Cid\u003E application, its camera eases to a view of the whole board from that chair\u0027s side, and the same button leaves. While engaged, the world\u0027s rules read the seat\u0027s channels as play (channel(...)), and the board reads where the seat points (board(pointer, \u003Crow\u003E, \u003Cseat\u003E)), whether the seat sits at it (board(engaged, \u2026)) and which chair\u0027s side it plays from (board(side, \u2026)), so the game itself stays document rules.",
       "type": [
         "object",
         "null"
@@ -7749,6 +7767,17 @@
           "description": "The height above the topology\u0027s origin, in world units, of the plane a pointer ray meets when it picks a cell: the playing surface, so a cell under the pointer is the cell the eye sees. Non-negative.",
           "type": "number",
           "default": 0
+        },
+        "seats": {
+          "description": "The chairs a seat sits in, each at one edge of the board facing across it; a seat sits in the one nearest where it stands (SeatSide). Absent, the table has a chair at each of its four edges. A board laid out for one player\u0027s view (a solitaire tableau, a lectern behind the board) names the chair it is laid out for, so its layout and controls read the right way round wherever the player walks up.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/WorldTabletopSeat"
+          },
+          "default": null
         }
       },
       "required": [

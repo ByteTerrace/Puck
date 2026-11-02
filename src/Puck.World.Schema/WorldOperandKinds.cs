@@ -336,8 +336,8 @@ public enum BoardSeatFacet : byte {
     /// <summary>The cell the seat's pointer ray meets on the playing surface (<see cref="WorldTabletopFrame.TryPointerCell"/>),
     /// or <c>-1</c> for no ray or a ray off the board.</summary>
     Pointer,
-    /// <summary>The side of the board the seat's body stands on (<see cref="WorldTabletopFrame.SideOf"/>), 0 through 3,
-    /// or <c>-1</c> for no live body.</summary>
+    /// <summary>The side of the board the seat plays from, the edge of the authored chair nearest its body
+    /// (<see cref="WorldTabletopFrame.SeatSide"/>), 0 through 3, or <c>-1</c> for no live body.</summary>
     Side,
 }
 /// <summary>One seat at an engageable tabletop (<c>$board:engaged|pointer|side:&lt;row&gt;:&lt;seat&gt;</c>): whether it
@@ -353,7 +353,9 @@ public sealed class BoardSeatOperand : WorldOperandFact {
     /// <param name="surface">The playing surface's height above the topology origin, in world units.</param>
     /// <param name="seat">The zero-based local seat.</param>
     /// <param name="facet">The facet the read reports.</param>
-    public BoardSeatOperand(string row, string placementId, CompiledTopology topology, FixedQ4816 surface, int seat, BoardSeatFacet facet) : base(CellKind.Int) {
+    /// <param name="engage">The board's engagement, whose chairs the side read chooses among.</param>
+    public BoardSeatOperand(string row, string placementId, CompiledTopology topology, FixedQ4816 surface, int seat, BoardSeatFacet facet, WorldTabletopEngage engage) : base(CellKind.Int) {
+        Engage = engage;
         Row = row;
         PlacementId = placementId;
         Topology = topology;
@@ -362,6 +364,8 @@ public sealed class BoardSeatOperand : WorldOperandFact {
         Facet = facet;
     }
 
+    /// <summary>Gets the board's engagement, whose chairs the side read chooses among.</summary>
+    public WorldTabletopEngage Engage { get; }
     /// <summary>Gets the facet the read reports.</summary>
     public BoardSeatFacet Facet { get; }
     /// <summary>Gets the id of the placement carrying the tabletop.</summary>

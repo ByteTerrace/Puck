@@ -7,9 +7,13 @@ namespace Puck.World;
 /// <summary>
 /// The frame a seat engaged at a tabletop plays in, computed in fixed point from the document alone so the
 /// simulation's rule reads (<c>board(pointer, …)</c>, <c>board(side, …)</c>) and the presentation's board view agree:
-/// the board's footprint and centre, the side of the board a position stands on, and the cell a pointer ray meets on
+/// the board's footprint and centre, the side of the board a seat plays from, and the cell a pointer ray meets on
 /// the playing surface. A board's anchored topology is world-axis-aligned (<see cref="WorldTopologyCompilation"/>), so
-/// its sides are the world's.
+/// its sides are the world's: columns run +X and rows +Z.
+/// <para>A seat at a side looks across the board toward the opposite edge, and its right is that forward crossed
+/// with world up, the camera basis <c>CameraSnapshot.Create</c> builds: from the -Z side ahead is +Z and right is -X,
+/// and each side round the board (+X, +Z, -X) turns both a quarter. The standard seat library's board steps
+/// (<c>worlds/standard/seat.puck</c>) turn a seat's presses into columns and rows by the same rule.</para>
 /// </summary>
 public static class WorldTabletopFrame {
     /// <summary>The side of a board whose edge faces -Z: a seat there looks toward +Z.</summary>
@@ -102,26 +106,82 @@ public static class WorldTabletopFrame {
             Z: ((minimum.Z + maximum.Z) * Half)
         );
     }
-    /// <summary>Returns the side of the board a position stands on: the board edge, of the four the world's axes
-    /// give it, facing the position from the board's centre (<see cref="SideNegativeZ"/>, <see cref="SidePositiveX"/>,
-    /// <see cref="SidePositiveZ"/>, <see cref="SideNegativeX"/>). A position exactly on a diagonal takes the Z side.</summary>
+    /// <summary>Returns the side of the board a seat standing at a position plays from: the edge of the authored chair
+    /// (<see cref="WorldTabletopEngage.Seats"/>) that faces the position most squarely from the board's centre, the
+    /// first authored on a tie, or, for a table with no chairs authored, the edge of the four facing the position (a
+    /// position exactly on a diagonal takes the Z side). The board view frames the board from this side and the rules
+    /// read it as <c>board(side, …)</c>, so the two agree on which way is up the board.</summary>
+    /// <param name="engage">The board's engagement, whose chairs the seat chooses among.</param>
     /// <param name="topology">The anchored topology.</param>
-    /// <param name="position">The position, in world units.</param>
-    /// <returns>The side, 0 through 3.</returns>
-    public static int SideOf(CompiledTopology topology, in FixedVector3 position) {
+    /// <param name="position">The seat's body position, in world units.</param>
+    /// <returns>The side, 0 through 3 (<see cref="SideNegativeZ"/>, <see cref="SidePositiveX"/>,
+    /// <see cref="SidePositiveZ"/>, <see cref="SideNegativeX"/>).</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="engage"/> or <paramref name="topology"/> is
+    /// <see langword="null"/>.</exception>
+    public static int SeatSide(WorldTabletopEngage engage, CompiledTopology topology, in FixedVector3 position) {
+        ArgumentNullException.ThrowIfNull(argument: engage);
+
         var centre = Centre(topology: topology);
         var dx = (position.X - centre.X);
         var dz = (position.Z - centre.Z);
+        var chosen = -1;
+        var squarest = FixedQ4816.Zero;
 
-        if (FixedQ4816.Abs(value: dx) > FixedQ4816.Abs(value: dz)) {
-            return ((dx > FixedQ4816.Zero)
-                ? SidePositiveX
-                : SideNegativeX);
+        if (engage.Seats is { } seats) {
+            for (var index = 0; (index < seats.Count); index++) {
+                if (!TrySideOfYaw(
+                    side: out var side,
+                    yawDegrees: seats[index].YawDegrees
+                )) {
+                    continue;
+                }
+
+                // The position's offset along the chair's outward edge normal.
+                var outward = side switch {
+                    SidePositiveX => dx,
+                    SidePositiveZ => dz,
+                    SideNegativeX => -dx,
+                    _ => -dz,
+                };
+
+                if ((chosen < 0) || (outward > squarest)) {
+                    chosen = side;
+                    squarest = outward;
+                }
+            }
         }
 
-        return ((dz > FixedQ4816.Zero)
-            ? SidePositiveZ
-            : SideNegativeZ);
+        return ((chosen >= 0)
+            ? chosen
+            : NearestEdge(
+                dx: dx,
+                dz: dz
+            ));
+    }
+    /// <summary>Resolves the edge a chair facing <paramref name="yawDegrees"/> sits at: the facing convention of a spawn
+    /// point and a body, where 0 faces -Z, so a chair at yaw 0 sits at the +Z edge, 90 at +X, 180 at -Z and 270 at
+    /// -X.</summary>
+    /// <param name="yawDegrees">The chair's facing, in degrees.</param>
+    /// <param name="side">The edge, 0 through 3, or -1 when the facing is not a whole number of quarter turns.</param>
+    /// <returns><see langword="true"/> when <paramref name="yawDegrees"/> is a finite whole number of quarter turns.</returns>
+    public static bool TrySideOfYaw(double yawDegrees, out int side) {
+        // A whole multiple of 90 divides by 90 exactly in binary floating point, so this test is exact.
+        var quarters = (yawDegrees / 90d);
+
+        if (!double.IsFinite(d: quarters) || (Math.Abs(value: quarters) > 1e9d) || (quarters != Math.Floor(d: quarters))) {
+            side = -1;
+
+            return false;
+        }
+
+        side = ((((((long)quarters) % 4L) + 4L) % 4L) switch {
+            0L => SidePositiveZ,
+            1L => SidePositiveX,
+            2L => SideNegativeZ,
+            _ => SideNegativeX,
+        });
+
+        return true;
     }
     /// <summary>Resolves the cell a pointer ray meets on the board's playing surface: the horizontal plane
     /// <paramref name="surface"/> above the topology's origin, met travelling down from above it, then resolved like a
@@ -163,6 +223,18 @@ public static class WorldTabletopFrame {
         );
     }
 
+    // The edge, of the four, facing an offset from the board's centre; an exact diagonal takes the Z side.
+    private static int NearestEdge(FixedQ4816 dx, FixedQ4816 dz) {
+        if (FixedQ4816.Abs(value: dx) > FixedQ4816.Abs(value: dz)) {
+            return ((dx > FixedQ4816.Zero)
+                ? SidePositiveX
+                : SideNegativeX);
+        }
+
+        return ((dz > FixedQ4816.Zero)
+            ? SidePositiveZ
+            : SideNegativeZ);
+    }
     // A compiled topology holds at least one cell (TopologyCompilation.TryValidate refuses an empty one).
     private static Footprint Measure(CompiledTopology topology) {
         var minimum = topology.CellCentre(cell: 0);
