@@ -867,6 +867,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
             construct: static (pipelines, passes, inputs) => new SdfWorldTables(
                 device: inputs.Device,
                 shadowRaster: passes.ShadowRaster,
+                shadowExitRaster: passes.ShadowExitRaster,
                 glassRaster: passes.GlassRaster,
                 occlusion: passes.Occlusion,
                 meshRaster: passes.MeshRaster,

@@ -32,6 +32,7 @@ public sealed class VulkanGpuPipelineFactory(IVulkanDeviceContext deviceContext,
     private const uint BlendOpAdd = 0;
     private const uint ColorComponentRgbaBits = 0x0000000F;
     private const uint CullModeBack = 2;
+    private const uint CullModeFront = 1;
     private const uint CullModeNone = 0;
     private const uint DynamicStateScissor = 1;
     private const uint DynamicStateViewport = 0;
@@ -293,9 +294,11 @@ public sealed class VulkanGpuPipelineFactory(IVulkanDeviceContext deviceContext,
                 PipelineCache: logicalDevice.PipelineCache,
                 PipelineLayoutHandle: groups.PipelineLayoutHandle,
                 Rasterization: new VkPipelineRasterizationStateCreateInfo {
-                    CullMode = ((description.Cull == GpuCullMode.Back)
-                        ? CullModeBack
-                        : CullModeNone),
+                    CullMode = (description.Cull switch {
+                        GpuCullMode.Back => CullModeBack,
+                        GpuCullMode.Front => CullModeFront,
+                        _ => CullModeNone,
+                    }),
                     DepthBiasEnable = False,
                     DepthClampEnable = False,
                     // A triangle wound counter-clockwise as it appears on the attachment is a front face, the sense of the
