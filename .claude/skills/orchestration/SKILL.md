@@ -142,6 +142,30 @@ every lane that received it. When a brief proves wrong, recall every lane workin
 from the same premise before replying to the lane that found it, and say that a
 stop is a stop, not a pause.
 
+A brief also names the existing mechanisms its change must reuse (found with
+`puck references` and `puck declarations` while checking the premise) and
+says no second one may be added. Reviews kept finding duplicates that lanes
+had just written, a second retry loop in a change built to remove one among
+them, so duplicates were created about as fast as they were found; naming the
+mechanism up front is cheaper than the review that catches it.
+
+When a second fix lane in one area comes back and its review finds the same
+class of defect in places the fix did not reach (disclosure took two lanes
+and three reviews, each finding new leaking doors), stop patching. The
+property is enforced in too many places; brief a design for the one
+chokepoint that makes the property structural (a type or project boundary,
+one derived view), then migrate behind it.
+
+Before briefing a step that decides how a pipeline works (what the renderer
+draws and submits, how the tick schedules, a camera or physics model), ask
+whether a research round has covered that design, even when the step arrives
+as a row in another plan. A plan written for one purpose (the job-system memo's
+R2, "move level selection to the GPU", written to free the frame thread) carries
+an unexamined design for another (what visibility should be): that lane moved
+the work without reducing it. If no round covers it, run one first (AGENTS.md,
+"Regular research is worth it"); the round costs an hour beside other lanes, a
+wrong design costs a lane, its review and the redo.
+
 Verify any base claim yourself with
 `git merge-base --is-ancestor <base> <integration-head>`, checking its exit
 status, and count the commits behind with
@@ -405,7 +429,23 @@ wall-clock work needs a quiet machine, and the lead takes it: a lane judges
 by counts and lists the timing reads it wants, and the lead runs them in a
 window it has cleared of every other lane's builds, suites, evals and World
 runs. A brief that measures boot, compile or frame time grants no GPU and
-takes no timing while other lanes run. Booting a windowed `Puck.World` is a GPU
+takes no timing while other lanes run.
+
+Settle windows are how the lead clears it. The owner's loose deadlines were
+meant as these periods; the lead now schedules them by state, not the clock:
+- **Trigger:** a wave of related lanes has landed, or a decision waits on a
+  measurement (the culling order waits on M1). Never on a timer.
+- **Drain:** launch no new lanes; let running ones reach a stopping point.
+  Lanes may keep editing; their builds, tests and GPU legs queue.
+- **Hold:** `puck lease quiet --holder lead -- <recipe>` takes the build, GPU
+  and heavy leases together and waits for `puck host load` to report idle.
+- **Measure:** one fixed recipe so windows compare: `puck sweep --baseline
+  <last>` (frames at the standard stops, both backends, the day cycle
+  running), a cold bake per backend, and the measurement of the moment.
+- **Record and release:** the numbers go into the owning plan as a dated-free
+  baseline row with the commit in its message, then the leases return.
+A lane's own timing taken under load is recorded as load-bound, and the plan
+does not rank on it. Booting a windowed `Puck.World` is a GPU
 leg even when only its startup is measured; a headless one is not. Use
 [`verification`](../verification/SKILL.md#what-uses-the-gpu) for GPU work
 classification and execution.
@@ -610,7 +650,11 @@ until a cross-family consensus round made it retract them. Treat its citations,
 figures and quotes as leads for a Claude or Codex lane to open and verify.
 Never take them as sources, and never let them carry a verdict alone. A
 research round therefore always runs a consensus step in which other families
-check its citations.
+check its citations. The same holds for its reading of Puck's own code: in the
+culling round it cited six shader and C# names that do not exist, a constant
+absent from the file it named, and wrong level-of-detail facts, and built a
+ranked technique on a problem Puck does not have. A Claude or Codex reader
+checks each `file:line` it gives before the plan uses it.
 
 Judge the family balance lane by lane. It is not a quota and not a reason to
 reassign work already under way. Owner steering adjusts judgement; do not harden

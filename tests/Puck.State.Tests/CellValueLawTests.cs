@@ -160,6 +160,24 @@ public sealed class CellValueLawTests {
             actual: restored!.Cells![0].Value
         );
     }
+    [Fact]
+    public void TheSlotJsonRoundTripPreservesItsCellsDisclosureMetadataAndClock() {
+        var cell = new StateCell(Key: StateRow.SlotKey, Value: CellValue.Int(17),
+            Clock: new StateCellClock(EpochTick: 9),
+            Visibility: new StateVisibility(Readers: ["seat1"]),
+            Observation: new StateObservation(Tick: 8, Visible: false));
+        var row = new StateRow(Name: CellName.Parse("private"), Kind: CellKind.Int, Cells: [cell]);
+        var options = new System.Text.Json.JsonSerializerOptions { Converters = { new StateRowJsonConverter() } };
+        var text = System.Text.Json.JsonSerializer.Serialize(row, options);
+        var restored = System.Text.Json.JsonSerializer.Deserialize<StateRow>(text, options)!;
+        var actual = Assert.Single(restored.Cells!);
+        Assert.True(restored.IsSlot);
+        Assert.Equal(cell.Key, actual.Key);
+        Assert.Equal(cell.Value, actual.Value);
+        Assert.Equal(cell.Clock, actual.Clock);
+        Assert.Equal(cell.Visibility!.Readers, actual.Visibility!.Readers);
+        Assert.Equal(cell.Observation, actual.Observation);
+    }
     // The authored grammar, per kind: a decimal spelling for Fixed (never its raw bits), true/false for Bool, a
     // plain integer otherwise. Text and vector carry their own payloads, so a numeric token against either is
     // refused by name rather than guessed at. `Raw` hands back the one number the row's column stores.

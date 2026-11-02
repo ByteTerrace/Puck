@@ -13,26 +13,26 @@ namespace Puck.World.Client.Tests;
 /// these laws resolve the eye frame by frame against walls and a body whose collider is the debug world's Moth: a
 /// capsule of radius 0.35 standing 2.06 m tall, framed from 1 m above its root.</summary>
 public sealed class WorldCameraClearanceLawTests {
-    [InlineData(WorldCameraClearanceChoice.Fade)]
-    [InlineData(WorldCameraClearanceChoice.Cutaway)]
+    [InlineData(false)]
+    [InlineData(true)]
     [Theory]
-    public void CompressionRaisesTheTargetAndRecoveryRestoresTheAuthoredFraming(WorldCameraClearanceChoice choice) {
+    public void CompressionRaisesTheTargetAndRecoveryRestoresTheAuthoredFraming(bool cutaway) {
         var wall = Walls((new Vector3(x: 0f, y: 2f, z: 1.8f), new Vector3(x: 4f, y: 4f, z: 0.1f)));
         var arm = new WorldCameraClearance();
-        var shift = Shift(scale: 1f);
+        var clearance = (cutaway ? Cutaway : Fade);
         var desired = Desired(yaw: 0.2f, pitch: 0.3f);
 
         for (var i = 0; (i < 120); i++) {
-            _ = arm.Resolve(wall, desired, Target, Body(), Vector3.UnitY, Boom, Frame, targetShift: shift, choice: choice, control: Control);
+            _ = arm.Resolve(wall, desired, Target, Body(), Vector3.UnitY, Boom, Frame, clearance: clearance);
         }
-        Assert.InRange(arm.Target.Y, 1.2f, ((choice == WorldCameraClearanceChoice.Cutaway) ? 1.55f : 1.74f));
+        Assert.InRange(arm.Target.Y, 1.2f, (cutaway ? 1.55f : 1.74f));
         Assert.Equal(Heading(eye: desired, target: Target), Heading(eye: arm.Eye, target: arm.Target), tolerance: 1e-5f);
         Assert.True(condition: (arm.Length < arm.AuthoredLength));
-        if (choice == WorldCameraClearanceChoice.Cutaway) {
+        if (cutaway) {
             Assert.Equal(1f, arm.BodyOpacity);
         }
         for (var i = 0; (i < 180); i++) {
-            _ = arm.Resolve(null, desired, Target, Body(), Vector3.UnitY, Boom, Frame, targetShift: shift, choice: choice, control: Control);
+            _ = arm.Resolve(null, desired, Target, Body(), Vector3.UnitY, Boom, Frame, clearance: clearance);
         }
         Assert.Equal(1f, arm.Target.Y, tolerance: 0.001f);
         Assert.Equal(4.2f, arm.Length, tolerance: 0.001f);
@@ -47,8 +47,7 @@ public sealed class WorldCameraClearanceLawTests {
         var target = (Target * scale);
         var desired = (Desired(yaw: 0f, pitch: 0f) * scale);
         var eye = arm.Resolve(wall, desired, target, Body(scale: scale), Vector3.UnitY, SdfCameraDynamics.None, Frame,
-            targetShift: Shift(scale: scale),
-            choice: WorldCameraClearanceChoice.Fade, control: Control, scale: scale);
+            clearance: Fade, scale: scale);
 
         Assert.Equal((1.74f * scale), arm.Target.Y, tolerance: 0.0001f);
         Assert.Equal(0f, arm.Rise);
@@ -58,19 +57,19 @@ public sealed class WorldCameraClearanceLawTests {
         Assert.Equal(Vector3.UnitZ, Vector3.Normalize(value: (eye - arm.Target)));
         Assert.True(condition: (arm.Length < Body(scale: scale).Exit(arm.Target, Vector3.UnitZ, (EyeRadius * scale))));
     }
-    /// <summary>One solver, each treatment's own authored values: a low ledge close behind the body leaves a level boom
-    /// shorter than the fade's minimum boom and inside the body, so both treatments rise over it on the same heading,
+    /// <summary>One operation, each authored case's own values: a low ledge close behind the body leaves a level boom
+    /// shorter than the fade case's minimum boom and inside the body, so both cases rise over it on the same heading,
     /// the fade no higher than its own ceiling above the rig's elevation and the cutaway no higher than its own; and a
-    /// fully compressed boom migrates the look to each treatment's own close target.</summary>
+    /// fully compressed boom migrates the look to each case's own close target.</summary>
     [Fact]
-    public void EachTreatmentRisesToItsOwnCeilingAndMigratesToItsOwnCloseTarget() {
+    public void EachCaseRisesToItsOwnCeilingAndMigratesToItsOwnCloseTarget() {
         // Waist-high, half a metre behind her: a level boom's eye sphere meets its top edge a few centimetres out.
         var ledge = Walls((new Vector3(x: 0f, y: 0.5f, z: 0.6f), new Vector3(x: 4f, y: 0.5f, z: 0.1f)));
         var desired = Desired(pitch: 0.3f, yaw: 0f);
 
-        foreach (var (choice, ceiling) in new[] { (WorldCameraClearanceChoice.Fade, FadeRise), (WorldCameraClearanceChoice.Cutaway, CutawayRise) }) {
+        foreach (var (choice, ceiling) in new[] { (Fade, FadeRise), (Cutaway, CutawayRise) }) {
             var arm = new WorldCameraClearance();
-            var eye = Run(arm: arm, body: Body(), choice: choice, desired: desired, field: ledge, frames: 120);
+            var eye = Run(arm: arm, body: Body(), clearance: (choice with { CloseTarget = Vector3.Zero }), desired: desired, field: ledge, frames: 120);
             var boom = (eye - arm.Target);
 
             Assert.Equal(expected: WorldCameraClearanceMode.Risen, actual: arm.Mode);
@@ -83,58 +82,46 @@ public sealed class WorldCameraClearanceLawTests {
         // A wall flush behind the body compresses the boom past the full fraction in both treatments.
         var wall = Walls((new Vector3(x: 0f, y: 2f, z: 0.7f), new Vector3(x: 4f, y: 4f, z: 0.1f)));
 
-        foreach (var (choice, closeY) in new[] { (WorldCameraClearanceChoice.Fade, 1.74f), (WorldCameraClearanceChoice.Cutaway, 1.55f) }) {
+        foreach (var (choice, closeY) in new[] { (Fade, 1.74f), (Cutaway, 1.55f) }) {
             var arm = new WorldCameraClearance();
 
-            _ = arm.Resolve(wall, Desired(yaw: 0f, pitch: 0f), Target, Body(), Vector3.UnitY, SdfCameraDynamics.None, Frame,
-                targetShift: Shift(scale: 1f), choice: choice, control: Control);
+            _ = arm.Resolve(wall, Desired(yaw: 0f, pitch: 0f), Target, Body(), Vector3.UnitY, SdfCameraDynamics.None, Frame, clearance: choice);
             Assert.Equal(expected: closeY, actual: arm.Target.Y, tolerance: 1e-4f);
         }
     }
+    /// <summary>A program that authors no clearance passes the eye and target through, and reads back as none.</summary>
     [Fact]
-    public void SessionAndPortableChoicesOverrideTheAuthorAndAutoRestoresThem() {
-        var control = Control;
-        var feel = WorldSeatCameraFeel.Default;
+    public void AProgramWithoutAClearancePassesTheEyeThrough() {
         var seat = new WorldSeatViewState();
+        var wall = Walls((new Vector3(x: 0f, y: 2f, z: 0.7f), new Vector3(x: 4f, y: 4f, z: 0.1f)));
+        var control = new WorldSeatViewControl(YawReference: WorldSeatYawReference.World, MinPitch: -0.5f, MaxPitch: 1.2f);
+        var desired = Desired(yaw: 0f, pitch: 0f);
+        var (eye, target) = (desired, Target);
 
-        Assert.Equal(WorldCameraClearanceChoice.Fade, seat.ClearanceChoice(control: control, feel: feel));
-        feel = feel with { ClearanceMode = WorldCameraClearanceChoice.Cutaway };
-        Assert.Equal(WorldCameraClearanceChoice.Cutaway, seat.ClearanceChoice(control: control, feel: feel));
-        seat.SetClearanceChoice(choice: WorldCameraClearanceChoice.Fade);
-        Assert.Equal(WorldCameraClearanceChoice.Fade, seat.ClearanceChoice(control: control, feel: feel));
-        seat.SetClearanceChoice(choice: WorldCameraClearanceChoice.Auto);
-        Assert.Equal(WorldCameraClearanceChoice.Cutaway, seat.ClearanceChoice(control: control, feel: feel));
+        Assert.Equal(0f, seat.Clear(true, wall, ref eye, ref target, Body(), Vector3.UnitY, Boom, Frame, clearance: null, control: control));
+        Assert.Equal(desired, eye);
+        Assert.Equal(Target, target);
+        Assert.Contains(expectedSubstring: "clearance=none", actualString: seat.DescribeClearance());
+        Assert.DoesNotContain(expectedSubstring: "cutaway=", actualString: seat.DescribeClearance());
     }
 
     // The debug world's camera-boom row: 4 Hz, critically damped.
     private static readonly SdfCameraDynamics Boom = new(Damping: 1f, Frequency: 4f, Response: 0f);
-    // The standard chase camera's values (worlds/standard/camera.puck): each treatment's rise ceiling above the rig's
-    // elevation, the eye's radius and skin, the fade distances, and the Moth's close targets.
+    // The standard chase camera's two cases (worlds/standard/camera.puck, chaseCamera) for the Moth: each case's rise
+    // ceiling above the rig's elevation, the eye's radius and skin, the fade distances, the minimum boom, and her close
+    // targets, 0.74 m (fade) and 0.55 m (cutaway) above her waist.
     private const float FadeRise = 0.35f;
     private const float CutawayRise = 1.1f;
     private const float EyeRadius = 0.3f;
     private const float SurfaceSkin = 0.1f;
-    private static readonly WorldCameraCharacterFade MothFade = new(StartDistance: 1.25f, EndDistance: 0.45f, MinimumBoom: 0.35f);
-    private static readonly WorldSeatViewControl Control = new(
-        YawReference: WorldSeatYawReference.World,
-        MinPitch: -0.5f,
-        MaxPitch: 1.2f,
-        ClearanceMode: WorldCameraClearanceChoice.Fade,
-        MaxRise: new WorldCameraClearanceRise(Fade: FadeRise, Cutaway: CutawayRise),
-        EyeRadius: EyeRadius,
-        SurfaceSkin: SurfaceSkin,
-        CharacterFade: MothFade
-    );
-
-    // The Moth's migration from her waist to her fade (1.74 m) and cutaway (1.55 m) close targets.
-    private static SdfCameraTargetShift Shift(float scale) => new(
-        Offset: new SdfCameraClearanceOffsets(
-            Fade: (new Vector3(x: 0f, y: 0.74f, z: 0f) * scale),
-            Cutaway: (new Vector3(x: 0f, y: 0.55f, z: 0f) * scale)
-        ),
-        StartFraction: 0.6f,
-        FullFraction: 0.2f
-    );
+    private static readonly SdfCameraClearance Fade = new(
+        Cutaway: false, EyeRadius: EyeRadius, SurfaceSkin: SurfaceSkin, MaxRise: FadeRise, MinimumBoom: 0.35f,
+        FadeStart: 1.25f, FadeEnd: 0.45f, CloseTarget: new Vector3(x: 0f, y: 0.74f, z: 0f), CloseTargetStartFraction: 0.6f,
+        CloseTargetFullFraction: 0.2f, NearMargin: 0.05f, RetractionSkin: 0.05f, ObstructedTargetSkin: 0f);
+    private static readonly SdfCameraClearance Cutaway = new(
+        Cutaway: true, EyeRadius: EyeRadius, SurfaceSkin: SurfaceSkin, MaxRise: CutawayRise, MinimumBoom: 0f,
+        FadeStart: 0f, FadeEnd: 0f, CloseTarget: new Vector3(x: 0f, y: 0.55f, z: 0f), CloseTargetStartFraction: 0.6f,
+        CloseTargetFullFraction: 0.2f, NearMargin: 0.05f, RetractionSkin: 0.05f, ObstructedTargetSkin: 1.1f);
 
     private const float Frame = (1f / 60f);
 
@@ -196,7 +183,8 @@ public sealed class WorldCameraClearanceLawTests {
         return new SdfFieldEvaluator(program: builder.Build());
     }
     // Resolves the same pose for a run of frames on the boom dynamics, returning the last eye.
-    private static Vector3 Run(WorldCameraClearance arm, SdfFieldEvaluator? field, Vector3 desired, WorldChaseBody body, int frames, SdfCameraDynamics? dynamics = null, WorldCameraClearanceChoice choice = WorldCameraClearanceChoice.Cutaway, WorldSeatViewControl? control = null) {
+    private static Vector3 Run(WorldCameraClearance arm, SdfFieldEvaluator? field, Vector3 desired, WorldChaseBody body, int frames, SdfCameraDynamics? dynamics = null, SdfCameraClearance? clearance = null) {
+        var resolved = (clearance ?? (Cutaway with { CloseTarget = Vector3.Zero }));
         var eye = desired;
 
         for (var frame = 0; (frame < frames); frame++) {
@@ -208,8 +196,7 @@ public sealed class WorldCameraClearanceLawTests {
                 subject: body,
                 target: Target,
                 up: Vector3.UnitY,
-                choice: choice,
-                control: (control ?? Control)
+                clearance: in resolved
             );
         }
 
@@ -280,8 +267,8 @@ public sealed class WorldCameraClearanceLawTests {
         var wall = Walls((new Vector3(x: 0f, y: 1.5f, z: 0.45f), new Vector3(x: 4f, y: 1.5f, z: 0.05f)));
         var crowded = new WorldCameraClearance();
         // A ceiling of 0.8 rad above the boom's 0.3 rad leaves the crowded eye beyond the wall's top edge, behind it.
-        var low = (Control with { MaxRise = new WorldCameraClearanceRise(Fade: FadeRise, Cutaway: 0.8f) });
-        var backed = Run(arm: crowded, body: Body(), control: low, desired: Desired(pitch: 0.3f, yaw: 0f), field: wall, frames: 60);
+        var low = (Cutaway with { CloseTarget = Vector3.Zero, MaxRise = 0.8f });
+        var backed = Run(arm: crowded, body: Body(), clearance: low, desired: Desired(pitch: 0.3f, yaw: 0f), field: wall, frames: 60);
 
         Assert.Equal(expected: WorldCameraClearanceMode.Crowded, actual: crowded.Mode);
         Assert.True(condition: (CapsuleDistance(point: backed) >= (EyeRadius - 0.01f)), userMessage: $"eye {backed} is within the eye radius of the body");

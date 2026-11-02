@@ -130,10 +130,14 @@ theme {
   }
 }
 
-// The standard's screen materials, which a screen row or a creation face names by id (`material: "crt"`). A material is
+// The standard's screen materials, which a screen row or a creation face names by id (`material: crt`). A material is
 // the display's own pixel structure drawn over its picture, which always fills the face: a device's glass is exactly its
 // picture, and any bezel is geometry the device authors around the face. A seat that frames the screen fades the whole
-// treatment out, so the framed picture is source-exact. A world refines a row by id or adds its own.
+// treatment out, so the framed picture is source-exact. A world refines a row by id or adds its own. A material is a
+// module's own until it exports it under `bindings`, so every document a world imports in the skin's place re-exports
+// `crt` (standard.puck, walker.puck, and the debug world's moth-controls.puck and controls.puck).
+export binding crt
+
 screenMaterials [
   // A cathode-ray tube: subtle scanlines, one a source row, faint red, green and blue stripes across each source column,
   // near-square corners and a crisp edge.

@@ -6,6 +6,21 @@ using Xunit;
 namespace Puck.World.Transpiler.Tests;
 
 public class LinterTests {
+    [InlineData("a != 0 ? 1 / a : 0", true)]
+    [InlineData("a == 0 ? 0 : 1 / a", true)]
+    [InlineData("a == 0 ? 0 : maximum(1, 7 % a)", true)]
+    [InlineData("a ? 0 : (b ? 1 / a : 0)", true)]
+    [InlineData("a ? 1 / 0 : 0", true)]
+    [InlineData("a ? 1 / (2) : 0", false)]
+    [InlineData("a ? 1 : 0", false)]
+    [InlineData("1 / a", false)]
+    [InlineData("1 / a > 0 ? 1 : 0", false)]
+    [Theory]
+    public void TernaryDivisionWarnsThatTheOtherArmDoesNotGuardIt(string expression, bool warns) {
+        var diagnostics = new DiagnosticBag();
+        PuckLinter.Lint(PuckParser.ParseDocument($"rule \"guarded\" {{\nlocal value = {expression}\na = value\n}}"), diagnostics);
+        Assert.Equal(warns, diagnostics.Any(diagnostic => diagnostic.Code == PuckDiagnosticCodes.EagerConditionalArithmetic));
+    }
     [Fact]
     public void CompositionReferencesCountAsUses() {
         var source = """

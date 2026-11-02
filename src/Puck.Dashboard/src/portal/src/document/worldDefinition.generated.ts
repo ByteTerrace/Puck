@@ -2026,6 +2026,8 @@ export type SdfExposureMode = "Manual" | "Auto";
 
 export type SdfIndirectTier = "Off" | "Medium" | "High";
 
+export type SdfToonBand = "Visibility" | "Combined";
+
 export type SearchMethod = "Negamax" | "MonteCarlo";
 
 export type SeatActivationPolicy = "Eager" | "OnDemand";
@@ -3084,6 +3086,57 @@ export type TextFontDefinition = {
 
 export type TilingFamily = "Triangular" | "Kagome" | "TruncatedSquare" | "Rhombitrihexagonal" | "TruncatedHexagonal" | "ElongatedTriangular" | "TruncatedTrihexagonal" | "Penrose";
 
+export type ToonStyleDocument = {
+  /**
+   * Whether the style bands; absent is on. False on a palette row keeps that material continuous whatever the world's default is; false on render.toon boots the world's default off until the lever turns it on.
+   */
+  enabled?: boolean | null;
+  /**
+   * Diffuse band threshold in [0, 1].
+   */
+  threshold?: number;
+  /**
+   * Full terminator width in [0.001, 0.5].
+   */
+  softness?: number;
+  /**
+   * Shadow-band reflectance, three linear RGB values in [0, 1].
+   */
+  shadowTint?: DocumentVector3;
+  /**
+   * Close outline radius in output pixels, in [0, 4]; zero disables outlines.
+   */
+  outlineWidth?: number;
+  /**
+   * Distance in metres at which the outline radius halves, in [0.1, 1000].
+   */
+  outlineDistance?: number;
+  /**
+   * Crease normal cosine in [0, 0.95].
+   */
+  outlineNormal?: number;
+  /**
+   * Outline multiplier, three linear RGB values in [0, 1].
+   */
+  outlineTint?: DocumentVector3;
+  /**
+   * Highlight size as one minus the half-vector cosine, in [0.001, 0.25].
+   */
+  specularSize?: number;
+  /**
+   * Reflected-light exposure compensation in stops, in [-4, 4].
+   */
+  exposure?: number;
+  /**
+   * Hue-preserving highlight compression in [0, 2]; zero disables it.
+   */
+  shoulder?: number;
+  /**
+   * How the band treats a light's shadow visibility: Visibility (the default) keeps the penumbra, Combined snaps it to the band's edge.
+   */
+  band?: SdfToonBand;
+};
+
 /**
  * One authored direction of a discrete LatticeTopology: the (X, Y, Z) cell step a neighbour walk, ray, or leaper offset takes, and the case-sensitive token a rule or $board:/$match: channel names it by. X/Y are the topology's own planar axes (a Grid's column/row, a Hex's q/r); Z is a Box's layer step and must be zero on every other kind.
  */
@@ -3857,51 +3910,6 @@ export type WorldCameraBoom = {
   step: number;
 };
 
-export type WorldCameraCharacterFade = {
-  /**
-   * The boom distance at which the body starts dissolving.
-   */
-  startDistance: number;
-  /**
-   * The distance at which the body is completely hidden.
-   */
-  endDistance: number;
-  /**
-   * The preferred shortest boom; a nearer wall takes precedence.
-   */
-  minimumBoom: number;
-};
-
-/**
- * How a seat's chase view handles a room that cannot fit its boom and body.
- */
-export type WorldCameraClearanceChoice = "Auto" | "Cutaway" | "Fade";
-
-export type WorldCameraClearanceRise = {
-  /**
-   * The rise ceiling while the seat fades its body, in [0, π/2].
-   */
-  fade: number;
-  /**
-   * The rise ceiling while the seat cuts walls away, in [0, π/2].
-   */
-  cutaway: number;
-};
-
-/**
- * The target a chase boom's look migrates to as geometry shortens it, per treatment of a close obstruction, in the axes of the look-at's own target offset.
- */
-export type WorldCameraCloseTarget = {
-  /**
-   * The close target while the seat fades its body.
-   */
-  fade: DocumentVector3;
-  /**
-   * The close target while the seat cuts walls away.
-   */
-  cutaway: DocumentVector3;
-};
-
 /**
  * An authored camera program — the ordered op list a rig resolves through every frame.
  */
@@ -3927,7 +3935,7 @@ export type WorldCameraProgram = {
 /**
  * One instruction in an authored camera program's ordered op list — the presentation-side pose algebra bodyMotionPrograms established for sim-side movement, promoted to cameras: an authored rig is an ordered list of these trivial ops rather than a bespoke closed motion/aim union, so a new camera behavior is authored data, never new engine code. This is the AUTHORING vocabulary only: Puck.World.Client.WorldCameraRigCompiler translates it to Puck.SdfVm.Views.SdfCameraOp and resolves each frame's bindings and subject poses, and Puck.SdfVm.Views.SdfCameraProgramEvaluator — which parses no document — walks the result. Floats throughout; presentation carries no fixed-point burden.
  */
-export type WorldCameraProgramOp = WorldCameraProgramOpAnchor | WorldCameraProgramOpOffset | WorldCameraProgramOpLookAt | WorldCameraProgramOpOrbit | WorldCameraProgramOpPath | WorldCameraProgramOpDynamics | WorldCameraProgramOpClampPitch | WorldCameraProgramOpFieldOfView | WorldCameraProgramOpBlend | WorldCameraProgramOpSelectProgram | WorldCameraProgramOpFirstPerson | null;
+export type WorldCameraProgramOp = WorldCameraProgramOpAnchor | WorldCameraProgramOpOffset | WorldCameraProgramOpLookAt | WorldCameraProgramOpOrbit | WorldCameraProgramOpPath | WorldCameraProgramOpDynamics | WorldCameraProgramOpClampPitch | WorldCameraProgramOpFieldOfView | WorldCameraProgramOpBlend | WorldCameraProgramOpSelectProgram | WorldCameraProgramOpFirstPerson | WorldCameraProgramOpClearance | null;
 
 /**
  * Establishes the CURRENT subject — the pose Offset/Orbit place the eye relative to, and LookAt aims along the facing of when it names no subject of its own. Also re-seeds the eye at the resolved subject's own position (the "first person" default before any Offset/Orbit runs). At most one per program, and it must be the first operation when present; a program that omits it starts from Reference implicitly.
@@ -3945,7 +3953,7 @@ export type WorldCameraProgramOpAnchor = {
 };
 
 /**
- * Evaluates two other authored programs by name and linearly interpolates their resolved eye, target, and field of view — the whole document's camera-program table (every cameras[].rig plus views.seatRig/views.cameraRig) is the namespace A/B resolve against. At most one per program; refused when it would create a reference cycle.
+ * Evaluates two other authored programs by name and linearly interpolates their resolved eye, target, and field of view — the whole document's camera-program table (every cameras[].rig plus views.seatRig/views.cameraRig/views.programs) is the namespace A/B resolve against. At most one per program; refused when it would create a reference cycle.
  */
 export type WorldCameraProgramOpBlend = {
   $type?: "blend";
@@ -3980,6 +3988,69 @@ export type WorldCameraProgramOpClampPitch = {
    * The maximum pitch, radians.
    */
   maxPitch: number;
+  /**
+   * Gets this op's authored $type token — the one spelling a refusal, a read-back, and the document all use.
+   */
+  opcode?: string | null;
+};
+
+/**
+ * Keeps a seat's chase eye in the room: the seat probes the static geometry and the framed body along the boom each frame and places the eye on a spring arm eased on the program's Dynamics. It shortens the boom along its own heading, rises it toward the seat's up by at most MaxRise when no level boom stands far enough out, and migrates the look target toward CloseTargetOffset as the boom compresses. Two capabilities only the engine has are offered: cutting away the walls between an eye the body put beyond them and the body (Cutaway), and fading the framed body in this seat's own view (FadeStart to FadeEnd). How a world trades them is authored: a program per treatment, chosen by a SelectProgram. A program without this op passes the eye through. At most one per program; read only by a seat framing its own body. Every parameter is a literal or a state.<row>[.<key>] binding. Distances are full-size metres, scaled by the framed body's live scale; angles are radians.
+ */
+export type WorldCameraProgramOpClearance = {
+  $type?: "clearance";
+  /**
+   * One keeps the body solid: the eye stays out of the body (its collider and drawn shapes), a boom that no rise clears goes up and over at MaxRise, a target inside geometry skips ObstructedTargetSkin, and the near plane cuts away the geometry between the eye and the body. Zero keeps the room: the eye stays level and short of every wall, at least MinimumBoom out where the room allows.
+   */
+  cutaway: BindableScalar;
+  /**
+   * The radius of the sphere the eye keeps clear of geometry and, under Cutaway, of the body.
+   */
+  eyeRadius: BindableScalar;
+  /**
+   * The nearest the eased eye's centre comes to geometry along the boom: a sudden obstruction cuts the eye in to here at once and the ease carries it the rest of the way.
+   */
+  surfaceSkin: BindableScalar;
+  /**
+   * The most the boom rises above the rig's own elevation, in [0, π/2].
+   */
+  maxRise: BindableScalar;
+  /**
+   * The shortest boom the eye keeps where the room allows it, rising if it must; a nearer wall takes precedence. Zero holds none.
+   */
+  minimumBoom: BindableScalar;
+  /**
+   * The boom length at which the body starts to fade from this seat's view.
+   */
+  fadeStart: BindableScalar;
+  /**
+   * The boom length at which the body is hidden; no less than FadeStart never fades it.
+   */
+  fadeEnd: BindableScalar;
+  /**
+   * The boom fraction below which the target migrates.
+   */
+  closeTargetStartFraction: BindableScalar;
+  /**
+   * The boom fraction at which the target reaches CloseTargetOffset.
+   */
+  closeTargetFullFraction: BindableScalar;
+  /**
+   * How far short of the body's nearest surface a cutaway's near plane stops.
+   */
+  nearMargin: BindableScalar;
+  /**
+   * How far short of a hit the probe reports the room.
+   */
+  retractionSkin: BindableScalar;
+  /**
+   * How far out along the boom the sweep starts when the target is inside geometry, past a shell such as a portal frame round the pivot; zero never skips.
+   */
+  obstructedTargetSkin: BindableScalar;
+  /**
+   * The target the look migrates to as the boom compresses, in the axes of the preceding LookAt's target offset, which must name a subject; absent keeps the rest target.
+   */
+  closeTargetOffset?: DocumentVector3;
   /**
    * Gets this op's authored $type token — the one spelling a refusal, a read-back, and the document all use.
    */
@@ -4066,18 +4137,6 @@ export type WorldCameraProgramOpLookAt = {
    * The finite target distance along the current subject's forward axis, used only when Subject is null.
    */
   focusDistance?: number;
-  /**
-   * The target offsets approached as collision shortens a seat's boom, one per clearance treatment, in the axes of TargetOffset; absent keeps the rest target.
-   */
-  closeTargetOffset?: WorldCameraCloseTarget | null;
-  /**
-   * The boom fraction below which target migration begins.
-   */
-  closeTargetStartFraction?: number;
-  /**
-   * The boom fraction at which migration reaches the close target.
-   */
-  closeTargetFullFraction?: number;
   /**
    * Gets this op's authored $type token — the one spelling a refusal, a read-back, and the document all use.
    */
@@ -4185,7 +4244,7 @@ export type WorldCameraSelectCase = {
    */
   value: number;
   /**
-   * The candidate program's name — the same blend namespace Blend resolves against (every cameras[].rig, plus views.seatRig/views.cameraRig).
+   * The candidate program's name — the same blend namespace Blend resolves against (every cameras[].rig, plus views.seatRig/views.cameraRig/views.programs).
    */
   program: string;
 };
@@ -8389,6 +8448,59 @@ export type WorldPrototype = {
          */
         ior?: number | null;
       } | null;
+      /**
+       * The slot's own cel style (ToonStyleDocument, on unless it says enabled: false, which keeps the slot continuous); null shades the slot with the world's default style (render.toon).
+       */
+      toon?: {
+        /**
+         * Whether the style bands; absent is on. False on a palette row keeps that material continuous whatever the world's default is; false on render.toon boots the world's default off until the lever turns it on.
+         */
+        enabled?: boolean | null;
+        /**
+         * Diffuse band threshold in [0, 1].
+         */
+        threshold?: number;
+        /**
+         * Full terminator width in [0.001, 0.5].
+         */
+        softness?: number;
+        /**
+         * Shadow-band reflectance, three linear RGB values in [0, 1].
+         */
+        shadowTint?: unknown;
+        /**
+         * Close outline radius in output pixels, in [0, 4]; zero disables outlines.
+         */
+        outlineWidth?: number;
+        /**
+         * Distance in metres at which the outline radius halves, in [0.1, 1000].
+         */
+        outlineDistance?: number;
+        /**
+         * Crease normal cosine in [0, 0.95].
+         */
+        outlineNormal?: number;
+        /**
+         * Outline multiplier, three linear RGB values in [0, 1].
+         */
+        outlineTint?: unknown;
+        /**
+         * Highlight size as one minus the half-vector cosine, in [0.001, 0.25].
+         */
+        specularSize?: number;
+        /**
+         * Reflected-light exposure compensation in stops, in [-4, 4].
+         */
+        exposure?: number;
+        /**
+         * Hue-preserving highlight compression in [0, 2]; zero disables it.
+         */
+        shoulder?: number;
+        /**
+         * How the band treats a light's shadow visibility: Visibility (the default) keeps the penumbra, Combined snaps it to the band's edge.
+         */
+        band?: "Visibility" | "Combined";
+      } | null;
     } | null)[] | null;
     /**
      * The authored shapes (null = empty).
@@ -9746,13 +9858,17 @@ export type WorldRenderDefaults = {
    */
   exposure?: WorldRenderExposure | null;
   /**
-   * Optional cel shading and its tuning. Absent is off.
+   * The world's default cel style, which every material that authors no style of its own shades with (ToonStyleDocument), on unless it says enabled: false, and which the live world.toon lever turns on or off. Absent is off.
    */
-  toon?: WorldRenderToon | null;
+  toon?: ToonStyleDocument | null;
   /**
    * Optional camera scatter. Absent is off.
    */
   bloom?: CameraBloom | null;
+  /**
+   * How far the key light's shadow cascades reach (WorldRenderShadowCoverage). Absent keeps the engine's 16 m near, 120 m far and 200 m caster reach; world.budget prints the coverage with each cascade's texel.
+   */
+  shadowCoverage?: WorldRenderShadowCoverage | null;
 };
 
 export type WorldRenderEnvironment = {
@@ -10152,6 +10268,21 @@ export type WorldRenderMedium = {
  * The enumerated world render-scale tiers a player picks at the console and a view's floor names, over the continuous render-scale ceiling a view carries (SdfViewSnapshot.RenderScale). A view's output keeps its rect's extent; below native it traces and shades a grid of that extent times its render scale, rounded up on each axis to a step of the render graph's extent quantization (RenderGraphExtent.Quantize, sixteen steps per power-of-two octave), and its own resolve pass reconstructs the grid into the output at world.upscale-sharpness. A layout transition's dip moves that grid inside the ceiling (SdfViewSnapshot.ResolvedRenderScale); the enumerated set lives only at the user surface. WorldRenderScaleTiers is the one definition of the names and scales, which the quality presets' floors, the console world.render-scale verb and the per-view floors read; a ceiling is a scalar. Each extent below is a lone whole-display view at 1280x800.
  */
 export type WorldRenderScaleTier = "Native" | "ThreeQuarter" | "Half" | "Quarter" | "Eighth";
+
+export type WorldRenderShadowCoverage = {
+  /**
+   * The depth from the eye the near cascade covers, positive and below the far reach (16 when absent).
+   */
+  near?: number | null;
+  /**
+   * The depth from the eye the far cascade covers, at most the far distance it is clipped to (120 when absent).
+   */
+  far?: number | null;
+  /**
+   * How far past a cascade toward the light a caster may stand and still shadow it (200 when absent).
+   */
+  casters?: number | null;
+};
 
 export type WorldRenderSky = {
   /**
@@ -11065,53 +11196,6 @@ export type WorldRenderSkyTwinkle = {
   rate?: BindableScalar;
 };
 
-export type WorldRenderToon = {
-  /**
-   * Whether the world boots with cel shading on; absent is off.
-   */
-  enabled?: boolean;
-  /**
-   * Diffuse band threshold in [0, 1].
-   */
-  threshold?: number;
-  /**
-   * Full terminator width in [0.001, 0.5].
-   */
-  softness?: number;
-  /**
-   * Shadow-band reflectance, three linear RGB values in [0, 1].
-   */
-  shadowTint?: DocumentVector3;
-  /**
-   * Close outline radius in output pixels, in [0, 4]; zero disables outlines.
-   */
-  outlineWidth?: number;
-  /**
-   * Distance in metres at which the outline radius halves, in [0.1, 1000].
-   */
-  outlineDistance?: number;
-  /**
-   * Crease normal cosine in [0, 0.95].
-   */
-  outlineNormal?: number;
-  /**
-   * Outline multiplier, three linear RGB values in [0, 1].
-   */
-  outlineTint?: DocumentVector3;
-  /**
-   * Highlight size as one minus the half-vector cosine, in [0.001, 0.25].
-   */
-  specularSize?: number;
-  /**
-   * Reflected-light exposure compensation in stops, in [-4, 4].
-   */
-  exposure?: number;
-  /**
-   * Hue-preserving highlight compression in [0, 2]; zero disables it.
-   */
-  shoulder?: number;
-};
-
 export type WorldRigid = {
   /**
    * The body's mass, in the same units gravity.attractors masses use. Must be strictly positive after fixed-point compilation and yield representable room-scale mass/inertia properties — a rigid body with no compiled mass is not a rigid body, it is a decoration.
@@ -11911,10 +11995,6 @@ export type WorldSeatCameraFeel = {
    */
   gyro?: WorldSeatGyro | null;
   /**
-   * The player's clearance preference; Auto inherits the framing world's default.
-   */
-  clearanceMode?: WorldCameraClearanceChoice;
-  /**
    * The player's automatic pull-in choice; null inherits the author's default.
    */
   autoFirstPerson?: boolean | null;
@@ -12002,29 +12082,9 @@ export type WorldSeatViewControl = {
    */
   maxPitch: number;
   /**
-   * The author's tight-space behavior, Fade or Cutaway; players may override it.
-   */
-  clearanceMode: WorldCameraClearanceChoice;
-  /**
-   * The most the boom rises above the rig's own elevation, in radians, for each treatment.
-   */
-  maxRise: WorldCameraClearanceRise;
-  /**
-   * The full-size radius, in metres, of the sphere the chase eye keeps clear of geometry and, in cutaway, the body.
-   */
-  eyeRadius: number;
-  /**
-   * The full-size nearest distance, in metres, the eased eye's centre comes to geometry along the boom: a sudden obstruction cuts the eye in to here at once, and the ease carries it the rest of the way.
-   */
-  surfaceSkin: number;
-  /**
    * The follow camera: with no look input the camera yaw eases in behind the body's heading; any look input (a deflected look stick, a held orbit/steer) is free-look and the follow yields for as long as it lasts. Optional; absent is a still camera that goes only where look input sends it. Needs World — a body-relative yaw already rides the body.
    */
   follow?: WorldSeatFollow | null;
-  /**
-   * The full-size fade distances; absent, fade never dissolves the body and holds no minimum boom.
-   */
-  characterFade?: WorldCameraCharacterFade | null;
   /**
    * The automatic pull-in policy; absent, automatic pull-in is unavailable whatever a player or session asks.
    */
@@ -13160,6 +13220,10 @@ export type WorldViewDefaults = {
    * Per-view render quality and tier floors; a row named * supplies the defaults.
    */
   quality?: (WorldViewQuality | null)[] | null;
+  /**
+   * The named camera programs no camera or seat resolves through directly: the framings a SelectProgram or Blend names, such as the cases a seat rig selects between. Programs is what a reader resolves through.
+   */
+  programs?: (WorldCameraProgram | null)[] | null;
   /**
    * Gets the authored named layouts. The absence-coalesce lives in the accessor for the same reason Elements's does.
    */

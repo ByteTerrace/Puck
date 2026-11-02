@@ -1,5 +1,6 @@
 using CompiledCellRef = Puck.State.Rules.CompiledCellRef;
 using IRuleKey = Puck.State.Rules.IRuleKey;
+using KeyNaming = Puck.State.Rules.KeyNaming;
 using IRuleOperand = Puck.State.Rules.IRuleOperand;
 using RuleReads = Puck.State.Rules.RuleReads;
 
@@ -479,7 +480,7 @@ public sealed class WorldPairKeyFact : KeyFact<IWorldFacts>, IRuleKey {
         return facet.PairKey(key: m_key);
     }
 
-    CellKey IRuleKey.Resolve(IStateReader reader, out bool named) {
+    CellKey IRuleKey.Resolve(IStateReader reader, out KeyNaming naming) {
         ArgumentNullException.ThrowIfNull(argument: reader);
 
         var facet = ((IWorldFacts)reader);
@@ -490,10 +491,9 @@ public sealed class WorldPairKeyFact : KeyFact<IWorldFacts>, IRuleKey {
 
         // An absent but addressable pair reads its state cell's default, just like any other missing keyed cell.
         // Only a missing participant is unnamed. PairKey itself does not intern while resolving a read.
-        named = (
-            (facet.ResolveBody(bodyRef: m_key.BodyA) >= 0) &&
-            (facet.ResolveBody(bodyRef: m_key.BodyB) >= 0)
-        );
+        naming = (((facet.ResolveBody(bodyRef: m_key.BodyA) >= 0) && (facet.ResolveBody(bodyRef: m_key.BodyB) >= 0))
+            ? KeyNaming.Cell
+            : KeyNaming.Nothing);
 
         return key;
     }
@@ -525,16 +525,18 @@ public sealed class WorldPairKeyFact : KeyFact<IWorldFacts>, IRuleKey {
             reason: out reason
         );
     }
-    bool IRuleKey.TryResolveIndex(IStateReader reader, out long index) {
+    KeyNaming IRuleKey.ResolveIndex(IStateReader reader, out long index) {
         ArgumentNullException.ThrowIfNull(argument: reader);
 
-        return RuleReads.TryKeyIndex(
+        return (RuleReads.TryKeyIndex(
             keys: reader.Arena.Keys,
             index: out index,
             key: ((IRuleKey)this).Resolve(
-                named: out _,
+                naming: out _,
                 reader: reader
             )
-        );
+        )
+            ? KeyNaming.Cell
+            : KeyNaming.Nothing);
     }
 }

@@ -14,13 +14,11 @@ public static partial class WorldDefinitionValidator {
             foreach (var name in scope.Rows) {
                 if (WorldDefinitionRows.FindStateRow(definition.State, name) is not { } row) { errors.Add(item: (prefix + $"no document row '{name}'")); continue; }
                 if (!ownedRows.Add(item: name)) { errors.Add(item: (prefix + $"row '{name}' belongs to more than one scope")); }
-                if ((row.Field is not null) || (row.Kind == CellKind.Vector) || (row.Advance is not null) || (row.Cycle is not null) || (row.Dynamics is not null) ||
-                    (row.Cells ?? []).Any(predicate: cell => ((cell.Clock is not null) || (cell.Advance is not null) || (cell.Cycle is not null) || (cell.Dynamics is not null)))) {
-                    errors.Add(item: (prefix + $"row '{name}' needs a wider continuation boundary (field, vector or timed state)"));
-                }
-                if ((row.Inverse is { } inverse) && (!scope.Rows.Contains(value: inverse.Tokens) || !scope.Rows.Contains(value: inverse.Codes))) {
-                    errors.Add(item: (prefix + $"derived board '{name}' requires both inverse input rows"));
-                }
+                if (row.Field is not null) { errors.Add(item: (prefix + $"row '{name}' needs a wider continuation boundary (a field row)")); }
+            }
+            // The arena owns the declaration-level admission rule it enforces again at capture and restore.
+            foreach (var refusal in StateArena.ScopeRefusals(rows: definition.State, scope: scope.Rows.ToHashSet(comparer: StringComparer.Ordinal))) {
+                errors.Add(item: (prefix + refusal));
             }
             foreach (var body in scope.Bodies) {
                 if ((body < 0) || (body >= definition.Population.Capacity) || !ownedBodies.Add(item: body)) { errors.Add(item: (prefix + $"invalid or multiply owned body:{body}")); }

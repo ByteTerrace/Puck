@@ -36,155 +36,182 @@ public sealed partial class WorldRuleHost {
     /// <returns>A deterministic, headless-safe read-back, or a refusal by name.</returns>
     internal string DescribeMatch(string patternName, string rowName, string? attribute, string? key, string? direction) {
         lock (Host.AuthorityGate) {
-            if (!m_patterns.TryGet(
-                name: patternName,
-                pattern: out var pattern
-            )) {
-                return $"[world.match: '{patternName}' names no pattern]";
+            return DescribeMatchCore(Host.Definition, this, m_patterns, patternName, rowName, attribute, key, direction);
+        }
+    }
+
+    /// <summary>Walks the same pattern machinery over only the reader's disclosed state, including tuple dependencies.</summary>
+    /// <param name="view">The caller's disclosed document and completed tick pair.</param>
+    /// <param name="patternName">The pattern.</param>
+    /// <param name="rowName">The source row.</param>
+    /// <param name="attribute">The attribute row of a keyed word.</param>
+    /// <param name="key">The board origin or first token.</param>
+    /// <param name="direction">The board direction, or <c>any</c>.</param>
+    /// <returns>The same narration as the authority path, computed only from disclosed values.</returns>
+    public static string DescribeDisclosedMatch(WorldStateReadView view, string patternName, string rowName, string? attribute, string? key, string? direction) {
+        var definition = view.Definition;
+        if (!CompiledPatterns.TryCompileAll(definition.Patterns, out var patterns, new List<string>())) {
+            return "[world.match: disclosed patterns do not compile]";
+        }
+        var reader = new ArenaEffectHost(WorldStateReader.Seed(definition), ticksPerSecond: definition.SimulationRateHz, dynamics: definition.Dynamics);
+        reader.Advance(view.CompletedTick, view.CompletedEngineTick);
+        return DescribeMatchCore(definition, reader, patterns, patternName, rowName, attribute, key, direction);
+    }
+
+    private static string DescribeMatchCore(WorldDefinition definition, IStateReader reader, CompiledPatterns patterns, string patternName, string rowName, string? attribute, string? key, string? direction) {
+        if (!patterns.TryGet(
+            name: patternName,
+            pattern: out var pattern
+        )) {
+            return $"[world.match: '{patternName}' names no pattern]";
+        }
+        if (WorldDefinitionRows.FindStateRow(
+            rows: definition.State,
+            name: rowName
+        ) is not { } row) {
+            return $"[world.match: '{rowName}' names no state row]";
+        }
+
+        var arena = reader.Arena;
+
+        if (!arena.Catalog.TryResolve(
+            handle: out var handle,
+            lane: StateLane.Document,
+            name: rowName
+        )) {
+            return $"[world.match: '{rowName}' names no arena row]";
+        }
+
+        var rowOrdinal = handle.Ordinal;
+        var word = new long[PatternCapacity.MaxWord];
+        var lines = new List<string>();
+
+        if (row.EffectiveDomain is StateDomain.CellsOf board) {
+            if (arena.Layout[rowOrdinal].Topology is not { } topology) {
+                return $"[world.match: '{rowName}' names no compiled topology]";
             }
-            if (WorldDefinitionRows.FindStateRow(
-                rows: Host.Definition.State,
-                name: rowName
-            ) is not { } row) {
-                return $"[world.match: '{rowName}' names no state row]";
+            if (
+                (key is null) ||
+                !topology.TryCell(
+                cell: out var origin,
+                key: key
+            )
+            ) {
+                return $"[world.match: a board source needs an origin cell of '{board.Topology}']";
+            }
+            if (direction is null) {
+                return "[world.match: a board source needs a direction or any]";
             }
 
-            var arena = Arena;
+            var values = new long[topology.CellCount];
+            var first = ((direction == "any")
+                ? 0
+                : topology.Direction(token: direction)
+            );
+            var last = ((direction == "any")
+                ? (topology.DirectionCount - 1)
+                : first
+            );
 
-            if (!arena.Catalog.TryResolve(
-                handle: out var handle,
-                lane: StateLane.Document,
-                name: rowName
-            )) {
-                return $"[world.match: '{rowName}' names no arena row]";
+            if (first < 0) {
+                return $"[world.match: '{direction}' is not a direction of '{board.Topology}']";
             }
-
-            var rowOrdinal = handle.Ordinal;
-            var word = new long[PatternCapacity.MaxWord];
-            var lines = new List<string>();
-
-            if (row.EffectiveDomain is StateDomain.CellsOf board) {
-                if (arena.Layout[rowOrdinal].Topology is not { } topology) {
-                    return $"[world.match: '{rowName}' names no compiled topology]";
+            for (var walked = first; (walked <= last); walked++) {
+                if (!ArenaBoards.TryReadRay(
+                    arena: arena,
+                    direction: walked,
+                    origin: origin,
+                    ray: out var ray,
+                    reason: out var rayReason,
+                    rowOrdinal: rowOrdinal,
+                    values: values,
+                    word: word
+                )) {
+                    return $"[world.match: {rayReason}]";
                 }
+
+                lines.Add(item: $"direction {walked}: {Narrate(
+                    pattern: pattern,
+                    values: ray
+                )}");
+            }
+        } else {
+            CompiledExpressionToken[]? expression = null;
+            var attributeOrdinal = -1;
+
+            if (
+                (row.EffectiveDomain is StateDomain.KeysOf { Ordered: true } zone) &&
+                (pattern.Source.Value is not null)
+            ) {
+                if (!WorldFactsCompiler.TryCompilePatternValue(
+                    definition: definition,
+                    pattern: pattern.Source,
+                    tokenDomain: zone.Row.Value,
+                    ruleName: "world.match",
+                    tokens: out expression,
+                    reason: out var valueReason
+                )) {
+                    return $"[world.match: {valueReason}]";
+                }
+                var needs = new RuleNeedsBuilder();
+                RuleDataflow.CollectExpressionSchedulingFacts(tokens: expression, into: needs);
+                if (!RuleNeeds.Admit(needs: needs.Build(), reader: reader, refusal: out var refusal)) {
+                    return $"[world.match: {refusal}]";
+                }
+            } else if (row.EffectiveDomain is StateDomain.KeysOf { Ordered: true }) {
                 if (
-                    (key is null) ||
-                    !topology.TryCell(
-                    cell: out var origin,
-                    key: key
+                    (attribute is null) ||
+                    !arena.Catalog.TryResolve(
+                    handle: out var attributeHandle,
+                    lane: StateLane.Document,
+                    name: attribute
                 )
                 ) {
-                    return $"[world.match: a board source needs an origin cell of '{board.Topology}']";
-                }
-                if (direction is null) {
-                    return "[world.match: a board source needs a direction or any]";
+                    return "[world.match: a zone source needs its attribute row]";
                 }
 
-                var values = new long[topology.CellCount];
-                var first = ((direction == "any")
-                    ? 0
-                    : topology.Direction(token: direction)
-                );
-                var last = ((direction == "any")
-                    ? (topology.DirectionCount - 1)
-                    : first
-                );
-
-                if (first < 0) {
-                    return $"[world.match: '{direction}' is not a direction of '{board.Topology}']";
-                }
-                for (var walked = first; (walked <= last); walked++) {
-                    if (!ArenaBoards.TryReadRay(
-                        arena: arena,
-                        direction: walked,
-                        origin: origin,
-                        ray: out var ray,
-                        reason: out var rayReason,
-                        rowOrdinal: rowOrdinal,
-                        values: values,
-                        word: word
-                    )) {
-                        return $"[world.match: {rayReason}]";
-                    }
-
-                    lines.Add(item: $"direction {walked}: {Narrate(
-                        pattern: pattern,
-                        values: ray
-                    )}");
-                }
-            } else {
-                CompiledExpressionToken[]? expression = null;
-                var attributeOrdinal = -1;
-
-                if (
-                    (row.EffectiveDomain is StateDomain.KeysOf { Ordered: true } zone) &&
-                    (pattern.Source.Value is not null)
-                ) {
-                    if (!WorldFactsCompiler.TryCompilePatternValue(
-                        definition: Host.Definition,
-                        pattern: pattern.Source,
-                        tokenDomain: zone.Row.Value,
-                        ruleName: "world.match",
-                        tokens: out expression,
-                        reason: out var valueReason
-                    )) {
-                        return $"[world.match: {valueReason}]";
-                    }
-                } else if (row.EffectiveDomain is StateDomain.KeysOf { Ordered: true }) {
-                    if (
-                        (attribute is null) ||
-                        !arena.Catalog.TryResolve(
-                        handle: out var attributeHandle,
-                        lane: StateLane.Document,
-                        name: attribute
-                    )
-                    ) {
-                        return "[world.match: a zone source needs its attribute row]";
-                    }
-
-                    attributeOrdinal = attributeHandle.Ordinal;
-                }
-
-                var start = 0;
-
-                if (key is not null) {
-                    start = (arena.Keys.TryResolve(
-                        key: out var startKey,
-                        name: key
-                    )
-                        ? PatternOperand.StartPosition(
-                            arena: arena,
-                            key: startKey,
-                            rowOrdinal: rowOrdinal
-                        )
-                        : int.MaxValue
-                    );
-                }
-
-                var length = PatternOperand.ReadWord(
-                    attributeOrdinal: attributeOrdinal,
-                    kind: pattern.Source.Kind,
-                    reader: this,
-                    rowOrdinal: rowOrdinal,
-                    start: start,
-                    tokenExpression: expression,
-                    word: word
-                );
-
-                lines.Add(item: Narrate(
-                    pattern: pattern,
-                    values: word.AsSpan(
-                        length: length,
-                        start: 0
-                    )
-                ));
+                attributeOrdinal = attributeHandle.Ordinal;
             }
 
-            return $"[world.match: {patternName} over {rowName} | {string.Join(
-                separator: " | ",
-                values: lines
-            )}]";
+            var start = 0;
+
+            if (key is not null) {
+                start = (arena.Keys.TryResolve(
+                    key: out var startKey,
+                    name: key
+                )
+                    ? PatternOperand.StartPosition(
+                        arena: arena,
+                        key: startKey,
+                        rowOrdinal: rowOrdinal
+                    )
+                    : int.MaxValue
+                );
+            }
+
+            var length = PatternOperand.ReadWord(
+                attributeOrdinal: attributeOrdinal,
+                kind: pattern.Source.Kind,
+                reader: reader,
+                rowOrdinal: rowOrdinal,
+                start: start,
+                tokenExpression: expression,
+                word: word
+            );
+
+            lines.Add(item: Narrate(
+                pattern: pattern,
+                values: word.AsSpan(
+                    length: length,
+                    start: 0
+                )
+            ));
         }
+
+        return $"[world.match: {patternName} over {rowName} | {string.Join(
+            separator: " | ",
+            values: lines
+        )}]";
     }
 
     private static string Narrate(CompiledPattern pattern, ReadOnlySpan<long> values) {

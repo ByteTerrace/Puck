@@ -1,4 +1,5 @@
-// Replay covers deterministic contact with the port's relieved scenery, including a walking continuation.
+// Replay covers deterministic contact with the floor's relieved scenery (meadow.puck, lawn.puck), including a
+// walking continuation.
 schema: "puck.world.definition.v1"
 basis: "debug"
 documentId: "debug"
@@ -33,5 +34,21 @@ test "the meadow bank retains its relieved support through replay" {
     bodyPosition(body, 0, z) == -43
     bodyPosition(body, 0, y) > 1.98
     bodyPosition(body, 0, y) < 2.1
+  }
+}
+
+test "a lawn boulder stops a walk and replays its contact" {
+  when {
+    seat1: body.pose 4.42 0.04 -9 0 0 0 0
+    ticks 4
+    seat1: player.signal keyboard.w press
+    ticks 24
+    seat1: player.signal keyboard.w release
+    ticks 4
+  }
+  expect {
+    bodyPosition(body, 0, z) > -12
+    bodyPosition(body, 0, z) < -9.5
+    bodyPosition(body, 0, y) < 0.3
   }
 }

@@ -103,7 +103,7 @@ public sealed partial class WorldScopedReplayRuntime {
         foreach (var image in m_startBodies) {
             if ((m_server.Body(index: image.Index) is null) || (m_server.Population.Generation(index: image.Index) != image.Generation)) { throw new InvalidOperationException(message: "A scoped body was replaced; capture again."); }
         }
-        m_server.Arena.ValidateScope(image: m_start);
+        // RestoreScope checks the whole image before it changes a column.
         m_server.Arena.RestoreScope(image: m_start);
         RestoreRules();
         foreach (var image in m_startBodies) {
@@ -120,9 +120,9 @@ public sealed partial class WorldScopedReplayRuntime {
     /// <summary>Runs at the input boundary, before the normal mutation drain.</summary>
     public void BeforeTick() {
         try { BeforeTickCore(); } catch (InvalidOperationException exception) {
-            m_active = false;
-            StopInput();
+            ResetDrive();
             Write(key: "status", value: -1);
+            Write(key: "cursor", value: 0);
             m_server.Output.Narrate("replay.scope", $"[replay.scope: {Name} refused — {exception.Message}]");
         }
     }
@@ -135,14 +135,7 @@ public sealed partial class WorldScopedReplayRuntime {
             if (request == 4) {
                 if (m_start is null) { Capture(); }
             } else if (request is 2 or 3) {
-                m_active = false;
-                if (m_recording) {
-                    m_inputs.Clear(); m_hashes.Clear(); m_commands.Clear(); m_intents.Clear();
-                    m_recordHash = Fnv1aHash.Create(); m_inputHash = Fnv1aHash.Create();
-                    m_commandHash = Fnv1aHash.Create(); m_intentHash = Fnv1aHash.Create();
-                }
-                m_recording = false;
-                m_cursor = 0; m_inputCursor = 0; m_diverged = false;
+                ResetDrive();
                 Restore();
                 Write(key: "status", value: 0);
                 Write(key: "cursor", value: 0);
@@ -185,6 +178,20 @@ public sealed partial class WorldScopedReplayRuntime {
                     recorded.MeasuredHoldTicks, owner));
             }
         }
+    }
+
+    // Cancellation and refusal both leave a settled, checkpointable runtime. An interrupted first recording
+    // has no complete expectation to replay, whereas a previously completed tape remains reusable.
+    private void ResetDrive() {
+        m_active = false;
+        if (m_recording) {
+            m_inputs.Clear(); m_hashes.Clear(); m_commands.Clear(); m_intents.Clear();
+            m_recordHash = Fnv1aHash.Create(); m_inputHash = Fnv1aHash.Create();
+            m_commandHash = Fnv1aHash.Create(); m_intentHash = Fnv1aHash.Create();
+        }
+        m_recording = false;
+        m_cursor = 0; m_inputCursor = 0; m_diverged = false;
+        StopInput();
     }
 
     private string InputSource => ("$replay:" + Name);

@@ -101,7 +101,6 @@
     { "name": "player.camera", "bindable": true, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "player.camera.automatic", "bindable": true, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "player.camera.boom", "bindable": true, "audience": "anyone", "valueKind": "axis2d", "wireArgs": true },
-    { "name": "player.camera.clearance", "bindable": true, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "player.camera.reset", "bindable": true, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "player.camera.view", "bindable": true, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "player.claim", "bindable": true, "audience": "anyone", "valueKind": "axis1d", "wireArgs": false },

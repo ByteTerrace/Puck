@@ -119,7 +119,10 @@ unrelated rows, bodies, routes, keys and the world's clock running.
 ring/draw cursors, in the same arena. It rebinds captured column addresses to
 the selected rows when unrelated row growth moves storage; selected row capacities
 must still agree. Field, vector, timed and pool rows are
-refused. Compiled row write sets and body-effect targets select rule and interaction
+refused, and a scope is closed under derivation: a derived (`inverse`) board
+belongs to it exactly when both its input rows do, since a raw restore would
+leave a board outside the scope holding what the drive derived. The arena owns
+that rule (`StateArena.ScopeRefusals`); the validator asks it. Compiled row write sets and body-effect targets select rule and interaction
 latches; a group which writes scoped rows or bodies contributes all member latches
 and its progress. Body targets include nested effect arms, decision options,
 literal keys and compiled placement domains. A selected continuation with shared

@@ -156,7 +156,7 @@ public sealed class HostAdmissionLawTests {
 
         Assert.False(condition: HostAdmission.Wait("Puck.World.Tests", false, true, () => Sample(heavy: "Puck.World.Tests 11"), clock, clock.Advance, error, CancellationToken.None, Thresholds));
         Assert.Equal(expected: TimeSpan.FromHours(hours: 2), actual: clock.GetElapsedTime(startingTimestamp: 0));
-        Assert.Equal(expected: HostAdmission.HeavyTimeout, actual: TimeSpan.FromHours(hours: 2));
+        Assert.Equal(expected: HeavyLease.Timeout, actual: TimeSpan.FromHours(hours: 2));
     }
 
     private static string HostAdmissionReason(double ram) {

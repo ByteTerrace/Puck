@@ -16,11 +16,24 @@ namespace Puck.State;
 /// <param name="Kind">The encoding <paramref name="Value"/> carries.</param>
 /// <param name="IsForever">Whether the fact is positive infinity.</param>
 /// <param name="IsAbsent">Whether the operand named no cell.</param>
-public readonly record struct RuleFact(long Value, CellKind Kind, bool IsForever, bool IsAbsent = false) {
+/// <param name="IsFaulted">Whether computing the operand's address faulted (a dynamic key or ring age whose arithmetic
+/// failed): the read names no cell, as <paramref name="IsAbsent"/> says, but a gate or an expression reading it faults
+/// as arithmetic rather than answering an absence.</param>
+public readonly record struct RuleFact(long Value, CellKind Kind, bool IsForever, bool IsAbsent = false, bool IsFaulted = false) {
     /// <summary>Creates the no-cell fact in a cell encoding.</summary>
     /// <param name="kind">The encoding a finite reading of the same operand would carry.</param>
     public static RuleFact Absent(CellKind kind) => new(
         IsAbsent: true,
+        IsForever: false,
+        Kind: kind,
+        Value: 0L
+    );
+    /// <summary>Creates the fact of an operand whose address computation faulted. It is absent too, so a consumer that
+    /// answers only absences still refuses it rather than reading a number.</summary>
+    /// <param name="kind">The encoding a finite reading of the same operand would carry.</param>
+    public static RuleFact Faulted(CellKind kind) => new(
+        IsAbsent: true,
+        IsFaulted: true,
         IsForever: false,
         Kind: kind,
         Value: 0L

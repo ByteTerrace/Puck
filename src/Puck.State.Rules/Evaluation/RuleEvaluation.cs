@@ -50,8 +50,8 @@ public static class RuleEvaluation {
         ExpressionFault.Absent => "the read went through a dynamic key that named no cell (an empty zone's endpoint); answer the absence with 'isAbsent(...)' or '... ?? <fallback>'",
         _ => "the expression overflowed, divided by zero, left a function's domain, or produced an invalid stack result",
     };
-    /// <summary>Evaluates a compiled postfix gate. A conjunct that cannot answer reads false and names its fault, so
-    /// the caller reports it rather than letting the gate silently stop holding. A gate with no tokens always
+    /// <summary>Evaluates a compiled postfix gate. A conjunct that faults closes the whole gate, including under
+    /// negation, and names its fault for the caller to report. A gate with no tokens always
     /// holds.</summary>
     /// <param name="reader">The evaluation in flight.</param>
     /// <param name="gate">The compiled postfix gate.</param>
@@ -170,6 +170,13 @@ public static class RuleEvaluation {
                 fact: in right,
                 read: rightRead
             )} -> {Spell(value: holds)}");
+
+            // A failed comparison has no truth value to negate or combine. End here so every gate consumer,
+            // including ordinary rules, groups and conditional effects, observes the same closed verdict.
+            if (raised != ExpressionFault.None) {
+                fault = raised;
+                return false;
+            }
         }
 
         fault = raised;
@@ -186,7 +193,8 @@ public static class RuleEvaluation {
     /// <param name="kind">The encoding the read answers in.</param>
     /// <param name="fact">The fact, on success.</param>
     /// <param name="fault">Why the read did not answer, or <see cref="ExpressionFault.None"/>. An operand answering
-    /// the absent fact faults <see cref="ExpressionFault.Absent"/>; one answering <c>forever</c> does not fault, since
+    /// the absent fact faults <see cref="ExpressionFault.Absent"/>, and one whose address computation faulted
+    /// (<see cref="RuleFact.IsFaulted"/>) faults <see cref="ExpressionFault.Domain"/>; one answering <c>forever</c> does not fault, since
     /// a fact comparison answers it under infinity semantics. <see cref="ExpressionFault.Forever"/> comes only from an
     /// expression, whose numeric evaluation cannot read infinity.</param>
     /// <returns><see langword="true"/> when the source answered. An operand answering the absent or forever fact
@@ -198,9 +206,11 @@ public static class RuleEvaluation {
             ArgumentNullException.ThrowIfNull(argument: reader);
 
             fact = operand.Read(reader: reader);
-            fault = (fact.IsAbsent
-                ? ExpressionFault.Absent
-                : ExpressionFault.None
+            fault = (fact.IsFaulted
+                ? ExpressionFault.Domain
+                : (fact.IsAbsent
+                    ? ExpressionFault.Absent
+                    : ExpressionFault.None)
             );
 
             return true;

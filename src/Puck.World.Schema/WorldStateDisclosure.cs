@@ -131,20 +131,43 @@ public static class WorldStateDisclosure {
             rowOrdinal: ordinal
         ));
     }
-    /// <summary>Determines whether the recipient may read every cell a document row holds without asking per cell: the
-    /// row's own policy admits the recipient, and neither a cell policy nor a containing zone can withhold a cell.</summary>
+    /// <summary>Determines, from declarations alone, whether a document row can never withhold a cell from the
+    /// recipient: the row's own policy admits the recipient, the row declares no cell restriction
+    /// (<see cref="StateArena.DeclaresCellVisibility"/>), and no ordered zone containing it declares one or excludes
+    /// the recipient. Every door that answers a restricted row differently (a whole-row read or write, a
+    /// presentation binding, an observation's row list, a delta's row replacement) asks this one question, so its
+    /// answer never depends on which members are present or hidden now.</summary>
     /// <param name="arena">The live store and its declarations.</param>
     /// <param name="rowOrdinal">The row's catalog ordinal.</param>
     /// <param name="recipient">The recipient, or <see langword="null"/> for the public observer.</param>
-    /// <returns><see langword="true"/> when every cell of the row is readable; <see langword="false"/> when some cell
-    /// may be withheld and each must be asked.</returns>
+    /// <returns><see langword="true"/> when no cell of the row can be withheld from the recipient;
+    /// <see langword="false"/> when one can, or the ordinal names no row.</returns>
     public static bool ReadsWholeRow(StateArena arena, int rowOrdinal, Principal? recipient) {
         ArgumentNullException.ThrowIfNull(argument: arena);
 
-        return ((((uint)rowOrdinal) < ((uint)arena.Rows.Count)) &&
-            (arena.Catalog.ContainingZones(rowOrdinal: rowOrdinal).Count == 0) &&
-            !arena.HasCellVisibility(rowOrdinal: rowOrdinal) &&
-            new Observer(arena: arena, recipient: recipient).Allows(policy: arena.Rows[rowOrdinal].Visibility));
+        return new Observer(arena: arena, recipient: recipient).ReadsWhole(rowOrdinal: rowOrdinal);
+    }
+    /// <summary>Returns what one row withholds from the recipient, read from the live store.</summary>
+    /// <param name="arena">The live store and its declarations.</param>
+    /// <param name="rowOrdinal">The row's catalog ordinal.</param>
+    /// <param name="recipient">The recipient, or <see langword="null"/> for the public observer.</param>
+    /// <returns><see langword="null"/> when the row reads whole for the recipient (<see cref="ReadsWholeRow"/>);
+    /// otherwise the record, present whether zero or many cells are withheld now.</returns>
+    public static WorldWithheldRow? WithheldFrom(StateArena arena, int rowOrdinal, Principal? recipient) {
+        ArgumentNullException.ThrowIfNull(argument: arena);
+
+        var observer = new Observer(arena: arena, recipient: recipient);
+
+        if (observer.ReadsWhole(rowOrdinal: rowOrdinal)) { return null; }
+        var row = arena.Rows[rowOrdinal];
+        var rowReadable = observer.Allows(policy: row.Visibility);
+        var count = 0;
+        var cursor = 0;
+
+        while (arena.TryNextCell(rowOrdinal: rowOrdinal, cursor: ref cursor, key: out var key)) {
+            if (!rowReadable || !observer.CanRead(row: row, rowOrdinal: rowOrdinal, key: key)) { count++; }
+        }
+        return new WorldWithheldRow(Count: count, Policy: (row.Visibility?.Hidden ?? HiddenCells.Omit), WholeRow: !rowReadable);
     }
     /// <summary>Determines whether the recipient may read one cell of a named row, for a door that must answer a cell
     /// the recipient may not read exactly as it answers an absent one.</summary>
@@ -216,11 +239,10 @@ public static class WorldStateDisclosure {
                 continue;
             }
 
+            // Which rows cross is decided by declaration, never by whether a member is restricted now.
             if (
                 (row.Visibility is null) &&
-                !observer.AnyCellRestricted(
-                rowOrdinal: rowOrdinal
-            ) &&
+                !arena.DeclaresCellVisibility(rowOrdinal: rowOrdinal) &&
                 (presented?.Contains(item: row.Name.Value) != true)
             ) {
                 continue;
@@ -370,6 +392,10 @@ public static class WorldStateDisclosure {
                 continue;
             }
 
+            if (observer.ReadsWhole(rowOrdinal: ordinal)) {
+                continue;
+            }
+
             var rowReadable = observer.Allows(policy: row.Visibility);
             var cells = (row.Cells ?? []);
             var kept = new List<StateCell>(capacity: cells.Count);
@@ -392,29 +418,14 @@ public static class WorldStateDisclosure {
                 }
             }
 
-            if (
-                rowReadable &&
-                (kept.Count == cells.Count) &&
-                !observer.AnyCellWithheld(
-                row: row,
-                rowOrdinal: ordinal
-            )
-            ) {
-                continue;
-            }
-
             withheld[row.Name.Value] = new WorldWithheldRow(
                 Count: (cells.Count - kept.Count),
                 Policy: (row.Visibility?.Hidden ?? HiddenCells.Omit),
                 WholeRow: !rowReadable
             );
-            // The row's own draw and ring bookkeeping is a reading of the cells withheld from it, so it goes too.
-            rows[index] = (row with {
-                Cells = kept,
-                DrawCursor = 0L,
-                DrawnMasks = null,
-                HistoryCursor = 0L,
-            });
+            // A row that can withhold has one shape whether zero or many cells are withheld now: its storage and cursor
+            // bookkeeping is a reading of the cells withheld from it, so it goes too.
+            rows[index] = WithoutStorageMetadata(row: row) with { Cells = kept };
         }
 
         if (withheld.Count == 0) {
@@ -439,15 +450,26 @@ public static class WorldStateDisclosure {
             Withheld: withheld
         );
     }
+    /// <summary>Removes reservation, physical slot and cursor metadata that can reveal omitted membership, preserving
+    /// the declared or inferred domain; the kept cells then load into contiguous slots. A readback applies this even
+    /// when no current cell is withheld, so zero and nonzero hidden inventories have the same metadata shape.</summary>
+    /// <param name="row">The exported row.</param>
+    /// <returns>The row without storage metadata.</returns>
+    public static WorldStateRow WithoutStorageMetadata(WorldStateRow row) => row with {
+        Domain = row.Domain ?? row.InferDomain(),
+        CellSlots = null,
+        ReservedCapacity = null,
+        DrawCursor = 0L,
+        DrawnMasks = null,
+        HistoryCursor = 0L,
+    };
+
     /// <summary>Reads placement projections directly from the arena for one recipient, without exporting state rows.</summary>
     public static IReadOnlyList<WorldPlacement> PlacementProjection(WorldDefinition definition, StateArena arena, Principal? recipient, bool unrestricted = false) {
         var observer = new Observer(arena: arena, recipient: recipient, unrestricted: unrestricted);
 
-        bool Withheld(string name, string? key) {
-            if (!arena.Catalog.TryResolve(handle: out var row, lane: StateLane.Document, name: name)) { return false; }
-            if (key is null) { return (!observer.Allows(policy: arena.Rows[row.Ordinal].Visibility) || observer.AnyCellWithheld(row: arena.Rows[row.Ordinal], rowOrdinal: row.Ordinal)); }
-            return (!CellName.TryParse(candidate: key, name: out var cell, reason: out _) || !observer.CanRead(arena.Rows[row.Ordinal], row.Ordinal, (arena.Keys.TryResolve(key: out var interned, name: cell) ? interned : default)));
-        }
+        bool Withheld(string name, string? key) => (arena.Catalog.TryResolve(handle: out var row, lane: StateLane.Document, name: name) &&
+            !observer.Discloses(rowOrdinal: row.Ordinal, key: key));
         List<WorldPlacement>? result = null;
 
         for (var index = 0; (index < definition.Placements.Count); index++) {
@@ -660,10 +682,7 @@ public static class WorldStateDisclosure {
             )) {
                 continue;
             }
-            if (
-                !observer.AnyCellWithheld(row: row, rowOrdinal: rowOrdinal) &&
-                ((row.Visibility is null) || observer.Allows(policy: row.Visibility))
-            ) {
+            if (observer.ReadsWhole(rowOrdinal: rowOrdinal)) {
                 continue;
             }
             if (WorldStateDocumentValues.ReferencesRow(
@@ -733,43 +752,29 @@ public static class WorldStateDisclosure {
         public bool Allows(StateVisibility? policy) => (m_unrestricted || (policy is null) || policy.IsPublic ||
             WorldStateDisclosure.Allows(arena: m_arena, policy: policy, recipient: m_name ??= m_recipient?.Describe()));
         public bool ReadsRow(string name) => (m_arena.Catalog.TryResolve(handle: out var handle, lane: StateLane.Document, name: name) &&
-            Allows(policy: m_arena.Rows[handle.Ordinal].Visibility) && !AnyCellWithheld(row: m_arena.Rows[handle.Ordinal], rowOrdinal: handle.Ordinal));
-        public bool AnyCellRestricted(int rowOrdinal) {
-            var cursor = 0;
-
-            while (m_arena.TryNextCell(
-                cursor: ref cursor,
-                key: out var key,
-                rowOrdinal: rowOrdinal
-            )) {
-                if (m_arena.Visibility(
-                    key: key,
-                    rowOrdinal: rowOrdinal
-                ) is not null) {
-                    return true;
-                }
+            ReadsWhole(rowOrdinal: handle.Ordinal));
+        // The one policy question: whether a declaration on the row's path (its own policy, a cell policy its storage
+        // admits, a containing zone's) can withhold a cell from this recipient. Current members never enter it.
+        public bool ReadsWhole(int rowOrdinal) {
+            if (m_unrestricted) { return true; }
+            if ((((uint)rowOrdinal) >= ((uint)m_arena.Rows.Count)) || !Allows(policy: m_arena.Rows[rowOrdinal].Visibility) ||
+                m_arena.DeclaresCellVisibility(rowOrdinal: rowOrdinal)) {
+                return false;
             }
-
-            return false;
+            foreach (var zoneOrdinal in m_arena.Catalog.ContainingZones(rowOrdinal: rowOrdinal)) {
+                if (!Allows(policy: m_arena.Rows[zoneOrdinal].Visibility) || m_arena.DeclaresCellVisibility(rowOrdinal: zoneOrdinal)) { return false; }
+            }
+            return true;
         }
-        public bool AnyCellWithheld(StateRow row, int rowOrdinal) {
-            var cursor = 0;
+        // Whether a reading of one cell (the slot cell for a null key) shows the recipient what the live cell holds. In a
+        // row that can withhold, an absent cell answers as a withheld one, so the two never read apart.
+        public bool Discloses(int rowOrdinal, string? key) {
+            if (ReadsWhole(rowOrdinal: rowOrdinal)) { return true; }
 
-            while (m_arena.TryNextCell(
-                cursor: ref cursor,
-                key: out var key,
-                rowOrdinal: rowOrdinal
-            )) {
-                if (!CanRead(
-                    key: key,
-                    row: row,
-                    rowOrdinal: rowOrdinal
-                )) {
-                    return true;
-                }
-            }
-
-            return false;
+            return (CellName.TryParse(candidate: (key ?? StateRow.SlotKey.Value), name: out var name, reason: out _) &&
+                m_arena.Keys.TryResolve(key: out var interned, name: name) &&
+                m_arena.TryRead(rowOrdinal: rowOrdinal, key: interned, value: out _) &&
+                CanRead(row: m_arena.Rows[rowOrdinal], rowOrdinal: rowOrdinal, key: interned));
         }
         public bool CanRead(StateRow row, int rowOrdinal, CellKey key) {
             if (m_unrestricted) {

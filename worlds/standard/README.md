@@ -19,17 +19,26 @@ It imports the standard and refines it, so a world imports it in the standard's 
 its `walker` kit, look and prototype by id, or replaces it (the debug world's Moth, whose own controls refine the
 standard's in [`../debug/moth-controls.puck`](../debug/moth-controls.puck)).
 
+`motion.puck` authors the standard's body motion programs: `walk`, which both the walker and the Moth import, so a
+correction to it reaches every avatar that walks. An avatar's speeds, holds, turn and actions stay in its own kit; a
+world refines the program itself by declaring a `bodyMotionPrograms` row named `walk` in its own body.
+
 `skin.puck` also authors the standard's screen materials (`screenMaterials`): the display treatment a screen row or a
-creation face names by id (`material: "crt"`), the CRT among them. A screen's picture always fills its face; a
+creation face names by id (`material: crt`), the CRT among them. A screen's picture always fills its face; a
 material draws the display's pixel structure over it (scanlines, subpixel stripes, a vignette, a glint and a soft
-rounded edge), and a device's bezel is geometry it authors round the face.
+rounded edge), and a device's bezel is geometry it authors round the face. A material id is a module's name like a
+state row's: an aliased import qualifies it, and a host names one an import declares only when that import exports it
+under `bindings`, as `skin.puck`, `standard.puck` and `walker.puck` export `crt`.
 
 `inputs.puck` declares the shared semantic channels (`forward`, `strafe`, `turn`, the face axes, `jump`, `run`,
 `flight`, `rise`, `dash`, `interact`, `start`, `select`, `confirm`, `cancel`) the controls and the games bind; a world
 declares its own actions beside them (the debug world's `suit` and `noclip`). `quality.puck` authors the
 `world.quality low|medium|high` presets; until initial development is done every machine runs `high`. `skies.puck` is
 a library of sky and air presets (`clearDay`, `overcast`, `starryNight`, `polarNight`, `clearDayAir`,
-`overcastAir`) a world expands inside its `render.sky` and `render.atmosphere` blocks.
+`overcastAir`) a world expands inside its `render.sky` and `render.atmosphere` blocks, and the day cycle
+(`dayCycle`), which a world expands at the top of a fragment of its own: a state clock whose row holds the day's phase,
+and on it the `key` light's direction, colour and illuminance and a clear sky that turns to night
+(`worlds/debug/day.puck` is the worked example).
 
 `editor.puck` authors build mode: the `editor` section (the grid, snapping, editor-camera feel, the build toggle every
 resting page carries, the read-only label and the build bar) and the `editor` binding overlay, whose context row
@@ -43,6 +52,10 @@ Respawn, Suit, layout and jetpack controls live in
 the garden and the night field import in the standard's place; the debug world's
 Go and Tour pages, Places ring and gallery icons live in
 [`../debug/controls.puck`](../debug/controls.puck), which refines those.
+
+`styles.puck` is a library of cel styles (`celStyle`, `celHardStyle`, `continuousStyle`): a palette row names one
+as its own (`toon: celStyle`) and a world names one as the default every other material inherits
+(`render { toon: celStyle }`), which `world.toon` switches live.
 
 `terrain.puck` and `foliage.puck` are optional libraries. Foliage supplies
 `broadleafTree`, `mossyRock`, `grassTuft`, `sceneryPatch`, `sceneryScatter` and

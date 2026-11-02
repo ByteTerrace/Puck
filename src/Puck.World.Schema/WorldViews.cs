@@ -167,22 +167,11 @@ public sealed record WorldViewLayout(string Name, IReadOnlyList<WorldViewSlot> S
 /// any look input (a deflected look stick, a held orbit/steer) is free-look and the follow yields for as long as
 /// it lasts. Optional; absent is a still camera that goes only where look input sends it. Needs
 /// <see cref="WorldSeatYawReference.World"/> — a body-relative yaw already rides the body.</param>
-/// <param name="ClearanceMode">The author's tight-space behavior, <see cref="WorldCameraClearanceChoice.Fade"/> or
-/// <see cref="WorldCameraClearanceChoice.Cutaway"/>; players may override it.</param>
-/// <param name="MaxRise">The most the boom rises above the rig's own elevation, in radians, for each treatment.</param>
-/// <param name="EyeRadius">The full-size radius, in metres, of the sphere the chase eye keeps clear of geometry and, in
-/// cutaway, the body.</param>
-/// <param name="SurfaceSkin">The full-size nearest distance, in metres, the eased eye's centre comes to geometry along
-/// the boom: a sudden obstruction cuts the eye in to here at once, and the ease carries it the rest of the way.</param>
-/// <param name="CharacterFade">The full-size fade distances; absent, fade never dissolves the body and holds no
-/// minimum boom.</param>
 /// <param name="AutoFirstPerson">The automatic pull-in policy; absent, automatic pull-in is unavailable whatever a
 /// player or session asks.</param>
 /// <param name="Boom">Optional authored distance limits and input step for the interactive orbit.</param>
 public sealed record WorldSeatViewControl(WorldSeatYawReference YawReference, float MinPitch, float MaxPitch,
-    WorldCameraClearanceChoice ClearanceMode, WorldCameraClearanceRise MaxRise, float EyeRadius, float SurfaceSkin,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldSeatFollow? Follow = null,
-    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldCameraCharacterFade? CharacterFade = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldCameraAutoFirstPerson? AutoFirstPerson = null,
     WorldCameraBoom? Boom = null);
 /// <summary>Authored bounds for a seat's interactive orbit distance, in full-size metres.</summary>
@@ -238,6 +227,9 @@ public enum WorldSeatYawReference : byte {
 /// <see cref="Puck.Hosting.RenderGraphInstanceSet.MaxNestingDepth"/>. <see cref="NestingDepth"/> is what a reader
 /// resolves through.</param>
 /// <param name="Quality">Per-view render quality and tier floors; a row named * supplies the defaults.</param>
+/// <param name="ProgramsRaw">The named camera programs no camera or seat resolves through directly: the framings a
+/// <see cref="WorldCameraProgramOp.SelectProgram"/> or <see cref="WorldCameraProgramOp.Blend"/> names, such as the
+/// cases a seat rig selects between. <see cref="Programs"/> is what a reader resolves through.</param>
 public sealed record WorldViewDefaults(IReadOnlyList<WorldViewLayout>? Layouts = null,
     [property: System.Text.Json.Serialization.JsonPropertyName("seatRig"), System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldCameraProgram? SeatRigRaw = null,
     [property: System.Text.Json.Serialization.JsonPropertyName("seatControl"), System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldSeatViewControl? SeatControlRaw = null,
@@ -248,8 +240,14 @@ public sealed record WorldViewDefaults(IReadOnlyList<WorldViewLayout>? Layouts =
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? Root = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldViewPostPass>? Post = null,
     [property: System.Text.Json.Serialization.JsonPropertyName("nestingDepth"), System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] int? NestingDepthRaw = null,
-    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldViewQuality>? Quality = null) {
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldViewQuality>? Quality = null,
+    [property: System.Text.Json.Serialization.JsonPropertyName("programs"), System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldCameraProgram>? ProgramsRaw = null) {
     private readonly IReadOnlyList<WorldViewLayout> m_layouts = (Layouts ?? []);
+
+    /// <summary>Gets the named camera programs the section declares for selects and blends to name, or an empty list
+    /// where it authors none.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public IReadOnlyList<WorldCameraProgram> Programs => (ProgramsRaw ?? []);
 
     /// <summary>Gets how many screens deep the presentation of this world nests: a portal whose face shows another
     /// world renders that world's own screens, its portals included, recursively to this many levels, so two portals
@@ -278,10 +276,6 @@ public sealed record WorldViewDefaults(IReadOnlyList<WorldViewLayout>? Layouts =
             ]
         ),
         SeatControlRaw: new WorldSeatViewControl(
-            ClearanceMode: WorldCameraClearanceChoice.Fade,
-            MaxRise: new WorldCameraClearanceRise(Fade: 0f, Cutaway: 0f),
-            EyeRadius: 0f,
-            SurfaceSkin: 0f,
             MaxPitch: 0f,
             MinPitch: 0f,
             YawReference: WorldSeatYawReference.World

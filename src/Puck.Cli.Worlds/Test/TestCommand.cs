@@ -134,6 +134,11 @@ public static partial class TestCommand {
         // A leg is recorded for comparison whenever something compares it: another worker count, or a recording.
         var recorded = ((legs.Count > 1) || (legs[0].Workers is not null) || (record is not null) || (compare is not null));
 
+        // A run of several worlds is a sweep of World processes at several GB each, so it holds the machine's heavy lease; a single world
+        // stays unleased. A --workers sweep re-runs the same worlds one count after another, never beside each other, so its legs add no
+        // concurrency and do not count.
+        using var heavy = ((worlds.Count > 1) ? AcquireHeavy(path: path, repositoryRoot: repositoryRoot, worlds: worlds.Count) : null);
+
         // Each worker count runs every scenario before the next count starts, so a count's wall time is its own.
         for (var legIndex = 0; (legIndex < legs.Count); legIndex++) {
             var leg = legs[legIndex];
@@ -201,6 +206,16 @@ public static partial class TestCommand {
         }
 
         return 0;
+    }
+    // Holds the shared heavy lease (HeavyLease) and says so: the lease prints its own line while it waits, and this one when it is held.
+    private static CliLease AcquireHeavy(string path, string repositoryRoot, int worlds) {
+        var started = Stopwatch.GetTimestamp();
+        var lease = HeavyLease.Acquire(clock: TimeProvider.System, holder: $"puck test {Path.GetFileName(path: path)}", repositoryRoot: repositoryRoot);
+
+        Console.WriteLine(value: string.Create(provider: CultureInfo.InvariantCulture,
+            handler: $"test: holding the heavy lease as lane {CliLease.LaneOf(checkout: repositoryRoot)} for {worlds} worlds (waited {Stopwatch.GetElapsedTime(startingTimestamp: started).TotalSeconds:F1} s)"));
+
+        return lease;
     }
     // The authored run supplies verdicts; reproduction replays captured input inside its worker.
     private static int RunWorld(TestWorld test, string worldDirectory, string leg, TextWriter output, TextWriter error, bool reproduce, out int boots, out ulong ticks) {

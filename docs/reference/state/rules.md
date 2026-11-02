@@ -252,8 +252,9 @@ Step by step:
 1. **Select live zones.** Every `$zones[…]` spelling in the rule resolves to a
    row. If any selects nothing, the gate reads closed without being consulted
    and nothing is reported.
-1. **Test the gate.** A conjunct that can't evaluate reads false and is
-   reported, so you can always see why a gate stopped holding.
+1. **Test the gate.** A conjunct that faults closes the whole gate and is
+   reported as `Arithmetic`. Negation never turns a fault into true, and an
+   `or` cannot recover it. An operand skipped by short-circuiting does not fault.
 1. **Check the mode.** The latch records whether the gate held. A `Level` rule
    fires whenever the gate holds; an `Edge` rule fires only when the previous
    evaluation of the same binding didn't hold.

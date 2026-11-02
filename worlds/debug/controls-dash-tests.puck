@@ -4,6 +4,8 @@ schema: "puck.world.definition.v1"
 basis: "avatars/moth"
 documentId: "controls-dash-tests"
 
+import "moth-controls"
+
 prototypes {
   prototype "burst-wall" {
     document {
