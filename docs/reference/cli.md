@@ -775,8 +775,6 @@ The [shader reference](shaders.md#shader-pipelines-and-live-development)
 owns the source-language, resource and toolchain contracts.
 ## `puck affected`—the checks a change needs
 
-While the debug world is the one live world, the fixtures this verb reads by default are quarantined at their repository paths under `experimental/`, and it is not run until the owner calls for qualification ([quarantined gates](../plans/open-items.md#quarantined-gates)).
-
 `puck affected` reads the working tree's changes against a base (`--since`,
 `HEAD` by default, so only uncommitted work) and names what those changes can
 break, and nothing wider. `--merge-base <revision>` takes the base as the merge
@@ -955,11 +953,10 @@ and named (see [Conventions](#conventions)).
 
 ## `puck gate`—the change-scoped gate
 
-While the debug world is the one live world, the fixtures this verb reads by default are quarantined at their repository paths under `experimental/`, and it is not run until the owner calls for qualification ([quarantined gates](../plans/open-items.md#quarantined-gates)).
-
 `puck gate` is the batch qualification for a branch. It reads the change
-against the merge base of `HEAD` and `--merge-base` (default
-`origin/features/gfx-pipeline`). The plan runs serially in this order:
+against the merge base of `HEAD` and `--merge-base`, which is required:
+the branch the change lands on is the caller's to name, since no default
+could know it. The plan runs serially in this order:
 
 1. `locks`: `puck locks --check`, run by the gate's own CLI before anything
    builds: `dotnet restore Puck.slnx --locked-mode --force`, reporting by name
@@ -1267,193 +1264,42 @@ cancelled after cleanup.
 
 ## `puck canary`—real-World behavioral proofs
 
-While the debug world is the one live world, the fixtures this verb reads by default are quarantined at their repository paths under `experimental/`, and it is not run until the owner calls for qualification ([quarantined gates](../plans/open-items.md#quarantined-gates)).
+While the debug world is the one live world, the canary fixtures are quarantined under
+`experimental/` apart from `tests/Puck.World.Canaries/self-update`, and the verb is
+not run until the owner calls for qualification
+([quarantined gates](../plans/open-items.md#quarantined-gates)).
 
 `puck canary` is deliberately narrow: it runs deterministic stdin-driven
 behavioral proofs that fit a strict transcript vocabulary. Every manifest owns
 a positive leg and an executable discriminating leg; both start from fresh
 state, and the positive observation must turn red under the discriminator while
 the declared opposite observation holds. The runner resolves one `Puck.World`
-build for the checkout's current sources, building it only when no earlier run
-has, and runs every leg against that exact artifact. The build never goes into
-the projects' `bin` directories (see [where the World artifact is
-built](#where-the-world-artifact-is-built)). `--world-artifact <dll>` runs every
-leg on the named entry assembly instead, such as a published package's, and
-builds nothing. `--debug-layers` boots the World of every leg that names a
-backend, windowed or offscreen, with `--debug-layers`, its backend's basic validation
-layer, and then fails any such leg
-whose stderr holds a validation message, naming the first: a
-`[vulkan-debug] validation` line or any `[d3d12-debug]` line, a teardown
-live-object report included. The Vulkan loader's `general` notices do not
-count, and the Direct3D 12 drain never prints the messages the layer raises
-by design, a pipeline-library miss and the full level's startup notice. A leg must also say its backend's layer is
-live: a Vulkan World prints `[vulkan] validation layer live` and a Direct3D 12
-World `[d3d12] debug layer live`. A leg that never prints its backend's live
-line, or prints `[vulkan] validation layer requested but not live` or
-`[d3d12] debug layer requested but not loaded`, fails, since nothing validated
-it. The runner keeps stdout and stderr
-separate, pins BOM-less UTF-8 stdin, closes the pipe, drains both streams,
-checks the absolute `--world` boot-origin line, enforces per-leg and
-whole-suite budgets, and kills the process tree on timeout.
+build for the checkout's current sources and runs every leg against that exact
+artifact (see [where the World artifact is built](#where-the-world-artifact-is-built));
+`--world-artifact <dll>` runs every leg on the named entry assembly instead and
+builds nothing. `--debug-layers` boots every leg that names a backend with its
+backend's validation layer and fails a leg whose stderr holds a validation
+message or never says the layer is live. The runner keeps stdout and stderr
+separate, closes stdin after the script, adds `wire.errors` and `quit` after it,
+enforces per-leg and whole-suite budgets, and kills the process tree on timeout.
+A leg that cannot exercise its environment (no usable device, a missing shader
+tool) is **unsupported**, not failed, and a selection with an unsupported proof
+exits 2. A script whose timing matters states it with `world.wait`.
 
-A leg lasts as long as its script. The runner adds two lines after the
-authored script: `wire.errors`, whose exact response count it checks, and
-`quit`, which ends the World once everything queued ahead of it has run. The
-manifest's `timeoutSeconds` is therefore not how long a leg runs. It is the
-ceiling at which the runner kills a leg that has hung, from 1 to 60 seconds
-(90 for a headless leg, 240 for a federated leg). Every World the runner starts
-also gets
-`--exit-after-seconds` at that ceiling, so a World the runner can no longer
-kill stops on its own. A companion authority gets its client's ceiling plus
-fifteen seconds, so it outlasts its client.
-
-The World runs every script line up to the first `world.wait` before its first
-tick. The line after a `world.wait` runs before the next tick. So a script
-whose timing matters states it with `world.wait`, and the result doesn't
-depend on how busy the machine is.
-
-The first Ctrl+C stops the run. The runner kills every World process it
-started, starts no further leg, and exits with code 2. A leg that fails with
-an exception stops the run the same way. The runner waits for the other legs'
-processes to die before it reports the failure.
+The manifest format (boot shapes, relaunch, packages, federated authorities,
+assertions and their vocabulary) is owned by the loader in
+`src/Puck.Cli.Harness/Canary`, which `puck canary --list` runs strictly over any
+manifest without building or booting. Read the loader and its laws, not a copy
+of them here.
 
 Legs run concurrently under two bounds. `--jobs` bounds the World processes
-running at once; the default is the logical processor count. A leg holds one
-of them for each process it runs: two for a companion-authority leg, one for
-each listener in an `authorities` leg. `--gpu-jobs` bounds the legs on the GPU
-at once, a windowed or offscreen leg or one that requires `gpu`; the default
-is 4. Every leg runs in its own run directory, state directory and loopback
-endpoints, so legs side by side share nothing they write. A manifest that
-declares `"exclusive": true` runs each of its legs alone, before every other
-leg; a proof says so when what it observes depends on how busy the machine
-is, as `four-corners-sharded` does, whose five processes keep independent
-wall clocks that its crossing must line up. Otherwise legs start in authored
-order as their bounds allow, a leg that does not fit yet never holding back a
-smaller one behind it. Each leg prints one line with its wall time as it ends
-(`canary: [12/332] pipeline-ink on vulkan positive held in 9.4s`), each
-proof's report prints whole and in authored order, and the closing `FAIL` line
-names the failed proofs in authored order. `--jobs 1 --gpu-jobs 1` runs the
-legs one at a time.
-
-After the last proof the runner prints what the run started and how its legs
-ended: the World boots, the processes it started for legs (World, stub
-launcher, and `shaders package`), whether it built `Puck.World`, how many
-legs ended at their script's `quit`, at their timeout, or otherwise, and the
-legs' summed time against the run's wall time.
-
-A `bootShape: "stub"` manifest runs its leg through `Puck.Launcher.Stub` from a
-leg-private, disposable `<run>/install/` tree, never the shared build path,
-and observes two successive process launches rather than one—the
-`self-update` canary is the only user today.
-
-A leg that runs one World process can declare a `relaunch`: a `script`, its
-own `commands`, and optionally a `world` file name. After the first process
-ends, the runner boots the World again under the same state directory. That
-boot runs on the named document in the leg's run directory, which the first
-script writes with `world.save {run}/<name>`, or, with no `world`, on the leg's
-own world again. The second boot runs its script with the
-same runner-owned ending. Each boot's commands are accounted against its own
-process, and each boot gets the exit, timeout and boot-origin checks.
-Assertions read both boots' streams in order, and captures from either land in
-the one run directory. The leg's budget counts both boots. `pipeline-override`
-uses it to prove that a committed value survives an exit, and `portal-walk` to
-walk the same crossing a second time with reconstruction off.
-
-A single-process leg can set `runSchedule: true` to arm the world document's
-existing command schedule. The runner passes `--schedule-dir {run}/schedule`,
-which retains the submission manifest and state exports with the capture
-evidence. A relaunch arms its document's schedule under `{run}/schedule-relaunch`.
-It may name a
-repository-relative `sourceWorld` fixture instead of a saved `world`; the two
-are mutually exclusive. This is opt-in and takes no companion authority or stub
-boot. Scheduled mutations submitted at tick N apply during N+1; a capture
-authored at N+1 is armed after that step and before its first render.
-
-A leg that runs one World process can also declare a `package`: a `source`, a
-file in the repository resolved from the canary's directory, so canaries can
-share one fixture; an `output`, a bare directory name; and an optional
-`alter`, a logical path inside the package. The runner packages each source
-once per run, however many legs, backends, and manifests name it: it copies
-the files of the directory holding the source into a scratch directory,
-packages the copied source with its own `shaders package`, and deletes the
-copy. Before a leg's first boot it copies that package to `{run}/<output>`, so
-a script names a relocated package whose source tree is gone. With `alter`, the
-runner then appends a line to that file of the leg's own copy, so its pin no
-longer holds. A package the verb cannot
-build because a shader tool is missing makes the leg unsupported; any other
-failure is an infrastructure failure, with the verb's output kept in
-`{run}/package.log`. `pipeline-package` and `no-device-compile` use it.
-
-A leg that sets `hideShaderCompiler` boots its World, and a relaunch, with every
-directory holding `dxc` removed from the search path, while the runner's own
-package build still sees it. A pipeline source with no package in the World's
-[package store](shaders.md#the-builds-package-store) cannot compile there and
-reports `unsupported`, which such a leg observes rather than setting aside as
-an environment it cannot exercise. `no-device-compile` uses it.
-
-A `bootShape: "offscreen"` manifest boots a world that authors
-`host.presentation: offscreen`: a real GPU device and no window. The runner
-passes no `--headless` value, which would override that shape, and runs every
-leg once per backend with `--backend`. The manifest must list `backends` as
-exactly `vulkan` and `directx` and declare the `gpu` requirement, so it is never
-automatic. It reports one proof per backend, as `<id> on <backend>`, and the
-manifest holds only when both did. A `bootShape: "windowed"` manifest may list
-the same `backends`, under the same rules: it then boots each leg windowed once per
-backend with `--backend`. No other shape reads `backends`.
-
-`puck canary --backend vulkan` or `--backend directx` runs every proof that
-lists `backends` on the named backend alone, for a per-change GPU check on one
-backend. Omitted, both run. Every other proof is unaffected: a headless or stub
-leg, and a windowed leg whose manifest lists no `backends`, boot once naming no
-backend, as they always do. The plan (`canary plan: backend-declaring proofs
-run on vulkan only (--backend vulkan), not on directx.`), the selection line
-and the final `PASS` or `FAIL` line name the backends that ran, so a run on one
-backend never reads as a run on both. The option refuses any other value by
-name. It is refused with `--merge`, because the merge gate holds both
-backends, and with `--list`, which runs nothing.
-The `pipeline-feedback`, `pipeline-ink`, `pipeline-edit`, `pipeline-supersede`,
-`pipeline-shapes`, `pipeline-resize`, `pipeline-counters`, `pipeline-override`, `pipeline-package`, `pipeline-budget`, `pipeline-churn`, `pipeline-fault`, `pipeline-geometry` and `pipeline-echo` canaries use this shape to test shader
-pipelines, and `source-conversion` uses it to run the shipped image-source
-conversion kernels; the [World guide](../../src/Puck.World/README.md#shader-pipelines)
-covers the `pipeline.wait` phases their scripts use.
-
-A leg that cannot exercise its environment is **unsupported**, not failed. The
-runner recognizes three announcements. The first is a World that exits 2 after
-printing `[world.host: unsupported: …]`, because the selected backend has no
-usable device on this host or the operating system does not offer it. The
-second is a `[pipeline: <name> unsupported: …]` or
-`[pipeline: <name> wait <phase> unsupported: …]` line, printed when a shader
-tool such as DXC is missing. The proof then reports `UNSUPPORTED` instead of a
-verdict. Because an offscreen proof needs every selected backend, the
-selection is not green: the run exits 2.
-
-A manifest declaring the `audio-output` requirement gets a third check: its
-own `[audio.state: device=… fault=…]` echo. `device=unsupported` (the platform
-offers no render backend at all) and `device=silent` naming a fault starting
-`render endpoint could not be opened: …` (a render backend exists but this
-machine has no default render endpoint to open) are both read as the machine
-categorically lacking audio hardware, from the World's own deterministic
-report rather than a separate host probe, and report `UNSUPPORTED` the same
-way a missing GPU or shader tool does. A device that opened but produced no
-signal (`device=playing`) is a real defect and is judged, never excused. The
-`voice-babble` canary declares `audio-output` because its assertions read
-`audio.state`'s `peak`.
-
-A World that cannot bind its listen endpoint prints the same
-`[world.host: unsupported: quic listener <endpoint> unavailable: …]` form and
-exit code, but the runner reports that leg as an infrastructure failure, not as
-unsupported. Every endpoint a canary World listens on is one the runner picked,
-so a refused bind means the port was taken after the runner probed it. That is
-a fault in the run, not a capability the machine lacks. QUIC is a prerequisite
-of the machine the runner runs on, not a requirement a manifest declares. The
-run still exits 2.
-
-Every leg whose script arms `pipeline.wait` also gets these runner checks:
-each armed wait reports exactly one outcome, and no outcome is `timed out`.
-Each outcome is listed by instance and phase, such as
-`pipeline.wait feedback submitted 2: reached`, so a stalled leg names the phase
-it stopped at. `reached` and `failed` outcomes are observations for the
-manifest's own assertions.
+running at once; the default is the logical processor count. `--gpu-jobs`
+bounds the legs on the GPU at once, a windowed or offscreen leg or one that
+requires `gpu`; the default is 4. Every leg runs in its own run directory,
+state directory and loopback endpoints, so legs side by side share nothing they
+write. A manifest that declares `"exclusive": true` runs each of its legs alone,
+before every other leg. The first Ctrl+C kills every World process the runner
+started, starts no further leg, and exits with code 2.
 
 ```text
 puck canary                         run the automatic set (headless, no environmental requirements)
@@ -1491,127 +1337,20 @@ the builds, and the summed per-leg timeouts. Every value is a count of the
 manifests, so the output is the same on every machine, and a GPU selection can
 be costed on a machine without a GPU.
 
-A selection with an offscreen or windowed proof on a named backend warms the
-engine's pipeline cache before any leg starts. The runner boots the first
-offscreen proof whose positive leg is one plain World process, once per
-backend those proofs boot, into one state directory: each boot waits for the
-engine to be ready, captures one frame (`<backend>-encode.png`, read back
-through the display encode, so no leg's first capture builds the encode's
-pipeline), prints its `pipeline-cache.<backend>` counts, and quits,
-under a 180-second timeout of its own (`CanaryCommand.WarmSeconds`). Every
-offscreen and windowed leg then starts with a copy of that `pipeline-cache`
-directory in its fresh state directory, so no leg builds the engine's
-pipelines on a cold driver inside its own timeout. The shader compiler's
-`pipelines` cache is not copied, so a leg that observes a compile still
-compiles. `--plan` counts the warm boots and their timeouts in the World boots
-and the leg budget, and the run's closing counts report how many seeded legs
-exited with the cache byte for byte as they received it: a pipeline the cache
-did not answer is written back to it, so an unchanged cache means every
-pipeline the leg created was a hit. A warm boot that times out, exits nonzero,
-never narrates the engine ready, never lands its capture, or prints no counts
-fails the selection with exit 2, naming its backend, before any leg starts.
-
 The selection forms are mutually exclusive and every execution selection must
-be nonempty. `--jobs` and `--gpu-jobs` combine with any of them, `--plan` with any but `--list`, and `--backend` with any but `--merge` and `--list`. Manifest tokens are case-sensitive. Every non-comment script
-command declares `accepted` or intentionally expected `refused`, bound to its
-verb and occurrence; an accepted claim may add `"stream": "stderr"` to expect
-its confirmation there instead of stdout—the shape server narration
-(`[world.grant: …]`, `[world.revoke: …]`) always uses regardless of
-accept/refuse, unlike an ordinary accepted command's stdout read-back.
-The runner pairs a verb's answers with its occurrences in order: the World
-writes each answer as one [console record](commands.md), whose lines after the
-first are indented, so an unindented line naming the verb opens its next
-answer. A multi-line answer counts once however the two streams interleave,
-and two identical answers in a row count twice. An answer names the verb its
-opening token names, or the longest claimed verb that token extends by a dot
-(`[world.state.row 'a' …]` answers `world.state`).
-Assertions cover stream-specific exact/contained lines, verb/occurrence/
-exact-cardinality responses, ordered sequences of responses (`sequence`) and
-of lines (`lines`: each listed line matches, exactly or as contained text, past
-the previous one's match), named response field
-extraction (from the response's first line, or with `"line"` from the first
-indented line of its record that starts with that text, past the first that
-starts with the text an `"after"` names; colonless `key=value` rows retain every
-named field, including a field named by the prefix itself; a `"line"` naming a whole
-counter kind reads that `<kind> <value>` line's value as the field the kind
-names), equality/inequality, strict ordering of two extracted numbers
-(`greater`: left above right), inclusive bounds, minimum margins,
-byte-level file equality/inequality (`filesDiffer`), per-channel bounds over a
-region of one capture (`imageRegion`), a capture's mean difference from a
-box-filtered reference over a region (`imageDifference`), and image agreement
-between two captured frames (`framesAgree`, stating `agree` explicitly—
-`RgbaFrameDifference` counts the pixels that moved by at least 2 LSB; `CanaryFrameNoise` compares
-that against a 64-pixel noise budget). Two live windowed captures of identical
-simulation state are never bit-equal: silhouette shading carries ±1-LSB
-variance, so a byte comparison of two live frames reports a difference on
-roughly one run in three. A frame proof therefore states `framesAgree`, never
-`filesDiffer`, over a `.png` pair; `filesDiffer` remains the right shape for a
-file whose bytes really are the claim. `puck parity` judges its frames with a
-different measure: per-tile deltas against the thresholds its contract sets
-for each station.
-An `imageRegion` names a run-relative `capture`, its expected `extent`
-(`[width, height]`, since a claim about a different image decides nothing), a
-normalized `region` (`[left, top, right, bottom]`; a pixel belongs to it when its
-center lies inside), `reduce` (`every` pixel or the per-channel `mean`), a
-`minimum` and/or `maximum` RGBA bound in normalized channel values, a
-`toleranceCodes` widening in 8-bit codes, and an explicit `holds`. Bounds come
-from the author's arithmetic, never from a recorded run. A missing capture, a
-wrong extent, or a region with no pixel center fails in either direction.
-An `imageDifference` names a run-relative `capture`, its `extent`, a run-relative
-`reference` whose extent is a whole multiple of the capture's on both axes, a
-normalized `region`, `maximumMeanCodes` and an explicit `holds`. The reference is
-box-filtered down to the capture's extent; each region pixel's difference is the
-mean of its absolute red, green and blue differences in 8-bit codes, and the claim
-holds when their mean is at most `maximumMeanCodes` (0 demands every pixel equal).
-The verdict prints the measured mean and the largest pixel difference. A missing
-capture or reference, a wrong extent, or a reference that is no whole multiple
-fails in either direction.
-A leg's `world` is a repository-relative `.world.json` document or `.puck`
-source; a leg booting a composition source may name the declared world it boots
-with `entry`, passed to the World as `--entry`. A manifest may start a companion authority
-world, pass its allocated endpoint through `connect`, and use `{run}` in scripts
-and assertions for per-leg capture paths. The companion boots headless, so a
-proof with `backends` may start one and boots its own World once per backend. A
-companion that is a composition source is compiled where it stands, every world
-it declares is staged together into the leg's run directory, and the companion
-boots the world the leg's `entry` names, else the source's declared entry; a
-client beside it boots the source itself and must `connect`. There are no regex programs, loops,
-callbacks, conditionals, shell, or embedded scripts.
+be nonempty. `--jobs` and `--gpu-jobs` combine with any of them, `--plan` with
+any but `--list`, and `--backend` with any but `--merge` and `--list`.
+`--backend vulkan` or `--backend directx` runs every backend-declaring proof on
+that backend alone; omitted, both run. A selection with an offscreen or windowed
+proof first warms the engine's pipeline cache once per backend
+(`CanaryCommand.WarmSeconds`), so no leg builds the engine's pipelines on a cold
+driver inside its own timeout; a warm boot that fails fails the selection with
+exit 2.
+
 Exit codes are 0 for all proofs held, 1 for an observed proof failure, and 2 for
 usage, manifest, build, or infrastructure refusal, including an unsupported
 environment.
 
-A leg may instead declare `authorities`: an array of `{id, world, script}`
-naming at least two listeners, none dialing out—the N-ary generalization of
-the singular `authorityWorld`/`connect` companion pair above, mutually
-exclusive with it. Every entry gets its own loopback endpoint and generated
-federation identity. The runner picks each endpoint before the entries boot, by
-binding a UDP socket to a free port (QUIC runs over UDP), because each entry's
-document names its own endpoint as `host.authority`. The identity is pinned into every other entry's
-admission rows the same way a two-process leg's companion is; the entries
-launch concurrently and run to completion before any assertion reads a
-transcript. Each entry keeps serving the others after its own script ends:
-the runner sends `quit` to every entry together, once each one has answered
-its final `wire.errors` or exited. A companion authority is likewise sent
-`quit` when its client's run ends, and is killed only if it hasn't exited
-within ten seconds. Exactly one entry's `world`/`script` must equal the leg's
-own—the entry an assertion with no `authority` selector reads by default—and
-a `line`/`response`/`sequence` assertion may add `"authority": "<id>"` to read
-a different entry's transcript instead. A federated leg's `timeoutSeconds`
-ceiling is wider (concurrently-spawned processes on a shared machine see real
-spawn/handshake variance a single process does not).
-`tests/Puck.World.Canaries/four-corners-sharded` is `authorities`'
-first user—five real processes (four ground worlds plus the floating
-island), one human-driven body ringing all four ground authorities. Not yet
-expressible in that same canary, owed to future widening rather than a
-runner limitation: vertical/island crossing, retained dual-stick camera and
-movement control across a handoff, autonomous producer-driven travellers,
-derived diagonal corner peers, and a cross-authority contact-pair settling
-observation. A killed or mispointed authority turning the corresponding
-transfer/address observation red is out of scope for any two-leg manifest
-by the format's own rule (a manifest is exactly `positive`/`discriminating`);
-a Silo-hosted (rather than `dotnet run`) authority entry is a documented
-future transport arm, not a reshape of `authorities`' current members.
 
 ### Where the World artifact is built
 
@@ -1708,7 +1447,7 @@ build goes to the store, a branch can run these verbs from its own build output:
 
 ```text
 dotnet build src/Puck.Cli -c Release
-dotnet src/Puck.Cli/bin/Release/net11.0/Puck.Cli.dll canary pipeline-feedback pipeline-ink pipeline-edit pipeline-supersede pipeline-shapes pipeline-resize pipeline-counters pipeline-override pipeline-package pipeline-budget pipeline-churn pipeline-fault pipeline-geometry pipeline-echo
+dotnet src/Puck.Cli/bin/Release/net11.0/Puck.Cli.dll canary self-update
 ```
 
 ---
@@ -1747,8 +1486,6 @@ starting inventories and incomplete persisted hash tapes are refused by name.
 The other board-room files are `go-tests.puck` and
 `reversi-tests.puck` beside it; run each file with the same flags. Live scope
 control is [`replay.scope`](state/worlds.md#hashes-checkpoints-and-replay).
-
-While the debug world is the one live world, the fixtures this verb reads by default are quarantined at their repository paths under `experimental/`, and it is not run until the owner calls for qualification ([quarantined gates](../plans/open-items.md#quarantined-gates)).
 
 A test world carries its own test. Its `schedule` section says what command to
 submit and at exactly which simulation tick, acting as which seat; its
@@ -2224,11 +1961,8 @@ not parity. A per-change check on one backend is
 
 ## `puck counters`—work-counter collector
 
-While the debug world is the one live world, the fixtures this verb reads by default are quarantined at their repository paths under `experimental/`, and it is not run until the owner calls for qualification ([quarantined gates](../plans/open-items.md#quarantined-gates)).
-
 `puck counters` reads the engine's deterministic work counts from a real World
 run, so a performance change can be judged by counted work rather than by time.
-`puck bench` stays the only tool that measures wall-clock time.
 
 ```text
 puck counters [--world <file>] [--script <file>] [--output <file>]
@@ -3182,16 +2916,11 @@ puck bench world path/to/world.puck
 
 ### `puck bench startup`
 
-While the debug world is the one live world, the fixtures this verb reads by default are quarantined at their repository paths under `experimental/`, and it is not run until the owner calls for qualification ([quarantined gates](../plans/open-items.md#quarantined-gates)).
-
 Measures the actual World executable in fresh processes, serially. Build World
 in Release first; the benchmark never builds inside a sample. With no world
-arguments it runs a representative corpus: overworld, Moth courtyard,
-Backgammon, Reversi, the three parlor games, the complete game host fixtures
-under `experimental/tests/Puck.World.Fixtures`, and the Jump, Kart, and Dive canary
-hosts. Most other files under `Assets/worlds/games` are modules that need a
-host; they cannot be benchmarked by launching the module alone. Explicit paths
-select another corpus:
+arguments it measures `worlds/debug`. A module that needs a host cannot be
+benchmarked by launching it alone. Explicit source, package or document
+arguments select another workload:
 
 ```sh
 puck bench startup --samples 3
@@ -4255,8 +3984,6 @@ matches its project (or was recorded); 1 drift was found or the restore failed;
 
 
 ## `puck baselines`—test baselines
-
-While the debug world is the one live world, the fixtures this verb reads by default are quarantined at their repository paths under `experimental/`, and it is not run until the owner calls for qualification ([quarantined gates](../plans/open-items.md#quarantined-gates)).
 
 A committed test baseline is recorded by this verb and only compared by its test. Every run of an owning test
 writes the fresh copy of each record it compares against to `records/<artifact>` beside its assembly

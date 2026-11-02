@@ -254,13 +254,15 @@ A lane is ready when it meets its own focused checks
 touched, its commit body says what it ran to show the change working, and it has
 merged the integration tip. A ready lane joins the integration lane's next batch
 and is held for nothing else: not another lane, not its review. The integration
-lane merges the batch, builds what the merge touched, runs the batch's sweep and
-bisects a red result; the lead fast-forwards the integration branch to the green
-head. "What the merge touched" includes what consumes it:
+lane merges the batch, builds what the merge touched, runs what the batch
+changed and looks into a red result; the lead fast-forwards the integration
+branch to the head. A test or sweep that failed or went unrun does not by itself
+block integration while the campaign lifts test requirements. "What the merge
+touched" includes what consumes it:
 - a change to a shader, interface or generated header builds `Puck.slnx`, test projects included;
 - a change that adds a project reference to a packable project (`IsPackable` in its project file) runs `puck nuget pack --output <scratch> --no-build` after a solution build, as CI's artifact job does: a reference to a non-packable project builds cleanly and fails only at packing;
-- a change to a world document runs the shipped-source suites (`Puck.World.Transpiler.Tests`, `Puck.Cli.Worlds.Tests`) and shows itself in the sweep;
-- a change to simulation state, maths or determinism also runs the `worlds/debug/*-tests.puck` files it touches with `--reproduce`;
+- a change to a world document is shown by booting the world; the shipped-source suites (`Puck.World.Transpiler.Tests`, `Puck.Cli.Worlds.Tests`) are an optional technique for it;
+- a change to simulation state, maths or determinism can run the `worlds/debug/*-tests.puck` files it touches with `--reproduce`, which shows two runs agree;
 - every check runs from a CLI and test binaries rebuilt after the merge, never stale copies.
 
 A merge is not finished until every line of the lane's Found section, and every

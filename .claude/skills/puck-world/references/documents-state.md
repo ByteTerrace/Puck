@@ -159,16 +159,14 @@ expression write every row and key in its escape-free backquotes. Declaring `min
 numeric row may declare; `int` + `min: 0` IS a timer, never
 a fifth kind, and the cross-document write-back channel
 (`Server.WorldOwnedWorlds.Decide`) reads that same row envelope through
-`TryAdmitWrite` rather than assuming a floor of its own. Capped at `StateCapacity.MaxRows` (1,024)
-rows, `MaxCellsPerRow` (4,096) cells per row (which an authored `capacity` may
-only NARROW, never widen; a slot or keys row authoring none gets `DefaultCellRoom`, 128), and
-`MaxTextValueLength` (1,024) text UTF-16 code units, refused by name past any. The rows
-together are bounded in bytes, not cells: `StateArena.Bytes` against
-`ArenaCapacity.MaxBytes` (64 MiB); `world.state` prints both. When validating a
-document without building its arena, combine `ArenaLayout.Bytes` with
-`StateArena.TryMeasureVisibility`; layout alone omits the bounded declaration
-and live visibility payload. Keep runtime writes, imports, journal retention,
-rewind and relayout on the same visibility charge, including `ReadersFrom`.
+`TryAdmitWrite` rather than assuming a floor of its own. Row, cell, text and
+arena ceilings, and what an authored `capacity` may do to them, are owned by
+[state limits](../../../../docs/reference/state/limits.md); a past-ceiling
+declaration is refused by name. When validating a document without building its
+arena, combine `ArenaLayout.Bytes` with `StateArena.TryMeasureVisibility`; layout
+alone omits the bounded declaration and live visibility payload. Keep runtime
+writes, imports, journal retention, rewind and relayout on the same visibility
+charge, including `ReadersFrom`.
 
 A keyed row may set `evicts: true` to trade its ordinary refuse-on-overflow
 capacity ceiling for FIFO drop-oldest: an `UpsertStateCell` write that mints a
@@ -789,9 +787,10 @@ live occupant and therefore follows release/reclaim.
 World body carriers are record enum fields plus `properties.carriers`. Map every
 enum member exactly once to one single-inhabitant placement, one local seat, or an
 explicit detached entry. Store no physical body index in a record, and do not add
-a generation-pinned attachment path beside carriers. Arena and Paddleball are the
-shipped examples: both author enum roles; Arena also keeps fighter health,
-respawn, and pickup state in records. Interaction geometry resolves the logical
+a generation-pinned attachment path beside carriers. The arena and paddleball
+games under `experimental/` are prior art for it: both author enum roles, and
+the arena also keeps fighter health, respawn, and pickup state in records.
+Interaction geometry resolves the logical
 role to a body, while effects read or write the same instance through lexical
 bindings.
 
