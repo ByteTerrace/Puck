@@ -27,73 +27,81 @@ Ranked by payoff at the latest batch. Lanes in flight are named; the lead
 resolves their edits to this file at merge.
 
 The owner's direction: fundamentals first, known or found along the way
-(AGENTS.md), with vigilance against duplication. The first six items are the
-highs: the three stages of the engine job system, the bake, the companion
-custody build and certified field contact. The debug
+(AGENTS.md), with vigilance against duplication. The frame bar, the cold-bake
+bar and the highs that stand before `main` lead. Work whose correctness rests
+on an invariant is designed and reviewed before code
+([orchestration](../../.claude/skills/orchestration/SKILL.md)). The debug
 world is the proving ground, so every plan's checks run on it, and what the
 experimental worlds have that it lacks is ported into it
 ([port](#port-the-experimental-worlds-missing-features)).
 
-1. [Engine job system](#engine-job-system), scheduling [high]: the rated burst
-   is off tick frames and unseen bodies hold; what remains is spreading the
-   rated views' and screens' phases and the tick frame's own tick-bound view
-   recording, which a tick plus produce still pushes past 16.7 ms.
-2. [Engine job system](#engine-job-system), the garbage-collection cuts on
-   today's runtime [high]: the bake's managed contour and refinement working
-   memory, and steady irradiance blocks and dressed-pick snapshots; measured
-   residuals are in the packet. Native storage uses `IAllocator` and
-   `MimallocAllocator`.
-3. [Engine job system](#engine-job-system), the memo [high]: the scheduler, the
-   deterministic parallel tick (about 70 % of a tick partitions), parallel view
-   recording (about 36 % of produce), memory ownership (scratch, borrowing and
-   handoff; one byte-accounting owner; the native-storage list) and the
-   state/jobs contract, reviewed before any build; phase 3 and F17 of the
-   [tick-to-produce memo](simulation-thread.md) meanwhile.
-4. [Bake proportional to change](#bake-proportional-to-change) [high]: narrow
-   the bake closure and share one store across both backends, then
-   `CloseSheets` and the collapse.
-5. [Transfers](#transfers-federation-and-server) [high]: the companion steps 6
-   to 10.
+0. The first settle window (the lead): drain, then under `puck lease quiet`
+   the culling measurements M1/M2 on R2's GPU selection, a cold bake per
+   backend against the one-minute bar, the frame bar at the standard stops on
+   both backends with the day cycle running, the exit layer's cost as the
+   transmission baseline, Vulkan's draw-count gap, and `puck verbs --check`.
+   It decides V1 against V2 and sets every later timing's baseline.
+1. [Visibility](visibility.md) V1 or V2 as M1 decides [high, the frame bar],
+   after the draw-identity fix R2's review found
+   ([GPU robustness](#vulkan-regressions-and-gpu-robustness)).
+2. [Transmission](transmission.md) [high]: its implementation lanes in order,
+   once the owner's look calls are answered or the design's choices stand.
+3. [Bake proportional to change](#bake-proportional-to-change) [high, the
+   cold-bake bar]: a static copy bakes in its prototype's frame and is shared,
+   bake grouping and detail derive from meaning rather than spelling, then
+   narrow the closure and share one store across both backends.
+4. [Disclosure](disclosure.md#the-build-order) [high, the long pole before
+   `main`]: steps 1-6 behind the harness, step 0b's principals, and the
+   owner's search-output decision.
+5. [Engine job system](#engine-job-system) [high]: scheduling (spread the
+   rated views and the tick frame's tick-bound recording), the
+   garbage-collection cuts, then J1 with T1's measurements; profile snapshot
+   emission before T3.
 6. [Certified field contact](#certified-field-contact): box and ellipsoid
    bodies, then clearance on slopes within a third of a metre.
-7. [Delivery](#delivery-launcher-and-ci): CI's steady state, the shader cache
-   and the GC-hole retirement.
-8. [Author leaks to the standard](#author-leaks-to-the-standard): the overlay
-   text advance and the helper templates.
-9. [Port the experimental worlds' missing features](#port-the-experimental-worlds-missing-features):
+7. [Transfers](#transfers-federation-and-server) [high]: the companion steps 6
+   to 10.
+8. [Language and authoring](#language-and-authoring) and [author leaks to the
+   standard](#author-leaks-to-the-standard): what lang-2 leaves of S11, the
+   cost corpus, the overlay text advance.
+9. Antigravity's coding trial ([agent tooling](#agent-tooling-and-skills)),
+   after the settle window.
+10. [Delivery](#delivery-launcher-and-ci): CI's steady state, the shader cache
+    and the GC-hole retirement.
+11. [Port the experimental worlds' missing features](#port-the-experimental-worlds-missing-features):
    the meadow and the creature garden now, as the bake's and the parallel
    tick's forcing workloads; the second seat, the authored passes and the
    quilt each ahead of the job-system step they prove (the owner's ruling,
    [order](port-experimental.md#lanes-in-order)).
-10. [Edit to running, hot reload and boot](#edit-to-running-hot-reload-and-boot):
+12. [Edit to running, hot reload and boot](#edit-to-running-hot-reload-and-boot):
     the boot's JSON round trip in `BindLive` (about 0.7 s), then a reboot for
     an edit outside `PuckHotReload`; measure the cold and warm builds.
-11. [The valley's terrain](#the-valleys-terrain): terrain pass step 1 (the image
+13. [The valley's terrain](#the-valleys-terrain): terrain pass step 1 (the image
     meter), with steps 2, 3, 6 and step 4's bound fix in parallel.
-12. [Refactoring campaign](#refactoring-campaign): `GpuRegion.Grow` as the only
+14. [Refactoring campaign](#refactoring-campaign): `GpuRegion.Grow` as the only
     growth path with the uniform view limit enforced there, the two overlay
     writers, the survey's remaining groups.
-13. [Collision versus drawn mesh](#collision-versus-drawn-mesh): the groups sharp
+15. [Collision versus drawn mesh](#collision-versus-drawn-mesh): the groups sharp
     boxes left worse (the board game room's table, gallery floors 0, 2 and 3,
     the Wonderland room, the lift doors, the deck television).
-14. [Lighting and GI](#lighting-and-gi): light a cold area from the coarser
+16. [Lighting and GI](#lighting-and-gi): light a cold area from the coarser
     levels or the sky term the moment a view arrives; the rest after the image
     meter.
-15. [Derived products are caches](#derived-products-are-caches): build the
+17. [Derived products are caches](#derived-products-are-caches): build the
     generated `.nes` cartridges and firmware images on demand and remove the
     bytes from git; narrow the compiled-world key; measure the wasm modules.
-16. [Test runner and replay](#test-runner-and-replay): the incremental authority
-    hash, its segments the memo's partitions.
-17. [Bake detail](#bake-detail): measure the static round-section term.
-18. [Residency and streaming](#residency-and-streaming): step 2 after the memo
+18. [Test runner and replay](#test-runner-and-replay): profile what recording
+    still folds whole every tick before choosing the next segment.
+19. [Bake detail](#bake-detail): measure the static round-section term.
+20. [Residency and streaming](#residency-and-streaming): step 2 after the memo
     names GI's work units; re-measure with the display on.
-19. [Vulkan regressions and GPU robustness](#vulkan-regressions-and-gpu-robustness):
+21. [Vulkan regressions and GPU robustness](#vulkan-regressions-and-gpu-robustness):
     the crossing frame and the pixel-pass gap.
-20. [MCP and the operator attachment](#mcp-and-the-operator-attachment): the
+22. [MCP and the operator attachment](#mcp-and-the-operator-attachment): the
     schema switch; the stale lease holder.
-21. [Tests (suspended)](#tests-suspended): triage the failing Windows shards by
+23. [Tests (suspended)](#tests-suspended): triage the failing Windows shards by
     cause.
-22. [Card tables](#card-tables-in-the-board-game-room) (the windowed look, then
+24. [Card tables](#card-tables-in-the-board-game-room) (the windowed look, then
     Spider), [Debug tools](#debug-tools) (windowed checks and exhibits),
     [Sweep](#sweep-and-visual-checks) (the paired tour) and
     [Temporal](#temporal-shimmer-and-cadence-flicker) (the blink re-measure).
@@ -178,11 +186,17 @@ M1 and M2a are built.
 - [medium] T1's snapshot row phase is about 0.21 ms of a debug tick, so most of
   the memo's 9-13 % snapshot-emission share lies elsewhere (the serial tail or
   the subscribers' `DeliverSnapshot`); profile it before T3 or any R step
-  assumes otherwise. J1 inherits two T1 measurements: the fork pays only past
-  about 500 rows, and a preempted worker holding a partition holds the join
-  (mean up to 836 µs against a 125 µs median), so J1 sizes partitions to bound
-  that tail. The headless debug world also builds snapshots for its night and
-  garden session instances every tick. (from: t1-snapshot)
+  assumes otherwise. The snapshot now writes serially under two full
+  partitions (512 delivered rows), where T1 measured no gain from a fork. J1
+  inherits the other measurement: a preempted worker holding a partition holds
+  the join (mean up to 836 µs against a 125 µs median). Smaller partitions do
+  not bound it: 128-row partitions lowered the debug world's median from 123 to
+  129 µs to 78 to 86 µs while their means stayed 205 to 794 µs, because the tail
+  is the host's preemption, not the partition's work. Bounding it is a pool
+  matter for J1 (its cap against oversubscription), measured on a quiet machine
+  before anything else is tried. The headless debug world also builds
+  snapshots for its night and garden session instances every tick.
+  (from: t1-snapshot)
 
 The owner's direction: performance with quality means removing a cost at its
 cause, never trading latency or lighting quality for frame time. The engine
@@ -1870,11 +1884,6 @@ under-use the language where the shared libraries (`worlds/standard/bounds.puck`
 The [illumination plan](illumination.md) holds the research round's decisions
 and the order they land in; the items below are its findings and checks.
 
-- [medium] The standard's `dayCycle` (`worlds/standard/skies.puck`) now needs
-  every world that expands it to author a light named `moon`. A standard
-  template that only works once an author adds a named row is a trap: the
-  template emits its own moon light, overridable by id like any standard row.
-  (from: illum-step2)
 
 - From step 1 (illum-step1): stretching the far cascade to cover the valley
   costs too much (at `valley-rim`, 120 m against 480 m: 208 against 7,170 draws,
@@ -1932,7 +1941,7 @@ and the order they land in; the items below are its findings and checks.
   bounce converges over relights toward the multi-bounce limit rather than
   stopping at the tier's two or three sweeps, so interiors lit mostly by
   bounce may read brighter than step 1's stills. A switched-off lamp's bounce
-  fades over up to sixteen relights rather than vanishing. Compare the gather
+  fades over the bounce sweeps rather than vanishing. Compare the gather
   stops with step 1's stills on a quiet machine. (from: illum-step2)
 - [high] The wrapped side's self-shadow term has failed three reviews, each
   in a new mesh-topology case: curvature transmission, then the exit layer,

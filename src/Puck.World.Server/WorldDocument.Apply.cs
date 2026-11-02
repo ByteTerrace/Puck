@@ -911,25 +911,9 @@ public sealed partial class WorldDocument {
 
         if (
             (partitions > 1) &&
-            (Host.Jobs is { Serial: false } jobs)
+            (Host.Jobs is { Serial: false } jobs) &&
+            ((count = CountSnapshotPartitions(capacity: capacity, partitions: partitions)) >= SnapshotForkRows)
         ) {
-            // Entity rows by partition: a serial pass counts each partition's delivered rows and assigns it the
-            // first position after every lower partition's, so each partition writes its rows in index order at
-            // its own offsets and the delivered sequence is the serial one at any worker count.
-            if (m_snapshotOffsets.Length < partitions) {
-                m_snapshotOffsets = new int[partitions];
-            }
-            count = 0;
-            for (var partition = 0; (partition < partitions); partition++) {
-                m_snapshotOffsets[partition] = count;
-                var end = Math.Min(val1: capacity, val2: ((partition + 1) * SnapshotPartitionRows));
-
-                for (var index = (partition * SnapshotPartitionRows); (index < end); index++) {
-                    if (SnapshotBody(index: index) is not null) {
-                        count++;
-                    }
-                }
-            }
             m_snapshotRows ??= new SnapshotRows(document: this);
             m_snapshotRows.ConsumeContinuity = consumeContinuity;
             jobs.Fork(body: m_snapshotRows, partitions: partitions);
@@ -999,6 +983,33 @@ public sealed partial class WorldDocument {
     // The entity rows one snapshot partition holds. The row index space is the population's, so the partition count
     // follows the document and never the worker count.
     private const int SnapshotPartitionRows = 256;
+    // The delivered rows below which the snapshot writes serially even with partitions and workers to spare: under
+    // two full partitions, waking a worker and joining it cost as much as the rows the fork would take off this
+    // thread.
+    private const int SnapshotForkRows = (2 * SnapshotPartitionRows);
+
+    // Counts each partition's delivered rows and assigns each partition the first position after every lower
+    // partition's (an exclusive prefix sum), so partitions write their rows in index order at their own offsets and
+    // the delivered sequence is the serial one at any worker count. Returns the delivered row count.
+    private int CountSnapshotPartitions(int capacity, int partitions) {
+        if (m_snapshotOffsets.Length < partitions) {
+            m_snapshotOffsets = new int[partitions];
+        }
+
+        var count = 0;
+
+        for (var partition = 0; (partition < partitions); partition++) {
+            m_snapshotOffsets[partition] = count;
+            var end = Math.Min(val1: capacity, val2: ((partition + 1) * SnapshotPartitionRows));
+
+            for (var index = (partition * SnapshotPartitionRows); (index < end); index++) {
+                if (SnapshotBody(index: index) is not null) {
+                    count++;
+                }
+            }
+        }
+        return count;
+    }
 
     // The body a snapshot delivers a row for at an entity index, or null for an inactive or bodiless slot.
     private WorldBody? SnapshotBody(int index) => (Host.Population.IsActive(index: index)

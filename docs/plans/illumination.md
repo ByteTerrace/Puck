@@ -583,10 +583,16 @@ against ([mesh GI reference](../../.claude/skills/rendering/references/mesh-gi.m
   traces 144 rays a probe where it traced 96 plus 144.
 - **The relight.** A light, sky, gain or material change advances the lighting
   version and relights the cached hits; bounce reads the volume about each hit
-  and converges over successive relights. The part of the cube the point and
-  spot lights and emission send is kept per probe with its own version, so a
-  moving sun relights only the directional term and the bounce. The sky enters
-  the lighting through its projected irradiance.
+  and converges as one iteration over the window: sweeps of every probe repeat
+  until a whole sweep under unchanged inputs moves no probe past the bound in
+  any colour channel, so convergence is never a probe's own. The part of the
+  cube the point and spot lights and emission send is kept per probe with its
+  own version, so a moving sun relights only the directional term and the
+  bounce. The sky enters the lighting through its projected irradiance, with
+  its tolerance per colour channel. The worker returns when the budget cannot
+  fund what is left and yields to a lockstep frame, which takes its work over.
+  The standard's `dayCycle` authors its own `moon` light, which a world
+  overrides by name.
 - **Geometry changes retrace only what they reach.** A scene build records the
   boxes of the static draws it added or removed, and a probe retraces only when
   one meets its placement region or one of its rays before the recorded hit;
