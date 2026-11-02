@@ -2112,11 +2112,12 @@ exports.
 
 The worlds themselves are quick: the probe's six run in about 10 seconds in
 one worker, most of it the first boot's one-time start-up, and each later
-world takes under half a second. The waits are the build lease (the World build
-of the checkout's sources, refused after 600 seconds behind other lanes'
-builds) and the heavy lease. A lane whose build queue is long builds
-`src/Puck.World` itself, copies its output to lane scratch, and passes that
-copy's `Puck.World.dll` as `--world-artifact`.
+world takes under half a second. The waits are the build lease and the heavy
+lease, each up to two hours, and the World build of the checkout's sources has
+its own thirty minutes once it starts ([waiting and
+building](#where-the-world-artifact-is-built)), so a long build queue is no
+reason to build privately; `--world-artifact` is for booting a build made
+some other way.
 
 ---
 

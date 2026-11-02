@@ -153,7 +153,8 @@ The latency for a `Frame` or `Tick` fork to acquire every worker is therefore
 one unit, never a whole bake stage. The bake's stages already run as bounded
 slabs: planes per frame (`SdfMeshPathBake.cs:1256`), points per frame (`:1371`,
 `:1483`), all sized from `FrameTaps` (`:171`); the irradiance trace's unit is one
-probe (`TraceProbe` inside the `Parallel.For` at `SdfMeshIrradiance.cs:1017`).
+probe (`Process`, tracing its hits or relighting them, inside the `Parallel.For`
+at `SdfMeshIrradiance.cs:1527`).
 The unit bound is 2 ms of work on the lead machine, measured when the pool
 lands (open question 3). Which queued bake actions exceed it is unknown from
 the code: the dispatcher at `SdfMeshPathBake.Residency.cs:179-186` runs whatever
@@ -639,7 +640,7 @@ second, and recording third; recording alone would not reach it.
 
 ### The cause fix beside it
 
-At R2's input (`997fb2d002`), `SdfWorldPassRecorder.Choose` culled and levelled
+Before R2, `SdfWorldPassRecorder.Choose` culled and levelled
 every draw for every pass on the CPU, and 160,000 draws took 700 ms a frame.
 Threads would divide that, not remove it. R2 extends the existing opaque
 occlusion mechanism, `SdfMeshOcclusion.RecordDraws`, through `ExecuteIndirect`
@@ -917,17 +918,16 @@ step (maximum 48) all lie on the static striped monitor face, x269–323 /
 y391–490. Enlarged CPU/GPU crops align geometrically. The sampled stripe
 difference exceeds the small pinned noise and its cause remains unconfirmed.
 
-R2's shadow integration (`b63e7191e`, then `d6f1624dfa`) carries the solid
-versus thin/clipped shadow-exit rule. One selection emits entry, solid-exit
-and thin-exit argument phases; each kept draw contributes an entry and exactly
-one exit to the generated statistics. `d231e5bec` counts the two executions
-with separate wave reductions: 64 lanes of a legal maximum mesh fit a uint
+R2's shadow integration carries the solid versus thin/clipped shadow-exit
+rule. One selection emits entry, solid-exit and thin-exit argument phases;
+each kept draw contributes an entry and exactly one exit to the generated
+statistics, which count the two executions with separate wave reductions: 64 lanes of a legal maximum mesh fit a uint
 sum, twice that does not; the existing accumulator carries each addition
 into 64 bits. Selection, arguments and history are unchanged by this fix.
 
-Final handback merge `5a73e11295` includes lead `5679a09f1a`'s GI, job-pool,
-language and simulation work; R2's selection, layout and backend sources are
-unchanged. Vulkan synchronization validation and full Direct3D 12 GPU-based
+With R2 merged beside the integration branch's GI, job-pool, language and
+simulation work (R2's selection, layout and backend sources unchanged by that
+merge), Vulkan synchronization validation and full Direct3D 12 GPU-based
 validation (state tracking and synchronized queues) pass at all four places
 after bakes settle, without warnings or errors:
 

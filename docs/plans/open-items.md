@@ -433,16 +433,12 @@ account and release them when a bake settles.
 - Four debug replay sources (`input-clock30`, `input-clock60`, `input-history`,
   `controls-dash`), eight scenarios, pass `--reproduce --jobs 2`; all per-tick
   reproduction files are byte-identical to their pre-edit copies, including
-  the rebuild after power loss. After merging integration tip `16db8704f0`,
-  its authoring/schema changes move the old hashes: all eight merged-native
-  reproduction files instead match the separate integration-only artifact
-  (`Puck.SourceRevision=16db8704f0`) byte for byte. That artifact excludes
-  the memory commits. After the final silo-recovery merge (`9e81ac0f75`),
-  both Release builds again have zero warnings/errors and all eight replay
-  files match the integration-only `1f8d233998` artifact (its only source
-  difference from that tip is the silo README). Final Direct3D 12 and Vulkan
-  boots settle at tick 12, capture and exit 0 without worker/device failures.
-  Evidence is under `.claude/scratch/mem-m1-*`.
+  the rebuild after power loss. After merging the integration tip, its
+  authoring/schema changes move the old hashes: all eight merged-native
+  reproduction files instead match a separate integration-only artifact
+  (without the memory commits) byte for byte, and again after the final
+  silo-recovery merge. Final Direct3D 12 and Vulkan boots settle at tick 12,
+  capture and exit 0 without worker/device failures.
 
 - Ownership and borrowing: authoritative ownership stays in an existing arena,
   scratch pool, job slot, mesh or host service, and its private record holds
@@ -766,7 +762,7 @@ system can take, from `dotnet-trace` thread-time samples of the frame thread
   39.25–40.16 ms CPU controls) in that quiet-window trace; [R2 observations](engine-job-system.md#r2-observations)
   holds the paired counters and GPU pass costs.
   Include the unmatched final-merge draw-count variance there too: after
-  `5a73e11295`, Vulkan / Direct3D 12 meadow validation reads 2,506 / 26,657
+  R2's final merge, Vulkan / Direct3D 12 meadow validation reads 2,506 / 26,657
   draws at high/native settings; its cause is unconfirmed (same observations).
   Owner: the lead.
 - [medium] `SdfMeshPathBake.Dress` rebuilds every draw of every group whenever
