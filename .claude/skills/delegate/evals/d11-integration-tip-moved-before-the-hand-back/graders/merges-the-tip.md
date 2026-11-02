@@ -5,4 +5,4 @@ match: contains
 flags: i
 ---
 
-git\s+merge\b[^\n]{0,60}lead/fundamentals
+\bmerg(e|es|ing)\b[^\n]{0,60}lead/fundamentals

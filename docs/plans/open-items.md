@@ -3049,16 +3049,13 @@ the Monitor hook check.
     suite.
   - **Next:**
     1. Validate every below-ceiling grader against its traces
-       (`puck evals graders`).
-    2. Fix the real gaps:
-       - delegate d14 (one chokepoint), d16 (a design lane measures
-         nothing), and on Sonnet d03 (set aside) and d15 (finish line);
-       - Fable's one failed d01 run with the skill.
-    3. Cut the delegate text that only restates AGENTS.md (d06-d08 and d13
-       score the same in both arms).
-    4. Measure each edit before and after with `--revision`.
-    5. Run review-passes on Opus and Haiku.
-    6. A Fable review of the results before anything is called proven.
+       (`puck evals graders`) for the suites other than `delegate`.
+    2. Re-run `delegate` with `--preload --ablation none` on each tier, at
+       the revision before its grader repairs and at HEAD: its with-without
+       results mostly measured AGENTS.md, because the with-arm rarely invoked
+       the skill it preloads in a real lane.
+    3. Run review-passes on Opus and Haiku, preloaded as the reviewer has it.
+    4. A Fable review of the results before anything is called proven.
   - **Harness limits on Windows (Claude Code 2.1.316):**
     - `case.yaml` `context.add_dirs` grants nothing;
     - `append_system_prompt` travels on the command line and overflows it.

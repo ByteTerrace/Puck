@@ -2660,16 +2660,18 @@ reported against it.
 The family the [skill evaluation procedure](../development/documentation.md#evaluate-an-agent-skill)
 runs on. Each verb's `--help` holds its full contract.
 
-- `puck evals run <skill> [--cases <glob>] [--tag <tag>...] [--revision <rev>] [--model <id>] [--judge <id>] [--runs n] [--ablation with-without|none] [--max-cost-usd x] [-j n] [--dry-run]`
+- `puck evals run <skill> [--cases <glob>] [--tag <tag>...] [--revision <rev>] [--model <id>] [--judge <id>] [--runs n] [--ablation with-without|none] [--max-cost-usd x] [-j n] [--no-fixture] [--preload] [--dry-run]`
   checks `<rev>` (default HEAD) out as a detached worktree under the main
   checkout's `.claude/worktrees/`, copies HEAD's `evals/` into it when `<rev>`
   is older, puts the rules-file fixture (HEAD's `AGENTS.md` text, and the
-  delegate skill's for a skill a lane loads) into every case's `case.yaml`
-  `execution.append_system_prompt`, both arms, and runs
+  delegate skill's for a skill a lane loads) ahead of the task in every case's
+  `prompt.md`, both arms, and runs
   `claude plugin eval` on that tree's skill with full model IDs and a judge no
   weaker than the model. The result, report, `run.json` manifest and each run's
   trace go under `.claude/skills/<skill>/evals/results/<stamp>/`, and the
-  worktree is removed. `--dry-run` prints the plan and the `claude` command
+  worktree is removed. `--preload` adds the skill's own `SKILL.md` text at
+  `<rev>` to the fixture, as an agent that preloads the skill has it, and is
+  refused without `--ablation none`. `--dry-run` prints the plan and the `claude` command
   line and creates nothing. A lane is refused this verb, except `--dry-run`
   and help, by the session-launch hook. Exit codes: 0 every run completed;
   1 a load or API error, or a partial run; 2 invalid input or a refusal;
