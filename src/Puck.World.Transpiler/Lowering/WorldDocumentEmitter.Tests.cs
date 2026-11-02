@@ -781,7 +781,7 @@ public static partial class WorldDocumentEmitter {
             return;
         }
 
-        foreach (var (addressed, cell) in given.Lines) {
+        foreach (var (addressed, cell, bound) in GivenLines(items: given.Cells, bound: null, scope: scope, world: null)) {
             if (ResolveTarget(
                 keyword: "given",
                 scope: scope,
@@ -795,7 +795,7 @@ public static partial class WorldDocumentEmitter {
 
             var world = target.Json;
             var rows = ((world["state"] as JsonObject)?["world"] as JsonArray);
-            var cellScope = target.Scope;
+            var cellScope = ((bound is null) ? target.Scope : target.Scope.WithLocals(lambdaLocals: Bound(bound: bound, outer: target.Scope.Locals)));
             var row = rows?
                 .OfType<JsonObject>()
                 .FirstOrDefault(predicate: candidate => (candidate["name"]?.GetValue<string>() == cell.Target.Name));
@@ -817,6 +817,11 @@ public static partial class WorldDocumentEmitter {
 
             var kind = ((row ?? inheritedRow)!["kind"]?.GetValue<string>() ?? nameof(CellKind.Int));
             var key = (cell.Target.Key ?? StateRow.SlotKey.Value);
+
+            // A key naming a loop's bound name is that iteration's element, as `row[item]` reads it.
+            if ((bound is not null) && bound.TryGetValue(key: key, value: out var element) && (KeyText(value: element) is { } elementKey)) {
+                key = elementKey;
+            }
             var value = (cell.Value switch {
                 RhsSecondsNode seconds => JsonValue.Create(value: seconds.Seconds),
                 RhsTextNode or RhsOperandNode => GivenLiteral(
@@ -920,6 +925,171 @@ public static partial class WorldDocumentEmitter {
             cells.AppendNode(item: new JsonObject { ["key"] = key, ["value"] = value });
         }
     }
+    // A test's given lines with every `for` expanded: each line once per element, with the names that iteration
+    // binds (null outside every loop).
+    private static IEnumerable<(string? World, TestGivenNode Cell, Dictionary<string, JsonNode?>? Bound)> GivenLines(IReadOnlyList<TestGivenItemNode> items, string? world, Dictionary<string, JsonNode?>? bound, DocumentScope scope) {
+        foreach (var item in items) {
+            switch (item) {
+                case TestGivenNode cell:
+                    yield return (world, cell, bound);
+
+                    break;
+                case TestGivenWorldNode addressed:
+                    foreach (var cell in addressed.Cells) {
+                        yield return (addressed.World, cell, bound);
+                    }
+
+                    break;
+                case TestGivenForNode loop:
+                    foreach (var iteration in LoopBindings(bound: bound, index: loop.Index, item: loop.Item, scope: scope, sequence: loop.Sequence, span: loop.Span)) {
+                        foreach (var line in GivenLines(bound: iteration, items: loop.Body, scope: scope, world: world)) {
+                            yield return line;
+                        }
+                    }
+
+                    break;
+            }
+        }
+    }
+    // A test's when steps with every loop expanded, a `for`'s bound names substituted into each seat step's command.
+    private static IEnumerable<(string? World, TestStepNode Step)> WhenLines(IReadOnlyList<TestStepNode> steps, string? world, Dictionary<string, JsonNode?>? bound, DocumentScope scope) {
+        foreach (var step in steps) {
+            switch (step) {
+                case TestWhenWorldNode addressed:
+                    foreach (var seat in addressed.Steps) {
+                        yield return (addressed.World, Substituted(bound: bound, scope: scope, seat: seat));
+                    }
+
+                    break;
+                case TestWhenLoopNode { IsRepeat: true } loop:
+                    for (var count = RepeatCount(loop: loop, scope: scope); (count > 0); count--) {
+                        scope.Budget.Spend(count: 1, span: loop.Span);
+                        foreach (var line in WhenLines(bound: bound, scope: scope, steps: loop.Body, world: world)) {
+                            yield return line;
+                        }
+                    }
+
+                    break;
+                case TestWhenLoopNode loop:
+                    foreach (var iteration in LoopBindings(bound: bound, index: loop.Index, item: loop.Item!, scope: scope, sequence: loop.Sequence, span: loop.Span)) {
+                        foreach (var line in WhenLines(bound: iteration, scope: scope, steps: loop.Body, world: world)) {
+                            yield return line;
+                        }
+                    }
+
+                    break;
+                case TestSeatStepNode seat:
+                    yield return (world, Substituted(bound: bound, scope: scope, seat: seat));
+
+                    break;
+                default:
+                    yield return (world, step);
+
+                    break;
+            }
+        }
+    }
+    // A scope's locals with a loop's bound names over them.
+    private static Dictionary<string, JsonNode?> Bound(Dictionary<string, JsonNode?> outer, Dictionary<string, JsonNode?> bound) {
+        var merged = new Dictionary<string, JsonNode?>(dictionary: outer, comparer: StringComparer.Ordinal);
+
+        foreach (var (name, value) in bound) {
+            merged[name] = value;
+        }
+
+        return merged;
+    }
+    // The names each iteration of a test's `for` binds, over the enclosing loop's.
+    private static IEnumerable<Dictionary<string, JsonNode?>> LoopBindings(string item, string? index, ExpressionNode sequence, SourceSpan span, Dictionary<string, JsonNode?>? bound, DocumentScope scope) {
+        var evaluationScope = ((bound is null) ? scope : scope.WithLocals(lambdaLocals: Bound(bound: bound, outer: scope.Locals)));
+
+        if (DocumentLowering.EvaluateValue(expr: sequence, scope: evaluationScope) is not JsonArray elements) {
+            scope.Diagnostics.ReportError(
+                code: PuckDiagnosticCodes.ForSequenceRefused,
+                message: "a 'for' in a test walks an array known at compile time",
+                span: sequence.Span
+            );
+
+            yield break;
+        }
+
+        for (var position = 0; (position < elements.Count); position++) {
+            scope.Budget.Spend(count: 1, span: span);
+
+            var iteration = ((bound is null) ? new Dictionary<string, JsonNode?>(comparer: StringComparer.Ordinal) : new Dictionary<string, JsonNode?>(dictionary: bound, comparer: StringComparer.Ordinal));
+
+            iteration[item] = elements[position]?.DeepClone();
+            if (index is { } ordinal) {
+                iteration[ordinal] = JsonValue.Create(value: ((long)position));
+            }
+
+            yield return iteration;
+        }
+    }
+    private static long RepeatCount(TestWhenLoopNode loop, DocumentScope scope) {
+        if ((DocumentLowering.EvaluateValue(expr: loop.Sequence, scope: scope) is JsonValue value) && value.TryGetValue(value: out long count) && (count >= 0L)) {
+            return count;
+        }
+
+        scope.Diagnostics.ReportError(
+            code: PuckDiagnosticCodes.TestStepInadmissible,
+            message: "'repeat' in a test's when block runs its steps a whole number of times known at compile time",
+            span: loop.Sequence.Span
+        );
+
+        return 0L;
+    }
+    // The text a bound element stands for in a key or a command line: a number in invariant spelling, a string as
+    // written; null for anything else.
+    private static string? KeyText(JsonNode? value) => (value is JsonValue scalar)
+        ? (scalar.TryGetValue(value: out string? text)
+            ? text
+            : (scalar.TryGetValue(value: out long whole)
+                ? whole.ToString(provider: CultureInfo.InvariantCulture)
+                : (scalar.TryGetValue(value: out double real) ? real.ToString(format: "R", provider: CultureInfo.InvariantCulture) : null)))
+        : null;
+    // `{name}` in a seat step written inside a `for` is the bound element's text; `{{` and `}}` are literal braces.
+    private static TestStepNode Substituted(TestSeatStepNode seat, Dictionary<string, JsonNode?>? bound, DocumentScope scope) {
+        if (bound is null) {
+            return seat;
+        }
+
+        var command = new StringBuilder(capacity: seat.Command.Length);
+        var text = seat.Command;
+
+        for (var index = 0; (index < text.Length); index++) {
+            var character = text[index];
+
+            if (((character == '{') || (character == '}')) && ((index + 1) < text.Length) && (text[(index + 1)] == character)) {
+                command.Append(value: character);
+                index++;
+
+                continue;
+            }
+            if (character != '{') {
+                command.Append(value: character);
+
+                continue;
+            }
+
+            var close = text.IndexOf(value: '}', startIndex: index);
+            var name = ((close < 0) ? "" : text[(index + 1)..close]);
+
+            if ((close < 0) || !bound.TryGetValue(key: name, value: out var element) || (KeyText(value: element) is not { } substituted)) {
+                scope.Diagnostics.ReportError(
+                    code: PuckDiagnosticCodes.TestStepInadmissible,
+                    message: $"'{text}' writes '{{{name}}}' inside a 'for', which binds no such name to a number or a string — write a bound name, or '{{{{' and '}}}}' for literal braces",
+                    span: seat.Span
+                );
+
+                return seat;
+            }
+            command.Append(value: substituted);
+            index = close;
+        }
+
+        return (seat with { Command = command.ToString() });
+    }
     // A given value is a literal of the row's own kind, lowered by the door an authored cell's value takes, so it
     // is spelled in the document exactly as that cell would be and refused by the same texts.
     private static JsonNode? GivenLiteral(TestGivenNode cell, string kind, DocumentScope scope) {
@@ -942,7 +1112,7 @@ public static partial class WorldDocumentEmitter {
         var cursor = 1UL;
         var last = 0UL;
 
-        foreach (var (addressed, step) in (((IEnumerable<(string? World, TestStepNode Step)>?)when?.Lines) ?? [])) {
+        foreach (var (addressed, step) in ((when is null) ? [] : WhenLines(bound: null, scope: scope, steps: when.Steps, world: null))) {
             if (step is TestTicksStepNode ticks) {
                 cursor += ((ulong)ticks.Ticks);
 

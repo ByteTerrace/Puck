@@ -1,0 +1,16 @@
+// A compile-time 'for' over shape rows is the rows written out.
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+prototypes {
+  prototype "p" {
+    document {
+      for i in range(0, 3) {
+        shape Box $"b{i}" {
+          position [i, 0, 0]
+          scale [0.5, 0.5, 0.5]
+        }
+      }
+    }
+  }
+}

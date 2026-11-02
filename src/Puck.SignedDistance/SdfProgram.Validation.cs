@@ -316,7 +316,7 @@ public sealed partial class SdfProgram {
                 !SdfMaterial.IsEmissiveLane(lane: material.EmissiveLane) ||
                 (material.Paints is { Count: > MaxPaintsPerMaterial }) ||
                 !material.IsGlassValid ||
-                (material.Toon is { IsValid: false }) ||
+                (material.Toon is { Enabled: true, IsValid: false }) ||
                 !SdfMaterialLayers.IsValid(
                 inset: material.Inset,
                 weathering: material.Weathering,

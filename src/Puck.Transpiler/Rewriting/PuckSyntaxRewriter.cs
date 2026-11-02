@@ -239,6 +239,9 @@ public abstract partial class PuckSyntaxRewriter {
         TestTicksStepNode leaf => leaf,
         TestWhenBlockNode block => (block with { Steps = this.RewrittenNodes(nodes: block.Steps) }),
         TestWhenWorldNode addressed => (addressed with { Steps = this.RewrittenNodes(nodes: addressed.Steps) }),
+        AllowNode leaf => leaf,
+        TestGivenForNode loop => (loop with { Body = this.RewrittenNodes(nodes: loop.Body), Sequence = this.Rewritten(node: loop.Sequence) }),
+        TestWhenLoopNode loop => (loop with { Body = this.RewrittenNodes(nodes: loop.Body), Sequence = this.Rewritten(node: loop.Sequence) }),
         _ => throw PuckRewriteException.UnknownKind(node: node),
     });
     /// <summary>Returns <paramref name="predicate"/> with every child rewritten.</summary>

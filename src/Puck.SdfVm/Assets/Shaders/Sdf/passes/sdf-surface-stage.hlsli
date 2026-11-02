@@ -192,8 +192,10 @@ float2 sdfMeshShadowGap(uint cascade, SdfMeshCascade c, float2 texel, float2 off
 // front of it shadows it. A triangle turned from the light (a wrapped side past the terminator) is where the light leaves
 // its own body, so it compares against the exit layer instead: the nearest face along the light where light leaves a
 // solid is its own unless another solid stands in front of that body, which shadows it however thin or thick either is.
-// The depth would hold the body's own lit side, and a wall's foot would leak light beside it in the exit layer, so each
-// receiver reads the one layer its facing calls for.
+// A caster that bounds no solid (an authored sheet, a body clipped at a portal's glass, a mirrored draw) draws every face
+// into the exit layer too (SdfMeshDraw.EnclosesSolid), so it shadows a wrapped side behind it as a thin caster. The depth
+// would hold the body's own lit side, and a wall's foot would leak light beside it in the exit layer, so each receiver
+// reads the one layer its facing calls for.
 float sdfMeshShadow(SdfPixel p, float3 surfacePoint, float3 face, uint first, uint end, float slope) {
     float2 pattern = sdfMeshPattern(p.pixel);
     float rotation = (pattern.x * 6.2831853);
@@ -206,8 +208,10 @@ float sdfMeshShadow(SdfPixel p, float3 surfacePoint, float3 face, uint first, ui
         SdfMeshCascade c = sdfMeshCascadeAt(cascade);
         float texelWorld = ((2.0 * c.halfHeight) / texels);
         bool exit = (dot(face, c.forward) > 0.0);
-        // The receiver offsets along its face's normal turned toward the light, off the layer that holds its own face.
-        float3 biased = (surfacePoint + ((exit ? -face : face) * (parameters.z * texelWorld)));
+        // A receiver facing the light offsets along its face's normal; one turned from it offsets straight toward the
+        // light, which moves it off its own exit by the offset alone. Along its face's reversed normal the offset would
+        // reach 1 / (n·l) times as far toward the light at a grazing angle and pass a blocker standing that close.
+        float3 biased = (surfacePoint + ((exit ? -c.forward : face) * (parameters.z * texelWorld)));
         float3 relative = (biased - c.position);
         float2 plane = float2((dot(relative, c.right) / (c.aspect * c.halfHeight)), (dot(relative, c.up) / c.halfHeight));
 

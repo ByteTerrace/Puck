@@ -6,11 +6,9 @@ namespace Puck.World.Transpiler.Lowering;
 /// <summary>The exact node each default the <c>shape</c> and <c>placement</c> row sugar elides stands for. Which
 /// members carry a default is their construct's own description; this resolves each one to a node, so the emitter
 /// that fills it and the decompiler that elides against it cannot disagree.</summary>
-/// <remarks><c>ShapeDocument.Group</c> carries no default: the authored corpus omits the key on some shapes and
-/// carries it on others, so filling one on lowering would add a key the source does not have. (The engine itself
-/// cannot tell the two apart — <c>CreationCanonicalizer</c> normalizes an absent <c>group</c> and an explicit
-/// <c>0</c> to the same value — so the constraint is round-trip fidelity, not engine semantics.) It passes through
-/// both directions like <c>material</c>/<c>parent</c> instead.</remarks>
+/// <remarks>A member written at its default and the member omitted mean the same, so both lower to the one
+/// canonical row that carries it (the spelling-equivalence corpus holds the pair). <c>parent</c> has no default
+/// value and passes through as written.</remarks>
 public static class WorldDocumentRowDefaults {
     // A described default is the canonical JSON text of the node it stands for, so `{"scale": [1, 1, 1]}` and
     // `{"scale": 1}` are told apart by the text rather than by a switch here. `$index` is the one positional
@@ -133,6 +131,42 @@ public static class WorldDocumentRowDefaults {
         return false;
     }
 
+    /// <summary>Writes a row's literal <c>rotation</c> quaternion in its one canonical sign. A quaternion and its
+    /// negation are the same rotation, so the canonical one has a positive <c>w</c>, or, when <c>w</c> is zero, a
+    /// positive first nonzero component of <c>x</c>, <c>y</c>, <c>z</c>. A binding reference, or anything other than
+    /// four numbers, is left as written.</summary>
+    /// <param name="row">The lowered row; its <c>rotation</c> member is rewritten in place.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="row"/> is <see langword="null"/>.</exception>
+    public static void CanonicalizeRotation(JsonObject row) {
+        ArgumentNullException.ThrowIfNull(argument: row);
+
+        if ((row["rotation"] is not JsonArray { Count: 4 } rotation) || !rotation.All(predicate: static component => ((component is JsonValue value) && TryGetNumber(number: out _, value: value)))) {
+            return;
+        }
+
+        var components = rotation.Select(selector: static component => {
+            _ = TryGetNumber(number: out var number, value: (JsonValue)component!);
+
+            return number;
+        }).ToArray();
+        var sign = ((components[3] != 0.0) ? components[3] : components.Take(count: 3).FirstOrDefault(predicate: static component => (component != 0.0)));
+
+        if (sign >= 0.0) {
+            return;
+        }
+
+        for (var index = 0; (index < 4); index++) {
+            // Negating zero writes 0, never -0, so a component the author wrote as 0 stays 0; each other component
+            // keeps the numeric type it was lowered as, so its spelling is the authored one less its sign.
+            var value = (JsonValue)rotation[index]!;
+
+            rotation[index] = ((components[index] == 0.0)
+                ? value.DeepClone()
+                : (value.TryGetValue<long>(value: out var whole)
+                    ? JsonValue.Create(value: -whole)
+                    : (value.TryGetValue<decimal>(value: out var exact) ? JsonValue.Create(value: -exact) : JsonValue.Create(value: -components[index]))));
+        }
+    }
     /// <summary>The value the bare <c>solid</c> flag stands for. <c>WorldSolid</c> carries exactly one field, so
     /// there is nothing else a default could omit.</summary>
     /// <returns>A fresh <c>{ "margin": 0 }</c> object.</returns>

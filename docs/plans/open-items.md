@@ -121,7 +121,11 @@ Each waits on the owner: what the engine should do, how it looks and feels, and 
   keyable on the day clock; the debug world authors a readable deep-blue
   night). The Moth supports both cel and plain styles, swappable live for
   playtesting the way binding layouts are, through a generic material-style
-  switch (the illum1-fix2 lane).
+  switch: a palette row's `toonSelect` binds its style to a state cell, and
+  `moth.style Cel|Plain` swaps it with no rebake.
+- Which of the Moth's slots band under Cel: today all 31 palette slots do,
+  skin, hair and eyes included; removing `toonSelect` from a slot in
+  `worlds/debug/avatars/moth.puck` keeps it continuous.
 - Mesh shipping: nothing is built until a presenting client downloads packages,
   and then on a self-hosted GPU runner (the owner's deferral;
   [rendering plan](rendering.md)).
@@ -1830,18 +1834,29 @@ and the order they land in; the items below are its findings and checks.
   pixels white like lit ones; at the noon sun the meadow lies in the east
   wall's shadow. Step 1's checks and the frame bar are owed again on the moving
   day cycle, with a low-sun cel style for the dawn penumbra check.
+- [high] The wrapped side's self-shadow term has failed three reviews, each
+  in a new mesh-topology case: curvature transmission, then the exit layer,
+  then the exit layer with closed/open classification. The last review found
+  grazing self-shadowing from the receiver-plane clamp
+  (`sdf-surface-stage.hlsli` ~:214, :232-234), multi-shell meshes oriented by
+  one signed volume (`WorldPlacementStamper.cs` ~:398, :411), T-junctions
+  demoting a solid to a thin caster, and skins whose deformation inverts
+  winding while `EnclosesSolid` holds. A design pass (transmit-design) replaces
+  class-by-class patching with a term correct by construction; implementation
+  follows its plan. (from: illum1fix2-astra)
 - From illum1-fix: the cascades' exit layer doubles each cascade pass's draws
   and vertices (`world.counters gpu pass sdf.world$shadow-near` at the stage:
   460 draws and 2.62 M vertices on Direct3D 12, two render passes) and adds a
   depth image per cascade (16 MiB each at 2048 texels); its frame time is owed
   on a quiet machine. At a grazing light (a wrapped side at n·l = -0.25) the
   filter's slope clearance (`SdfMeshShadowSlopeBias`, 2.5 texels of depth per
-  texel of lateral distance) still lets a parallel slab within about 0.1 m
-  along the light half through; the exit layer removed the leak beyond that.
-  The debug world authors no `render.toon`, so `world.toon on` there bands only
-  materials with styles of their own until a default style is authored there,
-  which takes either a copy of `celStyle`'s values with `enabled: false` or a
-  `.puck` way to override one field of an imported value.
+  texel of lateral distance) still clears a parallel blocker that stands within
+  a few texels of depth of a receiver turned from the light: a 2 cm slab 0.10 m
+  along the light from a 3 mm panel at n·l = -0.25 shadows only speckles of it
+  on both backends, where 0.3 m at n·l = -0.45 shadows it whole.
+  A body clipped at a portal's glass or drawn under a mirror is a thin caster in
+  the exit layer (`SdfMeshDraw.EnclosesSolid`), so its own wrapped side past
+  the terminator is shadowed by its own lit side while it straddles the glass.
   `SdfPassPlanLawTests.ATemporalViewAddsOnlyItsHistoryAndReactivityOverTheSpatialGraph`
   fails on its own constant (201,139,200 bytes against 1,221,350,400 from the
   current `HistorySurfaceWords`), unrelated to the cascades.
@@ -2777,6 +2792,12 @@ the completed 70-stop comparison manifest.
 Owner: language lane (transpiler) · medium · Next: the inline console command
 hang, then the pre-`main` language findings.
 
+- [medium] `.puck` has no way to take an imported value and override one field
+  of it (`celStyle` with `enabled: false`), so a world that wants the standard's
+  cel style as a default that boots off copies all eleven values
+  (`worlds/debug/debug.puck`'s `render.toon`). Add the override (an object
+  update over a `let`, or a merge builtin beside `concat`), then point the
+  debug world's default at `celStyle`. (from: illum1-fix2)
 - [medium] An `enum` block inside a template is silently dropped from the
   compiled document, so a row naming the enum fails with PUCK119; the
   standard's `chaseCamera` writes its enum as a `state.enums` row to work around
@@ -2806,13 +2827,48 @@ hang, then the pre-`main` language findings.
   4,000,000 in the valley plan. Reconcile both pages against `world.budget`.
   (from: composition)
 - [medium] A solid creation shape without `position` throws instead of giving
-  an authoring diagnostic. Removing `position [0, 0, 0]` from
-  `worlds/standard/foliage.puck`'s `sceneryPatch` makes both `compile --validate`
-  and a headless debug boot throw `NullReferenceException` at
-  `WorldDefinitionValidator.Placements.cs:1723`, through
-  `DocumentSpatialValues.cs:143`. Owner: language lane. Default or
-  refuse the missing position before the domain-expansion walk. The port
-  authors the explicit position and boots successfully. (from: meadow)
+  an authoring diagnostic: `WorldDefinitionValidator.Placements.cs:1723`,
+  through `DocumentSpatialValues.cs:143`, throws `NullReferenceException`. A
+  `.puck` source no longer reaches it (lowering fills the shape's described
+  `position` default), but a hand-written JSON document can. Default or refuse
+  the missing position in the validator before the domain-expansion walk.
+  (from: meadow)
+- [medium] Spelling pairs the compiler does not yet hold
+  (`SpellingEquivalenceCorpusTests.Open`), each fixed by choosing one canonical
+  form in lowering:
+  - `float-spelling`: `30.24` and `30.240000000000002` are one float32, the
+    precision a creation reads, but two documents (`worlds/debug/go.puck`'s
+    grid paints carry the long spelling). Round a creation's scalars to the
+    shortest float32 round-trip spelling on lowering, or keep doubles and say
+    so; either way the corpus pair records the choice.
+  - `profile-start`: a closed profile listed from another start vertex is one
+    polygon and two documents (and two bake keys). Start the ring at its least
+    vertex on lowering, for closed profiles only (a sweep's path and an open
+    revolve profile keep their order).
+  - `chamfer-default`: a zero `chamfer` and none are one SDF program but two
+    documents and two creation hashes (`CreationCanonicalizer.Normalize` keeps
+    `Chamfer` as written). Design and recommendation:
+    [G13](state-and-language.md#designs-to-choose).
+  - `ternary-fold`: a compile-time constant condition in a gate is not folded,
+    so `(c == 1) ? (a < 3) : (a <= 3)` lowers to a `compareValue` evaluating
+    both arms where `a < 3` lowers to `compareState`: a different rule program
+    and price. Fold constant expressions before lowering
+    ([G14](state-and-language.md#designs-to-choose)).
+  - A literal `rotation` is lowered in one sign on shape rows only
+    (`WorldDocumentRowDefaults.CanonicalizeRotation`); text runs, placements
+    and animation frames still keep the authored sign. Apply the one helper to
+    each.
+  - The audit's cost pairs that two documents cannot share (static placements
+    against one creation, split prototypes against one, `wall - opening`
+    against its box tiling, a mirrored pair against a `symmetry` fold, union
+    shape order, `x += 3` against `x = x + 3`, a latch cell against its
+    repeated guard) need a cost corpus over bake groups and the work sheet,
+    beside this document corpus.
+- [low] A module library's lets and templates are never reported unused (each is
+  an export), so an export nothing in the repository reads goes unflagged
+  (`worlds/debug/elements.puck` `elementFamilyGlyphs`,
+  `worlds/standard/styles.puck` `continuousStyle`). A directory lint could
+  report a library declaration no linted source reads.
 
 - [low] Two `exports { … }` blocks in one document keep only the later block's
   lists (the object section replaces, where the `export <facet> <names>`
@@ -3185,6 +3241,13 @@ ordinary · Next: new content and art on the owner's call.
   game's tests when converting. (from: puck-audit)
 - Owed: `puck verbs --check` with a windowed boot after clearance-op removed
   `player.camera.clearance` by hand (the first settle window runs it). (from: clearance-op)
+- [low] The gallery's `motion-pulse` exhibit (`worlds/debug/shapes.puck`, its
+  six petals smooth-unioned to the core in one pooled group) draws a stretched
+  seam all the time, since a continuous clock drives it: lint reports PUCK122
+  six times. Its look needs the owner's eye: one group per petal and core, or
+  no group and a union crease. The two exhibits that show the stretched seam on
+  purpose (`motion-smooth-blend`, `motion-carve`) acknowledge it with `allow`.
+  (from: puck-lang)
 - The faerie: the companion becomes small, abstract and original (nothing that
   reads as Ocarina of Time's) beside the moth, its animation rich, varied and
   reactive, dodging a swat through one generic threat input (a point and

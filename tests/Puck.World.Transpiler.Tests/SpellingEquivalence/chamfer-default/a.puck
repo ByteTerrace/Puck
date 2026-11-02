@@ -1,0 +1,14 @@
+// A box's chamfer at 0 is the chamfer omitted (the canonicalizer reads both as none).
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+prototypes {
+  prototype "p" {
+    document {
+      shape Box "b" {
+        chamfer: 0
+        scale [0.5, 0.5, 0.5]
+      }
+    }
+  }
+}

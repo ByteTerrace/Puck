@@ -221,6 +221,30 @@ public static partial class WorldConstructs {
                     Summary: "The blend's smoothing radius."
                 ),
                 new(
+                    Default: "0",
+                    DocumentKeys: ["group"],
+                    Kind: WorldMemberKind.Number,
+                    Name: "group",
+                    Position: WorldMemberPosition.Property,
+                    Summary: "The pooled blend group the shape bakes in."
+                ),
+                new(
+                    Default: "0",
+                    DocumentKeys: ["material"],
+                    Kind: WorldMemberKind.Number,
+                    Name: "material",
+                    Position: WorldMemberPosition.Property,
+                    Summary: "The palette slot the shape is painted from."
+                ),
+                new(
+                    Default: "[0, 0, 0]",
+                    DocumentKeys: ["position"],
+                    Kind: WorldMemberKind.Value,
+                    Name: "position",
+                    Position: WorldMemberPosition.Property,
+                    Summary: "The shape's position in its creation's frame, in metres; a binding reference in its place never elides."
+                ),
+                new(
                     Default: "[0, 0, 0, 1]",
                     DocumentKeys: ["rotation"],
                     Kind: WorldMemberKind.Value,

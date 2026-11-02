@@ -1,0 +1,14 @@
+// A length in centimetres is the same length in metres.
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+prototypes {
+  prototype "p" {
+    document {
+      shape Box "b" {
+        position [0, 30cm, 0]
+        scale [0.5, 0.5, 0.5]
+      }
+    }
+  }
+}

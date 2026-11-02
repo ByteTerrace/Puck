@@ -247,6 +247,99 @@ public static partial class PuckPrinter {
             );
             Trailing(trivia: cell.Trivia);
         }
+        private void TestGivenItems(IReadOnlyList<TestGivenItemNode> items, int level) {
+            foreach (var item in items) {
+                switch (item) {
+                    case TestGivenNode cell:
+                        TestGivenCell(
+                            cell: cell,
+                            level: level
+                        );
+
+                        break;
+                    case TestGivenWorldNode addressed:
+                        TestWorldBlock(
+                            level: level,
+                            trivia: addressed.Trivia,
+                            world: addressed.World,
+                            write: () => {
+                                foreach (var cell in addressed.Cells) {
+                                    TestGivenCell(
+                                        cell: cell,
+                                        level: (level + 1)
+                                    );
+                                }
+                            }
+                        );
+
+                        break;
+                    case TestGivenForNode loop:
+                        TestBlock(
+                            keyword: TestLoopHead(item: loop.Item, index: loop.Index, level: level, sequence: loop.Sequence),
+                            level: level,
+                            trivia: loop.Trivia,
+                            write: () => TestGivenItems(items: loop.Body, level: (level + 1))
+                        );
+
+                        break;
+                    default:
+                        break;
+                }
+            }
+        }
+        private void TestWhenItems(IReadOnlyList<TestStepNode> steps, int level) {
+            foreach (var step in steps) {
+                switch (step) {
+                    case TestWhenWorldNode addressed:
+                        TestWorldBlock(
+                            level: level,
+                            trivia: addressed.Trivia,
+                            world: addressed.World,
+                            write: () => {
+                                foreach (var seat in addressed.Steps) {
+                                    TestWhenStep(
+                                        level: (level + 1),
+                                        step: seat
+                                    );
+                                }
+                            }
+                        );
+
+                        break;
+                    case TestWhenLoopNode loop:
+                        TestBlock(
+                            keyword: TestLoopHead(item: loop.Item, index: loop.Index, level: level, sequence: loop.Sequence),
+                            level: level,
+                            trivia: loop.Trivia,
+                            write: () => TestWhenItems(steps: loop.Body, level: (level + 1))
+                        );
+
+                        break;
+                    default:
+                        TestWhenStep(
+                            level: level,
+                            step: step
+                        );
+
+                        break;
+                }
+            }
+        }
+        // `for item in sequence`, `for (item, index) in sequence` or `repeat count`: a test loop's head, its block
+        // printed after it as any test block's is.
+        private string TestLoopHead(string? item, string? index, ExpressionNode sequence, int level) {
+            var head = new StringBuilder();
+
+            if (item is null) {
+                head.Append(value: "repeat ");
+            } else if (index is null) {
+                head.Append(value: "for ").Append(value: item).Append(value: " in ");
+            } else {
+                head.Append(value: "for (").Append(value: item).Append(value: ", ").Append(value: index).Append(value: ") in ");
+            }
+
+            return head.Append(value: Capture(expression: sequence, level: level)).ToString();
+        }
         private void TestWhenStep(TestStepNode step, int level) {
             Leading(
                 level: level,
@@ -352,6 +445,11 @@ public static partial class PuckPrinter {
                     level: level,
                     trivia: statement.Trivia
                 );
+                foreach (var allow in statement.Allows) {
+                    Indent(level: level);
+                    m_builder.Append(value: "allow ").Append(value: allow.Code).Append(value: ' ').Append(value: Quote(text: allow.Reason));
+                    EndLine();
+                }
                 Statement(
                     level: level,
                     statement: statement
@@ -922,37 +1020,7 @@ public static partial class PuckPrinter {
                                 keyword: "given",
                                 level: (level + 1),
                                 trivia: given.Trivia,
-                                write: () => {
-                                    foreach (var item in given.Cells) {
-                                        switch (item) {
-                                            case TestGivenNode cell:
-                                                TestGivenCell(
-                                                    cell: cell,
-                                                    level: (level + 2)
-                                                );
-
-                                                break;
-                                            case TestGivenWorldNode addressed:
-                                                TestWorldBlock(
-                                                    level: (level + 2),
-                                                    trivia: addressed.Trivia,
-                                                    world: addressed.World,
-                                                    write: () => {
-                                                        foreach (var cell in addressed.Cells) {
-                                                            TestGivenCell(
-                                                                cell: cell,
-                                                                level: (level + 3)
-                                                            );
-                                                        }
-                                                    }
-                                                );
-
-                                                break;
-                                            default:
-                                                break;
-                                        }
-                                    }
-                                }
+                                write: () => TestGivenItems(items: given.Cells, level: (level + 2))
                             );
                         }
                         if (declaration.When is { } when) {
@@ -960,31 +1028,7 @@ public static partial class PuckPrinter {
                                 keyword: "when",
                                 level: (level + 1),
                                 trivia: when.Trivia,
-                                write: () => {
-                                    foreach (var step in when.Steps) {
-                                        if (step is TestWhenWorldNode addressed) {
-                                            TestWorldBlock(
-                                                level: (level + 2),
-                                                trivia: addressed.Trivia,
-                                                world: addressed.World,
-                                                write: () => {
-                                                    foreach (var seat in addressed.Steps) {
-                                                        TestWhenStep(
-                                                            level: (level + 3),
-                                                            step: seat
-                                                        );
-                                                    }
-                                                }
-                                            );
-
-                                            continue;
-                                        }
-                                        TestWhenStep(
-                                            level: (level + 2),
-                                            step: step
-                                        );
-                                    }
-                                }
+                                write: () => TestWhenItems(steps: when.Steps, level: (level + 2))
                             );
                         }
                         if (declaration.Expect is { } expect) {

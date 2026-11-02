@@ -662,6 +662,14 @@ principals are driven in-process. No GPU leg: the one door a headless run
 cannot reach is the local HUD mirror, which is unfiltered by design.
 `worlds/debug/disclosure-probe.puck` becomes the harness's smallest fixture.
 
+Step 0 drives the seat console, presentation and replica sessions. **Step 0b**
+adds the remaining principals, each as another writer into the same transcript
+so existing fixtures stand: a socket peer over QUIC, a mounted addon (a WASM
+guest that records what it receives), a federated traveller, and Observe
+revoked and regranted mid-run. The harness is not "green over the four games"
+until 0b has run; a step may land before 0b, but its doors on those principals
+are unproved until then.
+
 ### The harness's fixture contract
 
 The harness is `puck disclosure <world>` ([CLI reference](../reference/cli.md#puck-disclosurethe-noninterference-harness)).
