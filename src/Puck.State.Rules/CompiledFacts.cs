@@ -86,7 +86,7 @@ public interface IRuleKey : ICompiledFact {
     bool TryResolveForWrite(IStateReader reader, out CellKey key, out string reason) {
         key = Resolve(naming: out var naming, reader: reader);
         reason = ((naming == KeyNaming.Fault)
-            ? "the written cell's key faulted (overflow, a divide by zero, or a value with no number)"
+            ? RuleReads.KeyFaultReason
             : string.Empty);
 
         return (naming != KeyNaming.Fault);

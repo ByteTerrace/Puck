@@ -178,10 +178,14 @@ public sealed class WorldPlacementInfluenceOperand : WorldFactOperand {
         }
 
         var key = RuleReads.ResolveReference(
+            naming: out var naming,
             reader: reader,
             reference: in indirection
         );
 
+        if (naming == KeyNaming.Fault) {
+            return RuleFact.Faulted(kind: CellKind.Int);
+        }
         if (
             !key.IsValid ||
             !reader.Arena.Keys.TryGetName(
@@ -528,13 +532,20 @@ public sealed class WorldPairKeyFact : KeyFact<IWorldFacts>, IRuleKey {
     KeyNaming IRuleKey.ResolveIndex(IStateReader reader, out long index) {
         ArgumentNullException.ThrowIfNull(argument: reader);
 
+        var key = ((IRuleKey)this).Resolve(
+            naming: out var naming,
+            reader: reader
+        );
+
+        index = 0L;
+        if (naming != KeyNaming.Cell) {
+            return naming;
+        }
+
         return (RuleReads.TryKeyIndex(
             keys: reader.Arena.Keys,
             index: out index,
-            key: ((IRuleKey)this).Resolve(
-                naming: out _,
-                reader: reader
-            )
+            key: key
         )
             ? KeyNaming.Cell
             : KeyNaming.Nothing);

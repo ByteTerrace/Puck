@@ -73,34 +73,37 @@ public sealed class CompiledVector {
     }
     /// <summary>Reads the component span for this operand during evaluation.</summary>
     /// <param name="reader">The evaluation in flight.</param>
-    /// <param name="span">The components on success, or empty.</param>
-    /// <returns><see langword="true"/> when the vector was read.</returns>
-    public bool TryReadSpan(IStateReader reader, out ReadOnlySpan<sbyte> span) {
+    /// <param name="span">The components when a vector was read, or empty.</param>
+    /// <returns><see cref="KeyNaming.Cell"/> when a vector was read, <see cref="KeyNaming.Fault"/> when computing the
+    /// cell's key faulted, and <see cref="KeyNaming.Nothing"/> when the address holds no vector.</returns>
+    public KeyNaming ReadSpan(IStateReader reader, out ReadOnlySpan<sbyte> span) {
         ArgumentNullException.ThrowIfNull(argument: reader);
 
+        span = default;
         if (Constant is { } constant) {
             span = constant.Components;
 
-            return true;
+            return KeyNaming.Cell;
         }
 
         var key = RuleReads.ResolveKey(
             keyFrom: KeyFrom,
             literal: Key,
+            naming: out var naming,
             reader: reader
         );
 
-        if (!key.IsValid) {
-            span = default;
-
-            return false;
+        if (naming == KeyNaming.Fault) {
+            return KeyNaming.Fault;
         }
 
-        return reader.Arena.TryReadVector(
+        return ((key.IsValid && reader.Arena.TryReadVector(
             components: out span,
             key: key,
             rowOrdinal: RowOrdinal
-        );
+        ))
+            ? KeyNaming.Cell
+            : KeyNaming.Nothing);
     }
 }
 /// <summary>An operand that evaluates a vector function (dot, cosine, identical) over two vector operands.</summary>
@@ -141,15 +144,26 @@ public sealed class VectorCallOperand : RuleOperand {
     });
     /// <inheritdoc/>
     public override RuleFact Read(IStateReader reader) {
-        if (
-            !Left.TryReadSpan(
+        // Both sides are read before either answers: an absence beside a faulted key is still the fault, which a
+        // negation must not turn into truth.
+        var leftNaming = Left.ReadSpan(
             reader: reader,
             span: out var left
-        ) ||
-            !Right.TryReadSpan(
+        );
+        var rightNaming = Right.ReadSpan(
             reader: reader,
             span: out var right
-        )
+        );
+
+        if (
+            (leftNaming == KeyNaming.Fault) ||
+            (rightNaming == KeyNaming.Fault)
+        ) {
+            return RuleFact.Faulted(kind: ValueKind);
+        }
+        if (
+            (leftNaming != KeyNaming.Cell) ||
+            (rightNaming != KeyNaming.Cell)
         ) {
             return RuleFact.Absent(kind: ValueKind);
         }

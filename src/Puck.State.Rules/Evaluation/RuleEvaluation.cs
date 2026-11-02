@@ -113,13 +113,18 @@ public static class RuleEvaluation {
             if (predicate.ValueKind == CellKind.Text) {
                 var leftText = leftSource.Text;
                 var rightText = rightSource.Text;
-                var leftAnswered = leftText is not null || TryReadText(reader, leftSource.Operand, out leftText);
-                var rightAnswered = rightText is not null || TryReadText(reader, rightSource.Operand, out rightText);
+                var leftNaming = (leftText is not null) ? KeyNaming.Cell : ReadText(reader, leftSource.Operand, out leftText);
+                var rightNaming = (rightText is not null) ? KeyNaming.Cell : ReadText(reader, rightSource.Operand, out rightText);
                 var equal = string.Equals(leftText, rightText, StringComparison.Ordinal);
-                var textHolds = leftAnswered && rightAnswered &&
+                var textHolds = (leftNaming == KeyNaming.Cell) && (rightNaming == KeyNaming.Cell) &&
                     (predicate.Comparison == ExpressionOp.Equal ? equal : !equal);
                 stack[top++] = textHolds;
                 trace?.Add($"{predicate.Describe}: \"{leftText}\" {predicate.Comparison.Symbol()} \"{rightText}\" -> {Spell(textHolds)}");
+                // A faulted address closes the gate as a faulted numeric read does, ahead of any negation.
+                if ((leftNaming == KeyNaming.Fault) || (rightNaming == KeyNaming.Fault)) {
+                    fault = ExpressionFault.Domain;
+                    return false;
+                }
                 continue;
             }
             var right = default(RuleFact);
@@ -273,8 +278,9 @@ public static class RuleEvaluation {
     /// <param name="reader">The evaluation in flight.</param>
     /// <param name="source">The compiled text operand.</param>
     /// <param name="text">The text, or empty on a missing read.</param>
-    /// <returns>Whether a Text cell was read.</returns>
-    public static bool TryReadText(IStateReader reader, IRuleOperand? source, out string text) {
+    /// <returns><see cref="KeyNaming.Cell"/> when a Text cell was read, <see cref="KeyNaming.Fault"/> when computing
+    /// its row or key faulted, and <see cref="KeyNaming.Nothing"/> when no Text cell answered.</returns>
+    public static KeyNaming ReadText(IStateReader reader, IRuleOperand? source, out string text) {
         text = string.Empty;
         CellValue carried;
 
@@ -282,13 +288,20 @@ public static class RuleEvaluation {
             case StateCellOperand cell: {
                     var ordinal = cell.RowOrdinal;
 
-                    if ((cell.RowFrom is { } live) && !live.TryResolve(reader: reader, rowOrdinal: out ordinal)) {
-                        return false;
-                    }
-                    var key = RuleReads.ResolveKey(keyFrom: cell.KeyFrom, literal: cell.Key, reader: reader);
+                    if (cell.RowFrom is { } live) {
+                        var selected = live.Resolve(reader: reader, rowOrdinal: out ordinal);
 
+                        if (selected != KeyNaming.Cell) {
+                            return selected;
+                        }
+                    }
+                    var key = RuleReads.ResolveKey(keyFrom: cell.KeyFrom, literal: cell.Key, naming: out var naming, reader: reader);
+
+                    if (naming == KeyNaming.Fault) {
+                        return KeyNaming.Fault;
+                    }
                     if (!key.IsValid || !reader.Arena.TryRead(key: key, rowOrdinal: ordinal, value: out carried)) {
-                        return false;
+                        return KeyNaming.Nothing;
                     }
                     break;
                 }
@@ -296,25 +309,25 @@ public static class RuleEvaluation {
                     var bindings = reader.InstanceBindings;
 
                     if ((((uint)field.BindingSlot) >= ((uint)bindings.Length)) || (bindings[field.BindingSlot].PoolOrdinal != field.Pool.Ordinal) || !reader.Arena.TryReadLive(handle: bindings[field.BindingSlot], fieldOrdinal: field.Field.Ordinal, time: reader.Time, value: out carried)) {
-                        return false;
+                        return KeyNaming.Nothing;
                     }
                     break;
                 }
             case StaticInstanceFieldOperand field: {
                     if (!reader.Arena.TryResolvePoolSlot(poolOrdinal: field.Pool.Ordinal, slot: field.Handle.Slot, handle: out var handle) ||
                         !reader.Arena.TryReadLive(handle: handle, fieldOrdinal: field.Field.Ordinal, time: reader.Time, value: out carried)) {
-                        return false;
+                        return KeyNaming.Nothing;
                     }
                     break;
                 }
             default:
-                return false;
+                return KeyNaming.Nothing;
         }
 
         if (carried.Kind != CellKind.Text) {
-            return false;
+            return KeyNaming.Nothing;
         }
         text = carried.AsText;
-        return true;
+        return KeyNaming.Cell;
     }
 }
