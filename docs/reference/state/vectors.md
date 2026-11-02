@@ -114,17 +114,16 @@ rule "turn-hostile" {
 }
 
 rule "measure" {
-  when dot(stance[guards], situation) > 12000 : Int
+  when dot(stance[guards], situation) > 12000
   hostile = 0
 }
 ```
 
 These rules assume an Int slot `hostile` beside the rows above. A gate
-comparison between two expressions computes in `Fixed` unless it carries a kind
-suffix. `dot` and `identical` return `Int`, so a comparison against either one
-ends with `: Int`. Without the suffix, the compiler refuses the gate because an
-Int value sits where a Fixed one is required.
-[Rules and firing](rules.md#the-authored-model) describes the suffix.
+comparison's kind is inferred from its sides: `dot` and `identical` return
+`Int`, so a comparison against either one computes in `Int`, and `similarity`
+returns `Fixed`. A written kind suffix (`: Int`) is refused.
+[Rules and firing](rules.md#the-authored-model) describes the inference.
 
 ### Similarity and dot
 

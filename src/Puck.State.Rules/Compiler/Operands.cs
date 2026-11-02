@@ -534,8 +534,14 @@ public sealed class BoardOperand : RuleOperand, IStateAddressedOperand {
         var key = RuleReads.ResolveKey(
             keyFrom: KeyFrom,
             literal: Key,
+            naming: out var naming,
             reader: reader
         );
+
+        if (naming == KeyNaming.Fault) {
+            return RuleFact.Faulted(kind: CellKind.Int);
+        }
+
         var origin = -1;
 
         if (
@@ -655,13 +661,9 @@ public sealed class SymmetryOperand : RuleOperand, IStateAddressedOperand {
             : ((int)whole)
         );
     }
-    private FixedQ4816 ReadFixed(IStateReader reader) {
+    private FixedQ4816 ReadFixed(IStateReader reader, CellKey key) {
         var node = NodeOf(value: RuleReads.ReadFixed(
-            key: RuleReads.ResolveKey(
-                keyFrom: KeyFrom,
-                literal: Key,
-                reader: reader
-            ),
+            key: key,
             reader: reader,
             rowOrdinal: RowOrdinal
         ));
@@ -735,11 +737,25 @@ public sealed class SymmetryOperand : RuleOperand, IStateAddressedOperand {
     public override RuleFact Read(IStateReader reader) {
         ArgumentNullException.ThrowIfNull(argument: reader);
 
+        var key = RuleReads.ResolveKey(
+            keyFrom: KeyFrom,
+            literal: Key,
+            naming: out var naming,
+            reader: reader
+        );
+
+        if (naming == KeyNaming.Fault) {
+            return RuleFact.Faulted(kind: ValueKind);
+        }
+
         return RuleFact.Finite(
             kind: ValueKind,
             value: RuleFact.RawOf(
                 kind: ValueKind,
-                value: ReadFixed(reader: reader)
+                value: ReadFixed(
+                    key: key,
+                    reader: reader
+                )
             )
         );
     }

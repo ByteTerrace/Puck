@@ -1,23 +1,64 @@
-// A key or ring age whose arithmetic faults is a fault of the read, never an absence a gate can negate into truth:
+// A key or ring age whose arithmetic faults is a fault of the read, never an absence a gate can negate into truth,
+// and a fault of the effect, never a no-op the rest of a firing commits around:
 // `puck test worlds/debug/gate-fault-tests.puck --reproduce`. With `a` at zero, `1 / a` divides by zero, so each
-// faulting rule's gate closes on the arithmetic and never fires. The control rules read through an address that names
-// no cell (`b` keys nothing the rows hold), an absence that converts to false at a gate, so their negations fire:
-// the gates are evaluated, and only the fault keeps the others shut.
+// faulting rule's gate closes on the arithmetic and never fires, and each faulting effect refuses its whole firing,
+// rewinding the increment before it. The control rules read or write through an address that names no cell (`b`
+// keys nothing the rows hold), an absence that converts to false at a gate and skips an effect, so their negations
+// fire and their increments commit: the gates are evaluated, and only the fault keeps the others shut.
 
 schema: "puck.world.definition.v1"
 basis: "avatars/moth"
 documentId: "gate-fault-tests"
 
+let faultAlphabet = [
+  { name: "one", min: 1, max: 1 }
+]
+
+patterns [
+  { name: "faultRun", kind: Int, symbols: faultAlphabet, pattern: star(item: symbol(name: "one")) }
+]
+
 state {
+  lattices [
+    grid(name: "faultGrid", origin: [0, 0, 0], cellSize: 1, width: 2, depth: 2, wrap: None, directions: [
+      { name: "N", x: 0, y: -1 }
+      { name: "E", x: 1, y: 0 }
+      { name: "S", x: 0, y: 1 }
+      { name: "W", x: -1, y: 0 }
+    ])
+  ]
+  spaces {
+    space faultSpace { model: "gate-fault-fixture" revision: "1" dimensions: 8 }
+  }
   world {
     row { name: "a", kind: "Int", value: 0 }
     row { name: "b", kind: "Int", value: 5 }
     row { name: "cards", kind: "Int", cells [{ key: "1", value: 3 }] }
+    row { name: "nodes", kind: "Int", cells [{ key: "1", value: 5 }] }
+    row { name: "labels", kind: "Text", cells [{ key: "1", value: "yes" }] }
     row { name: "hist", kind: "Int", domain: ring(capacity: 4, empty: -1) }
+    row { name: "tiles", kind: "Int", capacity: 4, domain: cellsOf(topology: faultGrid) }
+    table vecs capacity(4) space(faultSpace)
     row { name: "keyFired", kind: "Int", value: 0 }
     row { name: "ageFired", kind: "Int", value: 0 }
+    row { name: "vectorFired", kind: "Int", value: 0 }
+    row { name: "originFired", kind: "Int", value: 0 }
+    row { name: "offsetFired", kind: "Int", value: 0 }
+    row { name: "symmetryFired", kind: "Int", value: 0 }
+    row { name: "boardPatternFired", kind: "Int", value: 0 }
+    row { name: "wordPatternFired", kind: "Int", value: 0 }
+    row { name: "textFired", kind: "Int", value: 0 }
+    row { name: "removeFired", kind: "Int", value: 0 }
     row { name: "keyControl", kind: "Int", value: 0 }
     row { name: "ageControl", kind: "Int", value: 0 }
+    row { name: "vectorControl", kind: "Int", value: 0 }
+    row { name: "originControl", kind: "Int", value: 0 }
+    row { name: "offsetControl", kind: "Int", value: 0 }
+    row { name: "symmetryControl", kind: "Int", value: 0 }
+    row { name: "boardPatternControl", kind: "Int", value: 0 }
+    row { name: "wordPatternControl", kind: "Int", value: 0 }
+    row { name: "textControl", kind: "Int", value: 0 }
+    row { name: "removeControl", kind: "Int", value: 0 }
   }
 }
 
@@ -31,6 +72,47 @@ rule "ring-age-fault" {
   mode: Level
   ageFired += 1
 }
+rule "vector-key-fault" {
+  when not (identical(vecs[1 / a], vector("fwAAAAAAAAA")) == 1)
+  mode: Level
+  vectorFired += 1
+}
+rule "board-origin-fault" {
+  when not (board(neighbour, tiles, E)[1 / a] == 99)
+  mode: Level
+  originFired += 1
+}
+rule "board-offset-fault" {
+  when not (board(offset, tiles, 1, 0)[1 / a] == 99)
+  mode: Level
+  offsetFired += 1
+}
+rule "symmetry-key-fault" {
+  when not (symmetry(ring, nodes)[1 / a] == 99)
+  mode: Level
+  symmetryFired += 1
+}
+rule "board-pattern-fault" {
+  when not (match(faultRun, tiles, E)[1 / a] == 99)
+  mode: Level
+  boardPatternFired += 1
+}
+rule "word-pattern-fault" {
+  when not (match(faultRun, cards)[1 / a] == 99)
+  mode: Level
+  wordPatternFired += 1
+}
+rule "text-key-fault" {
+  when not (labels[1 / a] == "yes")
+  mode: Level
+  textFired += 1
+}
+rule "remove-key-fault" {
+  mode: Level
+  removeFired += 1
+  remove cards[1 / a]
+}
+
 rule "dynamic-key-absent" {
   when not (cards[b] == 3)
   mode: Level
@@ -41,6 +123,46 @@ rule "ring-age-absent" {
   mode: Level
   ageControl += 1
 }
+rule "vector-key-absent" {
+  when not (identical(vecs[b], vector("fwAAAAAAAAA")) == 1)
+  mode: Level
+  vectorControl += 1
+}
+rule "board-origin-absent" {
+  when not (board(neighbour, tiles, E)[b] == 99)
+  mode: Level
+  originControl += 1
+}
+rule "board-offset-absent" {
+  when not (board(offset, tiles, 1, 0)[b] == 99)
+  mode: Level
+  offsetControl += 1
+}
+rule "symmetry-key-absent" {
+  when not (symmetry(ring, nodes)[b] == 99)
+  mode: Level
+  symmetryControl += 1
+}
+rule "board-pattern-absent" {
+  when not (match(faultRun, tiles, E)[b] == 99)
+  mode: Level
+  boardPatternControl += 1
+}
+rule "word-pattern-absent" {
+  when not (match(faultRun, cards)[b] == 99)
+  mode: Level
+  wordPatternControl += 1
+}
+rule "text-key-absent" {
+  when not (labels[b] == "yes")
+  mode: Level
+  textControl += 1
+}
+rule "remove-key-absent" {
+  mode: Level
+  removeControl += 1
+  remove cards[b]
+}
 
 test "a faulting key or ring age closes its gate" {
   when {
@@ -49,7 +171,32 @@ test "a faulting key or ring age closes its gate" {
   expect {
     keyFired == 0
     ageFired == 0
+    vectorFired == 0
+    originFired == 0
+    offsetFired == 0
+    symmetryFired == 0
+    boardPatternFired == 0
+    wordPatternFired == 0
+    textFired == 0
     keyControl > 0
     ageControl > 0
+    vectorControl > 0
+    originControl > 0
+    offsetControl > 0
+    symmetryControl > 0
+    boardPatternControl > 0
+    wordPatternControl > 0
+    textControl > 0
+  }
+}
+
+test "a faulting effect key refuses its whole firing" {
+  when {
+    ticks 10
+  }
+  expect {
+    removeFired == 0
+    cards[1] == 3
+    removeControl > 0
   }
 }

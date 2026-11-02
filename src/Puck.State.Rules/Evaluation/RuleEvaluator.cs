@@ -221,15 +221,18 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
         var selected = true;
 
         foreach (var reference in zones.References) {
-            var found = reference.TryResolve(
+            // A faulted index selects no row, so the rule is not for this evaluation either way; the trace names
+            // the fault apart from an index that selects none.
+            var naming = reference.Resolve(
                 reader: m_host,
                 rowOrdinal: out var ordinal
             );
+            var found = (naming == KeyNaming.Cell);
 
             selected &= found;
             trace?.Add(item: $"{reference.Spelling} -> {(found
                 ? m_host.Catalog.Descriptors[ordinal].Name
-                : "none")}");
+                : ((naming == KeyNaming.Fault) ? "fault" : "none"))}");
             if (
                 !found &&
                 (trace is null)

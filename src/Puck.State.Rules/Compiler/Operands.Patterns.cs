@@ -79,17 +79,12 @@ public sealed class PatternOperand : RuleOperand, IStateAddressedOperand {
     /// <summary>Gets the zone's per-token value expression, when the pattern carries one.</summary>
     public CompiledExpressionToken[]? TokenExpression { get; }
 
-    private long ReadBoardMatch(IStateReader reader, int rowOrdinal, BoardNeighbourQuery query) {
+    private long ReadBoardMatch(IStateReader reader, int rowOrdinal, BoardNeighbourQuery query, CellKey key) {
         var arena = reader.Arena;
         using var valuesLease = reader.Scratch.Rent<long>(length: query.Topology.CellCount);
 
         var values = valuesLease.Span;
         var word = reader.PatternWord;
-        var key = RuleReads.ResolveKey(
-            keyFrom: KeyFrom,
-            literal: Key,
-            reader: reader
-        );
         var origin = -1;
 
         if (
@@ -201,7 +196,7 @@ public sealed class PatternOperand : RuleOperand, IStateAddressedOperand {
             : mask
         );
     }
-    private long ReadWordMatch(IStateReader reader, int rowOrdinal) {
+    private long ReadWordMatch(IStateReader reader, int rowOrdinal, CellKey startKey) {
         var arena = reader.Arena;
         var word = reader.PatternWord;
         var start = 0;
@@ -209,12 +204,6 @@ public sealed class PatternOperand : RuleOperand, IStateAddressedOperand {
         if (
             (Key.IsValid || (KeyFrom is not null))
         ) {
-            var startKey = RuleReads.ResolveKey(
-                keyFrom: KeyFrom,
-                literal: Key,
-                reader: reader
-            );
-
             start = StartPosition(
                 arena: arena,
                 key: startKey,
@@ -427,17 +416,30 @@ public sealed class PatternOperand : RuleOperand, IStateAddressedOperand {
             }
         }
 
+        var key = RuleReads.ResolveKey(
+            keyFrom: KeyFrom,
+            literal: Key,
+            naming: out var naming,
+            reader: reader
+        );
+
+        if (naming == KeyNaming.Fault) {
+            return RuleFact.Faulted(kind: CellKind.Int);
+        }
+
         return RuleFact.Finite(
             kind: CellKind.Int,
             value: ((Board is { } query)
             ? ReadBoardMatch(
+                    key: key,
                     query: query,
                     reader: reader,
                     rowOrdinal: ordinal
                 )
             : ReadWordMatch(
                     reader: reader,
-                    rowOrdinal: ordinal
+                    rowOrdinal: ordinal,
+                    startKey: key
                 ))
         );
     }
