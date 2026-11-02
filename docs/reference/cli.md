@@ -2079,6 +2079,14 @@ answers differently with no hidden difference at all, so the run judges
 nothing. `--seed`, `--lines` and `--actions` override the fixture's draws;
 `--keep` keeps the staged world, every world's transcripts and exports.
 
+The worlds themselves are quick: the probe's six run in about 10 seconds in
+one worker, most of it the first boot's one-time start-up, and each later
+world takes under half a second. The waits are the build lease (the World build
+of the checkout's sources, refused after 600 seconds behind other lanes'
+builds) and the heavy lease. A lane whose build queue is long builds
+`src/Puck.World` itself, copies its output to lane scratch, and passes that
+copy's `Puck.World.dll` as `--world-artifact`.
+
 ---
 
 ## `puck parity`—cross-backend parity over the authored parity world
