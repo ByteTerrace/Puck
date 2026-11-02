@@ -56,7 +56,8 @@ internal sealed class SdfMeshOcclusion : IDisposable {
     public uint CandidateCount => m_count;
 
     // Each pass uploads constant-sized controls. The residency already uploaded each changed draw once.
-    public void Stage(int slot, uint count, uint width, uint height, in SdfMeshCull cull, in SdfMeshDetail detail, bool held, bool glass, bool occlude) {
+    public void Stage(int slot, uint count, uint width, uint height, in SdfMeshCull cull, in SdfMeshDetail detail, bool held, bool glass, bool occlude, uint phaseExecutions = 1) {
+        ArgumentOutOfRangeException.ThrowIfZero(phaseExecutions);
         // The recording slot's fence has completed before Stage. Retire replacements only on its next reuse, after all
         // preceding submissions and this slot's history copy have completed.
         foreach (var buffer in m_retired[slot]) { buffer.Dispose(); }
@@ -74,6 +75,9 @@ internal sealed class SdfMeshOcclusion : IDisposable {
         words[3] = glass ? 1u : 0u;
         detail.WriteGpu(rows: rows[1..4], held: held);
         cull.WriteGpu(rows: rows[4..]);
+        // The final cull row uses xyz for light forward; w counts consumers of each selected phase.
+        // KEEP IN SYNC with sdf-mesh-occlusion.comp.hlsl: row13.w, within the same 224-byte controls.
+        words[^1] = phaseExecutions;
         EnsureBuffers(draws: count, depth: occlude);
         m_candidates[slot]!.Write(data: words);
     }

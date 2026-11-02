@@ -227,5 +227,8 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         vertices = emit ? count : 0u;
     }
 
-    sdfOcclusionCount(draws, vertices);
+    // Stage supplies the number of raster consumers in the otherwise unused light-forward row's w.
+    // A cascade's entry and exit share arguments, but both executions count as work.
+    uint executions = sdfMeshOcclusionCandidates[13].w;
+    sdfOcclusionCount(draws * executions, vertices * executions);
 }

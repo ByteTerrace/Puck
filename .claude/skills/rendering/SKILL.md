@@ -258,7 +258,10 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   it, and rewriting one shared set changes both recorded dispatches.
   Draws a kernel issues are counted on the GPU past the
   counter rows (`GpuKernelCounters.DrawnWords`), so `gpu.draws` and
-  `gpu.vertices` include them. An object `world.cull frustum` brings back is the
+  `gpu.vertices` include them. A reused phase must stage its execution count
+  (`phaseExecutions`, row 13.w): cascade entry and exit count twice without
+  selecting twice. `GpuWorkCounting.DrawIndirectCount` counts the API call,
+  not its unknown draw/vertex totals. An object `world.cull frustum` brings back is the
   occlusion's. The identity is a root constant on Direct3D 12. Vulkan reads it
   from the
   argument buffer through its pushed word base plus `DrawIndex`
