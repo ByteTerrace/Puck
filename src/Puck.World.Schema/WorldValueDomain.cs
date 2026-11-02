@@ -119,6 +119,26 @@ public static class WorldValueFields {
         Maximum: SdfPhotometry.MaximumEv100,
         Minimum: 0f
     ));
+    /// <summary>The camera exposure's manual or starting value, in <c>EV100</c>.</summary>
+    public static WorldValueField ExposureEv100 { get; } = new(typeof(WorldRenderExposure), nameof(WorldRenderExposure.Ev100), new WorldValueDomain(
+        Maximum: SdfPhotometry.MaximumEv100,
+        Minimum: SdfPhotometry.MinimumEv100
+    ));
+    /// <summary>The automatic exposure's floor, in <c>EV100</c>: the darkest scene it brightens.</summary>
+    public static WorldValueField ExposureMinimum { get; } = new(typeof(WorldRenderExposure), nameof(WorldRenderExposure.Minimum), new WorldValueDomain(
+        Maximum: SdfPhotometry.MaximumEv100,
+        Minimum: SdfPhotometry.MinimumEv100
+    ));
+    /// <summary>The automatic exposure's ceiling, in <c>EV100</c>.</summary>
+    public static WorldValueField ExposureMaximum { get; } = new(typeof(WorldRenderExposure), nameof(WorldRenderExposure.Maximum), new WorldValueDomain(
+        Maximum: SdfPhotometry.MaximumEv100,
+        Minimum: SdfPhotometry.MinimumEv100
+    ));
+    /// <summary>The automatic exposure's compensation, in stops.</summary>
+    public static WorldValueField ExposureCompensation { get; } = new(typeof(WorldRenderExposure), nameof(WorldRenderExposure.Compensation), new WorldValueDomain(
+        Maximum: WorldRenderExposure.MaxCompensation,
+        Minimum: WorldRenderExposure.MinCompensation
+    ));
     /// <summary>The sky's reflection gain.</summary>
     public static WorldValueField EnvironmentReflection { get; } = new(typeof(WorldRenderEnvironment), nameof(WorldRenderEnvironment.Reflection), WorldValueDomain.NonNegative);
     /// <summary>A sky panel's intensity.</summary>
@@ -319,6 +339,10 @@ public static class WorldValueFields {
         EnvironmentAmbient,
         EnvironmentReflection,
         ExposureHold,
+        ExposureEv100,
+        ExposureMinimum,
+        ExposureMaximum,
+        ExposureCompensation,
         RimLuminance,
         RimPower,
         PointIntensity,

@@ -9890,19 +9890,19 @@ export type WorldRenderExposure = {
   /**
    * The manual exposure value at ISO 100, in [−6, 20]: about 15 for a sunlit day, 7 for a lit room, 3 for a dim one. An automatic exposure starts there and holds it while its meter has no reading. Absent is SdfExposure.DefaultEv100, or with automatic exposure the middle of its bounds.
    */
-  ev100?: number | null;
+  ev100?: BindableScalar;
   /**
    * The lowest EV100 an automatic exposure adapts to: the darkest scene it brightens. In [−6, 20]; absent is −6.
    */
-  minimum?: number | null;
+  minimum?: BindableScalar;
   /**
    * The highest EV100 an automatic exposure adapts to, at or above Minimum. In [−6, 20]; absent is 20.
    */
-  maximum?: number | null;
+  maximum?: BindableScalar;
   /**
    * The stops an automatic exposure brightens the metered image by, in [−10, 10]. Absent is zero.
    */
-  compensation?: number | null;
+  compensation?: BindableScalar;
   /**
    * The time constant an automatic exposure eases toward its meter with, in seconds, in [0, 60]; zero follows the meter at once. Absent is SdfExposure.DefaultAdaptation.
    */

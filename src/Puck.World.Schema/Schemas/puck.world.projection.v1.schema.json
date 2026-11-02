@@ -10565,35 +10565,215 @@
             },
             "ev100": {
               "description": "The manual exposure value at ISO 100, in [\u22126, 20]: about 15 for a sunlit day, 7 for a lit room, 3 for a dim one. An automatic exposure starts there and holds it while its meter has no reading. Absent is SdfExposure.DefaultEv100, or with automatic exposure the middle of its bounds.",
-              "type": [
-                "number",
-                "null"
-              ],
-              "default": null
+              "default": null,
+              "title": "BindableScalar",
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "clock": {
+                      "type": "string"
+                    },
+                    "keys": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "at": {
+                            "type": "number"
+                          },
+                          "value": {
+                            "type": "number"
+                          },
+                          "ease": {
+                            "type": "string",
+                            "enum": [
+                              "Linear",
+                              "Smooth",
+                              "Step"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "at",
+                          "value"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "clock",
+                    "keys"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
             },
             "minimum": {
               "description": "The lowest EV100 an automatic exposure adapts to: the darkest scene it brightens. In [\u22126, 20]; absent is \u22126.",
-              "type": [
-                "number",
-                "null"
-              ],
-              "default": null
+              "default": null,
+              "title": "BindableScalar",
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "clock": {
+                      "type": "string"
+                    },
+                    "keys": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "at": {
+                            "type": "number"
+                          },
+                          "value": {
+                            "type": "number"
+                          },
+                          "ease": {
+                            "type": "string",
+                            "enum": [
+                              "Linear",
+                              "Smooth",
+                              "Step"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "at",
+                          "value"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "clock",
+                    "keys"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
             },
             "maximum": {
               "description": "The highest EV100 an automatic exposure adapts to, at or above Minimum. In [\u22126, 20]; absent is 20.",
-              "type": [
-                "number",
-                "null"
-              ],
-              "default": null
+              "default": null,
+              "title": "BindableScalar",
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "clock": {
+                      "type": "string"
+                    },
+                    "keys": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "at": {
+                            "type": "number"
+                          },
+                          "value": {
+                            "type": "number"
+                          },
+                          "ease": {
+                            "type": "string",
+                            "enum": [
+                              "Linear",
+                              "Smooth",
+                              "Step"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "at",
+                          "value"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "clock",
+                    "keys"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
             },
             "compensation": {
               "description": "The stops an automatic exposure brightens the metered image by, in [\u221210, 10]. Absent is zero.",
-              "type": [
-                "number",
-                "null"
-              ],
-              "default": null
+              "default": null,
+              "title": "BindableScalar",
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "clock": {
+                      "type": "string"
+                    },
+                    "keys": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "at": {
+                            "type": "number"
+                          },
+                          "value": {
+                            "type": "number"
+                          },
+                          "ease": {
+                            "type": "string",
+                            "enum": [
+                              "Linear",
+                              "Smooth",
+                              "Step"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "at",
+                          "value"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "clock",
+                    "keys"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
             },
             "adaptation": {
               "description": "The time constant an automatic exposure eases toward its meter with, in seconds, in [0, 60]; zero follows the meter at once. Absent is SdfExposure.DefaultAdaptation.",

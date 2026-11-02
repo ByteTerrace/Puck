@@ -388,22 +388,17 @@ public static partial class WorldDefinitionValidator {
         }
 
         JudgeScalar(definition: definition, errors: errors, field: WorldValueFields.ExposureHold, path: "render.exposure.hold", scalar: exposure.Hold);
-
-        foreach (var (value, name) in new (float?, string)[] { (exposure.Ev100, "ev100"), (exposure.Minimum, "minimum"), (exposure.Maximum, "maximum") }) {
-            if (value is { } ev) {
-                RequireRange(value: ev, min: SdfPhotometry.MinimumEv100, max: SdfPhotometry.MaximumEv100, name: $"render.exposure.{name}", errors: errors);
-            }
-        }
-        if (exposure.Compensation is { } compensation) {
-            RequireRange(value: compensation, min: WorldRenderExposure.MinCompensation, max: WorldRenderExposure.MaxCompensation, name: "render.exposure.compensation", errors: errors);
-        }
+        JudgeScalar(definition: definition, errors: errors, field: WorldValueFields.ExposureEv100, path: "render.exposure.ev100", scalar: exposure.Ev100);
+        JudgeScalar(definition: definition, errors: errors, field: WorldValueFields.ExposureMinimum, path: "render.exposure.minimum", scalar: exposure.Minimum);
+        JudgeScalar(definition: definition, errors: errors, field: WorldValueFields.ExposureMaximum, path: "render.exposure.maximum", scalar: exposure.Maximum);
+        JudgeScalar(definition: definition, errors: errors, field: WorldValueFields.ExposureCompensation, path: "render.exposure.compensation", scalar: exposure.Compensation);
         if (exposure.Adaptation is { } adaptation) {
             RequireRange(value: adaptation, min: 0f, max: WorldRenderExposure.MaxAdaptation, name: "render.exposure.adaptation", errors: errors);
         }
         if (exposure.Local is { } local) {
             RequireRange(value: local, min: 0f, max: 1f, name: "render.exposure.local", errors: errors);
         }
-        if ((exposure.Minimum is { } minimum) && (exposure.Maximum is { } maximum) && (minimum > maximum)) {
+        if ((exposure.Minimum?.Literal is { } minimum) && (exposure.Maximum?.Literal is { } maximum) && (minimum > maximum)) {
             errors.Add(item: $"render.exposure.minimum {minimum} is above its maximum {maximum}; the darkest exposure an automatic exposure takes is the lower bound.");
         }
         if ((exposure.Mode == SdfExposureMode.Manual) && ((exposure.Minimum is not null) || (exposure.Maximum is not null) || (exposure.Compensation is not null) || (exposure.Adaptation is not null) || (exposure.Local is not null))) {

@@ -217,7 +217,9 @@ public sealed record WorldRenderDefaults(
 /// light meter about each view's camera (the irradiance volume's light about it and the point lights' at it), aims for
 /// that reading less <paramref name="Compensation"/> within <paramref name="Minimum"/> and <paramref name="Maximum"/>,
 /// and eases toward it over <paramref name="Adaptation"/> seconds of presentation time. Presentation only: nothing in
-/// simulation state reads it. The darkest exposure a world takes also sizes each point and spot light's range.</summary>
+/// simulation state reads it. <paramref name="Ev100"/>, the bounds and the compensation are bindable, so a world keys
+/// them on its day clock as it keys the sun and the sky (a lower floor at night). The darkest exposure any of their
+/// authored values reaches sizes each point and spot light's range, so a keyed floor never changes the lights.</summary>
 /// <param name="Mode">Manual or automatic. Absent is manual.</param>
 /// <param name="Ev100">The manual exposure value at ISO 100, in <c>[−6, 20]</c>: about 15 for a sunlit day, 7 for a lit
 /// room, 3 for a dim one. An automatic exposure starts there and holds it while its meter has no reading. Absent is
@@ -241,10 +243,10 @@ public sealed record WorldRenderDefaults(
 /// size each point and spot light's range, so a hold never changes the lights the volume traces. Absent is no hold.</param>
 public sealed record WorldRenderExposure(
     SdfExposureMode Mode = SdfExposureMode.Manual,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Ev100 = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Minimum = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Maximum = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Compensation = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableScalar? Ev100 = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableScalar? Minimum = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableScalar? Maximum = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableScalar? Compensation = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Adaptation = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Local = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableScalar? Hold = null
@@ -256,8 +258,10 @@ public sealed record WorldRenderExposure(
     /// <summary>The longest an exposure's adaptation admits, in seconds.</summary>
     public const float MaxAdaptation = 60f;
 
-    /// <summary>Returns the exposure a frame renders with: an absent section's manual default, or this section with
-    /// every absent value at its default.</summary>
+    /// <summary>Returns the brightest exposure the section's authored values reach, which sizes each point and spot
+    /// light's range: an absent section's manual default, or this section with each bindable value at its brightest
+    /// authored value (the lowest <see cref="Ev100"/> and <see cref="Minimum"/> literal or key, the highest
+    /// <see cref="Maximum"/> and <see cref="Compensation"/>), a state binding's at the widest the domain admits.</summary>
     /// <param name="exposure">The authored section, or <see langword="null"/>.</param>
     /// <returns>The exposure.</returns>
     public static SdfExposure Resolve(WorldRenderExposure? exposure) {
@@ -265,15 +269,21 @@ public sealed record WorldRenderExposure(
             return SdfExposure.Default;
         }
 
-        return ResolveSection(exposure: exposure);
+        return ResolveSection(exposure: exposure, value: static (scalar, _, brightest) => Brightest(brightest: brightest, scalar: scalar));
     }
-    /// <summary>Returns the exposure a frame's views map luminance by under a resolved hold: the pinned manual exposure
-    /// while <paramref name="hold"/> is above zero, otherwise <see cref="Resolve(WorldRenderExposure?)"/>.</summary>
+    /// <summary>Returns the exposure a frame's views map luminance by: each bindable value as the caller resolves it
+    /// (a literal, a state cell or keys on a clock), the pinned manual exposure while <paramref name="hold"/> is above
+    /// zero.</summary>
     /// <param name="exposure">The authored section, or <see langword="null"/>.</param>
+    /// <param name="value">Resolves a bindable value, with the field whose domain bounds it, to its current number; called
+    /// only for an authored one.</param>
     /// <param name="hold">The resolved <see cref="Hold"/>, in <c>EV100</c>; zero or less is no hold.</param>
     /// <returns>The exposure.</returns>
-    public static SdfExposure Held(WorldRenderExposure? exposure, float hold) {
-        var authored = Resolve(exposure: exposure);
+    /// <exception cref="ArgumentNullException"><paramref name="value"/> is <see langword="null"/>.</exception>
+    public static SdfExposure Held(WorldRenderExposure? exposure, Func<BindableScalar, WorldValueField, float> value, float hold) {
+        ArgumentNullException.ThrowIfNull(value);
+
+        var authored = ((exposure is null) ? SdfExposure.Default : ResolveSection(exposure: exposure, value: (scalar, field, _) => value(scalar, field)));
 
         return ((hold > 0f)
             ? (authored with {
@@ -283,17 +293,26 @@ public sealed record WorldRenderExposure(
             })
             : authored);
     }
+    // A bindable value at the brightest exposure it can reach: its lowest authored value where a lower one brightens,
+    // its highest where a higher one does; a state binding's the domain's end.
+    private static float Brightest(BindableScalar scalar, bool brightest) {
+        var values = scalar.AuthoredValues().ToArray();
 
-    private static SdfExposure ResolveSection(WorldRenderExposure exposure) {
+        if (values.Length == 0) { return (brightest ? SdfPhotometry.MinimumEv100 : SdfPhotometry.MaximumEv100); }
+        return (brightest ? values.Min() : values.Max());
+    }
 
+    // The section with each authored bindable value through `value`, given its field and whether a lower value brightens.
+    private static SdfExposure ResolveSection(WorldRenderExposure exposure, Func<BindableScalar, WorldValueField, bool, float> value) {
         var automatic = (exposure.Mode == SdfExposureMode.Auto);
-        var minimum = (exposure.Minimum ?? (automatic ? SdfPhotometry.MinimumEv100 : (exposure.Ev100 ?? SdfExposure.DefaultEv100)));
-        var maximum = (exposure.Maximum ?? (automatic ? SdfPhotometry.MaximumEv100 : (exposure.Ev100 ?? SdfExposure.DefaultEv100)));
+        float? ev100 = ((exposure.Ev100 is { } ev) ? value(ev, WorldValueFields.ExposureEv100, true) : null);
+        var minimum = ((exposure.Minimum is { } low) ? value(low, WorldValueFields.ExposureMinimum, true) : (automatic ? SdfPhotometry.MinimumEv100 : (ev100 ?? SdfExposure.DefaultEv100)));
+        var maximum = ((exposure.Maximum is { } high) ? value(high, WorldValueFields.ExposureMaximum, false) : (automatic ? SdfPhotometry.MaximumEv100 : (ev100 ?? SdfExposure.DefaultEv100)));
 
         return new SdfExposure(
             Adaptation: (exposure.Adaptation ?? SdfExposure.DefaultAdaptation),
-            Compensation: (exposure.Compensation ?? 0f),
-            Ev100: (exposure.Ev100 ?? (automatic ? ((minimum + maximum) / 2f) : SdfExposure.DefaultEv100)),
+            Compensation: ((exposure.Compensation is { } compensation) ? value(compensation, WorldValueFields.ExposureCompensation, false) : 0f),
+            Ev100: (ev100 ?? (automatic ? ((minimum + maximum) / 2f) : SdfExposure.DefaultEv100)),
             Local: (automatic ? (exposure.Local ?? 0f) : 0f),
             Maximum: maximum,
             Minimum: minimum,
