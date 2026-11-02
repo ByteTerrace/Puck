@@ -41,7 +41,8 @@ experimental worlds have that it lacks is ported into it
    thread, not the GPU (meadow 67 ms against 8-22 ms of GPU). Half the meadow's
    frame thread is `CaptureFrame`, chiefly CPU SDF field queries: creation-effector
    surface probes (27 %) and the chase camera's clearance march (18 %), about
-   31 ms of 70; the presenter's `Dress` is 18.6 % and the tick 23-28 %. Design
+   31 ms of 70 (the presenter's `Dress`, 18.6 %, is that clearance march); the
+   draw list's dressing and staging are 9 % and the tick 23-28 %. Design
    these as the job system's and the evaluator's work (batched, cached by what
    changed, off the frame thread) before any visibility step.
 1. [Lighting and GI](#lighting-and-gi) [high]: under lockstep a moving sun
@@ -2814,6 +2815,21 @@ minutes of GPU) when no lane holds the GPU, compared stop by stop, with
   the other leg read as `baseline: new signal`, red. Keep each window's sweep as
   one report, both legs together, so the next window compares whole.
   (from: settle-1)
+- [high] The tour's last stop does not survive the lead machine's memory. Two
+  attached Direct3D 12 tours with the sun held reached all 74 stills through
+  `garden`, then the session's memory reaper stopped the run during
+  `night-field`, before the sweep wrote its report; both times. The World
+  starts the tour at 13.9 to 14.5 GB private (`host.memory`: managed committed
+  3.2 GB, the native allocator 2.6 GB, the rest other native memory and the
+  device's mapped heaps) on a 31.7 GB machine. Crossing back from the garden re-plans the
+  `world` residency (7,101 then 7,113 groups) and loads 1,048 meshes while the
+  previous set is still held, and bakes 14 groups the store no longer holds: the
+  per-user mesh store sits at its cap (8,496,012,457 of 8,589,934,592 bytes,
+  32,866 entries in 20 identity sets), so a crossing evicts and re-bakes. Until
+  that peak falls, the tour completes only as two attached runs (`--stop` every
+  stop but `night-field`, then `night-field` on a fresh World). Find what the
+  crossing holds twice, and stop the store's cap from evicting the live
+  identity's meshes for older identities' entries. (from: settle-2)
 
 - [medium] The windowed `--tour` does not repeat to its 2 % threshold on a long-running World: an identical re-run of the same build on the same World put 17 stops past 2 % (wing-door-far 99.3 %, revolved-floor 41.7 %), and the GI counters differ with World history (`sdf.mesh-gi.camera-traces` 304 against 573), so a cross-build comparison through it cannot separate a change from lighting history. A difference in nearly every pixel looks like exposure: a camera moved by a stop's teleport is a cut, so the exposure jumps to the meter's target, and the meter's camera-trace sample ring (`SdfMeshIrradiance`) reused samples by where the camera stood before. A cut now meters fresh at the camera (`TryMeter(fresh:)`) and snaps to that first reading, so the cut's sample no longer depends on history; the probe reading still depends on which cells the trace has cached. The tour reads `world.exposure` at each held tick (`SweepStillResult.Exposure`) and a still past the amber fraction says whether its exposure differs from the baseline's; the paired tour on one `--attach`ed World confirms whether the remaining difference is the probe cache's. (from: bake-scale lane)
 - Finish sweep-honest's paired motion qualification: its first final tour

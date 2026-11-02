@@ -143,8 +143,11 @@ produce 71 %, of which `WorldFramePresenter.CaptureFrame` is 50 %; inside it the
 creation effectors' surface probes (`WorldCreationInstances.ApplyEffectors` into
 `WorldEffectorSolver.Probe`, CPU `SdfFieldEvaluator` marches) take 27 % and the
 chase camera's clearance march (`WorldCameraClearance.Clear`) 18 %. The
-presenter's `Dress` is 18.6 %, of which `SdfMeshPathBake.Dress` is 4.4 % and
-`SdfWorldTables.StageChangedDraws` 4.4 %; `SdfWorldResidency.PrepareOnce` 9.8 %;
+presenter's `WorldFramePresenter.Dress` (18.6 %) is that clearance march
+(`ResolveCamera` into `WorldSeatViewState.Clear`, 18.0 %), not draw work. The
+draw list's own `SdfMeshPathBake.Dress` is 4.4 % and
+`SdfWorldTables.StageChangedDraws` 4.4 %, both under the residency's capture;
+`SdfWorldResidency.PrepareOnce` 9.8 %;
 `SdfWorldTables.Pack` 6 %; command recording (`ShaderPipelineRenderNode.RenderFrame`)
 2.5 to 4.7 %; the tick 23 to 28 %; GC polling 7 to 8 %.
 
