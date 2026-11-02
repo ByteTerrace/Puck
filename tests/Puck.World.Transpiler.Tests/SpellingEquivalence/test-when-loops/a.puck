@@ -1,0 +1,30 @@
+// 'repeat' and 'for' in a test's when block are their steps written out.
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+state {
+  world {
+    table board {
+      a = 0
+      b = 0
+      c = 0
+    }
+  }
+}
+
+
+test "steps" {
+  when {
+    repeat 2 {
+      ticks 1
+      seat1: world.state.cell.set board a 1
+    }
+    for (key, n) in ["b", "c"] {
+      seat1: world.state.cell.set board {key} {n}
+      ticks 1
+    }
+  }
+  expect {
+    board.a == 1
+  }
+}

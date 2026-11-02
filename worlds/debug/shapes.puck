@@ -1955,8 +1955,9 @@ template motionPrototypes() {
   }
   // The sphere slides along the side of the still box, through a smooth union. The group bakes at the pose its program
   // arrived in and skins each vertex to its winning shape's slot, so the seam stretches as the sphere moves away, until
-  // the clock pauses and the group bakes again at the held pose (PUCK122 warns of it). The sphere stays partly outside
-  // the box over the whole slide: a sphere the bake found inside the box would bake into no surface and never draw.
+  // the clock pauses and the group bakes again at the held pose. The sphere stays partly outside the box over the whole
+  // slide: a sphere the bake found inside the box would bake into no surface and never draw.
+  allow PUCK122 "the exhibit shows the stretched seam of a moving smooth union"
   prototype "motion-smooth-blend" {
     document {
       clockDriver(key: "blend", cadence: 1.2)
@@ -2004,6 +2005,7 @@ template motionPrototypes() {
     }
   }
   // A cutter sliding across the face of a still box: a cut face keeps the slot of the shape it shapes.
+  allow PUCK122 "the exhibit shows the stretched seam of a moving cut"
   prototype "motion-carve" {
     document {
       clockDriver(key: "carve", cadence: 1.2)

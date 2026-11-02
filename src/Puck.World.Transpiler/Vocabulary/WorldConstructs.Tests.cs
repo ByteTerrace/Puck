@@ -4,7 +4,7 @@ public static partial class WorldConstructs {
     private static IReadOnlyList<WorldConstruct> Tests() => [
         new(
             DocumentMember: "(nothing)",
-            Grammar: "test \"name\" [with module(arguments)] { given { row = literal | world { row = literal … } … } when { ticks n | seatN [refused [\"text\"]]: command | world { seatN: command … } … } expect { gate | world { gate … } … } }",
+            Grammar: "test \"name\" [with module(arguments)] { given { row = literal | world { row = literal … } | for item in [ … ] { … } … } when { ticks n | seatN [refused [\"text\"]]: command | world { seatN: command … } | for item in [ … ] { … } | repeat n { … } … } expect { gate | world { gate … } … } }",
             Keyword: "test",
             Members: [
                 new(
@@ -30,7 +30,7 @@ public static partial class WorldConstructs {
                     Lowering: "the generated test world's own `state.world[].cells[].value`, kind-checked against the row each names",
                     Name: "given",
                     Position: WorldMemberPosition.Body,
-                    Summary: "The cells the generated test world boots at, one `row = literal` or `row[key] = literal` per line."
+                    Summary: "The cells the generated test world boots at, one `row = literal` or `row[key] = literal` per line; `for item in [ … ] { row[item] = literal }` writes its lines once per element, the bound names read in each key and value, as the lines written out would."
                 ),
                 new(
                     DocumentKeys: [],
@@ -38,7 +38,7 @@ public static partial class WorldConstructs {
                     Lowering: "the generated test world's `schedule` section: one row per seat step at the tick the preceding `ticks` reached, a `refused` step carrying `expect: Refused` and its `refusal` text, and the export tick the grid ends on",
                     Name: "when",
                     Position: WorldMemberPosition.Body,
-                    Summary: "The tick grid and the commands along it: `ticks n` carries the cursor, `seatN: <command line>` submits one admitted step or read verb at it, and `seatN refused \"text\": <command line>` claims the world refuses it, the recorded refusal containing the text when one is written."
+                    Summary: "The tick grid and the commands along it: `ticks n` carries the cursor, `seatN: <command line>` submits one admitted step or read verb at it, and `seatN refused \"text\": <command line>` claims the world refuses it, the recorded refusal containing the text when one is written. `repeat n { … }` runs its steps n times and `for item in [ … ] { … }` once per element, substituting `{item}` in each command line (`{{` and `}}` are literal braces), as the steps written out would."
                 ),
                 new(
                     DocumentKeys: [],

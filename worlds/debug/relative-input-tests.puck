@@ -73,38 +73,10 @@ test "opposing samples cancel before the step bound" {
 test "sub-scalar samples conserve their fractional residue" {
   when {
     ticks 2
-    seat1: player.signal mouse.motion 0.000003814697265625 0
-    ticks 1
-    seat1: player.signal mouse.motion 0.000003814697265625 0
-    ticks 1
-    seat1: player.signal mouse.motion 0.000003814697265625 0
-    ticks 1
-    seat1: player.signal mouse.motion 0.000003814697265625 0
-    ticks 1
-    seat1: player.signal mouse.motion 0.000003814697265625 0
-    ticks 1
-    seat1: player.signal mouse.motion 0.000003814697265625 0
-    ticks 1
-    seat1: player.signal mouse.motion 0.000003814697265625 0
-    ticks 1
-    seat1: player.signal mouse.motion 0.000003814697265625 0
-    ticks 1
-    seat1: player.signal mouse.motion 0.000003814697265625 0
-    ticks 1
-    seat1: player.signal mouse.motion 0.000003814697265625 0
-    ticks 1
-    seat1: player.signal mouse.motion 0.000003814697265625 0
-    ticks 1
-    seat1: player.signal mouse.motion 0.000003814697265625 0
-    ticks 1
-    seat1: player.signal mouse.motion 0.000003814697265625 0
-    ticks 1
-    seat1: player.signal mouse.motion 0.000003814697265625 0
-    ticks 1
-    seat1: player.signal mouse.motion 0.000003814697265625 0
-    ticks 1
-    seat1: player.signal mouse.motion 0.000003814697265625 0
-    ticks 1
+    repeat 16 {
+      seat1: player.signal mouse.motion 0.000003814697265625 0
+      ticks 1
+    }
     ticks 3
   }
   expect {

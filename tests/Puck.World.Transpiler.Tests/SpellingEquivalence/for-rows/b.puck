@@ -1,0 +1,21 @@
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+prototypes {
+  prototype "p" {
+    document {
+      shape Box "b0" {
+        position [0, 0, 0]
+        scale [0.5, 0.5, 0.5]
+      }
+      shape Box "b1" {
+        position [1, 0, 0]
+        scale [0.5, 0.5, 0.5]
+      }
+      shape Box "b2" {
+        position [2, 0, 0]
+        scale [0.5, 0.5, 0.5]
+      }
+    }
+  }
+}

@@ -1,0 +1,17 @@
+// row.key and row["key"] read the same cell.
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+state {
+  world {
+    table score {
+      red = 0
+      blue = 0
+    }
+  }
+}
+
+rule "tally" {
+  when score.red < 3
+  score.blue = score.red + 1
+}

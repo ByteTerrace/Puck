@@ -214,7 +214,7 @@ effect-only loop when both are needed. `local $"name{i}"` names each iteration's
 as locals for one iteration and never leak. The sequence must be an array known
 at compile time or the `for` is **PUCK044**; a body that assigns a field
 instead of emitting a row is **PUCK046**; nesting past the expansion ceiling is
-**PUCK045**. A test's `when` block has its own step grammar and takes no `for`. This is
+**PUCK045**. A test's `given` takes a `for` over its cell lines (a bound name read in a key, `row[item]`, and in a value), and its `when` a `for` or `repeat n { }` over its steps (a bound name substituted into a command line as `{item}`); each expands to the lines written out. This is
 distinct from a cartridge rule's `repeat`, a play-time loop with a compile-time
 count in 1..255.
 
