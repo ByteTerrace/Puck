@@ -1446,16 +1446,6 @@ and warm builds measured.
   shader package directory holding binaries but no manifest; clearing
   `src/Puck.World/obj/Release/net11.0/worlds` and building again passed.
   Unconfirmed as a packaging race.
-- [high] A windowed Direct3D 12 debug World died on its sixth `world.reload` in
-  about ten minutes with an access violation in the native allocator, on a
-  bake worker loading a stored mesh: `MimallocAllocator.mi_malloc` ←
-  `OwnedBuffer<Vector3>.Resize` ← `SdfMesh.NativeCopy` ←
-  `SdfMeshLibrary.TryLoad` ← `SdfMeshPathBake.Load` ← `SdfMeshPathBake.Work`
-  (exit 139, `0xC0000005`, right after the reload's `[sdf.mesh-gi] scene`
-  line; the machine was short of memory, its working set paged down to
-  1.4 GB). Reproduce with repeated reloads under `world.wait bakes`, and check
-  whether a load can run against a mimalloc heap another thread owns or one a
-  reload has torn down. (from: c1-groundcover)
 
 ### The valley's terrain
 
@@ -1501,6 +1491,12 @@ lowers it to the same JSON as before, except where the look changes on purpose.
 
 Code that grew a second implementation (AGENTS.md rule 7) or costs velocity:
 
+- [low] Four copies of a `NativeMemory`-backed test `IAllocator` named `HeapAllocator`
+  (`tests/Puck.Vulkan.Tests/VulkanIndirectCountLawTests.cs:117`,
+  `VulkanValidationLivenessTests.cs:247`, `VulkanGroupedPipelineLayoutLawTests.cs:233`,
+  `VulkanGroupedBindingLawTests.cs:206`), while `IAllocator`'s documentation names a
+  `NativeMemory`-backed implementation that `src` does not have. One shared allocator
+  serves them, and `GuardedAllocator` can wrap it where a suite wants misuse checks.
 - Make `GpuRegion.Grow` the only way to grow a GPU region, and enforce the uniform
   view limit there (one lane):
   - [low] Growing the program region on `world.reload` waits for the device to go

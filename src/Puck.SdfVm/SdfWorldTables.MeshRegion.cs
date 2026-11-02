@@ -20,9 +20,14 @@ public sealed partial class SdfWorldTables {
 
     private SdfMeshClaims? m_meshClaims;
     private bool m_meshTrimListening;
+    // Set by the account's trim request on whichever thread raised it; the arena and its claims belong to the frame
+    // thread, which trims at its next staging (TrimMeshSources).
+    private volatile bool m_meshTrimRequested;
 
+    private void RequestMeshTrim() => m_meshTrimRequested = true;
     private void TrimMeshSources() {
-        if (m_disposed) { return; }
+        if (!m_meshTrimRequested) { return; }
+        m_meshTrimRequested = false;
         m_meshArena.TrimUnused();
         m_meshesOwed.RemoveWhere(match: mesh => !m_meshArena.Placements.ContainsKey(key: mesh));
         // The source order walks the placements, so a trim that forgot one rebuilds it.
@@ -130,7 +135,8 @@ public sealed partial class SdfWorldTables {
     // Packs new draws or a new revision, growing the region when the list needs more
     // bytes; the upload sends the slot what it owes.
     private void StageMeshRegion(IReadOnlyList<SdfMeshDraw> draws, long revision) {
-        if (!m_meshTrimListening) { Puck.Hosting.Jobs.MemoryAccount.Shared.TrimRequested += TrimMeshSources; m_meshTrimListening = true; }
+        if (!m_meshTrimListening) { Puck.Hosting.Jobs.MemoryAccount.Shared.TrimRequested += RequestMeshTrim; m_meshTrimListening = true; }
+        TrimMeshSources();
         if (ReferenceEquals(objA: draws, objB: m_meshSource) && (revision == m_meshSourceRevision)) { StageMeshRegionCore(draws: draws, revision: revision); return; }
         // The staged list's meshes hold live claims; the arena's placement claims keep every placed mesh's storage, the
         // ones the list stopped naming included, until the arena forgets them.
