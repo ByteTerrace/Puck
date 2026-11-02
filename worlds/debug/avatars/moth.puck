@@ -10,33 +10,6 @@ import "moth-camera"
 let headScale = 0.7
 let headAt = [0, 1.735, 0.207]
 
-// The blink frame's poses in the head's unscaled frame, [id, x, y, z]: each closed lid forward over its eye, each open
-// eye's white, opening, iris, pupil, catchlights, lids and lash back inside the face.
-let blinkPose = [
-  [284, 0.07656, 1.74842, 0.21045]
-  [285, 0.03356, 1.74842, 0.23245]
-  [41, 0.07656, 1.74842, 0.06945]
-  [42, 0.07656, 1.74842, 0.06945]
-  [43, 0.07456, 1.74842, 0.11045]
-  [44, 0.07456, 1.74842, 0.11545]
-  [45, 0.06856, 1.76042, 0.11945]
-  [46, 0.08556, 1.73642, 0.11745]
-  [47, 0.02956, 1.74842, 0.09645]
-  [48, 0.02956, 1.74842, 0.09645]
-  [49, 0.11656, 1.76542, 0.09945]
-  [286, -0.07656, 1.74842, 0.21045]
-  [287, -0.11956, 1.74842, 0.23245]
-  [57, -0.07656, 1.74842, 0.06945]
-  [58, -0.07656, 1.74842, 0.06945]
-  [59, -0.07456, 1.74842, 0.11045]
-  [60, -0.07456, 1.74842, 0.11545]
-  [61, -0.06856, 1.76042, 0.11945]
-  [62, -0.08556, 1.73642, 0.11745]
-  [63, -0.02956, 1.74842, 0.09645]
-  [64, -0.02956, 1.74842, 0.09645]
-  [65, -0.11656, 1.76542, 0.09945]
-]
-
 // The suit's two plate colours, from the concept pack: dusty lavender and a warm ivory, with the darker lavender of
 // a groove and the near-black of a vent slot.
 let lavenderPlate = "#744080"
@@ -1264,7 +1237,7 @@ prototypes {
         {
           name: "blink"
           transforms: map(
-            blinkPose,
+            mothBlinkPose,
             row => {
               id: row[0]
               position: map([row[1], row[2], row[3]], (v, k) => headAt[k] + (v - mothHeadPivot[k]) * headScale)
