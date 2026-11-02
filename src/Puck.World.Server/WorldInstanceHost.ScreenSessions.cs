@@ -44,11 +44,11 @@ public abstract record WorldObservationSite : IComparable<WorldObservationSite> 
 public sealed class WorldObservationSession {
     private volatile WorldSessionObservation? m_observation;
 
-    internal WorldObservationSession(string owner, WorldObservationSite site, WorldScreenSource.Session source) {
+    internal WorldObservationSession(string owner, WorldObservationSite site, WorldScreenSource.Session source, bool unread) {
         Owner = owner;
         Site = site;
         Source = source;
-        Mirror = new WorldSessionMirror(placeholder: WorldProjection.Undisclosed);
+        Mirror = new WorldSessionMirror(placeholder: WorldProjection.Undisclosed, unread: unread);
     }
 
     /// <summary>Gets the destination instance's generation id, once resolved.</summary>
@@ -263,10 +263,13 @@ public sealed partial class WorldInstanceHost {
     // destination's own admission. A refusal that leaves a destination this resolution started with nobody in it stops
     // that instance again.
     private WorldObservationSession OpenScreenSession(WorldInstance owner, WorldObservationSite site, WorldScreenSource.Session source) {
+        // Only a presentation reads a session's mirror; in a host that presents nothing the destination still runs
+        // and discloses, and the mirror drops what it is sent.
         var session = new WorldObservationSession(
             owner: owner.Name,
             site: site,
-            source: source
+            source: source,
+            unread: !m_presents
         );
 
         if (!TryResolveObservedDestination(

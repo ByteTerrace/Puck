@@ -23,13 +23,14 @@ public sealed class SdfFieldBoundsLawTests {
     private const int InteriorPointsPerBox = 12;
 
     // The cases whose rule encloses a search, a hashed choice or a bounded move instead of mirroring a step, so a point
-    // box is not a few raws wide: the sweeps and every render op but the shear.
+    // box is not a few raws wide: the sweeps and every render op but the shear and the noise relief; and the reliefs
+    // whose finest octave multiplies the rotation's few raws of slack by thousands of lattice cells a unit.
     private static readonly HashSet<string> EnclosingCases = [
         "shape Sweep", "shape Sweep bulged and twisted", "shape Sweep three strands", "shape Path stroke",
         "op AxialProfile", "op RotatePlane", "op GaussianPush", "op DomainWarp", "op RepeatPolar", "op RepeatPolar mirrored",
         "op WallpaperFold Pmm", "op WallpaperFold P4M", "op WallpaperFold P3M1", "op WallpaperFold P6M", "op LogSphere",
         "op CellJitter White", "op CellJitter Blue", "op CellJitter Gaussian", "op CellJitter tumbled", "op LaneErode", "op LaneErode skipped",
-        "op Displace", "op NoiseDisplace",
+        "op Displace", "op NoiseDisplace terrain", "op NoiseDisplace rough",
     ];
 
     public static TheoryData<string> Cases() {
@@ -297,6 +298,9 @@ public sealed class SdfFieldBoundsLawTests {
         Shape(name: "op LaneErode skipped", emit: (b, m) => b.LaneErode(from: -2f, lane: 1, noiseScale: 3f, reach: 0.4f, to: -1f).Sphere(material: m, radius: 0.8f).ResetPoint().Box(halfExtents: new Vector3(x: 0.4f, y: 0.4f, z: 0.4f), material: m, round: 0f));
         Shape(name: "op Displace", emit: (b, m) => b.Sphere(material: m, radius: 0.8f).Displace(amplitude: 0.1f, frequency: new Vector3(x: 5f, y: 6f, z: 7f)));
         Shape(name: "op NoiseDisplace", emit: (b, m) => b.Sphere(material: m, radius: 0.8f).NoiseDisplace(amplitude: 0.1f, frequency: 2f, octaves: 3, seed: 4u));
+        Shape(name: "op NoiseDisplace terrain", emit: (b, m) => b.Translate(offset: new Vector3(x: 0f, y: -1f, z: 0f)).Scale(scale: new Vector3(value: 0.8f)).Rotate(rotation: Quaternion.CreateFromYawPitchRoll(yaw: 0.7f, pitch: 0f, roll: 0f))
+            .Sphere(material: m, radius: 2f).NoiseDisplace(amplitude: 1.5f, frequency: 0.9f, octaves: 6, seed: 11u));
+        Shape(name: "op NoiseDisplace rough", emit: (b, m) => b.Plane(material: m, normal: Vector3.UnitY, offset: 0f).NoiseDisplace(amplitude: 0.6f, frequency: 3.3f, gain: 0.9f, lacunarity: 2.7f, octaves: 8, seed: 0xFFFFFFF0u));
 
         foreach (var blend in ((SdfBlendOp[])[
             SdfBlendOp.Union, SdfBlendOp.SmoothUnion, SdfBlendOp.Subtraction, SdfBlendOp.Intersection,

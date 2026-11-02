@@ -4,33 +4,176 @@ using Puck.Maths;
 namespace Puck.State;
 
 public sealed partial class StateArena {
-    /// <summary>Folds every stored column of every lane plus the retained key ledger into one hash.</summary>
+    /// <summary>The rows one hash segment holds: the arena's digest folds one digest per segment of this many
+    /// consecutive catalog ordinals, and a segment folds one digest per row (<see cref="RowDigest"/>).</summary>
+    /// <remarks>It divides the parallel tick's 256-row snapshot partition evenly, so a partitioned fold takes whole
+    /// segments.</remarks>
+    public const int HashSegmentRows = 32;
+
+    // The digest cache: one digest per row, valid while the row's version is the one it was folded at, and one per
+    // segment, valid while none of its rows refolded. Both belong to one layout and one key table: a relayout,
+    // reservation or adoption replaces the layout and a restore replaces the key table, and either drops the cache.
+    // Readers on other threads (a console hash beside the tick) share it under the gate.
+    private readonly Lock m_digestGate = new();
+
+    private ulong[] m_rowDigests = [];
+    private ulong[] m_rowDigestVersions = [];
+    private bool[] m_rowDigestKnown = [];
+    private ulong[] m_segmentDigests = [];
+    private bool[] m_segmentDigestKnown = [];
+    private (ArenaColumn Column, int Index)[] m_unownedPositions = [];
+    private ArenaLayout? m_digestLayout;
+    private CellKeyTable? m_digestKeys;
+
+    /// <summary>Gets how many row digests the arena folded into its cache since it was built: a load-independent
+    /// count of the work <see cref="ComputeHash"/> and <see cref="RowDigest"/> did, which an unchanged row never adds
+    /// to and <see cref="RecomputeHash"/> never counts.</summary>
+    public long RowDigestFolds { get; private set; }
+
+    /// <summary>Folds every stored column of every lane plus the retained key ledger into one hash: one digest per
+    /// segment of <see cref="HashSegmentRows"/> rows, each over its rows' <see cref="RowDigest"/>, then the positions
+    /// no row owns, the key ledger and the undo history.</summary>
     /// <returns>The hash value.</returns>
     /// <remarks>
     /// The fold reads the logical value of each position rather than the array behind it, so an arena that has
     /// never written a clock hashes the same as one whose clock was written back to zero. Reservations follow
     /// the catalog, authored rows and admitted growth, so hosts running the same document and writes fold the
     /// same bytes in the same order.
-    /// <para>A host-owned row is excluded: it has no columns here, and its facet hashes what it serves.</para>
+    /// <para>A row refolds only when its <see cref="RowVersion"/> moved since its digest was taken, or the layout or
+    /// key table was replaced, so a tick that wrote three rows folds three. Inside an open scope versions have not
+    /// settled, so the whole arena folds afresh and the cache is neither read nor written.
+    /// <see cref="RecomputeHash"/> is the same value with no cache at all, which a verification run compares
+    /// against.</para>
+    /// <para>A host-owned row folds as its ordinal alone: it has no columns here, and its facet hashes what it
+    /// serves.</para>
     /// <para>Members fold their names in slot order, independently of intern ordinals. The retained key ledger
     /// folds its count and order-independent digest sum because orphan names affect future mint admission.</para>
     /// </remarks>
     public ulong ComputeHash() {
-        var hash = Fnv1aHash.Create();
-
-        foreach (var column in ArenaColumns.All) {
-            // The column's own ordinal separates two adjacent columns that would otherwise fold into one run.
-            hash.Add(value: ((ulong)((byte)column)));
-            FoldColumn(
-                column: column,
-                hash: ref hash
+        if (m_journal.Scopes != 0) { return Digest(cached: false); }
+        lock (m_digestGate) { return Digest(cached: true); }
+    }
+    /// <summary>Computes <see cref="ComputeHash"/>'s value with every row folded afresh, reading and writing no
+    /// cached digest: the full recompute an incremental digest is checked against.</summary>
+    /// <returns>The hash value.</returns>
+    public ulong RecomputeHash() => Digest(cached: false);
+    /// <summary>Returns one row's digest: <see cref="AddRowTo"/> folded into a fresh hash, cached by the row's
+    /// <see cref="RowVersion"/> outside an open scope.</summary>
+    /// <param name="rowOrdinal">The row's catalog ordinal.</param>
+    /// <returns>The digest.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="rowOrdinal"/> addresses no row.</exception>
+    public ulong RowDigest(int rowOrdinal) {
+        if (((uint)rowOrdinal) >= ((uint)m_layout.RowCount)) {
+            throw new ArgumentOutOfRangeException(
+                actualValue: rowOrdinal,
+                message: "The arena carries no row at that ordinal.",
+                paramName: nameof(rowOrdinal)
             );
         }
+        if (m_journal.Scopes != 0) { return FreshRowDigest(rowOrdinal: rowOrdinal); }
+        lock (m_digestGate) {
+            PrepareDigestCache();
+            return CachedRowDigest(refolded: out _, rowOrdinal: rowOrdinal);
+        }
+    }
 
+    private ulong Digest(bool cached) {
+        if (cached) { PrepareDigestCache(); }
+        var hash = Fnv1aHash.Create();
+        var rows = m_layout.RowCount;
+        var unowned = (cached ? m_unownedPositions : UnownedPositions(layout: m_layout));
+
+        hash.Add(value: ((ulong)rows));
+        for (var segment = 0; ((segment * HashSegmentRows) < rows); segment++) {
+            hash.Add(value: (cached
+                ? CachedSegmentDigest(segment: segment)
+                : FreshSegmentDigest(segment: segment)));
+        }
+        // A lane roster bit belongs to a lane rather than a row, and a mask word or lane slot outside every row's
+        // range belongs to none: no row version covers them, so they fold whole every time.
+        hash.Add(value: ((ulong)unowned.Length));
+        foreach (var (column, index) in unowned) {
+            hash.Add(value: ReadNumberRaw(
+                column: column,
+                index: index
+            ));
+        }
         // Retained names affect future mint admission, including names no row currently uses. The digest sum
         // preserves that resource state without making allocation ordinals part of content identity.
         m_keys.AddLedgerTo(hash: ref hash);
         AddUndoTo(hash: ref hash);
+        return hash.Value;
+    }
+    private void PrepareDigestCache() {
+        if (ReferenceEquals(objA: m_digestLayout, objB: m_layout) && ReferenceEquals(objA: m_digestKeys, objB: m_keys)) { return; }
+        var rows = m_layout.RowCount;
+        var segments = ((rows + (HashSegmentRows - 1)) / HashSegmentRows);
+
+        m_rowDigests = new ulong[rows];
+        m_rowDigestVersions = new ulong[rows];
+        m_rowDigestKnown = new bool[rows];
+        m_segmentDigests = new ulong[segments];
+        m_segmentDigestKnown = new bool[segments];
+        m_unownedPositions = UnownedPositions(layout: m_layout);
+        m_digestLayout = m_layout;
+        m_digestKeys = m_keys;
+    }
+    private static (ArenaColumn Column, int Index)[] UnownedPositions(ArenaLayout layout) {
+        var positions = new List<(ArenaColumn Column, int Index)>();
+
+        foreach (var column in ArenaColumns.All) {
+            if (IsLinkColumn(column: column) || (ArenaColumns.Space(column: column) == ArenaIndexSpace.Cell)) { continue; }
+            for (var index = 0; (index < layout.Size(column: column)); index++) {
+                if (layout.RowOf(column: column, index: index) < 0) { positions.Add(item: (column, index)); }
+            }
+        }
+        return [.. positions];
+    }
+    private ulong FreshRowDigest(int rowOrdinal) {
+        var hash = Fnv1aHash.Create();
+
+        AddRowTo(hash: ref hash, rowOrdinal: rowOrdinal);
+        return hash.Value;
+    }
+    private ulong CachedRowDigest(int rowOrdinal, out bool refolded) {
+        var version = m_rowVersions[rowOrdinal];
+
+        if (m_rowDigestKnown[rowOrdinal] && (m_rowDigestVersions[rowOrdinal] == version)) {
+            refolded = false;
+            return m_rowDigests[rowOrdinal];
+        }
+        var digest = FreshRowDigest(rowOrdinal: rowOrdinal);
+
+        RowDigestFolds++;
+        m_rowDigests[rowOrdinal] = digest;
+        m_rowDigestVersions[rowOrdinal] = version;
+        m_rowDigestKnown[rowOrdinal] = true;
+        refolded = true;
+        return digest;
+    }
+    private ulong CachedSegmentDigest(int segment) {
+        var first = (segment * HashSegmentRows);
+        var end = Math.Min(val1: (first + HashSegmentRows), val2: m_layout.RowCount);
+        var refolded = !m_segmentDigestKnown[segment];
+
+        for (var row = first; (row < end); row++) {
+            _ = CachedRowDigest(refolded: out var rowRefolded, rowOrdinal: row);
+            refolded |= rowRefolded;
+        }
+        if (!refolded) { return m_segmentDigests[segment]; }
+        var hash = Fnv1aHash.Create();
+
+        for (var row = first; (row < end); row++) { hash.Add(value: m_rowDigests[row]); }
+        m_segmentDigests[segment] = hash.Value;
+        m_segmentDigestKnown[segment] = true;
+        return hash.Value;
+    }
+    private ulong FreshSegmentDigest(int segment) {
+        var first = (segment * HashSegmentRows);
+        var end = Math.Min(val1: (first + HashSegmentRows), val2: m_layout.RowCount);
+        var hash = Fnv1aHash.Create();
+
+        for (var row = first; (row < end); row++) { hash.Add(value: FreshRowDigest(rowOrdinal: row)); }
         return hash.Value;
     }
     /// <summary>Folds one column of every lane into its own hash.</summary>
@@ -47,7 +190,8 @@ public sealed partial class StateArena {
         return hash.Value;
     }
     /// <summary>Folds everything the arena stores for one row into a running hash: every column's positions that
-    /// belong to the row, in column order, exactly as <see cref="ComputeHash"/> folds them for the whole arena.</summary>
+    /// belong to the row, in column order: the fold <see cref="RowDigest"/> takes and <see cref="ComputeHash"/>
+    /// combines.</summary>
     /// <param name="hash">The running hash.</param>
     /// <param name="rowOrdinal">The row's catalog ordinal.</param>
     /// <remarks>

@@ -92,7 +92,8 @@ public sealed partial class WorldColliderSet {
         return (FixedDirectedRounding.TryCeilingFromDouble(result: out var ceiling, value: growth) ? ceiling : FixedQ4816.MaxValue);
     }
     // The relieved program of one copy, its frame origin at offset from the copy's stamp origin, read as contact reads it;
-    // its evaluator's own box bounds prove a body clear.
+    // its evaluator's own box bounds prove a body clear, an identical box reusing its answer (a body at rest asks the same
+    // box every tick).
     private static FixedColliderField ReliefField(CreationDocument document, in FixedCreationStampTransform transform, float margin, bool bounded,
         IReadOnlyList<FixedStaticCollider> bases) {
         var noise = document.Noise!;
@@ -114,7 +115,7 @@ public sealed partial class WorldColliderSet {
             bounded: bounded
         ) {
             Bases = bases,
-            Bounds = evaluator,
+            Bounds = new SdfBoundsCache(field: evaluator),
         };
     }
     // A creation copy's contact shapes in one scope, with its relief over their union or without it.
