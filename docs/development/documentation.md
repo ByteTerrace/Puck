@@ -472,15 +472,30 @@ directory resolves as a plugin, and the run adds a no-skill baseline arm.
 **Writing graders:**
 
 - Write every criterion as a statement about what the reply contains, one
-  fact per grader, as a `PASS if` rule and a `FAIL if` rule, each with an
-  example reply. The sandboxed agent only advises, so a rubric worded as an
-  action ("fixes", "runs", "commits") fails a correct reply that recommends
-  the action.
+  fact per grader. Grade the behaviour Puck needs, never the skill's own
+  wording: a grader that a correct reply in other words would fail is
+  deleted.
+- A sandboxed agent only advises; its reply cannot fix, run or commit
+  anything. A rubric worded as an action ("fixes", "runs", "commits") fails a
+  correct reply that recommends the action, so a rubric says what the reply
+  proposes or states.
+- An `llm` rubric is a `PASS if` rule and a `FAIL if` rule, each with an
+  example reply, so the judge doesn't read the statement more literally than
+  the case means. A weak judge mostly fails correct replies; it rarely passes
+  wrong ones.
 - Prefer a deterministic grader. Use a `regex` for anything a token settles,
-  and `llm` only where meaning needs judging.
+  and `llm` only where meaning needs judging. A regex binds the token to the
+  command or statement it grades (`search\b[^\n]*[ \t]-M\s*0\b`, not
+  `-M\s*0`), so a mention in passing, a negation or a fact the prompt already
+  states does not pass it.
 - Read the transcripts of a sample of runs and check each LLM grader's verdict
   against your own. A grader that disagrees with a careful reading is
   repaired before any score built on it is believed.
+- Tag each case in its `prompt.md` frontmatter. A `regression` case guards
+  behaviour the skill already teaches: it runs 3 times at threshold 1.0, and
+  any failed run is a stop to investigate. A `capability` case measures a
+  known gap or a new case (`runs: 5`): report its score and per-run vector,
+  with no threshold. Run either set with `--tag`.
 
 **How to run it:**
 
@@ -526,6 +541,10 @@ skill itself teaches.
   empty directory without loading the skill. Phrase it as the developer's
   question, naming the Puck files, verbs or symptoms involved, without stating
   the answer a grader checks.
+- Say in the prompt that no checkout is reachable from the session. Without
+  it the agent follows the skill's base directory toward the repository, is
+  refused, and can spend every turn there; a run that reaches `max_turns` is
+  excluded from the score and listed.
 
 **Reading results:**
 

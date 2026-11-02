@@ -5,4 +5,4 @@ match: contains
 flags: i
 ---
 
--c\s+Release
+dotnet\s+(build|test)\b[^\n]*\s-c\s+Release

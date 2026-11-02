@@ -2,7 +2,6 @@
 type: regex
 weight: 1
 match: contains
-flags: i
 ---
 
-absorbsQuietStretches
+absorbsQuietStretches\W{0,3}(:|=)\s*false

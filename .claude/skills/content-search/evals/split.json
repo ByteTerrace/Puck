@@ -7,7 +7,7 @@
     "t03-fallback-when-puck-cannot-run",
     "t04-glob-brace-and-doublestar",
     "t06-flag-text-as-pattern",
-    "t07-cartridge-twin-sources"
+    "t07-cartridge-source-and-compile"
   ],
   "test": [
     "t01-literal-verb-uncapped",

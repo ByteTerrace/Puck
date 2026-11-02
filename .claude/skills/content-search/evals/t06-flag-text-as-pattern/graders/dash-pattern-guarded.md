@@ -2,7 +2,6 @@
 type: regex
 weight: 1
 match: contains
-flags: i
 ---
 
---\s+["']?-+exit-after-seconds|\\-+exit-after-seconds
+search\b[^\n]*[ \t]--[ \t]+["']?--exit-after-seconds|search\b[^\n]*\\-\\?-exit-after-seconds
