@@ -16,7 +16,8 @@ namespace Puck.Cli.Scan.Analyzers;
 //                    Matches) that holds continuous members and compares them exactly: a record, or a type that
 //                    declares Equals, Matches or operator ==.
 //   bit-equality   — an equality between two BitConverter bit patterns of floats (SingleToInt32Bits and its kin), the
-//                    spelling of "exactly the inputs it was computed for".
+//                    spelling of "exactly the inputs it was computed for", in a method named for matching (Matches,
+//                    Equals, Same, Bits) or a type named as a key; a law's bit-exact assertion is not listed.
 //   cached-compare — an == or != against a field named as a remembered value (cached*, last*, previous*, memo*) whose
 //                    declared type is continuous.
 // Detection is syntactic: types are matched by the name a declaration spells, so an alias or a var-typed local is
@@ -90,6 +91,12 @@ internal sealed class ExactKeyAnalyzer : ISourceAnalyzer {
             OperatorDeclarationSyntax op => op.OperatorToken.IsKind(kind: SyntaxKind.EqualsEqualsToken),
             _ => false,
         });
+    // Whether a comparison decides whether something is reused: it sits in a method named for matching (Matches, Equals,
+    // Same, Bits) or in a type named as a cache key. A bit-exact assertion in a law or a conversion check decides
+    // nothing about reuse.
+    private static bool DecidesReuse(SyntaxNode node) =>
+        ((node.Ancestors().OfType<MethodDeclarationSyntax>().FirstOrDefault()?.Identifier.ValueText is { } method) && ((method is "Bits") || method.Contains(value: "Match", comparisonType: StringComparison.Ordinal) || method.Contains(value: "Same", comparisonType: StringComparison.Ordinal) || method.Contains(value: "Equal", comparisonType: StringComparison.Ordinal))) ||
+        ((node.Ancestors().OfType<TypeDeclarationSyntax>().FirstOrDefault()?.Identifier.ValueText is { } type) && (KeyName.IsMatch(input: type) || type.EndsWith(value: "Key", comparisonType: StringComparison.Ordinal)));
     private static bool IsBitPattern(ExpressionSyntax expression) =>
         (expression is InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax { Name.Identifier.ValueText: var name } }) && BitPatterns.Contains(item: name);
     // The continuous fields each type declares, by name, for the cached-compare check.
@@ -152,7 +159,7 @@ internal sealed class ExactKeyAnalyzer : ISourceAnalyzer {
                     case BinaryExpressionSyntax { RawKind: (int)SyntaxKind.EqualsExpression or (int)SyntaxKind.NotEqualsExpression } binary: {
                             var (line, endLine) = ScanJsonl.LineRange(location: binary.GetLocation());
 
-                            if (IsBitPattern(expression: binary.Left) && IsBitPattern(expression: binary.Right)) {
+                            if (IsBitPattern(expression: binary.Left) && IsBitPattern(expression: binary.Right) && DecidesReuse(node: binary)) {
                                 sites.Add(endLine: endLine, file: parsed.Relative, kind: "bit-equality", line: line, text: binary.ToString());
                                 break;
                             }

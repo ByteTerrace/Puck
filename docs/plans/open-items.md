@@ -3713,6 +3713,17 @@ ordinary · Next: new content and art on the owner's call.
 
 Owner: the lead · ordinary · Next: the Monitor hook check.
 
+- [low] The hazard detectors' follow-ups ([hazards](../development/hazards.md)):
+  turn STALE001 into an error once `RuleEvaluator.EvaluateOnce` and
+  `RunFixpoint` stop reading a captured scratch and arena (the rule-faults
+  plan's step 4 removes the first); mark the next replaceable family when one
+  appears (a GPU device lost and recreated is the likely one); and triage the
+  rest of `puck scan --only clones` below the heaviest thirty clusters of `src`
+  and `tests`, which this pass did not read. A C# and HLSL formula pair has no
+  detector: the two languages share no tree, so an agreement law per pair
+  (evaluate both on the same inputs) is the check that would hold it.
+  (from: roslyn-hazards)
+
 - [medium] The lead session's own `puck` MCP server may run a stale CLI: the
   project root's build is never checked against its HEAD (the fallback now is,
   `.claude/hooks/puck-mcp.ps1`). Apply the same "the build finished after HEAD
