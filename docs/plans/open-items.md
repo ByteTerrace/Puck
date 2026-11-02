@@ -2908,6 +2908,9 @@ ordinary · Next: new content and art on the owner's call.
 
   Today the panels are baked SDF variants that swap lit and unlit material
   slots, a choice the slow text bake forced (`hall.puck:971-975`).
+- [low] The alchemy recipe book's last lines ("NEWEST", "DONE") run behind the
+  brass rail at the screen's bottom. A seated capture on Direct3D 12 shows it.
+  Fit the text runs to the screen, or move the rail.
 - In progress: boards switch to the Board page without changing the seat's
   bar preference (bar-engage).
 - Tabletop chairs (`engage.seats`, `WorldTabletopFrame.SeatSide`) leave the
