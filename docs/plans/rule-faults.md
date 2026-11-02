@@ -27,7 +27,7 @@ and means it.
 
 ## The verdict on the approach
 
-The fault register on `ArenaScratch` (`src/Puck.State/Arena/ArenaScratch.cs:24-80`)
+The fault register on `ArenaScratch` (`src/Puck.State/Arena/ArenaScratch.cs:25-81`)
 is the right contract (one place a fault lands, read by the one caller that
 decides) on the wrong mechanism: an out-of-band sticky flag beside the value,
 on an object that is not the evaluation. It cannot be closed, for four
@@ -44,11 +44,11 @@ structural reasons, each of which the rounds found one instance of:
 2. **The register lives on a replaceable object.** `IStateReader.Scratch`
    resolves `Arena.Scratch` (`src/Puck.State/IStateReader.cs:68`);
    `WorldRuleHost.Arena` resolves `m_host.Arena` (`src/Puck.World.Server/WorldRuleHost.cs:143`),
-   which `AdoptPreparedArena` replaces (`src/Puck.World.Server/WorldServer.Arena.cs:223-224`)
+   which `AdoptPreparedArena` replaces (`src/Puck.World.Server/WorldServer.Arena.cs:225-226`)
    from `CommitTransactional` (`src/Puck.World.Server/WorldRuleHost.Arms.cs:119-128`)
    in the middle of `FireEffects`, which captured `scratch` once
    (`src/Puck.State.Rules/Evaluation/RuleEvaluator.Effects.cs:70`) and opened
-   its delivery scopes on the captured object (`:140`) while every raise
+   its delivery scopes on the captured object (`:141`) while every raise
    resolved the new one, so an authored delivery fault after a document
    install threw in a live World. Until step 4 deletes the register,
    `RuleEvaluator.Deliver` opens each delivery's scope on the scratch the host
@@ -56,19 +56,24 @@ structural reasons, each of which the rounds found one instance of:
    installs a document is refused, not thrown" in
    `worlds/debug/rule-faults-tests.puck` is the witness W9 grows from. The
    register still lives on a replaceable object, so the reason stands for the
-   design.
-3. **Deciding places must remember to read it.** `RuleEvaluator.cs:575` and
-   `:636`, `WorldRuleHost.Decisions.cs:214` and `:257`, `RuleEvaluation.cs:133`
+   design. `STALE001` ([hazards](../development/hazards.md#a-reference-captured-across-a-replacement))
+   names the two captures left: `RuleEvaluator.EvaluateOnce` leaves its scope on
+   the scratch it entered before the evaluation fired, and `RunFixpoint` ends its
+   change window on the arena it took before its members fired
+   (`src/Puck.State.Rules/Evaluation/RuleEvaluator.cs:510`,
+   `RuleEvaluator.Groups.cs:145`).
+3. **Deciding places must remember to read it.** `RuleEvaluator.cs:580` and
+   `:641`, `WorldRuleHost.Decisions.cs:214` and `:257`, `RuleEvaluation.cs:133`
    and `:179` each poll `RaisedFault`; `GateOpen(faulted: out _)` discards its
    fault at `WorldRuleHost.Decisions.cs:190`, `:195`,
-   `WorldRuleHost.DecisionNeighbors.cs:98`, `:324` and `RuleEvaluator.Groups.cs:100`
+   `WorldRuleHost.DecisionNeighbors.cs:98`, `:324` and `RuleEvaluator.Groups.cs:101`
    on the strength of an enclosing scope.
 4. **A read-side register cannot order writes.** The Edge latch is written
-   before the firing (`RuleEvaluator.cs:585` then `:613`), a decision's choice,
+   before the firing (`RuleEvaluator.cs:590` then `:618`), a decision's choice,
    timers and candidate before its effects (`WorldRuleHost.Decisions.cs:320-334`
    then `:342`, `:366`), and an arm is evaluated twice, once in preflight on
    the old arena and again in delivery on the new one
-   (`RuleEvaluator.Effects.cs:82`, `:145`; `WorldRuleHost.Arms.cs:263-277`).
+   (`RuleEvaluator.Effects.cs:83`, `:146`; `WorldRuleHost.Arms.cs:263-277`).
 
 So the approach is not closed and a fifth patching round would not close it.
 Three things change, each removing a mechanism rather than an instance: the
@@ -185,7 +190,7 @@ comparator and in reading a text rather than a number; its two addresses go
 through the same resolution, and a faulted address is a `Faulted` verdict.
 
 An effect source that is `Absent` refuses the effect, as today
-(`RuleEvaluator.Effects.cs:1161-1172`). A local that is `Absent` ends the
+(`RuleEvaluator.Effects.cs:1162-1173`). A local that is `Absent` ends the
 evaluation `Closed` and leaves the latch entry to the sweep; a local that is
 `Faulted` ends it `Faulted` and the entry holds. Whether an absent local
 should hold instead is the open question at `open-items.md:3148-3157` and is
@@ -279,11 +284,11 @@ chosen decision. The design puts the rest in the same journal.
 
 **The journal participant.** `ArenaJournal` records one entry per overwritten
 position (`ArenaJournalEntry(Column, Index, Number, Reference)`,
-`src/Puck.State/Arena/ArenaJournal.cs:9`, `:117-135`). It gains one more entry
+`src/Puck.State/Arena/ArenaJournal.cs:9`, `:118-136`). It gains one more entry
 shape: `Column = ArenaColumn.Participant`, `Reference = IJournalParticipant`,
 `Index`/`Number` the participant's own undo record. `StateArena.Rewind`
 dispatches it to `participant.Undo(index, number)` beside `Restore(entry)`
-(`StateArena.cs:660-674`); `Commit` of the outermost scope discards it with
+(`StateArena.cs:661-675`); `Commit` of the outermost scope discards it with
 the rest. A participant records before it writes:
 
 ```csharp
@@ -303,7 +308,7 @@ the direction S10's "rewind as a complete continuation" names.
 
 What this buys over a proposal copy installed by the door: nested scopes. The
 search opens scopes around judge firings (`ArenaSearch.Candidates.cs:16`,
-`:35`), a savepoint opens one inside a firing (`RuleEvaluator.Effects.cs:688`),
+`:35`), a savepoint opens one inside a firing (`RuleEvaluator.Effects.cs:689`),
 and the job-system memo will open more. A latch written in place inside a
 child scope survives the parent's rewind; a journaled one does not. The door
 does not have to know what a decision binding is (it is a private type of the
@@ -358,7 +363,7 @@ synchronisation refuses (`:35-38`). `CommitTransactional` then adopts the
 proposed publication and installs the prepared document
 (`WorldRuleHost.Arms.cs:119-128`), and the deliveries run. Nothing after
 `:30` can be rewound, and the catch around `Propose`
-(`RuleEvaluator.Effects.cs:89-94`) never covered it. The design does not
+(`RuleEvaluator.Effects.cs:90-95`) never covered it. The design does not
 pretend otherwise. It draws the boundary and moves what can refuse to the
 right side of it:
 
@@ -414,20 +419,20 @@ evaluation, and it must reach every aggregate that decides something:
 - `RuleEvaluator.Evaluate(rules, …)` returns `RuleOutcome` for the family
   (`Faulted` if any evaluation faulted, else `Refused` if any refused, else
   `Fired` if any fired, else `Idle`) and `applied` beside it; the
-  `bool`-returning overloads (`RuleEvaluator.cs:322-353`) are deleted.
+  `bool`-returning overloads (`RuleEvaluator.cs:324-356`) are deleted.
 - `IArenaSearchJudge.Judge` returns `JudgeOutcome { Applied; Faulted }`;
   `PushScope` and the candidate replay (`ArenaSearch.Candidates.cs:35`,
   `:138`) carry it into the job; `Score` returns `Outcome`; `StepJob` folds
   both into the step's verdict and restarts the step on `Faulted`
-  (`ArenaSearch.cs:557-564` does this on the register today) before any
+  (`ArenaSearch.cs:562-569` does this on the register today) before any
   answer is adopted. A judge whose first rule writes a win marker and whose
   later rule faults is a faulted candidate, not a scored one.
 - A staged group advances on `Fired`, skips a `Refused` step under
   `RuleGroupStepPolicy.Skip`, and holds its cursor on `Faulted`
-  (`RuleEvaluator.Groups.cs:242` reads the two-case outcome today). A
+  (`RuleEvaluator.Groups.cs:243` reads the two-case outcome today). A
   fixpoint pass whose member faulted counts no progress for that pass and
   leaves the pass count where it was; the group's trigger is one `Verdict`,
-  `Faulted` leaving progress untouched (`Armed`, `:85-107`). Group progress
+  `Faulted` leaving progress untouched (`Armed`, `:86-108`). Group progress
   is a journal participant, so a member's faulted firing rewinds whatever
   progress the member's own scope wrote.
 - `WorldRuleHost.EvaluateDecisionBinding` and `EvaluateInteraction` return
@@ -440,7 +445,7 @@ Four writers of latch and decision state are not firings and stay:
 (`:317-321`), the decision store's `Restore` (`WorldRuleHost.Decisions.cs:541-569`)
 and the scoped-replay restore (`WorldScopedReplayRuntime.Rules.cs:74-81`).
 They run with no scope open: the sweep's end after `EvaluateRule`'s loop has
-committed every proposal (`RuleEvaluator.cs:482`), the restores between
+committed every proposal (`RuleEvaluator.cs:486`), the restores between
 ticks. The participant's journal write refuses when a scope is open at those
 moments (runtime refusal), which is the "no outstanding proposal" rule made
 mechanical: a restore inside a firing throws. The `Reset` the search judge
@@ -531,7 +536,7 @@ specified there.
 | Alexis King, "Parse, don't validate" (2019) | The inner fence: no `Value` accessor; obtaining a number requires the finite case. The review's point that `TryFinite(out n)` with an ignored `bool` defeats it is correct, and the analyzer's `OUTCOME002` is the answer the type cannot give. |
 | ISO SQL three-valued logic over `NULL` and C. J. Date's critique | The semantics to refuse for faults: Kleene logic lets a disjunction recover an unknown; `Faulted` absorbs. Absence, by contrast, keeps its own conversion rules, which are not Kleene either (an absent `not` is true, an absent arithmetic is absent). |
 | Jim Gray, "The Transaction Concept: Virtues and Limitations" (1981) | Atomicity is of the whole unit. A firing that journals its cells but writes its latch and choice in place is not atomic under any nesting; one journal for every participant is. |
-| Puck itself: the arena journal (`StateArena.cs:568-593`, `:653-680`) and the one-write-door convergence in [S1](state-and-language.md#s1--the-projection-law-and-the-one-door) | The Puck-native combination: the transaction exists and nests; the design enlists the remaining stores in it rather than adding a second mechanism beside it. |
+| Puck itself: the arena journal (`StateArena.cs:569-594`, `:654-681`) and the one-write-door convergence in [S1](state-and-language.md#s1--the-projection-law-and-the-one-door) | The Puck-native combination: the transaction exists and nests; the design enlists the remaining stores in it rather than adding a second mechanism beside it. |
 
 ## Every finding, one by one
 

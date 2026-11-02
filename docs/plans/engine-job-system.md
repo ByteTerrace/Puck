@@ -641,13 +641,13 @@ the rule VM stays serial in this memo:
   set validates nothing about it. The engine already knows this: `RuleSchedule`
   marks a rule `Volatile` when its needs or any row with value-over-time traits
   make row versions unprovable (`RuleSchedule.cs:9-44`), and the evaluator
-  consumes that (`RuleEvaluator.cs:125-198`). Any future speculation must reuse
+  consumes that (`RuleEvaluator.cs:126-199`). Any future speculation must reuse
   `RuleSchedule`, never a second dependency map.
 - Evaluation shares mutable state beyond scratch: the host's locals, instance
   bindings and bound keys (`WorldRuleHost.cs:180-199`), which pool iteration
-  writes before each gate (`RuleEvaluator.cs:409-410,446-454`).
+  writes before each gate (`RuleEvaluator.cs:413-414,450-458`).
 - Pool iteration enumerates the pool when the rule is reached, after earlier
-  firings (`RuleEvaluator.cs:386-410`); a phase-start snapshot can miss an
+  firings (`RuleEvaluator.cs:390-414`); a phase-start snapshot can miss an
   instance an earlier rule claims, with no verdict to invalidate.
 
 The rule-read semantics are therefore what the comment at
@@ -849,10 +849,10 @@ anything that holds a managed reference stays managed.
 4. **State, reference-free only.** `ArenaScratch` keeps its nesting and zeroed
    leases; leases of unmanaged element types get native backing per partition,
    and leases whose element type holds references stay managed, as the lease
-   already distinguishes them (`ArenaScratch.cs:114-118`). The journal's entries
+   already distinguishes them (`ArenaScratch.cs:115-119`). The journal's entries
    carry an `object? Reference` (`ArenaJournal.cs:9`), an undo root for an
    overwritten text or reference cell, so the journal splits: its numeric
-   fields (column, index, number) and the component buffer (`:29-36`) go native,
+   fields (column, index, number) and the component buffer (`:30-37`) go native,
    and a parallel managed array holds the reference roots with the same scope
    and rewind lifetime. Numeric columns go native; reference columns stay
    managed. `Adopt(source)` on relayout moves and detaches, as the packet says.

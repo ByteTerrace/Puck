@@ -45,7 +45,7 @@
         <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
         <!-- STALE001 (a reference read after a call that can replace it) is a warning while its open findings stand in
              the refactoring campaign (docs/development/hazards.md); it turns into an error once they are fixed. -->
-        <WarningsNotAsErrors>$(WarningsNotAsErrors);STALE001;STALE002;STALE003</WarningsNotAsErrors>
+        <WarningsNotAsErrors>$(WarningsNotAsErrors);STALE001</WarningsNotAsErrors>
         <!-- Build output is hard-linked rather than copied wherever the copy's source is replaced, never rewritten, when it
              changes. Every project otherwise copies its whole dependency closure into its own bin, so one built tree held
              each package and Puck assembly about seven times over. CopyLocal links each package file to the NuGet global

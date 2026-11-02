@@ -77,6 +77,7 @@ public enum WorldReleaseRuntimePublication { Opened, Private, Refused }
 public interface IWorldReleaseRuntime {
     Task<WorldReleaseRuntimeResult> DrainSourceAndCaptureAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default);
     /// <summary>Ensures the exact target is running, preserving an already running target on retries.</summary>
+    [Replaces(root: typeof(Puck.State.StateArena))]
     Task<WorldReleaseRuntimeResult> StartCandidatePrivatelyAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default);
     Task<WorldReleaseRuntimeResult> StopCandidateAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default);
     Task<WorldReleaseRuntimeResult> VerifyCandidatePrivatelyAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default);
@@ -84,6 +85,7 @@ public interface IWorldReleaseRuntime {
     Task<WorldReleaseRuntimePublication> PublishCandidateAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default);
     /// <summary>Restores protected roots without starting a source. This must be safe to repeat while Recover remains durable.</summary>
     Task<WorldReleaseRuntimeResult> RecoverSourceAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default);
+    [Replaces(root: typeof(Puck.State.StateArena))]
     Task<WorldReleaseRuntimeResult> StartRecoveredSourceAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default);
     Task<WorldReleaseRuntimePublication> PublishRecoveredSourceAsync(WorldReleaseGroupRecord operation, CancellationToken cancellationToken = default);
 }

@@ -450,6 +450,7 @@ public sealed partial class ArenaSearch {
     /// <param name="apply">Installs one job's writes through the caller's own door.</param>
     /// <returns><see langword="true"/> when an output installed.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="apply"/> is <see langword="null"/>.</exception>
+    [Replaces(root: typeof(StateArena))]
     public bool Step(ulong tick, ulong engineTick, Func<IReadOnlyList<ArenaSearchWrite>, bool> apply) {
         ArgumentNullException.ThrowIfNull(argument: apply);
         m_engineTick = engineTick;
@@ -551,7 +552,11 @@ public sealed partial class ArenaSearch {
 
                 throw;
             } finally {
+                // The search owns its arena and never swaps it; the judge's transactional commit is the search host's,
+                // which installs nothing, so the scratch the scope opened on is still the arena's.
+#pragma warning disable STALE001
                 fault = scratch.LeaveFaultScope(scope: faults);
+#pragma warning restore STALE001
             }
 
             Suspend(job: job);

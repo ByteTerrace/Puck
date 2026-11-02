@@ -673,6 +673,7 @@ public sealed partial class WorldServer {
 
     /// <summary>Advances every search job, delivering a landed job's writes with the same tick.</summary>
     /// <param name="tick">The simulation tick.</param>
+    [Replaces(root: typeof(StateArena))]
     public void StepSearch(ulong tick) {
         m_searchTick = tick;
 

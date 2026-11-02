@@ -24,11 +24,14 @@ internal sealed class ReplaceableAttribute(Type? root = null) : Attribute {
 /// Marks a member that can swap the live instance of a <c>[Replaceable]</c> root, directly or through what it calls:
 /// after it returns, a reference to the root (or to anything replaced with it) taken before the call may name the old
 /// instance. <c>Puck.Analyzers</c> follows calls inside an assembly on its own; the mark carries the fact across an
-/// assembly boundary and through virtual dispatch, so it is required on a member visible outside its assembly that
-/// reaches a replacement, and on the member an override or implementation that reaches one overrides or implements
-/// (STALE002), and on any method that assigns a field of the root's type outside a constructor (STALE003).
+/// assembly boundary and through virtual dispatch, so it is required on a member visible outside its assembly, on a type
+/// that hands out the root, that reaches a replacement, and on the member an override or implementation that reaches one
+/// overrides or implements (STALE002), and on a method that assigns the field a property serves outside a constructor (STALE003). A member of an
+/// assembly that cannot see the root (a hosting or actor contract below the state projects) names
+/// <c>typeof(object)</c>, which covers every root.
 /// </summary>
-/// <param name="root">The <c>[Replaceable]</c> root type the member can replace.</param>
+/// <param name="root">The <c>[Replaceable]</c> root type the member can replace, or a type every root it can replace
+/// derives from.</param>
 [AttributeUsage(validOn: AttributeTargets.Method | AttributeTargets.Property | AttributeTargets.Constructor, Inherited = false, AllowMultiple = true)]
 internal sealed class ReplacesAttribute(Type root) : Attribute {
     /// <summary>The root type the member can replace.</summary>

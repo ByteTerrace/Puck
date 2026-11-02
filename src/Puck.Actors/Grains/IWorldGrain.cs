@@ -8,6 +8,7 @@ public interface IWorldGrain : IGrainWithGuidCompoundKey {
     /// <summary>Activates this row, allowing up to three minutes for document composition and checkpoint recovery.</summary>
     /// <returns><see langword="true"/> once the row is ready to receive submissions.</returns>
     [ResponseTimeout("00:03:00")]
+    [Replaces(root: typeof(object))]
     Task<bool> ActivateAsync();
     /// <summary>Requests an immediate checkpoint of this row.</summary>
     /// <returns><see langword="true"/> when the checkpoint captured and wrote successfully.</returns>

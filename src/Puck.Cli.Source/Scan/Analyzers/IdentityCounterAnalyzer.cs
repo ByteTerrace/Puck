@@ -16,10 +16,11 @@ namespace Puck.Cli.Scan.Analyzers;
 //          `Interlocked.Increment(ref x)` result), the counter handing out the identity it names; a field named as a
 //          tally, depth or cursor (`m_count`, `m_depth`) is left out, as is an increment that indexes an array fill.
 //   bump — a statement-level increment of a field whose name says identity (id, generation, serial, sequence,
-//          next, handle, ticket, epoch, token, nonce, revision, version); a plain tally (hits, misses) is not listed.
+//          next, handle, ticket, token, nonce); a tally, and a version or epoch a cache compares, are not listed.
 // A field counts as captured when a member of the same type (by name, across partial files) whose name says it
 // persists (Capture, Checkpoint, Snapshot, Encode, Serialize, Save, Persist, Export, Import, Restore, Decode, Write)
-// mentions it, or a file of that type named for persistence (Checkpoint, Codec, Persistence, Snapshot) does.
+// mentions it, a file of that type named for persistence (Checkpoint, Codec, Persistence, Snapshot) does, or the type
+// writes it on another instance (`restored.m_next = carried`), the shape of a resuming factory.
 // Detection is syntactic: it matches names, not symbols, so a field captured through a helper it is passed to, or
 // one whose identity never reaches simulation state, is a false positive to triage, and a counter a codec writes
 // under another name is a false negative.
@@ -28,7 +29,8 @@ internal sealed class IdentityCounterAnalyzer : ISourceAnalyzer {
         "byte", "sbyte", "short", "ushort", "int", "uint", "long", "ulong", "nint", "nuint",
         "Int16", "UInt16", "Int32", "UInt32", "Int64", "UInt64",
     };
-    private static readonly Regex IdentityName = new(pattern: "(?i)(id$|ids$|generation|serial|sequence|^(m_)?next|handle|ticket|epoch|token|nonce|revision|version|mint)");
+    // A version, revision or epoch a cache compares in-process names no identity, so only these names list a bump.
+    private static readonly Regex IdentityName = new(pattern: "(?i)(id$|ids$|generation|serial|sequence|^(m_)?next|handle|ticket|token|nonce|mint)");
     private static readonly Regex PersistFile = new(pattern: "(Checkpoint|Codec|Persistence|Snapshot)");
     // A field named as a tally, a depth or a cursor counts or walks; it names nothing, however its value is used.
     private static readonly Regex TallyName = new(pattern: "(?i)(count|counts|depth|index|cursor|pending|length|size|total|hits|misses)$");
@@ -66,7 +68,7 @@ internal sealed class IdentityCounterAnalyzer : ISourceAnalyzer {
                 return (name, Used(expression: postfix));
             case PrefixUnaryExpressionSyntax { RawKind: (int)SyntaxKind.PreIncrementExpression } prefix when OperandName(operand: prefix.Operand) is { } name:
                 return (name, Used(expression: prefix));
-            case AssignmentExpressionSyntax { RawKind: (int)SyntaxKind.AddAssignmentExpression } assignment when OperandName(operand: assignment.Left) is { } name:
+            case AssignmentExpressionSyntax { RawKind: (int)SyntaxKind.AddAssignmentExpression, Right: LiteralExpressionSyntax { Token.ValueText: "1" } } assignment when OperandName(operand: assignment.Left) is { } name:
                 return (name, Used(expression: assignment));
             case InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax { Expression: IdentifierNameSyntax { Identifier.ValueText: "Interlocked" }, Name.Identifier.ValueText: "Increment" or "Add" } } invocation
                 when (invocation.ArgumentList.Arguments.FirstOrDefault()?.Expression is { } target) && (OperandName(operand: target) is { } name):
@@ -105,6 +107,11 @@ internal sealed class IdentityCounterAnalyzer : ISourceAnalyzer {
                             fields[(TypeKey(node: field), variable.Identifier.ValueText)] = (parsed.Relative, ScanJsonl.LineRange(location: variable.GetLocation()).Start, $"{field.Declaration.Type} {variable.Identifier.ValueText}");
                         }
 
+                        break;
+                    // A restore writes another instance's field from what was carried (`table.m_next = checkpoint.Next`,
+                    // `producer.m_sequence = sequence` in a resuming factory), whatever the member is called.
+                    case IdentifierNameSyntax identifier when identifier.Parent is MemberAccessExpressionSyntax { Expression: not ThisExpressionSyntax, Parent: AssignmentExpressionSyntax { RawKind: (int)SyntaxKind.SimpleAssignmentExpression } restore } access && ReferenceEquals(objA: access.Name, objB: identifier) && ReferenceEquals(objA: restore.Left, objB: access):
+                        _ = captured.Add(item: (TypeKey(node: identifier), identifier.Identifier.ValueText));
                         break;
                     case IdentifierNameSyntax identifier when persistFile || PersistMember.IsMatch(input: MemberName(node: identifier)):
                         if (Increment(node: identifier.Parent!) is null) {

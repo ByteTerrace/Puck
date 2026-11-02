@@ -19,9 +19,9 @@ namespace Puck.Analyzers;
 /// </para>
 /// <para>
 /// <b>What replaces.</b> A call to a member marked <c>[Replaces(typeof(Root))]</c>, to a member that member overrides or
-/// implements, or to a method of the same compilation that reaches such a call through its own calls. Calls inside a
-/// lambda count toward what the enclosing method reaches, since it may run them, but are not ordered against its reads.
-/// Constructing an object is not a replacement: whatever its constructor swaps belongs to the new object, which no one
+/// implements, or to a method of the same compilation that reaches such a call through its own calls. A call inside a
+/// lambda runs when the delegate's receiver decides, so it neither counts toward what the enclosing method reaches nor
+/// is ordered against its reads. Constructing an object is not a replacement: whatever its constructor swaps belongs to the new object, which no one
 /// holds yet. The roots are types, not instances, so a call that replaces some other instance of the root (a shadow
 /// server's arena, a search candidate's) counts too; a read that can only name an instance the call leaves alone is a
 /// false positive, suppressed at the read with its reason.
@@ -72,7 +72,7 @@ public sealed class StaleCaptureAnalyzer : DiagnosticAnalyzer {
         title: "Replacement reached without the mark",
         messageFormat: "'{0}' can replace {1} through '{2}', but {3} does not carry [Replaces(typeof({1}))]; add the mark so callers in other assemblies and through dispatch see the replacement",
         category: Category,
-        defaultSeverity: DiagnosticSeverity.Warning,
+        defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true,
         description: "The analyzer follows calls inside one compilation. A member another assembly can call, or a member reached through an override or interface, carries [Replaces] when it reaches a replacement, so the next compilation's STALE001 sees it.",
         customTags: WellKnownDiagnosticTags.CompilationEnd
@@ -83,7 +83,7 @@ public sealed class StaleCaptureAnalyzer : DiagnosticAnalyzer {
         title: "Served replaceable field assigned without the mark",
         messageFormat: "'{0}' assigns '{1}', the {2} '{3}' serves, outside a constructor without [Replaces(typeof({2}))]; mark it, since every holder of the instance '{3}' served before is stale after it",
         category: Category,
-        defaultSeverity: DiagnosticSeverity.Warning,
+        defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true,
         description: "A property that returns a field of a [Replaceable] type serves the live instance; assigning that field after construction swaps what every reader of the property reaches. The method that does it carries [Replaces] so the analyzer orders every captured reference against it. A field no property serves (a private cache, a lazily built scratch arena) is not a live pointer and is not held to the mark.",
         customTags: WellKnownDiagnosticTags.CompilationEnd
@@ -176,6 +176,21 @@ public sealed class StaleCaptureAnalyzer : DiagnosticAnalyzer {
 
         return roots;
     }
+    // Whether a set of marks covers a root: a mark names the root itself or a type the root derives from, so
+    // `[Replaces(typeof(object))]`, which a member of an assembly that cannot see the root carries, covers every root.
+    private static bool Covers(IEnumerable<INamedTypeSymbol> marks, INamedTypeSymbol root) =>
+        marks.Any(predicate: mark => {
+            for (var current = root; (current is not null); current = current.BaseType) {
+                if (SymbolEqualityComparer.Default.Equals(x: current.OriginalDefinition, y: mark)) {
+                    return true;
+                }
+            }
+
+            return false;
+        });
+    // Whether the member's assembly links the marks, which every repository project does.
+    private static bool CanCarryMark(ISymbol member) =>
+        (member.ContainingAssembly?.GetTypeByMetadataName(fullyQualifiedMetadataName: ReplacesName) is not null);
     private static bool VisibleOutside(ISymbol symbol) {
         for (var current = symbol; (current is not null) && (current is not INamespaceSymbol); current = current.ContainingSymbol) {
             if (current.DeclaredAccessibility is not (Accessibility.Public or Accessibility.Protected or Accessibility.ProtectedOrInternal)) {
@@ -418,9 +433,15 @@ public sealed class StaleCaptureAnalyzer : DiagnosticAnalyzer {
         // whose marks say it replaces. A call into another assembly without a mark replaces nothing the rule can see.
         private void AddCall(IMethodSymbol target, ImmutableArray<IArgumentOperation> arguments, SyntaxNode syntax, IMethodSymbol owner, bool inLambda) {
             target = (target.ReducedFrom ?? target).OriginalDefinition;
+            // A lambda runs when whoever receives the delegate decides, most often after the method that built it has
+            // returned (a command handler, a callback), so its calls are neither ordered against the method's reads nor
+            // counted toward what the method replaces.
             if (
-                !target.Locations.Any(predicate: static location => location.IsInSource) &&
-                !m_marked.GetOrAdd(key: target, valueFactory: static method => !MarkedRoots(method: method).IsEmpty)
+                inLambda ||
+                (
+                    !target.Locations.Any(predicate: static location => location.IsInSource) &&
+                    !m_marked.GetOrAdd(key: target, valueFactory: static method => !MarkedRoots(method: method).IsEmpty)
+                )
             ) {
                 return;
             }
@@ -477,7 +498,7 @@ public sealed class StaleCaptureAnalyzer : DiagnosticAnalyzer {
                 }
                 ReportUnmarkedReach(context: context, method: method, reach: reach);
                 foreach (var swap in body.FieldSwaps) {
-                    if (m_served.TryGetValue(key: swap.Field.OriginalDefinition, value: out var property) && !OwnMarks(member: method).Contains(item: swap.Root)) {
+                    if (m_served.TryGetValue(key: swap.Field.OriginalDefinition, value: out var property) && !Covers(marks: OwnMarks(member: method), root: swap.Root)) {
                         context.ReportDiagnostic(diagnostic: Diagnostic.Create(
                             descriptor: Stale003UnmarkedFieldSwap,
                             location: swap.Syntax.GetLocation(),
@@ -562,7 +583,7 @@ public sealed class StaleCaptureAnalyzer : DiagnosticAnalyzer {
 
                 foreach (var read in group.Where(predicate: static access => !access.Write).OrderBy(keySelector: static access => access.Syntax.SpanStart)) {
                     var stale = replacing.FirstOrDefault(predicate: entry =>
-                        entry.Roots.Contains(item: root) &&
+                        Covers(marks: entry.Roots, root: root) &&
                         !entry.Call.Arguments.Contains(item: variable) &&
                         ((body.Flow is { } flow)
                             ? flow.Contains(item: (entry.Call.Syntax, read.Syntax))
@@ -631,11 +652,13 @@ public sealed class StaleCaptureAnalyzer : DiagnosticAnalyzer {
             // A member marked itself still hides the replacement from a caller that dispatches through its base, so its
             // own marks are held to the bases as well.
             var held = own.Select(selector: root => (Root: root, Through: method))
-                .Concat(second: roots.Where(predicate: pair => !own.Contains(item: pair.Key)).Select(selector: static pair => (Root: pair.Key, Through: pair.Value)));
+                .Concat(second: roots.Where(predicate: pair => !Covers(marks: own, root: pair.Key)).Select(selector: static pair => (Root: pair.Key, Through: pair.Value)));
 
             foreach (var (root, through) in held) {
-                foreach (var member in bases) {
-                    if (!OwnMarks(member: member).Contains(item: root)) {
+                // A base declared outside the repository (a framework interface) cannot carry the mark, so dispatch
+                // through it is a blind spot rather than a finding.
+                foreach (var member in bases.Where(predicate: static member => CanCarryMark(member: member))) {
+                    if (!Covers(marks: OwnMarks(member: member), root: root)) {
                         context.ReportDiagnostic(diagnostic: Diagnostic.Create(
                             descriptor: Stale002UnmarkedReach,
                             location: location,
@@ -643,7 +666,7 @@ public sealed class StaleCaptureAnalyzer : DiagnosticAnalyzer {
                         ));
                     }
                 }
-                if ((bases.Count == 0) && !leaf && !own.Contains(item: root) && VisibleOutside(symbol: method) && Handles(type: method.ContainingType)) {
+                if ((bases.Count == 0) && !leaf && !Covers(marks: own, root: root) && VisibleOutside(symbol: method) && Handles(type: method.ContainingType)) {
                     context.ReportDiagnostic(diagnostic: Diagnostic.Create(
                         descriptor: Stale002UnmarkedReach,
                         location: location,

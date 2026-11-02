@@ -65,7 +65,7 @@ and a caller discards it, or a nested call's success overwrites an outer
 failure.
 
 - `GateOpen(faulted: out _)` discards the fault on the strength of an enclosing
-  scope (`src/Puck.State.Rules/Evaluation/RuleEvaluator.cs:573`,
+  scope (`src/Puck.State.Rules/Evaluation/RuleEvaluator.cs:574`,
   `RuleEvaluator.Groups.cs:101`,
   `src/Puck.World.Server/WorldRuleHost.DecisionNeighbors.cs:98`, `:324`).
 - A nested `RuleExpressions.Run` is handed its caller's `fault` variable, so a
@@ -96,12 +96,12 @@ with it. A local taken before the swap names the old instance after it.
   window on it after members that can fire a transactional commit
   (`src/Puck.State.Rules/Evaluation/RuleEvaluator.Groups.cs:145`, STALE001).
   Open.
-- `RuleEvaluator.EvaluateOnce` leaves its fault scope on the scratch it entered
-  before the evaluation fired (`src/Puck.State.Rules/Evaluation/RuleEvaluator.cs:509`,
-  STALE001), and `WorldRuleHost` reads `scratch.RaisedFault` after a decision's
-  effects fire (`src/Puck.World.Server/WorldRuleHost.Decisions.cs`). Open; step 4
-  of the [rule-faults plan](../plans/rule-faults.md#the-design) deletes the
-  register these read.
+- `RuleEvaluator.EvaluateOnce` enters a fault scope on the scratch, runs an
+  evaluation that can fire a transactional commit, and leaves the scope on the
+  scratch it entered (`src/Puck.State.Rules/Evaluation/RuleEvaluator.cs:510`,
+  STALE001): a fault the rest of the evaluation raises lands in the new arena's
+  scratch, outside the scope. Open; step 4 of the
+  [rule-faults plan](../plans/rule-faults.md#the-design) deletes the register.
 
 **Closed by** reading the live object from its owner after the call, or by
 moving the work after the call into a method of its own that reads it there
@@ -121,18 +121,31 @@ moving the work after the call into a method of its own that reads it there
   with no new value written between. The analyzer follows calls inside one
   compilation on its own. A variable handed to the replacing call is the
   replacement and is exempt.
-- **STALE002**: a member reached by dispatch carries the mark on the member it
-  overrides or implements, and a public member of a type that hands out the
-  root or replaces it directly carries the mark, so the next assembly sees the
-  replacement. Test assemblies owe no mark.
+- **STALE002**: a member that reaches a replacement and is reached by dispatch
+  has the mark on the member it overrides or implements, and a public member of
+  a type that hands out the root (`WorldServer.Step`, `ArenaSearch.Step`)
+  carries it, so the next assembly sees the replacement. Test assemblies owe no
+  public mark.
 - **STALE003**: a method that assigns the field a property serves (the live
   pointer, as `WorldServer.Arena` serves `m_arena`) outside a constructor
   carries the mark.
 
 The roots are types, not instances: a call that replaces a shadow server's
 arena counts against a capture of the live one. A read that can only name an
-instance the call leaves alone is suppressed at the read, with its reason.
-STALE001 stays a warning while the findings above are open.
+instance the call leaves alone is suppressed at the read, with its reason
+(`ArenaSearch.StepJob`, whose search owns its arena). A member of an assembly
+that cannot see `StateArena` (`IFixedStepSimulation.Step` in `Puck.Hosting`,
+`IWorldGrain.ActivateAsync` in `Puck.Actors`) carries
+`[Replaces(typeof(object))]`, which covers every root. Test assemblies are not
+held to STALE001: a test keeps the retired arena on purpose, or drives a host
+whose commit never replaces. STALE001 stays a warning while the findings above
+are open; it turns into an error when they close.
+
+What the rule cannot see: a replacement reached through a delegate, an event,
+reflection or a constructor; a capture held in another object's field; dispatch
+through a framework interface, which cannot carry the mark; and, across
+assemblies, a replacement reached through an unmarked public member of a type
+that does not hand out the root.
 
 ## Two copies of one computation
 
