@@ -53,10 +53,30 @@ test "a matching card goes onto the discard pile and a refused one stays in the 
     shedding.plays == 1
     count(sheddingHand1) == 4
     count(sheddingHeld1) == 4
-    sheddingHeld1[2] == true
     count(sheddingDiscard) == 2
     sheddingAct1.result == 1
     sheddingAct1.taken == 2
+  }
+}
+
+// Seat 1 shows the five of spades (4): it leaves seat 1's private twin and stays in the hand, where seat 2 now reads
+// it; a card seat 1 does not hold is refused in its own inbox.
+test "a shown card stays in the hand and every seat reads it" {
+  when {
+    ticks 40
+    seat2 refused "no such cell": world.state sheddingHand1 4
+    seat1: world.state.cell.set sheddingAct1 show 4
+    ticks 3
+    seat2: world.state sheddingHand1 4
+    seat1: world.state.cell.set sheddingAct1 show 22
+    ticks 3
+  }
+  expect {
+    count(sheddingHand1) == 5
+    count(sheddingHeld1) == 4
+    sheddingAct1.result == -1
+    sheddingAct1.taken == 2
+    shedding.turn == 1
   }
 }
 
@@ -68,8 +88,7 @@ test "a draw takes the top of the sealed pile into the hand and its owner's twin
   }
   expect {
     count(sheddingHand1) == 6
-    sheddingHeld1[1] == true
-    sheddingHand1[1] == true
+    count(sheddingHeld1) == 6
     count(sheddingDeck) == 2
     count(sheddingSealed) == 2
     shedding.turn == 2

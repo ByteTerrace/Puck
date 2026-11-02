@@ -17,7 +17,8 @@ bodies {
   seatSpawns ["stage", "stage"]
 }
 
-// The sessions the harness observes from: the authority's name decides the tier.
+// The sessions the harness observes from: the authority's name decides the tier. The editor session may also write
+// the restricted rows it names, so its drawn writes reach the mutation path rather than stopping at a missing grant.
 admission [
   {
     disclosure: Replica
@@ -29,6 +30,21 @@ admission [
     disclosure: Presentation
     domain: "presentation"
     grants [{ budget: 64, capability: Observe, subject: "all" }]
+    mode: FederatedAuthority
+  }
+  {
+    disclosure: Replica
+    domain: "editor"
+    grants: concat(
+      [
+        { budget: 64, capability: Observe, subject: "all" }
+        { budget: 64, capability: Mutate, subject: "section:State", kindMask: "UpsertStateCell,RemoveStateCell" }
+      ],
+      map(
+        ["skirmishPos", "skirmishLast", "skirmishKnows1", "skirmishSeen1", "skirmishOrder1", "skirmishSharpBest"],
+        row => { budget: 64, capability: Edit, subject: $"state:{row}" }
+      )
+    )
     mode: FederatedAuthority
   }
 ]

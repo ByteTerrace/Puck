@@ -811,6 +811,29 @@ source and what it changed. Line numbers are the sources the review named.
   visibility and a transfer or shuffle out of a restricted pile into a wider
   one is refused as widening; its deals are rule writes keyed by
   `zone(pile, first)`.
+- The four games' harness fixtures (`worlds/debug/<game>-disclosure.puck` and
+  its `.disclosure.json`; each admits a replica, a presentation and an
+  `editor` session, the last with Mutate of the state section and Edit of the
+  game's restricted rows, so its drawn writes reach the mutation path). Every
+  variant's setup steps apply, and every control agrees. The skirmish is red
+  at `world.state` to `seat2` (tick 40) and at `deliver.snapshot` to the
+  replica and editor sessions (tick 15) in each of its three fog pairs: the
+  public `skirmishSharpBest` row (`to`/`score` 25/-4 against 26/-7, 24/-4 and
+  24/-5), which is the search door; its late in-fog move is green. The card
+  game is red at the step-1 doors (`deliver.snapshot`, `deliver.state` and
+  `deliver.definition` on the hidden-only installs, and every session
+  `outcome.*` carrying the install-counting version), at `world.budget` and
+  `world.projection` (step 2), at the sessions' `query.state` in the two pairs
+  that swap a hand's card with the deck's (the `Placeholder` row a session
+  reads moves with the hidden swap), and at `world.placements` in the pair
+  where hidden cards leave seat 1's hand and return before a card is shown
+  (the shown card's `dealSlot` and position, step 4). The auction is red only when a bid is sealed mid-run
+  (`deliver.snapshot` to the replica and editor sessions at the bid's tick);
+  a bid present or absent, of another amount or over the purse, sealed before
+  the observed window, is green. Social deduction is green over another pair
+  of moles, a whisper between two other seats, a line in the den and two
+  other seats' votes: its hidden changes are rule writes into per-cell and
+  per-seat rows that move nothing a crew seat or a session is delivered.
 - Whether `world.identify` hashes the recipient's view or becomes operator-only
   (decided here: the view; the owner may prefer one QR per world).
 - Body disclosure (`WorldOutputHub.Redact`) joins the recipient view when its

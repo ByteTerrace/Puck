@@ -31,10 +31,10 @@ import "../standard/sealed"
 // first unit comes to red's first unit where it really stands; `skirmishFair` by how close it comes to where blue last
 // saw it. Their answers are the search's own writes into `skirmishSharpBest` (public) and `skirmishFairBest` (blue's).
 //
-// The disclosure fixture: the principals are `seat1` and `seat2`; the hidden cells are the other side's
-// `skirmishPos` cells, `skirmishLast`, the other side's `skirmishView`, `skirmishSeen<s>`, `skirmishKnows<s>` and inbox,
-// and `skirmishFairBest` for seat 1. `skirmishSharpBest` is public and judged over hidden cells: it is the fixture's
-// search door.
+// The disclosure fixture (../debug/skirmish-disclosure.puck): the principals are `seat1` and `seat2`; the hidden cells
+// are the other side's `skirmishPos` cells, `skirmishLast`, the other side's `skirmishView`, `skirmishSeen<s>`,
+// `skirmishKnows<s>` and inbox, and `skirmishFairBest` for seat 1. `skirmishSharpBest` is public and judged over hidden
+// cells: it is the fixture's search door.
 
 let skirmishWidth = 6
 let skirmishCells = 36

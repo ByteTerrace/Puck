@@ -1,79 +1,181 @@
 {
   "schema": "puck.disclosure.fixture.v1",
   "observer": "seat1",
-  "sessions": ["replica", "presentation"],
+  "sessions": [
+    "replica",
+    "presentation",
+    "editor"
+  ],
   "variants": [
     {
       "name": "drawn",
       "steps": [
-        { "at": 2, "run": "world.state.cell.set deduction phase 1" }
+        {
+          "at": 2,
+          "run": "world.state.cell.set deduction phase 1"
+        }
       ]
     },
     {
       "name": "other-moles",
       "steps": [
-        { "at": 2, "run": "world.state.cell.set deduction phase 1" },
-        { "at": 12, "run": "world.state.cell.set deductionSecret mole2 3" },
-        { "at": 12, "run": "world.state.cell.set deductionSecret mask 24" },
-        { "at": 12, "run": "world.state.cell.set deductionRole 2 1" },
-        { "at": 12, "run": "world.state.cell.set deductionRole 3 2" },
-        { "at": 12, "run": "world.state.cell.set deductionPartners 2 0" },
-        { "at": 12, "run": "world.state.cell.set deductionPartners 3 24" },
-        { "at": 12, "run": "world.state.cell.set deductionPartners 4 24" }
+        {
+          "at": 2,
+          "run": "world.state.cell.set deduction phase 1"
+        },
+        {
+          "at": 12,
+          "run": "world.state.cell.set deductionSecret mole2 3"
+        },
+        {
+          "at": 12,
+          "run": "world.state.cell.set deductionSecret mask 24"
+        },
+        {
+          "at": 12,
+          "run": "world.state.cell.set deductionRole 2 1"
+        },
+        {
+          "at": 12,
+          "run": "world.state.cell.set deductionRole 3 2"
+        },
+        {
+          "at": 12,
+          "run": "world.state.cell.set deductionPartners 2 0"
+        },
+        {
+          "at": 12,
+          "run": "world.state.cell.set deductionPartners 3 24"
+        },
+        {
+          "at": 12,
+          "run": "world.state.cell.set deductionPartners 4 24"
+        }
       ]
     },
     {
       "name": "whisper",
       "steps": [
-        { "at": 2, "run": "world.state.cell.set deduction phase 1" },
-        { "at": 24, "run": "world.state.cell.set deductionMailText2 text tonight" },
-        { "at": 24, "run": "world.state.cell.set deductionMail2 to 4" }
+        {
+          "at": 2,
+          "run": "world.state.cell.set deduction phase 1"
+        },
+        {
+          "at": 24,
+          "run": "world.state.cell.set deductionMailText2 text tonight"
+        },
+        {
+          "at": 24,
+          "run": "world.state.cell.set deductionMail2 to 4"
+        }
       ]
     },
     {
       "name": "den",
       "steps": [
-        { "at": 2, "run": "world.state.cell.set deduction phase 1" },
-        { "at": 24, "run": "world.state.cell.set deductionMailText4 text plan" },
-        { "at": 24, "run": "world.state.cell.set deductionMail4 to 9" }
+        {
+          "at": 2,
+          "run": "world.state.cell.set deduction phase 1"
+        },
+        {
+          "at": 24,
+          "run": "world.state.cell.set deductionMailText4 text plan"
+        },
+        {
+          "at": 24,
+          "run": "world.state.cell.set deductionMail4 to 9"
+        }
       ]
     },
     {
       "name": "votes",
       "steps": [
-        { "at": 2, "run": "world.state.cell.set deduction phase 1" },
-        { "at": 24, "run": "world.state.cell.set deductionMail2 vote 1" },
-        { "at": 24, "run": "world.state.cell.set deductionMail4 vote 1" }
+        {
+          "at": 2,
+          "run": "world.state.cell.set deduction phase 1"
+        },
+        {
+          "at": 24,
+          "run": "world.state.cell.set deductionMail2 vote 1"
+        },
+        {
+          "at": 24,
+          "run": "world.state.cell.set deductionMail4 vote 1"
+        }
       ]
     }
   ],
   "script": [
-    { "at": 40, "run": "world.budget" },
-    { "at": 40, "run": "world.placements" },
-    { "at": 40, "run": "world.state deductionRole" },
-    { "at": 40, "run": "world.state deductionPartners" },
-    { "at": 40, "run": "world.state deductionVotes" },
-    { "at": 40, "run": "world.state deductionHeard4" },
-    { "at": 40, "run": "world.state deductionDen4" },
-    { "at": 40, "run": "world.row state deductionRole" },
-    { "at": 40, "run": "world.projection" },
-    { "at": 40, "run": "world.identify" },
-    { "at": 41, "run": "world.state.cell.set deductionMail1 to 9" }
+    {
+      "at": 40,
+      "run": "world.budget"
+    },
+    {
+      "at": 40,
+      "run": "world.placements"
+    },
+    {
+      "at": 40,
+      "run": "world.state deductionRole"
+    },
+    {
+      "at": 40,
+      "run": "world.state deductionPartners"
+    },
+    {
+      "at": 40,
+      "run": "world.state deductionVotes"
+    },
+    {
+      "at": 40,
+      "run": "world.state deductionHeard4"
+    },
+    {
+      "at": 40,
+      "run": "world.state deductionDen4"
+    },
+    {
+      "at": 40,
+      "run": "world.row state deductionRole"
+    },
+    {
+      "at": 40,
+      "run": "world.projection"
+    },
+    {
+      "at": 40,
+      "run": "world.identify"
+    },
+    {
+      "at": 41,
+      "run": "world.state.cell.set deductionMail1 to 9"
+    }
   ],
   "fuzz": {
     "seed": 1,
     "lines": 64,
-    "actions": 16,
+    "actions": 48,
     "from": 42,
     "until": 68,
     "words": [
-      "deduction", "deductionSecret", "deductionRole", "deductionPartners", "deductionLines", "deductionDenLines",
-      "deductionReveal", "deductionTalk", "deductionTalkFrom", "deductionVotes", "deductionTally", "deductionHeard1",
-      "deductionHeard4", "deductionHeardFrom4", "deductionDen1", "deductionDen2", "deductionDen4", "deductionDenFrom4",
-      "deductionMail1", "deductionMail2", "deductionMailText1", "deductionMailText2", "deductionPickA", "deductionPickB",
-      "mole1", "mole2", "mask", "to", "vote", "text", "result", "taken", "phase", "close", "0", "1", "2", "3", "4", "9",
-      "20", "24", "tonight", "plan", "hello", "seat1", "seat2", "seat4", "{state.deductionRole.2}",
-      "{state.deductionDen4.0}", "$value", "nothing"
+      "deductionSecret",
+      "deductionRole",
+      "deductionPartners",
+      "deductionVotes",
+      "deductionHeard4",
+      "deductionDen4",
+      "deductionDen9",
+      "mole1",
+      "mole2",
+      "mask",
+      "0",
+      "1",
+      "2",
+      "3",
+      "4",
+      "plan",
+      "{state.deductionRole.2}",
+      "$value"
     ]
   }
 }

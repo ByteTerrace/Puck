@@ -157,10 +157,9 @@ template sheddingRules(seats, handSize) {
   // private twin.
   for s in range(1, seats) {
     rule $"shedding-deal-{s}" {
-      when (shedding.phase == 1 and
-        shedding.shuffled == 1 and
-        shedding.dealTurn == s and
-        shedding.dealt < (seats * handSize))
+      when shedding.phase == 1 and shedding.shuffled == 1 and shedding.dealTurn == s and shedding.dealt < (
+          seats * handSize
+        )
       setState(state: $"sheddingHeld{s}", key: zone(sheddingSealed, first), expression: true)
       setState(state: $"sheddingHand{s}", key: zone(sheddingSealed, first), expression: true)
       remove sheddingDeck[zone(sheddingSealed, first)]

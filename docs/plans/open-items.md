@@ -2544,10 +2544,9 @@ Klondike table stands north of the Go table in the board game room
    stand at their own tables (`debug.go auction`, `shedding`, `deduction`,
    `skirmish`; rules in `worlds/games/auction.puck`, `shedding.puck`,
    `deduction.puck`, `skirmish.puck`, the sealed inbox in
-   `worlds/standard/sealed.puck`), each with a `<game>-tests.puck` world that
-   boots it alone with its seats and authors a harness pair. Its header names
-   the principals and the hidden cells; the pairs adopt the harness's fixture
-   contract when step 0 writes it. Owed: the windowed look (four 1.2 m tables
+   `worlds/standard/sealed.puck`), each with a `<game>-tests.puck` world of
+   scenarios and a `<game>-disclosure.puck` harness fixture
+   ([what the harness finds](disclosure.md#open-items)). Owed: the windowed look (four 1.2 m tables
    south and north of the room's middle, the shedding racks' card orientation
    by yaw unchecked), physical units on the skirmish board (a deal lays
    children out by slot, never by a cell value, so a unit standing on its cell

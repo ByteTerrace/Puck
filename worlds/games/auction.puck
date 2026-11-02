@@ -18,8 +18,9 @@ import "../standard/sealed"
 // purse, and `auctionWinner` and `auctionPrice` record the lot. Four seconds later the audience empties, the bids go
 // back to 0 and the next lot opens; after the last, `auction.done` is 1.
 //
-// The disclosure fixture: the principals are `seat1` to `seat<seats>`; the hidden cells are `auctionIn<s>.bid`,
-// `auctionIn<s>.result`, `auctionIn<s>.taken` (each `seat<s>`'s alone) and every `auctionBids` cell while the lot is open.
+// The disclosure fixture (../debug/auction-disclosure.puck): the principals are `seat1` to `seat<seats>`; the hidden
+// cells are `auctionIn<s>.bid`, `auctionIn<s>.result`, `auctionIn<s>.taken` (each `seat<s>`'s alone) and every
+// `auctionBids` cell while the lot is open.
 
 template auctionState(seats, lots, purse) {
   sealedInbox(name: "auctionIn", seats: seats, fields: ["bid", "result"])

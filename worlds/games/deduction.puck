@@ -31,10 +31,10 @@ import "../standard/sealed"
 // answer in the same row (`result` 1 taken, -1 refused: a whisper to oneself or to no seat, the den from crew, a vote
 // outside the day). The day ends at `deduction.close` (any seat), or 30 s after it began.
 //
-// The disclosure fixture: the principals are `seat1` to `seat<seats>`; the hidden cells are `deductionSecret`, the
-// draw sites, every `deductionRole`, `deductionPartners`, `deductionLines` cell but the reader's own, every
-// `deductionDen<t>`, `deductionDenFrom<t>`, `deductionHeard<t>` and `deductionHeardFrom<t>` row but the reader's own, the
-// inboxes, and `deductionVotes` before the reveal.
+// The disclosure fixture (../debug/deduction-disclosure.puck): the principals are `seat1` to `seat<seats>`; the
+// hidden cells are `deductionSecret`, the draw sites, every `deductionRole`, `deductionPartners`, `deductionLines` cell
+// but the reader's own, every `deductionDen<t>`, `deductionDenFrom<t>`, `deductionHeard<t>` and `deductionHeardFrom<t>`
+// row but the reader's own, the inboxes, and `deductionVotes` before the reveal.
 
 let deductionDenSeat = 9
 
