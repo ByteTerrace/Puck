@@ -368,9 +368,12 @@ public sealed partial class SdfFieldEvaluator {
                         result = EditFieldBounds(instruction: in instruction, local: local, result: result);
                         break;
                     }
-                case SdfOp.Displace:
-                case SdfOp.NoiseDisplace: {
+                case SdfOp.Displace: {
                         result = RenderEditFieldBounds(instruction: in instruction, result: result);
+                        break;
+                    }
+                case SdfOp.NoiseDisplace: {
+                        result = NoiseDisplaceBounds(instruction: in instruction, local: local, result: result);
                         break;
                     }
                 case SdfOp.PushField: {

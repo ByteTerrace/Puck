@@ -328,8 +328,10 @@ Value noise over a 2D cell index, built on the Jarzynski & Olano PCG3D integer
 mix—the same mix the renderer's `sdfPcg3d` HLSL kernel carries, hand-kept in
 sync across that language boundary. A corner's value is the hash's top 16 bits read directly as a
 `FixedQ4816` fraction; corners blend by the quintic fade `6t⁵ − 15t⁴ + 10t³`
-through `FixedQ4816.Lerp`, one rounding per blend. The domain is a discrete
-cell index rather than a continuous position.
+(`QuinticFade`, the exact polynomial rounded once, so it never falls and stays
+in `[0, 1]`) through `FixedQ4816.Lerp`, one rounding per blend. `ValueNoise01`
+reads a discrete cell index; `ValueNoise3` and `Fbm3` read a continuous lattice
+point, and their box forms enclose them over a box for the contact proof.
 
 **Determinism tier.** Cross-machine bit-identical, pure integer and
 fixed-point throughout.
@@ -345,6 +347,9 @@ arguments.
 | `ScatterPoint(blockX, blockZ, seed, spacing, radius)` | The one jittered point a scatter block holds: `block·spacing + radius` plus the matching `Pcg3d` lane modulo the inset `max(0, spacing − 2·radius)`. |
 | `PcgMultiplier` / `PcgIncrement` / `HashStreamA` / `HashStreamB` / `HashTumble` / `NoiseSeedStreamY` / `NoiseSeedStreamZ` | The published constants the GPU's `sdf-hash.hlsli` and `sdf-noise.hlsli` are generated from. |
 | `ValueNoise01(cellX, cellZ, noiseCells, seed)` | One octave of quintic-smoothed value noise over the cell index, in `[0, 1)`. A caller sums octaves itself, as `FieldLattice.ApplyNoiseFill` and `CreationStampSampling.ResolveNoise` both do. |
+| `QuinticFade(t)` | The fade at a fraction in `[0, 1]`, rounded once to nearest; refuses a fraction outside it. |
+| `ValueNoise3(q, seedX, seedY, seedZ)` / `Fbm3(q, seed, octaves, gain, lacunarity)` | One octave of 3D value noise in `[-1, 1)`, and the octave sum a creation's relief adds to its field (`SdfOp.NoiseDisplace`), which the bake draws and contact reads. |
+| `ValueNoise3Bounds` / `Fbm3Bounds` | Certified intervals holding every answer of the point forms over a box: per cell, the exact trilinear range at the vertices of the box's fade range plus two raws a side for the point blend's roundings (pinned against an exact oracle), the corner hull past eight cells and the whole band past sixty-four corners. A box inside another answers inside its interval. |
 
 Both `Puck.Physics.Fields.FieldLattice` (a world's live `fields` section)
 and `Puck.World.Authoring.CreationStampSampling` (a placement's Noise/Scatter
