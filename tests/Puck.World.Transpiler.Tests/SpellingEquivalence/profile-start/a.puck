@@ -1,0 +1,14 @@
+// A convex profile listed from another start vertex is the same profile (audit S10).
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+prototypes {
+  prototype "p" {
+    document {
+      shape Prism "b" {
+        profile [[0, 0], [1, 0], [1, 1], [0, 1]]
+        scale [0.5, 0.5, 0.5]
+      }
+    }
+  }
+}

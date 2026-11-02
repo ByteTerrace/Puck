@@ -201,8 +201,14 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
     };
 
     devicesOption.AcceptOnlyFromAmong(values: ["all", "none"]);
+    // A developer diagnostic, never world-authored: native heap misuse otherwise faults later, inside the allocator, on
+    // whichever thread next allocates.
+    var debugAllocatorOption = new Option<bool>(name: "--debug-allocator") {
+        Description = "Guard every native block the engine allocates (GuardedAllocator): a double free, a write past a block's end, a free of a foreign pointer and a write into a freed block (held poisoned in a 1 GiB quarantine) end the process with [memory.guard] naming the block and the stack that freed it. Costs a stack walk per free.",
+    };
     var launchCommand = new RootCommand(description: "Puck World") {
         backendOption,
+        debugAllocatorOption,
         connectOption,
         controlOption,
         devicesOption,
@@ -253,6 +259,15 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
         Console.Error.WriteLine(value: "[world] definition refused: no --world. Puck.World boots the world it is handed: pass --world with an asset package folder (a folder whose manifest.json names its entry document), a .puck source, or a .world.json document.");
 
         return 1;
+    }
+    // Before any service resolves the allocator, so every native block the run owns carries the guard.
+    if (parseResult.GetValue(option: debugAllocatorOption)) {
+        var guard = new Puck.Abstractions.Memory.GuardedAllocator(inner: Puck.Memory.Allocator.Current);
+
+        Puck.Memory.Allocator.Current = guard;
+        // The blocks still quarantined at exit are checked too; collection checks them sooner (host.memory collect).
+        AppDomain.CurrentDomain.ProcessExit += (_, _) => Console.Error.WriteLine(value: $"[memory.guard] exit: {guard.Verify()} quarantined native blocks unwritten since their free");
+        Console.Error.WriteLine(value: "[memory.guard] native allocations are guarded: double frees, overruns and writes after free end the run");
     }
     var connectTarget = parseResult.GetValue(option: connectOption);
     Puck.World.Server.WorldExtensionConfiguration? extensionsConfiguration = null;

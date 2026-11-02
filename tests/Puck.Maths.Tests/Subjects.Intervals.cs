@@ -328,6 +328,52 @@ internal static partial class Subjects {
 
         return null;
     }
+    /// <summary>RoundedProduct over drawn intervals and factors: the hull of its ends' rounded products, holding every
+    /// interior point's rounded product, which lies within half a raw of the exact one; the top past the carrier.</summary>
+    /// <returns>The counterexample, or <see langword="null"/>.</returns>
+    public static string? FixedIntervalRoundedProductIsThePointHull() {
+        var generator = Pcg32XshRr.Create(state: 0xB0_0D5EUL, stream: 31UL);
+
+        for (var draw = 0; (draw < 2048); ++draw) {
+            var shift = ((int)(generator.NextUInt32() % 20U));
+            var a = (((long)(int)generator.NextUInt32()) << (shift / 2));
+            var b = (a + ((long)(generator.NextUInt32() >> (int)(generator.NextUInt32() % 32U))));
+            var factor = FixedQ4816.FromRawBits(value: (((long)(int)generator.NextUInt32()) >> (int)(generator.NextUInt32() % 24U)));
+            var value = new FixedInterval(lower: FixedQ4816.FromRawBits(value: a), upper: FixedQ4816.FromRawBits(value: b));
+            var product = FixedInterval.RoundedProduct(factor: factor, value: value);
+
+            if (product.IsUnbounded) {
+                return $"RoundedProduct({value}, {factor}) is unbounded inside the carrier";
+            }
+
+            var (atLower, atUpper) = ((value.Lower * factor), (value.Upper * factor));
+
+            if (product != FixedInterval.Hull(first: atLower, second: atUpper)) {
+                return $"RoundedProduct({value}, {factor}) is {product}, not the hull of its ends' products {atLower} and {atUpper}";
+            }
+
+            for (var sample = 0; (sample < 8); ++sample) {
+                var at = FixedQ4816.FromRawBits(value: (a + ((long)(generator.NextUInt32() % ((ulong)(b - a) + 1UL)))));
+                var exact = (((BigInteger)at.Value) * factor.Value);
+                var rounded = (at * factor);
+
+                if (!product.Contains(value: rounded)) {
+                    return $"{at} times {factor} rounds to {rounded}, outside RoundedProduct's {product}";
+                }
+                if (BigInteger.Abs(value: ((((BigInteger)rounded.Value) << 16) - exact)) > (BigInteger.One << 15)) {
+                    return $"{at} times {factor} rounds to {rounded}, more than half a raw from the exact product";
+                }
+            }
+        }
+
+        var whole = new FixedInterval(lower: FixedQ4816.MinValue, upper: FixedQ4816.MaxValue);
+
+        return (FixedInterval.RoundedProduct(factor: FixedQ4816.FromInteger(value: 2L), value: whole).IsUnbounded &&
+            FixedInterval.RoundedProduct(factor: FixedQ4816.One, value: FixedInterval.Entire).IsUnbounded &&
+            (FixedInterval.RoundedProduct(factor: FixedQ4816.Zero, value: whole) == FixedInterval.FromPoint(value: FixedQ4816.Zero)))
+            ? null
+            : "RoundedProduct does not answer the top past the carrier, or zero times the carrier is not zero";
+    }
     /// <summary>The fixed points of the interval type: the circular functions at the exact crest and trough raws, the
     /// arctangent's whole circle at the origin and across the cut, the unbounded sentinels, and the refusal of a
     /// reversed interval.</summary>

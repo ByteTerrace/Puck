@@ -568,7 +568,8 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
         }
 
         m_disposed = true;
-        if (m_meshTrimListening) { Puck.Hosting.Jobs.MemoryAccount.Shared.TrimRequested -= TrimMeshSources; m_meshTrimListening = false; }
+        if (m_meshTrimListening) { Puck.Hosting.Jobs.MemoryAccount.Shared.TrimRequested -= RequestMeshTrim; m_meshTrimListening = false; }
+        if (Interlocked.Exchange(location1: ref m_meshTrimRequested, value: 0) != 0) { Puck.Hosting.Jobs.MemoryAccount.Shared.CompleteDeferredTrim(); }
 
         // Drain the device BEFORE destroying anything (tolerating an already-lost device, where there is nothing left to
         // drain): the views' submissions, which the tables' own fences cannot see, read every table.

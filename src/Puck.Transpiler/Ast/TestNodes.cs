@@ -55,6 +55,33 @@ public sealed record TestGivenWorldNode(
     Line,
     Column
 );
+/// <summary><c>for item in sequence { row[item] = literal … }</c> inside a test's <c>given</c> block: the body's
+/// lines once per element of an array known at compile time, the bound names read as constants in each line's key
+/// and value. Compile-time only: the generated test world carries the cells it produces, exactly as the same lines
+/// written out would.</summary>
+/// <param name="Item">The name bound to each element.</param>
+/// <param name="Index">The name bound to each element's 0-based position, or <see langword="null"/>.</param>
+/// <param name="Sequence">The array walked.</param>
+/// <param name="Body">The cell lines, world blocks and nested loops, in written order.</param>
+/// <param name="Offset">The character offset within the source text.</param>
+/// <param name="Length">The character length of the node span.</param>
+/// <param name="Line">The 1-based line number in source text.</param>
+/// <param name="Column">The 1-based column number in source text.</param>
+public sealed record TestGivenForNode(
+    string Item,
+    string? Index,
+    ExpressionNode Sequence,
+    IReadOnlyList<TestGivenItemNode> Body,
+    int Offset = 0,
+    int Length = 0,
+    int Line = 1,
+    int Column = 1
+) : TestGivenItemNode(
+    Offset,
+    Length,
+    Line,
+    Column
+);
 /// <summary>One step of a test's <c>when</c> block: a position on the generated tick grid, or a command a seat
 /// submits at the position the preceding steps reached.</summary>
 /// <param name="Offset">The character offset within the source text.</param>
@@ -136,6 +163,37 @@ public sealed record TestWhenWorldNode(
     Line,
     Column
 );
+/// <summary><c>for item in sequence { … }</c> or <c>repeat count { … }</c> inside a test's <c>when</c> block: the
+/// body's steps once per element of an array known at compile time, or <c>count</c> times. A <c>for</c>'s bound
+/// names substitute into each seat step's command line where it writes <c>{name}</c> (<c>{{</c> and <c>}}</c> are
+/// literal braces), as an authored command's parameters do. Compile-time only: the generated schedule carries the
+/// rows it produces, exactly as the same steps written out would.</summary>
+/// <param name="Item">The name bound to each element, or <see langword="null"/> for a <c>repeat</c>.</param>
+/// <param name="Index">The name bound to each element's 0-based position, or <see langword="null"/>.</param>
+/// <param name="Sequence">The array a <c>for</c> walks, or the count a <c>repeat</c> runs.</param>
+/// <param name="Body">The steps, world blocks and nested loops, in written order.</param>
+/// <param name="Offset">The character offset within the source text.</param>
+/// <param name="Length">The character length of the node span.</param>
+/// <param name="Line">The 1-based line number in source text.</param>
+/// <param name="Column">The 1-based column number in source text.</param>
+public sealed record TestWhenLoopNode(
+    string? Item,
+    string? Index,
+    ExpressionNode Sequence,
+    IReadOnlyList<TestStepNode> Body,
+    int Offset = 0,
+    int Length = 0,
+    int Line = 1,
+    int Column = 1
+) : TestStepNode(
+    Offset,
+    Length,
+    Line,
+    Column
+) {
+    /// <summary>Gets whether the loop is a <c>repeat</c>, whose <see cref="Sequence"/> is a count.</summary>
+    public bool IsRepeat => (Item is null);
+}
 /// <summary>One entry of a test's <c>expect</c> block: a gate line, or a world of the composition holding gate
 /// lines of its own.</summary>
 /// <param name="Offset">The character offset within the source text.</param>
@@ -208,11 +266,15 @@ public sealed record TestGivenBlockNode(
     Line,
     Column
 ) {
-    /// <summary>Gets every cell line the block carries, each with the world it is addressed to, or
-    /// <see langword="null"/> for a line written outside every world block.</summary>
-    public IEnumerable<(string? World, TestGivenNode Cell)> Lines => Cells.SelectMany(selector: static item => (item switch {
+    /// <summary>Gets every cell line the block carries as written, each with the world it is addressed to, or
+    /// <see langword="null"/> for a line written outside every world block. A <c>for</c>'s body is read once, its
+    /// bound names unsubstituted.</summary>
+    public IEnumerable<(string? World, TestGivenNode Cell)> Lines => Written(items: Cells);
+
+    private static IEnumerable<(string? World, TestGivenNode Cell)> Written(IReadOnlyList<TestGivenItemNode> items) => items.SelectMany(selector: static item => (item switch {
         TestGivenNode cell => [(((string?)null), cell)],
         TestGivenWorldNode addressed => addressed.Cells.Select(selector: cell => (((string?)addressed.World), cell)),
+        TestGivenForNode loop => Written(items: loop.Body),
         _ => Enumerable.Empty<(string?, TestGivenNode)>(),
     }));
 }
@@ -234,10 +296,14 @@ public sealed record TestWhenBlockNode(
     Line,
     Column
 ) {
-    /// <summary>Gets every step the block carries in written order, each with the world it is addressed to, or
-    /// <see langword="null"/> for a step written outside every world block.</summary>
-    public IEnumerable<(string? World, TestStepNode Step)> Lines => Steps.SelectMany(selector: static step => (step switch {
+    /// <summary>Gets every step the block carries as written, in written order, each with the world it is addressed
+    /// to, or <see langword="null"/> for a step written outside every world block. A loop's body is read once, its
+    /// bound names unsubstituted.</summary>
+    public IEnumerable<(string? World, TestStepNode Step)> Lines => Written(steps: Steps);
+
+    private static IEnumerable<(string? World, TestStepNode Step)> Written(IReadOnlyList<TestStepNode> steps) => steps.SelectMany(selector: static step => (step switch {
         TestWhenWorldNode addressed => addressed.Steps.Select(selector: inner => (((string?)addressed.World), ((TestStepNode)inner))),
+        TestWhenLoopNode loop => Written(steps: loop.Body),
         _ => [(((string?)null), step)],
     }));
 }

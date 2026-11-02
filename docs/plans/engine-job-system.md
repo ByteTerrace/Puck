@@ -474,8 +474,8 @@ each). Against the build before the incremental hash: plain 256.7 s against
 180.4 s (the mirrors), recorded 441.4 s against 247.1 s with the body cache,
 so the recording's own cost fell from 184.7 s to 66.7 s. A tick refolds 1.6
 rows. The body cache's share, measured back to back on a busier machine: 288.8 s
-recorded with it, 309.8 s without. The always-on sample took 100.7 ms over
-the whole recorded run, 5.5 µs a tick. What the recording still costs is the
+recorded with it, 309.8 s without. The always-on sample took 52.8 ms over a
+whole recorded run (186.1 s authored), 2.9 µs a tick. What the recording still costs is the
 components that fold whole every tick (body continuations, poses, body action
 state, navigation, flock and input), unprofiled.
 

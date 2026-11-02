@@ -160,7 +160,7 @@ public static class WorldPlacementStamper {
                 Paints: Paints(colors: colors, document: document, entry: entry, hidden: hidden, pool: pool, motion: motion),
                 EmissiveLane: entry?.EmissiveLane,
                 Glass: entry?.Glass?.ToGlass(scale: (pool?.Scale ?? 1f)),
-                Toon: entry?.Toon?.ToToon()
+                Toon: (((entry?.ToonSelect is { } select) ? select.CaseOf(value: colors.ResolveWhole(token: select.State)) : null) ?? entry?.Toon)?.ToToon()
             ));
         }
     }
@@ -310,7 +310,9 @@ public static class WorldPlacementStamper {
     /// <summary>Poses a prototype's mesh as a draw: its engine-frame triangles under a uniform scale, an optional mirror (a
     /// plane through the origin in the local frame, as the shapes reflect), then the rotation and the origin, composed in
     /// the row-vector convention <see cref="SdfMeshDraw"/> carries. A static placement and a stamp-pool root pose it
-    /// alike.</summary>
+    /// alike. Under a mirror a closed mesh draws with its windings reversed, so its faces stay outward for the opaque
+    /// pass; the mirrored matrix then makes it a thin caster in a cascade's exit layer
+    /// (<see cref="SdfMeshDraw.EnclosesSolid"/>).</summary>
     /// <param name="mesh">The prototype's mesh (<see cref="MeshOf"/>).</param>
     /// <param name="material">The engine material the mesh's palette entry registered as.</param>
     /// <param name="origin">The world-space origin.</param>
@@ -332,24 +334,88 @@ public static class WorldPlacementStamper {
         return new SdfMeshDraw(
             Identity: identity,
             Material: material,
-            Mesh: mesh,
+            Mesh: (((reflectionNormal is not null) && mesh.Encloses) ? Mirrored(mesh: mesh) : mesh),
             ObjectToWorld: ((local * Matrix4x4.CreateFromQuaternion(quaternion: rotation)) * Matrix4x4.CreateTranslation(position: origin))
         );
     }
     /// <summary>The engine-frame <see cref="SdfMesh"/> of an inline prototype mesh, converted once: prototype rows are
     /// replaced, never mutated, so every placement, stamp and rebuild of one row shares one mesh. An authored mesh has no
     /// winding contract, and the opaque mesh pass culls back faces (<c>GpuCullMode.Back</c>), as the bake's meshes,
-    /// wound outward, need: the mesh carries each triangle in both windings, so whichever side or transform (a mirror
-    /// included) faces the camera draws.</summary>
+    /// wound outward, need. Triangles that close a volume, each edge between exactly two of them wound opposite ways
+    /// (<see cref="ClosedOutward"/>), are wound outward as the bake's are and enclose a solid
+    /// (<see cref="SdfMesh.Encloses"/>); any other mesh carries each triangle in both windings, so whichever side faces
+    /// the camera draws, and bounds no solid.</summary>
     /// <param name="mesh">The prototype's inline mesh.</param>
     /// <returns>The shared mesh.</returns>
     internal static SdfMesh MeshOf(WorldPrototypeMesh mesh) => Meshes.GetValue(
-        derive: static authored => new SdfMesh(
-            indices: TwoSided(indices: authored.Indices),
-            positions: authored.EngineVertices.ToArray()
-        ),
+        derive: static authored => {
+            var positions = authored.EngineVertices.ToArray();
+
+            return ((ClosedOutward(indices: authored.Indices, positions: positions) is { } outward)
+                ? new SdfMesh(indices: outward, positions: positions)
+                : new SdfMesh(indices: TwoSided(indices: authored.Indices), positions: positions) { Encloses = false });
+        },
         key: mesh
     );
+    // A closed mesh drawn under a mirror: the same triangles with each one's winding reversed, which the mirror reverses
+    // back, so its faces stay outward where it is drawn.
+    private static SdfMesh Mirrored(SdfMesh mesh) => MirroredMeshes.GetValue(key: mesh, createValueCallback: static closed => {
+        var indices = closed.Indices.ToArray();
+
+        for (var index = 0; (index < indices.Length); index += 3) {
+            (indices[(index + 1)], indices[(index + 2)]) = (indices[(index + 2)], indices[(index + 1)]);
+        }
+
+        return new SdfMesh(indices: indices, positions: closed.Positions);
+    });
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<SdfMesh, SdfMesh> MirroredMeshes = new();
+
+    // The triangles wound outward when they close a volume: every edge, its vertices matched by position, is shared by
+    // exactly two triangles that run it in opposite directions, and the volume they enclose is not zero. Triangles
+    // reversed as a whole (a negative volume) are flipped. Null for an open, nonmanifold or inconsistently wound mesh.
+    private static uint[]? ClosedOutward(IReadOnlyList<uint> indices, Vector3[] positions) {
+        var canonical = new int[positions.Length];
+        var first = new Dictionary<Vector3, int>();
+
+        for (var vertex = 0; (vertex < positions.Length); vertex++) {
+            canonical[vertex] = (first.TryGetValue(key: positions[vertex], value: out var seen) ? seen : (first[positions[vertex]] = vertex));
+        }
+
+        var edges = new Dictionary<(int From, int To), int>();
+        var volume = 0.0;
+
+        for (var index = 0; (index < indices.Count); index += 3) {
+            var a = canonical[indices[index]];
+            var b = canonical[indices[(index + 1)]];
+            var c = canonical[indices[(index + 2)]];
+
+            if ((a == b) || (b == c) || (c == a)) {
+                continue;
+            }
+            foreach (var edge in new[] { (a, b), (b, c), (c, a) }) {
+                edges[edge] = (edges.GetValueOrDefault(key: edge) + 1);
+            }
+            volume += Vector3.Dot(vector1: positions[a], vector2: Vector3.Cross(vector1: positions[b], vector2: positions[c]));
+        }
+        if ((edges.Count == 0) || (volume == 0.0)) {
+            return null;
+        }
+        foreach (var ((from, to), runs) in edges) {
+            if ((runs != 1) || (edges.GetValueOrDefault(key: (to, from)) != 1)) {
+                return null;
+            }
+        }
+
+        var outward = indices.ToArray();
+
+        if (volume < 0.0) {
+            for (var index = 0; (index < outward.Length); index += 3) {
+                (outward[(index + 1)], outward[(index + 2)]) = (outward[(index + 2)], outward[(index + 1)]);
+            }
+        }
+
+        return outward;
+    }
 
     // The triangles in their authored winding, then each again with its last two vertices swapped.
     private static uint[] TwoSided(IReadOnlyList<uint> indices) {

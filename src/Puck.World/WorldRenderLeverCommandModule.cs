@@ -378,7 +378,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
             name: "world.toon",
             description: "Cel shading, live: world.toon [on|off|toggle]. No argument echoes the mode. Switches each world's default style, render.toon (the standard's styles.puck authors celStyle); a world that authors none has no style to band with, and a material with a style of its own keeps it. Screens, portals and sky are not posterised. Presentation only, under the render grant.",
             handler: (context, args) => {
-                CommandResult Echo() => new(Output: $"[world.toon: {(settings.Toon ? "on" : "off")}]");
+                CommandResult Echo() => new(Output: $"[world.toon: {(settings.Toon ? "on" : "off")}{(settings.ToonStyled ? string.Empty : " (render.toon authors no complete style, so this world's default stays continuous)")}]");
                 if (args.Count == 0) { return Echo(); }
                 if (args.Count != 1) { return CommandResult.Error(output: "[world.toon: expected on|off|toggle]"); }
                 var on = (args.Is(index: 0, value: "toggle") ? !settings.Toon : ParseOnOff(token: args[0]));

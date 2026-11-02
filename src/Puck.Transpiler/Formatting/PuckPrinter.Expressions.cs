@@ -73,6 +73,14 @@ public static partial class PuckPrinter {
 
                 return;
             }
+            // A list of numbers written one to a line carries no layout of its own (a decompiled table, a run of
+            // zeros), so it prints as the printer lays out numbers: on one line when it fits, else filled rows.
+            // Strings keep the author's lines, since a column of them is often a picture (a tile's pixel rows).
+            if (array.Trivia.MultiLine && IsNumberALine(array: array)) {
+                Array(array: (array with { Trivia = (array.Trivia with { MultiLine = false }) }), level: level);
+
+                return;
+            }
             var everyLine = (!array.Trivia.MultiLine && !FitsOnOneLine(print: () => Array(array: array, level: level)));
 
             if (everyLine && array.Elements.All(predicate: IsScalar)) {

@@ -1,0 +1,25 @@
+// A 'for' in a test's given block is its cells written out.
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+state {
+  world {
+    table board {
+      a = 0
+      b = 0
+      c = 0
+    }
+  }
+}
+
+
+test "cells" {
+  given {
+    for key in ["a", "c"] {
+      board[key] = 2
+    }
+  }
+  expect {
+    board.a == 2
+  }
+}

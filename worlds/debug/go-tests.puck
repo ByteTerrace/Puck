@@ -68,11 +68,9 @@ test "a stone filling the last liberty captures a whole group" {
     goAiSide = 0
     goBoard[180] = 2
     goBoard[181] = 2
-    goBoard[161] = 1
-    goBoard[162] = 1
-    goBoard[179] = 1
-    goBoard[182] = 1
-    goBoard[199] = 1
+    for point in [161, 162, 179, 182, 199] {
+      goBoard[point] = 1
+    }
     goStoneCount[1] = 5
     goStoneCount[2] = 2
     goMove.play = 200
@@ -96,10 +94,9 @@ test "a stone with no liberty that captures nothing is refused as suicide" {
   given {
     goAiSide = 0
     goTurn = 2
-    goBoard[161] = 1
-    goBoard[179] = 1
-    goBoard[181] = 1
-    goBoard[199] = 1
+    for point in [161, 179, 181, 199] {
+      goBoard[point] = 1
+    }
     goStoneCount[1] = 4
     goMove.play = 180
   }
@@ -123,13 +120,12 @@ test "retaking a ko at once is refused" {
   given {
     goAiSide = 0
     goTurn = 2
-    goBoard[161] = 1
-    goBoard[179] = 1
-    goBoard[199] = 1
-    goBoard[181] = 1
-    goBoard[162] = 2
-    goBoard[182] = 2
-    goBoard[200] = 2
+    for point in [161, 179, 199, 181] {
+      goBoard[point] = 1
+    }
+    for point in [162, 182, 200] {
+      goBoard[point] = 2
+    }
     goStoneCount[1] = 4
     goStoneCount[2] = 3
   }
@@ -156,13 +152,12 @@ test "a ko may be retaken after an exchange elsewhere" {
   given {
     goAiSide = 0
     goTurn = 2
-    goBoard[161] = 1
-    goBoard[179] = 1
-    goBoard[199] = 1
-    goBoard[181] = 1
-    goBoard[162] = 2
-    goBoard[182] = 2
-    goBoard[200] = 2
+    for point in [161, 179, 199, 181] {
+      goBoard[point] = 1
+    }
+    for point in [162, 182, 200] {
+      goBoard[point] = 2
+    }
     goStoneCount[1] = 4
     goStoneCount[2] = 3
   }
@@ -283,20 +278,12 @@ test "the computer plays one move" {
 test "the game ends on two passes and is scored by area" {
   given {
     goAiSide = 0
-    goBoard[3] = 1
-    goBoard[22] = 1
-    goBoard[41] = 1
-    goBoard[57] = 1
-    goBoard[58] = 1
-    goBoard[59] = 1
-    goBoard[60] = 1
-    goBoard[357] = 2
-    goBoard[338] = 2
-    goBoard[319] = 2
-    goBoard[303] = 2
-    goBoard[302] = 2
-    goBoard[301] = 2
-    goBoard[300] = 2
+    for point in [3, 22, 41, 57, 58, 59, 60] {
+      goBoard[point] = 1
+    }
+    for point in [357, 338, 319, 303, 302, 301, 300] {
+      goBoard[point] = 2
+    }
     goStoneCount[1] = 7
     goStoneCount[2] = 7
   }
@@ -320,12 +307,12 @@ test "a capture is legal even when the drop begins with no empty neighbour" {
   given {
     goAiSide = 0
     goBoard[180] = 2
-    goBoard[161] = 1
-    goBoard[179] = 1
-    goBoard[181] = 1
-    goBoard[198] = 2
-    goBoard[200] = 2
-    goBoard[218] = 2
+    for point in [161, 179, 181] {
+      goBoard[point] = 1
+    }
+    for point in [198, 200, 218] {
+      goBoard[point] = 2
+    }
     goStoneCount[1] = 3
     goStoneCount[2] = 4
     goMove.play = 199
@@ -385,168 +372,9 @@ test "scoring a winding 19 by 19 corridor takes more than 128 passes" {
     goScoring = 1
     goGrowing = 1
     goBlackReach[0] = 1
-    goBoard[19] = 1
-    goBoard[20] = 1
-    goBoard[21] = 1
-    goBoard[22] = 1
-    goBoard[23] = 1
-    goBoard[24] = 1
-    goBoard[25] = 1
-    goBoard[26] = 1
-    goBoard[27] = 1
-    goBoard[28] = 1
-    goBoard[29] = 1
-    goBoard[30] = 1
-    goBoard[31] = 1
-    goBoard[32] = 1
-    goBoard[33] = 1
-    goBoard[34] = 1
-    goBoard[35] = 1
-    goBoard[36] = 1
-    goBoard[58] = 1
-    goBoard[59] = 1
-    goBoard[60] = 1
-    goBoard[61] = 1
-    goBoard[62] = 1
-    goBoard[63] = 1
-    goBoard[64] = 1
-    goBoard[65] = 1
-    goBoard[66] = 1
-    goBoard[67] = 1
-    goBoard[68] = 1
-    goBoard[69] = 1
-    goBoard[70] = 1
-    goBoard[71] = 1
-    goBoard[72] = 1
-    goBoard[73] = 1
-    goBoard[74] = 1
-    goBoard[75] = 1
-    goBoard[95] = 1
-    goBoard[96] = 1
-    goBoard[97] = 1
-    goBoard[98] = 1
-    goBoard[99] = 1
-    goBoard[100] = 1
-    goBoard[101] = 1
-    goBoard[102] = 1
-    goBoard[103] = 1
-    goBoard[104] = 1
-    goBoard[105] = 1
-    goBoard[106] = 1
-    goBoard[107] = 1
-    goBoard[108] = 1
-    goBoard[109] = 1
-    goBoard[110] = 1
-    goBoard[111] = 1
-    goBoard[112] = 1
-    goBoard[134] = 1
-    goBoard[135] = 1
-    goBoard[136] = 1
-    goBoard[137] = 1
-    goBoard[138] = 1
-    goBoard[139] = 1
-    goBoard[140] = 1
-    goBoard[141] = 1
-    goBoard[142] = 1
-    goBoard[143] = 1
-    goBoard[144] = 1
-    goBoard[145] = 1
-    goBoard[146] = 1
-    goBoard[147] = 1
-    goBoard[148] = 1
-    goBoard[149] = 1
-    goBoard[150] = 1
-    goBoard[151] = 1
-    goBoard[171] = 1
-    goBoard[172] = 1
-    goBoard[173] = 1
-    goBoard[174] = 1
-    goBoard[175] = 1
-    goBoard[176] = 1
-    goBoard[177] = 1
-    goBoard[178] = 1
-    goBoard[179] = 1
-    goBoard[180] = 1
-    goBoard[181] = 1
-    goBoard[182] = 1
-    goBoard[183] = 1
-    goBoard[184] = 1
-    goBoard[185] = 1
-    goBoard[186] = 1
-    goBoard[187] = 1
-    goBoard[188] = 1
-    goBoard[210] = 1
-    goBoard[211] = 1
-    goBoard[212] = 1
-    goBoard[213] = 1
-    goBoard[214] = 1
-    goBoard[215] = 1
-    goBoard[216] = 1
-    goBoard[217] = 1
-    goBoard[218] = 1
-    goBoard[219] = 1
-    goBoard[220] = 1
-    goBoard[221] = 1
-    goBoard[222] = 1
-    goBoard[223] = 1
-    goBoard[224] = 1
-    goBoard[225] = 1
-    goBoard[226] = 1
-    goBoard[227] = 1
-    goBoard[247] = 1
-    goBoard[248] = 1
-    goBoard[249] = 1
-    goBoard[250] = 1
-    goBoard[251] = 1
-    goBoard[252] = 1
-    goBoard[253] = 1
-    goBoard[254] = 1
-    goBoard[255] = 1
-    goBoard[256] = 1
-    goBoard[257] = 1
-    goBoard[258] = 1
-    goBoard[259] = 1
-    goBoard[260] = 1
-    goBoard[261] = 1
-    goBoard[262] = 1
-    goBoard[263] = 1
-    goBoard[264] = 1
-    goBoard[286] = 1
-    goBoard[287] = 1
-    goBoard[288] = 1
-    goBoard[289] = 1
-    goBoard[290] = 1
-    goBoard[291] = 1
-    goBoard[292] = 1
-    goBoard[293] = 1
-    goBoard[294] = 1
-    goBoard[295] = 1
-    goBoard[296] = 1
-    goBoard[297] = 1
-    goBoard[298] = 1
-    goBoard[299] = 1
-    goBoard[300] = 1
-    goBoard[301] = 1
-    goBoard[302] = 1
-    goBoard[303] = 1
-    goBoard[323] = 1
-    goBoard[324] = 1
-    goBoard[325] = 1
-    goBoard[326] = 1
-    goBoard[327] = 1
-    goBoard[328] = 1
-    goBoard[329] = 1
-    goBoard[330] = 1
-    goBoard[331] = 1
-    goBoard[332] = 1
-    goBoard[333] = 1
-    goBoard[334] = 1
-    goBoard[335] = 1
-    goBoard[336] = 1
-    goBoard[337] = 1
-    goBoard[338] = 1
-    goBoard[339] = 1
-    goBoard[340] = 1
+    for point in [19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 171, 172, 173, 174, 175, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 210, 211, 212, 213, 214, 215, 216, 217, 218, 219, 220, 221, 222, 223, 224, 225, 226, 227, 247, 248, 249, 250, 251, 252, 253, 254, 255, 256, 257, 258, 259, 260, 261, 262, 263, 264, 286, 287, 288, 289, 290, 291, 292, 293, 294, 295, 296, 297, 298, 299, 300, 301, 302, 303, 323, 324, 325, 326, 327, 328, 329, 330, 331, 332, 333, 334, 335, 336, 337, 338, 339, 340] {
+      goBoard[point] = 1
+    }
   }
   when {
     ticks 250

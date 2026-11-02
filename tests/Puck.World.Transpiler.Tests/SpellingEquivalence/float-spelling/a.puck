@@ -1,0 +1,14 @@
+// Two decimal spellings of one float are one value (go.puck's 30.240000000000002).
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+prototypes {
+  prototype "p" {
+    document {
+      shape Box "b" {
+        position [0, 30.24, 0]
+        scale [0.5, 0.5, 0.5]
+      }
+    }
+  }
+}
