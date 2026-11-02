@@ -27,7 +27,7 @@ Procedures loaded by [orchestration](../SKILL.md) for branches, delegation and l
   integration tip, every line `git diff <integration tip> HEAD` removes must be
   one you meant to remove: an unexplained deletion is someone else's work lost
   in a merge or squash, and green suites prove only the behavior they cover.
-  `git diff` shows it; `puck landing --against <tip> --base <authoring base>`
+  `git diff` shows it; `puck landing loss --against <tip> --base <authoring base>`
   makes the same Git-loss check mechanically; it reads Git state only and
   boots no World. To squash, reset to the
   commit your work started from, never to a remote ref that may have moved.
