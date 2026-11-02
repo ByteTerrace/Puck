@@ -1,4 +1,5 @@
 ---
+description: "orchestration 'Select models and route findings': owner steering adjusts judgement, never a quota; correctness-heavy work goes to the strongest fitting implementer (`principal` is conserved for design); a review is one pass and the lead rules on what remains."
 max_turns: 8
 allowed_tools: [Read, Glob, Grep, Skill]
 tags: [regression]

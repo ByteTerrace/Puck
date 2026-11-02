@@ -504,15 +504,16 @@ To compare the skill against no skill on one result, name it twice:
 
 A Puck session always has `AGENTS.md` loaded, and a lane also preloads
 `delegate`, so the honest baseline is the rules without the skill, not an
-empty context. `run` puts that context where a real session has it, in the
-system prompt: every case's `case.yaml` gets `execution.append_system_prompt`
-holding HEAD's `AGENTS.md` text, plus HEAD's `delegate/SKILL.md` body for
-every skill a lane loads (all but `delegate` and `orchestration`), each under
-a heading naming it. Both arms run with it, so the delta measures what the
-skill adds over the rules, and a case whose delta collapses marks skill text
-that duplicates `AGENTS.md`. A case that sets `append_system_prompt` itself is
-refused, since the runner would override one with the other. A fixture
-directory granted through `context.add_dirs` does not work: on Claude Code
+empty context. `run` puts that context where a real session delivers it, in
+the user turn: every case's `prompt.md` gets a `project-instructions` block
+ahead of its task, holding HEAD's `AGENTS.md` text, plus HEAD's
+`delegate/SKILL.md` body for every skill a lane loads (all but `delegate` and
+`orchestration`), each under a heading naming it. Both arms run with it, so
+the delta measures what the skill adds over the rules, and a case whose delta
+collapses marks skill text that duplicates `AGENTS.md`. The fixture never
+travels as `execution.append_system_prompt`: `claude plugin eval` passes that
+on the child's command line, which Windows caps far below the rules file's
+size. A fixture directory granted through `context.add_dirs` does not work: on Claude Code
 2.1.316 on Windows the session's `additional_directories` stays empty and the
 agent's reads of it are denied. Never grant the repository or
 `.claude/skills/`: the baseline arm would read the skill and the ablation would
@@ -549,13 +550,13 @@ comparison with it.
 `claude plugin eval` runs a bare skills directory as a plugin, and adds a
 no-skill baseline arm. A case is one directory under the skill's `evals/`:
 
-- `prompt.md`: frontmatter `tags`, `runs` (default 3), `max_turns`,
-  `timeout_seconds`, `allowed_tools` and `model`, then a realistic task.
+- `prompt.md`: frontmatter `description`, `tags`, `runs` (default 3),
+  `max_turns`, `timeout_seconds`, `allowed_tools` and `model`, then a
+  realistic task, which `run` puts the fixture ahead of.
 - `graders/*.md`: each grader one of `regex`, `tool_used`, `tool_order`,
   `file_exists`, `llm` or `baseline`. There are no custom-code graders.
 - `case.yaml`, when the case needs `context` fields (`scaffold_script`,
-  `history_file`). `run` adds the fixture's `execution.append_system_prompt`
-  to it, or creates it.
+  `history_file`).
 
 Cases are not split into training and held-out sets. An agent editing a skill
 reads every case, so a held-out set it can read holds nothing out, and the
@@ -567,6 +568,12 @@ real failures.
   fact per grader. Grade the behaviour Puck needs, never the skill's own
   wording: a grader that a correct reply in other words would fail is
   deleted.
+- Grade what the prompt's situation calls for. A grader for a rule the
+  prompt never raises (where `main` goes, in a case about a denied merge)
+  fails a correct reply that stays on the question. A grader for a rule the
+  skill only routes to another skill (orchestration sends GPU classification
+  to `verification`) cannot pass in a sandbox that loads only the skill under
+  test; grade that rule in the owning skill's suite.
 - A sandboxed agent only advises; its reply cannot fix, run or commit
   anything. A rubric worded as an action ("fixes", "runs", "commits") fails a
   correct reply that recommends the action, so a rubric says what the reply

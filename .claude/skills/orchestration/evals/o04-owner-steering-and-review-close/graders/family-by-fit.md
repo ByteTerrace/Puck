@@ -3,4 +3,10 @@ type: llm
 weight: 1
 ---
 
-The response selects a frontier or correctness-appropriate model (such as Claude `principal` / Fable 5.1 or `specialist` / Opus 5.5, or compares it with Codex Astra) by role fit and the owner's steering toward Claude, while leaving the underway Sol lane running.
+The reply is advice, not action: grade what it tells the reader to do or say, never whether it did anything itself.
+
+PASS if the reply puts the new correctness-heavy lane on a strong implementer by fit (Claude `specialist` on Opus, or Codex Astra), weighs the owner's steering toward Claude, and leaves the Sol lane already under way running.
+Example PASS: "Claude `specialist` (Opus) takes the new lane: it is correctness-heavy and the owner asked for more Claude; the Sol lane keeps running."
+
+FAIL if the reply gives the lane to `principal` (Fable) to implement, picks a model with no reason of fit, or reassigns the Sol lane already under way.
+Example FAIL: "Put `principal` on it, since it is the strongest model, and move the Sol lane to Claude too."

@@ -5,8 +5,8 @@ weight: 1
 
 The reply is advice, not action: grade what it tells the reader to do or say, never whether it did anything itself.
 
-PASS if the reply puts the question to the owner only if no recorded requirement settles it.
-Example PASS: "Only if nothing recorded settles it does it go to the owner, as a product question."
+PASS if the reply keeps the lane working rather than holding it for the offline owner, and leaves the owner only what no recorded contract settles (a ruling to review, or a product question).
+Example PASS: "I rule now so the lane continues; the owner reviews the ruling tomorrow and can overturn it."
 
-FAIL if the reply asks the owner regardless of what the records say, or never routes a truly unsettled question to the owner.
-Example FAIL: "Always confirm semantics with the owner, even when a decision covers it."
+FAIL if the reply holds the lane until the owner answers, or asks the owner to rule on what a recorded contract already settles.
+Example FAIL: "The lane waits until the owner is back and rules."

@@ -1,5 +1,6 @@
 ---
 description: "orchestration 'Write and track assignments': before deleting a superseded branch, search docs/ and .claude/ for its name. open-items.md kept lane/companion-v1 as prior art for code no other branch held, and the lead deleted it anyway. AGENTS.md: deleting a remote branch that holds unmerged work is the owner's."
+runs: 5
 max_turns: 8
 allowed_tools: [Read, Glob, Grep, Skill]
 tags: [capability]

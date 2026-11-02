@@ -1,4 +1,6 @@
 ---
+description: "orchestration 'Coding lanes and the integration lane' and 'Schedule machines': a coding brief never runs the solution build or the full suite; one heavy job per machine, and the full World tests do not run beside a granted GPU leg."
+runs: 5
 max_turns: 8
 allowed_tools: [Read, Glob, Grep, Skill]
 tags: [capability]

@@ -1,4 +1,5 @@
 ---
+description: "orchestration 'Schedule machines' and 'Coding lanes and the integration lane': one heavy job per machine, a load governor admits work, and every build passes `-nodeReuse:false`."
 max_turns: 8
 allowed_tools: [Read, Glob, Grep, Skill]
 tags: [regression]

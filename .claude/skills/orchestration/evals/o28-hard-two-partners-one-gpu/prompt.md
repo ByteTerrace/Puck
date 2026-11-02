@@ -1,4 +1,6 @@
 ---
+description: "orchestration 'Schedule machines': one GPU leg per GPU, admitted by the lease and never by a GPU that looks idle, with the lease's holder as the one record of who owns it. The search self-match this prompt also holds is verification's teaching, graded by its v07."
+runs: 5
 max_turns: 8
 allowed_tools: [Read, Glob, Grep, Skill]
 tags: [capability]

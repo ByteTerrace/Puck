@@ -1,5 +1,6 @@
 ---
 description: "orchestration 'No bad loops': before putting a semantics question to the owner, look for the decision it follows from; a behaviour a recorded contract implies is derived, written down with its derivation, and never labelled the owner's ruling. The lead once put a question to the owner that the fault contract already settled."
+runs: 5
 max_turns: 8
 allowed_tools: [Read, Glob, Grep, Skill]
 tags: [capability]

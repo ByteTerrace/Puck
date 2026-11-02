@@ -2664,8 +2664,8 @@ runs on. Each verb's `--help` holds its full contract.
   checks `<rev>` (default HEAD) out as a detached worktree under the main
   checkout's `.claude/worktrees/`, copies HEAD's `evals/` into it when `<rev>`
   is older, puts the rules-file fixture (HEAD's `AGENTS.md` text, and the
-  delegate skill's for a skill a lane loads) into every case's `case.yaml`
-  `execution.append_system_prompt`, both arms, and runs
+  delegate skill's for a skill a lane loads) as a `project-instructions` block
+  ahead of every case's `prompt.md` task, both arms, and runs
   `claude plugin eval` on that tree's skill with full model IDs and a judge no
   weaker than the model. The result, report, `run.json` manifest and each run's
   trace go under `.claude/skills/<skill>/evals/results/<stamp>/`, and the
