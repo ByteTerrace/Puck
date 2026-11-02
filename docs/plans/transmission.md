@@ -10,8 +10,9 @@ Implementation is a later lane; the steps at the end are its lanes, and the
 remaining review mediums are their checks.
 
 Status: design, final round. The code it describes is step 1's third round
-(`passes/sdf-surface-stage.hlsli`, `SdfMeshRasterPass.cs`,
-`SdfWorldPassRecorder.RecordExitDraws`, `WorldPlacementStamper.MeshOf`,
+(`passes/sdf-surface-stage.hlsli`, `SdfMeshRasterPass.cs`, the cascade's
+exit phases in `SdfWorldPassRecorder` recorded through `RecordMeshPhase`
+from the GPU selection, `WorldPlacementStamper.MeshOf`,
 `SdfMeshDraw.EnclosesSolid`) and step 2's relight (`SdfMeshIrradiance.Relight`
 and `Shade`, `SdfMeshProbeDepth.TraceHits`).
 
@@ -516,10 +517,11 @@ The second design review:
 
 What is known from the illum1-fix measurement at the stage on Direct3D 12
 (`world.counters gpu pass sdf.world$shadow-near`): 460 draws and 2.62 M
-vertices over the cascade's two render passes, both of which draw the same
-kept set through `RecordMeshDraw` with the same vertex counts, so each pass
-submits about 1.31 M vertices; front-face culling discards after the vertex
-stage and saves fragments, not vertices. The term's second pass costs the
+vertices over the cascade's two render passes, both of which drew the same
+kept set, so each pass submitted about 1.31 M vertices (the selection kernel
+now issues both as indirect draws, which changes the recording and not the
+work); front-face culling discards after the vertex stage and saves
+fragments, not vertices. The term's second pass costs the
 same vertex work and the depth pass's fragments, each running two loads and a
 compare, and the first pass gains a colour write. Up to three cascades can
 refresh in one frame. No timing of the exit layer on a quiet machine exists,
@@ -718,8 +720,11 @@ others run beside the second. The remaining review mediums are checks here.
    bindings and layout transitions, and the `uint` fragment output; the L1
    stage writes B1 under `[earlydepthstencil]`; `ShadowExitPipeline` becomes
    the peel (both variants behind one description, a lever for the
-   measurement); `RecordExitDraws` becomes one pass over the kept draws after
-   L1 and B1 are final; `sdfMeshShadowDepth` reads L1, B1 and L2 with one
+   measurement); the cascade's two exit phases (the selection kernel's
+   enclosing and non-enclosing classes, `sdf-mesh-selection.hlsli`) become
+   one `RecordMeshPhase` over the cascade's whole selected set through the
+   peel pipeline after L1 and B1 are final, and the enclosing class leaves
+   the selection; `sdfMeshShadowDepth` reads L1, B1 and L2 with one
    integer texel coordinate and no filtering; `sdfMeshShadow` applies the
    term's layer choice. `SdfMeshDraw.EnclosesSolid` is deleted and
    `SdfMesh.Encloses` renamed `Solid`. A palette with no positive wrap records
