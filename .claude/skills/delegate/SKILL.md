@@ -39,7 +39,8 @@ holds the Git, push and stop-order rules every family shares.
   cannot be switched off. Use the worktree as the working directory, literal absolute paths and one
   plain command per call: no `cd` chains and no variable expansion into a command or path. Write
   files with the Write tool; a heredoc, `cd`, loop or nested shell goes into a scratch script run as
-  one plain command.
+  one plain command. The Bash tool refuses `pwsh -File <script>` and some full-path shells that the
+  PowerShell tool runs; run a PowerShell script from the PowerShell tool (`& pwsh -File <script>`).
 - Name scratch `<worktree>/.claude/scratch/<lane>-*`. Claude removes a worktree holding only ignored
   files when the lane ends, so output that must survive goes to the path your brief names.
 - Set work aside with a WIP commit or a copy to a path your brief allows, never `git checkout --` or
