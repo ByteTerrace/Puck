@@ -945,7 +945,28 @@ store (AGENTS.md), and work proportional to change.
   and the plan spreads it over a 400 m floor, so this decides whether the
   cold-bake bar can hold: bake a static copy in its prototype's frame and
   share it across copies whose transform is rigid (a uniform scale admitted),
-  as the dynamic path does. (from: c1-groundcover)
+  as the dynamic path does. The debug world's placement stamper opens a group
+  per placement (`WorldPlacementStamper.cs:694-725`): the lawn has 307
+  placements, the meadow 121, Chess 64 squares, Reversi 68 tiles and dots, the
+  card table 29 spots and the granaries 16 tiles. (from: c1-groundcover,
+  puck-audit)
+- [medium] Static bake grouping depends on spelling, which breaks the
+  ergonomic-is-optimal ruling (AGENTS.md):
+  - A static group's mesh detail follows the whole group's size, so authors
+    split one object into separate prototypes to keep detail
+    (`devices.puck:16-22`, `desktop.puck:52`, `hall.puck:497-500`).
+  - A warped shape bakes alone and forces the next shape alone, so shape order
+    changes grouping (`WorldPlacementStamper.cs:714-725`).
+  - Every text run bakes as its own group.
+  - One non-union blend anywhere makes the whole creation one scope, refusing
+    panels, trims and cells on every shape.
+  - A subtraction collides as its whole bounding box, so walls with openings
+    are tiled from boxes (`paintings.puck:249-251`).
+  - Folds are cheaper than copies but cannot swing, slide, carry panels or
+    always collide.
+  Design them with the static-copy fix above: grouping and detail are derived
+  from what the document means, never from how it splits or orders rows.
+  (from: puck-audit)
 
 ### Certified field contact
 
@@ -2092,6 +2113,16 @@ Next: the per-tick authority hash is incremental
 ([design](engine-job-system.md#the-incremental-state-hash)); re-profile Go's
 reproduce worker for what remains.
 
+- [high] The incremental hash's caches miss invalidations (cross-family
+  review): a standalone `RowDigest` refresh leaves its parent segment stale
+  (`ArenaHash.cs:74-76,138-168`); a sleeping body's continuation stays cached
+  through `SetIntentSource`, an untimed `PressChannel`, `MergeLaneTimer` and the
+  late tether solve (`WorldBody.Tether.cs:119-143`); an off-thread hash between
+  a write's version bump and its store poisons a row digest; and live replay
+  never runs the full-recompute oracle. The incr-hash lane redesigns the body
+  cache around one write chokepoint (or deletes it if that costs more than it
+  saves), hashes only at a stable read boundary, and adds a rotating per-tick
+  spot check. (from: incrhash-astra)
 - [low · fix when touched] `Fixtures.FreshServer` (`tests/Shared/World/Fixtures.Server.cs:112`) deserializes without `WorldStateSettlement.SettleBeforeAdmission`, so a boot from a raw document with a seeded responsive placement can show the response's prototype while colliding as the authored one, which the real loader never does. Settle in the fixture as the loader does. (from: the tip-reds lane)
 - [medium] Recording still costs about a third of the plain authored run.
   The per-tick authority hash is incremental: the arena by `RowVersion`-cached
@@ -3119,6 +3150,14 @@ Owner: specialist lane (puck-world, build and hot reload, input) · ordinary · 
 Owner: debug-world content lanes, each started by the owner's direction ·
 ordinary · Next: new content and art on the owner's call.
 
+- [medium] `motion-pulse` (`shapes.puck` ~:2276) runs its six petals on a
+  continuous clock, so their seams stay stretched (PUCK122). Fix the exhibit's
+  motion so the seams close; its siblings `motion-smooth-blend` and
+  `motion-carve` show PUCK122 on purpose. (from: puck-audit)
+- [low] Board-game seats build button edges as hand-made cells (29 blocks
+  across go, alchemy, reversi, cardtable, granaries and chess) where a rule
+  with `mode: Edge` would do; switching changes behaviour, so verify each
+  game's tests when converting. (from: puck-audit)
 - Owed: `puck verbs --check` with a windowed boot after clearance-op removed
   `player.camera.clearance` by hand (the first settle window runs it). (from: clearance-op)
 - The faerie: the companion becomes small, abstract and original (nothing that
