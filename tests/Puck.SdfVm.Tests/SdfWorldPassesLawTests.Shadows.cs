@@ -23,8 +23,8 @@ public sealed partial class SdfWorldPassesLawTests {
         Assert.Equal(expected: SdfShadowResolution.Half, actual: half.Restrict(other: default).ShadowResolution);
         Assert.Equal(expected: SdfShadowResolution.Quarter, actual: half.Restrict(other: new SdfViewQuality { ShadowResolution = SdfShadowResolution.Quarter }).ShadowResolution);
     }
-    // A view allocates the cascades its quality and its world's shadow slots draw: every cascade's depth at the view's
-    // shadow resolution, and the second slot's cascade only while the frame holds a second stable slot. A change of either
+    // A view allocates the cascades its quality and its world's shadow slots draw: every cascade's depth and exit layer at the
+    // view's shadow resolution, and the second slot's cascade only while the frame holds a second stable slot. A change of either
     // rebuilds the view's graph once at the new shape.
     [Fact]
     public void AViewSizesItsCascadesByItsShadowResolutionAndHoldsTheSecondOnlyForASecondSlot() {
@@ -48,7 +48,8 @@ public sealed partial class SdfWorldPassesLawTests {
         }) {
             current = Shaped(resolution: resolution, slots: slots);
 
-            var depths = slots + 1;
+            // Each cascade allocates its depth and its exit layer.
+            var depths = (2 * (slots + 1));
 
             TestLiveness.Until(
                 step: () => (view.Produce(context: in context) && !node.IsBuildingCandidate &&

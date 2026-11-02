@@ -283,10 +283,11 @@ internal sealed class UploadModelGpu :
     void IGpuRecorder.DrawIndexed(nint commandBufferHandle, uint indexCount) { }
     void IGpuRecorder.DispatchIndirect(nint commandBufferHandle, nint argumentBufferHandle, ulong argumentBufferOffset) { }
 
+    // The model rasterizes nothing, so a counted indirect draw records nothing, as Draw does; every raster pass records one
+    // (SdfMeshOcclusion.RecordDraws) whatever the device counts natively.
     bool IGpuRecorder.CanDrawIndirectCount => false;
 
-    void IGpuRecorder.DrawIndirectCount(nint commandBufferHandle, nint pipelineLayoutHandle, nint argumentBufferHandle, ulong argumentBufferOffset, nint countBufferHandle, ulong countBufferOffset, uint maxDrawCount) =>
-        throw new NotSupportedException();
+    void IGpuRecorder.DrawIndirectCount(nint commandBufferHandle, nint pipelineLayoutHandle, nint argumentBufferHandle, ulong argumentBufferOffset, nint countBufferHandle, ulong countBufferOffset, uint maxDrawCount) { }
     void IGpuRecorder.ClearStorageImage(nint commandBufferHandle, nint imageHandle, GpuPixelFormat format) { }
     void IGpuRecorder.ClearStorageBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes) {
         if (m_buffers.TryGetValue(key: bufferHandle, value: out var buffer)) {

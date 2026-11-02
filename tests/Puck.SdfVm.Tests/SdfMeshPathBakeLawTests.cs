@@ -582,9 +582,7 @@ public sealed partial class SdfMeshPathBakeLawTests {
             var spacing = (0.015625f * MathF.Min(x: lattice.Cell.X, y: MathF.Min(x: lattice.Cell.Y, y: lattice.Cell.Z)));
 
             for (var local = 0; (local < lattice.Samples); local++, sample++) {
-                var position = (lattice.Points.IsEmpty
-                    ? (lattice.Origin + (new Vector3(x: (local % lattice.Dims.X), y: ((local / lattice.Dims.X) % lattice.Dims.Y), z: (local / (lattice.Dims.X * lattice.Dims.Y))) * lattice.Cell))
-                    : new Vector3(x: lattice.Points.Span[local].X, y: lattice.Points.Span[local].Y, z: lattice.Points.Span[local].Z));
+                var position = lattice.SampleAt(local: local);
 
                 var (value, shape) = Nearest(count: lattice.Instances, first: first, point: position, shapes: shapes);
                 var gradient = Vector3.Zero;
@@ -621,9 +619,7 @@ public sealed partial class SdfMeshPathBakeLawTests {
             var spacing = (0.015625f * MathF.Min(x: lattice.Cell.X, y: MathF.Min(x: lattice.Cell.Y, y: lattice.Cell.Z)));
 
             for (var local = 0; (local < lattice.Samples); local++, sample++) {
-                var position = (lattice.Points.IsEmpty
-                    ? (lattice.Origin + (new Vector3(x: (local % lattice.Dims.X), y: ((local / lattice.Dims.X) % lattice.Dims.Y), z: (local / (lattice.Dims.X * lattice.Dims.Y))) * lattice.Cell))
-                    : new Vector3(x: lattice.Points.Span[local].X, y: lattice.Points.Span[local].Y, z: lattice.Points.Span[local].Z));
+                var position = lattice.SampleAt(local: local);
 
                 var (value, shape) = Nearest(count: shapes.Length, first: 0, point: position, shapes: shapes);
                 var record = bytes.AsSpan(start: ((sample * SdfWorldPackage.MeshBakeSampleWords) * sizeof(uint)));
