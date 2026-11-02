@@ -1,0 +1,114 @@
+import "../games/deduction"
+import "gametable"
+
+// The deduction table: a social-deduction game for four seats, two of them moles (../games/deduction.puck), at the
+// board game room's north-west table on level 2. The debug world imports this file whole; deduction-tests.puck boots it
+// on its own as the disclosure harness's fixture for hidden roles and private channels. `deduction.start` draws the
+// roles; a seat speaks with `deduction.say <seat> <word>` (at the table), `deduction.whisper <seat> <to> <word>`,
+// `deduction.den <seat> <word>` (moles only), votes with `deduction.vote <seat> <for>`, and `deduction.close` ends the
+// day. Its chat is state: `world.state deductionTalk`, and for a seat its own `deductionHeard<s>` and the den.
+
+export action deduction, deductionMail1, deductionMail2, deductionMail3, deductionMail4
+export action deductionMailText1, deductionMailText2, deductionMailText3, deductionMailText4
+export read deduction, deductionSecret, deductionRole, deductionPartners, deductionLines, deductionDenLines, deductionReveal
+export read deductionTalk, deductionTalkFrom, deductionVotes, deductionTally
+export read deductionHeard1, deductionHeard2, deductionHeard3, deductionHeard4
+export read deductionHeardFrom1, deductionHeardFrom2, deductionHeardFrom3, deductionHeardFrom4
+export read deductionDen1, deductionDen2, deductionDen3, deductionDen4
+export read deductionDenFrom1, deductionDenFrom2, deductionDenFrom3, deductionDenFrom4
+export read deductionMail1, deductionMail2, deductionMail3, deductionMail4
+
+let deductionSeats = 4
+let deductionMoles = 2
+let deductionTable = [55, boardRoomFloor - 0.5, 36.5]
+
+state {
+  world {
+    deductionState(seats: deductionSeats, moles: deductionMoles)
+  }
+}
+
+deductionRules(seats: deductionSeats, moles: deductionMoles)
+
+let deductionSeatChoice = ["1", "2", "3", "4"]
+
+commands [
+  {
+    name: "deduction.start"
+    help: "Draws new roles at the deduction table and begins the day."
+    lines [
+      "world.state.cell.set deduction phase 1"
+    ]
+  }
+  {
+    name: "deduction.say"
+    help: "Says one word at the deduction table, for a seat (1 to 4)."
+    parameters [
+      { name: "seat", kind: Choice, values: deductionSeatChoice }
+      { name: "word", kind: Text }
+    ]
+    lines [
+      "world.state.cell.set deductionMailText{seat} text {word}"
+      "world.state.cell.set deductionMail{seat} to 0"
+    ]
+  }
+  {
+    name: "deduction.whisper"
+    help: "Whispers one word from a seat to another (1 to 4): only the two of them learn it was said."
+    parameters [
+      { name: "seat", kind: Choice, values: deductionSeatChoice }
+      { name: "to", kind: Choice, values: deductionSeatChoice }
+      { name: "word", kind: Text }
+    ]
+    lines [
+      "world.state.cell.set deductionMailText{seat} text {word}"
+      "world.state.cell.set deductionMail{seat} to {to}"
+    ]
+  }
+  {
+    name: "deduction.den"
+    help: "Says one word in the moles' den, for a seat (1 to 4); a crew seat is refused in its own inbox."
+    parameters [
+      { name: "seat", kind: Choice, values: deductionSeatChoice }
+      { name: "word", kind: Text }
+    ]
+    lines [
+      "world.state.cell.set deductionMailText{seat} text {word}"
+      "world.state.cell.set deductionMail{seat} to 9"
+    ]
+  }
+  {
+    name: "deduction.vote"
+    help: "Seals a seat's vote (1 to 4) for the seat to turn out."
+    parameters [
+      { name: "seat", kind: Choice, values: deductionSeatChoice }
+      { name: "for", kind: Choice, values: deductionSeatChoice }
+    ]
+    lines [
+      "world.state.cell.set deductionMail{seat} vote {for}"
+    ]
+  }
+  {
+    name: "deduction.close"
+    help: "Ends the day at the deduction table: the votes are counted and every role revealed."
+    lines [
+      "world.state.cell.set deduction close 1"
+    ]
+  }
+]
+
+// North of the table, facing -Z across it.
+spawnPoints [
+  { id: "deduction", position [deductionTable[0], boardRoomFloor, deductionTable[2] + 1.6], yawDegrees: 0 }
+]
+
+prototypes {
+  gameTablePrototype(id: "deductionTable", cloth: "#2E3A5C")
+}
+
+placements {
+  placement "deductionTable" {
+    prototype: "deductionTable"
+    position: deductionTable
+  }
+}

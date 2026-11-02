@@ -8,9 +8,8 @@ namespace Puck.Cli.Canary;
 
 /// <summary><c>puck canary</c> — bounded, two-leg behavioral proofs against the real Puck.World executable.</summary>
 public static partial class CanaryCommand {
-    // The one-time Release builds run against their own allowance on their own clock, so build time can never be
+    // The one-time Release builds run against their own limit (WorldArtifactBuild.BuildTimeout), so build time can never be
     // spent out of a proof's. Leg time is a separate budget derived from the selection itself; see CanaryBudget.
-    private static readonly TimeSpan BuildBudget = TimeSpan.FromSeconds(value: 600);
 
     private const string ScratchPrefix = "puck-canary-";
 
@@ -321,8 +320,6 @@ public static partial class CanaryCommand {
     );
 
     private static int RunSelected(IReadOnlyList<CanaryManifest> manifests, CanaryPlan plan, string repositoryRoot, bool explicitAll, CanaryCapacity capacity, bool keepTranscripts, string? worldArtifact, IReadOnlyCollection<string> debugLayers) {
-
-        var buildClock = Stopwatch.StartNew();
         IReadOnlyList<CanaryProof> proofs = [.. plan.Proofs.Select(selector: static proof => proof.Proof)];
         var scope = BackendScope(proofs: proofs);
         var scoped = ((scope is null)
@@ -348,10 +345,7 @@ public static partial class CanaryCommand {
             named: worldArtifact,
             path: out var artifact,
             repositoryRoot: repositoryRoot,
-            timeout: CliProcess.RemainingBudget(
-                budget: BuildBudget,
-                clock: buildClock
-            ),
+            timeout: WorldArtifactBuild.BuildTimeout,
             verb: "canary"
         )) {
             Console.Error.WriteLine(value: $"ERROR: {buildError}");
@@ -386,10 +380,7 @@ public static partial class CanaryCommand {
                 repositoryRoot: repositoryRoot,
                 outputDirectory: stubOutput,
                 logDirectory: stubDirectory,
-                timeout: CliProcess.RemainingBudget(
-                    budget: BuildBudget,
-                    clock: buildClock
-                )
+                timeout: WorldArtifactBuild.BuildTimeout
             )) {
                 Console.Error.WriteLine(value: $"ERROR: {stubError}");
 

@@ -225,14 +225,6 @@ public sealed class LiveRow {
 
         into.AddFact(fact: Index.Custom);
     }
-    /// <summary>Resolves the row for the evaluation in flight.</summary>
-    /// <param name="reader">The evaluation in flight.</param>
-    /// <param name="rowOrdinal">The selected row's catalog ordinal, on success.</param>
-    /// <returns><see langword="true"/> when the index selects a row.</returns>
-    public bool TryResolve(IStateReader reader, out int rowOrdinal) => (Resolve(
-        reader: reader,
-        rowOrdinal: out rowOrdinal
-    ) == KeyNaming.Cell);
     /// <summary>Resolves the row for the evaluation in flight, telling an index whose computation faulted apart from
     /// one that selects no row.</summary>
     /// <param name="reader">The evaluation in flight.</param>

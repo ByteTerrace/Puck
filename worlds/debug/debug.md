@@ -172,7 +172,10 @@ key (`world.rates toggle`, F7). [range.md](range.md) says how to use it.
 [skies.puck](../standard/skies.puck)): the sun (the `key` light), its colour and
 the sky follow the `day` state row, which holds the day's phase and advances one
 day every 24 minutes from ten in the morning. At noon the sun stands 46 degrees
-up toward +x and -z.
+up toward +x and -z. At night a deep-blue 6-lux moon (the `moon` light) stands
+opposite the sun under a 1-nit sky and its stars, and the hall's exposure floor
+(`render.exposure.minimum`, keyed on `day`) falls from EV 7 between 06:30 and
+17:30 to EV 2 at night.
 
 | To | Console line |
 |---|---|
@@ -208,6 +211,8 @@ case, `stage` when omitted:
 | `wonderland-room` | (4.5, 0, 21.5), outside the room's own doorway | +Z, through the doorway |
 | `boardroom` | (53, 9.05, 26), inside the board game room's doorway on the gallery's level 2 | +X, into the room |
 | `cards` | (60.8, 9.05, 37.4), at the +Z edge of the card table in the board game room ([`cardtable.md`](cardtable.md)), close enough to sit | -Z, across the board |
+| `auction`, `shedding` | (56.5, 9.05, 14) and (60.8, 9.05, 14), south of the sealed-bid auction and shedding card tables in the board game room ([`auction.puck`](auction.puck), [`shedding.puck`](shedding.puck)) | +Z, across the table |
+| `deduction`, `skirmish` | (55, 9.05, 38.1) and (67, 9.05, 38.1), north of the social-deduction and fog-of-war skirmish tables in the board game room ([`deduction.puck`](deduction.puck), [`skirmish.puck`](skirmish.puck)) | -Z, across the table |
 | `chess`, `go`, `reversi`, `alchemy`, `granaries` | (56.5, 9.05, 21), (56.5, 9.05, 29), (65, 9.05, 21), (65, 9.05, 29) and (65, 9.05, 13), at White's edge of the chess table, Black's of the Go and Reversi tables, and the south edge of the Alchemy and granary tables in the board game room ([`chess.md`](chess.md), [`go.md`](go.md), [`reversi.md`](reversi.md), [`alchemy.md`](alchemy.md), [`granaries.md`](granaries.md)), close enough to sit | +Z, across the board |
 | `desktop` | (12.4, 0.05, 23.7), behind the chair at the desktop computer in the gallery lobby | -X, toward the monitor |
 | `portals` | (53.5, 0.05, 26), the painting wing's doorway | +X, into the wing |

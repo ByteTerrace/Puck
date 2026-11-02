@@ -337,7 +337,8 @@ public sealed partial class WorldStateCommandModule {
                 echoes,
                 verb
             );
-        } catch (JsonException exception) {
+        } catch (Exception exception) when (exception is JsonException or NotSupportedException) {
+            // A payload without its $type discriminator is the serializer's NotSupportedException, not a JsonException.
             return CommandResult.Error(output: $"invalid state transform: {exception.Message}");
         }
     }

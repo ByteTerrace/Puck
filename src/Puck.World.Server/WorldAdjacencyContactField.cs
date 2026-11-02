@@ -216,7 +216,8 @@ internal sealed class WorldAdjacencyContactField : IEntityContactField {
 
             return new ContactResolution(
                 RequiredStepHeight: FixedQ4816.Max(x: resolution.RequiredStepHeight, y: neighbourResolution.RequiredStepHeight),
-                Unproved: (resolution.Unproved || neighbourResolution.Unproved),
+                // A neighbour's pairs index another authority's colliders, so its uncertainty stays unnamed here.
+                Uncertainty: (neighbourResolution.Unproved ? resolution.Uncertainty.Union(other: ContactUncertainty.Unknown) : resolution.Uncertainty),
                 Grounded: (resolution.Grounded || neighbourResolution.Grounded),
                 ObstructionNormal: ((neighbourObstruction == FixedVector3.Zero)
                 ? resolution.ObstructionNormal

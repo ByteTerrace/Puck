@@ -22,8 +22,9 @@ namespace Puck.World.Server;
 /// additive. Boxes retain the drawn fillet through <see cref="FixedStaticCollider.RoundedBox"/>; chamfered Boxes
 /// and Superellipsoids use their exact convex support maps, and a round capsule is the rounded box around its segment. Spheres and plain circular cylinders
 /// use their closest-point geometry; rounded/chamfered circular rims use contained cores with computed error bounds.
-/// Boolean carving, smoothing, and other finite primitive
-/// surfaces are not modelled: those primitives use their oriented bounding box (<see cref="FixedStaticCollider.Box"/>). A
+/// A creation whose shapes carve, smooth or otherwise blend each other, or that carries relief, collides as its composed
+/// field (<see cref="CollidesAsField"/>); any other finite primitive uses its oriented bounding box
+/// (<see cref="FixedStaticCollider.Box"/>). A
 /// solid screen still uses its world-axis bounding box, exact only for an axis-aligned slab. A sweep
 /// visits only the colliders a 4 m grid over world X and Z places near its move, and rejects any whose padded world
 /// bounds miss the body's before its exact query; neither cull changes the result.</para>
@@ -140,7 +141,7 @@ public sealed partial class WorldColliderSet : IContactField {
     public int PlaneCount { get; private init; }
     /// <summary>Gets the total collider count.</summary>
     public int SolidCount => ((((SphereCount + BoxCount) + CylinderCount) + PlaneCount) + FieldCount);
-    /// <summary>Gets the number of field colliders in the set: one per stamped copy of a relieved creation.</summary>
+    /// <summary>Gets the number of field colliders in the set: one per stamped copy of a creation that collides as its composed field (<see cref="CollidesAsField"/>).</summary>
     public int FieldCount { get; private init; }
     /// <summary>Gets the number of solid spheres in the set.</summary>
     public int SphereCount { get; private init; }
@@ -186,8 +187,8 @@ public sealed partial class WorldColliderSet : IContactField {
                 mirror: WorldPlacementStamp.MirrorFor(placement: placement)
             );
 
-            // A relieved creation compiles one field collider per copy that keeps a contact shape.
-            if (Relieves(document: creation.EngineDocument)) {
+            // A creation that collides as its composed field compiles one field collider per copy that keeps a contact shape.
+            if (CollidesAsField(document: creation.EngineDocument)) {
                 if (CreationStampEmitter.EmitsContact(document: creation.EngineDocument)) {
                     placementFields = AddSaturated(left: placementFields, right: copies);
                 }
@@ -295,9 +296,7 @@ public sealed partial class WorldColliderSet : IContactField {
 
     private static FixedStaticCollider PlacementFinite(in FixedCreationStampPrimitiveCopy copy, FixedQ4816 margin) {
         if (copy.Shape.Type == SdfSolidPrimitive.Box) {
-            var shapeScaleX = FixedQ4816.Max(x: FixedQ4816.Abs(value: FixedQ4816.FromDouble(value: copy.Shape.Scale.X)),
-                y: FixedQ4816.FromDouble(value: SdfSolidGeometry.MinimumScale));
-            var stampScale = (copy.LocalHalfExtents.X / shapeScaleX);
+            var stampScale = copy.StampScale;
             // The drawn box insets its rounding by at most its smallest half-extent (SdfSolidGeometry's Box arms).
             var smallest = FixedQ4816.Min(x: copy.LocalHalfExtents.X, y: FixedQ4816.Min(x: copy.LocalHalfExtents.Y, y: copy.LocalHalfExtents.Z));
             var radius = FixedQ4816.Min(x: (FixedQ4816.FromDouble(value: (copy.Shape.Rounding ?? 0f)) * stampScale), y: smallest);
@@ -316,10 +315,9 @@ public sealed partial class WorldColliderSet : IContactField {
             // A capsule is a rounded box whose inner box is its segment, which runs 0.5·scale.y from the shape's position
             // along its own Y (SdfSolidGeometry's unit law): scale.y stretches the segment, never the radius, so the
             // capsule's scaled unit bound would reach a whole radius-scaled length past either end.
-            var radiusScale = FixedQ4816.Max(x: FixedQ4816.Abs(value: FixedQ4816.FromDouble(value: copy.Shape.Scale.X)),
+            var segmentScale = FixedQ4816.Max(x: FixedQ4816.Abs(value: FixedQ4816.FromDouble(value: copy.Shape.Scale.Y)),
                 y: FixedQ4816.FromDouble(value: SdfSolidGeometry.MinimumScale));
-            var stampScale = (copy.LocalHalfExtents.X / radiusScale);
-            var halfSegment = ((FixedQ4816.Abs(value: FixedQ4816.FromDouble(value: copy.Shape.Scale.Y)) * stampScale) * CapsuleHalfSegment);
+            var halfSegment = ((segmentScale * copy.StampScale) * CapsuleHalfSegment);
 
             return FixedStaticCollider.RoundedBox(
                 (copy.Center + (copy.Rotation.Rotate(vector: FixedVector3.UnitY) * halfSegment)),
@@ -351,8 +349,7 @@ public sealed partial class WorldColliderSet : IContactField {
     // A rim without an exact cylinder contact uses its contained core. The maximum missing distance follows
     // from the two radial/height contractions and the authored enclosing cylinder, not a shape-name allowance.
     private static FixedVector2 CylinderInset(in FixedCreationStampPrimitiveCopy copy) {
-        var scale = (copy.LocalHalfExtents.X / FixedQ4816.Max(x: FixedQ4816.FromDouble(value: MathF.Abs(x: copy.Shape.Scale.X)),
-            y: FixedQ4816.FromDouble(value: SdfSolidGeometry.MinimumScale)));
+        var scale = copy.StampScale;
         var chamfer = (FixedQ4816.FromDouble(value: (copy.Shape.Chamfer ?? 0f)) * scale);
         var rounding = (FixedQ4816.FromDouble(value: (copy.Shape.Rounding ?? 0f)) * scale);
 
@@ -664,7 +661,7 @@ public sealed partial class WorldColliderSet : IContactField {
         var cylinders = 0;
         var planes = 0;
         var fields = 0;
-        var relieved = Relieves(document: creation.EngineDocument);
+        var composed = CollidesAsField(document: creation.EngineDocument);
         // The resolved yaw enters the contract through the SAME degrees-to-fixed-radians idiom every other
         // fixed-point placement path already uses (WorldPopulation, WorldPlacementAttachment), and
         // FixedQuaternion.FromAxisAngle is integer arithmetic — so no platform libm sine reaches a collider.
@@ -692,7 +689,7 @@ public sealed partial class WorldColliderSet : IContactField {
                     ReflectionNormal: instance.ReflectionNormal
                 );
 
-                if (relieved) {
+                if (composed) {
                     if (ReliefCollider(document: creation.EngineDocument, margin: solid.Margin, transform: transform) is not { } relief) {
                         return;
                     }

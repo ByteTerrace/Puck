@@ -88,11 +88,13 @@ cross-family review is required and never blocks a landing
 change to simulation state stays deterministic; `puck test --reproduce` shows
 recorded input reproduces every authority from its checkpoint in the same worker,
 including per-tick authoritative hashes, final machine cores and canonical exports. A differing trace names
-its first sampled tick and instance. The authoritative hash is incremental (arena rows cached by
-`RowVersion`, resting body slots by rest epoch), so `--reproduce` also checks every replayed tick, and the
-first `--workers` count every recorded tick, against a full recompute: `differs from its full recompute in
-Arena` (or `BodyContinuation`) means a write changed state without moving the version its digest is keyed
-by; move the version at that write rather than widening the recompute. Use the test preparation/work counts beside
+its first sampled tick and instance. The authoritative hash folds arena rows from digests cached by
+`RowVersion`, so `--reproduce` also checks every replayed tick, and the first `--workers` count every
+recorded tick, against a full recompute, and every authority hash samples one row and one segment of the cache
+(`[world.state.hash: stale digest ...]`, which fails a probed leg): `differs from its full recompute in Arena`
+or a stale digest means a write changed a row without moving its version, or a refold left its segment
+stale; move the version at that write rather than widening the recompute. Body continuations encode every
+fold; nothing caches them. Use the test preparation/work counts beside
 wall time when measuring it on a shared machine; build-lease waits are contention,
 and exported authority ticks exclude the extra shutdown ticks.
 
@@ -330,7 +332,11 @@ deferred is a protocol step the engine has not built.
 
 A windowed World driven by a stdin script spells its backend `--backend directx` or `--backend vulkan` (`auto` picks), waits for bakes with `world.wait bakes <s>` where `<s>` is 1 to 600, and is stopped by its PID once its readings are in: a windowed World has been seen running long past `--exit-after-seconds`.
 Use the private CLI copy's `puck lease gpu --holder <lane> --wait 1200 -- <command...>` for a granted GPU leg, and `puck lease heavy --holder <lane> --wait 7200 -- <command...>` for a heavy suite: heavy holders run long recorded suites back to back, and a one-hour wait can time out behind them. Run the request in the background and keep working. Without `--wait` a held lease refuses at once, so a script that runs its next step regardless (a boot after a build) must check the lease's exit code, or it measures a stale binary. Rebuild the private CLI copy after merging the integration tip: a copy older than the merge rejects documents that use new schema members. The verb owns acquisition, stale recovery and release, including failure and cancellation. A windowed World started with `puck_world_start` takes the same GPU lease itself (`holder`: your lane), waits at most its `timeoutSeconds` for it, and releases it when `puck_world_stop` ends the World or the World exits.
+To hold one lease across several commands, run a script the lease starts. On Windows name Git Bash by its full
+path (`"C:/Program Files/Git/usr/bin/bash.exe" <script>`): a bare `bash` resolves to WSL's, which sees no `D:/`
+path, so the script fails only after the queued lease is finally granted.
 Keep a granted batch within its brief's time box (at most 20 minutes for a GPU lease).
+A verb that builds the World (`puck test`, `canary`, `sweep`, `parity`, `counters`, `docs citations`) and the MCP start wait for the `build` lease up to two hours (`CliLease.DefaultWait`) with the queue position on stderr, and the build then has its own thirty-minute limit, so a deep queue is not a reason to pass `--world-artifact` or to build privately; the flag is for booting a build made some other way.
 `gate` and `affected` hold the same heavy lease through each heavy suite and
 check host headroom after acquisition. `puck test` holds it too whenever it runs
 more than one world (a debug-world sweep is 112 World processes, several GB each);
@@ -352,6 +358,13 @@ On Windows, a forwarded bare `bash` resolves to WSL's `bash.exe`, which cannot s
 `D:/` paths and exits 127 after the lease was granted; forward Git Bash by its full
 path (`"C:/Program Files/Git/usr/bin/bash.exe" <script>`) to run several commands
 under one lease.
+
+Take the heavy lease once per suite run: one `puck test` invocation (or one
+suite) per `puck lease heavy` acquisition, never a batch of runs under one hold,
+so the queue rotates between lanes. Keep each hold to about 30 minutes; a run
+that genuinely needs longer (Go's `--reproduce` with its full recompute) holds
+it alone and releases before the next. A script of several runs wraps each run
+in its own `puck lease heavy` call.
 
 
 GPU work is `puck parity`, `puck counters`, a canary requiring `gpu`, a windowed

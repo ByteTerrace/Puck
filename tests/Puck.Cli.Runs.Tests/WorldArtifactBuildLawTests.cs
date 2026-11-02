@@ -219,6 +219,42 @@ public sealed class WorldArtifactBuildLawTests {
         Assert.False(condition: restored.Reused);
         Assert.Equal(expected: 1, actual: restoredBuilder.Builds);
     }
+    // Law: waiting in the build lease's queue is not part of the build's own timeout, so a build that waited its turn
+    // still gets the whole timeout its caller named.
+    [Fact]
+    public async Task WaitingForTheBuildLeaseNeverShortensTheBuildsTimeout() {
+        using var checkout = new Checkout();
+        using var leases = new TemporaryDirectory();
+        var buildTimeout = TimeSpan.FromMinutes(minutes: 7);
+        TimeSpan? given = null;
+
+        using var holder = await CliLease.AcquireAsync(clock: TimeProvider.System, holder: "holder", name: "build", root: leases.RootPath, wait: TimeSpan.Zero, cancellationToken: TestContext.Current.CancellationToken);
+        var release = Task.Run(action: () => { Thread.Sleep(millisecondsTimeout: 1500); holder.Dispose(); }, cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.True(
+            condition: WorldArtifactBuild.TryResolve(
+                artifact: out var artifact,
+                builder: (arguments, timeout) => {
+                    given = timeout;
+                    File.WriteAllText(contents: "built", path: Path.Combine(path1: arguments[^1], path2: WorldArtifactBuild.ArtifactName));
+
+                    return new CliProcessResult(ExitCode: 0, OutputLines: [], Stderr: string.Empty, Stdout: "Build succeeded.", TimedOut: false);
+                },
+                error: out var error,
+                leaseRoot: () => leases.RootPath,
+                logDirectory: checkout.LogDirectory,
+                repositoryRoot: checkout.Root,
+                store: checkout.Store,
+                timeout: buildTimeout,
+                verb: "law",
+                wait: TestLiveness.Bound
+            ),
+            userMessage: error
+        );
+        await release;
+        artifact.Dispose();
+        Assert.Equal(expected: buildTimeout, actual: given);
+    }
     [InlineData("world")]
     [InlineData("stub")]
     [Theory]

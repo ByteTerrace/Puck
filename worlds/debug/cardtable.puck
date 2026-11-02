@@ -2,6 +2,10 @@ import "../standard/inputs"
 import "shapes"
 import "solitaire"
 import "../standard/cards"
+import "gametable"
+
+// The deck's back and its ace to six of each suit, which the shedding table (shedding.puck) deals in the same debug world.
+export read "card-back", "card-s-a", "card-s-2", "card-s-3", "card-s-4", "card-s-5", "card-s-6", "card-h-a", "card-h-2", "card-h-3", "card-h-4", "card-h-5", "card-h-6", "card-c-a", "card-c-2", "card-c-3", "card-c-4", "card-c-5", "card-c-6", "card-d-a", "card-d-2", "card-d-3", "card-d-4", "card-d-5", "card-d-6"
 // The card table: Klondike (klondike.puck) or FreeCell (freecell.puck), as `solitaire.table` names, played with 52
 // physical cards on a tabletop in the gallery hall's board game room, north of the Go table. The debug world imports this
 // file whole, after the Reversi table. cardtable.md beside this file says how to play, read the game and drive it from the
@@ -266,36 +270,13 @@ spawnPoints [
 ]
 
 prototypes {
-  prototype "cardTable" {
-    document {
-      name: "cardTable"
-      palette [
-        { color: "#6B4A2E", roughness: 0.6, specular: 0.15 }
-        { color: "#1F5A38", roughness: 0.9, specular: 0.03 }
-      ]
-      schema: "puck.creation.v1"
-      shape Box "top" {
-        material: 0
-        position [0, 1.25, 0]
-        scale [0.8, 0.05, 0.75]
-      }
-      shape Cylinder "leg" {
-        material: 0
-        position [0, 0.855, 0]
-        scale [0.08, 0.355, 0.08]
-      }
-      shape Cylinder "foot" {
-        material: 0
-        position [0, 0.52, 0]
-        scale [0.4, 0.02, 0.4]
-      }
-      shape Box "felt" {
-        material: 1
-        position [0, 1.3045, -0.09]
-        scale [0.54, 0.0045, 0.39]
-      }
-    }
-  }
+  gameTablePrototype(
+    id: "cardTable",
+    cloth: "#1F5A38",
+    top: [0.8, 0.05, 0.75],
+    feltAt: [0, 1.3045, -0.09],
+    felt: [0.54, 0.0045, 0.39]
+  )
 
   // An outline whose game is not on the table: a sliver under the felt.
   prototype "cardSpotHidden" {

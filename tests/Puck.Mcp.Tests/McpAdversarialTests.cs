@@ -417,17 +417,17 @@ public sealed class McpAdversarialTests {
     public async Task AStartWhoseSourcesCannotBeBuiltIsRefusedWithTheBuildsReason() {
         if (!OperatingSystem.IsWindows()) { Assert.Skip(reason: "Windows capability ACLs are required."); return; }
         using var scratch = new TemporaryDirectory(prefix: "puck-start-");
-        var asked = new List<(string Checkout, bool Spirv, TimeSpan Budget)>();
+        var asked = new List<(string Checkout, bool Spirv)>();
 
         _ = Directory.CreateDirectory(path: Path.Combine(path1: scratch.RootPath, path2: "worlds", path3: "debug"));
         await using var adapter = new InProcessAdapter(
             createSession: () => new ScriptedSession(entered: null),
             directory: scratch.RootPath,
             launch: new OperatorWorldLaunch(
-                AcquireGpuLease: static (_, _, _, _) => throw new InvalidOperationException(message: "a refused build takes no lease"),
+                AcquireGpuLease: static (_, _, _) => throw new InvalidOperationException(message: "a refused build takes no lease"),
                 Checkout: scratch.RootPath,
-                ResolveBuild: (checkout, spirv, budget, _) => {
-                    asked.Add(item: (checkout, spirv, budget));
+                ResolveBuild: (checkout, spirv, _) => {
+                    asked.Add(item: (checkout, spirv));
 
                     return Task.FromResult(result: new OperatorWorldBuild(Error: "the Puck.World build exited 1.", Lease: null, Path: null));
                 }
@@ -451,7 +451,7 @@ public sealed class McpAdversarialTests {
         Assert.Contains(expectedSubstring: "the Puck.World build exited 1.", actualString: structured.GetProperty(propertyName: "output").GetString());
         Assert.False(condition: structured.TryGetProperty(propertyName: "processId", value: out _));
         // A Vulkan start asks for the SPIR-V build.
-        Assert.Equal(expected: [(Path.TrimEndingDirectorySeparator(path: scratch.RootPath), true, TimeSpan.FromSeconds(seconds: 7))], actual: asked);
+        Assert.Equal(expected: [(Path.TrimEndingDirectorySeparator(path: scratch.RootPath), true)], actual: asked);
     }
     // Law: an adapter following a directory attaches to the newest World there that answers, skipping a capability
     // file whose World is gone, and after its attachment closes follows to whichever World now answers, with no

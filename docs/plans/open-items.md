@@ -998,9 +998,13 @@ octave the exact trilinear range at the vertices of the box's fade range, its
 rounding allowance pinned against an exact oracle by
 `sampling.lattice-noise-fade-and-box-bounds`), so a capsule half a metre above
 the valley's relief is proved clear by its first box. The ground snap acts on an
-unproved step and lands it on support it proves; the landing may carry the
-uncertainty the step already did (`FixedStepUp.TrySnap`'s `uncertain`), so a
-volume elsewhere in the band no longer lifts a walking body off its ground.
+unproved step and lands it on support it proves. A resolution names the volume
+and collider pairs it left uncertain (`ContactResolution.Uncertainty`, up to
+four by name, otherwise unnamed), and the landing may leave uncertain only pairs
+the step already did (`ContactUncertainty.IsWithin`): a pair still in the band
+no longer lifts a walking body off its ground, and a field clear at the start
+and newly unproved at the landing refuses it
+(`ASnapRefusesALandingThatOverlapsAFieldClearAtItsStart`).
 Remaining:
 
 - **[medium] Clearance within about a third of a metre of a slope is
@@ -1556,6 +1560,23 @@ lowers it to the same JSON as before, except where the look changes on purpose.
 
 Code that grew a second implementation (AGENTS.md rule 7) or costs velocity:
 
+- [medium] A body's simulation continuation has no single write door, so
+  nothing can say it is unchanged. `WorldPopulation.AppendContinuationHash`
+  encodes every active slot on every authority hash
+  (`src/Puck.World.Server/WorldPopulation.Checkpoint.cs`); the fields it
+  serializes (`WorldBody.Transfer.cs` `TransferState` and
+  `ApplyIntegrationResidue`, the pose, the lane timer and press arrays, the
+  tether residue, and the population entry's producer, autonomy and navigation
+  state) are written directly from the step, commands, contacts and tethers. A
+  rest-epoch cache missed four such writes to sleeping bodies, so it was
+  deleted. The redesign: group those fields in storage the body reaches only
+  through one accessor that moves a version (arrays included, which a plain
+  field write bypasses), so the compiler rather than convention enforces it;
+  the population's entry state the same way; then cache a slot's digest by that
+  version. Measured stake on go-tests: 21 s of a 310 s recording (7 %), the
+  share of resting bodies; a version that also covers moving bodies' unchanged
+  fields would not help, since a moving body's pose changes every tick.
+  (from: incr-hash)
 - [low] Four copies of a `NativeMemory`-backed test `IAllocator` named `HeapAllocator`
   (`tests/Puck.Vulkan.Tests/VulkanIndirectCountLawTests.cs:117`,
   `VulkanValidationLivenessTests.cs:247`, `VulkanGroupedPipelineLayoutLawTests.cs:233`,
@@ -1839,6 +1860,55 @@ and the order they land in; the items below are its findings and checks.
   pixels white like lit ones; at the noon sun the meadow lies in the east
   wall's shadow. Step 1's checks and the frame bar are owed again on the moving
   day cycle, with a low-sun cel style for the dawn penumbra check.
+- Step 2 (illum-step2) fixed the moving sun's frozen volume, the meter's stale
+  night, the two ray sets and the unhashed sky: a probe is a hit buffer traced
+  once per geometry and a relight under the frame's budget
+  ([step 2's status](illumination.md#step-2-status)). The night look is
+  authored: the exposure's bounds key on the day clock, and the debug world
+  keys an EV 2 night floor under a deep-blue moon. What it left:
+- [medium] The debug world's light switch is a geometry change as well as a
+  lighting change: `gallery.lights.all` swaps the hall's dark prototypes for
+  lit ones (`world.respond: 'hall-floor-1' hall-floor-1-dark -> hall-floor-1`,
+  34 static draws), so it retraced 8,294 of 61,440 probes. A lamp authored as
+  a lane-driven emissive would be a relight alone, but the relight reads a
+  lane-driven emissive as zero (`SdfMeshIrradiance.Shade`: a static draw has
+  no frame slot); read the lane's value in the relight, then author the
+  switch as a lane. (from: illum-step2)
+- [medium] A camera sample is relit on the frame thread, under the volume's
+  gate, whenever the lighting version advances (`SdfMeshIrradiance.CameraRadiance`
+  from `TryMeter`), outside the relight budget: the debug world's forty-odd
+  screen-camera views meter by camera sample, so each lighting capture (about
+  ten a second under the day) relights them on the frame thread
+  (`camera-relights` counts them). Move them into the worker's batches.
+  (from: illum-step2)
+- [medium] A lockstep frame whose lighting or windows changed relights the
+  whole window until it converges: 61,440 probes about four times, 11 to 24 s
+  a tick on Direct3D 12 under load. Lockstep with the day running is that slow
+  every tick. (from: illum-step2)
+- [low] The budget is per rendered frame, so the relight's rate follows the
+  frame rate until the four background workers bound it (about 10,000 to
+  11,000 probes a second under load at `gallery`); at six frames a second, 1024
+  a frame could not hold the 8 s age. A rate in probes a second would decouple
+  them. (from: illum-step2)
+- [low] A teleport brings cached cells relit long ago back into the window,
+  and the next cycle prints `behind` with their age (98 and 140 s seen); they
+  are stale, but the line reads as overload. (from: illum-step2)
+- [low] The CPU cache holds 2,200 bytes a probe (the hit buffer beside the
+  record), about twice what it held, and keeps every cell a window visited
+  until the layout changes. (from: illum-step2)
+- [medium · unmeasured] The debug world's night floor (EV 2, keyed on `day`)
+  lengthens every point and spot light's range by about five stops of
+  exposure, day and night, since ranges follow the darkest exposure any key
+  reaches (`WorldRenderExposure.Resolve`). More fixtures reach each view's
+  frustum and each probe's hits; measure the views pass and the relight's
+  local part against an EV 7 floor on a quiet machine, and size ranges by the
+  live floor if the cost shows. (from: illum-step2)
+- [low · unconfirmed] `render.indirect.bounces` is now an on/off switch:
+  bounce converges over relights toward the multi-bounce limit rather than
+  stopping at the tier's two or three sweeps, so interiors lit mostly by
+  bounce may read brighter than step 1's stills. A switched-off lamp's bounce
+  fades over up to sixteen relights rather than vanishing. Compare the gather
+  stops with step 1's stills on a quiet machine. (from: illum-step2)
 - [high] The wrapped side's self-shadow term has failed three reviews, each
   in a new mesh-topology case: curvature transmission, then the exit layer,
   then the exit layer with closed/open classification. The last review found
@@ -1846,9 +1916,17 @@ and the order they land in; the items below are its findings and checks.
   (`sdf-surface-stage.hlsli` ~:214, :232-234), multi-shell meshes oriented by
   one signed volume (`WorldPlacementStamper.cs` ~:398, :411), T-junctions
   demoting a solid to a thin caster, and skins whose deformation inverts
-  winding while `EnclosesSolid` holds. A design pass (transmit-design) replaces
-  class-by-class patching with a term correct by construction; implementation
-  follows its plan. (from: illum1fix2-astra)
+  winding while `EnclosesSolid` holds. A depth-order replacement (the
+  nearest surface and a peel of it, read by a closed bit) failed its design
+  review on the same point: two depth layers cannot say which body a surface
+  belongs to (a clipped receiver reads a sheet 2 m ahead as its own entry; a
+  3 mm panel behind a sheet loses it inside the bias; a tolerance merges a
+  sheet with a box front; a doubled triangle passes edge pairing). The
+  [transmission plan](transmission.md) now records a body identity per
+  cascade texel beside the depth, peels by identity, and shadows a wrapped
+  receiver by any other body in front and by its own body's second chord;
+  the packet's exit-layer items below close with it. (from: illum1fix2-astra,
+  transmit-astra, transmit-design)
 - From illum1-fix: the cascades' exit layer doubles each cascade pass's draws
   and vertices (`world.counters gpu pass sdf.world$shadow-near` at the stage:
   460 draws and 2.62 M vertices on Direct3D 12, two render passes) and adds a
@@ -1865,37 +1943,6 @@ and the order they land in; the items below are its findings and checks.
   `SdfPassPlanLawTests.ATemporalViewAddsOnlyItsHistoryAndReactivityOverTheSpatialGraph`
   fails on its own constant (201,139,200 bytes against 1,221,350,400 from the
   current `HistorySurfaceWords`), unrelated to the cascades.
-- [high] A sun that moves every frame freezes indirect light. Each direction
-  change starts a new lighting generation (`SdfMeshIrradiance.RefreshLighting`
-  hashes every directional and traced light record), and a trace batch landing
-  after a generation change is discarded (the `generation != m_generation`
-  test after the parallel trace). Confirmed on both backends with the debug
-  world's day cycle (`worlds/debug/day.puck`): at High the main residency
-  printed no `[sdf.mesh-gi] done`, `sdf.mesh-gi.probes` held still,
-  `world.probe` answered `unsettled` with nothing published, and the camera
-  meter retraced every frame (`camera-traces` about 300 a second); holding the
-  sun let the window finish ([step 0](illumination.md#step-0-what-the-run-showed)).
-  The fix is the plan's [first decision](illumination.md#1-split-each-probe-into-cached-hits-and-a-budgeted-gpu-relight).
-  (from: research-claude; confirmed by illum-step0)
-- [medium] The exposure meter follows the stale volume: at night (0.95 of the
-  day) with the noon volume still published, the debug view metered
-  `ev100=12.20 meter=3171 nits source=probes` and drew black. Step 2's GPU
-  meter read removes the cause; the night look also sits under the basis's
-  exposure floor of EV 7 against the day cycle's 2-nit night sky, which is a
-  look for the owner to set. (from: illum-step0)
-- The probe trace casts two ray sets from one origin: 128 for radiance
-  (`SdfMeshIrradiance.TraceProbe`) and 144 for depth
-  (`SdfMeshProbeDepth.Trace`). This is duplication the plan's step 2
-  converges into one hit buffer. (from: research-claude)
-- [medium] `RefreshLighting` does not hash the sky, so a sky-only change
-  leaves the bounced sky baked into the radiance cube stale while the
-  zero-bounce term relights; and a lighting change resets sweeps to zero, so
-  it re-places every probe and re-traces the geometry-only depth rays. Both
-  confirmed by step 0's run (a muted sky gradient left a probe's cube at
-  10,477 nits until an unrelated retrace took it to 9,212; a held-sun move
-  re-traced 4,796,784 depth rays at Medium) and written into the mesh-GI
-  reference; step 2's relight removes both. (from: consensus-agy; confirmed by
-  illum-step0)
 - [medium · unconfirmed cause] The baseline's resolve pass read 6.5 to 17.9 ms
   on the main view (Vulkan `overlook` 6.51, `portals` 9.41; Direct3D 12
   `gallery` 17.88) against the 0.41 to 0.44 ms the GPU cost reference
@@ -2086,6 +2133,17 @@ colliders report's only red findings left are the valley's relief
   'desk-chair' ... RepeatPolar]`, now narrated once per placement), so the chase
   camera and limb probes see no chair. Give the fixed-point query twin the
   fold, or bound the folded shape.
+- A creation whose contact shapes blend other than by hard union collides as
+  its composed field (`WorldColliderSet.CollidesAsField`), relieved or not: 78
+  of the debug world's 612 static colliders. Its cost, sampled thread time under
+  `FixedStepPump.Step` (`dotnet-trace`, headless, 40 s of the Moth strafing
+  through the flat-crown group at (8..16.5, -24)): `FixedFieldColliderContact.Solve`
+  3.5 % and the whole static sweep 13.5 % with the lawn trees unrelieved, against
+  2.7 % and 14.4 % with their former 2.5 cm relief, one run each on a shared
+  machine. Walking the rim at (0, 376, 470), whose relief is unchanged, Solve is
+  19.4 % and the sweep 30.6 %, the step-up's landing probes (`FixedStepUp.TrySnap`)
+  30.9 %. A cheaper exact join would be a smooth-union primitive pair with its
+  k/4 seam bound, if the field's cost ever becomes the limit. (from: far-hit)
 - The bake-side causes live in the [rendering plan's](rendering.md)
   bake items: a long thin member of a static union baking at the union's capped
   lattice, the sharp-edge rounding of about a tenth of a cell, and the Moth's
@@ -2155,25 +2213,24 @@ reproduce worker for what remains.
   spot check. (from: incrhash-astra)
 - [low · fix when touched] `Fixtures.FreshServer` (`tests/Shared/World/Fixtures.Server.cs:112`) deserializes without `WorldStateSettlement.SettleBeforeAdmission`, so a boot from a raw document with a seeded responsive placement can show the response's prototype while colliding as the authored one, which the real loader never does. Settle in the fixture as the loader does. (from: the tip-reds lane)
 - [medium] Recording still costs about a third of the plain authored run.
-  The per-tick authority hash is incremental: the arena by `RowVersion`-cached
-  row digests in 32-row segments, resting identity-less bodies by rest epoch in
-  32-slot segments, the scoped replay runtime through the same row digests
-  ([design and measurements](engine-job-system.md#the-incremental-state-hash)),
-  checked against a full recompute on every replayed tick of `--reproduce` and
-  every recorded tick of the first `--workers` count. A headless host's
-  screen-session mirrors drop their snapshots. Go's authored seconds at
-  `--jobs 1`: plain 256.7 s to 180.4 s, recorded 441.4 s to 247.1 s; a tick
-  refolds 1.6 of about 368 rows and 22 of about 559 slots. Left: the
-  recording's 66.7 s over plain is the components that still fold whole every
-  tick (`PopulationPose`, `BodyActionState`, `Navigation`, `Flock`, `Input`)
-  and the probe's per-tick input copy, unprofiled; `--reproduce`'s replay
-  (415.7 s for Go) pays the full recompute every tick, which is the check's
-  price; a replica's fixed 2.4-4 s floor per scenario is unmeasured since.
-  Re-profile Go's reproduce worker (`dotnet-sampled-thread-time`) before
-  choosing the next segment. A moving body still encodes its whole
-  continuation every tick; a write-side version per body would cover it, and
-  is the larger change the measurement has to justify. (from: quiet-measure,
-  tick-cost-2, incr-hash)
+  The per-tick authority hash folds the arena from `RowVersion`-cached row
+  digests in 32-row segments, and every body slot's continuation afresh in
+  32-slot segments; the scoped replay runtime reads the same row digests
+  ([design and measurements](engine-job-system.md#the-incremental-state-hash)).
+  Hashes fold under the authority gate. `--reproduce` checks every replayed
+  tick against a full recompute and the first `--workers` count every recorded
+  tick; every other hash samples one row and one segment of the cache. A
+  headless host's screen-session mirrors drop their snapshots. Go's authored
+  seconds at `--jobs 1`: plain 256.7 s to 180.4 s, recorded 441.4 s to 247.1 s
+  with a body cache since deleted, which a back-to-back pair put at 21 s of a
+  310 s recording; the [packet](#refactoring-campaign) holds the body
+  write-door redesign a sound one needs. Left: the components that still fold whole every tick (body
+  continuations, `PopulationPose`, `BodyActionState`, `Navigation`, `Flock`,
+  `Input`) and the probe's per-tick input copy, unprofiled; `--reproduce`'s
+  replay pays the full recompute every tick, which is the check's price; a
+  replica's fixed 2.4-4 s floor per scenario is unmeasured since. Re-profile
+  Go's reproduce worker (`dotnet-sampled-thread-time`) before choosing the
+  next segment. (from: quiet-measure, tick-cost-2, incr-hash)
 - [medium] Hall's test fixture uses `documentId: "hall-tests"`, so the garden
   and night references admit a separate full `debug` authority. Its root's
   stopped-machines import does not stop that companion's six machines;
@@ -2561,11 +2618,17 @@ Klondike table stands north of the Go table in the board game room
    leaving to a completed pile.
 2. Poker: seats, computer players and the hand judge; its own step.
 3. The [disclosure plan](disclosure.md#the-build-order)'s four fixture games
-   are tables-room content too (the owner's direction): a sealed-bid auction,
-   a card game with a draw pile, a discard pile and hands under `Count` and
-   `Placeholder`, social deduction with private chat, and a small fog-of-war
-   skirmish, each at its own table and each the pair script of the
-   noninterference harness.
+   stand at their own tables (`debug.go auction`, `shedding`, `deduction`,
+   `skirmish`; rules in `worlds/games/auction.puck`, `shedding.puck`,
+   `deduction.puck`, `skirmish.puck`, the sealed inbox in
+   `worlds/standard/sealed.puck`), each with a `<game>-tests.puck` world of
+   scenarios and a `<game>-disclosure.puck` harness fixture
+   ([what the harness finds](disclosure.md#open-items)). Owed: the windowed look (four 1.2 m tables
+   south and north of the room's middle, the shedding racks' card orientation
+   by yaw unchecked), physical units on the skirmish board (a deal lays
+   children out by slot, never by a cell value, so a unit standing on its cell
+   needs a body or a `respond` placement per cell). The language walls the
+   games hit are [S11's G17](state-and-language.md#s11--ergonomic-is-optimal).
 - Residency: none of it waits on streaming; at 52 to 104 cards a table it is a
   stress case for nearest-first bake order
   ([streaming](#residency-and-streaming)).
@@ -2801,13 +2864,48 @@ hang, then the pre-`main` language findings.
   4,000,000 in the valley plan. Reconcile both pages against `world.budget`.
   (from: composition)
 - [medium] A solid creation shape without `position` throws instead of giving
-  an authoring diagnostic. Removing `position [0, 0, 0]` from
-  `worlds/standard/foliage.puck`'s `sceneryPatch` makes both `compile --validate`
-  and a headless debug boot throw `NullReferenceException` at
-  `WorldDefinitionValidator.Placements.cs:1723`, through
-  `DocumentSpatialValues.cs:143`. Owner: language lane. Default or
-  refuse the missing position before the domain-expansion walk. The port
-  authors the explicit position and boots successfully. (from: meadow)
+  an authoring diagnostic: `WorldDefinitionValidator.Placements.cs:1723`,
+  through `DocumentSpatialValues.cs:143`, throws `NullReferenceException`. A
+  `.puck` source no longer reaches it (lowering fills the shape's described
+  `position` default), but a hand-written JSON document can. Default or refuse
+  the missing position in the validator before the domain-expansion walk.
+  (from: meadow)
+- [medium] Spelling pairs the compiler does not yet hold
+  (`SpellingEquivalenceCorpusTests.Open`), each fixed by choosing one canonical
+  form in lowering:
+  - `float-spelling`: `30.24` and `30.240000000000002` are one float32, the
+    precision a creation reads, but two documents (`worlds/debug/go.puck`'s
+    grid paints carry the long spelling). Round a creation's scalars to the
+    shortest float32 round-trip spelling on lowering, or keep doubles and say
+    so; either way the corpus pair records the choice.
+  - `profile-start`: a closed profile listed from another start vertex is one
+    polygon and two documents (and two bake keys). Start the ring at its least
+    vertex on lowering, for closed profiles only (a sweep's path and an open
+    revolve profile keep their order).
+  - `chamfer-default`: a zero `chamfer` and none are one SDF program but two
+    documents and two creation hashes (`CreationCanonicalizer.Normalize` keeps
+    `Chamfer` as written). Design and recommendation:
+    [G13](state-and-language.md#designs-to-choose).
+  - `ternary-fold`: a compile-time constant condition in a gate is not folded,
+    so `(c == 1) ? (a < 3) : (a <= 3)` lowers to a `compareValue` evaluating
+    both arms where `a < 3` lowers to `compareState`: a different rule program
+    and price. Fold constant expressions before lowering
+    ([G14](state-and-language.md#designs-to-choose)).
+  - A literal `rotation` is lowered in one sign on shape rows only
+    (`WorldDocumentRowDefaults.CanonicalizeRotation`); text runs, placements
+    and animation frames still keep the authored sign. Apply the one helper to
+    each.
+  - The audit's cost pairs that two documents cannot share (static placements
+    against one creation, split prototypes against one, `wall - opening`
+    against its box tiling, a mirrored pair against a `symmetry` fold, union
+    shape order, `x += 3` against `x = x + 3`, a latch cell against its
+    repeated guard) need a cost corpus over bake groups and the work sheet,
+    beside this document corpus.
+- [low] A module library's lets and templates are never reported unused (each is
+  an export), so an export nothing in the repository reads goes unflagged
+  (`worlds/debug/elements.puck` `elementFamilyGlyphs`,
+  `worlds/standard/styles.puck` `continuousStyle`). A directory lint could
+  report a library declaration no linted source reads.
 
 - [low] Two `exports { … }` blocks in one document keep only the later block's
   lists (the object section replaces, where the `export <facet> <names>`
@@ -2985,24 +3083,6 @@ brief's priorities ([security review](../development/security-review.md)).
     public routes today), `WorldOperatorAuthority`, `CommandDefinition.Operator`,
     DISC001 over module declarations, the public-surface law,
     `WorldStateDisclosure` deleted. Step 7, the red-team extension.
-- [high] A faulting remove key is treated as success, so a partial firing
-  commits: `src/Puck.State.Rules/Evaluation/RuleEvaluator.Effects.cs:723` calls
-  the `ResolveKey` overload that discards `KeyNaming`, and its invalid-key arm
-  returns true when `strict` is false (`:730`; ordinary firings pass
-  `strict: false` at `:149` and commit at `:98`). A rule that increments score
-  and then removes `labels[1 / zero]` commits the score instead of rewinding the
-  firing. (from: disc2-review)
-- [medium] Read operands still erase key faults beyond the Text case:
-  `src/Puck.State.Rules/Compiler/Operands.Vectors.cs:87` discards the naming
-  result and `VectorCallOperand.Read` answers Absent (`:154`);
-  `Compiler/Operands.cs:534` does the same for board origins and answers
-  `-1` for an invalid offset origin (`:554`), its symmetry reader at `:660` reads
-  through an invalid key as a default number; pattern reads discard the result
-  at `Compiler/Operands.Patterns.cs:88` and `:212`; Text at
-  `Evaluation/RuleEvaluation.cs:285-288` never raises a fault from the branch
-  at `:113`, so `not (labels[1 / zero] == "yes")` opens. Each should produce
-  `Domain`; the status-discarding overloads in `RuleReads.cs:207` and `:268`
-  make new misses easy. (from: disc2-review, disclosure-2)
 - [low] Closing a gate on a fault re-arms an Edge rule after a one-tick fault
   and fires a decision's `OnNoChoice`; decide whether a fault should hold the
   previous state instead. `WorldBody.GateOpen` and `MotionGateOpen` are
@@ -3180,6 +3260,13 @@ ordinary · Next: new content and art on the owner's call.
   game's tests when converting. (from: puck-audit)
 - Owed: `puck verbs --check` with a windowed boot after clearance-op removed
   `player.camera.clearance` by hand (the first settle window runs it). (from: clearance-op)
+- [low] The gallery's `motion-pulse` exhibit (`worlds/debug/shapes.puck`, its
+  six petals smooth-unioned to the core in one pooled group) draws a stretched
+  seam all the time, since a continuous clock drives it: lint reports PUCK122
+  six times. Its look needs the owner's eye: one group per petal and core, or
+  no group and a union crease. The two exhibits that show the stretched seam on
+  purpose (`motion-smooth-blend`, `motion-carve`) acknowledge it with `allow`.
+  (from: puck-lang)
 - The faerie: the companion becomes small, abstract and original (nothing that
   reads as Ocarina of Time's) beside the moth, its animation rich, varied and
   reactive, dodging a swat through one generic threat input (a point and

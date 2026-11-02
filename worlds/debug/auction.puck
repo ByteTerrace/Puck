@@ -1,0 +1,92 @@
+import "../games/auction"
+import "gametable"
+
+// The auction table: a sealed-bid auction (../games/auction.puck) of three lots among four seats, at the south-west
+// table of the board game room on level 2. The debug world imports this file whole; auction-tests.puck boots it on its
+// own as the disclosure harness's fixture for a private write. `auction.start` opens the first lot, a seat bids with
+// `auction.bid <seat> <coins>`, and ten seconds after a lot opens its bids reveal: a chip for each bid stands on the
+// table for the four seconds the reveal lasts, and `world.state auction`, `auctionWinner`, `auctionPrice` and
+// `auctionPurse` read the result.
+
+export action auction, auctionIn1, auctionIn2, auctionIn3, auctionIn4
+export read auction, auctionPurse, auctionBids, auctionAudience, auctionShown, auctionWinner, auctionPrice
+export read auctionIn1, auctionIn2, auctionIn3, auctionIn4
+
+let auctionSeats = 4
+let auctionLots = 3
+let auctionTable = [56.5, boardRoomFloor - 0.5, 15.6]
+
+state {
+  world {
+    auctionState(seats: auctionSeats, lots: auctionLots, purse: 100)
+  }
+}
+
+auctionRules(seats: auctionSeats, lots: auctionLots)
+
+commands [
+  {
+    name: "auction.start"
+    help: "Opens the auction table's first lot: bidding closes ten seconds later."
+    lines [
+      "world.state.cell.set auction open 1"
+    ]
+  }
+  {
+    name: "auction.bid"
+    help: "Seals a bid of some coins on the open lot for a seat (1 to 4); only that seat and the rules read it until the close."
+    parameters [
+      { name: "seat", kind: Choice, values ["1", "2", "3", "4"] }
+      { name: "coins", kind: Integer }
+    ]
+    lines [
+      "world.state.cell.set auctionIn{seat} bid {coins}"
+    ]
+  }
+]
+
+// South of the table, facing +Z across it.
+spawnPoints [
+  { id: "auction", position [auctionTable[0], boardRoomFloor, auctionTable[2] - 1.6], yawDegrees: 180 }
+]
+
+prototypes {
+  gameTablePrototype(id: "auctionTable", cloth: "#5A1E2A")
+
+  prototype "auctionChip" {
+    document {
+      name: "auctionChip"
+      palette [{ color: "#D6A13E", roughness: 0.35, specular: 0.6 }]
+      schema: "puck.creation.v1"
+      shape Cylinder "chip" {
+        material: 0
+        position [0, 0.006, 0]
+        scale [0.035, 0.006, 0.035]
+      }
+    }
+  }
+}
+
+placements {
+  placement "auctionTable" {
+    prototype: "auctionTable"
+    position: auctionTable
+  }
+
+  // A chip for each seat that bid, dealt in a row across the table from `auctionShown`, which the close writes.
+  placement "auctionChips" {
+    prototype: "auctionChip"
+    position [auctionTable[0] - 0.3, auctionTable[1] + gameTableTop + 0.05, auctionTable[2]]
+    distribution {
+      fill {
+        name: "none"
+        offset: 0
+        step: 0
+      }
+      region: lattice(stepA: [0.2, 0, 0], countA: auctionSeats, stepB: [0, 0, 0.2], countB: 1)
+    }
+    deal {
+      row: "auctionShown"
+    }
+  }
+}

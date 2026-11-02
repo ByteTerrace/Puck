@@ -197,19 +197,9 @@ public static class RuleReads {
             : StateReader.ArrangementRank(domainOrdinals: ordinals[..count])
         );
     }
-    /// <summary>Resolves the interned key a compiled address names for the evaluation in flight: a literal key, a
-    /// bound key token, another cell's value read as a key, or a compiled key fact.</summary>
-    /// <param name="reader">The evaluation in flight.</param>
-    /// <param name="literal">The compile-time key, used when <paramref name="keyFrom"/> is
-    /// <see langword="null"/>.</param>
-    /// <param name="keyFrom">The live indirection, or <see langword="null"/>.</param>
-    /// <returns>The key, or the invalid default when the indirection names no cell.</returns>
-    public static CellKey ResolveKey(IStateReader reader, CellKey literal, CompiledCellRef? keyFrom) => ResolveKey(
-        keyFrom: keyFrom,
-        literal: literal,
-        naming: out _,
-        reader: reader
-    );
+    /// <summary>Why an address whose key computation faulted refused: the one sentence every read and write that
+    /// meets <see cref="KeyNaming.Fault"/> reports.</summary>
+    public const string KeyFaultReason = "the address's key faulted (overflow, a divide by zero, or a value with no number)";
     /// <summary>Attempts to resolve the key a state-writing effect addresses. Only a dynamic key family that must
     /// create a new runtime address admits one here; read resolution never changes the key table.</summary>
     /// <param name="reader">The evaluation in flight.</param>
@@ -235,7 +225,10 @@ public static class RuleReads {
             reference: in reference
         );
     }
-    /// <summary>Resolves the interned key a compiled address names, and what it named.</summary>
+    /// <summary>Resolves the interned key a compiled address names for the evaluation in flight (a literal key, a
+    /// bound key token, another cell's value read as a key, or a compiled key fact), and what it named. No form
+    /// discards <paramref name="naming"/>: each caller decides what a faulted key means where it sits, a read raising
+    /// it as arithmetic and a write or remove refusing the firing.</summary>
     /// <param name="reader">The evaluation in flight.</param>
     /// <param name="literal">The compile-time key, used when <paramref name="keyFrom"/> is
     /// <see langword="null"/>.</param>
@@ -261,15 +254,6 @@ public static class RuleReads {
             reference: in reference
         );
     }
-    /// <summary>Resolves one live key indirection.</summary>
-    /// <param name="reader">The evaluation in flight.</param>
-    /// <param name="reference">The indirection.</param>
-    /// <returns>The key, or the invalid default when the indirection names no cell.</returns>
-    public static CellKey ResolveReference(IStateReader reader, in CompiledCellRef reference) => ResolveReference(
-        naming: out _,
-        reader: reader,
-        reference: in reference
-    );
     /// <summary>Resolves one live key indirection, and what it named.</summary>
     /// <param name="reader">The evaluation in flight.</param>
     /// <param name="reference">The indirection.</param>

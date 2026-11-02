@@ -16,16 +16,17 @@ namespace Puck.Mcp;
 /// <param name="Checkout">The adapter's own Puck checkout, the default checkout a start boots from; its repository's
 /// worktrees are the only other checkouts a start accepts.</param>
 /// <param name="AcquireGpuLease">Takes the machine's exclusive GPU lease for a holder and the lane it works for (null
-/// takes the holder's first word), waiting at most the given time, and returns the held lease, which releases on
-/// disposal; throws <see cref="TimeoutException"/> when it stays held.</param>
-/// <param name="ResolveBuild">Resolves the World build of a checkout's current sources, given the checkout and the time
-/// it may take, building it only when no earlier run built those sources; the CLI answers it with its content-keyed
+/// takes the holder's first word), waiting in the machine's queue for as long as the CLI's lease policy allows, which is
+/// never the start's own timeout, and returns the held lease, which releases on disposal; throws
+/// <see cref="TimeoutException"/> when it stays held.</param>
+/// <param name="ResolveBuild">Resolves the World build of a checkout's current sources, given the checkout, building it
+/// only when no earlier run built those sources; the CLI answers it with its content-keyed
 /// World build store, so the build a start boots can never be older than the sources it boots. Its boolean asks for a
 /// build that carries Vulkan SPIR-V, which a Vulkan start needs.</param>
 public sealed record OperatorWorldLaunch(
     string Checkout,
-    Func<string, string?, TimeSpan, CancellationToken, Task<IDisposable>> AcquireGpuLease,
-    Func<string, bool, TimeSpan, CancellationToken, Task<OperatorWorldBuild>> ResolveBuild
+    Func<string, string?, CancellationToken, Task<IDisposable>> AcquireGpuLease,
+    Func<string, bool, CancellationToken, Task<OperatorWorldBuild>> ResolveBuild
 );
 /// <summary>The World build a start boots, or why none could be made.</summary>
 /// <param name="Path">The full path of <c>Puck.World.dll</c>, or <see langword="null"/> when no build is available.</param>
@@ -232,7 +233,7 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
         bool windowed, bool ownerPlay, int seconds, OperatorAttachment attachment, StartProgress progress, CancellationToken cancellationToken) {
         var budget = TimeSpan.FromSeconds(seconds: seconds);
         // The build comes before the GPU lease, so a long build never holds the machine's GPU.
-        var resolved = await launch!.ResolveBuild(checkout, (backend == "vulkan"), budget, cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
+        var resolved = await launch!.ResolveBuild(checkout, (backend == "vulkan"), cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
 
         if (resolved.Path is not { } build) {
             resolved.Lease?.Dispose();
@@ -247,11 +248,11 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
             progress.Stage = "gpu-lease";
 
             try {
-                lease = await launch!.AcquireGpuLease(holder, lane, budget, cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
+                lease = await launch!.AcquireGpuLease(holder, lane, cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
             } catch (TimeoutException error) {
                 resolved.Lease?.Dispose();
 
-                return Refuse(output: $"Refused: the GPU lease stayed held for {seconds} s, so no windowed World was started ({error.Message}). Retry the start, or start headless.");
+                return Refuse(output: $"Refused: the GPU lease was not granted, so no windowed World was started ({error.Message}). Retry the start, or start headless.");
             } catch (OperationCanceledException) {
                 resolved.Lease?.Dispose();
                 throw;

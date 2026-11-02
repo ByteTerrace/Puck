@@ -210,7 +210,7 @@ public static class AffectedSuites {
         if (suite.Heavy && !AffectedCommand.AdmitHeavySuite(gpuVerbGrammars: gpuVerbGrammars, repositoryRoot: repositoryRoot, suite: suite.Name)) {
             return new AffectedSuiteResult(
                 ExitCode: CliExit.Refused,
-                Report: [$"REFUSED — host admission did not return within {HeavyLease.Timeout.TotalHours.ToString(format: "0", provider: CultureInfo.InvariantCulture)} hours"]
+                Report: [$"REFUSED — host admission did not return within {CliLease.DefaultWait.TotalHours.ToString(format: "0", provider: CultureInfo.InvariantCulture)} hours"]
             );
         }
 

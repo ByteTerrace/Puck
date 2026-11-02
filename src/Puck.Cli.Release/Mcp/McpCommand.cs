@@ -14,7 +14,7 @@ public static class McpCommand {
     // build blocks, so it runs on its own thread; a cancelled start abandons it and releases whatever it finishes with.
     // A build that is needed takes the machine's build lease first, so lanes with different source states build one at
     // a time; a Vulkan start builds with SPIR-V, which keys it apart from the Direct3D 12 build.
-    private static async Task<OperatorWorldBuild> ResolveBuildAsync(string checkout, bool spirv, TimeSpan budget, CancellationToken cancellationToken) {
+    private static async Task<OperatorWorldBuild> ResolveBuildAsync(string checkout, bool spirv, CancellationToken cancellationToken) {
         var logs = RunDirectory.CreatePath(prefix: "puck-mcp-build-");
         var build = Task.Run(function: () => {
             var resolved = WorldArtifactBuild.TryResolve(
@@ -23,7 +23,7 @@ public static class McpCommand {
                 logDirectory: logs,
                 repositoryRoot: checkout,
                 spirv: spirv,
-                timeout: budget,
+                timeout: WorldArtifactBuild.BuildTimeout,
                 verb: "mcp"
             );
 
@@ -104,7 +104,7 @@ public static class McpCommand {
             var launch = ((checkout is null)
                 ? null
                 : new OperatorWorldLaunch(
-                    AcquireGpuLease: async (holder, lane, wait, token) => await CliLease.AcquireAsync(
+                    AcquireGpuLease: async (holder, lane, token) => await CliLease.AcquireAsync(
                         ancestor: ancestor,
                         cancellationToken: token,
                         clock: TimeProvider.System,
@@ -112,7 +112,7 @@ public static class McpCommand {
                         lane: lane,
                         name: "gpu",
                         root: await CliLease.RootAsync(cancellationToken: token, checkout: checkout).ConfigureAwait(continueOnCapturedContext: false),
-                        wait: wait
+                        wait: CliLease.DefaultWait
                     ).ConfigureAwait(continueOnCapturedContext: false),
                     Checkout: checkout,
                     ResolveBuild: ResolveBuildAsync

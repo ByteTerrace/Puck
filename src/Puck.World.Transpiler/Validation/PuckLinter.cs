@@ -7,10 +7,16 @@ namespace Puck.World.Transpiler.Validation;
 
 /// <summary>Static analysis linter for Puck authoring source files.</summary>
 public static partial class PuckLinter {
-    /// <summary>Lints an authored <see cref="DocumentNode"/>, reporting code quality warnings and suggestions.</summary>
-    /// <param name="document">The parsed AST document.</param>
+    /// <summary>Lints an authored <see cref="DocumentNode"/>, reporting code quality warnings and suggestions. Only
+    /// the source's own statements are linted: a declaration an import brought in (one carrying a
+    /// <c>DefinitionPath</c>) is read for the names it uses and nothing else, since linting its own source reports
+    /// its findings once, wherever it is imported.</summary>
+    /// <param name="document">The parsed AST document, with the declarations its imports brought in.</param>
     /// <param name="diagnostics">The diagnostic bag to record linter findings into.</param>
-    public static void Lint(DocumentNode document, DiagnosticBag diagnostics) {
+    /// <param name="library">Whether the source is a module library (<see cref="WorldSourceDeclaration.EmitsDocument"/>
+    /// is <see langword="false"/>). Every top-level <c>let</c> and <c>template</c> of a library is what it hands to
+    /// its importers, so none is reported unused for want of a use inside the library itself.</param>
+    public static void Lint(DocumentNode document, DiagnosticBag diagnostics, bool library = false) {
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(diagnostics);
 
@@ -25,6 +31,7 @@ public static partial class PuckLinter {
                     key: letNode.Name,
                     value: out var existing
                 )) {
+                    if (letNode.DefinitionPath is not null) { continue; }
                     diagnostics.ReportWarning(
                         code: PuckDiagnosticCodes.LintDuplicateKey,
                         message: $"Constant '{letNode.Name}' shadows a previous declaration on line {existing.Line}",
@@ -38,6 +45,7 @@ public static partial class PuckLinter {
                     key: templateNode.Name,
                     value: out var existing
                 )) {
+                    if (templateNode.DefinitionPath is not null) { continue; }
                     diagnostics.ReportWarning(
                         code: PuckDiagnosticCodes.LintDuplicateKey,
                         message: $"Template '{templateNode.Name}' shadows a previous declaration on line {existing.Line}",
@@ -49,56 +57,52 @@ public static partial class PuckLinter {
             }
         }
 
-        // 2. Pass 2: Collect all referenced identifiers across statements and expressions
+        // 2. Pass 2: Collect all referenced identifiers across statements and expressions. An imported
+        // declaration's own findings belong to its source, so they are read into a bag nobody reports.
+        var imported = new DiagnosticBag();
+
         foreach (var statement in document.Statements) {
             CollectReferences(
                 statement,
                 referencedIdentifiers,
-                diagnostics
+                (IsImported(statement: statement) ? imported : diagnostics)
             );
         }
 
-        // 3. Pass 3: Check for unused declarations. A declaration an import brought in is reported against the
-        // source that declares it. A statement the parser could not read may hold the use, so nothing is reported
-        // unused until the source parses whole.
-        if (diagnostics.HasErrors && UnreadStatementFinder.Holds(document: document)) {
+        // 3. Pass 3: Check for unused declarations: the source's own, and none of a library's, whose every
+        // declaration is for its importers. A statement the parser could not read may hold the use, so nothing is
+        // reported unused until the source parses whole.
+        if (library || (diagnostics.HasErrors && UnreadStatementFinder.Holds(document: document))) {
             return;
         }
 
         foreach (var (name, node) in declaredLets) {
-            if (!referencedIdentifiers.Contains(item: name)) {
-                var start = diagnostics.Count;
-
+            if ((node.DefinitionPath is null) && !referencedIdentifiers.Contains(item: name)) {
                 diagnostics.ReportInformation(
                     code: PuckDiagnosticCodes.LintUnusedLet,
                     message: $"Constant '{name}' is declared but its value is never used",
                     span: node.Span
                 );
-                diagnostics.AttributeFrom(sourcePath: node.DefinitionPath, startIndex: start);
             }
         }
 
         foreach (var (name, node) in declaredTemplates) {
-            if (!referencedIdentifiers.Contains(item: name)) {
-                var start = diagnostics.Count;
-
+            if ((node.DefinitionPath is null) && !referencedIdentifiers.Contains(item: name)) {
                 diagnostics.ReportInformation(
                     code: PuckDiagnosticCodes.LintUnusedLet,
                     message: $"Template '{name}' is declared but never instantiated",
                     span: node.Span
                 );
-                diagnostics.AttributeFrom(sourcePath: node.DefinitionPath, startIndex: start);
             }
         }
     }
+    private static bool IsImported(StatementNode statement) => (statement is LetNode { DefinitionPath: not null } or TemplateNode { DefinitionPath: not null });
 
     // Every node is walked through SyntaxWalk.Children; the arms below are only the nodes that name something, report
     // something, or read a key as text. A colour literal written directly into a `let`'s value — through calls,
     // indexing, lambdas and interpolation, but not inside an array, object or arithmetic — is the constant it names,
     // so it is not reported.
     private static void CollectReferences(SyntaxNode node, HashSet<string> references, DiagnosticBag diagnostics, bool inLet = false) {
-        var findings = diagnostics.Count;
-
         switch (node) {
             case IdentifierExpressionNode ident:
                 references.Add(item: ident.Name);
@@ -176,10 +180,6 @@ public static partial class PuckLinter {
                 node: child,
                 references: references
             );
-        }
-        // A template an import brought in is reported against the source that declares it.
-        if (node is TemplateNode template) {
-            diagnostics.AttributeFrom(sourcePath: template.DefinitionPath, startIndex: findings);
         }
     }
     // An assignment target's key is held as source text, so every identifier in it is counted as a use; a key naming

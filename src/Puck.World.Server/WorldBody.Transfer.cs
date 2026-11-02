@@ -332,22 +332,6 @@ public sealed partial class WorldBody {
         return copy;
     }
     // Reads the register file into image, one raw value per slot of the kit's compiled definitions.
-    // The action-state lane values a continuation view reads (ReadActionState), folded without assembling the image:
-    // they live in the arena's slot lanes, which a rule writes without waking the body.
-    internal ulong ActionStateDigest() {
-        var hash = Fnv1aHash.Create();
-
-        for (var slot = 0; (slot < m_actionStateDefinitions.Length); slot++) {
-            hash.Add(value: ((m_stateLane is { } lane)
-                ? lane.Read(
-                    ordinal: m_stateOrdinal,
-                    slot: slot
-                )
-                : 0L
-            ));
-        }
-        return hash.Value;
-    }
     private void ReadActionState(long[] image) {
         for (var slot = 0; (slot < image.Length); slot++) {
             image[slot] = ((m_stateLane is { } lane)
@@ -390,7 +374,6 @@ public sealed partial class WorldBody {
     /// velocity/orientation fields beside it.</summary>
     /// <param name="state">The state a matching <see cref="CaptureTransferState"/> call produced.</param>
     public void ApplyTransferState(WorldBodyTransferState state) {
-        MoveRestEpoch();
         CopyClamped(state.ScriptActors.Timers, m_scriptActors);
         CopyClamped(state.ScriptActors.Pending, m_pendingScriptActors);
         // A restored body never sleeps through the restore that just replaced its velocity/orientation/program —
@@ -675,7 +658,6 @@ public sealed partial class WorldBody {
     /// <param name="contactFieldVersion">The reconstructed population's current contact-field version, or
     /// <see langword="null"/> to restore the captured numeric version directly.</param>
     public void ApplyIntegrationResidue(WorldBodyIntegrationResidue residue, ulong? contactFieldVersion = null) {
-        MoveRestEpoch();
         m_previousPosition = residue.PreviousPosition;
         m_positionAccumulator = FixedVector3RateAccumulator.FromRemainders(
             xRemainder: residue.PositionRemainderX,

@@ -26,7 +26,7 @@ public static class HostAdmission {
             : string.Create(provider: CultureInfo.InvariantCulture, handler: $"no memory headroom: freeRAM={reading.FreeRamGb:0.0}GB freeDisk={reading.FreeDiskGb:0.0}GB (admission needs freeRAM>{thresholds.CapacityRamGb:0.0}GB and freeDisk>={thresholds.PressureDiskGb:0.0}GB)")));
 
     /// <summary>Waits until the host can take <paramref name="step"/>, at most <see cref="Timeout"/>, or
-    /// <see cref="HeavyLease.Timeout"/> for a heavy suite. CPU load never holds a step back.</summary>
+    /// <see cref="CliLease.DefaultWait"/> for a heavy suite. CPU load never holds a step back.</summary>
     /// <param name="step">The step's name, for the wait lines.</param>
     /// <param name="device">Whether the step opens a GPU device, and so must also wait for the GPU to be idle.</param>
     /// <param name="heavySuite">Whether the step runs a heavy suite, and so must also wait while another process runs
@@ -42,7 +42,7 @@ public static class HostAdmission {
     /// first.</returns>
     public static bool Wait(string step, bool device, bool heavySuite, Func<HostSample> sample, TimeProvider clock, Action<TimeSpan> delay, TextWriter error, CancellationToken cancellationToken, HostLoadThresholds thresholds) {
         var started = clock.GetTimestamp();
-        var bound = (heavySuite ? HeavyLease.Timeout : Timeout);
+        var bound = (heavySuite ? CliLease.DefaultWait : Timeout);
         var printed = started;
         string? reason = null;
 

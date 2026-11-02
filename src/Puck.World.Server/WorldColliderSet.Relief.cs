@@ -7,20 +7,38 @@ using Puck.World.Authoring;
 
 namespace Puck.World.Server;
 
-// A relieved creation (one carrying a noise facet) collides as the surface its bake draws: one field collider per
-// stamped copy, whose field is the creation's own fixed-point program (its contact shapes and the relief over their
-// union, in one scope), read by the evaluator the field provider uses. A collider follows the drawn solid
+// A creation whose contact shapes do not meet as a plain union of primitives (a smooth or carving blend joins them, or a
+// noise facet relieves them) collides as the surface its bake draws: one field collider per stamped copy, whose field
+// is the creation's own fixed-point program (its contact shapes, their blends and any relief over their union, in one
+// scope), read by the evaluator the field provider uses. A collider follows the drawn solid
 // (docs/decisions/engine-design.md); its primitives' analytic colliders stand only as the diagnostic's witnesses.
 public sealed partial class WorldColliderSet {
     // The gradient taps' half-span: the field's default, or a sixteenth of the relief's finest wavelength when that is
     // shorter, and never under a 1024th of a metre.
     private const float ReliefGradientFloor = (1f / 1024f);
 
-    /// <summary>Returns whether a creation's solid collides as a field: it carries relief the analytic primitives do not
-    /// draw.</summary>
+    /// <summary>Returns whether a creation carries relief: a noise facet of nonzero amplitude.</summary>
     /// <param name="document">The creation.</param>
     /// <returns><see langword="true"/> when the creation has a noise facet of nonzero amplitude.</returns>
     internal static bool Relieves(CreationDocument document) => (document.Noise is { } noise) && (noise.Amplitude != 0f);
+    /// <summary>Returns whether a creation's solid collides as its composed field rather than as its primitives: it
+    /// carries relief, or a shape contact keeps joins the others by any blend but a hard union, whose surface the
+    /// independent primitives do not draw.</summary>
+    /// <param name="document">The creation.</param>
+    /// <returns><see langword="true"/> when the creation is relieved or a contact shape blends other than by union.</returns>
+    internal static bool CollidesAsField(CreationDocument document) {
+        if (Relieves(document: document)) {
+            return true;
+        }
+
+        foreach (var shape in (document.Shapes ?? [])) {
+            if (CreationStampEmitter.EmitsContact(shape: shape) && ((shape.Blend ?? SdfBlendOp.Union) != SdfBlendOp.Union)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     // One placement copy's analytic primitive colliders, the witnesses a relieved field projects, and the world box that
     // holds its relieved surface: each primitive's own drawn bound (never a witness collider's inset core), grown by the
@@ -96,18 +114,18 @@ public sealed partial class WorldColliderSet {
     // box every tick).
     private static FixedColliderField ReliefField(CreationDocument document, in FixedCreationStampTransform transform, float margin, bool bounded,
         IReadOnlyList<FixedStaticCollider> bases) {
-        var noise = document.Noise!;
-        // The finest octave's wavelength in world units: the creation's units scaled by the stamp.
-        var finest = MathF.Abs(x: noise.Frequency);
+        var relieved = Relieves(document: document);
+        // The finest octave's wavelength in world units: the creation's units scaled by the stamp; none without relief.
+        var finest = (relieved ? MathF.Abs(x: document.Noise!.Frequency) : 0f);
 
-        for (var octave = 1; (octave < Math.Clamp(value: (noise.Octaves ?? 4), min: 1, max: SdfProgramBuilder.MaxNoiseOctaves)); octave++) {
-            finest *= (noise.Lacunarity ?? 2f);
+        for (var octave = 1; (relieved && (octave < Math.Clamp(value: (document.Noise!.Octaves ?? 4), min: 1, max: SdfProgramBuilder.MaxNoiseOctaves))); octave++) {
+            finest *= (document.Noise!.Lacunarity ?? 2f);
         }
 
         var wavelength = ((finest > 0f) ? (((float)transform.Scale) / finest) : float.PositiveInfinity);
         var step = Math.Max(val1: ReliefGradientFloor, val2: Math.Min(val1: ((float)FixedColliderField.DefaultGradientStep), val2: (wavelength / 16f)));
 
-        var evaluator = new SdfFieldEvaluator(program: ReliefProgram(document: document, margin: margin, relieved: true, transform: transform));
+        var evaluator = new SdfFieldEvaluator(program: ReliefProgram(document: document, margin: margin, relieved: relieved, transform: transform));
 
         return new FixedColliderField(
             field: evaluator,
@@ -143,7 +161,7 @@ public sealed partial class WorldColliderSet {
         var fixedMargin = FixedQ4816.FromDouble(value: margin);
         // The unrelieved program, at the stamp's own origin: its blends bound how far the relief's union reaches.
         var envelope = ReliefProgram(document: document, margin: margin, relieved: false, transform: transform);
-        var growth = (FixedQ4816.FromDouble(value: MathF.Abs(x: document.Noise!.Amplitude)) + BlendGrowth(program: envelope));
+        var growth = ((Relieves(document: document) ? FixedQ4816.FromDouble(value: MathF.Abs(x: document.Noise!.Amplitude)) : FixedQ4816.Zero) + BlendGrowth(program: envelope));
         var primitives = PrimitiveColliders(bounds: out var box, document: document, growth: growth, margin: fixedMargin, transform: transform,
             unbounded: out var unbounded);
         var (center, half) = (unbounded ? (transform.Origin, FixedVector3.Zero) : box);

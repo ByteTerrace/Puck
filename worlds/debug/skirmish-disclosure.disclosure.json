@@ -1,0 +1,148 @@
+{
+  "schema": "puck.disclosure.fixture.v1",
+  "observer": "seat2",
+  "sessions": [
+    "replica",
+    "presentation",
+    "editor"
+  ],
+  "variants": [
+    {
+      "name": "cell1",
+      "steps": []
+    },
+    {
+      "name": "cell5",
+      "steps": [
+        {
+          "at": 2,
+          "run": "world.state.cell.set skirmishPos 1 5"
+        },
+        {
+          "at": 2,
+          "run": "world.state.cell.set skirmishLast 1 5"
+        }
+      ]
+    },
+    {
+      "name": "cell0",
+      "steps": [
+        {
+          "at": 2,
+          "run": "world.state.cell.set skirmishPos 1 0"
+        },
+        {
+          "at": 2,
+          "run": "world.state.cell.set skirmishLast 1 0"
+        }
+      ]
+    },
+    {
+      "name": "absent",
+      "steps": [
+        {
+          "at": 2,
+          "run": "world.state.cell.set skirmishPos 1 -1"
+        },
+        {
+          "at": 2,
+          "run": "world.state.cell.set skirmishLast 1 -1"
+        }
+      ]
+    },
+    {
+      "name": "late-move",
+      "steps": [
+        {
+          "at": 80,
+          "run": "world.state.cell.set skirmishPos 3 3"
+        },
+        {
+          "at": 80,
+          "run": "world.state.cell.set skirmishLast 3 3"
+        }
+      ]
+    }
+  ],
+  "script": [
+    {
+      "at": 40,
+      "run": "world.budget"
+    },
+    {
+      "at": 40,
+      "run": "world.placements"
+    },
+    {
+      "at": 40,
+      "run": "world.state skirmishSharpBest"
+    },
+    {
+      "at": 40,
+      "run": "world.state skirmishFairBest"
+    },
+    {
+      "at": 40,
+      "run": "world.state skirmishView"
+    },
+    {
+      "at": 40,
+      "run": "world.state skirmishLast"
+    },
+    {
+      "at": 40,
+      "run": "world.row state skirmishPos"
+    },
+    {
+      "at": 40,
+      "run": "world.topologies"
+    },
+    {
+      "at": 40,
+      "run": "world.projection"
+    },
+    {
+      "at": 40,
+      "run": "world.identify"
+    },
+    {
+      "at": 40,
+      "run": "world.search"
+    },
+    {
+      "at": 100,
+      "run": "world.state skirmishKnows2"
+    },
+    {
+      "at": 100,
+      "run": "world.budget"
+    }
+  ],
+  "fuzz": {
+    "seed": 1,
+    "lines": 64,
+    "actions": 48,
+    "from": 42,
+    "until": 104,
+    "words": [
+      "skirmishPos",
+      "skirmishLast",
+      "skirmishKnows1",
+      "skirmishSeen1",
+      "skirmishOrder1",
+      "skirmishSharpBest",
+      "skirmishKnows9",
+      "unit",
+      "to",
+      "token",
+      "0",
+      "1",
+      "4",
+      "5",
+      "19",
+      "-1",
+      "{state.skirmishPos.1}",
+      "$value"
+    ]
+  }
+}

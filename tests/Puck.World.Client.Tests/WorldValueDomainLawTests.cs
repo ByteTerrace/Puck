@@ -85,6 +85,22 @@ public sealed class WorldValueDomainLawTests {
             Author: s => Fixtures.BuildDocument() with { RenderRaw = WorldRenderDefaults.Absent with { Exposure = new WorldRenderExposure(Mode: SdfExposureMode.Auto, Hold: s) } },
             Path: "render.exposure.hold"
         ),
+        [WorldValueFields.ExposureEv100] = new Case(
+            Author: s => Fixtures.BuildDocument() with { RenderRaw = WorldRenderDefaults.Absent with { Exposure = new WorldRenderExposure(Mode: SdfExposureMode.Manual, Ev100: s) } },
+            Path: "render.exposure.ev100"
+        ),
+        [WorldValueFields.ExposureMinimum] = new Case(
+            Author: s => Fixtures.BuildDocument() with { RenderRaw = WorldRenderDefaults.Absent with { Exposure = new WorldRenderExposure(Mode: SdfExposureMode.Auto, Minimum: s) } },
+            Path: "render.exposure.minimum"
+        ),
+        [WorldValueFields.ExposureMaximum] = new Case(
+            Author: s => Fixtures.BuildDocument() with { RenderRaw = WorldRenderDefaults.Absent with { Exposure = new WorldRenderExposure(Mode: SdfExposureMode.Auto, Maximum: s) } },
+            Path: "render.exposure.maximum"
+        ),
+        [WorldValueFields.ExposureCompensation] = new Case(
+            Author: s => Fixtures.BuildDocument() with { RenderRaw = WorldRenderDefaults.Absent with { Exposure = new WorldRenderExposure(Mode: SdfExposureMode.Auto, Compensation: s) } },
+            Path: "render.exposure.compensation"
+        ),
         [WorldValueFields.PanelIntensity] = Sky(s => new WorldRenderSkyLayer.Panel(Intensity: s), e => e.Sky.First<SdfSkyPanel>().Intensity, "intensity"),
         [WorldValueFields.PanelBlur] = Sky(s => new WorldRenderSkyLayer.Panel(Blur: s), e => e.Sky.First<SdfSkyPanel>().Blur, "blur"),
         [WorldValueFields.RimLuminance] = Lit(author: s => new WorldRenderLight.Rim(Luminance: s), present: static e => e.Lights[0].Weight, member: "luminance"),

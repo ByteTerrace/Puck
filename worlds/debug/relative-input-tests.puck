@@ -42,7 +42,7 @@ state {
   }
 }
 rule "accumulate-device-displacement" {
-  when channel(1, sampleDelta)
+  when channel(1, sampleDelta) != 0
   mode: Level
   deltaTotal[0] += channel(1, sampleDelta)
 }
@@ -73,38 +73,10 @@ test "opposing samples cancel before the step bound" {
 test "sub-scalar samples conserve their fractional residue" {
   when {
     ticks 2
-    seat1: player.signal mouse.motion 0.000003814697265625 0
-    ticks 1
-    seat1: player.signal mouse.motion 0.000003814697265625 0
-    ticks 1
-    seat1: player.signal mouse.motion 0.000003814697265625 0
-    ticks 1
-    seat1: player.signal mouse.motion 0.000003814697265625 0
-    ticks 1
-    seat1: player.signal mouse.motion 0.000003814697265625 0
-    ticks 1
-    seat1: player.signal mouse.motion 0.000003814697265625 0
-    ticks 1
-    seat1: player.signal mouse.motion 0.000003814697265625 0
-    ticks 1
-    seat1: player.signal mouse.motion 0.000003814697265625 0
-    ticks 1
-    seat1: player.signal mouse.motion 0.000003814697265625 0
-    ticks 1
-    seat1: player.signal mouse.motion 0.000003814697265625 0
-    ticks 1
-    seat1: player.signal mouse.motion 0.000003814697265625 0
-    ticks 1
-    seat1: player.signal mouse.motion 0.000003814697265625 0
-    ticks 1
-    seat1: player.signal mouse.motion 0.000003814697265625 0
-    ticks 1
-    seat1: player.signal mouse.motion 0.000003814697265625 0
-    ticks 1
-    seat1: player.signal mouse.motion 0.000003814697265625 0
-    ticks 1
-    seat1: player.signal mouse.motion 0.000003814697265625 0
-    ticks 1
+    repeat 16 {
+      seat1: player.signal mouse.motion 0.000003814697265625 0
+      ticks 1
+    }
     ticks 3
   }
   expect {

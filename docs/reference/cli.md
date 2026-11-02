@@ -100,7 +100,7 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck declarations`](#puck-declarationsdeclaration-inventory) | declaration inventory read off the parsed syntax, with no build. |
 | [`puck decompile`](#the-puck-dsl-verbs) | renders a world JSON document back as `.puck` source—a one-time import, not a synced mirror; optionally resolves companion vector locks with `--embeddings`. |
 | [`puck determinism`](#puck-determinismcross-host-determinism-attestation) | boots the scenarios of a determinism manifest headless in-process and records per-tick, per-system state hashes and document-level hashes into a strict stream; `determinism compare` names the first tick and system, or document hash, where two hosts' streams differ. |
-| [`puck disclosure`](#puck-disclosurethe-noninterference-harness) | boots one headless world per variant of a world's `<stem>.disclosure.json` fixture (and the first again as the control), drives the same non-operator principals with the same scripted and seeded inputs in each, and names every door at which a principal was told something different. |
+| [`puck disclosure`](#puck-disclosurethe-noninterference-harness) | boots one headless world per variant of a world's `<stem>.disclosure.json` fixture (and the first again as the control), drives the same non-operator principals with the same scripted and seeded inputs in each, and names every principal whose ordered stream of received events differs, where it first differs and at which doors. |
 | [`puck docs`](#puck-docsthe-documentation-family) | the documentation family: `build` stages the website reference, `links` checks relative links and cited repository paths, and `citations` checks the console-verb tokens skills and XML docs cite, including a live `Puck.World` console boot. |
 | [`puck embed`](#the-puck-dsl-verbs) | resolves authored `embed(...)` text into committed `.embeddings.json` lock files, or probes cosine similarity rankings. |
 | [`puck firmware`](#puck-firmwarebundled-boot-images) | rebuilds or verifies the HGB boot ROMs and AGB BIOS from their maintained sources. |
@@ -1621,14 +1621,29 @@ per source state, and build only when the store has no build for the
 checkout's current sources. A second run over an unchanged checkout builds
 nothing. `puck test --world-artifact <dll>` and `puck canary --world-artifact
 <dll>` bypass the store and launch the named entry assembly as given, which is
-how `puck qualify` runs canaries on a published package.
+how `puck qualify` runs canaries on a published package, or how a run boots a
+build made some other way.
 
 A build the store lacks takes the machine's `build` lease first
 (`puck lease build`), so runs over different source states build one at a
 time rather than all at once; a run that finds its build in the store takes no
 lease, and a run that finds another building the same source state waits for
 that build instead. The `build` lease is separate from `heavy`, which a gate holds for a whole
-suite. A start with `puck_world_start`'s `backend: vulkan` builds with
+suite.
+
+Waiting and building have separate limits. A run waits for other runs'
+builds of its source state and for the `build` lease for at most two hours
+(`CliLease.DefaultWait`, the one wait every machine-wide lease takes unless its
+caller names another: the heavy lease, the build lease, a sweep's GPU lease and
+the MCP adapter's GPU lease). While it waits, the lease prints
+`lease: <holder> waiting for build lease held by <holder>; N queued ahead, ...` to standard
+error when its place changes, and again every five minutes. The build itself
+then gets its own thirty minutes (`WorldArtifactBuild.BuildTimeout`), counted from
+the moment it starts. No verb's own run budget (`puck sweep --timeout`, a
+suite's leg time) counts either wait or the build: a deep queue never shortens
+the build, and never fails a run whose build was fine. `puck lease <name>
+--wait <seconds>` is the one place a caller sets the wait, and its default is
+zero. A start with `puck_world_start`'s `backend: vulkan` builds with
 `-p:PuckShaderSpirvEnabled=true`, a different source state in the store from the
 Direct3D 12 build, because a Windows build of one project otherwise ships no
 SPIR-V and a Vulkan boot refuses.
@@ -1868,8 +1883,8 @@ puck test <path> --jobs <n>            run at most n worker processes concurrent
                                      or 1 on a machine with fewer than four logical CPUs)
 puck test <path> --reproduce           restore each authority's checkpoint and replay its recorded input
 puck test <path> --workers 1,2,0       run every scenario at each Puck.World --workers count and
-                                       require their hashes, exports and crossing logs to match
-puck test <path> --record <dir>        keep each world's hashes, exports and crossing log
+                                       require their hashes, snapshots, exports and crossing logs to match
+puck test <path> --record <dir>        keep each world's hashes, snapshots, exports and crossing log
                                        under <dir>/<world> (lane scratch, never committed)
 puck test <path> --compare <dir>       require each world to match its recording under <dir>
 puck test <path> --cache-dir <dir>     share this device-cache root across workers and runs
@@ -1955,11 +1970,12 @@ determinism qualification pass: the worker captures each authority's starting
 checkpoint and the tape's input stream, restores that checkpoint in place, then
 replays the input through the ordinary replay doors. Every completed tick's authority
 hash, final machine cores and final canonical state export must match. A mismatch
-names the authority and recorded tick. The authority hash is incremental (rows
-and resting bodies fold from digests cached by version), so every replayed tick
-is also compared with a full recompute of the same state, and a difference
-fails the leg naming the stale component (`differs from its full recompute in
-Arena`). The authored
+names the authority and recorded tick. The authority hash folds arena rows from
+digests cached by version, so every replayed tick is also compared with a full
+recompute of the same state, and a difference fails the leg naming the stale
+component (`differs from its full recompute in Arena`). Every probed leg also
+fails when the always-on sample of that cache (one row and one segment per
+hash) found a stale digest. The authored
 schedule runs once: its outcomes and edit echoes remain in
 `test-run.json`; replay consumes the resulting inputs instead of executing console
 commands again. External input is captured once, so this checks deterministic
@@ -1977,17 +1993,20 @@ verb runs every scenario as a full authored host run, the batch host with its
 instance host and portal scan, under `<dir>/worlds/<n>/workers-<count>`, one
 count after another, and prints each count's wall time. Each leg records
 `reproduction.json` (each authority's per-tick state hash, from the same replay
-probe `--reproduce` uses; its `divergence` is set only under `--reproduce`) and
-`crossings.json` (every crossing line the instance host narrates, stamped with
-the booted authority's completed tick) beside its `out` exports and manifest.
-Every count must match the first: a mismatch prints `DIVERGED` with the first
-recorded tick whose hash differs per authority, the first JSON path where an
-export differs, and the first differing crossing entry, and exits 2. Verdicts are
-read from the first count. The first count also compares every recorded tick's
+probe `--reproduce` uses; its `divergence` is set only under `--reproduce`),
+`snapshots.json` (each authority's delivered snapshots, one hash per delivery
+of its tick and every entity entry in delivered order, so a count that delivers
+the same rows in other positions differs) and `crossings.json` (every crossing
+line the instance host narrates, stamped with the booted authority's completed
+tick) beside its `out` exports and manifest. Every count must match the first:
+a mismatch prints `DIVERGED` with the first recorded tick whose state or
+snapshot hash differs per authority, the first JSON path where an export
+differs, and the first differing crossing entry, and exits 2. Verdicts are read
+from the first count. The first count also compares every recorded tick's
 incremental authority hash with a full recompute, as `--reproduce` does for its
 replay; the other counts take the incremental hash alone.
 
-`--record <dir>` keeps the first count's `reproduction.json`,
+`--record <dir>` keeps the first count's `reproduction.json`, `snapshots.json`,
 `crossings.json` and `out` under `<dir>/<world>`, and a later run with
 `--compare <dir>` must match it the same way: the before-and-after oracle a
 step that should not change semantics runs against. A recording is a lane-local
@@ -2059,25 +2078,37 @@ first variant again as the control, each through the real `Puck.World`
 executable. In each world the variant's operator steps author the hidden state;
 the observed seat runs the world's own schedule rows, the fixture's script and
 the drawn console lines; and each session the fixture names is admitted
-in-process and performs its drawn actions. Each world writes a
-`disclosure.json` transcript (`WorldDisclosureTranscript`) beside its exports.
+in-process and performs its drawn actions. Drawn console lines and session
+actions follow each verb's argument forms (the usage its `help` text spells,
+`CommandRegistry.Usage`), with every placeholder filled from the fixture's
+`slots`. Each world writes a `disclosure.json` transcript
+(`WorldDisclosureTranscript`) beside its exports.
 
-`WorldDisclosureComparison` compares the transcripts door by door: a console
-verb, `deliver.definition`, `deliver.state`, `deliver.snapshot`,
-`deliver.answer`, a `query.*`, an `outcome.*` (the typed mutation outcome) or
-`lifetime` (a stream's attach and end). A door differs when it answered
-different bytes, at another tick, or a different number of times, so count and
-size per tick are compared with content. Each leak names its door, the
-principal, the first tick, the ordinal of the answer, the byte offset (and the
-JSON path inside a delivered document) and both answers. An activation id is a
-per-run nonce and is named by the order it first appeared.
+A transcript is one ordered stream of raw events per recipient, each recorded
+where it leaves the authority for that recipient and stamped with the tick it
+arrived at: a console verb's answer as its handler returned it, the seat's
+edit `echo`, `deliver.definition`, `deliver.state` and `deliver.snapshot` (the
+snapshot as the federation wire encodes it), `deliver.answer`, a `query.*`, an
+`outcome.*` (the typed completion as the peer wire's Completion lane encodes
+it) and `lifetime` (a stream's attach, and its end with the cause, when it
+happens). `WorldDisclosureComparison` compares each recipient's whole stream:
+an event at another tick, in another order across doors, with another byte,
+or missing, differs. Each leak names the principal, where its streams first
+part (both events, the byte offset and the JSON path inside a delivered
+document), and, as a reporting aid, every door whose own answers differ. A
+server's activation id is the one run-local nonce, named by the order it first
+appeared.
 
 Exit codes are 0 when no principal can tell any variant from the first, 1 for
 a leak, and 2 for usage, a fixture or world that does not load, a world that did
-not finish, or a control that differs from the first variant: such a door
-answers differently with no hidden difference at all, so the run judges
-nothing. `--seed`, `--lines` and `--actions` override the fixture's draws;
-`--keep` keeps the staged world, every world's transcripts and exports.
+not finish, a run that is INVALID (a variant step refused, answered after the
+fuzz window began when it was armed before it, or never answered; an operator
+act refused; a step or script line at or after the export tick; a fixture
+session the world did not admit), or a control that differs from the first
+variant: such a recipient is told something with no hidden difference at all,
+so the run judges nothing. `--seed`, `--lines` and `--actions` override the
+fixture's draws; `--keep` keeps the staged world, every world's transcripts and
+exports.
 
 The worlds themselves are quick: the probe's six run in about 10 seconds in
 one worker, most of it the first boot's one-time start-up, and each later

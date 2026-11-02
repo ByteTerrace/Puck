@@ -1,7 +1,6 @@
 using System.Text;
 using System.Text.Json.Nodes;
 using Puck.World.Transpiler.Composition;
-using Puck.World.Transpiler.Vocabulary;
 using Puck.Transpiler.Diagnostics;
 using Puck.Abstractions.Machines;
 using Puck.World.Authoring;
@@ -10,60 +9,6 @@ namespace Puck.World.Transpiler.Validation;
 
 /// <summary>Validates lowered world definitions against engine semantic rules and maps errors to source spans.</summary>
 public static class WorldSemanticValidator {
-    // The source map indexes the source's own lowered document; a refusal's path indexes the composed one, whose
-    // lists a basis or an import may have lengthened or reordered, so the path is traced back into the source's own
-    // document first (WorldDocumentBasis.TraceToLayer), and a node only a basis or an import contributes has no span.
-    private static SourceSpan ExtractSpanFromError(string error, SourceMap? sourceMap, JsonObject composed, JsonObject? source) {
-        if (sourceMap is null) {
-            return SourceSpan.None;
-        }
-
-        // Error strings frequently begin with path prefix like "views.layouts[0].slots[0].pipeline: ..." or "screens[0].frame"
-        var colonIdx = error.IndexOf(value: ':');
-        var pathToken = ((colonIdx > 0)
-            ? error[..colonIdx].Trim()
-            : (error.Split(
-                options: StringSplitOptions.RemoveEmptyEntries,
-                separator: ' '
-            ).FirstOrDefault() ?? "")
-        );
-
-        var composedPointer = WorldDocumentPointers.ToJsonPointer(
-            path: pathToken,
-            table: WorldConstructs.Table
-        );
-        var jsonPointer = (((source is null) || ReferenceEquals(objA: source, objB: composed))
-            ? composedPointer
-            : WorldDocumentBasis.TraceToLayer(
-                composed: composed,
-                layer: source,
-                pointer: composedPointer
-            ));
-
-        if (jsonPointer is null) {
-            return SourceSpan.None;
-        }
-
-        // The map registers the nodes the emitter lowered, which are rarely the leaf the engine names; walking back
-        // up the pointer finds the nearest enclosing node that does carry a span.
-        while (jsonPointer.Length > 1) {
-            if (sourceMap.TryGetSpan(
-                jsonPointer: jsonPointer,
-                span: out var span
-            )) {
-                return span;
-            }
-            var lastSegment = jsonPointer.LastIndexOf(value: '/');
-
-            if (lastSegment <= 0) {
-                break;
-            }
-            jsonPointer = jsonPointer[..lastSegment];
-        }
-
-        return SourceSpan.None;
-    }
-
     /// <summary>Returns a value indicating whether <paramref name="loweredJson"/> is a ROOT — a whole world that
     /// stands on its own or on a basis chain — rather than a MODULE, a fragment some other root imports.</summary>
     /// <remarks>A root declares <see cref="WorldDefinition.SchemaVersion"/>, a <c>basis</c>, or both; every other document is a
@@ -131,8 +76,11 @@ public static class WorldSemanticValidator {
     /// <param name="machines">The deployment's machine vocabulary, supplied without loading code from the document.</param>
     /// <param name="catalogFingerprint">The stable metadata fingerprint for composition under <paramref name="machines"/>.</param>
     /// <param name="sourceCompilation">The already compiled root and its input facts, when available.</param>
+    /// <param name="origins">Collects the authored origin of every value the composition retains, so a finding
+    /// against a basis's or an import's row can be placed in the source that authored it
+    /// (<see cref="ValidateWorld"/>); <see langword="null"/> to keep none.</param>
     /// <returns><see langword="true"/> when the graph composed.</returns>
-    public static bool TryComposeWorld(JsonObject loweredJson, SourceMap? sourceMap, DiagnosticBag diagnostics, string sourcePath, out JsonObject composed, IMachineValidationCatalog? machines = null, string catalogFingerprint = "", WorldCompiledSource? sourceCompilation = null) {
+    public static bool TryComposeWorld(JsonObject loweredJson, SourceMap? sourceMap, DiagnosticBag diagnostics, string sourcePath, out JsonObject composed, IMachineValidationCatalog? machines = null, string catalogFingerprint = "", WorldCompiledSource? sourceCompilation = null, WorldDocumentOrigins? origins = null) {
         ArgumentNullException.ThrowIfNull(loweredJson);
         ArgumentNullException.ThrowIfNull(diagnostics);
         ArgumentException.ThrowIfNullOrWhiteSpace(sourcePath);
@@ -150,6 +98,7 @@ public static class WorldSemanticValidator {
             catalogFingerprint: catalogFingerprint,
             chainBytes: out _,
             composed: out var chain,
+            origins: origins,
             reason: out var composeReason,
             rootBytes: rootBytes,
             sourceCompilation: sourceCompilation,
@@ -189,8 +138,12 @@ public static class WorldSemanticValidator {
     /// (<see cref="WorldDocumentBasis.TraceToLayer"/>), so a basis's or an import's rows cannot shift the line a
     /// refusal lands on. <see langword="null"/> when <paramref name="loweredJson"/> is the source's own document.</param>
     /// <param name="sourcePath">The root document's path, when known, so referenced assets resolve beside it.</param>
+    /// <param name="origins">The authored origins <see cref="TryComposeWorld"/> collected for
+    /// <paramref name="loweredJson"/>, so a finding against a row only a basis or an import authors is placed on that
+    /// source's line, and dropped when that source acknowledges it with an <c>allow</c> line; <see langword="null"/>
+    /// reports such a finding without a location.</param>
     /// <returns>True if the world passed semantic validation without errors.</returns>
-    public static bool ValidateWorld(JsonObject loweredJson, SourceMap? sourceMap, DiagnosticBag diagnostics, IMachineValidationCatalog? machines = null, string catalogFingerprint = "", JsonObject? source = null, string? sourcePath = null) {
+    public static bool ValidateWorld(JsonObject loweredJson, SourceMap? sourceMap, DiagnosticBag diagnostics, IMachineValidationCatalog? machines = null, string catalogFingerprint = "", JsonObject? source = null, string? sourcePath = null, WorldDocumentOrigins? origins = null) {
         ArgumentNullException.ThrowIfNull(loweredJson);
         ArgumentNullException.ThrowIfNull(diagnostics);
 
@@ -235,50 +188,34 @@ public static class WorldSemanticValidator {
             out _
         );
 
+        var locator = new WorldFindingLocator(composed: loweredJson, origins: origins, source: source, sourceMap: sourceMap, sourcePath: sourcePath);
+
         foreach (var error in errors) {
-            diagnostics.ReportError(
+            Report(diagnostics: diagnostics, finding: locator.Locate(
                 code: (undeclaredEnums.Contains(item: error)
                     ? PuckDiagnosticCodes.StateEnumUndeclared
                     : PuckDiagnosticCodes.SemanticValidation),
                 message: error,
-                span: ExtractSpanFromError(
-                    composed: loweredJson,
-                    error: error,
-                    source: source,
-                    sourceMap: sourceMap
-                )
-            );
+                severity: DiagnosticSeverity.Error
+            ));
         }
 
         // A check the validator deferred to the host that runs the world is a notice, never a finding against the
         // author: a host without that catalog cannot answer it either way.
         foreach (var notice in deferred) {
-            diagnostics.ReportInformation(
-                code: PuckDiagnosticCodes.SemanticValidationDeferred,
-                message: notice,
-                span: ExtractSpanFromError(
-                    composed: loweredJson,
-                    error: notice,
-                    source: source,
-                    sourceMap: sourceMap
-                )
-            );
+            Report(diagnostics: diagnostics, finding: locator.Locate(code: PuckDiagnosticCodes.SemanticValidationDeferred, message: notice, severity: DiagnosticSeverity.Information));
         }
 
         foreach (var warning in MovingBlends(definition: definition)) {
-            diagnostics.ReportWarning(
-                code: PuckDiagnosticCodes.MovingBlend,
-                message: warning,
-                span: ExtractSpanFromError(
-                    composed: loweredJson,
-                    error: warning,
-                    source: source,
-                    sourceMap: sourceMap
-                )
-            );
+            Report(diagnostics: diagnostics, finding: locator.Locate(code: PuckDiagnosticCodes.MovingBlend, message: warning, severity: DiagnosticSeverity.Warning));
         }
 
         return (errors.Count == 0);
+    }
+    private static void Report(DiagnosticBag diagnostics, Diagnostic? finding) {
+        if (finding is not null) {
+            diagnostics.Report(diagnostic: finding);
+        }
     }
     /// <summary>Returns a warning for each blend of an animated creation's pooled groups that joins shapes moving
     /// independently (<see cref="CreationMotion.MovingBlends"/>), naming the creation, the two shapes, what moves each

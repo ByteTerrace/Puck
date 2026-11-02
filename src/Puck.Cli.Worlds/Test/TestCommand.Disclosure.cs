@@ -40,12 +40,15 @@ public static partial class TestCommand {
             Boots one headless world per variant of a disclosure fixture (and the first variant again, the control),
             identical but for the hidden state each variant's operator steps author, drives the same non-operator
             principals with the same inputs in each (the observed seat's console lines, the world's own schedule rows,
-            and in-process sessions admitted from the fixture's authorities), and compares everything each principal
-            received byte for byte: replies, refusals, typed outcomes, query answers, every delivery with its version,
-            count and size per tick, and each stream's lifetime. A difference is a leak, named by its door (the verb,
-            delivery kind, query or outcome), its first tick and the two answers. Exit codes are 0 when no principal
-            can tell any variant from the first, 1 for a leak, and 2 for usage, a fixture or world that does not load,
-            a leg that did not finish, or a control that differs from the first variant (the harness cannot judge).
+            and in-process sessions admitted from the fixture's authorities), records everything each principal
+            receives as one ordered stream of raw events stamped with their receipt ticks (console answers as their
+            handlers returned them, edit echoes, typed outcomes as the peer wire encodes them, query answers, every
+            delivery, and each stream's attach and end with its cause), and compares each principal's whole stream. A
+            difference is a leak, named by where the streams first part and by every door whose own answers differ.
+            Exit codes are 0 when no principal can tell any variant from the first, 1 for a leak, and 2 for usage, a
+            fixture or world that does not load, a leg that did not finish, a run that is INVALID (a variant step
+            refused, answered late or never, or a fixture session the world did not admit), or a control that differs
+            from the first variant (the harness cannot judge).
             """,
             name: "disclosure"
         ) {
@@ -123,7 +126,15 @@ public static partial class TestCommand {
         var until = (fuzz.Until ?? Math.Max(val1: from, val2: ((schedule!.ExportTick > 2UL) ? (schedule.ExportTick - 2UL) : 0UL)));
 
         if (until >= schedule!.ExportTick) {
-            Console.Error.WriteLine(value: $"ERROR: the fuzz window ends at tick {until}, at or after the export tick {schedule.ExportTick}, so its last inputs would never answer.");
+            Console.Error.WriteLine(value: $"INVALID: the fuzz window ends at tick {until}, at or after the export tick {schedule.ExportTick}, so its last inputs would never answer.");
+            return 2;
+        }
+        if (until < from) {
+            Console.Error.WriteLine(value: $"INVALID: the fuzz window ends at tick {until}, before it starts at {from}.");
+            return 2;
+        }
+        if (fixture.WindowRefusal(exportTick: schedule.ExportTick) is { } late) {
+            Console.Error.WriteLine(value: $"INVALID: {late}.");
             return 2;
         }
         // The control is the first variant again: two worlds whose hidden state is equal, which must compare equal, or
@@ -168,31 +179,34 @@ public static partial class TestCommand {
             }
             transcripts[index] = WorldDisclosureTranscript.Parse(json: File.ReadAllBytes(path: file));
             Console.WriteLine(value: string.Create(provider: CultureInfo.InvariantCulture,
-                handler: $"  {variant.Name}: {transcripts[index].Entries.Count} answer(s) recorded; {LegSeconds(directory: directory):F1} s"));
+                handler: $"  {variant.Name}: {transcripts[index].Events.Count} event(s) to {transcripts[index].Events.Select(selector: static entry => entry.Principal).Distinct().Count()} principal(s); {LegSeconds(directory: directory):F1} s"));
         }
-        var noise = WorldDisclosureComparison.Compare(left: transcripts[1], right: transcripts[0]);
+        var verdict = WorldDisclosureVerdict.Judge(worlds: [.. variants.Select(selector: (variant, index) => (variant.Name, transcripts[index]))]);
 
-        if (noise.Count > 0) {
-            Console.Error.WriteLine(value: $"REFUSED: the control '{variants[0].Name}' differs from '{variants[1].Name}', whose hidden state is the same; these doors answer differently without any hidden difference, so they judge nothing:");
-            foreach (var leak in noise) { Console.Error.WriteLine(value: $"  {leak.Describe()}"); }
-            return 2;
+        switch (verdict.Outcome) {
+            case WorldDisclosureOutcome.Invalid:
+                Console.Error.WriteLine(value: "INVALID: a world of the run did not set up what the fixture says, so the pair is not the one it means and nothing is judged:");
+                foreach (var reason in verdict.Invalid) { Console.Error.WriteLine(value: $"  {reason}"); }
+                return 2;
+            case WorldDisclosureOutcome.Noise:
+                Console.Error.WriteLine(value: $"REFUSED: the control '{variants[0].Name}' differs from '{variants[1].Name}', whose hidden state is the same; these recipients are told something other than hidden state, so the run judges nothing:");
+                foreach (var line in verdict.Noise.SelectMany(selector: static leak => leak.Describe())) { Console.Error.WriteLine(value: $"  {line}"); }
+                return 2;
         }
-        Console.WriteLine(value: $"  control: '{variants[0].Name}' agrees with '{variants[1].Name}' at every door");
-        var leaks = 0;
+        Console.WriteLine(value: $"  control: '{variants[0].Name}' agrees with '{variants[1].Name}' for every recipient");
+        var told = 0;
 
-        for (var index = 2; (index < legs.Length); index++) {
-            var found = WorldDisclosureComparison.Compare(left: transcripts[1], right: transcripts[index]);
-
-            leaks += found.Count;
-            if (found.Count == 0) {
-                Console.WriteLine(value: $"  pair {variants[1].Name} / {variants[index].Name}: no principal can tell them apart");
+        foreach (var pair in verdict.Pairs) {
+            told += pair.Leaks.Count;
+            if (pair.Leaks.Count == 0) {
+                Console.WriteLine(value: $"  pair {variants[1].Name} / {pair.Variant}: no principal can tell them apart");
                 continue;
             }
-            Console.Error.WriteLine(value: $"  LEAK pair {variants[1].Name} / {variants[index].Name}: {found.Count} door(s)");
-            foreach (var leak in found) { Console.Error.WriteLine(value: $"    {leak.Describe()}"); }
+            Console.Error.WriteLine(value: $"  LEAK pair {variants[1].Name} / {pair.Variant}: {pair.Leaks.Count} principal(s) tell them apart, at {pair.Leaks.Sum(selector: static leak => leak.Doors.Count)} door(s)");
+            foreach (var line in pair.Leaks.SelectMany(selector: static leak => leak.Describe())) { Console.Error.WriteLine(value: $"    {line}"); }
         }
-        if (leaks > 0) {
-            Console.Error.WriteLine(value: $"FAIL: {leaks} leaking door(s) across {(legs.Length - 2)} pair(s).");
+        if (verdict.Outcome == WorldDisclosureOutcome.Leak) {
+            Console.Error.WriteLine(value: $"FAIL: {told} principal stream(s) differ across {verdict.Pairs.Count} pair(s).");
             return 1;
         }
         Console.WriteLine(value: $"PASS: no observed principal can tell any variant of {name} from '{variants[1].Name}'.");

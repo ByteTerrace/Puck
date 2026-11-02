@@ -64,6 +64,9 @@ public sealed class LoopbackTransport : IPrincipalServerLink {
     /// through the server's own doors, so a device stick or a <c>body.*</c> verb cannot fold into the re-driven
     /// tick; every other payload kind (grant, session, mutation, …) still crosses.</summary>
     public bool InputMasked { get; set; }
+    /// <summary>Gets or sets where this connection mints the operation id of a mutation whose caller named none:
+    /// <see cref="WorldOperationIds.Random"/> unless a harness seeds it so paired runs submit identical envelopes.</summary>
+    public WorldOperationIds OperationIds { get; set; } = WorldOperationIds.Random;
     /// <summary>Gets an optional record tap invoked with every submitted intent before it reaches the server — the seam the
     /// replay tape captures the live per-tick intent stream through. <see langword="null"/> (the default) is a free
     /// pass-through; set only while a recording is armed.</summary>
@@ -207,6 +210,8 @@ public sealed class LoopbackTransport : IPrincipalServerLink {
         return true;
     }
 
+    /// <inheritdoc/>
+    public Guid NextOperationId(Principal principal) => OperationIds.Next(principal: principal);
     /// <summary>Binds the client sink the server delivers each tick's snapshot to.</summary>
     /// <param name="sink">The client sink.</param>
     /// <returns>A lease that detaches <paramref name="sink"/> when disposed — see

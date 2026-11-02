@@ -93,25 +93,26 @@ template overcast(cover = 0.85, luminance = 3200) {
 }
 
 // The day cycle's sky through the day: at each hour, the stops of `clearDay`'s gradient (at the elevations it gives
-// them), the luminance the gradient and the clouds show at, and the stars' opacity. Midnight to dawn is night, a blue
-// twilight about sunrise and sunset, and the clear day between nine and fifteen.
+// them), the luminance the gradient and the clouds show at, whether the hour is night (whose luminance is `dayCycle`'s
+// `nightLuminance`), and the stars' opacity. Midnight to dawn is night, a blue twilight about sunrise and sunset, and the
+// clear day between nine and fifteen.
 let dayStops = ["#5E6A72", "#CFDCE6", "#7FAED4", "#2F5C8C"]
 let morningStops = ["#5A6670", "#E6D6C4", "#86B0D4", "#2F5C8C"]
 let sunriseStops = ["#4E4650", "#F0A070", "#8EA6CC", "#33588A"]
 let twilightStops = ["#141626", "#3C3A58", "#2A3866", "#121C3A"]
 let nightStops = ["#020306", "#04060C", "#060A16", "#070B16"]
 let daySkyHours = [
-  { hour: 0, stops: nightStops, luminance: 2, stars: 1 }
-  { hour: 4.5, stops: nightStops, luminance: 2, stars: 1 }
-  { hour: 5.25, stops: twilightStops, luminance: 60, stars: 0.3 }
-  { hour: 6, stops: sunriseStops, luminance: 2500, stars: 0 }
-  { hour: 7, stops: morningStops, luminance: 7000, stars: 0 }
-  { hour: 9, stops: dayStops, luminance: 10000, stars: 0 }
-  { hour: 15, stops: dayStops, luminance: 10000, stars: 0 }
-  { hour: 17, stops: morningStops, luminance: 7000, stars: 0 }
-  { hour: 18, stops: sunriseStops, luminance: 2500, stars: 0 }
-  { hour: 18.75, stops: twilightStops, luminance: 60, stars: 0.3 }
-  { hour: 19.5, stops: nightStops, luminance: 2, stars: 1 }
+  { hour: 0, stops: nightStops, luminance: 0, night: 1, stars: 1 }
+  { hour: 4.5, stops: nightStops, luminance: 0, night: 1, stars: 1 }
+  { hour: 5.25, stops: twilightStops, luminance: 60, night: 0, stars: 0.3 }
+  { hour: 6, stops: sunriseStops, luminance: 2500, night: 0, stars: 0 }
+  { hour: 7, stops: morningStops, luminance: 7000, night: 0, stars: 0 }
+  { hour: 9, stops: dayStops, luminance: 10000, night: 0, stars: 0 }
+  { hour: 15, stops: dayStops, luminance: 10000, night: 0, stars: 0 }
+  { hour: 17, stops: morningStops, luminance: 7000, night: 0, stars: 0 }
+  { hour: 18, stops: sunriseStops, luminance: 2500, night: 0, stars: 0 }
+  { hour: 18.75, stops: twilightStops, luminance: 60, night: 0, stars: 0.3 }
+  { hour: 19.5, stops: nightStops, luminance: 0, night: 1, stars: 1 }
 ]
 
 // The time of day as one clock: the sun's direction, colour and illuminance on the light named `key`, and the sky about
@@ -121,22 +122,14 @@ let daySkyHours = [
 // `render` block replaces the first's members. The sun rises due east of `heading` at six, culminates at
 // `noonElevation` degrees at noon and sets at eighteen, at `peak` lux times the cosine of its hour angle, and casts no
 // light below the horizon; it is `horizonColor` until seven and from seventeen, and `noonColor` between. The day starts
-// at `start` hours. Writing the row moves the time (`world.state.cell.set <clock> $value 0.5` is noon), and its advance
-// holds the sun (`world.row.set state <clock> advance {"perSecondNumerator":0,"perSecondDenominator":1}`) and runs it
-// again (the numerator back to one over `daySeconds`).
-template dayCycle(
-  clock = "day",
-  daySeconds = 1440,
-  start = 10,
-  noonElevation = 60,
-  heading = 0,
-  peak = 100000,
-  noonColor = "#FFF0DC",
-  horizonColor = "#FFB278",
-  cloudiness = 0.25,
-  cloudTier = low,
-  sunLight = 0
-) {
+// at `start` hours. The moon is the light named `moon`, which the world authors beside `key` (a directional whose
+// `shadow: auto` lets it take a shadow slot once the sun has set): it stands opposite the sun, at `moonPeak` lux times
+// the cosine of its hour angle, in `moonColor`. The night sky's gradient shows at `nightLuminance` nits and its stars
+// at `starLuminance`. Writing the row moves the time (`world.state.cell.set <clock> $value 0.5` is noon), and its
+// advance holds the sun (`world.row.set state <clock> advance {"perSecondNumerator":0,"perSecondDenominator":1}`) and
+// runs it again (the numerator back to one over `daySeconds`). The exposure is the world's to key on the same clock
+// (`render.exposure`'s `minimum`, `maximum`, `compensation` and `ev100` take `{ clock, keys }`).
+template dayCycle(clock = "day", daySeconds = 1440, start = 10, noonElevation = 60, heading = 0, peak = 100000, noonColor = "#FFF0DC", horizonColor = "#FFB278", cloudiness = 0.25, cloudTier = low, sunLight = 0, moonPeak = 0.25, moonColor = "#C8D4FF", nightLuminance = 2, starLuminance = 2) {
   timeline {
     clocks [{ name: clock, state: clock, spanSeconds: 24h }]
   }
@@ -158,12 +151,29 @@ template dayCycle(
         lights {
           key: directional(
             direction: [
-              (((0 - sine((h - 12) * 0.2617993877991494)) * cosine(heading * 0.017453292519943295)) + (cosine((h - 12) * 0.2617993877991494) * cosine(noonElevation * 0.017453292519943295) * sine(heading * 0.017453292519943295))),
+              (((0 - sine((h - 12) * 0.2617993877991494)) * cosine(heading * 0.017453292519943295)) + (cosine(
+                (h - 12) * 0.2617993877991494
+              ) * cosine(noonElevation * 0.017453292519943295) * sine(heading * 0.017453292519943295))),
               (cosine((h - 12) * 0.2617993877991494) * sine(noonElevation * 0.017453292519943295)),
-              (((0 - sine((h - 12) * 0.2617993877991494)) * sine(heading * 0.017453292519943295)) - (cosine((h - 12) * 0.2617993877991494) * cosine(noonElevation * 0.017453292519943295) * cosine(heading * 0.017453292519943295)))
+              (((0 - sine((h - 12) * 0.2617993877991494)) * sine(heading * 0.017453292519943295)) - (cosine(
+                (h - 12) * 0.2617993877991494
+              ) * cosine(noonElevation * 0.017453292519943295) * cosine(heading * 0.017453292519943295)))
             ],
             color: ((h <= 7) or (h >= 17)) ? horizonColor : noonColor,
             illuminance: peak * maximum(0, cosine((h - 12) * 0.2617993877991494))
+          )
+          moon: directional(
+            direction: [
+              (((0 - sine((h - 12) * 0.2617993877991494)) * cosine(heading * 0.017453292519943295)) + (cosine(
+                (h - 12) * 0.2617993877991494
+              ) * cosine(noonElevation * 0.017453292519943295) * sine(heading * 0.017453292519943295))) * (0 - 1),
+              (cosine((h - 12) * 0.2617993877991494) * sine(noonElevation * 0.017453292519943295)) * (0 - 1),
+              (((0 - sine((h - 12) * 0.2617993877991494)) * sine(heading * 0.017453292519943295)) - (cosine(
+                (h - 12) * 0.2617993877991494
+              ) * cosine(noonElevation * 0.017453292519943295) * cosine(heading * 0.017453292519943295))) * (0 - 1)
+            ],
+            color: moonColor,
+            illuminance: moonPeak * maximum(0, 0 - cosine((h - 12) * 0.2617993877991494))
           )
         }
       })
@@ -178,14 +188,17 @@ template dayCycle(
         ])
         sunDisc(name: "sun", light: sunLight, radius: 0.53deg, intensity: 12, color: "#FFF1D6")
         clouds(name: "cumulus", coverage: cloudiness, scale: 2, softness: 0.3, drift: [0.02, 0.005], tier: cloudTier)
-        stars(name: "stars", luminance: 2, density: 48, brightness: 1.2, seed: 7, opacity: 0)
+        stars(name: "stars", luminance: starLuminance, density: 48, brightness: 1.2, seed: 7, opacity: 0)
       ]
       clock: clock
       keys: map(daySkyHours, k => {
         at: k["hour"] * 3600
         layers {
-          air: gradient(luminance: k["luminance"], stops: map(k["stops"], color => { color: color }))
-          cumulus: clouds(luminance: k["luminance"])
+          air: gradient(
+            luminance: k["luminance"] + (k["night"] * nightLuminance),
+            stops: map(k["stops"], color => { color: color })
+          )
+          cumulus: clouds(luminance: k["luminance"] + (k["night"] * nightLuminance))
           stars: stars(opacity: k["stars"])
         }
       })

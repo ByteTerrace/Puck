@@ -131,6 +131,36 @@ public sealed class BoxPlacementColliderLawTests {
             Assert.InRange(actual: ((double)distance), high: budget, low: -budget);
         }
     }
+    // A round capsule collides as the rounded box around its segment, which runs 0.5·scale.y up its own Y from its
+    // position at the placement's exact scale: a hair-thin, 64 m segment ends where the drawn one does at 0.75 and 0.5,
+    // and a tilted branch keeps its direction.
+    [InlineData(0.0001f, 128f, 0.75f, 0f)]
+    [InlineData(0.0001f, 128f, 0.5f, 0f)]
+    [InlineData(0.13f, 2.1f, 1.0843f, 41f)]
+    [Theory]
+    public void ACapsuleCollidesAsItsDrawnSegment(float radius, float length, float scale, float angle) {
+        var definition = Document(type: SdfSolidPrimitive.Capsule, halfExtents: new Vector3(x: radius, y: length, z: radius), scale: scale,
+            rotation: Quaternion.CreateFromAxisAngle(Vector3.UnitZ, ((angle * MathF.PI) / 180)));
+        var collider = Assert.Single(collection: WorldColliderSet.Build(definition: definition).DiagnosticColliders).Collider;
+
+        Assert.Equal(Puck.Physics.FixedStaticColliderKind.RoundedBox, collider.Kind);
+        Assert.True(condition: WorldSolidField.TryBuild(definition, out var field, out var reason), userMessage: reason);
+        var budget = WorldDiagnosticGeometry.Numerical(collider: collider);
+
+        foreach (var point in WorldDiagnosticGeometry.SurfaceSamples(collider: collider)) {
+            Assert.True(condition: field!.Evaluator.TryDistance(FixedPosition.FromLocal(local: FixedVector3.FromVector3(value: point)), out var distance, out _));
+            Assert.InRange(actual: ((double)distance), high: budget, low: -budget);
+        }
+
+        // The collider's far end is the drawn one's: the segment's end plus the radius along the capsule's own axis, in the
+        // engine frame, which negates the author frame's X and Z.
+        var authored = Vector3.Transform(value: Vector3.UnitY, rotation: Quaternion.CreateFromAxisAngle(Vector3.UnitZ, ((angle * MathF.PI) / 180)));
+        var axis = new Vector3(x: -authored.X, y: authored.Y, z: -authored.Z);
+        var end = (axis * (((0.5f * length) + radius) * scale));
+        var support = collider.SupportPoint(direction: FixedVector3.FromVector3(value: axis));
+
+        Assert.InRange(actual: ((double)Vector3.Dot(vector1: support.ToVector3(), vector2: axis)), high: (end.Length() + 0.001), low: (end.Length() - 0.001));
+    }
     [InlineData(0.1f, 0f)]
     [InlineData(0f, 0.1f)]
     [Theory]

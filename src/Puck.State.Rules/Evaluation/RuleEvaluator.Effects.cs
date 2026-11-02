@@ -472,8 +472,8 @@ public sealed partial class RuleEvaluator {
         if (effect.Field.Kind == CellKind.Text) {
             var text = effect.Text;
 
-            if ((text is null) && !RuleEvaluation.TryReadText(reader: m_host, source: effect.Source.Operand, text: out text)) {
-                return true;
+            if ((text is null) && !TryReadText(effect: effect, firing: in firing, refused: out var textRefused, source: effect.Source.Operand, text: out text)) {
+                return !textRefused;
             }
             if (!m_host.Arena.TryWrite(handle: handle, fieldOrdinal: effect.Field.Ordinal, value: CellValue.Text(value: text), reason: out var textReason)) {
                 ReportRefusal(detail: textReason, effect: effect.Describe, refusal: RuleEffectRefusal.MutationRejected, ruleName: firing.RuleName, tick: firing.Tick);
@@ -501,8 +501,8 @@ public sealed partial class RuleEvaluator {
         if (effect.Field.Kind == CellKind.Text) {
             var text = effect.Text;
 
-            if ((text is null) && !RuleEvaluation.TryReadText(reader: m_host, source: effect.Source.Operand, text: out text)) {
-                return true;
+            if ((text is null) && !TryReadText(effect: effect, firing: in firing, refused: out var textRefused, source: effect.Source.Operand, text: out text)) {
+                return !textRefused;
             }
             if (!m_host.Arena.TryWrite(handle: handle, fieldOrdinal: effect.Field.Ordinal, value: CellValue.Text(value: text), reason: out var textReason)) {
                 ReportRefusal(detail: textReason, effect: effect.Describe, refusal: RuleEffectRefusal.MutationRejected, ruleName: firing.RuleName, tick: firing.Tick);
@@ -560,8 +560,10 @@ public sealed partial class RuleEvaluator {
         ReadOnlySpan<sbyte> source;
 
         if (effect.Source.Vector is { } vector) {
-            if (!vector.TryReadSpan(reader: m_host, span: out source)) {
-                ReportRefusal(detail: "the vector source is absent", effect: effect.Describe, refusal: RuleEffectRefusal.Arithmetic, ruleName: firing.RuleName, tick: firing.Tick);
+            var naming = vector.ReadSpan(reader: m_host, span: out source);
+
+            if (naming != KeyNaming.Cell) {
+                ReportRefusal(detail: ((naming == KeyNaming.Fault) ? RuleReads.KeyFaultReason : "the vector source is absent"), effect: effect.Describe, refusal: RuleEffectRefusal.Arithmetic, ruleName: firing.RuleName, tick: firing.Tick);
                 return false;
             }
         } else if ((effect.Source.Pool is { } pool) && (((uint)effect.Source.BindingSlot) < ((uint)bindings.Length)) && (bindings[effect.Source.BindingSlot].PoolOrdinal == pool.Ordinal) && m_host.Arena.TryReadVector(handle: bindings[effect.Source.BindingSlot], fieldOrdinal: effect.Source.Field.Ordinal, components: out source)) {
@@ -723,9 +725,16 @@ public sealed partial class RuleEvaluator {
         var key = RuleReads.ResolveKey(
             keyFrom: effect.KeyFrom,
             literal: effect.Key,
+            naming: out var naming,
             reader: m_host
         );
 
+        // A faulted key is never the no-op an absent cell is: the firing refuses whole, strict or not.
+        if (naming == KeyNaming.Fault) {
+            ReportRefusal(detail: RuleReads.KeyFaultReason, effect: effect.Describe,
+                refusal: RuleEffectRefusal.Arithmetic, ruleName: firing.RuleName, tick: firing.Tick);
+            return false;
+        }
         if (!key.IsValid) {
             if (!strict) {
                 return true;
@@ -760,16 +769,38 @@ public sealed partial class RuleEvaluator {
     private bool FireTransform(TransformStateEffect effect, in EffectFiring firing, out bool moved) {
         moved = false;
 
-        var binding = new ArenaTransformBinding(
-            bindsKey: (effect.KeyRef is not null),
-            fromRowOrdinal: RowOrdinal(row: effect.FromRow),
-            key: ((effect.KeyRef is { } indirection)
+        var fromNaming = RowOrdinal(
+            row: effect.FromRow,
+            rowOrdinal: out var fromRowOrdinal
+        );
+        var toNaming = RowOrdinal(
+            row: effect.ToRow,
+            rowOrdinal: out var toRowOrdinal
+        );
+        var keyNaming = KeyNaming.Nothing;
+        var key = ((effect.KeyRef is { } indirection)
             ? RuleReads.ResolveReference(
+                naming: out keyNaming,
                 reader: m_host,
                 reference: in indirection
             )
-            : default),
-            toRowOrdinal: RowOrdinal(row: effect.ToRow),
+            : default);
+
+        if (
+            (fromNaming == KeyNaming.Fault) ||
+            (toNaming == KeyNaming.Fault) ||
+            (keyNaming == KeyNaming.Fault)
+        ) {
+            ReportRefusal(detail: RuleReads.KeyFaultReason, effect: effect.Describe,
+                refusal: RuleEffectRefusal.Arithmetic, ruleName: firing.RuleName, tick: firing.Tick);
+            return false;
+        }
+
+        var binding = new ArenaTransformBinding(
+            bindsKey: (effect.KeyRef is not null),
+            fromRowOrdinal: fromRowOrdinal,
+            key: key,
+            toRowOrdinal: toRowOrdinal,
             bindsInstance: ((effect.Arena is ArenaTransform.PushRay ray) && (((uint)ray.OriginBindingSlot) < ((uint)m_host.InstanceBindings.Length))),
             instance: (((effect.Arena is ArenaTransform.PushRay pushRay) && (((uint)pushRay.OriginBindingSlot) < ((uint)m_host.InstanceBindings.Length))) ? m_host.InstanceBindings[pushRay.OriginBindingSlot] : default)
         );
@@ -845,13 +876,17 @@ public sealed partial class RuleEvaluator {
 
         return false;
     }
-    private int RowOrdinal(LiveRow? row) => (((row is { } live) && live.TryResolve(
-        reader: m_host,
-        rowOrdinal: out var ordinal
-    ))
-        ? ordinal
-        : -1
-    );
+    // A live row's selection, -1 when there is none to substitute (no live row, or an index selecting none).
+    private KeyNaming RowOrdinal(LiveRow? row, out int rowOrdinal) {
+        rowOrdinal = -1;
+
+        return ((row is { } live)
+            ? live.Resolve(
+                reader: m_host,
+                rowOrdinal: out rowOrdinal
+            )
+            : KeyNaming.Nothing);
+    }
     private bool FireWrite(IRuleEffect effect, IStateWriteEffect write, in EffectFiring firing, bool strict, out bool moved) {
         moved = false;
 
@@ -861,12 +896,16 @@ public sealed partial class RuleEvaluator {
         // author wrote a value and it would go nowhere, so the firing rewinds exactly as an absent source does. The
         // negative-ordinal skip below is the separate, compile-time-absent case.
         if (write.RowFrom is { } selection) {
-            if (!selection.TryResolve(
+            var selected = selection.Resolve(
                 reader: m_host,
                 rowOrdinal: out ordinal
-            )) {
+            );
+
+            if (selected != KeyNaming.Cell) {
                 ReportRefusal(
-                    detail: $"{RuleEvaluation.DescribeFault(fault: ExpressionFault.Absent)}; '{selection.Spelling}' selects no row",
+                    detail: ((selected == KeyNaming.Fault)
+                        ? $"{RuleReads.KeyFaultReason}; '{selection.Spelling}' selects no row"
+                        : $"{RuleEvaluation.DescribeFault(fault: ExpressionFault.Absent)}; '{selection.Spelling}' selects no row"),
                     effect: effect.Describe,
                     refusal: RuleEffectRefusal.Arithmetic,
                     ruleName: firing.RuleName,
@@ -991,12 +1030,8 @@ public sealed partial class RuleEvaluator {
         var write = ((WriteEffect)effect);
         var text = write.Text;
 
-        if ((text is null) && !RuleEvaluation.TryReadText(reader: m_host, source: write.Source.Operand, text: out text)) {
-            return true;
-        }
-
-        if (text is null) {
-            return true;
+        if ((text is null) && !TryReadText(effect: effect, firing: in firing, refused: out var refused, source: write.Source.Operand, text: out text)) {
+            return !refused;
         }
 
         return Apply(
@@ -1037,6 +1072,23 @@ public sealed partial class RuleEvaluator {
             ? layout[rowOrdinal].Kind
             : CellKind.Int
         );
+    }
+    // A Text source that answers no cell skips its effect, as an absent text always has; one whose address faulted
+    // refuses the firing, reported here.
+    private bool TryReadText(IRuleEffect effect, IRuleOperand? source, in EffectFiring firing, out string text, out bool refused) {
+        var naming = RuleEvaluation.ReadText(
+            reader: m_host,
+            source: source,
+            text: out text
+        );
+
+        refused = (naming == KeyNaming.Fault);
+        if (refused) {
+            ReportRefusal(detail: RuleReads.KeyFaultReason, effect: effect.Describe,
+                refusal: RuleEffectRefusal.Arithmetic, ruleName: firing.RuleName, tick: firing.Tick);
+        }
+
+        return (naming == KeyNaming.Cell);
     }
     private void RefuseSource(IRuleEffect effect, in EffectFiring firing, ExpressionFault fault) => ReportRefusal(
         detail: RuleEvaluation.DescribeFault(fault: fault),

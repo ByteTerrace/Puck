@@ -1,0 +1,135 @@
+// The deduction table's scenarios (deduction.puck, ../games/deduction.puck), each booted as a small world of its own
+// with four seats: `puck test worlds/debug/deduction-tests.puck --reproduce`. A game starts at boot (`deduction.phase`
+// 1), and the seeded draw makes seats 4 and 2 the moles every run, seats 1 and 3 the crew.
+
+schema: "puck.world.definition.v1"
+basis: "avatars/moth"
+documentId: "deduction-tests"
+import "deduction"
+
+bodies {
+  localSeats: 4
+  seatActivation [Eager, Eager, Eager, Eager]
+  seatSpawns ["stage", "stage", "stage", "stage"]
+}
+
+test "the draw makes two moles who know each other" {
+  given {
+    deduction.phase = 1
+  }
+  when {
+    ticks 10
+  }
+  expect {
+    deduction.phase == 2
+    deductionSecret.mole1 == 4
+    deductionSecret.mole2 == 2
+    deductionRole[2] == 2
+    deductionRole[4] == 2
+    deductionRole[1] == 1
+    deductionPartners[2] == 20
+    deductionPartners[4] == 20
+    deductionPartners[1] == 0
+  }
+}
+
+test "a seat reads its own role and no other" {
+  given {
+    deduction.phase = 1
+  }
+  when {
+    ticks 10
+    seat1: world.state deductionRole 1
+    seat1 refused "no such cell": world.state deductionRole 2
+    seat1 refused "no such cell": world.state deductionPartners 4
+    seat3: world.state deductionSecret
+    ticks 2
+  }
+  expect {
+    deduction.phase == 2
+  }
+}
+
+// Seat 2 whispers to seat 3: the line lands in seat 3's own rows alone, the table's talk does not move, and only seat 3
+// reads it.
+test "a whisper reaches only its listener" {
+  given {
+    deduction.phase = 1
+  }
+  when {
+    ticks 10
+    seat2: world.state.cell.set deductionMailText2 text psst
+    seat2: world.state.cell.set deductionMail2 to 3
+    seat1: world.state.cell.set deductionMailText1 text hello
+    seat1: world.state.cell.set deductionMail1 to 0
+    ticks 3
+    seat3: world.state deductionHeard3 0
+    seat1 refused "no such cell": world.state deductionHeard3 0
+    seat1: world.state deductionTalk 0
+    ticks 2
+  }
+  expect {
+    deductionHeard3[0] == "psst"
+    deductionHeardFrom3[0] == 2
+    deductionLines[3] == 1
+    deductionTalk[0] == "hello"
+    deductionTalkFrom[0] == 1
+    deductionTalk[1] == ""
+    deductionMail2.result == 1
+  }
+}
+
+// Seat 2, a mole, speaks in the den: both moles' den rows take the line. Seat 1, crew, is refused in its own inbox.
+test "the den is the moles' alone" {
+  given {
+    deduction.phase = 1
+  }
+  when {
+    ticks 10
+    seat2: world.state.cell.set deductionMailText2 text plan
+    seat2: world.state.cell.set deductionMail2 to 9
+    seat1: world.state.cell.set deductionMailText1 text listen
+    seat1: world.state.cell.set deductionMail1 to 9
+    ticks 3
+    seat4: world.state deductionDen4 0
+    seat1 refused "no such cell": world.state deductionDen4 0
+    ticks 2
+  }
+  expect {
+    deductionDen4[0] == "plan"
+    deductionDenFrom4[0] == 2
+    deductionDen2[0] == "plan"
+    deductionDen1[0] == ""
+    deductionDen3[0] == ""
+    deductionMail2.result == 1
+    deductionMail1.result == -1
+  }
+}
+
+// Seats 1 and 3 vote out seat 2, a mole; the crew wins, and every role and vote is now every seat's to read.
+test "the vote turns out the most voted and reveals every role" {
+  given {
+    deduction.phase = 1
+  }
+  when {
+    ticks 10
+    seat1: world.state.cell.set deductionMail1 vote 2
+    seat3: world.state.cell.set deductionMail3 vote 2
+    seat2: world.state.cell.set deductionMail2 vote 1
+    seat4: world.state.cell.set deductionMail4 vote 3
+    ticks 3
+    seat1 refused "no such cell": world.state deductionVotes 3
+    seat1: world.state.cell.set deduction close 1
+    ticks 3
+    seat1: world.state deductionRole 2
+    seat1: world.state deductionVotes 3
+    ticks 2
+  }
+  expect {
+    deduction.phase == 4
+    deduction.out == 2
+    deduction.outRole == 2
+    deduction.winner == 1
+    deductionTally[2] == 2
+  }
+}

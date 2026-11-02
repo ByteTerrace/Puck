@@ -93,8 +93,9 @@ expressions in one kind. A declared `kind` is used as written. Without one, the
 kind is inferred as a local's is: `Int`, unless both sides are constants and
 one holds a fraction, and `Fixed` when the sides don't compile as `Int`. Neither
 side is converted to the other's kind. In `.puck`, a plain read compared with a
-literal or with another plain read lowers to `compareState`; anything else, or
-a comparison suffixed with `: Int` or `: Fixed`, lowers to `compareValue`.
+literal or with another plain read lowers to `compareState`; anything else
+lowers to `compareValue` with its kind inferred. A written kind suffix
+(`: Int`, `: Fixed`) is refused.
 
 Text rows support `==` and `!=` against a quoted literal or another Text row,
 including keyed cells: `guide[title] == "SHEAR"` or `actual == expected`.

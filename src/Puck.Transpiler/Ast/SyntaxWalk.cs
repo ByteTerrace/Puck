@@ -93,6 +93,8 @@ public static class SyntaxWalk {
             TestGivenNode given => [given.Target, given.Value],
             TestGivenWorldNode givenWorld => givenWorld.Cells,
             TestWhenWorldNode whenWorld => whenWorld.Steps,
+            TestGivenForNode givenLoop => [givenLoop.Sequence, .. givenLoop.Body],
+            TestWhenLoopNode whenLoop => [whenLoop.Sequence, .. whenLoop.Body],
             TestExpectationNode expectation => [expectation.Predicate],
             TestExpectWorldNode expectWorld => expectWorld.Expectations,
             TestGivenBlockNode givenBlock => givenBlock.Cells,

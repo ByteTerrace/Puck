@@ -57,6 +57,10 @@ Go and Tour pages, Places ring and gallery icons live in
 as its own (`toon: celStyle`) and a world names one as the default every other material inherits
 (`render { toon: celStyle }`), which `world.toon` switches live.
 
+`sealed.puck` is a library of sealed inboxes (`sealedInbox`): a row per seat that only that seat and the world's rules
+read, through which a seat hands a game a value no other seat may read (a sealed bid, a vote, a whisper, an order),
+and which a game's own rule collects. The games in [`../games/`](../games/README.md) use it.
+
 `bounds.puck` is a library of boxes given their bounds (`boundsBox` for a world-space box in a creation at the origin,
 `localBox` for one in the creation's own frame, `barRing` for the three bars round a canvas), for shells, furniture and
 frames built from boxes.

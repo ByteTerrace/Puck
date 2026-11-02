@@ -176,14 +176,13 @@ public static partial class CountersCommand {
             artifact: out var artifact,
             repositoryRoot: repositoryRoot,
             runDirectory: runDirectory,
-            timeout: CliProcess.RemainingBudget(
-                budget: SuiteBudget,
-                clock: suiteClock
-            ),
             verb: Verb
         )) {
             return CliExit.Refused;
         }
+
+        // The suite's budget measures its legs; the wait for the build lease and the build are their own limits.
+        suiteClock.Restart();
 
         using var lease = artifact;
         var runs = new List<WorldCountersRun>(capacity: WorldOffscreenLeg.Backends.Count);

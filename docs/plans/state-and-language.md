@@ -809,6 +809,260 @@ sheet for the debug world, allocation, `host.frames`), and `puck test
 worlds/debug --reproduce` passing with re-recorded hashes where a step changes
 them.
 
+### S11 — Ergonomic is optimal
+
+The owner's ruling ([AGENTS.md](../../AGENTS.md#puck-is-pre-release)): cost
+follows what a document means, never how it is spelled, and every spelling
+lowers to one canonical form. An audit of the debug world's sources listed the
+gaps; this package holds what landed and the designs still to choose.
+
+Landed:
+
+- **The spelling-equivalence corpus**,
+  `tests/Puck.World.Transpiler.Tests/SpellingEquivalence/` with
+  `SpellingEquivalenceCorpusTests`. Each pair is two `.puck` documents that
+  mean the same; the pair holds when both compile to the identical canonical
+  document and the identical generated test worlds, so every identity and
+  price derived from the document agrees. A pair the compiler does not yet
+  hold is listed by name in the test against its open item, and fails the
+  test the day it starts holding. A new spelling lands with its pair.
+- **Defaults are canonical.** A shape row's `group`, `material` and `position`
+  carry described defaults, filled on lowering like `blend`, `rotation`,
+  `scale` and `smooth`, so a member written at its default and the member
+  omitted are one document. A shape's literal `rotation` lowers in its one
+  sign (`w > 0`, or the first nonzero of `x`, `y`, `z` positive when `w` is 0),
+  so `q` and `-q` key one creation (the audit's S10, confirmed: the
+  canonicalizer normalized length only, so the two hashed apart).
+- **`allow CODE "why"`** on the line before a row, `let` or other statement
+  acknowledges one warning or note over that statement's span. It never
+  reaches the document. An unknown code, a missing reason or nothing to cover
+  is PUCK124; an error is never acknowledged.
+- **Diagnostics read against their author.** A finding against the composed
+  world is placed on the line that authored it: the source's own layer through
+  its source map (which names the library a template came from), or a basis's
+  or import's row through the origins the composition retains, read through
+  that document's own source map. `puck lint <dir>` prints a finding placed in
+  another file once. An imported declaration is linted only in its own source,
+  and a module library's lets and templates are never reported unused.
+- **`for` and `repeat` in a test's `given` and `when`.** `for item in [...]`
+  binds names a given line's key and value read and a seat step's command
+  substitutes as `{item}`; `repeat n { }` repeats steps. Both expand at
+  compile time to the lines written out (the corpus holds both).
+
+#### Designs to choose
+
+Each lowers to the existing canonical form, so the corpus proves it with a pair
+the day it lands. Each lists options and a recommendation; the owner chooses.
+
+**G1 — Deriving a record from another.** A value cannot be another with
+overrides. Sites: the gallery map re-lists every text-run field to move six
+runs (`worlds/debug/shapes.puck` around `:421`, the `map(..., run => { … })`),
+the Moth's palette repeats the whole `weathering { }` block per plate slot
+(`worlds/debug/avatars/moth.puck:1278` on, five times), the 13 near-identical
+emboss runs in `shapes.puck`.
+
+- (a) `base with { member: value }`, an expression: a block after `with`,
+  members replacing the base's by name, shallow. Reads as Puck's own block
+  spelling and needs no colon rule of its own.
+- (b) A spread inside an object literal: `{ ...base, member: value }`.
+  Familiar from JavaScript; a second object-literal grammar.
+- (c) A builtin: `merge(base, { … })`. No grammar change; reads worst at the
+  sites above.
+
+Recommendation: (a), shallow, with a nested override spelled by nesting
+(`weathering: plate.weathering with { seed: 72 }`). It lowers to the object
+written out, so the pair is a `with` against the literal.
+
+**G2 — Deriving a keyed row under a new id.** Refining a row by id works only
+for the same id, so `range-walker` copies the walker kit
+(`worlds/debug/range.puck:121`) rather than deriving from it.
+
+- (a) A row header naming its base: `kit "range-walker" from "walker" { … }`,
+  resolved at compile time against the rows the source, its libraries, its
+  basis and its imports declare, emitting the whole row.
+- (b) No new construct: move the walker kit into a library `let` and derive
+  with G1's `with` (`kits [ walkerKit with { name: "range-walker" … } ]`).
+- (c) A template the walker's library exports, called with overrides.
+
+Recommendation: (b) now, since it needs only G1 and the existing library
+import, then (a) only if a site needs to derive from a row that is a
+document's own and cannot move into a library. (a) needs the compile to read
+a basis's or import's rows, which today it reads only for enums.
+
+**G3 — Value functions.** A `let` cannot hold a lambda (PUCK042) and a template
+emits rows or members, not values, so a repeated value inside an array (text
+runs, paints, palette entries) cannot be named once. The Moth's blink frame is
+built twice, once in `worlds/debug/avatars/moth.puck` (the `blink` frame of the
+`moth` prototype) and again in `moth-pilot.puck` (around `:603`), the two
+`map(..., row => { id … position … rotation … })` bodies differing only in the
+head's anchor and scale. The register already
+decides `function`: compile-time, inlined, non-recursive
+([decision](../decisions/state-and-language.md#the-authoring-consensus)).
+
+- (a) `function name(p, q = d) = expression`, called in call position, the
+  body inlined with the arguments bound as constants.
+- (b) Admit a lambda in a `let` (`let run = (text, at) => { … }`): no new
+  keyword, but a value that is sometimes a function, and two ways to name one.
+
+Recommendation: (a), as decided. The pair is a call against the expression
+written out with the arguments substituted.
+
+**G7 — Totals summed by hand across documents.** `bodies.capacity`
+(`worlds/debug/debug.puck:174`, summing counts `shapes.puck` restates from each
+game) and `placements.policy.derivedFaceScreens` (`debug.puck:185`,
+`garden.puck:83`, `night.puck:78`) are summed by hand from what imports
+declare, and drift when an import changes.
+
+- (a) Derive them: the engine counts the composed world's derived face screens
+  and its populations, and the authored member goes (a ledger, which the
+  owner's rulings delete).
+- (b) Contributions: each import writes its share (`bodies { capacity += 54 }`)
+  and composition sums the shares, as a basis merge does for keyed rows.
+- (c) A compile-time fold over imports (`sum(imports, d => d.cardBodies)`).
+
+Recommendation: (a) for both, since each is a function of the composed world;
+(b) only for a budget the author must choose rather than count. With (a) the
+pair is an authored total against none.
+
+**G8 — Naming a rule expression.** A `let` cannot name a state expression, so
+the idle-door guard is restated in nine Klondike rules and eight FreeCell rules
+(`worlds/debug/klondike.puck:246` on), and Klondike adds a `moveReady` latch
+cell (`klondike.puck:504`) partly to keep the work budget's price low.
+
+- (a) G3's `function` over state reads: `function idle() = solitaire.table == 1
+  and …`, inlined into each gate, so the rule program and its price are the
+  hand-written guard's.
+- (b) A derived state row (`derived idle = …`): a run-time cell, priced and
+  stored as one, which changes the program.
+- (c) A `let` holding an unevaluated expression, inlined where read: a second
+  meaning for `let`.
+
+Recommendation: (a), one construct for G3 and G8. The pair is a guard named by
+a function against the guard written out. Whether a latch cell and the guard it
+factors price the same (the audit's S9) is a cost question for the work
+budget, not a spelling pair: the latch is extra state.
+
+**G13 — A member written only when it applies.** A template cannot leave a
+member out on a condition. `worlds/standard/bounds.puck`'s `boundsBox` takes an
+optional `bevel`: a `for` over `filter([bevel], b => b > 0)` that writes
+`chamfer: b` is PUCK046 (a `for` emits rows, never a field), and
+`chamfer: null` lowers to a JSON `null` member. So every box writes
+`chamfer: 0`, which is a second document beside the box with none: the
+`chamfer-default` pair fails. The renderer, the stamp emitter and the
+validator read both as no chamfer (`shape.Chamfer ?? 0f`,
+`CreationCanonicalizer.cs:2420`, `:2511`, `CreationStampEmitter.cs:148`), so the
+SDF program and its bake agree, but `CreationCanonicalizer.Normalize` keeps
+`Chamfer` as written, so the creation's canonical hash differs too.
+
+- (a) Canonical form first, no syntax: lowering leaves out a member equal to
+  "none" for that member (a zero `chamfer` or `rounding`), and `Normalize` does
+  the same, so `chamfer: 0` is the omitted chamfer everywhere. The template
+  keeps writing `chamfer: bevel`.
+- (b) A conditional member: `chamfer: bevel if bevel > 0`, or an `if` block
+  around members in a row body (`if bevel > 0 { chamfer: bevel }`), evaluated at
+  compile time.
+- (c) `null` means absent: a member whose compile-time value is `null` is not
+  written. Simple, but a document member that is a meaningful `null` (an
+  explicit null name, a basis-merge removal) then needs another spelling.
+
+Recommendation: (a) now, since it removes the need at this site and fixes the
+pair at its cause; (b) as an `if` around members if a site needs a member whose
+zero is not "none".
+
+**G14 — A template inside a rule, and a branch folded at compile time.** A
+template's body is document statements, so it cannot carry a gate, a local or
+an effect, and a template called inside a rule body is read as an effect of
+that name (`climb(limit: 3)` inside a rule is PUCK030, "unknown member
+'limit' at /rules/1/effects/0"). A compile-time choice in a gate is not folded:
+`when (strict == 1) ? (level < 3) : (level <= 3)` with `let strict = 1` lowers to
+a `compareValue` over an expression evaluating both arms, where `when level < 3`
+lowers to `compareState`, so the rule program and its price change with the
+spelling (the `ternary-fold` pair fails). Together they block one shared
+seat-input template across Go, Alchemy, Reversi, the card table, the granaries
+and chess (`worlds/debug/go.puck` around `:1153` and its siblings).
+
+- Folding is a defect, not a design: an expression whose operands are all
+  compile-time constants folds before lowering, a ternary on a constant
+  condition becomes its chosen arm, and `x == c` folds wherever `c` and `x` are
+  constants. Then the pair holds.
+- For the template half: (a) a rule-body template, `template seatPress(button)
+  { local … ; when … ; seat.edge = … }`, admitted only where a rule body
+  stands, its statements spliced into the rule as a rule-body `for` already
+  is; (b) G3's `function` for the gates and values, with the effects written
+  per game; (c) a template emitting whole rules (possible today) with the
+  per-game differences as parameters.
+
+Recommendation: fold constants now; then (a), since the shared part of the
+seat-input rules is effects and locals as well as gates.
+
+**G15 — Enum words in a `let` and in a row.** A row or a template's body takes
+a closed-vocabulary word bare and refuses it quoted (`bond: "Surface"` in a
+kit's hold is PUCK110), while inside a `let`'s object both `bond: Surface` and
+`bond: "Surface"` compile to the same document, since the value's place in the
+model is not known until a row reads it (the `enum-word-in-let` pair holds:
+`worlds/standard/kits.puck`'s `groundHold` quotes its words). One spelling is the
+fix: a `let`'s object refuses the quoted word too, once lowering can type the
+let's value where a row reads it, or the row admits the quoted word and the
+printer writes it bare. Recommendation: refuse it in the `let` (PUCK110 names
+the bare spelling), migrating the standard's lets with `puck migrate`.
+
+**G16 — The Moth's mirrored halves.** The right half of `moth.puck` (from about
+`:2508`) restates the left. Of 114 left/right shape pairs the right id is the
+left's plus 100 (43 pairs), 68 (39), 20 (8), 7 (7), 8 (5), 16 (4), 1 (3), 6 (3),
+48 and 69, so a `side` template (as `moth-pilot.puck`'s `pilotArm(side)`) needs a
+table as long as the shapes. The other residuals are systematic: positions,
+pivots and profile points negate x, a rotation reflects to `(x, -y, -z, w)` up
+to sign (now one canonical sign), swing amplitudes, axes and phases flip.
+
+- (a) Renumber: give the right half `id = left id + 1000` (and groups
+  likewise), updating every id the frames, chains and effectors name, then
+  write each limb once as a template over `side`. Nothing new in the language.
+- (b) A mirror construct over a set of shape rows,
+  `mirror x { rename: ("left", "right"), ids: +1000 } { shape … }`, emitting the
+  reflected copies at compile time; it lowers to both halves written out, so
+  the corpus pair is the construct against the halves.
+
+Recommendation: (a). The irregular offsets are history, not design; once the
+ids are regular the existing template expresses the side, and the language
+needs (b) only if several creatures (the pond's spider and hound) want it.
+
+**G17 — What the hidden-information games hit.** Authoring the four games
+(`worlds/games/auction.puck`, `shedding.puck`, `deduction.puck`,
+`skirmish.puck`), each wall checked against the compiled document or a running
+World. A rule-body template and `schedule … in` with a parameter are G14's.
+
+- A row name computed per seat (`$"sheddingHand{s}"`) reads in a gate or a
+  local, but an assignment, a `remove` or a sugar key's `zone(…)` naming it is
+  PUCK001/PUCK002, so every per-seat write is a call form (`setState`,
+  `addState`, `removeStateCell` with `state: $"…"`): two spellings of one
+  write, one admitted only for literal names.
+- In a call form, `key: expr(card)` with `card` a local lowers as a read of a
+  row named `card` (the `expression:` argument resolves the same local), and a
+  `for` variable bare in `key:` lowers as its literal name; `key: $"{c}"`
+  works. A compile-time string on an assignment's right side
+  (`row[k] = $"seat{s}"`, or a `let` holding one) lowers as a copy from a row
+  of that name (`fromState`), where a literal string lowers as text;
+  `setState(…, text: $"seat{s}")` writes the text. Compiling the imported
+  fragment alone with `--validate` passes the bad copy; only the composing
+  world refuses it (`StateRowUnknown`).
+- `export read` refuses a backquoted dashed name (`` `card-back` ``, PUCK001)
+  and takes a quoted one.
+
+Recommendation: one lowering for a write whatever names its row, key or value:
+an interpolated name is a write target wherever a literal is, a local or a
+`for` variable resolves in every argument of a call form as it does in the
+sugar, a compile-time string on a right side is text, and the export list takes
+the backquoted name; each with a corpus pair against the spelling that works
+today.
+
+Engine behaviour the games met, which a game spells around rather than a
+language gap: a rule's write never mints a key in a keyed row (only a pile
+takes new members), so every chat slot, audience cell and vote is declared up
+front, and a literal-key read of a cell no seed declares is refused at
+validation (`StateCellUndeclared`); a search job restarts whenever a row it
+reads changes and `observe` restamps every remembered cell, so a job scoring
+over a `knowledge` row finishes only when the observe runs on change.
+
 ## Sequencing
 
 Landed: the rebuild and the means to build and test a world against it

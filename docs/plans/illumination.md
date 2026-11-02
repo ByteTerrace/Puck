@@ -37,17 +37,16 @@ The research round read the code, and the plan rests on these facts:
   term already relights for free at zero bounces. The sun, the static point and
   spot lights and every emissive surface are baked into the radiance cube at
   trace time, and later bounce sweeps bake the sky's colour too.
-- `RefreshLighting` hashes every directional light record and every traced
-  light; any change advances the generation and restarts the trace
-  (`src/Puck.SdfVm/SdfMeshIrradiance.cs`, `RefreshLighting`), and a batch
-  that lands after a generation change is thrown away (the `generation !=
-  m_generation` test after the parallel trace). The debug world's `key` light
-  follows the authored day (`worlds/debug/day.puck`), and step 0's run showed
-  the volume never publishing while it moves ([step 0](#step-0-what-the-run-showed)).
-  This is the [high] moving-sun finding in the
-  [Lighting and GI packet](open-items.md#lighting-and-gi).
-- Each probe traces two ray sets from one origin: 128 full-reach radiance rays
-  and 144 bounded depth rays. Both record first hits.
+- Since step 2 a probe is a hit buffer and a relight
+  ([step 2](#step-2-status)): one full-reach closest hit per octahedral texel,
+  from which its sky shares and surface map derive, traced once per geometry;
+  and its radiance cube and light bits, relit from those hits when the lighting
+  version advances (`SdfMeshIrradiance.RefreshLighting`, which now hashes the
+  sky too). Before it, any light change restarted the trace and discarded every
+  batch that landed after it, so the volume never published while the day's sun
+  moved ([step 0](#step-0-what-the-run-showed)).
+- The two former ray sets (128 or 96 Fibonacci radiance rays and 144 bounded
+  depth rays) are one set of 144 octahedral rays at full reach.
 - Only static opaque draws cast into the volume (`SdfMeshIrradianceScene`
   admits `!IsDynamic && !Glass`). A moving body receives light and casts none;
   a lane-driven emissive reads zero in the trace.
@@ -436,7 +435,7 @@ the frame thread records, which J1 does not reorder.
 |---|---|---|---|
 | 0. Confirm and baseline (done but the Deck leg, [below](#step-0-what-the-run-showed)) | rendering, with a Deck leg | The authored day cycle as standard data (a `dayCycle` template in `worlds/standard/skies.puck` driving the key light's direction, colour and the sky from one clock; the debug world imports it, with a lever to hold the sun); the moving-sun run; today's CPU trace and frame timed on the Deck at High; the [corrections](#corrections) below | Headless, key light bound to the clock: whether `[sdf.mesh-gi] done` lines ever print and whether `world.counters sdf.mesh-gi` probes settle or restart each frame; `world.probe` at the teal corner reports `unsettled` for the run's length if the finding holds. Deck: `[sdf.mesh-gi] done … seconds=` at High and `host.frames` at `debug.go overlook` |
 | 1. Direct light correct (landed but for the scale-following lengths, the back-plate lines and the terrain cascade; see [step 1's status](#step-1-status)) | rendering | The wrapped-diffuse query; `band(cosine) × visibility` with the penumbra kept, and toon keeping rim, reflections and AO ([cel shading](#cel-shading), decisions 1 and 2: the style layer per material with the world default); scale-following shading lengths; cascade coverage printed in `world.budget`; the terrain cascade with the terrain pass's step 7 | Indoors under the 100 klx sun at `debug.go gallery` with the Moth's wrapped skin past the terminator: no sunlit patch under a roof (`world.debug-view shadow`); the quarter-size Moth's back-plate lines gone; under a cel style the Moth's terminator shows the cascades' penumbra in `shadow` and her rim in the lit view while the floor beside her stays continuous; `valley-rim` shows ridge shadows on the far walls; stills at the sweep's hall stops compared tolerantly; the frame bar at every stop with the sun moving |
-| 2. Hits and relight | rendering, principal-grade review | The merged hit buffer written by today's CPU trace; the GPU relight under `render.indirect.budget`; per-probe rescale; the sky transfer with its cosine term; the budget surface in `world.budget`, the counters and `world.lights`; the lockstep drain on the GPU; the exposure path's GPU read; the cel style's shadow band reading the volume's bounce and sky tint ([cel shading](#cel-shading), decision 3) | The day cycle at `debug.go gallery` and `overlook`: indirect light follows the sun with the age counter under the authored target and no `[sdf.mesh-gi] behind` line; a lamp switched by `gallery.lights.all` relights without a trace (`traced` unchanged, `relit` rises); under a cel style the hall's shadow band warms when the lamps come on and the lawn's cools under the open sky; `world.exposure` continuous across the atrium's arch; the frame bar across the cycle on all three; a lockstep still of one tick repeats across two Worlds within the noise |
+| 2. Hits and relight (landed on the CPU but for the GPU relight, the sky transfer, the per-probe rescale and the exposure's GPU read; see [step 2's status](#step-2-status)) | rendering, principal-grade review | The merged hit buffer written by today's CPU trace; the GPU relight under `render.indirect.budget`; per-probe rescale; the sky transfer with its cosine term; the budget surface in `world.budget`, the counters and `world.lights`; the lockstep drain on the GPU; the exposure path's GPU read; the cel style's shadow band reading the volume's bounce and sky tint ([cel shading](#cel-shading), decision 3) | The day cycle at `debug.go gallery` and `overlook`: indirect light follows the sun with the age counter under the authored target and no `[sdf.mesh-gi] behind` line; a lamp switched by `gallery.lights.all` relights without a trace (`traced` unchanged, `relit` rises); under a cel style the hall's shadow band warms when the lamps come on and the lawn's cools under the open sky; `world.exposure` continuous across the atrium's arch; the frame bar across the cycle on all three; a lockstep still of one tick repeats across two Worlds within the noise |
 | 3. GPU trace hits | rendering, GPU leg on both backends and the Deck | The trace-hits interface with both legs; rigid bodies cast; the CPU trace deleted once a leg holds on all three | A body posed under a lamp darkens the floor in `world.debug-view indirect`; a `world.reload` that removes a wall re-traces its closure (B1's check) in tens of milliseconds amortized (`[sdf.mesh-gi]` traced against the window); the cold boot's GI seconds against today's 8.35; thin-wall stills (teal corner, stairwell flight B) compared tolerantly with step 2's; the Deck decides the leg |
 | 4. Bitmask AO and bent normal | rendering | The bitmask march over the depth pyramid; the bent normal in the visibility record and in the gather; the cel outline's check ([cel shading](#cel-shading), decision 4) | `meadow.puck` blades without dark halos and thin crevices closed in `world.debug-view ao`; under a cel style with outlines on, a presented burst of eight frames at `debug.go meadow` shows no ink shimmer between frames beyond the blades' own motion, and at `debug.go portals` no ink on the paintings' pictures; `world.gpu-timing` of `surface` against today's on all three; stills at the gather stops compared tolerantly |
 | 5. Lights | rendering | The list measurement; LTC for screens, portal openings and authored rectangles; the local shadow residency with overload named | The device row with every screen on: specular on the floor in front of each screen; `world.counters gpu` views texels at 68 fixtures and at a scratch world with 680; a scratch world past the shadow residency names the deferred lights and shows no flicker; the frame bar at `debug.go devices` |
@@ -572,10 +571,112 @@ Open in step 1:
   on a fixed sun; with the cycle merged, they and the frame bar are owed again
   with the sun moving.
 
+## Step 2 status
+
+Landed with the relight on the CPU, beside the trace and the scene it shades
+against ([mesh GI reference](../../.claude/skills/rendering/references/mesh-gi.md)):
+
+- **The hit buffer.** One closest hit per octahedral texel at full reach is a
+  probe's whole geometric measurement (`SdfMeshProbeDepth.TraceHits`); its sky
+  shares, inside share and the bounded surface map derive from it, so the two
+  ray sets are one and the patch visibility rule reads the same storage. Medium
+  traces 144 rays a probe where it traced 96 plus 144.
+- **The relight.** A light, sky, gain or material change advances the lighting
+  version and relights the cached hits; bounce reads the volume about each hit
+  and converges over successive relights. The part of the cube the point and
+  spot lights and emission send is kept per probe with its own version, so a
+  moving sun relights only the directional term and the bounce. The sky enters
+  the lighting through its projected irradiance.
+- **Geometry changes retrace only what they reach.** A scene build records the
+  boxes of the static draws it added or removed, and a probe retraces only when
+  one meets its placement region or one of its rays before the recorded hit;
+  the rest keep their hits and are relit. This is the job-system memo's B1
+  closure, written over hits as this plan intended
+  ([B1](engine-job-system.md#gi-as-jobs-and-only-the-probes-whose-light-can-change)).
+- **The budget surface.** `render.indirect.budget { relight, trace, age }`
+  (the standard's quality document: 2048, 2048, 8 s), the `sdf.mesh-gi`
+  counters `traced`, `relit`, `behind`, `camera-relights`, the volume's sheet in
+  `world.budget` with the lighting age's median and oldest, and the
+  `[sdf.mesh-gi] behind` line naming the relit and needed rates.
+- **Lockstep.** A tick-locked frame relights its window from no bounce until it
+  converges whenever its geometry, lighting or windows changed or asynchronous
+  frames relit since, so its light is a function of those alone.
+- **The exposure meter** reads the relit volume, so the night meters night.
+
+Checked on the debug world, windowed Direct3D 12, on the lead machine with
+other lanes' work loading its CPU (frame times are evidence, not verdicts):
+
+- With the day running at `debug.go gallery`, `world.probe` answers (it was
+  `unsettled` for the run's length in step 0), with `lighting-version`
+  advancing about ten a second and `local-version` holding at 2. The relight
+  ran at 10,202 to 10,951 probes a second, the window's lighting age at a
+  median of 3.7 to 4.2 s and an oldest of 5.5 to 5.9 s against the 8 s target;
+  one `behind` line (8.71 s, at a moment the rate fell to 6,958 a second)
+  printed in about a minute of the cycle. Before the point-light part was kept,
+  the same place relit 4,700 to 5,800 a second and stayed behind (11 to 13 s).
+- Jumping the day from 0.47 to 0.70 relit 91,362 probes and traced none
+  (`traced` 143,598 before and after); the outdoor probe at (-8, 0.5, -10)
+  went from 10,350 to 1,200 to 1,970 nits, and `world.debug-view indirect`
+  follows it (the lane's captures).
+- `gallery.lights.all on` with the sun held: the switch both changes the lights
+  and swaps the hall's dark prototypes for lit ones (34 static draws), so it is
+  a geometry change too. It retraced 8,294 of the window's 61,440 probes and
+  relit 89,683 (`done … traced=8294 relit=89683 lights=96 seconds=39.680`);
+  before the change sets it retraced the whole window.
+- Night at 0.95 of the day meters `0.208 nits source=probes` on the main view
+  under the former fixed EV 7 floor; step 0 read 3171 nits from the stale noon
+  volume. The night look is now authored (the owner's ruling: exposure is the
+  author's to style): `render.exposure`'s `ev100`, `minimum`, `maximum` and
+  `compensation` take keys on a clock, the standard's `dayCycle` gains a moon
+  opposite the sun and a night sky luminance, and the debug world keys the
+  hall's floor from EV 7 by day to EV 2 at night under a deep-blue 6-lux moon
+  and a 1-nit sky with stars. At 0.95 the main view then reads
+  `ev100=2.00 minimum=2 meter=0.465 nits source=probes`, a readable blue night
+  (the lane's captures). The light ranges follow the darkest exposure any key
+  reaches, so the debug world's point and spot lights now reach as far as an
+  EV 2 night shows them, day and night.
+- `host.frames` with the sun moving: `gallery` 54.4 ms average, 53.8 p50,
+  118 p99, 160 max; `overlook` 37.1, 35.7, 51.9, 57.0. These are not compared
+  with step 0's table: the load differed.
+
+Open in step 2:
+
+- **The GPU relight and the exposure's GPU read** (decision 1, the third gap).
+  A relight's dominant cost under a moving sun is the sun's shadow ray from each
+  hit, which needs the scene; the scene is on the CPU until step 3 puts the
+  trace on the GPU, so the relight moves with it rather than reading cascades
+  that cover 120 m. The meter stays a CPU read of the relit volume until then.
+- **The sky transfer with its cosine term** (decision 1): the probes still
+  carry six sky shares the views pass multiplies by the live sky SH.
+- **The per-probe rescale** of probes a relight has not reached during a
+  transition.
+- **The cel band warming under the hall's lamps.** The style's shadow band
+  already reads the volume's bounce and sky (`sdfMeshIndirect` times the
+  style's tint in `sdf-light-stage.hlsli`), and with the relight that light is
+  live; in the hall the lamps are white and the default style's tint is cool,
+  so the band brightens without warming. Whether it should warm is the style's
+  authoring.
+- **Vulkan**, windowed on the same machine and load, after its cold bake
+  (during which `behind` printed while the pending scenes retraced): with the
+  day running at `gallery` the relight ran at 13,081 to 13,328 probes a second,
+  the age at a median of 2.1 to 2.5 s and an oldest of 4.4 to 4.5 s, and no
+  `behind` line printed over about a minute and a half; `local-version` held at
+  4 while `lighting-version` passed 998. Jumping from 0.45 to 0.95 relit
+  442,742 probes and traced none (`traced` 99,392 before and after), and the
+  night metered `ev100=2.00 meter=0.65 nits source=probes`. `host.frames` at
+  `gallery`: 91.6 ms average, 88.8 p50, 126.8 p99, 159.9 max.
+- **The lockstep pair** held: two Direct3D 12 Worlds booted on one build ran
+  one script (sun held at 0.3, the outdoor control pose, `world.lockstep on`)
+  and took a settled still at tick 700. The stills differ only on the Moth
+  and the grass tuft beside her (0.76 % of pixels past 8 levels), whose
+  simulation states differed (state and pose hashes did, the commands having
+  landed on different ticks); the lit scene, its indirect light and its
+  exposure matched to the level everywhere else.
+
 ## Corrections
 
 Errors the research found in Puck's own documents and comments. Step 0 fixed
-the first three; the fourth waits for step 2:
+the first three; step 2 fixed the fourth:
 
 - Fixed: the comment above `sdfMeshShadow`
   (`src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-surface-stage.hlsli`) now
@@ -587,9 +688,9 @@ the first three; the fourth waits for step 2:
 - Recorded: the same reference now says the lighting key leaves out the sky
   (measured above); step 2's relight removes the defect.
 - The [job-system memo](engine-job-system.md#gi-as-jobs-and-only-the-probes-whose-light-can-change)
-  says "a light, layout or window change still invalidates the window". After
-  step 2 a light change invalidates nothing; update the memo when step 2
-  lands.
+  said "a light, layout or window change still invalidates the window". A
+  light change now invalidates no hits and a scene change only the probes it
+  reaches; the memo says so.
 - The research round's own report misnamed the Assassin's Creed Shadows
   presenters; they are Luc Leblanc and Melino Conte, as cited above. The
   report is not in the repository and no document here misnames them.

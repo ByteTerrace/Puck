@@ -116,8 +116,9 @@ mapping; applying a preset does not change the source gains or receiver controls
 The tier sizes the irradiance volume (below); Off reads no volume, and views
 light with the authored fill instead.
 
-`render.indirect.bounces` requests zero through four bounces after the direct
-light, capped by the tier (two at Medium, three at High); absent uses that cap.
+`render.indirect.bounces` zero switches reflected bounce off; any other value (or
+none) leaves it on, and bounce converges over successive relights of the
+volume rather than stopping at a fixed depth.
 
 `SdfFrame.IndirectSources` carries one category mask. Its bits follow the five
 categories: direct 1, feedback 2, emission 4, sky 8 and screens 16; the default
@@ -166,8 +167,8 @@ worlds are mostly static and their evaluation belongs at edit time rather than
 in the frame.
 
 - **Probes.** A probe sits at the centre of a world cell: 1 m apart in a
-  48×16×48 window at High (128 rays a probe, three bounces), 2 m apart in a
-  32×12×32 window at Medium (96 rays, two bounces). Two coarser levels nest
+  48×16×48 window at High, 2 m apart in a
+  32×12×32 window at Medium, each probe 144 rays. Two coarser levels nest
   about it at every tier, 32×12×32 windows of 8 m and 32 m cells, which reach
   256 m and 1,024 m. Each level's window centres on the cameras of every view
   the residency renders when they fit in its middle, and on the first view's
@@ -181,18 +182,21 @@ in the frame.
   built from those landed so far once the previous scene's trace has finished,
   at most every few seconds, so the volume and the meter answer during a cold
   bake; a lockstep frame waits for the whole bake. Dynamic groups, glass and
-  diagnostic slices do not enter that scene. Probes trace on the pool, every
-  probe's first sweep before any second, finest level first and nearest the
-  camera first. A probe stores two
+  diagnostic slices do not enter that scene. A probe's measurement is a hit
+  buffer, one closest hit per octahedral texel at full reach, traced once per
+  geometry; its light is a relight of those hits under the frame's lighting.
+  Probes are worked on the pool, untraced ones first (finest level and nearest
+  the camera first), then those whose lighting is oldest. A probe stores two
   ambient cubes, one value per axis direction: the share of cosine-weighted sky
-  its rays reach, and the cosine-weighted mean radiance the static geometry
+  its misses see, and the cosine-weighted mean radiance the static geometry
   sends it, and which static point and spot lights its centre sees, one bit a
   record of the lights table. A hit's radiance is each directional light under
   a traced shadow ray and each static point or spot light under its windowed
   falloff, cone and a traced shadow ray, each scaled by its `bounce`, its
-  emission, and, from the second sweep, the light it reflects from the probes
-  about it, its sky included, which is the Feedback source. The sources mask
-  and gains of `render.indirect.sources` apply as described above. A probe
+  emission, and the light it reflects from the probes about it, its sky
+  included, which is the Feedback source; that bounce converges over
+  successive relights. The sources mask and gains of `render.indirect.sources`
+  apply as described above. A probe
   stands at its cell's centre unless that lies inside geometry or within
   `SdfMeshIrradianceProbe.Clearance` (0.1 m) of a surface: then the trace moves
   it to the nearest point of its cell that stands clear, carries the offset in
@@ -203,12 +207,12 @@ in the frame.
   <z> [<nx> <ny> <nz>]` reads the eight probes about a point: where each stands,
   its inside share, validity, cubes and the terms of its weight.
   The published volume holds each probe's own measured sky and radiance cubes;
-  neighbours never supply its sky or radiance. Sky and surface radiance use the
-  same full-reach radiance rays, sharing one quadrature across cells so a uniform
-  field gains no lattice noise from independently rotated ray sets. Each probe stores a 12×12 octahedral first-hit
-  surface map, one word per texel: ray distance and compact normal.
-  Negative distances mark misses to the receiver support radius. One bounded
-  ray per texel traces on the first sweep; later bounces reuse the map.
+  neighbours never supply its sky or radiance. Sky, surface radiance and the
+  surface map come from the same hits, sharing one quadrature (each texel
+  weighted by its solid angle) across cells so a uniform field gains no lattice
+  noise. Each probe stores a 12×12 octahedral first-hit surface map, one word
+  per texel: ray distance and compact normal, the hits within the receiver
+  support radius. Negative distances mark misses to that radius.
 - **A probe lights receivers its surface samples support.** Four reflected
   angular taps reconstruct compatible local patches and test the signed gap from
   their surfaces. This keeps flat and curved receivers visible, including grazing angles,
@@ -262,17 +266,23 @@ in the frame.
   draws builds the scene from the one it replaces, so only geometry new to it
   builds (a moved, recoloured or renumbered draw builds none, and geometry a
   change set aside, such as a light switch's other slab, is kept for the next
-  scene up to 8 million triangles), and retraces every probe; `world.counters
-  sdf.mesh-gi` counts the builds and the geometry each built and reused. A
-  change of a directional light, the gains, the
-  sources, the bounces or what the static scene's materials reflect and emit (a
-  bound color's move, a placement showing another creation over the same meshes,
-  as the gallery hall's light switches do) retraces them over the same scene; a
-  body's palette coming or going, which no probe ray meets, retraces nothing
-  (`SdfMeshIrradianceScene.Materials` names the ids the key reads). Old probes keep
-  drawing, and remain available to the exposure meter and viewers,
-  until each cell completes its replacement sweeps. The tracer distinguishes
-  generations instead of clearing those samples. A layout change clears the
+  scene up to 8 million triangles), and retraces only the probes the added or
+  removed draws reach: their placement region, or a ray before its recorded
+  hit. The rest keep their hits and are relit. `world.counters sdf.mesh-gi`
+  counts the builds, the geometry each built and reused, and the probes traced
+  and relit. A change of a directional light, a static point or spot light, the
+  gains, the sources, the sky or what the static scene's materials reflect and
+  emit traces nothing: it relights the cached hits under the frame's budget
+  (`render.indirect.budget`: probes relit and traced a frame, and the lighting
+  age past which the volume prints `[sdf.mesh-gi] behind`), so a day's moving
+  sun keeps the relight cycling over the window and overload lengthens the
+  lighting's age, never the frame. `world.budget` prints the age's median and
+  oldest. The part of each probe's light the point and spot lights and emission
+  send is kept while they hold still, so a moving sun relights only the
+  directional light and the bounce. A body's palette coming or going, which no
+  probe ray meets, relights nothing (`SdfMeshIrradianceScene.Materials` names
+  the ids the key reads). Old probes keep drawing, and remain available to the
+  exposure meter and viewers, until their replacement lands. A layout change clears the
   staging volume, but the GPU keeps its previous table and coordinates until
   every slot in the new window has a first measurement; a moving window follows
   the same rule, and the thread pool refills its slots from the cache, so a
@@ -287,8 +297,8 @@ in the frame.
   and a return. On the debug world's 250 stored static groups (16.9 million
   triangles) a full build takes about 1.2 s on the Ryzen 7 7800X3D and a
   one-draw change about 0.05 s. A change of a static point or spot light (a
-  switch's power) retraces the probes, since their bounce and visibility bits
-  carry it; an anchored light's move retraces nothing.
+  switch's power) relights the probes, since their bounce and visibility bits
+  carry it; an anchored light's move relights nothing.
 - **Limits.** Moving bodies receive the volume's light and cast none into it.
   Anchored lights and screens contribute no bounced light. The sky's bounced
   share is captured when a generation of probes traces, so drifting clouds
@@ -380,15 +390,15 @@ camera, which carries every traced light's bounce, aims for
 `log2(L · 100 / 12.5)` less the compensation within the bounds, and eases there
 over the adaptation time of presentation time, snapping to the first reading
 after a camera cut (`SdfViewExposures`); a cut the meter cannot read yet stays
-owed until it can. A camera with no visible lattice probe measures its own
-surroundings through the same radiance tracer. Its six directional values are
-cached by camera cell and scene/lighting generation, with storage bounded by the
-view count. Turning the camera reweights them; movement within the cell reuses
-them only across an unblocked segment from their actual origin, and never at a
-cut, whose reading is taken where the camera stands. The cache
-refreshes once more when the volume finishes its bounce sweeps, so an early
-measurement does not retain incomplete bounce lighting. The `camera-traces`
-counter under `world.counters sdf.mesh-gi` stays constant on steady reads.
+owed until it can. The meter reads the probes as last relit, so it follows a
+moving sun into the night. A camera with no visible lattice probe traces a hit
+buffer of its own, cached by camera cell and geometry with storage bounded by
+the view count, and relights it when the lighting changes or the volume
+settles. Turning the camera reweights it; movement within the cell reuses it
+only across an unblocked segment from its actual origin, and never at a cut,
+whose reading is taken where the camera stands. The `camera-traces` counter
+under `world.counters sdf.mesh-gi` stays constant on steady reads, and
+`camera-relights` counts the relights.
 An unavailable scene or a camera
 inside opaque geometry supplies no reading: exposure, local adaptation's meter
 and sky visibility hold

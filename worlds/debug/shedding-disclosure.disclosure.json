@@ -1,0 +1,203 @@
+{
+  "schema": "puck.disclosure.fixture.v1",
+  "observer": "seat2",
+  "sessions": [
+    "replica",
+    "presentation",
+    "editor"
+  ],
+  "variants": [
+    {
+      "name": "dealt",
+      "steps": []
+    },
+    {
+      "name": "swapped",
+      "steps": [
+        {
+          "at": 40,
+          "run": "world.state.cell.remove sheddingHeld1 2"
+        },
+        {
+          "at": 40,
+          "run": "world.state.cell.remove sheddingHand1 2"
+        },
+        {
+          "at": 40,
+          "run": "world.state.cell.remove sheddingSealed 18"
+        },
+        {
+          "at": 40,
+          "run": "world.state.cell.remove sheddingDeck 18"
+        },
+        {
+          "at": 42,
+          "run": "world.state.cell.set sheddingHeld1 18 true"
+        },
+        {
+          "at": 42,
+          "run": "world.state.cell.set sheddingHand1 18 true"
+        },
+        {
+          "at": 42,
+          "run": "world.state.cell.set sheddingSealed 2 true"
+        },
+        {
+          "at": 42,
+          "run": "world.state.cell.set sheddingDeck 2 true"
+        }
+      ]
+    },
+    {
+      "name": "reslotted",
+      "steps": [
+        {
+          "at": 40,
+          "run": "world.state.cell.remove sheddingHeld1 2"
+        },
+        {
+          "at": 40,
+          "run": "world.state.cell.remove sheddingHand1 2"
+        },
+        {
+          "at": 40,
+          "run": "world.state.cell.remove sheddingHeld1 4"
+        },
+        {
+          "at": 40,
+          "run": "world.state.cell.remove sheddingHand1 4"
+        },
+        {
+          "at": 42,
+          "run": "world.state.cell.set sheddingHeld1 4 true"
+        },
+        {
+          "at": 42,
+          "run": "world.state.cell.set sheddingHand1 4 true"
+        },
+        {
+          "at": 42,
+          "run": "world.state.cell.set sheddingHeld1 2 true"
+        },
+        {
+          "at": 42,
+          "run": "world.state.cell.set sheddingHand1 2 true"
+        }
+      ]
+    },
+    {
+      "name": "late-swap",
+      "steps": [
+        {
+          "at": 70,
+          "run": "world.state.cell.remove sheddingHeld3 19"
+        },
+        {
+          "at": 70,
+          "run": "world.state.cell.remove sheddingHand3 19"
+        },
+        {
+          "at": 70,
+          "run": "world.state.cell.remove sheddingSealed 15"
+        },
+        {
+          "at": 70,
+          "run": "world.state.cell.remove sheddingDeck 15"
+        },
+        {
+          "at": 72,
+          "run": "world.state.cell.set sheddingHeld3 15 true"
+        },
+        {
+          "at": 72,
+          "run": "world.state.cell.set sheddingHand3 15 true"
+        },
+        {
+          "at": 72,
+          "run": "world.state.cell.set sheddingSealed 19 true"
+        },
+        {
+          "at": 72,
+          "run": "world.state.cell.set sheddingDeck 19 true"
+        }
+      ]
+    }
+  ],
+  "script": [
+    {
+      "at": 62,
+      "run": "world.budget"
+    },
+    {
+      "at": 62,
+      "run": "world.placements"
+    },
+    {
+      "at": 62,
+      "run": "world.state sheddingHand1"
+    },
+    {
+      "at": 62,
+      "run": "world.state sheddingHand3"
+    },
+    {
+      "at": 62,
+      "run": "world.state sheddingSealed"
+    },
+    {
+      "at": 62,
+      "run": "world.row state sheddingHand1"
+    },
+    {
+      "at": 62,
+      "run": "world.projection"
+    },
+    {
+      "at": 62,
+      "run": "world.identify"
+    },
+    {
+      "at": 85,
+      "run": "world.placements"
+    },
+    {
+      "at": 85,
+      "run": "world.state sheddingHand3"
+    },
+    {
+      "at": 85,
+      "run": "world.budget"
+    },
+    {
+      "at": 86,
+      "run": "world.state.cell.set sheddingAct2 show 0"
+    }
+  ],
+  "fuzz": {
+    "seed": 1,
+    "lines": 64,
+    "actions": 48,
+    "from": 63,
+    "until": 88,
+    "words": [
+      "sheddingSealed",
+      "sheddingDeck",
+      "sheddingHand1",
+      "sheddingHeld1",
+      "sheddingRank",
+      "sheddingAct1",
+      "sheddingHand9",
+      "show",
+      "play",
+      "2",
+      "4",
+      "11",
+      "18",
+      "23",
+      "99",
+      "true",
+      "{state.sheddingHand1.2}",
+      "sheddingRack1/2"
+    ]
+  }
+}

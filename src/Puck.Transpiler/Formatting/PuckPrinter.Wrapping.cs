@@ -129,6 +129,15 @@ public static partial class PuckPrinter {
             m_builder.Append(value: ']');
         }
         private static bool IsScalar(ExpressionNode element) => (element is LiteralExpressionNode or ColorExpressionNode or IdentifierExpressionNode or UnaryExpressionNode { Operand: LiteralExpressionNode });
+        private static bool IsNumber(ExpressionNode element) => (element is LiteralExpressionNode { Value: long or double or decimal or int } or UnaryExpressionNode { Operator: "-", Operand: LiteralExpressionNode { Value: long or double or decimal or int } });
+        // Every element a number on a line of its own, with no comment anywhere in the list to keep in place.
+        private static bool IsNumberALine(ArrayExpressionNode array) => (
+            (array.Elements.Count > 1) &&
+            (array.Trivia.Inner.Count == 0) &&
+            (array.Trivia.Opening is null) &&
+            array.Elements.All(predicate: static element => (IsNumber(element: element) && (element.Trivia.Leading.Count == 0) && (element.Trivia.Trailing is null))) &&
+            array.Elements.Skip(count: 1).All(predicate: static element => element.Trivia.OnNewLine)
+        );
         // `a + b + c`, one operator level read left to right, as one operand a line with each operator ending the
         // line before the operand it joins. The parentheses are the flat printer's, operand by operand.
         private void BrokenChain(BinaryExpressionNode binary, int level) {

@@ -88,19 +88,19 @@ state {
 }
 rule "first-press" {
   forEach: $inputEvents:1
-  when inputEdge(1, action0, Press, each)
+  when inputEdge(1, action0, Press, each) != 0
   mode: Level
   firstPresses += 1
 }
 rule "middle-press" {
   forEach: $inputEvents:1
-  when inputEdge(1, action32, Press, each)
+  when inputEdge(1, action32, Press, each) != 0
   mode: Level
   middlePresses += 1
 }
 rule "last-press" {
   forEach: $inputEvents:1
-  when inputEdge(1, action64, Press, each)
+  when inputEdge(1, action64, Press, each) != 0
   mode: Level
   lastPresses += 1
 }

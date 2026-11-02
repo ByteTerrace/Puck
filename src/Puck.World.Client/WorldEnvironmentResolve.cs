@@ -134,6 +134,13 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
             WriteIndirect(mirror, definition.Render.Indirect);
             m_exposure = WorldRenderExposure.Held(
                 exposure: definition.Render.Exposure,
+                value: (scalar, field) => Scalar(
+                    fallback: 0f,
+                    field: field,
+                    mirror: mirror,
+                    scalar: scalar,
+                    site: new WorldValueSite(Index: 0, Section: "render.exposure")
+                ),
                 hold: Scalar(
                     fallback: 0f,
                     field: WorldValueFields.ExposureHold,

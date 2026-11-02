@@ -8,19 +8,24 @@ public static partial class ArenaTransforms {
     /// carries no bindings and a live key is therefore refused.</param>
     /// <param name="transform">The resolved transform, on success.</param>
     /// <param name="reason">Why the effect did not resolve, or empty on success.</param>
-    /// <returns><see langword="true"/> when the effect resolved.</returns>
+    /// <returns><see langword="true"/> when the effect resolved; <see langword="false"/> when a live key's
+    /// computation faulted, a remember's key names no cell, or the effect is no vector transform.</returns>
     /// <remarks>This is the one conversion: the evaluator takes it with its host, so each term's own live key
     /// resolves fresh per firing, and a host's command path takes it with no reader, where every key is already
     /// literal.</remarks>
     public static bool TryVectorTransform(IRuleEffect effect, StateCatalog catalog, IStateReader? reader, out ArenaTransform? transform, out string reason) {
+        var faulted = false;
+
         reason = string.Empty;
         transform = (effect switch {
             VectorCopyEffect copy => new ArenaTransform.Copy(
             From: SourceOf(
+                faulted: ref faulted,
                 reader: reader,
                 vector: copy.Source
             ),
             IntoKey: KeyOf(
+                faulted: ref faulted,
                 key: copy.Key,
                 keyFrom: copy.KeyFrom,
                 reader: reader
@@ -28,12 +33,14 @@ public static partial class ArenaTransforms {
             IntoRowOrdinal: copy.RowOrdinal
         ),
             VectorMixEffect mix => MixOf(
+            faulted: ref faulted,
             mix: mix,
             reader: reader
         ),
             VectorMeanEffect mean => new ArenaTransform.Mean(
             FromRowOrdinal: mean.FromRowOrdinal,
             IntoKey: KeyOf(
+                faulted: ref faulted,
                 key: mean.Key,
                 keyFrom: mean.KeyFrom,
                 reader: reader
@@ -43,6 +50,7 @@ public static partial class ArenaTransforms {
         ),
             VectorNearestEffect nearest => new ArenaTransform.Nearest(
             Exclude: KeyOf(
+                faulted: ref faulted,
                 key: nearest.ExcludeKey,
                 keyFrom: nearest.ExcludeKeyFrom,
                 reader: reader
@@ -52,6 +60,7 @@ public static partial class ArenaTransforms {
             IntoRowOrdinal: nearest.RowOrdinal,
             K: nearest.K,
             Query: SourceOf(
+                faulted: ref faulted,
                 reader: reader,
                 vector: nearest.Query
             ),
@@ -60,12 +69,19 @@ public static partial class ArenaTransforms {
         ),
             VectorRememberEffect remember => RememberOf(
             catalog: catalog,
+            faulted: ref faulted,
             reader: reader,
             remember: remember
         ),
             _ => null,
         });
 
+        if (faulted) {
+            transform = null;
+            reason = RuleReads.KeyFaultReason;
+
+            return false;
+        }
         if (transform is null) {
             // A remember is the one arm whose key must name a cell before the transform exists, so its own key is
             // what failed rather than the arm's shape.
@@ -84,12 +100,13 @@ public static partial class ArenaTransforms {
         return true;
     }
 
-    private static ArenaTransform? MixOf(VectorMixEffect mix, IStateReader? reader) {
+    private static ArenaTransform? MixOf(VectorMixEffect mix, IStateReader? reader, ref bool faulted) {
         var terms = new ArenaMixTerm[mix.Terms.Count];
 
         for (var term = 0; (term < terms.Length); term++) {
             terms[term] = new ArenaMixTerm(
                 Source: SourceOf(
+                    faulted: ref faulted,
                     reader: reader,
                     vector: mix.Terms[term].Source
                 ),
@@ -99,6 +116,7 @@ public static partial class ArenaTransforms {
 
         return new ArenaTransform.Mix(
             IntoKey: KeyOf(
+                faulted: ref faulted,
                 key: mix.Key,
                 keyFrom: mix.KeyFrom,
                 reader: reader
@@ -107,8 +125,9 @@ public static partial class ArenaTransforms {
             Terms: terms
         );
     }
-    private static ArenaTransform? RememberOf(VectorRememberEffect remember, StateCatalog catalog, IStateReader? reader) {
+    private static ArenaTransform? RememberOf(VectorRememberEffect remember, StateCatalog catalog, IStateReader? reader, ref bool faulted) {
         var key = KeyOf(
+            faulted: ref faulted,
             key: remember.Key,
             keyFrom: remember.KeyFrom,
             reader: reader
@@ -122,6 +141,7 @@ public static partial class ArenaTransforms {
         )
             ? new ArenaTransform.Remember(
                 From: SourceOf(
+                    faulted: ref faulted,
                     reader: reader,
                     vector: remember.Source
                 ),
@@ -134,10 +154,11 @@ public static partial class ArenaTransforms {
     }
     // A vector operand is either a literal the compiler folded or a cell the arena reads; a literal never
     // allocates here, because the compiled vector already holds its components.
-    private static VectorSource SourceOf(CompiledVector vector, IStateReader? reader) => (vector.IsConstant
+    private static VectorSource SourceOf(CompiledVector vector, IStateReader? reader, ref bool faulted) => (vector.IsConstant
         ? VectorSource.Literal(components: vector.Constant!.Memory)
         : VectorSource.Cell(
             key: KeyOf(
+                faulted: ref faulted,
                 key: vector.Key,
                 keyFrom: vector.KeyFrom,
                 reader: reader
@@ -145,14 +166,26 @@ public static partial class ArenaTransforms {
             rowOrdinal: vector.RowOrdinal
         )
     );
-    private static CellKey KeyOf(CellKey key, CompiledCellRef? keyFrom, IStateReader? reader) => ((keyFrom is { } indirection)
-        ? ((reader is { } live)
-            ? RuleReads.ResolveReference(
-                reader: live,
-                reference: in indirection
-            )
-            : default
-        )
-        : key
-    );
+    // A live key whose computation faulted sets faulted, which refuses the whole transform rather than letting it
+    // address the invalid key as an absent cell.
+    private static CellKey KeyOf(CellKey key, CompiledCellRef? keyFrom, IStateReader? reader, ref bool faulted) {
+        if (
+            (keyFrom is not { } indirection) ||
+            (reader is not { } live)
+        ) {
+            return ((keyFrom is null)
+                ? key
+                : default);
+        }
+
+        var resolved = RuleReads.ResolveReference(
+            naming: out var naming,
+            reader: live,
+            reference: in indirection
+        );
+
+        faulted |= (naming == KeyNaming.Fault);
+
+        return resolved;
+    }
 }

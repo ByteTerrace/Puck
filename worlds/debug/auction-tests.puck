@@ -1,0 +1,113 @@
+// The auction table's scenarios (auction.puck, ../games/auction.puck), each booted as a small world of its own with
+// four seats: `puck test worlds/debug/auction-tests.puck --reproduce`. A lot opens at boot and closes 10 s (300 ticks)
+// later.
+
+schema: "puck.world.definition.v1"
+basis: "avatars/moth"
+documentId: "auction-tests"
+import "auction"
+
+bodies {
+  localSeats: 4
+  seatActivation [Eager, Eager, Eager, Eager]
+  seatSpawns ["stage", "stage", "stage", "stage"]
+}
+
+test "the highest sealed bid takes the lot at its price" {
+  given {
+    auction.open = 1
+  }
+  when {
+    ticks 10
+    seat1: world.state.cell.set auctionIn1 bid 30
+    seat2: world.state.cell.set auctionIn2 bid 45
+    seat3: world.state.cell.set auctionIn3 bid 20
+    ticks 320
+  }
+  expect {
+    auctionWinner[1] == 2
+    auctionPrice[1] == 45
+    auctionPurse[2] == 55
+    auctionPurse[1] == 100
+    auctionIn2.result == 1
+    auctionIn2.taken == 1
+    auctionIn2.bid == 0
+  }
+}
+
+// Before the close a seat reads its own inbox and no other, and nobody reads the bids; after it, every seat reads them.
+test "a bid is the bidder's alone until the close reveals it" {
+  given {
+    auction.open = 1
+  }
+  when {
+    ticks 10
+    seat1: world.state.cell.set auctionIn1 bid 30
+    ticks 5
+    seat1: world.state auctionIn1 taken
+    seat2 refused "no such cell": world.state auctionIn1 taken
+    seat1 refused "no such cell": world.state auctionBids 1
+    ticks 310
+    seat2: world.state auctionBids 1
+  }
+  expect {
+    auctionWinner[1] == 1
+    auctionPrice[1] == 30
+  }
+}
+
+test "a bid above the purse is refused in the bidder's own inbox" {
+  given {
+    auction.open = 1
+  }
+  when {
+    ticks 10
+    seat1: world.state.cell.set auctionIn1 bid 150
+    ticks 320
+  }
+  expect {
+    auctionIn1.result == -1
+    auctionIn1.taken == 1
+    auctionWinner[1] == 0
+    auctionPurse[1] == 100
+  }
+}
+
+test "a tie goes to the lower seat and a later bid replaces an earlier one" {
+  given {
+    auction.open = 1
+  }
+  when {
+    ticks 10
+    seat4: world.state.cell.set auctionIn4 bid 60
+    seat3: world.state.cell.set auctionIn3 bid 10
+    ticks 5
+    seat3: world.state.cell.set auctionIn3 bid 60
+    ticks 320
+  }
+  expect {
+    auctionWinner[1] == 3
+    auctionPrice[1] == 60
+    auctionIn3.taken == 2
+  }
+}
+
+// The three lots run one after another and the next lot's bids start empty.
+test "after the reveal the next lot opens with no bids" {
+  given {
+    auction.open = 1
+  }
+  when {
+    ticks 10
+    seat1: world.state.cell.set auctionIn1 bid 40
+    ticks 450
+    seat2: world.state.cell.set auctionIn2 bid 25
+    ticks 420
+  }
+  expect {
+    auctionWinner[1] == 1
+    auctionWinner[2] == 2
+    auctionPrice[2] == 25
+    auction.lot == 3
+  }
+}

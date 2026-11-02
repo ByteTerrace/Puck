@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Puck.Commands;
 using Puck.Confinement;
+using Puck.World.Protocol;
 using Puck.World.Server;
 
 namespace Puck.World;
@@ -29,6 +30,7 @@ internal sealed class WorldTestBatch {
     private IServiceProvider m_services = null!;
     private TextCommandSession m_control = null!;
     private readonly List<(string Name, WorldReplayProbe Probe)> m_probes = [];
+    private readonly List<SnapshotLog> m_snapshots = [];
     private readonly HashSet<WorldInstance> m_observed = [];
 
     private bool m_observing;
@@ -105,6 +107,7 @@ internal sealed class WorldTestBatch {
             return 1;
         } finally {
             foreach (var (_, probe) in batch.m_probes) { probe.Dispose(); }
+            foreach (var snapshots in batch.m_snapshots) { snapshots.Dispose(); }
             batch.m_legDeadline?.Dispose();
             batch.m_control?.Dispose();
             Console.Out.Flush(); Console.Error.Flush();
@@ -156,6 +159,7 @@ internal sealed class WorldTestBatch {
                 probe.VerifiesIncrementalHash = m_legs[m_index].VerifyHash;
                 m_probes.Add(item: (instance.Name, probe));
             } catch (InvalidOperationException exception) { m_legFailure = $"cannot capture '{instance.Name}': {exception.Message}"; }
+            if (m_legs[m_index].Record) { m_snapshots.Add(item: SnapshotLog.Attach(name: instance.Name, server: instance.Server)); }
         }
     }
     private void StartLeg() {
@@ -194,6 +198,7 @@ internal sealed class WorldTestBatch {
         m_observing = false;
         m_crossings.Recording = false;
         foreach (var (_, probe) in m_probes) { probe.Dispose(); }
+        foreach (var snapshots in m_snapshots) { snapshots.Dispose(); }
         try { m_disclosure?.Write(directory: Path.Combine(path1: m_legs[m_index].Directory, path2: "out")); } catch (IOException exception) { m_legFailure = $"cannot write the disclosure transcript: {exception.Message}"; }
         m_disclosure = null;
         try { ArchiveStateFiles(directory: m_legs[m_index].Directory); } catch (IOException exception) { m_legFailure = $"cannot archive authored state: {exception.Message}"; }
@@ -221,8 +226,6 @@ internal sealed class WorldTestBatch {
             foreach (var (name, probe) in m_probes) {
                 int? divergence = null;
 
-                if (probe.StaleDigest is { } stale) { throw new InvalidOperationException(message: $"'{name}': {stale}"); }
-
                 if (leg.Reproduce) {
                     try {
                         Console.WriteLine(value: $"[test.batch: tick replay {name} 0]");
@@ -231,6 +234,7 @@ internal sealed class WorldTestBatch {
                         });
                     } catch (Exception exception) { throw new InvalidOperationException($"reproduction of '{name}' failed: {exception.Message}", exception); }
                 }
+                if (probe.StaleDigest is { } stale) { throw new InvalidOperationException(message: $"'{name}': {stale}"); }
 
                 results.Add(item: new { world = name, divergence, hashes = probe.Hashes });
                 if (divergence >= 0) { throw new InvalidOperationException(message: $"reproduction diverged in '{name}' at recorded tick {divergence}"); }
@@ -238,7 +242,10 @@ internal sealed class WorldTestBatch {
             // One row per authority: the per-tick hashes the probe recorded during the authored run, and under
             // --reproduce the replay's first divergent tick (-1 when it reproduced).
             if (leg.Probed) { File.WriteAllText(Path.Combine(path1: leg.Directory, path2: "reproduction.json"), JsonSerializer.Serialize(results)); }
-            if (leg.Record) { File.WriteAllText(Path.Combine(path1: leg.Directory, path2: "crossings.json"), m_crossings.Serialize()); }
+            if (leg.Record) {
+                File.WriteAllText(Path.Combine(path1: leg.Directory, path2: "crossings.json"), m_crossings.Serialize());
+                File.WriteAllText(Path.Combine(path1: leg.Directory, path2: "snapshots.json"), JsonSerializer.Serialize(m_snapshots.Select(selector: static log => new { world = log.Name, hashes = log.Hashes })));
+            }
             var replayTicks = (Stopwatch.GetTimestamp() - replayStarted);
             var run = Get<WorldTestRun>();
 
@@ -246,12 +253,11 @@ internal sealed class WorldTestBatch {
             var server = Get<WorldServer>();
 
             File.WriteAllText(Path.Combine(path1: leg.Directory, path2: "timing.json"), JsonSerializer.Serialize(new {
-                // The boot authority's incremental hash work beside what a whole fold would have done: rows and body
-                // slots refolded against the arena's rows and the population's slots.
+                // The boot authority's incremental hash work: rows refolded against the arena's rows, and the time its
+                // always-on digest sample took.
                 arenaRows = server.Arena.Layout.RowCount,
                 arenaRowFolds = server.Arena.RowDigestFolds,
-                populationSlots = server.Population.Capacity,
-                continuationFolds = server.Population.ContinuationFolds,
+                digestCheckMilliseconds = Milliseconds(ticks: server.Persistence.DigestCheckTicks),
                 authorityTicks = run.AuthorityTicks,
                 bootMilliseconds = Milliseconds(ticks: m_bootTicks),
                 armMilliseconds = Milliseconds(ticks: m_armTicks),
@@ -272,6 +278,7 @@ internal sealed class WorldTestBatch {
             m_failed = true;
         }
         m_probes.Clear();
+        m_snapshots.Clear();
         m_output.Flush(); m_error.Flush();
         m_index++;
         Get<IHostApplicationLifetime>().StopApplication();
@@ -305,6 +312,79 @@ internal sealed class WorldTestBatch {
             lock (m_gate) { m_entries.Add(item: entry); }
         }
         public string Serialize() { lock (m_gate) { return JsonSerializer.Serialize(value: m_entries); } }
+    }
+
+    // One authority's delivered snapshots: a hash per delivery of its tick and every entity entry in delivered order,
+    // so two runs agree only when they delivered the same entries in the same positions. The attach primer is not
+    // recorded; floats hash by their bits.
+    private sealed class SnapshotLog : IClientSink, IDisposable {
+        private readonly List<ulong> m_hashes = [];
+        private IDisposable? m_lease;
+        private volatile bool m_recording;
+
+        private SnapshotLog(string name) { Name = name; }
+
+        public string Name { get; }
+        public IReadOnlyList<ulong> Hashes => m_hashes;
+
+        public static SnapshotLog Attach(string name, WorldServer server) {
+            var log = new SnapshotLog(name: name);
+
+            log.m_lease = server.AttachSink(sink: log);
+            log.m_recording = true;
+            return log;
+        }
+        public void Dispose() {
+            m_recording = false;
+            Interlocked.Exchange(location1: ref m_lease, value: null)?.Dispose();
+        }
+        public void DeliverSnapshot(in WorldSnapshot snapshot) {
+            if (!m_recording) { return; }
+            var hash = Puck.Maths.Fnv1aHash.Create();
+
+            hash.Add(value: snapshot.Tick);
+            hash.Add(value: (uint)snapshot.Entries.Length);
+            foreach (ref readonly var entry in snapshot.Entries.Span) {
+                hash.Add(value: (uint)entry.Index);
+                Add(hash: ref hash, value: entry.Position);
+                Add(hash: ref hash, value: entry.Orientation);
+                Add(hash: ref hash, value: entry.BodyColor);
+                hash.Add(value: (byte)(entry.Active ? 1 : 0));
+                hash.Add(value: entry.Kit);
+                hash.Add(value: entry.Look);
+                hash.Add(value: entry.CatalogRig);
+                hash.Add(value: (uint)entry.Continuity.Kind);
+                hash.Add(value: BitConverter.SingleToUInt32Bits(value: entry.Continuity.Seconds));
+                if (entry.Continuity.Carried is { } carried) {
+                    Add(hash: ref hash, value: carried.Rotation);
+                    Add(hash: ref hash, value: carried.Translation);
+                    hash.Add(value: BitConverter.SingleToUInt32Bits(value: carried.Scale));
+                }
+                hash.Add(value: (uint)entry.Generation);
+                hash.Add(value: entry.PlacementId);
+                hash.Add(value: BitConverter.SingleToUInt32Bits(value: entry.Heading));
+                hash.Add(value: (ulong)entry.Facts);
+                foreach (var cell in entry.State.Span) { hash.Add(value: cell); }
+            }
+            m_hashes.Add(item: hash.Value);
+        }
+        public void DeliverAnswer(in QueryAnswer answer) { }
+        public void DeliverComposition(WorldComposition composition) { }
+        public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version) { }
+        public void DeliverSessionLever(WorldSessionLever lever) { }
+        public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp) { }
+
+        private static void Add(ref Puck.Maths.Fnv1aHash hash, System.Numerics.Vector3 value) {
+            hash.Add(value: BitConverter.SingleToUInt32Bits(value: value.X));
+            hash.Add(value: BitConverter.SingleToUInt32Bits(value: value.Y));
+            hash.Add(value: BitConverter.SingleToUInt32Bits(value: value.Z));
+        }
+        private static void Add(ref Puck.Maths.Fnv1aHash hash, System.Numerics.Quaternion value) {
+            hash.Add(value: BitConverter.SingleToUInt32Bits(value: value.X));
+            hash.Add(value: BitConverter.SingleToUInt32Bits(value: value.Y));
+            hash.Add(value: BitConverter.SingleToUInt32Bits(value: value.Z));
+            hash.Add(value: BitConverter.SingleToUInt32Bits(value: value.W));
+        }
     }
 
     // HostLog and logging providers retain this writer for the native host's entire lifetime.

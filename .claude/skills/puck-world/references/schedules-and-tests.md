@@ -290,7 +290,8 @@ authored host run (batch host, instance host, portal scan) booted with
 included; `0` is `Environment.ProcessorCount`; the one setting is
 `Puck.Hosting.Jobs.JobWorkers`, registered by `AddWorldBoot`). Each leg records
 its probes' hashes in `reproduction.json` (`divergence` null unless
-`--reproduce`), the instance host's crossing narration with ticks in
+`--reproduce`), its delivered snapshots' entity entries hashed per tick in
+`snapshots.json`, the instance host's crossing narration with ticks in
 `crossings.json`, and its `out` exports; every count must match the first,
 and a mismatch names the first differing recorded tick, export JSON path and
 crossing entry. `--record <dir>` keeps the first count's recording per world and
@@ -366,11 +367,21 @@ variant of `<stem>.disclosure.json` plus the first variant again as the
 control, each leg carrying a `WorldDisclosureLeg` that `WorldTestBatch` hands to
 `WorldDisclosureRun` after `WorldTestRun.Reset` (which clears the tick script,
 so arming before it loses the lines). The run arms the variant's operator steps
-with `WorldTickScript.Arm`, the observer's script and drawn lines with
-`ArmSeat`, admits `WorldDisclosureSession`s through `TryObserveAsSession`, acts
-for them on `WorldTestRun.Ticked`, and writes `disclosure.json` at the export.
-The schedule's rows of the observer join the transcript from
-`WorldTestRun.Lines`. The fixture contract is in
+with `WorldTickScript.Arm(tick, line, out armed)`, the observer's script and
+drawn lines with `ArmSeat`, admits `WorldDisclosureSession`s through
+`TryObserveAsSession`, acts for them on `WorldTestRun.Ticked`, and writes
+`disclosure.json` at the export. Every event is recorded as it arrives, never
+reconstructed at the export: a line's answer through `WorldTickScript.Answered`
+(the handler's raw result, before `Line.Answer` flattens it), the observer's
+edit echoes through `WorldDisclosureEchoTap` (which chains the host's
+`EchoTap`), and session deliveries, completions and stream ends
+(`WorldSessionObservation.EndedBecause`) by the session itself. The schedule's
+rows of the observer are observed lines too (`WorldTestRun.Lines`). The run
+seeds `LoopbackTransport.OperationIds` so console mutations carry the same
+operation ids in both worlds, and marks the transcript invalid for a refused,
+late or unanswered step, a refused operator act, or an unadmitted session;
+`WorldDisclosureVerdict.Judge` turns that into INVALID before any comparison.
+The fixture contract is in
 [the disclosure plan](../../../../docs/plans/disclosure.md#the-harnesss-fixture-contract).
 A control that differs means a door answers with a per-run value: name it by
 first appearance (`WorldDisclosureTranscript.Nonce`, as activation ids are) if

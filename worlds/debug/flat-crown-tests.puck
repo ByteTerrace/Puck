@@ -1,6 +1,6 @@
 // Solid copies of the standard's flatCrownTree, whose shapes join by smooth unions with no field scope of their own,
-// on a floor as wide as the valley's. A walk passes under a crown 1.5 m from its trunk, clear of the branches' capsule
-// colliders, and the chase camera's
+// on a floor as wide as the valley's. Each copy collides as its composed field, smooth joins included, and a walk
+// passes under a crown 1.5 m from its trunk; the chase camera's
 // clearance (world.view.camera) reads open beside them and far from them: booted with `--world`, `body.pose 0 0.05 0 0
 // 0 0 0` stands the Moth among the trees and `body.pose 0 0.05 150 0 0 0 0` far from them.
 schema: "puck.world.definition.v1"
@@ -20,28 +20,36 @@ placements {
   placement "flat-0" {
     prototype: "flat-0"
     position [5, 0, 1.5]
-    solid { margin: 0 }
+    solid {
+      margin: 0
+    }
   }
   placement "flat-1" {
     prototype: "flat-1"
     position [-6, 0, 6]
     yawDegrees: 147
     scale: 1.08
-    solid { margin: 0 }
+    solid {
+      margin: 0
+    }
   }
   placement "flat-2" {
     prototype: "flat-2"
     position [-3, 0, -7]
     yawDegrees: 50
     scale: 0.93
-    solid { margin: 0 }
+    solid {
+      margin: 0
+    }
   }
   placement "flat-3" {
     prototype: "flat-0"
     position [9, 0, -6]
     yawDegrees: 113
     scale: 1.06
-    solid { margin: 0 }
+    solid {
+      margin: 0
+    }
   }
 }
 

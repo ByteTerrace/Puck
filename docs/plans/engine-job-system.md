@@ -3,7 +3,7 @@
 This memo designs the engine job system the [packet](open-items.md#engine-job-system)
 asks for: one scheduler for frame-critical work, the tick, the bake and GI; a
 deterministic parallel tick; parallel view recording on both backends; memory
-ownership; and background work proportional to change. M1, M2a and T0 are built;
+ownership; and background work proportional to change. M1, M2a, T0 and T1 are built;
 the build table tracks the remaining work. Every
 decision names the code it rests on, so a reviewer can check it against the
 source before anything is built; a builder re-reads each citation first. The
@@ -41,7 +41,11 @@ The numbers below are the packet's, measured on the quiet lead machine
   now is smaller (section 2): the snapshot, the crossing scan and the rigid
   bodies' advance. The kit bodies' advance and the rule gates run through one
   arena transaction and shared host state, and partitioning them needs a
-  transaction redesign this memo names but does not build.
+  transaction redesign this memo names but does not build. The entity-row
+  phase E4 partitions is a small part of that emission share: T1 measured it at
+  about 0.21 ms of a 15 to 21 ms headless debug-world tick at one worker, so
+  the rest of the 9 to 13 % lies in what E4 keeps serial (the field and input
+  tail and the subscribers' `DeliverSnapshot`), which T1 did not separate.
 - About 36 % of produce is per-view command recording
   (`ShaderPipelineRenderNode.RenderFrame`, 2.4 / 1.9 ms of 6.5 / 5.5; 5.3 ms of a
   slow frame's 14.8). The shared residency preparation before it
@@ -85,6 +89,18 @@ their own and move with them: the pipeline cache's `BuildConcurrency`
 `JobWorkers`, which T0 registers from `Puck.World --workers`; the pool reads
 it rather than a count of its own. The pool never oversubscribes the machine, which is what today's
 three independent worker counts do during a cold bake.
+
+T1 built the pool's first part, the one the tick needs: `JobPool`
+(`Puck.Hosting.Jobs`, a container singleton `AddWorldBoot` registers and every
+authority's server receives) holds `JobWorkers.Count - 1` threads at normal
+priority, idle on an operating-system semaphore, and its `Fork(partitions,
+IJobPartitions)` hands out partition indices from one counter to those
+threads and the forking thread, which then waits on an event for the
+partitions others still hold. One fork runs at a time; a second concurrent
+fork, a fork of one partition and every fork of a serial pool run inline in
+partition order. J1 grows this object into the class-ordered pool above (the
+classes and comparers, bounded background units, channels, and `0`'s count
+reconciled with `max(2, ProcessorCount - 2)`); it does not add another.
 
 The pool lives in `Puck.Hosting` because every consumer already reaches it:
 `Puck.Shaders` (`Puck.Shaders.csproj:14`), `Puck.SdfVm` (`Puck.SdfVm.csproj:24`),
@@ -316,10 +332,14 @@ checked against:
    cache the arena builds lazily on a read is built on the frame thread before
    the fork: `CellSlotAt` allocates and fills a row's positional array on first
    read and publishes it by generation (`StateArena.Order.cs:30-43`), which two
-   first readers would race, so the arena gains a `PrepareReads` that fills
-   every row's positions before a partitioned phase and a partition never
-   builds one. Every write a partition would make goes into a partition-owned
-   log, replayed at the join.
+   first readers would race, so a partitioned phase whose reads reach a linked
+   row by position needs the arena to gain a `PrepareReads` that fills every
+   row's positions before the fork, and a partition never builds one. E4 needs
+   none: its only arena reads are participant lane slots
+   (`StateArena.TryReadSlot`, `StateArena.Participants.cs:128-235`), which
+   address a column directly and build no cache, so T1 built no
+   `PrepareReads`; the first phase that reads a linked row builds it. Every write
+   a partition would make goes into a partition-owned log, replayed at the join.
 3. **Partition-owned scratch.** Scratch is owned by the partition index and
    retained between ticks: a `WorldBody.StepScratch` per partition in place of
    the population's one (`WorldPopulation.cs:332`), a collider candidate list per
@@ -330,8 +350,8 @@ checked against:
    indexed by the thread.
 4. **A stable commit order that is today's execution order.** The join merges
    partition logs by a commit key of (loop, entity index), where the loop order
-   is the step's: simulated bodies first (`WorldTick.Step.cs:413`), then local
-   seats (`:418`). Seats occupy the lowest indices (`WorldPopulation.cs:412-414`)
+   is the step's: simulated bodies first (`WorldTick.Step.cs:421`), then local
+   seats (`:426`). Seats occupy the lowest indices (`WorldPopulation.cs:412-414`)
    and the simulated loop skips them (`WorldPopulation.Step.cs:855-858`), so an
    ascending-index merge alone would put seat 0's outputs before a peer's where
    today they follow; the loop component of the key keeps today's order exactly.
@@ -342,23 +362,23 @@ checked against:
    order is positional: the pose pack writes a registration's slots at fixed
    positions, so recording order does not change what the GPU reads.
 6. **Snapshots only at publication boundaries.** `EmitSnapshot` runs once at the
-   step's end (`WorldTick.Step.cs:638`), after every join.
+   step's end (`WorldTick.Step.cs:646`), after every join.
 
 ### The step's phases
 
-Today's step order is `StepCore` (`WorldTick.Step.cs:304-644`): input and drains,
-`AdvanceSimulated` (`:413`), `AdvanceSeats` (`:418`), `ResolveDynamicContacts`
-(`:425`), tethers and carried bodies, `CompleteStep`, outputs applied, events,
-`EvaluateWorldRules` (`:590`), the serial tail (`SyncBodyCells`, grants, board,
+Today's step order is `StepCore` (`WorldTick.Step.cs:307-653`): input and drains,
+`AdvanceSimulated` (`:421`), `AdvanceSeats` (`:426`), `ResolveDynamicContacts`
+(`:433`), tethers and carried bodies, `CompleteStep`, outputs applied, events,
+`EvaluateWorldRules` (`:598`), the serial tail (`SyncBodyCells`, grants, board,
 search, fields, deadlines, responses, deals, addons, engagement, machines) and
-`EmitSnapshot` (`:638`); the instance host's portal scan runs after the server's
+`EmitSnapshot` (`:646`); the instance host's portal scan runs after the server's
 step. The parallel tick keeps that order and forks three phases:
 
 | Phase | Epoch (reads) | Writes during the phase | Join |
 |---|---|---|---|
 | **E1 rigid advance** (the bodies whose kit is rigid, `WorldBody.Step.cs:60-70`, by entity partition, inside `AdvanceSimulated`'s order) | The contact fields and collider set as `RefreshAttached` left them (`WorldPopulation.Step.cs:826`); the body's own fields. `AdvanceRigid` reads no other body and no arena (`WorldBody.Rigid.cs:635-692`): it writes its own velocity, pose and support flags and captures into the partition's scratch. | The body's own fields; the partition's work counters. | Counters summed in partition order; then the kit bodies and seats advance serially as today, reading the rigid bodies' new poses as a lower-index body's would today (below). |
 | **E3 crossing scan** (seats by partition, per instance) | Every body's final pose for the tick (`FixedPreviousPosition`, `FixedPosition`), the face catalog, the occupancy as the phase started. | The seat's winner (`winners[seat]`, `WorldInstanceHost.Adjacency.cs:423-432`) and an occupancy delta per partition: the `(placement, face, seat, inside)` rows `Observe` would write and the rows `Forget` would remove. | Deltas applied to the one occupancy dictionary in seat order, then `ResolveAndEnqueueCoalescedTransfers` over the winners, serial (`:355-369`). |
-| **E4 snapshot** (entity rows by partition) | The final state, through the prepared arena. | Positional writes into `SnapshotEntries` at offsets a prefix sum assigns (below). | `DeliverSnapshot`, serial, with the field and input tail (`WorldDocument.Apply.cs:965-1020`) unchanged. |
+| **E4 snapshot** (entity rows by partition; built) | The final state: population entries, each body's own fields, and participant lane slots, which build no arena cache (contract rule 2). | Positional writes into `SnapshotEntries` at offsets a prefix sum assigns (below); each row's register-file range of the snapshot's state scratch; the body's own continuity hint. | The field and input tail of `BuildSnapshotCore` (`WorldDocument.Apply.cs:940-997`) and `DeliverSnapshot`, serial and unchanged. |
 
 **E1's scope.** Only rigid bodies partition. A rigid kit "hands the whole step to
 the rigid solver instead of the grounded/free motion program: no intent, action
@@ -403,11 +423,15 @@ claim's own parameter and document identity (`WorldFaceFrame.cs:277`), not on
 scan order.
 
 **E4's offsets.** The snapshot is compact: inactive slots are skipped and each
-active body writes at `count++` (`WorldDocument.Apply.cs:922-942`), and only that
-prefix is delivered (`:1008-1015`). Each partition first counts its active rows;
-a serial exclusive prefix sum over the partition counts gives each partition
-its first offset; partitions then write their rows in index order from that
-offset. The delivered sequence is byte-identical to today's at any count.
+active body writes at `count++` (`WriteSnapshotRows`, `WorldDocument.Apply.cs:1013-1059`),
+and only that prefix is delivered (`:987`). A serial pass on the forking thread
+counts each partition's delivered rows and assigns each partition the running
+total before it, an exclusive prefix sum (`:922-933`); the fork then has each
+partition write its rows in index order from that offset (`SnapshotRows`,
+`:1068-1077`). The count pass reads two fields per slot, so it stays serial
+rather than costing a second fork and join. The serial path, taken at one
+worker or one partition, is the same `WriteSnapshotRows` over every row, so the
+delivered sequence is byte-identical to the serial code's at any count.
 
 Serial phases stay serial: the kit bodies and seats, rigid pair contacts,
 `EvaluateWorldRules` whole (below), the authority hash, events, addons,
@@ -430,40 +454,53 @@ parallel without changing a value:
   that changes a row's bytes moves (number, text, vector, visibility and
   observation columns through one door each; growth, snapshot and scope
   restore, undo and adoption move it or replace the layout, which drops the
-  cache). Inside an open scope the arena folds afresh. The scoped replay
-  runtime folds its rows through the same `RowDigest`, so there is one cache.
+  cache). A row refold invalidates its segment, whether `ComputeHash` or a
+  standalone `RowDigest` read took it. Inside an open scope the arena folds
+  afresh. The scoped replay runtime folds its rows through the same
+  `RowDigest`, so there is one cache.
 - **Body continuations.** `WorldPopulation.AppendContinuationHash` folds one
   digest per segment of `HashSegmentSlots` (32) entity slots, the E1 body
-  partition, which divides E4's 256-row partition evenly. A slot's digest is
-  cached only while its body rests (asleep, or parked in a rigid island) and
-  stands while the body's rest epoch (moved by every wake, park, sleep, pose,
-  restore and transfer), its generation, the population's admission revision,
-  the contact-field version and the body's action-state lane values hold. A
-  body with an identity is never cached, since a fact or record written on the
-  identity moves its continuation without touching the body. A moving body
-  encodes every tick, as before. Over go-tests (15 worlds, 18,204 ticks, about
-  368 rows and 559 slots each) a tick refolds 1.6 rows and 22 slots.
-- **The recompute check.** A write that changes state without moving the
-  version its digest is keyed by would hide a divergence, so
-  `StateArena.RecomputeHash`, `AppendContinuationHash(recompute: true)` and
+  partition, which divides E4's 256-row partition evenly. Every slot encodes
+  on every fold; nothing caches it. A cached slot needs one door every write to
+  a serialized body field passes, and a body's continuation is dozens of fields
+  and arrays its step, commands, contacts and tethers write directly (the
+  review found four such writes to sleeping bodies: `SetIntentSource`,
+  `PressChannel`, `MergeLaneTimer` and the late tether solve). That chokepoint
+  is a `WorldBody` redesign; measured on go-tests, the rest-epoch cache it
+  would make sound saved 21 s of a 310 s recording (7 %), so the cache was
+  deleted and the redesign filed in the
+  [refactoring packet](open-items.md#refactoring-campaign). The four writes now
+  wake a resting body (`WorldBody.WakeIfResting`), since each hands it input
+  or a pose it must run to carry.
+- **The read boundary.** Every hash folds under the server's `AuthorityGate`,
+  the boundary that excludes the tick's writers (the tick's own tape close
+  already holds it; `world.state.hash` takes it), so a fold beside a write can
+  never store old bytes under a new version. The arena itself is not
+  thread-safe. When T1's read epoch lands it is the same boundary.
+- **The checks.** `StateArena.RecomputeHash` and
   `WorldStateHashComposition.RecomputeAuthoritative` give the same value with
-  nothing cached, and `DescribeStaleDigest` names the stale component.
-  `puck test --reproduce` checks every replayed tick and the first count of
-  `--workers` every recorded tick; a mismatch fails the leg by name. Plain
-  `--record` legs and later `--workers` counts take only the incremental hash.
+  nothing cached, and `DescribeStaleDigest` names the stale component:
+  `puck test --reproduce` checks every replayed tick and the restored start,
+  and the first count of `--workers` every recorded tick. Every other hash
+  samples the cache (`StateArena.CheckDigests`, from `WorldPersistence`): the
+  next row in rotation refolded against its cached digest and version, and the
+  next segment refolded from its rows' cached digests. A disagreement drops the
+  cache, folds afresh, narrates `[world.state.hash: stale digest ...]` once
+  and fails a probed `puck test` leg.
 
 A headless host also stops delivering snapshots to its screen-session mirrors
 (`WorldSessionMirror(unread: true)`), which only a presentation reads; the
 destination still runs and discloses.
 
 Measured on go-tests at `--jobs 1` under the heavy lease, authored seconds
-summed from each leg's `timing.json`, the build before against the build
-after: plain 256.7 s against 180.4 s (the mirrors), recorded (`--record`)
-441.4 s against 247.1 s, so the recording's own cost fell from 184.7 s to
-66.7 s. `--reproduce` after: 228.6 s authored and 415.7 s replay, the replay
-paying the full recompute every tick; `--workers 1,2,0` after: 346.9 s at the
-checked first count, 254.7 s and 265.2 s at the others. What the recording
-still costs is the components that fold whole every tick (poses, body action
+summed from each leg's `timing.json` (15 worlds, 18,204 ticks, about 368 rows
+each). Against the build before the incremental hash: plain 256.7 s against
+180.4 s (the mirrors), recorded 441.4 s against 247.1 s with the body cache,
+so the recording's own cost fell from 184.7 s to 66.7 s. A tick refolds 1.6
+rows. The body cache's share, measured back to back on a busier machine: 288.8 s
+recorded with it, 309.8 s without. The always-on sample took 52.8 ms over a
+whole recorded run (186.1 s authored), 2.9 µs a tick. What the recording still costs is the
+components that fold whole every tick (body continuations, poses, body action
 state, navigation, flock and input), unprofiled.
 
 ### Rule evaluation stays serial
@@ -504,7 +541,10 @@ frame thread waits on while taking partitions itself, and the ordered merge
 above. No per-item queueing, no async continuation, no channel on the tick's
 path. The join's wait is the only place the frame thread blocks on a worker, and
 it is bounded by one partition's work, since every worker that holds a partition
-finishes it.
+finishes it, unless the host preempts that worker while it holds one: T1
+measured fork means of 180 to 840 µs against a 125 µs median on a shared
+machine. J1's cap and the class order keep the pool from oversubscribing the
+machine itself, which is the case Puck controls.
 
 ### Proof by reproduce and by recorded oracle
 
@@ -740,18 +780,22 @@ each light; hit shading traces shadows from the hit; and later sweeps read
 neighbouring cached probes (`:1287-1303`), so a change propagates through bounce
 feedback.
 
-Decision: a scene rebuild computes a **change set** of instances (added,
-removed, or moved, by comparing the new and previous instance lists, each with
-its old and new bounds) and materials. The invalidated probes are the closure:
-every probe whose cell lies within `lighting.Reach` of any changed instance's
-old or new bounds, or whose light rays or shadow traces could cross them (a
-segment test against the bounds), then expanded by one neighbour ring per sweep
-of the layout for the bounce feedback. Those probes drop their generation; the
-rest keep theirs. A light, layout or window change still invalidates the window.
-The first implementation is checked against a full retrace: the probe tables
-and a windowed still after a removal and a move must match the full retrace's
-within the trace's own noise, and the closure is widened until they do. Fewer
-probes traced is the cost reading, never the correctness reading.
+Illumination step 2 split each probe into a hit buffer and a relight
+([illumination](illumination.md#step-2-status)), which settles most of this.
+A light change invalidates no hits: it advances the lighting version and the
+probes are relit from their cached hits under the frame's budget. A scene
+rebuild computes a **change set**, the world boxes of the static draws it added
+or removed (a moved draw is both), and retraces only the probes whose
+placement region one overlaps or whose rays meet one before the hit they
+recorded (`SdfMeshIrradiance.Affected`); the rest keep their hits, which a
+trace would reproduce, and are relit, so bounce and shadow rays through the
+change are recomputed without a closure over them. A layout or reach change
+still retraces the window. The CPU law
+`ALockstepFrameRendersTheWindowTracedToTheEnd` checks a removal's probe table
+against a fresh volume's word for word. What remains for B1 is the jobs: the
+trace and relight batches under `Lighting`, and the windowed check against a
+full retrace after a `world.reload` that removes a wall and one that moves a
+draw. Fewer probes traced is the cost reading, never the correctness reading.
 
 The trace's unit is one probe; its comparer is the existing `(sweeps, level,
 distance)` key; its class is `Lighting`, under the frame and the bake. The scene
@@ -790,7 +834,7 @@ as `puck mesh audit` for bake defects.
 | **M2a Native movers 1 and 2 — built** | Published mesh payloads, readback copies, lattice storage and point workspaces on `IAllocator`; reference-bearing contour storage and worker-slot refinement indexes retain managed ownership. | Collections during a cold bake (`host.frames`) against 345; windowed stills at `debug.go desktop` before and after on both backends, compared as above; `host.memory collect` after `world.reload` of a one-group edit shows the replaced group's bytes released. The [packet](open-items.md#memory-ownership) records the measurements. |
 | **J1 The pool and the channels** | `Puck.Hosting.Jobs`: classes with their comparers, bounded units, the dependency rules, the cap with hysteresis, per-owner channels drained at each owner's install point, parking, shutdown settlement; every site in section 1's table moved; the bake's static pool, the irradiance worker counts and the engine's `Parallel.For` deleted. | A cold bake with `host.frames` sampled through it against 96 / 183 ms, and the process's thread count at `workers + 2` plus the dedicated threads. A lockstep `world.at` still after a `world.reload` traces its own scene (`[sdf.mesh-gi]` reports the frame's draw count). A channel forced full by a scratch world with more groups than its capacity lands every group (`[sdf.mesh-bake] done` counts match). A headless boot with a reflow verb answers it. `quit` during a cold bake exits cleanly with no device-after-dispose message in stderr on both backends. The first visible group bakes before any unseen one (`[sdf.mesh-bake]` order against `world.view.pick`). |
 | **T0 The worker-count harness — built** | `--workers N` on `Puck.World`, carried as `Puck.Hosting.Jobs.JobWorkers` (the one setting `AddWorldBoot` registers; `0` is `Environment.ProcessorCount`, frame thread included); `puck test --workers 1,2,0` as full host runs compared across counts, and `--record <dir>` / `--compare <dir>` as the recorded oracle ([CLI reference](../reference/cli.md#puck-testtest-worlds)). Deviations: the crossing log is the instance host's crossing narration (`world.transfer`, `world.portal`, `world.adjacency`, `world.continuum`) stamped with the booted authority's tick, since a `Puck.World` host installs no durable `IWorldCrossingLog`; the per-tick hashes reuse `reproduction.json` from the same replay probe; the focused fixtures are left to T1, T3 and T2, which name them; J1 reconciles `0`'s count with the pool's `max(2, ProcessorCount - 2)` workers plus the frame thread. Baseline: `puck test worlds/debug --workers 1,2,0` (106 worlds; the standard authors no test worlds) agrees at every count with the serial code, at 1,790 / 1,672 / 1,910 s per count with `--jobs 2` on a shared lead machine; the recording probe's per-tick authority hash roughly doubles a world's authored time (go-tests: 255 s plain, 478 s recorded, 18,204 ticks), and boots are about a quarter of the rest. | `puck test --workers 1,2,0` on the four debug sources and the standard's test worlds passes with the serial code (a baseline for the T-steps). |
-| **T1 Snapshot partitions** | E4 with partition counts, the prefix sum and `PrepareReads`. No semantic change. | T0 on a fixture of 300 bodies with inactive holes across the 256-row boundary, comparing the delivered entity sequence (a sink that hashes each snapshot's entries, printed per tick) across counts and against the recording. |
+| **T1 Snapshot partitions — built, check passed** | E4 with the serial count pass and prefix sum, on `JobPool` (section 1). No `PrepareReads`: the row phase reads no linked row (contract rule 2). No semantic change. T0's legs gained `snapshots.json`, each delivered snapshot's tick and entity entries hashed per delivery, compared like the authority hashes. Measured (the row phase alone, boot authority, unpaced headless, p50 over 600-tick windows, shared lead machine): the garden crowd (`garden-crowd.puck`, 129 rows) is one partition and runs the serial path at every count (34 to 40 µs); the fixture (300 rows, two partitions) is within noise (42 to 61 µs serial, 37 to 56 µs at 0); the debug world (558 rows, three partitions) drops from 206 to 216 µs at one worker to 123 to 129 µs at 0, p90 233 to 262 against 147 to 166, and 78 to 86 µs with 128-row partitions; a 2,001-row scratch crowd drops from 297 to 329 µs to 119 to 140 µs. The debug world's saving is about 0.09 ms of a 15 to 21 ms headless tick. A fork's mean is worse than serial on the shared machine (182 to 836 µs against 209 to 351): a worker preempted while it holds a partition holds the join, which the memo's "bounded by one partition's work" does not account for. Forcing 64-row partitions on 129 rows costs about 6 µs at p50 and a long tail, so the fork pays at the median from about 500 rows (two full partitions) and by a tenth of a millisecond only past about 1,500. | Passed: `puck test worlds/debug/snapshot-partitions-tests.puck --workers 1,2,0 --compare <recording of the serial code>` agrees across counts and with the recording; `--workers 1,2,0` on `garden-tests`, `suit-tests` and `granaries-tests` agrees at every count, and again after merging the integration tip (whose own changes move the fixture's authority hash from tick 0 while its snapshot entries still match the recording). |
 | **T3 Crossing scan partitions** | E3 by seat partition with occupancy deltas. | T0 on a fixture of 40 seats where two seats enter one party-travel door on one tick and seats straddle the 32-seat boundary; the crossing log (transfer tick, cohort) identical across counts and against the recording. |
 | **T2 Rigid advance partitions** | E1 for rigid bodies with partition scratch; the rigid share measured first; the one pose-read change re-recorded. | T0 on a fixture of 200 rigid bodies (a rack and a domino line) beside kit bodies whose producers target a rigid body; hashes identical across counts; `puck bench world` at 0 B median a tick; a standing `host.frames` simulate read against 6.3 ms. |
 | **R1 Parallel recording in waves** | Waves, prepare-before-fork with the fence first, residency upload and extent in preparation, in-order submission; the pose pack fork. Direct3D 12 and a windowed Vulkan boot. | `host.frames` produce avg at the lobby against 6.5 ms; a `world.at` script that moves a portal view and changes a screen's source every frame for 120 frames, with stills at three ticks compared as above with the serial build's on both backends (a one-frame-late read or a descriptor overwritten under a slot in flight shows as a localized difference beyond the noise); GPU-based validation clean on Direct3D 12 and the validation layer clean on Vulkan. |

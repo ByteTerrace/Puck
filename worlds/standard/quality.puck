@@ -9,6 +9,18 @@
 // them. `standard.puck` imports this table, so every world importing the standard answers each tier, and a world
 // without the standard imports it by name.
 render {
+  // The irradiance volume's budget, the same at every tier: each rendered frame relights at most `relight` probes from
+  // their cached hits (a light or sky change) and traces at most `trace` probes' hits (a scene change or a window
+  // move), and a relight cycle whose oldest lighting is older than `age` seconds prints `[sdf.mesh-gi] behind`. The
+  // standard's day turns the sun a quarter of a degree a second, so an eight-second age lags it two degrees; a world
+  // with a faster day or more probes in view raises `relight` and reads the frame time move in `host.frames`.
+  indirect {
+    budget {
+      relight: 2048
+      trace: 2048
+      age: 8
+    }
+  }
   low {
     bloom: Off
     indirect: Off

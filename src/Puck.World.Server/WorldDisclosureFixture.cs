@@ -22,13 +22,19 @@ public sealed record WorldDisclosureVariant(string Name, IReadOnlyList<WorldDisc
 /// <param name="Actions">The number of actions each observed session performs.</param>
 /// <param name="From">The first tick an input may be submitted after; absent, the tick after the last variant step.</param>
 /// <param name="Until">The last tick an input may be submitted after; absent, the schedule's export tick less its settle ticks.</param>
-/// <param name="Words">The words drawn as arguments: every row, key, seat and value name the principal can spell, existing
-/// or not. Never read from either world, whose names differ with the hidden state under test.</param>
+/// <param name="Words">The loose words: every row, key, seat and value name the principal can spell, existing or not,
+/// and the vocabulary of any placeholder <paramref name="Slots"/> does not name. Never read from either world, whose
+/// names differ with the hidden state under test.</param>
 /// <param name="Verbs">The console verbs drawn; absent, every verb the registry lets any principal run, less
 /// <paramref name="Exclude"/> and <see cref="WorldDisclosureFixture.OutsideTheGuarantee"/>.</param>
 /// <param name="Exclude">Further verbs (or <c>prefix.</c> families) not drawn.</param>
+/// <param name="Slots">Each placeholder's vocabulary by the name a verb's usage gives it (<c>row</c>, <c>key</c>,
+/// <c>value</c>, <c>transform-json</c>, <c>phase-row</c>, …), aimed at hidden, absent, public and other players'
+/// targets; a console verb and a session action are drawn in their argument forms with each placeholder filled from
+/// here. Absent, every placeholder draws from <paramref name="Words"/>.</param>
 public sealed record WorldDisclosureFuzz(ulong Seed = 1, int Lines = 0, int Actions = 0, ulong? From = null, ulong? Until = null,
-    IReadOnlyList<string>? Words = null, IReadOnlyList<string>? Verbs = null, IReadOnlyList<string>? Exclude = null);
+    IReadOnlyList<string>? Words = null, IReadOnlyList<string>? Verbs = null, IReadOnlyList<string>? Exclude = null,
+    IReadOnlyDictionary<string, IReadOnlyList<string>>? Slots = null);
 
 /// <summary>What a worker runs for one world of a disclosure pair: a variant's steps, the principals observed, and the
 /// window the drawn inputs fall in.</summary>
@@ -84,6 +90,21 @@ public sealed record WorldDisclosureFixture(string Schema, string Observer, IRea
     public static bool Excludes(string verb, IReadOnlyList<string>? exclude) => OutsideTheGuarantee.Concat(second: (exclude ?? [])).Any(predicate: excluded =>
         (excluded.EndsWith(value: '.') ? verb.StartsWith(value: excluded, comparisonType: StringComparison.Ordinal) : string.Equals(a: verb, b: excluded, comparisonType: StringComparison.Ordinal)));
 
+    /// <summary>Returns why a step of this fixture could not settle before the run's export: a variant step or a
+    /// script line at or after <paramref name="exportTick"/> never answers before the transcripts are compared, so the
+    /// hidden state it authors, or the door it asks, is never under test.</summary>
+    /// <param name="exportTick">The tick the world's schedule exports at, which ends every run of the pair.</param>
+    /// <returns>The refusal naming the first late step, or <see langword="null"/> when every step lands in time.</returns>
+    public string? WindowRefusal(ulong exportTick) {
+        foreach (var variant in Variants) {
+            if (variant.Steps.FirstOrDefault(predicate: step => (step.At >= exportTick)) is { } late) {
+                return $"variant '{variant.Name}' runs '{late.Run}' at tick {late.At}, at or after the export tick {exportTick}, so it never authors its hidden state before the comparison";
+            }
+        }
+        return ((Script ?? []).FirstOrDefault(predicate: step => (step.At >= exportTick)) is { } line)
+            ? $"the script runs '{line.Run}' at tick {line.At}, at or after the export tick {exportTick}, so it never answers"
+            : null;
+    }
     /// <summary>Reads and validates a fixture.</summary>
     /// <param name="path">The fixture file.</param>
     /// <param name="fixture">The fixture, when valid.</param>
@@ -108,7 +129,10 @@ public sealed record WorldDisclosureFixture(string Schema, string Observer, IRea
                 "variants names one variant twice",
             { Variants: var variants } when variants.Any(predicate: static variant => variant.Steps.Any(predicate: static step => (step.At == 0UL) || string.IsNullOrWhiteSpace(value: step.Run))) =>
                 "a variant step runs at tick 0 or runs nothing; a step runs after a completed tick, at 1 or later",
-            { Fuzz: { Lines: > 0, Words: not { Count: > 0 } } } => "fuzz draws lines but names no words to spell their arguments with",
+            { Script: { } script } when script.Any(predicate: static step => (step.At == 0UL) || string.IsNullOrWhiteSpace(value: step.Run)) =>
+                "a script line runs at tick 0 or runs nothing; a line runs after a completed tick, at 1 or later",
+            { Fuzz: { Lines: > 0, Words: not { Count: > 0 }, Slots: not { Count: > 0 } } } => "fuzz draws lines but names no words or slots to spell their arguments with",
+            { Fuzz: { Actions: > 0 }, Sessions: not { Count: > 0 } } => "fuzz draws session actions but sessions names no session to act",
             _ => null,
         });
         if (reason is not null) {
