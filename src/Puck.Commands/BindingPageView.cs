@@ -38,7 +38,50 @@ public sealed record BindingPageView(
     IReadOnlyList<BindingModifierView> Modifiers,
     IReadOnlyList<BindingChordCommandView> CommandChords,
     FrozenDictionary<string, BindingPageOpenerView>? Openers = null
-);
+) {
+    /// <summary>Returns a value indicating whether <paramref name="other"/> is selected by the same held modifiers as
+    /// this page — the same place in its own group (both resting pages, or both the page a left trigger opens), so a
+    /// presentation surface that keeps one place per such position (a binding bar's bank) shows either page there. A
+    /// page's <see cref="Modifiers"/> lists every modifier of the profile both views were compiled from, so the two
+    /// lists are compared by id.</summary>
+    /// <param name="other">The page to compare, from the same compiled profile.</param>
+    /// <returns><see langword="true"/> when both pages require exactly the same modifiers.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="other"/> is <see langword="null"/>.</exception>
+    public bool SharesHeldModifiers(BindingPageView other) {
+        ArgumentNullException.ThrowIfNull(argument: other);
+
+        if (ReferenceEquals(objA: this, objB: other)) {
+            return true;
+        }
+
+        return (Required(view: this, within: other) && Required(view: other, within: this));
+
+        // Every modifier `view` requires is one `within` requires too.
+        static bool Required(BindingPageView view, BindingPageView within) {
+            foreach (var modifier in view.Modifiers) {
+                if (!modifier.Required) {
+                    continue;
+                }
+
+                var found = false;
+
+                foreach (var candidate in within.Modifiers) {
+                    if (candidate.Required && string.Equals(a: candidate.Id, b: modifier.Id, comparisonType: StringComparison.Ordinal)) {
+                        found = true;
+
+                        break;
+                    }
+                }
+
+                if (!found) {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+    }
+}
 /// <summary>The page a held control opens, as the UI presents it.</summary>
 /// <param name="PageId">The profile-unique identifier of the page the control opens.</param>
 /// <param name="Label">The opened page's display label, if any; opaque to the engine.</param>

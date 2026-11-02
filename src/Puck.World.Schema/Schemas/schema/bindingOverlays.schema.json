@@ -533,7 +533,7 @@
             "default": null
           },
           "modelCell": {
-            "description": "A text state cell, state.\u003Crow\u003E.\u003Ckey\u003E, whose value picks the bar\u0027s model: single draws one bar \u2014 the active page\u0027s bank, in the first authored bank\u0027s place, swapping in place as a chord is held or released; any other value (or no cell) draws every bank the live layout places, the active one at full alpha and the rest as wings. Ordinary state, flipped the same way LayoutCell is.",
+            "description": "A text state cell, state.\u003Crow\u003E.\u003Ckey\u003E, whose value picks the bar\u0027s model: single draws one bar \u2014 the active page, in the first authored bank\u0027s place, swapping in place as a chord is held or released or a context group switches the page; any other value (or no cell) draws every bank the live layout places, the active one at full alpha and the rest as wings. The active page never changes the model. Ordinary state, flipped the same way LayoutCell is.",
             "type": [
               "string",
               "null"

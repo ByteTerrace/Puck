@@ -132,6 +132,15 @@ Without a seat preference, the authored `LayoutCell` and `ModelCell` still
 select the world design, with `single` displaying one bank and any other
 model displaying every bank placed by the selected layout.
 
+A context group switches the active page and nothing else. Sitting at a board
+(the debug world's `tabletop` overlay, `../debug/chess.puck`) makes its Board
+page active; the layout, model and scale stay as the player or world set them,
+and leaving restores the page before. No bank names Board, so it takes the place
+of the bank whose page the same held modifiers select (Move's, the resting
+page): under `single` the bar shows Board alone, under full wings every page
+with Board active. `world.binding-bar` reads the active `page` and the
+`activeBank` it draws in.
+
 An import composes rows by id. To change a standard design, declare its id in
 the importing document's own body; nested objects refine inherited fields.
 For example, change the bar's plate size without copying its layout:
