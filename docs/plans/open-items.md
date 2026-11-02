@@ -514,8 +514,6 @@ publication boundaries. The single-owner assumptions to replace:
   and a budget under the frame and the bake, and GI re-measures only the probes
   that see newly landed geometry ([lighting](#lighting-and-gi),
   [residency](#residency-and-streaming) step 2).
-- The incremental authority hash's digest segments, designed with the parallel
-  tick's partitions ([test runner](#test-runner-and-replay)).
 - Machine stepping and parking: "observed" comes from authoritative state only
   (seats, bindings and engagement), never from who looks, because presentation
   must not change simulation state ([machines plan](machines-and-cartridges.md)).
@@ -524,11 +522,6 @@ publication boundaries. The single-owner assumptions to replace:
 - The presentation view's cut 5 merges with phase 3 of the tick-to-produce memo
   ([runtime plan](runtime-and-delivery.md#the-presentation-view),
   [simulation thread](simulation-thread.md)).
-- Draw-scaling culling: every pass culls and levels each draw
-  (`SdfWorldPassRecorder.Choose`), and 160,000 draws took 700 ms a frame. Name its
-  cause fix beside the parallel recording rather than leaving it to threads. A
-  frame during a cold bake read avg 96 ms and p99 183 ms (simulate 28 ms of it)
-  with a worker a processor at normal priority.
 - One handoff into the frame thread. Background work reaches the frame through
   a different hand-rolled path at each site. Kernel loads use `ConcurrentQueue`
   (`SdfKernelTreeLoad.cs:16`). The composition build polls a `Task`
@@ -1882,14 +1875,6 @@ and the order they land in; the items below are its findings and checks.
   template emits its own moon light, overridable by id like any standard row.
   (from: illum-step2)
 
-- [high, the illum1-fix lane is fixing] Step 1's self-transmission allowance
-  (`passes/sdf-surface-stage.hlsli:219,282`) estimates thickness from
-  curvature, so a flat mm-thick wing ignores a separate slab 10 cm toward the
-  light while a 1 cm sheet self-shadows; [medium] the surface pass's identity
-  omits the material wrap (`SdfWorldTables.Cadence.cs:110`); [medium] cel style
-  values entered the bake code identity (`SdfProgram.Materials.cs:81`);
-  [medium] the standard cel style is duplicated in C# defaults
-  (`ToonStyleDocument.cs:29`, `SdfToon.cs:47`). (from: illum1-astra)
 - From step 1 (illum-step1): stretching the far cascade to cover the valley
   costs too much (at `valley-rim`, 120 m against 480 m: 208 against 7,170 draws,
   0.24 against 8.4 ms, 13.9 against 55.3 cm texels), so the valley waits for the
@@ -2045,14 +2030,6 @@ the fixed poses and the approaches already rejected.
   depth rays, and one probe table now fits its tier: 11.02 MiB Medium, 33.05 MiB
   High (Direct3D 12 High GI trace 11.487 to 7.437 s, Medium 1.698 to 1.032 s).
   These figures await a home in the mesh-GI reference.
-- [medium] Wrapped diffuse materials leak sunlight indoors: the surface pass
-  skips the shadow-cascade query where n·l <= 0, but a material with wrap (the
-  Moth's skin, wrap 0.35) still takes diffuse sunlight there (about 18.5 % at
-  n·l = -0.1), and an all-unqueried filter window reads fully visible, so an
-  indoor wrapped surface past the terminator is lit by a sun the roof occludes
-  (`src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-surface-stage.hlsli:305`).
-  Query where the wrapped term is positive, without self-shadowing the wrap away
-  outdoors. (from: bright-lines review)
 - [medium] The stairwell's flight B enclosure reads black on its side walls in
   `indirect` while its treads and landings are lit
   (`gather-stairwell-flight-b-0-indirect`). Coverage is not the cause:
@@ -2258,16 +2235,6 @@ Next: the per-tick authority hash is incremental
 ([design](engine-job-system.md#the-incremental-state-hash)); re-profile Go's
 reproduce worker for what remains.
 
-- [high] The incremental hash's caches miss invalidations (cross-family
-  review): a standalone `RowDigest` refresh leaves its parent segment stale
-  (`ArenaHash.cs:74-76,138-168`); a sleeping body's continuation stays cached
-  through `SetIntentSource`, an untimed `PressChannel`, `MergeLaneTimer` and the
-  late tether solve (`WorldBody.Tether.cs:119-143`); an off-thread hash between
-  a write's version bump and its store poisons a row digest; and live replay
-  never runs the full-recompute oracle. The incr-hash lane redesigns the body
-  cache around one write chokepoint (or deletes it if that costs more than it
-  saves), hashes only at a stable read boundary, and adds a rotating per-tick
-  spot check. (from: incrhash-astra)
 - [low · fix when touched] `Fixtures.FreshServer` (`tests/Shared/World/Fixtures.Server.cs:112`) deserializes without `WorldStateSettlement.SettleBeforeAdmission`, so a boot from a raw document with a seeded responsive placement can show the response's prototype while colliding as the authored one, which the real loader never does. Settle in the fixture as the loader does. (from: the tip-reds lane)
 - [medium] Recording still costs about a third of the plain authored run.
   The per-tick authority hash folds the arena from `RowVersion`-cached row
@@ -3330,23 +3297,23 @@ Owner: specialist lane (puck-world, build and hot reload, input) · ordinary · 
 Owner: debug-world content lanes, each started by the owner's direction ·
 ordinary · Next: new content and art on the owner's call.
 
-- [medium] `motion-pulse` (`shapes.puck` ~:2276) runs its six petals on a
-  continuous clock, so their seams stay stretched (PUCK122). Fix the exhibit's
-  motion so the seams close; its siblings `motion-smooth-blend` and
-  `motion-carve` show PUCK122 on purpose. (from: puck-audit)
+- [medium] The gallery's `motion-pulse` exhibit (`worlds/debug/shapes.puck:2267`,
+  its six petals smooth-unioned to the core in one pooled group) runs on a
+  continuous clock, so it draws a stretched seam all the time and lint reports
+  PUCK122 six times. Its look needs the owner's eye: one group per petal and
+  core, or no group and a union crease. The two exhibits that show the
+  stretched seam on purpose (`motion-smooth-blend`, `motion-carve`)
+  acknowledge it with `allow`. (from: puck-audit, puck-lang)
 - [low] Board-game seats build button edges as hand-made cells (29 blocks
   across go, alchemy, reversi, cardtable, granaries and chess) where a rule
   with `mode: Edge` would do; switching changes behaviour, so verify each
   game's tests when converting. (from: puck-audit)
-- Owed: `puck verbs --check` with a windowed boot after clearance-op removed
-  `player.camera.clearance` by hand (the first settle window runs it). (from: clearance-op)
-- [low] The gallery's `motion-pulse` exhibit (`worlds/debug/shapes.puck`, its
-  six petals smooth-unioned to the core in one pooled group) draws a stretched
-  seam all the time, since a continuous clock drives it: lint reports PUCK122
-  six times. Its look needs the owner's eye: one group per petal and core, or
-  no group and a union crease. The two exhibits that show the stretched seam on
-  purpose (`motion-smooth-blend`, `motion-carve`) acknowledge it with `allow`.
-  (from: puck-lang)
+- Owed: `puck verbs` with a windowed boot (the first settle window runs it).
+  The checked-in catalog is stale: clearance-op removed
+  `player.camera.clearance` by hand, and `puck verbs --check --headless-only`
+  now stops at `world.state.hash`, whose audience the catalog records as
+  `anyone` where the headless World registers it `operator`. (from:
+  clearance-op, docs-sweep)
 - The faerie: the companion becomes small, abstract and original (nothing that
   reads as Ocarina of Time's) beside the moth, its animation rich, varied and
   reactive, dodging a swat through one generic threat input (a point and
