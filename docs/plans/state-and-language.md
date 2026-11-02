@@ -1129,6 +1129,22 @@ World. A rule-body template and `schedule … in` with a parameter are G14's.
 - `export read` refuses a backquoted dashed name (`` `card-back` ``, PUCK001)
   and takes a quoted one.
 
+Landed: an interpolated row name is a target wherever a literal is (an
+assignment, a compound assignment, `remove`, a bracketed key holding one, as
+in `sealed[zone($"hand{s}", first)]`), read through the atom-aware operand
+parser; a local inside a call form's computed key (`key: expr(card)`) keeps
+its local spelling when the key is read again after the rule's locals leave
+scope; an interpolated string, or a let or loop variable holding a string, on
+a write's right side is text; and `export` takes a backquoted name, refuses a
+quoted one (PUCK110) and prints the backquote (the printer and the decompiler
+share `PuckPrinter.PrintExportName`). A bare word in a call form's `key:`
+stays the literal key it spells, as `row.word` does (the one bracket rule):
+a computed key is `$"{c}"` or `expr(c)`. The games' per-seat writes, removes
+and texts are sugar now, every document unchanged; a keyed copy of a text
+cell stays a `setState(…, fromState, fromKey)` call, since a keyed read on a
+right side lowers to an expression program, which cannot carry text. The
+corpus holds `computed-write`.
+
 Decided: one lowering for a write whatever names its row, key or value:
 an interpolated name is a write target wherever a literal is, a local or a
 `for` variable resolves in every argument of a call form as it does in the

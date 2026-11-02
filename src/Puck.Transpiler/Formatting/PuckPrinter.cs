@@ -138,9 +138,11 @@ public static partial class PuckPrinter {
         ? name
         : Quote(text: name)
     );
-
-    private static string ExportName(string name) => QualifiedName.Parse(text: name).Print(segment: PrintName);
-
+    /// <summary>Returns an exported name as an <c>export</c> line spells it: each dotted segment bare, or backquoted
+    /// when the bare form cannot carry it, as a name is wherever it stands.</summary>
+    /// <param name="name">The exported name.</param>
+    /// <returns>The spelling.</returns>
+    public static string PrintExportName(string name) => QualifiedName.Parse(text: name).Print(segment: static segment => (IdentifierSpelling.IsName(text: segment) ? segment : $"`{segment}`"));
     /// <summary>Returns a property name as a statement reader takes it back: bare when it is one name that opens no
     /// other production where it stands — in a construct body one of <see cref="PropertyKeywords"/>, at the top level
     /// one of <see cref="DocumentHeaders"/> — and a quoted string otherwise.</summary>
@@ -545,7 +547,7 @@ public static partial class PuckPrinter {
                             m_builder.Append(value: ((index == 0)
                                 ? " "
                                 : ", "
-                            )).Append(value: ExportName(name: export.Names[index]));
+                            )).Append(value: PrintExportName(name: export.Names[index]));
                         }
 
                         break;

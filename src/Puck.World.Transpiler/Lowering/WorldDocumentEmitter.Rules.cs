@@ -1181,19 +1181,25 @@ public static partial class WorldDocumentEmitter {
             return key;
         }
 
-        var bound = BindOperand(
+        return ExplicitLocalsKey(key: (RuleFacts.ExpressionKeyPrefix + BindOperand(
             operand: Puck.Transpiler.Parsing.PuckParser.CreateOperand(
                 form: DocumentValueForm.Expression,
                 text: key[RuleFacts.ExpressionKeyPrefix.Length..]
             ),
             scope: scope
-        );
+        )));
+    }
+    // An expression key is read again after the rule's locals leave scope, so a local keeps its explicit spelling in it
+    // rather than the bare name the source dialect gives it, which would then read a row of that name.
+    private static string ExplicitLocalsKey(string key) {
+        if (!key.StartsWith(comparisonType: StringComparison.Ordinal, value: RuleFacts.ExpressionKeyPrefix)) {
+            return key;
+        }
+        var expression = key[RuleFacts.ExpressionKeyPrefix.Length..];
 
-        // The key is read again after the rule's locals leave scope, so a local keeps its explicit spelling here
-        // rather than the bare name the source dialect gives it.
-        return (RuleFacts.ExpressionKeyPrefix + ((ExpressionSpelling.TryParse(error: out _, program: out var program, text: bound) && ExpressionSpelling.TryPrint(program: program, text: out var printed))
+        return (RuleFacts.ExpressionKeyPrefix + ((ExpressionSpelling.TryParse(error: out _, program: out var program, text: expression) && ExpressionSpelling.TryPrint(program: program, text: out var printed))
             ? printed
-            : bound));
+            : expression));
     }
     // `allowText` gates whether an RhsTextNode's Text lands on the object — AddState carries no Text field at all;
     // a string RHS reaching it is already PUCK009 from the parser, and best-effort lowering here emits nothing for
@@ -1220,6 +1226,11 @@ public static partial class WorldDocumentEmitter {
                     obj["valueSeconds"] = seconds.Seconds;
                 }
                 break;
+            // A string known at compile time (an interpolated string, or a let or loop variable holding one) is text, as
+            // the same string written literally is; only a name read at run time copies a row.
+            case RhsOperandNode operand when (allowText && !isVectorRow && (CompileTimeText(operand: operand.Expression, scope: scope) is { } computed)):
+                obj["text"] = computed;
+                break;
             case RhsOperandNode operand:
                 ApplyOperandRhs(
                     isVectorRow: isVectorRow,
@@ -1232,6 +1243,19 @@ public static partial class WorldDocumentEmitter {
                 );
                 break;
         }
+    }
+    private static string? CompileTimeText(OperandExpressionNode operand, DocumentScope scope) {
+        var syntax = operand.Syntax;
+
+        while (syntax is ExpressionSpelling.SourceGroup group) { syntax = group.Value; }
+        var value = syntax switch {
+            ExpressionSpelling.SourceAtom atom => DocumentLowering.LowerValue(operand.Atoms[atom.Index].Value, scope),
+            ExpressionSpelling.SourceName { Quoted: false } name when (!GetPoolBindings(scope: scope).Contains(item: name.Name) && (ExpressionSpelling.CurrentLocals?.Contains(item: name.Name) != true) &&
+                scope.TryLowerBinding(name.Name, out var bound)) => bound,
+            _ => null,
+        };
+
+        return (((value is JsonValue scalar) && scalar.TryGetValue<string>(value: out var text) && !decimal.TryParse(text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out _)) ? text : null);
     }
     // A single unkeyed state read (`row`, no brackets) lowers to a bare `fromState`; a single KEYED read
     // (`row[key]`) always lowers to a verbatim `expression`, never decomposed into `fromState`+`fromKey`, even
@@ -1357,7 +1381,7 @@ public static partial class WorldDocumentEmitter {
         switch (operand.Form) {
             case DocumentValueForm.Key:
                 if (ExpressionSpelling.TryParseKey(error: out var keyError, key: out var key, text: text)) {
-                    return JsonValue.Create(value: key);
+                    return JsonValue.Create(value: ExplicitLocalsKey(key: key));
                 }
 
                 scope.Diagnostics.ReportError(

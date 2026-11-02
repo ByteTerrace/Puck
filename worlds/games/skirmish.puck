@@ -257,10 +257,10 @@ template skirmishRules() {
     rule $"skirmish-receipt-{s}" {
       local moved = skirmish.ordered == s and skirmishTurn != s
       when search(ply) == 0 and $"skirmishOrder{s}".unit >= 0
-      setState(state: $"skirmishOrder{s}", key: result, expression: moved ? 1 : -1)
-      setState(state: $"skirmishOrder{s}", key: unit, expression: -1)
-      setState(state: $"skirmishOrder{s}", key: to, expression: -1)
-      addState(state: $"skirmishOrder{s}", key: taken, expression: 1)
+      $"skirmishOrder{s}".result = moved ? 1 : -1
+      $"skirmishOrder{s}".unit = -1
+      $"skirmishOrder{s}".to = -1
+      $"skirmishOrder{s}".taken += 1
       skirmish.ordered = 0
     }
   }
@@ -280,7 +280,7 @@ template skirmishRules() {
         (third >= 0 ? skirmishSight[maximum(third, 0)] : 0)
       )
       for c in range(0, skirmishCells) {
-        setState(state: $"skirmishSeen{s}", key: $"{c}", expression: (skirmishView[$"{s}"] >> c) & 1)
+        $"skirmishSeen{s}"[$"{c}"] = (skirmishView[$"{s}"] >> c) & 1
       }
       transform observe(row: $"skirmishKnows{s}")
     }

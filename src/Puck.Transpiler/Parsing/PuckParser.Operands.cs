@@ -73,7 +73,7 @@ public static partial class PuckParser {
 
             // '{' stops for the same reason '}' does: no operand grammar contains one, and an `if`/`repeat` gate
             // is followed immediately by its block body.
-            if ((c is '\n' or '\r') && EndsWithOperator(buffer.AsSpan(start, cursor.Offset - start))) {
+            if ((c is '\n' or '\r') && EndsWithOperator(text: buffer.AsSpan(start, (cursor.Offset - start)))) {
                 cursor.Advance();
                 continue;
             }
@@ -111,15 +111,16 @@ public static partial class PuckParser {
         text = text.TrimEnd();
         if (text.IsEmpty) { return false; }
         foreach (var row in ExpressionOperators.Infix) {
-            if (Matches(text, row.Symbol!)) { return true; }
+            if (Matches(candidate: text, symbol: row.Symbol!)) { return true; }
         }
-        return Matches(text, ExpressionOperators.Find(ExpressionOp.Not)!.Symbol!) || text[^1] is '~' or '?' or ':';
+        return (Matches(candidate: text, symbol: ExpressionOperators.Find(operation: ExpressionOp.Not)!.Symbol!) || (text[^1] is '~' or '?' or ':'));
 
         static bool Matches(ReadOnlySpan<char> candidate, string symbol) {
-            if (!candidate.EndsWith(symbol, StringComparison.Ordinal)) { return false; }
-            var before = candidate.Length - symbol.Length - 1;
-            return !IdentifierSpelling.IsStart(symbol[0]) || before < 0 ||
-                !(IdentifierSpelling.IsNameCharacter(candidate[before]) || candidate[before] is '.' or ':');
+            if (!candidate.EndsWith(comparisonType: StringComparison.Ordinal, value: symbol)) { return false; }
+            var before = ((candidate.Length - symbol.Length) - 1);
+
+            return (!IdentifierSpelling.IsStart(character: symbol[0]) || (before < 0) ||
+                !(IdentifierSpelling.IsNameCharacter(character: candidate[before]) || (candidate[before] is '.' or ':')));
         }
     }
     private static OperandExpressionNode ValidatedOperand(string text, SourceSpan span, DiagnosticBag? diagnostics) =>
@@ -156,7 +157,10 @@ public static partial class PuckParser {
             offset: start
         );
 
-        if (!TryReadName(admitted: NameForms.Extended, context: context, spelling: out _, text: out _)) {
+        // A row named by an interpolated string (`$"hand{s}"`) is a target as the literal name is.
+        var interpolated = ((cursor.Current == '$') && (cursor.PeekNext() == '"'));
+
+        if (!TryReadName(admitted: (interpolated ? NameForms.Interpolated : NameForms.Extended), context: context, spelling: out _, text: out _)) {
             text = string.Empty;
             span = default;
             return false;
@@ -203,6 +207,7 @@ public static partial class PuckParser {
     private static RowRefNode ResolveRowRef(string text, SourceSpan span, DiagnosticBag? diagnostics) {
         // `row[$"…"]` computes its key at lowering, as the same atom does in a read; the row is resolved alone.
         if (
+            !text.StartsWith(comparisonType: StringComparison.Ordinal, value: "$\"") &&
             (text.IndexOf(comparisonType: StringComparison.Ordinal, value: "[$\"") is var open and > 0) &&
             text.EndsWith(comparisonType: StringComparison.Ordinal, value: "\"]") &&
             (text.IndexOf(value: '[') == open)
@@ -225,6 +230,19 @@ public static partial class PuckParser {
                     KeyAtom: atom
                 );
             }
+        }
+        // Any other target an interpolated string spells (its row, or a key that reads one, as in
+        // `sealed[zone($"hand{s}", first)]`) is resolved whole as the operand it is, as the same text read is.
+        if (text.Contains(comparisonType: StringComparison.Ordinal, value: "$\"") && (CreateOperand(text: text, form: DocumentValueForm.Expression) is { Syntax: { } } computed)) {
+            return new RowRefNode(
+                text,
+                null,
+                span.Offset,
+                span.Length,
+                span.Line,
+                span.Column,
+                Operand: computed with { Offset = span.Offset, Length = span.Length, Line = span.Line, Column = span.Column }
+            );
         }
         if (text.Contains(value: "].")) {
             return new RowRefNode(
@@ -307,7 +325,10 @@ public static partial class PuckParser {
             span.Line,
             span.Column,
             Operand: (text.Contains(value: '[') ? CreateOperand(text: text, form: DocumentValueForm.Expression) with {
-                Offset = span.Offset, Length = span.Length, Line = span.Line, Column = span.Column,
+                Offset = span.Offset,
+                Length = span.Length,
+                Line = span.Line,
+                Column = span.Column,
             } : null)
         );
     }
@@ -335,7 +356,7 @@ public static partial class PuckParser {
             buffer: context.Scanner.Buffer,
             offset: start
         );
-        var text = ScanOperandSpan(context, stopKeywords);
+        var text = ScanOperandSpan(context: context, stopKeywords: stopKeywords);
 
         if (text.Length == 0) {
             rowRef = null;

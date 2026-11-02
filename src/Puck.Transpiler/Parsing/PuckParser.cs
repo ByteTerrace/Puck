@@ -607,7 +607,15 @@ public static partial class PuckParser {
                             exportName += $".{member}";
                         }
                         names.Add(item: exportName);
+                    } else if ((context.Scanner.Cursor.Current == '`') && TryReadBackquotedName(context: context, name: out var backquoted)) {
+                        names.Add(item: backquoted);
                     } else if (TryReadName(admitted: NameForms.String, context: context, spelling: out _, text: out var exportStr)) {
+                        // An exported name is a name: one the bare form cannot carry is backquoted, never quoted.
+                        diagnostics?.ReportError(
+                            code: PuckDiagnosticCodes.ArgumentWrittenBare,
+                            message: $"an exported name is written as a name; write `{exportStr}`",
+                            span: new SourceSpan(startOffset, (context.Scanner.Cursor.Offset - startOffset), line, col)
+                        );
                         names.Add(item: exportStr);
                     } else {
                         break;

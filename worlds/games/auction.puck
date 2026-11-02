@@ -104,9 +104,9 @@ template auctionRules(seats, lots) {
       if covered {
         auctionBids[$"{s}"] = offer
       }
-      setState(state: $"auctionIn{s}", key: bid, expression: 0)
-      setState(state: $"auctionIn{s}", key: result, expression: covered ? 1 : -1)
-      addState(state: $"auctionIn{s}", key: taken, expression: 1)
+      $"auctionIn{s}".bid = 0
+      $"auctionIn{s}".result = covered ? 1 : -1
+      $"auctionIn{s}".taken += 1
     }
   }
 
@@ -116,7 +116,7 @@ template auctionRules(seats, lots) {
     auction.open = 0
     auction.revealed = 1
     for s in range(1, seats) {
-      setState(state: auctionAudience, key: $"{s}", text: $"seat{s}")
+      auctionAudience[$"{s}"] = $"seat{s}"
       if auctionBids[$"{s}"] > 0 {
         auctionShown[$"{s}"] = true
       }
@@ -147,7 +147,7 @@ template auctionRules(seats, lots) {
     when auction.tallied == 1 and $tick >= auction.nextAt
     for s in range(1, seats) {
       auctionBids[$"{s}"] = 0
-      setState(state: auctionAudience, key: $"{s}", text: "")
+      auctionAudience[$"{s}"] = ""
       remove auctionShown[$"{s}"]
     }
     auction.revealed = 0
