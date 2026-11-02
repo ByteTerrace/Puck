@@ -826,16 +826,22 @@
                         "null"
                       ],
                       "default": null,
-                      "description": "Whether the style bands; absent is on. False on a palette row keeps that material continuous whatever the world\u0027s default is; false on render.toon boots the world\u0027s default off until the lever turns it on."
+                      "description": "Whether the style bands; absent is on. False on a palette row keeps that material continuous whatever the world\u0027s default is; false on render.toon boots the world\u0027s default off until the lever turns it on, which a style with every value then bands with."
                     },
                     "threshold": {
-                      "type": "number",
-                      "default": 0.45,
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null,
                       "description": "Diffuse band threshold in [0, 1]."
                     },
                     "softness": {
-                      "type": "number",
-                      "default": 0.08,
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null,
                       "description": "Full terminator width in [0.001, 0.5]."
                     },
                     "shadowTint": {
@@ -843,18 +849,27 @@
                       "description": "Shadow-band reflectance, three linear RGB values in [0, 1]."
                     },
                     "outlineWidth": {
-                      "type": "number",
-                      "default": 1.5,
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null,
                       "description": "Close outline radius in output pixels, in [0, 4]; zero disables outlines."
                     },
                     "outlineDistance": {
-                      "type": "number",
-                      "default": 12,
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null,
                       "description": "Distance in metres at which the outline radius halves, in [0.1, 1000]."
                     },
                     "outlineNormal": {
-                      "type": "number",
-                      "default": 0.65,
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null,
                       "description": "Crease normal cosine in [0, 0.95]."
                     },
                     "outlineTint": {
@@ -862,18 +877,27 @@
                       "description": "Outline multiplier, three linear RGB values in [0, 1]."
                     },
                     "specularSize": {
-                      "type": "number",
-                      "default": 0.025,
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null,
                       "description": "Highlight size as one minus the half-vector cosine, in [0.001, 0.25]."
                     },
                     "exposure": {
-                      "type": "number",
-                      "default": 0.5,
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null,
                       "description": "Reflected-light exposure compensation in stops, in [-4, 4]."
                     },
                     "shoulder": {
-                      "type": "number",
-                      "default": 0.65,
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null,
                       "description": "Hue-preserving highlight compression in [0, 2]; zero disables it."
                     },
                     "band": {

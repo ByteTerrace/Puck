@@ -305,7 +305,7 @@ An expression that fails reports one of these `ExpressionFault` values:
 
 | Fault | Cause |
 |---|---|
-| `Domain` | Overflow, division by zero, a function argument outside its domain, or an invalid stack result. |
+| `Domain` | Overflow, division by zero, a function argument outside its domain, or an invalid stack result, including one in a read's own address: a dynamic key (`cards[1 / a]`), a live row index, or a history ring's age. Such a read faults; it is never the absent value. |
 | `Absent` | An operand's dynamic key named no cell, or a table read named a key the table doesn't carry. |
 | `Forever` | An operand produced a fact that carries no number. |
 

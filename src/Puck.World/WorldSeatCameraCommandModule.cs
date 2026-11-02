@@ -11,7 +11,7 @@ namespace Puck.World;
 /// including a headless federation canary.</summary>
 internal sealed class WorldSeatCameraCommandModule(WorldInstanceHost instances, PlayerRoster roster, WorldContinuum continuum, WorldSeatAuthorityRouter seatRouter, WorldSeatBindings seatBindings) : ICommandModule {
     // The keys the default reading keeps: where the camera is and looks, how, and what the clearance did to the view.
-    private static readonly string[] CompactKeys = ["tick", "view", "eye", "target", "yaw", "pitch", "fov", "mode", "fade", "clearance"];
+    private static readonly string[] CompactKeys = ["tick", "view", "eye", "target", "yaw", "pitch", "fov", "fade", "clearance", "cutaway"];
 
     // The reading `world.view.camera [player] [full|compact|<key>,<key>...]` asks for: the compact set by default,
     // every field for `full`, or the named keys in the order given. A key the seat does not report is named in the
@@ -86,7 +86,6 @@ internal sealed class WorldSeatCameraCommandModule(WorldInstanceHost instances, 
         var gyro = seatLook.Gyro;
         var control = definition.Views.SeatControl;
         var state = seat?.View;
-        var choice = (state?.ClearanceChoice(control: control, feel: seatLook) ?? ((seatLook.ClearanceMode == WorldCameraClearanceChoice.Auto) ? control.ClearanceMode : seatLook.ClearanceMode));
         var angularVelocity = (seat?.MotionAngularVelocity ?? Vector3.Zero);
         var route = seatRouter.Route(slot: slot);
         var fields = new List<KeyValuePair<string, string>>();
@@ -139,7 +138,6 @@ internal sealed class WorldSeatCameraCommandModule(WorldInstanceHost instances, 
         Add(key: "angularVelocity", value: $"({angularVelocity.X:0.####},{angularVelocity.Y:0.####},{angularVelocity.Z:0.####})");
 
         if (state is not null) {
-            Add(key: "mode", value: $"{choice.ToString().ToLowerInvariant()}");
             Add(key: "autoFirstPerson", value: $"{Flag(value: state.AutomaticFirstPerson(control: control, feel: seatLook))}");
 
             // The client's clearance reading is a fixed run of key=value tokens that hold no free text.
@@ -262,38 +260,9 @@ internal sealed class WorldSeatCameraCommandModule(WorldInstanceHost instances, 
             routing: CommandRouting.Immediate
         );
         yield return CommandDefinition.WithWireArgs(
-            bindability: CommandBindability.Bindable,
-            name: "player.camera.clearance",
-            description: "Chooses this seat's tight-space camera: player.camera.clearance [fade|cutaway|auto|toggle]. No argument toggles fade/cutaway. Auto restores the portable preference or world's default. Heading is preserved; world.view.camera echoes mode and fade.",
-            handler: (context, args) => {
-                if (args.Count > 1) {
-                    return CommandResult.Error(output: "[player.camera.clearance: expected fade|cutaway|auto|toggle]");
-                }
-                var token = ((args.Count == 0) ? "toggle" : args[0].ToString());
-                var seat = roster.Seat(slot: context.Slot);
-
-                if (seat is null) {
-                    return CommandResult.Error(output: "[player.camera.clearance: no occupied seat]");
-                }
-                var definition = instances.ResolveRoutedDefinition(slot: context.Slot);
-                var feel = (seat.Profile?.SeatLook ?? definition.PlayerDefaults.SeatLook);
-                WorldCameraClearanceChoice choice;
-
-                if (string.Equals(a: token, b: "toggle", comparisonType: StringComparison.OrdinalIgnoreCase)) {
-                    choice = ((seat.View.ClearanceChoice(control: definition.Views.SeatControl, feel: feel) == WorldCameraClearanceChoice.Fade)
-                        ? WorldCameraClearanceChoice.Cutaway : WorldCameraClearanceChoice.Fade);
-                } else if (!Enum.TryParse(token, ignoreCase: true, out choice) || !Enum.IsDefined(value: choice)) {
-                    return CommandResult.Error(output: "[player.camera.clearance: expected fade|cutaway|auto|toggle]");
-                }
-                seat.View.SetClearanceChoice(choice: choice);
-                return new CommandResult(Output: Describe(slot: context.Slot));
-            },
-            routing: CommandRouting.Immediate
-        );
-        yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.view.camera",
-            description: $"Echoes a seat's camera: world.view.camera [player] [full|<key>,<key>...], player 1..{PlayerRoster.MaxSlots}; the default reading is tick, view, eye, target, yaw, pitch, fov, mode, fade and clearance. `full` reads every field (control policy, held free-look state, motion-input state, camera orbit and the last presented eye), and a comma list reads just those keys in the order given; a value holding a space is quoted. tick= is the latest simulation tick the client received, view= first or third, eye= and target= are world metres, yaw= and pitch= degrees, fov= the vertical field of view in degrees of the last framed seat camera (0 before any frame, as in a headless World). full also reads viewSource= player, program or clearance, transition= zero (third) to one (first), autoFirstPerson= the effective preference, room= independent head clearance in full-size metres, dwell= consecutive entry/exit seconds, boom= the placed boom over the authored one, rise= the degrees the boom rose over the body, near= the metres of geometry the near plane cuts away between the eye and the body, mode= fade or cutaway, fade= zero (solid) to one (hidden), clearance= none, open, shortened, risen or crowded. The definition follows the seat's current authority route; profile look preferences remain seat-owned across handoff.",
+            description: $"Echoes a seat's camera: world.view.camera [player] [full|<key>,<key>...], player 1..{PlayerRoster.MaxSlots}; the default reading is tick, view, eye, target, yaw, pitch, fov, fade, clearance and cutaway. `full` reads every field (control policy, held free-look state, motion-input state, camera orbit and the last presented eye), and a comma list reads just those keys in the order given; a value holding a space is quoted. tick= is the latest simulation tick the client received, view= first or third, eye= and target= are world metres, yaw= and pitch= degrees, fov= the vertical field of view in degrees of the last framed seat camera (0 before any frame, as in a headless World). full also reads viewSource= player, program or clearance, transition= zero (third) to one (first), autoFirstPerson= the effective preference, room= independent head clearance in full-size metres, dwell= consecutive entry/exit seconds, boom= the placed boom over the authored one, rise= the degrees the boom rose over the body, near= the metres of geometry the near plane cuts away between the eye and the body, fade= zero (solid) to one (hidden), clearance= none (the camera program authors no clearance op), open, shortened, risen or crowded, then the clearance op's parameters as the frame resolved them, full-size: cutaway= true or false, eyeRadius=, surfaceSkin=, maxRise= degrees, minimumBoom=, fadeStart=, fadeEnd=, closeTarget=, closeTargetStart=, closeTargetFull=, nearMargin=, retractionSkin= and obstructedTargetSkin=. The definition follows the seat's current authority route; profile look preferences remain seat-owned across handoff.",
             handler: Read,
             routing: CommandRouting.Immediate
         );

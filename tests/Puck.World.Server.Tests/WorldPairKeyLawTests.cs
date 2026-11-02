@@ -40,9 +40,9 @@ public sealed class WorldPairKeyLawTests {
 
         Assert.False(condition: pair.Resolve(
             reader: fixture.Server.RuleHost,
-            named: out var named
+            naming: out var naming
         ).IsValid);
-        Assert.True(condition: named);
+        Assert.Equal(expected: KeyNaming.Cell, actual: naming);
         Assert.Equal(expected: before, actual: fixture.Server.Arena.Keys.Count);
 
         var scope = fixture.Server.Arena.BeginScope();

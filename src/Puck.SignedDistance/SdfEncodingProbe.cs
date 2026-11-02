@@ -193,7 +193,7 @@ public static class SdfEncodingProbe {
                     ],
                     EmissiveLane: ((int)v[80]),
                     Glass: new SdfGlass(Depth: v[81], Ior: v[82]),
-                    Toon: SdfToon.Default with {
+                    Toon: new SdfToon {
                         Enabled = true, Band = SdfToonBand.Combined, Threshold = v[83], Softness = v[84],
                         ShadowTint = new Vector3(x: v[85], y: v[86], z: v[87]), OutlineWidth = v[88], OutlineDistance = v[89],
                         OutlineNormal = v[90], OutlineTint = new Vector3(x: v[91], y: v[92], z: v[93]), SpecularSize = v[94],

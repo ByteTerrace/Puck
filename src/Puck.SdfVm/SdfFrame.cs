@@ -239,8 +239,9 @@ public sealed record SdfFrame(
     /// <summary>The camera exposure every exposed view of the frame maps the luminance it shades to the display by
     /// (<c>render.exposure</c>). The default is the manual exposure an unauthored world renders at.</summary>
     public SdfExposure Exposure { get; init; } = SdfExposure.Default;
-    /// <summary>The optional opaque-material cel response, applied before temporal reconstruction.</summary>
-    public SdfToon Toon { get; init; } = SdfToon.Default;
+    /// <summary>The world's default cel style, which every material without a style of its own shades with, applied
+    /// before temporal reconstruction; the default is off.</summary>
+    public SdfToon Toon { get; init; }
 
     /// <summary>Engine-bench lever: skips the per-screen area-light loop (the diegetic screens stop spilling colored light
     /// into the room). Default <see langword="false"/> = screen lights on. Directly measures the lit screens' cost for the

@@ -143,6 +143,15 @@ agent works in that mode by default, without asking:
     far behind on the lead machine: a change to rendering or GPU code also gets a
     windowed Vulkan boot of the debug world, and a Vulkan regression is fixed as
     ordinary work. Full parity qualification waits for the owner's call.
+  - Upper hardware enhances; the baseline is cross-platform (the owner's
+    ruling). The frame bar (60 FPS on the RTX 2060 and RTX 4070, 45 on the
+    Steam Deck, at the highest quality) is set and met by a path every bar
+    device runs. A technique only stronger hardware has (work graphs on the
+    4070, for example) is allowed as an enhancement there, never as what the
+    baseline depends on. Such a path is a second implementation, so it earns
+    its place: it reads the same data, gives the same result within the
+    still tolerance, is measured to pay on that hardware, and falls back to
+    the baseline path automatically.
   - Tests never depend on commercial ROMs. A test or check stage runs on
     committed sources (homebrew and test cartridges); a commercial ROM is used
     only locally, by hand, and is never committed.

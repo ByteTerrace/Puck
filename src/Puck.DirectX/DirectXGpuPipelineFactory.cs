@@ -175,9 +175,11 @@ public sealed unsafe partial class DirectXGpuPipelineFactory(DirectXDeviceContex
             RasterizerState = new D3D12_RASTERIZER_DESC {
                 AntialiasedLineEnable = false,
                 ConservativeRaster = D3D12_CONSERVATIVE_RASTERIZATION_MODE.D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF,
-                CullMode = ((cull == GpuCullMode.Back)
-                    ? D3D12_CULL_MODE.D3D12_CULL_MODE_BACK
-                    : D3D12_CULL_MODE.D3D12_CULL_MODE_NONE),
+                CullMode = (cull switch {
+                    GpuCullMode.Back => D3D12_CULL_MODE.D3D12_CULL_MODE_BACK,
+                    GpuCullMode.Front => D3D12_CULL_MODE.D3D12_CULL_MODE_FRONT,
+                    _ => D3D12_CULL_MODE.D3D12_CULL_MODE_NONE,
+                }),
                 DepthBias = 0,
                 DepthBiasClamp = 0f,
                 DepthClipEnable = true,

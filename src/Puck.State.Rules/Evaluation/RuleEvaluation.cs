@@ -193,7 +193,8 @@ public static class RuleEvaluation {
     /// <param name="kind">The encoding the read answers in.</param>
     /// <param name="fact">The fact, on success.</param>
     /// <param name="fault">Why the read did not answer, or <see cref="ExpressionFault.None"/>. An operand answering
-    /// the absent fact faults <see cref="ExpressionFault.Absent"/>; one answering <c>forever</c> does not fault, since
+    /// the absent fact faults <see cref="ExpressionFault.Absent"/>, and one whose address computation faulted
+    /// (<see cref="RuleFact.IsFaulted"/>) faults <see cref="ExpressionFault.Domain"/>; one answering <c>forever</c> does not fault, since
     /// a fact comparison answers it under infinity semantics. <see cref="ExpressionFault.Forever"/> comes only from an
     /// expression, whose numeric evaluation cannot read infinity.</param>
     /// <returns><see langword="true"/> when the source answered. An operand answering the absent or forever fact
@@ -205,9 +206,11 @@ public static class RuleEvaluation {
             ArgumentNullException.ThrowIfNull(argument: reader);
 
             fact = operand.Read(reader: reader);
-            fault = (fact.IsAbsent
-                ? ExpressionFault.Absent
-                : ExpressionFault.None
+            fault = (fact.IsFaulted
+                ? ExpressionFault.Domain
+                : (fact.IsAbsent
+                    ? ExpressionFault.Absent
+                    : ExpressionFault.None)
             );
 
             return true;

@@ -7,6 +7,9 @@ namespace Puck.World.Server;
 public sealed class WorldStateChangeDisclosure {
     private FieldCellDelta[] m_result = [];
     private bool[] m_changed = [];
+    // The cells last sent for each row that can withhold from this recipient; null until sent, or after Forget.
+    private FieldCellDelta[]?[] m_sent = [];
+    private StateArena? m_sentArena;
     private int m_count;
 
     private void Add(FieldCellDelta delta) {
@@ -58,6 +61,10 @@ public sealed class WorldStateChangeDisclosure {
             m_count = 0;
             return changes;
         }
+        if (!ReferenceEquals(objA: m_sentArena, objB: arena) || (m_sent.Length != arena.Rows.Count)) {
+            m_sent = new FieldCellDelta[]?[arena.Rows.Count];
+            m_sentArena = arena;
+        }
         for (var ordinal = 0; (ordinal < arena.Rows.Count); ordinal++) {
             if (!policiesMoved && !m_changed[ordinal]) { continue; }
             var header = m_count;
@@ -70,9 +77,24 @@ public sealed class WorldStateChangeDisclosure {
                 Add(delta: new FieldCellDelta(Cell: position++, Field: 0, Raw: 0, Row: ordinal, Image: arena.ReadCellImage(key: key, rowOrdinal: ordinal)));
             }
             m_result[header] = m_result[header] with { Raw = position };
+            if (WorldStateDisclosure.ReadsWholeRow(arena: arena, recipient: recipient, rowOrdinal: ordinal)) { continue; }
+            // A row that can withhold is replaced only when what the recipient reads of it moved: a replacement on every
+            // tick its hidden cells change would show when they do.
+            var composed = m_result.AsSpan(start: (header + 1), length: position);
+
+            if ((m_sent[ordinal] is { } sent) && composed.SequenceEqual(other: sent)) {
+                Array.Clear(array: m_result, index: header, length: (m_count - header));
+                m_count = header;
+                continue;
+            }
+            m_sent[ordinal] = composed.ToArray();
         }
         return m_result.AsMemory(length: m_count, start: 0);
     }
+
+    /// <summary>Forgets every restricted row replacement this recipient was sent: the recipient's rows were just
+    /// seeded whole by a definition or state delivery, so the next change of each row is sent again.</summary>
+    public void Forget() => Array.Clear(array: m_sent);
 
     // Whether the snapshot's row replacements are exactly the recipient's: every replaced row reads whole for it (no
     // cell or zone policy can withhold a cell, and its own policy admits the recipient), and each replacement's

@@ -212,6 +212,7 @@ public static partial class SweepCommand {
 
                     try {
                         gpu = CliLease.AcquireAsync(
+                            ancestor: ProcessInspection.IsAncestor,
                             cancellationToken: budget.Token,
                             clock: TimeProvider.System,
                             holder: Verb,

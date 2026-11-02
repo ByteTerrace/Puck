@@ -229,38 +229,53 @@ public sealed class LiveRow {
     /// <param name="reader">The evaluation in flight.</param>
     /// <param name="rowOrdinal">The selected row's catalog ordinal, on success.</param>
     /// <returns><see langword="true"/> when the index selects a row.</returns>
-    public bool TryResolve(IStateReader reader, out int rowOrdinal) {
+    public bool TryResolve(IStateReader reader, out int rowOrdinal) => (Resolve(
+        reader: reader,
+        rowOrdinal: out rowOrdinal
+    ) == KeyNaming.Cell);
+    /// <summary>Resolves the row for the evaluation in flight, telling an index whose computation faulted apart from
+    /// one that selects no row.</summary>
+    /// <param name="reader">The evaluation in flight.</param>
+    /// <param name="rowOrdinal">The selected row's catalog ordinal when a row is selected, otherwise -1.</param>
+    /// <returns><see cref="KeyNaming.Cell"/> when the index selects a row, <see cref="KeyNaming.Fault"/> when computing
+    /// it faulted, and <see cref="KeyNaming.Nothing"/> otherwise.</returns>
+    public KeyNaming Resolve(IStateReader reader, out int rowOrdinal) {
         var reference = Index;
-
-        if (!RuleReads.TryResolveIndex(
+        var naming = RuleReads.ResolveIndex(
             index: out var index,
             reader: reader,
             reference: in reference
-        )) {
-            rowOrdinal = -1;
+        );
 
-            return false;
+        rowOrdinal = -1;
+        if (naming != KeyNaming.Cell) {
+            return naming;
         }
         if (Table is { } table) {
-            return table.TryOrdinal(
+            return (table.TryOrdinal(
                 index: index,
                 rowOrdinal: out rowOrdinal
-            );
+            )
+                ? KeyNaming.Cell
+                : KeyNaming.Nothing);
         }
 
-        return m_family.TryGetOrdinal(
+        return (m_family.TryGetOrdinal(
             index: ((int)Math.Clamp(
                 max: int.MaxValue,
                 min: int.MinValue,
                 value: index
             )),
             ordinal: out rowOrdinal
-        );
+        )
+            ? KeyNaming.Cell
+            : KeyNaming.Nothing);
     }
 }
 /// <summary>A key computed where it is used: the cell whose name is the integer its expression evaluates to at the
 /// moment the effect or condition holding it reads or writes. Preceding effects are visible to the expression.</summary>
-/// <remarks>A fault names no cell. An integer names that key even when no row holds it.</remarks>
+/// <remarks>An integer names that key even when no row holds it. An absence the expression reads names no cell; any
+/// other fault is the key's fault (<see cref="KeyNaming.Fault"/>), which a read raises as arithmetic.</remarks>
 public sealed class EffectKeyFact : RuleKeyFact {
     /// <summary>Initializes the fact.</summary>
     /// <param name="source">The key's compiled Int expression.</param>
@@ -281,33 +296,33 @@ public sealed class EffectKeyFact : RuleKeyFact {
         tokens: Source
     );
     /// <inheritdoc/>
-    public override CellKey Resolve(IStateReader reader, out bool named) {
+    public override CellKey Resolve(IStateReader reader, out KeyNaming naming) {
         ArgumentNullException.ThrowIfNull(argument: reader);
 
-        if (!TryResolveIndex(
+        naming = ResolveIndex(
             index: out var index,
             reader: reader
-        )) {
-            named = false;
+        );
 
-            return default;
-        }
-
-        named = true;
-
-        return RuleReads.TryIndexKey(index: index, key: out var key, keys: reader.Arena.Keys) ? key : default;
+        return (((naming == KeyNaming.Cell) && RuleReads.TryIndexKey(index: index, key: out var key, keys: reader.Arena.Keys)) ? key : default);
     }
     /// <inheritdoc/>
-    public override bool TryResolveIndex(IStateReader reader, out long index) {
+    public override KeyNaming ResolveIndex(IStateReader reader, out long index) {
         ArgumentNullException.ThrowIfNull(argument: reader);
 
-        return RuleExpressions.TryEvaluate(
-            fault: out _,
+        if (RuleExpressions.TryEvaluate(
+            fault: out var fault,
             kind: CellKind.Int,
             program: Source,
             reader: reader,
             value: out index
-        );
+        )) {
+            return KeyNaming.Cell;
+        }
+
+        return ((fault == ExpressionFault.Absent)
+            ? KeyNaming.Nothing
+            : KeyNaming.Fault);
     }
 }
 /// <summary>The key a declared local computed: the cell whose name is the local's integer.</summary>
@@ -333,11 +348,11 @@ public sealed class LocalKeyFact : RuleKeyFact {
         tokens: Source
     );
     /// <inheritdoc/>
-    public override CellKey Resolve(IStateReader reader, out bool named) {
+    public override CellKey Resolve(IStateReader reader, out KeyNaming naming) {
         ArgumentNullException.ThrowIfNull(argument: reader);
 
         // A binding spells an integer, so it always names a cell; one no key table interns is a cell no row holds.
-        named = true;
+        naming = KeyNaming.Cell;
 
         return (RuleReads.TryIndexKey(
             keys: reader.Arena.Keys,
@@ -349,11 +364,11 @@ public sealed class LocalKeyFact : RuleKeyFact {
         );
     }
     /// <inheritdoc/>
-    public override bool TryResolveIndex(IStateReader reader, out long index) {
+    public override KeyNaming ResolveIndex(IStateReader reader, out long index) {
         ArgumentNullException.ThrowIfNull(argument: reader);
 
         index = reader.LocalValue(ordinal: Ordinal);
 
-        return true;
+        return KeyNaming.Cell;
     }
 }

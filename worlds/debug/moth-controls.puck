@@ -6,6 +6,9 @@
 import "../standard/standard"
 import "pad-kit"
 
+// The standard's screen material, re-exported so a world importing these controls names it.
+export binding crt
+
 bindingOverlays [
   {
     id: "moth-controls"

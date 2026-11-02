@@ -49,6 +49,8 @@ public sealed partial class SdfWorldTables {
     private ulong m_geometrySignature;
     private ulong m_lightingSignature;
     private ulong m_shadowSignature;
+    // The live program's material wraps (SdfMaterial.Wrap), which the surface pass reads (WrapSignatureOf).
+    private ulong m_wrapSignature;
     private ulong m_visualSignature;
 
     private static readonly (int Offset, int Length)[] CompositeValues = Members(members: [SdfWorldPackage.GeometryOnly]);
@@ -113,6 +115,9 @@ public sealed partial class SdfWorldTables {
             case SdfWorldPackage.Parts.ShadowFar:
             case SdfWorldPackage.Parts.ShadowSecond:
                 hash.Add(value: shadow.Value);
+                // The surface pass queries the cascades wherever a material's wrap carries its light, so a palette's wraps
+                // decide which pixels it measures.
+                if (part == SdfWorldPackage.Parts.Surface) { hash.Add(value: m_wrapSignature); }
                 break;
             // The glass shading pass lights the glass and reads the lit image; the clear and the glass raster are
             // geometry alone, one signature, so a standing raster never accumulates onto a clear it did not see.

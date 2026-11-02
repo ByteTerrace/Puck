@@ -147,12 +147,12 @@ diffuse, and specular low enough that highlights never read as leaves.
 
 | Zone | Family | Template | Treatment |
 |---|---|---|---|
-| Floor | Lawn | The floor disc (`debug.puck`'s `floor`) takes the painterly set's turf slot ([the sets](terrain-pass.md#the-two-standard-material-sets)) with brush-scale breakup | Flat yellow-green, slightly warmer toward the walls |
-| Floor | Paths | `sceneryPatch` with flat radii in a paving colour, laid end to end along each route | Terracotta, the one place edges stay sharp |
+| Floor | Lawn | The floor disc (`lawn.puck`'s `floor`, the standard's `paintedGround`) in one turf value, broken by flat `sceneryPatch` masses in a shade and a light value; the painterly set's turf slot ([the sets](terrain-pass.md#the-two-standard-material-sets)) takes over the value when it lands | Flat yellow-green; the warmer band toward the walls is the terrain pass's |
+| Floor | Paths | Paints on the floor disc (`paintedGround`): quadratic Bézier sweeps in a paving colour, costing no draw, bake or contact | Terracotta, the one place edges stay sharp |
 | Floor | Grass | `windMeadowTile` where the camera comes close (the meadow, the spawn's lawn, the pool's banks, the approach); `grassTuft` clusters wider | The existing six-value ramp, one gust phase across the whole floor through the placed world position |
-| Floor | Flowers | A new `flowerCluster`: the tuft's stems with grouped coloured heads | Yellow and white near paths and water, as the overview's foreground |
+| Floor | Flowers | `flowerCluster`: a low leafy mound with grouped coloured heads and no thin stems, which would set a millimetre bake cell | Yellow and white near paths and water, as the overview's foreground |
 | Floor | Shrubs | A new `scrubClump`: two to four crowns at ground level, no trunk | Dark blue-green, in groups of three along banks and the hall's base |
-| Floor | Trees | `broadleafTree`, and a `flatCrownTree` variant whose crowns spread wider than tall | Grouped crowns in three greens; flat crowns where the overview shows them |
+| Floor | Trees | Four families on one `groupedTree`: `broadleafTree` (rounded), `flatCrownTree` (spreading, wider than tall), `columnTree` (tall and narrow) and `weepingTree` (a dome over hanging masses), each taking `height`, `spread`, `lean` and `leaves` | Grouped crowns in three flat greens; the families mixed by area so each reads as a species and no two trees as clones (the owner's answer: variety) |
 | Floor | Boulders | `mossyRock` with its palette made a parameter so the canyon set wears terracotta and peach strata over the same stone | Low, warm, rounded; moss only on the shaded side |
 | Floor | Banks and sand | `sceneryPatch` | Relieved caps that break the lawn's plane where paths bend |
 | Slopes | Green ledges | `sceneryPatch` in turf colour on each ledge the terrain's material layers show as turf | Flat green bands on the strata |
@@ -223,7 +223,7 @@ no files and run beside each other.
 
 | Lane | Place or seam | Runs | Check on `worlds/debug` |
 |---|---|---|---|
-| C1 The floor's ground cover | The meadow's families spread west across the south lawn to the spawn and the approach; the lawn's painterly turf, paths, boulders, shrubs, flowers and trees from the standard | Now, beside J1 and the bake and memory work; it is R2's and R1's forcing load | `debug.go stage`, a full turn and a walk to the entrance: grouped trees, boulders and paths read in B's values on both backends; `world.budget` and `world.counters` draws and bake groups against the meadow's 7,578 draws and 6,183 groups; `host.frames` at the spawn before and after; `puck mesh audit --cpu` for the new families |
+| C1 The floor's ground cover (done, [as built](#c1-as-built)) | The meadow's families spread west across the south lawn to the spawn and the approach; the lawn's painterly turf, paths, boulders, shrubs, flowers and trees from the standard | Now, beside J1 and the bake and memory work; it is R2's and R1's forcing load | `debug.go stage`, a full turn and a walk to the entrance: grouped trees, boulders and paths read in B's values on both backends; `world.budget` and `world.counters` draws and bake groups against the meadow's 7,578 draws and 6,183 groups; `host.frames` at the spawn before and after; `puck mesh audit --cpu` for the new families |
 | C2 The hall in B's vocabulary | The shell as stepped cream and ochre modules on teal arches with the lift tower, shades and roof terraces; indoors the three stacked east wings and the atrium's arch; every function kept (four floors, stairs, lift, exhibits, portals, tables) | Parallel with C1; the blockout first, cladding after the terrain pass's step 6 lands its palette | `debug.go gallery`, `lift`, `stairs`, `boardroom`, `portals`: every `debug.go` spot and traversal goal still reached; the hall's tests pass; stills at the sweep's hall stops compared tolerantly with the build before |
 | C3 Water | The falls, the stream, the bridge and the pool, with the medium and the flow lattice; a swim hold the Moth refines in the standard | After C1 (the banks are its families); the field workload | `debug.go pool` (new) and a swim: depth rows change with depth, the body floats and surfaces; the flow lattice's source tops up and spills (`world.counters`); from the spawn the falls show on the north-west wall; the stream's phase is continuous across its creations |
 | C4 The creature garden | The garden's pond plot: pack, swarm, school, stalker, crawling, rumor | Now, ahead of T2; its 128 bodies are the parallel tick's forcing case | 128 bodies through the garden painting; `puck bench world` on the garden; `puck test --workers 1,2,0` once T0 exists, bit-identical across counts; the rate tiers hold the unseen bodies |
@@ -234,12 +234,62 @@ no files and run beside each other.
 | C9 The traversal course | Kart, ledge course, planetoids and grapple on the east floor | After T2; content after the fundamentals, as the port page orders | A lap time; the trophy region; a walk round a planetoid; a swing between posts; from the board game room's window the course is in view |
 | C10 Light across the valley | The seam lane: the far cascade, GI proportional to change and the image meter checked together from the atrium to the lawn, with the lighting-direction pass | After terrain pass steps 1 and 7 and B1 | A walk from `debug.go gallery` out to the pool: no dark interval, no clipped rock, the rim's shadow on the floor, coloured shadows under the trees; `world.exposure` continuous across the arch |
 | C11 The tables | Lanes 5, 8, 11 and 12 in the board game room, in the card tables packet's order | After C5's seat; content | Each table reached by `debug.go`; two seats with hidden information; a physical judge settles |
+| C12 The fencing salle | A training hall for the [readable interaction](readable-interaction.md) plan: a duel floor, target dummies and a thrown-object range; the standard's duel kit with diegetic telegraphs (a debug tool disguised as architecture: it forces contact precision, motion prediction and input latency) | After that plan's steps 1 to 3 | Two local seats duel at `debug.go salle`; a parry, an evade and a feint read from the blades alone; a recorded duel replays with identical grades |
 
 C1, C2 and C4 start now. C3 follows C1; C5 follows the seat; C6 follows
 residency step 2; C7 follows the terrain pass; C8, C9 and C11 are content after
 T2 and R1; C10 runs whenever its three inputs have landed. The combat yard (lane
 13) and the climate wing keep their reservations and join when the job-system
 memo and the weather decision reach them.
+
+### C1 as built
+
+[The lawn](../../worlds/debug/lawn.md) places 307 rows from the spawn and the
+approach across the south lawn to the meadow: 24 trees in four families and
+eleven variants, 42 shrubs, 19 canyon boulders, 52 flower clumps and 156 tufts
+along the paths, a four-tile wind-grass patch beside the spawn, and ten flat
+turf masses. The floor is the standard's `paintedGround` with eight painted
+paths. Tree form follows the owner's answer: the families mix by area and the
+swap is a group's `kind` in `lawnGroups`.
+
+Measured on one build (the lane's merge of the integration tip), RTX 4070,
+the authored 1280×900 view, `--devices none`, an empty cache per leg and a GPU
+lease per leg, with other lanes' builds and GPU work queued beside them, so
+the frame readings are loaded-machine observations. Cold bake is the `world`
+residency's `[sdf.mesh-bake] done … seconds`; frames are `host.frames` over
+300 ticks standing and 180 walking (`body.fly 1 0 0 0 0 0 7`), at
+`debug.go stage` and `debug.go meadow`; counts are `world.counters gpu
+summary` (the primary `world` node) and `world.budget`; memory is
+`host.memory` once the bakes settle.
+
+| Reading | Before | After |
+|---|---:|---:|
+| Direct3D 12 cold bake | 157.95 s | 233.95 s |
+| Vulkan cold bake | not taken on this build | 287.26 s |
+| Groups, unique bakes | 6,183, 1,368 | 7,236, 1,671 |
+| Baked triangles | 45.06 M | 56.91 M |
+| Direct3D 12 stage standing, walking (avg / p99 ms) | 58.4 / 97.2, 82.4 / 128.3 | 107.0 / 113.7, 129.3 / 163.0 |
+| Direct3D 12 meadow standing, walking | 73.3 / 125.9, 64.9 / 129.8 | 131.0 / 174.3, 126.0 / 142.6 |
+| Vulkan stage standing, walking | | 108.8 / 175.0, 134.0 / 154.6 |
+| Vulkan meadow standing, walking | | 134.5 / 180.0, 142.5 / 196.8 |
+| Primary view draws (vertices) at the stage | 657 (3.09 M) | 3,360 (8.32 M) |
+| Primary view draws at the meadow | 2,773 | 2,652 |
+| Retained draws, instances, dynamic slots | 7,578, 7,403, 4,994 | 8,672, 10,218, 5,748 |
+| Mesh region | 1,589,088,616 B | 1,994,605,168 B |
+| Account live bytes, private | 1,607,732,922 B, 15,815 MiB | 2,022,625,748 B, 17,898 MiB |
+
+The 303 added unique bakes are the static rows, one each: a static copy bakes
+in world space, so copies never share
+([the bake packet](open-items.md#bake-proportional-to-change)); the 748 grass
+parts are dynamic and shared. The flower clump was then rebuilt as a mound
+with heads and no millimetre stems, which `puck mesh audit --cpu` puts at
+26,962 triangles a clump where the measured stems took 54,132. Produce and
+simulate rose even at the meadow, where the drawn work barely moved, so part
+of the frame rise is the machine's load between legs and wants a quiet
+back-to-back reading. Captures at the stage, the turn and the lawn walk read
+B's grouped trees, terracotta boulders and paths alike on both backends.
+`puck test --reproduce` passes on meadow-tests (with a new walk into a lawn
+boulder), hall-tests and noclip-tests.
 
 ## The owner's answers
 

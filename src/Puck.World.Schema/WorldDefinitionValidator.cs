@@ -1642,41 +1642,19 @@ public static partial class WorldDefinitionValidator {
             views: definition.ViewsRaw
         );
 
-        // The whole document's camera-program name table (every cameras[].rig, plus views.seatRig/cameraRig) — the
-        // namespace a blend op resolves against. Assembled once here so dangling names and blend cycles are checked
-        // exactly once, over the whole graph, never per-program. A duplicated program name is refused: a blend
-        // resolves by name alone, so two programs under one name resolve nothing honestly.
+        // The whole document's camera-program name table (WorldCameraPrograms.Declared) — the namespace a blend or select
+        // op resolves against. Assembled once here so dangling names and cycles are checked exactly once, over the
+        // whole graph, never per-program. A duplicated program name is refused: a blend resolves by name alone, so two
+        // programs under one name resolve nothing honestly.
         var cameraPrograms = new Dictionary<string, WorldCameraProgram>(comparer: StringComparer.Ordinal);
 
-        void AddCameraProgram(WorldCameraProgram? program, string path) {
-            if (program is not { Name: { Length: > 0 } }) {
-                return;
+        foreach (var (programPath, program) in WorldCameraPrograms.Declared(definition: definition)) {
+            if (
+                (program is { Name: { Length: > 0 } }) &&
+                !cameraPrograms.TryAdd(key: program.Name, value: program)
+            ) {
+                errors.Add(item: $"{programPath}.name '{program.Name}' is duplicated across the document's camera programs.");
             }
-
-            if (!cameraPrograms.TryAdd(
-                key: program.Name,
-                value: program
-            )) {
-                errors.Add(item: $"{path}.name '{program.Name}' is duplicated across the document's camera programs.");
-            }
-        }
-
-        for (var index = 0; (index < definition.Cameras.Count); index++) {
-            AddCameraProgram(
-                path: $"cameras[{index}].rig",
-                program: definition.Cameras[index]?.Rig
-            );
-        }
-
-        if (definition.ViewsRaw is { } viewsForBlend) {
-            AddCameraProgram(
-                path: "views.seatRig",
-                program: viewsForBlend.SeatRig
-            );
-            AddCameraProgram(
-                path: "views.cameraRig",
-                program: viewsForBlend.CameraRig
-            );
         }
 
         ValidateCameraPrograms(

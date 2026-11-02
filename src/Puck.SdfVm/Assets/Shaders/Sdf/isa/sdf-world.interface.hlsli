@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-world' (sha256/25d8b68300e4a837551649dd8b06f043779df2b51f5bf9243da26456e8ed7f65). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-world' (sha256/146dd82cd2c0283ae283e1e89b5cafada0d6ac2f6fc70ab980743016bbd18fce). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_WORLD
 #define PUCK_SHADER_INTERFACE_SDF_WORLD
 
@@ -238,9 +238,12 @@ struct SdfWorldPass {
 [[vk::binding(38, 3)]] Texture2D<float4> meshShadowNear : register(t38, space3);
 [[vk::binding(39, 3)]] Texture2D<float4> meshShadowFar : register(t39, space3);
 [[vk::binding(40, 3)]] Texture2D<float4> meshShadowSecond : register(t40, space3);
-[[vk::binding(41, 3)]] RWStructuredBuffer<uint> workCounters : register(u41, space3);
-[[vk::binding(42, 3)]] StructuredBuffer<uint> sdfMeshPyramid : register(t42, space3);
-[[vk::binding(43, 3)]] RWStructuredBuffer<uint> sdfMeshPyramidRW : register(u43, space3);
+[[vk::binding(41, 3)]] Texture2D<float4> meshShadowNearExit : register(t41, space3);
+[[vk::binding(42, 3)]] Texture2D<float4> meshShadowFarExit : register(t42, space3);
+[[vk::binding(43, 3)]] Texture2D<float4> meshShadowSecondExit : register(t43, space3);
+[[vk::binding(44, 3)]] RWStructuredBuffer<uint> workCounters : register(u44, space3);
+[[vk::binding(45, 3)]] StructuredBuffer<uint> sdfMeshPyramid : register(t45, space3);
+[[vk::binding(46, 3)]] RWStructuredBuffer<uint> sdfMeshPyramidRW : register(u46, space3);
 
 // The pass's own work, added to its row of the node's kernel counters (GpuKernelCounters, which reads the rows
 // back): each counted kind in GpuWork.KernelKinds order, march steps, texels written, sky evaluations, sky hashes,

@@ -1,6 +1,7 @@
 schema: "puck.world.definition.v1"
 import "../../standard/inputs"
 import "../../standard/quality"
+import "../../standard/motion"
 import "moth-head"
 import "moth-dash"
 import "moth-camera"
@@ -219,29 +220,6 @@ bodies {
   ]
   sleepAfterSeconds: 0s
 }
-
-bodyMotionPrograms [
-  {
-    kind: Motion
-    name: "walk"
-    operations [
-      ResolveYawAttitudeAndPlanarFrame
-      ResolveHold
-      ComputePlanarTargetVelocity
-      ShapeVelocity
-      SnapYawToPlanarIntent
-      RunActionTriggers
-      ApplyHold
-      IntegratePlanarAndVerticalVelocity
-      CommitPose
-    ]
-    planarTarget {
-      backward: 0.7
-      strafe: 0.85
-    }
-    version: "puck.body.program.v1"
-  }
-]
 
 cameras [
   // Eight cameras round the jetpack alone, framed on her hovering 2 m above the hero spawn (body.pose 48 2 -48 0 0 0 in

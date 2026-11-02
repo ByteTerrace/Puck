@@ -50,7 +50,7 @@ import "guide"
 import "machine-debugger"
 import "range"
 import "valley"
-import "meadow"
+import "lawn"
 // The time of day: the sun and the sky on one clock (day.puck).
 import "day"
 
@@ -246,27 +246,6 @@ state {
 prototypes {
   galleryPrototypes()
   studioPrototypes()
-
-  prototype "floor" {
-    document {
-      name: "floor"
-      palette [
-        {
-          color: "#8C8C8C"
-          roughness: 0.9
-          specular: 0.02
-        }
-      ]
-      schema: "puck.creation.v1"
-      // The valley's floor (valley.puck): a disc running on under the walls to their outer feet, so its rim never shows
-      // inside the ring.
-      shape Cylinder "ground" {
-        material: 0
-        position [0, -0.2, 0]
-        scale [740, 0.2, 740]
-      }
-    }
-  }
 
   prototype "axis-x" {
     document {

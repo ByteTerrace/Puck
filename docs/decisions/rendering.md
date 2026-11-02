@@ -129,8 +129,23 @@ owner ruled the second (a style per material, not one look per world).
   wherever that light's diffuse response is non-zero, a wrapped material's side
   past the terminator included, and filters what it queried. A side it skips
   decodes as fully visible, so any response there is light through walls. Past
-  the terminator the receiver's own body stands between it and the light, so
-  casters within that depth transmit; a roof or a wall farther off does not.
+  the terminator the receiver's own body stands between it and the light, and
+  that body, and only it, lets the wrap's light through. Each cascade holds two
+  layers: its depth, the first face the light meets (where it enters the first
+  solid it crosses), and an exit layer, the first face turned from the light
+  (where it leaves that solid). A triangle facing the light compares against
+  the depth; one turned from it compares against the exit layer, where its own
+  face is the nearest exit unless another solid stands in front of its body.
+  This is exact for a millimetre wing and a metre-thick plate alike and needs
+  no thickness estimate. One from the surface's curvature fails flat geometry
+  both ways (it lets a separate slab a few centimetres off a flat wing through,
+  and shadows a thick flat plate by itself), and a per-vertex thickness cannot
+  follow the light's angle. Reading
+  the exit layer for every receiver (second-depth shadow mapping, Wang and
+  Molnar 1994) would leak light along every lit floor beside a wall's foot,
+  where the wall's far face meets the floor, so a receiver facing the light
+  keeps the depth. The exit layer costs a second raster of each cascade's draws
+  (the faces toward the light culled) and one more depth image per cascade.
 - **The band shapes the light, not the shadow.** A cel style bands a light's
   cosine and keeps its visibility as a separate factor,
   `band(cosine) × visibility`, so the filtered penumbra keeps its softness and
