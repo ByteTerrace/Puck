@@ -4,6 +4,11 @@ using Puck.World.Client;
 namespace Puck.World;
 
 /// <summary>One seat's resolved binding-bar policy and current visibility.</summary>
+/// <param name="ActivePage">The seat's active page, which the bar always draws.</param>
+/// <param name="ActiveBank">The index into <see cref="WorldBindingBarAuthoring.Banks"/> of the bank the active page
+/// draws in: the bank naming it, else the first bank whose page the same held modifiers select (a context group's
+/// resting page stands in the resting page's bank); -1 when neither. The single model draws the active page alone in
+/// the first bank's place; the stacked model draws every bank, this one with the active page.</param>
 /// <param name="Authoring">The resolved authored policy.</param>
 /// <param name="Source">Where the resolved policy came from.</param>
 /// <param name="Override">The live visibility override, or <see langword="null"/> for authored behavior.</param>
@@ -25,6 +30,8 @@ namespace Puck.World;
 /// the bar's opacity multiplier, so a fading <c>recently</c> predicate fades the bar rather than cutting it. 1
 /// under a live override or with no condition.</param>
 internal readonly record struct WorldBindingBarStatus(
+    BindingPageView ActivePage,
+    int ActiveBank,
     WorldBindingBarAuthoring Authoring,
     string Source,
     bool? Override,
@@ -88,6 +95,29 @@ internal sealed class WorldBindingBarControl {
             ? text.AsText
             : null
         );
+    }
+    // The bank the seat's active page draws in: the bank that names it, else the first bank whose page the same held
+    // modifiers select. A context group (a tabletop's board) brings its own resting page, which no bank names; it takes
+    // the place of the resting page's bank, so engaging changes the page and never the bar's layout or model.
+    private int ActiveBank(int slot, WorldBindingBarAuthoring authoring, BindingPageView page) {
+        var banks = authoring.Banks;
+
+        for (var index = 0; (index < banks.Count); index++) {
+            if (string.Equals(a: banks[index].PageId, b: page.PageId, comparisonType: StringComparison.Ordinal)) {
+                return index;
+            }
+        }
+
+        for (var index = 0; (index < banks.Count); index++) {
+            if (
+                m_bindings.TryPageView(pageId: banks[index].PageId, slot: slot, view: out var bankPage) &&
+                page.SharesHeldModifiers(other: bankPage)
+            ) {
+                return index;
+            }
+        }
+
+        return -1;
     }
     private static bool HasBank(WorldBindingBarAuthoring authoring, string pageId) {
         foreach (var bank in authoring.Banks) {
@@ -181,6 +211,7 @@ internal sealed class WorldBindingBarControl {
             b: WorldBindingBarAuthoring.SingleModel,
             comparisonType: StringComparison.Ordinal
         );
+        var activePage = m_bindings.PageView(slot: slot);
         var effectiveScale = 1f;
         var presence = ((hidden || (liveOverride is true))
             ? (hidden
@@ -201,6 +232,12 @@ internal sealed class WorldBindingBarControl {
         }
 
         return new WorldBindingBarStatus(
+            ActiveBank: ActiveBank(
+                authoring: authoring,
+                page: activePage,
+                slot: slot
+            ),
+            ActivePage: activePage,
             Authoring: authoring,
             EffectiveHideUnbound: (preferences?.HideUnbound ?? authoring.HideUnbound),
             EffectiveScale: effectiveScale,

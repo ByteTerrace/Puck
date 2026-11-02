@@ -284,7 +284,9 @@ public sealed record WorldBindingBarLayout(
 /// top).</summary>
 /// <param name="Id">The bank's stable id — its mutation address and its key in every layout's bank table.</param>
 /// <param name="PageId">The <c>BindingPageDefinition.Id</c> this bank renders — validated to exist somewhere in the
-/// composed binding profile.</param>
+/// composed binding profile. While a context group (a board's) makes another page active that no bank names, that
+/// page renders in the first bank whose page the same held modifiers select, so the group's resting page takes the
+/// resting page's bank and the bar's layout and model stay as the seat set them.</param>
 /// <param name="Alpha">This bank's opacity when it is NOT the seat's currently active page.</param>
 /// <param name="ActiveAlpha">This bank's opacity when it IS the seat's currently active page; <see langword="null"/>
 /// draws fully opaque (1.0) while active.</param>
@@ -340,9 +342,9 @@ public sealed record WorldBindingBarBank(
 /// <paramref name="Layouts"/>; a value naming none falls back to <paramref name="Layout"/>. Ordinary state: a chord,
 /// a wheel sector, or the console switches the bar's whole shape by writing the cell.</param>
 /// <param name="ModelCell">A text state cell, <c>state.&lt;row&gt;.&lt;key&gt;</c>, whose value picks the bar's model:
-/// <c>single</c> draws one bar — the active page's bank, in the first authored bank's place, swapping in place as a
-/// chord is held or released; any other value (or no cell) draws every bank the live layout places, the active one
-/// at full alpha and the rest as wings. Ordinary state, flipped the same way <paramref name="LayoutCell"/> is.</param>
+/// <c>single</c> draws one bar — the active page, in the first authored bank's place, swapping in place as a
+/// chord is held or released or a context group switches the page; any other value (or no cell) draws every bank the
+/// live layout places, the active one at full alpha and the rest as wings. The active page never changes the model. Ordinary state, flipped the same way <paramref name="LayoutCell"/> is.</param>
 /// <param name="Visible">The bar's visibility condition over presentation facts, or <see langword="null"/> for always.</param>
 public sealed record WorldBindingBarAuthoring(
     IReadOnlyList<string> SlotSet,
