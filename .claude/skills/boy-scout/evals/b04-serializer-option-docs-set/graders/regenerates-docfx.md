@@ -5,4 +5,4 @@ match: contains
 flags: i
 ---
 
-docs\s+build|docfx
+puck\s+docs\s+build

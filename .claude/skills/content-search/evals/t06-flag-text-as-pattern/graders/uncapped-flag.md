@@ -2,7 +2,6 @@
 type: regex
 weight: 1
 match: contains
-flags: i
 ---
 
--M\s*0\b
+search\b[^\n]*[ \t](-M\s*0|--max-results[ =]0)\b
