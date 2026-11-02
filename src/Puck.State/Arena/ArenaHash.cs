@@ -76,11 +76,12 @@ public sealed partial class StateArena {
         PrepareDigestCache();
         return CachedRowDigest(rowOrdinal: rowOrdinal);
     }
-    /// <summary>Samples the digest cache against the stored bytes: refolds the next row in rotation and compares it
-    /// with its cached digest at an unmoved version, and refolds the next segment in rotation from its rows' cached
-    /// digests and compares it with the segment's own. A mismatch means a write moved bytes without moving the
-    /// version the cache trusts, or a refold left its segment stale: the arena drops the whole cache, so the next
-    /// <see cref="ComputeHash"/> folds afresh, and names what disagreed.</summary>
+    /// <summary>Samples the digest cache against the stored bytes, right after a <see cref="ComputeHash"/>: refolds
+    /// the next row in rotation and compares it with its cached digest and version, and refolds the next segment in
+    /// rotation from its rows' cached digests and compares it with the segment's own. A mismatch means a write moved
+    /// bytes without moving the version the cache trusts, a fold left a moved row unrefolded, or a refold left its
+    /// segment stale: the arena drops the whole cache, so the next <see cref="ComputeHash"/> folds afresh, and names
+    /// what disagreed.</summary>
     /// <returns><see langword="null"/> when both samples agree or nothing was cached; otherwise the disagreement.</returns>
     /// <remarks>The work is one row's fold and at most <see cref="HashSegmentRows"/> cached digests; every row and
     /// segment is sampled once per pass of the rotation. The caller excludes writers, as for
@@ -96,10 +97,12 @@ public sealed partial class StateArena {
 
         m_checkRow = (row + 1);
         m_checkSegment = (segment + 1);
-        if (m_rowDigestKnown[row] && (m_rowDigestVersions[row] == m_rowVersions[row])) {
+        if (m_rowDigestKnown[row]) {
             var bytes = FreshRowDigest(rowOrdinal: row);
 
-            if (bytes != m_rowDigests[row]) {
+            if (m_rowDigestVersions[row] != m_rowVersions[row]) {
+                fault = $"row '{RowName(rowOrdinal: row)}' stands at version {m_rowVersions[row]} after a fold that cached it at version {m_rowDigestVersions[row]}";
+            } else if (bytes != m_rowDigests[row]) {
                 fault = $"row '{RowName(rowOrdinal: row)}' at version {m_rowVersions[row]} caches digest {m_rowDigests[row]:x16} and its bytes fold {bytes:x16}";
             }
         }

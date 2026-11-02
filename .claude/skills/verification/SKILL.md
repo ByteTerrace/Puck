@@ -348,6 +348,13 @@ On Windows, a forwarded bare `bash` resolves to WSL's `bash.exe`, which cannot s
 path (`"C:/Program Files/Git/usr/bin/bash.exe" <script>`) to run several commands
 under one lease.
 
+Take the heavy lease once per suite run: one `puck test` invocation (or one
+suite) per `puck lease heavy` acquisition, never a batch of runs under one hold,
+so the queue rotates between lanes. Keep each hold to about 30 minutes; a run
+that genuinely needs longer (Go's `--reproduce` with its full recompute) holds
+it alone and releases before the next. A script of several runs wraps each run
+in its own `puck lease heavy` call.
+
 
 GPU work is `puck parity`, `puck counters`, a canary requiring `gpu`, a windowed
 or offscreen `Puck.World` run, and any test run that can select a device law.

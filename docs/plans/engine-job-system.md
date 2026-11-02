@@ -430,40 +430,53 @@ parallel without changing a value:
   that changes a row's bytes moves (number, text, vector, visibility and
   observation columns through one door each; growth, snapshot and scope
   restore, undo and adoption move it or replace the layout, which drops the
-  cache). Inside an open scope the arena folds afresh. The scoped replay
-  runtime folds its rows through the same `RowDigest`, so there is one cache.
+  cache). A row refold invalidates its segment, whether `ComputeHash` or a
+  standalone `RowDigest` read took it. Inside an open scope the arena folds
+  afresh. The scoped replay runtime folds its rows through the same
+  `RowDigest`, so there is one cache.
 - **Body continuations.** `WorldPopulation.AppendContinuationHash` folds one
   digest per segment of `HashSegmentSlots` (32) entity slots, the E1 body
-  partition, which divides E4's 256-row partition evenly. A slot's digest is
-  cached only while its body rests (asleep, or parked in a rigid island) and
-  stands while the body's rest epoch (moved by every wake, park, sleep, pose,
-  restore and transfer), its generation, the population's admission revision,
-  the contact-field version and the body's action-state lane values hold. A
-  body with an identity is never cached, since a fact or record written on the
-  identity moves its continuation without touching the body. A moving body
-  encodes every tick, as before. Over go-tests (15 worlds, 18,204 ticks, about
-  368 rows and 559 slots each) a tick refolds 1.6 rows and 22 slots.
-- **The recompute check.** A write that changes state without moving the
-  version its digest is keyed by would hide a divergence, so
-  `StateArena.RecomputeHash`, `AppendContinuationHash(recompute: true)` and
+  partition, which divides E4's 256-row partition evenly. Every slot encodes
+  on every fold; nothing caches it. A cached slot needs one door every write to
+  a serialized body field passes, and a body's continuation is dozens of fields
+  and arrays its step, commands, contacts and tethers write directly (the
+  review found four such writes to sleeping bodies: `SetIntentSource`,
+  `PressChannel`, `MergeLaneTimer` and the late tether solve). That chokepoint
+  is a `WorldBody` redesign; measured on go-tests, the rest-epoch cache it
+  would make sound saved 21 s of a 310 s recording (7 %), so the cache was
+  deleted and the redesign filed in the
+  [refactoring packet](open-items.md#refactoring-campaign). The four writes now
+  wake a resting body (`WorldBody.WakeIfResting`), since each hands it input
+  or a pose it must run to carry.
+- **The read boundary.** Every hash folds under the server's `AuthorityGate`,
+  the boundary that excludes the tick's writers (the tick's own tape close
+  already holds it; `world.state.hash` takes it), so a fold beside a write can
+  never store old bytes under a new version. The arena itself is not
+  thread-safe. When T1's read epoch lands it is the same boundary.
+- **The checks.** `StateArena.RecomputeHash` and
   `WorldStateHashComposition.RecomputeAuthoritative` give the same value with
-  nothing cached, and `DescribeStaleDigest` names the stale component.
-  `puck test --reproduce` checks every replayed tick and the first count of
-  `--workers` every recorded tick; a mismatch fails the leg by name. Plain
-  `--record` legs and later `--workers` counts take only the incremental hash.
+  nothing cached, and `DescribeStaleDigest` names the stale component:
+  `puck test --reproduce` checks every replayed tick and the restored start,
+  and the first count of `--workers` every recorded tick. Every other hash
+  samples the cache (`StateArena.CheckDigests`, from `WorldPersistence`): the
+  next row in rotation refolded against its cached digest and version, and the
+  next segment refolded from its rows' cached digests. A disagreement drops the
+  cache, folds afresh, narrates `[world.state.hash: stale digest ...]` once
+  and fails a probed `puck test` leg.
 
 A headless host also stops delivering snapshots to its screen-session mirrors
 (`WorldSessionMirror(unread: true)`), which only a presentation reads; the
 destination still runs and discloses.
 
 Measured on go-tests at `--jobs 1` under the heavy lease, authored seconds
-summed from each leg's `timing.json`, the build before against the build
-after: plain 256.7 s against 180.4 s (the mirrors), recorded (`--record`)
-441.4 s against 247.1 s, so the recording's own cost fell from 184.7 s to
-66.7 s. `--reproduce` after: 228.6 s authored and 415.7 s replay, the replay
-paying the full recompute every tick; `--workers 1,2,0` after: 346.9 s at the
-checked first count, 254.7 s and 265.2 s at the others. What the recording
-still costs is the components that fold whole every tick (poses, body action
+summed from each leg's `timing.json` (15 worlds, 18,204 ticks, about 368 rows
+each). Against the build before the incremental hash: plain 256.7 s against
+180.4 s (the mirrors), recorded 441.4 s against 247.1 s with the body cache,
+so the recording's own cost fell from 184.7 s to 66.7 s. A tick refolds 1.6
+rows. The body cache's share, measured back to back on a busier machine: 288.8 s
+recorded with it, 309.8 s without. The always-on sample took 100.7 ms over
+the whole recorded run, 5.5 µs a tick. What the recording still costs is the
+components that fold whole every tick (body continuations, poses, body action
 state, navigation, flock and input), unprofiled.
 
 ### Rule evaluation stays serial
