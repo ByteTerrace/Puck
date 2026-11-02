@@ -68,7 +68,7 @@ public static class CheckoutContent {
         stdout = result.Stdout;
 
         if (result.ExitCode != 0) {
-            reason = $"git {arguments[1]} exited {result.ExitCode}: {result.Stderr.Trim().ReplaceLineEndings(replacementText: " ")}";
+            reason = $"git {arguments.First(predicate: static argument => !argument.StartsWith(value: '-'))} exited {result.ExitCode}: {result.Stderr.Trim().ReplaceLineEndings(replacementText: " ")}";
 
             return false;
         }
@@ -96,7 +96,8 @@ public static class CheckoutContent {
             return false;
         }
         if (!TryGit(
-            arguments: ["--literal-pathspecs", "status", "--porcelain=v1", "-z", "--untracked-files=all", "--no-renames", "--", .. roots],
+            // Reading another checkout (the main checkout an owner works in) takes no index lock and rewrites no index.
+            arguments: ["--literal-pathspecs", "--no-optional-locks", "status", "--porcelain=v1", "-z", "--untracked-files=all", "--no-renames", "--", .. roots],
             reason: out reason,
             repositoryRoot: repositoryRoot,
             stdout: out var changed

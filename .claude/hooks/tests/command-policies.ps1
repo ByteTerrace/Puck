@@ -385,8 +385,8 @@ Add-Case git-safety 'command -pv git stash' pass pass posix
 Add-Case git-safety 'command -pV git stash' pass pass posix
 Add-Case git-safety 'command -p git stash' pass deny posix
 
-# read-only-agent: a Claude subagent whose definition denies it Edit and Write (scout here) against a writer
-# (implementer). Command, read-only verdict, writer verdict, dialect (any, posix or pwsh). The cases run from this
+# read-only-agent: the Claude subagents whose definitions deny them Edit and Write (scout, reviewer) against writers
+# (implementer, specialist). Command, read-only verdict, writer verdict, dialect (any, posix or pwsh). The cases run from this
 # checkout's root, since the scratch repositories sit in the temp directory, where a read-only agent may write; the
 # policies only resolve paths, and nothing runs.
 $readOnlyCwd = (Split-Path -Parent (Split-Path -Parent $hooks)).Replace('\', '/')
@@ -497,7 +497,7 @@ try {
     $readOnlyTools = @{ any = @('Bash', 'PowerShell'); posix = @('Bash'); pwsh = @('PowerShell') }
     foreach ($case in $readOnlyCases) {
         foreach ($toolName in $readOnlyTools[$case.Dialect]) {
-            foreach ($agent in @(@{ Type = 'scout'; Expected = $case.ReadOnly }, @{ Type = 'implementer'; Expected = $case.Writer })) {
+            foreach ($agent in @(@{ Type = 'scout'; Expected = $case.ReadOnly }, @{ Type = 'reviewer'; Expected = $case.ReadOnly }, @{ Type = 'implementer'; Expected = $case.Writer }, @{ Type = 'specialist'; Expected = $case.Writer })) {
                 $payload = @{ session_id = 's'; hook_event_name = 'PreToolUse'; tool_name = $toolName; tool_input = @{ command = $case.Command }; cwd = $readOnlyCwd; agent_id = 'a1'; agent_type = $agent.Type }
                 $reply = Invoke-AgentPolicy $payload 'claude'
                 $verdict = Get-Verdict $reply

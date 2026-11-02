@@ -35,7 +35,8 @@ if ([string]::IsNullOrEmpty($projectRoot)) { $projectRoot = (Resolve-Path -Liter
 
 $working = & git -C $cwd rev-parse --show-toplevel 2>$null
 if (($LASTEXITCODE -ne 0) -or -not $working) { exit 0 }
-$candidates = @($working, $projectRoot, (Get-MainCheckout $cwd)) | Where-Object { $_ } | Select-Object -Unique
+$seen = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+$candidates = @(@($working, $projectRoot, (Get-MainCheckout $cwd)) | Where-Object { $_ } | ForEach-Object { $_.Replace('\', '/').TrimEnd('/') } | Where-Object { $seen.Add($_) })
 
 function Write-Reply([string] $text) {
     ConvertTo-Json -Compress -Depth 4 -EscapeHandling EscapeNonAscii -InputObject @{

@@ -371,6 +371,26 @@ leaving any conflicts for the lane to resolve. A worktree another agent
 created can deny a Codex lane its `.git/worktrees/<name>` writes; give the lane a
 worktree the lead creates.
 
+Before each fan-out, and after each fast-forward of the main checkout, the
+lead runs `puck agents provenance --project-root <the session's project root>`
+from its own checkout ([CLI reference](../../../docs/reference/cli.md#puck-agents-linknative-skill-discovery)).
+It computes keys over `.claude/agents`, `.claude/skills`, `.claude/hooks`,
+`.claude/settings.json` and `AGENTS.md` in the lead's checkout, the project
+root and the main checkout, records nothing, and exits 1 naming each differing
+path with both checkouts' paths and branches. On a mismatch the lead
+dispatches nothing until the main checkout is fast-forwarded
+([land in batches](#land-in-batches)) or the session is restarted from the
+integration checkout. The SessionStart hook runs the same check on startup,
+resume and compact and shows a mismatch to the owner and the session. Tell
+the owner to start a lead session from the integration checkout. Whether that
+also moves agent discovery is unprobed: a lane cannot start a `claude`
+session, so the lead probes it once (a scratch worktree whose `.claude/agents`
+holds a marker agent, and `claude -p` started there asked which subagent types
+it has) and records the answer here. What is observed: a session rooted at the
+main checkout lists a worktree's skills only as directory-scoped variants
+(`.claude/worktrees/lead-next:orchestration`), and the bare skill name loads
+the main checkout's copy.
+
 Before launching Codex in a main checkout or fresh worktree, build/copy its CLI
 as [verification](../verification/SKILL.md#run-verbs-from-your-own-cli-copy)
 describes and run `dotnet <lane>-cli/Puck.Cli.dll agents link` there. Then launch
@@ -736,7 +756,12 @@ ahead, changed files, last commit, newest write, log exit, GPU lease state and a
 `STALL` mark, in seconds, read-only, and without walking `bin/` or `obj/`.
 `puck lanes --watch 0` is the stall watcher: run it as the one background
 monitor, and it prints only a lane finishing, stalling or resuming, a lease
-changing, or a lane appearing or leaving.
+changing, or a lane appearing or leaving. A findings-only lane's launch writes
+`<worktree>/.claude/scratch/<lane>.task` holding `mode: findings-only` and
+`report: <its findings path>` (a Codex log whose header names a read-only
+sandbox needs none), so `puck lanes` judges it by its log and report rather
+than by writes, and tells a delivered report (`reported`) from a process that
+exited without one (`exited`).
 
 In Claude, arm a recurring audit as a background monitor, which reports while the lead is
 busy; a session cron fires only when the lead is idle and misses exactly the

@@ -304,7 +304,7 @@ public static partial class LanesCommand {
         string? report = null;
 
         if (mode == FindingsMode) {
-            IEnumerable<string> reports = ((reportPath is not null) ? [reportPath] : scratchRoots.SelectMany(selector: scratch => LogNames(branch: worktree.Branch, name: name).Select(selector: candidate => System.IO.Path.Combine(path1: scratch, path2: (candidate + "-findings.md")))));
+            var reports = ((reportPath is { } declaredPath) ? new[] { declaredPath } : scratchRoots.SelectMany(selector: scratch => LogNames(branch: worktree.Branch, name: name).Select(selector: candidate => System.IO.Path.Combine(path1: scratch, path2: (candidate + "-findings.md")))));
 
             report = reports.FirstOrDefault(predicate: Delivered)?.Replace(oldChar: '\\', newChar: '/');
         }

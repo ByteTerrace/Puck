@@ -89,8 +89,9 @@ project root and the main checkout that has a Release build with the verb, and
 shows the owner and the session the expected and actual paths and branches
 when their agent configuration differs (`systemMessage` and
 `additionalContext`); it is silent when they agree, and says so when no build
-could run the check. `cli-build.ps1` holds the build and main-checkout lookup
-both hooks share.
+could run the check. `cli-build.ps1` holds what both hooks share: the build
+and main-checkout lookup, and `puck-mcp`'s rule for when the main checkout's
+build may stand in.
 
 ## What the classifier sees
 
