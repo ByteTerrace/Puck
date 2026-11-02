@@ -20,9 +20,10 @@
 // also sets debug.puck's population capacity. shapes.md says how to get around and what each level shows.
 //
 // Creation shapes are authored in a frame turned 180 degrees about up from the world's, so a shape at author
-// position (x, y, z) in a placement at the origin with no yaw stands at world (-x, y, -z). `hallBox` takes world
+// position (x, y, z) in a placement at the origin with no yaw stands at world (-x, y, -z). `boundsBox` (standard/bounds.puck) takes world
 // bounds and writes the author-frame row, so every number below is a world coordinate.
 
+import "../standard/bounds"
 import "shapes"
 // The companion hears the lift's authored door edge through its read-only sensory projection.
 exports {
@@ -158,7 +159,7 @@ let hallLightAisles = [[13.6, 19.6, 25.6, 31.6], [14.6, 22.6, 30.6], [14.6, 22.6
 // looks stay one geometry (the strips' slot alone differs) and the slab's bake keeps its trim at the slab's detail.
 template hallStrips(top, aisles) {
   for z in aisles {
-    hallBox(
+    boundsBox(
       label: $"strip-{z}",
       x0: 21,
       x1: 69,
@@ -170,7 +171,7 @@ template hallStrips(top, aisles) {
     )
   }
   for z in [18, 26] {
-    hallBox(
+    boundsBox(
       label: $"landing-light-{z}",
       x0: 11.5,
       x1: 19,
@@ -186,8 +187,8 @@ template hallStrips(top, aisles) {
 // A slab or roof piece: the floor finish on top and a white ceiling under it, two boxes stacked into the one slab, so
 // the ceiling bounces the strips' and downlights' light back down as a gallery's white ceiling does.
 template hallSlab(label, x0, x1, y0, y1, z0, z1) {
-  hallBox(label: $"{label}-ceiling", x0: x0, x1: x1, y0: y0, y1: (y0 + 0.02), z0: z0, z1: z1, slot: hallCeiling)
-  hallBox(label: label, x0: x0, x1: x1, y0: (y0 + 0.02), y1: y1, z0: z0, z1: z1, slot: hallFloor)
+  boundsBox(label: $"{label}-ceiling", x0: x0, x1: x1, y0: y0, y1: (y0 + 0.02), z0: z0, z1: z1, slot: hallCeiling)
+  boundsBox(label: label, x0: x0, x1: x1, y0: (y0 + 0.02), y1: y1, z0: z0, z1: z1, slot: hallFloor)
 }
 
 // The lift. Its car is a population body (`lift-car`, kit `lift`) carrying attached solid platform, cab and door
@@ -430,15 +431,15 @@ prototypes {
       schema: "puck.creation.v1"
       palette: hallPalette
       // South face: the lobby piers either side of the entrance, then a pier between each window.
-      hallBox(label: "south-pier-west", x0: 10, x1: 14, y0: 0, y1: parapet, z0: 12, z1: 12.3, slot: hallWall)
-      hallBox(label: "south-pier-door", x0: 18, x1: 21, y0: 0, y1: parapet, z0: 12, z1: 12.3, slot: hallWall)
+      boundsBox(label: "south-pier-west", x0: 10, x1: 14, y0: 0, y1: parapet, z0: 12, z1: 12.3, slot: hallWall)
+      boundsBox(label: "south-pier-door", x0: 18, x1: 21, y0: 0, y1: parapet, z0: 12, z1: 12.3, slot: hallWall)
       for x in longPiers {
-        hallBox(label: $"south-pier-{x}", x0: x, x1: (x + 2), y0: 0, y1: parapet, z0: 12, z1: 12.3, slot: hallWall)
+        boundsBox(label: $"south-pier-{x}", x0: x, x1: (x + 2), y0: 0, y1: parapet, z0: 12, z1: 12.3, slot: hallWall)
       }
-      hallBox(label: "south-pier-east", x0: 69, x1: 70, y0: 0, y1: parapet, z0: 12, z1: 12.3, slot: hallWall)
-      hallBox(label: "south-sill", x0: 21, x1: 69, y0: 0, y1: 0.9, z0: 12, z1: 12.3, slot: hallWall)
+      boundsBox(label: "south-pier-east", x0: 69, x1: 70, y0: 0, y1: parapet, z0: 12, z1: 12.3, slot: hallWall)
+      boundsBox(label: "south-sill", x0: 21, x1: 69, y0: 0, y1: 0.9, z0: 12, z1: 12.3, slot: hallWall)
       for (band, index) in upperBands {
-        hallBox(
+        boundsBox(
           label: $"south-band-{index}",
           x0: 14,
           x1: 69,
@@ -450,13 +451,13 @@ prototypes {
         )
       }
       // North face: solid behind the stairs and the shaft, windows along the halls.
-      hallBox(label: "north-core", x0: 10, x1: 21, y0: 0, y1: parapet, z0: 39.7, z1: 40, slot: hallWall)
+      boundsBox(label: "north-core", x0: 10, x1: 21, y0: 0, y1: parapet, z0: 39.7, z1: 40, slot: hallWall)
       for x in longPiers {
-        hallBox(label: $"north-pier-{x}", x0: x, x1: (x + 2), y0: 0, y1: parapet, z0: 39.7, z1: 40, slot: hallWall)
+        boundsBox(label: $"north-pier-{x}", x0: x, x1: (x + 2), y0: 0, y1: parapet, z0: 39.7, z1: 40, slot: hallWall)
       }
-      hallBox(label: "north-pier-east", x0: 69, x1: 70, y0: 0, y1: parapet, z0: 39.7, z1: 40, slot: hallWall)
+      boundsBox(label: "north-pier-east", x0: 69, x1: 70, y0: 0, y1: parapet, z0: 39.7, z1: 40, slot: hallWall)
       for (band, index) in bands {
-        hallBox(
+        boundsBox(
           label: $"north-band-{index}",
           x0: 21,
           x1: 69,
@@ -469,7 +470,7 @@ prototypes {
       }
       // East face.
       for (pier, index) in eastPiers {
-        hallBox(
+        boundsBox(
           label: $"east-pier-{index}",
           x0: 69.7,
           x1: 70,
@@ -481,7 +482,7 @@ prototypes {
         )
       }
       for (band, index) in bands {
-        hallBox(
+        boundsBox(
           label: $"east-band-{index}",
           x0: 69.7,
           x1: 70,
@@ -493,7 +494,7 @@ prototypes {
         )
       }
       // West face, solid.
-      hallBox(label: "west", x0: 10, x1: 10.3, y0: 0, y1: parapet, z0: 12.3, z1: 39.7, slot: hallWall)
+      boundsBox(label: "west", x0: 10, x1: 10.3, y0: 0, y1: parapet, z0: 12.3, z1: 39.7, slot: hallWall)
     }
   }
   // The cassettes a level's blinds roll into on one face, one under the band over each window's head, set back in the
@@ -507,7 +508,7 @@ prototypes {
         palette: hallPalette
         for (opening, n) in filter(hallOpenings, o => ((o.level == row.level) and (o.face == row.face))) {
           for depth in ((row.face == "south") ? [[12.05, 12.28]] : ((row.face == "north") ? [[39.72, 39.95]] : [])) {
-            hallBox(
+            boundsBox(
               label: $"cassette-{n}",
               x0: opening.a0,
               x1: opening.a1,
@@ -519,7 +520,7 @@ prototypes {
             )
           }
           for depth in ((row.face == "east") ? [[69.72, 69.95]] : []) {
-            hallBox(
+            boundsBox(
               label: $"cassette-{n}",
               x0: depth[0],
               x1: depth[1],
@@ -544,9 +545,9 @@ prototypes {
       name: "hall-floor-0"
       schema: "puck.creation.v1"
       palette: hallPalette
-      hallBox(label: "ground-south", x0: 10.3, x1: 69.7, y0: 0, y1: 0.05, z0: 12.3, z1: 36.1, slot: hallFloor)
-      hallBox(label: "ground-north", x0: 17.7, x1: 69.7, y0: 0, y1: 0.05, z0: 36.1, z1: 39.7, slot: hallFloor)
-      hallBox(label: "ground-stairs", x0: 10.3, x1: 14.1, y0: 0, y1: 0.05, z0: 36.1, z1: 39.7, slot: hallFloor)
+      boundsBox(label: "ground-south", x0: 10.3, x1: 69.7, y0: 0, y1: 0.05, z0: 12.3, z1: 36.1, slot: hallFloor)
+      boundsBox(label: "ground-north", x0: 17.7, x1: 69.7, y0: 0, y1: 0.05, z0: 36.1, z1: 39.7, slot: hallFloor)
+      boundsBox(label: "ground-stairs", x0: 10.3, x1: 14.1, y0: 0, y1: 0.05, z0: 36.1, z1: 39.7, slot: hallFloor)
     }
   }
   for k in range(1, 3) {
@@ -622,7 +623,7 @@ prototypes {
             { color: "#3A3F47", roughness: 0.6, specular: 0.15 }
             { color: state.indicator, roughness: 0.4, emissive: state.glow }
           ]
-          hallBox(
+          boundsBox(
             label: "plate",
             x0: plate.x,
             x1: (plate.x + 0.04),
@@ -632,7 +633,7 @@ prototypes {
             z1: (plate.z + 0.13),
             slot: 0
           )
-          hallBox(
+          boundsBox(
             label: "rocker",
             x0: (plate.x + 0.04),
             x1: (plate.x + 0.09),
@@ -642,7 +643,7 @@ prototypes {
             z1: (plate.z + 0.035),
             slot: 1
           )
-          hallBox(
+          boundsBox(
             label: "indicator",
             x0: (plate.x + 0.04),
             x1: (plate.x + 0.055),
@@ -675,7 +676,7 @@ prototypes {
       name: "boardroom-shell"
       schema: "puck.creation.v1"
       palette: hallPalette
-      hallBox(
+      boundsBox(
         label: "partition-south",
         x0: 51,
         x1: 51.3,
@@ -685,7 +686,7 @@ prototypes {
         z1: roomDoorZ0,
         slot: hallWall
       )
-      hallBox(
+      boundsBox(
         label: "partition-north",
         x0: 51,
         x1: 51.3,
@@ -695,7 +696,7 @@ prototypes {
         z1: 39.7,
         slot: hallWall
       )
-      hallBox(
+      boundsBox(
         label: "partition-lintel",
         x0: 51,
         x1: 51.3,
@@ -737,7 +738,7 @@ prototypes {
             )
           }
         ]
-        hallBox(
+        boundsBox(
           label: "board",
           x0: blind.x0,
           x1: blind.x1,
@@ -767,7 +768,7 @@ prototypes {
       palette: hallPalette
       for k in range(0, 3) {
         for i in range(1, 8) {
-          hallBox(
+          boundsBox(
             label: $"flight-a-{k}-{i}",
             x0: 10.3,
             x1: 12.1,
@@ -778,7 +779,7 @@ prototypes {
             slot: hallFloor
           )
         }
-        hallBox(
+        boundsBox(
           label: $"landing-{k}",
           x0: 10.3,
           x1: 14.1,
@@ -789,7 +790,7 @@ prototypes {
           slot: hallFloor
         )
         for j in range(1, 8) {
-          hallBox(
+          boundsBox(
             label: $"flight-b-{k}-{j}",
             x0: 12.3,
             x1: 14.1,
@@ -800,7 +801,7 @@ prototypes {
             slot: hallFloor
           )
         }
-        hallBox(
+        boundsBox(
           label: $"divider-{k}",
           x0: 12.1,
           x1: 12.3,
@@ -812,7 +813,7 @@ prototypes {
         )
         // Flight B's east side between the flight's foot and the lift shaft's west wall (which begins at z 36.1): the
         // stairwell is walled where no flight or landing opens, and the storey's exit stays at z below stairStart.
-        hallBox(
+        boundsBox(
           label: $"east-{k}",
           x0: 14.1,
           x1: 14.4,
@@ -825,7 +826,7 @@ prototypes {
       }
       // Level 3's floor is holed over the whole stairwell, as every level's is, so the Moth (2.06 m tall) keeps her
       // headroom on the last landing; a rail stands round the well where no flight arrives.
-      hallBox(
+      boundsBox(
         label: "rail-3-divider",
         x0: 12.1,
         x1: 12.3,
@@ -835,7 +836,7 @@ prototypes {
         z1: landingSouth,
         slot: hallTrim
       )
-      hallBox(
+      boundsBox(
         label: "rail-3-east",
         x0: 14.1,
         x1: 14.4,
@@ -845,7 +846,7 @@ prototypes {
         z1: 36.1,
         slot: hallTrim
       )
-      hallBox(
+      boundsBox(
         label: "rail-3-south",
         x0: 10.3,
         x1: 12.3,
@@ -864,13 +865,13 @@ prototypes {
       name: "hall-shaft"
       schema: "puck.creation.v1"
       palette: hallPalette
-      hallBox(label: "shaft-west", x0: 14.1, x1: 14.4, y0: 0, y1: hallTop, z0: 36.1, z1: 39.7, slot: hallTrim)
-      hallBox(label: "shaft-east", x0: 17.4, x1: 17.7, y0: 0, y1: hallTop, z0: 36.1, z1: 39.7, slot: hallTrim)
-      hallBox(label: "shaft-jamb-west", x0: 14.4, x1: 15, y0: 0, y1: hallTop, z0: 36.1, z1: 36.4, slot: hallTrim)
-      hallBox(label: "shaft-jamb-east", x0: 16.8, x1: 17.4, y0: 0, y1: hallTop, z0: 36.1, z1: 36.4, slot: hallTrim)
+      boundsBox(label: "shaft-west", x0: 14.1, x1: 14.4, y0: 0, y1: hallTop, z0: 36.1, z1: 39.7, slot: hallTrim)
+      boundsBox(label: "shaft-east", x0: 17.4, x1: 17.7, y0: 0, y1: hallTop, z0: 36.1, z1: 39.7, slot: hallTrim)
+      boundsBox(label: "shaft-jamb-west", x0: 14.4, x1: 15, y0: 0, y1: hallTop, z0: 36.1, z1: 36.4, slot: hallTrim)
+      boundsBox(label: "shaft-jamb-east", x0: 16.8, x1: 17.4, y0: 0, y1: hallTop, z0: 36.1, z1: 36.4, slot: hallTrim)
       for k in range(0, 4) {
         // The slab owns the horizontal finish: a lintel lid at its top z-fights with the landing's floor.
-        hallBox(
+        boundsBox(
           label: $"shaft-lintel-{k}",
           x0: 15,
           x1: 16.8,

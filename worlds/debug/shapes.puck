@@ -42,17 +42,6 @@ let fallX = 66
 let fallZ = 22.6
 let fallHole = 1
 
-// One box given its world bounds, for a creation standing at the origin with no yaw: the author frame is turned 180
-// degrees about up from the world's, so the row negates x and z. The hall's shell (hall.puck) and the painting wing's
-// (paintings.puck) are written with it.
-template hallBox(label, x0, x1, y0, y1, z0, z1, slot) {
-  shape Box $"{label}" {
-    material: slot
-    position [(0 - ((x0 + x1) / 2)), ((y0 + y1) / 2), (0 - ((z0 + z1) / 2))]
-    scale [((x1 - x0) / 2), ((y1 - y0) / 2), ((z1 - z0) / 2)]
-  }
-}
-
 let galleryX = 23
 let gallerySpacing = 2.6
 

@@ -1,0 +1,38 @@
+// What the painting wing (paintings.puck) and Wonderland (wonderland.puck) share: the palette rows both paint their
+// frames with, the colour a glass shows past the deepest window inside a window, and the portal face a canvas wears. A
+// module library: it hands its importers lets and templates and emits no document.
+
+// The frames' palette rows. Each painting prototype lists the ones it wears in its own slot order.
+let paintingGiltRow = { color: "#C9A43A", roughness: 0.4, specular: 0.4 }
+let paintingLipRow = { color: "#5C2B26", roughness: 0.55, specular: 0.2 }
+let paintingBlackRow = { color: "#15171B", roughness: 0.45, specular: 0.2 }
+let paintingBoardRow = { color: "#F2EEE4", roughness: 0.6 }
+let paintingInkRow = { color: "#3A3F47", roughness: 0.6 }
+
+// What a glass shows past the deepest level of windows inside windows when its destination is this world itself.
+let fallbackSelf = "#10141B"
+
+// A door onto `destination` and a window showing what lies past it, rippling like an event horizon: a slow shimmer all
+// the time and rings from every body that touches or passes through. A crossing arrives out of `counterpart`, a face of
+// the destination's document, or of this world's own for the destination `self`.
+template paintingFace(destination, counterpart, fallback) {
+  faceSources [
+    {
+      face: "glass"
+      filter: linear
+      portal {
+        arrival: "mapped"
+        counterpart: counterpart
+        destination: destination
+        travel: "body"
+      }
+      source {
+        $type: "session"
+        destination: destination
+        fallback: fallback
+        projection: window
+        ripple: true
+      }
+    }
+  ]
+}

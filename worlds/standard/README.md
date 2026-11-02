@@ -57,6 +57,10 @@ Go and Tour pages, Places ring and gallery icons live in
 as its own (`toon: celStyle`) and a world names one as the default every other material inherits
 (`render { toon: celStyle }`), which `world.toon` switches live.
 
+`bounds.puck` is a library of boxes given their bounds (`boundsBox` for a world-space box in a creation at the origin,
+`localBox` for one in the creation's own frame, `barRing` for the three bars round a canvas), for shells, furniture and
+frames built from boxes.
+
 `terrain.puck` and `foliage.puck` are optional libraries. Foliage supplies
 `broadleafTree`, `mossyRock`, `grassTuft`, `sceneryPatch`, `sceneryScatter` and
 `windMeadowTile`; import it with `import "../standard/foliage"` and expand its
