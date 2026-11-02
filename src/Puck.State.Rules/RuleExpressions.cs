@@ -15,23 +15,77 @@ public static class RuleExpressions {
     [ThreadStatic]
     private static ArenaScratch? FoldScratch;
 
-    /// <summary>Evaluates a compiled postfix program.</summary>
+    /// <summary>Evaluates a compiled postfix program. This is where every rule fault begins: a
+    /// <see cref="ExpressionFault.Domain"/> or <see cref="ExpressionFault.Forever"/> failure is raised into the
+    /// reader's <see cref="ArenaScratch"/> before it returns, so the fault scope of whichever caller decides what the
+    /// evaluation means sees it, whatever an intermediate caller does with the result. An absence is not raised: its
+    /// caller answers it.</summary>
     /// <param name="reader">The evaluation in flight, or <see langword="null"/> to fold constants — a live read
-    /// refuses without one.</param>
+    /// refuses without one, and a fold raises nothing.</param>
     /// <param name="program">The postfix program.</param>
     /// <param name="kind">The kind to evaluate in.</param>
     /// <param name="value">The raw result.</param>
     /// <param name="fault">Why the program failed, or <see cref="ExpressionFault.None"/>.</param>
     /// <returns><see langword="true"/> when the program evaluated.</returns>
-    public static bool TryEvaluate(IStateReader? reader, ReadOnlySpan<CompiledExpressionToken> program, CellKind kind, out long value, out ExpressionFault fault) => Run(
-        arguments: [],
-        fault: out fault,
-        kind: kind,
-        member: null,
-        program: program,
-        reader: reader,
-        value: out value
-    );
+    /// <exception cref="InvalidOperationException">The program faulted with no fault scope open on the reader's
+    /// scratch.</exception>
+    public static bool TryEvaluate(IStateReader? reader, ReadOnlySpan<CompiledExpressionToken> program, CellKind kind, out long value, out ExpressionFault fault) {
+        if (Run(
+            arguments: [],
+            fault: out fault,
+            kind: kind,
+            member: null,
+            program: program,
+            reader: reader,
+            value: out value
+        )) {
+            return true;
+        }
+        if ((reader is not null) && (fault is (ExpressionFault.Domain or ExpressionFault.Forever))) {
+            reader.Scratch.RaiseFault(fault: fault);
+        }
+
+        return false;
+    }
+
+    /// <summary>Evaluates a compiled postfix program as a fault scope of its own, for a caller that is itself what
+    /// decides what a fault means (a read-back, a perception sample): the caller receives the fault as
+    /// <paramref name="fault"/>, and any scope enclosing this one sees it too.</summary>
+    /// <param name="reader">The evaluation in flight.</param>
+    /// <param name="program">The postfix program.</param>
+    /// <param name="kind">The kind to evaluate in.</param>
+    /// <param name="value">The raw result.</param>
+    /// <param name="fault">The first fault anything in the evaluation raised, else why the program did not evaluate,
+    /// or <see cref="ExpressionFault.None"/>.</param>
+    /// <returns><see langword="true"/> when the program evaluated and nothing in it faulted.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="reader"/> is <see langword="null"/>.</exception>
+    public static bool TryEvaluateAlone(IStateReader reader, ReadOnlySpan<CompiledExpressionToken> program, CellKind kind, out long value, out ExpressionFault fault) {
+        ArgumentNullException.ThrowIfNull(argument: reader);
+
+        var scratch = reader.Scratch;
+        var scope = scratch.EnterFaultScope();
+        bool evaluated;
+        ExpressionFault raised;
+
+        try {
+            evaluated = TryEvaluate(
+                fault: out fault,
+                kind: kind,
+                program: program,
+                reader: reader,
+                value: out value
+            );
+        } finally {
+            raised = scratch.LeaveFaultScope(scope: scope);
+        }
+        if (raised != ExpressionFault.None) {
+            fault = raised;
+
+            return false;
+        }
+
+        return evaluated;
+    }
 
     private static bool Run(IStateReader? reader, ReadOnlySpan<CompiledExpressionToken> program, CellKind kind, long? member, ReadOnlySpan<long> arguments, out long value, out ExpressionFault fault) {
         fault = ExpressionFault.Domain;

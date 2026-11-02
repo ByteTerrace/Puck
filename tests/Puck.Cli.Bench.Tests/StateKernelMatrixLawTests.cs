@@ -106,7 +106,7 @@ public sealed class StateKernelMatrixLawTests {
                     );
                     Assert.Equal(
                         (tokens > 0),
-                        Puck.State.Rules.RuleExpressions.TryEvaluate(
+                        Puck.State.Rules.RuleExpressions.TryEvaluateAlone(
                             fault: out _,
                             kind: CellKind.Int,
                             program: program,

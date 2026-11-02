@@ -273,8 +273,9 @@ the document carries its expansion at each use.
 ## Answer an absent read
 
 A read is **absent** when a dynamic key names no cell, such as the last card of
-an empty pile, `$previous` on a pattern's first token, or a table key the table
-doesn't carry. Two operations accept
+an empty pile or a table key the table doesn't carry. (`$previous` on a
+pattern's first token is not absent: it reads the cell no row holds, which is
+0.) Two operations accept
 an absent value:
 
 - `isAbsent(operand)` produces 1 when the read is absent and 0 otherwise.
@@ -308,6 +309,15 @@ An expression that fails reports one of these `ExpressionFault` values:
 | `Domain` | Overflow, division by zero, a function argument outside its domain, or an invalid stack result, including one in a read's own address: a dynamic key (`cards[1 / a]`), a live row index, or a history ring's age. Such a read faults; it is never the absent value. |
 | `Absent` | An operand's dynamic key named no cell, or a table read named a key the table doesn't carry. |
 | `Forever` | An operand produced a fact that carries no number. |
+
+`Domain` and `Forever` are faults, and no consumer can lose one: the evaluator
+raises it into the evaluation's fault register (`ArenaScratch.RaiseFault`) where
+it happens, and the caller that decides what the evaluation meant reads the
+register, not the value an intermediate read made of the fault. A rule's gate,
+a firing, a decision, a group trigger and a search step each open such a scope.
+An evaluation that faults with no scope open throws, because nothing would
+answer its fault. `Absent` is a value, not a fault: each consumer answers it
+where it sits.
 
 Arithmetic never wraps. Int addition, subtraction, and multiplication compute
 the exact result and fail if it doesn't fit 64 bits. Int division truncates
@@ -533,7 +543,7 @@ the document's own spelling.
 | `TableRow`, `TableDocument`, `TableEntryDocument`, `TableCanonicalizer` | Puck.State, Puck.State.Generators | A table reference and the table document with its validation. |
 | `CompiledTable` | Puck.State.Generators | A loaded table read by binary search. |
 | `RuleCapacity` | Puck.State | The token, subprogram, and local ceilings. |
-| `ExpressionFault` | Puck.State.Rules | Why an expression failed. |
+| `ExpressionFault` | Puck.State | Why an expression failed. |
 
 The pipeline types are listed in [The expression pipeline](#the-expression-pipeline).
 

@@ -38,9 +38,10 @@ public sealed class PatternPreviousTokenLawTests {
         );
 
         Span<long> word = stackalloc long[4];
-        var length = PatternOperand.ReadTupleWord(
+        var spelled = PatternOperand.ReadTupleWord(
             expression: program!,
             kind: CellKind.Int,
+            length: out var length,
             reader: host,
             rowOrdinal: TransformFixture.Ordinal(
                 context: context,
@@ -49,6 +50,10 @@ public sealed class PatternPreviousTokenLawTests {
             word: word
         );
 
+        Assert.Equal(
+            actual: spelled,
+            expected: ExpressionFault.None
+        );
         Assert.Equal(
             actual: word[..length].ToArray(),
             expected: [1L, 4L, 2L]
