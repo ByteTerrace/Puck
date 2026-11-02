@@ -900,6 +900,17 @@ warnings/errors. Two debug fixtures pass `--reproduce` again on this merge:
 `input-clock30-tests.puck` (four verdicts) and `unbiased-draws-tests.puck`
 (six); presentation selection does not enter simulation state.
 
+The final integration (`b63e7191e`, then `d6f1624dfa`) also carries the solid
+versus thin/clipped shadow-exit rule. One selection emits entry, solid-exit
+and thin-exit argument phases; each kept draw contributes an entry and exactly
+one exit to the generated statistics. This replaces the earlier execution
+multiplier. Vulkan synchronization validation passes at all four settled
+places on this three-phase artifact: lobby / rim / gallery / meadow read
+13,415 / 839 / 16,523 / 20,360 physical draws. Its cold bake rebuilds 7,242
+groups and settles at tick 2,721; no validation warning or error appears.
+Final Release CLI and dual-backend World builds pass with zero warnings/errors,
+and both debug fixtures reproduce again (four and six verdicts).
+
 
 ### What becomes of the tick-to-produce memo's phases
 
