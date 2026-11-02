@@ -751,6 +751,22 @@ system can take, from `dotnet-trace` thread-time samples of the frame thread
 
 #### Other frame-time findings
 
+- [high] The frame thread's field-query answer caches never answer where they
+  matter ([where the frame thread goes](engine-job-system.md#where-the-frame-thread-goes)).
+  `WorldEffectorSolver.TryProbeSurface` writes a probe with no field (a body
+  in a routed scene, whose client publishes no static field) into its 64-entry
+  ring though `SurfaceQuery.Matches` can never match it
+  (`WorldEffectorSolver.cs:242-257`, `:270-272`): about 56 such probes a frame
+  evict the field-backed answers every frame. The rate-range Moths, more than
+  220 m from the meadow, are posed and probed every frame at 1.4 to 2.5 ms a probe, three
+  quarters of it the hit's six-evaluation gradient. The camera's clearance
+  ring matches bit-identical inputs (`WorldCameraClearance.cs:149-160`), and a
+  boom target that moves 0.1 mm a frame misses it every frame at the meadow:
+  four sphere casts at 3.2 ms each. Together about 33 ms of the meadow's 74.
+  Fold into Next item 0's design: skip a fieldless probe before the ring, key
+  answers by what changed rather than by bits, and rate the posing and
+  probing of bodies far from every view the way presentation work is already
+  rated. (from: settle-2)
 - [high] The meadow is now a forcing workload in the real debug world
   (`debug.go meadow`): 1,994 two-part blades add 4,004 dynamic slots and
   4,215 retained mesh draws. Direct3D 12's 600-iteration standing/walking
@@ -964,6 +980,20 @@ store (AGENTS.md), and work proportional to change.
   bound by how often a frame admits work. The same tree's first boot of the
   merged tip, as a sweep's warm-up, baked in 136.8 s (Direct3D 12) and
   230.5 s (Vulkan). The bar fails on both backends by more than double.
+- [high] A cold bake's private memory climbs past 16 GB within its first
+  minute, which is what the thread-time split of the bake still waits on. The
+  second settle window's Direct3D 12 cold bake, from an empty `--cache-dir`
+  under a `dotnet-trace` thread-time session, read private 11,175 MiB at
+  `[engine: ready]` (27.6 s), 14,379 MiB 30 s later and 16,161 MiB at 83 s,
+  when the window's memory rule (stop a World past 15,000 MiB, so the
+  session's memory reaper does not take the whole window) stopped it with the
+  bake unfinished; the trace, cut off with its World, does not parse
+  (`Read past end of stream`). Over those 83 s the frame ran 325 iterations
+  at 199 ms on average, with 313 collections pausing 4.4 s in all, so the
+  bake's allocation is a cost on the frame as well as on memory. The split of
+  the bake into contour, prepare, land and store CPU, GPU dispatch waits and
+  idle frames needs either a cold bake that stays under the machine's memory
+  or the window's memory rule raised for that leg. (from: settle-2)
 - The earlier readings (other lanes building beside them): Direct3D 12's `world`
   residency bakes its 2,090 groups in 132.0 s on the cuts merged with the
   integration tip (170.5 s before that merge, the same session's base 259.0 s;
@@ -2830,6 +2860,39 @@ minutes of GPU) when no lane holds the GPU, compared stop by stop, with
   stop but `night-field`, then `night-field` on a fresh World). Find what the
   crossing holds twice, and stop the store's cap from evicting the live
   identity's meshes for older identities' entries. (from: settle-2)
+  - Measured as two runs on each backend (`host.memory` private): a fresh
+    World at 10,451 to 10,694 MiB before the 74-stop tour ends it at 22,197 MiB
+    (Direct3D 12) and 19,891 MiB (Vulkan), and `night-field` alone takes a
+    fresh World from 8,101 to 16,099 MiB (Direct3D 12) and from 10,590 to
+    15,855 MiB (Vulkan). The tour keeps what each stop loaded, and the one
+    crossing back from the garden adds 5,265 to 7,998 MiB by itself.
+    (from: settle-2)
+- **The sweep baseline is four reports** (each a `puck.sweep.v1` attached
+  windowed leg with the sun held, `--no-headless --no-scenarios`): per backend,
+  `settle-2-sweep-<backend>-main/report.json` (74 stops: every stop but
+  `night-field`) and `settle-2-sweep-<backend>-night/report.json`
+  (`night-field` alone), in the settle lane's scratch; the landing commit's
+  message names the absolute path. The headless leg and the scenarios last ran
+  whole in settle-1's owned Direct3D 12 sweep (tools clean, scenarios clean).
+  The next window reproduces the split and compares each part with its own
+  counterpart: boot `--paused --control`, hold the sun
+  (`world.row.set state day advance {"perSecondNumerator":0,"perSecondDenominator":1}`),
+  then `puck sweep --attach <attachment> --no-headless --no-scenarios
+  --stop <every stop but night-field> --baseline <...>-main/report.json`, and on
+  a fresh World `--stop night-field --baseline <...>-night/report.json`. Both
+  parts read 74 + 1 stills against settle-1's October baseline: 32 clean, 42
+  amber and the new `night-field` on each backend; the red signals are the
+  baseline's drift (placements 1,078 to 5,157, rules 735 to 1,426, private
+  6,668 to 13,310 MiB), the colliders refusal, the frames read under lockstep
+  (about 67 ms, each tick waiting for its frame, so they are not the frame
+  bar), and the watchdog's four `companion-overlap bodies=0+42` records.
+  (from: settle-2)
+- [medium · tool gap] `puck sweep --baseline` takes one report
+  (`SweepCommand.cs:28`, an `Option<string>`), so a tour split into parts
+  cannot be compared as one, and a report does not merge two runs. Accept
+  several `--baseline` reports, matching each stop and signal to the report
+  that holds it, or a `puck sweep merge` that writes one report from parts.
+  (from: settle-2)
 
 - [medium] The windowed `--tour` does not repeat to its 2 % threshold on a long-running World: an identical re-run of the same build on the same World put 17 stops past 2 % (wing-door-far 99.3 %, revolved-floor 41.7 %), and the GI counters differ with World history (`sdf.mesh-gi.camera-traces` 304 against 573), so a cross-build comparison through it cannot separate a change from lighting history. A difference in nearly every pixel looks like exposure: a camera moved by a stop's teleport is a cut, so the exposure jumps to the meter's target, and the meter's camera-trace sample ring (`SdfMeshIrradiance`) reused samples by where the camera stood before. A cut now meters fresh at the camera (`TryMeter(fresh:)`) and snaps to that first reading, so the cut's sample no longer depends on history; the probe reading still depends on which cells the trace has cached. The tour reads `world.exposure` at each held tick (`SweepStillResult.Exposure`) and a still past the amber fraction says whether its exposure differs from the baseline's; the paired tour on one `--attach`ed World confirms whether the remaining difference is the probe cache's. (from: bake-scale lane)
 - Finish sweep-honest's paired motion qualification: its first final tour
