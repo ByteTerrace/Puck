@@ -7,7 +7,7 @@
 //   level 0  shape: primitives at a uniform scale and stretched, prism profiles extruded and revolved
 //   level 1  composition: sweeps and the per-shape facets, every shape blend, the domain folds
 //   level 2  motion: the stamp pool's rotation, swings, slides, moving blends, paints, IK and frames, and warps II; the
-//            board game room fills its east end (boardroom.puck)
+//            board game room fills its east end (hall.puck)
 //   level 3  form and surface: parameter forms, palette channels and wear, cel styles, glass
 //
 // A sign hangs over the west end of each row naming the row, a map board in the lobby by the entrance lists the levels
@@ -21,7 +21,7 @@ import "../standard/styles"
 // The hall's storey height and each level's floor top: level k's floor stands at 4.5k + 0.05 (hall.puck).
 let galleryStorey = 4.5
 let galleryPopulation = 43
-// The board game room's bodies (boardroom.puck): the granary board's cursor (granaries.puck), Alchemy's cursor and 31
+// The board game room's bodies: the granary board's cursor (granaries.puck), Alchemy's cursor and 31
 // element tokens (alchemy.puck), Go's cursor and 361 stones (go.puck), then Reversi's cursor and 64 discs
 // (reversi.puck), and above them the card table's cursor, 52 cards and held marker (cardtable.puck). debug.puck imports
 // the card table first and the others after it, so the cards take the population's very top slots, the granary board
@@ -212,7 +212,7 @@ let accent = { color: "#D9822B", roughness: 0.45, specular: 0.3 }
 // The palette, the plinth beneath the exhibit, the plinth's label and its plaque. Expanded after the exhibit's own
 // shapes, so an exhibit's subtraction or intersection never reaches the plinth. `extra` appends palette slots from 3 on,
 // `runs` text runs after the label, and `note` is the plaque: what the exhibit demos and what to look for, in small
-// type under the label (each non-whitespace glyph charges the stamp budget, so a note stays under ~120 glyphs).
+// type under the label (each non-whitespace glyph adds bake work, so a note stays under ~120 glyphs).
 template exhibit(label, extra = [], runs = [], note = "") {
   name: label
   schema: "puck.creation.v1"
@@ -254,7 +254,7 @@ template exhibit(label, extra = [], runs = [], note = "") {
 }
 
 // A section board hanging on two rods from the ceiling over a level's floor, its lower edge 2.6 m up: a row's sign,
-// and the board game room's over its doorway (boardroom.puck). Its placement's yaw turns the text's face.
+// and the board game room's over its doorway (hall.puck). Its placement's yaw turns the text's face.
 template sectionSign(name, title, what) {
   prototype name {
     document {
