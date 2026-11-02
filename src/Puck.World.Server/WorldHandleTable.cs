@@ -38,7 +38,9 @@ namespace Puck.World.Server;
 /// <see cref="TryResolve"/> refuses a handle whose generation no longer matches the slot's — a revoked grant is
 /// exactly this case, and it must resolve to nothing rather than whatever now happens to occupy the same index. The
 /// generation counter is monotonic for the table's lifetime and never reused, so a stale handle can never
-/// coincidentally match a newly-minted one at the same index.</para>
+/// coincidentally match a newly-minted one at the same index. A guest keeps minted handles in its memory, which an
+/// authority checkpoint carries, so the slots and the counter ride the grants checkpoint too
+/// (<see cref="WorldHandleTableCheckpoint"/>): a restored guest's handle resolves exactly as it did live.</para>
 /// <para><b>A rebuild is triggered by any grant-table write, but a generation only moves for an index whose
 /// designation actually changed.</b> <see cref="WorldGrants.Revision"/> is process-global — bumped by every
 /// principal's grant, revoke, engagement route, and revoke miss — so a table for one (principal, capability) rebuilds
@@ -124,6 +126,42 @@ public sealed class WorldHandleTable {
 
         m_slots = next;
         m_builtAtRevision = m_grants.Revision;
+    }
+
+    /// <summary>Captures this table as it stands, its slots, generation counter and the grant revision it was built
+    /// at, without rebuilding it first.</summary>
+    /// <returns>The table's checkpoint.</returns>
+    internal WorldHandleTableCheckpoint Capture() => new(
+        BuiltAtRevision: m_builtAtRevision,
+        Capability: m_capability,
+        NextGeneration: m_nextGeneration,
+        Principal: m_principal,
+        Slots: [.. m_slots.Select(selector: static slot => (slot.Subject, slot.Generation))]
+    );
+    /// <summary>Rebuilds a table from its checkpoint over a restored grant table.</summary>
+    /// <param name="grants">The restored grant table the table projects.</param>
+    /// <param name="checkpoint">The captured table.</param>
+    /// <returns>The restored table.</returns>
+    /// <exception cref="ArgumentException"><paramref name="checkpoint"/> names a principal inside the trust boundary, or
+    /// a slot generation that is negative or not below its generation counter.</exception>
+    internal static WorldHandleTable Restore(WorldGrants grants, WorldHandleTableCheckpoint checkpoint) {
+        var table = new WorldHandleTable(
+            capability: checkpoint.Capability,
+            grants: grants,
+            principal: checkpoint.Principal
+        );
+
+        foreach (var (_, generation) in checkpoint.Slots) {
+            if ((generation < 0) || (generation >= checkpoint.NextGeneration)) {
+                throw new ArgumentException(message: $"handle table {checkpoint.Principal.Describe()} {checkpoint.Capability} holds generation {generation} outside its counter {checkpoint.NextGeneration}", paramName: nameof(checkpoint));
+            }
+        }
+
+        table.m_slots = [.. checkpoint.Slots.Select(selector: static slot => new Slot(Generation: slot.Generation, Subject: slot.Subject))];
+        table.m_nextGeneration = checkpoint.NextGeneration;
+        table.m_builtAtRevision = checkpoint.BuiltAtRevision;
+
+        return table;
     }
 
     /// <summary>Mints a handle for slot <paramref name="index"/> as the table stands right now (rebuilding first if

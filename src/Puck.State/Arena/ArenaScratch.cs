@@ -59,7 +59,22 @@ public sealed class ArenaScratch {
     /// <param name="scope">The scope <see cref="EnterFaultScope"/> returned.</param>
     /// <returns>The first fault raised inside the scope, or <see cref="ExpressionFault.None"/>.</returns>
     /// <exception cref="InvalidOperationException">No fault scope is open.</exception>
-    public ExpressionFault LeaveFaultScope(FaultScope scope) {
+    public ExpressionFault LeaveFaultScope(FaultScope scope) => CloseFaultScope(
+        passOn: true,
+        scope: scope
+    );
+    /// <summary>Closes the innermost fault scope at a place whose refusal is the fault's whole answer, so the fault
+    /// is not passed on: the enclosing scope keeps only what it had raised before this one opened. A rule's
+    /// <c>transaction</c> savepoint is that place, since a refusal inside it rewinds the savepoint and runs its
+    /// <c>onFailure</c>; every other deciding place leaves with <see cref="LeaveFaultScope"/>.</summary>
+    /// <param name="scope">The scope <see cref="EnterFaultScope"/> returned.</param>
+    /// <returns>The first fault raised inside the scope, or <see cref="ExpressionFault.None"/>.</returns>
+    /// <exception cref="InvalidOperationException">No fault scope is open.</exception>
+    public ExpressionFault AnswerFaultScope(FaultScope scope) => CloseFaultScope(
+        passOn: false,
+        scope: scope
+    );
+    private ExpressionFault CloseFaultScope(FaultScope scope, bool passOn) {
         if (m_faultScopes == 0) {
             throw new InvalidOperationException(message: "no fault scope is open");
         }
@@ -69,7 +84,7 @@ public sealed class ArenaScratch {
         m_faultScopes--;
         m_raisedFault = ((m_faultScopes == 0)
             ? ExpressionFault.None
-            : ((scope.Outer != ExpressionFault.None) ? scope.Outer : raised)
+            : ((scope.Outer != ExpressionFault.None) ? scope.Outer : (passOn ? raised : ExpressionFault.None))
         );
 
         return raised;

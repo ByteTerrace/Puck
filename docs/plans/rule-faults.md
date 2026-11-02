@@ -88,8 +88,8 @@ verdict is read once by one door.
 > of the value; the only code that produces an `Outcome` from tokens is the
 > interpreter; every store a firing changes is written through the arena
 > journal, so one rewind undoes all of it; and the firing's verdict is read by
-> one door, which commits the journal scope only when no outcome in the firing
-> faulted.
+> one door, which commits the journal scope only when no outcome the firing
+> folds faulted (a `transaction` answers its own body's fault).
 
 | Clause | Enforced by | Where it stops |
 |---|---|---|
@@ -321,7 +321,11 @@ each effect's declared sources evaluated by the interpreter just before it (so
 a later effect still reads what an earlier one wrote, `rules.md:284`), queue
 arms **prepared once** (an arm's `Prepare(ReadOnlySpan<long> values, ReadOnlySpan<ResolvedKey> keys) : Resolved<PreparedArm>`
 receives values the evaluator read; the arm never holds a frame), and fold
-every step's outcome into one `FiringDecision`. A decision binding's phase
+every step's outcome into one `FiringDecision`. A `transaction` step folds
+its own body first: a faulted body is the savepoint's refusal (the register's
+transaction clause), so the savepoint rewinds, `onFailure` runs, and the
+firing folds the savepoint's result rather than the fault; `ArenaScratch.AnswerFaultScope`
+is that boundary while the register stands. A decision binding's phase
 also writes its next binding state through the journal and fires its common
 and option effects into the same scope. Nothing outside the journal is
 written.
