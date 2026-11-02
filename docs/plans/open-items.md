@@ -1125,6 +1125,25 @@ a refactor rewrites or deletes tests freely and is verified by building and
 running what it changed. A `.puck` rewrite proves itself cheaply: `puck compile`
 lowers it to the same JSON as before, except where the look changes on purpose.
 
+- [medium] The rot sweep found three places where code and its own
+  documentation disagree. `puck docs links` does not read XML comments, so
+  none of these is checked yet. (from: rot-fix)
+  - **Carve bakes may be dead.** No in-tree producer requests a carve brick
+    bake; `ISdfBrickBakeService.RequestBrickBake`'s only callers are tests.
+    `WorldFieldEmitter.AdvanceBricks` uploads height fields. Yet
+    `bricks-and-baking.md`'s Bake and Swap sections and the XML doc still
+    describe settled-carve bins. Confirm, then delete the path with its
+    chapter, or wire it.
+  - **The rule host's effect skip.** `documents-rules.md` says a
+    `setState`/`addState` effect is submitted only when it could move the
+    destination, but the code that enforces this was not found.
+    `WorldServer.SaveEffectTap`'s XML doc still names the deleted
+    `FireWorldRuleEffect`. Find the skip or correct the page.
+  - **Superellipsoid.** `SdfFieldEvaluator.SdfSuperellipsoid`'s comment
+    claims exact 1-Lipschitz for every radius, while the Valley packet and
+    `hazards.md` keep the CPU/GPU small-radius disagreement open. One of them
+    is wrong.
+
 Code that grew a second implementation (AGENTS.md rule 7) or costs velocity:
 
 - [medium] A body's simulation continuation has no single write door, so
