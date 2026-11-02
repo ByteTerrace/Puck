@@ -268,8 +268,7 @@ public static partial class WorldFactsCompiler {
             );
         }
 
-        var key = default(CellKey);
-        CompiledCellRef? keyFrom = null;
+        (CellKey Key, CompiledCellRef? KeyFrom)? body = null;
 
         if (effect.Key is { } bodyKey) {
             var address = context.ResolveBodyAddress(
@@ -278,15 +277,13 @@ public static partial class WorldFactsCompiler {
                 verb: "emitCue"
             );
 
-            key = address.Key;
-            keyFrom = address.KeyFrom;
+            body = (address.Key, address.KeyFrom);
         }
 
         return new WorldCueEffect(
+            body: body,
             cue: effect.Name,
             describe: $"emitCue {effect.Name}",
-            key: key,
-            keyFrom: keyFrom,
             payload: effect.Payload
         );
     }

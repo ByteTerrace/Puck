@@ -229,6 +229,15 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
             );
             var found = (naming == KeyNaming.Cell);
 
+            if (naming == KeyNaming.Fault) {
+                ReportRefusal(
+                    detail: $"{RuleReads.KeyFaultReason}; '{reference.Spelling}' selects no row, and the gate decided nothing",
+                    effect: "gate",
+                    refusal: RuleEffectRefusal.Arithmetic,
+                    ruleName: rule.Name,
+                    tick: m_host.Tick
+                );
+            }
             selected &= found;
             trace?.Add(item: $"{reference.Spelling} -> {(found
                 ? m_host.Catalog.Descriptors[ordinal].Name
@@ -474,9 +483,11 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
 
         return aggregate;
     }
-    /// <summary>Runs one gate-and-fire under the bindings already in place. Edge fires on the crossing alone and
-    /// re-arms only when the gate closes again; Level fires every tick the gate holds. The latch entry is per
-    /// binding, never per rule alone; an entry the enclosing sweep does not touch is closed by the sweep.</summary>
+    /// <summary>Runs one gate-and-fire under the bindings already in place, inside a fault scope of its own. Edge fires
+    /// on the crossing alone and re-arms only when the gate closes again; Level fires every tick the gate holds. The
+    /// latch entry is per binding, never per rule alone; an entry the enclosing sweep does not touch is closed by the
+    /// sweep. An evaluation whose bindings, live rows or gate fault decides nothing: the entry keeps the verdict it
+    /// last held, so an Edge rule neither fires nor re-arms on a fault tick.</summary>
     /// <param name="rule">The compiled rule.</param>
     /// <param name="latch">The family's edge latch.</param>
     /// <param name="state">The rule's latch state (<see cref="RuleLatch.Rule"/>).</param>
@@ -485,8 +496,14 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
     /// <param name="applied">Whether the firing moved the arena or emitted through the host.</param>
     /// <returns>What the evaluation did.</returns>
     public RuleOutcome EvaluateOnce(CompiledRule rule, RuleLatch latch, RuleLatch.RuleState state, LatchKey binding, ulong stepTicks, out bool applied) {
+        var scratch = m_host.Scratch;
+        var faults = scratch.EnterFaultScope();
+
         m_host.BeginRuleEvaluation();
-        try { return EvaluateOnceCore(applied: out applied, binding: binding, state: state, latch: latch, rule: rule, stepTicks: stepTicks); } finally { m_host.EndRuleEvaluation(); }
+        try { return EvaluateOnceCore(applied: out applied, binding: binding, state: state, latch: latch, rule: rule, stepTicks: stepTicks); } finally {
+            m_host.EndRuleEvaluation();
+            _ = scratch.LeaveFaultScope(scope: faults);
+        }
     }
 
     private RuleOutcome EvaluateOnceCore(CompiledRule rule, RuleLatch latch, RuleLatch.RuleState state, LatchKey binding, ulong stepTicks, out bool applied) {
@@ -540,9 +557,7 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
             tick: tick,
             trace: trace
         )) {
-            EndTrace(entry: trace);
-
-            return RuleOutcome.Idle;
+            return HoldOnFault(latch: latch, scheduling: scheduling, trace: trace);
         }
 
         // Every live row the rule spells must select a row, or this evaluation is simply not for these indices: the
@@ -556,6 +571,10 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
             ruleName: rule.Name,
             trace: trace?.Conjuncts
         ));
+
+        if (m_host.Scratch.RaisedFault != ExpressionFault.None) {
+            return HoldOnFault(latch: latch, scheduling: scheduling, trace: trace);
+        }
 
         ref var slot = ref CollectionsMarshal.GetValueRefOrAddDefault(
             dictionary: held,
@@ -611,10 +630,20 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
         return outcome;
     }
 
+    // A fault decided nothing. A binding that merely could not evaluate (an absence) leaves its entry for the sweep to
+    // close, as a closed gate would; one that faulted touches it, so the sweep keeps the verdict the entry last held.
+    private RuleOutcome HoldOnFault(RuleLatch latch, RuleLatch.BindingSchedule scheduling, RuleTraceEvaluation? trace) {
+        if (m_host.Scratch.RaisedFault != ExpressionFault.None) {
+            latch.Touch(schedule: scheduling);
+        }
+        EndTrace(entry: trace);
+
+        return RuleOutcome.Idle;
+    }
     /// <summary>Evaluates a compiled gate for the evaluation in flight, reporting whether it faulted — a conjunct's
-    /// expression overflowed, left a function's domain, or read a fact with no number or no cell. An <c>if</c>
-    /// effect's condition uses this to distinguish a genuinely false condition from one that could not evaluate,
-    /// which runs neither branch.</summary>
+    /// expression overflowed, left a function's domain, or read a fact with no number. A faulted gate decided
+    /// nothing: a rule keeps its last verdict, a decision its choice, and an <c>if</c> effect's condition runs
+    /// neither branch and refuses its firing.</summary>
     /// <param name="gate">The compiled gate.</param>
     /// <param name="ruleName">The rule the gate belongs to, for the refusal ledger.</param>
     /// <param name="faulted">Whether some conjunct could not evaluate; already reported against the rule in
@@ -632,7 +661,7 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
         faulted = (fault != ExpressionFault.None);
         if (faulted) {
             ReportRefusal(
-                detail: $"{RuleEvaluation.DescribeFault(fault: fault)}; the gate closed",
+                detail: $"{RuleEvaluation.DescribeFault(fault: fault)}; the gate decided nothing",
                 effect: "gate",
                 refusal: RuleEffectRefusal.Arithmetic,
                 ruleName: ruleName,

@@ -189,15 +189,29 @@ public sealed partial class WorldRuleHost {
                 );
             }
 
-            var length = PatternOperand.ReadWord(
-                attributeOrdinal: attributeOrdinal,
-                kind: pattern.Source.Kind,
-                reader: reader,
-                rowOrdinal: rowOrdinal,
-                start: start,
-                tokenExpression: expression,
-                word: word
-            );
+            // The console's read decides what a token's fault means here: the word spells nothing, and says why.
+            var scratch = reader.Scratch;
+            var scope = scratch.EnterFaultScope();
+            ExpressionFault spelled;
+            int length;
+
+            try {
+                spelled = PatternOperand.ReadWord(
+                    attributeOrdinal: attributeOrdinal,
+                    kind: pattern.Source.Kind,
+                    length: out length,
+                    reader: reader,
+                    rowOrdinal: rowOrdinal,
+                    start: start,
+                    tokenExpression: expression,
+                    word: word
+                );
+            } finally {
+                _ = scratch.LeaveFaultScope(scope: scope);
+            }
+            if (spelled != ExpressionFault.None) {
+                return $"[world.match: {patternName} over {rowName} | the word spells nothing, since a token's value expression did not answer: {RuleEvaluation.DescribeFault(fault: spelled)}]";
+            }
 
             lines.Add(item: Narrate(
                 pattern: pattern,

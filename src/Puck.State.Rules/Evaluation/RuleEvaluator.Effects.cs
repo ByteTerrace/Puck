@@ -67,10 +67,16 @@ public sealed partial class RuleEvaluator {
         );
         var queued = m_deferred.Count;
         var mark = m_host.BeginStateTransaction();
+        var scratch = m_host.Scratch;
+        var serial = m_refusalSerial;
 
         applied = false;
 
         bool proposed;
+        // A fault raised anywhere before the commit refuses the whole firing, whatever the effect that met it made of
+        // it: an effect can drop a value, never the fault the register already holds.
+        var faults = scratch.EnterFaultScope();
+        var fault = ExpressionFault.None;
 
         try {
             proposed = Propose(
@@ -85,6 +91,21 @@ public sealed partial class RuleEvaluator {
             DiscardQueued(from: queued);
 
             throw;
+        } finally {
+            fault = scratch.LeaveFaultScope(scope: faults);
+        }
+
+        if (proposed && (fault != ExpressionFault.None)) {
+            proposed = false;
+            if (m_refusalSerial == serial) {
+                ReportRefusal(
+                    detail: $"{RuleEvaluation.DescribeFault(fault: fault)}; the firing refused whole",
+                    effect: "the firing",
+                    refusal: RuleEffectRefusal.Arithmetic,
+                    ruleName: ruleName,
+                    tick: tick
+                );
+            }
         }
 
         if (!proposed) {
@@ -115,11 +136,26 @@ public sealed partial class RuleEvaluator {
                 if ((arm.Needs & EffectNeeds.Transactional) != EffectNeeds.None) {
                     continue;
                 }
-                if (arm.TryDeliverAfterCommit(
-                    firing: in firing,
-                    host: m_host,
-                    refusal: out var refusal
-                )) {
+
+                var delivery = scratch.EnterFaultScope();
+                bool delivered;
+                EffectRefusal refusal;
+
+                try {
+                    delivered = arm.TryDeliverAfterCommit(
+                        firing: in firing,
+                        host: m_host,
+                        refusal: out refusal
+                    );
+                } finally {
+                    fault = scratch.LeaveFaultScope(scope: delivery);
+                }
+                // Past the commit nothing rewinds, so a delivery that faulted is counted as refused.
+                if (delivered && (fault != ExpressionFault.None)) {
+                    delivered = false;
+                    refusal = EffectRefusal.Of(code: RuleEffectRefusal.Arithmetic, reason: RuleEvaluation.DescribeFault(fault: fault));
+                }
+                if (delivered) {
                     applied |= arm.SubmitsMutation;
                 } else {
                     ReportRefusal(
