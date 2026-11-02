@@ -251,6 +251,11 @@ public static class AffectedCommand {
 
         return true;
     }
+
+    /// <summary>The documentation check's printed and executed arguments: the whole corpus, since a change to code can
+    /// break a citation in any page.</summary>
+    public static readonly string[] DocsLinksArguments = ["docs", "links"];
+
     /// <summary>The strict manifest check's shared printed and executed arguments.</summary>
     public static string[] CanaryCheckArguments(IReadOnlyList<string> ids) => ["canary", "--list", .. ids];
     /// <summary>Strictly loads and lists every prose-edited manifest through the root command, without a World.</summary>
@@ -325,6 +330,10 @@ public static class AffectedCommand {
             failed.Add(item: "canary manifests");
         }
 
+        if (plan.DocsLinks && (CliRoot.Invoke(args: DocsLinksArguments, root: root) != 0)) {
+            failed.Add(item: "docs links");
+        }
+
         // The suites build once and run their CPU tests side by side (AffectedSuites).
         failed.AddRange(collection: AffectedSuites.Run(
             gpuVerbGrammars: composition.GpuVerbGrammars,
@@ -390,6 +399,11 @@ public static class AffectedCommand {
         }
         if (plan.CanaryChecks.Count > 0) {
             into.WriteLine(value: $"puck {string.Join(separator: ' ', value: CanaryCheckArguments(ids: plan.CanaryChecks))}");
+        }
+
+        if (plan.DocsLinks) {
+            into.WriteLine(value: "docs-links");
+            into.WriteLine(value: $"puck {string.Join(separator: ' ', value: DocsLinksArguments)}");
         }
 
         if (plan.Parity) {
@@ -533,12 +547,15 @@ public static class AffectedCommand {
               must match. Files with conditional directives, parse errors, additions and deletions are
               not judged. A manifest edit confined to root title and binding selects a canary-check
               line and puck canary --list <id...>, which --run strictly loads without booting a World.
-              Gate repository checks remain: format and docs links, with
-              docs citations in the GPU gate.
+              A changed page of the documentation corpus, a non-trivia C# change under src/ or tests/,
+              or any deleted file selects a docs-links line and puck docs links, which --run runs over
+              the whole corpus. Gate repository checks remain: format, with docs citations in the GPU
+              gate.
               Changing build infrastructure (build/, Directory.Build.*, global.json, Puck.slnx) chooses
               every suite. A changed .puck source that declares test blocks is run with puck test, and
               prints as a test line. A change under .github/ chooses only the suites whose project files
-              declare it (PuckAffectedInput). Prose, .claude/, editors/ and experimental/ choose nothing.
+              declare it (PuckAffectedInput). Prose, .claude/, editors/ and experimental/ choose no suite
+              or canary.
 
               A baseline is chosen when its owning test project is reached or a changed or deleted
               file matches its declared data inputs. Each baseline line names its artifact and is

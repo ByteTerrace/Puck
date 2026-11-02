@@ -143,6 +143,32 @@ internal static class DeclarationsWalker {
                 );
 
                 break;
+            // An enum member is a constant field of its enum, and a positional record parameter declares a property:
+            // both are members a caller names, though neither is spelled as a field or property declaration.
+            case EnumMemberDeclarationSyntax member when options.WantMembers:
+                Add(
+                    file: file,
+                    node: member,
+                    kind: "field",
+                    identifier: member.Identifier,
+                    simpleName: member.Identifier.Text,
+                    options: options,
+                    records: records
+                );
+
+                break;
+            case ParameterSyntax { Parent.Parent: RecordDeclarationSyntax } parameter when options.WantMembers:
+                Add(
+                    file: file,
+                    node: parameter,
+                    kind: "property",
+                    identifier: parameter.Identifier,
+                    simpleName: parameter.Identifier.Text,
+                    options: options,
+                    records: records
+                );
+
+                break;
             case BaseFieldDeclarationSyntax field when options.WantMembers:
                 // One record per declarator: `int a, b;` declares two fields, and the attributes and any
                 // filter apply to the whole declaration.
@@ -293,6 +319,10 @@ internal static class DeclarationsWalker {
                     parts.Add(item: (type.Identifier.Text + (TypeParameters(list: type.TypeParameterList) ?? string.Empty)));
 
                     break;
+                case EnumDeclarationSyntax @enum:
+                    parts.Add(item: @enum.Identifier.Text);
+
+                    break;
                 case BaseNamespaceDeclarationSyntax @namespace:
                     parts.Add(item: Flatten(node: @namespace.Name));
 
@@ -371,30 +401,47 @@ internal static class DeclarationsWalker {
 
     // Every record the options select, ordered by (path, line, column, relation, name) — a total order,
     // so two runs over an unchanged tree emit byte-identical bytes.
+    // Files are walked in parallel, each into its own list; the total order makes the merged result independent of
+    // which walk finished first.
     public static List<AnalysisRecord> Collect(SourceCorpus corpus, DeclarationsOptions options) {
-        var records = new List<AnalysisRecord>();
+        var perFile = new List<AnalysisRecord>[corpus.Files.Count];
 
-        foreach (var file in corpus.Files) {
-            foreach (var node in file.Root.DescendantNodes()) {
-                CollectDeclarations(
-                    file: file,
-                    node: node,
-                    options: options,
-                    records: records
-                );
-            }
+        Parallel.For(
+            body: index => {
+                var file = corpus.Files[index];
+                var records = new List<AnalysisRecord>();
 
-            if (options.Doc) {
-                CollectCrefs(
-                    file: file,
-                    options: options,
-                    records: records
-                );
-            }
+                foreach (var node in file.Root.DescendantNodes()) {
+                    CollectDeclarations(
+                        file: file,
+                        node: node,
+                        options: options,
+                        records: records
+                    );
+                }
+
+                if (options.Doc) {
+                    CollectCrefs(
+                        file: file,
+                        options: options,
+                        records: records
+                    );
+                }
+
+                perFile[index] = records;
+            },
+            fromInclusive: 0,
+            toExclusive: corpus.Files.Count
+        );
+
+        var merged = new List<AnalysisRecord>(capacity: perFile.Sum(selector: static records => records.Count));
+
+        foreach (var records in perFile) {
+            merged.AddRange(collection: records);
         }
 
-        records.Sort(comparison: Compare);
+        merged.Sort(comparison: Compare);
 
-        return records;
+        return merged;
     }
 }

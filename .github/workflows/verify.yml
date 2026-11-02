@@ -14,6 +14,8 @@ run-name: Runtime verification — ${{ github.ref_name }}
 # schema), or the name registry, an SDF instruction-set change without regenerating the kernels' sdf-isa.hlsli, or a
 # project declaration changed without regenerating the layering block in docs/project-map.md, fails the build here
 # rather than only in a manual verb run. The branding check also catches drift in distributed assets and their source wiring.
+# `documents` runs `puck docs links` over the whole hand-written corpus: links, anchors, cited paths and C# symbols, and
+# the rot markers docs/development/documentation.md names. It needs no GPU and no World.
 # `shader-bytecode` is the binding contract's cross-host gate leg: it compiles every shader with the pinned Linux DXC
 # through the build's own CompileShaders target and holds each SPIR-V output byte for byte to the Windows build's,
 # which the artifacts job collected (`puck shaders compare --build`). DXIL is no part of it: Direct3D 12 is its one
@@ -141,6 +143,28 @@ jobs:
           name: world-test-results-linux
           path: artifacts/world-test-results
     timeout-minutes: 15
+  documents:
+    if: ${{ !cancelled() && (needs.artifacts.result == 'success' || (inputs.prebuilt && needs.artifacts.result == 'skipped')) }}
+    name: Check the documentation corpus
+    needs: artifacts
+    runs-on: ubuntu-24.04
+    steps:
+      # Every commit and every branch tip, without trees or blobs beyond the checked-out commit's: `puck docs links`
+      # reads the first commit's date and the branches that exist, which a shallow single-branch clone cannot answer.
+      - name: Check out source with its history and branches
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          filter: tree:0
+      - name: Install the pinned .NET SDK
+        uses: ./.github/actions/setup-dotnet
+      - name: Install Puck CLI
+        uses: ./.github/actions/setup-puck
+        with:
+          artifact: nuget-packages
+      - name: puck docs links
+        run: puck docs links
+    timeout-minutes: 10
   ledgers:
     if: ${{ !cancelled() && (needs.artifacts.result == 'success' || (inputs.prebuilt && needs.artifacts.result == 'skipped')) }}
     name: Verify generated contracts and branding

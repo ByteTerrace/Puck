@@ -1,4 +1,5 @@
 using System.CommandLine;
+using System.Diagnostics;
 using System.Globalization;
 using System.Net;
 using System.Text;
@@ -8,8 +9,10 @@ using Puck.Cli.Source;
 
 namespace Puck.Cli.Docs;
 
-/// <summary><c>puck docs links</c> — checks every relative markdown link and cited repository path in a fixed
-/// documentation set resolves. For each document it extracts: (a) every relative markdown link target
+/// <summary><c>puck docs links</c> — the check that keeps the hand-written corpus (<see cref="DocsCorpus"/>) from
+/// rotting. Beyond the citations below it resolves every cited C# name against the declaration index
+/// (<see cref="DocsSymbols"/>) and fails on rot markers (<see cref="DocsRot"/>). For each document it extracts: (a)
+/// every relative markdown link target
 /// (<c>[text](path)</c>, <c>[text](path#fragment)</c>, <c>[text](#fragment)</c>) — external schemes are skipped —
 /// resolved against the document's own directory, then the repository root, and a fragment on a link into a
 /// markdown file (the document itself when the link names no path) must equal one of that file's heading anchors,
@@ -17,34 +20,11 @@ namespace Puck.Cli.Docs;
 /// (<c>src/...</c>, <c>docs/...</c>, <c>tests/...</c>, <c>build/...</c>) with a file extension, resolved the same
 /// way; (c) every backticked bare filename with a source-ish extension, looked up in an index of every filename
 /// under <c>src/</c>, <c>docs/</c>, <c>tests/</c>, <c>build/</c>, <c>worlds/</c>, and <c>.claude/skills/</c> — enforced for
-/// documents under <c>src/</c> (a project README cites its neighbors), advisory for documents under <c>docs/</c>,
-/// which legitimately name out-of-repo files. Two controls — a deliberately nonexistent path must fail resolution,
-/// and a deliberately absent fragment must miss a heading's anchors — run before any document, so a green run
-/// proves the checker can turn red.</summary>
+/// documents under <c>src/</c> and <c>tests/</c> (a project README cites its neighbors), advisory elsewhere, where a
+/// page legitimately names out-of-repo files. Three controls — a deliberately nonexistent path must fail resolution,
+/// a deliberately absent fragment must miss a heading's anchors, and this verb's own entry point must resolve while a
+/// member it lacks does not — run before any document, so a green run proves the checker can turn red.</summary>
 public static class DocsLinksCommand {
-    private static readonly string[] DefaultDocuments = [
-        "src/Puck.World/README.md",
-        "src/Puck.World.Client/README.md",
-        "src/Puck.World/Audio/README.md",
-        "src/Puck.World.Schema/README.md",
-        "src/Puck.World.Server/README.md",
-        "src/Puck.Attestation/README.md",
-        "README.md",
-        "docs/README.md",
-        "docs/overview.md",
-        "docs/getting-started.md",
-        "docs/architecture/README.md",
-        "docs/authoring/README.md",
-        "docs/rendering/README.md",
-        "docs/emulation/README.md",
-        "docs/development/README.md",
-        "docs/development/contributing.md",
-        "docs/reference/README.md",
-        "docs/plans/README.md",
-        "docs/decisions/README.md",
-        "docs/project-map.md",
-        "docs/game/README.md",
-    ];
     // AGENTS.md rule 1 pins these paths as existing only in git history; docs/project-map.md states exactly
     // that where it names them, so their non-resolution is correct, not a broken citation.
     private static readonly string[] HistoricalCitations = ["src/Puck", "src/Puck.Avatars"];
@@ -184,6 +164,32 @@ public static class DocsLinksCommand {
             }
         }
     }
+    // Steps a page's fence state over one line and returns whether that line is code: a fence's opening or closing
+    // line, or any line between them. CommonMark closes a fence with a line of the same character at least as long.
+    private static bool InCode(string line, ref string? fence) {
+        var fenceMatch = CodeFence.Match(input: line);
+
+        if (fence is null) {
+            if (!fenceMatch.Success) {
+                return false;
+            }
+
+            fence = fenceMatch.Groups[1].Value;
+
+            return true;
+        }
+
+        if (
+            fenceMatch.Success &&
+            (fenceMatch.Groups[1].Value[0] == fence[0]) &&
+            (fenceMatch.Groups[1].Value.Length >= fence.Length) &&
+            (line.Trim().Trim(trimChar: fence[0]).Length == 0)
+        ) {
+            fence = null;
+        }
+
+        return true;
+    }
     private static string? Resolve(string target, string documentDirectory, string repositoryRoot) =>
         (ResolveUnder(
             directory: documentDirectory,
@@ -274,24 +280,10 @@ public static class DocsLinksCommand {
         string? fence = null;
 
         foreach (var line in lines) {
-            var fenceMatch = CodeFence.Match(input: line);
-
-            if (fence is null) {
-                if (fenceMatch.Success) {
-                    fence = fenceMatch.Groups[1].Value;
-
-                    continue;
-                }
-            } else {
-                if (
-                    fenceMatch.Success &&
-                    (fenceMatch.Groups[1].Value[0] == fence[0]) &&
-                    (fenceMatch.Groups[1].Value.Length >= fence.Length) &&
-                    (line.Trim().Trim(trimChar: fence[0]).Length == 0)
-                ) {
-                    fence = null;
-                }
-
+            if (InCode(
+                fence: ref fence,
+                line: line
+            )) {
                 continue;
             }
 
@@ -317,6 +309,7 @@ public static class DocsLinksCommand {
     }
 
     public static int Run(string repositoryRoot, string[] documents) {
+        var started = Stopwatch.GetTimestamp();
         var fileNameIndex = BuildFileNameIndex(repositoryRoot: repositoryRoot);
 
         if (
@@ -347,8 +340,45 @@ public static class DocsLinksCommand {
             );
         }
 
+        var symbolControl = DocsSymbols.CitedName(span: $"{nameof(DocsLinksCommand)}.{nameof(Run)}()");
+
+        if ((symbolControl is null) || (DocsSymbols.CitedName(span: "storage.userId") is not null)) {
+            return CliExit.Refuse(
+                verb: "docs links",
+                what: "the symbol control",
+                why: "the symbol shape did not tell a C# member from a document field path."
+            );
+        }
+
+        var symbols = DocsSymbols.Build(repositoryRoot: repositoryRoot);
+
+        if ((symbols.Resolve(name: symbolControl) != DocsSymbolVerdict.Resolved) || (symbols.Resolve(name: $"{nameof(DocsLinksCommand)}.ThisMemberDoesNotExist") != DocsSymbolVerdict.Missing)) {
+            return CliExit.Refuse(
+                verb: "docs links",
+                what: "the symbol control",
+                why: "this verb's own entry point did not resolve, or a member it lacks did, so the index cannot discriminate."
+            );
+        }
+
+        var branches = DocsRot.Branches.TryRead(
+            repositoryRoot: repositoryRoot,
+            why: out var branchesWhy
+        );
+        var firstCommit = DocsRot.ReadFirstCommit(repositoryRoot: repositoryRoot);
+        var rot = new DocsRot(
+            branches: branches,
+            extensions: fileNameIndex.Select(selector: static name => Path.GetExtension(path: name).TrimStart(trimChar: '.').ToLowerInvariant())
+                .Where(predicate: static extension => (extension.Length != 0))
+                .ToHashSet(comparer: StringComparer.Ordinal),
+            firstCommit: firstCommit,
+            literalDates: symbols.LiteralDates,
+            pinnedHashes: DocsRot.HexRuns(path: Path.Combine(
+                path1: repositoryRoot,
+                path2: "THIRD-PARTY-NOTICES.md"
+            ))
+        );
         var anchorCache = new Dictionary<string, HashSet<string>>(comparer: StringComparer.OrdinalIgnoreCase);
-        var failures = new List<string>();
+        var failures = new List<(string Category, string Message)>();
         var advisories = new List<string>();
         var checkedCount = 0;
 
@@ -359,23 +389,72 @@ public static class DocsLinksCommand {
             );
 
             if (!File.Exists(path: documentPath)) {
-                failures.Add(item: $"{document}: the document itself does not exist");
+                failures.Add(item: ("missing", $"{document}: the document itself does not exist"));
 
                 continue;
             }
 
             var documentDirectory = (Path.GetDirectoryName(path: documentPath) ?? repositoryRoot);
-            var enforceBareFileNames = document.Replace(
+            var relative = document.Replace(
                 newChar: '/',
                 oldChar: '\\'
-            ).StartsWith(
+            );
+            var enforceBareFileNames = (relative.StartsWith(
                 comparisonType: StringComparison.Ordinal,
                 value: "src/"
-            );
+            ) || relative.StartsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: "tests/"
+            ));
+            var durable = DocsCorpus.IsDurable(relativePath: relative);
             var lines = File.ReadAllLines(path: documentPath);
+            string? fence = null;
 
             for (var lineNumber = 1; (lineNumber <= lines.Length); lineNumber++) {
-                foreach (var citation in Citations(line: lines[(lineNumber - 1)])) {
+                var line = lines[(lineNumber - 1)];
+
+                var code = InCode(
+                    fence: ref fence,
+                    line: line
+                );
+
+                foreach (var (category, message) in rot.Line(
+                    code: code,
+                    durable: durable,
+                    line: line
+                )) {
+                    failures.Add(item: (category, $"{document}:{lineNumber}: {message}"));
+                }
+
+                // A fenced block is an example or a transcript, not a citation: its spans are not names.
+                if (!code) {
+                    foreach (Match span in Backticked.Matches(input: line)) {
+                        var content = span.Groups[1].Value;
+
+                        if (DocsSymbols.CitedName(span: content) is { } name) {
+                            checkedCount++;
+
+                            switch (symbols.Resolve(name: name)) {
+                                case DocsSymbolVerdict.Missing:
+                                    failures.Add(item: ("symbol", $"{document}:{lineNumber}: symbol '{name}' names no declaration under src/ or tests/"));
+
+                                    break;
+                                case DocsSymbolVerdict.Unknown:
+                                    advisories.Add(item: $"{document}:{lineNumber}: symbol '{name}' is neither Puck's nor the runtime's, so its currency is not checked");
+
+                                    break;
+                                default:
+                                    break;
+                            }
+                        }
+
+                        if (rot.Branch(span: content) is { } branchMessage) {
+                            failures.Add(item: ("branch", $"{document}:{lineNumber}: {branchMessage}"));
+                        }
+                    }
+                }
+
+                foreach (var citation in Citations(line: line)) {
                     checkedCount++;
 
                     if (citation.Kind == CitationKind.File) {
@@ -401,9 +480,11 @@ public static class DocsLinksCommand {
 
                         var message = $"{document}:{lineNumber}: cited filename '{citation.Target}' exists nowhere under src/, docs/, tests/, build/, worlds/, or .claude/skills/";
 
-                        (enforceBareFileNames
-                            ? failures
-                            : advisories).Add(item: message);
+                        if (enforceBareFileNames) {
+                            failures.Add(item: ("file", message));
+                        } else {
+                            advisories.Add(item: message);
+                        }
 
                         continue;
                     }
@@ -424,7 +505,7 @@ public static class DocsLinksCommand {
                         ));
 
                     if (resolved is null) {
-                        failures.Add(item: $"{document}:{lineNumber}: {citation.KindName} '{citation.Target}' does not resolve");
+                        failures.Add(item: (citation.KindName, $"{document}:{lineNumber}: {citation.KindName} '{citation.Target}' does not resolve"));
 
                         continue;
                     }
@@ -451,65 +532,122 @@ public static class DocsLinksCommand {
                     }
 
                     if (!anchors.Contains(item: citation.Fragment)) {
-                        failures.Add(item: $"{document}:{lineNumber}: anchor '{citation.Target}#{citation.Fragment}' does not resolve");
+                        failures.Add(item: ("anchor", $"{document}:{lineNumber}: anchor '{citation.Target}#{citation.Fragment}' does not resolve"));
                     }
                 }
             }
         }
 
-        Console.WriteLine(value: $"---- documents: {documents.Length}; citations checked: {checkedCount}; failures: {failures.Count}; advisories: {advisories.Count} ----");
+        var elapsed = Stopwatch.GetElapsedTime(startingTimestamp: started);
+        var byCategory = failures.GroupBy(keySelector: static failure => failure.Category)
+            .OrderBy(
+                comparer: StringComparer.Ordinal,
+                keySelector: static group => group.Key
+            )
+            .Select(selector: static group => $"{group.Key} {group.Count()}");
+
+        Console.WriteLine(value: $"---- documents: {documents.Length}; declarations indexed: {symbols.DeclarationCount}; citations checked: {checkedCount}; failures: {failures.Count}{((failures.Count == 0) ? string.Empty : $" ({string.Join(separator: ", ", values: byCategory)})")}; advisories: {advisories.Count}; {elapsed.TotalSeconds.ToString(format: "0.0", provider: CultureInfo.InvariantCulture)}s ----");
+
+        if (branches is null) {
+            Console.WriteLine(value: $"note: branch names were not checked: {branchesWhy}.");
+        }
+
+        if (firstCommit is null) {
+            Console.WriteLine(value: "note: the clone is shallow, so no date is exempt as history before the first commit.");
+        }
 
         foreach (var advisory in advisories) {
             Console.WriteLine(value: $"note: {advisory}");
         }
 
         if (failures.Count != 0) {
-            foreach (var failure in failures) {
-                Console.WriteLine(value: $"FAIL: {failure}");
+            foreach (var (category, message) in failures) {
+                Console.WriteLine(value: $"FAIL [{category}]: {message}");
             }
 
             return CliExit.Failed;
         }
 
-        Console.WriteLine(value: "PASS: every relative link, heading anchor and cited repository path in the checked documents resolves.");
+        Console.WriteLine(value: "PASS: every link, anchor, cited path and cited symbol in the checked documents resolves, and none shows a rot marker.");
 
         return CliExit.Success;
     }
     public static Command Create() {
         var documentsArgument = new Argument<string[]>(name: "document") {
             Arity = ArgumentArity.ZeroOrMore,
-            Description = "Repository-relative markdown files to check; absent, the manual's entry points and the World documentation.",
+            Description = "Repository-relative markdown files to check; absent, the whole hand-written corpus.",
         };
         var command = new Command(
-            description: "Check that every relative markdown link, heading anchor and cited repository path resolves.",
+            description: "Check the hand-written documents for broken links, anchors, paths and symbols, and for rot markers.",
             name: "links"
         ) { documentsArgument };
 
         command.Detail(detail: """
+            With no document named, checks the hand-written corpus, derived from the tree: AGENTS.md
+            and README.md at the root, every markdown file under docs/ (not the image packs in
+            docs/game/art/*/), under .claude/skills/ (not evals/) and under worlds/, and every
+            README.md under src/ and tests/. A page whose opening lines say "Generated by ...; do
+            not hand-edit" is left to its generator's check.
+
             A link's #fragment into a markdown file (or a bare #fragment into the document itself)
             must name one of the target's heading anchors, slugged as GitHub renders them: the
             heading's text lowercased, punctuation dropped, spaces turned to hyphens, and a repeated
             heading suffixed -1, -2, ... in document order.
 
             Also checks every backticked bare filename against an index swept from src/, docs/,
-            tests/, build/, worlds/, and .claude/skills/: enforced for a document under src/, advisory
-            elsewhere. Two controls run before any document (a deliberately nonexistent path must
-            fail resolution, and a deliberately absent fragment must miss), so a green run proves
-            the checker can turn red.
+            tests/, build/, worlds/, and .claude/skills/: enforced for a document under src/ or
+            tests/, advisory elsewhere.
 
-            Exit codes: 0 every citation resolved; 1 one or more did not; 2 a usage error or
-            refusal.
+            A code span outside a fenced block shaped like a dotted C# name (each segment opens
+            with a capital: RuleCapacity.MaxWorkUnitsPerTick, DocsCommand.Create()) must name a type,
+            member, namespace or project declared under src/ or tests/, read from the syntax index
+            puck declarations uses, or a type of the .NET runtime.
+
+            Rot markers fail the run: a date (an ISO date, or a month and a day) other than one
+            the code spells in a string literal under src/ (a protocol revision); a commit SHA, a
+            run of 7 to 40 hex characters on a line that speaks of commits, merges or tips; a path
+            to a concrete entry under .claude/scratch/, a jobs/ directory or AppData/Local/Temp; a
+            code span naming a branch (shaped like an existing one, or called a branch) that exists
+            neither locally nor on a remote; and, in a page outside docs/plans/, a file:line or
+            file#Lline citation. Nothing is recorded: every check reads the current tree and refs.
+            Branch names are not checked when no remote-tracking branch exists.
+
+            Three controls run before any document (a deliberately nonexistent path must fail
+            resolution, a deliberately absent fragment must miss, and this verb's own entry point
+            must resolve while a member it lacks does not), so a green run proves the checker can
+            turn red.
+
+            Exit codes: 0 every check passed; 1 one or more failed; 2 a usage error or refusal.
             """);
         // The default is applied here rather than as a default value, which help would evaluate: reading it runs this
         // type's static initializer and compiles every citation pattern.
-        command.SetAction(action: parseResult => (CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)
-            ? Run(
-                documents: ((parseResult.GetValue(argument: documentsArgument) is { Length: > 0 } documents)
-                    ? documents
-                    : DefaultDocuments),
+        command.SetAction(action: parseResult => {
+            if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
+                return CliExit.Refused;
+            }
+
+            if (parseResult.GetValue(argument: documentsArgument) is { Length: > 0 } documents) {
+                return Run(
+                    documents: documents,
+                    repositoryRoot: repositoryRoot
+                );
+            }
+
+            return (DocsCorpus.TryEnumerate(
+                documents: out var corpus,
+                error: out var error,
                 repositoryRoot: repositoryRoot
             )
-            : CliExit.Refused));
+                ? Run(
+                    documents: [.. corpus],
+                    repositoryRoot: repositoryRoot
+                )
+                : CliExit.Refuse(
+                    verb: "docs links",
+                    what: "the documentation corpus",
+                    why: error
+                ));
+        });
 
         return command;
     }
