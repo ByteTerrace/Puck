@@ -2310,6 +2310,12 @@ the static round-section term's cost with `puck mesh audit --cpu`.
   for static instances and merges every member's detail into one
   `DetailLow`/`DetailHigh` box, where per-member regions would let a thin
   member declare its own detail.
+- Each residency's first upload copies the whole bake point table, 32 MiB of
+  host-visible staging (`SdfWorldTables.MeshBakePoints.cs:14`, sized by
+  `SdfWorldPackage.MeshBakeMaxSamples` at 2^21), though a frame writes only its
+  batch's points; `SdfWorldTablesWorkLawTests` counts 34.4 MB of host-visible
+  writes on a first upload, 33.5 MB of them that table. Owe only the entries a batch
+  writes, and size the staging to that. (from: sdfvm-signal)
 
 ### Residency and streaming
 
@@ -2526,9 +2532,15 @@ The suite target (100 % line coverage plus the keep-list) and CI's `coverage` jo
 are suspended; a red test or coverage job is not a stop, and a refactor rewrites
 or deletes tests freely.
 
-- Four `Puck.SdfVm.Tests` laws fail on the integration head with or without
-  the memory fixes: store repeated load, skinned settle, cubic lattice and
-  static union copy. The settle-cap law fails intermittently. (from: mem-fixes)
+- `Puck.SdfVm.Tests` is green (478 laws) after the sdfvm-signal lane: three
+  engine regressions fixed (a refused build retried once on an unchanged frame,
+  a repeated library load re-read the store, settle accounting lost to the
+  native-ownership `Draw`), the rest updated to R2, the exit layer, the cold
+  bake's slab sampling and frame share, and the 2^21-sample dispatch.
+  `ATemporalViewRunsTheTemporalFragmentWithHistoryAtItsOutput` and
+  `CadenceVisualChangesLeaveConvergedHistoryAndItsRingStanding` each failed
+  once beside a World build and passed alone and in two class runs; both wait
+  on a thread-pool graph rebuild. (from: sdfvm-signal)
 - The thirteen standing red `Puck.World.Server.Tests` laws pass. The editor fixture now declares the one-bank bar the validator
   requires; guest writes no longer enter the recovery journal (the laws read
   echoes instead); a replay drive builds its boot image on a shadow server; a
