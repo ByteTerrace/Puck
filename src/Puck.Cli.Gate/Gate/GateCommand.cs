@@ -45,7 +45,7 @@ public static class GateCommand {
     /// <param name="composition">What the gate reads from the verbs composed beside it.</param>
     /// <returns>The command.</returns>
     public static Command Create(TimeProvider clock, GateComposition composition) {
-        var mergeBaseOption = AffectedCommand.MergeBase(description: "The branch the change lands on; the change is read against its merge base with HEAD.");
+        var mergeBaseOption = AffectedCommand.MergeBase(description: "Required. The branch the change lands on, such as origin/main or the integration branch your brief names; the change is read against its merge base with HEAD.");
         var gpuOption = AffectedCommand.Gpu();
 
         gpuOption.Description = "Add affected canaries (side by side, up to --gpu-jobs legs on the GPU) and parity, then device suites and docs citations, one step after another.";
@@ -57,7 +57,7 @@ public static class GateCommand {
             name: Verb
         ) { mergeBaseOption, gpuOption, gpuJobsOption, recordOption, suiteJobsOption };
 
-        mergeBaseOption.DefaultValueFactory = static _ => GateRun.DefaultTarget;
+        mergeBaseOption.Required = true;
         command.Detail(detail: (GatePlan.Detail() + $"""
 
             Baseline steps run only when affected reaches their owning project or declared data inputs.
@@ -88,7 +88,7 @@ public static class GateCommand {
             clock: clock,
             composition: composition,
             cancellationToken: cancellationToken,
-            target: parseResult.GetValue(option: mergeBaseOption)!
+            target: parseResult.GetRequiredValue(option: mergeBaseOption)
         )));
         return command;
     }

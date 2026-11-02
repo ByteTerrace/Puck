@@ -26,7 +26,7 @@ Every shape has a packed lane layout shared by `SdfInstruction`,
 - host validation and conservative bound analysis;
 - distance and gradient implementations;
 - Lipschitz analysis when the field is not factor 1;
-- behavior in reduced shader variants; and
+- agreement with the CPU twin in `SdfFieldEvaluator`, or its refusal by name; and
 - cross-backend verification.
 
 Lifted two-dimensional profiles use `SdfLift.Revolve` or `SdfLift.Extrude`.
@@ -79,7 +79,7 @@ coordinate is clamped to `[from,to]`, then the target receives
 including circular arcs, without a runtime field warp. The compiler includes
 the deformation in its error bound. Shear and stroke cannot be combined.
 
-Curves are flattened during composition, never during ray marching. `tolerance`
+Curves are flattened during composition, never while the field is sampled. `tolerance`
 is the maximum local geometric approximation error, between 0.00001 and 0.1,
 apart from floating-point rounding. World-space error grows by at most the
 larger X/Y scale and the placement scale. At most 128 edges are emitted; a
@@ -87,17 +87,14 @@ tighter tolerance that exceeds that budget is refused. Tiny edges below
 0.000001 profile units are also refused to protect projection denominators.
 The renderer evaluates the resulting polygon or rounded segments directly;
 there is no surface-expanding safety margin. Each edge uses two packed uint4
-table entries, and live-authoring capacity probes reserve that maximum without
-constructing dummy paths.
+table entries.
 
 Path profiles currently support extrusion only. Rounding, chamfer, panel and
-trims are refused; use the outline itself for corner shaping. They are
-presentation geometry: deterministic field-contact requests refuse them by
-name. Author a separate supported contact shape when needed.
-
-The [path fixture](../../../../experimental/tests/Puck.Parity/paths.puck) exercises
-arcs, a concave sheared outline, a hole, cubic curves, and smooth width changes.
-It has its own [cross-backend contract](../../../../experimental/tests/Puck.Parity/paths.contract.json).
+trims are refused; use the outline itself for corner shaping. Deterministic
+field-contact queries (`SdfFieldEvaluator`) evaluate a Path directly from the
+program's compiled edge table, so a Path is a valid contact
+shape: a fill is the exact distance to its edge list and a stroke the exact
+distance to its hulls of disks.
 
 ## Degenerate profile admission
 

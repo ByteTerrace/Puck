@@ -121,9 +121,11 @@ extension, with `build/CodeCoverage.config`) and keeps a compact form of its Cob
 its TRX. The **Check line coverage** job in `azure.yml` downloads every shard's results and runs
 `puck artifacts coverage`, which merges the reports (a line is covered when any
 run hit it) and fails unless every line of live `src/` code is covered and every
-live project was loaded by some run. The suite's target is the smallest set of
-tests that reaches that, plus the owner's keep-list of invariant tests coverage
-cannot see ([AGENTS.md](../../AGENTS.md#puck-is-pre-release)). The runners have no
+live project was loaded by some run. The owner has suspended that target during
+the refactoring campaign ([AGENTS.md](../../AGENTS.md#puck-is-pre-release)); the
+workflow still runs the job as a report, and reconciling the two is workflow work.
+When restored, the target is the smallest set of tests that reaches it, plus the
+owner's keep-list of invariant tests coverage cannot see. The runners have no
 GPU and no real mouse or foreground window, so code only that hardware reaches
 is left out through one list, `build/CoverageHardwareOnly.txt`, and nowhere
 else. The `Puck.*.Post` emulator batteries are verification harnesses, not engine code:
@@ -183,7 +185,11 @@ Node harness job fails if the payload it downloads has no entry module. The
 HGB battery step is
 informational: it runs every corpus ROM, goes red and names each ROM that does
 not pass in the job summary, and does not hold a release or deploy while ROMs
-fail. Test reports
+fail. Its `documents` job runs `puck docs links` over the whole hand-written
+corpus with no GPU and no World
+([keep documents from rotting](documentation.md#keep-documents-from-rotting)); it
+checks out every commit and branch tip without their trees, since the check
+reads the first commit's date and the branches that exist. Test reports
 are retained as artifacts and job summaries on every event, including
 fork pull requests. Verification needs only a read-only repository token.
 Its `shader-bytecode` job installs the pinned DXC on Linux, compiles every shader
@@ -219,11 +225,8 @@ retains TRX results, and refuses a filter that executes no tests.
 It does not require a Linux apphost or recompile the Windows-produced assemblies.
 
 No workflow runs the real-World canaries: their offscreen proofs need a GPU
-device on both backends, which the hosted runners do not have. The canary merge
-gate is `puck canary --merge`, run on a GPU machine before the owner merges. It
-runs the automatic set and every canary requiring `gpu`; a bare `puck canary`
-runs the automatic set alone and skips every GPU proof. See
-[the `puck canary` reference](../reference/cli.md#puck-canaryreal-world-behavioral-proofs).
+device on both backends, which the hosted runners do not have, and they are
+quarantined. See [the `puck canary` reference](../reference/cli.md#puck-canaryreal-world-behavioral-proofs).
 
 The Azure graph builds its two Linux container images independently of the Windows
 producer. The silo's Caddy stage uses Google's Docker Hub mirror with an exact index digest;
@@ -302,6 +305,7 @@ the step in the same change.
 | `puck shaders generate --check` | `artifacts.yml`, `format.yml`, `verify.yml` | `shaders generate` |
 | `puck schema`, `registry`, `architecture` and `branding --check` | `verify.yml` | the step of the same name |
 | `puck pull-request format` | `format.yml` | `format` over the change's C# and `.puck` sources |
+| `puck docs links` | `verify.yml` (`documents`) | `affected`, when the change touches a corpus page, a C# source or deletes a file |
 | Every test assembly (`puck artifacts test-windows`, one shard per runner, with the pinned DXC so shader laws run, the CPU selection and no `BuildTree` laws), the Linux world tests (`puck artifacts test-world`) and the formatter laws | `build.yml`, `verify.yml`, `format.yml` | `affected`, for the suites the change reaches (a workflow or composite action reaches the suites whose laws read them by their `PuckAffectedInput` declaration), with the DXC on `PATH` and the same CPU selection; it also runs the `BuildTree` laws, in the tree it built, and `--gpu` adds the device laws |
 
 The gate leaves out the steps that are runs, packages or other platforms rather

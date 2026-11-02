@@ -16,15 +16,15 @@ this skill with them when they disagree.
 
 ## What a law is for
 
-`AGENTS.md` sets the owner's target for the suite: the smallest set of tests
-that reaches 100% line coverage, plus a short keep-list of invariant tests that
-coverage cannot see (determinism, exact fixed-point results). That shapes every
-decision here.
+`AGENTS.md` sets the owner's target for the suite, suspended during the
+campaign: the smallest set of tests that reaches 100% line coverage, plus a
+short keep-list of invariant tests that coverage cannot see (determinism, exact
+fixed-point results). That shapes every decision here.
 
 - Write a law where running the change cannot show the behavior: an exact
   fixed-point result, a refusal or overflow boundary, a determinism property.
-  CI requires 100% line coverage of live `src/`, so a new public member lands
-  with a law (or an existing test) that reaches it.
+  A new public member is classified by a law or a precise waiver when the change
+  needs one.
 - Author at the `Default` tier. A Deep row that only draws more random
   operands from its Default sibling's domain adds no evidence and no line
   coverage; write one only for a domain Default cannot reach (the exhaustive

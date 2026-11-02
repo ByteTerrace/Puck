@@ -101,7 +101,7 @@ rule "soft-drop" {
 
 | Form | Lowers to |
 |---|---|
-| `a = b` `a += b` `a -= b` `a *= b` `a /= b` `a %= b` `a &= b` `a \|= b` `a ^= b` `a <<= b` `a >>= b` | `set` with operation `set`/`add`/`subtract`/`mul`/`div`/`mod`/`and`/`or`/`xor`/`shl`/`shr` |
+| `a = b` `a += b` `a -= b` `a *= b` `a /= b` `a %= b` `a &= b` `a \|= b` `a ^= b` `a <<= b` `a >>= b` | `set` with no operation for `=`, otherwise the operation `Add`/`Subtract`/`Multiply`/`Divide`/`Remainder`/`BitAnd`/`BitOr`/`BitXor`/`ShiftLeft`/`ShiftRight` (the [forge reference](cartridge-forge.md#source-contract) owns the vocabulary) |
 | `if <gate> { … } else { … }`, `else if` chained | `if` with `when`/`then`/`else` |
 | `repeat <count> as <name> { … }` | `repeat`; the count is a compile-time whole number in 1..255 |
 | `break` | `break` |

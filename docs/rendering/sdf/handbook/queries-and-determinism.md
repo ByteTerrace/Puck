@@ -4,8 +4,8 @@ Simulation code asks an SDF world questions such as "what's beneath my feet"
 and "can I see that" through one query interface. Puck supplies two
 implementations with different confidence levels: the deterministic evaluator
 for exact simulation and the bounded path for conservative answers. The
-determinism contract separates those results from presentation checks, and
-gravity remains a one-line field derivation owned by the caller.
+determinism contract separates those results from presentation checks, and a
+field gradient supplies geometric surface normals, never gravity.
 
 ## Why a world needs a query interface
 
@@ -131,29 +131,38 @@ host-side bounds/Lipschitz analysis passes already have to the shader. It
 walks a live `SdfProgram` directly in `FixedQ4816`, so its answers reflect
 whatever the program currently is, not a stale bake—hence `Exact`.
 
-That exactness has a price: the evaluator is **warp-free**. Its constructor
-walks the program once and throws immediately, naming the first
-disqualifying instruction, if the program contains anything it cannot
-interpret in fixed point—chiefly the ops whose exact math needs runtime
-trigonometry it does not yet implement fixed-point (twists, bends,
-log-spherical folds, cell jitter, polar repeats, and the two sinusoidal
-warps, displacement and domain warp), plus the dynamic-transform op (its
-per-frame pose buffer has no seam in this interface), the wallpaper fold
-(isometric and therefore tractable, just not yet mirrored), and a small
-number of shapes whose exact cores need runtime trig or texture sampling
-(star and regular-polygon's `atan2`, the ellipse's cubic solve, the
-glyph shape's texture sample, and a sampled brick, whose pool is an engine
-resource the evaluator cannot reach), and a non-uniform `Scale`, because the
-interpreter's minimum-axis correction is a march bound, not physical distance.
-Everything else—resets, translates,
-rotations (a baked quaternion needs no runtime sin/cos), uniform scales, repeats,
-symmetry planes, elongation, onion/dilate, scoped field push/pop, and the
-shape/blend core—is interpreted exactly, because every one of those
-operations is either an isometry or has an exact, closed-form fixed-point
-treatment. The constructor's fail-loud design is
-deliberate: an evaluator that silently interpreted *part* of a program and
+That exactness has a price, and the price depends on the **reading** the
+evaluator is constructed for (`SdfFieldReading`). Its constructor walks the
+program once and throws immediately, naming the first disqualifying
+instruction, if the program contains anything that reading cannot interpret in
+fixed point. An evaluator that silently interpreted *part* of a program and
 guessed at the rest would be worse than one that refuses outright, because
 its wrong answers would look exactly like right ones.
+
+- **`Contact`** reads physical clearance, so it is **warp-free**. It interprets
+  the isometries and the ops with an exact closed-form fixed-point treatment:
+  resets, translates, rotations (a baked quaternion needs no runtime sin/cos),
+  uniform scales, repeats, symmetry planes, elongation, onion and dilate,
+  scoped field push and pop, cell displacement and creation relief
+  (`NoiseDisplace`, whose scope keeps the reading a lower bound on the drawn
+  surface), plus the shape and blend core. It refuses every warp and fold the
+  renderer draws that is not physical clearance, a non-uniform `Scale` (the
+  interpreter's minimum-axis correction is a march bound, not distance), a
+  multi-strand `Sweep`, and the dynamic-transform op, whose per-frame pose
+  buffer has no seam in this interface.
+- **`Render`** reads what the renderer draws, for the baked-mesh audit and the
+  CPU bake. It lifts the warp refusals: it interprets a non-uniform `Scale` as
+  the interpreter's minimum-axis lower bound, every strand of a `Sweep`, and
+  every op in `SdfFieldEvaluator.RenderWarpOps`. It still refuses
+  `TransformDynamic`.
+- **Both readings** refuse the shapes whose exact cores need runtime
+  trigonometry or texture sampling: regular polygon and star (`atan2`), glyph
+  (a texture sample) and a sampled brick, whose pool is an engine resource the
+  evaluator cannot reach. They admit the rest, including the ellipse and a
+  `Path`, which reads the program's own compiled edge table.
+
+`SdfFieldEvaluator.IsSupportedOp` and `IsSupportedShape` are the single
+definition of what each reading admits.
 
 A sim binds only `IWorldQuery` itself; nothing downstream needs to know or care
 which provider answered.
@@ -367,11 +376,13 @@ bounds or both refusing.
 
 ## What determinism means here
 
-Puck's determinism contract is a single sentence: **display is a pure function
-of data plus tick plus inputs.** Given the same world document, the same
-sequence of per-tick input snapshots, and the same tick count, the simulation
-produces the same state regardless of which presentation backend is attached
-or how long the wall clock takes.
+Puck's determinism contract is a single sentence: **simulation state is a pure
+function of data plus tick plus inputs, at a fixed code version.** Given the
+same world document, the same sequence of per-tick input snapshots, and the same
+tick count, the simulation produces bit-identical state regardless of which
+presentation backend is attached or how long the wall clock takes. Presentation
+(pixels, eased cameras, artistic float work) is outside the bit-identical
+contract.
 
 That contract only constrains one side of the engine. **Simulation state is
 fixed-point; presentation is float, and always has been.** The distinction
@@ -390,8 +401,7 @@ camera math. The float never has anywhere to leak back into simulation
 state, so it never threatens the contract.
 
 **The contract and the gates are not the same thing.** The contract is what must
-always be true. The gates—hash comparisons, golden replays, calibrated
-performance ceilings—are the evidence that it currently *is* true, and
+always be true. The gates—hash comparisons and golden replays—are the evidence that it currently *is* true, and
 evidence gets re-measured, not treated as sacred. A design is never watered
 down just to keep a gate green; if a change legitimately alters measured
 behavior, the gate's expectation gets re-captured against the new reality,
@@ -407,12 +417,13 @@ program and the same points hash bit-identical. That is what "deterministic"
 cashes out to at the code level—not "close enough," but the same bits,
 every time, by construction.
 
-## Derive gravity from the field
+## Surface normals and field gradients
 
 `IWorldQuery` answers geometric questions about a world. A narrower,
 separate interface—declared in `Puck.Maths`, so a field's producer and its
 consumers can sit in sibling libraries that never reference each other —
-answers a question one level more abstract:
+answers a question one level more abstract, the distance to the nearest surface
+and which way it lies:
 
 ```csharp
 public interface IFieldEvaluator {
@@ -444,28 +455,20 @@ about a thousandth of the normalized gradient—some 400 times smaller than
 the tetrahedron's edge aliasing, small enough to be imperceptible during
 play, and exactly zero on geometry that is not rotated.
 
-The gradient is the entire primitive. The engine stops there on purpose —
+The gradient is the whole primitive. The engine stops there on purpose —
 nothing on this interface, or in its implementation, knows what a "planet"
 or "down" or "gravity" is. The field only ever answers "which way is the
-surface closer" and "which way is it farther." Everything gameplay-shaped
-is the consumer's one line on top:
+surface closer" and "which way is it farther": a geometric surface normal and a
+clearance, which contact support and orientation read.
 
-```csharp
-// "down," for a walker standing anywhere on a field — a flat floor, a
-// planetoid's far side, the inside of a hollow shell:
-var down = -gradient; // (already unit length)
-
-// a rocket's escape thrust, or a repulsor: just drop the sign.
-var up = gradient;
-```
-
-That a walker crossing a planetoid's terminator can compute "down" the same
-way a walker on a flat floor does—one negated gradient read, no special
-case for curvature—is the payoff of keeping this seam this narrow. The
-field never encodes "this is a planet"; the consumer decides that a
-gradient pointing toward a spherical mass *means* gravity, the same field
-primitive would equally mean wind, magnetism, or nothing gameplay-shaped at
-all if a different consumer read it differently.
+Gravity is not derived from this gradient. A world authors acceleration
+independently of geometry (a uniform acceleration, placement-plus-mass
+attractors, a point source by its surface gravity, or bounded local areas), and
+the server solves it through `WorldGravityField`; the
+[reference game design](../../../game/design.md#project-shape-rulings) states
+the ruling. A consumer that wants field-following behavior, a repulsor or a
+wall-hugging walker for example, reads the gradient itself and decides what it
+means, the same way it would for any other geometric query.
 
 ---
 
@@ -475,9 +478,7 @@ all if a different consumer read it differently.
   —the `SdfFieldEvaluator` sync-pair entry (excluded-ops reconciliation,
   measured tolerances) and the "Composition, anchors, views, and queries"
   section's query provider summary.
-- [AGENTS.md](../../../../AGENTS.md)—the determinism contract (core rule 4). No
-  automated gate covers this query contract; `puck parity` checks only the
-  state hashes and pixels of its authored parity world.
+- [AGENTS.md](../../../../AGENTS.md)—the determinism contract (core rule 4).
 - Source: `src/Puck.Maths/FixedPoint/IWorldQuery.cs`,
   `src/Puck.Maths/FixedPoint/IFieldEvaluator.cs`,
   `src/Puck.SignedDistance/Queries/SdfFieldEvaluator.cs`,

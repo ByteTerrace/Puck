@@ -27,72 +27,74 @@ authored motion, answered in space and time), use the
 
 ## Design decisions
 
-The charter was ratified and remains the design authority for
-the reference game. The amendment below records the decision
-to converge the districts into one shipped world; the older four-world wording
-is retained as historical reasoning for those districts.
+The charter named a floating-island hub with three instanced dungeons and a
+studio canvas. That roster is superseded as files: the island, its district
+modules and the quilt shards are quarantined prior art under
+[`experimental/`](../../experimental/README.md), and the live reference world is
+the debug world (`worlds/debug`), which imports the standard package
+(`worlds/standard`). Features the quarantined worlds had are ported into it,
+never re-admitted as worlds of their own. What survives as design:
 
-**Amended (owner ruling): one world.** Everything the charter below names, and everything the
-campaign has built toward since the demo, converges on ONE shipped document, `puck.world.json`: the
-floating island IS the nexus, and the dungeons, the studio canvas, the arcade cabinets, the market of
-tabletop games, the creature garden, the proving ground, split-screen seats, and the game-within-a-game
-reveals are districts of that island rather than sibling documents. Each district is an importable module
-(`imports[].as`) the island composes; a district reached by walking is a place on the island, and a
-district that must be instanced (a group dungeon, a user workshop) is the same module minted through a
-`destinations` row. The island is also the operational twin of the platform that hosts it: the
-granary court renders the deployment's storage inventory today, and every further reading of the
-platform (traffic, queues, compute, gateways, caches) enters the same way, as observation rows a
-module's placements, bodies, and rules read — the engine learns no cloud noun and no game noun for it.
-The roster of retired prototypes (`play`, `nexus`, `dive`, `kart`, `jump`, `studio`, the quilt corners,
-the frozen diorama, the two scenario documents, `granaries.puck`) is realized inside the one world
-and deleted as each is realized, never repaired beside it. The 51-game tabletop roster
-(chess through billiards, Riichi Mahjong, Chinese Checkers) is a real target the market district is
-built toward, and every capability it needs lands as a game-agnostic primitive — chance and
-information-set search nodes, multi-hop candidate chains, n-player search, a cue gesture over
-`body.impulse`, priority windows over phases and deadlines — proven by authoring and running the game
-that needs it, never by asserting it. The four-world reading below stays as the record of what each
-district is for.
+**One world, districts as modules.** Everything the charter names converges on
+one world: the dungeons, the studio canvas, the arcade cabinets, the market of
+tabletop games, the creature garden, split-screen seats and the
+game-within-a-game reveals are places in it rather than sibling documents. Each
+place is an importable module (`imports[].as`) the world composes; a place
+reached by walking is a place in the world, and one that must be instanced (a
+group dungeon, a user workshop) is the same module minted through a
+`destinations` row. A retired prototype is realized inside the one world and
+deleted as it is, never repaired beside it. The world is also the operational
+twin of the platform that hosts it: the granary court renders the deployment's
+storage inventory, and every further reading of the platform (traffic, queues,
+compute, gateways, caches) enters the same way, as observation rows a module's
+placements, bodies and rules read. The engine learns no cloud noun and no game
+noun for it.
 
-Three further rulings. **The shipped rate is 30 Hz.** The 240 Hz default was the stress
-requirement every primitive had to survive, never the game's rate: a world that authors no `simulation.rateHz`
-runs at 30, a fixture that wants the stress rate authors 240 by name, and no document, skill, or law says
-"240 Hz" as if it were the world's own. **Adjacencies return, with the four-corners stressor.** The one
-world is the centre authority of a quilt: four corner shards, each a basis delta over `puck.world.json`
-with its own `documentId` and reciprocal `adjacencies` rows, so a body walks off the island's ground onto
-a neighbour's without a portal, and `four-corners-sharded`, `seamless-adjacency`, and the circuit canaries
-run against those shards rather than the retired prototypes. The instance-ceiling overrun that once ruled
-the island out of the quilt is a measurement to retake, and an engine gap to close if it holds, never a
-reason to leave the seams off. **The product is a Trojan horse over the one world.** Each retail title
-is a basis delta over the island that pins the boot seat, layout, and district and hides the plaza until an
-identity fact flips; the reveal is authored presentation reading facts (a camera program selecting on a
-row, a binding overlay swapped by a row, a sky reading a cell), and the true game beyond it is the
-federation rulings describe — every player owns a world, meaning between worlds is
-bilateral, the grant table is the rulebook, a duel or a wager is a pair of signed attestations each side's
-document honours plus provenance on what changes hands. No accord subsystem, no realm type, no
-seat-router enforcement: the missing primitive is provenance signing for carried state, and it is the
-federation arc's.
+**The tabletop roster is a target.** The 51-game roster (chess through
+billiards, Riichi Mahjong, Chinese Checkers) is a real target the market is
+built toward. Every capability it needs lands as a game-agnostic primitive:
+chance and information-set search nodes, multi-hop candidate chains, n-player
+search, a cue gesture over `body.impulse`, priority windows over phases and
+deadlines. Each is proven by authoring and running the game that needs it.
 
+**The shipped rate is 30 Hz.** The 240 Hz default was the stress requirement
+every primitive had to survive, never the game's rate: a world that authors no
+`simulation.rateHz` runs at 30, a fixture that wants the stress rate authors 240
+by name, and no document, skill or law says "240 Hz" as if it were the world's
+own.
 
-**Four game worlds, no others.** **Nexus** — the overworld hub, a floating island above a field of
-planetoids, a plaza that local multiplayer shares — and three instanced "dungeons" reached from it:
-**Dive** (underwater), **Kart** (racing), **Jump** (platformer).
+**Adjacencies return.** A body walks off one world's ground onto a neighbour's
+without a portal, through reciprocal `adjacencies` rows between documents with
+their own `documentId`s. The instance-ceiling overrun that once ruled the old
+island out of that arrangement is a measurement to retake against the debug
+world, and an engine gap to close if it holds, never a reason to leave the seams
+off.
 
-Each dungeon is entered through a picture-frame portal standing on the island. Walk to a
-frame and the world underneath changes with no restart, never a loading menu and never a `--flag`
-mode swap. Design is **feel-first**: a dungeon earns its place by how it feels to move through,
-before any scoring, unlock or progression is layered on it. The nexus's own feel is gentler than any
-dungeon's — a promenading pace fit for a shared plaza.
+**The product is a Trojan horse over the one world.** Each retail title is a
+basis delta over the world that pins the boot seat, layout and place and hides
+the plaza until an identity fact flips. The reveal is authored presentation
+reading facts (a camera program selecting on a row, a binding overlay swapped
+by a row, a sky reading a cell), and the true game beyond it is what the
+federation rulings describe: every player owns a world, meaning between worlds
+is bilateral, the grant table is the rulebook, and a duel or a wager is a pair
+of signed attestations each side's document honours plus provenance on what
+changes hands. There is no accord subsystem, no realm type and no seat-router
+enforcement; the missing primitive is provenance signing for carried state,
+and it is the federation arc's.
 
-`studio` ships beside them as a non-game **dev canvas** for character work, and as Puck's first
-formal border crossing (owner amendment): the nexus and studio meet at a mapped border. It is not a
-game world and not a destination in the reveal graph. The island is `puck.world.json`; Dive, Kart,
-Jump, Studio and the other districts are modules under `Assets/worlds/modules` that it imports, so
-a doc counting "four worlds" is counting the charter's roster, not the files.
+**Design is feel-first.** A dungeon (Dive underwater, Kart racing, Jump
+platforming) earns its place by how it feels to move through, before any
+scoring, unlock or progression is layered on it. It is entered through a
+picture-frame portal: walk to a frame and the world underneath changes with no
+restart, never a loading menu and never a `--flag` mode swap. The hub's own
+feel is gentler than any dungeon's, a promenading pace fit for a shared plaza.
+The studio is a non-game dev canvas for character work, and Puck's first formal
+border crossing: the hub and studio meet at a mapped border.
 
-**Reveals are a core world mechanic** — attunement-like achievement facts carried on the identity,
-general enough for cross-game unlocks between trusted servers. Every world is a starting point; all
-starting points converge on the hub. An arcade cabinet stands dark on the island as the first of
-them.
+**Reveals are a core world mechanic.** Attunement-like achievement facts
+carried on the identity, general enough for cross-game unlocks between trusted
+servers. Every world is a starting point, and all starting points converge on
+the hub. An arcade cabinet stands dark in it as the first of them.
 
 ## Project-shape rulings
 
@@ -162,9 +164,7 @@ count) — a
 decision's price stays legible instead of a silent frame tax. In the document vocabulary,
 `kits`/`looks`/`placements` are dealt-row sections (`{rows, assignment}`/`{rows, policy}`, with
 authoring defaults in placements' own policy block), and creations are `prototypes` rows that other
-rows reference by `prototypeId`. The dive district (`modules/dive.puck`) is the worked example of the
-field spelling (a medium pool lattice a diver kit settles in) and the arena district
-(`modules/arena.puck`) carries the hp/targeting/attack, elemental-status, and state-driven-look suites. A value that turns with the tick is a `cycle` trait on a state row (`StateCycle`, exclusive with `advance`, `dynamics` and `draw`), driven by a generator of the symmetry lattice's reflection group (`Puck.Maths.SymmetryWord`: an authored word of mirrors whose derived order is the period, or the lattice's own thirty-step `Puck.Maths.CyclicRotation` cycle) and, for its lattice outputs, `Puck.Maths.SymmetryLattice` — a looping animation, a twelve-position dial, a phase or a ring-slot address enters the game as a row every draw, rule, binding and HUD element already reads, never as a shader-side clock; rules read the lattice's own pairing through `$symmetry:innerProduct`, and a `symmetryOrbit` generator source deals a ring or a word's orbit as a shuffle bag.
+rows reference by `prototypeId`. A value that turns with the tick is a `cycle` trait on a state row (`StateCycle`, exclusive with `advance`, `dynamics` and `draw`), driven by a generator of the symmetry lattice's reflection group (`Puck.Maths.SymmetryWord`: an authored word of mirrors whose derived order is the period, or the lattice's own thirty-step `Puck.Maths.CyclicRotation` cycle) and, for its lattice outputs, `Puck.Maths.SymmetryLattice` — a looping animation, a twelve-position dial, a phase or a ring-slot address enters the game as a row every draw, rule, binding and HUD element already reads, never as a shader-side clock; rules read the lattice's own pairing through `$symmetry:innerProduct`, and a `symmetryOrbit` generator source deals a ring or a word's orbit as a shuffle bag.
 
 **Gravity authoring names acceleration independently of geometry.** A world may
 author a uniform acceleration directly, retain explicit placement-plus-mass
@@ -188,36 +188,14 @@ The same global kernel honors body-only systems when no static source is
 authored, and every fixed-point composition addition saturates rather than
 wrapping across an extreme.
 
-## Where the campaign actually is
+## Open work
 
-**Do not trust this section's vintage — re-run the checks.** Each claim below names the check that
-produced it, because a status sentence with no check behind it is how a reader ends up believing a
-capability exists.
-
-Test runs and command transcripts are not kept here: the landing commit
-message of each change carries the evidence for it.
-
-**The charter's back half has not started**: the owner feel sitting (the declared gate,
-never held — and now well behind the motion work, so its recordings want redoing), win conditions,
-achievement facts and the meta-achievement, the cabinet quest, the Konami easter egg, the nexus's social
-pass, and the first reveal edge.
-
-**Win conditions split, and half needs no engine work.** A touch-triggered individual condition
-("this body reached the trophy") is a per-body interaction whose effect writes `state`, with the HUD
-binding the row — every world already authors `actions` lanes, so this is authorable today. A
-comparative or aggregate condition ("first to N", "team score ≥ X", anything reacting to a state
-change from an arbitrary source) cannot be expressed per-body, because a per-body action cannot
-watch another body's write. That half needs world-scope rules. **So the fastest path to a world that
-can be WON does not wait on the rules section.**
-
-## How the work is shaped
-
-The campaign execution is structured into five sequential engineering tracks with two strict prerequisites:
-- **Prerequisites**: Track 2's canary runner gates Track 1 (Track 1's proof is a canary), and Track 5's entity-address type gates Track 3's ghost records.
-- **Track 1: Envelope ratification** — Root/single frame, sibling frames, size/speed/angular bounds, and derived adjacency overlap depth.
-- **Track 2: Canary runner** — Central manifest-driven proof engine (`puck canary`) executing positive and red discriminating legs against Release builds.
-- **Track 3: Neighbour tape & ghosts** — Transport determinism, per-tick delivered snapshot hoist, and read-only non-authoritative ghost entities.
-- **Track 4: Playability & feel** — Seat-lifetime view state, dual-stick motion/look, owner feel sitting, touch-triggered win slices, and navigation.
-- **Track 5: Ownership, membership & combat** — Entity-addressable rules, elemental interactions, and charter content proofs.
-
-> **Detailed work plan and gated ladder**: for the engineering breakdown of each track, creature collective laws, rigid dynamics, tabletop primitives, poker hold'em logic, the waves, the gated ladder, and the open technical questions, see [Play](../plans/play.md).
+The charter's back half (the owner feel sitting, win conditions, achievement
+facts and the meta-achievement, the cabinet quest, the Konami easter egg, the
+hub's social pass and the first reveal edge) and the engineering sequence behind
+it are tracked in the [play programme](../plans/play.md) and
+[open items](../plans/open-items.md). A win condition that compares or
+aggregates across bodies is an authored rule over world-scope state (the skirmish
+game's `worlds/games/skirmish.puck` rule that names a winner when a side has lost
+all three units is the worked example), and a touch-triggered individual
+condition is a per-body interaction whose effect writes `state`.

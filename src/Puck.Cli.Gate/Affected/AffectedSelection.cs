@@ -29,7 +29,9 @@ public sealed record AffectedCanary(string Directory, IReadOnlyList<string> File
 /// recorded names, so no canary could be chosen for them and no recording ever can; ordinal order.</param>
 /// <param name="Worlds">Changed <c>.puck</c> sources that declare <c>test</c> blocks, for <c>puck test</c>; ordinal
 /// order.</param>
-public sealed record AffectedPlan(IReadOnlyList<BaselineArtifact> Baselines, IReadOnlyList<string> Canaries, IReadOnlyList<string> CanaryChecks, bool Everything, bool Parity, IReadOnlyList<string> Suites, IReadOnlyList<string> Unmapped, IReadOnlyList<string> Worlds, IReadOnlyList<string> Deleted);
+/// <param name="DocsLinks">Whether <c>puck docs links</c> must run: a change touched a page of the documentation corpus
+/// (<see cref="DocsCorpus"/>), a C# source whose declarations a page may cite, or deleted a file a page may link.</param>
+public sealed record AffectedPlan(IReadOnlyList<BaselineArtifact> Baselines, IReadOnlyList<string> Canaries, IReadOnlyList<string> CanaryChecks, bool Everything, bool Parity, IReadOnlyList<string> Suites, IReadOnlyList<string> Unmapped, IReadOnlyList<string> Worlds, IReadOnlyList<string> Deleted, bool DocsLinks = false);
 /// <summary>
 /// Chooses the suites and canaries a set of changed files needs, and nothing wider. Suites follow the project graph:
 /// a changed project and every project that references it, transitively. Canaries follow what they were recorded
@@ -59,6 +61,11 @@ public static class AffectedSelection {
             comparisonType: StringComparison.OrdinalIgnoreCase,
             value: ".md"
         ));
+    // What `puck docs links` reads that a change can break: a corpus page, a C# source under src/ or tests/ whose
+    // declarations a page cites by name, or any deleted file, which a page may link or cite by path. A trivia-only C#
+    // edit never reaches here, since it changes no declaration.
+    private static bool CitedByDocuments(string path, bool deleted) =>
+        (deleted || DocsCorpus.IsDocument(relativePath: path) || (path.EndsWith(comparisonType: StringComparison.Ordinal, value: ".cs") && (path.StartsWith(comparisonType: StringComparison.Ordinal, value: "src/") || path.StartsWith(comparisonType: StringComparison.Ordinal, value: "tests/"))));
 
     private const string LockFileName = "packages.lock.json";
 
@@ -126,6 +133,7 @@ public static class AffectedSelection {
         Func<string, IReadOnlyList<string>>? linkedBy = null
     ) {
         var everything = false;
+        var docsLinks = false;
         var worldBuild = false;
         var seeds = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
         // Projects a change reaches alone, without the projects that reference them: a project's own restore lock.
@@ -148,6 +156,7 @@ public static class AffectedSelection {
                 continue;
             }
             effective.Add(item: path);
+            docsLinks |= CitedByDocuments(path: path, deleted: (deleted?.Contains(item: path) ?? false));
 
             if (StartsWithAny(path: path, prefixes: BuildInfrastructure)) {
                 everything = true;
@@ -319,7 +328,8 @@ public static class AffectedSelection {
             Suites: [.. reached.Where(predicate: static project => project.IsSuite).Select(selector: static project => project.Name).Order(comparer: StringComparer.Ordinal)],
             Unmapped: [.. unmapped],
             Worlds: [.. worlds],
-            Deleted: [.. gone]
+            Deleted: [.. gone],
+            DocsLinks: docsLinks
         );
     }
 }

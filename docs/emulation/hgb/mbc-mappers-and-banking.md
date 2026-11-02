@@ -22,7 +22,7 @@ flowchart TD
 ```
 
 1. **Write-Only Control**: Mapper registers are mapped to ROM address space (`0x0000–0x7FFF`). Writing to these addresses modifies mapper state without altering ROM data.
-2. **RAM Write Protection**: External battery-backed SRAM is disabled by default. Games must write value `0x0A` to `0x0000–0x1FFF` to enable read/write access. Any other value write-protects the RAM, preventing corruption during power-down.
+2. **RAM Write Protection**: External battery-backed SRAM is disabled by default. Games must write a value whose low nibble is `0x0A` (conventionally `0x0A`) to `0x0000–0x1FFF` to enable read/write access; every mapper tests the low nibble only. Any other value write-protects the RAM, preventing corruption during power-down.
 
 ---
 

@@ -12,7 +12,7 @@ not bypass the document's rules.
 | Understand document fields | [World schema](../../src/Puck.World.Schema/README.md). |
 | Write one shader or a multi-pass effect | [Live shader workflow](../../src/Puck.World/README.md#shader-pipelines), then the [pipeline contract](../reference/shaders.md#shader-pipelines-and-live-development). |
 | Build a cartridge | [Cartridge DSL](../../src/Puck.GamingBricks.Transpiler/README.md) and [forge workflow](../../src/Puck.GamingBricks.Forge/README.md). |
-| Author shapes or audio | [World authoring library](../../src/Puck.World.Authoring/README.md) and [Example documents](../examples/README.md). |
+| Author shapes or audio | [World authoring library](../../src/Puck.World.Authoring/README.md). |
 
 ## Source, document and running state
 

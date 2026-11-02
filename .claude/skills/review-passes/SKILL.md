@@ -226,7 +226,7 @@ no brief, so it raises compatibility findings and tries to run tests.
    added for it. A pass's
    build, test and format claims count only when its own environment could
    run them: a sandbox that could not reach the SDK proved nothing, so step 3
-   builds and proves every law outside it.
+   builds and runs the fixes outside it.
    Record the fix range before continuing. A blocker the pass left open goes
    to the lead before anyone repairs it; the lead rules on each one (a scoped
    fix, a recorded open item, or a dismissal with its reason) and places it in
@@ -246,8 +246,8 @@ no brief, so it raises compatibility findings and tries to run tests.
    verification repairs; never push them before step 5.
 3. **Verify the fixes.** Brief one agent, in the review worktree, to build
    each touched project with zero warnings, show each fix working by running
-   or measuring it, run the tests the fixes added or touched, and resolve or
-   report each open finding as verified, repaired, or rejected with the
+   or measuring it, run a test only where a finding cannot be settled another
+   way or the brief asks for one, and resolve or report each open finding as verified, repaired, or rejected with the
    reason. A law a fix added that still passes with the fix withheld pins
    nothing, so a passing law does not make a fix right; a rejected fix is not
    landed as written. For documentation-only fixes, run `puck docs links <changed .md

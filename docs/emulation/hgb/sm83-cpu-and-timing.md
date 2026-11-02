@@ -46,15 +46,21 @@ The `DAA` instruction adjusts the binary result of an addition or subtraction in
 
 All SM83 execution timings are exact multiples of **4 T-cycles** (1 M-cycle). The CPU cannot advance or interact with memory faster than 1 M-cycle:
 
-| Instruction Class | M-Cycles | T-Cycles (DMG) | T-Cycles (CGB 2x) | Example |
-|---|---|---|---|---|
-| Register-to-Register | 1 | 4 | 2 | `LD A, B`, `ADD A, C`, `NOP` |
-| Immediate / Memory Read | 2 | 8 | 4 | `LD A, d8`, `LD A, [HL]` |
-| 16-bit ALU / Conditional Jump (Untaken) | 2 | 8 | 4 | `ADD HL, BC`, `JR NZ, r8` (untaken) |
-| Conditional Jump (Taken) / Memory Write | 3 | 12 | 6 | `JR NZ, r8` (taken), `LD [HL], d8` |
-| Subroutine Call / Push | 4 | 16 | 8 | `CALL a16`, `PUSH BC` |
-| Subroutine Return | 4 | 16 | 8 | `RET` |
-| Conditional Return (Taken) | 5 | 20 | 10 | `RET Z` (taken) |
+| Instruction Class | M-Cycles | CPU T-Cycles | Example |
+|---|---|---|---|
+| Register-to-Register | 1 | 4 | `LD A, B`, `ADD A, C`, `NOP` |
+| Immediate / Memory Read | 2 | 8 | `LD A, d8`, `LD A, [HL]` |
+| 16-bit ALU / Conditional Jump (Untaken) | 2 | 8 | `ADD HL, BC`, `JR NZ, r8` (untaken) |
+| Conditional Jump (Taken) / Memory Write | 3 | 12 | `JR NZ, r8` (taken), `LD [HL], d8` |
+| Push | 4 | 16 | `PUSH BC` |
+| Subroutine Return | 4 | 16 | `RET` |
+| Conditional Return (Taken) | 5 | 20 | `RET Z` (taken) |
+| Subroutine Call | 6 | 24 | `CALL a16` (two operand reads, an internal cycle, two stack writes) |
+
+An instruction's CPU T-cycle count does not change in Color double-speed mode.
+Double speed halves the time each cycle takes against the machine's base clock,
+which the PPU, APU and timers keep, so the same instruction elapses half as many
+base-clock ticks.
 
 ### Prefix 0xCB bit operations
 Opcode `0xCB` switches the decoder to an alternate 256-instruction table:
@@ -72,14 +78,11 @@ Opcode `0xCB` switches the decoder to an alternate 256-instruction table:
 The `HALT` instruction enters a low-power mode, pausing instruction execution until an interrupt occurs. However, physical SM83 silicon contains a famous pipelining bug:
 
 > [!WARNING]
-> **The HALT Bug**: When `HALT` executes while the Interrupt Master Enable flag is **disabled** (`IME = 0`) but an interrupt is already **pending** (`IE & IF != 0`), the CPU fails to enter low-power sleep and **fails to increment `PC` on the subsequent instruction fetch**.
+> **The HALT Bug**: When `HALT` executes while the Interrupt Master Enable flag is **disabled** (`IME = 0`) but an interrupt is already **pending** (`IE & IF != 0`), the CPU fails to enter low-power sleep and **fails to increment `PC` on the subsequent opcode fetch**.
 
-As a result, the opcode byte immediately following `HALT` is fetched twice:
-1. The CPU reads the byte at `PC` and executes it.
-2. The `PC` remains unchanged.
-3. The CPU reads the exact same byte at `PC` again as the start of the next instruction.
+As a result, the byte immediately following `HALT` is read at an unchanged `PC` and then read again by the incrementing fetches that follow it. A one-byte instruction therefore executes twice. For an instruction that takes operands, the repeated byte is consumed as its first operand instead of being executed a second time.
 
-Puck's `Sm83.cs` models this double-read behavior. Mooneye rows and the
+Puck's `Sm83` suppresses the increment for that one opcode fetch only and models both outcomes. Mooneye rows and the
 repository's other CPU checks establish the cases they exercise; they don't
 turn those results into a blanket parity claim for every SM83 revision.
 

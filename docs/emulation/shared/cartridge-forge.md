@@ -99,7 +99,11 @@ compiles to no document of its own.
 
 ## Source contract
 
-All top-level fields are required. `forge.show` prints a complete starting
+These top-level fields are required, though an array may be empty where a row
+below says "up to": `schema`, `target`, `title`, `gameCode`, `palettes`,
+`tiles`, `map`, `variables`, `arrays`, `screens`, `layers`, `raster`, `sounds`,
+`rules`, `sprites`, `scrollX` and `scrollY`. `mapPalettes`, `scene`, `save`,
+`bitmap`, `affine`, `clock`, `window` and `tallSprites` are optional. `forge.show` prints a complete starting
 document; applications can obtain the same data with `CartridgeDocuments.Create`.
 
 | Field | Meaning and limits |
@@ -116,7 +120,7 @@ document; applications can obtain the same data with `CartridgeDocuments.Create`
 | `layers` | Up to 2 `{map,mapPalettes,scrollX,scrollY,priority,visible}` scrolling backgrounds behind the document's own, each with its own 32×32 map and scroll. `priority` is 0 (nearest) through 3. A turning background occupies the nearer of the two hardware surfaces, so declaring one leaves room for a single layer. AGB only. |
 | `window` | Optional `{map,mapPalettes,x,y,visible}` panel drawn over the background from its corner down and right, out of its own 32×32 map. |
 | `raster` | Up to 8 `{line,scrollX,scrollY}` rows in ascending scanline order, each setting the scroll for the band from its line to the picture's foot. `line` is 1–143; line zero is the document's own scroll. |
-| `clock` | Optional naming of state slots a `clock` step fills from the cartridge's real-time clock. `seconds`, `minutes` and `hours` work on both targets. The rest do not, because the two machines carry different devices: `days` is a count of days since the cartridge started and is cgb only, while `day`, `month` and `year` are a calendar date and are agb only. |
+| `clock` | Optional naming of state slots a `clock` step fills from the cartridge's real-time clock. `seconds`, `minutes` and `hours` work on every target. The rest do not, because the two machine families carry different devices: `days` is a count of days since the cartridge started and is cgb and dmg only, while `day`, `month` and `year` are a calendar date and are agb only. |
 | `affine` | Optional `{map,angle,scale,centreX,centreY,visible}` background that rotates and scales. Angle is a turn in 256 steps, scale is sixteenths (16 = life size). AGB only. |
 | `tallSprites` | Draws sprites 8×16; a sprite's tile index then names a pair and its low bit is ignored. |
 | `variables` | Up to 128 `{name,initial,max}` unsigned slots. `max` selects the representation and bounds the initial value, 1 through 65535; absent is 255. A slot whose ceiling fits a byte spends one byte, a wider one spends two, little-endian. Wide slots precede byte slots, keeping halfwords aligned; compilation exposes their addresses by name. Arithmetic wraps modulo 256 or 65536 according to storage width. Assignment, `Add`, `Subtract` and comparisons support wide slots; byte destinations and composed byte expressions refuse wide reads and literals above 255. |
@@ -320,7 +324,7 @@ Operations are named from the engine's opcodes (`Puck.State.ExpressionOp`):
 `Add`, `Subtract`, `Multiply`, `Divide`, `Remainder`, `BitAnd`, `BitOr`, `BitXor`,
 `ShiftLeft` and `ShiftRight`; an ABSENT operation assigns, which is the one
 combination no opcode spells. Byte arithmetic is unsigned and wraps modulo 256 on
-both targets; wide assignment, addition and subtraction use sixteen bits. A runtime zero divisor yields zero and a runtime shift of eight or more
+every target; wide assignment, addition and subtraction use sixteen bits. A runtime zero divisor yields zero and a runtime shift of eight or more
 yields zero, so no operand can trap; the literal forms of both are refused at
 validation instead. A sprite with zero visibility, an invalid runtime
 tile index, or a top-left position outside the native viewport is hidden.
@@ -352,8 +356,8 @@ engine's hash of exported ROM bytes. `CartridgeCompilation.Variables` and `.Arra
 memory addresses for debugging and memory watches.
 
 This version supports background maps written at run time, byte and wide state,
-addressable byte arrays, sprites, cartridge audio and battery-backed state on both
-targets. ROM banking and visual editing are not yet part of this document schema. A blit compiles and runs on both targets;
+addressable byte arrays, sprites, cartridge audio and battery-backed state on every
+target. ROM banking and visual editing are not yet part of this document schema. A blit compiles and runs on every target;
 its display-off interval is not priced as ordinary frame work. Existing Tune audio
 documents retain their separate compiler. These boundaries are explicit so
 an editor cannot silently discard unsupported authored data.

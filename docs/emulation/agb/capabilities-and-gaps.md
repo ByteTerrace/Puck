@@ -32,7 +32,7 @@ hardware details, sources, and diagnostic procedures.
 | Per-dot PPU and VRAM fetch open bus | candidate | XL | games or hardware tests that require mid-scanline state |
 | Exact Direct Sound level and SOUNDBIAS model | evidence needed | M | captured hardware amplitude and PWM behavior |
 | Band-limited presentation resampling | candidate | L | audible-quality requirement; deterministic integer core remains unchanged |
-| GPIO sensors | candidate | M | recordable command design plus per-device protocol tests |
+| GPIO gyro sensor (rumble, solar and tilt are implemented) | candidate | M | recordable command design plus a device protocol test |
 | Undersized-ROM mirroring | evidence needed | S | cartridge-size and open-bus probe |
 | Software fast memory | evidence needed | M | profile against the current region dispatcher |
 | Cached interpreter | evidence needed | L–XL | profile and parity prototype |

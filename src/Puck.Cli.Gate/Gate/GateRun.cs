@@ -25,9 +25,6 @@ public interface IGateRunner {
 }
 /// <summary>Executes the batch plan serially, recording each step and withholding coverage on any failure.</summary>
 public static class GateRun {
-    /// <summary>The branch a change is gated against unless <c>--merge-base</c> names another.</summary>
-    public const string DefaultTarget = "origin/features/gfx-pipeline";
-
     private const int FailureTail = 15;
     private const string Verb = "gate";
 

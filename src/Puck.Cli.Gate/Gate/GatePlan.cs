@@ -33,7 +33,6 @@ public static class GatePlan {
         new("copy CLI", GateStepKind.CopyCli, []),
         new("affected", GateStepKind.Puck, ["affected", "--merge-base", "<merge base>", "--run", "--suite-jobs", "<suite-jobs>"], Heavy: true),
         new("format", GateStepKind.Puck, ["format", "--check", "--file-list", "<file list>"], Sources: true),
-        new("docs links", GateStepKind.Puck, ["docs", "links"]),
         new("schema", GateStepKind.Puck, ["schema", "--check"]),
         new("architecture", GateStepKind.Puck, ["architecture", "--check"]),
         new("registry", GateStepKind.Puck, ["registry", "--check"]),

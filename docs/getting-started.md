@@ -54,7 +54,7 @@ Headless mode runs the World host without GPU presentation. It is useful for
 checking documents and simulation; it does not test rendering.
 
 ```powershell
-'world.status' | dotnet run --project src/Puck.World -c Release --no-build -- --world worlds/debug --headless --exit-after-seconds 3 --state-dir artifacts/getting-started/headless
+'world.status' | dotnet run --project src/Puck.World -c Release --no-build -- --world worlds/debug --devices none --headless --exit-after-seconds 3 --state-dir artifacts/getting-started/headless
 ```
 
 Look for the loaded-world information and the status response. If startup fails,
@@ -64,11 +64,12 @@ recording and more detailed launch options.
 
 ## Make a first content change
 
-The [three-pass ink example](../src/Puck.World/README.md#shader-pipelines)
-provides a focused editing task: launch its world, draw with the pointer, then
-change the visualization's exposure through `pipeline.set`. The guide includes
-exact commands for inspecting the result, pausing, stepping and capturing it.
-Its graph document and shader sources are linked beside the instructions.
+The debug world's `desktop` view graph (package `source.capture`, declared in
+`worlds/debug/desktop.puck`) is a focused editing task. With the world running,
+the `pipeline.*` console verbs address that row by name: `pipeline.set desktop
+<pass> <json>` previews parameter overrides for one pass, and `pipeline.commit`
+makes the preview authored. The [shader pipelines guide](reference/shaders.md#shader-pipelines-and-live-development)
+explains the verbs, loading, pausing and capturing.
 
 For document authoring, start with the
 [World DSL examples](../src/Puck.World.Transpiler/README.md). For native handheld

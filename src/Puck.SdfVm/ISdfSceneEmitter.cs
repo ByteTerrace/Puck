@@ -22,8 +22,8 @@ namespace Puck.SdfVm;
 /// value <see cref="ISdfFrameSource.CaptureFrame"/> received this call, threaded down so an emitter that needs to
 /// pose anchor-driven content (a camera rig following a live body, a smoothed pose read straight from sim state
 /// rather than from an already-alpha-baked owner field) has it without reaching into host-private state. 0 for the
-/// one construction-time probe (<see cref="SdfEmitContext.Probe"/> — there is no simulation tick to interpolate
-/// toward yet). Most emitters ignore it (their content is already baked into a render-relative transform upstream,
+/// offline probe emission (<see cref="SdfEmitContext.Probe"/> — there is no simulation tick to interpolate
+/// toward). Most emitters ignore it (their content is already baked into a render-relative transform upstream,
 /// like <c>OverworldFrameSource.PackPlayerRenderTransforms</c>) — it exists for the emitter that needs the raw
 /// fraction itself.</param>
 public readonly record struct SdfEmitContext(
@@ -51,7 +51,8 @@ public interface ISdfSceneEmitter {
     /// <param name="builder">The shared program builder (earlier emitters in the list may already have added
     /// content — materials/instructions/instances accumulate across the whole composed list).</param>
     /// <param name="context">This call's context (see <see cref="SdfEmitContext"/>) — <see cref="SdfEmitContext.Probe"/>
-    /// selects the worst-case branch; <see cref="SdfEmitContext.SlotBase"/> is this emitter's assigned dynamic-transform
+    /// is true only for an offline diagnostic emission, which an emitter may answer with its largest legal form, and
+    /// false for every composed frame; <see cref="SdfEmitContext.SlotBase"/> is this emitter's assigned dynamic-transform
     /// range.</param>
     void Emit(SdfProgramBuilder builder, in SdfEmitContext context);
 

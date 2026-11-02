@@ -216,6 +216,14 @@ record of when this repository changed:
   [the AGB firmware README](../../src/Puck.AdvancedGamingBrick/Firmware/README.md).
 - An external protocol's version string, such as MCP's `2026-07-28`, which is
   the protocol's own name for the revision Puck speaks.
+- A date of history before the repository existed, such as a famous chess
+  game's.
+
+`puck docs links` recognizes each exemption from the tree, never from a list:
+the legal pages are outside its corpus, a provenance pin is one
+[the third-party notices](../../THIRD-PARTY-NOTICES.md) carry, a protocol
+version is a date the code spells in a string literal, and history falls before
+the first commit.
 
 ## Keep documents from rotting
 
@@ -253,9 +261,14 @@ hold are held by a check; the rest are procedure.
 - **A ruling sweeps the corpus in the change that makes it.** When AGENTS.md
   gains or changes an owner ruling, the same change searches `docs/` and
   `.claude/` for text that contradicts it and fixes or deletes that text.
-- **Checks run where rot is born.** `puck docs links` runs over every
-  hand-written page and skill on every push. It checks current state only,
-  against no recorded file, and covers:
+- **Checks run where rot is born.** Rot is born in lanes, and CI runs only
+  for `main` and pull requests, so `puck docs links` runs over every
+  hand-written page and skill in three places:
+  - in each lane, before its final commit;
+  - by the lead, after each merge into the integration branch;
+  - in CI's `documents` job (`puck affected` selects it locally as well).
+
+  It checks current state only, against no recorded file, and covers:
   - links and anchors;
   - repository paths;
   - cited symbols;
