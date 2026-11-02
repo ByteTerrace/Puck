@@ -707,6 +707,17 @@ drive. Today that is a socket peer, a mounted addon, a federated traveller and
 an Observe revoked and regranted mid-run; each is added as a principal of the
 same transcript, so a fixture written now gains those doors without changing.
 
+On the probe the harness is red at these doors, each the cause a later step
+removes; the control pair agrees at every door:
+
+| Door | Pair | What differs | Step |
+|---|---|---|---|
+| `world.budget` (seat2) | any hidden member | the raw placement count and rows, dealt children included | 2 |
+| `world.placements` (seat2) | one or two hidden members dealt before `pub` | `pub`'s `dealSlot` and position (`offsets[1]`, `offsets[2]`) | 4 |
+| `world.projection` (seat2) | any hidden member | the presentation projection's byte count | 2 |
+| `deliver.definition` (presentation session), `deliver.state` (replica session) | a hidden-only install mid-run (`late`) | a delivery in one world and none in the other, with the replica's moved-row list | 1 |
+| `outcome.*` (both sessions) | `late` | the typed outcome's document version | 1, 3 |
+
 **No step opens a door before its protection lands.** The order puts the
 delivery protections (the cursor, recipient-scoped versions, the delta over
 images) first, since every later step changes what recipients are shown and
