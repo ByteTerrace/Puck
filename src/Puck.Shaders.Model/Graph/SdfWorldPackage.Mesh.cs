@@ -34,6 +34,13 @@ public static partial class SdfWorldPackage {
     public const string MeshShadowNear = "meshShadowNear";
     /// <summary>The far shadow cascade's depth, sampled by the surface pass.</summary>
     public const string MeshShadowFar = "meshShadowFar";
+    /// <summary>The near shadow cascade's exit layer, sampled by the surface pass: per texel the depth of the nearest
+    /// face turned from the light, where the light leaves the first solid it crosses (<see cref="Parts.ShadowNearExit"/>).</summary>
+    public const string MeshShadowNearExit = "meshShadowNearExit";
+    /// <summary>The far shadow cascade's exit layer, sampled by the surface pass.</summary>
+    public const string MeshShadowFarExit = "meshShadowFarExit";
+    /// <summary>The second shadow slot's cascade exit layer, sampled by the surface pass.</summary>
+    public const string MeshShadowSecondExit = "meshShadowSecondExit";
     /// <summary>The bake samples the bake pass writes: per lattice sample its field value and material, and, when the bake
     /// asks for it, its gradient (<see cref="MeshBakeSampleWords"/> words).</summary>
     public const string MeshBakeSamplesWritten = "meshBakeSamplesRW";
@@ -73,7 +80,10 @@ public static partial class SdfWorldPackage {
     public const int MeshShadowResolution = 2048;
 
     private static readonly string[] ShadowParts = [Parts.ShadowNear, Parts.ShadowFar, Parts.ShadowSecond];
-    private static readonly string[] ShadowStorages = [Parts.ShadowNearDepth, Parts.ShadowFarDepth, Parts.ShadowSecondDepth];
+    private static readonly string[] ShadowStorages = [
+        Parts.ShadowNearDepth, Parts.ShadowFarDepth, Parts.ShadowSecondDepth,
+        Parts.ShadowNearExit, Parts.ShadowFarExit, Parts.ShadowSecondExit,
+    ];
 
     /// <summary>Returns a fragment without the shadow cascades, for a view whose quality skips shadows: no cascade pass, no
     /// cascade depth, and a surface pass that reads none, so the view allocates none of the cascades and its surface pass
@@ -101,7 +111,7 @@ public static partial class SdfWorldPackage {
         ArgumentOutOfRangeException.ThrowIfLessThan(value: texels, other: 1);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(value: texels, other: MeshShadowResolution);
 
-        var shaped = (second ? fragment : Without(fragment: fragment, parts: [Parts.ShadowSecond], storages: [Parts.ShadowSecondDepth]));
+        var shaped = (second ? fragment : Without(fragment: fragment, parts: [Parts.ShadowSecond], storages: [Parts.ShadowSecondDepth, Parts.ShadowSecondExit]));
 
         return ((texels == MeshShadowResolution)
             ? shaped

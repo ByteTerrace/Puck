@@ -15,7 +15,8 @@ public enum SdfToonBand {
 /// <summary>Presentation-only cel shading: a style a material shades with. A world's default style
 /// (<c>SdfFrame.Toon</c>) applies to every material that authors none; a material's own
 /// (<see cref="SdfMaterial.Toon"/>) replaces it for that material alone. Colours are linear RGB, widths are output
-/// pixels, distances are metres.</summary>
+/// pixels, distances are metres. The engine holds no look: every style is authored (the standard package's
+/// <c>styles.puck</c>), and the default value is off.</summary>
 public readonly record struct SdfToon {
     /// <summary>Whether a material shading with this style uses the cel response; a disabled style shades it
     /// continuously.</summary>
@@ -42,13 +43,6 @@ public readonly record struct SdfToon {
     public float Shoulder { get; init; }
     /// <summary>How the band treats a light's shadow visibility.</summary>
     public SdfToonBand Band { get; init; }
-
-    /// <summary>The initial look; off until a document or live lever enables it.</summary>
-    public static SdfToon Default { get; } = new() {
-        Threshold = .45f, Softness = .08f, ShadowTint = new(.38f, .48f, .65f),
-        OutlineWidth = 1.5f, OutlineDistance = 12f, OutlineNormal = .65f,
-        OutlineTint = new(.08f, .10f, .16f), SpecularSize = .025f, Exposure = .5f, Shoulder = .65f,
-    };
 
     /// <summary>Gets the style's mode word as the kernels read it (<c>shade/sdf-toon.hlsli</c>): zero when disabled,
     /// one for <see cref="SdfToonBand.Visibility"/>, two for <see cref="SdfToonBand.Combined"/>.</summary>
