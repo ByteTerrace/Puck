@@ -30,7 +30,7 @@ public interface IMotionClearance {
 /// giving the eye and the aim point a frame would use. The geometry is the one the seat camera's clearance keeps its eye out of
 /// (<see cref="WorldCameraClearance"/>): every placement the field query can read, emitted as <see cref="WorldPlacementStamper.EmitStatic"/>
 /// emits it and read through <see cref="SdfFieldEvaluator"/>, which holds no body. An eye is blocked when a sphere of
-/// the seat control's authored eye radius (<see cref="WorldSeatViewControl.EyeRadius"/>) about it overlaps geometry, and the sight line is blocked when a thin sphere swept from
+/// the eye radius the seat framing's clearance op authors (<see cref="WorldCameraProgramOp.Clearance.EyeRadius"/>) about it overlaps geometry, and the sight line is blocked when a thin sphere swept from
 /// the eye to the aim point hits geometry before the point.
 /// </summary>
 public sealed class MotionClearance : IMotionClearance {
@@ -139,7 +139,8 @@ public sealed class MotionClearance : IMotionClearance {
     public string? Blocked(Vector3 eye, Vector3 target) {
         var fixedEye = FixedPosition.FromLocal(local: FixedVector3.FromVector3(value: eye));
 
-        var eyeRadius = m_definition.Views.SeatControl.EyeRadius;
+        // The radius the world's chase eye keeps clear: its seat framing's clearance op, or none.
+        var eyeRadius = (WorldCameraPrograms.SeatFraming(views: m_definition.Views)?.ClearanceOp?.EyeRadius.Literal ?? 0f);
 
         if (m_field.Overlap(center: fixedEye, radius: FixedQ4816.FromDouble(value: eyeRadius))) {
             return $"the eye ({Format(point: eye)}) is inside geometry or within {eyeRadius.ToString(provider: CultureInfo.InvariantCulture)} m of it, {Nearest(point: eye)}";

@@ -3,7 +3,7 @@
 #ifndef SHADE_SDF_TOON_OUTLINE_HLSLI
 #define SHADE_SDF_TOON_OUTLINE_HLSLI
 
-float sdfToonEdge(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, int2 offset) {
+float sdfToonEdge(SdfToonStyle style, SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, int2 offset) {
     int2 pixel = int2(p.pixel) + offset;
     int2 dims = int2(worldViewDims(p.view));
     if (any(pixel < 0) || any(pixel >= dims)) { return 0.0; }
@@ -16,13 +16,13 @@ float sdfToonEdge(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, int2 offs
     float footprint = max(p.pixelFootprint * s.t, 0.0001);
     // A tangent-plane comparison avoids drawing a depth edge across a sloping plane. Only the near side inks a jump.
     float depth = smoothstep(1.5, 3.0, abs(dot(delta, s.normal)) / footprint) * step(s.t, t);
-    float crease = 1.0 - smoothstep(passGroup.toonOutline.z - 0.08, passGroup.toonOutline.z, dot(s.normal, normal));
+    float crease = 1.0 - smoothstep(style.outline.z - 0.08, style.outline.z, dot(s.normal, normal));
     crease *= 1.0 - smoothstep(3.0, 6.0, abs(t - s.t) / footprint);
     return max(depth, crease);
 }
 
-float sdfToonOutline(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint) {
-    float width = passGroup.toonOutline.x / (1.0 + s.t / max(passGroup.toonOutline.y, 0.1));
+float sdfToonOutline(SdfToonStyle style, SdfPixel p, SdfSurfaceSample s, float3 surfacePoint) {
+    float width = style.outline.x / (1.0 + s.t / max(style.outline.y, 0.1));
     if (width <= 0.0) { return 0.0; }
     int inner = max(1, (int)floor(width));
     int outer = inner + 1;
@@ -34,9 +34,9 @@ float sdfToonOutline(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint) {
         [unroll]
         for (int x = -1; x <= 1; x++) {
             if ((x != 0) || (y != 0)) {
-                innerEdge = max(innerEdge, sdfToonEdge(p, s, surfacePoint, int2(x, y) * inner));
+                innerEdge = max(innerEdge, sdfToonEdge(style, p, s, surfacePoint, int2(x, y) * inner));
                 if (width > 1.0) {
-                    outerEdge = max(outerEdge, sdfToonEdge(p, s, surfacePoint, int2(x, y) * outer));
+                    outerEdge = max(outerEdge, sdfToonEdge(style, p, s, surfacePoint, int2(x, y) * outer));
                 }
             }
         }

@@ -1,4 +1,5 @@
 using Puck.Launcher;
+using Puck.World.Authoring;
 
 namespace Puck.World.Client;
 
@@ -103,8 +104,8 @@ public static partial class WorldSessionLevers {
             RenderScale = settings.RenderScale,
             UpscaleSharpness = settings.UpscaleSharpness,
             Temporal = settings.Temporal,
-            Toon = (settings.Toon == (render.Toon?.Enabled ?? false)) ? render.Toon
-                : (render.Toon ?? new WorldRenderToon()) with { Enabled = settings.Toon },
+            Toon = (settings.Toon == (render.Toon?.IsOn ?? false)) ? render.Toon
+                : (render.Toon ?? new ToonStyleDocument()) with { Enabled = settings.Toon },
             SkyQuality = settings.SkyQuality,
             SkyFieldScale = settings.SkyFieldScale,
             DynamicResolution = settings.DynamicResolution,

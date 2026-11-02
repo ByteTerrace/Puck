@@ -291,21 +291,31 @@ avatar's feet at ledges. When automatic is chosen it carries hysteresis:
 - A modest field-of-view widening (0.96 rad to 1.12 rad vertical) pairs with the
   blend, and the avatar's stamp hides inside 0.45 m.
 
-**The standard template's values.** Durable framing structure lives in the
-camera program (`views.seatRig`) and `views.seatControl`; portable player
-preference lives in `seatDefaults.seatCameraFeel` and echoes in
-`world.view.camera`.
+**The standard template's values.** `chaseCamera` authors the two modes as the
+programs `<rig>-fade` and `<rig>-cutaway` in `views.programs`, each an `orbit`,
+a `lookAt`, a `clearance` op, the lens, the `camera-boom` ease and the
+first-person eye. `views.seatRig` is a `selectProgram` keyed by the
+`cameraClearance` state row (the player's preference, `Fade` or `Cutaway`,
+written live by the standard's `camera.clearance` command). Each `clearance`
+parameter below is a literal or a `state.<row>` binding; `world.view.camera`
+reads them back as the frame resolved them.
 
 | Parameter | Where authored | `fade` (default) | `cutaway` | Purpose |
 |---|---|---|---|---|
-| `clearanceMode` | `views.seatControl`; player override in `seatCameraFeel` (`auto`, `fade`, `cutaway`, `firstPerson`) | `"fade"` | `"cutaway"` | How close obstructions are resolved; the player's `auto` inherits the world's mode. |
-| `distance` | `views.seatRig` `orbit` op | 4.2 m | 4.2 m | Unobstructed rest boom, scaled by `liveScale`. |
-| `pivotOffset` / `targetOffset` | `views.seatRig` `orbit` and `lookAt` ops | `[0, 1.0, 0]` | `[0, 1.0, 0]` | Rest look target at full boom length. |
-| `closeTargetOffset` | `lookAt` op's `closeTargetOffset { fade, cutaway }` (`chaseCamera`'s `fadeCloseTarget`, `cutawayCloseTarget`) | `[0, 1.74, 0]` (`[0, 1.54, 0]` pilot) | `[0, 1.55, 0]` (`[0, 1.40, 0]` pilot) | Target interpolated toward as the boom fraction falls from `closeTargetStartFraction` (0.6) to `closeTargetFullFraction` (0.2). |
-| `maxRise` (`LiftCeiling`) | `views.seatControl.maxRise { fade, cutaway }` (`chaseCamera`'s `fadeMaxRise`, `cutawayMaxRise`) | 0.35 rad | 1.1 rad | Elevation added above the rest pitch when the keep-out blocks a level pull-in: past the body in cutaway, past `characterFade.minimumBoom` in fade. |
-| `dynamics` | `views.seatRig` `dynamics` op (`camera-boom` row) | `f: 4, zeta: 1, r: 0`, `SurfaceSkin` 0.1 m | same | Critically damped ease on boom fraction, rise angle and target blend; wall contact clamps at once. |
-| `occluderTreatment` | `views.seatControl` / clearance op | `wallCollide` (hard sphere-cast, no cutaway) | `nearCutaway` (`Near` advances to the wall face, `NearMargin` 0.05 m) | How the walls between eye and avatar are treated. |
-| `characterFade` | `views.seatControl` / clearance op | start 1.25 m, end 0.45 m, `minimumBoom` 0.35 m | none (the eye never enters the keep-out) | Dither-fades the avatar's stamp as the eye nears the target. |
+| preference | `cameraClearance` state row; `chaseCamera`'s `clearance` (0 or 1) seeds it | `Fade` | `Cutaway` | Which case the seat rig selects. |
+| `distance` | each case's `orbit` op | 4.2 m | 4.2 m | Unobstructed rest boom, scaled by `liveScale`. |
+| `pivotOffset` / `targetOffset` | each case's `orbit` and `lookAt` ops | `[0, 1.0, 0]` | `[0, 1.0, 0]` | Rest look target at full boom length. |
+| `cutaway` | `clearance` op | 0 | 1 | One keeps the body solid: the eye stays out of the body, a boom no rise clears goes up and over at `maxRise`, and the near plane cuts away the walls between. Zero keeps the room, the eye level and short of every wall. |
+| `closeTargetOffset` | `clearance` op (`chaseCamera`'s `fadeCloseTarget`, `cutawayCloseTarget`) | `[0, 1.74, 0]` | `[0, 1.55, 0]` | Target interpolated toward, in the `lookAt`'s axes, as the boom fraction falls from `closeTargetStartFraction` (0.6) to `closeTargetFullFraction` (0.2). |
+| `maxRise` | `clearance` op (`fadeMaxRise`, `cutawayMaxRise`) | 0.35 rad | 1.1 rad | Elevation added above the rest pitch when the keep-out blocks a level pull-in: past the body in cutaway, past `minimumBoom` in fade. |
+| `eyeRadius` | `clearance` op | 0.3 m | 0.3 m | The sphere the eye keeps clear of geometry and, in cutaway, the body. |
+| `surfaceSkin` | `clearance` op | 0.1 m | 0.1 m | The nearest the eased eye's centre comes to geometry along the boom. |
+| `minimumBoom` | `clearance` op | 0.35 m | 0 | The shortest boom kept where the room allows it, rising if it must. |
+| `fadeStart` / `fadeEnd` | `clearance` op | 1.25 m / 0.45 m | 0 / 0 (never fades) | Dither-fades the avatar's stamp as the eye nears the target. |
+| `nearMargin` | `clearance` op | 0.05 m | 0.05 m | How far short of the body the cutaway's near plane stops. |
+| `retractionSkin` | `clearance` op | 0.05 m | 0.05 m | How far short of a hit the probe reports the room. |
+| `obstructedTargetSkin` | `clearance` op | 0 (never skips) | 1.1 m | Where the sweep starts when the target is inside geometry (a portal frame round the pivot). |
+| `dynamics` | each case's `dynamics` op (`camera-boom` row) | `f: 4, zeta: 1, r: 0` | same | Critically damped ease on boom fraction, rise angle and target blend; wall contact clamps at once. |
 
 ## Tabletop
 

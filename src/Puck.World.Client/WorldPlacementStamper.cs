@@ -159,7 +159,8 @@ public static class WorldPlacementStamper {
                 Receive: (entry?.Receive ?? 1f),
                 Paints: Paints(colors: colors, document: document, entry: entry, hidden: hidden, pool: pool, motion: motion),
                 EmissiveLane: entry?.EmissiveLane,
-                Glass: entry?.Glass?.ToGlass(scale: (pool?.Scale ?? 1f))
+                Glass: entry?.Glass?.ToGlass(scale: (pool?.Scale ?? 1f)),
+                Toon: entry?.Toon?.ToToon()
             ));
         }
     }

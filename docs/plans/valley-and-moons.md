@@ -20,7 +20,7 @@ work in the debug world; quarantined worlds stay quarantined.
 | Flight | Partial | The Moth's Free and Lift motion (`avatars/moth.puck`) is body-frame 6DOF free integration by design, with no ground pin or gravity; assisted leveling and cruise are new authored policy, not a defect. `World` and `Heading` intent are composed correctly and must not be swapped. Grounding facts are written under every motion program; the ownership gate controls only write-back. |
 | Terrain bake | Partial | The bake's reach is `max(1, farDistance)`, and an instance's radius is clamped to it, which can clip a huge instance; post-contour chunks do not stream. Coarse sampling is 65 samples on a shape's longest axis with conditional refinement (4, detail 8). |
 | Draw distance | Partial | `farDistance` is capped at 8192 m (`WorldRenderDefaults.MaxFarDistance`); haze extinction is `-log(1 - haze) / farDistance`, which couples haze to draw distance. |
-| Shadows | Partial | Key-light receiver splits at 16 and 120 m, second light at 40 m, casters reaching 200 m beyond each cascade toward the light (`SdfMeshShadowCascades`); macro terrain shadowing is missing. |
+| Shadows | Partial | Key-light receiver splits at 16 and 120 m, second light at 40 m, casters reaching 200 m beyond each cascade toward the light (`SdfMeshShadowCascades`, authored as `render.shadowCoverage`); macro terrain shadowing is missing, and stretching the far cascade to the walls costs 25 times its vertices ([illumination step 1](illumination.md#step-1-status)). |
 | Depth transport | Exists, to qualify | Reconstruction packs coverage-weighted inverse distance in half lanes for harmonic-mean filtering; single samples already carry float `t`. Longer ranges are qualified, and lanes widened together only if precision runs out. |
 | Sky | Exists | `Disc` and `View` layers, stars, clouds, panorama; a `World` infinity view is opaque, while a far view uses geometry coverage. |
 | Atmosphere | Partial | A dome seen from the ground (`SdfAtmosphere`, `sdf-atmosphere.hlsli`); no altitude dependence, no spherical shell, no transition to vacuum. |
@@ -115,7 +115,7 @@ centre and turned to its bearing, built from `worlds/standard/terrain.puck`
 mass and two shoulders sunk 30% below the floor plane, cut 10 m under it, and
 6-octave fBm relief of 4 m amplitude at 0.02 cycles a metre. The feet stand
 205 to 230 m from the origin, the summits 300 to 430 m high; the floor
-(`debug.puck`'s `floor`) is a 740 m disc that runs on under every wall, so the
+(`lawn.puck`'s `floor`) is a 740 m disc that runs on under every wall, so the
 old slab edge is gone. The overlook is a deck at 345 m on the south-west
 face. Draw distance is 6000 m and the clear day's fog 0.0006 a metre, so the
 rim keeps about two thirds of its light. A body under y −40 is stood on the

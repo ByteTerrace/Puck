@@ -7,6 +7,56 @@ namespace Puck.World.Server.Tests;
 
 public sealed partial class WorldScopedReplayTests {
     [Fact]
+    public void AnEmptyKeyedInventoryCanGrowAndReplayRepeatedly() {
+        using var fixture = Fixtures.FreshServer(GrowingInventory());
+        Request(fixture, 4);
+        Assert.Equal(0, fixture.Server.ScopedReplays[0].Checkpoint().Start!.Capacities[0]);
+        for (var drive = 0; drive < 3; drive++) {
+            Request(fixture, 1);
+            for (var tick = 0; tick < 6; tick++) { fixture.Step(); }
+            Assert.Equal(drive == 0 ? 3 : 4, Read(fixture, "control", "status"));
+            Assert.Equal(7, Read(fixture, "counter", "card"));
+            Assert.False(fixture.Server.ScopedReplays[0].Checkpoint().Active);
+        }
+        Request(fixture, 3);
+        Assert.Equal(0, Read(fixture, "control", "status"));
+        Assert.False(fixture.Server.ScopedReplays[0].Checkpoint().Active);
+    }
+
+    [Fact]
+    public void ARefusedScopeRestoreEndsItsDriveAndCanBeStartedAgain() {
+        using var fixture = Fixtures.FreshServer(GrowingInventory());
+        Request(fixture, 4);
+        Request(fixture, 1);
+        Assert.True(fixture.Server.ScopedReplays[0].Checkpoint().Recording);
+        fixture.Server.Arena.GrowthAdmission = layout => layout[0].CellCapacity == 0 ? "scope reservation refused for this witness" : null;
+        Request(fixture, 3);
+        var scope = fixture.Server.ScopedReplays[0];
+        var refused = scope.Checkpoint();
+        Assert.Equal(-1, Read(fixture, "control", "status"));
+        Assert.False(refused.Active);
+        Assert.False(refused.Recording);
+        Assert.Equal(0, refused.Cursor);
+        Assert.Empty(refused.Hashes);
+        fixture.Server.Arena.GrowthAdmission = null;
+        scope.RestoreCheckpoint(refused);
+        Request(fixture, 1);
+        for (var tick = 0; tick < 6; tick++) { fixture.Step(); }
+        Assert.Equal(3, Read(fixture, "control", "status"));
+    }
+
+    private static WorldDefinition GrowingInventory() {
+        var document = Document();
+        return document with {
+            StateRaw = document.StateRaw! with { World = document.State.Select(row => row.Name.Value == "counter"
+                ? new WorldStateRow(Name: row.Name, Kind: CellKind.Int, Domain: StateDomain.Keys.Instance) : row).ToArray() },
+            ReplaysRaw = [document.ReplaysRaw![0] with {
+                Inputs = [new WorldScopedReplayInput(1, Principal.Seat(0), [new WorldScopedReplayCell(Key: "card", Row: "counter", Value: 7)])]
+            }]
+        };
+    }
+
+    [Fact]
     public void AWholeSessionTapeRecordsScopeControlsAndDerivesProgramInputsExactlyOnce() {
         using var harness = new WorldHistoryHarness(definition: Document(), on: false, seats: 1);
 

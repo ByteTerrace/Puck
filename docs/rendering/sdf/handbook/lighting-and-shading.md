@@ -47,9 +47,22 @@ views averages each light's visibility over the same plane-aware 4×4 window
 temporal reconstruction ([ambient occlusion](#ambient-occlusion-screen-space-obscurance)).
 The window's shadow average also leaves out a neighbour whose normal turns more
 than 60 degrees from the pixel's, because the surface pass leaves full
-visibility on a side turned from the light, which it does not query: averaged
-across the crease where a wall meets the ceiling, it would light a band along
-the wall's top.
+visibility on a side the light's response does not reach, which it does not
+query: averaged across the crease where a wall meets the ceiling, it would light
+a band along the wall's top.
+
+The surface pass queries a light wherever its diffuse response is non-zero. For
+a plain material that is the side facing the light; a wrapped material
+(`wrap`, `max((n·l + wrap) / (1 + wrap), 0)`) takes light past the terminator
+until the cosine reaches `-wrap`, so the pass reads the material's wrap
+(`sdfMaterialWrap`) and queries that side too: an unqueried slot decodes as
+fully visible, which would light a skin's far side with the sun under a roof. Past the
+terminator the receiver's own lit side stands in front of it toward the light,
+so the query lets a caster within the receiver's own depth transmit
+(`sdfMeshShadowTransmission`): a sphere of radius r lies `2 r |n·l|` behind its
+lit side, r is the surface's own curvature radius and at most half a metre for a
+flat or concave one. The wrap's light survives on a body in the open, and a
+roof or wall farther off still shadows it.
 `world.debug-view shadow` shows the key light's filtered visibility. The
 ambient term still fills shadowed regions, so shadows read soft and colored,
 never black.
@@ -459,18 +472,31 @@ its face, never behind it.
 
 ### Cel shading
 
-`world.toon on|off|toggle` selects a presentation-only cel response. With no
-argument it echoes the choice. It uses the same render-section grant and
-session-lever delivery as `world.ao`, and contributes no simulation state.
-It starts off unless `render.toon.enabled` is true. Until the live lever is
-used, reload follows the document default; afterwards the session choice
-applies to the host, routed worlds and nested views, with each world's own
-tuning. `world.save` folds the live choice into the render settings.
+Cel shading is a style per material, not one look per world. A style is one
+`toon` value with the fields below. A palette row that carries one shades its
+material with it; every other material inherits the world's default style,
+`render.toon`. A style is on unless it says `enabled: false`, so a row with
+`toon { enabled: false }` stays continuous under a banded world, and one scene
+mixes cel-styled creations with continuous ones (the gallery's `shape-cel` and
+`shape-cel-hard` exhibits on level 3). The standard package authors styles as
+data in `worlds/standard/styles.puck` (`celStyle`, `celHardStyle`,
+`continuousStyle`): a row names one with `toon: celStyle` and a world with
+`render { toon: celStyle }`.
+
+`world.toon on|off|toggle` is the live lever over the world's default style.
+With no argument it echoes the choice. It uses the same render-section grant and
+session-lever delivery as `world.ao`, and contributes no simulation state. A
+material with a style of its own keeps it whichever way the lever is set. The
+default starts on when `render.toon` is present and not `enabled: false`. Until
+the live lever is used, reload follows the document default; afterwards the
+session choice applies to the host, routed worlds and nested views, with each
+world's own style. `world.save` folds the live choice into the render settings.
 
 ```text
 render {
   toon {
-    enabled: false
+    enabled: true
+    band: Visibility
     threshold: 0.45
     softness: 0.08
     shadowTint [0.38, 0.48, 0.65]
@@ -485,16 +511,21 @@ render {
 }
 ```
 
-The views pass bands each directional light's diffuse cosine and filtered
-shadow visibility together. Point lights retain their range, cone and probe
-visibility, with a banded diffuse cosine. A short soft terminator joins the
-two tones; `threshold` places it and `softness` is its full cosine width.
-Indirect light and sky ambient take the cooler linear RGB `shadowTint`,
-with AO still affecting indirect light. This does not add unoccluded sunlight
-inside a shadowed room. Specular lobes become bounded patches: `specularSize`
-is one minus their half-vector cosine, with a narrow soft edge. Metals keep
-their painted colour; continuous environment lobes and rim enrichment are
-omitted in this mode.
+The views pass bands each light's diffuse cosine and keeps its shadow
+visibility as a separate factor, `band(cosine) × visibility`, so the cascades'
+filtered penumbra keeps its softness and its colour under the band's edge
+(`band: Visibility`, the default). `band: Combined` bands the cosine and the
+visibility together, `band(cosine × visibility)`, the harder look in which a
+penumbra snaps to the band. Point lights retain their range, cone and probe
+visibility, with a banded diffuse cosine under ambient occlusion. A short soft
+terminator joins the two tones; `threshold` places it and `softness` is its
+full cosine width. Indirect light and sky ambient take the cooler linear RGB
+`shadowTint`, with AO still affecting indirect light. This does not add
+unoccluded sunlight inside a shadowed room. Specular lobes become bounded
+patches: `specularSize` is one minus their half-vector cosine, with a narrow
+soft edge. The banded lights shade the paint flat, metals included; the rim
+lights, the environment reflection and ambient occlusion stay in the cel
+response as they are in the continuous one.
 
 Outlines compare the depth and normals of eight neighbouring visibility
 records, on the foreground side of silhouettes and at sharp creases. The
@@ -517,9 +548,13 @@ There is no additional dispatch, image or history allocation: the work is
 in `sdf.world$views` and reported with that pass's counters. An outlined
 opaque hit reads at most eight neighbouring depths and normals at a radius
 of one render pixel or less, sixteen above it. Width zero skips these reads;
-mode off skips the cel response and all outline reads. The pass-block
-parameters participate in the lighting cadence signature, so live edits
-request fresh shading and temporal samples without rebuilding geometry.
+a material shading continuously skips the cel response and all outline reads.
+A material's own style is four rows of its material record (rows 22 to 25,
+laid out as the pass block's `toonBands`, `toonShadow`, `toonOutline` and
+`toonInk`; `SdfToon.WriteRows` writes both), all zero to inherit the world's
+default, so a palette edit restyles one material and changes no mesh. The
+pass-block parameters participate in the lighting cadence signature, so live
+edits request fresh shading and temporal samples without rebuilding geometry.
 
 ### Lighting levers
 

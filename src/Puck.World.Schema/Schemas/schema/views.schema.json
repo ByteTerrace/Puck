@@ -32,38 +32,6 @@
           "description": "The maximum live pitch offset in radians.",
           "type": "number"
         },
-        "clearanceMode": {
-          "$ref": "./common.schema.json#/$defs/WorldCameraClearanceChoice",
-          "description": "The author\u0027s tight-space behavior, Fade or Cutaway; players may override it."
-        },
-        "maxRise": {
-          "description": "The most the boom rises above the rig\u0027s own elevation, in radians, for each treatment.",
-          "type": "object",
-          "properties": {
-            "fade": {
-              "description": "The rise ceiling while the seat fades its body, in [0, \u03C0/2].",
-              "type": "number"
-            },
-            "cutaway": {
-              "description": "The rise ceiling while the seat cuts walls away, in [0, \u03C0/2].",
-              "type": "number"
-            }
-          },
-          "required": [
-            "fade",
-            "cutaway"
-          ],
-          "additionalProperties": false,
-          "title": "WorldCameraClearanceRise"
-        },
-        "eyeRadius": {
-          "description": "The full-size radius, in metres, of the sphere the chase eye keeps clear of geometry and, in cutaway, the body.",
-          "type": "number"
-        },
-        "surfaceSkin": {
-          "description": "The full-size nearest distance, in metres, the eased eye\u0027s centre comes to geometry along the boom: a sudden obstruction cuts the eye in to here at once, and the ease carries it the rest of the way.",
-          "type": "number"
-        },
         "follow": {
           "description": "The follow camera: with no look input the camera yaw eases in behind the body\u0027s heading; any look input (a deflected look stick, a held orbit/steer) is free-look and the follow yields for as long as it lasts. Optional; absent is a still camera that goes only where look input sends it. Needs World \u2014 a body-relative yaw already rides the body.",
           "type": [
@@ -87,35 +55,6 @@
           "additionalProperties": false,
           "default": null,
           "title": "WorldSeatFollow"
-        },
-        "characterFade": {
-          "description": "The full-size fade distances; absent, fade never dissolves the body and holds no minimum boom.",
-          "type": [
-            "object",
-            "null"
-          ],
-          "properties": {
-            "startDistance": {
-              "description": "The boom distance at which the body starts dissolving.",
-              "type": "number"
-            },
-            "endDistance": {
-              "description": "The distance at which the body is completely hidden.",
-              "type": "number"
-            },
-            "minimumBoom": {
-              "description": "The preferred shortest boom; a nearer wall takes precedence.",
-              "type": "number"
-            }
-          },
-          "required": [
-            "startDistance",
-            "endDistance",
-            "minimumBoom"
-          ],
-          "additionalProperties": false,
-          "default": null,
-          "title": "WorldCameraCharacterFade"
         },
         "autoFirstPerson": {
           "description": "The automatic pull-in policy; absent, automatic pull-in is unavailable whatever a player or session asks.",
@@ -189,11 +128,7 @@
       "required": [
         "yawReference",
         "minPitch",
-        "maxPitch",
-        "clearanceMode",
-        "maxRise",
-        "eyeRadius",
-        "surfaceSkin"
+        "maxPitch"
       ],
       "additionalProperties": false,
       "default": null,
@@ -572,6 +507,17 @@
         ],
         "additionalProperties": false,
         "title": "WorldViewQuality"
+      },
+      "default": null
+    },
+    "programs": {
+      "description": "The named camera programs no camera or seat resolves through directly: the framings a SelectProgram or Blend names, such as the cases a seat rig selects between. Programs is what a reader resolves through.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "./common.schema.json#/$defs/WorldCameraProgram"
       },
       "default": null
     },

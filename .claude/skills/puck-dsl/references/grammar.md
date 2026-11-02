@@ -117,7 +117,11 @@ not bind its members as constants: the emitter indexes enum declarations from
 the source's own statements before templates expand
 (`WorldDocumentEmitter.IndexTypesAndDerivedState`), so a template body reading
 `MoveKind.Castle` folds only when the expanding source declares that enum itself
-(`worlds/games/chess.puck`'s header shows the pattern). Two blocks of one
+(`worlds/games/chess.puck`'s header shows the pattern). An `enum` block inside a
+template body is not carried into the document at all, so a row naming it is
+refused (PUCK119); a template declares its enum as a `state { enums [ { name:
+"…", members ["…"] } ] }` row instead (`chaseCamera` in
+`worlds/standard/camera.puck`). Two blocks of one
 section in one source (a template's `views { }` beside another) do not merge
 deeply: a later block's member replaces the same member of an earlier one (a
 second `seatControl` drops the first's `boom`), so a template carries the whole

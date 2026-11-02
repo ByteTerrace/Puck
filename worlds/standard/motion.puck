@@ -1,0 +1,29 @@
+// The standard's body motion programs, which an avatar's kits name by `bodyMotionProgram`. `walk` turns the body toward
+// its planar intent, moves it at the kit's speed (backing at 0.7 of it and sidestepping at 0.85), runs its kit actions
+// and holds it to the ground or lets it fall. Both the standard walker (walker.puck) and the debug world's Moth
+// (../debug/avatars/moth.puck) import it; a world refines a program by declaring a row of the same name in its own
+// body, and an avatar's speeds, holds and turn stay in its own kit.
+schema: "puck.world.definition.v1"
+
+bodyMotionPrograms [
+  {
+    kind: Motion
+    name: "walk"
+    operations [
+      ResolveYawAttitudeAndPlanarFrame
+      ResolveHold
+      ComputePlanarTargetVelocity
+      ShapeVelocity
+      SnapYawToPlanarIntent
+      RunActionTriggers
+      ApplyHold
+      IntegratePlanarAndVerticalVelocity
+      CommitPose
+    ]
+    planarTarget {
+      backward: 0.7
+      strafe: 0.85
+    }
+    version: "puck.body.program.v1"
+  }
+]

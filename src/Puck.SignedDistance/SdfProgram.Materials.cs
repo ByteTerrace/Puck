@@ -8,10 +8,13 @@ public sealed partial class SdfProgram {
     // 12..13 weathering controls; 14..17 two reveal surfaces; 18..19 deposit;
     // 20 the paints and the emissive lane: (first paint's vector, paint count, emissive lane + 1 or 0 for a static
     // emissive, 0) as uint bits; 21 the glass: (absorption per world unit, index of refraction), zero for an opaque
-    // material, so a positive index says glass.
+    // material, so a positive index says glass; 22..25 the material's own cel style (SdfToon.WriteRows; KEEP IN SYNC with
+    // sdfToonStyle in shade/sdf-toon.hlsli), all zero to inherit the world's default, a mode of -1 for a style that
+    // keeps the material continuous.
     // Bleed occupies 2.w/7.zw, and indirect receive is 3.w.
     private void PackMaterials(int materialOffsetVectors, int paintOffsetVectors, IReadOnlyList<SdfMaterial> materialTable, int materialCount) {
         var paintCursor = paintOffsetVectors;
+        Span<Vector4> toonRows = stackalloc Vector4[4];
 
         for (var index = 0; (index < materialCount); index++) {
             var m = materialTable[index];
@@ -73,6 +76,12 @@ public sealed partial class SdfProgram {
             foreach (var paint in paints) {
                 PackPaint(paint: paint, paintVector: paintCursor);
                 paintCursor += PaintVectorsPerEntry;
+            }
+            if (m.Toon is { } toon) {
+                toon.WriteRows(inkW: 0f, mode: (toon.Enabled ? toon.Mode : -1f), rows: toonRows);
+                for (var row = 0; (row < toonRows.Length); row++) {
+                    Row(row: (22 + row), value: toonRows[row]);
+                }
             }
             if (m.Glass is { } glass) {
                 Row(

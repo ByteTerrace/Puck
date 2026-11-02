@@ -629,7 +629,7 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
         faulted = (fault != ExpressionFault.None);
         if (faulted) {
             ReportRefusal(
-                detail: $"{RuleEvaluation.DescribeFault(fault: fault)}; the conjunct read false",
+                detail: $"{RuleEvaluation.DescribeFault(fault: fault)}; the gate closed",
                 effect: "gate",
                 refusal: RuleEffectRefusal.Arithmetic,
                 ruleName: ruleName,

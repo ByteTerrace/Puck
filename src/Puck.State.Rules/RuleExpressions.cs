@@ -92,8 +92,10 @@ public static class RuleExpressions {
 
                     var fact = token.Operand!.Read(reader: reader);
 
-                    if (fact.IsForever) {
-                        fault = ExpressionFault.Forever;
+                    if (fact.IsForever || fact.IsFaulted) {
+                        fault = (fact.IsFaulted
+                            ? ExpressionFault.Domain
+                            : ExpressionFault.Forever);
                         value = 0L;
 
                         return false;

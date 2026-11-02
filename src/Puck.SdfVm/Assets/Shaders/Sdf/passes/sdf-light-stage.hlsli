@@ -79,7 +79,7 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
         if (sampledScreen) {
             // An opening (a portal's window) is the world beyond its glass, which the resolve's clip keeps current like
             // any other surface; reactive, it would drop every jittered sample's history and flicker at each edge. A
-            // display is reactive only over its picture: its edge band (a screen material's soft edge, or a plain face's outermost pixel)
+            // display is reactive only over its picture: its edge band (the face's outermost pixel, and a screen material's soft edge)
             // is as steady as the device around it, and keeps its history, so the face's jittered edge resolves like any
             // other edge. An opening that ripples is the one
             // reactive opening: its refraction moves on its own, and a history would smear it.
@@ -169,14 +169,16 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
             shadeSurface.normal = normal;
             shadeSurface.rayDirection = p.rayDirection;
             shadeSurface.material = shadeMaterial;
+            shadeSurface.toon = sdfToonStyle(shadeMaterial);
             shadeSurface.ambientOcclusion = ambientOcclusion;
             shadeSurface.shadowVisibility = shadowVisibility;
             shadeSurface.probed = meshIndirect;
             shadeSurface.probes = probes;
 
             float3 radiance = indirectSky ? 0.0 : worldSkyIrradiance(normal) * ambientOcclusion;
-            bool toon = sdfToonEnabled();
-            if (toon) { radiance *= passGroup.toonShadow.rgb; }
+            SdfToonStyle style = shadeSurface.toon;
+            bool toon = sdfToonEnabled(style);
+            if (toon) { radiance *= style.shadow.rgb; }
             float3 rim = float3(0.0, 0.0, 0.0);
             float3 specular = float3(0.0, 0.0, 0.0);
             float attenuation = 1.0;
@@ -200,7 +202,8 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
 
             color = sdfMaterialShade(shadeMaterial, radiance, normal, p.rayDirection);
             if (toon) {
-                // Metals retain their paint and a discrete highlight rather than a blurred environment lobe.
+                // The banded lights shade the paint flat, metals included; the environment lobe, the rim and the bounded
+                // highlights join after it as for any material.
                 color = shadeMaterial.albedo * radiance;
             }
 
@@ -208,7 +211,7 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
 
             if (meshIndirect) {
                 indirect = sdfMeshIndirect(probes, normal);
-                if (toon) { indirect *= passGroup.toonShadow.rgb; }
+                if (toon) { indirect *= style.shadow.rgb; }
                 color += indirect * shadeMaterial.albedo
                     * passGroup.indirectApply.rgb
                     * ((toon ? 1.0 : (1.0 - shadeMaterial.metal)) * shadeMaterial.receive * passGroup.indirectApply.w
@@ -217,9 +220,9 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
             // Authored fill is the indirect-off look: a share of the key light's luminance on a white surface. It never
             // adds a second approximation while the volume is on.
             if (!meshIndirect) {
-                float fill = toon ? 1.0 - sdfToonBand(dot(normal, keyDirection), 1.0)
+                float fill = toon ? 1.0 - sdfToonStep(style, dot(normal, keyDirection))
                     : 1.0 - max(dot(normal, keyDirection), 0.0);
-                float3 fillTint = toon ? passGroup.toonShadow.rgb : 1.0;
+                float3 fillTint = toon ? style.shadow.rgb : 1.0;
                 color += shadeMaterial.albedo * shadeMaterial.fill * worldKeyRadiance() * fill * ambientOcclusion * fillTint;
             }
 
@@ -229,7 +232,7 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
             // every angle, so matte paint reflects little of the sky even at grazing) and local occlusion; with the
             // irradiance volume on, only as far as the volume sees the sky open that way, and the surroundings' light
             // where not.
-            if (!toon && ((shadeMaterial.specular > 0.0) || (shadeMaterial.metal > 0.0))) {
+            if ((shadeMaterial.specular > 0.0) || (shadeMaterial.metal > 0.0)) {
                 float3 f0 = lerp(float3(shadeMaterial.specular, shadeMaterial.specular, shadeMaterial.specular), shadeMaterial.albedo, shadeMaterial.metal);
                 float3 viewDirection = -p.rayDirection;
                 float nDotV = saturate(dot(normal, viewDirection));
@@ -244,7 +247,7 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
 
             // The rim brightens and the point lights' lobes join after the shade: a rim is a look rather than a light the
             // material's specular answers. The occluders then dim reflected light; self-emission stays.
-            if (!toon) { color += rim; }
+            color += rim;
             color += specular;
 
             float3 selfEmission = (shadeMaterial.albedo * shadeMaterial.emissive);
@@ -270,9 +273,9 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, float3 surfacePoint, bool u
             // exposure shows, at the strength the surface's exposed illumination reaches against a white surface the
             // meter aims for: a lit room keeps its edge highlights and ink, and a dim room's edges stay dim.
             if (toon) {
-                color = sdfToonExpose(color);
-                float ink = sdfToonOutline(p, s, surfacePoint);
-                color *= lerp(1.0, passGroup.toonInk, ink);
+                color = sdfToonExpose(style, color);
+                float ink = sdfToonOutline(style, p, s, surfacePoint);
+                color *= lerp(1.0, style.ink, ink);
                 color += selfEmission;
             } else if (curvatureShading) {
                 float lit = saturate(((incoming * localGain) * passGroup.exposure) / SDF_REFERENCE_WHITE);

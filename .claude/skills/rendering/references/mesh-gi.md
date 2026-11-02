@@ -72,8 +72,13 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   full in-window receiver support including relocation. Each word holds an FP16
   ray distance and two signed octahedral normal bytes. A
   negative distance explicitly marks a miss and its reach. Receivers beyond
-  that measured support receive nothing. Depth is traced on the first sweep
-  and reused for later bounces; sky still uses the full-reach radiance rays.
+  that measured support receive nothing. Depth is traced on a probe's first
+  sweep of each lighting generation and reused for that generation's later
+  bounces; sky still uses the full-reach radiance rays. A generation starts
+  every cell at sweep zero (`TraceProbe`'s `sweep > 0` test), so a lighting
+  change alone re-places each probe and re-traces its geometry-only depth rays:
+  moving the held sun at Medium re-traced 4,796,784 depth rays, the count a
+  layout change traces.
 - Four reflected angular taps reconstruct local surface patches from first-hit
   positions and signed octahedral normal bytes. Join taps only when their normals
   agree and the symmetric point/normal residual is within `DepthSurfaceJoinGap`:
@@ -181,7 +186,15 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   a scene not built yet; removing the last draw must discard its occlusion and
   bounce light, even when dynamic or glass draws remain.
 - A lighting change or scene rebuild advances a generation, never clears the
-  cache. The tracer counts only that generation's sweeps; bounce reads use its
+  cache. The lighting key (`RefreshLighting`) hashes the directional and traced
+  light records, the indirect gains and sources, the tier and the scene's
+  materials, never the sky: a sky-only change keeps the generation, so the sky
+  baked into the radiance cubes stays stale until some other change retraces
+  (a muted sky gradient left an outdoor probe's cube at 10,477 nits until a
+  0.004-degree sun move retraced it to 9,212). A light that changes every frame
+  (a day cycle's sun) advances the generation every frame, and every batch the
+  trace lands is thrown away (the `generation != m_generation` test), so the
+  volume never publishes while the sun moves. The tracer counts only that generation's sweeps; bounce reads use its
   intermediate samples while viewers keep the previous completed
   sample until the cell's replacement finishes. An invalid replacement rejects
   immediately. Clear the CPU cache and staging volume only when the layout

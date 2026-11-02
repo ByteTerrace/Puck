@@ -53,6 +53,7 @@ public abstract record WorldCameraSubject {
 [System.Text.Json.Serialization.JsonDerivedType(typeof(WorldCameraProgramOp.Blend), typeDiscriminator: "blend")]
 [System.Text.Json.Serialization.JsonDerivedType(typeof(WorldCameraProgramOp.SelectProgram), typeDiscriminator: "selectProgram")]
 [System.Text.Json.Serialization.JsonDerivedType(typeof(WorldCameraProgramOp.FirstPerson), typeDiscriminator: "firstPerson")]
+[System.Text.Json.Serialization.JsonDerivedType(typeof(WorldCameraProgramOp.Clearance), typeDiscriminator: "clearance")]
 [System.Text.Json.Serialization.JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 public abstract record WorldCameraProgramOp {
     private WorldCameraProgramOp() {
@@ -64,6 +65,7 @@ public abstract record WorldCameraProgramOp {
         Anchor => "anchor",
         Blend => "blend",
         ClampPitch => "clampPitch",
+        Clearance => "clearance",
         Dynamics => "dynamics",
         FieldOfView => "fieldOfView",
         FirstPerson => "firstPerson",
@@ -106,12 +108,48 @@ public abstract record WorldCameraProgramOp {
     /// own.</param>
     /// <param name="FocusDistance">The finite target distance along the current subject's forward axis, used only
     /// when <paramref name="Subject"/> is <see langword="null"/>.</param>
-    /// <param name="CloseTargetOffset">The target offsets approached as collision shortens a seat's boom, one per
-    /// clearance treatment, in the axes of <paramref name="TargetOffset"/>; absent keeps the rest target.</param>
-    /// <param name="CloseTargetStartFraction">The boom fraction below which target migration begins.</param>
-    /// <param name="CloseTargetFullFraction">The boom fraction at which migration reaches the close target.</param>
-    public sealed record LookAt(WorldCameraSubject? Subject, DocumentVector3? TargetOffset = null, bool WorldAxes = false, float FocusDistance = 6f,
-        WorldCameraCloseTarget? CloseTargetOffset = null, float CloseTargetStartFraction = 0.6f, float CloseTargetFullFraction = 0.2f) : WorldCameraProgramOp;
+    public sealed record LookAt(WorldCameraSubject? Subject, DocumentVector3? TargetOffset = null, bool WorldAxes = false, float FocusDistance = 6f) : WorldCameraProgramOp;
+    /// <summary>
+    /// <para>Keeps a seat's chase eye in the room: the seat probes the static geometry and the framed body along the
+    /// boom each frame and places the eye on a spring arm eased on the program's <see cref="Dynamics"/>. It shortens
+    /// the boom along its own heading, rises it toward the seat's up by at most <paramref name="MaxRise"/> when no
+    /// level boom stands far enough out, and migrates the look target toward <paramref name="CloseTargetOffset"/> as
+    /// the boom compresses. Two capabilities only the engine has are offered: cutting away the walls between an eye
+    /// the body put beyond them and the body (<paramref name="Cutaway"/>), and fading the framed body in this seat's
+    /// own view (<paramref name="FadeStart"/> to <paramref name="FadeEnd"/>). How a world trades them is authored:
+    /// a program per treatment, chosen by a <see cref="SelectProgram"/>. A program without this op passes the eye
+    /// through. At most one per program; read only by a seat framing its own body.</para>
+    /// <para>Every parameter is a literal or a <c>state.&lt;row&gt;[.&lt;key&gt;]</c> binding. Distances are
+    /// full-size metres, scaled by the framed body's live scale; angles are radians.</para>
+    /// </summary>
+    /// <param name="Cutaway">One keeps the body solid: the eye stays out of the body (its collider and drawn shapes),
+    /// a boom that no rise clears goes up and over at <paramref name="MaxRise"/>, a target inside geometry skips
+    /// <paramref name="ObstructedTargetSkin"/>, and the near plane cuts away the geometry between the eye and the
+    /// body. Zero keeps the room: the eye stays level and short of every wall, at least
+    /// <paramref name="MinimumBoom"/> out where the room allows.</param>
+    /// <param name="EyeRadius">The radius of the sphere the eye keeps clear of geometry and, under
+    /// <paramref name="Cutaway"/>, of the body.</param>
+    /// <param name="SurfaceSkin">The nearest the eased eye's centre comes to geometry along the boom: a sudden
+    /// obstruction cuts the eye in to here at once and the ease carries it the rest of the way.</param>
+    /// <param name="MaxRise">The most the boom rises above the rig's own elevation, in [0, π/2].</param>
+    /// <param name="MinimumBoom">The shortest boom the eye keeps where the room allows it, rising if it must; a nearer
+    /// wall takes precedence. Zero holds none.</param>
+    /// <param name="FadeStart">The boom length at which the body starts to fade from this seat's view.</param>
+    /// <param name="FadeEnd">The boom length at which the body is hidden; no less than <paramref name="FadeStart"/>
+    /// never fades it.</param>
+    /// <param name="CloseTargetStartFraction">The boom fraction below which the target migrates.</param>
+    /// <param name="CloseTargetFullFraction">The boom fraction at which the target reaches
+    /// <paramref name="CloseTargetOffset"/>.</param>
+    /// <param name="NearMargin">How far short of the body's nearest surface a cutaway's near plane stops.</param>
+    /// <param name="RetractionSkin">How far short of a hit the probe reports the room.</param>
+    /// <param name="ObstructedTargetSkin">How far out along the boom the sweep starts when the target is inside
+    /// geometry, past a shell such as a portal frame round the pivot; zero never skips.</param>
+    /// <param name="CloseTargetOffset">The target the look migrates to as the boom compresses, in the axes of the
+    /// preceding <see cref="LookAt"/>'s target offset, which must name a subject; absent keeps the rest target.</param>
+    public sealed record Clearance(BindableScalar Cutaway, BindableScalar EyeRadius, BindableScalar SurfaceSkin, BindableScalar MaxRise,
+        BindableScalar MinimumBoom, BindableScalar FadeStart, BindableScalar FadeEnd, BindableScalar CloseTargetStartFraction,
+        BindableScalar CloseTargetFullFraction, BindableScalar NearMargin, BindableScalar RetractionSkin, BindableScalar ObstructedTargetSkin,
+        DocumentVector3? CloseTargetOffset = null) : WorldCameraProgramOp;
     /// <summary>Orbits the eye about its pivot. <paramref name="Yaw"/> and <paramref name="Pitch"/> are live-bindable
     /// like <see cref="FieldOfView"/>'s field of view: a seat rig whose yaw reads a state cell turns the CAMERA when that cell
     /// changes — look behind is <c>state.look.behind</c> flipping between 0 and π — while the seat's facing (what
@@ -157,7 +195,7 @@ public abstract record WorldCameraProgramOp {
     public sealed record FieldOfView(BindableScalar FieldOfViewRadians) : WorldCameraProgramOp;
     /// <summary>Evaluates two other authored programs by name and linearly interpolates their resolved eye, target,
     /// and field of view — the whole document's camera-program table (every <c>cameras[].rig</c> plus
-    /// <c>views.seatRig</c>/<c>views.cameraRig</c>) is the namespace <paramref name="A"/>/<paramref name="B"/>
+    /// <c>views.seatRig</c>/<c>views.cameraRig</c>/<c>views.programs</c>) is the namespace <paramref name="A"/>/<paramref name="B"/>
     /// resolve against. At most one per program; refused when it would create a reference cycle.</summary>
     /// <param name="A">The program resolved at <paramref name="Weight"/> 0.</param>
     /// <param name="B">The program resolved at <paramref name="Weight"/> 1.</param>
@@ -181,7 +219,7 @@ public abstract record WorldCameraProgramOp {
 /// when the op's key rounds to <see cref="Value"/>.</summary>
 /// <param name="Value">The matching key value.</param>
 /// <param name="Program">The candidate program's name — the same blend namespace <see cref="WorldCameraProgramOp.Blend"/>
-/// resolves against (every <c>cameras[].rig</c>, plus <c>views.seatRig</c>/<c>views.cameraRig</c>).</param>
+/// resolves against (every <c>cameras[].rig</c>, plus <c>views.seatRig</c>/<c>views.cameraRig</c>/<c>views.programs</c>).</param>
 public sealed record WorldCameraSelectCase(long Value, string Program);
 /// <summary>An authored camera program — the ordered op list a rig resolves through every frame.</summary>
 /// <param name="Name">The stable name a <see cref="WorldCameraProgramOp.Blend"/> op selects this program by.</param>
@@ -205,6 +243,9 @@ public sealed record WorldCameraProgram(string Name, string Version, IReadOnlyLi
     /// <summary>Gets the program's <see cref="WorldCameraProgramOp.ClampPitch"/> op, or <see langword="null"/>.</summary>
     [System.Text.Json.Serialization.JsonIgnore]
     public WorldCameraProgramOp.ClampPitch? ClampPitchOp => FirstOrDefault<WorldCameraProgramOp.ClampPitch>();
+    /// <summary>Gets the program's <see cref="WorldCameraProgramOp.Clearance"/> op, or <see langword="null"/>.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public WorldCameraProgramOp.Clearance? ClearanceOp => FirstOrDefault<WorldCameraProgramOp.Clearance>();
     /// <summary>Gets the program's <see cref="WorldCameraProgramOp.Dynamics"/> op, or <see langword="null"/>.</summary>
     [System.Text.Json.Serialization.JsonIgnore]
     public WorldCameraProgramOp.Dynamics? DynamicsOp => FirstOrDefault<WorldCameraProgramOp.Dynamics>();

@@ -1,6 +1,9 @@
 // The courtyard's foliage, east of the hero studio. Source: the quarantined moth-courtyard meadow rows.
 // The studio ends at x=72; the grove's westernmost bank starts at x=75. No pose stations are imported.
 import "../standard/foliage"
+
+// The wind cells drive every wind-grass patch on the floor (lawn.puck), so their gusts share one phase.
+export binding meadowWindSpeed, meadowFlutterSpeed, meadowWindPose
 let meadowOrigin = [114, 0, -62]
 let meadowBanks = [
   {

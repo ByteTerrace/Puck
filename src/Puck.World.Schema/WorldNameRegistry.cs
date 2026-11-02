@@ -49,6 +49,9 @@ public enum WorldNameKind : byte {
     Prototype,
     /// <summary>A <c>timeline</c> clock: its own namespace, so a state clock may share its row's name.</summary>
     Clock,
+    /// <summary>A <c>screenMaterials</c> row: its own namespace, apart from every state-side name, which a screen row
+    /// and a creation face name by id.</summary>
+    ScreenMaterial,
     /// <summary>Any declaration the document makes, whatever its namespace: an entry of a module's export lists.</summary>
     Any,
 }
@@ -1281,6 +1284,11 @@ public static partial class WorldNameRegistry {
             WorldExportFacet.Binding
         ),
         new(typeof(WorldClock), nameof(WorldClock.State), WorldNameKind.State, WorldNameRole.Names), new(typeof(WorldClock), nameof(WorldClock.Name), WorldNameKind.Clock, WorldNameRole.Declares), new(typeof(WorldRenderSky), nameof(WorldRenderSky.Clock), WorldNameKind.Clock, WorldNameRole.Names), new(typeof(WorldRenderLighting), nameof(WorldRenderLighting.Clock), WorldNameKind.Clock, WorldNameRole.Names),
+        // A screen material is presentation a screen or a creation face binds by id: a module's material is its own
+        // until it exports it under `bindings`.
+        new(typeof(WorldScreenMaterial), nameof(WorldScreenMaterial.Id), WorldNameKind.ScreenMaterial, WorldNameRole.Declares),
+        new(typeof(WorldScreen), nameof(WorldScreen.Material), WorldNameKind.ScreenMaterial, WorldNameRole.Names, WorldExportFacet.Binding),
+        new(typeof(WorldPlacementFace), nameof(WorldPlacementFace.Material), WorldNameKind.ScreenMaterial, WorldNameRole.Names, WorldExportFacet.Binding),
         new(
             typeof(WorldLookMotion),
             nameof(WorldLookMotion.Lanes),

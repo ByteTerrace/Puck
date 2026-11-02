@@ -205,12 +205,12 @@ public static class AffectedSuites {
     // what CI's does, so an explicit tier such as Maths' Deep and Exhaustive stays out, and the Gpu trait keeps device
     // laws out (CliTestRun.CpuSelection). The platform prints each failure with its message and stack.
     private static AffectedSuiteResult RunSuite(string repositoryRoot, AffectedSuite suite, IReadOnlyDictionary<string, Func<Command>> gpuVerbGrammars) {
-        using var lease = (suite.Heavy ? HostAdmission.AcquireHeavy(repositoryRoot: repositoryRoot, step: suite.Name, clock: TimeProvider.System) : null);
+        using var lease = (suite.Heavy ? HeavyLease.Acquire(repositoryRoot: repositoryRoot, holder: suite.Name, clock: TimeProvider.System) : null);
 
         if (suite.Heavy && !AffectedCommand.AdmitHeavySuite(gpuVerbGrammars: gpuVerbGrammars, repositoryRoot: repositoryRoot, suite: suite.Name)) {
             return new AffectedSuiteResult(
                 ExitCode: CliExit.Refused,
-                Report: [$"REFUSED — host admission did not return within {HostAdmission.HeavyTimeout.TotalHours.ToString(format: "0", provider: CultureInfo.InvariantCulture)} hours"]
+                Report: [$"REFUSED — host admission did not return within {HeavyLease.Timeout.TotalHours.ToString(format: "0", provider: CultureInfo.InvariantCulture)} hours"]
             );
         }
 

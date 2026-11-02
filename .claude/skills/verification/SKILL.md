@@ -324,9 +324,18 @@ path (`"C:/Program Files/Git/usr/bin/bash.exe" <script>`): a bare `bash` resolve
 path, so the script fails only after the queued lease is finally granted.
 Keep a granted batch within its brief's time box (at most 20 minutes for a GPU lease).
 `gate` and `affected` hold the same heavy lease through each heavy suite and
-check host headroom after acquisition. When an ancestor already owns it,
+check host headroom after acquisition. `puck test` holds it too whenever it runs
+more than one world (a debug-world sweep is 112 World processes, several GB each);
+a single world stays unleased, and `--workers` legs run one after another so they
+do not count. When an ancestor already owns it,
 validated PID/start-time ancestry admits a serialized child lease, so a run
-does not wait on itself and siblings still exclude one another; [lease reference](../../../docs/reference/cli.md#puck-leaseexclusive-machine-work).
+does not wait on itself and siblings still exclude one another; every
+acquisition (heavy, the World build, `puck sweep`'s GPU lease, a World start)
+does this; [lease reference](../../../docs/reference/cli.md#puck-leaseexclusive-machine-work).
+A timing measurement runs under `puck lease quiet --holder <lane> --wait 600 --settle 30 -- <command...>`,
+which holds the heavy, build and GPU leases together, waits until `puck host load`'s
+readings show an idle machine for `--settle` seconds, then runs the command, with
+`puck sweep` and Worlds nesting inside it; the lead's settle windows use it.
 
 In PowerShell, quote forwarded `'-nodeReuse:false'` after `--`; otherwise the
 shell can split the colon-bearing switch before the lease receives it

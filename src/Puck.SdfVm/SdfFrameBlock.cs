@@ -193,19 +193,13 @@ public static partial class SdfFrameBlock {
             WriteUInt32(block: block, offset: (LightMask + (word * sizeof(uint))), value: ((uint)(mask >> (32 * word))));
         }
         WriteSingle(block: block, offset: Exposure, value: (tables.Exposures?.MultiplierOf(view: view) ?? 1f));
-        var toon = frame.Toon;
+        Span<Vector4> toonRows = stackalloc Vector4[4];
 
-        WriteSingle(block: block, offset: ToonBands, value: (toon.Enabled ? 1f : 0f));
-        WriteSingle(block: block, offset: (ToonBands + 4), value: toon.Threshold);
-        WriteSingle(block: block, offset: (ToonBands + 8), value: toon.Softness);
-        WriteSingle(block: block, offset: (ToonBands + 12), value: toon.SpecularSize);
-        WriteVector3(block: block, offset: ToonShadow, value: toon.ShadowTint);
-        WriteSingle(block: block, offset: (ToonShadow + 12), value: MathF.Pow(x: 2f, y: toon.Exposure));
-        WriteSingle(block: block, offset: ToonOutline, value: (toon.OutlineWidth * ((float)snapshot.RenderGrid)));
-        WriteSingle(block: block, offset: (ToonOutline + 4), value: toon.OutlineDistance);
-        WriteSingle(block: block, offset: (ToonOutline + 8), value: toon.OutlineNormal);
-        WriteSingle(block: block, offset: (ToonOutline + 12), value: toon.Shoulder);
-        WriteVector3(block: block, offset: ToonInk, value: toon.OutlineTint);
+        frame.Toon.WriteRows(inkW: ((float)snapshot.RenderGrid), mode: frame.Toon.Mode, rows: toonRows);
+        WriteVector4(block: block, offset: ToonBands, value: toonRows[0]);
+        WriteVector4(block: block, offset: ToonShadow, value: toonRows[1]);
+        WriteVector4(block: block, offset: ToonOutline, value: toonRows[2]);
+        WriteVector4(block: block, offset: ToonInk, value: toonRows[3]);
         WriteSingle(block: block, offset: ExposeShare, value: (snapshot.Unexposed ? SdfPhotometry.WindowAdaptation : 1f));
         WriteSingle(block: block, offset: AirLight, value: (tables.Exposures?.AirLightOf(view: view) ?? 1f));
         WriteSingle(block: block, offset: MeterLuminance, value: (tables.Exposures?.MeteredOf(view: view) ?? 0f));
@@ -277,5 +271,9 @@ public static partial class SdfFrameBlock {
         WriteSingle(block: block, offset: offset, value: value.X);
         WriteSingle(block: block, offset: (offset + sizeof(float)), value: value.Y);
         WriteSingle(block: block, offset: (offset + (2 * sizeof(float))), value: value.Z);
+    }
+    private static void WriteVector4(Span<byte> block, int offset, Vector4 value) {
+        WriteVector3(block: block, offset: offset, value: new Vector3(x: value.X, y: value.Y, z: value.Z));
+        WriteSingle(block: block, offset: (offset + (3 * sizeof(float))), value: value.W);
     }
 }

@@ -21,9 +21,9 @@ public sealed class WorldHostOwnedCellOperand(int rowOrdinal, CellKey key, Compi
     }
     /// <inheritdoc/>
     public override RuleFact Read(IStateReader reader, IWorldFacts facet) {
-        var resolved = RuleReads.ResolveKey(reader: reader, literal: Key, keyFrom: KeyFrom, named: out var named);
+        var resolved = RuleReads.ResolveKey(reader: reader, literal: Key, keyFrom: KeyFrom, naming: out var naming);
 
-        if (!named) { return RuleFact.Absent(kind: ValueKind); }
+        if (naming != KeyNaming.Cell) { return ((naming == KeyNaming.Fault) ? RuleFact.Faulted(kind: ValueKind) : RuleFact.Absent(kind: ValueKind)); }
         var value = ((resolved.IsValid && RuleReads.TryKeyIndex(keys: reader.Arena.Keys, key: resolved, index: out var cell) &&
             (cell >= 0) && (cell <= int.MaxValue) && facet.TryReadHostOwnedCell(RowOrdinal, ((int)cell), out var raw)) ? raw : 0L);
 

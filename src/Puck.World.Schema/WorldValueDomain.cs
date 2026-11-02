@@ -247,6 +247,33 @@ public static class WorldValueFields {
     public static WorldValueField OrbitPitch { get; } = new(typeof(WorldCameraProgramOp.Orbit), nameof(WorldCameraProgramOp.Orbit.Pitch), WorldValueDomain.Finite);
     /// <summary>A first-person op's authored view request.</summary>
     public static WorldValueField FirstPersonActive { get; } = new(typeof(WorldCameraProgramOp.FirstPerson), nameof(WorldCameraProgramOp.FirstPerson.Active), WorldValueDomain.Unit);
+    /// <summary>A clearance op's cutaway: zero keeps the room, one keeps the body solid and cuts walls away.</summary>
+    public static WorldValueField ClearanceCutaway { get; } = new(typeof(WorldCameraProgramOp.Clearance), nameof(WorldCameraProgramOp.Clearance.Cutaway), WorldValueDomain.Unit);
+    /// <summary>A clearance op's eye radius, in full-size metres.</summary>
+    public static WorldValueField ClearanceEyeRadius { get; } = new(typeof(WorldCameraProgramOp.Clearance), nameof(WorldCameraProgramOp.Clearance.EyeRadius), WorldValueDomain.Positive);
+    /// <summary>A clearance op's surface skin, in full-size metres.</summary>
+    public static WorldValueField ClearanceSurfaceSkin { get; } = new(typeof(WorldCameraProgramOp.Clearance), nameof(WorldCameraProgramOp.Clearance.SurfaceSkin), WorldValueDomain.Positive);
+    /// <summary>A clearance op's rise ceiling above the rig's elevation, in radians.</summary>
+    public static WorldValueField ClearanceMaxRise { get; } = new(typeof(WorldCameraProgramOp.Clearance), nameof(WorldCameraProgramOp.Clearance.MaxRise), new WorldValueDomain(
+        Maximum: (MathF.PI / 2f),
+        Minimum: 0f
+    ), Why: "a rise past a quarter turn looks back over the top of the subject");
+    /// <summary>A clearance op's preferred shortest boom, in full-size metres.</summary>
+    public static WorldValueField ClearanceMinimumBoom { get; } = new(typeof(WorldCameraProgramOp.Clearance), nameof(WorldCameraProgramOp.Clearance.MinimumBoom), WorldValueDomain.NonNegative);
+    /// <summary>A clearance op's boom length where the body starts to fade, in full-size metres.</summary>
+    public static WorldValueField ClearanceFadeStart { get; } = new(typeof(WorldCameraProgramOp.Clearance), nameof(WorldCameraProgramOp.Clearance.FadeStart), WorldValueDomain.NonNegative);
+    /// <summary>A clearance op's boom length where the body is hidden, in full-size metres.</summary>
+    public static WorldValueField ClearanceFadeEnd { get; } = new(typeof(WorldCameraProgramOp.Clearance), nameof(WorldCameraProgramOp.Clearance.FadeEnd), WorldValueDomain.NonNegative);
+    /// <summary>A clearance op's boom fraction where the target starts to migrate.</summary>
+    public static WorldValueField ClearanceCloseTargetStart { get; } = new(typeof(WorldCameraProgramOp.Clearance), nameof(WorldCameraProgramOp.Clearance.CloseTargetStartFraction), WorldValueDomain.Unit);
+    /// <summary>A clearance op's boom fraction where the target reaches its close target.</summary>
+    public static WorldValueField ClearanceCloseTargetFull { get; } = new(typeof(WorldCameraProgramOp.Clearance), nameof(WorldCameraProgramOp.Clearance.CloseTargetFullFraction), WorldValueDomain.Unit);
+    /// <summary>A clearance op's near-plane margin short of the body, in full-size metres.</summary>
+    public static WorldValueField ClearanceNearMargin { get; } = new(typeof(WorldCameraProgramOp.Clearance), nameof(WorldCameraProgramOp.Clearance.NearMargin), WorldValueDomain.NonNegative);
+    /// <summary>A clearance op's retraction skin short of a hit, in full-size metres.</summary>
+    public static WorldValueField ClearanceRetractionSkin { get; } = new(typeof(WorldCameraProgramOp.Clearance), nameof(WorldCameraProgramOp.Clearance.RetractionSkin), WorldValueDomain.NonNegative);
+    /// <summary>A clearance op's sweep start past a shell round an obstructed target, in full-size metres.</summary>
+    public static WorldValueField ClearanceObstructedTargetSkin { get; } = new(typeof(WorldCameraProgramOp.Clearance), nameof(WorldCameraProgramOp.Clearance.ObstructedTargetSkin), WorldValueDomain.NonNegative);
     /// <summary>A path op's fraction along its curve.</summary>
     public static WorldValueField PathFraction { get; } = new(typeof(WorldCameraProgramOp.Path), nameof(WorldCameraProgramOp.Path.Fraction), WorldValueDomain.Finite);
     /// <summary>A field-of-view op's angle, in radians, from the narrowest a camera is built with to just under a half
@@ -351,6 +378,18 @@ public static class WorldValueFields {
         OrbitYaw,
         OrbitPitch,
         FirstPersonActive,
+        ClearanceCutaway,
+        ClearanceEyeRadius,
+        ClearanceSurfaceSkin,
+        ClearanceMaxRise,
+        ClearanceMinimumBoom,
+        ClearanceFadeStart,
+        ClearanceFadeEnd,
+        ClearanceCloseTargetStart,
+        ClearanceCloseTargetFull,
+        ClearanceNearMargin,
+        ClearanceRetractionSkin,
+        ClearanceObstructedTargetSkin,
         PathFraction,
         FieldOfView,
         BlendWeight,
