@@ -115,8 +115,8 @@ test "a free cell holds one card" {
   }
 }
 
-// Seat 1 sits in the chair at the -Z edge, moves the cursor seven columns right to the ace of clubs, lifts it, goes up to the top row
-// (the diamonds' foundation, over it), steps left to the clubs' and puts it down.
+// Seat 1 sits in the chair at the -Z edge, moves the cursor seven columns right to the ace of clubs, lifts it, goes up to
+// the top row (the diamonds' foundation, over it), steps left to the clubs' and puts it down.
 test "a seated player lifts the ace and plays it on its foundation" {
   when {
     ticks 400

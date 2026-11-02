@@ -20,13 +20,13 @@ export read `card-back`, `card-s-a`, `card-s-2`, `card-s-3`, `card-s-4`, `card-s
 // the piles change (`kSync`), every card is read for its pile and its depth in it and posed at the matching slot of the
 // `kSlots` graph, lying flat, face up or face down. The seat plays through the same mailbox the console uses.
 //
-// The table has one chair, at its -Z edge facing +Z (the engage block's `seats`), and both games are laid out for it: away
-// from the seat is +Z and its right is -X (its forward crossed with up, as the board view sees it). Seated there,
+// The table has one chair, at its -Z edge facing +Z (the engage block's `seats`), and both games are laid out for it:
+// away from the seat is +Z and its right is -X (its forward crossed with up, as the board view sees it). Seated there,
 // Klondike's top row runs across the far side from left to right: stock, waste, a gap, four foundations (suits in the
 // order spades, hearts, clubs, diamonds), and nearer the seat the seven tableau columns, each fanning toward it, every
-// face reading upright; FreeCell's is four free cells and the four foundations over its eight columns. The pointer, or the movement keys,
-// moves a cursor over a card; the pick button lifts the run from there, and again on another pile it plays the move. On
-// Klondike's stock it draws, or turns the waste over once the stock is empty.
+// face reading upright; FreeCell's is four free cells and the four foundations over its eight columns. The pointer, or
+// the movement keys, moves a cursor over a card; the pick button lifts the run from there, and again on another pile it
+// plays the move. On Klondike's stock it draws, or turns the waste over once the stock is empty.
 
 // The table's placement (its creation's floor 0.5 m under its origin on level 2's floor), the playing surface over the
 // table's origin and the card's size. A card is the deck's 1.76 by 2.48 creation scaled to 10.6 by 14.9 cm, and lies a
@@ -39,13 +39,14 @@ let cardHalfTall = 0.0744
 let cardLayer = 0.0032
 
 // The pick grid: 0.02 m cells in 48 columns (six to a card column: FreeCell's eight columns fill it and Klondike's seven
-// stand centred between half a column of margin) and 54 rows, so the whole grid is 0.96 m by 1.08 m. The grid's cells run
-// +X and +Z like every board's, so its column 0 is at the seat's right and its row 0 at the seat: `cardAcross` and
-// `cardFarRow` count a cell's column from the seat's left and its row from the far edge, the order the piles are laid in. The felt (1.08 m by 0.78 m, its far edge 6 cm past the grid's) is cut to a game in play, not to
-// the longest fan a column could ever grow: a deal's seven-card fans end 13 cm short of its near edge, and a fan of ten
-// cards reaches it; deeper fans run on over the table's wood, and the pointer still picks them (the grid's depth). A cell
-// names the pile under it (`kBoard` for Klondike, `kBoardF` for FreeCell); a tableau column's depth is read off its row,
-// two rows to a card of the fan.
+// stand centred between half a column of margin) and 54 rows, so the whole grid is 0.96 m by 1.08 m. Its cells run +X
+// and +Z like every board's, so its column 0 is at the seat's right and its row 0 at the seat: `cardAcross` and
+// `cardFarRow` count a cell's column from the seat's left and its row from the far edge, the order the piles are laid
+// in. The felt (1.08 m by 0.78 m, its far edge 6 cm past the grid's) is cut to a game in play, not to the longest fan a
+// column could ever grow: a deal's seven-card fans end 13 cm short of its near edge, and a fan of ten cards reaches it;
+// deeper fans run on over the table's wood, and the pointer still picks them (the grid's depth). A cell names the pile
+// under it (`kBoard` for Klondike, `kBoardF` for FreeCell); a tableau column's depth is read off its row from the far
+// edge, two rows to a card of the fan.
 let cardFan = 0.04
 let cardCell = 0.02
 let cardWide = 48

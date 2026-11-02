@@ -87,8 +87,8 @@ test "the stock draws a card to the waste" {
   }
 }
 
-// Seat 1 sits in the chair at the -Z edge, moves the cursor six columns right to the ace of diamonds, lifts it, goes up to the top row
-// (the diamonds' foundation, over it) and puts it down: the same move through the pick button.
+// Seat 1 sits in the chair at the -Z edge, moves the cursor six columns right to the ace of diamonds, lifts it, goes up
+// to the top row (the diamonds' foundation, over it) and puts it down: the same move through the pick button.
 test "a seated player lifts the ace and plays it on its foundation" {
   when {
     ticks 400
