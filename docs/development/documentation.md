@@ -420,8 +420,8 @@ shows it changes outcomes ([evaluating a skill](#evaluate-an-agent-skill)).
 These evals measure Claude in the named harness and model, not Codex or
 Antigravity. Three `puck evals` verbs wrap `claude plugin eval`
 ([plugin evals](https://code.claude.com/docs/en/plugin-evals)); never run it
-by hand or through a script, which is how one comparison mixed ablation modes
-and reported edit effects the data did not hold:
+by hand or through a script, where one comparison can mix ablation modes,
+judges or live trees unnoticed:
 
 | Verb | Does |
 |---|---|
@@ -458,8 +458,9 @@ from. The two kinds answer different questions: `run --tag` runs one kind, and
 - **Regression:** teaching the skill already carries reliably. Three runs;
   the case holds when every run passes every grader (pass^k), and any failing
   run is a stop to investigate.
-- **Capability:** teaching that is new or still failing. Five runs; report
-  the mean and the per-run vector, with no threshold. A capability case that
+- **Capability:** teaching that is new or still failing, with `runs: 5` in its
+  frontmatter, which `run` honours unless `--runs` overrides it. Report the
+  mean and the per-run vector, with no threshold. A capability case that
   passes every run on every model that loads the skill becomes a regression
   case.
 
@@ -490,13 +491,11 @@ puck evals compare <before>/aggregate-result.json <after>/aggregate-result.json
 - Only executed graders count: one pass plus two cost-ceiling skips is 1/1.
 - A run that reached `max_turns`, ended on an error, was aborted by a mock or
   had its judge graders skipped is infrastructure evidence, never failed
-  teaching: it is left out and listed. A diagnosis prompt says no checkout is
-  reachable, or the case raises `max_turns`, since an agent that follows a
-  skill's path into a repository it cannot reach spends every turn looking.
+  teaching: it is left out and listed.
 - A difference is real when it exceeds one grader's share of a run's score
-  and the two run vectors do not overlap. One run swings by about 0.2, so at
-  three runs a case's difference under about 0.1 is noise; a suite mean hides
-  which cases moved.
+  and the two run vectors do not overlap. "A delta under 0.1 is noise" holds
+  per case at three runs, never for a suite mean, which hides which cases
+  moved.
 
 To compare the skill against no skill on one result, name it twice:
 `puck evals compare r.json r.json --a-arm without`.
@@ -524,11 +523,10 @@ made without the fixture, for comparison with it.
 - **Models:** full model IDs only (`claude-sonnet-5-5`, never `sonnet`), so a
   model rollout never reads as a skill change. `run` refuses an alias.
 - **Judge:** at least as strong as the model under test, since a weaker judge
-  fails correct replies it cannot follow (a Haiku judge failed the `delegate`
-  suite's correct answers). Judge Sonnet suites with Sonnet, and the
-  judgement-heavy `delegate`, `orchestration` and `review-passes` suites with
-  Opus. Judge calls are about 8% of a run's cost. `run`'s judge defaults to
-  the model and refuses a weaker tier.
+  fails correct replies it cannot follow. Judge Sonnet suites with Sonnet, and
+  the judgement-heavy `delegate`, `orchestration` and `review-passes` suites
+  with Opus. Judge calls are a small share of a run's cost. `run`'s judge
+  defaults to the model and refuses a weaker tier.
 - **Tiers:** run a skill at each tier that loads it, not every skill at every
   tier. A skill that helps one tier can hurt another.
 
@@ -564,20 +562,30 @@ two or three cases a skill holds out score as noise. The guard against teaching 
 the test is the rule below, stated generally, and capability cases drawn from
 real failures.
 
-- Write every criterion as a statement about what the reply says, one fact
-  per grader, as a `PASS if` rule and a `FAIL if` rule, each with an example
-  reply. The sandboxed agent only advises, so a rubric worded as an action
-  ("fixes", "runs", "commits") fails a correct reply that recommends the
-  action.
-- Key a rubric on meaning, never on the phrase the skill uses: a reply that
-  gives the skill's answer in other words passes.
+- Write every criterion as a statement about what the reply contains, one
+  fact per grader. Grade the behaviour Puck needs, never the skill's own
+  wording: a grader that a correct reply in other words would fail is
+  deleted.
+- A sandboxed agent only advises; its reply cannot fix, run or commit
+  anything. A rubric worded as an action ("fixes", "runs", "commits") fails a
+  correct reply that recommends the action, so a rubric says what the reply
+  proposes or states.
+- An `llm` rubric is a `PASS if` rule and a `FAIL if` rule, each with an
+  example reply, so the judge doesn't read the statement more literally than
+  the case means. A weak judge mostly fails correct replies; it rarely passes
+  wrong ones.
 - Prefer a deterministic grader. Use a `regex` for anything a token settles,
-  and `llm` only where meaning needs judging.
+  and `llm` only where meaning needs judging. A regex binds the token to the
+  command or statement it grades (`search\b[^\n]*[ \t]-M\s*0\b`, not
+  `-M\s*0`), so a mention in passing, a negation or a fact the prompt already
+  states does not pass it.
+- Read the transcripts of a sample of runs and check each LLM grader's verdict
+  against your own. A grader that disagrees with a careful reading is
+  repaired before any score built on it is believed.
 - Validate graders before believing any score built on them. For each grader
   `puck evals graders` lists, label each run's reply PASS or FAIL yourself,
   record your agreement with the judge, and repair the rubric where you
-  disagree. About half the failing teaching in the first full round was
-  grading.
+  disagree.
 - A rule added to fix a failing case is stated generally, never as that
   case's answer.
 
@@ -594,6 +602,10 @@ context `run` adds.
   empty directory without loading the skill. Phrase it as the developer's
   question, naming the Puck files, verbs or symptoms involved, without stating
   the answer a grader checks.
+- Say in the prompt that no checkout is reachable from the session. Without
+  it the agent follows the skill's base directory toward the repository, is
+  refused, and can spend every turn there; a run that reaches `max_turns` is
+  excluded from the score and listed.
 
 **Agent definitions:** plugin eval does not evaluate a standalone
 `.claude/agents/*.md`. An agent is evaluated through what it loads: its
@@ -601,8 +613,8 @@ preloaded skills, run at the agent's model. Teaching written into an agent's
 body is therefore never measured, so it belongs in the skill the agent
 preloads (the reviewer's rule to read revisions through Git's object commands
 lives in `review-passes`, which its cases measure), and the body keeps only
-the role: its model, its tools and what its brief names. Delegation reliability is not measured,
-because the lead names the agent explicitly.
+the role: its model, its tools and what its brief names. Delegation
+reliability is not measured, because the lead names the agent explicitly.
 
 **Two cheap checks beside the evals:**
 

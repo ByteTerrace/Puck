@@ -5,4 +5,4 @@ match: contains
 flags: i
 ---
 
--c\s+Release
+dotnet\s+test\b[^\n]*Puck\.Maths\.Tests[^\n]*\s-c\s+Release|dotnet\s+test\b[^\n]*\s-c\s+Release[^\n]*Puck\.Maths\.Tests
