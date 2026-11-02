@@ -121,7 +121,11 @@ Each waits on the owner: what the engine should do, how it looks and feels, and 
   keyable on the day clock; the debug world authors a readable deep-blue
   night). The Moth supports both cel and plain styles, swappable live for
   playtesting the way binding layouts are, through a generic material-style
-  switch (the illum1-fix2 lane).
+  switch: a palette row's `toonSelect` binds its style to a state cell, and
+  `moth.style Cel|Plain` swaps it with no rebake.
+- Which of the Moth's slots band under Cel: today all 31 palette slots do,
+  skin, hair and eyes included; removing `toonSelect` from a slot in
+  `worlds/debug/avatars/moth.puck` keeps it continuous.
 - Mesh shipping: nothing is built until a presenting client downloads packages,
   and then on a self-hosted GPU runner (the owner's deferral;
   [rendering plan](rendering.md)).
