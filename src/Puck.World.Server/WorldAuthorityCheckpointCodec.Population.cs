@@ -21,21 +21,49 @@ public static partial class WorldAuthorityCheckpointCodec {
     }
 
     /// <summary>Folds the simulation continuation of captured population entries through the checkpoint's field codecs,
-    /// excluding rendered appearance: the bytes <see cref="WorldPopulation.AppendContinuationHash"/> folds from the live
+    /// excluding rendered appearance: the value <see cref="WorldPopulation.AppendContinuationHash"/> folds from the live
     /// slots the entries were captured from.</summary>
     /// <param name="hash">The hash to fold into.</param>
     /// <param name="entries">The entries, in slot order.</param>
+    /// <param name="capacity">The population's slot count; every entry's index is below it.</param>
     /// <exception cref="ArgumentNullException"><paramref name="entries"/> is <see langword="null"/>.</exception>
-    public static void AppendPopulationEntries(ref Fnv1aHash hash, IReadOnlyList<WorldPopulationEntryCheckpoint> entries) {
+    /// <exception cref="ArgumentOutOfRangeException">An entry's index is outside <paramref name="capacity"/>.</exception>
+    public static void AppendPopulationEntries(ref Fnv1aHash hash, IReadOnlyList<WorldPopulationEntryCheckpoint> entries, int capacity) {
         ArgumentNullException.ThrowIfNull(argument: entries);
 
         var writer = new WireWriter();
+        var digests = new ulong[capacity];
+        var present = new bool[capacity];
 
-        writer.WriteArrayCount(count: entries.Count);
         for (var index = 0; (index < entries.Count); index++) {
-            WriteContinuationEntry(writer: writer, entry: entries[index]);
+            var entry = entries[index];
+
+            ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(other: capacity, value: entry.Index);
+            present[entry.Index] = true;
+            digests[entry.Index] = ContinuationDigest(entry: entry, writer: writer);
         }
-        hash.Add(values: writer.WrittenSpan);
+        FoldContinuationSegments(digests: digests, hash: ref hash, present: present);
+    }
+    // One slot's continuation digest: the entry's continuation bytes, hashed alone.
+    internal static ulong ContinuationDigest(WireWriter writer, in WorldPopulationEntryCheckpoint entry) {
+        writer.Reset();
+        WriteContinuationEntry(writer: writer, entry: entry);
+        return Fnv1aHash.Compute(values: writer.WrittenSpan);
+    }
+    // The continuation's shape: the slot count, then one digest per segment of WorldPopulation.HashSegmentSlots slots,
+    // each over its slots' presence and the present slots' digests.
+    internal static void FoldContinuationSegments(ref Fnv1aHash hash, ReadOnlySpan<ulong> digests, ReadOnlySpan<bool> present) {
+        hash.Add(value: ((uint)digests.Length));
+        for (var first = 0; (first < digests.Length); first += WorldPopulation.HashSegmentSlots) {
+            var segment = Fnv1aHash.Create();
+            var end = Math.Min(val1: (first + WorldPopulation.HashSegmentSlots), val2: digests.Length);
+
+            for (var index = first; (index < end); index++) {
+                segment.Add(value: (present[index] ? ((byte)1) : ((byte)0)));
+                if (present[index]) { segment.Add(value: digests[index]); }
+            }
+            hash.Add(value: segment.Value);
+        }
     }
 
     /// <summary>Writes one entry's simulation continuation: its checkpoint encoding without the rendered

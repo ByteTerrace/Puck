@@ -294,7 +294,7 @@ self-check. Both halves hold on the payload this README's own numbers came
 from.
 
 The canary's other half, `Puck.State.StateArena.ComputeHash()` (every stored
-column of a session's arena folded through one FNV-1a accumulator) over two
+column of a session's arena, folded per row and per row segment through FNV-1a) over two
 scripted sequences of `games/tictactoe.puck` composed under `standard.puck`, is
 quarantined with those worlds under
 `experimental/tests/Puck.World.Browser.Tests` while the debug world is the one

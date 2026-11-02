@@ -10,7 +10,7 @@ namespace Puck.World.Games.Tests;
 /// <summary>
 /// The authoritative hash folds every body's simulation continuation from views of the live slots
 /// (<see cref="WorldPopulation.AppendContinuationHash"/>), and the views fold exactly the bytes the checkpoint's own
-/// entries encode (<see cref="WorldAuthorityCheckpointCodec.AppendPopulationEntries"/> over
+/// entries encode, slot by slot and segment by segment (<see cref="WorldAuthorityCheckpointCodec.AppendPopulationEntries"/> over
 /// <see cref="WorldPopulation.Capture"/>): over a carried body sweeping against a wall behind a walking carrier, and
 /// over a rigid ball that comes to rest, tick by tick, and over a seat driven by an owned identity carrying facts and
 /// records. A steady fold allocates nothing, a profiled seat's included.
@@ -28,10 +28,12 @@ public sealed class ContinuationHashLawTests {
 
         population.AppendContinuationHash(hash: ref streamed);
         WorldAuthorityCheckpointCodec.AppendPopulationEntries(
+            capacity: population.Capacity,
             entries: entries,
             hash: ref captured
         );
         WorldAuthorityCheckpointCodec.AppendPopulationEntries(
+            capacity: population.Capacity,
             entries: [.. entries.Select(selector: static entry => ((entry.Profile is { } profile)
                 ? (entry with {
                     Profile = profile with {

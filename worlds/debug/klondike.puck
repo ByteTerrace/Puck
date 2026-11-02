@@ -269,18 +269,9 @@ template klondikeGather(step, pile) {
   }
 }
 
-klondikeGather(step: 0, pile: solitaireKlondikePile1)
-klondikeGather(step: 1, pile: solitaireKlondikePile2)
-klondikeGather(step: 2, pile: solitaireKlondikePile3)
-klondikeGather(step: 3, pile: solitaireKlondikePile4)
-klondikeGather(step: 4, pile: solitaireKlondikePile5)
-klondikeGather(step: 5, pile: solitaireKlondikePile6)
-klondikeGather(step: 6, pile: solitaireKlondikePile7)
-klondikeGather(step: 7, pile: solitaireKlondikePile8)
-klondikeGather(step: 8, pile: solitaireKlondikePile10)
-klondikeGather(step: 9, pile: solitaireKlondikePile11)
-klondikeGather(step: 10, pile: solitaireKlondikePile12)
-klondikeGather(step: 11, pile: solitaireKlondikePile13)
+for (pile, step) in [1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13] {
+  klondikeGather(step: step, pile: $"solitaireKlondikePile{pile}")
+}
 
 rule "solitaireKlondike-gather-advance" {
   when solitaire.table == 1 and solitaireKlondike.stage == 1 and count($zones[solitaireKlondike.gatherStep]) == 0
@@ -334,34 +325,9 @@ template klondikeDeal(step, pile) {
   }
 }
 
-klondikeDeal(step: 0, pile: solitaireKlondikePile2)
-klondikeDeal(step: 1, pile: solitaireKlondikePile3)
-klondikeDeal(step: 2, pile: solitaireKlondikePile4)
-klondikeDeal(step: 3, pile: solitaireKlondikePile5)
-klondikeDeal(step: 4, pile: solitaireKlondikePile6)
-klondikeDeal(step: 5, pile: solitaireKlondikePile7)
-klondikeDeal(step: 6, pile: solitaireKlondikePile8)
-klondikeDeal(step: 7, pile: solitaireKlondikePile3)
-klondikeDeal(step: 8, pile: solitaireKlondikePile4)
-klondikeDeal(step: 9, pile: solitaireKlondikePile5)
-klondikeDeal(step: 10, pile: solitaireKlondikePile6)
-klondikeDeal(step: 11, pile: solitaireKlondikePile7)
-klondikeDeal(step: 12, pile: solitaireKlondikePile8)
-klondikeDeal(step: 13, pile: solitaireKlondikePile4)
-klondikeDeal(step: 14, pile: solitaireKlondikePile5)
-klondikeDeal(step: 15, pile: solitaireKlondikePile6)
-klondikeDeal(step: 16, pile: solitaireKlondikePile7)
-klondikeDeal(step: 17, pile: solitaireKlondikePile8)
-klondikeDeal(step: 18, pile: solitaireKlondikePile5)
-klondikeDeal(step: 19, pile: solitaireKlondikePile6)
-klondikeDeal(step: 20, pile: solitaireKlondikePile7)
-klondikeDeal(step: 21, pile: solitaireKlondikePile8)
-klondikeDeal(step: 22, pile: solitaireKlondikePile6)
-klondikeDeal(step: 23, pile: solitaireKlondikePile7)
-klondikeDeal(step: 24, pile: solitaireKlondikePile8)
-klondikeDeal(step: 25, pile: solitaireKlondikePile7)
-klondikeDeal(step: 26, pile: solitaireKlondikePile8)
-klondikeDeal(step: 27, pile: solitaireKlondikePile8)
+for (pile, step) in reduce(range(0, 7), [], (piles, row) => concat(piles, range(row + 2, 7 - row))) {
+  klondikeDeal(step: step, pile: $"solitaireKlondikePile{pile}")
+}
 
 rule "solitaireKlondike-deal-finish" {
   when solitaire.table == 1 and solitaireKlondike.stage == 3 and solitaireKlondike.dealStep == 27
@@ -673,14 +639,9 @@ template klondikeReveal(z, pile) {
   }
 }
 
-klondikeReveal(z: 1, pile: solitaireKlondikePile1)
-klondikeReveal(z: 2, pile: solitaireKlondikePile2)
-klondikeReveal(z: 3, pile: solitaireKlondikePile3)
-klondikeReveal(z: 4, pile: solitaireKlondikePile4)
-klondikeReveal(z: 5, pile: solitaireKlondikePile5)
-klondikeReveal(z: 6, pile: solitaireKlondikePile6)
-klondikeReveal(z: 7, pile: solitaireKlondikePile7)
-klondikeReveal(z: 8, pile: solitaireKlondikePile8)
+for z in range(1, 8) {
+  klondikeReveal(z: z, pile: $"solitaireKlondikePile{z}")
+}
 
 rule "solitaireKlondike-attribute-advance" {
   when solitaire.table == 1 and (solitaireKlondike.stage == 0 or solitaireKlondike.stage == 5)

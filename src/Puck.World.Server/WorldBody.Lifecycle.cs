@@ -296,6 +296,7 @@ public sealed partial class WorldBody {
     }
     /// <summary>Teleports to a full pose already expressed in deterministic numerics.</summary>
     public void Pose(FixedVector3 position, FixedQ4816 yawRadians, FixedQ4816 pitchRadians, FixedQ4816 rollRadians) {
+        MoveRestEpoch();
         m_position = position;
         m_yaw = yawRadians;
         // The drive pitch scalar mirrors the posed pitch inside its own clamp, so the next drive frame rebuilds

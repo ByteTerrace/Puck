@@ -1,4 +1,5 @@
 import "../standard/inputs"
+import "../standard/kits"
 import "shapes"
 // Physical Reversi (Othello) on an 8x8 board, played to the World Othello Federation's official rules
 // (https://www.worldothello.org/about/about-othello/othello-rules/official-rules/english): 64 rigid two-faced discs,
@@ -76,50 +77,11 @@ looks: map(["reversiDisc", "reversiCursor"], name => {
   source: creation(prototypeId: name)
 })
 
-kits [
-  {
-    bodyContact: Solid
-    bodyMotionProgram: "walk"
-    collider: box(halfExtents: [0.055, 0.016, 0.055], rotation: [0, 0, 0, 1])
-    motion {
-      facingSnap: true
-      holds [
-        {
-          bond: Free
-          envelope {
-            sinkSpeed: 40
-          }
-          gravity {
-            fall: 46
-            rise: 28
-          }
-          hold: Gravity
-          name: "air"
-        }
-      ]
-      shaping [
-        {
-          along {}
-        }
-      ]
-      speed {
-        value: 0.001
-      }
-      turn {
-        rate: 0.001
-      }
-    }
-    name: "reversiDisc"
-    rigid {
-      angularDamping: 0.05
-      friction: 0.6
-      linearDamping: 0.05
-      mass: 0.04
-      restitution: 0.05
-      rollingFriction: 0.2
-    }
-  }
-]
+pieceKit(
+  name: "reversiDisc",
+  collider: box(halfExtents: [0.055, 0.016, 0.055], rotation: [0, 0, 0, 1]),
+  mass: 0.04
+)
 
 placements {
   placement "reversiTable" {

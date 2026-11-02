@@ -744,7 +744,7 @@ refuses a row the view withholds anything from. Whether a row withholds is decid
 (`WorldStateDisclosure.ReadsWholeRow`: its policy, a cell policy its storage admits, a containing zone), never by
 which cells are hidden now, so every door (`view.Withheld`, observations, whole-row edits, HUD template
 placeholders, presentation bindings, replica row replacements) answers zero, one and many hidden cells alike.
-`worlds/debug/disclosure-probe.puck` runs a second seat through those doors with a `--schedule-dir`. A direct read of a withheld cell is
+`puck disclosure worlds/debug/disclosure-probe.puck` runs a second seat and two sessions through those doors in worlds that differ only in hidden cells and names every door that answers differently. A direct read of a withheld cell is
 refused by name — `[world.state: 'vault'.'$value' is not disclosed to seat2 — its
 visibility withholds it]` — alike for a withheld key and an absent one, so a refusal
 never says which keys exist; a listing shows the row's `hidden` policy (nothing, a
