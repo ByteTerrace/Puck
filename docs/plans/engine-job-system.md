@@ -917,7 +917,7 @@ step (maximum 48) all lie on the static striped monitor face, x269–323 /
 y391–490. Enlarged CPU/GPU crops align geometrically. The sampled stripe
 difference exceeds the small pinned noise and its cause remains unconfirmed.
 
-The final integration (`b63e7191e`, then `d6f1624dfa`) carries the solid
+R2's shadow integration (`b63e7191e`, then `d6f1624dfa`) carries the solid
 versus thin/clipped shadow-exit rule. One selection emits entry, solid-exit
 and thin-exit argument phases; each kept draw contributes an entry and exactly
 one exit to the generated statistics. `d231e5bec` counts the two executions
@@ -925,15 +925,25 @@ with separate wave reductions: 64 lanes of a legal maximum mesh fit a uint
 sum, twice that does not; the existing accumulator carries each addition
 into 64 bits. Selection, arguments and history are unchanged by this fix.
 
-Vulkan synchronization validation passes at all four settled places on this
-exact final artifact: lobby / rim / gallery / meadow read 13,802 / 830 /
-16,842 / 20,675 physical draws, with bakes settled at tick 73 and no warning
-or error. Full Direct3D 12 GPU-based validation, including state tracking and
-synchronized queue validation, passes on the same final artifact: lobby /
-rim / gallery / meadow read 13,853 / 830 / 16,987 / 20,484 physical draws,
-with bakes settled at tick 7 and no warning or error. That leg takes about
-303 seconds; the Vulkan and Direct3D batch stays below its 850-second bound.
-The earlier cold preparation rebuilt 7,242 groups.
+Final handback merge `5a73e11295` includes lead `5679a09f1a`'s GI, job-pool,
+language and simulation work; R2's selection, layout and backend sources are
+unchanged. Vulkan synchronization validation and full Direct3D 12 GPU-based
+validation (state tracking and synchronized queues) pass at all four places
+after bakes settle, without warnings or errors:
+
+| Backend | Bakes settled, tick | Lobby draws | Rim draws | Gallery draws | Meadow draws |
+|---|---:|---:|---:|---:|---:|
+| Vulkan | 369 | 7,186 | 1,298 | 8,925 | 2,506 |
+| Direct3D 12 | 388 | 15,143 | 1,290 | 18,070 | 26,657 |
+
+These current-world validation reads follow each pose by 12 ticks, with the
+same spawn positions and high/native settings; they are not a new matched
+timing pair. Their variance, especially the Vulkan meadow count, remains
+unexplained and belongs in the lead's quiet-window trace. Before this last
+integration, the corrected R2 artifact read 20,675 Vulkan / 20,484 Direct3D 12
+meadow draws. Do not attribute the later count change to an R2 speedup.
+The final full Direct3D leg takes about 394 seconds; both native legs fit
+one 850-second batch. Earlier cold preparation rebuilt 7,242 groups.
 
 Final Release CLI and dual-backend World builds pass with zero warnings/errors.
 Two debug fixtures pass `--reproduce` on the final artifact:

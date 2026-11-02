@@ -731,6 +731,9 @@ system can take, from `dotnet-trace` thread-time samples of the frame thread
   Include R2's unresolved Direct3D 12 lobby reading (68.78 ms produce against
   39.25–40.16 ms CPU controls) in that quiet-window trace; [R2 observations](engine-job-system.md#r2-observations)
   holds the paired counters and GPU pass costs.
+  Include the unmatched final-merge draw-count variance there too: after
+  `5a73e11295`, Vulkan / Direct3D 12 meadow validation reads 2,506 / 26,657
+  draws at high/native settings; its cause is unconfirmed (same observations).
   Owner: the lead.
 - [medium] `SdfMeshPathBake.Dress` rebuilds every draw of every group whenever
   one dynamic slot moved, and for each dynamic group scans `MeshAssetSlots`
