@@ -1,3 +1,4 @@
+import "../standard/seat"
 import "../standard/inputs"
 import "shapes"
 import "solitaire"
@@ -625,47 +626,8 @@ rule "freecell-table-first-deal" {
 // cell remembers whether it was held.
 rule "klondike-seat-presses" {
   mode: Level
-  if board(engaged, kBoard, 1) == 1 and channel(1, confirm) >= 0.5 {
-    kSeat.pickEdge = kSeat.pickDown == 0
-    kSeat.pickDown = 1
-  } else {
-    kSeat.pickEdge = 0
-    kSeat.pickDown = 0
-  }
-  if board(engaged, kBoard, 1) == 1 and channel(1, cancel) >= 0.5 {
-    kSeat.cancelEdge = kSeat.cancelDown == 0
-    kSeat.cancelDown = 1
-  } else {
-    kSeat.cancelEdge = 0
-    kSeat.cancelDown = 0
-  }
-  if board(engaged, kBoard, 1) == 1 and channel(1, forward) >= 0.5 {
-    kSeat.aheadEdge = kSeat.aheadDown == 0
-    kSeat.aheadDown = 1
-  } else {
-    kSeat.aheadEdge = 0
-    kSeat.aheadDown = 0
-  }
-  if board(engaged, kBoard, 1) == 1 and channel(1, forward) <= -0.5 {
-    kSeat.behindEdge = kSeat.behindDown == 0
-    kSeat.behindDown = 1
-  } else {
-    kSeat.behindEdge = 0
-    kSeat.behindDown = 0
-  }
-  if board(engaged, kBoard, 1) == 1 and channel(1, strafe) >= 0.5 {
-    kSeat.rightEdge = kSeat.rightDown == 0
-    kSeat.rightDown = 1
-  } else {
-    kSeat.rightEdge = 0
-    kSeat.rightDown = 0
-  }
-  if board(engaged, kBoard, 1) == 1 and channel(1, strafe) <= -0.5 {
-    kSeat.leftEdge = kSeat.leftDown == 0
-    kSeat.leftDown = 1
-  } else {
-    kSeat.leftEdge = 0
-    kSeat.leftDown = 0
+  for button in seatButtons {
+    seatPress(seat: kSeat, boardName: kBoard, button: button)
   }
 }
 

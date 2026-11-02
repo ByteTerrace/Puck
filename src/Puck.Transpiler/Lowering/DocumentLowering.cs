@@ -1488,6 +1488,8 @@ public static partial class DocumentLowering {
     /// bound. A vocabulary can use this to preserve reference provenance through later document rewrites.</param>
     /// <param name="initializeInvocation">An optional initializer run after declarations and arguments are bound,
     /// before the body is lowered.</param>
+    /// <param name="inRuleBody">Whether the call stands in a rule body, the one place a <c>rule template</c> is
+    /// called and a document template is not.</param>
     public static void ExpandTemplate(
         CallExpressionNode call,
         JsonObject target,
@@ -1495,7 +1497,8 @@ public static partial class DocumentLowering {
         Action<StatementNode, JsonObject, DocumentScope> sink,
         Dictionary<string, object?>? annotations = null,
         Func<TemplateParameterNode, ExpressionNode, DocumentScope, ExpressionNode>? bindArgument = null,
-        Action<DocumentScope, IReadOnlyList<StatementNode>>? initializeInvocation = null
+        Action<DocumentScope, IReadOnlyList<StatementNode>>? initializeInvocation = null,
+        bool inRuleBody = false
     ) {
         ArgumentNullException.ThrowIfNull(call);
         ArgumentNullException.ThrowIfNull(scope);
@@ -1515,6 +1518,16 @@ public static partial class DocumentLowering {
             scope.Diagnostics.ReportError(
                 code: PuckDiagnosticCodes.InvalidValue,
                 message: $"Unknown module or template '{call.Name}'.",
+                span: call.Span
+            );
+            return;
+        }
+        if (template.IsRuleBody != inRuleBody) {
+            scope.Diagnostics.ReportError(
+                code: PuckDiagnosticCodes.InvalidValue,
+                message: (template.IsRuleBody
+                    ? $"'{templateName}' is a rule template: its locals, gate and effects splice into a rule body, so it is called inside one"
+                    : $"'{templateName}' is a document template; a rule body calls a 'rule template'"),
                 span: call.Span
             );
             return;
@@ -1909,6 +1922,18 @@ public static partial class DocumentLowering {
         ArgumentNullException.ThrowIfNull(scope);
 
         foreach (var statement in statements) {
+            // A rule template's call splices its body here under its bound arguments, as a `for` does its iterations.
+            if ((statement is ExpressionStatementNode { Expression: CallExpressionNode call }) && scope.Templates.TryGetValue(key: call.Name, value: out var template) && template.IsRuleBody) {
+                var spliced = new List<(StatementNode Statement, DocumentScope Scope)>();
+
+                ExpandTemplate(call: call, inRuleBody: true, scope: scope, sink: (member, _, invocation) => spliced.Add(item: (member, invocation)), target: []);
+                foreach (var (member, invocation) in spliced) {
+                    foreach (var flattened in ExpandBody(scope: invocation, statements: [member])) {
+                        yield return flattened;
+                    }
+                }
+                continue;
+            }
             if (statement is not ForStatementNode loop) {
                 yield return (statement, scope);
 

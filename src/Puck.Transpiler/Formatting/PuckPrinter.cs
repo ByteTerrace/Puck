@@ -581,7 +581,7 @@ public static partial class PuckPrinter {
                         break;
                     }
                 case TemplateNode template: {
-                        m_builder.Append(value: (template.IsModule ? "module" : "template"));
+                        m_builder.Append(value: (template.IsModule ? "module" : (template.IsRuleBody ? "rule template" : "template")));
                         InlineHeader(trivia: template.Trivia);
                         m_builder.Append(value: ' ').Append(value: template.Name).Append(value: '(');
                         for (var index = 0; (index < template.Parameters.Count); index++) {

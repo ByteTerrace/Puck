@@ -222,6 +222,9 @@ public sealed record TemplateNode(
 ) {
     /// <summary>Gets whether this declaration was authored as a typed <c>module</c>.</summary>
     public bool IsModule { get; init; }
+    /// <summary>Gets whether this declaration was authored as a <c>rule template</c>: its body is rule-body statements
+    /// (locals, a gate, effects), spliced into the rule body that calls it as a rule-body <c>for</c> is.</summary>
+    public bool IsRuleBody { get; init; }
     /// <summary>Gets the defining source path when this declaration came through an import.</summary>
     public string? DefinitionPath { get; init; }
 }

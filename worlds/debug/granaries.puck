@@ -1,3 +1,4 @@
+import "../standard/seat"
 import "../standard/inputs"
 import "shapes"
 
@@ -668,33 +669,8 @@ rule "granary-inspect-sku-empty" {
 
 rule "granary-seat-presses" {
   mode: Level
-  if board(engaged, granaryBoard, 1) == 1 and channel(1, forward) >= 0.5 {
-    granarySeat.aheadEdge = granarySeat.aheadDown == 0
-    granarySeat.aheadDown = 1
-  } else {
-    granarySeat.aheadEdge = 0
-    granarySeat.aheadDown = 0
-  }
-  if board(engaged, granaryBoard, 1) == 1 and channel(1, forward) <= -0.5 {
-    granarySeat.behindEdge = granarySeat.behindDown == 0
-    granarySeat.behindDown = 1
-  } else {
-    granarySeat.behindEdge = 0
-    granarySeat.behindDown = 0
-  }
-  if board(engaged, granaryBoard, 1) == 1 and channel(1, strafe) >= 0.5 {
-    granarySeat.rightEdge = granarySeat.rightDown == 0
-    granarySeat.rightDown = 1
-  } else {
-    granarySeat.rightEdge = 0
-    granarySeat.rightDown = 0
-  }
-  if board(engaged, granaryBoard, 1) == 1 and channel(1, strafe) <= -0.5 {
-    granarySeat.leftEdge = granarySeat.leftDown == 0
-    granarySeat.leftDown = 1
-  } else {
-    granarySeat.leftEdge = 0
-    granarySeat.leftDown = 0
+  for button in seatSteps {
+    seatPress(seat: granarySeat, boardName: granaryBoard, button: button)
   }
 }
 

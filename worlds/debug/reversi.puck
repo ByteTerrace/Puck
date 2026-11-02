@@ -1,3 +1,4 @@
+import "../standard/seat"
 import "../standard/inputs"
 import "../standard/kits"
 import "shapes"
@@ -445,9 +446,9 @@ rules "" when reversiHold == reversiSettleTicks and search(ply) == 0 {
   // Anything else that changed is illegal, and is put right below: a disc showing a face the position does not give
   // its cell is turned over (so a missing flip is no illegality, only a change put right), a stray goes back.
   rule "reversi-read-illegal" {
-    when ((reversiChangedCount > 0 or reversiCollisions > 0) and
-      reversiLegal == 0 and
-      (board(mask, reversiSeen, 1, 2) & ~((board(mask, reversiBoard, 1, 2)))) != 0)
+    when (reversiChangedCount > 0 or reversiCollisions > 0) and reversiLegal == 0 and (
+        board(mask, reversiSeen, 1, 2) & ~((board(mask, reversiBoard, 1, 2)))
+      ) != 0
     reversiIllegal += 1
   }
 
@@ -781,40 +782,8 @@ search {
 // cell remembers whether it was held.
 rule "reversi-seat-presses" {
   mode: Level
-  if board(engaged, reversiBoard, 1) == 1 and channel(1, confirm) >= 0.5 {
-    reversiSeat.pickEdge = reversiSeat.pickDown == 0
-    reversiSeat.pickDown = 1
-  } else {
-    reversiSeat.pickEdge = 0
-    reversiSeat.pickDown = 0
-  }
-  if board(engaged, reversiBoard, 1) == 1 and channel(1, forward) >= 0.5 {
-    reversiSeat.aheadEdge = reversiSeat.aheadDown == 0
-    reversiSeat.aheadDown = 1
-  } else {
-    reversiSeat.aheadEdge = 0
-    reversiSeat.aheadDown = 0
-  }
-  if board(engaged, reversiBoard, 1) == 1 and channel(1, forward) <= -0.5 {
-    reversiSeat.behindEdge = reversiSeat.behindDown == 0
-    reversiSeat.behindDown = 1
-  } else {
-    reversiSeat.behindEdge = 0
-    reversiSeat.behindDown = 0
-  }
-  if board(engaged, reversiBoard, 1) == 1 and channel(1, strafe) >= 0.5 {
-    reversiSeat.rightEdge = reversiSeat.rightDown == 0
-    reversiSeat.rightDown = 1
-  } else {
-    reversiSeat.rightEdge = 0
-    reversiSeat.rightDown = 0
-  }
-  if board(engaged, reversiBoard, 1) == 1 and channel(1, strafe) <= -0.5 {
-    reversiSeat.leftEdge = reversiSeat.leftDown == 0
-    reversiSeat.leftDown = 1
-  } else {
-    reversiSeat.leftEdge = 0
-    reversiSeat.leftDown = 0
+  for button in filter(seatButtons, button => button.name != "cancel") {
+    seatPress(seat: reversiSeat, boardName: reversiBoard, button: button)
   }
 }
 

@@ -177,6 +177,9 @@ public static partial class WorldDocumentEmitter {
                     return new Syntax.Literal(Value: constant);
                 case Syntax.SourceAccess access when (Constant(access: access) is { } constant):
                     return new Syntax.Literal(Value: constant);
+                // A read through a compile-time object or array (a loop's record, a let's table) is the number it reads.
+                case Syntax.SourceAccess or Syntax.SourceIndex when (HasBoundRoot(node: node) && (Number(value: DocumentLowering.LowerValue(ToCompileTime(node: node, operand: operand), scope)) is { } read)):
+                    return new Syntax.Literal(Value: read);
                 case Syntax.Unary unary: {
                         var value = Fold(node: unary.Operand, operand: operand);
 
@@ -581,12 +584,17 @@ public static partial class WorldDocumentEmitter {
         }
         private bool HasBoundRoot(Syntax.SyntaxNode node) {
             if (HasRuntimeRoot(node: node)) { return false; }
-            while (true) {
-                if ((QualifiedName.From(syntax: node)?.ToString() is { } qualified) && scope.TryLowerBinding(qualified, out _)) { return true; }
+            // A binding a key or member is read through that holds a name (a template parameter or loop variable
+            // holding "goSeat") names a row, so what follows it is that row's key or member, read or written as the
+            // row spelled out would be; only a binding holding an object or array is read through at compile time.
+            for (var whole = true; ; whole = false) {
+                if ((QualifiedName.From(syntax: node)?.ToString() is { } qualified) && scope.TryLowerBinding(qualified, out var bound)) {
+                    return (whole || !((bound is JsonValue named) && named.TryGetValue<string>(value: out _)));
+                }
                 switch (node) {
                     case Syntax.SourceAccess access: node = access.Target; break;
                     case Syntax.SourceIndex index: node = index.Target; break;
-                    default: return ((node is Syntax.SourceName { Quoted: false } name) && scope.TryLowerBinding(name.Name, out _));
+                    default: return false;
                 }
             }
         }

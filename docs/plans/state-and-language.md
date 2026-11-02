@@ -1056,7 +1056,17 @@ and chess (`worlds/debug/go.puck` around `:1153` and its siblings).
 
 Decided: fold constants now; then (a), since the shared part of the
 seat-input rules is effects and locals as well as gates. The fold landed (see
-above); the `ternary-fold` and `constant-fold` pairs hold.
+above); the `ternary-fold` and `constant-fold` pairs hold. The rule template
+landed as `rule template name(p, q = d) { … }`, its body parsed as rule-body
+statements and spliced by `DocumentLowering.ExpandBody` where a rule body calls
+it, under its bound arguments, as a rule-body `for` splices; a document template
+called in a rule body, or a rule template outside one, is refused by name. A
+binding a key or member is read through that holds a name (`seat` holding
+`"goSeat"`) names that row, in a read and as a write target alike. The standard's
+`seat.puck` holds the seat buttons (`seatButtons`, `seatSteps`), `seatHeld` and
+`seatPress`; Go, Alchemy, Reversi, the card table and the granaries call
+`seatPress` in a `for`, chess its `seatHeld`, and every document is unchanged.
+The hand-made edge cells stay. The corpus holds `rule-template`.
 
 **G15 — Enum words in a `let` and in a row.** A row or a template's body takes
 a closed-vocabulary word bare and refuses it quoted (`bond: "Surface"` in a

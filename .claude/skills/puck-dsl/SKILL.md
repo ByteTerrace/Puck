@@ -44,7 +44,9 @@ A document's `schema:` field selects its vocabulary, never the filename.
   to the object written out; `function name(p, q = d) = expr` names a value
   or a guard, inlined where it is called (a document value, a gate, an
   effect), never recursive; `template name(p, q = d) { }` a
-  parametric block; `import "name" [as alias]`, `export` and
+  parametric block; `rule template name(p) { }` a block of rule-body
+  statements (locals, `when`, `if`, effects) a rule body calls and splices
+  (`worlds/standard/seat.puck`'s `seatPress`); `import "name" [as alias]`, `export` and
   `use m as a(args)` compose modules.
 - **An import names, never spells a file.** `import "skies"`, not
   `import "skies.puck"` (**PUCK121**). The named file decides what comes in: a

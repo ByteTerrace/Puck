@@ -1,0 +1,34 @@
+// A seated player's buttons at a table game: which channel each reads and which way it is pressed, the test for one
+// held past half way, and the press it makes. A module library: it hands its importers lets, a function and a rule
+// template, and emits no document.
+
+// The buttons a table game reads, each a channel past half way in one direction: pick and cancel, and a step each way
+// across the board.
+let seatSteps = [
+  { name: "ahead", channel: "forward", sign: 1 }
+  { name: "behind", channel: "forward", sign: -1 }
+  { name: "right", channel: "strafe", sign: 1 }
+  { name: "left", channel: "strafe", sign: -1 }
+]
+let seatButtons = concat(
+  [{ name: "pick", channel: "confirm", sign: 1 }, { name: "cancel", channel: "cancel", sign: 1 }],
+  seatSteps
+)
+
+// Seat 1 holds `channelName` past half way in the direction `sign` names.
+function seatPast(channelName, sign) = (sign > 0) ? channel(1, channelName) >= 0.5 : channel(1, channelName) <= -0.5
+
+// Seat 1 is at `boardName` and holds `channelName` past half way in the direction `sign` names.
+function seatHeld(boardName, channelName, sign = 1) = board(engaged, boardName, 1) == 1 and seatPast(channelName, sign)
+
+// One button's press this tick, in the seat row's `<button>Edge` and `<button>Down` cells: the edge is 1 on the tick the
+// button goes past half way, and the down cell remembers whether it was held.
+rule template seatPress(seat, boardName, button) {
+  if seatHeld(boardName, button.channel, button.sign) {
+    seat[$"{button.name}Edge"] = seat[$"{button.name}Down"] == 0
+    seat[$"{button.name}Down"] = 1
+  } else {
+    seat[$"{button.name}Edge"] = 0
+    seat[$"{button.name}Down"] = 0
+  }
+}

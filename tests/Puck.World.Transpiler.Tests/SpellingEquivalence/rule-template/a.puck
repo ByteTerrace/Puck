@@ -1,0 +1,34 @@
+// A rule template's body spliced into a rule is the body written out: its locals, gate and effects, a parameter naming
+// the row it writes and a loop's record choosing its key and its arm.
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+state {
+  world {
+    table pad {
+      upDown = 0
+      upEdge = 0
+      downDown = 0
+      downEdge = 0
+    }
+    slot level = 0
+  }
+}
+
+let buttons = [{ name: "up", sign: 1 }, { name: "down", sign: -1 }]
+
+rule template press(row, button) {
+  if ((button.sign > 0) ? level >= 1 : level <= -1) {
+    row[$"{button.name}Edge"] = row[$"{button.name}Down"] == 0
+    row[$"{button.name}Down"] = 1
+  } else {
+    row[$"{button.name}Down"] = 0
+  }
+}
+
+rule "presses" {
+  when level
+  for button in buttons {
+    press(row: pad, button: button)
+  }
+}

@@ -1484,6 +1484,13 @@ public static partial class WorldDocumentEmitter {
     // Every effect that addresses one cell resolves its target here, so an assignment, a removal and a schedule
     // agree on what a target spelling means and refuse the same targets.
     private static EffectTarget ResolveEffectTarget(RowRefNode target, DocumentScope scope) {
+        // A row named by a binding that holds a name (a template parameter, a loop variable) is that row, as the same
+        // name read in an expression is.
+        if (!GetPoolBindings(scope: scope).Contains(item: target.Name) && IdentifierSpelling.IsName(text: target.Name) &&
+            scope.TryLowerBinding(target.Name, out var boundRow) && (boundRow is JsonValue rowName) && rowName.TryGetValue<string>(value: out var named) &&
+            !scope.TryRefuseRead(name: target.Name, span: target.Span)) {
+            target = target with { Name = named };
+        }
         if (GetOrCreateDerivedState(scope: scope).ContainsKey(key: target.Name)) {
             scope.Diagnostics.ReportError(code: PuckDiagnosticCodes.InvalidValue,
                 message: $"Derived state '{target.Name}' is read-only; assign to its source row", span: target.Span);
