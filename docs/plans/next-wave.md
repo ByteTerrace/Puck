@@ -25,7 +25,16 @@ Parallel lanes, with no shared files except where an order is named:
 2. **relight-lockstep** (specialist). Under lockstep, quantize the sun on a
    fixed grid, never against the last capture (that comparison makes the image
    depend on when a run started). The sky term is under lockstep too. Proof:
-   relights per tick, and a day-cycle sweep that completes.
+   relights per tick, and a day-cycle sweep that completes. The lane also
+   takes the owner's night notes ([Lighting and GI](open-items.md#lighting-and-gi)):
+   - the jump to night, when stale daytime bounce and slow exposure adaptation
+     leave the scene black with glowing canopies;
+   - the near-whole-frame changes about every 2.4 s;
+   - a look for a captured moment of the dusk glow.
+
+   The settled night that reads as a dim day is fixed as an authored standard
+   night style (exposure curve, low-light desaturation and blue shift, the
+   moon), with only the mechanisms in the engine.
 3. **memory-deck** (specialist). Attribution first: about 8.4 GB is
    unattributed. Then:
    - the mesh library keeps claimed meshes findable and budgets only
@@ -52,6 +61,15 @@ Parallel lanes, with no shared files except where an order is named:
    the Superellipsoid's far field ([certified field contact](open-items.md#certified-field-contact))
    and small radius ([the valley's terrain](open-items.md#the-valleys-terrain));
    the trial's scoring is in [agent tooling](open-items.md#agent-tooling-and-skills).
+9. **deploy-fix** (implementer, small). `ReusePublishedContainerAsync` asks the
+   registry for the known `<repo>:<commit>` tag and treats only a not-found
+   answer as "not published". It never lists the catalog, which the ABAC
+   publishing identity is deliberately denied
+   ([Delivery](open-items.md#delivery-launcher-and-ci)).
+10. **tree-research** (read-only, beside the wave). How good stylized and
+    realistic trees get their structure and variety, applied through Puck's
+    SDF bake, so a foliage lane starts from references
+    ([Debug world content](open-items.md#debug-world-content)).
 
 Later, with their designs done: the [rule-faults](rule-faults.md) steps, the
 [transmission](transmission.md) lanes, and [disclosure](disclosure.md) steps
@@ -59,22 +77,16 @@ Later, with their designs done: the [rule-faults](rule-faults.md) steps, the
 
 ## Before the owner's go
 
-- Prune the merged lanes' worktrees (`git worktree list`; delete a branch
-  only after searching `docs/` and `.claude/` for its name).
-- Add the production deploy fix as a small lane: ask for the known image tag
-  instead of listing the registry
-  ([Delivery](open-items.md#delivery-launcher-and-ci)).
-- Fold the owner's night-lighting notes into relight-lockstep's brief: the
-  jump to night, the dim-day look, the authored night style, the dusk glow
-  ([Lighting and GI](open-items.md#lighting-and-gi)).
-- Run a read-only tree research round beside the wave, so a foliage lane
-  starts from references ([Debug world content](open-items.md#debug-world-content)).
 - The lift waits on the owner's go.
+- The skill-eval program finishes first, so the lanes start on proven
+  `delegate` and orchestration skills
+  ([agent tooling](open-items.md#agent-tooling-and-skills)).
 - Design the player menu, player saves and the hub to worlds shape before any
   code ([the owner's rulings](../decisions/play.md#the-game)).
   1. A read-only grounding pass finds what already exists: identity and
      owned worlds, checkpoints and persistence, crossings and transfers, the
-     avatar studio, `world.save`, `quit`, the wheel and the UI plan's tree.
+     avatar studio, `world.save`, `quit`, the wheel and the UI plan's tree
+     ([done](next-wave/ground-hub.md)).
   2. A design memo reasons abstractly through:
      - the hub as the release's launching point;
      - character creation and selection;

@@ -2884,6 +2884,19 @@ Owner: specialist lane (puck-world, build and hot reload, input) · ordinary · 
 Owner: debug-world content lanes, each started by the owner's direction ·
 ordinary · Next: new content and art on the owner's call.
 
+- [high] Player-state defects found grounding the hub design
+  ([ground-hub.md](next-wave/ground-hub.md)). The design memo decides the
+  shape; these are defects whatever it decides:
+  - `WorldInstanceHost.DurableImages` is never assigned, so a persisted
+    destination loses its state when the process quits;
+  - `MachineCreationRequest.SavePath` is never set, so a cartridge's battery
+    save dies with the process;
+  - `WorldOwnedWorlds.IdentityBase` copies the whole host world into every
+    identity (30 MB in the debug world);
+  - `world.save` refuses on the debug world: it names the loop-generated
+    `sheddingRack1` as a parent, which `shedding.puck` does not export. Note
+    that `world.save` writes the world's source when it succeeds, so never run
+    it as a read against a working tree.
 - [high] The trees read as inflatable toys (owner's walkthrough, the lawn).
   - Canopies are a few smooth, drooping blended lobes, with no branch
     structure, leaf clumps, gaps or silhouette breakup.
