@@ -916,6 +916,131 @@
                   "additionalProperties": false,
                   "default": null,
                   "description": "The slot\u0027s own cel style (ToonStyleDocument, on unless it says enabled: false, which keeps the slot continuous); null shades the slot with the world\u0027s default style (render.toon)."
+                },
+                "toonSelect": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "state": {
+                      "type": "string",
+                      "description": "The state.\u003Crow\u003E[.\u003Ckey\u003E] binding naming the cell."
+                    },
+                    "cases": {
+                      "type": "array",
+                      "items": {
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "enabled": {
+                            "type": [
+                              "boolean",
+                              "null"
+                            ],
+                            "default": null,
+                            "description": "Whether the style bands; absent is on. False on a palette row keeps that material continuous whatever the world\u0027s default is; false on render.toon boots the world\u0027s default off until the lever turns it on, which a style with every value then bands with."
+                          },
+                          "threshold": {
+                            "type": [
+                              "number",
+                              "null"
+                            ],
+                            "default": null,
+                            "description": "Diffuse band threshold in [0, 1]."
+                          },
+                          "softness": {
+                            "type": [
+                              "number",
+                              "null"
+                            ],
+                            "default": null,
+                            "description": "Full terminator width in [0.001, 0.5]."
+                          },
+                          "shadowTint": {
+                            "default": null,
+                            "description": "Shadow-band reflectance, three linear RGB values in [0, 1]."
+                          },
+                          "outlineWidth": {
+                            "type": [
+                              "number",
+                              "null"
+                            ],
+                            "default": null,
+                            "description": "Close outline radius in output pixels, in [0, 4]; zero disables outlines."
+                          },
+                          "outlineDistance": {
+                            "type": [
+                              "number",
+                              "null"
+                            ],
+                            "default": null,
+                            "description": "Distance in metres at which the outline radius halves, in [0.1, 1000]."
+                          },
+                          "outlineNormal": {
+                            "type": [
+                              "number",
+                              "null"
+                            ],
+                            "default": null,
+                            "description": "Crease normal cosine in [0, 0.95]."
+                          },
+                          "outlineTint": {
+                            "default": null,
+                            "description": "Outline multiplier, three linear RGB values in [0, 1]."
+                          },
+                          "specularSize": {
+                            "type": [
+                              "number",
+                              "null"
+                            ],
+                            "default": null,
+                            "description": "Highlight size as one minus the half-vector cosine, in [0.001, 0.25]."
+                          },
+                          "exposure": {
+                            "type": [
+                              "number",
+                              "null"
+                            ],
+                            "default": null,
+                            "description": "Reflected-light exposure compensation in stops, in [-4, 4]."
+                          },
+                          "shoulder": {
+                            "type": [
+                              "number",
+                              "null"
+                            ],
+                            "default": null,
+                            "description": "Hue-preserving highlight compression in [0, 2]; zero disables it."
+                          },
+                          "band": {
+                            "enum": [
+                              "Visibility",
+                              "Combined"
+                            ],
+                            "default": "Visibility",
+                            "description": "How the band treats a light\u0027s shadow visibility: Visibility (the default) keeps the penumbra, Combined snaps it to the band\u0027s edge.",
+                            "x-enumDescriptions": {
+                              "Visibility": "The band shapes the light\u0027s cosine and the shadow visibility multiplies it after: band(cosine) \u00D7 visibility, so a filtered penumbra keeps its softness and colour.",
+                              "Combined": "The band shapes the cosine and the visibility together: band(cosine \u00D7 visibility), the harder look in which a penumbra snaps to the band\u0027s edge."
+                            }
+                          }
+                        },
+                        "additionalProperties": false,
+                        "description": "A cel style on the wire (SdfToon): the world\u0027s default style (render.toon, which the live world.toon lever overrides) and a palette row\u0027s own (Toon) are this one shape, so a style authored once (the standard\u0027s styles.puck) serves both. The engine holds no look of its own: a style that bands authors every value, and one that says enabled: false needs none. Presentation only; no field enters simulation state or the bake."
+                      },
+                      "description": "The styles, the first for the value zero; each is a whole style (ToonStyleDocument), enabled: false keeping the slot continuous."
+                    }
+                  },
+                  "required": [
+                    "state",
+                    "cases"
+                  ],
+                  "additionalProperties": false,
+                  "default": null,
+                  "description": "The slot\u0027s styles chosen live by a state cell (PaletteToonSelectDocument), whose case replaces Toon while the cell names one; null keeps Toon."
                 }
               },
               "required": [

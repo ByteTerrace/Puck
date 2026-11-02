@@ -203,9 +203,8 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   nothing; the window and the pattern's tile are a pair. A side is queried
   wherever the light's diffuse response is non-zero, which for a wrapped
   material reaches past the terminator to `n·l > -wrap` (`sdfMaterialWrap`);
-  such a side lets casters within its own body's depth transmit
-  (`sdfMeshShadowTransmission`), or the wrap would shadow itself away in the
-  open. A side the response does not reach is never queried: its slot holds `SDF_SHADOW_UNQUERIED`
+  such a side reads the cascade's exit layer (below), or the wrap would shadow
+  itself away in the open. A side the response does not reach is never queried: its slot holds `SDF_SHADOW_UNQUERIED`
   (`frame/sdf-shadow-visibility.hlsli`), which decodes as fully visible, and
   the window's shadow average takes only queried pixels (`sdfShadowQueried`).
   An unmeasured slot averaged in lights a one-pixel line along every
@@ -224,7 +223,13 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   surface pass sees turned from the light compares against the exit layer, so
   its own body lets a wrapped material's light through while any other solid in
   front shadows it; one facing the light keeps the depth, which holds no wall's
-  far face to leak light along the wall's foot. A pipeline description field
+  far face to leak light along the wall's foot. Winding says where light leaves
+  only for a draw that encloses a solid (`SdfMeshDraw.EnclosesSolid`); any other
+  draw (an open authored sheet, a portal-clipped body, a mirrored draw) enters
+  the exit layer whole, through the depth's cull-none pipeline, so it still
+  shadows a wrapped side behind it. A receiver turned from the light offsets
+  straight toward the light: an offset along its reversed face normal reaches
+  `1 / (n·l)` times as far and passes a near blocker. A pipeline description field
   that changes the pipeline must enter `GpuPassPipelineKey`: the cache shares one
   pipeline per key, so a lease differing only in an unkeyed field silently gets
   the other's pipeline (the exit layer then holds the depth's faces).
@@ -648,8 +653,10 @@ wrong. The contracts that bite most often:
   counter-clockwise face front (`GpuGraphicsPipelineDescription`, the two
   pipeline factories), and the opaque mesh pass culls back faces
   (`SdfMeshRasterPass.Description`; a cascade's exit layer culls front faces
-  seen from the light, and its depth and the glass pipeline cull nothing). A mesh not from the bake is drawn in both windings
-  (`WorldPlacementStamper.MeshOf`). Probe facing with `SV_IsFrontFace` in the
+  seen from the light, and its depth and the glass pipeline cull nothing). An
+  authored mesh whose triangles close a volume is wound outward like the bake's;
+  any other authored mesh is drawn in both windings and does not enclose
+  (`WorldPlacementStamper.MeshOf`, `SdfMesh.Encloses`). Probe facing with `SV_IsFrontFace` in the
   mesh fragment stage and `world.debug-view depth`, on both backends.
 - **A mesh is a function of its geometry.** Groups are keyed by
   `SdfMeshGeometryBuilder`; anything the bake samples that the instructions do

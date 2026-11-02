@@ -151,6 +151,9 @@ public static partial class CreationCanonicalizer {
         foreach (var refusal in (entry.Toon?.Refusals(path: $"palette[{index}].toon") ?? [])) {
             errors.Add(item: new(Message: $"{refusal}.", Path: $"palette[{index}].toon"));
         }
+        foreach (var refusal in (entry.ToonSelect?.Refusals(path: $"palette[{index}].toonSelect") ?? [])) {
+            errors.Add(item: new(Message: $"{refusal}.", Path: $"palette[{index}].toonSelect"));
+        }
 
         void Color(string? value, string name) {
             if ((value is not null) && !HexColor.TryParse(rgb: out _, value: value) && !HexColor.IsStateBinding(value: value)) {
