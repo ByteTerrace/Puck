@@ -324,7 +324,7 @@ actor)` (6), `Session(request)` (7), `Designation(designation, actor)` (8),
 `FederatedIntents(held)` (20), `Departure(transferId, slot, restored)` (21),
 `Crossing(slot, source frame, destination frame)` (23: a portal pair standing
 in one world carrying its body in place, taped by `WorldServer.CrossingTap`
-and re-applied through `WorldServer.ApplyInPlaceCrossing`), and
+and re-applied through `WorldServer.TryApplyInPlaceCrossing`), and
 `SeatIdentity(slot, projection)` (22: a fork's switch of a rebound seat to the live owned identity, applied at the head
 of the tick it is recorded on). Every switch and every home adoption a re-drive binds under one identity id binds the
 escrow's one detached identity for that id (`WorldTransferEscrow.TryBindDetached`), for the whole re-drive and cleared
@@ -348,7 +348,7 @@ refuses is still taped and reproduces as the identical refusal. **`MutationTap`
 lives on `WorldServer`, not the loopback**,
 firing in `ApplyEnvelope`'s `Mutation` arm — the one ingress a local write, an
 admitted socket peer's write, and a traveller's submission forwarded by its
-source authority (`WorldForwardedAuthority.TryApplySubmission`) all share, each
+source authority (`WorldLocalForwardedAuthority.TryApplySubmission`) all share, each
 carrying the acting principal its own envelope stamped. `MutationOutcomeTap`
 fires beside it, once the SAME tick's `Step` has drained and applied the
 mutation — the entry's `Outcome` field; `ApplyEnvelope` is the ONLY caller
@@ -470,7 +470,7 @@ is faithful re-execution of the captured submission/intent stream from a
 boot-anchored snapshot. A mid-session document edit IS re-applied, through
 the same buffered mutation door the live session used — which is re-execution,
 not a stored effect being replayed, so the side-effect-free property is
-unchanged: the pipeline touches the shadow server's own document only. A rule-fired `ActionEffect.Save` DOES re-derive deterministically
+unchanged: the pipeline touches the shadow server's own document only. A rule-fired `WorldEffect.Save` DOES re-derive deterministically
 during a drive, exactly like any other rule effect (the same gate, the same
 tick), but its tap is engine I/O — `WorldPostBuildWiring`'s live closure
 writes the world's own loaded file — so `WorldReplaySnapshot.Drive` wires its
@@ -479,7 +479,7 @@ save is SUPPRESSED, never reaching disk, and named on stderr
 (`[replay: save effect suppressed …]`, once per fire) rather than left
 indistinguishable from a rule that never fired. Suppressing it cannot move the
 population hash — the sim state after a tick carrying a fired save is bit-identical
-to a tick without one (`ActionEffect.Save`'s own remarks) — so a
+to a tick without one (`WorldEffect.Save`'s own remarks) — so a
 `replay.verify` MATCH is unaffected either way; proven by a fresh-process
 verify leaving the recorded world file's mtime untouched while the hash still
 matches.

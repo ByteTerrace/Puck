@@ -225,7 +225,7 @@ laws exercise that boundary.
   a smaller single shape stays whole, since locked seams tripled a terrain sector's first level. A mesh that would
   fill more than `SdfMeshChunks.MostChunks` 8 m bins takes bins of twice the side until it fills no more: the world
   group's far ground cut at 8 m made 160,000 draws; the former CPU
-  `SdfWorldPassRecorder.Choose` culled and levelled each for every pass, and
+  per-pass selection culled and levelled each for every pass, and
   the frame took 700 ms, starving the bake of dispatches. R2 now selects them
   in `frame/sdf-mesh-selection.hlsli` through the existing counted indirect
   path; chunk sizing still controls retained geometry and candidate work.
@@ -246,7 +246,7 @@ laws exercise that boundary.
   (`WorldCreationInstances.Emit`). A glass draw (`SdfMeshDraw.Glass`) is drawn by the
   glass pass alone and stays out of the mesh pass, the cascades and the
   irradiance scene (`SdfMeshIrradianceScene.IsStatic`).
-- **Static features declare their spacing.** `WorldPlacementStamper.ShapeDetail`
+- **Static features declare their spacing.** `WorldPlacementStamper.StaticInstanceVisitor.ShapeDetail`
   feeds the existing `SdfInstanceRange.Detail` refinement regions from authored
   geometry: an eighth of a sweep's smaller radius, a quarter of a shell's
   thickness or a rounded profile's radius, a thirty-second of a warped shape's

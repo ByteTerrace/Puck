@@ -310,8 +310,8 @@ so the writer carries no text policy of its own.
 
 Authority input publications reconcile in `WorldClientSeats.ClearAnalog`, the
 shared end-of-step seat lifecycle used by headless and presented hosts. Do not
-put epoch, source rearming, or mapping synchronization only in
-`WorldSimulation.PublishSeats`: a headless host must receive every boundary too,
+put epoch, source rearming, or mapping synchronization (`WorldSeatBindings.SyncRoute`)
+only in a path a presented host runs: a headless host must receive every boundary too,
 including boundaries which do not change its authority route.
 
 Every rendered slot's `Pressed` state reflects the physical source in
@@ -371,7 +371,7 @@ layers on `(family, state)` — a later layer overrides a re-declared key IN
 PLACE, new keys append, so precedence order is authored primarily by the
 layer that ships the vocabulary. The seat's ACTIVE group derives as: first
 matching context row's group (document order) → the seat's requested group
-(`WorldSeatBindings.SetActiveGroup`, the mode pointer) → the profile default.
+(`PagedInputBindings.SetActiveGroup`, the mode pointer) → the profile default.
 A family is one of three kinds: a BUILT-IN engine family
 (`WorldContextFamilies` — the output of one per-seat single-valued state
 machine): `roster` publishes `unjoined|claimed|pending|active`, `engagement`

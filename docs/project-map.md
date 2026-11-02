@@ -274,8 +274,8 @@ Cross-backend parity has one on-demand check: `puck parity` boots the real `Puck
 
 ## Experimental projects
 
-`experimental/` holds `Puck.BareMetal` (freestanding Native AOT runtime, UEFI
-kernels, direct hardware bring-up), `Puck.Platform.Switch`, and the quarantined `Puck.Post`, `Puck.Bench`,
+`experimental/` holds `experimental/Puck.BareMetal` (freestanding Native AOT runtime, UEFI
+kernels, direct hardware bring-up), `experimental/Puck.Platform.Switch`, and the quarantined `experimental/Puck.Post`, `experimental/Puck.Bench`,
 and both `scripts/` trees (`scripts/world`, `scripts/recording`).
 The quarantine rules—read as prior art, never build, run, fix, or revive —
 live in

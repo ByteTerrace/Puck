@@ -914,11 +914,9 @@ viewports after that placement.
 Both rendered hosts hold the completed simulation tick while a tick-scheduled capture is owed.
 Repeated window resizes can delay frame production, but cannot advance the capture to a later tick
 or leave it blocking the next scheduled capture. A pending capture presents bound state and body
-poses at fraction one; its image, region tick and state hash describe the scheduled tick
-(`WorldTemporalCaptureLawTests.AWindowedCapturePinsItsClockAndBodyPoseAndReleasesTheFractionAfterServing`). The
+poses at fraction one; its image, region tick and state hash describe the scheduled tick. The
 swapchain follows the window's client extent while the world's logical frame extent stays fixed.
-`WorldCaptureSchedulerLawTests.AWindowResizeStormWritesEveryScheduledTicksFrameWithoutBlockingTheNextCapture`
-checks every PNG's tick and hash through delayed frames. When a frame cannot be served, the existing
+When a frame cannot be served, the existing
 readiness-dependent hold budgets apply separately to each accepted request, produce a named refusal
 and withdraw that request when exhausted; a run settles
 anything still owed before disposal (`WorldCaptureHoldLawTests`).

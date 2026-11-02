@@ -107,13 +107,14 @@ flow everywhere.)
 The cache is kept honest by a four-stage lifecycle, all of it off the live edit
 path so a carve never waits on a bake.
 
-**Settle.** A planner bins carves by center into brick-sized boxes. A bin becomes
-bake-eligible only when it holds enough hard carves to be worth a brick's fixed
-footprint (below a threshold, the analytic instances are simply cheaper), and it
-"settles" only after 120 produced frames pass with no edit touching it
-(`SdfCarveBakePlanner.DefaultSettleFrames`). In-flight
-carves—a live meteor shower, a cluster mid-edit—stay fully analytic. Nothing
-is cached until it stops changing.
+**Settle.** Settling is a producer's decision, never the engine's: a frame source
+proposes a bake through `ISdfBrickBakeService.RequestBrickBake` once the carves it
+binned into a brick-sized box have stopped changing and are enough to be worth a
+brick's fixed footprint (below a threshold, the analytic instances are simply
+cheaper). In-flight carves—a live meteor shower, a cluster mid-edit—stay fully
+analytic. Nothing is cached until it stops changing. No in-tree frame source plans
+carve bakes today: `WorldFieldEmitter.AdvanceBricks` is the one producer, and it
+uploads host-baked height-field bricks through `ISdfBrickBakeService.UploadBrick`.
 
 **Bake.** When a bin settles, a tiny standalone compute kernel writes its brick:
 one thread per voxel, each computing the closed-form min-of-spheres distance and

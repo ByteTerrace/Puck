@@ -89,7 +89,7 @@ curve while this row governs — `1` (the default) for an ordinary row, and a
 held drift row's own tightened arc. A `dynamics` row names a `dynamics`-
 section row (a pole-matched second-order follower — see
 [documents-render.md](documents-render.md)) shaping velocity instead of either mechanism; it compiles
-once per kit (`WorldKit.Compile`) against the world's resolved simulation
+once per kit (`FixedWorldKit.Compile`) against the world's resolved simulation
 rate (`WorldDefinition.SimulationRateHz`) — a resident world authoring
 `rateHz: 0` cannot compile one and refuses by name. The follower's state lives in `WorldBody` as
 ordinary sim state, included in whatever the body snapshot/checkpoint

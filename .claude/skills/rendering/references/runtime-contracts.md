@@ -154,7 +154,7 @@ image `ProduceFrame` hands the display, through that instance's node
 so the image cannot change under it. A frame on which `ReasonOf` names a reason
 or the output is tainted is skipped, never read, and the burst's presentation
 indices show the gap. It skips, besides, the renders retained state it had
-discarded needs to converge again (one `SdfTemporalSamples.Period`, below), so
+discarded needs to converge again (one `SdfWorldPackage.TemporalPeriod`, below), so
 the burst reads the steady image. It counts as pending (`PendingCapturePath`) until its
 last PNG is written, so the capture gate fills, capture frames re-render
 tainted instances and `world.wait captures` fences the files, but not as

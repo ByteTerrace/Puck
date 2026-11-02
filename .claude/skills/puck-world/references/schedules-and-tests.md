@@ -220,9 +220,7 @@ root is disposed (`IFixedStepSimulation.SettleOwedFrames`). A host with no rende
 does not hold. `world.counters` shows the hold under `world.captures`
 (`world.captures.held`, and `world.captures.ticks-while-armed`, which stays 0
 in both rendered hosts); `WorldCaptureHoldLawTests` pins the budgets and
-settlement without a GPU, and
-`WorldCaptureSchedulerLawTests.AWindowResizeStormWritesEveryScheduledTicksFrameWithoutBlockingTheNextCapture`
-pins the tick and state hash of every PNG through repeated delayed frames.
+settlement without a GPU.
 
 ## Schedules, verdicts, and `test` blocks
 

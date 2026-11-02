@@ -32,7 +32,7 @@ is non-serialized; definitions sharing `StateRaw` share its compiled view, and
 inventory, flags, semantic memories, and vector embeddings. **A slot is a table with one
 key, and there is ONE authored spelling for both.** A row names itself,
 declares its `kind` (`Int`, `Fixed`, `Bool`, `Text`, or `Vector`), and carries EITHER a bare `value` — sugar for the one
-cell keyed `WorldStateRow.SlotKey` (`"$value"`) — OR a `cells` array of
+cell keyed `StateRow.SlotKey` (`"$value"`) — OR a `cells` array of
 author-keyed `{"key","value"}` objects. Two optional fields, never two
 discriminators: a row carrying both, or a `value` beside a `capacity`
 (declaring a capacity is declaring keyed-row intent), refuses by name.
@@ -176,7 +176,7 @@ row, so they can never trigger it, and never move that key's age — true
 insertion-order FIFO, not LRU). Requires a declared `capacity` — refused by
 name without one, which also covers a slot row, since a slot never declares
 one. The eviction itself belongs to `StateArena`'s mint (`Puck.State`), and
-both doors reach it: `WorldServer.TryCompose`'s `UpsertStateCell` arm composes
+both doors reach it: `WorldDocument.TryCompose`'s `UpsertStateCell` arm composes
 through an arena over the running world's own document (so a live write and
 every `world.undo` journal re-composition reproduce the identical victim; the
 dropped key is named on that write's `[world.mutation: …]` echo,

@@ -36,7 +36,7 @@ its built-ins `help`, `run`, `wire.ack`, `wire.errors`).
 
 A shared module in `Puck.World.Console` never takes a link at construction: a verb
 that submits resolves the instance the console addresses on each call
-(`IWorldConsoleAuthority.TryResolveInstance` or `TryResolveLink`) and submits
+(`WorldConsoleAuthorityExtensions.TryResolveInstance` or `TryResolveLink`) and submits
 through that instance's `WorldInstance.SubmissionLink`, so no verb acts on boot
 while the console addresses another instance (`WorldConsoleAddressLawTests`).
 The `Puck.World`-resident desktop modules still take the boot link, which is
@@ -619,7 +619,7 @@ needed, since every consumer lives in this same project):
   a `DocumentVector3`; JSON `null` clears a nullable field) is actually
   validated. A `"state.<row>[.<key>]"` string written into a bindable field
   keeps the binding: the compose boundary resolves a submitted row's references
-  against the current definition's state (`WorldServer.TryCompose` rehydrates
+  against the current definition's state (`WorldDocument.TryCompose` rehydrates
   the candidate when the mutation carries one; the `creations` arm resolves a
   private copy of the row before canonicalizing it), so the installed row
   carries the reference and re-resolves on every later write to that state

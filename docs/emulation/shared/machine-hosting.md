@@ -219,7 +219,7 @@ The worker applies these policies:
   every whole number of seconds, so a clock that is not a whole number of
   hertz (the NTSC NES master clock is 236,250,000 cycles every 11 seconds) is
   exact. Engine ticks become core cycles through
-  `RationalRateAccumulator.TakeCycleBudget`, a remainder-carrying integer
+  `MachineCycleBudget.TakeCycleBudget`, a remainder-carrying integer
   conversion against `Puck.Maths.FixedTickConversion.TicksPerSecond`. A core may change its
   rate's cycles while it runs, but keeps its seconds, which set the
   scale of the carried phase; the conversion carries phase rather than

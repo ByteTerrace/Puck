@@ -304,7 +304,7 @@ regular expression misses some. When a scan law misses a real site, replace it
 with the type and delete the scan; a law that cannot fail at a real site pins
 nothing.
 
-In xUnit v3, `Assert.Throws`, `Record.Exception` and their async forms rethrow
+In xUnit v3, `Assert.Throws`, `Xunit.Record.Exception` and their async forms rethrow
 the skip exception, so a test that wraps a call which can skip reports
 **Skipped** instead of failing; catch it with `try`/`catch` and assert on it.
 

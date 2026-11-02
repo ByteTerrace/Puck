@@ -503,7 +503,7 @@ writes `player.row.set`/`player.state.cell.set` — the `world.row.set`/
 `world.state.cell.set` grammars submitted through the seat's current
 authority (`ServerLinkSubmissions.SubmitWorldMutation` over
 `WorldFederatedServerLink.SubmitEnvelope` → the federation
-`Routed` lane → `WorldForwardedAuthority.TryApplySubmission`, where the
+`Routed` lane → `WorldLocalForwardedAuthority.TryApplySubmission`, where the
 DESTINATION re-stamps the envelope with the traveler's own transfer principal
 and its ordinary admission door — row-scoped grants included — decides it; the
 verdict narrates on the destination's transcript). That is how a
@@ -607,7 +607,7 @@ What IS taped on the submission side: every document mutation, whatever
 ingress it arrived through. `WorldServer.MutationTap` fires at the envelope
 dispatch every submission shares, so a local console write, an admitted socket
 peer's, and a traveller's submission forwarded by its source authority
-(`WorldForwardedAuthority.TryApplySubmission`) all tape identically, each with
+(`WorldLocalForwardedAuthority.TryApplySubmission`) all tape identically, each with
 the acting principal its own envelope stamped. The two internal producers that
 reach `EnqueueMutation` directly — a mounted guest's decoded act and a world
 rule's `generate` effect — are deliberately untaped and re-derive during the

@@ -176,9 +176,9 @@ A few rules apply to every limit on this page:
 | Quantity | Value | Constant | Explained in |
 |---|---|---|---|
 | Engine ticks per second | 50,400 | `FixedTickConversion.TicksPerSecond` | [Row and cell behavior](traits.md#engine-ticks-and-simulation-ticks) |
-| Dynamics frequency | above 0, at most 100 Hz | `DynamicsRow.MaxFrequencyHz` | [Row and cell behavior](traits.md#smooth-a-value-for-presentation) |
-| Dynamics damping | 0 to 16 | `DynamicsRow.MaxDamping` | [Row and cell behavior](traits.md#smooth-a-value-for-presentation) |
-| Dynamics response | -4 to 4 | `DynamicsRow.MinResponse`, `DynamicsRow.MaxResponse` | [Row and cell behavior](traits.md#smooth-a-value-for-presentation) |
+| Dynamics frequency | above 0, at most 100 Hz | `DynamicsLimits.MaxFrequencyHz` | [Row and cell behavior](traits.md#smooth-a-value-for-presentation) |
+| Dynamics damping | 0 to 16 | `DynamicsLimits.MaxDamping` | [Row and cell behavior](traits.md#smooth-a-value-for-presentation) |
+| Dynamics response | -4 to 4 | `DynamicsLimits.MinResponse`, `DynamicsLimits.MaxResponse` | [Row and cell behavior](traits.md#smooth-a-value-for-presentation) |
 
 ## Next steps
 

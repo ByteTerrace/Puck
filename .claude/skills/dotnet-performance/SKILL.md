@@ -47,7 +47,7 @@ project file before changing code.
 - **`PlatformTarget` is x64 and `OptimizationPreference` is Speed.** Arm-specific
   and size-tuning material is background rather than a work item.
 - **`Puck.World` sets `TieredPGO=false`**
-  ([`Puck.World.csproj:20`](../../../src/Puck.World/Puck.World.csproj)). The
+  (the `TieredPGO` property in [`Puck.World.csproj`](../../../src/Puck.World/Puck.World.csproj)). The
   setting is process-wide, so every library a World loads runs without dynamic
   PGO, while `puck bench` runs in the CLI with it. Advice that rests on dynamic
   PGO (guarded devirtualization, stack-allocated `foreach` enumerators over

@@ -76,9 +76,9 @@ tracking (`DirectXBufferStates`, `DirectXResourceStates`) sit at the project roo
 So do the four builders every call site uses, in `Puck.DirectX` and its
 presentation project alike: `DirectXBarriers.Transition` (a whole-resource
 transition, no flags), `DirectXDescriptorHeaps.Create` (node mask zero; type,
-size and shader visibility vary), `DirectXBuffers.CreateCommitted` (a
+size and shader visibility vary), `DirectXBuffers.Create` (a
 format-less row-major buffer with no heap flags; size, heap type, initial state
-and resource flags vary), and `DirectXTextures.CreateCommitted` (a single-mip,
+and resource flags vary), and `DirectXTextures.Create` (a single-mip,
 single-sample 2D texture on a default heap; extent, format, heap flags, initial
 state, resource flags and optimized clear value vary). `DirectXTextures.OfUsage`
 and `InitialStateOf` give an image the flags, clear value and initial state its

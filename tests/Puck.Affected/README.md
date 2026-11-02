@@ -2,13 +2,13 @@
 
 The coverage map is quarantined with the canaries it maps: while the debug world
 is the one live world, every canary and the last recorded
-`canary-coverage.json` live under
+`experimental/tests/Puck.Affected/canary-coverage.json` live under
 [`experimental/tests`](../../experimental/tests/Puck.Affected/canary-coverage.json),
 and with no canary directory `puck affected` selects no canary
 ([open items](../../docs/plans/open-items.md#quarantined-gates)).
 The rest of this page describes the map as the verb reads it.
 
-`canary-coverage.json` records which `Puck.World` source files each
+The map records which `Puck.World` source files each
 [real-World canary](../../docs/reference/cli.md#puck-canaryreal-world-behavioral-proofs)
 executes. [`puck affected`](../../docs/reference/cli.md#puck-affectedthe-checks-a-change-needs)
 reads it to choose the canaries a change needs, so a change runs the proofs

@@ -13,7 +13,6 @@ suites that link it ([`puck affected`](../../../docs/reference/cli.md#puck-affec
 | `ThreadPoolFloor.cs` | A raised thread-pool minimum, so laws that block on child processes never starve the in-process servers beside them. |
 | `SchedulingCohorts.cs` | Cohorts of workers held at barriers, so a scheduling law counts admissions rather than timing them. |
 | `TrackedPuckSources.cs` | Every tracked `.puck` source outside `experimental/`, as theory data. |
-| `ScheduledWorldBoot.cs` | One authored test world booted headless through the real `Puck.World` executable with a piped script. |
 | `AffectedMemoryTree.cs` | An in-memory tree for `puck affected`'s document and stand-in laws. |
 | `ShaderBuildFixture.cs` | An isolated project over the shipped shader build targets, with a CPU-only stand-in for DXC that records, holds or fails each compile. |
 

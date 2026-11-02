@@ -472,7 +472,7 @@ refuses the whole batch.
 The refresh has a mirror for the other direction: a mutation that itself
 carries a `state.` reference (a creation whose shapes bind a cell, a placement
 whose position names one) rehydrates its candidate after composing
-(`WorldServer.TryCompose`, `WorldStateDocumentValues.HasReference` over the
+(`WorldDocument.TryCompose`, `WorldStateDocumentValues.HasReference` over the
 mutation), so validation and the derived rebuilds read a resolved holder. The
 `UpsertCreation` arm additionally resolves a private JSON copy of the submitted
 row against the current state before canonicalizing it
@@ -622,7 +622,7 @@ an authored `bodies` section, the machine host's named declarations, magazine
 selectors into their authored screen rows, and every moving authored `state`
 cell. A section the document omits stays omitted, and one the session left
 alone is written as authored. `world.reset`/`world.load`/`world.reload` are ONE
-rebuild-and-swap mechanism (`WorldServer.ApplyRebuild`) over three document
+rebuild-and-swap mechanism (`WorldDocument.ApplyRebuild`) over three document
 sources—the server's own base, a different file, or a re-read of the
 current origin. Load and reset re-seed the runtime grants and participant
 registers and require fresh input attachments. A live reload retains existing
@@ -2200,7 +2200,7 @@ round-trip). A screen owns no machine: content mounts only into a declared
 machine through its provider operations, from a file in its `contentFolders`.
 `screen.select`/`.link`/`.unlink` submit a `WorldScreenOp`
 (`Puck.World.Protocol`) through the ordered submission domain
-(`IServerLink.SubmitScreenOp`), applied SYNCHRONOUSLY like `Command`/`Grant`/
+(`ServerLinkSubmissions.SubmitScreenOp`), applied SYNCHRONOUSLY like `Command`/`Grant`/
 `Revoke` and checked against the ordinary grant table (`Control` over
 `screen:<n>`) before the host is touched; selection boots nothing. A content
 path ending in `.puck` names authored cartridge source; its provider resolves
@@ -2211,7 +2211,7 @@ hash and the image's hash) on `WorldMachineState.Cartridge` for
 `screen.state`; a forge refusal is the operation's fault, verbatim. Declared cable links
 (`IWorldMachineHost.ReconcileLinks`) are established/torn down at
 construction (for a link declared in the boot document itself) AND on every
-`WorldServer.Install` (every live mutation and every whole-document
+`WorldDocument.Install` (every live mutation and every whole-document
 rebuild)—never only once; the reconcile itself is two-phase and atomic
 per call (every stale-or-changed declared link tears down FIRST, complete,
 before anything (re-)establishes), so a re-shape that moves a screen from
@@ -2740,7 +2740,7 @@ session at the keyframe and a recorded session event each refuse on their own.
 No build gate covers this project's behavior; verify by RUNNING `Puck.World`
 over stdin. The apply pipeline's all-or-nothing contract (a mutation that
 fails whole-document validation leaves the live definition byte-identical)—
-the same gate `WorldServer.ApplyUndo`'s journal-replay loop passes each kept
+the same gate `WorldPersistence.ApplyUndo`'s journal-replay loop passes each kept
 entry through—is proven in-process by
 `tests/Puck.World.Server.Tests/MutationAllOrNothingLawTests.cs`; that suite does not
 construct a genuine mid-replay validation failure, so the replay loop's own

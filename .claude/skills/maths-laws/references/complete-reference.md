@@ -367,7 +367,7 @@ Details that decide a declaration:
 - **A waiver is a category argument, not an apology.** Write one shared reason
   per category and cite it verbatim from every member of it; name the gate of
   record that *does* pin the member (a law id, or an emulator battery stage).
-  `Puck.Post` is quarantined in `experimental/` and is never a gate of record.
+  `experimental/Puck.Post` is quarantined and is never a gate of record.
   An individual reason appears only where the category does not honestly fit.
 - Presentation boundaries — the points where a value leaves the deterministic
   world for the renderer — are **not** automatically waivable: lane order and

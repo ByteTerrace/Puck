@@ -622,7 +622,7 @@ facade over the host. Screen index IS machine identity for screen-hosted machine
 
 A screen owns no machine: every machine is a `machines` row, and a screen shows
 one by name. `screen.select`/`.link`/`.unlink` submit a `WorldScreenOp`
-through the ordered submission domain (`IServerLink.SubmitScreenOp`), applied
+through the ordered submission domain (`ServerLinkSubmissions.SubmitScreenOp`), applied
 SYNCHRONOUSLY like `Command`/`Grant`/`Revoke` (never buffered — a
 `body.engage` auto-insert precheck submits a `Select` immediately ahead of
 the `ComposeControl` that follows it in the same batch, and the second

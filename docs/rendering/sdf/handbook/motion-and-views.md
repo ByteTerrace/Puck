@@ -272,9 +272,9 @@ front, back and sides, which all sample the screen image; a slab wholly outside
 the frustum renders nothing beneath it. It renders at most once a frame however many screens show it, at the
 extent its footprint asks, and at the refresh `world.view-refresh` sets (a
 window session on every frame). A window's footprint is the share of its
-consumer's image its glass spans (`WorldPortalVisibility.Coverage`), held to
-whole power-of-two octaves that grow at once and halve only once the glass
-falls below two fifths of its octave (`WorldPortalVisibility.Octave`), since
+consumer's image its glass spans (`WorldPortalVisibility.Coverage`), quantized
+by the render graph's one footprint rule (`RenderGraphExtent.Quantize`), so a window grows at once and
+shrinks only once the glass falls to `RenderGraphExtent.ShrinkThreshold` of the extent it holds, since
 every extent change rebuilds the view's graph, its targets created off the frame
 thread while the installed graph keeps presenting; a window authors no
 resolution. It draws as clear glass at the luminance of the world beyond it

@@ -61,7 +61,7 @@ as an explicit remainder; it does not re-emit prototypes or change state.
   flow (a pending seat's inputs drive the profile picker, not locomotion).
   `PlayerRoster.Devices.cs` (a sibling partial) carries the per-kind device
   vocabulary: a keyboard, mouse, or gamepad is learned through the router's own
-  first-touch discovery (`InputRouter.ObserveDeviceKind` classifies the kind
+  first-touch discovery (`InputRouter.ClassifyDeviceKind` classifies the kind
   from the signal's source family before the roster ever resolves a slot for
   it), while a camera is recorded explicitly via `ObserveDevice` and seated by
   its own default policy (the lowest occupied, camera-less slot, player 1

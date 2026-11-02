@@ -40,7 +40,7 @@ techniques and the defects review found are what transfer. Each technique cites 
   reverted.
 - **Measure where `TieredPGO` matches the target.** The World process runs
   without dynamic PGO
-  ([`Puck.World.csproj:20`](../../../../src/Puck.World/Puck.World.csproj)), and
+  (the `TieredPGO` property in [`Puck.World.csproj`](../../../../src/Puck.World/Puck.World.csproj)), and
   the setting is process-wide, so every library it loads runs that way.
   `puck bench kernels` and `puck bench world` run in the CLI with default PGO,
   and the World test hosts turn tiering off. A win that rests on PGO (guarded
@@ -65,20 +65,20 @@ techniques and the defects review found are what transfer. Each technique cites 
 
 | Technique | PR | In Puck |
 |---|---|---|
-| Decide before the expensive path. A prefilter may give only false positives, and a miss never repeats the fast path's work | #70119 | `RuleEvaluator.cs:534-551` skips bindings and gate when nothing the rule reads changed ([source](../../../../src/Puck.State.Rules/Evaluation/RuleEvaluator.cs)) |
-| Cache a derivation keyed by exactly what it reads, and cache an absence when absence is the common answer | #70220 | `RuleLatch.cs:54-58` keys a rule's schedule by evaluator and compiled rule ([source](../../../../src/Puck.State.Rules/Evaluation/RuleLatch.cs)); `WorldEffectorSolver.cs:256` stores fieldless probes that can never match (open, Next item 0) |
-| Hoist keyed setup out of a repeated operation | #70157 | `SdfWorldTables.Cadence.cs:272-276` hashes each region once with `XxHash3` ([source](../../../../src/Puck.SdfVm/SdfWorldTables.Cadence.cs)) |
-| Size first, then write once into the final destination | #70134 | `SdfWorldTables.MeshRegion.cs:287` writes a draw straight into its staged record ([source](../../../../src/Puck.SdfVm/SdfWorldTables.MeshRegion.cs)) |
-| Remove re-copies and rescans of finished work | #70139 | `SdfMeshPathBake.cs:312`'s done-through cursor ([source](../../../../src/Puck.SdfVm/SdfMeshPathBake.cs)) |
-| Allocate rarely used state on first use | #70189 | `WorldEffectorSolver.cs:243` builds its answer ring on a thread's first probe ([source](../../../../src/Puck.World.Client/WorldEffectorSolver.cs)) |
-| A `static` lambda with a state argument, not a capturing closure | #70185 | `WorldSchema.cs:871-874` ([source](../../../../src/Puck.World.Schema/WorldSchema.cs)) |
-| Without PGO, loop over the concrete collection where an interface enumerator boxes | #70147 | `SdfMeshPathBake.cs:405, :424` iterate an `IReadOnlyList<SdfMeshInstance>` per group in the World process: read its disassembly |
-| Format text only when it is emitted | #70178 | `GenlockPhaseAligner.cs:50-54` checks `IsEnabled` first ([source](../../../../src/Puck.Launcher/GenlockPhaseAligner.cs)) |
-| Look up by span through an alternate lookup, and decode strictly | #70142 | `CellKey.cs:250` ([source](../../../../src/Puck.State/CellKey.cs)) |
-| Cache `SearchValues` statically; never rebuild one per call | #70224 | `SafeName.cs:17` ([source](../../../../src/Puck.State/SafeName.cs)) |
-| A scan over a few fixed entries beats hashing; one over a list that grows with the world is the quadratic | #70209 | `SdfMeshPathBake.cs:404` scans `MeshAssetSlots` once per group ([data and memory](data-and-memory.md#a-scan-per-item-is-a-quadratic)) |
-| Publish shared state as an immutable object in one reference write | #70176 | `CodeRevision.cs:90` ([source](../../../../src/Puck.Abstractions/CodeRevision.cs)) |
-| Scratch its owner keeps and reuses, over a shared pool | #70159 | `WorldBody.SweepRefusal.cs:64`'s `StepScratch` ([source](../../../../src/Puck.World.Server/WorldBody.SweepRefusal.cs)) |
+| Decide before the expensive path. A prefilter may give only false positives, and a miss never repeats the fast path's work | #70119 | `RuleEvaluator.EvaluateOnceCore` skips bindings and gate when nothing the rule reads changed ([source](../../../../src/Puck.State.Rules/Evaluation/RuleEvaluator.cs)) |
+| Cache a derivation keyed by exactly what it reads, and cache an absence when absence is the common answer | #70220 | `RuleLatch.RuleState` keys a rule's schedule by evaluator and compiled rule ([source](../../../../src/Puck.State.Rules/Evaluation/RuleLatch.cs)); `WorldEffectorSolver.TryProbeSurface` stores fieldless probes that `SurfaceQuery.Matches` can never match (open, Next item 0) |
+| Hoist keyed setup out of a repeated operation | #70157 | `SdfWorldTables.UpdateTablesSignature` hashes each region once with `XxHash3` ([source](../../../../src/Puck.SdfVm/SdfWorldTables.Cadence.cs)) |
+| Size first, then write once into the final destination | #70134 | `SdfWorldTables.StageChangedDraws` writes a draw straight into its staged record ([source](../../../../src/Puck.SdfVm/SdfWorldTables.MeshRegion.cs)) |
+| Remove re-copies and rescans of finished work | #70139 | `SdfMeshPathBake.Pending`'s done-through cursor ([source](../../../../src/Puck.SdfVm/SdfMeshPathBake.cs)) |
+| Allocate rarely used state on first use | #70189 | `WorldEffectorSolver.TryProbeSurface` builds its answer ring on a thread's first probe ([source](../../../../src/Puck.World.Client/WorldEffectorSolver.cs)) |
+| A `static` lambda with a state argument, not a capturing closure | #70185 | `WorldSchema.ResolveDescriptionForMember` ([source](../../../../src/Puck.World.Schema/WorldSchema.cs)) |
+| Without PGO, loop over the concrete collection where an interface enumerator boxes | #70147 | `SdfMeshPathBake.Dress` iterates an `IReadOnlyList<SdfMeshInstance>` per group in the World process: read its disassembly |
+| Format text only when it is emitted | #70178 | `GenlockPhaseAligner.LogPhase` checks `IsEnabled` first ([source](../../../../src/Puck.Launcher/GenlockPhaseAligner.cs)) |
+| Look up by span through an alternate lookup, and decode strictly | #70142 | `CellKeyTable.TryResolve` ([source](../../../../src/Puck.State/CellKey.cs)) |
+| Cache `SearchValues` statically; never rebuild one per call | #70224 | `IdentifierRules.ReservedCharacters` ([source](../../../../src/Puck.State/SafeName.cs)) |
+| A scan over a few fixed entries beats hashing; one over a list that grows with the world is the quadratic | #70209 | `SdfMeshPathBake.Dress` scans `MeshAssetSlots` once per group ([data and memory](data-and-memory.md#a-scan-per-item-is-a-quadratic)) |
+| Publish shared state as an immutable object in one reference write | #70176 | `CodeRevision.ClearCache` ([source](../../../../src/Puck.Abstractions/CodeRevision.cs)) |
+| Scratch its owner keeps and reuses, over a shared pool | #70159 | `WorldBody.StepScratch` ([source](../../../../src/Puck.World.Server/WorldBody.SweepRefusal.cs)) |
 
 ## Hazards review found
 

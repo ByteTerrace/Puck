@@ -137,7 +137,7 @@ fallible gate for an `UpsertAddon`/`RemoveAddon` mutation (refusing by name
 first when no addon host is attached at all), after every cheaper refusal;
 `WorldAddonRuntime.TryCreate` calls it at boot (against no prior state, and
 `WorldPostBuildWiring` turns a refusal into an ordinary boot refusal rather
-than an unhandled exception), `WorldServer.ApplyRebuild` calls it
+than an unhandled exception), `WorldDocument.ApplyRebuild` calls it
 unconditionally for `world.reset`/`.load`/`.reload` (a whole-document swap
 can move any section, including the channel table), and `ApplyUndo` calls
 it both as a throwaway per-entry probe (proving an intermediate journal

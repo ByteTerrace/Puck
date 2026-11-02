@@ -152,7 +152,7 @@ Engine facts those worlds exercised, which hold for any world:
   (`MachineCartridgeLawTests`).
 - **Derived limits.** Sixteen drive-reach ordinals across channels and target
   registers; aggregate physical-region primer and sampled-surface byte budgets; and the rule budget
-  `RuleCapacity.MaxWorkUnitsPerTick` (four million work units), where a
+  `RuleCapacity.MaxWorkUnitsPerTick`, where a
   body-pair interaction costs capacity squared.
 - **Placement policy.** `placements.policy` is optional, and whole when
   authored (a partial block refuses at parse naming the missing member).
@@ -389,7 +389,7 @@ here".
   Text cell holding the matching array. `WorldStateDocumentValues` resolves
   those only after the whole world parses, retains the reference for canonical
   write-back, and rehydrates a fresh candidate when a referenced state row is
-  mutated — or when a row write introduces a reference (`WorldServer.TryCompose`;
+  mutated — or when a row write introduces a reference (`WorldDocument.TryCompose`;
   the `creations` arm resolves a private copy of the submitted row first, since
   its canonicalizer reads bound values) — so a rejected candidate cannot alter
   the live value holder.

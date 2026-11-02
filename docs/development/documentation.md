@@ -242,7 +242,7 @@ hold are held by a check; the rest are procedure.
 
 - **Derive, don't copy.** A fact the code holds (a verb's flags, a constant, a
   limit, a schema field) is generated from the code or cited by name, never
-  retyped. Write `Rule.MaxWorkUnitsPerTick`, not its value; the value goes into
+  retyped. Write `RuleCapacity.MaxWorkUnitsPerTick`, not its value; the value goes into
   prose only where the code is its single source and a check compares them.
 - **Cite symbols in durable pages.** The manual, decisions, skills, references
   and code comments cite a type or member by name (`SdfMeshIrradiance.ProbeCache`;

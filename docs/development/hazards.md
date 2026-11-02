@@ -65,9 +65,8 @@ and a caller discards it, or a nested call's success overwrites an outer
 failure.
 
 - `GateOpen(faulted: out _)` discards the fault on the strength of an enclosing
-  scope (`src/Puck.State.Rules/Evaluation/RuleEvaluator.cs:574`,
-  `RuleEvaluator.Groups.cs:101`,
-  `src/Puck.World.Server/WorldRuleHost.DecisionNeighbors.cs:98`, `:324`).
+  scope (`RuleEvaluator.EvaluateOnceCore`, `RuleEvaluator.Armed`,
+  `WorldRuleHost.DecisionOptionGate` and `WorldRuleHost.TryScoreDecisionChoice`).
 - A nested `RuleExpressions.Run` is handed its caller's `fault` variable, so a
   nested success writes `None` over an outer fault
   ([rule faults](../plans/rule-faults.md#the-verdict-on-the-approach), reason 1).
@@ -94,12 +93,12 @@ with it. A local taken before the swap names the old instance after it.
   the host serves after the commit.
 - `RuleEvaluator.RunFixpoint` takes `arena` before the pass and ends its change
   window on it after members that can fire a transactional commit
-  (`src/Puck.State.Rules/Evaluation/RuleEvaluator.Groups.cs:145`, STALE001).
+  (STALE001).
   Open.
-- `RuleEvaluator.EvaluateOnce` enters a fault scope on the scratch, runs an
+- `RuleEvaluator.EvaluateOnceCore` enters a fault scope on the scratch, runs an
   evaluation that can fire a transactional commit, and leaves the scope on the
-  scratch it entered (`src/Puck.State.Rules/Evaluation/RuleEvaluator.cs:510`,
-  STALE001): a fault the rest of the evaluation raises lands in the new arena's
+  scratch it entered
+  (STALE001): a fault the rest of the evaluation raises lands in the new arena's
   scratch, outside the scope. Open; step 4 of the
   [rule-faults plan](../plans/rule-faults.md#the-design) deletes the register.
 
@@ -163,13 +162,13 @@ The same formula written twice drifts: one copy is fixed and the other is not,
 or one adds a field the other forgets.
 
 - The test copies of the bake's sample-position formula, written out in four
-  `SdfVm` test helpers and `MeshCpuBake`, now one `SdfMeshPathBake.SampleAt`
-  (`src/Puck.SdfVm/SdfMeshPathBake.cs:44`).
+  `SdfVm` test helpers and `MeshCpuBake`, now one `SdfMeshBakeRequest.SampleAt`
+  (`src/Puck.SdfVm/SdfMeshPathBake.cs`).
 - Five copies of a `NativeMemory`-backed test `IAllocator` named
-  `HeapAllocator` (`tests/Puck.Vulkan.Tests/VulkanIndirectCountLawTests.cs:155`
+  `HeapAllocator` (`tests/Puck.Vulkan.Tests/VulkanIndirectCountLawTests.cs`
   and four more; [refactoring campaign](../plans/open-items.md#refactoring-campaign)).
 - The Superellipsoid's CPU and GPU formulas disagree at small radii
-  (`src/Puck.SignedDistance/Queries/SdfFieldEvaluator.cs:836` against
+  (`SdfFieldEvaluator.SdfSuperellipsoid` against
   `mapCore`), and the box cull is written in C# and HLSL
   (`SdfMeshCull.Keeps`, `sdf-mesh-selection.hlsli`).
 
@@ -198,7 +197,7 @@ replayed run mints different identities.
   memory without riding the checkpoint; its `Capture` and `Restore` now carry it
   (`src/Puck.World.Server/WorldHandleTable.cs`).
 - `WorldSessionResolver.m_nextGenerationId`
-  (`src/Puck.World.Schema/WorldSessionResolver.cs:75`) mints the generation ids
+  (`src/Puck.World.Schema/WorldSessionResolver.cs`) mints the generation ids
   a transfer continuation's checkpoint carries, and nothing captures the counter.
   Unconfirmed: a restored host's adoption mints afresh rather than reusing.
 
@@ -227,9 +226,7 @@ A cache keyed on inputs that move every frame never hits, and costs its lookups
 and its memory; or a ring is flushed by entries that can never match.
 
 - `WorldCameraClearance.ClearanceQuery` and `WorldEffectorSolver.SurfaceQuery`
-  compare floats by their bits
-  (`src/Puck.World.Client/WorldCameraClearance.cs:146-165`,
-  `src/Puck.World.Client/WorldEffectorSolver.cs:242-280`), so a moving camera or
+  compare floats by their bits, so a moving camera or
   a walking foot asks a new question every frame and the 32- and 64-entry rings
   are flushed by answers that never match again. The two rings are also one
   mechanism written twice.

@@ -186,7 +186,7 @@ footgun a level-triggered `addState` already carries (see `WorldRule.Mode`'s own
 remarks); a write failure is caught at the tap and narrated on stderr by name,
 never fatal to the tick. Effects and
 predicates address a (row, KEY) PAIR — an omitted key means the row's slot cell,
-and `WorldStateRow.IsKeyed` is the discriminator: one switch over the row's
+and `StateRow.IsKeyed` is the discriminator: one switch over the row's
 declared `Domain` (`StateDomain` — `Slot`/`Keys`/`KeysOf`/`CellsOf`/`Ring`;
 an unauthored row infers `Slot` or `Keys` from `cells`/`capacity`/`phase` alone
 (a `phase` row has no single value to read even before its first participant,
@@ -240,7 +240,7 @@ the same answer on every run. A rule's EFFECTS are a different question: they
 act as `Principal.World` (see [authority.md](authority.md)).
 
 A `setState`/`addState` effect is submitted only when it could MOVE the
-destination (`WorldServer.FireWorldRuleEffect`): the resolved value already
+destination: the resolved value already
 matching the cell has always skipped, and so does a value the destination row's
 declared envelope (`min`/`max`) pins where the cell already sits, under its
 authored `overflow` policy (`Refuse`, the default, or `Saturate`) —

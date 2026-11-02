@@ -119,8 +119,8 @@ the default.
 
 `<see cref="…"/>` targets come back as ordinary reference locations — not
 implicit, not candidate. Verified: `references IAllocator` includes
-`src/Puck.Abstractions/Memory/AllocatorExtensions.cs:4` and `:6`, which are the
-`<see cref="IAllocator"/>` in that class's doc comment; `--no-doc` drops those
+`src/Puck.Abstractions/Memory/AllocatorExtensions.cs`, at the
+`<see cref="IAllocator"/>` entries in that class's doc comment; `--no-doc` drops those
 and the other documentation-only locations without dropping code references.
 
 **Consequence for dead-code work:** a symbol whose only inbound references are
@@ -130,11 +130,11 @@ result reads as a live consumer and the dead code survives.
 
 ### This tier is blind to anything the project system does not compile
 
-Verified in this tree: `experimental/scripts/recording/mux-check.cs:111`
+Verified in this tree: `experimental/scripts/recording/mux-check.cs`
 contains `session.Consume(new CaptureFrame(` — a self-contained file-based
 `.NET` app under the quarantined `experimental/` tree, in no project at all
 (none of it is reached by the root build; see `experimental/README.md`). No
-reference query reports that line.
+reference query reports that call.
 
 So **"zero references" can mean "zero compiled references"**. Pair a deletion
 decision with `puck search -M 0 -l <name>` or `puck declarations` over the same

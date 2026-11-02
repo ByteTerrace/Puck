@@ -156,9 +156,9 @@ lanes masked. Control flow that ends at a barrier must be reached by every lane.
 
 - **Done right.** The views gather runs on every lane of the group, a lane past
   the render extent included, because it ends at the group's barrier
-  ([`sdf-views-stage.hlsli:22`](../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-views-stage.hlsli)).
+  (`sdfViewsGatherFilter` in [`sdf-views-stage.hlsli`](../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-views-stage.hlsli)).
   The bake maps adjacent threads to adjacent lattice samples
-  ([`sdf-mesh-bake.comp.hlsl:52-55`](../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-mesh-bake.comp.hlsl)),
+  (the lattice search in [`sdf-mesh-bake.comp.hlsl`](../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-mesh-bake.comp.hlsl)),
   so a wave's instance masks and `mapCore` walks agree where the field is
   coherent.
 - **One walk in `mapCore`** ([SKILL](../SKILL.md#editing-kernels)): a second
@@ -177,7 +177,7 @@ splits it.
 
 - **Done right.** The region copy walks its words grid-stride: thread `i`
   copies word `i`, then `i` plus the dispatch's threads
-  ([`region-copy.comp.hlsl:35`](../../../../src/Puck.Shaders/Assets/Shaders/Residency/region-copy.comp.hlsl)).
+  (the copy loop in [`region-copy.comp.hlsl`](../../../../src/Puck.Shaders/Assets/Shaders/Residency/region-copy.comp.hlsl)).
 - **Unmeasured.** The visibility record is 32 bytes a pixel, field after field
   ([`frame/sdf-visibility.hlsli`](../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/frame/sdf-visibility.hlsli)),
   so one word's load across a wave strides 32 bytes. Its typed load and store
@@ -194,17 +194,17 @@ different words of one bank serialize.
 
 - **Done right.** The views filter tile stores each field in its own array
   (`float4` positions, `uint` shadows, `uint` normals,
-  [`sdf-views-stage.hlsli:13-15`](../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-views-stage.hlsli)),
+  `sdfViewsFilterTile`, `sdfViewsFilterShadows` and `sdfViewsFilterNormals` in [`sdf-views-stage.hlsli`](../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-views-stage.hlsli)),
   so no array is a struct of fields a lane reads one of.
 - **Not conflict-free.** The tile is 11 words wide and an 8×8 group's warp is
   eight lanes by four rows, so a `uint` read at `(lane.y + y) * 11 + lane.x + x`
   puts row 0 (words 1 to 7) and row 3 (words 33 to 39) on the same banks: a
   2-way conflict on `sdfViewsFilterShadows` and `sdfViewsFilterNormals`, 32 reads
-  a pixel (`:77-82`). The `float4` array reads a quarter-warp at a time, one tile
+  a pixel (the filter's reads). The `float4` array reads a quarter-warp at a time, one tile
   row of eight consecutive entries. Unmeasured.
 - **Wrong today.** The sky environment reduction stores `[28][64]` floats and
   then has each of 28 lanes read its row at the same column
-  ([`sdf-sky-environment-reduce.comp.hlsl:13,49`](../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-sky-environment-reduce.comp.hlsl)):
+  (`sdfSkyReduce` in [`sdf-sky-environment-reduce.comp.hlsl`](../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-sky-environment-reduce.comp.hlsl)):
   a 64-word stride puts every lane on one bank, a 28-way conflict on each of 64
   reads. Pad the row to 65 words. It runs one group only when the environment
   refreshes, so the cost is small.
@@ -219,7 +219,7 @@ A wave intrinsic sums lanes in registers; one lane then does the atomic.
 
 - **Done right.** `puckCountWork` and `puckCountShapes` sum with
   `WaveActiveSum` and write one atomic a wave
-  ([`ShaderWorkCounters.cs:125-128`](../../../../src/Puck.Shaders.Model/Interface/ShaderWorkCounters.cs)).
+  (`puckCountWork` in [`ShaderWorkCounters.AppendHlsl`](../../../../src/Puck.Shaders.Model/Interface/ShaderWorkCounters.cs)).
 - Wave size is the device's (32 on NVIDIA, 32 or 64 on AMD), so never size data
   by it. A float reduction's order differs by wave size; counts are integers,
   and the sky reduction sums in a fixed order so its coefficients repeat on one
@@ -231,7 +231,7 @@ Sources: [HLSL-WAVE] and [KHR-SUBGROUP] (lane count is the implementation's).
 
 Puck packs halves for storage (the visibility record's curvature and AO, the
 history surface, the probes' depth) and computes in `float`; `-enable-16bit-types`
-is on ([`ShaderCompiler.Identity.cs:51`](../../../../src/Puck.Shaders.Model/Compiler/ShaderCompiler.Identity.cs))
+is on ([`ShaderCompiler.StepsOf`](../../../../src/Puck.Shaders.Model/Compiler/ShaderCompiler.Identity.cs))
 and no kernel declares a 16-bit arithmetic type.
 
 - Packing is lossy at the edges: a coverage just under one rounds to 0.9995 in
@@ -254,7 +254,7 @@ should fill whole waves.
   1.78 GB mesh region; GPU-based validation refused the total
   (`7012245 exceeds 4194303`). It now caps rows at 64 and has each thread copy
   several words (`GpuRegion.CopyGroups`,
-  [`GpuRegion.cs:456`](../../../../src/Puck.Abstractions/Gpu/Residency/GpuRegion.cs)).
+  [`GpuRegion`](../../../../src/Puck.Abstractions/Gpu/Residency/GpuRegion.cs)).
 - The SDF compute kernels' groups are 64 threads (8×8 for the pixel passes,
   `SDF_VISIBILITY_GROUP_EDGE`), a whole number of waves on both vendors.
 - The bake spends a fixed share of each frame (`SdfMeshPathBake.FrameTaps`,
@@ -273,7 +273,7 @@ large blocks.
 
 - **Wait for a slot, not the device.** The Direct3D 12 compositor waits on the
   fence of the back buffer it is about to reuse
-  ([`DirectXSurfaceCompositor.cs:476`](../../../../src/Puck.DirectX.Presentation/DirectXSurfaceCompositor.cs));
+  ([`DirectXSurfaceCompositor.WaitForFrameSlot`](../../../../src/Puck.DirectX.Presentation/DirectXSurfaceCompositor.cs));
   `WaitIdle` stays for a resize, a reload's install, a capture's readback and
   device loss.
 - **Read back late.** The kernel counters arrive a few frames after their frame

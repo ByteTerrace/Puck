@@ -50,13 +50,11 @@ Use the smallest fixture that exercises the behavior under test:
 - `Fixtures.BuildDocument` supplies a compiler-maintained world for engine laws.
   `FreshServer` validates its serialized document and owns a fresh server and
   scratch directory for every case.
-- `AuthoredGameFixtures.Program` loads a shipped game's state, rules, patterns,
+- `AuthoredGameFixtures` loads a shipped game's state, rules, patterns,
   and tables into that minimal world. A poker hand must not build the Nexus
   navigation graph or simulate unrelated creatures.
 - A deterministic run several laws read is computed once and shared as its
-  immutable results, never as a live server: `ShippedWorldIdleRuns` holds two
-  independent idle boots of the island, and `ShippedWorldStateBaselines.Run`
-  one replay per shipped world.
+  immutable results, never as a live server.
 - Composition checks load the complete Nexus once. Placement-identity checks
   retain its complete placement order and kit assignments, but use one-cell
   navigation domains because they do not advance the simulation.

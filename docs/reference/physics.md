@@ -72,7 +72,7 @@ possible. Mass and the gravitational constant must be non-negative. The positive
 Plummer softening length prevents a singularity and must have a non-zero
 representable square.
 
-`FastMonopoleOptions.OpeningAngle` and `AdaptiveFmmOptions.OpeningAngle` control
+`OctreeGravityOptions.OpeningAngle`, shared by `FastMonopoleOptions` and `AdaptiveFmmOptions`, controls
 the speed/accuracy tradeoff. Smaller values open more cells. Zero delegates to
 the pairwise solver and is therefore bit-identical to the oracle. The defaults
 are `0.5` and `0.4` respectively, both on `UnitInterval32`'s closed unit

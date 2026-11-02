@@ -616,7 +616,7 @@ every kit rides is documented on its kit's `WorldMotion`
 row (`Speed`/`Turn`, `MoveFrame`/`FacingSnap`, the up-axis steering ceilings
 `upTurn` (field/contact) and the obstruction-witness latch `obstruction`
 (displacement/idleThreshold/graceSeconds)—both default to the engine's own
-rates; `Turn.MaxPitch` is the drive frame's own pitch clamp; `groundSnap` is
+rates; `WorldTurn.MaxPitch` is the drive frame's own pitch clamp; `groundSnap` is
 the downward reach within which a grounded walker follows a surface (0.3 m
 by default, scaled with the body, zero disables it); `stepHeight` is the tallest riser a grounded walker
 walks up onto, scaled with the body, zero by default and never negative), the
@@ -1160,7 +1160,7 @@ substrate (`StateCell`, `CellKind`—
 `int`/`fixed`/`bool`/`text`, never float, the determinism contract), capped
 at `StateCapacity.MaxRows` rows and `MaxTextValueLength` characters per
 text cell. A SLOT (the common one-value case) is a row with exactly one
-cell keyed by the reserved `WorldStateRow.SlotKey`; a KEYED row carries
+cell keyed by the reserved `StateRow.SlotKey`; a KEYED row carries
 author-chosen keys—**a slot is a table with one key**, one mechanism under
 ONE authored spelling (`WorldStateRowJsonConverter` in
 `WorldDefinitionSerialization.cs`):
@@ -1666,14 +1666,14 @@ Each cell's stored `value` is its own BASE, accumulating from its own
 `clock.epochEngineTick` at its own rate—a body's HP, threat, or resource
 regenerates (or drains) on its own clock, independent of every other cell in
 the same row. A cell's own `advance` (or `dynamics`/`cycle`) is legitimate
-only on a NON-reserved cell key: the reserved slot key (`WorldStateRow.SlotKey`)
+only on a NON-reserved cell key: the reserved slot key (`StateRow.SlotKey`)
 has no separate default of its own to override—the two never both name the
 same cell, so "which advance governs this cell" is never an open question. A
 DRAW SITE's own bookkeeping is not reachable here at all: `drawCursor`/
 `drawnMasks` are typed row FIELDS, never cells, so nothing can name them as
 an accumulator. `EffectiveBehavior.Resolve` checks the cell's own trait
 first and falls back to the row's default otherwise, so a slot row's
-behavior is untouched. Because `StateReader.Reduce`/`ArgExtremum` resolve
+behavior is untouched. Because `RuleReads.Reduce` resolves
 the row once and each candidate cell once through that identical known-cell
 computation rather than repeating row/key scans or reading `StateCell.Value`
 directly, a `$reduce:sum`/`$argmax:`/`$argmin:` rule operand over a table of
@@ -2281,7 +2281,7 @@ rebuilds (document write, population entry, and solid-field geometry) rather
 than a flat number.
 
 Predicates and effects address a (row, KEY) PAIR: an omitted `key` means the
-row's slot cell, and `WorldStateRow.IsKeyed` is the discriminator, so rules reach
+row's slot cell, and `StateRow.IsKeyed` is the discriminator, so rules reach
 keyed rows and not just scalars. `IsKeyed` is deliberately NOT `!IsSlot`—a row
 carrying no cells at all is not a slot yet IS slot-addressable, because the first
 write mints its slot cell exactly as `world.state.cell.set` does; `IsSlot` asks

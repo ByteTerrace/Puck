@@ -574,7 +574,7 @@ files in a shared tree. See
 
 ### Engine changes and verification coverage
 
-`Puck.Post` remains quarantined under `experimental/Puck.Post` and outside the
+The `experimental/Puck.Post` project remains quarantined and outside the
 solution. Its historical stages are prior art, not current verification. Use
 the live checks appropriate to the changed contract and report what remains
 untested; no single check covers the complete engine.
@@ -729,7 +729,7 @@ events, so the person at the machine never drives the run; agents always pass it
 ([the ruling](../../.claude/skills/puck-world/SKILL.md#an-agents-world-opens-no-physical-device)).
 
 Use `Puck.World` for game verification. Do not add a `--validate-*` mode or
-a `Puck.Post` stage for game-specific behavior unless explicitly requested.
+an `experimental/Puck.Post` stage for game-specific behavior unless explicitly requested.
 
 The console and process stdin use the same command registry. Accepted results
 are written to stdout and refusals to stderr; host log lines go to stderr too,
@@ -766,8 +766,8 @@ BIOS: a retail image is a local, by-hand input and is never committed.
 
 ### Performance changes
 
-There is no maintained cross-engine benchmark score. `Puck.Bench` remains
-quarantined under `experimental/`; do not build or revive its old suite.
+There is no maintained cross-engine benchmark score. `experimental/Puck.Bench` remains
+quarantined; do not build or revive its old suite.
 
 Performance is judged by counted work, code and disassembly, and only counts
 set a ceiling or gate a change. Timings (`puck bench`, `world.gpu-timing`,

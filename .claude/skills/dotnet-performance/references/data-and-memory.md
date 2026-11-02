@@ -48,7 +48,7 @@ frame and tick share one thread today.
   disclosure check, and a standing World then read zero collections over 600
   ticks.
 - **Shape of the fix.** Reuse scratch that the owner keeps
-  (`WorldBody.StepScratch`, [`WorldBody.SweepRefusal.cs:60`](../../../../src/Puck.World.Server/WorldBody.SweepRefusal.cs):
+  (`WorldBody.StepScratch`, [source](../../../../src/Puck.World.Server/WorldBody.SweepRefusal.cs)):
   "a capture writes into the buffers the last one left"); key a cache by what
   its derivation reads, not by an object a delivery replaces (a face catalog
   keyed by definition was rederived every tick); build a default on first read
@@ -76,9 +76,9 @@ survivors and with old-to-young references, not with the garbage.
   and promotes that object. The irradiance cache held a record class per probe
   sweep in a `ConcurrentDictionary`, about 9 MB promoted on a walk into an
   untraced area; it is now an open-addressed table of `Probe` structs
-  ([`SdfMeshIrradiance.cs:1630-1642`](../../../../src/Puck.SdfVm/SdfMeshIrradiance.cs)).
+  ([`SdfMeshIrradiance.ProbeCache`](../../../../src/Puck.SdfVm/SdfMeshIrradiance.cs)).
   `HostLog` kept a ring of strings, so every line promoted; it now copies lines
-  into one circular `char[]` ([`HostLog.cs:79`](../../../../src/Puck.Hosting/HostLog.cs)).
+  into one circular `char[]` ([`HostLog`](../../../../src/Puck.Hosting/HostLog.cs)).
 - **A finalizable object survives its first collection.** The desktop capture
   feed made a finalizable WinRT projection a frame; those were the
   finalization-queue promotions in every gen0 until it read frames through the
@@ -107,18 +107,17 @@ the order it reads them, and what it never reads lives elsewhere.
 
 - **Arrays of structs over graphs of objects.** The irradiance scene's hierarchy
   is a `Node[]` of 28-byte structs whose two children sit side by side
-  ([`SdfMeshIrradianceScene.cs:55`](../../../../src/Puck.SdfVm/SdfMeshIrradianceScene.cs)),
-  walked with a fixed `stackalloc` stack under `[SkipLocalsInit]` (`:299`), so a
+  ([`SdfMeshIrradianceScene.Node`](../../../../src/Puck.SdfVm/SdfMeshIrradianceScene.cs)),
+  walked with a fixed `stackalloc` stack under `[SkipLocalsInit]` (`SdfMeshIrradianceScene.Walk`), so a
   slab test of both children touches adjacent memory and no object headers.
 - **Split by field when loops read different fields.** The hierarchy build keeps
-  bounds and centroids in separate arrays (`m_lows`, `m_highs`, `m_centroids`,
-  `:725-728`); `SdfMesh` keeps positions, normals, indices and materials apart
-  ([`SdfMesh.cs:139-152`](../../../../src/Puck.SdfVm/SdfMesh.cs)), so the trace
+  bounds and centroids in separate arrays (`m_lows`, `m_highs`, `m_centroids` in `SdfMeshIrradianceScene.Hierarchy`); `SdfMesh` keeps positions, normals, indices and materials apart
+  ([`SdfMesh.Positions`](../../../../src/Puck.SdfVm/SdfMesh.cs), `Normals`, `Indices`), so the trace
   reads positions and indices alone and never copies them (a copy of the debug
   world's meshes is about 1.1 GB).
 - **Keep cold state off the hot path.** A step captures a 46-field
-  [`WorldBodyIntegrationResidue`](../../../../src/Puck.World.Server/WorldBodyIntegrationResidue.cs) (`:83`) plus transfer state for every body every step
-  ([`WorldBody.SweepRefusal.cs:71-84`](../../../../src/Puck.World.Server/WorldBody.SweepRefusal.cs)),
+  [`WorldBodyIntegrationResidue`](../../../../src/Puck.World.Server/WorldBodyIntegrationResidue.cs) plus transfer state for every body every step
+  ([`WorldBody.CaptureMotion`](../../../../src/Puck.World.Server/WorldBody.SweepRefusal.cs)),
   read only when a sweep is refused; that capture is 7 to 8 % of a rigid body's
   advance (open below).
 
@@ -137,7 +136,7 @@ by value, captured into a snapshot or copied out of a collection repeats it.
   sampled on a cold walk until it filled its fields and built one record.
 - **Fewer, larger commands is the same rule on the GPU's recorder.** The
   previous mesh table's history copy records a device-side `CopyBuffer` per
-  changed range ([`SdfWorldTables.Motion.cs:157-180`](../../../../src/Puck.SdfVm/SdfWorldTables.Motion.cs)),
+  changed range ([`SdfWorldTables.CopyMeshHistory`](../../../../src/Puck.SdfVm/SdfWorldTables.Motion.cs)),
   not a span copy on the CPU. It holds whole draw records at the mesh region's
   stride, so the changed draws record one command per run instead of one
   64-byte command per moving draw (about 128 a frame): 657 ms to 13 ms per 20 s
@@ -160,11 +159,11 @@ The runtime zeroes every new array and, without `[SkipLocalsInit]`, every
 nothing.
 
 - **Done right.** `WireArgs.Tail` marks itself `[SkipLocalsInit]` because its
-  scratch is written before it is read ([`WireArgs.cs:97`](../../../../src/Puck.Commands/WireArgs.cs)).
-  Both it (`:114`) and `BatchInverseKernel` size their `stackalloc` to the
+  scratch is written before it is read ([`WireArgs.Tail`](../../../../src/Puck.Commands/WireArgs.cs)).
+  Both it and `BatchInverseKernel` size their `stackalloc` to the
   request, not the threshold; `BatchInverseKernel`'s assembly has no
   `SkipLocalsInit`, so the sizing also keeps it from zeroing the unused part
-  ([`BatchInverseKernel.cs:68`](../../../../src/Puck.Maths/FiniteFields/BatchInverseKernel.cs)).
+  ([`BatchInverseKernel.Invert`](../../../../src/Puck.Maths/FiniteFields/BatchInverseKernel.cs)).
 - **Budget the stack.** A `stackalloc` takes a constant cap or a length checked
   against a threshold, with an `ArrayPool` or heap fallback above it
   (`BatchInverseKernel`, `WireArgs.Tail`, `DirectXDebugLabel`'s 64-word cap);
@@ -176,9 +175,9 @@ nothing.
   array, `preserve: false` growth, an uninitialized array, a `[SkipLocalsInit]`
   local, a native block) holds an earlier owner's bytes; on a value path that is
   a determinism defect. Name the call that writes every element a reader
-  reaches: `WorldTick.LatticeDraws.cs:51` rents a buffer that
+  reaches: `WorldTick.PaintLatticeDraw` rents a buffer that
   `GeneratorEngine.TryRunBatch` fills to its length
-  ([`GeneratorEngine.cs:567-569`](../../../../src/Puck.State.Generators/GeneratorEngine.cs)).
+  ([`GeneratorEngine`](../../../../src/Puck.State.Generators/GeneratorEngine.cs)).
 
 Sources: `stackalloc` memory limits, the threshold-and-fallback pattern and
 avoiding it in loops ([MS-STACKALLOC], analyzer [CA2014]); a large array's
@@ -194,12 +193,12 @@ way.
 
 - **Measured here.** `SdfMeshPathBake.Pending` touched all 2,596 groups on every
   footprint call until it kept a done-through cursor
-  ([`SdfMeshPathBake.cs:312`](../../../../src/Puck.SdfVm/SdfMeshPathBake.cs));
+  ([`SdfMeshPathBake.Pending`](../../../../src/Puck.SdfVm/SdfMeshPathBake.cs));
   `BindScreens` searched a list for each routed window until the window's index
   became its latched order (sampled 439 to 134 ms per 20 s).
 - **Hash once, compare once.** The tables' cadence signatures hashed each region
   byte-wise with FNV twice a frame; they now hash each region once with
-  `XxHash3` ([`SdfWorldTables.Cadence.cs:272`](../../../../src/Puck.SdfVm/SdfWorldTables.Cadence.cs)).
+  `XxHash3` ([`SdfWorldTables.UpdateTablesSignature`](../../../../src/Puck.SdfVm/SdfWorldTables.Cadence.cs)).
 - **A short fixed scan is not the quadratic.** The cost is items × a list that
   grows with the world; a scan over a few entries that never grow beats sorting
   or hashing them (dotnet/aspnetcore#70209 skips the sort at eight keys or
@@ -220,7 +219,7 @@ storage through the host's `IAllocator`.
   what moved ([mesh bake](../../rendering/references/mesh-bake.md#the-mesh-region)).
 - **Write from the source, keep no shadow copy** of a large table: the mesh
   region's flush writes from the `SdfMesh` arrays
-  ([`SdfWorldTables.MeshRegion.cs:463`](../../../../src/Puck.SdfVm/SdfWorldTables.MeshRegion.cs)).
+  ([`SdfWorldTables.MeshWordsOf`](../../../../src/Puck.SdfVm/SdfWorldTables.MeshRegion.cs)).
 
 Sources: bandwidth and the cost of streaming past the last-level cache
 ([DREPPER], [INTEL-OPT]).
@@ -296,15 +295,15 @@ variable (true sharing) or neighbouring ones (false sharing). Parallel work
 writes per-worker state and merges once.
 
 - **Explicit owners.** `MeshCpuBake` gives each worker its own evaluator through
-  `localInit` ([`MeshCpuBake.cs:92`](../../../../src/Puck.Cli.Worlds/Mesh/MeshCpuBake.cs));
+  `localInit` ([`MeshCpuBake.Answer`](../../../../src/Puck.Cli.Worlds/Mesh/MeshCpuBake.cs));
   the bake's worker slots retain their own refinement indexes
   ([`SdfMeshPathBake.Residency.cs`](../../../../src/Puck.SdfVm/SdfMeshPathBake.Residency.cs)).
   The field evaluator's existing `[ThreadStatic]` walk scratch
-  ([`SdfFieldEvaluator.PointWalk.cs:12`](../../../../src/Puck.SignedDistance/Queries/SdfFieldEvaluator.PointWalk.cs))
+  ([`SdfFieldEvaluator.PointReachScratch`](../../../../src/Puck.SignedDistance/Queries/SdfFieldEvaluator.PointWalk.cs))
   is a migration in the job-system memo, not a model for new scratch.
 - **Shared counters** (`Interlocked` on one field from every worker) are the
   shape to look for. The ones on hot-looking paths today are per read or per
-  node pair (`SdfMeshStore.cs:211-214`, `SdfMeshIrradianceScene.cs:742`) and
+  node pair (`SdfMeshStore.TryReadEntry`, `SdfMeshIrradianceScene.Hierarchy`'s node allocation) and
   unmeasured; read IPC and misses with `AMDuProfPcm` on a pinned harness before
   padding anything.
 
@@ -345,7 +344,7 @@ Each is a rule above that Puck breaks today; the packet holds the work.
   refusal snapshot on every rigid advance
   ([simulation tick](../../../../docs/plans/open-items.md#engine-job-system)).
 - **Linear scans per body.** `WorldBodyStateReads.TryResolveSlot` searches the
-  declared state by name ([`WorldBodyStateReads.cs:43`](../../../../src/Puck.World.Schema/WorldBodyStateReads.cs))
+  declared state by name ([source](../../../../src/Puck.World.Schema/WorldBodyStateReads.cs))
   for every body on a one-body register change, and
   `SdfMeshPathBake.IrradiancePending` walks every group each frame once the bake
   has settled ([frame time](../../../../docs/plans/open-items.md#engine-job-system)).
