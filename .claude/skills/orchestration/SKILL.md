@@ -131,8 +131,9 @@ brief:
   a lead to verify, not a fact. One lane was sent to add a source-generated
   JSON context that already existed, because the packet said none did;
 
-- a fresh read of the worktree's AGENTS.md and owning skill, correcting stale
-  startup repository text while preserving current owner and system precedence.
+- for a Codex or Antigravity lane, an instruction to read the
+  [`delegate` skill](../delegate/SKILL.md) before anything else (Claude's
+  project agents preload it); it owns the lane's own working contract.
 
 When a lane demonstrates stale-rule behavior, the lead starts a fresh session
 before launching its continuation. Editing a skill alone does not require a new session.
@@ -165,9 +166,7 @@ single door, or a derived view, never "every caller remembers". Every first
 draft of such work this session came back with highs from review (the
 incremental hash's caches, the disclosure harness, the exit layer three times,
 the transmission design), each from an invariant kept by convention; a design
-review costs a quarter hour, a failed fix round a lane's afternoon. A new
-check or oracle is shown failing without the fix it guards (fault injection),
-not only passing with it.
+review costs a quarter hour, a failed fix round a lane's afternoon.
 
 Before briefing a step that decides how a pipeline works (what the renderer
 draws and submits, how the tick schedules, a camera or physics model), ask
@@ -185,17 +184,11 @@ status, and count the commits behind with
 `git rev-list --count <base>..<integration-head>`
 ([why a two-dot range is not ancestry](../verification/SKILL.md#branches)).
 
-Only the assignment's last commit carries one of these trailers, as the last
-line of its message:
-
-```text
-Brief: <id> done
-Brief: <id> blocked: <question>
-```
-
-Progress and WIP commits carry no `Brief:` trailer, and no other value follows
-`Brief: <id>`. The lead checks the final commit's trailer and subject format
-before merging a lane.
+Only the assignment's last commit carries the `Brief:` trailer the
+[`delegate` skill](../delegate/SKILL.md#finish) names (`done` or
+`blocked: <question>`); progress and WIP commits carry none, and no other value
+follows `Brief: <id>`. The lead checks the final commit's trailer and subject
+format before merging a lane.
 
 The lead's ledger and plan files that a delegate never writes are the lead's
 own scratch checklists under `<worktree>/.claude/scratch/<lane>-*`. The repository's documents,
@@ -289,20 +282,19 @@ will do.
 
 Heavy verification runs in one place, one job at a time; this is the owner's
 direction, after concurrent whole-solution builds exhausted the machine's memory.
-- **Coding lanes** build only the projects they touch, with `-m:2`, and run only
-  their focused tests. They run no whole-solution build, no full suite and no
-  GPU leg, and they hand back a branch that builds and passes those tests.
+- **Coding lanes** keep to the [`delegate` skill's](../delegate/SKILL.md#build-and-run)
+  build bounds and hand back a branch that builds and passes their focused
+  checks.
   Several run at once (the owner's direction: don't over-serialize for
   memory), within the WIP limit: about three building writers, one heavy
   integration job and one GPU leg. A windowed debug World holds about 10 GB of
   working set (15 GB private) within a minute of boot. On a 32 GB machine, while
   one runs, only a couple of building lanes fit beside it. Keep windowed capture
-  batches short (boot, capture, stop), and tune on a headless World. A lane that
-  runs scenario files (`puck test <file>`) names the files and passes `--jobs 1`:
-  this serializes headless worker processes, including reproduce replicas, with
-  one independent native host live at a time, where a higher `--jobs` beside a
-  replay can exhaust memory and kill it. Every brief, a read-only review's
-  included, says so.
+  batches short (boot, capture, stop), and tune on a headless World. The
+  delegate skill's `--jobs 1` serializes headless worker processes, including
+  reproduce replicas, with one independent native host live at a time, where a
+  higher `--jobs` beside a replay can exhaust memory and kill it; a brief names
+  the scenario files a lane may run.
 - **Reaping** is prevented by that limit, because Claude Code reaps background
   jobs when memory runs critically low. A reaped lane is handled once: the lead
   saves its tree as a WIP commit, removes the cause, and restarts it with a
