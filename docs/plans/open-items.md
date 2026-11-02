@@ -2891,24 +2891,6 @@ brief's priorities ([security review](../development/security-review.md)).
   - Steps 5 and 6, the compiler and the deletion of every other predicate
     ([decision 6](disclosure.md#6-the-compiler-holds-the-line)): DISC001 and its
     allowlist, `CommandDefinition.Operator`, `WorldStateDisclosure` deleted.
-- [high] A faulting remove key is treated as success, so a partial firing
-  commits: `src/Puck.State.Rules/Evaluation/RuleEvaluator.Effects.cs:723` calls
-  the `ResolveKey` overload that discards `KeyNaming`, and its invalid-key arm
-  returns true when `strict` is false (`:730`; ordinary firings pass
-  `strict: false` at `:149` and commit at `:98`). A rule that increments score
-  and then removes `labels[1 / zero]` commits the score instead of rewinding the
-  firing. (from: disc2-review)
-- [medium] Read operands still erase key faults beyond the Text case:
-  `src/Puck.State.Rules/Compiler/Operands.Vectors.cs:87` discards the naming
-  result and `VectorCallOperand.Read` answers Absent (`:154`);
-  `Compiler/Operands.cs:534` does the same for board origins and answers
-  `-1` for an invalid offset origin (`:554`), its symmetry reader at `:660` reads
-  through an invalid key as a default number; pattern reads discard the result
-  at `Compiler/Operands.Patterns.cs:88` and `:212`; Text at
-  `Evaluation/RuleEvaluation.cs:285-288` never raises a fault from the branch
-  at `:113`, so `not (labels[1 / zero] == "yes")` opens. Each should produce
-  `Domain`; the status-discarding overloads in `RuleReads.cs:207` and `:268`
-  make new misses easy. (from: disc2-review, disclosure-2)
 - [low] Closing a gate on a fault re-arms an Edge rule after a one-tick fault
   and fires a decision's `OnNoChoice`; decide whether a fault should hold the
   previous state instead. `WorldBody.GateOpen` and `MotionGateOpen` are
