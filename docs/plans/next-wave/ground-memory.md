@@ -9,7 +9,7 @@ forbade both), so everything about meshes, GI and the GPU is [R] or [S].
 
 One headless debug World (`puck_world_start`, headless, `--devices none`), `host.memory` at boot (tick ~296), after
 600 ticks (tick 896) and after `host.memory collect`, and two `dotnet-gcdump` heap snapshots (boot, tick 896),
-aggregated by type (`.claude/scratch/ground-memory-agg.ps1`; the gcdump report's first column is per-object size,
+aggregated by type (a scratch script; the gcdump report's first column is per-object size,
 so a type's bytes are size x count).
 
 | Reading | Boot (t≈296) | t=896 | After `collect` |

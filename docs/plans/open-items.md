@@ -3803,6 +3803,47 @@ Owner: the lead · ordinary · Next: the Monitor hook check.
   (evaluate both on the same inputs) is the check that would hold it.
   (from: roslyn-hazards)
 
+- [high, the analyzer's soundness] A Codex review found three STALE001
+  misses outside the hazards page's stated blind spots. The page asserts
+  each one as covered, so a lane reading it trusts the wrong thing until they
+  are fixed or listed:
+  - Passing the old arena to a replacing call exempts every later read
+    (`StaleCaptureAnalyzer.cs:451`, `:587`). Being an argument does not prove
+    it is adopted, and `hazards.md:123` states the exemption as fact.
+  - The STALE003 seed misses a getter that returns its field through a local,
+    an auto-property's setter and `??=` (`:419`, `:426`).
+  - A refresh on the normal path stops the walk before the replacing call's
+    catch and finally edges (`:254`, `:259`, `:293`).
+
+  Medium:
+  - `finally` is modelled as a bypassable successor, a false positive after
+    an unconditional refresh (`:300`).
+  - `s = host.ReplaceAndGetScratch()` is flagged by source order (`:254`,
+    `:476`).
+  - Local functions use a second, text-order mechanism, and a captured read
+    detaches from its call (`:377`, `:611`). Fold them into the one CFG walk.
+  - An async replacement is attributed to the call that starts it, not to
+    its completion (`:398`, `:531`).
+  - STALE002 ignores inherited root accessors (`:631`-`:669`).
+  - `[Replaces(typeof(object))]` and stale marks are never checked.
+  - `identity-counters` matches project paths relative to the scan root, so
+    `puck scan src/Puck.World.Server` finds nothing
+    (`IdentityCounterAnalyzer.cs:41`, `:98`), and its type keys drop the
+    namespace and arity (`:47`, `:107`).
+  - `exact-keys` misses `Dictionary<Vector3|float|tuple, _>` keys
+    (`ExactKeyAnalyzer.cs:124`, `:139`).
+  - Every compilation builds the call graph with no fast path when it has no
+    replaceable types; test compilations build flow results they never read
+    (`:100`, `:331`). Measure it against the edit-to-running bar.
+
+  Low:
+  - Mentioning a counter counts as persisting it.
+  - `exact-keys` reports a tolerant `Matches` as exact.
+  - `CommentSmellScan.cs:326` is a second line-site writer beside
+    `ScanSites`.
+
+  The `ArenaSearch.cs:557` suppression is justified. (from: hazards-astra)
+
 - [medium] The lead session's own `puck` MCP server may run a stale CLI: the
   project root's build is never checked against its HEAD (the fallback now is,
   `.claude/hooks/puck-mcp.ps1`). Apply the same "the build finished after HEAD

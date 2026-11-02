@@ -119,8 +119,8 @@ moving the work after the call into a method of its own that reads it there
 - **STALE001** (warning): a local or parameter of a replaceable type read, on a
   path of the method's control flow graph, after a call that replaces its root,
   with no new value written between. The analyzer follows calls inside one
-  compilation on its own. A variable handed to the replacing call is the
-  replacement and is exempt.
+  compilation on its own. A variable handed to the replacing call is exempt,
+  on the unproved assumption that the call adopts it.
 - **STALE002**: a member that reaches a replacement and is reached by dispatch
   has the mark on the member it overrides or implements, and a public member of
   a type that hands out the root (`WorldServer.Step`, `ArenaSearch.Step`)
@@ -146,6 +146,16 @@ reflection or a constructor; a capture held in another object's field; dispatch
 through a framework interface, which cannot carry the mark; and, across
 assemblies, a replacement reached through an unmarked public member of a type
 that does not hand out the root.
+
+These gaps are open as well, until the
+[analyzer's soundness item](../plans/open-items.md#agent-tooling-and-skills)
+closes them:
+
+- a getter that returns its field through a local, an auto-property or `??=`;
+- the catch and finally paths after a refresh on the normal path;
+- a read inside a local function or lambda that a later call runs;
+- an async replacement that completes after the capture;
+- an inherited root accessor across assemblies.
 
 ## Two copies of one computation
 
