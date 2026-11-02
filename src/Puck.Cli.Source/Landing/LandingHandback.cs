@@ -58,8 +58,9 @@ public static partial class LandingHandback {
             or --base), less commits a fast-forward or reset brought onto that chain. A merge of the
             integration tip keeps the lane as first parent, so what it brings in is not judged.
 
-              brief      HEAD carries "Brief: <id> done" or "Brief: <id> blocked: <question>", and no
-                         other lane commit carries a Brief: line.
+              brief      the final commit, the newest non-merge lane commit, carries "Brief: <id> done"
+                         or "Brief: <id> blocked: <question>", no other lane commit carries a Brief:
+                         line, and only merges (of the integration tip) follow it.
               subjects   every non-merge lane commit's subject is "area: sentence", the area
                          lowercase (several areas join with ", ").
               coauthor   no lane commit carries a Co-Authored-By trailer.
@@ -164,14 +165,19 @@ public static partial class LandingHandback {
         if (commits.Count == 0) { return CliExit.Refuse(verb: Verb, what: head[..12], why: "the branch holds no commit of its own past --against."); }
 
         var briefFindings = new List<string>();
+        // The final commit is the newest one the lane wrote that is not a merge: a lane merges the integration tip
+        // before it reports, and a tip that moves after the final commit puts a merge on top of it.
+        var final = commits.FindIndex(match: static commit => (commit.Parents.Count < 2));
 
         if (commits[0].Hash != head) {
             briefFindings.Add(item: $"HEAD {head[..12]} is not a commit the lane wrote (a fast-forward or reset put it there); end the branch with the lane's own final commit.");
-        } else if (!BriefLine().IsMatch(input: commits[0].Message)) {
-            briefFindings.Add(item: $"{commits[0].Label}: the final commit carries no \"Brief: <id> done\" or \"Brief: <id> blocked: <question>\" line.");
+        } else if (final < 0) {
+            briefFindings.Add(item: "the lane holds only merges; its final commit carries the Brief: line.");
+        } else if (!BriefLine().IsMatch(input: commits[final].Message)) {
+            briefFindings.Add(item: $"{commits[final].Label}: the final commit carries no \"Brief: <id> done\" or \"Brief: <id> blocked: <question>\" line.");
         }
-        briefFindings.AddRange(collection: commits.Skip(count: 1).Where(predicate: static commit => AnyBriefLine().IsMatch(input: commit.Message)).Select(selector: static commit => $"{commit.Label}: carries a Brief: line, which belongs on the final commit only."));
-        Leg(findings: briefFindings, name: "brief", pass: $"{commits[0].Hash[..12]} carries the Brief: line and no other lane commit does.");
+        briefFindings.AddRange(collection: commits.Where(predicate: (commit, index) => ((index != final) && AnyBriefLine().IsMatch(input: commit.Message))).Select(selector: static commit => $"{commit.Label}: carries a Brief: line, which belongs on the final commit only."));
+        Leg(findings: briefFindings, name: "brief", pass: $"{((final < 0) ? head : commits[final].Hash)[..12]} carries the Brief: line, no other lane commit does, and only merges follow it.");
 
         Leg(
             findings: [.. commits.Where(predicate: static commit => ((commit.Parents.Count < 2) && !Subject().IsMatch(input: commit.Subject))).Reverse().Select(selector: static commit => $"{commit.Label}: not a lowercase \"area: sentence\" subject.")],

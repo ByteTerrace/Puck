@@ -21,12 +21,7 @@ public static partial class EvalsRun {
     /// <summary>The directory, beside a result document, that holds each run's copied transcript as
     /// <c>&lt;case&gt;/&lt;arm&gt;-&lt;run&gt;.jsonl</c>.</summary>
     public const string TracesDirectory = "traces";
-    /// <summary>The fixture directory <c>puck evals run</c> adds to every case and grants through
-    /// <c>context.add_dirs</c>.</summary>
-    public const string FixtureDirectory = "puck-rules";
     private const string DefaultModel = "claude-sonnet-5-5";
-    // Reading the fixture costs the agent one turn (both files in one parallel read).
-    private const int FixtureTurns = 1;
     // The lead's own skill; every other skill is loaded by a lane, which preloads delegate.
     private static readonly string[] SkillsWithoutDelegate = ["delegate", "orchestration"];
     // Weakest first: a judge's tier must be at least the tier of the model under test.
@@ -71,11 +66,11 @@ public static partial class EvalsRun {
                live tree, which claude plugin eval would read as it changes. With a --revision other
                than HEAD, HEAD's .claude/skills/<skill>/evals/ replaces the revision's, so the old
                and new skill run identical cases.
-            2. Adds the fixture to every case in that tree: a puck-rules/ directory holding HEAD's
-               AGENTS.md (and, for a skill a lane loads, HEAD's delegate SKILL.md as
-               delegate-SKILL.md), granted through case.yaml context.add_dirs and named by an
-               append_system_prompt line, and one more max_turns for reading it. Both arms read it,
-               so the delta measures what the skill adds over the rules a session already has. The
+            2. Adds the fixture to every case in that tree: HEAD's AGENTS.md text (and, for a skill
+               a lane loads, HEAD's delegate SKILL.md text) in case.yaml
+               execution.append_system_prompt, where a real session has them loaded. Both arms
+               carry it, so the delta measures what the skill adds over the rules a session already
+               has. A case whose prompt.md or case.yaml sets append_system_prompt is refused. The
                repository and .claude/skills/ are never granted.
             3. Runs claude plugin eval on the tree's skill directory with --trust-plugin,
                --no-publish, --keep-temp, --threshold 0 and the models given, writing
@@ -118,16 +113,29 @@ public static partial class EvalsRun {
     private static int Tier(string model) => ((FullModelId().Match(input: model) is { Success: true } match) ? System.Array.IndexOf(array: Tiers, value: match.Groups["tier"].Value) : -1);
     private static string Quote(string argument) => ((argument.Length != 0) && !argument.Any(predicate: static c => (char.IsWhiteSpace(c: c) || (c is '"' or '\'' or '*' or '?' or '[' or '$')))) ? argument : $"'{argument.Replace(oldValue: "'", newValue: "'\\''")}'";
     private static string Display(string path) => path.Replace(oldChar: '\\', newChar: '/');
-    private static string YamlString(string text) => $"\"{text.Replace(oldValue: "\\", newValue: "\\\\").Replace(oldValue: "\"", newValue: "\\\"")}\"";
 
-    /// <summary>The line appended to every case's system prompt, naming the fixture the agent reads.</summary>
-    /// <param name="withDelegate">Whether the fixture holds the delegate skill.</param>
-    /// <returns>The prompt text.</returns>
-    public static string FixturePrompt(bool withDelegate) =>
-        "You are working in the Puck repository, and every session there has its rules file, AGENTS.md, loaded. " +
-        $"A copy of it is AGENTS.md in the additional working directory named {FixtureDirectory}" +
-        (withDelegate ? "; beside it, delegate-SKILL.md is the delegate skill every Puck lane preloads, and you are such a lane" : string.Empty) +
-        (withDelegate ? ". Read both before you answer, and follow them." : ". Read it before you answer, and follow it.");
+    /// <summary>Builds the text appended to every case's system prompt: the rules file a session in the repository has
+    /// loaded, and, for a lane, the delegate skill it preloads, each under a heading naming what it is.</summary>
+    /// <param name="agents">The text of <c>AGENTS.md</c>.</param>
+    /// <param name="delegateSkill">The text of the delegate skill's <c>SKILL.md</c>, or <see langword="null"/> to leave
+    /// it out; its YAML frontmatter is dropped, as a preloaded skill's body is what a lane reads.</param>
+    /// <returns>The prompt text, with <c>\n</c> line endings.</returns>
+    public static string FixturePrompt(string agents, string? delegateSkill) {
+        var text = new StringBuilder();
+
+        text.Append(value: "You are working in the Puck repository. Its rules file, AGENTS.md, is loaded in every session there; its contents follow.\n\n");
+        text.Append(value: "# Contents of AGENTS.md (project instructions, checked into the codebase)\n\n");
+        text.Append(value: agents.ReplaceLineEndings(replacementText: "\n").Trim());
+        if (delegateSkill is not null) {
+            var lines = delegateSkill.ReplaceLineEndings(replacementText: "\n").Split(separator: '\n');
+            var end = CaseFiles.FrontmatterEnd(lines: lines);
+
+            text.Append(value: "\n\nYou are a delegated Puck lane, and every lane preloads the delegate skill; its contents follow.\n\n");
+            text.Append(value: "# Contents of the delegate skill (.claude/skills/delegate/SKILL.md)\n\n");
+            text.Append(value: string.Join(separator: '\n', value: lines[((end < 0) ? 0 : (end + 1))..]).Trim());
+        }
+        return text.ToString();
+    }
 
     private static async Task<int> RunAsync(Settings settings, TimeProvider clock, CancellationToken cancellationToken) {
         if (!SkillName().IsMatch(input: settings.Skill)) { return CliExit.Refuse(verb: Verb, what: settings.Skill, why: "is not a skill directory name."); }
@@ -177,7 +185,7 @@ public static partial class EvalsRun {
         Console.WriteLine(value: $"{Verb}: {settings.Skill} at {settings.Revision} ({revision[..12]}), cases from HEAD ({head[..12]}){((revision == head) ? string.Empty : ", copied into the old tree")}");
         Console.WriteLine(value: $"{Verb}: frozen tree {Display(path: tree)} (detached at {revision[..12]}; {(settings.KeepTree ? "kept" : "removed after the run")})");
         Console.WriteLine(value: (settings.Fixture
-            ? $"{Verb}: fixture {FixtureDirectory}/ in every case: HEAD's AGENTS.md{(withDelegate ? " and delegate SKILL.md" : string.Empty)}, granted by case.yaml context.add_dirs, named by append_system_prompt, max_turns +{FixtureTurns}"
+            ? $"{Verb}: fixture in every case's case.yaml execution.append_system_prompt, both arms: HEAD's AGENTS.md{(withDelegate ? " and delegate SKILL.md" : string.Empty)} text"
             : $"{Verb}: no fixture (--no-fixture): the cases run without the rules file"));
         Console.WriteLine(value: $"{Verb}: model {settings.Model}, judge {settings.Judge}, ablation {settings.Ablation}, ceiling ${settings.MaxCostUsd.ToString(provider: CultureInfo.InvariantCulture)}");
         Console.WriteLine(value: $"{Verb}: results {Display(path: results)}");
@@ -242,11 +250,9 @@ public static partial class EvalsRun {
         }
     }
 
-    /// <summary>Adds the rules-file fixture to every case directory: a <see cref="FixtureDirectory"/> directory holding
-    /// <c>AGENTS.md</c> (and <c>delegate-SKILL.md</c> when <paramref name="delegateSkill"/> is given), granted through
-    /// <c>case.yaml</c> <c>context.add_dirs</c> and named by <c>execution.append_system_prompt</c>, with the
-    /// <c>max_turns</c> a <c>prompt.md</c> sets raised by one for the read. Every case is checked before any is
-    /// written.</summary>
+    /// <summary>Adds the rules-file fixture to every case directory: <see cref="FixturePrompt"/> as the
+    /// <c>execution.append_system_prompt</c> of its <c>case.yaml</c>, which both arms run with. Every case is checked
+    /// before any is written.</summary>
     /// <param name="caseDirectories">The case directories, in a tree the run owns.</param>
     /// <param name="agents">The text of <c>AGENTS.md</c>.</param>
     /// <param name="delegateSkill">The text of the delegate skill, or <see langword="null"/> to leave it out.</param>
@@ -254,22 +260,13 @@ public static partial class EvalsRun {
     /// refusal writes nothing.</returns>
     public static (string Case, string Why)? AddFixture(IReadOnlyList<string> caseDirectories, string agents, string? delegateSkill) {
         foreach (var caseDirectory in caseDirectories) {
-            if (CaseFiles.PromptSets(caseDirectory: caseDirectory, key: "append_system_prompt")) { return (caseDirectory, "its prompt.md sets append_system_prompt, which would override the fixture's; move that text into the prompt."); }
-            if (Directory.Exists(path: Path.Combine(caseDirectory, FixtureDirectory))) { return (caseDirectory, $"it already holds {FixtureDirectory}/, the directory the fixture writes."); }
-            if (File.Exists(path: Path.Combine(caseDirectory, CaseFiles.Case)) && File.ReadAllLines(path: Path.Combine(caseDirectory, CaseFiles.Case)).Any(predicate: static line => (line.TrimStart().StartsWith(value: "add_dirs:", comparisonType: StringComparison.Ordinal) || line.TrimStart().StartsWith(value: "append_system_prompt:", comparisonType: StringComparison.Ordinal)))) {
-                return (caseDirectory, "its case.yaml sets add_dirs or append_system_prompt already; merge the fixture's by hand or drop them.");
-            }
+            if (CaseFiles.PromptSets(caseDirectory: caseDirectory, key: "append_system_prompt")) { return (caseDirectory, "its prompt.md sets append_system_prompt, which would override the fixture; move that text into the prompt."); }
+            if (CaseFiles.CaseSets(caseDirectory: caseDirectory, key: "append_system_prompt")) { return (caseDirectory, "its case.yaml sets append_system_prompt, which the fixture writes; move that text into the prompt."); }
         }
-        var prompt = YamlString(text: FixturePrompt(withDelegate: (delegateSkill is not null)));
+        var prompt = FixturePrompt(agents: agents, delegateSkill: delegateSkill);
 
         foreach (var caseDirectory in caseDirectories) {
-            var fixture = Directory.CreateDirectory(path: Path.Combine(caseDirectory, FixtureDirectory)).FullName;
-
-            File.WriteAllText(path: Path.Combine(fixture, "AGENTS.md"), contents: agents);
-            if (delegateSkill is not null) { File.WriteAllText(path: Path.Combine(fixture, "delegate-SKILL.md"), contents: delegateSkill); }
-            CaseFiles.SetCaseKey(caseDirectory: caseDirectory, key: "add_dirs", section: "context", value: $"[{FixtureDirectory}]");
-            CaseFiles.SetCaseKey(caseDirectory: caseDirectory, key: "append_system_prompt", section: "execution", value: prompt);
-            _ = CaseFiles.RaiseMaxTurns(caseDirectory: caseDirectory, extra: FixtureTurns);
+            CaseFiles.SetCaseKey(caseDirectory: caseDirectory, key: "append_system_prompt", section: "execution", text: prompt);
         }
         return null;
     }
@@ -307,8 +304,7 @@ public static partial class EvalsRun {
             ["model"] = settings.Model,
             ["judge"] = settings.Judge,
             ["ablation"] = settings.Ablation,
-            ["fixture"] = (settings.Fixture ? (withDelegate ? new[] { "AGENTS.md", "delegate-SKILL.md" } : ["AGENTS.md"]) : []),
-            ["fixtureTurns"] = (settings.Fixture ? FixtureTurns : 0),
+            ["fixture"] = (settings.Fixture ? (withDelegate ? new[] { "AGENTS.md", ".claude/skills/delegate/SKILL.md" } : ["AGENTS.md"]) : []),
             ["command"] = (IReadOnlyList<string>)["claude", .. arguments],
             ["exitCode"] = exitCode,
             ["traces"] = traces,
