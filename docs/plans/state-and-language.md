@@ -1026,6 +1026,43 @@ Recommendation: (a). The irregular offsets are history, not design; once the
 ids are regular the existing template expresses the side, and the language
 needs (b) only if several creatures (the pond's spider and hound) want it.
 
+**G17 — What the hidden-information games hit.** Authoring the four games
+(`worlds/games/auction.puck`, `shedding.puck`, `deduction.puck`,
+`skirmish.puck`), each wall checked against the compiled document or a running
+World. A rule-body template and `schedule … in` with a parameter are G14's.
+
+- A row name computed per seat (`$"sheddingHand{s}"`) reads in a gate or a
+  local, but an assignment, a `remove` or a sugar key's `zone(…)` naming it is
+  PUCK001/PUCK002, so every per-seat write is a call form (`setState`,
+  `addState`, `removeStateCell` with `state: $"…"`): two spellings of one
+  write, one admitted only for literal names.
+- In a call form, `key: expr(card)` with `card` a local lowers as a read of a
+  row named `card` (the `expression:` argument resolves the same local), and a
+  `for` variable bare in `key:` lowers as its literal name; `key: $"{c}"`
+  works. A compile-time string on an assignment's right side
+  (`row[k] = $"seat{s}"`, or a `let` holding one) lowers as a copy from a row
+  of that name (`fromState`), where a literal string lowers as text;
+  `setState(…, text: $"seat{s}")` writes the text. Compiling the imported
+  fragment alone with `--validate` passes the bad copy; only the composing
+  world refuses it (`StateRowUnknown`).
+- `export read` refuses a backquoted dashed name (`` `card-back` ``, PUCK001)
+  and takes a quoted one.
+
+Recommendation: one lowering for a write whatever names its row, key or value:
+an interpolated name is a write target wherever a literal is, a local or a
+`for` variable resolves in every argument of a call form as it does in the
+sugar, a compile-time string on a right side is text, and the export list takes
+the backquoted name; each with a corpus pair against the spelling that works
+today.
+
+Engine behaviour the games met, which a game spells around rather than a
+language gap: a rule's write never mints a key in a keyed row (only a pile
+takes new members), so every chat slot, audience cell and vote is declared up
+front, and a literal-key read of a cell no seed declares is refused at
+validation (`StateCellUndeclared`); a search job restarts whenever a row it
+reads changes and `observe` restamps every remembered cell, so a job scoring
+over a `knowledge` row finishes only when the observe runs on change.
+
 ## Sequencing
 
 Landed: the rebuild and the means to build and test a world against it

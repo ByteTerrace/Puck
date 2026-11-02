@@ -2565,33 +2565,8 @@ Klondike table stands north of the Go table in the board game room
    south and north of the room's middle, the shedding racks' card orientation
    by yaw unchecked), physical units on the skirmish board (a deal lays
    children out by slot, never by a cell value, so a unit standing on its cell
-   needs a body or a `respond` placement per cell), and the walls the games hit
-   (each verified while authoring them):
-   - A rule's write never mints a key in a keyed row (`a write never mints a
-     key`), so every chat slot, audience cell and vote is declared up front;
-     only a pile takes new members. A literal key read of a cell no seed
-     declares is refused when the document validates (`StateCellUndeclared`).
-   - An interpolated row name (`$"sheddingHand{s}"`) reads in a gate or a local
-     but cannot be an assignment target, a `remove` target or the row inside a
-     sugar key's `zone(...)`; the call forms (`setState`, `addState`,
-     `removeStateCell`) carry it.
-   - In a call form, a local inside `key: expr(...)` or `expression:` lowers as
-     a read of a row of that name, where the sugar resolves the local; a bare
-     `for` variable in `key:` lowers as its literal name. A compile-time string
-     on an assignment's right side (`row[k] = $"seat{s}"`, or a `let` holding
-     one) lowers as a copy from a row of that name rather than as text; the
-     `text:` argument of `setState` writes it. `puck compile --validate` of an
-     imported fragment alone passes the bad copy; only the composing world
-     refuses it.
-   - A template called inside a rule body lowers as an effect call rather than
-     expanding, and `schedule … in` takes only a literal duration, so neither
-     a shared bookkeeping template nor a duration parameter works.
-   - `export read` takes no dashed name in backquotes; quoted names do.
-   - A search job restarts whenever a row it reads changes, and an `observe`
-     restamps every remembered cell, so a job scoring over a `knowledge` row
-     only finishes when the observe runs on change, not every tick.
-   - The debug world's placement policy floor was 0.46; the shedding racks
-     stand the standard deck at 0.06, so the floor is 0.06 now.
+   needs a body or a `respond` placement per cell). The language walls the
+   games hit are [S11's G17](state-and-language.md#s11--ergonomic-is-optimal).
 - Residency: none of it waits on streaming; at 52 to 104 cards a table it is a
   stress case for nearest-first bake order
   ([streaming](#residency-and-streaming)).
