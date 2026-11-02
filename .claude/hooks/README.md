@@ -10,7 +10,7 @@ no policy speaks to gets no output, so the tool's own permission rules decide.
 |---|---|
 | `git-safety` | Pushes and `gh` writes, and the git that touches what every lane shares (the table is in the script's header) |
 | `read-only-agent` | A read-only Claude agent's git other than reads, writes outside a scratch or findings path, and generators that rewrite tracked files |
-| `session-launch` | A lane's launch of another agent session (`codex`, `agy`, `claude`, the Codex companion script), and the lead's Codex launch that changes its own approvals or sandbox |
+| `session-launch` | A lane's launch of another agent session (`codex`, `agy`, `claude`, the Codex companion script, and `puck evals run`, which starts `claude plugin eval` as its own child), and the lead's Codex launch that changes its own approvals or sandbox |
 | `no-coauthor` | A commit, merge, commit-tree or cherry-pick whose message carries `Co-Authored-By` |
 | `no-node-reuse` | `dotnet build`, `msbuild`, `restore`, `pack` or `publish` without `-nodeReuse:false` |
 | `world-devices` | A `Puck.World` boot that names no `--devices` |
@@ -21,7 +21,8 @@ no policy speaks to gets no output, so the tool's own permission rules decide.
 A lane is a Claude subagent (its payload carries `agent_id`), a Codex session or
 an Antigravity session. A lane is refused every push, every shared-state git
 command, every launch of another agent session (only help, version and listing
-forms pass) and anything the classifier cannot see into. The Claude session with no
+forms pass, a subcommand's help such as `claude plugin eval --help` among them,
+and `puck evals run --dry-run`) and anything the classifier cannot see into. The Claude session with no
 `agent_id` is the lead: it is asked before a push or `gh` write that reaches
 `main`, force-pushes, deletes, mirrors or cannot be resolved, before a
 permission-changing Codex launch and before an opaque command; its other pushes
@@ -132,7 +133,9 @@ the message file with the edit tool first.
 ## Rules only prose holds
 
 No hook enforces these; AGENTS.md and the skills state them, and the lead checks
-them when it merges a lane:
+them when it merges a lane. `puck landing handback` checks the first two
+mechanically, with Co-Authored-By trailers, plumbing-built commits and the docs
+links at the lane's head:
 
 - The final commit of an assignment ends with `Brief: <id> done` or
   `Brief: <id> blocked: <question>`, and no other commit carries a `Brief:`

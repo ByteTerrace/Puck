@@ -2,7 +2,6 @@
 type: regex
 weight: 1
 match: contains
-flags: i
 ---
 
-\s-i\b
+search\b[^\n]*[ \t](-i|--ignore-case)\b

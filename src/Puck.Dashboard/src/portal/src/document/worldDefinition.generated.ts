@@ -3573,7 +3573,7 @@ export type WorldBindingBarAuthoring = {
    */
   layoutCell?: string | null;
   /**
-   * A text state cell, state.<row>.<key>, whose value picks the bar's model: single draws one bar — the active page's bank, in the first authored bank's place, swapping in place as a chord is held or released; any other value (or no cell) draws every bank the live layout places, the active one at full alpha and the rest as wings. Ordinary state, flipped the same way LayoutCell is.
+   * A text state cell, state.<row>.<key>, whose value picks the bar's model: single draws one bar — the active page, in the first authored bank's place, swapping in place as a chord is held or released or a context group switches the page; any other value (or no cell) draws every bank the live layout places, the active one at full alpha and the rest as wings. The active page never changes the model. Ordinary state, flipped the same way LayoutCell is.
    */
   modelCell?: string | null;
   /**
@@ -3591,7 +3591,7 @@ export type WorldBindingBarBank = {
    */
   id: string;
   /**
-   * The BindingPageDefinition.Id this bank renders — validated to exist somewhere in the composed binding profile.
+   * The BindingPageDefinition.Id this bank renders — validated to exist somewhere in the composed binding profile. While a context group (a board's) makes another page active that no bank names, that page renders in the first bank whose page the same held modifiers select, so the group's resting page takes the resting page's bank and the bar's layout and model stay as the seat set them.
    */
   pageId: string;
   /**

@@ -1100,8 +1100,9 @@ Facts a script needs:
   `Puck.Platform.Windows.AddWindowsPrecisionWaiter`. The two boot shapes are
   never composed together.
 - `WorldSimulation.cs`—the one `IFixedStepSimulation` shell over `WorldHostStep`.
-  Composition supplies a post-step: windowed synchronizes seat bindings and
-  publishes seat context; headless and offscreen update logical wheel state.
+  Composition supplies a post-step: every shape synchronizes seat bindings and
+  publishes seat context, so a seated seat switches pages headless too; headless
+  and offscreen then update logical wheel state.
 - `WorldHostStep.cs`—the one fixed step every boot shape runs, in one order:
   decide whether boot is due, submit its seats' intents, drain the host's
   pending transfers, step boot through

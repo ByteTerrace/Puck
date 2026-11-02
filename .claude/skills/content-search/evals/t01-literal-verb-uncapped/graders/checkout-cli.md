@@ -5,4 +5,4 @@ match: contains
 flags: i
 ---
 
-Puck\.Cli(\.dll|\.csproj)
+dotnet\s+(?!["']?src/Puck\.Cli/bin)["']?[^\s"']*Puck\.Cli\.dll["']?\s+search\b|dotnet\s+["']?\$\{?\w+\}?["']?\s+search\b

@@ -24959,7 +24959,7 @@
                       "type": "string"
                     },
                     "pageId": {
-                      "description": "The BindingPageDefinition.Id this bank renders \u2014 validated to exist somewhere in the composed binding profile.",
+                      "description": "The BindingPageDefinition.Id this bank renders \u2014 validated to exist somewhere in the composed binding profile. While a context group (a board\u0027s) makes another page active that no bank names, that page renders in the first bank whose page the same held modifiers select, so the group\u0027s resting page takes the resting page\u0027s bank and the bar\u0027s layout and model stay as the seat set them.",
                       "type": "string"
                     },
                     "alpha": {
@@ -25342,7 +25342,7 @@
                 "default": null
               },
               "modelCell": {
-                "description": "A text state cell, state.\u003Crow\u003E.\u003Ckey\u003E, whose value picks the bar\u0027s model: single draws one bar \u2014 the active page\u0027s bank, in the first authored bank\u0027s place, swapping in place as a chord is held or released; any other value (or no cell) draws every bank the live layout places, the active one at full alpha and the rest as wings. Ordinary state, flipped the same way LayoutCell is.",
+                "description": "A text state cell, state.\u003Crow\u003E.\u003Ckey\u003E, whose value picks the bar\u0027s model: single draws one bar \u2014 the active page, in the first authored bank\u0027s place, swapping in place as a chord is held or released or a context group switches the page; any other value (or no cell) draws every bank the live layout places, the active one at full alpha and the rest as wings. The active page never changes the model. Ordinary state, flipped the same way LayoutCell is.",
                 "type": [
                   "string",
                   "null"

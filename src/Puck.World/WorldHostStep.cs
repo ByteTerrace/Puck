@@ -95,8 +95,8 @@ internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTa
     /// <summary>Runs one fixed step.</summary>
     /// <param name="context">The pump's tick context; only its step width reaches the server.</param>
     /// <param name="afterInstances">The shell's own post-step, run after every instance has stepped and before the
-    /// seat intents finish — the windowed shell syncs seat bindings and publishes seat context here; a headless
-    /// shell publishes logical wheel state.</param>
+    /// seat intents finish: every shape syncs seat bindings and publishes seat context here, and a headless or
+    /// offscreen shell then publishes logical wheel state.</param>
     public void Step(in FixedStepContext context, Action? afterInstances) {
         sourceWatch.Poll();
         // A seat claim can be published off this thread (a federated observer reporting an onward handoff) or by a

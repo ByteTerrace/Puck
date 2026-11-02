@@ -114,4 +114,18 @@ public static class CliGit {
 
         return (resolved.Length != 0);
     }
+    /// <summary>Resolves the main checkout of the repository <paramref name="repository"/> belongs to: the directory that
+    /// holds the common git directory, the same answer from every worktree. Shared per-repository state (leases, the
+    /// worktrees folder) lives under it, never under a linked worktree.</summary>
+    /// <param name="repository">Any worktree of the repository.</param>
+    /// <param name="mainCheckout">The main checkout's absolute path, or empty when git cannot name it.</param>
+    /// <returns><see langword="true"/> when resolved.</returns>
+    public static bool TryResolveMainCheckout(string repository, out string mainCheckout) {
+        var common = Run(repository, "rev-parse", "--path-format=absolute", "--git-common-dir").Stdout.Trim();
+
+        mainCheckout = (Path.IsPathFullyQualified(path: common)
+            ? (Path.GetDirectoryName(path: Path.TrimEndingDirectorySeparator(path: common)) ?? string.Empty)
+            : string.Empty);
+        return (mainCheckout.Length != 0);
+    }
 }

@@ -8,7 +8,7 @@ using Puck.Launcher.Release;
 namespace Puck.Cli.Canary;
 
 // A stub-shaped leg's runner: it never launches Puck.World.dll from the shared build path CanaryCommand's other
-// legs and puck landing depend on. Each leg gets its own disposable <run>/install/ tree (stub.json, current,
+// legs depend on. Each leg gets its own disposable <run>/install/ tree (stub.json, current,
 // versions/<v>/...), a leg-private release-source directory signed by a throwaway root/issuing/subject chain
 // verified by the ordinary release verifier. It observes installation, activation and successive stub launches,
 // concatenating their transcripts before the shared assertion engine runs — so leg.expect authors over the
