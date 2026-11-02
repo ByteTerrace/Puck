@@ -115,7 +115,14 @@ Each waits on the owner: what the engine should do, how it looks and feels, and 
 - Whether a `search` job whose public outputs are judged over restricted rows
   is refused, linted or left to the author, as a binding to a restricted row on
   the shared screen is; the fog-of-war skirmish fixture shows what it leaks
-  first ([disclosure](disclosure.md#open-items)).
+  first ([disclosure](disclosure.md#open-items)). The owner waits for that
+  evidence before deciding.
+- Decided by the owner: night exposure is the lead's call, provided authors can
+  style it as their vision demands (the floor and curve stay authored data,
+  keyable on the day clock; the debug world authors a readable deep-blue
+  night). The Moth supports both cel and plain styles, swappable live for
+  playtesting the way binding layouts are, through a generic material-style
+  switch (the illum1-fix2 lane).
 - Mesh shipping: nothing is built until a presenting client downloads packages,
   and then on a self-hosted GPU runner (the owner's deferral;
   [rendering plan](rendering.md)).
@@ -1778,6 +1785,21 @@ and the order they land in; the items below are its findings and checks.
   pixels white like lit ones; at the noon sun the meadow lies in the east
   wall's shadow. Step 1's checks and the frame bar are owed again on the moving
   day cycle, with a low-sun cel style for the dawn penumbra check.
+- From illum1-fix: the cascades' exit layer doubles each cascade pass's draws
+  and vertices (`world.counters gpu pass sdf.world$shadow-near` at the stage:
+  460 draws and 2.62 M vertices on Direct3D 12, two render passes) and adds a
+  depth image per cascade (16 MiB each at 2048 texels); its frame time is owed
+  on a quiet machine. At a grazing light (a wrapped side at n·l = -0.25) the
+  filter's slope clearance (`SdfMeshShadowSlopeBias`, 2.5 texels of depth per
+  texel of lateral distance) still lets a parallel slab within about 0.1 m
+  along the light half through; the exit layer removed the leak beyond that.
+  The debug world authors no `render.toon`, so `world.toon on` there bands only
+  materials with styles of their own until a default style is authored there,
+  which takes either a copy of `celStyle`'s values with `enabled: false` or a
+  `.puck` way to override one field of an imported value.
+  `SdfPassPlanLawTests.ATemporalViewAddsOnlyItsHistoryAndReactivityOverTheSpatialGraph`
+  fails on its own constant (201,139,200 bytes against 1,221,350,400 from the
+  current `HistorySurfaceWords`), unrelated to the cascades.
 - [high] A sun that moves every frame freezes indirect light. Each direction
   change starts a new lighting generation (`SdfMeshIrradiance.RefreshLighting`
   hashes every directional and traced light record), and a trace batch landing

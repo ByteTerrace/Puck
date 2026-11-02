@@ -116,7 +116,11 @@ public sealed class SdfFrameBlockLawTests {
             FarDistance = 30f,
             IndirectTier = SdfIndirectTier.High,
             Lights = Lights(),
-            Toon = SdfToon.Default with { Enabled = true },
+            Toon = new SdfToon {
+                Enabled = true, Threshold = .45f, Softness = .08f, ShadowTint = new(.38f, .48f, .65f), OutlineWidth = 1.5f,
+                OutlineDistance = 12f, OutlineNormal = .65f, OutlineTint = new(.08f, .1f, .16f), SpecularSize = .025f,
+                Exposure = .5f, Shoulder = .65f,
+            },
         };
     }
     // Lights whose count, shadow light and curvature gains are none of them zero, and a full table of directionals, which

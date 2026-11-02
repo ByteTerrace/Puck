@@ -143,6 +143,21 @@ agent works in that mode by default, without asking:
     far behind on the lead machine: a change to rendering or GPU code also gets a
     windowed Vulkan boot of the debug world, and a Vulkan regression is fixed as
     ordinary work. Full parity qualification waits for the owner's call.
+  - Ergonomic is optimal (the owner's ruling). Cost depends on what a
+    document means, never on how it is spelled: a `for`/`map`, a template, a
+    fold or a `let` costs no more than the hand-unrolled, pasted or literal
+    form it replaces, so no author ever writes a clumsier form for speed. The
+    surface language may keep several spellings where each helps authors,
+    but all lower to one canonical form (the compiled document and its
+    derived identities: bake, rule program, instance buckets); uniformity
+    lives there, so it never constrains expression, and a capability is
+    removed only when nothing an author could want is lost. A spelling that
+    costs more is a compiler or engine defect, never a style note. Confidence
+    comes from a spelling-equivalence corpus (pairs that mean the same compile
+    to identical documents, identities and counted work), cost attributed to
+    what the author wrote in `world.budget`, and a log of where authors (the
+    games, the debug world, agents authoring from prompts) hit walls or
+    reach for clumsy forms.
   - Upper hardware enhances; the baseline is cross-platform (the owner's
     ruling). The frame bar (60 FPS on the RTX 2060 and RTX 4070, 45 on the
     Steam Deck, at the highest quality) is set and met by a path every bar
