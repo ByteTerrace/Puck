@@ -23,7 +23,13 @@ patterns [
   { name: "faultRun", kind: Int, symbols: faultAlphabet, pattern: star(item: symbol(name: "one")) }
   { name: "tokenFault", kind: Int, value: cards[1 / a], symbols: zeroAlphabet, pattern: symbol(name: "zero") }
   { name: "tokenZero", kind: Int, value: cards[1] - 3, symbols: zeroAlphabet, pattern: symbol(name: "zero") }
-  { name: "tokenAbsent", kind: Int, value: tokens[zone(emptyDeck, last)], symbols: zeroAlphabet, pattern: symbol(name: "zero") }
+  {
+    name: "tokenAbsent"
+    kind: Int
+    value: tokens[zone(emptyDeck, last)]
+    symbols: zeroAlphabet
+    pattern: symbol(name: "zero")
+  }
 ]
 
 state {
@@ -197,21 +203,21 @@ state {
       value: 1
     }
     table fired {
-      "cue" = 0
-      "token" = 0
-      "absentLeft" = 0
-      "edge" = 0
-      "decisionPicked" = 0
-      "decisionEmpty" = 0
+      cue = 0
+      token = 0
+      absentLeft = 0
+      edge = 0
+      decisionPicked = 0
+      decisionEmpty = 0
     }
     table control {
-      "cue" = 0
-      "token" = 0
-      "tokenAbsent" = 0
-      "absentLeft" = 0
-      "edge" = 0
-      "decisionPicked" = 0
-      "decisionEmpty" = 0
+      cue = 0
+      token = 0
+      tokenAbsent = 0
+      absentLeft = 0
+      edge = 0
+      decisionPicked = 0
+      decisionEmpty = 0
     }
   }
 }
@@ -354,12 +360,12 @@ rule "token-absent" {
 
 // The left side reads an empty pile's endpoint, absent; the right side is still read, and its fault wins.
 rule "absent-left-fault" {
-  when not (tokens[zone(emptyDeck, last)] + 0 == cards[1 / a])
+  when not (tokens[zone(emptyDeck, last)] + 0) == cards[1 / a]
   mode: Level
   fired.absentLeft += 1
 }
 rule "absent-left-absent" {
-  when not (tokens[zone(emptyDeck, last)] + 0 == cards[b])
+  when not (tokens[zone(emptyDeck, last)] + 0) == cards[b]
   mode: Level
   control.absentLeft += 1
 }

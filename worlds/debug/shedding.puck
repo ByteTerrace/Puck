@@ -156,7 +156,12 @@ placements {
           offset: 0
           step: 0
         }
-        region: lattice(stepA: [0, 0.33 * sheddingCardScale, 0], countA: 2, stepB: [0.75 * sheddingCardScale, 0, 0], countB: 12)
+        region: lattice(
+          stepA: [0, 0.33 * sheddingCardScale, 0],
+          countA: 2,
+          stepB: [0.75 * sheddingCardScale, 0, 0],
+          countB: 12
+        )
       }
       deal {
         row: $"sheddingHand{rack.seat}"
