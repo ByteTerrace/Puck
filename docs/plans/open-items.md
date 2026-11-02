@@ -1950,9 +1950,16 @@ and the order they land in; the items below are its findings and checks.
   sheet with a box front; a doubled triangle passes edge pairing). The
   [transmission plan](transmission.md) now records a body identity per
   cascade texel beside the depth, peels by identity, and shadows a wrapped
-  receiver by any other body in front and by its own body's second chord;
-  the packet's exit-layer items below close with it. (from: illum1fix2-astra,
-  transmit-astra, transmit-design)
+  receiver by any other body in front and by its own body's next surface
+  along the light. Its second review settled the body index's lifetime (one
+  table per residency, no reuse under a held cascade, a generation in the
+  word), a canonical body key apart from `MotionIdentity`, that two surfaces
+  cannot infer occupancy (overlapping authored components over-shadow), an
+  unresolved-footprint policy that never reads a distant blocker absent, a
+  receiver handle in the GI's cached hits, and the Deck measured at Full; its
+  remaining mediums are the implementation lanes' checks. The packet's
+  exit-layer items below close with it. (from: illum1fix2-astra,
+  transmit-astra, transmit2-astra, transmit-design)
 - From illum1-fix: the cascades' exit layer doubles each cascade pass's draws
   and vertices (`world.counters gpu pass sdf.world$shadow-near` at the stage:
   460 draws and 2.62 M vertices on Direct3D 12, two render passes) and adds a
