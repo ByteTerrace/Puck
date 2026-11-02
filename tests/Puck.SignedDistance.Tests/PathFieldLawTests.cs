@@ -18,7 +18,8 @@ public sealed class PathFieldLawTests {
     private static readonly Vector2 Scale = new(x: 0.8f, y: 0.6f);
     private static readonly Quaternion Turn = Quaternion.Normalize(value: new Quaternion(w: 0.9f, x: 0.2f, y: -0.35f, z: 0.1f));
     private static readonly SdfPathContour Outline = new(new Vector2(x: -0.8f, y: -0.8f), [new(new Vector2(x: 0.8f, y: -0.8f)), new(new Vector2(x: 0.8f, y: 0.8f)), new(new Vector2(x: 0f, y: 0.1f)), new(new Vector2(x: -0.8f, y: 0.8f))]);
-    private static readonly SdfPathContour Hole = new(new Vector2(x: -0.3f, y: -0.5f), [new(new Vector2(x: 0.3f, y: -0.5f)), new(new Vector2(x: 0.3f, y: -0.2f)), new(new Vector2(x: -0.3f, y: -0.2f))]);
+    private static readonly SdfPathContour ShortEdged = new(new Vector2(x: -0.8f, y: -0.8f), [new(new Vector2(x: 0.8f, y: -0.8f)), new(new Vector2(x: 0.8f, y: 0.8f)), new(new Vector2(x: 0.798f, y: 0.8f)), new(new Vector2(x: -0.8f, y: 0.8f))]);
+    private static readonly SdfPathContour Hole =new(new Vector2(x: -0.3f, y: -0.5f), [new(new Vector2(x: 0.3f, y: -0.5f)), new(new Vector2(x: 0.3f, y: -0.2f)), new(new Vector2(x: -0.3f, y: -0.2f))]);
 
     private static IEnumerable<Vector3> Points() {
         for (var x = -5; (x <= 5); x++) {
@@ -135,6 +136,12 @@ public sealed class PathFieldLawTests {
 
     [Fact]
     public void AFillReadsAsTheKernelsEdgeParity() => AssertReadsAsTheKernel(halfDepth: 0.25f, profile: new SdfPathProfile([Outline, Hole]));
+    // An edge 0.0016 long at the shape's scale, whose squared length is under one raw (the gilded corners of a card's
+    // frame flatten their arcs to edges this short).
+    [Fact]
+    public void AFillWithAnEdgeShorterThanItsSquaredRawReadsAsTheKernel() => AssertReadsAsTheKernel(halfDepth: 0.25f, profile: new SdfPathProfile([ShortEdged]));
+    [Fact]
+    public void AFillWithAnEdgeShorterThanItsSquaredRawBoundsItsAnswers() => AssertBoundsEnclose(halfDepth: 0.25f, profile: new SdfPathProfile([ShortEdged]));
     [Fact]
     public void AStrokeReadsAsTheKernelsHullOfDisks() => AssertReadsAsTheKernel(halfDepth: 0.2f, profile: new SdfPathProfile([Outline], Stroke: new SdfPathStroke(RadiusStart: 0.12f, RadiusEnd: 0.04f)));
     [Fact]

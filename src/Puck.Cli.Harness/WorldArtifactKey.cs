@@ -1,8 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
-using Puck.Assets;
-using Puck.Hosting;
 
 namespace Puck.Cli;
 
@@ -10,10 +8,9 @@ namespace Puck.Cli;
 /// Names the source state a World build is made from, so an unchanged checkout is built once and every later run
 /// reuses that build.
 /// <para>
-/// The key hashes, over the <see cref="WorldArtifactClosure"/> roots only: git's object id for each root in
-/// <c>HEAD</c> (a directory's tree id covers every committed file inside it), and, for every path under a root that
-/// <c>git status</c> reports as modified, staged, deleted or untracked, the path, its status and the SHA-256 of the
-/// bytes on disk. Files git ignores are not inputs; every item the World's build names outside <c>bin</c> and
+/// The key hashes what <see cref="CheckoutContent"/> reads over the <see cref="WorldArtifactClosure"/> roots only:
+/// git's object id for each root in <c>HEAD</c>, and the path, status and on-disk SHA-256 of every changed or untracked
+/// path under a root. Files git ignores are not inputs; every item the World's build names outside <c>bin</c> and
 /// <c>obj</c> is tracked or untracked, never ignored. The key also carries the runtime identifier of the machine, the
 /// <c>CI</c> environment variable the shared build properties read, and the build's own command line, since each
 /// changes what the same sources build into.
@@ -27,34 +24,6 @@ public static class WorldArtifactKey {
     // The schema name distinguishes the keying rule, so a build keyed under another rule cannot name these inputs.
     private const string Schema = "puck.world-artifact-key.v1";
 
-    private static bool TryGit(string repositoryRoot, IReadOnlyList<string> arguments, out string stdout, out string reason) {
-        ChildProcessResult result;
-
-        try {
-            result = CliGit.Run(
-                arguments: [.. arguments],
-                repository: repositoryRoot
-            );
-        } catch (Exception exception) when ((exception is InvalidOperationException or System.ComponentModel.Win32Exception)) {
-            stdout = string.Empty;
-            reason = $"git could not start: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
-
-            return false;
-        }
-
-        stdout = result.Stdout;
-
-        if (result.ExitCode != 0) {
-            reason = $"git {arguments[1]} exited {result.ExitCode}: {result.Stderr.Trim().ReplaceLineEndings(replacementText: " ")}";
-
-            return false;
-        }
-
-        reason = string.Empty;
-
-        return true;
-    }
-
     /// <summary>Computes the key of the checkout's current World sources.</summary>
     /// <param name="repositoryRoot">The checkout, which must be a git working tree with a <c>HEAD</c> commit.</param>
     /// <param name="roots">The closure roots, from <see cref="WorldArtifactClosure.Walk"/>.</param>
@@ -65,19 +34,11 @@ public static class WorldArtifactKey {
     public static bool TryCompute(string repositoryRoot, IReadOnlyList<string> roots, IReadOnlyList<string> buildArguments, out string key, out string reason) {
         key = string.Empty;
 
-        if (!TryGit(
-            arguments: ["--literal-pathspecs", "ls-tree", "-z", "HEAD", "--", .. roots],
+        if (!CheckoutContent.TryRead(
             reason: out reason,
             repositoryRoot: repositoryRoot,
-            stdout: out var committed
-        )) {
-            return false;
-        }
-        if (!TryGit(
-            arguments: ["--literal-pathspecs", "status", "--porcelain=v1", "-z", "--untracked-files=all", "--no-renames", "--", .. roots],
-            reason: out reason,
-            repositoryRoot: repositoryRoot,
-            stdout: out var changed
+            roots: roots,
+            snapshot: out var snapshot
         )) {
             return false;
         }
@@ -94,33 +55,9 @@ public static class WorldArtifactKey {
             separator: '\u001f',
             values: buildArguments
         ));
-        Append(text: committed);
-
-        // Each porcelain -z entry is "XY <path>" and --no-renames keeps it to one path, so the entries sort into a
-        // stable order whatever order git walked the tree in.
-        var entries = changed.Split(
-            options: StringSplitOptions.RemoveEmptyEntries,
-            separator: '\0'
-        ).Where(predicate: static entry => (entry.Length > 3)).Order(comparer: StringComparer.Ordinal);
-
-        foreach (var entry in entries) {
-            var path = Path.Combine(
-                path1: repositoryRoot,
-                path2: entry[3..]
-            );
-            string content;
-
-            try {
-                content = ContentPin.OfFile(path: path).Hex;
-            } catch (Exception exception) when ((exception is FileNotFoundException or DirectoryNotFoundException)) {
-                content = "absent";
-            } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-                reason = $"could not read the changed file {entry[3..]}: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
-
-                return false;
-            }
-
-            Append(text: $"{entry}\0{content}");
+        Append(text: snapshot.Committed);
+        foreach (var change in snapshot.Changes) {
+            Append(text: $"{change.Entry}\0{change.Content}");
         }
 
         key = Convert.ToHexStringLower(inArray: hash.GetHashAndReset()[..16]);

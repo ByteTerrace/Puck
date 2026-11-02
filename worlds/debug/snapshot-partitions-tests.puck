@@ -39,7 +39,9 @@ template crowd(name, at, count) {
     prototype: "standIn"
     position: at
     inhabit {
-      count { row: count }
+      count {
+        row: count
+      }
       distribution {
         fill {
           name: "additive"

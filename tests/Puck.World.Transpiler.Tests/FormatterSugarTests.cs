@@ -41,7 +41,7 @@ public class FormatterSugarTests {
             _ = evaluator.Evaluate(rules: rules, latch: new Puck.State.Rules.RuleLatch(), stepTicks: 1);
             Assert.Equal(RuleEffectRefusal.Arithmetic, Assert.Single(evaluator.Diagnostics()).Refusal);
             Assert.False(Puck.State.Rules.RuleEvaluation.GateHolds(reader: host, gate: rules[0].Gate, fault: out var fault));
-            Assert.Equal(Puck.State.Rules.ExpressionFault.Domain, fault);
+            Assert.Equal(Puck.State.ExpressionFault.Domain, fault);
             Assert.True(arena.Catalog.TryResolve(lane: StateLane.Document, name: "fired", handle: out var fired));
             Assert.True(arena.TryReadRawAt(rowOrdinal: fired.Ordinal, position: 0, raw: out var value));
             Assert.True(value == 0, $"Effect ran for:\n{text}");

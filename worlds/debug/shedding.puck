@@ -51,8 +51,9 @@ let sheddingFaces = {
   "23": "card-d-6"
 }
 // Each seat's rack: where along its edge the first card stands and the yaw that turns a face toward the seat (the deck's
-// face looks down -Z of its author frame). A dealt card's offset is in the rack's frame, which the rack's yaw turns and
-// its scale shrinks, so a card stands 0.75 card-units (4.5 cm) from the last along the rack's own +X.
+// face looks down -Z of its author frame). A dealt card's offset is metres in the rack's frame, which the rack's yaw
+// turns; the rack's scale is the card's own size, which every dealt card carries. A card stands 0.75 card-units (4.5 cm)
+// from the last along the rack's own +X.
 let sheddingRacks = [
   { seat: 1, origin [-0.27, 0, -0.5], yaw: 0 }
   { seat: 2, origin [0.27, 0, 0.5], yaw: 180 }
@@ -130,7 +131,7 @@ placements {
         offset: 0
         step: 0
       }
-      region: lattice(stepA: [0, 0, -0.07], countA: 24, stepB: [0, 0, 0], countB: 1)
+      region: lattice(stepA: [0, 0, -0.07 * sheddingCardScale], countA: 24, stepB: [0, 0, 0], countB: 1)
     }
     deal {
       row: "sheddingDiscard"
@@ -155,7 +156,7 @@ placements {
           offset: 0
           step: 0
         }
-        region: lattice(stepA: [0, 0.33, 0], countA: 2, stepB: [0.75, 0, 0], countB: 12)
+        region: lattice(stepA: [0, 0.33 * sheddingCardScale, 0], countA: 2, stepB: [0.75 * sheddingCardScale, 0, 0], countB: 12)
       }
       deal {
         row: $"sheddingHand{rack.seat}"

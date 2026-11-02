@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json.Nodes;
 using Puck.Abstractions.Documents;
+using Puck.Transpiler.Lowering;
 using Puck.World.Transpiler.Decompiler;
 using Xunit;
 
@@ -30,8 +31,13 @@ public class ProjectionLawTests {
     }
     // The verdict names the construct, so the caller passes `label` rather than letting a mismatch report a bare
     // JSON pointer.
+    //
+    // A document whose print is longer than the source limit (PUCK047) cannot close the print half: the generated
+    // worlds' source never spells their rows out, and they stay under the format half.
     private static void AssertPrintsBackToItself(JsonObject document, string label) {
         var printed = WorldDecompiler.Decompile(root: document);
+
+        if (printed.Length > DocumentEvaluationBudget.TextLimit) { return; }
         var recompiled = Compile(
             label: $"{label}: the printed source",
             source: printed
@@ -97,11 +103,6 @@ public class ProjectionLawTests {
         };
     }
 
-    /// <summary>Sources whose document prints back longer than <c>PUCK047</c>'s source limit, so the print half of
-    /// the law cannot close on them. They stay under the format half. The card table's fifty-two card creations make a document
-    /// of several megabytes, which its template-generated source never spells out.</summary>
-    private static readonly string[] PrintExclusions = ["debug/cardtable.puck"];
-
     public static TheoryData<string> Constructs() => new(values: ConstructRegistry.Names);
     public static TheoryData<string> ShippedSources() => ShippedWorlds.Sources();
     [Fact]
@@ -163,12 +164,10 @@ public class ProjectionLawTests {
         var sourcePath = ShippedWorlds.PathOf(relativePath: relativePath);
         var document = ShippedWorlds.Compile(relativePath: relativePath).RequireJson();
 
-        if (!PrintExclusions.Contains(value: relativePath, comparer: StringComparer.Ordinal)) {
-            AssertPrintsBackToItself(
-                document: document,
-                label: relativePath
-            );
-        }
+        AssertPrintsBackToItself(
+            document: document,
+            label: relativePath
+        );
         AssertFormattingKeepsTheDocument(
             document: document,
             label: relativePath,

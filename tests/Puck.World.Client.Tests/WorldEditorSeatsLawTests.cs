@@ -14,7 +14,7 @@ namespace Puck.World.Client.Tests;
 public sealed class WorldEditorSeatsLawTests {
     private static readonly BindingPageEntryDefinition Toggle = new(Command: WorldEditorBindings.ToggleCommand, Id: "editor.toggle", Sources: ["keyboard.f2"]);
     private static readonly WorldEditorDefaults Authored = new(
-        Bar: WorldBindingBarAuthoring.Absent,
+        Bar: EditorBarFixtures.Bar,
         Camera: new WorldEditorCamera(FlyRate: 6f, MaxDistance: 14f, MaxPitch: 1.35f, MinDistance: 0.5f, MinPitch: 0.05f, OrbitRate: 2.4f, PanRate: 3f, ZoomRate: 1.2f),
         Grid: new WorldEditorGrid(LineWidth: 1.5f, Mode: WorldEditorGridMode.Surface, Pitch: new Vector3(value: 2f), PlaneY: 0f, Visible: false),
         ReadOnlyLabel: "read-only",

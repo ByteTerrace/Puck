@@ -12,7 +12,8 @@ foreach ($file in Get-ChildItem -LiteralPath "$PSScriptRoot/policies" -Filter '*
 # nothing. A decision is deny or ask; a policy with nothing to say abstains, so the tool's own rules decide.
 $script:PolicyChecks = [ordered]@{
     'git-safety'     = 'Test-GitSafetyPolicy'
-    'codex-launch'   = 'Test-CodexLaunchPolicy'
+    'read-only-agent' = 'Test-ReadOnlyAgentPolicy'
+    'session-launch' = 'Test-SessionLaunchPolicy'
     'no-coauthor'    = 'Test-NoCoauthorPolicy'
     'no-node-reuse'  = 'Test-NoNodeReusePolicy'
     'world-devices'  = 'Test-WorldDevicesPolicy'

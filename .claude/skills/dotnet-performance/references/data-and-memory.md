@@ -132,9 +132,9 @@ same array ([TOUB-FS]).
 A struct copy costs its size every time, and a large struct passed or returned
 by value, captured into a snapshot or copied out of a collection repeats it.
 
-- **Measured here.** `SdfMeshIrradiance.TraceProbe` copied its probe record once
-  per neighbour bit (up to 26 a probe): 171 of 289 MiB sampled on a cold walk
-  until it filled its fields and built one record.
+- **Measured here.** The irradiance trace (`SdfMeshIrradiance`) once copied its
+  probe record once per neighbour bit (up to 26 a probe): 171 of 289 MiB
+  sampled on a cold walk until it filled its fields and built one record.
 - **Fewer, larger commands is the same rule on the GPU's recorder.** The
   previous mesh table's history copy records a device-side `CopyBuffer` per
   changed range ([`SdfWorldTables.Motion.cs:157-180`](../../../../src/Puck.SdfVm/SdfWorldTables.Motion.cs)),

@@ -4,17 +4,6 @@ using Puck.Maths;
 
 namespace Puck.State.Rules;
 
-/// <summary>Why a compiled expression did not evaluate.</summary>
-public enum ExpressionFault : byte {
-    /// <summary>The expression evaluated.</summary>
-    None,
-    /// <summary>An operand read a fact with no number.</summary>
-    Forever,
-    /// <summary>An operand's dynamic key named no cell (an empty zone's endpoint).</summary>
-    Absent,
-    /// <summary>Overflow, a divide by zero, a function argument outside its domain, or an invalid stack result.</summary>
-    Domain,
-}
 /// <summary>The allocation-free read side a compiled gate, binding and effect source share: reading one value
 /// source, folding a postfix Boolean gate, and formatting a fact for the trace. Nothing here holds state of its
 /// own; every number it formats is rendered with the invariant culture.</summary>
@@ -50,26 +39,47 @@ public static class RuleEvaluation {
         ExpressionFault.Absent => "the read went through a dynamic key that named no cell (an empty zone's endpoint); answer the absence with 'isAbsent(...)' or '... ?? <fallback>'",
         _ => "the expression overflowed, divided by zero, left a function's domain, or produced an invalid stack result",
     };
-    /// <summary>Evaluates a compiled postfix gate. A conjunct that faults closes the whole gate, including under
-    /// negation, and names its fault for the caller to report. A gate with no tokens always
-    /// holds.</summary>
+    /// <summary>Evaluates a compiled postfix gate inside a fault scope of its own. A conjunct that faults leaves the
+    /// gate undecided: evaluation stops ahead of any negation or grouping, the gate answers
+    /// <see langword="false"/>, and <paramref name="fault"/> names the fault, which also passes on to any enclosing
+    /// scope. Both sides of a comparison are read, so an absence on one side never hides a fault on the other. A gate
+    /// with no tokens always holds.</summary>
     /// <param name="reader">The evaluation in flight.</param>
     /// <param name="gate">The compiled postfix gate.</param>
-    /// <param name="fault">The first conjunct fault, or <see cref="ExpressionFault.None"/>.</param>
+    /// <param name="fault">The first fault any conjunct raised, or <see cref="ExpressionFault.None"/>; a caller
+    /// seeing a fault decides what an undecided gate means where it sits.</param>
     /// <param name="trace">An optional per-conjunct narration sink.</param>
-    /// <returns><see langword="true"/> when the gate holds.</returns>
+    /// <returns><see langword="true"/> when the gate holds and nothing faulted.</returns>
     public static bool GateHolds(IStateReader reader, GateToken[] gate, out ExpressionFault fault, List<string>? trace = null) {
+        ArgumentNullException.ThrowIfNull(argument: reader);
         ArgumentNullException.ThrowIfNull(argument: gate);
 
-        fault = ExpressionFault.None;
-
         if (gate.Length == 0) {
+            fault = ExpressionFault.None;
+
             return true;
         }
 
-        var raised = ExpressionFault.None;
+        var scratch = reader.Scratch;
+        var scope = scratch.EnterFaultScope();
+        bool holds;
 
-        using var stackLease = reader.Scratch.Rent<bool>(length: gate.Length);
+        try {
+            holds = Fold(
+                gate: gate,
+                reader: reader,
+                scratch: scratch,
+                trace: trace
+            );
+        } finally {
+            fault = scratch.LeaveFaultScope(scope: scope);
+        }
+
+        return (holds && (fault == ExpressionFault.None));
+    }
+    // Folds the gate's postfix program, returning false the moment a conjunct raises a fault.
+    private static bool Fold(IStateReader reader, GateToken[] gate, ArenaScratch scratch, List<string>? trace) {
+        using var stackLease = scratch.Rent<bool>(length: gate.Length);
 
         var stack = stackLease.Span;
         var top = 0;
@@ -120,36 +130,25 @@ public static class RuleEvaluation {
                     (predicate.Comparison == ExpressionOp.Equal ? equal : !equal);
                 stack[top++] = textHolds;
                 trace?.Add($"{predicate.Describe}: \"{leftText}\" {predicate.Comparison.Symbol()} \"{rightText}\" -> {Spell(textHolds)}");
-                // A faulted address closes the gate as a faulted numeric read does, ahead of any negation.
-                if ((leftNaming == KeyNaming.Fault) || (rightNaming == KeyNaming.Fault)) {
-                    fault = ExpressionFault.Domain;
+                if (scratch.RaisedFault != ExpressionFault.None) {
                     return false;
                 }
                 continue;
             }
-            var right = default(RuleFact);
-            var rightFault = ExpressionFault.None;
             var leftRead = TryReadSource(
                 fact: out var left,
-                fault: out var leftFault,
+                fault: out _,
                 kind: predicate.ValueKind,
                 reader: reader,
                 source: in leftSource
             );
-            var rightRead = (leftRead && TryReadSource(
-                fact: out right,
-                fault: out rightFault,
+            var rightRead = TryReadSource(
+                fact: out var right,
+                fault: out _,
                 kind: predicate.ValueKind,
                 reader: reader,
                 source: in rightSource
-            ));
-
-            if (raised == ExpressionFault.None) {
-                raised = First(
-                    left: leftFault == ExpressionFault.Absent ? ExpressionFault.None : leftFault,
-                    right: rightFault == ExpressionFault.Absent ? ExpressionFault.None : rightFault
-                );
-            }
+            );
 
             // An absent side names no cell, so no comparison holds against it — not even NotEqual: "the top card is
             // not a king" must not read as true of an empty pile. Absence converts to false at a gate.
@@ -176,15 +175,11 @@ public static class RuleEvaluation {
                 read: rightRead
             )} -> {Spell(value: holds)}");
 
-            // A failed comparison has no truth value to negate or combine. End here so every gate consumer,
-            // including ordinary rules, groups and conditional effects, observes the same closed verdict.
-            if (raised != ExpressionFault.None) {
-                fault = raised;
+            // A faulted comparison has no truth value to negate or combine.
+            if (scratch.RaisedFault != ExpressionFault.None) {
                 return false;
             }
         }
-
-        fault = raised;
 
         return (
             (top == 1) &&
@@ -217,6 +212,9 @@ public static class RuleEvaluation {
                     ? ExpressionFault.Absent
                     : ExpressionFault.None)
             );
+            if (fact.IsFaulted) {
+                reader.Scratch.RaiseFault(fault: ExpressionFault.Domain);
+            }
 
             return true;
         }
@@ -260,12 +258,6 @@ public static class RuleEvaluation {
         return true;
     }
 
-    private static ExpressionFault First(ExpressionFault left, ExpressionFault right) => ((left is (ExpressionFault.Domain or ExpressionFault.Forever or ExpressionFault.Absent))
-        ? left
-        : ((right is (ExpressionFault.Domain or ExpressionFault.Forever or ExpressionFault.Absent))
-            ? right
-            : ExpressionFault.None
-    ));
     private static string Spell(bool value) => (value
         ? "true"
         : "false"
@@ -281,6 +273,18 @@ public static class RuleEvaluation {
     /// <returns><see cref="KeyNaming.Cell"/> when a Text cell was read, <see cref="KeyNaming.Fault"/> when computing
     /// its row or key faulted, and <see cref="KeyNaming.Nothing"/> when no Text cell answered.</returns>
     public static KeyNaming ReadText(IStateReader reader, IRuleOperand? source, out string text) {
+        ArgumentNullException.ThrowIfNull(argument: reader);
+
+        var naming = ReadTextCore(reader: reader, source: source, text: out text);
+
+        if (naming == KeyNaming.Fault) {
+            reader.Scratch.RaiseFault(fault: ExpressionFault.Domain);
+        }
+
+        return naming;
+    }
+
+    private static KeyNaming ReadTextCore(IStateReader reader, IRuleOperand? source, out string text) {
         text = string.Empty;
         CellValue carried;
 

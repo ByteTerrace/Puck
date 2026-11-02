@@ -2,16 +2,10 @@
 # The persistent MCP front follows activated builds while previous workers retain their owned Worlds.
 $ErrorActionPreference = 'Stop'
 
+. "$PSScriptRoot/cli-build.ps1"
+
 function Write-Note([string] $message) {
     [Console]::Error.WriteLine("puck-mcp: $message")
-}
-
-function Get-CliBuild([string] $checkout) {
-    $build = Join-Path $checkout 'src/Puck.Cli/bin/Release/net11.0'
-    if ((Test-Path -LiteralPath (Join-Path $build 'Puck.Cli.dll')) -and (Test-Path -LiteralPath (Join-Path $build 'puck-build-ready'))) {
-        return $build
-    }
-    return $null
 }
 
 $root = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '../..')).Path
@@ -19,14 +13,17 @@ $source = $root
 $build = Get-CliBuild $root
 
 if ($null -eq $build) {
-    $common = & git -C $root rev-parse --path-format=absolute --git-common-dir 2>$null
-    if (($LASTEXITCODE -eq 0) -and $common) {
-        $main = (Resolve-Path -LiteralPath (Split-Path -Parent $common)).Path
-        if ($main -ne $root) {
-            $build = Get-CliBuild $main
-            if ($null -ne $build) {
+    $main = Get-MainCheckout $root
+    if ($main -and ($main -ne $root)) {
+        $mainBuild = Get-CliBuild $main
+        if ($null -ne $mainBuild) {
+            $refusal = Get-MainBuildRefusal $root $main $mainBuild
+            if ($null -eq $refusal) {
+                $build = $mainBuild
                 $source = $main
-                Write-Note "this worktree has no Release build of src/Puck.Cli; using the main checkout's at $build."
+                Write-Note "this worktree has no Release build of src/Puck.Cli; using the main checkout's at $build, built from the same sources."
+            } else {
+                Write-Note "this worktree has no Release build of src/Puck.Cli, and the main checkout's is not used: $refusal."
             }
         }
     }

@@ -40,8 +40,13 @@ public sealed partial class RuleEvaluator {
             if ((m_host is IArenaUndoHost suppressingUndo) && suppressingUndo.UndoGroupSuppressed(group: group.Name, tick: m_host.Tick)) {
                 continue;
             }
-            var armed = Armed(group: group);
+            var armed = Armed(group: group, faulted: out var faulted);
 
+            // A trigger that faulted decided nothing: the group neither runs nor re-arms this tick, and keeps its
+            // progress for the tick its trigger decides again.
+            if (faulted) {
+                continue;
+            }
             // A trigger that reads false re-arms the group: a breached fixpoint group runs again only after its
             // trigger has gone false and holds once more.
             if (!armed) {
@@ -77,23 +82,28 @@ public sealed partial class RuleEvaluator {
         return applied;
     }
 
-    private bool Armed(CompiledRuleGroup group) {
+    private bool Armed(CompiledRuleGroup group, out bool faulted) {
+        faulted = false;
         if (group.Trigger.Length == 0) {
             return true;
         }
-        if (!TryEvaluateLocals(
-            declared: group.Locals,
-            owner: group.Name,
-            tick: m_host.Tick
-        )) {
-            return false;
-        }
 
-        return GateOpen(
-            faulted: out _,
-            gate: group.Trigger,
-            ruleName: group.Name
-        );
+        var scratch = m_host.Scratch;
+        var scope = scratch.EnterFaultScope();
+
+        try {
+            return (TryEvaluateLocals(
+                declared: group.Locals,
+                owner: group.Name,
+                tick: m_host.Tick
+            ) && GateOpen(
+                faulted: out _,
+                gate: group.Trigger,
+                ruleName: group.Name
+            ));
+        } finally {
+            faulted = (scratch.LeaveFaultScope(scope: scope) != ExpressionFault.None);
+        }
     }
     // One pass per tick over every member, in authored order. The pass closes the group when no row of its write
     // set differs from what it held when the pass began. Each member commits on its own, so RowVersion only answers

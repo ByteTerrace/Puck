@@ -8,9 +8,11 @@ namespace Puck.World;
 /// <summary>
 /// A placement's deal facet: the row is a template whose instances are dealt from a keyed state row, one child
 /// placement per cell, laid out over the template's own <see cref="WorldPlacement.Distribution"/> region in cell
-/// order. The template itself renders nothing and collides with nothing; its prototype and its
+/// order. The template itself renders nothing and collides with nothing; its prototype, its
+/// <see cref="WorldPlacement.Scale"/> and its
 /// <see cref="WorldPlacement.Solid"/>/<see cref="WorldPlacement.Grip"/>/<see cref="WorldPlacement.Region"/>/
-/// <see cref="WorldPlacement.Emission"/> facets are what every child is stamped with. A child is an ordinary
+/// <see cref="WorldPlacement.Emission"/> facets are what every child is stamped with. The region's offsets are metres
+/// in the template's frame, never scaled by it. A child is an ordinary
 /// placement row named <c>&lt;template&gt;/&lt;cellKey&gt;</c> (<see cref="ChildId"/>) with
 /// <see cref="WorldPlacement.Parent"/> naming the template and the region's dealt offset as its local position,
 /// written and removed through ordinary <c>UpsertPlacement</c>/<c>RemovePlacement</c> mutations under

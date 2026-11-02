@@ -120,7 +120,7 @@ public sealed class CliLeaseTests : IDisposable {
         var waiting = new List<(string Holder, Task<CliLease> Task)>();
 
         async Task Queue(string name, string? lane = null) {
-            waiting.Add((name, CliLease.AcquireAsync(root: m_root, name: "gpu", holder: name, lane: lane, wait: TimeSpan.FromMinutes(minutes: 10), clock: clock, cancellationToken: Token)));
+            waiting.Add(item: (name, CliLease.AcquireAsync(root: m_root, name: "gpu", holder: name, lane: lane, wait: TimeSpan.FromMinutes(minutes: 10), clock: clock, cancellationToken: Token)));
             await clock.WhenArmedAsync(count: waiting.Count, ct: Token, dueTime: tick);
         }
 
@@ -143,19 +143,53 @@ public sealed class CliLeaseTests : IDisposable {
             // The next waiter's timer arms again once it has re-checked its place.
             using (await admitted) { await clock.WhenArmedAsync(count: waiting.Count, ct: Token, dueTime: tick); }
         }
-        Assert.Equal(expected: new[] { "a one", "b one", "renamed c", "a two", "a three" }, actual: order);
+        Assert.Equal(actual: order, expected: new[] { "a one", "b one", "renamed c", "a two", "a three" });
+    }
+    // A lane that has held the lease before ranks by when it was last served; a lane that never has must not rank first
+    // for that reason alone, or every new lane (one per worktree) would overtake a lane already waiting, however long.
+    [Fact]
+    public async Task ALaneThatNeverHeldTheLeaseDoesNotOvertakeALaneThatWaitedBeforeIt() {
+        var clock = new VirtualClock();
+        var tick = TimeSpan.FromMilliseconds(milliseconds: 100);
+
+        (await Take(holder: "veteran probe")).Dispose();
+        var holder = await Take(holder: "holder");
+        var waiting = new List<(string Holder, Task<CliLease> Task)>();
+
+        async Task Queue(string name) {
+            waiting.Add(item: (name, CliLease.AcquireAsync(root: m_root, name: "gpu", holder: name, wait: TimeSpan.FromMinutes(minutes: 10), clock: clock, cancellationToken: Token)));
+            await clock.WhenArmedAsync(count: waiting.Count, ct: Token, dueTime: tick);
+        }
+
+        await Queue(name: "veteran waiting");
+        await Queue(name: "fresh one");
+        await Queue(name: "fresh two");
+        var order = new List<string>();
+
+        holder.Dispose();
+        while (waiting.Count > 0) {
+            clock.Advance(by: tick);
+            var admitted = await Task.WhenAny(tasks: waiting.Select(selector: entry => entry.Task)).WaitAsync(cancellationToken: Token);
+            var entry = waiting.Single(predicate: entry => (entry.Task == admitted));
+
+            waiting.Remove(item: entry);
+            order.Add(item: entry.Holder);
+            using (await admitted) { await clock.WhenArmedAsync(count: waiting.Count, ct: Token, dueTime: tick); }
+        }
+        Assert.Equal(actual: order, expected: new[] { "veteran waiting", "fresh one", "fresh two" });
     }
     [Fact]
     public async Task AFourLineTicketRotatesUnderItsHoldersFirstWord() {
         var queue = Path.Combine(path1: m_root, path2: "gpu.queue");
         using var process = Process.GetCurrentProcess();
 
-        // Lane a is the lane served last, and its two older tickets carry no lane line.
+        // Lane b was served before lane a, which is the lane served last, and a's two older tickets carry no lane line.
+        (await Take(holder: "b probe")).Dispose();
         (await Take(holder: "a probe")).Dispose();
         foreach (var (sequence, holder) in new[] { ("000000000002", "a one"), ("000000000003", "a two") }) {
             File.WriteAllLines(path: Path.Combine(path1: queue, path2: sequence), contents: [holder, DateTimeOffset.UtcNow.ToString(format: "O", formatProvider: CultureInfo.InvariantCulture), process.Id.ToString(provider: CultureInfo.InvariantCulture), process.StartTime.ToUniversalTime().Ticks.ToString(provider: CultureInfo.InvariantCulture)]);
         }
-        // Read as lane a, they rank behind the never-served lane b despite being older; read as lanes of their own, they would not.
+        // Read as lane a, they rank behind lane b despite being older; read as lanes of their own (never served), they would not.
         using var other = await Take(holder: "b one");
 
         Assert.Equal(expected: 4, actual: File.ReadAllLines(path: Path.Combine(path1: m_root, path2: "gpu/holder")).Length);

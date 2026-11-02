@@ -56,8 +56,7 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   and skipped `sdf.world$mask`/`sdf.world$bake` work is not by itself a stall.
   Read the wait's bake description twice: its meshes, pending groups,
   dispatches and samples distinguish progress from a stopped scheduler.
-  Plain `lead/catch-up` at `3870e5e0e`, without the two `codex-gi2` fixes,
-  also failed to finish a cold Direct3D bake within nearly nine minutes. Its mesh
+  The integration branch without the two `codex-gi2` fixes also failed to finish a cold Direct3D bake within nearly nine minutes. Its mesh
   draw count kept rising. `host.frames` showed eight simulation catch-up steps
   taking roughly 400 ms a frame; `world.rate pause` on the boot instance
   reduced frame time to about 19 ms and accelerated baking. Pause only a

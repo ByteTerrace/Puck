@@ -80,6 +80,23 @@
     ],
     "SessionStart": [
       {
+        "matcher": "startup|resume|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pwsh",
+            "args": [
+              "-NoProfile",
+              "-ExecutionPolicy",
+              "Bypass",
+              "-File",
+              "${CLAUDE_PROJECT_DIR}/.claude/hooks/provenance.ps1"
+            ],
+            "timeout": 60
+          }
+        ]
+      },
+      {
         "matcher": "compact",
         "hooks": [
           {
