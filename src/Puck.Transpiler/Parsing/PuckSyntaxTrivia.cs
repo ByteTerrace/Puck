@@ -1101,6 +1101,9 @@ public static class PuckSyntaxTrivia {
                 case LambdaExpressionNode lambda: {
                         return (lambda with { Body = VisitExpression(expression: lambda.Body) });
                     }
+                case FunctionExpressionNode function: {
+                        return (function with { Body = VisitExpression(expression: function.Body) });
+                    }
                 case WithExpressionNode derived: {
                         return (derived with {
                             Base = VisitExpression(expression: derived.Base),

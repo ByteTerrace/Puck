@@ -1,0 +1,23 @@
+// A value built by a function is the value written out with the arguments substituted.
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+let poses = [[3, 0.5, 1], [4, -0.5, 1]]
+
+function pose(at, s) = {
+  name: "blink"
+  transforms: map(poses, row => { id: row[0], position [at + row[1] * s, row[2] * s, 0], rotation [0, 0, 0, 1] })
+}
+
+prototypes {
+  prototype "p" {
+    document {
+      schema: "puck.creation.v1"
+      name: "p"
+      frames [pose(1, 2)]
+      shape Box "b" {
+        scale [0.5, 0.5, 0.5]
+      }
+    }
+  }
+}

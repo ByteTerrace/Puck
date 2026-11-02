@@ -41,7 +41,9 @@ A document's `schema:` field selects its vocabulary, never the filename.
 - `let name = expr` is a compile-time constant; `base with { member: value }`
   derives a record from an object (shallow: members replaced or added, a nested
   override spelled by nesting, `speed: kit.speed with { value: 5 }`) and lowers
-  to the object written out; `template name(p, q = d) { }` a
+  to the object written out; `function name(p, q = d) = expr` names a value
+  or a guard, inlined where it is called (a document value, a gate, an
+  effect), never recursive; `template name(p, q = d) { }` a
   parametric block; `import "name" [as alias]`, `export` and
   `use m as a(args)` compose modules.
 - **An import names, never spells a file.** `import "skies"`, not

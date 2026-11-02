@@ -511,7 +511,13 @@ public static partial class WorldDocumentEmitter {
             foreach (var operand in operands) {
                 var (gate, constant) = FoldGate(node: operand, scope: scope);
 
-                if (gate is not null) {
+                // A junction of the same kind inside this one is its operands in place: `all [all [a, b], c]` is
+                // `all [a, b, c]`, in the same order, so an inlined guard reads as the guard written out.
+                if ((gate is AndPredicateNode { } innerAnd) && !decides) {
+                    kept.AddRange(collection: innerAnd.Operands);
+                } else if ((gate is OrPredicateNode { } innerOr) && decides) {
+                    kept.AddRange(collection: innerOr.Operands);
+                } else if (gate is not null) {
                     kept.Add(item: gate);
                 } else if (constant == decides) {
                     if (kept.Count == 0) { return (null, decides); }

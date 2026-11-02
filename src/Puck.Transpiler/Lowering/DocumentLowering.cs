@@ -288,6 +288,21 @@ public static partial class DocumentLowering {
                     return result;
                 }
 
+            case CallExpressionNode call when (FunctionNamed(name: call.Name, scope: scope) is { } function): {
+                    owned = false;
+
+                    return CallFunction(call: call, fieldKey: fieldKey, function: function, scope: scope);
+                }
+
+            case FunctionExpressionNode function:
+                scope.Diagnostics.ReportError(
+                    code: PuckDiagnosticCodes.InvalidValue,
+                    message: "a function is called with its arguments, never read as a value",
+                    span: function.Span
+                );
+
+                return null;
+
             case CallExpressionNode call: {
                     var context = MemberContext(scope: scope);
                     var arm = scope.Vocabulary.CallContext(callName: call.Name, context: context);
@@ -417,6 +432,101 @@ public static partial class DocumentLowering {
     }
 
     private const string MemberContextKey = "MemberContext";
+    private const string CallingFunctionsKey = "CallingFunctions";
+
+    /// <summary>Returns the value function a name calls in this scope.</summary>
+    /// <param name="name">The called name.</param>
+    /// <param name="scope">The lowering scope.</param>
+    /// <returns>The function, or <see langword="null"/> when the name declares none.</returns>
+    public static FunctionExpressionNode? FunctionNamed(string name, DocumentScope scope) {
+        ArgumentNullException.ThrowIfNull(argument: scope);
+
+        return ((!scope.Locals.ContainsKey(key: name) && scope.Constants.TryGetValue(key: name, value: out var value) && (value is FunctionExpressionNode function)) ? function : null);
+    }
+    /// <summary>Matches a call's arguments to a function's parameters: positional arguments in order, then named ones by
+    /// name, and a parameter no argument supplies takes its default. A missing argument, a name no parameter has, a
+    /// parameter supplied twice and too many arguments are refused at the call.</summary>
+    /// <param name="name">The function's name, for the refusal.</param>
+    /// <param name="function">The function.</param>
+    /// <param name="argumentNames">Each argument's name, or <see langword="null"/> for a positional one.</param>
+    /// <param name="span">The call's span.</param>
+    /// <param name="scope">The lowering scope, whose diagnostics take a refusal.</param>
+    /// <returns>For each parameter, the index of its argument, or -1 for its default; <see langword="null"/> after a
+    /// refusal.</returns>
+    public static int[]? BindFunctionArguments(string name, FunctionExpressionNode function, IReadOnlyList<string?> argumentNames, SourceSpan span, DocumentScope scope) {
+        ArgumentNullException.ThrowIfNull(argument: function);
+        ArgumentNullException.ThrowIfNull(argument: argumentNames);
+        ArgumentNullException.ThrowIfNull(argument: scope);
+        var bound = Enumerable.Repeat(element: -1, count: function.Parameters.Count).ToArray();
+        string? refusal = null;
+
+        for (var index = 0; ((index < argumentNames.Count) && (refusal is null)); index++) {
+            var at = ((argumentNames[index] is { } named)
+                ? function.Parameters.ToList().FindIndex(match: parameter => (parameter.Name == named))
+                : index);
+
+            refusal = (((at < 0) || (at >= bound.Length))
+                ? ((argumentNames[index] is { } unknown) ? $"function '{name}' has no parameter '{unknown}'" : $"function '{name}' takes {bound.Length} argument(s)")
+                : ((bound[at] >= 0) ? $"function '{name}' is given '{function.Parameters[at].Name}' twice" : null));
+            if (refusal is null) { bound[at] = index; }
+        }
+        for (var at = 0; ((at < bound.Length) && (refusal is null)); at++) {
+            if ((bound[at] < 0) && (function.Parameters[at].DefaultValue is null)) {
+                refusal = $"function '{name}' needs its argument '{function.Parameters[at].Name}'";
+            }
+        }
+        if (refusal is not null) {
+            scope.Diagnostics.ReportError(code: PuckDiagnosticCodes.InvalidValue, message: refusal, span: span);
+            return null;
+        }
+        return bound;
+    }
+    /// <summary>Runs <paramref name="expand"/> as the expansion of one call of a function, refusing a call the
+    /// function makes of itself, directly or through another: a function is inlined, so it cannot recur.</summary>
+    /// <typeparam name="T">What the expansion returns.</typeparam>
+    /// <param name="name">The function's name.</param>
+    /// <param name="span">The call's span.</param>
+    /// <param name="scope">The lowering scope.</param>
+    /// <param name="expand">The expansion.</param>
+    /// <param name="refused">What the call stands for when it is refused.</param>
+    /// <returns>The expansion's result, or <paramref name="refused"/>.</returns>
+    public static T ExpandFunction<T>(string name, SourceSpan span, DocumentScope scope, Func<T> expand, T refused) {
+        ArgumentNullException.ThrowIfNull(argument: scope);
+        ArgumentNullException.ThrowIfNull(argument: expand);
+        if (scope.Annotations.GetValueOrDefault(key: CallingFunctionsKey) is not HashSet<string> calling) {
+            calling = new HashSet<string>(comparer: StringComparer.Ordinal);
+            scope.Annotations[CallingFunctionsKey] = calling;
+        }
+        if (!calling.Add(item: name)) {
+            scope.Diagnostics.ReportError(code: PuckDiagnosticCodes.InvalidValue, message: $"function '{name}' calls itself; a function is inlined and cannot recur", span: span);
+            return refused;
+        }
+        try {
+            return expand();
+        } finally {
+            calling.Remove(item: name);
+        }
+    }
+
+    // A call of a value function at compile time: the body evaluated with each parameter bound to its argument's value
+    // (or its default's), as locals the body reads and nothing else does.
+    private static JsonNode? CallFunction(CallExpressionNode call, FunctionExpressionNode function, string? fieldKey, DocumentScope scope) {
+        if (BindFunctionArguments(argumentNames: [.. call.Arguments.Select(selector: static argument => argument.Name)], function: function, name: call.Name, scope: scope, span: call.Span) is not { } bound) {
+            return null;
+        }
+        var locals = new Dictionary<string, JsonNode?>(comparer: StringComparer.Ordinal);
+
+        for (var at = 0; (at < bound.Length); at++) {
+            locals[function.Parameters[at].Name] = EvaluateValue(expr: ((bound[at] >= 0) ? call.Arguments[bound[at]].Value : function.Parameters[at].DefaultValue!), fieldKey: null, scope: scope);
+        }
+        return ExpandFunction(
+            expand: () => EvaluateValue(expr: function.Body, fieldKey: fieldKey, scope: scope.WithLocals(lambdaLocals: locals)),
+            name: call.Name,
+            refused: ((JsonNode?)null),
+            scope: scope,
+            span: call.Span
+        );
+    }
 
     /// <summary>Gets the position the value being lowered fills, in the vocabulary's own terms.</summary>
     /// <param name="scope">The lowering scope.</param>

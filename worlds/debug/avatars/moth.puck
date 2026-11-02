@@ -1165,19 +1165,7 @@ prototypes {
       schema: "puck.creation.v1"
       name: "moth"
       // The blink seats each closed lid over its eye and parks the open eye's pieces behind the face, at the head's scale.
-      frames [
-        {
-          name: "blink"
-          transforms: map(
-            mothBlinkPose,
-            row => {
-              id: row[0]
-              position: map([row[1], row[2], row[3]], (v, k) => headAt[k] + (v - mothHeadPivot[k]) * headScale)
-              rotation [0, 0, 0, 1]
-            }
-          )
-        }
-      ]
+      frames [mothBlinkFrame(headAt, headScale)]
       // The suit is pristine, as on the sheets: wear reaches only the tightest edges, and faintly.
       palette [
         {

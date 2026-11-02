@@ -510,21 +510,21 @@ for c in range(0, granaryCells) {
 }
 
 rule "granary-cell-cleanup" {
-  when granaryPhase == 0 and isAbsent(influence(water, granaryStores)[$each]) != 0
+  when granaryPhase == 0 and isAbsent(influence(water, granaryStores)[$each])
   mode: Level
   forEach: granaryCellOf
   remove granaryCellOf[$each]
 }
 
 rule "granary-water-coverage-cleanup" {
-  when granaryPhase == 1 and isAbsent(influence(water, granaryStores)[$each]) != 0
+  when granaryPhase == 1 and isAbsent(influence(water, granaryStores)[$each])
   mode: Level
   forEach: granaryWaterCoverage
   remove granaryWaterCoverage[$each]
 }
 
 rule "granary-power-coverage-cleanup" {
-  when granaryPhase == 2 and isAbsent(influence(power, granaryStores)[$each]) != 0
+  when granaryPhase == 2 and isAbsent(influence(power, granaryStores)[$each])
   mode: Level
   forEach: granaryPowerCoverage
   remove granaryPowerCoverage[$each]

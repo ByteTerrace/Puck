@@ -982,6 +982,22 @@ cell (`klondike.puck:504`) partly to keep the work budget's price low.
 - (c) A `let` holding an unevaluated expression, inlined where read: a second
   meaning for `let`.
 
+Landed, G3 and G8: `function name(p, q = d) = expression` is a `let` holding a
+`FunctionExpressionNode`, so libraries hand functions over like any `let`.
+A call in a document value evaluates the body with the arguments bound as
+locals; a call in a rule operand is spliced before the constant fold, its
+parameters replaced by the argument syntax, so a gate built from a function
+is reclassified as the guard written out, and an inlined `and` or `or` joins
+its enclosing junction in order (`all [all [a, b], c]` is `all [a, b, c]`,
+which also flattens one parenthesized group in chess). A function calling
+itself is refused. The Moth's blink frame is `mothBlinkFrame(at, s)` in
+`moth-head.puck`; Klondike and FreeCell name their guards
+`klondikeIdle`/`klondikeRequest` and `freecellIdle`/`freecellRequest`. Each
+`moveReady` latch stays: rules run in sequence, so the latch and the inlined
+guard behave alike, but the latch evaluates the ten-cell guard once a tick
+for the move rules, each of which then reads three cells. The corpus holds
+`function-gate` and `function-value`.
+
 Decided: (a), one construct for G3 and G8. The pair is a guard named by
 a function against the guard written out. Whether a latch cell and the guard it
 factors price the same (the audit's S9) is a cost question for the work

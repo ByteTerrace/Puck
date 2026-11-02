@@ -17,14 +17,120 @@ public static partial class WorldDocumentEmitter {
 
     private static ExpressionNode CompileTimeOperand(OperandExpressionNode operand, DocumentScope scope) =>
         new OperandBinder(scope: scope).CompileTime(operand: operand);
-    // The operand with what its compile-time constants decide folded (OperandBinder.Fold), or itself when nothing folds.
-    private static OperandExpressionNode FoldOperand(OperandExpressionNode operand, DocumentScope scope) =>
-        (((operand.Form == DocumentValueForm.Expression) && (operand.Syntax is { } syntax) && (new OperandBinder(scope: scope).Fold(node: syntax, operand: operand) is var folded) && !ReferenceEquals(objA: folded, objB: syntax))
-            ? PuckParser.RebuildOperand(atoms: [.. operand.Atoms.Select(selector: static atom => atom.Value)], original: operand, syntax: folded)
-            : operand);
+    // The operand with its value functions inlined (OperandBinder.Inline) and what its compile-time constants decide
+    // folded (OperandBinder.Fold), or itself when neither changes it.
+    private static OperandExpressionNode FoldOperand(OperandExpressionNode operand, DocumentScope scope) {
+        if ((operand.Form != DocumentValueForm.Expression) || (operand.Syntax is not { } syntax)) {
+            return operand;
+        }
+        var binder = new OperandBinder(scope: scope);
+        var inlined = binder.Inline(node: syntax, operand: operand);
+        var folded = binder.Fold(node: inlined, operand: operand);
+
+        return (ReferenceEquals(objA: folded, objB: syntax)
+            ? operand
+            : PuckParser.RebuildOperand(atoms: [.. operand.Atoms.Select(selector: static atom => atom.Value), .. binder.InlinedAtoms], original: operand, syntax: folded));
+    }
 
     private sealed class OperandBinder(DocumentScope scope) {
         private readonly StringBuilder m_text = new();
+        private readonly List<InterpolatedStringNode> m_inlinedAtoms = [];
+
+        // The atoms an inlined function body or default brought, numbered after the operand's own.
+        internal IReadOnlyList<InterpolatedStringNode> InlinedAtoms => m_inlinedAtoms;
+
+        // Splices each call of a value function (DocumentLowering.FunctionNamed) into the operand: its body with each
+        // parameter replaced by its argument's syntax (or its default's), so the rule program is the expression written
+        // out. Names the body reads that are not its parameters resolve where the call is, like any operand name.
+        internal Syntax.SyntaxNode Inline(Syntax.SyntaxNode node, OperandExpressionNode operand) {
+            return (CallsFunction(node: node) ? Splice(current: node) : node);
+
+            Syntax.SyntaxNode Splice(Syntax.SyntaxNode current) => current switch {
+                Syntax.SourceCall call when (DocumentLowering.FunctionNamed(name: call.Name, scope: scope) is { } function) => Expand(call: call, function: function),
+                Syntax.SourceCall call => call with { Arguments = [.. call.Arguments.Select(selector: argument => argument with { Value = Splice(current: argument.Value) })] },
+                Syntax.SourceGroup group => group with { Value = Splice(current: group.Value) },
+                Syntax.SourceIndex index => index with { Target = Splice(current: index.Target), Index = Splice(current: index.Index) },
+                Syntax.SourceAccess access => access with { Target = Splice(current: access.Target) },
+                Syntax.SourceLambda lambda => lambda with { Body = Splice(current: lambda.Body) },
+                Syntax.Unary unary => unary with { Operand = Splice(current: unary.Operand) },
+                Syntax.Binary binary => binary with { Left = Splice(current: binary.Left), Right = Splice(current: binary.Right) },
+                Syntax.Ternary ternary => new Syntax.Ternary(Condition: Splice(current: ternary.Condition), WhenTrue: Splice(current: ternary.WhenTrue), WhenFalse: Splice(current: ternary.WhenFalse)),
+                _ => current,
+            };
+            Syntax.SyntaxNode Expand(Syntax.SourceCall call, FunctionExpressionNode function) {
+                if (DocumentLowering.BindFunctionArguments(argumentNames: [.. call.Arguments.Select(selector: static argument => argument.Name)], function: function, name: call.Name, scope: scope, span: operand.Span) is not { } bound) {
+                    return new Syntax.Literal(Value: 0m);
+                }
+                return DocumentLowering.ExpandFunction(
+                    expand: () => {
+                        var arguments = new Dictionary<string, Syntax.SyntaxNode>(comparer: StringComparer.Ordinal);
+
+                        for (var at = 0; (at < bound.Length); at++) {
+                            arguments[function.Parameters[at].Name] = ((bound[at] >= 0)
+                                ? Splice(current: call.Arguments[bound[at]].Value)
+                                : Convert(expression: function.Parameters[at].DefaultValue!));
+                        }
+                        return Splice(current: Substitute(arguments: arguments, node: Convert(expression: function.Body)));
+                    },
+                    name: call.Name,
+                    refused: ((Syntax.SyntaxNode)new Syntax.Literal(Value: 0m)),
+                    scope: scope,
+                    span: operand.Span
+                );
+            }
+            // The compile-time expression as operand syntax, its atoms numbered after those already spliced in.
+            Syntax.SyntaxNode Convert(ExpressionNode expression) {
+                var converted = PuckParser.CreateOperand(expression: expression, form: DocumentValueForm.Expression);
+
+                if (converted.Syntax is not { } tree) {
+                    Refuse(message: $"'{converted.Text}' {converted.SyntaxError}", span: operand.Span);
+                    return new Syntax.Literal(Value: 0m);
+                }
+                var offset = (operand.Atoms.Count + m_inlinedAtoms.Count);
+
+                m_inlinedAtoms.AddRange(collection: converted.Atoms.Select(selector: static atom => atom.Value));
+                return Renumber(node: tree, offset: offset);
+            }
+        }
+
+        private bool CallsFunction(Syntax.SyntaxNode node) => node switch {
+            Syntax.SourceCall call => ((DocumentLowering.FunctionNamed(name: call.Name, scope: scope) is not null) || call.Arguments.Any(predicate: argument => CallsFunction(node: argument.Value))),
+            Syntax.SourceGroup group => CallsFunction(node: group.Value),
+            Syntax.SourceIndex index => (CallsFunction(node: index.Target) || CallsFunction(node: index.Index)),
+            Syntax.SourceAccess access => CallsFunction(node: access.Target),
+            Syntax.SourceLambda lambda => CallsFunction(node: lambda.Body),
+            Syntax.Unary unary => CallsFunction(node: unary.Operand),
+            Syntax.Binary binary => (CallsFunction(node: binary.Left) || CallsFunction(node: binary.Right)),
+            Syntax.Ternary ternary => (CallsFunction(node: ternary.Condition) || CallsFunction(node: ternary.WhenTrue) || CallsFunction(node: ternary.WhenFalse)),
+            _ => false,
+        };
+        // A parameter's every bare reading becomes its argument, grouped unless the argument is a primary, so an
+        // argument's operators keep their own precedence; a lambda binder of the same name shadows it.
+        private static Syntax.SyntaxNode Substitute(Syntax.SyntaxNode node, IReadOnlyDictionary<string, Syntax.SyntaxNode> arguments) => node switch {
+            Syntax.SourceName { Quoted: false } name when arguments.TryGetValue(key: name.Name, value: out var argument) =>
+                ((argument is Syntax.Literal or Syntax.SourceName or Syntax.SourceString or Syntax.SourceAtom or Syntax.SourceGroup or Syntax.SourceAccess or Syntax.SourceIndex or Syntax.SourceCall) ? argument : new Syntax.SourceGroup(Value: argument)),
+            Syntax.SourceCall call => call with { Arguments = [.. call.Arguments.Select(selector: item => item with { Value = Substitute(arguments: arguments, node: item.Value) })] },
+            Syntax.SourceGroup group => group with { Value = Substitute(arguments: arguments, node: group.Value) },
+            Syntax.SourceIndex index => index with { Target = Substitute(arguments: arguments, node: index.Target), Index = Substitute(arguments: arguments, node: index.Index) },
+            Syntax.SourceAccess access => access with { Target = Substitute(arguments: arguments, node: access.Target) },
+            Syntax.SourceLambda lambda => lambda with { Body = Substitute(arguments: (arguments.ContainsKey(key: lambda.Binder) ? arguments.Where(predicate: pair => (pair.Key != lambda.Binder)).ToDictionary(comparer: StringComparer.Ordinal) : arguments), node: lambda.Body) },
+            Syntax.Unary unary => unary with { Operand = Substitute(arguments: arguments, node: unary.Operand) },
+            Syntax.Binary binary => binary with { Left = Substitute(arguments: arguments, node: binary.Left), Right = Substitute(arguments: arguments, node: binary.Right) },
+            Syntax.Ternary ternary => new Syntax.Ternary(Condition: Substitute(arguments: arguments, node: ternary.Condition), WhenTrue: Substitute(arguments: arguments, node: ternary.WhenTrue), WhenFalse: Substitute(arguments: arguments, node: ternary.WhenFalse)),
+            _ => node,
+        };
+        private static Syntax.SyntaxNode Renumber(Syntax.SyntaxNode node, int offset) => ((offset == 0) ? node : node switch {
+            Syntax.SourceAtom atom => atom with { Index = (atom.Index + offset) },
+            Syntax.SourceCall call => call with { Arguments = [.. call.Arguments.Select(selector: item => item with { Value = Renumber(node: item.Value, offset: offset) })] },
+            Syntax.SourceGroup group => group with { Value = Renumber(node: group.Value, offset: offset) },
+            Syntax.SourceIndex index => index with { Target = Renumber(node: index.Target, offset: offset), Index = Renumber(node: index.Index, offset: offset) },
+            Syntax.SourceAccess access => access with { Target = Renumber(node: access.Target, offset: offset) },
+            Syntax.SourceLambda lambda => lambda with { Body = Renumber(node: lambda.Body, offset: offset) },
+            Syntax.Unary unary => unary with { Operand = Renumber(node: unary.Operand, offset: offset) },
+            Syntax.Binary binary => binary with { Left = Renumber(node: binary.Left, offset: offset), Right = Renumber(node: binary.Right, offset: offset) },
+            Syntax.Ternary ternary => new Syntax.Ternary(Condition: Renumber(node: ternary.Condition, offset: offset), WhenTrue: Renumber(node: ternary.WhenTrue, offset: offset), WhenFalse: Renumber(node: ternary.WhenFalse, offset: offset)),
+            _ => node,
+        });
 
         private HashSet<string>? m_derived;
         private string? m_binder;

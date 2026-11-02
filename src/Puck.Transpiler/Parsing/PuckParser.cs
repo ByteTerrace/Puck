@@ -460,6 +460,49 @@ public static partial class PuckParser {
             }
         }
 
+        // `function name(p, q = d) = expression`: a value function, held as the let it lowers to.
+        if (TryMatchStatementKeyword(context: context, keyword: "function")) {
+            SkipWhiteSpace(context: context);
+            if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var functionName)) {
+                throw CreateException(context: context, message: "Expected a name after 'function'");
+            }
+            SkipWhiteSpace(context: context);
+            if (!TryConsume(c: '(', context: context)) {
+                throw CreateException(context: context, message: $"Expected '(' after function name '{functionName}'");
+            }
+            var parameters = new List<TemplateParameterNode>();
+
+            SkipWhiteSpace(context: context);
+            while (!cursor.Eof && (cursor.Current != ')')) {
+                var parameterStart = cursor.Offset;
+
+                var (parameterLine, parameterColumn) = GetLineAndColumn(buffer: context.Scanner.Buffer, offset: parameterStart);
+
+                if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var parameterName)) {
+                    throw CreateException(context: context, message: $"Expected a parameter name in function '{functionName}'");
+                }
+                SkipWhiteSpace(context: context);
+                var fallback = (TryConsume(c: '=', context: context) ? ParseExpression(context: context) : null);
+
+                parameters.Add(item: new TemplateParameterNode(Column: parameterColumn, DefaultValue: fallback, Length: (cursor.Offset - parameterStart), Line: parameterLine, Name: parameterName, Offset: parameterStart));
+                SkipWhiteSpace(context: context);
+                if (!TryConsume(c: ',', context: context)) { break; }
+                SkipWhiteSpace(context: context);
+            }
+            if (!TryConsume(c: ')', context: context)) {
+                throw CreateException(context: context, message: $"Expected ')' closing function '{functionName}''s parameters");
+            }
+            SkipWhiteSpace(context: context);
+            if (!TryConsume(c: '=', context: context)) {
+                throw CreateException(context: context, message: $"Expected '=' and the expression function '{functionName}' stands for");
+            }
+            var body = ParseExpression(context: context);
+            var functionLength = (context.Scanner.Cursor.Offset - startOffset);
+
+            return new LetNode(Column: col, Length: functionLength, Line: line, Name: functionName, Offset: startOffset,
+                Value: new FunctionExpressionNode(Body: body, Column: col, Length: functionLength, Line: line, Offset: startOffset, Parameters: parameters));
+        }
+
         if (TryMatchStatementKeyword(context: context, keyword: "let")) {
             SkipWhiteSpace(context: context);
             if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var varName)) {

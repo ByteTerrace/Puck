@@ -1,0 +1,26 @@
+// A guard named by a function is the guard written out, in a gate and in a value: the rule program and its price are
+// the hand-written one's.
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+state {
+  world {
+    slot stage = 0
+    slot busy = 0
+    slot action = 0
+    slot ready = 0
+    slot moves = 0
+  }
+}
+
+function idle() = (stage == 0 and busy == 0)
+function asked(kind, at = 1) = (idle() and action == kind + at)
+
+rule "move" {
+  when asked(2) and moves < 10
+  moves += 1
+}
+
+rule "ready" {
+  ready = asked(kind: 4, at: 0)
+}

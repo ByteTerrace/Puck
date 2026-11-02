@@ -62,19 +62,19 @@ bindingOverlays [{
   }
 ]
 rule "motion" {
-  when inputMatch(1, motion) != 0
+  when inputMatch(1, motion)
   mode: Level
   motions += 1
   consumeInput(owner: "1", pattern: "motion")
 }
 rule "change-facing" {
-  when inputEdge(1, changeFacing, Press, 0) != 0
+  when inputEdge(1, changeFacing, Press, 0)
   mode: Edge
   setBodyState(key: 0, state: "inputFacing", expression: -bodyState(body, 0, inputFacing))
 }
 rule "buffered-action" {
   local age = inputAge(1, attack, Press, 0) ?? 0.0
-  when inputMatch(1, buffered) != 0 and age >= 0.05
+  when inputMatch(1, buffered) and age >= 0.05
   mode: Level
   buffered += 1
   consumeInput(owner: "1", pattern: "buffered")

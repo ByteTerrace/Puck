@@ -601,20 +601,7 @@ prototypes {
           ]
         }
         // The blink seats each closed lid over its eye and parks the open eye's pieces behind the face.
-        {
-          name: "blink"
-          transforms: map(
-            mothBlinkPose,
-            row => {
-              id: row[0]
-              position: map(
-                [row[1], row[2], row[3]],
-                (v, k) => pilotHeadAt[k] + (v - mothHeadPivot[k]) * pilotHeadScale
-              )
-              rotation [0, 0, 0, 1]
-            }
-          )
-        }
+        mothBlinkFrame(pilotHeadAt, pilotHeadScale)
       ]
       palette [
         // The undersuit: the harness straps over her shoulders and across her back, and the lavender patches where

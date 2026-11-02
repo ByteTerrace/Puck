@@ -495,6 +495,29 @@ public sealed record ConditionalExpressionNode(
     Line,
     Column
 );
+/// <summary>A value function's parameters and body: the value of the <see cref="LetNode"/> a
+/// <c>function name(p, q = d) = body</c> declaration lowers to. It is compile-time, non-recursive and inlined: a call
+/// in a document value evaluates the body with its arguments bound, and a call in a rule operand splices the body with
+/// its arguments substituted, so the program is the expression written out.</summary>
+/// <param name="Parameters">The parameters, each with an optional default.</param>
+/// <param name="Body">The expression the function stands for.</param>
+/// <param name="Offset">The character offset within the source text.</param>
+/// <param name="Length">The character length of the node span.</param>
+/// <param name="Line">The 1-based line number in source text.</param>
+/// <param name="Column">The 1-based column number in source text.</param>
+public sealed record FunctionExpressionNode(
+    IReadOnlyList<TemplateParameterNode> Parameters,
+    ExpressionNode Body,
+    int Offset = 0,
+    int Length = 0,
+    int Line = 1,
+    int Column = 1
+) : ExpressionNode(
+    Offset,
+    Length,
+    Line,
+    Column
+);
 /// <summary>A record derived from another: <c>base with { member: value }</c>. It evaluates to <paramref name="Base"/>'s
 /// object with each member <paramref name="Overrides"/> names replaced, and those it does not have added; shallow, so a
 /// nested override is spelled by nesting (<c>weathering: plate.weathering with { seed: 72 }</c>). It lowers to the

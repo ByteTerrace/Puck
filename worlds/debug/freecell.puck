@@ -246,12 +246,16 @@ patterns [
   }
 ]
 
+// The door is idle on a request: the table is up, a request waits, and no deal or move is under way.
+function freecellIdle() = (solitaire.table == 2 and
+  solitaireFreecell.request != solitaireFreecell.applied and
+  solitaireFreecell.stage == 0 and solitaireFreecell.busy == 0)
+
+// The door is idle on a request for action `kind` in a game under way.
+function freecellRequest(kind) = freecellIdle() and solitaireFreecell.status == 1 and solitaireFreecell.action == kind
+
 rule "solitaireFreecell-new-deal" {
-  when (solitaire.table == 2 and
-    solitaireFreecell.request != solitaireFreecell.applied and
-    solitaireFreecell.stage == 0 and
-    solitaireFreecell.busy == 0 and
-    solitaireFreecell.action == 1)
+  when freecellIdle() and solitaireFreecell.action == 1
   solitaireFreecell.stage = 1
   solitaireFreecell.status = 0
   solitaireFreecell.result = 0
@@ -352,12 +356,7 @@ rule "solitaireFreecell-empties" {
 }
 
 rule "solitaireFreecell-prepare-move" {
-  when (solitaire.table == 2 and
-    solitaireFreecell.request != solitaireFreecell.applied and
-    solitaireFreecell.stage == 0 and
-    solitaireFreecell.busy == 0 and
-    solitaireFreecell.status == 1 and
-    solitaireFreecell.action == 2)
+  when freecellRequest(2)
   solitaireFreecell.sourceOk = 0
   solitaireFreecell.targetOk = 0
   solitaireFreecell.runLength = 0
@@ -366,13 +365,7 @@ rule "solitaireFreecell-prepare-move" {
 // A run leaves a column when it is in sequence from its leading card to the column's end; a free cell gives up its one
 // card; a foundation gives up nothing.
 rule "solitaireFreecell-source" {
-  when (solitaire.table == 2 and
-    solitaireFreecell["request"] != solitaireFreecell["applied"] and
-    solitaireFreecell["stage"] == 0 and
-    solitaireFreecell["busy"] == 0 and
-    solitaireFreecell["status"] == 1 and
-    solitaireFreecell["action"] == 2 and
-    $zones[solitaireFreecell.from][solitaireFreecell["card"]] == 1)
+  when freecellRequest(2) and $zones[solitaireFreecell.from][solitaireFreecell["card"]] == 1
   zones [
     ""
     ""
@@ -396,13 +389,7 @@ rule "solitaireFreecell-source" {
 }
 
 rule "solitaireFreecell-source-cell" {
-  when (solitaire.table == 2 and
-    solitaireFreecell["request"] != solitaireFreecell["applied"] and
-    solitaireFreecell["stage"] == 0 and
-    solitaireFreecell["busy"] == 0 and
-    solitaireFreecell["status"] == 1 and
-    solitaireFreecell["action"] == 2 and
-    $zones[solitaireFreecell.from][solitaireFreecell["card"]] == 1)
+  when freecellRequest(2) and $zones[solitaireFreecell.from][solitaireFreecell["card"]] == 1
   zones [
     solitaireFreecellPile0
     solitaireFreecellPile1
@@ -428,13 +415,7 @@ rule "solitaireFreecell-source-cell" {
 // A column takes a run on an empty column or on the card one rank above its leading card in the other colour, when the
 // free cells and the other empty columns could carry it a card at a time and the column has room.
 rule "solitaireFreecell-target-column" {
-  when (solitaire.table == 2 and
-    solitaireFreecell.request != solitaireFreecell.applied and
-    solitaireFreecell.stage == 0 and
-    solitaireFreecell.busy == 0 and
-    solitaireFreecell.status == 1 and
-    solitaireFreecell.action == 2 and
-    solitaireFreecell.sourceOk == 1)
+  when freecellRequest(2) and solitaireFreecell.sourceOk == 1
   zones [
     ""
     ""
@@ -466,13 +447,7 @@ rule "solitaireFreecell-target-column" {
 
 // A free cell takes one card while it is empty.
 rule "solitaireFreecell-target-cell" {
-  when (solitaire.table == 2 and
-    solitaireFreecell.request != solitaireFreecell.applied and
-    solitaireFreecell.stage == 0 and
-    solitaireFreecell.busy == 0 and
-    solitaireFreecell.status == 1 and
-    solitaireFreecell.action == 2 and
-    solitaireFreecell.sourceOk == 1)
+  when freecellRequest(2) and solitaireFreecell.sourceOk == 1
   zones [
     solitaireFreecellPile0
     solitaireFreecellPile1
@@ -496,13 +471,7 @@ rule "solitaireFreecell-target-cell" {
 
 // A foundation takes the next rank of its own suit, one card at a time.
 rule "solitaireFreecell-target-foundation" {
-  when (solitaire.table == 2 and
-    solitaireFreecell.request != solitaireFreecell.applied and
-    solitaireFreecell.stage == 0 and
-    solitaireFreecell.busy == 0 and
-    solitaireFreecell.status == 1 and
-    solitaireFreecell.action == 2 and
-    solitaireFreecell.sourceOk == 1)
+  when freecellRequest(2) and solitaireFreecell.sourceOk == 1
   zones [
     ""
     ""
@@ -528,19 +497,13 @@ rule "solitaireFreecell-target-foundation" {
   )
 }
 
-// A move is ready when the door is idle on a move request whose run and landing the rules above accepted. The move rules
-// below gate on this one cell and on their two piles, which is all the work budget has to price them by.
+// A move is ready when the door is idle on a move request whose run and landing the rules above accepted. The guard is
+// evaluated here once a tick into one cell, and the move rules below gate on that cell and on their two piles, so each
+// reads three cells instead of the guard's ten; inlining freecellRequest into each would price every one at the guard.
 rule "solitaireFreecell-move-ready" {
   mode: Level
   solitaireFreecell.moveReady = (
-    solitaire.table == 2 and
-    solitaireFreecell.request != solitaireFreecell.applied and
-    solitaireFreecell.stage == 0 and
-    solitaireFreecell.busy == 0 and
-    solitaireFreecell.status == 1 and
-    solitaireFreecell.action == 2 and
-    solitaireFreecell.sourceOk == 1 and
-    solitaireFreecell.targetOk == 1
+    freecellRequest(2) and solitaireFreecell.sourceOk == 1 and solitaireFreecell.targetOk == 1
   )
 }
 
@@ -580,10 +543,7 @@ for from in fcCells {
 }
 
 rule "solitaireFreecell-reject" {
-  when (solitaire.table == 2 and
-    solitaireFreecell.request != solitaireFreecell.applied and
-    solitaireFreecell.stage == 0 and
-    solitaireFreecell.busy == 0)
+  when freecellIdle()
   transaction {
     solitaireFreecell.result = -1
     solitaireFreecell.applied = solitaireFreecell.request
