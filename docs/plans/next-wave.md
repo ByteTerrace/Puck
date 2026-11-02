@@ -70,6 +70,19 @@ Later, with their designs done: the [rule-faults](rule-faults.md) steps, the
 - Run a read-only tree research round beside the wave, so a foliage lane
   starts from references ([Debug world content](open-items.md#debug-world-content)).
 - The lift waits on the owner's go.
+- Design the player menu, player saves and the hub to worlds shape before any
+  code ([the owner's rulings](../decisions/play.md#the-game)).
+  1. A read-only grounding pass finds what already exists: identity and
+     owned worlds, checkpoints and persistence, crossings and transfers, the
+     avatar studio, `world.save`, `quit`, the wheel and the UI plan's tree.
+  2. A design memo reasons abstractly through:
+     - the hub as the release's launching point;
+     - character creation and selection;
+     - player-driven hubs and world swapping;
+     - what a player save holds, refined from what Puck already persists;
+     - true pause only in solo sessions;
+     - exit to menu and exit to desktop.
+  3. Fable reviews the memo before any lane builds it.
 
 ## The settle window that closes the wave
 

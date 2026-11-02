@@ -17,6 +17,26 @@ target machines, and the inspiration authors draw on to build their own worlds.
 Each feature the quarantined worlds hold that the debug world lacks is ported
 into it, one place at a time, rather than revived in place.
 
+**The release launches from a hub.** The debug world models the planned
+release (the owner's ruling). A hub world is the launching point for player
+worlds; character creation and selection fit into it, and players may drive
+hubs of their own. A design for menus, saves or world switching reasons from
+that whole shape, abstractly, never from the one world at hand.
+
+**The player menu opens on Start** (the owner's ruling). It offers exit to
+menu and exit to desktop, plus swapping worlds wherever the release or an
+author supports it.
+- Only a solo session truly pauses. Anywhere else the menu simply opens while
+  the world runs on.
+- An engaged overlay that declares Start, such as a console's pad, keeps it,
+  under [an overlay replaces only what it declares](input-channels.md#an-overlay-replaces-only-what-it-declares).
+- The menu is authored in the standard package. The engine supplies the UI
+  tree, a player-safe save and the leave and quit operations.
+
+What a player save holds is still open. Puck already persists some player
+state, and the design starts by finding exactly what, rather than assuming
+it is missing.
+
 **A surface is one description.** An island built from separate
 descriptions (hand-placed creation piles, painted lattice heights, flat prop
 scatter, detached ground quads) agrees with itself only by eye, so the surface
