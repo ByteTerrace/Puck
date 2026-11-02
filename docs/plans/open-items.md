@@ -115,7 +115,14 @@ Each waits on the owner: what the engine should do, how it looks and feels, and 
 - Whether a `search` job whose public outputs are judged over restricted rows
   is refused, linted or left to the author, as a binding to a restricted row on
   the shared screen is; the fog-of-war skirmish fixture shows what it leaks
-  first ([disclosure](disclosure.md#open-items)).
+  first ([disclosure](disclosure.md#open-items)). The owner waits for that
+  evidence before deciding.
+- Decided by the owner: night exposure is the lead's call, provided authors can
+  style it as their vision demands (the floor and curve stay authored data,
+  keyable on the day clock; the debug world authors a readable deep-blue
+  night). The Moth supports both cel and plain styles, swappable live for
+  playtesting the way binding layouts are, through a generic material-style
+  switch (the illum1-fix2 lane).
 - Mesh shipping: nothing is built until a presenting client downloads packages,
   and then on a self-hosted GPU runner (the owner's deferral;
   [rendering plan](rendering.md)).
