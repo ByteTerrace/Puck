@@ -344,10 +344,10 @@ public sealed class CliLease : IDisposable {
     /// <param name="checkout">The working checkout.</param>
     /// <param name="cancellationToken">Cancels Git discovery.</param>
     /// <returns>The main checkout's lease directory.</returns>
-    public static async Task<string> RootAsync(string checkout, CancellationToken cancellationToken = default) {
-        var common = (await CliGit.CaptureAsync(arguments: ["rev-parse", "--path-format=absolute", "--git-common-dir"], cancellationToken: cancellationToken, repository: checkout).ConfigureAwait(continueOnCapturedContext: false)).Trim();
-
-        return Path.Combine(path1: Path.GetDirectoryName(path: common)!, path2: ".claude/leases");
+    public static Task<string> RootAsync(string checkout, CancellationToken cancellationToken = default) {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!CliGit.TryResolveMainCheckout(repository: checkout, mainCheckout: out var mainCheckout)) { throw new InvalidOperationException(message: $"git names no common directory for {checkout}."); }
+        return Task.FromResult(result: Path.Combine(path1: mainCheckout, path2: ".claude/leases"));
     }
 
     private static CliLease? TryAcquire(string directory, string holder, string lane, TimeProvider clock) {

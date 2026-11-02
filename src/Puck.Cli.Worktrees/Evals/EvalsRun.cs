@@ -152,7 +152,10 @@ public static partial class EvalsRun {
         var stamp = clock.GetUtcNow().ToString(format: "yyyyMMdd-HHmmss", formatProvider: CultureInfo.InvariantCulture);
         var label = $"{stamp}-{revision[..10]}-{Tiers[Tier(model: settings.Model)]}-{settings.Ablation}{(settings.Fixture ? string.Empty : "-nofixture")}";
         var results = Path.GetFullPath(path: Path.Combine(root, ".claude", "skills", settings.Skill, "evals", "results", label));
-        var tree = Path.GetFullPath(path: Path.Combine(root, ".claude", "worktrees", $"evals-{settings.Skill}-{stamp}"));
+        // The frozen tree goes under the main checkout's worktrees folder, beside every other worktree, never nested
+        // inside the linked worktree the lead runs from.
+        if (!CliGit.TryResolveMainCheckout(repository: root, mainCheckout: out var mainCheckout)) { return CliExit.Refuse(verb: Verb, what: root, why: "git names no common directory for this checkout."); }
+        var tree = Path.GetFullPath(path: Path.Combine(mainCheckout, ".claude", "worktrees", $"evals-{settings.Skill}-{stamp}"));
         var target = Path.Combine(tree, ".claude", "skills", settings.Skill);
         List<string> arguments = [
             "plugin", "eval", Display(path: target),
