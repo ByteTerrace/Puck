@@ -221,8 +221,13 @@ takes the main path onto the dead `theap_main` and faults inside `mi_malloc`
 [mimalloc#1271](https://github.com/microsoft/mimalloc/issues/1271)). A .NET
 thread-pool worker retires when idle, so it must never be the loader:
 `MimallocAllocator`'s type initializer loads the library on a thread of its own
-that waits until process exit, and `MimallocThreadLifecycleLawTests` faults
-without it.
+that waits until process exit. `MimallocThreadLifecycleLawTests` sets up the
+trigger itself: in a process that has not loaded mimalloc, a short-lived thread
+makes the first allocation and exits, and the law starts threads until one
+reuses that thread's TEB address (read with `NtQueryInformationThread`), which
+then allocates. Without the owner thread the test host faults in that
+allocation. The law skips, rather than passes, when mimalloc was already loaded
+or no thread reused the address.
 
 Use a persistent default domain for general buffers. Add private heaps for
 actual independently retired graphs/resources. A world returns globally cached

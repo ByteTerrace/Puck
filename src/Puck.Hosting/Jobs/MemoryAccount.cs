@@ -37,8 +37,20 @@ public sealed class MemoryAccount {
     /// <summary>Requests that cache owners detach idle claims. Active consumer claims are unaffected.</summary>
     public event Action? TrimRequested;
 
-    /// <summary>Asks participating caches to release their claims, outside the account lock.</summary>
+    /// <summary>Asks participating caches to release their claims, outside the account lock. A cache whose claims belong
+    /// to another thread defers the release to that thread (<see cref="DeferTrim"/>), so some storage can outlive the
+    /// call; <see cref="DeferredTrims"/> counts those still waiting.</summary>
     public void TrimCaches() => TrimRequested?.Invoke();
+
+    private int m_deferredTrims;
+
+    /// <summary>Gets the trims a cache owner deferred to its own thread that have not run yet.</summary>
+    public int DeferredTrims => Volatile.Read(location: ref m_deferredTrims);
+    /// <summary>Records a trim request a cache owner will service on its own thread; it calls
+    /// <see cref="CompleteDeferredTrim"/> once it has.</summary>
+    public void DeferTrim() => _ = Interlocked.Increment(location: ref m_deferredTrims);
+    /// <summary>Records that a deferred trim has run, or that its owner was disposed with it still waiting.</summary>
+    public void CompleteDeferredTrim() => _ = Interlocked.Decrement(location: ref m_deferredTrims);
 
     /// <summary>Gets the machine-derived budget, leaving failure, cancellation and allocator headroom.</summary>
     public long DefaultBudget { get; } = Math.Max(val1: 0, val2: (((HostMemory.InstalledPhysicalBytes() ?? GC.GetGCMemoryInfo().TotalAvailableMemoryBytes) * 3) / 4));
