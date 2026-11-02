@@ -559,8 +559,8 @@ no-skill baseline arm. A case is one directory under the skill's `evals/`:
   creates it.
 
 Cases are not split into training and held-out sets. An agent editing a skill
-reads every case, so a held-out set it can read holds nothing out, and at five
-or so cases a skill a held-out score is noise. The guard against teaching to
+reads every case, so a held-out set it can read holds nothing out, and the
+two or three cases a skill holds out score as noise. The guard against teaching to
 the test is the rule below, stated generally, and capability cases drawn from
 real failures.
 
@@ -600,8 +600,8 @@ context `run` adds.
 preloaded skills, run at the agent's model. Teaching written into an agent's
 body is therefore never measured, so it belongs in the skill the agent
 preloads (the reviewer's rule to read revisions through Git's object commands
-belongs in `review-passes`), and the body keeps only the role: its model, its
-tools and what its brief names. Delegation reliability is not measured,
+lives in `review-passes`, which its cases measure), and the body keeps only
+the role: its model, its tools and what its brief names. Delegation reliability is not measured,
 because the lead names the agent explicitly.
 
 **Two cheap checks beside the evals:**

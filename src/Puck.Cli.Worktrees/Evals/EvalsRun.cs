@@ -189,7 +189,7 @@ public static partial class EvalsRun {
         }
         try {
             if (revision != head) {
-                foreach (string[] step in new[] { new[] { "rm", "-r", "-q", "--ignore-unmatch", "--", evalsPath }, new[] { "checkout", head, "--", evalsPath } }) {
+                foreach (var step in new[] { new[] { "rm", "-r", "-q", "--ignore-unmatch", "--", evalsPath }, new[] { "checkout", head, "--", evalsPath } }) {
                     if (await CliGit.RunAsync(arguments: step, cancellationToken: cancellationToken, repository: tree).ConfigureAwait(continueOnCapturedContext: false) is { ExitCode: not 0 } failed) {
                         return CliExit.Refuse(verb: Verb, what: Display(path: tree), why: $"git {string.Join(separator: ' ', values: step)} failed: {failed.Stderr.Trim()}");
                     }
@@ -201,17 +201,8 @@ public static partial class EvalsRun {
                 var agents = await CliGit.CaptureAsync(arguments: ["show", $"{head}:AGENTS.md"], cancellationToken: cancellationToken, repository: root).ConfigureAwait(continueOnCapturedContext: false);
                 var delegateSkill = (withDelegate ? await CliGit.CaptureAsync(arguments: ["show", $"{head}:.claude/skills/delegate/SKILL.md"], cancellationToken: cancellationToken, repository: root).ConfigureAwait(continueOnCapturedContext: false) : null);
 
-                foreach (var caseDirectory in caseDirectories) {
-                    if (CaseFiles.PromptSets(caseDirectory: caseDirectory, key: "append_system_prompt")) {
-                        return CliExit.Refuse(verb: Verb, what: Display(path: caseDirectory), why: "its prompt.md sets append_system_prompt, which would override the fixture's; move that text into the prompt.");
-                    }
-                    var fixture = Directory.CreateDirectory(path: Path.Combine(caseDirectory, FixtureDirectory)).FullName;
-
-                    await File.WriteAllTextAsync(path: Path.Combine(fixture, "AGENTS.md"), contents: agents, cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
-                    if (delegateSkill is not null) { await File.WriteAllTextAsync(path: Path.Combine(fixture, "delegate-SKILL.md"), contents: delegateSkill, cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false); }
-                    CaseFiles.SetCaseKey(caseDirectory: caseDirectory, key: "add_dirs", section: "context", value: $"[{FixtureDirectory}]");
-                    CaseFiles.SetCaseKey(caseDirectory: caseDirectory, key: "append_system_prompt", section: "execution", value: YamlString(text: FixturePrompt(withDelegate: withDelegate)));
-                    _ = CaseFiles.RaiseMaxTurns(caseDirectory: caseDirectory, extra: FixtureTurns);
+                if (AddFixture(agents: agents, caseDirectories: caseDirectories, delegateSkill: delegateSkill) is { } refusal) {
+                    return CliExit.Refuse(verb: Verb, what: Display(path: refusal.Case), why: refusal.Why);
                 }
             }
 
@@ -248,6 +239,37 @@ public static partial class EvalsRun {
         }
     }
 
+    /// <summary>Adds the rules-file fixture to every case directory: a <see cref="FixtureDirectory"/> directory holding
+    /// <c>AGENTS.md</c> (and <c>delegate-SKILL.md</c> when <paramref name="delegateSkill"/> is given), granted through
+    /// <c>case.yaml</c> <c>context.add_dirs</c> and named by <c>execution.append_system_prompt</c>, with the
+    /// <c>max_turns</c> a <c>prompt.md</c> sets raised by one for the read. Every case is checked before any is
+    /// written.</summary>
+    /// <param name="caseDirectories">The case directories, in a tree the run owns.</param>
+    /// <param name="agents">The text of <c>AGENTS.md</c>.</param>
+    /// <param name="delegateSkill">The text of the delegate skill, or <see langword="null"/> to leave it out.</param>
+    /// <returns><see langword="null"/> when every case took the fixture, or the first case that cannot, with why; a
+    /// refusal writes nothing.</returns>
+    public static (string Case, string Why)? AddFixture(IReadOnlyList<string> caseDirectories, string agents, string? delegateSkill) {
+        foreach (var caseDirectory in caseDirectories) {
+            if (CaseFiles.PromptSets(caseDirectory: caseDirectory, key: "append_system_prompt")) { return (caseDirectory, "its prompt.md sets append_system_prompt, which would override the fixture's; move that text into the prompt."); }
+            if (Directory.Exists(path: Path.Combine(caseDirectory, FixtureDirectory))) { return (caseDirectory, $"it already holds {FixtureDirectory}/, the directory the fixture writes."); }
+            if (File.Exists(path: Path.Combine(caseDirectory, CaseFiles.Case)) && File.ReadAllLines(path: Path.Combine(caseDirectory, CaseFiles.Case)).Any(predicate: static line => (line.TrimStart().StartsWith(value: "add_dirs:", comparisonType: StringComparison.Ordinal) || line.TrimStart().StartsWith(value: "append_system_prompt:", comparisonType: StringComparison.Ordinal)))) {
+                return (caseDirectory, "its case.yaml sets add_dirs or append_system_prompt already; merge the fixture's by hand or drop them.");
+            }
+        }
+        var prompt = YamlString(text: FixturePrompt(withDelegate: (delegateSkill is not null)));
+
+        foreach (var caseDirectory in caseDirectories) {
+            var fixture = Directory.CreateDirectory(path: Path.Combine(caseDirectory, FixtureDirectory)).FullName;
+
+            File.WriteAllText(path: Path.Combine(fixture, "AGENTS.md"), contents: agents);
+            if (delegateSkill is not null) { File.WriteAllText(path: Path.Combine(fixture, "delegate-SKILL.md"), contents: delegateSkill); }
+            CaseFiles.SetCaseKey(caseDirectory: caseDirectory, key: "add_dirs", section: "context", value: $"[{FixtureDirectory}]");
+            CaseFiles.SetCaseKey(caseDirectory: caseDirectory, key: "append_system_prompt", section: "execution", value: prompt);
+            _ = CaseFiles.RaiseMaxTurns(caseDirectory: caseDirectory, extra: FixtureTurns);
+        }
+        return null;
+    }
     // Copies each run's transcript beside the result and removes the run's sandbox (the claude-eval-* directory whose
     // out/ holds the transcript) unless asked to keep it. Returns how many transcripts were copied.
     private static int CopyTraces(string results, bool keepSandboxes) {
