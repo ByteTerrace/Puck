@@ -35,73 +35,85 @@ world is the proving ground, so every plan's checks run on it, and what the
 experimental worlds have that it lacks is ported into it
 ([port](#port-the-experimental-worlds-missing-features)).
 
-0. The first settle window (the lead): drain, then under `puck lease quiet`
-   the culling measurements M1/M2 on R2's GPU selection, a cold bake per
-   backend against the one-minute bar, the frame bar at the standard stops on
-   both backends with the day cycle running, the exit layer's cost as the
-   transmission baseline, Vulkan's draw-count gap, and `puck verbs --check`.
-   It decides V1 against V2 and sets every later timing's baseline.
-1. [Visibility](visibility.md) V1 or V2 as M1 decides [high, the frame bar],
-   after the draw-identity fix R2's review found
+0. [The frame thread's CPU field queries](engine-job-system.md#the-frame-bar-at-the-standard-stops)
+   [high, the frame bar]: the first settle window found every stop failing
+   60 FPS on both backends with the frame bound by CPU work on the frame
+   thread, not the GPU (meadow 67 ms against 8-22 ms of GPU). Half the meadow's
+   frame thread is `CaptureFrame`, chiefly CPU SDF field queries: creation-effector
+   surface probes (27 %) and the chase camera's clearance march (18 %), about
+   31 ms of 70; the presenter's `Dress` is 18.6 % and the tick 23-28 %. Design
+   these as the job system's and the evaluator's work (batched, cached by what
+   changed, off the frame thread) before any visibility step.
+1. [Lighting and GI](#lighting-and-gi) [high]: under lockstep a moving sun
+   relights all 589,824 probes every tick (about 10 s a tick,
+   `SdfMeshIrradiance.cs:538-559`, `DrainKey` at `:578`), so the sweep's
+   windowed leg cannot run with the day cycle and the sweep baseline is still
+   owed; then the sweep baseline in the next settle window.
+2. [Visibility](visibility.md): V2's first steps (V2a, V2b) ahead of V1a, as
+   M1 read, after the draw-identity fix R2's review found
    ([GPU robustness](#vulkan-regressions-and-gpu-robustness)).
-2. [Transmission](transmission.md) [high]: its implementation lanes in order,
+3. [Transmission](transmission.md) [high]: its implementation lanes in order,
    once the owner's look calls are answered or the design's choices stand.
-3. [Bake proportional to change](#bake-proportional-to-change) [high, the
+4. [Bake proportional to change](#bake-proportional-to-change) [high, the
    cold-bake bar]: a static copy bakes in its prototype's frame and is shared,
    bake grouping and detail derive from meaning rather than spelling, then
    narrow the closure and share one store across both backends.
-4. [Disclosure](disclosure.md#the-build-order) [high, the long pole before
+5. [Disclosure](disclosure.md#the-build-order) [high, the long pole before
    `main`]: steps 1-6 behind the harness, step 0b's principals, and the
    owner's search-output decision.
-5. [Engine job system](#engine-job-system) [high]: scheduling (spread the
+6. [Rule faults](rule-faults.md) [high, before `main`]: the class is not
+   closed by the register (a fourth review found escapes); build the designed
+   outcome type, single interpreter and journal-backed firing in its steps,
+   each reviewed.
+7. [Engine job system](#engine-job-system) [high]: scheduling (spread the
    rated views and the tick frame's tick-bound recording), the
    garbage-collection cuts, then J1 with T1's measurements; profile snapshot
    emission before T3.
-6. [Certified field contact](#certified-field-contact): box and ellipsoid
+8. [Certified field contact](#certified-field-contact): box and ellipsoid
    bodies, then clearance on slopes within a third of a metre.
-7. [Transfers](#transfers-federation-and-server) [high]: the companion steps 6
+9. [Transfers](#transfers-federation-and-server) [high]: the companion steps 6
    to 10.
-8. [Language and authoring](#language-and-authoring) and [author leaks to the
+10. [Language and authoring](#language-and-authoring) and [author leaks to the
    standard](#author-leaks-to-the-standard): what lang-2 leaves of S11, the
    cost corpus, the overlay text advance.
-9. Antigravity's coding trial ([agent tooling](#agent-tooling-and-skills)),
+11. Antigravity's coding trial ([agent tooling](#agent-tooling-and-skills)),
    after the settle window.
-10. [Delivery](#delivery-launcher-and-ci): CI's steady state, the shader cache
+12. [Delivery](#delivery-launcher-and-ci): CI's steady state, the shader cache
     and the GC-hole retirement.
-11. [Port the experimental worlds' missing features](#port-the-experimental-worlds-missing-features):
+13. [Port the experimental worlds' missing features](#port-the-experimental-worlds-missing-features):
    the meadow and the creature garden now, as the bake's and the parallel
    tick's forcing workloads; the second seat, the authored passes and the
    quilt each ahead of the job-system step they prove (the owner's ruling,
    [order](port-experimental.md#lanes-in-order)).
-12. [Edit to running, hot reload and boot](#edit-to-running-hot-reload-and-boot):
+14. [Edit to running, hot reload and boot](#edit-to-running-hot-reload-and-boot):
     the boot's JSON round trip in `BindLive` (about 0.7 s), then a reboot for
     an edit outside `PuckHotReload`; measure the cold and warm builds.
-13. [The valley's terrain](#the-valleys-terrain): terrain pass step 1 (the image
+15. [The valley's terrain](#the-valleys-terrain): terrain pass step 1 (the image
     meter), with steps 2, 3, 6 and step 4's bound fix in parallel.
-14. [Refactoring campaign](#refactoring-campaign): `GpuRegion.Grow` as the only
+16. [Refactoring campaign](#refactoring-campaign): `GpuRegion.Grow` as the only
     growth path with the uniform view limit enforced there, the two overlay
     writers, the survey's remaining groups.
-15. [Collision versus drawn mesh](#collision-versus-drawn-mesh): the groups sharp
+17. [Collision versus drawn mesh](#collision-versus-drawn-mesh): the groups sharp
     boxes left worse (the board game room's table, gallery floors 0, 2 and 3,
     the Wonderland room, the lift doors, the deck television).
-16. [Lighting and GI](#lighting-and-gi): light a cold area from the coarser
+18. [Lighting and GI](#lighting-and-gi): light a cold area from the coarser
     levels or the sky term the moment a view arrives; the rest after the image
     meter.
-17. [Derived products are caches](#derived-products-are-caches): build the
+19. [Derived products are caches](#derived-products-are-caches): build the
     generated `.nes` cartridges and firmware images on demand and remove the
     bytes from git; narrow the compiled-world key; measure the wasm modules.
-18. [Test runner and replay](#test-runner-and-replay): profile what recording
+20. [Test runner and replay](#test-runner-and-replay): profile what recording
     still folds whole every tick before choosing the next segment.
-19. [Bake detail](#bake-detail): measure the static round-section term.
-20. [Residency and streaming](#residency-and-streaming): step 2 after the memo
+21. [Bake detail](#bake-detail): measure the static round-section term.
+22. [Residency and streaming](#residency-and-streaming): step 2 after the memo
     names GI's work units; re-measure with the display on.
-21. [Vulkan regressions and GPU robustness](#vulkan-regressions-and-gpu-robustness):
+23. [Vulkan regressions and GPU robustness](#vulkan-regressions-and-gpu-robustness):
     the crossing frame and the pixel-pass gap.
-22. [MCP and the operator attachment](#mcp-and-the-operator-attachment): the
+24. [MCP and the operator attachment](#mcp-and-the-operator-attachment): the
     schema switch; the stale lease holder.
-23. [Tests (suspended)](#tests-suspended): triage the failing Windows shards by
+25. [Tests (suspended)](#tests-suspended): triage the failing Windows shards by
     cause.
-24. [Card tables](#card-tables-in-the-board-game-room) (the windowed look, then
+26. [Card tables](#card-tables-in-the-board-game-room) (the windowed look, then
     Spider), [Debug tools](#debug-tools) (windowed checks and exhibits),
     [Sweep](#sweep-and-visual-checks) (the paired tour) and
     [Temporal](#temporal-shimmer-and-cadence-flicker) (the blink re-measure).
