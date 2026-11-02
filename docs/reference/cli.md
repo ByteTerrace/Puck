@@ -83,7 +83,7 @@ whose command no longer breaks its rule, until the row is deleted.
 | Verb | What it is |
 |---|---|
 | [`puck affected`](#puck-affectedthe-checks-a-change-needs) | names the test suites, canaries and parity run a change needs, from the project graph and recorded canary coverage; `--run` runs the suites and worlds, and `--run --gpu` the canaries too. |
-| [`puck agents`](#puck-agents-linknative-skill-discovery) | creates or checks the checkout's native skills link. |
+| [`puck agents`](#puck-agents-linknative-skill-discovery) | creates or checks the checkout's native skills link, and compares the agent configuration of the working checkout, the project root and the main checkout. |
 | [`puck architecture`](../project-map.md) | the project-layering report: explains the build-time layering gate, `--map` prints the generated layering block of `docs/project-map.md`, and `--check` fails when the checked-in block drifts from the projects' declarations. |
 | [`puck artifacts`](#automation-commands) | capture, restore, and test the compiled-solution archive CI passes between jobs. |
 | [`puck azure`](../development/ci.md#azure-production-deployment) | build, deploy, publish, and verify Puck's Azure production; run from the repository root. |
@@ -111,7 +111,7 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck landing`](#puck-landinggit-loss-check) | refuses a commit that silently drops content its author never worked from. |
 | [`puck lanes`](#puck-lanesone-line-per-worktree) | prints one line per worktree: branch, commits ahead, changes, last commit, newest write, log, lease and stall state; `--watch` prints only the changes. |
 | [`puck laws`](#puck-laws-provea-law-against-its-fix) | `laws prove` shows, in an isolated proof tree, that a law fails with its fix withheld and passes with it, and prints the evidence for a commit body. |
-| [`puck lease`](#puck-leaseexclusive-machine-work) | run a command while exclusively holding the shared GPU, heavy-work or World-build resource, or all three once the machine is idle (`lease quiet`, the settle window for timing measurements). |
+| [`puck lease`](#puck-leaseexclusive-machine-work) | run a command while exclusively holding the shared GPU, heavy-work or World-build resource, or all three once the machine is idle (`lease quiet`, the settle window for timing measurements); `lease list` prints each lease's holder and queue. |
 | [`puck lint`](#the-puck-dsl-verbs) | static analysis and symbol resolution over a `.puck` document, composed the same way `compile --validate` composes it. |
 | [`puck locks`](#puck-locksrestore-lock-files) | re-records the solution's `packages.lock.json` files after a reference change, takes newer packages with `--update`, or with `--check` runs a locked restore and names each project whose lock file drifted, writing nothing. |
 | [`puck lsp`](#the-puck-dsl-verbs) | the `.puck` language server over stdio: completion, hover, document symbols, formatting, semantic tokens, and diagnostics published once the input goes quiet. |
@@ -2112,11 +2112,12 @@ exports.
 
 The worlds themselves are quick: the probe's six run in about 10 seconds in
 one worker, most of it the first boot's one-time start-up, and each later
-world takes under half a second. The waits are the build lease (the World build
-of the checkout's sources, refused after 600 seconds behind other lanes'
-builds) and the heavy lease. A lane whose build queue is long builds
-`src/Puck.World` itself, copies its output to lane scratch, and passes that
-copy's `Puck.World.dll` as `--world-artifact`.
+world takes under half a second. The waits are the build lease and the heavy
+lease, each up to two hours, and the World build of the checkout's sources has
+its own thirty minutes once it starts ([waiting and
+building](#where-the-world-artifact-is-built)), so a long build queue is no
+reason to build privately; `--world-artifact` is for booting a build made
+some other way.
 
 ---
 
@@ -4456,10 +4457,21 @@ active  controls  codex/controls  ahead 3 files 2 commit 14m "controls: ..." wri
   lane's turn 2 of 3 in the round, four admissions before it). A lane is matched
   by the lease's lane name against the worktree name, the branch, or the
   branch's last segment.
-- The first column is the lane's state: `active`; `done` or `blocked` (the last
-  commit's `Brief:` trailer); `exited` (the log ends with an exit line); `main`;
-  or `STALL`, an active lane whose newest write is older than `--stall` minutes
-  (default 30) while it neither holds a lease nor waits for one.
+- `mode findings-only` marks a lane that delivers a report instead of commits:
+  its `.claude/scratch/<name>.task` file holds `mode: findings-only` (and may
+  name `report: <path>`), or its log's Codex header names a read-only sandbox.
+  Its report is that path, else `.claude/scratch/<name>-findings.md` in the
+  worktree or the main checkout; `report <path>` shows it once it is a
+  non-empty file.
+- The first column is the lane's state, what it delivered before whether its
+  process ended: `done` or `blocked` (the last commit's `Brief:` trailer);
+  `reported` (a findings-only lane's report); `exited` (the log ends with an
+  exit line and nothing was delivered, which `--watch` says); `active`; `main`;
+  or `STALL`, an active lane that shows no progress for `--stall` minutes
+  (default 30) while it neither holds a lease nor waits for one. A writer's
+  progress is its newest write; a findings-only lane writes nothing until it
+  reports, so its progress is its log's growth, and one whose log is still
+  empty is never marked.
 
 `--json` prints the same rows as one JSON document with ages in seconds.
 `--watch <minutes>` polls every `--interval` seconds (default 30) for that long
@@ -4499,7 +4511,7 @@ Run `puck lease gpu --holder <lane> [--lane <lane>] [--wait <seconds>] -- <execu
 
 The main checkout, found through Git's common directory, owns `.claude/leases/<name>/holder` for all its worktrees. The holder records the holder name, UTC acquisition time, process ID and process start ticks on four lines, and the lane on a fifth only when it is not the holder's first word. A persistent sibling `<name>.guard` file is held exclusively for the command's lifetime; it is not removed, because replacing the locked file would let competing processes lock different files. The holder directory is removed on exit, including child failure and Ctrl+C. A taken lease refuses immediately unless `--wait` supplies a nonnegative number of seconds. Waiting uses the CLI clock.
 
-Admission rotates between lanes and is first come, first served within a lane. A lane is the first word of `--holder` (`probe-depth-fix timing run` is lane `probe-depth-fix`), or the value of `--lane` when given; `puck_world_start` passes its `lane` argument the same way and names the checkout's directory when it gets neither `holder` nor `lane`. Every acquisition, even `--wait 0`, takes a ticket in the sibling `<name>.queue` directory: a file named by a zero-padded sequence (the highest present plus one, claimed with an exclusive create) holding the same metadata lines as a holder. Each time a lane takes the lease, the sibling `<name>.rotation` directory records it as the most recently served (one file per lane, holding a serial one above every other lane's). The guard goes to the oldest live ticket of the lane served least recently, and a lane never served ranks first, so a lane with three queued runs gets one turn per round while other lanes wait. With lane A queued three times ahead of lanes B and C, once each, runs are admitted A1, B1, C1, A2, A3. A holder that exits and immediately acquires again queues behind every other lane already waiting, and a newcomer cannot overtake a lane that has waited, because a newcomer's lane is served after theirs. The wait message names the holder, how many tickets are ahead in this order, and the lane's turn among the queued lanes (`lane a is 2 of 3 in the round`). A ticket is removed when its waiter acquires, times out or is cancelled. A ticket whose process has exited (or whose PID was reused) is deleted by the next waiter that looks, and a ticket whose metadata never became readable is deleted once ten seconds old, so a power trip leaves nothing that blocks admission. The queue lives beside the lease, so a child lease under an ancestor holder queues in `child.queue` inside that holder's directory.
+Admission rotates between lanes and is first come, first served within a lane. A lane is the first word of `--holder` (`probe-depth-fix timing run` is lane `probe-depth-fix`), or the value of `--lane` when given; `puck_world_start` passes its `lane` argument the same way and names the checkout's directory when it gets neither `holder` nor `lane`. Every acquisition, even `--wait 0`, takes a ticket in the sibling `<name>.queue` directory: a file named by a zero-padded sequence (the highest present plus one, claimed with an exclusive create) holding the same metadata lines as a holder. Each time a lane takes the lease, the sibling `<name>.rotation` directory records it as the most recently served (one file per lane, holding a serial one above every other lane's). The guard goes to the oldest live ticket of the lane served least recently. A lane that has never held the lease takes the serial of the lane served most recently as it first queues (the same file, created whole and never over a serial a holder wrote), so a new lane ranks behind every lane served longer ago and behind a lane served at the same point whose ticket is older, never ahead of a lane that was already waiting. A lane with three queued runs gets one turn per round while other lanes wait. With lane A queued three times ahead of lanes B and C, once each, runs are admitted A1, B1, C1, A2, A3. A holder that exits and immediately acquires again queues behind every other lane already waiting, and a newcomer cannot overtake a lane that has waited, because a newcomer's lane is served after theirs. The wait message names the holder, how many tickets are ahead in this order, and the lane's turn among the queued lanes (`lane a is 2 of 3 in the round`). A ticket is removed when its waiter acquires, times out or is cancelled. A ticket whose process has exited (or whose PID was reused) is deleted by the next waiter that looks, and a ticket whose metadata never became readable is deleted once ten seconds old, so a power trip leaves nothing that blocks admission. The queue lives beside the lease, so a child lease under an ancestor holder queues in `child.queue` inside that holder's directory.
 
 Heavy suites in `gate` and `affected` use this same lease through admission
 and execution. When a live ancestor already holds it, verified process ancestry
@@ -4513,6 +4525,18 @@ in `gate` and `affected`, a multi-world `puck test`, the World build store's
 windowed World the MCP server starts all pass the ancestor recognizer
 (`ProcessInspection.IsAncestor`), so a command run under `puck lease <name>`
 that takes the same lease waits on a sibling, never on itself.
+
+### `puck lease list`—who holds what and who waits
+
+Run `puck lease list` to read the shared lease directory without changing it. For each of `build`, `gpu` and `heavy` it prints one line, `idle` or `held by <holder> (lane <lane>) for <time>` (with `, stale: its process has exited` for a holder file whose process is gone, which the next acquisition replaces), followed by the queued count. Under it, one line per live waiter in admission order, the order the lease will be granted in: its holder, lane, how long it has waited, its lane's turn among the queued lanes, and how many admissions come before it. The verb takes no ticket, deletes no dead ticket, and writes no rotation serial, so it can run at any time beside any lease (it reads through `CliLease.Inspect`, the reader `puck lanes` uses). A lease a holder's descendants hold as a `child` of it is not shown. The lead reads it for lease pressure ([orchestration](../../.claude/skills/orchestration/SKILL.md#schedule-machines)).
+
+```text
+build: idle
+gpu: held by probe-depth-fix timing run (lane probe-depth-fix) for 3m 5s; 2 queued
+  1. meadow gpu (lane meadow) waiting 2m 40s; lane 1 of 2 in the round, 0 ahead
+  2. probe-depth-fix retime (lane probe-depth-fix) waiting 1m 2s; lane 2 of 2 in the round, 1 ahead
+heavy: idle
+```
 
 ### `puck lease quiet`—a settle window
 
@@ -4530,3 +4554,19 @@ link aimed elsewhere, or a missing source is refused without replacement.
 Only the link is ignored; the `.agents/` JSON configurations remain tracked.
 Exit 0 means the link is correct, exit 1 means `--check` found drift, and exit 2
 means creation was refused or failed. The verb never edits home configuration or hook trust.
+
+`puck agents provenance [--checkout <dir>] [--project-root <dir>]` checks which
+checkout a session's agent configuration comes from. It reads `.claude/agents`,
+`.claude/skills`, `.claude/hooks`, `.claude/settings.json` and `AGENTS.md` in
+the checkout the session works in (`--checkout`, default the current
+directory's), the project root Claude Code loads agents, skills and hooks from
+(`--project-root`, the `CLAUDE_PROJECT_DIR` its hooks see; without it only the
+other two are compared), and the main checkout (the
+parent of git's common directory). Each path's key is computed at run time from
+git's committed entry and the bytes of every changed or untracked file under
+it, and nothing is recorded. It prints each checkout with its branch, and exits
+0 when all agree, 1 with a `MISMATCH` line per differing checkout naming the
+paths, both checkouts and their branches, and 2 when a checkout cannot be read.
+Claude's SessionStart hook runs it on startup, resume and compact, and the lead
+runs it before dispatching lanes
+([orchestration](../../.claude/skills/orchestration/SKILL.md#launch-capabilities)).

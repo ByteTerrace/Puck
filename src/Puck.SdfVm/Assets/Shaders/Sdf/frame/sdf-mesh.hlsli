@@ -20,10 +20,13 @@ uint sdfMeshRecord(uint draw) {
     return (draw * SDF_MESH_DRAW_WORDS);
 }
 // The first index of a draw's level of detail: zero for its mesh's own triangles, otherwise three times the level's first
-// triangle among the mesh's levelled triangles (SDF_MESH_LEVEL_TRIANGLE_WORD). A draw of the level adds it to its vertex
+// triangle among the mesh's levelled triangles (SDF_MESH_LEVEL_TABLE_WORD). A draw of the level adds it to its vertex
 // id, which counts from zero on every backend, so the triangle a vertex names is the level's.
 uint sdfMeshLevelIndex(uint record, uint level) {
-    return ((level == 0u) ? 0u : (3u * sdfMeshRegion[((record + SDF_MESH_LEVEL_TRIANGLE_WORD) + min(level, 2u)) - 1u]));
+    if (level == 0u) { return 0u; }
+    uint table = sdfMeshRegion[record + SDF_MESH_LEVEL_TABLE_WORD];
+    uint count = sdfMeshRegion[record + SDF_MESH_LEVEL_TABLE_WORD + 1u];
+    return 3u * sdfMeshRegion[table + 3u * min(level, count)];
 }
 
 // The material a draw's triangle shades with: the draw's material, plus the triangle's palette entry when its mesh

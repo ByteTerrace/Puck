@@ -1420,15 +1420,6 @@ render {
           shadow: always,
           angularRadius: 0.2
         )
-        // The moon, which the day cycle (day.puck) turns opposite the sun and lights at night; it takes a shadow slot by
-        // its luminance once the sun has set.
-        directional(
-          name: "moon",
-          direction: [-3, 5, 4],
-          color: "#7088E8",
-          illuminance: 0lx,
-          shadow: auto
-        )
         // The inspection fill (`gallery.inspect`): five unshadowed neutral lights, one from overhead and four low
         // from the sides, each at the `galleryFill.fill` illuminance, zero while the lever is Off. They reach every
         // surface that faces them, shadowed or not, so no exhibit sits in the dark.

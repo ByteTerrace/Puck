@@ -891,9 +891,9 @@ choice:
 
 **G1 — Deriving a record from another.** A value cannot be another with
 overrides. Sites: the gallery map re-lists every text-run field to move six
-runs (`worlds/debug/shapes.puck` around `:421`, the `map(..., run => { … })`),
+runs (`worlds/debug/shapes.puck` around `:410`, the `map(..., run => { … })`),
 the Moth's palette repeats the whole `weathering { }` block per plate slot
-(`worlds/debug/avatars/moth.puck:1278` on, five times), the 13 near-identical
+(`worlds/debug/avatars/moth.puck:1233` on, five times), the 13 near-identical
 emboss runs in `shapes.puck`.
 
 - (a) `base with { member: value }`, an expression: a block after `with`,
@@ -910,7 +910,7 @@ written out, so the pair is a `with` against the literal.
 
 **G2 — Deriving a keyed row under a new id.** Refining a row by id works only
 for the same id, so `range-walker` copies the walker kit
-(`worlds/debug/range.puck:121`) rather than deriving from it.
+(`worlds/debug/range.puck:122`) rather than deriving from it.
 
 - (a) A row header naming its base: `kit "range-walker" from "walker" { … }`,
   resolved at compile time against the rows the source, its libraries, its
@@ -953,8 +953,8 @@ Decided: (a). The pair is a call against the expression
 written out with the arguments substituted.
 
 **G7 — Totals summed by hand across documents.** `bodies.capacity`
-(`worlds/debug/debug.puck:174`, summing counts `shapes.puck` restates from each
-game) and `placements.policy.derivedFaceScreens` (`debug.puck:185`,
+(`worlds/debug/debug.puck:180`, summing counts `shapes.puck` restates from each
+game) and `placements.policy.derivedFaceScreens` (`debug.puck:191`,
 `garden.puck:83`, `night.puck:78`) are summed by hand from what imports
 declare, and drift when an import changes.
 
@@ -972,7 +972,7 @@ pair is an authored total against none.
 **G8 — Naming a rule expression.** A `let` cannot name a state expression, so
 the idle-door guard is restated in nine Klondike rules and eight FreeCell rules
 (`worlds/debug/klondike.puck:246` on), and Klondike adds a `moveReady` latch
-cell (`klondike.puck:504`) partly to keep the work budget's price low.
+cell (`klondike.puck:472`) partly to keep the work budget's price low.
 
 - (a) G3's `function` over state reads: `function idle() = solitaire.table == 1
   and …`, inlined into each gate, so the rule program and its price are the
@@ -1263,6 +1263,10 @@ ticked; the [open items](open-items.md#next) rank the work packets drawn from it
 
 - C1: the charged-operation, failed-work, and report inventory above feeds
   [S10 step 7](#s10--the-state-review).
+- Rule-fault propagation: the fault register on `ArenaScratch` is replaced by
+  the in-band `Outcome`, the one interpreter and the transactional firing of
+  [the rule-faults plan](rule-faults.md), in its nine steps with their
+  witnesses and checks.
 
 - S7's substrate and World integration are present: generation-aware single and
   pair pools, snapshots, lexical claim/release/iteration, logical body carriers,

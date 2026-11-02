@@ -495,9 +495,9 @@ leg did not include a pre-phase still or a Vulkan boot; pixel parity remains
 unconfirmed. The later phases retain their paired-still and frame-budget
 finish lines.
 
-The sweep and windowed observation above were recorded at `02e6bd3cde`.
-The final integration merge includes `lead/fundamentals` at `5ce882b902`,
-including its later mesh-bake changes. On that combined head, Release builds
+The sweep and windowed observation above were recorded before phase 1's final
+merge with the integration branch, which brought later mesh-bake changes. On
+that combined head, Release builds
 of World and CLI passed with zero warnings/errors and the rebuilt private CLI
 reproduced `input-clock30-tests.puck`; both its authority-hash sequence and
 canonical export still match the pre-phase artifact byte for byte. The GPU

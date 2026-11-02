@@ -12,6 +12,6 @@ state {
 }
 
 rule "climb" {
-  when (strict == 1) ? (level < 3) : (level <= 3)
+  when ((strict == 1) ? (level < 3) : (level <= 3))
   moves += 1
 }

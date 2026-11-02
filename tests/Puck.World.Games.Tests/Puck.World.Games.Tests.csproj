@@ -46,6 +46,7 @@
         <Compile Include="../Shared/World/CreationFixtures.cs" Link="World/CreationFixtures.cs" />
         <Compile Include="../Shared/World/CrossingIdentityFixtures.cs" Link="World/CrossingIdentityFixtures.cs" />
         <Compile Include="../Shared/World/DocumentCompositionCollection.cs" Link="World/DocumentCompositionCollection.cs" />
+        <Compile Include="../Shared/World/EditorBarFixtures.cs" Link="World/EditorBarFixtures.cs" />
         <Compile Include="../Shared/World/Fixtures.Server.cs" Link="World/Fixtures.Server.cs" />
         <Compile Include="../Shared/World/Fixtures.cs" Link="World/Fixtures.cs" />
         <Compile Include="../Shared/World/PerUserRootScan.cs" Link="World/PerUserRootScan.cs" />

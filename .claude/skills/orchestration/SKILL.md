@@ -33,12 +33,15 @@ shared files, its own capacity to inspect and merge) and launches more only
 when that judgement says the machine and the lead can absorb them. The owner's
 direction:
 
-- **Review before landing where a defect does damage before review lands.** Code
-  that deletes files, crosses a trust boundary (grants, federation, admission,
-  credentials) or rewrites persisted data gets its cross-family review before it
-  lands; everything else lands on its evidence and is reviewed alongside. A
-  pruning change that could delete outside its install root and a cap that
-  trusted the sender both landed first and had to be reverted or refixed.
+- **Review risky changes early, without gating them.** Code that deletes
+  files, crosses a trust boundary (grants, federation, admission, credentials)
+  or rewrites persisted data has its cross-family review started the moment it
+  hands back, ahead of other reviews, and the lead reads its diff for those
+  hazards before merging; like everything else, it lands on its evidence and is
+  never held for the review (AGENTS.md: review is never a landing
+  precondition). A pruning change that could delete outside its install root
+  and a cap that trusted the sender both had to be reverted or refixed after
+  landing.
 - **The lead's verification window outranks lane legs.** Windowed checks owed by
   several lanes are one session the lead runs with GPU priority; it is never
   queued behind the lanes it verifies.
@@ -46,8 +49,9 @@ direction:
   run, so the lead holds a short quiet window at a natural pause (lanes parked at
   WIP commits) to re-measure the speedups landed since the last one; a speed
   claim stands only once measured there.
-- **An Antigravity lane is bounded and always reviewed before it lands**: its
-  output has carried fabricated claims and high findings.
+- **An Antigravity lane is bounded, its claims are checked against the code
+  before it merges, and its review starts first**: its output has carried
+  fabricated claims and high findings.
 
 - **Batch, including unrelated areas.** Several lanes work independent areas at
   once, and the integration lane verifies them together in one sweep of the
@@ -65,8 +69,9 @@ direction:
   security, large-context and UI reviews. The reviewer gets the diff and the
   author's claim, not the author's reasoning, and tries to break it with a repro,
   a counterexample or a missed caller. Review depth follows risk: determinism,
-  maths and renderer changes get an Astra- or `principal`-grade reviewer, ordinary
-  engine code Sol or `specialist`, docs and world content none or a scout's
+  maths and renderer changes get Astra or an Opus `reviewer` or `specialist`
+  (`principal` only as [Conserve Fable](#no-bad-loops) allows), ordinary engine
+  code Sol, `reviewer` or `specialist`, docs and world content none or a scout's
   spot-check.
   - The author starts its next item when it hands back and is never paused; the
     change lands in its batch whether or not the review has finished.
@@ -77,9 +82,9 @@ direction:
     new packet with an owner role and a next action, never a list of its own. A
     high finding goes to the top of [Next](../../../docs/plans/open-items.md#next)
     and so into the next integration batch.
-  - The reviewer's fixes are a follow-up branch of their own in that batch
-    (review-and-fix, [`review-passes`](../review-passes/SKILL.md)), never edits
-    to the author's branch.
+  - The brief picks the [review mode](../review-passes/SKILL.md#when-a-lane-gets-a-review),
+    findings-only or review-and-fix, which also decides who fixes what the
+    review finds; the author's branch is never edited by a reviewer.
   - The integration lane may revert a landed change when leaving it in is worse
     than removing it.
   - The only blocking review gate is before the owner pushes `main`: every high
@@ -131,8 +136,9 @@ brief:
   a lead to verify, not a fact. One lane was sent to add a source-generated
   JSON context that already existed, because the packet said none did;
 
-- a fresh read of the worktree's AGENTS.md and owning skill, correcting stale
-  startup repository text while preserving current owner and system precedence.
+- for a Codex or Antigravity lane, an instruction to read the
+  [`delegate` skill](../delegate/SKILL.md) before anything else (Claude's
+  project agents preload it); it owns the lane's own working contract.
 
 When a lane demonstrates stale-rule behavior, the lead starts a fresh session
 before launching its continuation. Editing a skill alone does not require a new session.
@@ -156,6 +162,17 @@ property is enforced in too many places; brief a design for the one
 chokepoint that makes the property structural (a type or project boundary,
 one derived view), then migrate behind it.
 
+Better still, do it first. Work whose correctness rests on an invariant (a
+cache and its invalidation, an oracle and what it records, a visibility or
+shadow term and the geometry it assumes, a concurrency primitive and its
+wakeups) gets a written design and a Codex design review before any code,
+and its brief names the invariant and what enforces it: the compiler, a
+single door, or a derived view, never "every caller remembers". Every first
+draft of such work this session came back with highs from review (the
+incremental hash's caches, the disclosure harness, the exit layer three times,
+the transmission design), each from an invariant kept by convention; a design
+review costs a quarter hour, a failed fix round a lane's afternoon.
+
 Before briefing a step that decides how a pipeline works (what the renderer
 draws and submits, how the tick schedules, a camera or physics model), ask
 whether a research round has covered that design, even when the step arrives
@@ -172,17 +189,11 @@ status, and count the commits behind with
 `git rev-list --count <base>..<integration-head>`
 ([why a two-dot range is not ancestry](../verification/SKILL.md#branches)).
 
-Only the assignment's last commit carries one of these trailers, as the last
-line of its message:
-
-```text
-Brief: <id> done
-Brief: <id> blocked: <question>
-```
-
-Progress and WIP commits carry no `Brief:` trailer, and no other value follows
-`Brief: <id>`. The lead checks the final commit's trailer and subject format
-before merging a lane.
+Only the assignment's last commit carries the `Brief:` trailer the
+[`delegate` skill](../delegate/SKILL.md#finish) names (`done` or
+`blocked: <question>`); progress and WIP commits carry none, and no other value
+follows `Brief: <id>`. The lead checks the final commit's trailer and subject
+format before merging a lane.
 
 The lead's ledger and plan files that a delegate never writes are the lead's
 own scratch checklists under `<worktree>/.claude/scratch/<lane>-*`. The repository's documents,
@@ -197,6 +208,18 @@ changes and what the lane ran to show them working before merging
 ([landing bar](../verification/SKILL.md#the-landing-bar)).
 
 ## Land in batches
+
+The main checkout tracks the integration branch (the owner's ruling). Claude
+Code loads `.claude/agents/`, hooks and unscoped skills from the project root,
+the main checkout, not from the lead's worktree, so a lane runs whatever agent
+definitions and skills the main checkout holds; one session's agent fixes did
+nothing for its lanes until this was found. After each push of the integration
+branch the lead fast-forwards the main checkout's branch to it: leave the
+worktree with `ExitWorktree` (`keep`), confirm the main checkout is clean, run
+`git merge --ff-only <integration branch>` there, and return with
+`EnterWorktree` (`path`). The main checkout keeps its own branch name, because
+the integration branch is checked out in the lead's worktree; it never carries
+work of its own.
 
 A lane is ready when it meets its own focused checks
 ([landing bar](../verification/SKILL.md#the-landing-bar)): it builds what it
@@ -264,20 +287,19 @@ will do.
 
 Heavy verification runs in one place, one job at a time; this is the owner's
 direction, after concurrent whole-solution builds exhausted the machine's memory.
-- **Coding lanes** build only the projects they touch, with `-m:2`, and run only
-  their focused tests. They run no whole-solution build, no full suite and no
-  GPU leg, and they hand back a branch that builds and passes those tests.
+- **Coding lanes** keep to the [`delegate` skill's](../delegate/SKILL.md#build-and-run)
+  build bounds and hand back a branch that builds and passes their focused
+  checks.
   Several run at once (the owner's direction: don't over-serialize for
   memory), within the WIP limit: about three building writers, one heavy
   integration job and one GPU leg. A windowed debug World holds about 10 GB of
   working set (15 GB private) within a minute of boot. On a 32 GB machine, while
   one runs, only a couple of building lanes fit beside it. Keep windowed capture
-  batches short (boot, capture, stop), and tune on a headless World. A lane that
-  runs scenario files (`puck test <file>`) names the files and passes `--jobs 1`:
-  this serializes headless worker processes, including reproduce replicas, with
-  one independent native host live at a time, where a higher `--jobs` beside a
-  replay can exhaust memory and kill it. Every brief, a read-only review's
-  included, says so.
+  batches short (boot, capture, stop), and tune on a headless World. The
+  delegate skill's `--jobs 1` serializes headless worker processes, including
+  reproduce replicas, with one independent native host live at a time, where a
+  higher `--jobs` beside a replay can exhaust memory and kill it; a brief names
+  the scenario files a lane may run.
 - **Reaping** is prevented by that limit, because Claude Code reaps background
   jobs when memory runs critically low. A reaped lane is handled once: the lead
   saves its tree as a WIP commit, removes the cause, and restarts it with a
@@ -349,6 +371,26 @@ leaving any conflicts for the lane to resolve. A worktree another agent
 created can deny a Codex lane its `.git/worktrees/<name>` writes; give the lane a
 worktree the lead creates.
 
+Before each fan-out, and after each fast-forward of the main checkout, the
+lead runs `puck agents provenance --project-root <the session's project root>`
+from its own checkout ([CLI reference](../../../docs/reference/cli.md#puck-agents-linknative-skill-discovery)).
+It computes keys over `.claude/agents`, `.claude/skills`, `.claude/hooks`,
+`.claude/settings.json` and `AGENTS.md` in the lead's checkout, the project
+root and the main checkout, records nothing, and exits 1 naming each differing
+path with both checkouts' paths and branches. On a mismatch the lead
+dispatches nothing until the main checkout is fast-forwarded
+([land in batches](#land-in-batches)) or the session is restarted from the
+integration checkout. The SessionStart hook runs the same check on startup,
+resume and compact and shows a mismatch to the owner and the session. Tell
+the owner to start a lead session from the integration checkout. Whether that
+also moves agent discovery is unprobed: a lane cannot start a `claude`
+session, so the lead probes it once (a scratch worktree whose `.claude/agents`
+holds a marker agent, and `claude -p` started there asked which subagent types
+it has) and records the answer here. What is observed: a session rooted at the
+main checkout lists a worktree's skills only as directory-scoped variants
+(`.claude/worktrees/lead-next:orchestration`), and the bare skill name loads
+the main checkout's copy.
+
 Before launching Codex in a main checkout or fresh worktree, build/copy its CLI
 as [verification](../verification/SKILL.md#run-verbs-from-your-own-cli-copy)
 describes and run `dotnet <lane>-cli/Puck.Cli.dll agents link` there. Then launch
@@ -381,7 +423,11 @@ names. The owner-approved list allows every command
 ([contributing](../../../docs/development/contributing.md#antigravity-user-settings));
 a machine whose list names only `git`, `dotnet`, `pwsh` and `node` auto-denies any
 other command, such as `rm` or `Remove-Item`, and the run ends with no output, so
-a brief that deletes files says to use `git rm`. A headless run also ends when the agent
+a brief that deletes files says to use `git rm`. Reading a file outside the
+workspace is auto-denied the same way ("a tool required the read_file
+permission that headless mode cannot prompt for"), so the lead copies any
+shared brief, findings or facts into the lane's worktree (`.claude/scratch/`)
+and the brief names workspace-relative paths only. A headless run also ends when the agent
 goes idle waiting on a background task of its own (a background build), leaving
 its edits uncommitted, so a brief tells it to build and test in the foreground.
 A headless run can also stall with its process alive and its log empty, so the
@@ -438,10 +484,20 @@ window it has cleared of every other lane's builds, suites, evals and World
 runs. A brief that measures boot, compile or frame time grants no GPU and
 takes no timing while other lanes run.
 
+`puck lease list` is how the lead sees lease pressure: each of build, gpu and
+heavy with its holder, lane and how long it has held, then its queue in
+admission order with each waiter's wait. Read it before granting a GPU or heavy
+leg and while draining for a settle window, to see which lane a window waits on
+(a holder far past its time box is the one to ask), and `puck lanes` for the same
+queues per lane.
+
 Settle windows are how the lead clears it. The owner's loose deadlines were
 meant as these periods; the lead now schedules them by state, not the clock:
 - **Trigger:** a wave of related lanes has landed, or a decision waits on a
-  measurement (the culling order waits on M1). Never on a timer.
+  measurement (the culling order waits on M1). Never on a timer, and never
+  by waiting for the machine to go quiet on its own: with a dozen lanes it
+  never does, and one session's first window slipped for that reason. The lead
+  drains deliberately.
 - **Drain:** launch no new lanes; let running ones reach a stopping point.
   Lanes may keep editing; their builds, tests and GPU legs queue.
 - **Hold:** `puck lease quiet --holder lead -- <recipe>` takes the build, GPU
@@ -558,29 +614,32 @@ state its plan and cost to the owner in one sentence before launching it.
 
 When the owner pairs with the lead, the lead stays free for that conversation
 and subagents do the work: implementation, investigation, verification runs and
-reviews. The lead writes briefs, inspects results, merges and reports. The
-project agents under `.claude/agents/` carry the four Claude models the owner
-allows, in order of rising cost:
+reviews. The lead writes briefs, inspects results, merges and reports. The five
+project agents under `.claude/agents/` use the four Claude models the owner
+allows, in order of rising cost. Each agent's description says what it takes
+and what it does not, and the lead routes by those descriptions; the table
+holds only what they leave out:
 
-| Agent | Model | Effort | Use for |
-|---|---|---|---|
-| `scout` | Haiku 5.5 | medium | Read-only search, log triage, live-World probes and captures. No source edits or commits; authorized CLI bootstrap is allowed. |
-| `implementer` | Sonnet 5.5 | high | A specified brief with a finish line. It is the default writer. |
-| `specialist` | Opus 5.5 | high | Design judgement across projects, diagnosis of an unknown cause, review-and-fix passes. |
-| `principal` | Fable 5.1 | high | Correctness-critical or long-horizon work: determinism and fixed-point maths, the bake and its kernels, renderer architecture, a defect other lanes failed to crack. |
+| Agent | Model | Effort | Worktree | Preloads |
+|---|---|---|---|---|
+| `scout` | Haiku 5.5 | medium | none | `content-search`, `symbol-analysis` |
+| `implementer` | Sonnet 5.5 | high | own | `delegate` |
+| `reviewer` | Opus 5.5 | high | none | `delegate`, `review-passes`, `content-search`, `symbol-analysis` |
+| `specialist` | Opus 5.5 | high | own | `delegate` |
+| `principal` | Fable 5.1 | high | own | `delegate` |
 
 Route each brief to the cheapest role that fits it (the owner's ruling): a
-brief with a known cause or a specified result, such as content, a document
-change, a world edit or a fix with a repro, goes to `implementer`, even when it
-is large. `specialist` is for an unknown cause or a design call across projects.
-`principal` is for the problems the table names and nothing else, and its usage
-is conserved (the owner's ruling): an unknown cause starts on `specialist` or
-Astra, and `principal` takes a problem only after one of them has failed to
-crack it. When a lane on
-a cheaper role stalls, escalate that lane; never start on the expensive role
-because a brief is long. Codex is part of the same lineup: Sol is a peer of
-`implementer` and takes the same briefs, and Astra is comparable to `principal`
-and takes only what `principal` would. Spread implementer briefs across
+brief with a known cause or a specified result goes to `implementer` even when
+it is large. When a lane on a cheaper role stalls, escalate that lane; never
+start on the expensive role because a brief is long. `principal` is conserved
+(the owner's ruling, [Conserve Fable](#no-bad-loops)): an unknown cause stays
+with `specialist` or Astra, at a higher effort or in the other family when a
+lane stalls, and `principal` enters only as a design review when repeated
+rounds point at a fundamental flaw in the approach, never to run the
+diagnosis. Codex is part of the same lineup: Sol is a peer of `implementer` and
+takes the same briefs, and Astra, the frontier model, takes demanding
+implementation, diagnosis and review, the work of `specialist`; Fable's
+design-only limit does not apply to it. Spread implementer briefs across
 `implementer` and Sol, so both families' slots stay busy. Concept art and
 other image generation go to Codex as the primary artist and judge (the
 owner's ruling): its built-in `image_generation` tool makes the images and its
@@ -697,15 +756,19 @@ ahead, changed files, last commit, newest write, log exit, GPU lease state and a
 `STALL` mark, in seconds, read-only, and without walking `bin/` or `obj/`.
 `puck lanes --watch 0` is the stall watcher: run it as the one background
 monitor, and it prints only a lane finishing, stalling or resuming, a lease
-changing, or a lane appearing or leaving.
+changing, or a lane appearing or leaving. A findings-only lane's launch writes
+`<worktree>/.claude/scratch/<lane>.task` holding `mode: findings-only` and
+`report: <its findings path>` (a Codex log whose header names a read-only
+sandbox needs none), so `puck lanes` judges it by its log and report rather
+than by writes, and tells a delivered report (`reported`) from a process that
+exited without one (`exited`).
 
 In Claude, arm a recurring audit as a background monitor, which reports while the lead is
 busy; a session cron fires only when the lead is idle and misses exactly the
 drift it exists for. On each audit, act on what degraded in the same turn: a
 ready lane waiting more than an hour for a batch, an idle slot with ready work,
-a lane held for anything but the integration lane's next batch, a lane that
-repeats a failure or has made no writes for 30 minutes ([no bad
-loops](#no-bad-loops)), or a stale board.
+a lane held for anything but the integration lane's next batch, a stalled lane
+([no bad loops](#no-bad-loops)), or a stale board.
 
 When an owner correction reveals a process rule, change the repository skill
 that drives the behavior (this one, `review-passes`, `verification`) in the
@@ -714,12 +777,14 @@ beside a skill that still says otherwise changes nothing.
 
 ## No bad loops
 
-Every lane and the lead follow five rules, so that a failure costs one retry and
-not a spiral:
+Every lane and the lead follow these rules, so that a failure costs one retry
+and not a spiral:
 
-- Retry a failing step (a build, test, boot, start, review or restart) once. If
-  it fails again, stop, record what failed and what was tried, and take the next
-  item.
+- Retry an unchanged failing step (a build, test, boot, start, review or
+  restart) once; a new attempt after diagnosing and fixing a cause is not a
+  retry. If the unchanged step fails again, stop, record what failed and what
+  was tried, and take the next item the brief or track already authorizes; a
+  one-shot lane with none hands back blocked.
 - Every poll has a deadline and a spacing that fits the work. A lane waits on a
   run of minutes by starting it in the background and checking every few
   minutes (or blocking on its exit), never by re-running a status script every
@@ -746,8 +811,12 @@ not a spiral:
   next batch or filed into their packet, and that fix lands on its own evidence
   without a second review round. A lane that lands is followed at once by the
   next open item, and each batch deletes the items it closed.
-- The lead's audit stops a lane that repeats a failure or makes no writes for 30
-  minutes, saves its tree as a WIP commit, and hands the work to another lane.
+- The lead's audit stops a stalled lane, saves a writing lane's tree as a WIP
+  commit, and hands the work to another lane. A lane is stalled when it repeats
+  a failure, or when its progress stops for 30 minutes: writes for a writing
+  lane; findings, job output or exit for a read-only lane (`reviewer`, `scout`,
+  a findings-only Codex lane), which writes no source by design. A leased job
+  still producing output is not stalled.
 - When the review of a fix finds more instances of the class it fixed, the next
   fix is structural: one check that holds the invariant everywhere and a test
   over every case, not another path-by-path round. When the structural round
@@ -760,8 +829,16 @@ not a spiral:
   Twice the lead started principal lanes after that instruction, and the owner
   found Fable past half its usage. The owner's standing go-ahead: Fable may
   design (a design memo, an architecture, a review of a
-  design), sparingly; it never does the hard labor of implementing,
+  design) and review, sparingly, above all when repeated review rounds point
+  at a fundamental flaw rather than a list of fixes, as a way to climb a
+  steep hill; it never does the hard labor of implementing,
   measuring or bisecting, which goes to specialist or implementer.
+- Before putting a semantics question to the owner, look for the decision it
+  follows from (`docs/decisions/`, the plan's requirements). A behaviour a
+  recorded contract implies is derived, written down with its derivation, and
+  never asked about or labelled the owner's ruling; the owner decides only
+  what no requirement settles. (The lead once put "a faulted Edge rule holds
+  its latch" to the owner; the fault contract already implied it.)
 - A defect the owner can see (a walkthrough, a sweep still, a capture) ranks
   at the top of Next and gets a lane at once, aimed at the root cause, not a
   packet line: the hall stairs' holes sat as "dark patches" in the sweep packet
@@ -776,8 +853,10 @@ not a spiral:
   card table and a corrected influence price did.
 - A Codex run that ends `Selected model is at capacity` is retried once on the
   other Codex model (Sol to Astra or back), not on the same one.
-- A read-only lane in a worktree commits what it writes or returns it as text:
-  an uncommitted file in an auto-cleaned worktree is gone when the lane ends.
+- A read-only lane makes no commit: it writes its findings to the path its
+  brief names and repeats them in its hand-back, and the lead copies any
+  findings out of a worktree before removing it
+  ([lane work](references/lane-work.md#delegated-work)).
 
 ## Rule on collisions
 
@@ -821,5 +900,5 @@ listed name, which survives a restart where its bridge address does not.
 | Skill | Route there for |
 |---|---|
 | [`verification`](../verification/SKILL.md) | The landing bar, optional checks, private CLI copies and GPU execution. |
-| [`review-passes`](../review-passes/SKILL.md) | Review-and-fix passes: briefs, companion launch commands and the follow-up branch a pass hands over. |
+| [`review-passes`](../review-passes/SKILL.md) | Review passes in either mode, findings-only or review-and-fix: briefs, launch commands and the follow-up branch a fixing pass hands over. |
 | [`boy-scout`](../boy-scout/SKILL.md) | Keeping agent-facing documents and skills in step with a change; [Writing documentation](../../../docs/development/documentation.md) owns their prose and the skill evaluation procedure. |

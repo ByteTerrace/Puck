@@ -66,27 +66,30 @@
 #define SDF_VISIBILITY_ZERO_NORMAL  0x80008000u
 
 // The mesh region's draw record (SdfMeshRecord) and the level shift a mesh draw's pushed index carries (SdfKernelInterfaces.MeshLevelShift).
-#define SDF_MESH_DRAW_WORDS             47u
-#define SDF_MESH_MATERIAL_WORD          16u
-#define SDF_MESH_INDEX_WORD             17u
-#define SDF_MESH_INDEX_COUNT_WORD       18u
-#define SDF_MESH_VERTEX_WORD            19u
-#define SDF_MESH_FLAGS_WORD             20u
-#define SDF_MESH_TRIANGLE_MATERIAL_WORD 21u
-#define SDF_MESH_NORMAL_MATRIX_WORD     22u
-#define SDF_MESH_FRAME_SLOT_WORD        31u
-#define SDF_MESH_SKIN_WORD              32u
-#define SDF_MESH_CARRY_ROTATION_WORD    33u
-#define SDF_MESH_CARRY_TRANSLATION_WORD 37u
-#define SDF_MESH_CARRY_SCALE_WORD       40u
-#define SDF_MESH_CLIP_PLANE_WORD        41u
-#define SDF_MESH_LEVEL_TRIANGLE_WORD    45u
-#define SDF_MESH_VERTEX_WORDS           6u
-#define SDF_MESH_MEMBER_WORDS           8u
-#define SDF_MESH_NORMALS_FLAG           0x00000001u
-#define SDF_MESH_MATERIALS_FLAG         0x00000002u
-#define SDF_MESH_SKIN_FLAG              0x00000004u
-#define SDF_MESH_LEVEL_SHIFT            24u
+#define SDF_MESH_DRAW_WORDS               63u
+#define SDF_MESH_MATERIAL_WORD            16u
+#define SDF_MESH_INDEX_WORD               17u
+#define SDF_MESH_INDEX_COUNT_WORD         18u
+#define SDF_MESH_VERTEX_WORD              19u
+#define SDF_MESH_FLAGS_WORD               20u
+#define SDF_MESH_TRIANGLE_MATERIAL_WORD   21u
+#define SDF_MESH_NORMAL_MATRIX_WORD       22u
+#define SDF_MESH_FRAME_SLOT_WORD          31u
+#define SDF_MESH_SKIN_WORD                32u
+#define SDF_MESH_CARRY_ROTATION_WORD      33u
+#define SDF_MESH_CARRY_TRANSLATION_WORD   37u
+#define SDF_MESH_CARRY_SCALE_WORD         40u
+#define SDF_MESH_CLIP_PLANE_WORD          41u
+#define SDF_MESH_LEVEL_TABLE_WORD         45u
+#define SDF_MESH_SELECTION_WORD           47u
+#define SDF_MESH_VERTEX_WORDS             6u
+#define SDF_MESH_MEMBER_WORDS             8u
+#define SDF_MESH_NORMALS_FLAG             0x00000001u
+#define SDF_MESH_MATERIALS_FLAG           0x00000002u
+#define SDF_MESH_SKIN_FLAG                0x00000004u
+#define SDF_MESH_LEVEL_SHIFT              24u
+#define SDF_MESH_SELECTION_GROUP_SIZE     64u
+#define SDF_MESH_SELECTION_GROUPS_PER_ROW 65535u
 
 // The irradiance volume's probe record and read (SdfMeshIrradianceProbe).
 #define SDF_MESH_IRRADIANCE_PROBE_WORDS            235u

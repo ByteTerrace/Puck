@@ -763,18 +763,40 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         // its normal matrix (the inverse transpose of its upper 3x3), its frame slot, -1 for a mesh stored in world
         // space, and the word its members sit at, zero for a mesh without them. The arena starts past the reserved draw
         // records, and each
-        // mesh lies whole there in the order the list first names it: the quad's four vertices and six indices, then the
-        // triangle's three vertices, its one triangle material and its three indices.
+        // mesh lies whole there in the order the list first names it: the quad's four vertices, six indices and its level
+        // table, then the triangle's three vertices, its one triangle material, its three indices and its level table. A
+        // mesh without coarser levels has a table of one row: its first triangle, vertex count and error.
         var arena = (SdfMeshRegionArena.MinimumDrawCapacity * SdfMeshRecord.DrawWords);
         var quadVertices = ((uint)arena);
         var quadIndices = (quadVertices + (4u * SdfMeshRecord.VertexWords));
-        var triangleVertices = (quadIndices + 6u);
+        var quadLevels = (quadIndices + 6u);
+        var triangleVertices = (quadLevels + 3u);
         var triangleMaterials = (triangleVertices + (3u * SdfMeshRecord.VertexWords));
         var triangleIndices = (triangleMaterials + 1u);
-        var words = ((int)(triangleIndices + 3u));
+        var triangleLevels = (triangleIndices + 3u);
+        var words = ((int)(triangleLevels + 3u));
         var bytes = (((ulong)words) * sizeof(uint));
 
-        void Record(Matrix4x4 matrix, uint material, uint indexWord, uint indexCount, uint vertexWord, uint flags, uint materialWord) {
+        // The selection rows a draw's record ends with: its host box's centre and flags, then each half axis beside the
+        // box's stretch, the mesh's selection identity and its coarser level count. The identity is a process-wide
+        // sequence, so the region's own word stands in for it once the law has checked who shares it.
+        void Selection(in SdfMeshDraw draw, int record) {
+            var boxed = SdfMeshBox.TryOf(box: out var box, draw: in draw);
+            var at = ((record * SdfMeshRecord.DrawWords) + SdfMeshRecord.SelectionWord);
+            float[] rows = [
+                box.Center.X, box.Center.Y, box.Center.Z, 0f,
+                box.HalfX.X, box.HalfX.Y, box.HalfX.Z, box.Stretch,
+                box.HalfY.X, box.HalfY.Y, box.HalfY.Z, 0f,
+                box.HalfZ.X, box.HalfZ.Y, box.HalfZ.Z, 0f,
+            ];
+
+            for (var word = 0; (word < rows.Length); word++) {
+                if (word != 11) { expected[(at + word)] = BitConverter.SingleToUInt32Bits(value: rows[word]); }
+            }
+            expected[(at + 3)] = ((boxed ? 0u : 1u) | (draw.Glass ? 2u : 0u) | (draw.EnclosesSolid ? 4u : 0u));
+            expected[(at + 15)] = (uint)draw.Mesh.Levels.Count;
+        }
+        void Record(Matrix4x4 matrix, uint material, uint indexWord, uint indexCount, uint vertexWord, uint flags, uint materialWord, uint levelWord) {
             float[] rows = [
                 matrix.M11, matrix.M12, matrix.M13, matrix.M14,
                 matrix.M21, matrix.M22, matrix.M23, matrix.M24,
@@ -793,9 +815,12 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             expected.Add(item: 0u);
             // The identity carry (rotation, translation, a scale of one) and the clip plane that clips nothing.
             expected.AddRange(collection: new[] { 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 0f }.Select(selector: BitConverter.SingleToUInt32Bits));
-            // A mesh without coarser levels draws its own triangles at every level, from its first.
-            expected.AddRange(collection: [0u, 0u]);
+            // The mesh's shared level table and its coarser level count, none here; Selection writes the rows after.
+            expected.AddRange(collection: [levelWord, 0u]);
+            expected.AddRange(collection: new uint[(SdfMeshRecord.DrawWords - SdfMeshRecord.SelectionWord)]);
         }
+        // A level table of one row: the mesh's own triangles from its first, three vertices a triangle, error zero.
+        void Levels(SdfMesh mesh) => expected.AddRange(collection: [0u, (uint)(3 * mesh.TriangleCount), 0u]);
         // A vertex: its position and its normal, zeros for a normal its mesh lacks.
         void Vertices(SdfMesh mesh) {
             for (var vertex = 0; (vertex < mesh.Positions.Length); vertex++) {
@@ -806,15 +831,18 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             }
         }
 
-        Record(flags: 0u, indexCount: 6, indexWord: quadIndices, material: 4, materialWord: quadIndices, matrix: moved, vertexWord: quadVertices);
-        Record(flags: SdfMeshRecord.NormalsFlag | SdfMeshRecord.MaterialsFlag, indexCount: 3, indexWord: triangleIndices, material: 5, materialWord: triangleMaterials, matrix: Matrix4x4.CreateScale(scale: 2f), vertexWord: triangleVertices);
-        Record(flags: 0u, indexCount: 6, indexWord: quadIndices, material: 6, materialWord: quadIndices, matrix: Matrix4x4.Identity, vertexWord: quadVertices);
+        Record(flags: 0u, indexCount: 6, indexWord: quadIndices, levelWord: quadLevels, material: 4, materialWord: quadIndices, matrix: moved, vertexWord: quadVertices);
+        Record(flags: SdfMeshRecord.NormalsFlag | SdfMeshRecord.MaterialsFlag, indexCount: 3, indexWord: triangleIndices, levelWord: triangleLevels, material: 5, materialWord: triangleMaterials, matrix: Matrix4x4.CreateScale(scale: 2f), vertexWord: triangleVertices);
+        Record(flags: 0u, indexCount: 6, indexWord: quadIndices, levelWord: quadLevels, material: 6, materialWord: quadIndices, matrix: Matrix4x4.Identity, vertexWord: quadVertices);
+        for (var draw = 0; (draw < draws.Length); draw++) { Selection(draw: in draws[draw], record: draw); }
         expected.AddRange(collection: new uint[(arena - expected.Count)]);
         Vertices(mesh: quad);
         expected.AddRange(collection: quad.Indices.ToArray());
+        Levels(mesh: quad);
         Vertices(mesh: triangle);
         expected.Add(item: 2u);
         expected.AddRange(collection: triangle.Indices.ToArray());
+        Levels(mesh: triangle);
 
         rig.Warm();
         rig.Render(time: 0f);
@@ -830,12 +858,23 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         Assert.Equal(expected: words, actual: rig.Engine.MeshRegionWords);
         Assert.Equal(expected: bytes, actual: rig.Engine.MeshRegionUsedBytes);
         Assert.Equal(expected: SdfWorldTables.MeshRegionGrownBytes(needBytes: bytes), actual: rig.Engine.MeshRegionBytes);
+
+        // Both quad draws name one selection identity, and the triangle another.
+        var identities = MemoryMarshal.Cast<byte, uint>(span: rig.Gpu.DeviceLocal(part: "mesh-region", sizeBytes: rig.Engine.MeshRegionBytes).AsSpan(length: ((int)bytes), start: 0)).ToArray();
+        uint IdentityOf(int record) => identities[(((record * SdfMeshRecord.DrawWords) + SdfMeshRecord.SelectionWord) + 11)];
+
+        Assert.Equal(expected: IdentityOf(record: 0), actual: IdentityOf(record: 2));
+        Assert.NotEqual(expected: IdentityOf(record: 0), actual: IdentityOf(record: 1));
+        for (var draw = 0; (draw < draws.Length); draw++) {
+            expected[(((draw * SdfMeshRecord.DrawWords) + SdfMeshRecord.SelectionWord) + 11)] = IdentityOf(record: draw);
+        }
         Assert.Equal(
             expected: MemoryMarshal.AsBytes(span: expected.ToArray().AsSpan()).ToArray(),
             actual: rig.Gpu.DeviceLocal(part: "mesh-region", sizeBytes: rig.Engine.MeshRegionBytes)[..((int)bytes)]
         );
 
-        // The same list again repacks nothing, and a list moving one draw owes the one word its translation changed.
+        // The same list again repacks nothing, and a list moving one draw owes the two words its translation changed: the
+        // matrix's, and its selection box centre's, each in a run of its own.
         rig.Render(
             meshDraws: draws,
             time: 0f
@@ -848,7 +887,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             meshDraws: shifted,
             time: 0f
         );
-        Assert.Equal(expected: (((stillBytes + HeaderBytes) + RunEntryBytes) + sizeof(uint)), actual: rig.Gpu.HostBytes());
+        Assert.Equal(expected: (((stillBytes + HeaderBytes) + (2 * RunEntryBytes)) + (2 * sizeof(uint))), actual: rig.Gpu.HostBytes());
 
         var shiftedWords = rig.Gpu.DeviceLocal(part: "mesh-region", sizeBytes: rig.Engine.MeshRegionBytes)[..((int)bytes)];
 
@@ -860,6 +899,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         // A list that moves draws over the meshes the region holds repacks only the draw records, and the meshes it kept
         // are the ones a whole repack writes.
         expected[((2 * SdfMeshRecord.DrawWords) + 14)] = BitConverter.SingleToUInt32Bits(value: 7f);
+        Selection(draw: in shifted[2], record: 2);
         Assert.Equal(
             expected: MemoryMarshal.AsBytes(span: expected.ToArray().AsSpan()).ToArray(),
             actual: shiftedWords

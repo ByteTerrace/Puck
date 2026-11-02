@@ -25,10 +25,6 @@ public sealed partial class SdfWorldTables {
     private readonly GpuUploadRuns m_previousMeshCopies = new(capacity: GpuRegion.MaxCopyRuns);
     private readonly GpuUploadRuns m_seededMeshDraws = new(capacity: GpuRegion.MaxCopyRuns);
 
-    // Whether a previous table has been written, so its first copy waits on no earlier reader.
-    private bool m_dynamicHistoryWritten;
-    private bool m_meshHistoryWritten;
-
     // Whether the next upload seeds a whole previous table from the current one.
     private bool m_seedDynamicHistory = true;
     private bool m_seedMeshHistory = true;
@@ -139,7 +135,7 @@ public sealed partial class SdfWorldTables {
         var source = m_dynamicTransformRegion.Buffer(slot: slot);
         var rows = ((int)(m_previousDynamicTransforms.SizeBytes / DynamicTransformByteLength));
 
-        BeginHistoryCopy(commandBuffer: commandBuffer, destination: m_previousDynamicTransforms, initialized: m_dynamicHistoryWritten, source: source);
+        BeginHistoryCopy(commandBuffer: commandBuffer, destination: m_previousDynamicTransforms, source: source);
         for (var run = 0; (run < copies.Count); run++) {
             var start = copies.Start(index: run);
             var end = Math.Min(val1: (start + copies.Length(index: run)), val2: rows);
@@ -152,7 +148,6 @@ public sealed partial class SdfWorldTables {
             }
         }
         FinishHistoryCopy(commandBuffer: commandBuffer, destination: m_previousDynamicTransforms, source: source);
-        m_dynamicHistoryWritten = true;
     }
     private void CopyMeshHistory(nint commandBuffer, int slot, GpuUploadRuns copies, uint limit) {
         if ((copies.Count == 0) || (limit == 0)) {
@@ -160,7 +155,7 @@ public sealed partial class SdfWorldTables {
         }
         var source = m_meshRegion.Buffer(slot: slot);
 
-        BeginHistoryCopy(commandBuffer: commandBuffer, destination: m_previousMeshTransforms, initialized: m_meshHistoryWritten, source: source);
+        BeginHistoryCopy(commandBuffer: commandBuffer, destination: m_previousMeshTransforms, source: source);
         for (var run = 0; (run < copies.Count); run++) {
             var start = copies.Start(index: run);
             var end = Math.Min(val1: (start + copies.Length(index: run)), val2: ((int)limit));
@@ -173,17 +168,23 @@ public sealed partial class SdfWorldTables {
             }
         }
         FinishHistoryCopy(commandBuffer: commandBuffer, destination: m_previousMeshTransforms, source: source);
-        m_meshHistoryWritten = true;
     }
     private void CopyHistoryRange(nint commandBuffer, IGpuBuffer source, IGpuBuffer destination, ulong sourceOffset, ulong destinationOffset, ulong bytes) =>
         m_gpu.Recorder.CopyBuffer(commandBufferHandle: commandBuffer, sourceBufferHandle: source.BufferHandle,
             destinationBufferHandle: destination.BufferHandle, sizeBytes: bytes, sourceOffsetBytes: sourceOffset, destinationOffsetBytes: destinationOffset);
-    private void BeginHistoryCopy(nint commandBuffer, IGpuBuffer source, IGpuBuffer destination, bool initialized) {
+    private void BeginHistoryCopy(nint commandBuffer, IGpuBuffer source, IGpuBuffer destination) {
+        // An unread routed world can copy history again without an intervening shader reader. Order earlier copies
+        // as well as readers and region-upload shader writes. First use in a new Direct3D 12 recording is COMMON;
+        // its tracker supplies any state established earlier in this recording instead.
+        m_gpu.Recorder.MemoryBarrier(commandBufferHandle: commandBuffer,
+            sourceAccessMask: GpuAccess.ShaderRead | GpuAccess.ShaderWrite | GpuAccess.CopyWrite,
+            sourceStageMask: TableReaders | GpuStage.Transfer,
+            destinationAccessMask: GpuAccess.TransferRead | GpuAccess.CopyWrite, destinationStageMask: GpuStage.Transfer);
         m_gpu.Recorder.TransitionBuffer(bufferHandle: source.BufferHandle, commandBufferHandle: commandBuffer,
-            sourceAccessMask: GpuAccess.ShaderRead, sourceStageMask: TableReaders,
+            sourceAccessMask: GpuAccess.None, sourceStageMask: GpuStage.TopOfPipe,
             destinationAccessMask: GpuAccess.TransferRead, destinationStageMask: GpuStage.Transfer);
         m_gpu.Recorder.TransitionBuffer(bufferHandle: destination.BufferHandle, commandBufferHandle: commandBuffer,
-            sourceAccessMask: (initialized ? GpuAccess.ShaderRead : GpuAccess.None), sourceStageMask: (initialized ? GpuStage.ComputeShader : GpuStage.TopOfPipe),
+            sourceAccessMask: GpuAccess.None, sourceStageMask: GpuStage.TopOfPipe,
             destinationAccessMask: GpuAccess.CopyWrite, destinationStageMask: GpuStage.Transfer);
     }
     private void FinishHistoryCopy(nint commandBuffer, IGpuBuffer source, IGpuBuffer destination) {
@@ -243,7 +244,6 @@ public sealed partial class SdfWorldTables {
         Retire(replaced: m_previousMeshTransforms);
         m_previousMeshTransforms = replacement;
         m_bindingRevision++;
-        m_meshHistoryWritten = false;
         m_seedMeshHistory = true;
     }
 }

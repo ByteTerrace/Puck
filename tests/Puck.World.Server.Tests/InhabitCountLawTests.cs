@@ -170,7 +170,10 @@ public sealed class InhabitCountLawTests {
         using var fixture = Fixtures.FreshServer(definition: Document(initial: 0));
         var populations = new List<int>();
 
-        fixture.Server.MutationJournalTap = (_, _, _) => populations.Add(item: Inhabitants(fixture: fixture).Length);
+        // A guest's decisions never enter the recovery journal, so the echo each applied write returns is the seam.
+        fixture.Server.EchoTap = echo => {
+            if (echo.Mutation is WorldMutation.UpsertStateCell) { populations.Add(item: Inhabitants(fixture: fixture).Length); }
+        };
         foreach (var count in new[] { 3, 0 }) {
             fixture.Server.EnqueueMutation(new WorldMutation.UpsertStateCell(Puck.Commands.Principal.Console,
                 CountRow, WorldStateRow.SlotKey.Value, count, WorldDocumentWriteKind.Set), sourceAddonInstanceId: 7);

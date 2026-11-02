@@ -37,9 +37,7 @@ public sealed class SdfFieldSliceLawTests {
             var spacing = (0.015625f * MathF.Min(lattice.Cell.X, MathF.Min(lattice.Cell.Y, lattice.Cell.Z)));
 
             for (var local = 0; (local < lattice.Samples); local++, sample++) {
-                var position = (lattice.Points.IsEmpty
-                    ? (lattice.Origin + (new Vector3(x: (local % lattice.Dims.X), y: ((local / lattice.Dims.X) % lattice.Dims.Y), z: (local / (lattice.Dims.X * lattice.Dims.Y))) * lattice.Cell))
-                    : new Vector3(x: lattice.Points.Span[local].X, y: lattice.Points.Span[local].Y, z: lattice.Points.Span[local].Z));
+                var position = lattice.SampleAt(local: local);
                 var gradient = Vector3.Zero;
 
                 if (lattice.Gradients) {
@@ -141,8 +139,9 @@ public sealed class SdfFieldSliceLawTests {
         var bake = new SdfMeshPathBake { Residency = "slice-gauge" };
         var frame = Frame(half: new Vector3(value: 0.25f));
         var completions = 0;
-        // Past one reference frame's share of evaluations: the slice samples over several frames.
-        var slice = new SdfFieldSlice(axis: SdfAxis.Y, bands: 0.05f, centre: Vector2.Zero, completed: _ => completions++, half: 1.2f, offset: 0.1f, resolution: 256);
+        // Past one reference frame's share of evaluations: a chunk's lattice with gradients is a whole share
+        // (SdfMeshPathBake.FrameTaps), so the slice's two chunks sample over several frames.
+        var slice = new SdfFieldSlice(axis: SdfAxis.Y, bands: 0.05f, centre: Vector2.Zero, completed: _ => completions++, half: 1.2f, offset: 0.1f, resolution: 512);
 
         _ = bake.Dress(frame: frame);
         Assert.True(condition: bake.Probe(slice: slice));
@@ -168,13 +167,13 @@ public sealed class SdfFieldSliceLawTests {
 
         var described = slice.Describe();
 
-        Assert.Contains(expectedSubstring: "y=0.1 centre=(0,0) half=1.2 256x256 bands=0.05", actualString: described, comparisonType: StringComparison.Ordinal);
+        Assert.Contains(expectedSubstring: "y=0.1 centre=(0,0) half=1.2 512x512 bands=0.05", actualString: described, comparisonType: StringComparison.Ordinal);
         Assert.DoesNotContain(expectedSubstring: "max=1 off=0%", actualString: described, comparisonType: StringComparison.Ordinal);
         Assert.Matches(expectedRegexPattern: @"\|grad d\| min=0\.[0-5]\d* mean=0\.\d+ max=1(\.0\d*)? off=\d", actualString: described);
 
         var rgba = slice.Render();
         // Along X at the centre row the gauge's rate is minR/rX: a third, so the gradient panel is blue there.
-        var blue = Pixel(column: (256 + 250), rgba: rgba, row: 128, width: 512);
+        var blue = Pixel(column: (512 + 500), rgba: rgba, row: 256, width: 1024);
 
         Assert.True(condition: ((blue.Z > 200f) && (blue.X < 100f)), userMessage: $"gradient panel {blue}");
     }

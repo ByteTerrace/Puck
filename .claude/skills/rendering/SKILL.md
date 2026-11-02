@@ -234,7 +234,8 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   pipeline per key, so a lease differing only in an unkeyed field silently gets
   the other's pipeline (the exit layer then holds the depth's faces).
 - **Every raster pass culls draws by a host box** (`SdfMeshBox`, `SdfMeshCull`,
-  applied in `SdfWorldPassRecorder.Choose`): a view's frustum, a
+  tested by `frame/sdf-mesh-selection.hlsli` through `SdfMeshOcclusion`): a
+  view's frustum, a
   cascade's light box and the receivers it shadows. A box is the mesh's
   position bounds through the draw's matrix and carry, so a draw whose vertex
   stage moves vertices any other way (members' slots, a displacement) must have
@@ -243,7 +244,10 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   `gpu.vertices` in `world.counters gpu` counts what each pass draws. The same
   box chooses each kept draw's level of detail (`SdfMeshDetail`): the view's by
   its error in display pixels over the box's nearest depth, with the 1.1-pixel
-  band kept per draw in the recorder, a cascade's by its texel. A draw with no
+  band kept per draw in the GPU state, a cascade's by its texel. The residency
+  uploads bounds and level metadata once
+  in each changed mesh record; every raster pass uploads 224 bytes of controls
+  and records one counted indirect draw per phase. A draw with no
   box draws its merged mesh, so a skinned body never coarsens. A shape that
   changes when `world.detail 0` is set is the level's.
 - **The mesh pass also culls by occlusion** (`SdfMeshOcclusion`,
@@ -259,10 +263,30 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   it, and rewriting one shared set changes both recorded dispatches.
   Draws a kernel issues are counted on the GPU past the
   counter rows (`GpuKernelCounters.DrawnWords`), so `gpu.draws` and
-  `gpu.vertices` include them. An object `world.cull frustum` brings back is the
-  occlusion's. The vertex stage's draw is pushed index plus `SV_InstanceID`
-  (`sdfMeshRasterDraw`): keep the instance term, Vulkan's indirect draws carry
-  the draw there.
+  `gpu.vertices` include them. Cascade selection emits entry and exactly one
+  exit command per kept draw: solid exits use front-face culling, thin/clipped
+  exits the unculled pipeline. Count those emitted commands, without another
+  selection or history write. Count entry and exit with separate wave reductions:
+  64 lanes of a maximum mesh's vertices fit a uint sum, twice that does not;
+  `puckAddWork` carries each addition into the 64-bit accumulator.
+  `GpuWorkCounting.DrawIndirectCount` counts the API call,
+  not its unknown draw/vertex totals. An object `world.cull frustum` brings back is the
+  occlusion's. The identity is a root constant on Direct3D 12. Vulkan reads it
+  from the
+  argument buffer through its pushed word base plus `DrawIndex`
+  (`sdfMeshRasterIdentity`); first instance stays zero. When
+  `CanDrawIndirectCount` is false, the recorder issues those same initialized
+  slots in one fixed `vkCmdDrawIndirect` when multi-draw is available; otherwise
+  it advances the word base for each individual slot, including empty rejected slots;
+  no raster CPU cull or level path remains. Keep command-to-vertex read barriers and
+  preserve level state when buffers grow. Compute binds the read-only command
+  alias to the dummy, while raster binds its real command buffer; binding it
+  alongside the compute writer would demand conflicting resource states.
+  `SdfMeshCull.Keeps` remains a live host query: `WorldCreationInstances.Rates.Shown`
+  uses it to keep an off-camera body's pose updating when its shadow is visible.
+  It does not select raster arguments. Include that downstream World consumer
+  when checking references; the SdfVm test project's dependency closure alone
+  cannot establish that a helper is unused.
 - **Reprojection interpolates displacement.** `sdfPreviousPoint` in
   `frame/sdf-reprojection.hlsli` adds the triangle's weighted vertex movements
   to the current hit. Unchanged vertices return that hit exactly before any
@@ -639,16 +663,17 @@ wrong. The contracts that bite most often:
   vertices, each with its measured error. The region lays a level's indices and
   materials after the merged ones', so its triangles are numbered after them. A
   draw pushes its level above its index (`SdfKernelInterfaces.MeshLevelShift`,
-  in a counted indirect draw's identity too), its record holds each level's
-  first triangle (`SdfMeshRecord.LevelTriangleWord`), and both raster vertex
+  in a counted indirect draw's identity too), its record points at the mesh's
+  shared level table (`SdfMeshRecord.LevelTableWord`), and both raster vertex
   stages add it to the vertex id (`sdfMeshLevelIndex`). Never pass the level as
   a first vertex: Direct3D 12's `SV_VertexID` counts from zero whatever the
   draw's first vertex, so the draw fetches the merged mesh's first triangles and
   objects go missing. The surface pass reads the triangle the pixel names with
   no level of its own. Everything that reads `SdfMesh.Indices` (the
   irradiance trace, the audit, the diagnostics' nearest query) reads the merged
-  mesh, level zero. Each pass's choice is `SdfMeshDetail` beside the box cull, in
-  `SdfWorldPassRecorder.Choose`; `world.detail 0|1|2` forces one level
+  mesh, level zero. Each pass's choice runs beside the box cull in
+  `frame/sdf-mesh-selection.hlsli`, from `SdfMeshDetail`'s packed controls;
+  `world.detail 0|1|2` forces one level
   everywhere, and `world.detail auto` restores the choice.
 - **Large static unions have independently drawn chunks** (`SdfMeshChunks`, before the merge). Their contour edges
   partition the surface, and every seam edge stays fixed at every level. The store holds the pieces; only those pieces
@@ -813,7 +838,10 @@ pacer's lateness ([Puck.Launcher](../../../src/Puck.Launcher/README.md)).
   `world.wait` then repeat the same completed GPU window. Use separate control
   requests spaced in wall time when measuring a paused scene.
 - Device-free suites: `dotnet test tests/Puck.SignedDistance.Tests -c Release --no-build`
-  after a `-nodeReuse:false` build (ISA packing, Lipschitz, bakes) and `tests/Puck.Shaders.Tests`. Cross-backend
+  after a `-nodeReuse:false` build (ISA packing, Lipschitz, bakes) and `tests/Puck.Shaders.Tests`.
+  Anything that answers a bake lattice on the CPU (`MeshCpuBake`, the SdfVm laws' kernel stand-ins) places
+  each sample with `SdfMeshBakeRequest.SampleAt`, as the kernel does: a slab keeps its final lattice's
+  origin and counts its planes from `Slab`, so a copied grid formula answers a slab at the wrong planes. Cross-backend
   parity (`puck parity --world <file>`) needs a parity world with its contract
   beside it, and none exists while the debug world is the one live world; until
   one does, compare the two backends' captures and counts yourself.

@@ -1,8 +1,5 @@
 using System.Numerics;
 
-
-
-
 namespace Puck.World.Testing;
 
 /// <summary>The editor placement world: one crate prototype and a seat to place from.</summary>
@@ -24,15 +21,15 @@ internal static class EditorPlacementFixtures {
                         YawDegrees: 0f
                     )],
                 }),
-            }),
+            }).WithRestingPage(),
             name: "boot"
         );
     }
 
     internal static WorldPrototype Crate { get; } = CreationFixtures.UnitSphere(id: "crate");
-    // The standard editor's values (worlds/standard/editor.puck), with no bar of its own.
+    // The standard editor's values (worlds/standard/editor.puck), with the one-bank bar the validator requires.
     internal static WorldEditorDefaults Editor { get; } = new(
-        Bar: WorldBindingBarAuthoring.Absent,
+        Bar: EditorBarFixtures.Bar,
         Camera: new WorldEditorCamera(FlyRate: 6f, MaxDistance: 14f, MaxPitch: 1.35f, MinDistance: 0.5f, MinPitch: 0.05f, OrbitRate: 2.4f, PanRate: 3f, ZoomRate: 1.2f),
         Grid: new WorldEditorGrid(LineWidth: 1.5f, Mode: WorldEditorGridMode.Surface, Pitch: new Vector3(value: 0.5f), PlaneY: 0f, Visible: false),
         ReadOnlyLabel: "Build (read-only)",

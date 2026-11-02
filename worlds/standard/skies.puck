@@ -122,9 +122,9 @@ let daySkyHours = [
 // `render` block replaces the first's members. The sun rises due east of `heading` at six, culminates at
 // `noonElevation` degrees at noon and sets at eighteen, at `peak` lux times the cosine of its hour angle, and casts no
 // light below the horizon; it is `horizonColor` until seven and from seventeen, and `noonColor` between. The day starts
-// at `start` hours. The moon is the light named `moon`, which the world authors beside `key` (a directional whose
-// `shadow: auto` lets it take a shadow slot once the sun has set): it stands opposite the sun, at `moonPeak` lux times
-// the cosine of its hour angle, in `moonColor`. The night sky's gradient shows at `nightLuminance` nits and its stars
+// at `start` hours. The template authors the moon, a directional named `moon` whose `shadow: auto` lets it take a shadow
+// slot once the sun has set; a world restyles it with `moonPeak` and `moonColor`, or overrides the row by its name. It
+// stands opposite the sun, at `moonPeak` lux times the cosine of its hour angle, in `moonColor`. The night sky's gradient shows at `nightLuminance` nits and its stars
 // at `starLuminance`. Writing the row moves the time (`world.state.cell.set <clock> $value 0.5` is noon), and its
 // advance holds the sun (`world.row.set state <clock> advance {"perSecondNumerator":0,"perSecondDenominator":1}`) and
 // runs it again (the numerator back to one over `daySeconds`). The exposure is the world's to key on the same clock
@@ -145,6 +145,9 @@ template dayCycle(clock = "day", daySeconds = 1440, start = 10, noonElevation = 
   }
   render {
     lighting {
+      lights [
+        directional(name: "moon", direction: [0, 1, 0], color: moonColor, illuminance: 0lx, shadow: auto)
+      ]
       clock: clock
       keys: map(range(0, 24), h => {
         at: h * 3600

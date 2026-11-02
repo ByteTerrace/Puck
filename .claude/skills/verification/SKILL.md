@@ -148,10 +148,13 @@ scratch worlds, never in engine simulation logic.
 
 ### Coverage
 
-CI checks 100% line coverage of live `src/` from the CPU suites on every push
-to `main` (`puck artifacts coverage`, the `coverage` job in `azure.yml`, outside
-what deploy waits for). New code lands with a test that reaches it, and dead
-internals, duplicates and ledgers that nothing reaches are deleted, not tested.
+While the refactoring campaign suspends test requirements (AGENTS.md), the
+coverage target and the CI `coverage` job are suspended too, and no change is
+held back for a missing test. The standing target, when the owner restores it:
+100% line coverage of live `src/` from the CPU suites on every push to `main`
+(`puck artifacts coverage`, the `coverage` job in `azure.yml`, outside what
+deploy waits for), with new code reached by a test, and dead internals,
+duplicates and ledgers that nothing reaches deleted, not tested.
 "Unreached" is not "unwanted" (the owner's ruling,
 [AGENTS.md](../../../AGENTS.md#puck-is-pre-release)): a product capability
 (capture, input devices, audio or speech, probes, a world or exhibit) that
@@ -204,7 +207,9 @@ Build `src/Puck.Cli` in Release in your worktree, copy
 `src/Puck.Cli/bin/Release/net11.0/` to a directory only your lane uses
 (`<worktree>/.claude/scratch/<lane>-cli/`), and run `dotnet <copy>/Puck.Cli.dll <verb>` from
 the worktree root. Never run the globally installed `puck` on PATH: it is
-another build of another head. Refresh the copy after a change the CLI reaches.
+another build of another head. Refresh the copy after a change the CLI reaches
+and after every merge of the integration tip: a copy older than the merge
+rejects documents that use new schema members.
 A generator verb (`schema`, `registry`, `vocabulary`, `locks`, `baselines`,
 `branding`) run without `--check` rewrites the files it owns; `--check` only
 reports drift. Restore a fresh worktree once
@@ -213,6 +218,11 @@ reports drift. Restore a fresh worktree once
 On Windows, refresh the private CLI only after any lease command hosted by that copy has exited: the lease
 process itself keeps its loaded DLLs locked while the child build runs. Copy after lease completion, or host
 the build lease from another CLI copy.
+Copy portable output into a fresh destination, or copy its contents when
+refreshing an existing one. PowerShell `Copy-Item <output-directory>
+-Destination <existing-directory> -Recurse` nests the output directory and
+leaves stale DLLs at the destination root. Check the entry DLL before launch;
+publish any queued runner's artifact pointer only after the copy finishes.
 
 When `puck schema` reports missing XML documentation, do not accept the resulting
 removal of schema descriptions: on the restricted Windows harness the generator's
@@ -269,16 +279,20 @@ because it looks in the default `bin` and `obj` directories.
 - Read a command's output and exit status: an exit code of 0 is not a verdict.
 - MSBuild rebuilds by file time. A file copied back over a mutant keeps its
   older time, so the build keeps the mutated assembly although `git diff` shows
-  the source restored. Restore with `git restore` or touch the file, rebuild,
+  the source restored. Commit the fix as WIP before injecting the fault, so the
+  injected fault is the only uncommitted edit; then restore it with `git restore
+  <file>` (or touch the copied-back file), rebuild,
   and confirm the test host loaded the freshly built assembly, using its
   write time/path or a diagnostic in the output; `git diff` and exit 0 alone
   prove neither. `puck laws prove
   <law> --fix <revision>` proves a law against its fix in its own clone and
   never touches your tree.
 
-A custom test traversal outside `tests/` must pass `-p:PuckShaderSpirvEnabled=true`
-explicitly. It does not inherit `tests/Directory.Build.rsp`; a Windows project
-build otherwise removes SPIR-V outputs. CPU shader tests use a fake device but
+A Windows project build intended for a Vulkan run must pass
+`-p:PuckShaderSpirvEnabled=true` explicitly, including a private World artifact.
+A custom test traversal outside `tests/` needs the same flag because it does not
+inherit `tests/Directory.Build.rsp`; a Windows project build otherwise removes
+SPIR-V outputs. CPU shader tests use a fake device but
 still read the compiled bytecode, so missing fixtures cause failures and can leave
 asynchronous package tests waiting. Building both bytecode formats uses no GPU.
 
@@ -324,10 +338,9 @@ deferred is a protocol step the engine has not built.
 ## What uses the GPU
 
 A windowed World driven by a stdin script spells its backend `--backend directx` or `--backend vulkan` (`auto` picks), waits for bakes with `world.wait bakes <s>` where `<s>` is 1 to 600, and is stopped by its PID once its readings are in: a windowed World has been seen running long past `--exit-after-seconds`.
-Use the private CLI copy's `puck lease gpu --holder <lane> --wait 1200 -- <command...>` for a granted GPU leg, and `puck lease heavy --holder <lane> --wait 7200 -- <command...>` for a heavy suite: heavy holders run long recorded suites back to back, and a one-hour wait can time out behind them. Run the request in the background and keep working. Without `--wait` a held lease refuses at once, so a script that runs its next step regardless (a boot after a build) must check the lease's exit code, or it measures a stale binary. Rebuild the private CLI copy after merging the integration tip: a copy older than the merge rejects documents that use new schema members. The verb owns acquisition, stale recovery and release, including failure and cancellation. A windowed World started with `puck_world_start` takes the same GPU lease itself (`holder`: your lane), waits at most its `timeoutSeconds` for it, and releases it when `puck_world_stop` ends the World or the World exits.
-To hold one lease across several commands, run a script the lease starts. On Windows name Git Bash by its full
-path (`"C:/Program Files/Git/usr/bin/bash.exe" <script>`): a bare `bash` resolves to WSL's, which sees no `D:/`
-path, so the script fails only after the queued lease is finally granted.
+Use the private CLI copy's `puck lease gpu --holder <lane> --wait 1200 -- <command...>` for a granted GPU leg, and `puck lease heavy --holder <lane> --wait 7200 -- <command...>` for a heavy suite: heavy holders run long recorded suites back to back, and a one-hour wait can time out behind them. Run the request in the background and keep working. Without `--wait` a held lease refuses at once, so a script that runs its next step regardless (a boot after a build) must check the lease's exit code, or it measures a stale binary. The verb owns acquisition, stale recovery and release, including failure and cancellation. A windowed World started with `puck_world_start` takes the same GPU lease itself (`holder`: your lane), waits for it up to `CliLease.DefaultWait` (its `timeoutSeconds` bounds only the boot), and releases it when `puck_world_stop` ends the World or the World exits.
+To hold one lease across several commands, run a script the lease starts, with Git Bash named by its full path
+as the PowerShell paragraph below says.
 Keep a granted batch within its brief's time box (at most 20 minutes for a GPU lease).
 A verb that builds the World (`puck test`, `canary`, `sweep`, `parity`, `counters`, `docs citations`) and the MCP start wait for the `build` lease up to two hours (`CliLease.DefaultWait`) with the queue position on stderr, and the build then has its own thirty-minute limit, so a deep queue is not a reason to pass `--world-artifact` or to build privately; the flag is for booting a build made some other way.
 `gate` and `affected` hold the same heavy lease through each heavy suite and
@@ -347,10 +360,11 @@ readings show an idle machine for `--settle` seconds, then runs the command, wit
 In PowerShell, quote forwarded `'-nodeReuse:false'` after `--`; otherwise the
 shell can split the colon-bearing switch before the lease receives it
 ([toolchain caution](../../../docs/development/contributing.md#hardware-and-toolchain-cautions)).
-On Windows, a forwarded bare `bash` resolves to WSL's `bash.exe`, which cannot see
-`D:/` paths and exits 127 after the lease was granted; forward Git Bash by its full
-path (`"C:/Program Files/Git/usr/bin/bash.exe" <script>`) to run several commands
-under one lease.
+The lease starts its child without a shell, so on Windows a forwarded bare `bash`
+resolves through `PATH` to WSL's `bash.exe`, which cannot see `D:/` paths, has no
+.NET 11 and exits 127, and only after the queued lease was finally granted.
+Forward Git Bash by its full path (`"C:/Program Files/Git/usr/bin/bash.exe" <script>`)
+to run several commands under one lease.
 
 Take the heavy lease once per suite run: one `puck test` invocation (or one
 suite) per `puck lease heavy` acquisition, never a batch of runs under one hold,
@@ -472,7 +486,7 @@ prune or repack objects another worktree on the machine still reads.
 | Skill | Route there for |
 |---|---|
 | [`orchestration`](../orchestration/SKILL.md) | Coordinating lanes, landings and machines. |
-| [`review-passes`](../review-passes/SKILL.md) | A review-and-fix pass and verifying its fixes. |
+| [`review-passes`](../review-passes/SKILL.md) | A review pass in either mode, and verifying a review-and-fix pass's fixes. |
 | [`maths-laws`](../maths-laws/SKILL.md) | The Maths law suite's tiers and structural completeness. |
 | [`gaming-bricks`](../gaming-bricks/SKILL.md) | The emulator suites. |
 | [`rendering`](../rendering/SKILL.md) | Captures, parity and GPU counters for render work. |

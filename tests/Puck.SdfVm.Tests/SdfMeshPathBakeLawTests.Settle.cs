@@ -12,11 +12,14 @@ namespace Puck.SdfVm.Tests;
 public sealed partial class SdfMeshPathBakeLawTests {
     private static readonly Vector3 OwnHalf = new(value: 0.2f);
     private static readonly Vector3 MemberHalf = new(value: 0.1f);
+    // A member this many slots past its group's own: the group's poses span three rows a slot over the gap, more point
+    // table entries than one dispatch's samples (SdfWorldPackage.MeshBakeMaxSamples).
+    private const int PosedGap = ((SdfWorldPackage.MeshBakeMaxSamples / 3) + 1);
 
     [Fact]
     public void ACubicLatticeDispatchesWhenItsPosesExceedTheSampleBudget() {
         var bake = new SdfMeshPathBake { Library = new SdfMeshLibrary(), Residency = "posed-cube" };
-        var frame = SettleFrame(groups: 1, memberGap: 100000, offset: 0f, program: SettleProgram(groups: 1, memberGap: 100000, scale: 4f), time: 0f);
+        var frame = SettleFrame(groups: 1, memberGap: PosedGap, offset: 0f, program: SettleProgram(groups: 1, memberGap: PosedGap, scale: 4f), time: 0f);
         var index = 0L;
         var full = false;
 
@@ -30,7 +33,7 @@ public sealed partial class SdfMeshPathBakeLawTests {
                     full = true;
                 }
                 bake.Record(batch: batch);
-                bake.Complete(batch: batch, samples: AnswerPosed(batch: batch, empty: false, memberGap: 100000, scale: 4f));
+                bake.Complete(batch: batch, samples: AnswerPosed(batch: batch, empty: false, memberGap: PosedGap, scale: 4f));
             }
             return !bake.Pending;
         });
@@ -133,9 +136,14 @@ public sealed partial class SdfMeshPathBakeLawTests {
         var after = bake.Dress(frame: SettleFrame(groups: Groups, offset: 0.55f, program: program, time: 0.7f)).MeshDraws.Select(selector: static draw => draw.Mesh).ToArray();
 
         Assert.Equal(expected: before.Take(count: 2), actual: after.Take(count: 2));
-        _ = bake.Dress(frame: SettleFrame(groups: Groups, offset: 0.55f, program: program, time: 5f));
-        Assert.Equal(expected: 2L, actual: settles.Read(kind: SdfMeshSettle.Refused));
-        Assert.Equal(expected: 9L, actual: settles.Read(kind: SdfMeshSettle.Queued));
+
+        // The other three start as the caps allow and mesh nothing too. Each of the five rebakes once toward the pose and
+        // is handed back its mesh, and a refused group stands, starting nothing more, until its member moves.
+        DriveSettle(bake: bake, empty: true, frame: SettleFrame(groups: Groups, offset: 0.55f, program: program, time: 5f), index: ref index, until: () => (settles.Read(kind: SdfMeshSettle.Refused) == 5L));
+        _ = bake.Dress(frame: SettleFrame(groups: Groups, offset: 0.55f, program: program, time: 7f));
+        Assert.Equal(expected: 5L, actual: settles.Read(kind: SdfMeshSettle.Refused));
+        Assert.Equal(expected: 10L, actual: settles.Read(kind: SdfMeshSettle.Queued));
+        Assert.Equal(expected: before, actual: bake.Dress(frame: SettleFrame(groups: Groups, offset: 0.55f, program: program, time: 7.1f)).MeshDraws.Select(selector: static draw => draw.Mesh));
     }
 
     // Groups of a box on slot 2g+1 and a smaller box memberGap slots later, smooth-free: each a dynamic instance on its own slot.
@@ -212,9 +220,7 @@ public sealed partial class SdfMeshPathBakeLawTests {
             var spacing = (0.015625f * MathF.Min(x: request.Cell.X, y: MathF.Min(x: request.Cell.Y, y: request.Cell.Z)));
 
             for (var local = 0; (local < request.Samples); local++, sample++) {
-                var position = (request.Points.IsEmpty
-                    ? (request.Origin + (new Vector3(x: (local % request.Dims.X), y: ((local / request.Dims.X) % request.Dims.Y), z: (local / (request.Dims.X * request.Dims.Y))) * request.Cell))
-                    : new Vector3(x: request.Points.Span[local].X, y: request.Points.Span[local].Y, z: request.Points.Span[local].Z));
+                var position = request.SampleAt(local: local);
 
                 var (value, shape) = (empty ? (1f, 0) : Nearest(count: 2, first: 0, point: position, shapes: shapes));
                 var record = bytes.AsSpan(start: ((sample * SdfWorldPackage.MeshBakeSampleWords) * sizeof(uint)));

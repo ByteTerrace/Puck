@@ -433,6 +433,17 @@ composition of existing verbs expresses. The debug world's `places.puck`
 bindability or audience of a C# verb owes `puck verbs` (regenerates the
 catalog `puck compile --validate` checks authored commands against).
 
+**A rule fault is raised, never returned.** `RuleExpressions.TryEvaluate` raises
+every `Domain` or `Forever` fault into the reader's `ArenaScratch` register,
+and the boundary that decides what the evaluation means reads the register: a
+rule's gate holds its latch, a firing refuses whole, a decision keeps its
+choice, a search step lands nothing. Local code may drop a value but never the
+fault. A new place that evaluates rule expressions opens a scope
+(`ArenaScratch.EnterFaultScope`/`LeaveFaultScope`) or calls
+`RuleExpressions.TryEvaluateAlone`; a fault raised outside every scope throws.
+`Absent` is a value each consumer answers, never raised
+([expressions](../../../docs/reference/state/expressions.md#constant-folding-and-faults)).
+
 **Narrate through the hub.** Server never writes to `System.Console`; every line
 is a `WorldOutputHub.Narrate` call, bound to stderr (or stdout for answers) by
 the composition root.

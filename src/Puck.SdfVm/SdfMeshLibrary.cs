@@ -161,6 +161,14 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
         mesh = null;
         refusal = null;
         if (Disk is null) { return false; }
+        // A geometry the library already holds under this identity is served from memory: the decode is shared until
+        // the library evicts it, and the store is read again only for a geometry it does not hold.
+        if (HoldsEmpty(geometry: geometry, identity: identity)) { return true; }
+        if (TryTake(geometry: geometry, identity: identity, materials: materials, mesh: out var held)) {
+            if (form is { } heldForm) { lock (m_gate) { m_forms[(identity, heldForm)] = geometry; } }
+            mesh = held;
+            return true;
+        }
         var key = (Identity: identity, Geometry: geometry);
         var pending = m_reads.GetOrAdd(key, static (key, disk) => new Lazy<StoredMesh>(valueFactory: () => {
             var loaded = disk.TryRead(geometry: key.Geometry, identity: key.Identity, materials: out var stored, mesh: out var read, refusal: out var why);

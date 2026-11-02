@@ -485,9 +485,12 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
     // field it joins is, from there on, only composed by hard set operations (union, subtraction, intersection), never
     // displaced, dilated, shelled or softly blended, at its own depth or through each enclosing pop. Such a pop keeps the
     // full Q48.16 resolution of its own field, which a scale under the grid would erase, and the certified step scale
-    // carries the scale instead (CertifiedStepScale). Only the contact reading defers; the render reading scales as the
-    // kernels do. One backward pass: ok[d] says the depth-d accumulator, from the current position on, is never read by
-    // magnitude.
+    // carries the scale instead (CertifiedStepScale). That scale is the whole program's, so a pop defers only when its
+    // scope holds every shape the program has: a scope beside other shapes (one relieved creation among a world's
+    // placements) would lower every query's certified distance everywhere by its own factor, so it scales its candidate
+    // at the pop instead. Only the contact reading defers; the render reading scales as the kernels do. One forward pass
+    // finds each pop's push and the shapes between them; one backward pass: ok[d] says the depth-d accumulator, from the
+    // current position on, is never read by magnitude.
     private static bool[] DeferredScopes(IReadOnlyList<SdfInstruction> instructions, SdfFieldReading reading) {
         var deferred = new bool[instructions.Count];
 
@@ -496,11 +499,33 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
         }
 
         var depths = new int[instructions.Count];
+        // Per pop, the shapes its scope holds; -1 for every other instruction.
+        var held = new int[instructions.Count];
+        Span<int> shapesAtPush = stackalloc int[SdfProgramBuilder.MaxFieldScopeDepth + 1];
         var depth = 0;
+        var shapes = 0;
 
         for (var index = 0; (index < instructions.Count); index++) {
             depths[index] = depth;
-            depth += ((instructions[index].Op == SdfOp.PushField) ? 1 : ((instructions[index].Op == SdfOp.PopField) ? -1 : 0));
+            held[index] = -1;
+
+            switch (instructions[index].Op) {
+                case SdfOp.ShapeBlend: {
+                        shapes++;
+                        break;
+                    }
+                case SdfOp.PushField: {
+                        shapesAtPush[depth++] = shapes;
+                        break;
+                    }
+                case SdfOp.PopField: {
+                        held[index] = (shapes - shapesAtPush[--depth]);
+                        break;
+                    }
+                default: {
+                        break;
+                    }
+            }
         }
 
         Span<bool> ok = stackalloc bool[SdfProgramBuilder.MaxFieldScopeDepth + 2];
@@ -515,7 +540,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
                 case SdfOp.PopField: {
                         var hard = HardCompose(blend: instruction.Blend);
 
-                        deferred[index] = ((instruction.Blend == ((uint)SdfBlendOp.Union)) && (instruction.Data1.Y > 0f) && ok[at - 1]);
+                        deferred[index] = ((instruction.Blend == ((uint)SdfBlendOp.Union)) && (instruction.Data1.Y > 0f) && ok[at - 1] && (held[index] == shapes));
                         ok[at] = (hard && ok[at - 1]);
                         ok[at - 1] &= hard;
                         break;
