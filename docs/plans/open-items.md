@@ -3418,6 +3418,21 @@ ordinary · Next: new content and art on the owner's call.
 
 Owner: the lead · ordinary · Next: the Monitor hook check.
 
+- After the first settle window: give Antigravity (Gemini Argon) a fair
+  coding trial before deciding its role (the owner's direction: it has so far
+  done research only, where its code citations were unreliable). Two bounded
+  issue fixes from this file, each in its own worktree with a mechanical check:
+  the four duplicate `HeapAllocator` test allocators and `IAllocator`'s untrue
+  documentation (small), and the Superellipsoid's loose far field plus its
+  small-radius CPU/GPU disagreement in both interpreters (medium, with laws
+  shown failing first). Score each objectively, beside comparable Claude and
+  Codex lanes: does it build and pass what it claims (the lead reruns every
+  command); high and medium findings from a Claude and a Codex review; brief
+  adherence (scope, reuse of existing mechanisms, no shared-state git); report
+  honesty (every claimed file:line and result checked); and whether its runs
+  finish headless without stalling. Record the verdict in the orchestration
+  skill's routing table either way.
+
 - The agent-policy hook may not cover Claude Code's `Monitor` tool:
   `.claude/settings.json` matches `Bash|PowerShell`, and whether a Monitor
   PreToolUse payload carries `tool_input.command` is unverified. Log one
