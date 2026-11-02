@@ -123,15 +123,24 @@ Each waits on the owner: what the engine should do, how it looks and feels, and 
   the same every time. No engine check stands between the restricted read and
   the public write today (transforms have `TransformWidensAudience`; search
   outputs do not).
-- Two looks in the transmission design ([transmission](transmission.md)):
-  whether a body's own overhang (the Moth's wing over her torso) shadows its
-  wrapped dark side continuously across the terminator (the design's choice,
-  two depth layers and an identity), or never (one layer and an identity,
-  showing a seam of about a quarter of the sun at `wrap: 0.35`); and whether
-  wrap stays independent of thickness (the design's choice) or a thick body's
-  dark side darkens as light passes through it, as a separate material term.
-  The resolution floors, stated in the plan, follow from the shadow map's
-  texel size; the grazing allowance `S` defaults to 4 texels.
+- Looks in the transmission design ([transmission](transmission.md)), each
+  with the design's choice first:
+  - A body's own overhangs and hollows shadow its wrapped dark side (the
+    next-surface rule): the Moth's wing shadows her torso's dark side as it
+    does her lit side; a hollow box's outer back reads dark; overlapping
+    components of one authored mesh over-shadow each other. The alternative,
+    own matter never shading its own dark side, costs one layer less and shows
+    a seam of `wrap/(1+wrap)` (about a quarter of the sun at `wrap: 0.35`) at
+    the terminator under every overhang.
+  - A receiver the shadow map cannot resolve reads from same-body neighbours,
+    or dark, never lit: about 2.5° of surface on smooth baked bodies (under a
+    millimetre on the Moth), wider on authored meshes without vertex normals.
+    Reading lit there is the leak every earlier round chased.
+  - Wrap stays independent of thickness; light passing through a thick body
+    can come later as a separate material term.
+  - The Steam Deck is measured at Full quality, the bar's highest quality:
+    3.5 ms for three cascades inside its 22.2 ms frame, with a live-byte budget
+    at the portal stop. Confirm or set the budgets.
 - Decided by the owner: night exposure is the lead's call, provided authors can
   style it as their vision demands (the floor and curve stay authored data,
   keyable on the day clock; the debug world authors a readable deep-blue
