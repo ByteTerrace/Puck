@@ -139,7 +139,9 @@ let lawnGrassCenter = [-5, -5]
 let lawnGrassTiles = [[5.05, 6.25], [5.95, 6.25], [5.05, 7.15], [5.95, 7.15]]
 let lawnGrassOrigin = [lawnGrassCenter[0] - 5.5, 0, lawnGrassCenter[1] - 6.7]
 
-// Flat painted masses of turf in two values: shade under the tree groups and lighter sweeps in the open lawn.
+// Flat painted masses of turf in two values: shade under the tree groups and lighter sweeps in the open lawn. None
+// reaches the avatar studio's grid lane (world x 29.5 to 34.5, z -51 to -27, studio.puck), whose thin lines a turf mass
+// would bury and whose low motion cameras keep their eyes 0.35 m over its floor.
 let lawnPatches = [
   { position [-18, -20], r [8, 0.12, 6], yaw: 20, tone: 0 }
   { position [-22, -48], r [6, 0.12, 5], yaw: 70, tone: 0 }
@@ -148,7 +150,7 @@ let lawnPatches = [
   { position [78, -2], r [7, 0.12, 5], yaw: 160, tone: 0 }
   { position [-30, -26], r [5, 0.12, 4.5], yaw: 40, tone: 0 }
   { position [-14, -6], r [9, 0.12, 4], yaw: 15, tone: 1 }
-  { position [24, -36], r [12, 0.12, 5], yaw: 100, tone: 1 }
+  { position [21, -36], r [12, 0.12, 5], yaw: 100, tone: 1 }
   { position [-2, -96], r [10, 0.12, 4.5], yaw: 30, tone: 1 }
   { position [84, -88], r [11, 0.12, 5], yaw: 140, tone: 1 }
 ]
