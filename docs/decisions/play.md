@@ -33,9 +33,20 @@ author supports it.
 - The menu is authored in the standard package. The engine supplies the UI
   tree, a player-safe save and the leave and quit operations.
 
-What a player save holds is still open. Puck already persists some player
-state, and the design starts by finding exactly what, rather than assuming
-it is missing.
+The owner's further rulings on the shape:
+- **A character claims, a world clamps.** A player's identity carries its own
+  look and kit into every world. Each world may restrict or restyle what it
+  admits, as it already clamps the identity's motion rates.
+- **Exit to menu goes to the hub world.** The hub world itself is the menu's
+  destination, and character selection, the world list and player hubs are
+  places in it. There is no separate shell outside every world.
+- **Two menu layers.** The authored Start menu is the normal, styleable game
+  menu. Beneath it, a small host-owned escape that no world can cover,
+  restyle or intercept always offers exit to the hub and exit to desktop.
+
+A player save is, today, the owned identity document
+([grounding](../plans/next-wave/ground-hub.md#1-player-persistence-today)).
+The design refines it rather than inventing another.
 
 **A surface is one description.** An island built from separate
 descriptions (hand-placed creation piles, painted lattice heights, flat prop
