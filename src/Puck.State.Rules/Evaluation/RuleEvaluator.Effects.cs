@@ -58,7 +58,6 @@ public sealed partial class RuleEvaluator {
             return RuleOutcome.Fired;
         }
 
-        var arena = m_host.Arena;
         var firing = new EffectFiring(
             EngineTick: m_host.EngineTick,
             RuleName: ruleName,
@@ -137,25 +136,11 @@ public sealed partial class RuleEvaluator {
                     continue;
                 }
 
-                var delivery = scratch.EnterFaultScope();
-                bool delivered;
-                EffectRefusal refusal;
-
-                try {
-                    delivered = arm.TryDeliverAfterCommit(
-                        firing: in firing,
-                        host: m_host,
-                        refusal: out refusal
-                    );
-                } finally {
-                    fault = scratch.LeaveFaultScope(scope: delivery);
-                }
-                // Past the commit nothing rewinds, so a delivery that faulted is counted as refused.
-                if (delivered && (fault != ExpressionFault.None)) {
-                    delivered = false;
-                    refusal = EffectRefusal.Of(code: RuleEffectRefusal.Arithmetic, reason: RuleEvaluation.DescribeFault(fault: fault));
-                }
-                if (delivered) {
+                if (Deliver(
+                    arm: arm,
+                    firing: in firing,
+                    refusal: out var refusal
+                )) {
                     applied |= arm.SubmitsMutation;
                 } else {
                     ReportRefusal(
@@ -172,6 +157,33 @@ public sealed partial class RuleEvaluator {
         }
 
         return RuleOutcome.Fired;
+    }
+    // Delivers one irreversible arm after its firing's commit. A transactional install may have replaced the arena,
+    // and with it the scratch every read raises into, so the delivery's fault scope is opened on the scratch the host
+    // serves now, never on one taken before the commit. Past the commit nothing rewinds, so a delivery that faulted
+    // is refused.
+    private bool Deliver(IRuleEffect arm, in EffectFiring firing, out EffectRefusal refusal) {
+        var scratch = m_host.Scratch;
+        var scope = scratch.EnterFaultScope();
+        bool delivered;
+        ExpressionFault fault;
+
+        try {
+            delivered = arm.TryDeliverAfterCommit(
+                firing: in firing,
+                host: m_host,
+                refusal: out refusal
+            );
+        } finally {
+            fault = scratch.LeaveFaultScope(scope: scope);
+        }
+        if (delivered && (fault != ExpressionFault.None)) {
+            refusal = EffectRefusal.Of(code: RuleEffectRefusal.Arithmetic, reason: RuleEvaluation.DescribeFault(fault: fault));
+
+            return false;
+        }
+
+        return delivered;
     }
 
     // Everything a firing does before its commit: the reversible effects, then each queued arm's preflight against

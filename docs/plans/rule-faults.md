@@ -47,9 +47,16 @@ structural reasons, each of which the rounds found one instance of:
    which `AdoptPreparedArena` replaces (`src/Puck.World.Server/WorldServer.Arena.cs:223-224`)
    from `CommitTransactional` (`src/Puck.World.Server/WorldRuleHost.Arms.cs:119-128`)
    in the middle of `FireEffects`, which captured `scratch` once
-   (`src/Puck.State.Rules/Evaluation/RuleEvaluator.Effects.cs:70`) and opens
+   (`src/Puck.State.Rules/Evaluation/RuleEvaluator.Effects.cs:70`) and opened
    its delivery scopes on the captured object (`:140`) while every raise
-   resolves the new one.
+   resolved the new one, so an authored delivery fault after a document
+   install threw in a live World. Until step 4 deletes the register,
+   `RuleEvaluator.Deliver` opens each delivery's scope on the scratch the host
+   serves after the commit; the block "a delivery that faults after its firing
+   installs a document is refused, not thrown" in
+   `worlds/debug/rule-faults-tests.puck` is the witness W9 grows from. The
+   register still lives on a replaceable object, so the reason stands for the
+   design.
 3. **Deciding places must remember to read it.** `RuleEvaluator.cs:575` and
    `:636`, `WorldRuleHost.Decisions.cs:214` and `:257`, `RuleEvaluation.cs:133`
    and `:179` each poll `RaisedFault`; `GateOpen(faulted: out _)` discards its
