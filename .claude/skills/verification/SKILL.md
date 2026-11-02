@@ -148,10 +148,13 @@ scratch worlds, never in engine simulation logic.
 
 ### Coverage
 
-CI checks 100% line coverage of live `src/` from the CPU suites on every push
-to `main` (`puck artifacts coverage`, the `coverage` job in `azure.yml`, outside
-what deploy waits for). New code lands with a test that reaches it, and dead
-internals, duplicates and ledgers that nothing reaches are deleted, not tested.
+While the refactoring campaign suspends test requirements (AGENTS.md), the
+coverage target and the CI `coverage` job are suspended too, and no change is
+held back for a missing test. The standing target, when the owner restores it:
+100% line coverage of live `src/` from the CPU suites on every push to `main`
+(`puck artifacts coverage`, the `coverage` job in `azure.yml`, outside what
+deploy waits for), with new code reached by a test, and dead internals,
+duplicates and ledgers that nothing reaches deleted, not tested.
 "Unreached" is not "unwanted" (the owner's ruling,
 [AGENTS.md](../../../AGENTS.md#puck-is-pre-release)): a product capability
 (capture, input devices, audio or speech, probes, a world or exhibit) that
