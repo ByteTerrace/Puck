@@ -83,15 +83,26 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   cube and the traced-light bits, shaded under the current lighting. The
   lighting version advances on a change of the directional or traced lights,
   the gains, the sources, the bounce switch, the scene's materials or the sky
-  (the packed sky's key, then its projected irradiance against `SkyTolerance`,
-  so a twinkle relights nothing). A relight's bounce reads the volume about
-  each hit as it stands, so bounce converges over successive relights: a probe
-  is relit until one relight moves each axis's luminance by at most
-  `ConvergedShare` (plus `ConvergedFloor` nits), at most `MaxRelights` times a
-  lighting. A switched-off lamp's bounce therefore decays over those relights,
-  under a thousandth of the lit value in the point-light law, rather than
-  vanishing in one. `render.indirect.bounces` zero switches the bounce off; any
-  other value switches it on.
+  (the packed sky's key, then its projected irradiance against `SkyTolerance`
+  in each colour channel apart, relative to that channel's own largest
+  coefficient, so a twinkle relights nothing and a dim channel's change still
+  counts). A relight's bounce reads the volume about each hit as it stands, so
+  the bounce is one iteration over the whole window: a sweep relights every
+  probe once, and another follows while any probe of the last moved past
+  `ConvergedShare` (plus `ConvergedFloor` nits) in any colour channel of any
+  axis, or was relit under a lighting since replaced; it stops only when a
+  whole sweep under unchanged inputs moved nothing, or after `MaxSweeps` (an
+  `[sdf.mesh-gi] unconverged` line). Convergence is never a probe's own: a
+  probe that read zero before the light reached it is relit by the next sweep,
+  and a geometry change wakes every probe. Never retire a probe on its own
+  small change (the baffled-rooms and red-to-green laws in
+  `SdfMeshIrradianceLawTests.Relight.cs`). A switched-off lamp's bounce decays
+  over the sweeps, under a thousandth of the lit value in the point-light law.
+  `render.indirect.bounces` zero switches the bounce off; any other value
+  switches it on.
+- The worker returns, never spins: when the budget leaves a probe's trace
+  unfunded it waits for the next grant, and a lockstep frame asks it to yield
+  at its next batch and takes over its work (`m_yield`, the spent-budget law).
 - The cube is two parts. The local part (the traced point and spot lights'
   bounce under their shadow rays, and emission) is kept per probe with the
   lighting's local version, which advances only when those lights, the gains,
@@ -239,8 +250,8 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   build, a trace, a refill, a traced probe not yet published); a relight in
   progress reads as `relighting=1` on its first line.
 - A lockstep frame (`Drain`) relights its whole window from no bounce, each
-  later pass reflecting the one before, until every probe converges or
-  `MaxRelights` passes, whenever its geometry, lighting, windows or layout
+  later pass relighting every probe from the one before, until a whole pass
+  moves nothing past the bound or `MaxSweeps` passes, whenever its geometry, lighting, windows or layout
   differ from the last drain or asynchronous work relit since. Its light is a
   function of those alone, never of bounce asynchronous frames left; the law
   `ALockstepFrameRendersTheWindowTracedToTheEnd` compares a fresh volume's
