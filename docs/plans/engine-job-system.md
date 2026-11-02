@@ -77,9 +77,9 @@ the frame thread and the audio render thread
 (`WorldAudioRenderService.cs:179`), which are the two threads that must never
 wait on a worker. The Steam Deck (4 cores, 8 threads) runs 6 workers; the lead
 machine (16 logical) runs 14. Nothing else in the engine starts a CPU worker:
-the bake's static pool (`SdfMeshPathBake.Residency.cs:31-39`), the irradiance
+the bake's static pool (`SdfMeshPathBake.Residency.cs:36-43`), the irradiance
 worker counts, `Parallel.For` in the engine's runtime paths
-(`SdfMeshIrradiance.cs:1017`, `SdfMeshIrradianceScene.cs:103,579,756`,
+(`SdfMeshIrradiance.cs:1527`, `SdfMeshIrradianceScene.cs:103,579,756`,
 `SdfMeshChunks.cs:96`) and the thread-pool `Task.Run` sites listed below all
 move onto it. Three more sites size work from `Environment.ProcessorCount` on
 their own and move with them: the pipeline cache's `BuildConcurrency`
@@ -129,21 +129,22 @@ class with ready work, and within a class the job its comparer ranks first
 
 | Class | Work | Who forks it |
 |---|---|---|
-| `Frame` | The frame's own parallel work: view recording (section 3), the pose pack and the other `BeginFrame` partitions, a lockstep frame's synchronous irradiance drain (`SdfMeshIrradiance.cs:333-345,396-400`). | The frame thread, inside produce. |
+| `Frame` | The frame's own parallel work: view recording (section 3), the pose pack and the other `BeginFrame` partitions, a lockstep frame's synchronous irradiance drain (`SdfMeshIrradiance.cs:531-549`). | The frame thread, inside produce. |
 | `Tick` | The parallel tick's partitions (section 2). | The frame thread, inside the step. |
-| `Bake` | The mesh bake's group stages, kernel-tree compiles on reload (`SdfKernelTreeLoad.cs:62`), shader pipeline builds (`BackgroundBuild`), the composition build (`SdfCompositionFrameSource.cs:625`), the static field build (`WorldFramePresenter.cs:509`). | Residencies and render nodes. |
-| `Lighting` | The irradiance scene build, probe traces and refill (`SdfMeshIrradiance.cs:422,691,802`), response preparation (`WorldFramePresenter.cs:2406`), the reflow preview (`WorldServer.Reflow.cs:79`). | The irradiance volume, the presenter and the server. |
+| `Bake` | The mesh bake's group stages, kernel-tree compiles on reload (`SdfKernelTreeLoad.cs:62`), shader pipeline builds (`BackgroundBuild`), the composition build (`SdfCompositionFrameSource.cs:268`), the static field build (`WorldFramePresenter.cs:511`). | Residencies and render nodes. |
+| `Lighting` | The irradiance worker's traces and relights, its scene build and refill (`SdfMeshIrradiance.cs:558,1011,1147`), response preparation (`WorldFramePresenter.cs:2436`), the reflow preview (`WorldServer.Reflow.cs:79`). | The irradiance volume, the presenter and the server. |
 
 The `Bake` comparer ranks the group with the **largest** demand priority first:
 `SdfMeshDemand.Priority` grows with nearness and view density
 (`SdfMeshDemand.cs:70-78`, "past one for a demanded box, below one for another")
-and the bake takes the largest today (`SdfMeshPathBake.Residency.cs:211`,
+and the bake takes the largest today (`SdfMeshPathBake.Residency.cs:333`,
 `WorkQueue[index].Group.Priority > WorkQueue[best].Group.Priority`). The
 priority is read live at take time, as `TakeWork` reads it ("as the frame thread
-last left it", `:199-200`), so a demand change reorders queued work, and a
-leader inherits the largest of its members' (`:112-114`). The `Lighting` comparer
-is the probe order the trace already sorts by, `(sweeps, level, distance)`
-ascending (`SdfMeshIrradiance.cs:1003-1005`). The scheduler takes the policies
+last left it", `:320-321`), so a demand change reorders queued work, and a
+leader inherits the largest of its members' (`:179`). The `Lighting` comparer
+is the order the irradiance worker already sorts by (`SdfMeshIrradiance.cs:1459-1467`):
+probes to trace first, by level and distance, then relights by their lighting's
+age, passes, level and distance. The scheduler takes the policies
 as comparers; it decides no priority of its own.
 
 `Frame` and `Tick` are forks the frame thread drives and joins in the same
@@ -156,12 +157,13 @@ Decision: a background job (`Bake`, `Lighting`) is a sequence of resumable units
 each bounded in work, and a worker checks for higher-class work between units.
 The latency for a `Frame` or `Tick` fork to acquire every worker is therefore
 one unit, never a whole bake stage. The bake's stages already run as bounded
-slabs: planes per frame (`SdfMeshPathBake.cs:1256`), points per frame (`:1371`,
-`:1483`), all sized from `FrameTaps` (`:171`); the irradiance trace's unit is one
-probe (`TraceProbe` inside the `Parallel.For` at `SdfMeshIrradiance.cs:1017`).
+slabs: planes per frame (`SdfMeshPathBake.cs:1359`), points per frame (`:1515`,
+`:1646`), all sized from `FrameTaps` (`:174`); the irradiance trace's unit is one
+probe (`Process`, tracing its hits or relighting them, inside the `Parallel.For`
+at `SdfMeshIrradiance.cs:1527`).
 The unit bound is 2 ms of work on the lead machine, measured when the pool
 lands (open question 3). Which queued bake actions exceed it is unknown from
-the code: the dispatcher at `SdfMeshPathBake.Residency.cs:179-186` runs whatever
+the code: the dispatcher at `SdfMeshPathBake.Residency.cs:299-341` runs whatever
 action was queued, so J1 measures each action kind's duration and splits those
 over the bound; the Bake proportional to change packet's narrower closure
 shrinks them anyway.
@@ -171,7 +173,7 @@ shrinks them anyway.
 Decision: no job waits inside a unit, and no worker ever blocks on another job.
 
 - **Nested parallel work is a fork the parent helps with.** A job that today
-  joins a `Parallel.For` (the trace, `SdfMeshIrradiance.cs:422` joining `:1017`;
+  joins a `Parallel.For` (the worker, `SdfMeshIrradiance.cs:558` joining `:1527`;
   the scene build, `SdfMeshIrradianceScene.cs:103`) becomes a fork whose parent
   takes partitions itself until the fork is done, so a parent holding a worker
   is always working, never waiting, and every worker is free to take the same
@@ -237,12 +239,12 @@ owner's direction is no added latency. So:
 - **The owner drains at its own latest install point**, on the frame thread,
   exactly where it polls today: `BackgroundBuild.TryTake` once a frame
   (`BackgroundBuild.cs:4-8`), the composition source where it adopts a build
-  (`SdfCompositionFrameSource.cs:572-573`), the bake where `BeginFrame` polls its
-  readbacks, the irradiance volume where it publishes (`SdfMeshIrradiance.cs:424`).
+  (`SdfCompositionFrameSource.cs:565`), the bake where `BeginFrame` polls its
+  readbacks, the irradiance volume where it publishes (`SdfMeshIrradiance.cs:708`).
   A result ready before the poll installs on the same frame it does today.
 - **A synchronous dependency settles in the same frame.** A lockstep frame waits
   for its scene build and refill and traces before it renders
-  (`SdfMeshIrradiance.cs:333-345,396-400`). That work runs as a `Frame` fork the
+  (`SdfMeshIrradiance.cs:531-549`). That work runs as a `Frame` fork the
   frame thread helps with, and its results install immediately in the same
   call, so lockstep publication stays synchronous and a `[still]` traces the
   frame's own scene.
@@ -272,19 +274,19 @@ Every site below moves onto it, with its result kind:
 | Site today | Mechanism today | After |
 |---|---|---|
 | `SdfKernelTreeLoad.cs:16-18,62` | `ConcurrentQueue` of ready kernels and errors, polled by `TakeReady` | `Bake` jobs per source; results into the load's kernel channel, drained by `TakeReady`. |
-| `SdfCompositionFrameSource.cs:625` | A `Task` polled each frame | One `Bake` job; the built program and delta into the source's program channel, drained where `AdoptBuild` runs (`:572-573`). |
-| `SdfMeshIrradiance.cs:422,691,802` | Three `Task.Run` and a `Parallel.For` (`:1017`) | `Lighting` jobs and forks; landed probe blocks and the built scene into the volume's lighting channel; `Publish` drains it (`:424`). Lockstep: a `Frame` fork. |
-| `SdfMeshPathBake.cs:1006`, `SdfMeshPathBake.Residency.cs:158-199` | A static work queue, `Task.Run` workers, fire-and-forget | `Bake` jobs under the descending demand comparer; landings into the residency's bake channel; the static pool is deleted. |
+| `SdfCompositionFrameSource.cs:268` | A `Task` polled each frame | One `Bake` job; the built program and delta into the source's program channel, drained where `AdoptBuild` runs (`:565`). |
+| `SdfMeshIrradiance.cs:558,1011,1147` | Three `Task.Run` and a `Parallel.For` (`:1527`) | `Lighting` jobs and forks; landed probe blocks and the built scene into the volume's lighting channel; `Publish` drains it (`:708`). Lockstep: a `Frame` fork. |
+| `SdfMeshPathBake.cs:1099`, `SdfMeshPathBake.Residency.cs:272-341` | A static work queue, `Task.Run` workers, fire-and-forget | `Bake` jobs under the descending demand comparer; landings into the residency's bake channel; the static pool is deleted. |
 | `BackgroundBuild.cs:134,149` | `Task.Run` on the thread pool, `TryTake` once a frame | `Start` enqueues a `Bake` job; `TryTake` drains the build's own channel. The candidate lifecycle (take-or-discard, cancel callbacks) is kept as a consumer, as the packet says. |
 | `GpuImageLeases.cs:67` | A `Task.Run` disposer | A `Bake` job per retirement batch; a deferred disposal is engine work, not I/O. |
-| `WorldFramePresenter.cs:509,2406` | `Task.Run` | `Bake` (the static field) and `Lighting` (responses) jobs; results into the presenter's channels. |
+| `WorldFramePresenter.cs:511,2436` | `Task.Run` | `Bake` (the static field) and `Lighting` (responses) jobs; results into the presenter's channels. |
 | `WorldServer.Reflow.cs:79` | `Task.Run` | A `Lighting` job; the preview into the server's reflow channel, read by the drain verb. |
 | `ShaderCompiler.cs:97,165` | `Task.Run` | `Bake` jobs. |
 
 Not moved, and why:
 
 - I/O stays asynchronous and completes into its owner's channel: the mesh
-  store's disk account (`SdfMeshPathBake.cs:1006` prints and records; its disk
+  store's disk account (`SdfMeshPathBake.cs:1099` prints and records; its disk
   read is I/O), the camera device open (`WorldScreenBinder.Device.Camera.cs:434,1046`),
   the blob store (`WorldAuthorityBlobStore.cs:125`), extensions' network work,
   and every `PersistentRequestLane`, `PeerLink`, `WorldSiloHost.Mailbox` and
@@ -647,7 +649,7 @@ second, and recording third; recording alone would not reach it.
 
 ### The cause fix beside it
 
-At R2's input (`997fb2d002`), `SdfWorldPassRecorder.Choose` culled and levelled
+Before R2, `SdfWorldPassRecorder.Choose` culled and levelled
 every draw for every pass on the CPU, and 160,000 draws took 700 ms a frame.
 Threads would divide that, not remove it. R2 extends the existing opaque
 occlusion mechanism, `SdfMeshOcclusion.RecordDraws`, through `ExecuteIndirect`
@@ -700,7 +702,7 @@ registry of buffers.
 ### The native-storage list
 
 Which consumers move onto `IAllocator` (`IAllocator.cs:8`) and `MimallocAllocator`
-(`MimallocAllocator.cs:6`), in order, each with the measurement that puts it
+(`MimallocAllocator.cs:14`), in order, each with the measurement that puts it
 there. The rule for the order: large, reference-free, long-lived or
 LOH-churning storage first; small managed scratch is reused in place, not moved;
 anything that holds a managed reference stays managed.
@@ -715,12 +717,12 @@ anything that holds a managed reference stays managed.
 2. **Bake workspaces.** A group's lattice planes and point buffers (`group.Points`,
    `SdfMeshPathBake.cs:1483`), owned by the group's job slot and retained between
    its stages.
-3. **Irradiance blocks and the scene.** A `ProbeBlock` is one batch's words,
-   allocated per batch at LOH size on purpose (`SdfMeshIrradiance.cs:1008-1009,
-   1616-1628`), and every cached `ProbeData` is a slice of its block
-   (`:1147`, `:1610-1615`), installed into the cache directly (`:1030-1040`) and
-   retained as the current and previous measurement while bounce sweeps
-   converge (`:1630-1632`). The job and the landed result therefore cannot share
+3. **Irradiance blocks and the scene.** A `ProbeBlock` is one trace batch's
+   geometry words and a `LightBlock` one relight batch's light words, each
+   allocated per batch at LOH size on purpose (`SdfMeshIrradiance.cs:1517-1520`,
+   the classes at `:2187-2211`), and every cached probe is a slice of its
+   blocks, installed into the cache directly and retained while bounce
+   converges. The job and the landed result therefore cannot share
    one reusable block. Decision: a block is rented from the account by the job
    and **owned by the cache from landing**: the cache keeps a live-slice count
    per block, decremented as its probes are replaced or their previous
@@ -774,6 +776,12 @@ packet's: per-group content keys, the narrowed closure, one store for both
 backends; the scheduler runs whatever that packet leaves to bake.
 
 ### GI as jobs, and only the probes whose light can change
+
+Illumination step 2 has since made a probe a hit buffer traced once per
+geometry and relit under the frame's budget
+([step 2's status](illumination.md#step-2-status)), so the analysis below and
+its line citations describe the trace before it; re-read the worker
+(`SdfMeshIrradiance.Process`, `Relight`) before building this section's step.
 
 The trace re-measures every probe after every scene rebuild: a probe's cached
 sweeps count only while `cached.Current.Generation == generation`
@@ -925,17 +933,16 @@ step (maximum 48) all lie on the static striped monitor face, x269–323 /
 y391–490. Enlarged CPU/GPU crops align geometrically. The sampled stripe
 difference exceeds the small pinned noise and its cause remains unconfirmed.
 
-R2's shadow integration (`b63e7191e`, then `d6f1624dfa`) carries the solid
-versus thin/clipped shadow-exit rule. One selection emits entry, solid-exit
-and thin-exit argument phases; each kept draw contributes an entry and exactly
-one exit to the generated statistics. `d231e5bec` counts the two executions
-with separate wave reductions: 64 lanes of a legal maximum mesh fit a uint
+R2's shadow integration carries the solid versus thin/clipped shadow-exit
+rule. One selection emits entry, solid-exit and thin-exit argument phases;
+each kept draw contributes an entry and exactly one exit to the generated
+statistics, which count the two executions with separate wave reductions: 64 lanes of a legal maximum mesh fit a uint
 sum, twice that does not; the existing accumulator carries each addition
 into 64 bits. Selection, arguments and history are unchanged by this fix.
 
-Final handback merge `5a73e11295` includes lead `5679a09f1a`'s GI, job-pool,
-language and simulation work; R2's selection, layout and backend sources are
-unchanged. Vulkan synchronization validation and full Direct3D 12 GPU-based
+With R2 merged beside the integration branch's GI, job-pool, language and
+simulation work (R2's selection, layout and backend sources unchanged by that
+merge), Vulkan synchronization validation and full Direct3D 12 GPU-based
 validation (state tracking and synchronized queues) pass at all four places
 after bakes settle, without warnings or errors:
 

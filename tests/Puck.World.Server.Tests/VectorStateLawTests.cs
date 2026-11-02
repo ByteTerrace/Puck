@@ -578,7 +578,9 @@ public sealed class VectorStateLawTests {
             ],
             Kind: CellKind.Vector,
             Name: CellName.Parse(candidate: "events"),
-            Space: "lore"
+            Space: "lore",
+            // A cell that declares its own readers needs the row's policy; an empty one keeps the row itself public.
+            Visibility: new StateVisibility()
         );
 
         var definition = BuildDocumentWithState(spaces: [space], rows: [situationRow, eventsRow]);
@@ -821,7 +823,7 @@ public sealed class VectorStateLawTests {
 
         // A write addresses a cell its row holds; it never mints one, so the row a document declares empty stays
         // empty and the copy is refused by row and cell name.
-        Assert.Empty(collection: memoriesAfter.Cells ?? []);
+        Assert.Empty(collection: (memoriesAfter.Cells ?? []));
         Assert.Contains(
             collection: fixture.Server.RuleRuntimeDiagnostics(),
             filter: static diagnostic => diagnostic.Detail.Contains(

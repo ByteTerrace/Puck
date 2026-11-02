@@ -71,7 +71,9 @@ public sealed class WorldEditorFrameLawTests {
     }
 
     private const float DestinationPitch = 2f;
+
     private static readonly WorldEditorSnap Snap = new(AngleStepDegrees: 15f, Enabled: false, ObjectPatchRadius: 2.5f, Surface: true);
+
     private const string North = "north";
 
     // The slab's centre in the destination's own coordinates; its top face stands a quarter above.
@@ -140,7 +142,7 @@ public sealed class WorldEditorFrameLawTests {
         CreationsRaw = [Crate, SlabCreation],
         DocumentId = "away",
         EditorRaw = new WorldEditorDefaults(
-            Bar: WorldBindingBarAuthoring.Absent,
+            Bar: EditorBarFixtures.Bar,
             Camera: new WorldEditorCamera(FlyRate: 6f, MaxDistance: 14f, MaxPitch: 1.35f, MinDistance: 0.5f, MinPitch: 0.05f, OrbitRate: 2.4f, PanRate: 3f, ZoomRate: 1.2f),
             Grid: new WorldEditorGrid(LineWidth: 1.5f, Mode: WorldEditorGridMode.Surface, Pitch: new Vector3(value: DestinationPitch), PlaneY: 0f, Visible: false),
             ReadOnlyLabel: "read-only",
@@ -148,7 +150,7 @@ public sealed class WorldEditorFrameLawTests {
             Toggle: new Puck.Commands.BindingPageEntryDefinition(Command: "player.build", Id: "editor.toggle", Sources: ["keyboard.f2"])
         ),
         PlacementRowsRaw = [SlabAt(position: Slab)],
-    });
+    }).WithRestingPage();
     // A seat routed to the destination and drawn in the boot frame across the adjacency, whose boot-frame field holds the
     // destination's slab where the adjacency draws it.
     private static (WorldClient Client, WorldContinuum Continuum, WorldSeatAuthorityRouter Routes) Across(WorldAuthorityEndpoint north, WorldDefinition destination) {

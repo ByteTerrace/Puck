@@ -122,10 +122,7 @@ public class PrinterCommentPositionTests {
               }
             }
             placement "seat" {
-              position [
-                1,
-                2
-              ]
+              position [1, 2]
               facing: clamp(
                 // S3: inside a call's argument list.
                 1,

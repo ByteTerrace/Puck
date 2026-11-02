@@ -211,6 +211,18 @@ changes and what the lane ran to show them working before merging
 
 ## Land in batches
 
+The main checkout tracks the integration branch (the owner's ruling). Claude
+Code loads `.claude/agents/`, hooks and unscoped skills from the project root,
+the main checkout, not from the lead's worktree, so a lane runs whatever agent
+definitions and skills the main checkout holds; one session's agent fixes did
+nothing for its lanes until this was found. After each push of the integration
+branch the lead fast-forwards the main checkout's branch to it: leave the
+worktree with `ExitWorktree` (`keep`), confirm the main checkout is clean, run
+`git merge --ff-only <integration branch>` there, and return with
+`EnterWorktree` (`path`). The main checkout keeps its own branch name, because
+the integration branch is checked out in the lead's worktree; it never carries
+work of its own.
+
 A lane is ready when it meets its own focused checks
 ([landing bar](../verification/SKILL.md#the-landing-bar)): it builds what it
 touched, its commit body says what it ran to show the change working, and it has
@@ -394,7 +406,11 @@ names. The owner-approved list allows every command
 ([contributing](../../../docs/development/contributing.md#antigravity-user-settings));
 a machine whose list names only `git`, `dotnet`, `pwsh` and `node` auto-denies any
 other command, such as `rm` or `Remove-Item`, and the run ends with no output, so
-a brief that deletes files says to use `git rm`. A headless run also ends when the agent
+a brief that deletes files says to use `git rm`. Reading a file outside the
+workspace is auto-denied the same way ("a tool required the read_file
+permission that headless mode cannot prompt for"), so the lead copies any
+shared brief, findings or facts into the lane's worktree (`.claude/scratch/`)
+and the brief names workspace-relative paths only. A headless run also ends when the agent
 goes idle waiting on a background task of its own (a background build), leaving
 its edits uncommitted, so a brief tells it to build and test in the foreground.
 A headless run can also stall with its process alive and its log empty, so the
@@ -450,6 +466,13 @@ by counts and lists the timing reads it wants, and the lead runs them in a
 window it has cleared of every other lane's builds, suites, evals and World
 runs. A brief that measures boot, compile or frame time grants no GPU and
 takes no timing while other lanes run.
+
+`puck lease list` is how the lead sees lease pressure: each of build, gpu and
+heavy with its holder, lane and how long it has held, then its queue in
+admission order with each waiter's wait. Read it before granting a GPU or heavy
+leg and while draining for a settle window, to see which lane a window waits on
+(a holder far past its time box is the one to ask), and `puck lanes` for the same
+queues per lane.
 
 Settle windows are how the lead clears it. The owner's loose deadlines were
 meant as these periods; the lead now schedules them by state, not the clock:

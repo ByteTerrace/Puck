@@ -42,7 +42,12 @@ admission [
     domain: "writer"
     grants [
       { budget: 64, capability: Observe, subject: "all" }
-      { budget: 64, capability: Mutate, subject: "section:State", kindMask: "UpsertStateCell,RemoveStateCell,Generate,TransformState,Batch" }
+      {
+        budget: 64
+        capability: Mutate
+        subject: "section:State"
+        kindMask: "UpsertStateCell,RemoveStateCell,Generate,TransformState,Batch"
+      }
       { budget: 64, capability: Edit, subject: "state:hand" }
       { budget: 64, capability: Edit, subject: "state:pile" }
     ]

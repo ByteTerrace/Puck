@@ -31,7 +31,7 @@ the 4,250,000 work-unit ceiling ([card tables](open-items.md#card-tables-in-the-
 so a lane that adds a whole game lands it as a destination document behind a
 painting, as the garden and the night field do, unless the game is priced to fit.
 And the debug world runs one local seat (`bodies { localSeats: 1 }`,
-`worlds/debug/avatars/moth.puck:536`), so a lane that needs a second seat waits
+`worlds/debug/avatars/moth.puck:197`), so a lane that needs a second seat waits
 for lane 5.
 
 ## What the debug world already has in another form
@@ -79,13 +79,12 @@ Within that, order is value to the proving ground: lanes that exercise engine
 systems the debug world does not touch come first. Beyond the garden's pond
 plot (lane 4: `interactions`, `navigation`, flocks, a `Pull` hold), a search of
 `worlds/` finds no `adjacencies`, `curves` track, `region(` trigger, medium,
-`field` lattice, authored HLSL package, row `visibility` audience, `embeds` row
-or identity fact.
+`field` lattice, authored HLSL package, `embeds` row or identity fact.
 
 ### 1. Authored render passes
 
 The debug world mounts one graph instance, the engine's `source.capture`
-package (`worlds/debug/desktop.puck:28`), and ships no HLSL. The pipeline
+package (`worlds/debug/desktop.puck:30`), and ships no HLSL. The pipeline
 subsystem (`views.graphs`, shader packages, `world.shaders.reload`) is the one
 a 30-second edit-to-running ruling most depends on.
 
@@ -175,12 +174,15 @@ schedules (`Puck.Physics.FixedFlockSteering`, the `ProduceFlockIntent`,
 ### 5. Second seat and hidden information
 
 Every private-information game needs a second reader that the first cannot read
-through. The debug world has no row `visibility` audience, no `embeds` row and
-no second seat.
+through. Row `visibility` audiences stand in the debug world (the granaries,
+`disclosure-probe.puck` and the four hidden-information games,
+`worlds/games/auction.puck`, `shedding.puck`, `deduction.puck` and
+`skirmish.puck`, whose test and disclosure worlds run four local seats); the
+debug world itself still boots one seat and has no `embeds` row.
 
 | Feature | Source | Support | Place and why | Size |
 |---|---|---|---|---|
-| Two local seats and a `split` layout | `puck.world.json` `bodies.localSeats: 2`, `views` layout `split`; canary `split-seats`; `worlds/debug/suit-tests.puck:29` already runs two | wire; cost in the entity table and the per-seat rules (`moth.puck:7718`) | `debug.puck`'s capacity; the prerequisite for the rest of this lane and for poker and Hearts in lane 12 | medium |
+| Two local seats and a `split` layout | `puck.world.json` `bodies.localSeats: 2`, `views` layout `split`; canary `split-seats`; `worlds/debug/suit-tests.puck:29` already runs two | wire; cost in the entity table and the per-seat rules (`moth.puck:6821`) | `debug.puck`'s capacity; the prerequisite for the rest of this lane and for poker and Hearts in lane 12 | medium |
 | Lineup: hidden busts, yes-or-no questions, a computer that asks the best splitting question | `experimental/worlds/parlor/lineup.puck`, `parlor.basis.puck`; canary `lineup`; games tests `LineupLawTests`, `LineupDealLawTests` | wire (seat-scoped `visibility`, a `deal` facet) | A board game room table | medium |
 | Hidden ranks: concealed armies, per-side knowledge boards, a reveal by widening the readers | `games/hiddenranks.puck`; `experimental/tests/Puck.World.Fixtures/minimal-hiddenranks-host.puck` | wire (`visibility`, `readersFrom`, `knowledge` boards, `removeStateCell`) | A board game room table | medium |
 | Word spy: a key card only the spymasters read, an aim computed in a vector space | `games/wordspy.puck`, `games/wordspy.embeddings.json` | wire (`Puck.Embeddings`, `embeds(...)`, `puck embed`; the fixture generator has no semantics, so clues are reproducible rather than apt) | The only embeddings consumer; four roles, so addon or computer seats | large |

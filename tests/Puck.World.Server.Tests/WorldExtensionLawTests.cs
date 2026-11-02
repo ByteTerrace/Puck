@@ -607,9 +607,9 @@ public sealed class WorldExtensionLawTests {
             new LoopbackTransport(server: fixture.Server),
             [],
             Fixtures.MachineHostFactory,
-            static (_, server) => {
-                Assert.Throws<InvalidOperationException>(testCode: () => Extension(server: server));
-                Assert.Throws<InvalidOperationException>(testCode: server.StartRecordedExtensionEpoch);
+            // A drive builds its boot image on a shadow server and suppresses the live one only afterwards.
+            (_, server) => {
+                Assert.NotSame(actual: server, expected: fixture.Server);
                 return new NullAddonHost();
             },
             stateRoot: new WorldStateRoot(path: stateDirectory.RootPath)
