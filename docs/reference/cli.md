@@ -1954,11 +1954,12 @@ determinism qualification pass: the worker captures each authority's starting
 checkpoint and the tape's input stream, restores that checkpoint in place, then
 replays the input through the ordinary replay doors. Every completed tick's authority
 hash, final machine cores and final canonical state export must match. A mismatch
-names the authority and recorded tick. The authority hash is incremental (rows
-and resting bodies fold from digests cached by version), so every replayed tick
-is also compared with a full recompute of the same state, and a difference
-fails the leg naming the stale component (`differs from its full recompute in
-Arena`). The authored
+names the authority and recorded tick. The authority hash folds arena rows from
+digests cached by version, so every replayed tick is also compared with a full
+recompute of the same state, and a difference fails the leg naming the stale
+component (`differs from its full recompute in Arena`). Every probed leg also
+fails when the always-on sample of that cache (one row and one segment per
+hash) found a stale digest. The authored
 schedule runs once: its outcomes and edit echoes remain in
 `test-run.json`; replay consumes the resulting inputs instead of executing console
 commands again. External input is captured once, so this checks deterministic

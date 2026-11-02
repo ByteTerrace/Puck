@@ -431,7 +431,15 @@ scope, where versions have not settled, the whole arena folds afresh. A write
 that changes a row's bytes without moving its version would leave its digest
 stale, so `RecomputeHash` returns the same value with nothing cached, and a
 verification run (`puck test --reproduce`, the first count of `--workers`)
-compares the two every tick. `RowDigestFolds` counts the row folds.
+compares the two every tick. Between those runs `CheckDigests` samples the
+cache: it refolds the next row in rotation against its cached digest and the
+next segment from its rows' cached digests, and on a mismatch drops the cache
+and names what disagreed; a world host samples on every authority hash. A row
+refold invalidates its segment, whether `ComputeHash` or a standalone
+`RowDigest` read took it. The arena is not thread-safe, and the cache would
+keep a fold taken beside a write, so a caller excludes writers while it hashes
+(a world host hashes under its authority gate). `RowDigestFolds` counts the
+row folds.
 
 What the hash covers:
 

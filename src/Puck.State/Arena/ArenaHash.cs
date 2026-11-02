@@ -11,11 +11,11 @@ public sealed partial class StateArena {
     public const int HashSegmentRows = 32;
 
     // The digest cache: one digest per row, valid while the row's version is the one it was folded at, and one per
-    // segment, valid while none of its rows refolded. Both belong to one layout and one key table: a relayout,
-    // reservation or adoption replaces the layout and a restore replaces the key table, and either drops the cache.
-    // Readers on other threads (a console hash beside the tick) share it under the gate.
-    private readonly Lock m_digestGate = new();
-
+    // segment, valid until any of its rows refolds (a refold through ComputeHash or a standalone RowDigest read
+    // alike). Both belong to one layout and one key table: a relayout, reservation or adoption replaces the layout and
+    // a restore replaces the key table, and either drops the cache. The arena is not thread-safe, and the cache
+    // makes that sharper: a fold taken beside a write would store the old bytes under the new version for good, so a
+    // reader that takes the cache excludes every writer (a world host hashes under its authority gate).
     private ulong[] m_rowDigests = [];
     private ulong[] m_rowDigestVersions = [];
     private bool[] m_rowDigestKnown = [];
@@ -24,6 +24,9 @@ public sealed partial class StateArena {
     private (ArenaColumn Column, int Index)[] m_unownedPositions = [];
     private ArenaLayout? m_digestLayout;
     private CellKeyTable? m_digestKeys;
+    // The next row and segment CheckDigests samples.
+    private int m_checkRow;
+    private int m_checkSegment;
 
     /// <summary>Gets how many row digests the arena folded into its cache since it was built: a load-independent
     /// count of the work <see cref="ComputeHash"/> and <see cref="RowDigest"/> did, which an unchanged row never adds
@@ -42,23 +45,22 @@ public sealed partial class StateArena {
     /// <para>A row refolds only when its <see cref="RowVersion"/> moved since its digest was taken, or the layout or
     /// key table was replaced, so a tick that wrote three rows folds three. Inside an open scope versions have not
     /// settled, so the whole arena folds afresh and the cache is neither read nor written.
-    /// <see cref="RecomputeHash"/> is the same value with no cache at all, which a verification run compares
-    /// against.</para>
+    /// <see cref="RecomputeHash"/> is the same value with no cache at all, and <see cref="CheckDigests"/> samples
+    /// the cache against it a row and a segment at a time.</para>
+    /// <para>The caller excludes every writer for the duration: the arena is not thread-safe, and a hash taken beside
+    /// a write can cache the old bytes under the new version.</para>
     /// <para>A host-owned row folds as its ordinal alone: it has no columns here, and its facet hashes what it
     /// serves.</para>
     /// <para>Members fold their names in slot order, independently of intern ordinals. The retained key ledger
     /// folds its count and order-independent digest sum because orphan names affect future mint admission.</para>
     /// </remarks>
-    public ulong ComputeHash() {
-        if (m_journal.Scopes != 0) { return Digest(cached: false); }
-        lock (m_digestGate) { return Digest(cached: true); }
-    }
+    public ulong ComputeHash() => Digest(cached: (m_journal.Scopes == 0));
     /// <summary>Computes <see cref="ComputeHash"/>'s value with every row folded afresh, reading and writing no
     /// cached digest: the full recompute an incremental digest is checked against.</summary>
     /// <returns>The hash value.</returns>
     public ulong RecomputeHash() => Digest(cached: false);
     /// <summary>Returns one row's digest: <see cref="AddRowTo"/> folded into a fresh hash, cached by the row's
-    /// <see cref="RowVersion"/> outside an open scope.</summary>
+    /// <see cref="RowVersion"/> outside an open scope. A refold invalidates the row's segment digest.</summary>
     /// <param name="rowOrdinal">The row's catalog ordinal.</param>
     /// <returns>The digest.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="rowOrdinal"/> addresses no row.</exception>
@@ -71,10 +73,45 @@ public sealed partial class StateArena {
             );
         }
         if (m_journal.Scopes != 0) { return FreshRowDigest(rowOrdinal: rowOrdinal); }
-        lock (m_digestGate) {
-            PrepareDigestCache();
-            return CachedRowDigest(refolded: out _, rowOrdinal: rowOrdinal);
+        PrepareDigestCache();
+        return CachedRowDigest(rowOrdinal: rowOrdinal);
+    }
+    /// <summary>Samples the digest cache against the stored bytes: refolds the next row in rotation and compares it
+    /// with its cached digest at an unmoved version, and refolds the next segment in rotation from its rows' cached
+    /// digests and compares it with the segment's own. A mismatch means a write moved bytes without moving the
+    /// version the cache trusts, or a refold left its segment stale: the arena drops the whole cache, so the next
+    /// <see cref="ComputeHash"/> folds afresh, and names what disagreed.</summary>
+    /// <returns><see langword="null"/> when both samples agree or nothing was cached; otherwise the disagreement.</returns>
+    /// <remarks>The work is one row's fold and at most <see cref="HashSegmentRows"/> cached digests; every row and
+    /// segment is sampled once per pass of the rotation. The caller excludes writers, as for
+    /// <see cref="ComputeHash"/>.</remarks>
+    public string? CheckDigests() {
+        if ((m_journal.Scopes != 0) || !ReferenceEquals(objA: m_digestLayout, objB: m_layout) || !ReferenceEquals(objA: m_digestKeys, objB: m_keys)) { return null; }
+        var rows = m_layout.RowCount;
+
+        if (rows == 0) { return null; }
+        var row = (m_checkRow % rows);
+        var segment = (m_checkSegment % m_segmentDigests.Length);
+        string? fault = null;
+
+        m_checkRow = (row + 1);
+        m_checkSegment = (segment + 1);
+        if (m_rowDigestKnown[row] && (m_rowDigestVersions[row] == m_rowVersions[row])) {
+            var bytes = FreshRowDigest(rowOrdinal: row);
+
+            if (bytes != m_rowDigests[row]) {
+                fault = $"row '{RowName(rowOrdinal: row)}' at version {m_rowVersions[row]} caches digest {m_rowDigests[row]:x16} and its bytes fold {bytes:x16}";
+            }
         }
+        if ((fault is null) && m_segmentDigestKnown[segment]) {
+            var children = SegmentOfCachedRows(segment: segment);
+
+            if (children != m_segmentDigests[segment]) {
+                fault = $"segment {segment} caches digest {m_segmentDigests[segment]:x16} and its rows' cached digests fold {children:x16}";
+            }
+        }
+        if (fault is not null) { m_digestLayout = null; }
+        return fault;
     }
 
     private ulong Digest(bool cached) {
@@ -135,11 +172,11 @@ public sealed partial class StateArena {
         AddRowTo(hash: ref hash, rowOrdinal: rowOrdinal);
         return hash.Value;
     }
-    private ulong CachedRowDigest(int rowOrdinal, out bool refolded) {
+    // The one place a row digest enters the cache, so the segment that folded the old one is invalidated with it.
+    private ulong CachedRowDigest(int rowOrdinal) {
         var version = m_rowVersions[rowOrdinal];
 
         if (m_rowDigestKnown[rowOrdinal] && (m_rowDigestVersions[rowOrdinal] == version)) {
-            refolded = false;
             return m_rowDigests[rowOrdinal];
         }
         var digest = FreshRowDigest(rowOrdinal: rowOrdinal);
@@ -148,24 +185,27 @@ public sealed partial class StateArena {
         m_rowDigests[rowOrdinal] = digest;
         m_rowDigestVersions[rowOrdinal] = version;
         m_rowDigestKnown[rowOrdinal] = true;
-        refolded = true;
+        m_segmentDigestKnown[(rowOrdinal / HashSegmentRows)] = false;
         return digest;
     }
     private ulong CachedSegmentDigest(int segment) {
         var first = (segment * HashSegmentRows);
         var end = Math.Min(val1: (first + HashSegmentRows), val2: m_layout.RowCount);
-        var refolded = !m_segmentDigestKnown[segment];
 
-        for (var row = first; (row < end); row++) {
-            _ = CachedRowDigest(refolded: out var rowRefolded, rowOrdinal: row);
-            refolded |= rowRefolded;
-        }
-        if (!refolded) { return m_segmentDigests[segment]; }
+        for (var row = first; (row < end); row++) { _ = CachedRowDigest(rowOrdinal: row); }
+        if (m_segmentDigestKnown[segment]) { return m_segmentDigests[segment]; }
+        var digest = SegmentOfCachedRows(segment: segment);
+
+        m_segmentDigests[segment] = digest;
+        m_segmentDigestKnown[segment] = true;
+        return digest;
+    }
+    private ulong SegmentOfCachedRows(int segment) {
+        var first = (segment * HashSegmentRows);
+        var end = Math.Min(val1: (first + HashSegmentRows), val2: m_layout.RowCount);
         var hash = Fnv1aHash.Create();
 
         for (var row = first; (row < end); row++) { hash.Add(value: m_rowDigests[row]); }
-        m_segmentDigests[segment] = hash.Value;
-        m_segmentDigestKnown[segment] = true;
         return hash.Value;
     }
     private ulong FreshSegmentDigest(int segment) {

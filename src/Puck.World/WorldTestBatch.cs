@@ -211,8 +211,6 @@ internal sealed class WorldTestBatch {
             foreach (var (name, probe) in m_probes) {
                 int? divergence = null;
 
-                if (probe.StaleDigest is { } stale) { throw new InvalidOperationException(message: $"'{name}': {stale}"); }
-
                 if (leg.Reproduce) {
                     try {
                         Console.WriteLine(value: $"[test.batch: tick replay {name} 0]");
@@ -221,6 +219,7 @@ internal sealed class WorldTestBatch {
                         });
                     } catch (Exception exception) { throw new InvalidOperationException($"reproduction of '{name}' failed: {exception.Message}", exception); }
                 }
+                if (probe.StaleDigest is { } stale) { throw new InvalidOperationException(message: $"'{name}': {stale}"); }
 
                 results.Add(item: new { world = name, divergence, hashes = probe.Hashes });
                 if (divergence >= 0) { throw new InvalidOperationException(message: $"reproduction diverged in '{name}' at recorded tick {divergence}"); }
@@ -236,12 +235,11 @@ internal sealed class WorldTestBatch {
             var server = Get<WorldServer>();
 
             File.WriteAllText(Path.Combine(path1: leg.Directory, path2: "timing.json"), JsonSerializer.Serialize(new {
-                // The boot authority's incremental hash work beside what a whole fold would have done: rows and body
-                // slots refolded against the arena's rows and the population's slots.
+                // The boot authority's incremental hash work: rows refolded against the arena's rows, and the time its
+                // always-on digest sample took.
                 arenaRows = server.Arena.Layout.RowCount,
                 arenaRowFolds = server.Arena.RowDigestFolds,
-                populationSlots = server.Population.Capacity,
-                continuationFolds = server.Population.ContinuationFolds,
+                digestCheckMilliseconds = Milliseconds(ticks: server.Persistence.DigestCheckTicks),
                 authorityTicks = run.AuthorityTicks,
                 bootMilliseconds = Milliseconds(ticks: m_bootTicks),
                 armMilliseconds = Milliseconds(ticks: m_armTicks),

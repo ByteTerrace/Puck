@@ -166,6 +166,12 @@ public static partial class WorldStateHashComposition {
     public static ulong Hash(WorldServer server, ulong tick, WorldStateHashScope scope) {
         ArgumentNullException.ThrowIfNull(argument: server);
 
+        lock (server.AuthorityGate) {
+            return HashScope(scope: scope, server: server, tick: tick);
+        }
+    }
+
+    private static ulong HashScope(WorldServer server, ulong tick, WorldStateHashScope scope) {
         return (scope switch {
             WorldStateHashScope.Authoritative => HashAuthoritative(
                 server: server,
@@ -190,9 +196,10 @@ public static partial class WorldStateHashComposition {
     /// <param name="tick">The simulation tick.</param>
     /// <returns>The digest: one fold over each component's own digest (<see cref="AuthoritativeComponents"/>), in
     /// <see cref="Authoritative"/> order.</returns>
-    /// <remarks>The arena and the body continuations fold incrementally: a row or a body slot whose version has not
-    /// moved contributes its cached digest. <see cref="RecomputeAuthoritative"/> is the same value with nothing
-    /// cached.</remarks>
+    /// <remarks>The arena folds incrementally: a row whose version has not moved contributes its cached digest, and
+    /// one row and one segment of that cache are sampled against the stored bytes on every fold
+    /// (<see cref="WorldPersistence.StaleDigest"/>). <see cref="RecomputeAuthoritative"/> is the same value with
+    /// nothing cached. Every read takes the server's <see cref="WorldServer.AuthorityGate"/>.</remarks>
     /// <exception cref="ArgumentNullException"><paramref name="server"/> is <see langword="null"/>.</exception>
     public static ulong HashAuthoritative(WorldServer server, ulong tick) => Fold(
         order: AuthoritativeOrder,
@@ -228,6 +235,7 @@ public static partial class WorldStateHashComposition {
 
         var digests = new ulong[AuthoritativeOrder.Length];
 
+        using var gate = server.AuthorityGate.EnterScope();
         for (var index = 0; (index < digests.Length); index++) {
             digests[index] = ComponentDigest(
                 component: AuthoritativeOrder[index],
@@ -317,6 +325,7 @@ public static partial class WorldStateHashComposition {
         ArgumentNullException.ThrowIfNull(argument: server);
 
         var hash = Fnv1aHash.Create();
+        using var gate = server.AuthorityGate.EnterScope();
 
         // Walked by index: an interface enumerator would allocate one box per composed hash.
         for (var index = 0; (index < order.Count); index++) {
@@ -348,11 +357,14 @@ public static partial class WorldStateHashComposition {
         return hash.Value;
     }
     // The array is walked by index rather than through IReadOnlyList: every authoritative hash a replay tick takes
-    // runs here, and an interface enumerator would allocate one box per call.
+    // runs here, and an interface enumerator would allocate one box per call. Every public read folds under the
+    // authority gate, the boundary that excludes the tick's writers, so the arena's digest cache never stores bytes
+    // a concurrent write is changing; the tick itself already holds the gate when its tape closes.
     private static ulong Fold(WorldServer server, ulong tick, ulong seed, WorldStateHashComponent[] order, bool recompute) {
         ArgumentNullException.ThrowIfNull(argument: server);
 
         var hash = Fnv1aHash.Create();
+        using var gate = server.AuthorityGate.EnterScope();
 
         for (var index = 0; (index < order.Length); index++) {
             hash.Add(value: ComponentDigest(
