@@ -239,13 +239,17 @@ patterns [
   }
 ]
 
+// The door is idle on a request: the table is up, a request waits, and no deal, draw or move is under way.
+function klondikeIdle() = (solitaire.table == 1 and
+  solitaireKlondike.request != solitaireKlondike.applied and
+  solitaireKlondike.stage == 0 and solitaireKlondike.busy == 0)
+
+// The door is idle on a request for action `kind` in a game under way.
+function klondikeRequest(kind) = klondikeIdle() and solitaireKlondike.status == 1 and solitaireKlondike.action == kind
+
 rule "solitaireKlondike-new-deal" {
-  when (solitaire.table == 1 and
-    solitaireKlondike.request != solitaireKlondike.applied and
-    solitaireKlondike.stage == 0 and
-    solitaireKlondike.busy == 0 and
-    solitaireKlondike.action == 1 and
-    (solitaireKlondike.option == 1 or solitaireKlondike.option == 3))
+  when klondikeIdle() and solitaireKlondike.action == 1 and (solitaireKlondike.option == 1 or
+      solitaireKlondike.option == 3)
   solitaireKlondike.activeOption = solitaireKlondike.option
   solitaireKlondike.stage = 1
   solitaireKlondike.status = 0
@@ -344,25 +348,14 @@ rule "solitaireKlondike-deal-finish" {
 }
 
 rule "solitaireKlondike-prepare-move" {
-  when (solitaire.table == 1 and
-    solitaireKlondike.request != solitaireKlondike.applied and
-    solitaireKlondike.stage == 0 and
-    solitaireKlondike.busy == 0 and
-    solitaireKlondike.status == 1 and
-    solitaireKlondike.action == 2)
+  when klondikeRequest(2)
   solitaireKlondike.sourceOk = 0
   solitaireKlondike.targetOk = 0
   solitaireKlondike.runLength = 0
 }
 
 rule "solitaireKlondike-source" {
-  when (solitaire.table == 1 and
-    solitaireKlondike["request"] != solitaireKlondike["applied"] and
-    solitaireKlondike["stage"] == 0 and
-    solitaireKlondike["busy"] == 0 and
-    solitaireKlondike["status"] == 1 and
-    solitaireKlondike["action"] == 2 and
-    $zones[solitaireKlondike.from][solitaireKlondike["card"]] == 1)
+  when klondikeRequest(2) and $zones[solitaireKlondike.from][solitaireKlondike["card"]] == 1
   zones [
     ""
     ""
@@ -379,13 +372,7 @@ rule "solitaireKlondike-source" {
 }
 
 rule "solitaireKlondike-source-1" {
-  when (solitaire.table == 1 and
-    solitaireKlondike["request"] != solitaireKlondike["applied"] and
-    solitaireKlondike["stage"] == 0 and
-    solitaireKlondike["busy"] == 0 and
-    solitaireKlondike["status"] == 1 and
-    solitaireKlondike["action"] == 2 and
-    $zones[solitaireKlondike.from][solitaireKlondike["card"]] == 1)
+  when klondikeRequest(2) and $zones[solitaireKlondike.from][solitaireKlondike["card"]] == 1
   zones [
     ""
     solitaireKlondikePile1
@@ -407,13 +394,7 @@ rule "solitaireKlondike-source-1" {
 }
 
 rule "solitaireKlondike-target" {
-  when (solitaire.table == 1 and
-    solitaireKlondike.request != solitaireKlondike.applied and
-    solitaireKlondike.stage == 0 and
-    solitaireKlondike.busy == 0 and
-    solitaireKlondike.status == 1 and
-    solitaireKlondike.action == 2 and
-    solitaireKlondike.sourceOk == 1)
+  when klondikeRequest(2) and solitaireKlondike.sourceOk == 1
   zones [
     ""
     ""
@@ -432,13 +413,7 @@ rule "solitaireKlondike-target" {
 }
 
 rule "solitaireKlondike-target-10" {
-  when (solitaire.table == 1 and
-    solitaireKlondike.request != solitaireKlondike.applied and
-    solitaireKlondike.stage == 0 and
-    solitaireKlondike.busy == 0 and
-    solitaireKlondike.status == 1 and
-    solitaireKlondike.action == 2 and
-    solitaireKlondike.sourceOk == 1)
+  when klondikeRequest(2) and solitaireKlondike.sourceOk == 1
   zones [
     ""
     ""
@@ -465,19 +440,14 @@ rule "solitaireKlondike-target-10" {
 // A move is a rule per pair of piles it can run between: a tableau column (2 to 8) to another or to a foundation
 // (10 to 13), the waste (1) to either, and a foundation back to a column. The score rises 10 for a card to a foundation,
 // falls 15 for one taken from it and rises 5 for one taken from the waste.
-// A move is ready when the door is idle on a move request whose run and landing the rules above accepted. The move
-// rules below gate on this one cell and on their two piles, which is all the work budget has to price them by.
+// A move is ready when the door is idle on a move request whose run and landing the rules above accepted. The guard
+// is evaluated here once a tick into one cell, and the 46 move rules below gate on that cell and on their two piles, so
+// each reads three cells instead of the ten the guard reads; inlining klondikeRequest into each would read the same
+// cells the same way but price every move rule at the whole guard.
 rule "solitaireKlondike-move-ready" {
   mode: Level
   solitaireKlondike.moveReady = (
-    solitaire.table == 1 and
-    solitaireKlondike.request != solitaireKlondike.applied and
-    solitaireKlondike.stage == 0 and
-    solitaireKlondike.busy == 0 and
-    solitaireKlondike.status == 1 and
-    solitaireKlondike.action == 2 and
-    solitaireKlondike.sourceOk == 1 and
-    solitaireKlondike.targetOk == 1
+    klondikeRequest(2) and solitaireKlondike.sourceOk == 1 and solitaireKlondike.targetOk == 1
   )
 }
 
@@ -538,13 +508,7 @@ for from in [10, 11, 12, 13] {
 }
 
 rule "solitaireKlondike-draw-start" {
-  when (solitaire.table == 1 and
-    solitaireKlondike.request != solitaireKlondike.applied and
-    solitaireKlondike.stage == 0 and
-    solitaireKlondike.busy == 0 and
-    solitaireKlondike.status == 1 and
-    solitaireKlondike.action == 3 and
-    count(solitaireKlondikePile0) > 0)
+  when klondikeRequest(3) and count(solitaireKlondikePile0) > 0
   transaction {
     solitaireKlondike.stage = 4
     solitaireKlondike.drawLeft = minimum(solitaireKlondike.activeOption, count(solitaireKlondikePile0))
@@ -572,14 +536,7 @@ rule "solitaireKlondike-draw-finish" {
 }
 
 rule "solitaireKlondike-recycle-start" {
-  when (solitaire.table == 1 and
-    solitaireKlondike.request != solitaireKlondike.applied and
-    solitaireKlondike.stage == 0 and
-    solitaireKlondike.busy == 0 and
-    solitaireKlondike.status == 1 and
-    solitaireKlondike.action == 3 and
-    count(solitaireKlondikePile0) == 0 and
-    count(solitaireKlondikePile1) > 0)
+  when klondikeRequest(3) and count(solitaireKlondikePile0) == 0 and count(solitaireKlondikePile1) > 0
   solitaireKlondike.stage = 2
   solitaireKlondike.passes = solitaireKlondike.passes + 1
 }
@@ -611,10 +568,7 @@ rule "solitaireKlondike-deal-advance" {
 }
 
 rule "solitaireKlondike-reject" {
-  when (solitaire.table == 1 and
-    solitaireKlondike.request != solitaireKlondike.applied and
-    solitaireKlondike.stage == 0 and
-    solitaireKlondike.busy == 0)
+  when klondikeIdle()
   transaction {
     solitaireKlondike.result = -1
     solitaireKlondike.applied = solitaireKlondike.request

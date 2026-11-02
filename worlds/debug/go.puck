@@ -1,5 +1,6 @@
 import "../standard/inputs"
 import "../standard/kits"
+import "../standard/seat"
 import "shapes"
 // Physical Go on a 19x19 board: 361 rigid stones on a goban in the gallery hall's board game room (hall.puck), whose every
 // settled arrangement is judged against the position the rules last accepted, and a computer opponent. The debug
@@ -880,47 +881,8 @@ rule "go-seat-presses" {
     goSeat.rightEdge or
     goSeat.leftEdge)
   mode: Level
-  if board(engaged, goBoard, 1) == 1 and channel(1, confirm) >= 0.5 {
-    goSeat.pickEdge = goSeat.pickDown == 0
-    goSeat.pickDown = 1
-  } else {
-    goSeat.pickEdge = 0
-    goSeat.pickDown = 0
-  }
-  if board(engaged, goBoard, 1) == 1 and channel(1, cancel) >= 0.5 {
-    goSeat.cancelEdge = goSeat.cancelDown == 0
-    goSeat.cancelDown = 1
-  } else {
-    goSeat.cancelEdge = 0
-    goSeat.cancelDown = 0
-  }
-  if board(engaged, goBoard, 1) == 1 and channel(1, forward) >= 0.5 {
-    goSeat.aheadEdge = goSeat.aheadDown == 0
-    goSeat.aheadDown = 1
-  } else {
-    goSeat.aheadEdge = 0
-    goSeat.aheadDown = 0
-  }
-  if board(engaged, goBoard, 1) == 1 and channel(1, forward) <= -0.5 {
-    goSeat.behindEdge = goSeat.behindDown == 0
-    goSeat.behindDown = 1
-  } else {
-    goSeat.behindEdge = 0
-    goSeat.behindDown = 0
-  }
-  if board(engaged, goBoard, 1) == 1 and channel(1, strafe) >= 0.5 {
-    goSeat.rightEdge = goSeat.rightDown == 0
-    goSeat.rightDown = 1
-  } else {
-    goSeat.rightEdge = 0
-    goSeat.rightDown = 0
-  }
-  if board(engaged, goBoard, 1) == 1 and channel(1, strafe) <= -0.5 {
-    goSeat.leftEdge = goSeat.leftDown == 0
-    goSeat.leftDown = 1
-  } else {
-    goSeat.leftEdge = 0
-    goSeat.leftDown = 0
+  for button in seatButtons {
+    seatPress(seat: goSeat, boardName: goBoard, button: button)
   }
 }
 

@@ -43,6 +43,20 @@ let mothBlinkPose = [
   [65, -0.11656, 1.76542, 0.09945]
 ]
 
+// The blink frame of a creation whose head stands at `at` scaled by `s`: each closed lid seated over its eye and the open
+// eye's pieces parked behind the face.
+function mothBlinkFrame(at, s) = {
+  name: "blink"
+  transforms: map(
+    mothBlinkPose,
+    row => {
+      id: row[0]
+      position: map([row[1], row[2], row[3]], (v, k) => at[k] + (v - mothHeadPivot[k]) * s)
+      rotation [0, 0, 0, 1]
+    }
+  )
+}
+
 // One lock of hair: a tapering sweep from its root on the crown or temple, laid over the scalp and face and smoothly
 // joined to the scalp's group, so the hair reads as one swept mass. `a` is the root in the head's unscaled frame, `b` and
 // `c` the sweep's control and end points relative to it.

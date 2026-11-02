@@ -2262,8 +2262,9 @@ template motionPrototypesB() {
       exhibit(label: "BEND", extra: [accent])
     }
   }
-  // A dynamic slot carries a rigid pose and no scale, so a pulse is six petals sliding out from a core and back, all
-  // smooth-unioned in one group.
+  // A dynamic slot carries a rigid pose and no scale, so a pulse is six petals sliding out from a core and back. Each
+  // petal and the core is a blend group of its own: a group bakes one mesh, and a seam joining shapes that move apart
+  // would stretch as they slide.
   prototype "motion-pulse" {
     document {
       clockDriver(key: "pulse", cadence: 2.5)
@@ -2273,14 +2274,12 @@ template motionPrototypesB() {
         position [0, 1.2, 0]
         scale [0.12, 0.12, 0.12]
       }
-      for petal in pulsePetals {
+      for (petal, index) in pulsePetals {
         shape Sphere $"{petal.name}" {
-          blend: SmoothUnion
-          group: 1
+          group: 2 + index
           material: accentMaterial
           position: petal.at
           scale [0.09, 0.09, 0.09]
-          smooth: 0.06
           slides [
             {
               driver: "clock"

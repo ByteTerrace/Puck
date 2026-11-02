@@ -1,0 +1,17 @@
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+enum Seat {
+  None
+  Taken
+}
+
+kits [
+  {
+    name: "cursor"
+    bodyMotionProgram: "walk"
+    motion {
+      holds [{ name: "held", bond: Free, hold: None }]
+    }
+  }
+]

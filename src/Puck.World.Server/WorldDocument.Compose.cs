@@ -125,13 +125,13 @@ public sealed partial class WorldDocument {
     // The boot-frozen derived-face reservation gate, shared by the mutation and rebuild apply paths so the two can
     // never disagree about what the binder can actually show.
     private bool ExceedsBootDerivedFaceReservation(WorldDefinition candidate, out string reason) {
-        if (candidate.Authoring.DerivedFaceScreens <= Host.BootDerivedFaceScreens) {
+        if (candidate.DerivedFaceScreens <= Host.BootDerivedFaceScreens) {
             reason = string.Empty;
 
             return false;
         }
 
-        reason = $"authoring.derivedFaceScreens {candidate.Authoring.DerivedFaceScreens} exceeds the boot-reserved {Host.BootDerivedFaceScreens} derived-face screen slot(s); the binder registers that band once at boot and the render provider key set is frozen there, so restart the host to load a wider one";
+        reason = $"{candidate.DerivedFaceScreens} derived face screen(s) exceeds the boot-reserved {Host.BootDerivedFaceScreens} derived-face screen slot(s); the binder registers that band once at boot and the render provider key set is frozen there, so restart the host to load a wider one";
 
         return true;
     }

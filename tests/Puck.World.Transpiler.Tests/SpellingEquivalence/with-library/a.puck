@@ -1,0 +1,15 @@
+// A row derived from a library's `let` with `with` is the row written out (G2).
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+import "kit-parts"
+
+kits [
+  {
+    name: "flyer"
+    bodyMotionProgram: "walk"
+    motion {
+      holds [groundHold with { name: "groundFlight", thrust: 1 }, groundHold]
+    }
+  }
+]

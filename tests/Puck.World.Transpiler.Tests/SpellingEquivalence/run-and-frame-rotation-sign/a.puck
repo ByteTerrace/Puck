@@ -1,0 +1,32 @@
+// A text run's and an animation frame's rotation q and -q are one rotation, as a shape's are (quaternion-sign).
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+prototypes {
+  prototype "p" {
+    document {
+      schema: "puck.creation.v1"
+      name: "p"
+      frames [
+        {
+          name: "turn"
+          transforms [{ id: 0, position [0, 0, 0], rotation [0, 0.7071068, 0, 0.7071068] }]
+        }
+      ]
+      palette [{ color: "#DDE8EA" }]
+      shape Box "panel" {
+        scale [0.5, 0.5, 0.05]
+      }
+      textRuns [
+        {
+          text: "PAIR"
+          position [0, 0, 0.05]
+          rotation [0, 0, 0.3826834, 0.9238795]
+          emHeight: 0.1
+          depth: 0.01
+          mode: "emboss"
+        }
+      ]
+    }
+  }
+}

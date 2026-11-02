@@ -318,6 +318,13 @@ public sealed partial class DocumentScope {
         );
     }
 
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<ExpressionNode, string> ConstantSources = new();
+
+    /// <summary>Returns the source an imported <c>let</c>'s value was written in.</summary>
+    /// <param name="value">The let's value expression.</param>
+    /// <returns>The defining source path, or <see langword="null"/> for a let this source declares.</returns>
+    public static string? DefinitionPathOf(ExpressionNode value) => (ConstantSources.TryGetValue(key: value, value: out var path) ? path : null);
+
     internal void BindArgument(string name, ExpressionNode expression, DocumentScope caller) {
         Constants[name] = expression;
         m_arguments[name] = caller;
@@ -373,6 +380,43 @@ public sealed partial class DocumentScope {
 
             value = EvaluateAtNoPosition(expression: expression, fieldKey: fieldKey, lexical: lexical);
             m_values[key] = (expression, value);
+            return true;
+        } finally {
+            m_evaluating.Remove(item: name);
+        }
+    }
+
+    /// <summary>Lowers a <c>let</c> holding a record at the position it lands in, as the record written there would
+    /// lower: its closed words read as that position's words, never as a name some other declaration binds.</summary>
+    /// <param name="name">The let's name.</param>
+    /// <param name="fieldKey">The destination field used to validate units.</param>
+    /// <param name="position">The position, in the vocabulary's own terms.</param>
+    /// <param name="value">The lowered value, owned by the caller.</param>
+    /// <returns><see langword="true"/> when the name is a let and no local shadows it.</returns>
+    /// <exception cref="DocumentEvaluationException">The let refers to itself.</exception>
+    public bool TryLowerBindingAt(string name, string? fieldKey, object position, out JsonNode? value) {
+        value = null;
+        if (Locals.ContainsKey(key: name) || !Constants.TryGetValue(key: name, value: out var expression)) {
+            return false;
+        }
+        // Lowered once per position, so a let read in many places refuses a misspelling once, against its own source.
+        var key = (name, $"{fieldKey}\0{position}");
+
+        if (m_values.TryGetValue(key: key, value: out var cached) && ReferenceEquals(objA: cached.Expression, objB: expression)) {
+            value = cached.Value?.DeepClone();
+            return true;
+        }
+        if (!m_evaluating.Add(item: name)) {
+            throw new DocumentEvaluationException($"The binding '{name}' refers to itself.", expression.Span, PuckDiagnosticCodes.InvalidValue);
+        }
+        try {
+            var lexical = (m_arguments.TryGetValue(key: name, value: out var caller) ? caller : ForConstant());
+            var start = Diagnostics.Count;
+            var lowered = DocumentLowering.At(context: position, lower: () => DocumentLowering.LowerValue(expr: expression, fieldKey: fieldKey, scope: lexical), scope: lexical);
+
+            Diagnostics.AttributeFrom(sourcePath: DefinitionPathOf(value: expression), startIndex: start);
+            m_values[key] = (expression, lowered);
+            value = lowered?.DeepClone();
             return true;
         } finally {
             m_evaluating.Remove(item: name);
@@ -477,6 +521,7 @@ public sealed partial class DocumentScope {
                         span: let.Span
                     );
                 } else {
+                    if (let.DefinitionPath is { } definitionPath) { ConstantSources.AddOrUpdate(key: let.Value, value: definitionPath); }
                     m_arguments[let.Name] = ((Path.GetDirectoryName(path: let.DefinitionPath) is { Length: > 0 } directory)
                         ? ConstantScopeBeside(directory: directory, scopes: (besideDefinitions ??= new(comparer: StringComparer.Ordinal)))
                         : ForConstant()

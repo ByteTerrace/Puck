@@ -26,11 +26,16 @@ public sealed class DiagnosticBag : IReadOnlyList<Diagnostic> {
         ArgumentNullException.ThrowIfNull(diagnostics);
         m_diagnostics.AddRange(collection: diagnostics);
     }
-    /// <summary>Attributes diagnostics added at or after <paramref name="startIndex"/> to an imported source.</summary>
+    /// <summary>Attributes diagnostics added at or after <paramref name="startIndex"/> to an imported source. One an
+    /// inner expansion already attributed (a library's declaration read inside another library's) keeps its source.</summary>
+    /// <param name="startIndex">The first diagnostic the source authored.</param>
+    /// <param name="sourcePath">The source, or <see langword="null"/> for the compiled source itself.</param>
     public void AttributeFrom(int startIndex, string? sourcePath) {
         if (sourcePath is null) { return; }
         for (var index = startIndex; (index < m_diagnostics.Count); index++) {
-            m_diagnostics[index] = m_diagnostics[index] with { SourcePath = sourcePath };
+            if (m_diagnostics[index].SourcePath is null) {
+                m_diagnostics[index] = m_diagnostics[index] with { SourcePath = sourcePath };
+            }
         }
     }
     /// <summary>Renders all diagnostics into a formatted multi-line string with source context excerpts.</summary>

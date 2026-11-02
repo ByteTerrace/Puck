@@ -138,9 +138,11 @@ public static partial class PuckPrinter {
         ? name
         : Quote(text: name)
     );
-
-    private static string ExportName(string name) => QualifiedName.Parse(text: name).Print(segment: PrintName);
-
+    /// <summary>Returns an exported name as an <c>export</c> line spells it: each dotted segment bare, or backquoted
+    /// when the bare form cannot carry it, as a name is wherever it stands.</summary>
+    /// <param name="name">The exported name.</param>
+    /// <returns>The spelling.</returns>
+    public static string PrintExportName(string name) => QualifiedName.Parse(text: name).Print(segment: static segment => (IdentifierSpelling.IsName(text: segment) ? segment : $"`{segment}`"));
     /// <summary>Returns a property name as a statement reader takes it back: bare when it is one name that opens no
     /// other production where it stands — in a construct body one of <see cref="PropertyKeywords"/>, at the top level
     /// one of <see cref="DocumentHeaders"/> — and a quoted string otherwise.</summary>
@@ -456,6 +458,7 @@ public static partial class PuckPrinter {
                 );
             }
         }
+
         // Whether the statements printing now are read by a construct body's reader, where a property spelling one
         // of PropertyKeywords prints quoted; the document, a plain block and an object read every name as a member.
         private bool m_construct;
@@ -544,8 +547,29 @@ public static partial class PuckPrinter {
                             m_builder.Append(value: ((index == 0)
                                 ? " "
                                 : ", "
-                            )).Append(value: ExportName(name: export.Names[index]));
+                            )).Append(value: PrintExportName(name: export.Names[index]));
                         }
+
+                        break;
+                    }
+                case LetNode { Value: FunctionExpressionNode function } declaration: {
+                        m_builder.Append(value: "function ").Append(value: declaration.Name).Append(value: '(');
+                        for (var index = 0; (index < function.Parameters.Count); index++) {
+                            if (index > 0) { m_builder.Append(value: ", "); }
+                            m_builder.Append(value: function.Parameters[index].Name);
+                            if (function.Parameters[index].DefaultValue is { } fallback) {
+                                m_builder.Append(value: " = ");
+                                Expression(
+                                    expression: fallback,
+                                    level: level
+                                );
+                            }
+                        }
+                        m_builder.Append(value: ") = ");
+                        Expression(
+                            expression: function.Body,
+                            level: level
+                        );
 
                         break;
                     }
@@ -559,7 +583,7 @@ public static partial class PuckPrinter {
                         break;
                     }
                 case TemplateNode template: {
-                        m_builder.Append(value: (template.IsModule ? "module" : "template"));
+                        m_builder.Append(value: (template.IsModule ? "module" : (template.IsRuleBody ? "rule template" : "template")));
                         InlineHeader(trivia: template.Trivia);
                         m_builder.Append(value: ' ').Append(value: template.Name).Append(value: '(');
                         for (var index = 0; (index < template.Parameters.Count); index++) {
@@ -1619,15 +1643,18 @@ public static partial class PuckPrinter {
         private void Predicate(PredicateNode predicate, bool parenthesize, int level = 0) {
             switch (predicate) {
                 case ComparisonPredicateNode comparison: {
-                        if (comparison.Comparator == "!=" &&
-                            comparison.Right.Syntax is ExpressionSpelling.Literal { Value: 0 } &&
-                            comparison.Left.Syntax is { } syntax &&
-                            PuckParser.CreateGate(operand: comparison.Left) is ComparisonPredicateNode {
+                        if ((comparison.Comparator == "!=") &&
+                            (comparison.Right.Syntax is ExpressionSpelling.Literal { Value: 0 }) &&
+                            (comparison.Left.Syntax is not null) &&
+                            (PuckParser.CreateGate(operand: comparison.Left) is ComparisonPredicateNode {
                                 Comparator: "!=", Right.Syntax: ExpressionSpelling.Literal { Value: 0 }
-                            } truth && truth.Left.Syntax == syntax) {
+                            } truth) &&
+                            // By spelling: a call's argument list compares by reference, so its trees never match.
+                            string.Equals(a: truth.Left.Text, b: comparison.Left.Text, comparisonType: StringComparison.Ordinal)) {
                             // Elide only an identical truth test. Compound comparisons and truth operators keep
                             // their expression boundary: fact comparisons can differ under absence or infinity.
-                            var group = comparison.Left.Syntax is ExpressionSpelling.Binary or ExpressionSpelling.Ternary;
+                            var group = (comparison.Left.Syntax is ExpressionSpelling.Binary or ExpressionSpelling.Ternary);
+
                             if (group) { m_builder.Append(value: '('); }
                             OperandText(enclose: !group, level: level, text: comparison.Left.Text);
                             if (group) { m_builder.Append(value: ')'); }
@@ -1683,7 +1710,8 @@ public static partial class PuckPrinter {
             }
         }
         private void ComparisonOperand(OperandExpressionNode operand, int level) {
-            var group = operand.Syntax is ExpressionSpelling.Binary or ExpressionSpelling.Ternary or ExpressionSpelling.Unary { Operator: "not" };
+            var group = (operand.Syntax is ExpressionSpelling.Binary or ExpressionSpelling.Ternary or ExpressionSpelling.Unary { Operator: "not" });
+
             if (group) { m_builder.Append(value: '('); }
             OperandText(enclose: !group, level: level, text: operand.Text);
             if (group) { m_builder.Append(value: ')'); }

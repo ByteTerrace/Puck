@@ -73,8 +73,6 @@ public static partial class WorldDocumentEmitter {
                 );
             }
         }
-        WorldDocumentRowDefaults.CanonicalizeRotation(row: shapeObj);
-
         shapesArr.AppendNode(item: shapeObj);
 
         return true;
@@ -113,9 +111,9 @@ public static partial class WorldDocumentEmitter {
             }
         }
         DocumentLowering.AssignOrExtend(
-            sectionObject,
-            WorldSectionRows.Member,
-            lowered
+            key: WorldSectionRows.Member,
+            target: sectionObject,
+            value: lowered
         );
     }
     private static bool LowerPlacementsBlock(BlockNode block, JsonObject parent, DocumentScope scope) {

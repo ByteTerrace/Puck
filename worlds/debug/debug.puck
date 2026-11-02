@@ -181,14 +181,11 @@ bodies {
 }
 
 placements {
-  // Twelve derived face screens: the painting wing's six canvases (paintings.puck), the Wonderland doors' two
-  // (wonderland.puck), the rate range's three windows (range.puck) and the probe screen (camera-course.puck).
   policy {
     authoringHeadroomInstances: 4096
     authoringHeadroomScreens: 0
     candidateCap: 1
     candidateRadius: 1
-    derivedFaceScreens: 12
     maxPlacementScale: 1.45
     // The shedding table's racks stand the standard deck's cards at 0.06 (shedding.puck).
     minPlacementScale: 0.06

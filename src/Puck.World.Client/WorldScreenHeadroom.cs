@@ -42,7 +42,7 @@ internal static class WorldScreenHeadroom {
         }
 
         if (reserved.Count < headroomCount) {
-            throw new InvalidOperationException(message: $"authoring.authoringHeadroomScreens asks for {headroomCount} reserved screen slot(s), but only {reserved.Count} of the engine's {SdfProgramBuilder.MaxScreenSurfaces} surfaces are free: {authoredCount} carry an authored screen and {derivedFaceScreens} are reserved for derived creation faces at indices {derivedFaceBase}..{((derivedFaceBase + derivedFaceScreens) - 1)}. Lower authoring.authoringHeadroomScreens by {(headroomCount - reserved.Count)}, lower authoring.derivedFaceScreens, or author fewer screens.");
+            throw new InvalidOperationException(message: $"authoring.authoringHeadroomScreens asks for {headroomCount} reserved screen slot(s), but only {reserved.Count} of the engine's {SdfProgramBuilder.MaxScreenSurfaces} surfaces are free: {authoredCount} carry an authored screen and {derivedFaceScreens} are reserved for derived creation faces at indices {derivedFaceBase}..{((derivedFaceBase + derivedFaceScreens) - 1)}. Lower authoring.authoringHeadroomScreens by {(headroomCount - reserved.Count)}, light fewer creation faces, or author fewer screens.");
         }
 
         return reserved;

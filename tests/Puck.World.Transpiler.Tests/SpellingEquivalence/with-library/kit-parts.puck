@@ -1,0 +1,8 @@
+// A module library: the hold the pair's kit derives from.
+let groundHold = {
+  name: "ground"
+  bond: Surface
+  hold: Gravity
+  reach: 1.2
+  forward: Heading
+}

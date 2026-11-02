@@ -1,0 +1,14 @@
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+state {
+  world {
+    slot level = 0
+    slot moves = 0
+  }
+}
+
+rule "climb" {
+  moves = 4
+  level += moves
+}

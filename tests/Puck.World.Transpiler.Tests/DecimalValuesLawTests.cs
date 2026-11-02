@@ -58,15 +58,14 @@ public sealed class DecimalValuesLawTests {
     );
 
     // Each origin component is lowered through the general expression path, the one every field's value takes.
+    // A reserved root key is data no model member types, so it shows the lowering's own numbers; a member the model
+    // reads as a float holds the float's spelling instead (WorldDocumentRowDefaults.CanonicalFloat).
     private static string[] LoweredOrigin(string x, string y, string z) {
-        var screens = Assert.IsType<JsonArray>(@object: WorldSources.LowerSourceClean(source: $$"""
+        var origin = Assert.IsType<JsonArray>(@object: WorldSources.LowerSourceClean(source: $$"""
             schema: "puck.world.definition.v1"
             let long = 0.1234567890123456789012345
-            screens [
-                { origin [{{x}}, {{y}}, {{z}}] }
-            ]
-            """)["screens"]);
-        var origin = Assert.IsType<JsonArray>(@object: Assert.IsType<JsonObject>(@object: screens[0])["origin"]);
+            _origin [{{x}}, {{y}}, {{z}}]
+            """)["_origin"]);
 
         return [.. origin.Select(selector: static component => component!.ToJsonString())];
     }

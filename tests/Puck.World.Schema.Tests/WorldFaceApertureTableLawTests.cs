@@ -46,7 +46,6 @@ public sealed class WorldFaceApertureTableLawTests {
         ScreenIndex: -1,
         ShapeId: 0,
         ShapeType: primitive,
-        SlotStarved: false,
         Source: new WorldScreenSource.None()
     );
 

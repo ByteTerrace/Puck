@@ -1,3 +1,4 @@
+import "../standard/seat"
 import "elements"
 import "../standard/inputs"
 import "../standard/kits"
@@ -531,47 +532,8 @@ rules "" when alchemyHold == alchemySettleTicks {
 
 rule "alchemy-seat-presses" {
   mode: Level
-  if board(engaged, alchemyBoard, 1) == 1 and channel(1, confirm) >= 0.5 {
-    alchemySeat.pickEdge = alchemySeat.pickDown == 0
-    alchemySeat.pickDown = 1
-  } else {
-    alchemySeat.pickEdge = 0
-    alchemySeat.pickDown = 0
-  }
-  if board(engaged, alchemyBoard, 1) == 1 and channel(1, cancel) >= 0.5 {
-    alchemySeat.cancelEdge = alchemySeat.cancelDown == 0
-    alchemySeat.cancelDown = 1
-  } else {
-    alchemySeat.cancelEdge = 0
-    alchemySeat.cancelDown = 0
-  }
-  if board(engaged, alchemyBoard, 1) == 1 and channel(1, forward) >= 0.5 {
-    alchemySeat.aheadEdge = alchemySeat.aheadDown == 0
-    alchemySeat.aheadDown = 1
-  } else {
-    alchemySeat.aheadEdge = 0
-    alchemySeat.aheadDown = 0
-  }
-  if board(engaged, alchemyBoard, 1) == 1 and channel(1, forward) <= -0.5 {
-    alchemySeat.behindEdge = alchemySeat.behindDown == 0
-    alchemySeat.behindDown = 1
-  } else {
-    alchemySeat.behindEdge = 0
-    alchemySeat.behindDown = 0
-  }
-  if board(engaged, alchemyBoard, 1) == 1 and channel(1, strafe) >= 0.5 {
-    alchemySeat.rightEdge = alchemySeat.rightDown == 0
-    alchemySeat.rightDown = 1
-  } else {
-    alchemySeat.rightEdge = 0
-    alchemySeat.rightDown = 0
-  }
-  if board(engaged, alchemyBoard, 1) == 1 and channel(1, strafe) <= -0.5 {
-    alchemySeat.leftEdge = alchemySeat.leftDown == 0
-    alchemySeat.leftDown = 1
-  } else {
-    alchemySeat.leftEdge = 0
-    alchemySeat.leftDown = 0
+  for button in seatButtons {
+    seatPress(seat: alchemySeat, boardName: alchemyBoard, button: button)
   }
 }
 

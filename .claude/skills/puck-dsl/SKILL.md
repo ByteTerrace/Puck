@@ -20,7 +20,7 @@ file is corrected in the same change.
 |---|---|
 | Parser, printer, lowering, diagnostics | `src/Puck.Transpiler` (`Parsing/PuckParser*.cs`, `Formatting/PuckPrinter*.cs`, `Lowering/DocumentLowering*.cs` and `DocumentBuiltins.cs`, `Diagnostics/PuckDiagnosticCodes.cs`) |
 | World vocabulary, its linter and language server | `src/Puck.World.Transpiler` (`Vocabulary/` describes every construct once; `Validation/PuckLinter*.cs`; `Lsp/`) |
-| World compile contract | `src/Puck.World.Transpiler/WorldCompiler.cs`; `WorldDocumentMembers.cs` checks emitted members against `WorldModelShape` and lowers authored pins to canonical document identities |
+| World compile contract | `src/Puck.World.Transpiler/WorldCompiler.cs`; `WorldDocumentMembers.cs` walks the emitted document along `WorldModelShape`: it refuses unconsumed members, lowers authored pins to canonical document identities, and writes each typed value's canonical form (float spelling, rotation sign, convex profile start, zero-is-absent shape members, a write's `value`/`fromState`, model member order) |
 | Cartridge vocabulary | `src/Puck.GamingBricks.Transpiler` |
 | Expression vocabulary (operators, named functions) | `Puck.State.ExpressionOperators`, `Puck.State.ExpressionVocabulary` |
 | CLI verbs | `src/Puck.Cli.Worlds` (`Transpiler/`: compile, decompile, lint, lsp, migrate, embed; `Test/`; `Vocabulary/`), `src/Puck.Cli.Format` (format) |
@@ -38,8 +38,15 @@ A document's `schema:` field selects its vocabulary, never the filename.
   **PUCK040**, the most common mistake; the fix is to drop the colon. A value
   written as a call or a name keeps its colon even when it produces a
   container: `pixels: map(range(0, 8), row => "00000000")`, `origin: bounds`.
-- `let name = expr` is a compile-time constant; `template name(p, q = d) { }` a
-  parametric block; `import "name" [as alias]`, `export` and
+- `let name = expr` is a compile-time constant; `base with { member: value }`
+  derives a record from an object (shallow: members replaced or added, a nested
+  override spelled by nesting, `speed: kit.speed with { value: 5 }`) and lowers
+  to the object written out; `function name(p, q = d) = expr` names a value
+  or a guard, inlined where it is called (a document value, a gate, an
+  effect), never recursive; `template name(p, q = d) { }` a
+  parametric block; `rule template name(p) { }` a block of rule-body
+  statements (locals, `when`, `if`, effects) a rule body calls and splices
+  (`worlds/standard/seat.puck`'s `seatPress`); `import "name" [as alias]`, `export` and
   `use m as a(args)` compose modules.
 - **An import names, never spells a file.** `import "skies"`, not
   `import "skies.puck"` (**PUCK121**). The named file decides what comes in: a
@@ -119,6 +126,9 @@ A document's `schema:` field selects its vocabulary, never the filename.
   spelling-equivalence corpus
   (`tests/Puck.World.Transpiler.Tests/SpellingEquivalence/`) holds each pair; a
   new spelling lands with its pair, and a pair that fails is a compiler defect.
+  Constants fold before lowering: a name bound to a number, an enum member, an
+  exact operator over constants and a ternary on a constant condition become
+  their value, in gates and values alike.
 - Gates (`when`, `if`, `expect`) accept ordinary expressions. Zero and absence
   are false; nonzero numeric values are true. `and` and `or` short-circuit;
   `not` negates truth. They yield Int 0/1 and bind below comparisons. Bitwise

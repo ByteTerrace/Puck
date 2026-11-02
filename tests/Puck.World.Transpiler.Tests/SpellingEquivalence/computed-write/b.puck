@@ -1,0 +1,47 @@
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+state {
+  world {
+    row {
+      name: "cards"
+      kind: "Int"
+      capacity: 4
+      cells: map(range(0, 4), k => { key: $"{k}", value: k })
+    }
+    row {
+      name: "sealed"
+      kind: "Bool"
+      domain: keysOf(ordered: true, row: cards)
+      capacity: 4
+    }
+    row {
+      name: "hand1"
+      kind: "Bool"
+      domain: keysOf(ordered: true, row: cards)
+      capacity: 4
+      cells: map(range(0, 4), k => { key: $"{k}", value: true })
+    }
+    row {
+      name: "inbox1"
+      kind: "Int"
+      cells [{ key: "bid", value: 0 }, { key: "taken", value: 0 }]
+    }
+    row {
+      name: "audience"
+      kind: "Text"
+      cells [{ key: "1", value: "" }]
+    }
+  }
+}
+
+rule "gather-1" {
+  local card = 2
+  when count(hand1) > 0
+  sealed[zone(hand1, first)] = true
+  remove hand1[zone(hand1, first)]
+  inbox1.bid = 0
+  inbox1.taken += 1
+  audience["1"] = "seat1"
+  sealed[card] = true
+}

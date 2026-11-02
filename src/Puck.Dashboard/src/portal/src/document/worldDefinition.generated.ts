@@ -7501,7 +7501,7 @@ export type WorldPlacementContribution = {
 };
 
 /**
- * A placement's deal facet: the row is a template whose instances are dealt from a keyed state row, one child placement per cell, laid out over the template's own Distribution region in cell order. The template itself renders nothing and collides with nothing; its prototype and its Solid/Grip/Region/ Emission facets are what every child is stamped with. A child is an ordinary placement row named <template>/<cellKey> (ChildId) with Parent naming the template and the region's dealt offset as its local position, written and removed through ordinary UpsertPlacement/RemovePlacement mutations under Principal.World by the per-tick sweep (Server.WorldTick.SweepPlacementDeals), so a dealt instance journals, undoes, replays, and rebuilds colliders through the one placement door. Every template a tick re-deals lands in that tick's one mutation.
+ * A placement's deal facet: the row is a template whose instances are dealt from a keyed state row, one child placement per cell, laid out over the template's own Distribution region in cell order. The template itself renders nothing and collides with nothing; its prototype, its Scale and its Solid/Grip/Region/ Emission facets are what every child is stamped with. The region's offsets are metres in the template's frame, never scaled by it. A child is an ordinary placement row named <template>/<cellKey> (ChildId) with Parent naming the template and the region's dealt offset as its local position, written and removed through ordinary UpsertPlacement/RemovePlacement mutations under Principal.World by the per-tick sweep (Server.WorldTick.SweepPlacementDeals), so a dealt instance journals, undoes, replays, and rebuilds colliders through the one placement door. Every template a tick re-deals lands in that tick's one mutation.
  */
 export type WorldPlacementDeal = {
   /**
@@ -7675,10 +7675,6 @@ export type WorldPlacementPolicyDefaults = {
    * Live-consumed. The drag preview channel's missing-response fallback: a released overlay with no definition delivery after this many produced frames drops honestly.
    */
   previewDeadlineFrames: number;
-  /**
-   * Boot-consumed. The derived screen slots the binder reserves at boot for creation faces (a face declared by a placement's creation, lit by a feed), registered at [Client.WorldPrototypeFacets.DerivedFaceBase, DerivedFaceBase + this). Bounded so the range stays inside the engine screen table.
-   */
-  derivedFaceScreens: number;
 };
 
 /**

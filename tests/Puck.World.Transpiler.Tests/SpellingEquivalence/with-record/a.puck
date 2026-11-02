@@ -1,0 +1,26 @@
+// A record derived with `with` is the record written out: members replaced in place, new ones added, and a nested
+// override spelled by nesting.
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+let baseMotion = {
+  facingSnap: false
+  groundSnap: 0.3
+  moveFrame: World
+  speed {
+    value: 4
+    held {
+      channel: "run"
+      multiplier: 2
+    }
+  }
+  turn { rate: 2.5 }
+}
+
+kits [
+  {
+    name: "walker"
+    bodyMotionProgram: "walk"
+    motion: baseMotion with { stepHeight: 0.3, speed: baseMotion.speed with { value: 5 } }
+  }
+]

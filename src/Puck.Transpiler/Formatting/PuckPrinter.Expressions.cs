@@ -15,7 +15,7 @@ public static partial class PuckPrinter {
             Arguments(arguments: arguments, everyLine: everyLine, level: level, multiLine: (multiLine || everyLine));
             // A call that spans lines only inside its last argument (`map(xs, x => {` … `})`) closes on that
             // argument's last line; one with an argument on a line of its own closes on its own line.
-            if (everyLine || (multiLine && (arguments is not [.., { Trivia.Trailing: null }] || arguments.Any(predicate: static argument => (argument.Trivia.OnNewLine || (argument.Trivia.Leading.Count > 0)))))) {
+            if (everyLine || (multiLine && ((arguments is not [.., { Trivia.Trailing: null }]) || arguments.Any(predicate: static argument => (argument.Trivia.OnNewLine || (argument.Trivia.Leading.Count > 0)))))) {
                 EndLine();
                 Indent(level: level);
             }
@@ -271,7 +271,7 @@ public static partial class PuckPrinter {
                         break;
                     }
                 case CallExpressionNode call: {
-                        m_builder.Append(value: call.Name == "not" ? "`not`" : call.Name);
+                        m_builder.Append(value: ((call.Name == "not") ? "`not`" : call.Name));
                         ArgumentList(
                             arguments: call.Arguments,
                             level: level,
@@ -406,6 +406,22 @@ public static partial class PuckPrinter {
                         Object(
                             level: level,
                             @object: @object
+                        );
+
+                        break;
+                    }
+                // `with` reads as a postfix on its base, so a base looser than a primary, or a prefix operator that
+                // would otherwise take the whole derivation, is parenthesized.
+                case WithExpressionNode derived: {
+                        Operand(
+                            level: level,
+                            operand: derived.Base,
+                            parenthesize: ((derived.Base is UnaryExpressionNode) || (Precedence(@operator: derived.Base) < PuckParser.PrimaryLevel))
+                        );
+                        m_builder.Append(value: " with ");
+                        Object(
+                            level: level,
+                            @object: derived.Overrides
                         );
 
                         break;

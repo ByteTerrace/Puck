@@ -459,7 +459,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     /// about which face belongs to which placement. Call at the delivery boundary (a definition-revision move).</summary>
     /// <param name="definition">The delivered definition.</param>
     /// <param name="derivedFaces">This delivery's derived-face screen rows — always exactly
-    /// <c>authoring.derivedFaceScreens</c> entries (<see cref="WorldPrototypeFacets.Derive"/> pads the reserved range
+    /// <see cref="WorldDefinition.DerivedFaceScreens"/> entries (<see cref="WorldPrototypeFacets.Derive"/> pads the reserved range
     /// with placeholders), composed alongside <paramref name="definition"/>'s own declared screens on every
     /// subsequent rebuild until the next delivery.</param>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> or <paramref name="derivedFaces"/> is
@@ -779,7 +779,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         m_noseFactor = definition.PlayerDefaults.NoseFactor;
 
         m_authoringHeadroomScreens = envelope.HeadroomScreens;
-        m_derivedFaceScreens = definition.Authoring.DerivedFaceScreens;
+        m_derivedFaceScreens = definition.DerivedFaceScreens;
         // Placeholder rows until the first delivery calls ObserveDelivery with the real derived faces — matters only
         // for the construction-time capacity probe (SdfCompositionFrameSource's ctor runs it synchronously, before
         // WorldFramePresenter can ever reconcile a delivery), so the probe reserves this band's word/instance cost even

@@ -239,15 +239,6 @@ public static partial class WorldDefinitionValidator {
             name: "placements.policy.previewDeadlineFrames",
             errors: errors
         );
-        // The derived-face reserve: the slots boot-registered at [DerivedFaceBase, DerivedFaceBase + count). The
-        // ceiling is the remaining span in the engine's screen table.
-        RequireIntRange(
-            value: authoring.DerivedFaceScreens,
-            min: 0,
-            max: SdfProgramBuilder.MaxScreenSurfaces,
-            name: "placements.policy.derivedFaceScreens",
-            errors: errors
-        );
     }
     // A rigid kit's mass properties derive from its own collider shape (WorldRigid.cs), so the collider it names must
     // have exactly one compiled primitive with closed-form inertia — a compound creation is refused rather than
@@ -1999,14 +1990,6 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"placements: {parentReason}");
         }
 
-        // The derived-face SCREEN budget, refused here because it is provable from the document alone: a face whose
-        // resolved source renders nothing claims no slot, so this counts only the faces that actually ask for one.
-        // Overflow that reaches the running engine can only darken a face, never remove a door — but a document that
-        // over-claims statically is an authoring error, and naming it at validation beats discovering it as a dark
-        // screen.
-        if (faces.ClaimingFaceCount > faces.SlotCapacity) {
-            errors.Add(item: $"{faces.ClaimingFaceCount} derived creation face(s) resolve to a source that renders something, but authoring.derivedFaceScreens reserves only {faces.SlotCapacity} slot(s); raise the reservation or give a face a 'none' source.");
-        }
 
         // No census-fit rule: networkPlayers is a remote admission CAP, not a static reservation an
         // inhabitant competes with. An inhabitant is a peer that JOINS a free slot; total occupancy is bounded by the

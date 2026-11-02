@@ -8,34 +8,70 @@ let standardSink = { sinkSpeed: 40 }
 // A walking body's holds: the ground it stands on within reach, and the fall that takes over off it.
 let groundHold = {
   name: "ground"
-  bond: "Surface"
-  hold: "Gravity"
+  bond: Surface
+  hold: Gravity
   cone [0, 60]
   reach: 1.2
-  forward: "Heading"
+  forward: Heading
   gravity: standardGravity
   envelope: standardSink
 }
 let fallHold = {
   name: "fall"
-  bond: "Free"
-  hold: "Gravity"
-  forward: "Heading"
+  bond: Free
+  hold: Gravity
+  forward: Heading
   gravity: standardGravity
   envelope: standardSink
 }
 
 // A piece's hold in the air: it falls and settles under gravity wherever it is let go.
-let airHold = { name: "air", bond: "Free", hold: "Gravity", gravity: standardGravity, envelope: standardSink }
+let airHold = { name: "air", bond: Free, hold: Gravity, gravity: standardGravity, envelope: standardSink }
 
 // A body posed by the rules, held where they put it, with no gravity.
-let heldHold = { name: "held", bond: "Free", hold: "None" }
+let heldHold = { name: "held", bond: Free, hold: None }
 
 // What a still piece's motion is made of: it has no gait, so the walk program gets a speed and a turn rate too small to
 // move it, and the rules and the physics place it.
 let stillShaping = [{ along {} }]
 let stillSpeed = { value: 0.001 }
 let stillTurn = { rate: 0.001 }
+
+// A body the rules pose: held where they put it, with no gait. A piece derives its own from it (its hold, a facing
+// snap, a pitch limit).
+let stillMotion = { holds [heldHold], shaping: stillShaping, speed: stillSpeed, turn: stillTurn }
+
+// A walking body's motion: it stands on the ground and falls off it, walks at 4 m/s and runs at twice that while the run
+// channel is held, steps up a kerb, and turns towards where it is driven. An avatar derives its own pace from it.
+let walkerMotion = {
+  facingSnap: false
+  groundSnap: 0.3
+  holds [groundHold, fallHold]
+  moveFrame: World
+  shaping [
+    {
+      along {
+        engage: 40
+        release: 50
+      }
+      turnScale: 1
+    }
+  ]
+  speed {
+    value: 4
+    held {
+      channel: "run"
+      multiplier: 2
+    }
+  }
+  stepHeight: 0.3
+  turn {
+    falloff: 1
+    maxPitch: 1.2
+    pitchRate: 0
+    rate: 2.5
+  }
+}
 
 // A rigid piece (a stone, a token, a chess piece): it falls under gravity and settles where it is let go, and stays.
 template pieceKit(name, collider, mass, friction = 0.6, restitution = 0.05, rollingFriction = 0.2) {
@@ -44,13 +80,7 @@ template pieceKit(name, collider, mass, friction = 0.6, restitution = 0.05, roll
       bodyContact: Solid
       bodyMotionProgram: "walk"
       collider: collider
-      motion {
-        facingSnap: true
-        holds [airHold]
-        shaping: stillShaping
-        speed: stillSpeed
-        turn: stillTurn
-      }
+      motion: stillMotion with { facingSnap: true, holds [airHold] }
       name: name
       rigid {
         angularDamping: 0.05
@@ -70,13 +100,7 @@ template heldKit(name) {
     {
       bodyContact: Overlap
       bodyMotionProgram: "walk"
-      motion {
-        facingSnap: true
-        holds [heldHold]
-        shaping: stillShaping
-        speed: stillSpeed
-        turn: stillTurn
-      }
+      motion: stillMotion with { facingSnap: true }
       name: name
     }
   ]

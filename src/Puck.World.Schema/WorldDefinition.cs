@@ -103,6 +103,7 @@ public sealed partial record WorldDefinition(
     /// reservation.</summary>
     [JsonIgnore]
     public IReadOnlyList<WorldRole> Roles => (RolesRaw ?? []);
+
     /// <summary>Returns the role row named <paramref name="name"/>, or <see langword="null"/> when this world declares
     /// none.</summary>
     /// <param name="name">The role name.</param>
@@ -116,6 +117,7 @@ public sealed partial record WorldDefinition(
 
         return null;
     }
+
     /// <summary>The document schema version. A loader rejects any other value; the canonical writer always emits it.</summary>
     public const string SchemaVersion = "puck.world.definition.v1";
     /// <summary>The rate a world with no <see cref="Simulation"/> section runs at. Distinct from the resident,
@@ -141,6 +143,12 @@ public sealed partial record WorldDefinition(
     /// authored rows span); a world wanting live placement authoring declares the block deliberately.</summary>
     [JsonIgnore]
     public WorldPlacementPolicyDefaults Authoring => (PlacementsRaw?.Policy ?? WorldPlacementPolicyDefaults.DeriveFrom(placements: Placements));
+    /// <summary>Gets the screen slots the world's creation faces claim, one for each face of a placed creation whose
+    /// source renders something (<see cref="WorldFaceCatalog.ClaimingFaceCount"/>), counted from the composed world.
+    /// The binder reserves them at boot at <c>[DerivedFaceBase, DerivedFaceBase + this)</c>, so a later definition that
+    /// claims more needs a restart.</summary>
+    [JsonIgnore]
+    public int DerivedFaceScreens => WorldFaceCatalog.For(definition: this).ClaimingFaceCount;
     /// <summary>Gets or initializes the placement policy through the placements section (see <see cref="KitRowsRaw"/>).</summary>
     [JsonIgnore]
     public WorldPlacementPolicyDefaults? AuthoringRaw { get => PlacementsRaw?.Policy; init => PlacementsRaw = ((PlacementsRaw ?? new WorldPlacementsSection()) with { Policy = value }); }
@@ -388,10 +396,12 @@ public sealed partial record WorldDefinition(
     /// its picture untreated.</summary>
     [JsonIgnore]
     public IReadOnlyList<WorldScreenMaterial> ScreenMaterials => (ScreenMaterialsRaw ?? []);
+
     /// <summary>Returns the screen material a screen or face names.</summary>
     /// <param name="id">The material's id, or <see langword="null"/> for none.</param>
     /// <returns>The declared material, or <see langword="null"/> when <paramref name="id"/> is null or names none.</returns>
     public WorldScreenMaterial? ScreenMaterialOf(string? id) => WorldScreenMaterial.Find(id: id, materials: ScreenMaterials);
+
     /// <summary>Gets the <c>search</c> section — ABSENT resolves to no jobs.</summary>
     [JsonIgnore]
     public WorldSearchSection Search => (SearchRaw ?? WorldSearchSection.Absent);

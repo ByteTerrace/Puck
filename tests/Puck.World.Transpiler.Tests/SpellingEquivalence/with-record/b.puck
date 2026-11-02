@@ -1,0 +1,23 @@
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+kits [
+  {
+    name: "walker"
+    bodyMotionProgram: "walk"
+    motion {
+      stepHeight: 0.3
+      facingSnap: false
+      groundSnap: 0.3
+      moveFrame: World
+      speed {
+        value: 5
+        held {
+          channel: "run"
+          multiplier: 2
+        }
+      }
+      turn { rate: 2.5 }
+    }
+  }
+]

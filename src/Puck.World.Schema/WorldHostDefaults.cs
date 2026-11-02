@@ -75,10 +75,6 @@ public sealed record WorldStorageDefaults(string? Endpoint = null, string? UserI
 /// the cycle ring.</param>
 /// <param name="PreviewDeadlineFrames">Live-consumed. The drag preview channel's missing-response fallback: a
 /// released overlay with no definition delivery after this many produced frames drops honestly.</param>
-/// <param name="DerivedFaceScreens">Boot-consumed. The derived screen slots the binder reserves at boot for creation
-/// faces (a face declared by a placement's creation, lit by a feed), registered at
-/// <c>[<c>Client.WorldPrototypeFacets.DerivedFaceBase</c>, DerivedFaceBase + this)</c>. Bounded so the range
-/// stays inside the engine screen table.</param>
 public sealed record WorldPlacementPolicyDefaults(
     int AuthoringHeadroomScreens,
     int AuthoringHeadroomInstances,
@@ -86,25 +82,23 @@ public sealed record WorldPlacementPolicyDefaults(
     float MaxPlacementScale,
     float CandidateRadius,
     int CandidateCap,
-    int PreviewDeadlineFrames,
-    int DerivedFaceScreens
+    int PreviewDeadlineFrames
 ) {
     /// <summary>Gets the inert base — zero headroom, a zero-width scale envelope, no candidates, no preview
-    /// deadline, no derived faces. What an unauthored policy resolves to when the world also authors no placement
+    /// deadline. What an unauthored policy resolves to when the world also authors no placement
     /// rows (see <see cref="DeriveFrom"/>); a world reading this cannot author placements or edit.</summary>
     public static WorldPlacementPolicyDefaults Absent { get; } = new WorldPlacementPolicyDefaults(
         AuthoringHeadroomInstances: 0,
         AuthoringHeadroomScreens: 0,
         CandidateCap: 0,
         CandidateRadius: 0f,
-        DerivedFaceScreens: 0,
         MaxPlacementScale: 0f,
         MinPlacementScale: 0f,
         PreviewDeadlineFrames: 0
     );
 
     /// <summary>Derives what an unauthored <c>placements.policy</c> means: zero initial
-    /// headroom (instances and screens), no derived faces, no candidate ring, no preview deadline — and a scale
+    /// headroom (instances and screens), no candidate ring, no preview deadline — and a scale
     /// envelope spanning exactly the placement rows' authored scales, so a static world validates exactly what it
     /// authored (a row's scale is admitted because it is authored, never against a guessed envelope) and the
     /// envelope's ceiling keeps <c>Client.WorldCreationInstances</c>'s probe bound radius covering the largest authored

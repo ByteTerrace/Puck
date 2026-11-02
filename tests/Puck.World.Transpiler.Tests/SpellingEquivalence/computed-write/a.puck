@@ -1,0 +1,52 @@
+// A row named by an interpolated string is a write target as its literal name is (an assignment, a compound
+// assignment, a `remove`, a key a `zone()` reads); a compile-time string on the right is text; and a local inside a
+// call form's computed key is the local.
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+state {
+  world {
+    row {
+      name: "cards"
+      kind: "Int"
+      capacity: 4
+      cells: map(range(0, 4), k => { key: $"{k}", value: k })
+    }
+    row {
+      name: "sealed"
+      kind: "Bool"
+      domain: keysOf(ordered: true, row: cards)
+      capacity: 4
+    }
+    row {
+      name: "hand1"
+      kind: "Bool"
+      domain: keysOf(ordered: true, row: cards)
+      capacity: 4
+      cells: map(range(0, 4), k => { key: $"{k}", value: true })
+    }
+    row {
+      name: "inbox1"
+      kind: "Int"
+      cells [{ key: "bid", value: 0 }, { key: "taken", value: 0 }]
+    }
+    row {
+      name: "audience"
+      kind: "Text"
+      cells [{ key: "1", value: "" }]
+    }
+  }
+}
+
+for s in range(1, 1) {
+  rule $"gather-{s}" {
+    local card = 2
+    when count($"hand{s}") > 0
+    sealed[zone($"hand{s}", first)] = true
+    remove $"hand{s}"[zone($"hand{s}", first)]
+    $"inbox{s}".bid = 0
+    $"inbox{s}".taken += 1
+    audience[$"{s}"] = $"seat{s}"
+    setState(state: sealed, key: expr(card), expression: true)
+  }
+}

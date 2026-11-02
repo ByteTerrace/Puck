@@ -3347,17 +3347,6 @@ Owner: specialist lane (puck-world, build and hot reload, input) · ordinary · 
 Owner: debug-world content lanes, each started by the owner's direction ·
 ordinary · Next: new content and art on the owner's call.
 
-- [medium] The gallery's `motion-pulse` exhibit (`worlds/debug/shapes.puck:2267`,
-  its six petals smooth-unioned to the core in one pooled group) runs on a
-  continuous clock, so it draws a stretched seam all the time and lint reports
-  PUCK122 six times. Its look needs the owner's eye: one group per petal and
-  core, or no group and a union crease. The two exhibits that show the
-  stretched seam on purpose (`motion-smooth-blend`, `motion-carve`)
-  acknowledge it with `allow`. (from: puck-audit, puck-lang)
-- [low] Board-game seats build button edges as hand-made cells (29 blocks
-  across go, alchemy, reversi, cardtable, granaries and chess) where a rule
-  with `mode: Edge` would do; switching changes behaviour, so verify each
-  game's tests when converting. (from: puck-audit)
 - Owed: `puck verbs` with a windowed boot (the first settle window runs it).
   The checked-in catalog is stale: clearance-op removed
   `player.camera.clearance` by hand, and `puck verbs --check --headless-only`

@@ -1,0 +1,30 @@
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+state {
+  world {
+    table pad {
+      upDown = 0
+      upEdge = 0
+      downDown = 0
+      downEdge = 0
+    }
+    slot level = 0
+  }
+}
+
+rule "presses" {
+  when level
+  if level >= 1 {
+    pad.upEdge = pad.upDown == 0
+    pad.upDown = 1
+  } else {
+    pad.upDown = 0
+  }
+  if level <= -1 {
+    pad.downEdge = pad.downDown == 0
+    pad.downDown = 1
+  } else {
+    pad.downDown = 0
+  }
+}

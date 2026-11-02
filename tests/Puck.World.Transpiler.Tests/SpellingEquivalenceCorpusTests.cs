@@ -9,12 +9,7 @@ namespace Puck.World.Transpiler.Tests;
 /// fails is a compiler defect: fixed, or listed in <see cref="Open"/> against its entry in the open items.</summary>
 public class SpellingEquivalenceCorpusTests {
     // A pair the compiler does not yet hold, with the open item that owns it (docs/plans/open-items.md).
-    private static readonly Dictionary<string, string> Open = new(comparer: StringComparer.Ordinal) {
-        ["chamfer-default"] = "state-and-language.md G13: a zero chamfer is the chamfer omitted",
-        ["float-spelling"] = "open items: canonical float rounding for creation scalars",
-        ["profile-start"] = "open items: canonical start vertex for a closed profile",
-        ["ternary-fold"] = "state-and-language.md G14: constant expressions fold before lowering",
-    };
+    private static readonly Dictionary<string, string> Open = new(comparer: StringComparer.Ordinal);
 
     private static string CorpusDirectory() {
         var directory = AppContext.BaseDirectory;
@@ -36,15 +31,15 @@ public class SpellingEquivalenceCorpusTests {
 
         return (
             compilation.Json!.ToJsonString(),
-            [.. compilation.TestWorlds.Select(selector: world => $"{world.Name}\n{world.Json.ToJsonString()}".Replace(oldValue: stem, newValue: "~", comparisonType: StringComparison.Ordinal))]
+            [.. compilation.TestWorlds.Select(selector: world => $"{world.Name}\n{world.Json.ToJsonString()}".Replace(comparisonType: StringComparison.Ordinal, newValue: "~", oldValue: stem))]
         );
     }
 
     /// <summary>Gets every pair in the corpus.</summary>
     public static TheoryData<string> Pairs => [.. Directory.GetDirectories(path: CorpusDirectory()).Select(selector: static directory => Path.GetFileName(path: directory)).Order(comparer: StringComparer.Ordinal)];
 
-    [Theory]
     [MemberData(memberName: nameof(Pairs))]
+    [Theory]
     public void BothSpellingsCompileToOneDocument(string pair) {
         var directory = Path.Combine(path1: CorpusDirectory(), path2: pair);
         var a = Compile(path: Path.Combine(path1: directory, path2: "a.puck"));
@@ -57,7 +52,7 @@ public class SpellingEquivalenceCorpusTests {
             return;
         }
 
-        Assert.Equal(expected: a.Document, actual: b.Document);
-        Assert.Equal(expected: a.Tests, actual: b.Tests);
+        Assert.Equal(actual: b.Document, expected: a.Document);
+        Assert.Equal(actual: b.Tests, expected: a.Tests);
     }
 }

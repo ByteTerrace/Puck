@@ -42,6 +42,7 @@ public sealed record SdfPrismProfile(SdfPrismProfileKind Kind, float CornerRadiu
     /// <summary>The low bits of a <see cref="SdfShapeType.ConvexPolygon"/> instruction's packed reference that hold its
     /// vertex count less one; the bits above hold its table's first vector (<see cref="PackConvexReference"/>).</summary>
     public const int ConvexCountBits = 5;
+
     /// <summary>Packs a <see cref="SdfShapeType.ConvexPolygon"/> instruction's reference to its vertex table: the table's
     /// first vector above <see cref="ConvexCountBits"/> bits of the vertex count less one. KEEP IN SYNC with
     /// sdfConvexPolygonSolid in field/sdf-shapes.hlsli.</summary>
@@ -49,7 +50,8 @@ public sealed record SdfPrismProfile(SdfPrismProfileKind Kind, float CornerRadiu
     /// <param name="count">The vertex count, from <see cref="MinConvexVertices"/> through <see cref="MaxConvexVertices"/>.</param>
     /// <returns>The packed reference.</returns>
     public static uint PackConvexReference(int tableVector, int count) =>
-        ((((uint)tableVector) << ConvexCountBits) | ((uint)(count - 1)));
+        (((uint)tableVector) << ConvexCountBits) | ((uint)(count - 1));
+
     /// <summary>The fewest vertices a <see cref="SdfPrismProfileKind.Convex"/> profile may carry.</summary>
     public const int MinConvexVertices = 3;
 
@@ -76,6 +78,29 @@ public sealed record SdfPrismProfile(SdfPrismProfileKind Kind, float CornerRadiu
     public static bool IsValidConvexHull(IReadOnlyList<Vector2>? vertices) =>
         (IsConvexHull(vertices: vertices) &&
             vertices!.All(predicate: static vertex => ((MathF.Abs(x: vertex.X) <= 1f) && (MathF.Abs(x: vertex.Y) <= 1f))));
+    /// <summary>Returns where a closed polygon's canonical listing starts: the rotation of its vertices that is least
+    /// when compared vertex by vertex, X before Y. A polygon listed from any start vertex, in the same winding, is one
+    /// polygon, so each starts its canonical listing at this index.</summary>
+    /// <param name="vertices">The polygon's vertices, in winding order.</param>
+    /// <returns>The index of the canonical first vertex; 0 for an empty list.</returns>
+    public static int CanonicalStart(IReadOnlyList<Vector2> vertices) {
+        ArgumentNullException.ThrowIfNull(argument: vertices);
+        var best = 0;
+
+        for (var candidate = 1; (candidate < vertices.Count); candidate++) {
+            for (var offset = 0; (offset < vertices.Count); offset++) {
+                var a = vertices[((candidate + offset) % vertices.Count)];
+                var b = vertices[((best + offset) % vertices.Count)];
+                var order = ((a.X != b.X) ? a.X.CompareTo(value: b.X) : a.Y.CompareTo(value: b.Y));
+
+                if (order != 0) {
+                    if (order < 0) { best = candidate; }
+                    break;
+                }
+            }
+        }
+        return best;
+    }
     /// <summary>Whether <paramref name="vertices"/> is a well-formed clockwise convex polygon at any size: 3 to
     /// <see cref="MaxConvexVertices"/> finite points, no two coincident, no three collinear, and every consecutive edge
     /// pair turning the same way (a strictly negative 2D cross product at every vertex). A positive per-axis scale of

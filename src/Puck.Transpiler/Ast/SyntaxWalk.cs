@@ -32,6 +32,8 @@ public static class SyntaxWalk {
             ArgumentNode argument => [argument.Value],
             BinaryExpressionNode binary => [binary.Left, binary.Right],
             ConditionalExpressionNode conditional => [conditional.Condition, conditional.WhenTrue, conditional.WhenFalse],
+            WithExpressionNode derived => [derived.Base, derived.Overrides],
+            FunctionExpressionNode function => [.. function.Parameters, function.Body],
             UnaryExpressionNode unary => [unary.Operand],
             ForStatementNode loop => [loop.Sequence, .. loop.Body],
             IndexExpressionNode index => [index.Target, index.Index],

@@ -4,6 +4,7 @@ using System.Text.Json.Nodes;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Diagnostics;
 using Puck.Transpiler.Lowering;
+using Puck.Transpiler.Parsing;
 using Syntax = Puck.State.ExpressionSpelling;
 
 namespace Puck.World.Transpiler.Lowering;
@@ -13,17 +14,130 @@ public static partial class WorldDocumentEmitter {
     // ever sent back through symbol resolution, so a binding cannot inject an operator or capture another name.
     internal static string BindOperand(OperandExpressionNode operand, DocumentScope scope) =>
         new OperandBinder(scope: scope).Bind(operand: operand);
+
     private static ExpressionNode CompileTimeOperand(OperandExpressionNode operand, DocumentScope scope) =>
         new OperandBinder(scope: scope).CompileTime(operand: operand);
+    // The operand with its value functions inlined (OperandBinder.Inline) and what its compile-time constants decide
+    // folded (OperandBinder.Fold), or itself when neither changes it.
+    private static OperandExpressionNode FoldOperand(OperandExpressionNode operand, DocumentScope scope) {
+        if ((operand.Form != DocumentValueForm.Expression) || (operand.Syntax is not { } syntax)) {
+            return operand;
+        }
+        var binder = new OperandBinder(scope: scope);
+        var inlined = binder.Inline(node: syntax, operand: operand);
+        var folded = binder.Fold(node: inlined, operand: operand);
+
+        return (ReferenceEquals(objA: folded, objB: syntax)
+            ? operand
+            : PuckParser.RebuildOperand(atoms: [.. operand.Atoms.Select(selector: static atom => atom.Value), .. binder.InlinedAtoms], original: operand, syntax: folded));
+    }
 
     private sealed class OperandBinder(DocumentScope scope) {
         private readonly StringBuilder m_text = new();
+        private readonly List<InterpolatedStringNode> m_inlinedAtoms = [];
+
+        // The atoms an inlined function body or default brought, numbered after the operand's own.
+        internal IReadOnlyList<InterpolatedStringNode> InlinedAtoms => m_inlinedAtoms;
+
+        // Splices each call of a value function (DocumentLowering.FunctionNamed) into the operand: its body with each
+        // parameter replaced by its argument's syntax (or its default's), so the rule program is the expression written
+        // out. Names the body reads that are not its parameters resolve where the call is, like any operand name.
+        internal Syntax.SyntaxNode Inline(Syntax.SyntaxNode node, OperandExpressionNode operand) {
+            return (CallsFunction(node: node) ? Splice(current: node) : node);
+
+            Syntax.SyntaxNode Splice(Syntax.SyntaxNode current) => current switch {
+                Syntax.SourceCall call when (DocumentLowering.FunctionNamed(name: call.Name, scope: scope) is { } function) => Expand(call: call, function: function),
+                Syntax.SourceCall call => call with { Arguments = [.. call.Arguments.Select(selector: argument => argument with { Value = Splice(current: argument.Value) })] },
+                Syntax.SourceGroup group => group with { Value = Splice(current: group.Value) },
+                Syntax.SourceIndex index => index with { Target = Splice(current: index.Target), Index = Splice(current: index.Index) },
+                Syntax.SourceAccess access => access with { Target = Splice(current: access.Target) },
+                Syntax.SourceLambda lambda => lambda with { Body = Splice(current: lambda.Body) },
+                Syntax.Unary unary => unary with { Operand = Splice(current: unary.Operand) },
+                Syntax.Binary binary => binary with { Left = Splice(current: binary.Left), Right = Splice(current: binary.Right) },
+                Syntax.Ternary ternary => new Syntax.Ternary(Condition: Splice(current: ternary.Condition), WhenTrue: Splice(current: ternary.WhenTrue), WhenFalse: Splice(current: ternary.WhenFalse)),
+                _ => current,
+            };
+            Syntax.SyntaxNode Expand(Syntax.SourceCall call, FunctionExpressionNode function) {
+                if (DocumentLowering.BindFunctionArguments(argumentNames: [.. call.Arguments.Select(selector: static argument => argument.Name)], function: function, name: call.Name, scope: scope, span: operand.Span) is not { } bound) {
+                    return new Syntax.Literal(Value: 0m);
+                }
+                return DocumentLowering.ExpandFunction(
+                    expand: () => {
+                        var arguments = new Dictionary<string, Syntax.SyntaxNode>(comparer: StringComparer.Ordinal);
+
+                        for (var at = 0; (at < bound.Length); at++) {
+                            arguments[function.Parameters[at].Name] = ((bound[at] >= 0)
+                                ? Splice(current: call.Arguments[bound[at]].Value)
+                                : Convert(expression: function.Parameters[at].DefaultValue!));
+                        }
+                        return Splice(current: Substitute(arguments: arguments, node: Convert(expression: function.Body)));
+                    },
+                    name: call.Name,
+                    refused: ((Syntax.SyntaxNode)new Syntax.Literal(Value: 0m)),
+                    scope: scope,
+                    span: operand.Span
+                );
+            }
+            // The compile-time expression as operand syntax, its atoms numbered after those already spliced in.
+            Syntax.SyntaxNode Convert(ExpressionNode expression) {
+                var converted = PuckParser.CreateOperand(expression: expression, form: DocumentValueForm.Expression);
+
+                if (converted.Syntax is not { } tree) {
+                    Refuse(message: $"'{converted.Text}' {converted.SyntaxError}", span: operand.Span);
+                    return new Syntax.Literal(Value: 0m);
+                }
+                var offset = (operand.Atoms.Count + m_inlinedAtoms.Count);
+
+                m_inlinedAtoms.AddRange(collection: converted.Atoms.Select(selector: static atom => atom.Value));
+                return Renumber(node: tree, offset: offset);
+            }
+        }
+
+        private bool CallsFunction(Syntax.SyntaxNode node) => node switch {
+            Syntax.SourceCall call => ((DocumentLowering.FunctionNamed(name: call.Name, scope: scope) is not null) || call.Arguments.Any(predicate: argument => CallsFunction(node: argument.Value))),
+            Syntax.SourceGroup group => CallsFunction(node: group.Value),
+            Syntax.SourceIndex index => (CallsFunction(node: index.Target) || CallsFunction(node: index.Index)),
+            Syntax.SourceAccess access => CallsFunction(node: access.Target),
+            Syntax.SourceLambda lambda => CallsFunction(node: lambda.Body),
+            Syntax.Unary unary => CallsFunction(node: unary.Operand),
+            Syntax.Binary binary => (CallsFunction(node: binary.Left) || CallsFunction(node: binary.Right)),
+            Syntax.Ternary ternary => (CallsFunction(node: ternary.Condition) || CallsFunction(node: ternary.WhenTrue) || CallsFunction(node: ternary.WhenFalse)),
+            _ => false,
+        };
+        // A parameter's every bare reading becomes its argument, grouped unless the argument is a primary, so an
+        // argument's operators keep their own precedence; a lambda binder of the same name shadows it.
+        private static Syntax.SyntaxNode Substitute(Syntax.SyntaxNode node, IReadOnlyDictionary<string, Syntax.SyntaxNode> arguments) => node switch {
+            Syntax.SourceName { Quoted: false } name when arguments.TryGetValue(key: name.Name, value: out var argument) =>
+                ((argument is Syntax.Literal or Syntax.SourceName or Syntax.SourceString or Syntax.SourceAtom or Syntax.SourceGroup or Syntax.SourceAccess or Syntax.SourceIndex or Syntax.SourceCall) ? argument : new Syntax.SourceGroup(Value: argument)),
+            Syntax.SourceCall call => call with { Arguments = [.. call.Arguments.Select(selector: item => item with { Value = Substitute(arguments: arguments, node: item.Value) })] },
+            Syntax.SourceGroup group => group with { Value = Substitute(arguments: arguments, node: group.Value) },
+            Syntax.SourceIndex index => index with { Target = Substitute(arguments: arguments, node: index.Target), Index = Substitute(arguments: arguments, node: index.Index) },
+            Syntax.SourceAccess access => access with { Target = Substitute(arguments: arguments, node: access.Target) },
+            Syntax.SourceLambda lambda => lambda with { Body = Substitute(arguments: (arguments.ContainsKey(key: lambda.Binder) ? arguments.Where(predicate: pair => (pair.Key != lambda.Binder)).ToDictionary(comparer: StringComparer.Ordinal) : arguments), node: lambda.Body) },
+            Syntax.Unary unary => unary with { Operand = Substitute(arguments: arguments, node: unary.Operand) },
+            Syntax.Binary binary => binary with { Left = Substitute(arguments: arguments, node: binary.Left), Right = Substitute(arguments: arguments, node: binary.Right) },
+            Syntax.Ternary ternary => new Syntax.Ternary(Condition: Substitute(arguments: arguments, node: ternary.Condition), WhenTrue: Substitute(arguments: arguments, node: ternary.WhenTrue), WhenFalse: Substitute(arguments: arguments, node: ternary.WhenFalse)),
+            _ => node,
+        };
+        private static Syntax.SyntaxNode Renumber(Syntax.SyntaxNode node, int offset) => ((offset == 0) ? node : node switch {
+            Syntax.SourceAtom atom => atom with { Index = (atom.Index + offset) },
+            Syntax.SourceCall call => call with { Arguments = [.. call.Arguments.Select(selector: item => item with { Value = Renumber(node: item.Value, offset: offset) })] },
+            Syntax.SourceGroup group => group with { Value = Renumber(node: group.Value, offset: offset) },
+            Syntax.SourceIndex index => index with { Target = Renumber(node: index.Target, offset: offset), Index = Renumber(node: index.Index, offset: offset) },
+            Syntax.SourceAccess access => access with { Target = Renumber(node: access.Target, offset: offset) },
+            Syntax.SourceLambda lambda => lambda with { Body = Renumber(node: lambda.Body, offset: offset) },
+            Syntax.Unary unary => unary with { Operand = Renumber(node: unary.Operand, offset: offset) },
+            Syntax.Binary binary => binary with { Left = Renumber(node: binary.Left, offset: offset), Right = Renumber(node: binary.Right, offset: offset) },
+            Syntax.Ternary ternary => new Syntax.Ternary(Condition: Renumber(node: ternary.Condition, offset: offset), WhenTrue: Renumber(node: ternary.WhenTrue, offset: offset), WhenFalse: Renumber(node: ternary.WhenFalse, offset: offset)),
+            _ => node,
+        });
 
         private HashSet<string>? m_derived;
         private string? m_binder;
         private int m_keyDepth;
 
         internal string Bind(OperandExpressionNode operand) {
+            operand = FoldOperand(operand: operand, scope: scope);
             WriteOperand(operand: operand);
             var text = m_text.ToString();
             // A literal string can be the comparand of a text gate. Arithmetic still compiles through the
@@ -47,7 +161,133 @@ public static partial class WorldDocumentEmitter {
         }
         internal ExpressionNode CompileTime(OperandExpressionNode operand) => ((operand.Syntax is { } syntax)
             ? ToCompileTime(node: syntax, operand: operand) : RefuseCompileTime(operand: operand));
+        // Folds what compile-time constants decide, so a spelling's program and price never depend on whether the
+        // author wrote a constant or an expression of constants: a name bound to a number becomes that number, a
+        // choice on a constant condition becomes its arm, and an operator over constants becomes its result where
+        // the result is exact in the runtime's Q48.16 arithmetic. Calls, indexes and accesses keep their spelling,
+        // since a name inside one may be a row or a key rather than a value.
+        internal Syntax.SyntaxNode Fold(Syntax.SyntaxNode node, OperandExpressionNode operand) {
+            switch (node) {
+                case Syntax.SourceGroup group: {
+                        var value = Fold(node: group.Value, operand: operand);
 
+                        return ((value is Syntax.Literal) ? value : (ReferenceEquals(objA: value, objB: group.Value) ? group : group with { Value = value }));
+                    }
+                case Syntax.SourceName name when (Constant(name: name, operand: operand) is { } constant):
+                    return new Syntax.Literal(Value: constant);
+                case Syntax.SourceAccess access when (Constant(access: access) is { } constant):
+                    return new Syntax.Literal(Value: constant);
+                // A read through a compile-time object or array (a loop's record, a let's table) is the number it reads.
+                case Syntax.SourceAccess or Syntax.SourceIndex when (HasBoundRoot(node: node) && (Number(value: DocumentLowering.LowerValue(ToCompileTime(node: node, operand: operand), scope)) is { } read)):
+                    return new Syntax.Literal(Value: read);
+                case Syntax.Unary unary: {
+                        var value = Fold(node: unary.Operand, operand: operand);
+
+                        if ((value is Syntax.Literal { Value: var number }) && IsExact(value: number)) {
+                            switch (unary.Operator) {
+                                case "-": return new Syntax.Literal(Value: -number);
+                                case "not": return Truth(value: (number == 0m));
+                            }
+                        }
+                        return (ReferenceEquals(objA: value, objB: unary.Operand) ? unary : unary with { Operand = value });
+                    }
+                case Syntax.Binary binary: {
+                        var left = Fold(node: binary.Left, operand: operand);
+                        var right = Fold(node: binary.Right, operand: operand);
+
+                        if (FoldBinary(left: left, operation: binary.Operator, right: right) is { } result) { return result; }
+                        return ((ReferenceEquals(objA: left, objB: binary.Left) && ReferenceEquals(objA: right, objB: binary.Right)) ? binary : binary with { Left = left, Right = right });
+                    }
+                case Syntax.Ternary ternary: {
+                        var condition = Fold(node: ternary.Condition, operand: operand);
+
+                        if ((condition is Syntax.Literal { Value: var number }) && IsExact(value: number)) {
+                            return Fold(node: ((number != 0m) ? ternary.WhenTrue : ternary.WhenFalse), operand: operand);
+                        }
+                        var whenTrue = Fold(node: ternary.WhenTrue, operand: operand);
+                        var whenFalse = Fold(node: ternary.WhenFalse, operand: operand);
+
+                        return ((ReferenceEquals(objA: condition, objB: ternary.Condition) && ReferenceEquals(objA: whenTrue, objB: ternary.WhenTrue) && ReferenceEquals(objA: whenFalse, objB: ternary.WhenFalse))
+                            ? ternary
+                            : new Syntax.Ternary(Condition: condition, WhenFalse: whenFalse, WhenTrue: whenTrue));
+                    }
+                default:
+                    return node;
+            }
+        }
+
+        // The number a bare name stands for at compile time, resolved in WriteName's order: a runtime binder, a
+        // pool binding or derived state is never a constant, and a let or loop binding is one when it holds a number.
+        private decimal? Constant(Syntax.SourceName name, OperandExpressionNode operand) {
+            if (name.Quoted || name.Name.StartsWith(value: '$') || (name.Name == m_binder) || GetPoolBindings(scope: scope).Contains(item: name.Name) ||
+                GetOrCreateDerivedState(scope: scope).ContainsKey(key: name.Name)) {
+                return null;
+            }
+            if (name.Name is "true" or "false") { return ((name.Name == "true") ? 1m : 0m); }
+            if (!scope.TryLowerBinding(name.Name, out var bound) || scope.TryRefuseRead(name: name.Name, span: operand.Span)) {
+                return null;
+            }
+            return Number(value: bound);
+        }
+        // The number a dotted read stands for, resolved in Write's order: a qualified binding, then an enum member.
+        private decimal? Constant(Syntax.SourceAccess access) {
+            if (HasRuntimeRoot(node: access)) { return null; }
+            if ((QualifiedName.From(syntax: access)?.ToString() is { } qualified) && scope.TryLowerBinding(qualified, out var bound)) {
+                return Number(value: bound);
+            }
+            if ((InstanceName(node: access) is null) && (access.Target is Syntax.SourceName { Quoted: false } enumName) &&
+                GetOrCreateEnums(scope: scope).TryGetValue(key: enumName.Name, value: out var definition)) {
+                for (var ordinal = 0; (ordinal < definition.Members.Count); ordinal++) {
+                    if (definition.Members[ordinal] == access.Member) { return ordinal; }
+                }
+            }
+            return null;
+        }
+        private static decimal? Number(JsonNode? value) {
+            if (value is not JsonValue scalar) {
+                return null;
+            }
+            // The number WriteValue would write for the binding, read back from the same text.
+            var text = (scalar.TryGetValue<string>(value: out var written) ? written : scalar.ToJsonString());
+            decimal? number = (scalar.TryGetValue<bool>(value: out var flag) ? (flag ? 1m : 0m)
+                : (decimal.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed) ? parsed : null));
+
+            return (((number is { } exact) && IsExact(value: exact)) ? exact : null);
+        }
+
+        internal static Syntax.Literal? FoldBinary(Syntax.SyntaxNode left, string operation, Syntax.SyntaxNode right) {
+            if ((left is Syntax.Literal { Value: var a }) && IsExact(value: a)) {
+                // A constant decides a short-circuit whatever the other side reads.
+                if ((operation == "and") && (a == 0m)) { return Truth(value: false); }
+                if ((operation == "or") && (a != 0m)) { return Truth(value: true); }
+            }
+            if ((left is not Syntax.Literal { Value: var x }) || (right is not Syntax.Literal { Value: var y }) || !IsExact(value: x) || !IsExact(value: y)) {
+                return null;
+            }
+            decimal? result = operation switch {
+                "==" => Bool(value: (x == y)),
+                "!=" => Bool(value: (x != y)),
+                "<" => Bool(value: (x < y)),
+                "<=" => Bool(value: (x <= y)),
+                ">" => Bool(value: (x > y)),
+                ">=" => Bool(value: (x >= y)),
+                "and" => Bool(value: ((x != 0m) && (y != 0m))),
+                "or" => Bool(value: ((x != 0m) || (y != 0m))),
+                "+" => (x + y),
+                "-" => (x - y),
+                // A product is exact in Q48.16 when one factor is whole.
+                "*" when ((decimal.Truncate(d: x) == x) || (decimal.Truncate(d: y) == y)) => (x * y),
+                _ => null,
+            };
+
+            return (((result is { } value) && IsExact(value: value)) ? new Syntax.Literal(Value: value) : null);
+
+            static decimal Bool(bool value) => (value ? 1m : 0m);
+        }
+
+        private static Syntax.Literal Truth(bool value) => new(Value: (value ? 1m : 0m));
+        // A decimal is exact in the runtime's arithmetic when it is a whole number of 2^-16 steps inside Q48.16's range.
+        private static bool IsExact(decimal value) => ((Math.Abs(value: value) < 140_737_488_355_328m) && (decimal.Truncate(d: (value * 65_536m)) == (value * 65_536m)));
         private void Refuse(string message, SourceSpan span) => scope.Diagnostics.ReportError(
             code: PuckDiagnosticCodes.OperandParse, message: message, span: span);
         private void WriteOperand(OperandExpressionNode operand) {
@@ -215,11 +455,12 @@ public static partial class WorldDocumentEmitter {
         }
         private void WriteIndex(Syntax.SourceIndex index, OperandExpressionNode operand) {
             var key = index.Index;
+
             if (key is Syntax.SourceGroup) {
                 Refuse(message: "row[(expression)] is retired; use row[expression]. Brackets already evaluate their contents.", span: operand.Span);
             }
             while (key is Syntax.SourceGroup group) { key = group.Value; }
-            if ((m_keyDepth > 0) && key is Syntax.SourceName { Name: "$value" }) {
+            if ((m_keyDepth > 0) && (key is Syntax.SourceName { Name: "$value" })) {
                 Refuse(message: "slot[$value] inside brackets is retired; use the slot name directly: row[slot].", span: operand.Span);
                 Write(index.Target, DocumentValueForm.Expression, operand);
                 return;
@@ -245,16 +486,16 @@ public static partial class WorldDocumentEmitter {
             m_keyDepth++;
             // Brackets evaluate their contents. Literal and reserved keys already have a document spelling;
             // all other values go through the expression binder, including bare lexical names.
-            if (key is Syntax.SourceName { Quoted: false } boundName && scope.TryLowerBinding(boundName.Name, out var boundKey)) {
+            if ((key is Syntax.SourceName { Quoted: false } boundName) && scope.TryLowerBinding(boundName.Name, out var boundKey)) {
                 WriteValue(boundKey, DocumentValueForm.Key, operand.Span);
             } else if (key is Syntax.SourceAccess or Syntax.SourceIndex or Syntax.SourceCall) {
-                Write(key, DocumentValueForm.Expression, operand);
+                Write(form: DocumentValueForm.Expression, node: key, operand: operand);
             } else if (key is not (Syntax.Literal or Syntax.SourceString or Syntax.SourceAtom or Syntax.SourceName { Quoted: true } or Syntax.SourceName { Name: ['$', ..] })) {
                 m_text.Append(value: '(');
-                Write(key, DocumentValueForm.Expression, operand);
+                Write(form: DocumentValueForm.Expression, node: key, operand: operand);
                 m_text.Append(value: ')');
             } else {
-                Write(key, DocumentValueForm.Key, operand);
+                Write(form: DocumentValueForm.Key, node: key, operand: operand);
             }
             m_keyDepth--;
             m_text.Append(value: ']');
@@ -265,8 +506,8 @@ public static partial class WorldDocumentEmitter {
                 m_text.Append(value: '0');
                 return;
             }
-            if (call is { Name: "maximum", Arguments: [var left, var right] } &&
-                BooleanSyntax(left.Value) && BooleanSyntax(right.Value)) {
+            if ((call is { Name: "maximum", Arguments: [var left, var right] }) &&
+                BooleanSyntax(node: left.Value) && BooleanSyntax(node: right.Value)) {
                 Refuse(message: "maximum() over Boolean expressions is retired; write 'left or right'.", span: operand.Span);
                 m_text.Append(value: '0');
                 return;
@@ -291,7 +532,7 @@ public static partial class WorldDocumentEmitter {
             m_text.Append(value: ')');
         }
         private static bool BooleanSyntax(Syntax.SyntaxNode node) => node switch {
-            Syntax.SourceGroup group => BooleanSyntax(group.Value),
+            Syntax.SourceGroup group => BooleanSyntax(node: group.Value),
             Syntax.Binary { Operator: "==" or "!=" or "<" or "<=" or ">" or ">=" or "and" or "or" } => true,
             Syntax.Unary { Operator: "not" } => true,
             _ => false,
@@ -343,12 +584,17 @@ public static partial class WorldDocumentEmitter {
         }
         private bool HasBoundRoot(Syntax.SyntaxNode node) {
             if (HasRuntimeRoot(node: node)) { return false; }
-            while (true) {
-                if ((QualifiedName.From(syntax: node)?.ToString() is { } qualified) && scope.TryLowerBinding(qualified, out _)) { return true; }
+            // A binding a key or member is read through that holds a name (a template parameter or loop variable
+            // holding "goSeat") names a row, so what follows it is that row's key or member, read or written as the
+            // row spelled out would be; only a binding holding an object or array is read through at compile time.
+            for (var whole = true; ; whole = false) {
+                if ((QualifiedName.From(syntax: node)?.ToString() is { } qualified) && scope.TryLowerBinding(qualified, out var bound)) {
+                    return (whole || !((bound is JsonValue named) && named.TryGetValue<string>(value: out _)));
+                }
                 switch (node) {
                     case Syntax.SourceAccess access: node = access.Target; break;
                     case Syntax.SourceIndex index: node = index.Target; break;
-                    default: return ((node is Syntax.SourceName { Quoted: false } name) && scope.TryLowerBinding(name.Name, out _));
+                    default: return false;
                 }
             }
         }

@@ -244,9 +244,9 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// lifetime-qualified identity its host started it under when the name ran before.</summary>
     public string AuthorityIdentity { get; internal set; }
     /// <summary>Gets the derived-face screen slots this instance's boot document reserved. The presentation binder
-    /// registers exactly that band up front and the render provider key set is frozen there, so a live edit may lower
-    /// <see cref="WorldPlacementPolicyDefaults.DerivedFaceScreens"/> but never raise it past this — a raise is refused by
-    /// name, in the same family as the boot-allocated population capacity, rather than seating faces at indices no
+    /// registers exactly that band up front and the render provider key set is frozen there, so a live edit may light
+    /// fewer creation faces (<see cref="WorldDefinition.DerivedFaceScreens"/>) but never more than this — more is refused
+    /// by name, in the same family as the boot-allocated population capacity, rather than seating faces at indices no
     /// renderer holds.</summary>
     public int BootDerivedFaceScreens { get; }
     /// <summary>Gets the phases this world's state clocks read as it was admitted at boot
@@ -570,7 +570,7 @@ public sealed partial class WorldServer : IWorldServerHost {
                 ? lifetime
                 : instanceIdentity)
         );
-        BootDerivedFaceScreens = definition.Authoring.DerivedFaceScreens;
+        BootDerivedFaceScreens = definition.DerivedFaceScreens;
         ResetClockSeeds(definition: definition);
         m_machines = machines;
         if (!machines.TryPrepare(

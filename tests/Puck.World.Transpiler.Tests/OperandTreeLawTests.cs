@@ -39,8 +39,8 @@ public class OperandTreeLawTests {
     [InlineData("values[$\"amount\"] + $\"{amount}\"")]
     [Theory]
     public void SugarCallsAndBlockMembersBindTheSameTree(string expression) {
-        var sugar = Compile(source: (Prefix + $"rule r {{ result = {expression} }}"))["rules"]![0]!["effects"]![0]!["expression"];
-        var call = Compile(source: (Prefix + $"rule r {{ setState(state: result, expression: {expression}) }}"))["rules"]![0]!["effects"]![0]!["expression"];
+        var sugar = Compile(source: (Prefix + $"rule r {{ result = {expression} }}"))["rules"]![0]!["effects"]![0];
+        var call = Compile(source: (Prefix + $"rule r {{ setState(state: result, expression: {expression}) }}"))["rules"]![0]!["effects"]![0];
         var block = Compile(source: (Prefix + $$"""
             rules [{ name: "r"
                 effects [{ $type: setState
@@ -48,7 +48,7 @@ public class OperandTreeLawTests {
                     expression: {{expression}}
                 }]
             }]
-            """))["rules"]![0]!["effects"]![0]!["expression"];
+            """))["rules"]![0]!["effects"]![0];
 
         Assert.NotNull(@object: sugar);
         Assert.True(condition: JsonNode.DeepEquals(node1: sugar, node2: call), userMessage: call?.ToJsonString());
@@ -101,10 +101,10 @@ public class OperandTreeLawTests {
     [Fact]
     public void BoundObjectMembersAndArrayIndicesAreResolvedStructurally() {
         var source = (Prefix + "let settings = { count: 5 }\nlet counts = [2, 7]\nrule r { result = settings.count + counts[1] }");
-        var expression = Compile(source: source)["rules"]![0]!["effects"]![0]!["expression"]!;
+        var effect = Compile(source: source)["rules"]![0]!["effects"]![0]!;
 
-        Assert.Equal(5m, expression["instructions"]![0]!["value"]!.GetValue<decimal>());
-        Assert.Equal(7m, expression["instructions"]![1]!["value"]!.GetValue<decimal>());
+        // settings.count reads 5 and counts[1] reads 7 at compile time, and the sum of the two constants folds.
+        Assert.Equal(12m, effect["value"]!.GetValue<decimal>());
     }
     [Fact]
     public void AnImportAliasReachesBareSugarOperandsWithoutRenamingLiteralKeys() {

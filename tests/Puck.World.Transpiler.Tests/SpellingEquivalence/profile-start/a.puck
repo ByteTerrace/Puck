@@ -5,8 +5,13 @@ documentId: "pair"
 prototypes {
   prototype "p" {
     document {
+      schema: "puck.creation.v1"
+      name: "p"
       shape Prism "b" {
-        profile [[0, 0], [1, 0], [1, 1], [0, 1]]
+        profile {
+          kind: Convex
+          vertices [[-1, -1], [-1, 1], [1, 1], [1, -1]]
+        }
         scale [0.5, 0.5, 0.5]
       }
     }

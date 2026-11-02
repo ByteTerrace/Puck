@@ -1,0 +1,15 @@
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+kits [
+  {
+    name: "flyer"
+    bodyMotionProgram: "walk"
+    motion {
+      holds [
+        { name: "groundFlight", bond: Surface, hold: Gravity, reach: 1.2, forward: Heading, thrust: 1 }
+        { name: "ground", bond: Surface, hold: Gravity, reach: 1.2, forward: Heading }
+      ]
+    }
+  }
+]

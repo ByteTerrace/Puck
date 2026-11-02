@@ -66,8 +66,14 @@ and which a game's own rule collects. The games in [`../games/`](../games/README
 frames built from boxes.
 
 `kits.puck` is a library of kit parts: the gravity and the ground, fall and air holds a body wears (`groundHold`,
-`fallHold`, `airHold`), and the kits of a piece that stays where it is put (`pieceKit` for a rigid piece the physics
-settles, `heldKit` for a cursor the rules pose).
+`fallHold`, `airHold`), the motions a kit derives its own from with `with` (`walkerMotion`, the walker's 4 m/s walk
+and run, and `stillMotion`, a body the rules pose), and the kits of a piece that stays where it is put (`pieceKit` for
+a rigid piece the physics settles, `heldKit` for a cursor the rules pose).
+
+`seat.puck` is a library of a seated player's buttons at a table game: the buttons and the channel each reads
+(`seatButtons`, `seatSteps`), whether one is held past half way (`seatHeld`), and the rule template that records its
+press in a seat row's `<button>Edge` and `<button>Down` cells (`seatPress`), which a game's presses rule calls in a
+`for` over its buttons.
 
 `terrain.puck` and `foliage.puck` are optional libraries. Foliage supplies
 `broadleafTree`, `mossyRock`, `grassTuft`, `sceneryPatch`, `sceneryScatter` and

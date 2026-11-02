@@ -534,7 +534,7 @@ internal static partial class Fixtures {
             rateHz: DefaultRateHz,
             seatCollider: null,
             creations: [creation],
-            placements: [.. Enumerable.Range(start: 0, count: companions).Select(selector: index => new WorldPlacement(
+            placements: [.. Enumerable.Range(count: companions, start: 0).Select(selector: index => new WorldPlacement(
                 Id: $"companion-{index}",
                 PrototypeId: creation.Id,
                 Position: new DocumentVector3(value: new Vector3(x: (2f + index), y: 0f, z: 2f)),
@@ -872,7 +872,6 @@ internal static partial class Fixtures {
         AuthoringHeadroomScreens: 4,
         CandidateCap: 16,
         CandidateRadius: 32f,
-        DerivedFaceScreens: 4,
         MaxPlacementScale: 5.0f,
         MinPlacementScale: 0.2f,
         PreviewDeadlineFrames: 12

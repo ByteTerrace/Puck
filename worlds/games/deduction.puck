@@ -185,7 +185,7 @@ template deductionRules(seats, moles) {
   rule "deduction-clear" {
     when deduction.phase == 1 and deduction.drawn == 0
     for s in range(1, seats) {
-      setState(state: deductionReveal, key: $"{s}", text: "")
+      deductionReveal[$"{s}"] = ""
       deductionVotes[$"{s}"] = 0
       deductionRole[$"{s}"] = 0
       deductionPartners[$"{s}"] = 0
@@ -231,11 +231,11 @@ template deductionRules(seats, moles) {
     rule $"deduction-say-{s}" {
       when deduction.phase == 2 and $"deductionMail{s}".to == 0
       setState(state: deductionTalk, key: expr(deduction.said % 8), fromState: $"deductionMailText{s}", fromKey: text)
-      setState(state: deductionTalkFrom, key: expr(deduction.said % 8), expression: s)
+      deductionTalkFrom[deduction.said % 8] = s
       deduction.said += 1
-      setState(state: $"deductionMail{s}", key: to, expression: -1)
-      setState(state: $"deductionMail{s}", key: result, expression: 1)
-      addState(state: $"deductionMail{s}", key: taken, expression: 1)
+      $"deductionMail{s}".to = -1
+      $"deductionMail{s}".result = 1
+      $"deductionMail{s}".taken += 1
     }
 
     // A whisper to seat `t`: into seat `t`'s own rows alone, so nothing another seat reads moves.
@@ -245,11 +245,11 @@ template deductionRules(seats, moles) {
         setState(state: $"deductionHeard{t}", key: expr(deductionLines[$"{t}"] % 4), fromState: $"deductionMailText{s}",
           fromKey: text
         )
-        setState(state: $"deductionHeardFrom{t}", key: expr(deductionLines[$"{t}"] % 4), expression: s)
+        $"deductionHeardFrom{t}"[deductionLines[$"{t}"] % 4] = s
         deductionLines[$"{t}"] += 1
-        setState(state: $"deductionMail{s}", key: to, expression: -1)
-        setState(state: $"deductionMail{s}", key: result, expression: 1)
-        addState(state: $"deductionMail{s}", key: taken, expression: 1)
+        $"deductionMail{s}".to = -1
+        $"deductionMail{s}".result = 1
+        $"deductionMail{s}".taken += 1
       }
     }
 
@@ -264,7 +264,7 @@ template deductionRules(seats, moles) {
         setState(state: $"deductionDen{t}", key: expr(deductionDenLines[$"{t}"] % 4), fromState: $"deductionMailText{s}",
           fromKey: text
         )
-        setState(state: $"deductionDenFrom{t}", key: expr(deductionDenLines[$"{t}"] % 4), expression: s)
+        $"deductionDenFrom{t}"[deductionDenLines[$"{t}"] % 4] = s
         deductionDenLines[$"{t}"] += 1
       }
     }
@@ -272,18 +272,18 @@ template deductionRules(seats, moles) {
     rule $"deduction-den-{s}" {
       local mole = deductionRole[$"{s}"] == 2
       when deduction.phase == 2 and $"deductionMail{s}".to == deductionDenSeat
-      setState(state: $"deductionMail{s}", key: to, expression: -1)
-      setState(state: $"deductionMail{s}", key: result, expression: mole ? 1 : -1)
-      addState(state: $"deductionMail{s}", key: taken, expression: 1)
+      $"deductionMail{s}".to = -1
+      $"deductionMail{s}".result = mole ? 1 : -1
+      $"deductionMail{s}".taken += 1
     }
 
     // Anything else addressed is refused: oneself, or no seat.
     rule $"deduction-misaddressed-{s}" {
       local to = $"deductionMail{s}".to
       when deduction.phase == 2 and to > 0 and to != deductionDenSeat and (to == s or to > seats)
-      setState(state: $"deductionMail{s}", key: to, expression: -1)
-      setState(state: $"deductionMail{s}", key: result, expression: -1)
-      addState(state: $"deductionMail{s}", key: taken, expression: 1)
+      $"deductionMail{s}".to = -1
+      $"deductionMail{s}".result = -1
+      $"deductionMail{s}".taken += 1
     }
 
     // A sealed vote, collected while the day lasts; a later vote replaces an earlier one.
@@ -294,9 +294,9 @@ template deductionRules(seats, moles) {
       if valid {
         deductionVotes[$"{s}"] = vote
       }
-      setState(state: $"deductionMail{s}", key: vote, expression: -1)
-      setState(state: $"deductionMail{s}", key: result, expression: valid ? 1 : -1)
-      addState(state: $"deductionMail{s}", key: taken, expression: 1)
+      $"deductionMail{s}".vote = -1
+      $"deductionMail{s}".result = valid ? 1 : -1
+      $"deductionMail{s}".taken += 1
     }
   }
 
@@ -331,7 +331,7 @@ template deductionRules(seats, moles) {
     deduction.outRole = deduction.out > 0 ? deductionRole[deduction.out] : 0
     deduction.winner = deduction.outRole == 2 ? 1 : 2
     for s in range(1, seats) {
-      setState(state: deductionReveal, key: $"{s}", text: $"seat{s}")
+      deductionReveal[$"{s}"] = $"seat{s}"
     }
   }
 }

@@ -112,6 +112,14 @@ public static partial class DocumentLowering {
 
                     return placeholder;
                 }
+                // A let holding a record lands where it is read as the record written there: its members take a row's
+                // spelling and lower at their own positions.
+                if (!scope.Locals.ContainsKey(key: ident.Name) && scope.Constants.TryGetValue(key: ident.Name, value: out var declared) &&
+                    (declared is ObjectExpressionNode or ArrayExpressionNode or WithExpressionNode) && (MemberContext(scope: scope) is { } position)) {
+                    if (scope.TryLowerBindingAt(fieldKey: fieldKey, name: ident.Name, position: position, value: out var placed)) {
+                        return placed;
+                    }
+                }
                 if (scope.TryEvaluateBinding(
                     ident.Name,
                     fieldKey,
@@ -265,6 +273,44 @@ public static partial class DocumentLowering {
                     return jsonObj;
                 }
 
+            // The base's object with the overrides' members in place of its own, the ones it lacks added: the object
+            // written out, lowered at this value's position like any object literal.
+            case WithExpressionNode derived: {
+                    if (EvaluateValue(expr: derived.Base, fieldKey: fieldKey, scope: scope) is not JsonObject based) {
+                        scope.Diagnostics.ReportError(
+                            code: PuckDiagnosticCodes.InvalidValue,
+                            message: "'with' derives a record from an object; its base is not one",
+                            span: derived.Base.Span
+                        );
+
+                        return null;
+                    }
+                    var result = ((JsonObject)based.DeepClone());
+
+                    if (Evaluate(expr: derived.Overrides, fieldKey: fieldKey, owned: out _, scope: scope) is JsonObject overrides) {
+                        foreach (var (key, value) in overrides.ToArray()) {
+                            result[key] = value?.DeepClone();
+                        }
+                    }
+
+                    return result;
+                }
+
+            case CallExpressionNode call when (FunctionNamed(name: call.Name, scope: scope) is { } function): {
+                    owned = false;
+
+                    return CallFunction(call: call, fieldKey: fieldKey, function: function, scope: scope);
+                }
+
+            case FunctionExpressionNode function:
+                scope.Diagnostics.ReportError(
+                    code: PuckDiagnosticCodes.InvalidValue,
+                    message: "a function is called with its arguments, never read as a value",
+                    span: function.Span
+                );
+
+                return null;
+
             case CallExpressionNode call: {
                     var context = MemberContext(scope: scope);
                     var arm = scope.Vocabulary.CallContext(callName: call.Name, context: context);
@@ -394,6 +440,101 @@ public static partial class DocumentLowering {
     }
 
     private const string MemberContextKey = "MemberContext";
+    private const string CallingFunctionsKey = "CallingFunctions";
+
+    /// <summary>Returns the value function a name calls in this scope.</summary>
+    /// <param name="name">The called name.</param>
+    /// <param name="scope">The lowering scope.</param>
+    /// <returns>The function, or <see langword="null"/> when the name declares none.</returns>
+    public static FunctionExpressionNode? FunctionNamed(string name, DocumentScope scope) {
+        ArgumentNullException.ThrowIfNull(argument: scope);
+
+        return ((!scope.Locals.ContainsKey(key: name) && scope.Constants.TryGetValue(key: name, value: out var value) && (value is FunctionExpressionNode function)) ? function : null);
+    }
+    /// <summary>Matches a call's arguments to a function's parameters: positional arguments in order, then named ones by
+    /// name, and a parameter no argument supplies takes its default. A missing argument, a name no parameter has, a
+    /// parameter supplied twice and too many arguments are refused at the call.</summary>
+    /// <param name="name">The function's name, for the refusal.</param>
+    /// <param name="function">The function.</param>
+    /// <param name="argumentNames">Each argument's name, or <see langword="null"/> for a positional one.</param>
+    /// <param name="span">The call's span.</param>
+    /// <param name="scope">The lowering scope, whose diagnostics take a refusal.</param>
+    /// <returns>For each parameter, the index of its argument, or -1 for its default; <see langword="null"/> after a
+    /// refusal.</returns>
+    public static int[]? BindFunctionArguments(string name, FunctionExpressionNode function, IReadOnlyList<string?> argumentNames, SourceSpan span, DocumentScope scope) {
+        ArgumentNullException.ThrowIfNull(argument: function);
+        ArgumentNullException.ThrowIfNull(argument: argumentNames);
+        ArgumentNullException.ThrowIfNull(argument: scope);
+        var bound = Enumerable.Repeat(element: -1, count: function.Parameters.Count).ToArray();
+        string? refusal = null;
+
+        for (var index = 0; ((index < argumentNames.Count) && (refusal is null)); index++) {
+            var at = ((argumentNames[index] is { } named)
+                ? function.Parameters.ToList().FindIndex(match: parameter => (parameter.Name == named))
+                : index);
+
+            refusal = (((at < 0) || (at >= bound.Length))
+                ? ((argumentNames[index] is { } unknown) ? $"function '{name}' has no parameter '{unknown}'" : $"function '{name}' takes {bound.Length} argument(s)")
+                : ((bound[at] >= 0) ? $"function '{name}' is given '{function.Parameters[at].Name}' twice" : null));
+            if (refusal is null) { bound[at] = index; }
+        }
+        for (var at = 0; ((at < bound.Length) && (refusal is null)); at++) {
+            if ((bound[at] < 0) && (function.Parameters[at].DefaultValue is null)) {
+                refusal = $"function '{name}' needs its argument '{function.Parameters[at].Name}'";
+            }
+        }
+        if (refusal is not null) {
+            scope.Diagnostics.ReportError(code: PuckDiagnosticCodes.InvalidValue, message: refusal, span: span);
+            return null;
+        }
+        return bound;
+    }
+    /// <summary>Runs <paramref name="expand"/> as the expansion of one call of a function, refusing a call the
+    /// function makes of itself, directly or through another: a function is inlined, so it cannot recur.</summary>
+    /// <typeparam name="T">What the expansion returns.</typeparam>
+    /// <param name="name">The function's name.</param>
+    /// <param name="span">The call's span.</param>
+    /// <param name="scope">The lowering scope.</param>
+    /// <param name="expand">The expansion.</param>
+    /// <param name="refused">What the call stands for when it is refused.</param>
+    /// <returns>The expansion's result, or <paramref name="refused"/>.</returns>
+    public static T ExpandFunction<T>(string name, SourceSpan span, DocumentScope scope, Func<T> expand, T refused) {
+        ArgumentNullException.ThrowIfNull(argument: scope);
+        ArgumentNullException.ThrowIfNull(argument: expand);
+        if (scope.Annotations.GetValueOrDefault(key: CallingFunctionsKey) is not HashSet<string> calling) {
+            calling = new HashSet<string>(comparer: StringComparer.Ordinal);
+            scope.Annotations[CallingFunctionsKey] = calling;
+        }
+        if (!calling.Add(item: name)) {
+            scope.Diagnostics.ReportError(code: PuckDiagnosticCodes.InvalidValue, message: $"function '{name}' calls itself; a function is inlined and cannot recur", span: span);
+            return refused;
+        }
+        try {
+            return expand();
+        } finally {
+            calling.Remove(item: name);
+        }
+    }
+
+    // A call of a value function at compile time: the body evaluated with each parameter bound to its argument's value
+    // (or its default's), as locals the body reads and nothing else does.
+    private static JsonNode? CallFunction(CallExpressionNode call, FunctionExpressionNode function, string? fieldKey, DocumentScope scope) {
+        if (BindFunctionArguments(argumentNames: [.. call.Arguments.Select(selector: static argument => argument.Name)], function: function, name: call.Name, scope: scope, span: call.Span) is not { } bound) {
+            return null;
+        }
+        var locals = new Dictionary<string, JsonNode?>(comparer: StringComparer.Ordinal);
+
+        for (var at = 0; (at < bound.Length); at++) {
+            locals[function.Parameters[at].Name] = EvaluateValue(expr: ((bound[at] >= 0) ? call.Arguments[bound[at]].Value : function.Parameters[at].DefaultValue!), fieldKey: null, scope: scope);
+        }
+        return ExpandFunction(
+            expand: () => EvaluateValue(expr: function.Body, fieldKey: fieldKey, scope: scope.WithLocals(lambdaLocals: locals)),
+            name: call.Name,
+            refused: ((JsonNode?)null),
+            scope: scope,
+            span: call.Span
+        );
+    }
 
     /// <summary>Gets the position the value being lowered fills, in the vocabulary's own terms.</summary>
     /// <param name="scope">The lowering scope.</param>
@@ -641,10 +782,11 @@ public static partial class DocumentLowering {
         }
         if (bin.Operator is "and" or "or") {
             var left = IsTruthy(node: leftNode);
-            if ((bin.Operator == "and" && !left) || (bin.Operator == "or" && left)) {
-                return JsonValue.Create(value: left ? 1L : 0L);
+
+            if (((bin.Operator == "and") && !left) || ((bin.Operator == "or") && left)) {
+                return JsonValue.Create(value: (left ? 1L : 0L));
             }
-            return JsonValue.Create(value: IsTruthy(node: EvaluateValue(bin.Right, scope, fieldKey)) ? 1L : 0L);
+            return JsonValue.Create(value: (IsTruthy(node: EvaluateValue(bin.Right, scope, fieldKey)) ? 1L : 0L));
         }
 
         var rightNode = EvaluateValue(
@@ -939,7 +1081,8 @@ public static partial class DocumentLowering {
             scope,
             fieldKey
         );
-        if (un.Operator == "not") { return JsonValue.Create(value: IsTruthy(node: operand) ? 0L : 1L); }
+
+        if (un.Operator == "not") { return JsonValue.Create(value: (IsTruthy(node: operand) ? 0L : 1L)); }
 
         if (un.Operator == "~") {
             if (
@@ -1353,6 +1496,8 @@ public static partial class DocumentLowering {
     /// bound. A vocabulary can use this to preserve reference provenance through later document rewrites.</param>
     /// <param name="initializeInvocation">An optional initializer run after declarations and arguments are bound,
     /// before the body is lowered.</param>
+    /// <param name="inRuleBody">Whether the call stands in a rule body, the one place a <c>rule template</c> is
+    /// called and a document template is not.</param>
     public static void ExpandTemplate(
         CallExpressionNode call,
         JsonObject target,
@@ -1360,7 +1505,8 @@ public static partial class DocumentLowering {
         Action<StatementNode, JsonObject, DocumentScope> sink,
         Dictionary<string, object?>? annotations = null,
         Func<TemplateParameterNode, ExpressionNode, DocumentScope, ExpressionNode>? bindArgument = null,
-        Action<DocumentScope, IReadOnlyList<StatementNode>>? initializeInvocation = null
+        Action<DocumentScope, IReadOnlyList<StatementNode>>? initializeInvocation = null,
+        bool inRuleBody = false
     ) {
         ArgumentNullException.ThrowIfNull(call);
         ArgumentNullException.ThrowIfNull(scope);
@@ -1380,6 +1526,16 @@ public static partial class DocumentLowering {
             scope.Diagnostics.ReportError(
                 code: PuckDiagnosticCodes.InvalidValue,
                 message: $"Unknown module or template '{call.Name}'.",
+                span: call.Span
+            );
+            return;
+        }
+        if (template.IsRuleBody != inRuleBody) {
+            scope.Diagnostics.ReportError(
+                code: PuckDiagnosticCodes.InvalidValue,
+                message: (template.IsRuleBody
+                    ? $"'{templateName}' is a rule template: its locals, gate and effects splice into a rule body, so it is called inside one"
+                    : $"'{templateName}' is a document template; a rule body calls a 'rule template'"),
                 span: call.Span
             );
             return;
@@ -1774,6 +1930,18 @@ public static partial class DocumentLowering {
         ArgumentNullException.ThrowIfNull(scope);
 
         foreach (var statement in statements) {
+            // A rule template's call splices its body here under its bound arguments, as a `for` does its iterations.
+            if ((statement is ExpressionStatementNode { Expression: CallExpressionNode call }) && scope.Templates.TryGetValue(key: call.Name, value: out var template) && template.IsRuleBody) {
+                var spliced = new List<(StatementNode Statement, DocumentScope Scope)>();
+
+                ExpandTemplate(call: call, inRuleBody: true, scope: scope, sink: (member, _, invocation) => spliced.Add(item: (member, invocation)), target: []);
+                foreach (var (member, invocation) in spliced) {
+                    foreach (var flattened in ExpandBody(scope: invocation, statements: [member])) {
+                        yield return flattened;
+                    }
+                }
+                continue;
+            }
             if (statement is not ForStatementNode loop) {
                 yield return (statement, scope);
 

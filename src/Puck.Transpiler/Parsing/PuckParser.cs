@@ -460,6 +460,25 @@ public static partial class PuckParser {
             }
         }
 
+        // `function name(p, q = d) = expression`: a value function, held as the let it lowers to.
+        if (TryMatchStatementKeyword(context: context, keyword: "function")) {
+            SkipWhiteSpace(context: context);
+            if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var functionName)) {
+                throw CreateException(context: context, message: "Expected a name after 'function'");
+            }
+            var parameters = ParseDefaultedParameters(context: context, owner: $"function '{functionName}'");
+
+            SkipWhiteSpace(context: context);
+            if (!TryConsume(c: '=', context: context)) {
+                throw CreateException(context: context, message: $"Expected '=' and the expression function '{functionName}' stands for");
+            }
+            var body = ParseExpression(context: context);
+            var functionLength = (context.Scanner.Cursor.Offset - startOffset);
+
+            return new LetNode(Column: col, Length: functionLength, Line: line, Name: functionName, Offset: startOffset,
+                Value: new FunctionExpressionNode(Body: body, Column: col, Length: functionLength, Line: line, Offset: startOffset, Parameters: parameters));
+        }
+
         if (TryMatchStatementKeyword(context: context, keyword: "let")) {
             SkipWhiteSpace(context: context);
             if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var varName)) {
@@ -588,7 +607,15 @@ public static partial class PuckParser {
                             exportName += $".{member}";
                         }
                         names.Add(item: exportName);
+                    } else if ((context.Scanner.Cursor.Current == '`') && TryReadBackquotedName(context: context, name: out var backquoted)) {
+                        names.Add(item: backquoted);
                     } else if (TryReadName(admitted: NameForms.String, context: context, spelling: out _, text: out var exportStr)) {
+                        // An exported name is a name: one the bare form cannot carry is backquoted, never quoted.
+                        diagnostics?.ReportError(
+                            code: PuckDiagnosticCodes.ArgumentWrittenBare,
+                            message: $"an exported name is written as a name; write `{exportStr}`",
+                            span: new SourceSpan(startOffset, (context.Scanner.Cursor.Offset - startOffset), line, col)
+                        );
                         names.Add(item: exportStr);
                     } else {
                         break;
@@ -745,6 +772,10 @@ public static partial class PuckParser {
         }
 
         if (TryMatchStatementKeyword(context: context, keyword: "rule")) {
+            SkipWhiteSpace(context: context);
+            if (TryMatchKeyword(context: context, keyword: "template")) {
+                return ParseRuleTemplate(col: col, context: context, diagnostics: diagnostics, line: line, startOffset: startOffset);
+            }
             return ParseRuleBlock(col: col, context: context, diagnostics: diagnostics, line: line, startOffset: startOffset);
         }
 
@@ -951,6 +982,7 @@ public static partial class PuckParser {
     // such as a rule group's body; null parses document statements.
     private static ForStatementNode ParseForStatement(ParseContext context, int startOffset, int line, int col, DiagnosticBag? diagnostics, string? schema = null, IDocumentVocabulary? vocabulary = null, Func<ParseContext, DiagnosticBag?, StatementNode?>? body = null) {
         var cursor = context.Scanner.Cursor;
+
         var (item, index, sequence) = ParseForHead(context: context);
         var statements = new List<StatementNode>();
 
@@ -1182,6 +1214,23 @@ public static partial class PuckParser {
                 continue;
             }
 
+            // A derived record: `base with { member: value }`. Only a block after the keyword reads as one, so a
+            // statement's own `with` (`shuffle deck with stream`) is never taken for it.
+            if (!separated && (cur == 'w')) {
+                var before = context.Scanner.Cursor.Position;
+
+                if (TryMatchKeyword(context: context, keyword: "with")) {
+                    SkipWhiteSpace(context: context);
+                    if (context.Scanner.Cursor.Current == '{') {
+                        var overrides = ParseObjectExpression(context: context);
+
+                        expr = new WithExpressionNode(Base: expr, Overrides: overrides, Offset: expr.Offset, Length: (context.Scanner.Cursor.Offset - expr.Offset), Line: expr.Line, Column: expr.Column);
+                        continue;
+                    }
+                }
+                context.Scanner.Cursor.ResetPosition(position: before);
+            }
+
             break;
         }
 
@@ -1199,14 +1248,15 @@ public static partial class PuckParser {
         }
 
         if (cursor.Current == '`') {
-            if (!TryReadBackquotedName(context, out var quoted)) {
-                throw CreateException(context, "Expected a nonempty backquoted name");
+            if (!TryReadBackquotedName(context: context, name: out var quoted)) {
+                throw CreateException(context: context, message: "Expected a nonempty backquoted name");
             }
-            var length = cursor.Offset - startOffset;
-            SkipWhiteSpace(context);
-            return cursor.Current == '('
-                ? ParseCallExpression(context, quoted, startOffset, line, col)
-                : new IdentifierExpressionNode(Name: $"`{quoted}`", Offset: startOffset, Length: length, Line: line, Column: col);
+            var length = (cursor.Offset - startOffset);
+
+            SkipWhiteSpace(context: context);
+            return ((cursor.Current == '(')
+                ? ParseCallExpression(col: col, context: context, functionName: quoted, line: line, startOffset: startOffset)
+                : new IdentifierExpressionNode(Column: col, Length: length, Line: line, Name: $"`{quoted}`", Offset: startOffset));
         }
 
         if (TryMatchKeyword(context: context, keyword: "asset")) {
@@ -1597,6 +1647,69 @@ public static partial class PuckParser {
     // A statement keyword followed by ':', '{' or '[' is an ordinary property or block of that name instead
     // (`template: "{state.title}"` in an element row), as `world`, `border`, `door` and `parameter` are, so a
     // document-level or block member never needs quoting for spelling one.
+    // `(p, q = d)`: a function's or a rule template's parameters, each a name with an optional default.
+    private static List<TemplateParameterNode> ParseDefaultedParameters(ParseContext context, string owner) {
+        var cursor = context.Scanner.Cursor;
+        var parameters = new List<TemplateParameterNode>();
+
+        SkipWhiteSpace(context: context);
+        if (!TryConsume(c: '(', context: context)) {
+            throw CreateException(context: context, message: $"Expected '(' opening {owner}'s parameters");
+        }
+        SkipWhiteSpace(context: context);
+        while (!cursor.Eof && (cursor.Current != ')')) {
+            var parameterStart = cursor.Offset;
+
+            var (parameterLine, parameterColumn) = GetLineAndColumn(buffer: context.Scanner.Buffer, offset: parameterStart);
+
+            if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var parameterName)) {
+                throw CreateException(context: context, message: $"Expected a parameter name in {owner}");
+            }
+            SkipWhiteSpace(context: context);
+            var fallback = (TryConsume(c: '=', context: context) ? ParseExpression(context: context) : null);
+
+            parameters.Add(item: new TemplateParameterNode(Column: parameterColumn, DefaultValue: fallback, Length: (cursor.Offset - parameterStart), Line: parameterLine, Name: parameterName, Offset: parameterStart));
+            SkipWhiteSpace(context: context);
+            if (!TryConsume(c: ',', context: context)) { break; }
+            SkipWhiteSpace(context: context);
+        }
+        if (!TryConsume(c: ')', context: context)) {
+            throw CreateException(context: context, message: $"Expected ')' closing {owner}'s parameters");
+        }
+        return parameters;
+    }
+    // `rule template name(p, q = d) { … }`: rule-body statements spliced into the rule body that calls the template.
+    private static TemplateNode ParseRuleTemplate(ParseContext context, int startOffset, int line, int col, DiagnosticBag? diagnostics) {
+        var cursor = context.Scanner.Cursor;
+
+        SkipWhiteSpace(context: context);
+        if (!TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var templateName)) {
+            throw CreateException(context: context, message: "Expected a name after 'rule template'");
+        }
+        var parameters = ParseDefaultedParameters(context: context, owner: $"rule template '{templateName}'");
+
+        SkipWhiteSpace(context: context);
+        var bodyStart = cursor.Offset;
+
+        if (!TryConsume(c: '{', context: context)) {
+            throw CreateException(context: context, message: $"Expected '{{' body for rule template '{templateName}'");
+        }
+        var statements = new List<StatementNode>();
+
+        SkipWhiteSpace(context: context);
+        while (!cursor.Eof && (cursor.Current != '}')) {
+            statements.Add(item: ParseRuleBodyStatement(context: context, diagnostics: diagnostics));
+            ConsumeSeparator(context: context);
+            SkipWhiteSpace(context: context);
+        }
+        if (!TryConsume(c: '}', context: context)) {
+            throw CreateException(context: context, message: $"Expected '}}' closing rule template '{templateName}'");
+        }
+        var (bodyLine, bodyColumn) = GetLineAndColumn(buffer: context.Scanner.Buffer, offset: bodyStart);
+        var body = new BlockNode(Column: bodyColumn, Identifier: templateName, Length: (cursor.Offset - bodyStart), Line: bodyLine, Name: null, Offset: bodyStart, Statements: statements, Target: null);
+
+        return new TemplateNode(Body: body, Column: col, Length: (cursor.Offset - startOffset), Line: line, Name: templateName, Offset: startOffset, Parameters: parameters) { IsRuleBody = true };
+    }
     private static bool TryMatchStatementKeyword(ParseContext context, string keyword) {
         var cursor = context.Scanner.Cursor;
         var saved = cursor.Position;
