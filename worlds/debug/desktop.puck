@@ -8,6 +8,7 @@
 // or own press on the engaged monitor opens a passthrough source, and the desktop page below only says which pad
 // control means which pointer act; the engine acts on a local pad's own press alone and refuses a document that tries
 // more.
+import "../standard/bounds"
 
 // The capture's output extent and cadence, the pane's and the monitor's alike: the primary display at its own size and
 // shape (2560 by 1440), so its text stays sharp. The primary display rather than the one the World's window is on:
@@ -47,7 +48,7 @@ views {
 // A desk against the gallery lobby's west wall (hall.puck, its inner face at x = 10.3), south of the big painting to
 // Wonderland (wonderland.puck), with a 27-inch monitor on a stand, a tower beside it on the floor, a keyboard and mouse, and an office
 // chair. Whoever sits at it faces the wall, -X; the monitor faces +X, into the lobby. Every number is a world coordinate
-// on the level 0 floor (y = 0.05): each placement stands at the origin and `deskBox` writes a box's author-frame row
+// on the level 0 floor (y = 0.05): each placement stands at the origin and `boundsBox` (standard/bounds.puck) writes a box's author-frame row
 // from its world bounds (the creation frame is the world's turned 180 degrees about up, so x and z negate). Each piece
 // is its own prototype so the bake meshes it at its own scale.
 //
@@ -82,16 +83,6 @@ let deskTop = 0.79
 let chairX = 11.55
 let chairZ = 23.7
 
-// One box given its world bounds, chamfered (0 leaves the box's own fillet).
-template deskBox(label, x0, x1, y0, y1, z0, z1, slot, bevel = 0) {
-  shape Box $"{label}" {
-    material: slot
-    position [(0 - ((x0 + x1) / 2)), ((y0 + y1) / 2), (0 - ((z0 + z1) / 2))]
-    scale [((x1 - x0) / 2), ((y1 - y0) / 2), ((z1 - z0) / 2)]
-    chamfer: bevel
-  }
-}
-
 prototypes {
   // Light oak on charcoal panel legs, a modesty panel across the back.
   prototype "desk" {
@@ -102,7 +93,7 @@ prototypes {
         { color: "#C9A57B", roughness: 0.55, specular: 0.05 }
         { color: "#2E3136", roughness: 0.6, specular: 0.2, metal: 0.3 }
       ]
-      deskBox(
+      boundsBox(
         label: "top",
         x0: 10.33,
         x1: 11.08,
@@ -113,9 +104,9 @@ prototypes {
         slot: 0,
         bevel: 0.003
       )
-      deskBox(label: "leg-south", x0: 10.36, x1: 11.05, y0: 0.05, y1: (deskTop - 0.02), z0: 22.98, z1: 23.01, slot: 1)
-      deskBox(label: "leg-north", x0: 10.36, x1: 11.05, y0: 0.05, y1: (deskTop - 0.02), z0: 24.39, z1: 24.42, slot: 1)
-      deskBox(label: "modesty", x0: 10.37, x1: 10.39, y0: 0.4, y1: (deskTop - 0.02), z0: 23.005, z1: 24.395, slot: 1)
+      boundsBox(label: "leg-south", x0: 10.36, x1: 11.05, y0: 0.05, y1: (deskTop - 0.02), z0: 22.98, z1: 23.01, slot: 1)
+      boundsBox(label: "leg-north", x0: 10.36, x1: 11.05, y0: 0.05, y1: (deskTop - 0.02), z0: 24.39, z1: 24.42, slot: 1)
+      boundsBox(label: "modesty", x0: 10.37, x1: 10.39, y0: 0.4, y1: (deskTop - 0.02), z0: 23.005, z1: 24.395, slot: 1)
     }
   }
 
@@ -132,7 +123,7 @@ prototypes {
       ]
       // Each part sinks a few millimetres into the one behind it rather than abutting it: two coplanar faces meeting
       // fold the bake's contour.
-      deskBox(
+      boundsBox(
         label: "bezel-top",
         x0: (panelFront - 0.005),
         x1: bezelFront,
@@ -142,7 +133,7 @@ prototypes {
         z1: monitorNorth,
         slot: 0
       )
-      deskBox(
+      boundsBox(
         label: "bezel-chin",
         x0: (panelFront - 0.005),
         x1: bezelFront,
@@ -152,7 +143,7 @@ prototypes {
         z1: monitorNorth,
         slot: 0
       )
-      deskBox(
+      boundsBox(
         label: "bezel-north",
         x0: (panelFront - 0.005),
         x1: bezelFront,
@@ -162,7 +153,7 @@ prototypes {
         z1: monitorNorth,
         slot: 0
       )
-      deskBox(
+      boundsBox(
         label: "bezel-south",
         x0: (panelFront - 0.005),
         x1: bezelFront,
@@ -172,7 +163,7 @@ prototypes {
         z1: (pictureZ - pictureHalfWidth),
         slot: 0
       )
-      deskBox(
+      boundsBox(
         label: "panel",
         x0: (panelFront - 0.022),
         x1: panelFront,
@@ -182,7 +173,7 @@ prototypes {
         z1: monitorNorth,
         slot: 1
       )
-      deskBox(
+      boundsBox(
         label: "back",
         x0: (panelFront - 0.06),
         x1: (panelFront - 0.008),
@@ -193,7 +184,7 @@ prototypes {
         slot: 1,
         bevel: 0.012
       )
-      deskBox(
+      boundsBox(
         label: "mount",
         x0: 10.65,
         x1: (panelFront - 0.056),
@@ -203,7 +194,7 @@ prototypes {
         z1: (pictureZ + 0.05),
         slot: 1
       )
-      deskBox(
+      boundsBox(
         label: "neck",
         x0: 10.615,
         x1: 10.655,
@@ -237,11 +228,11 @@ prototypes {
         { color: "#141619", roughness: 0.8, specular: 0.05 }
         { color: "#4FA3FF", emissive: 250, roughness: 0.3 }
       ]
-      deskBox(label: "case", x0: 10.42, x1: 10.9, y0: 0.07, y1: 0.55, z0: 24.52, z1: 24.73, slot: 0, bevel: 0.004)
-      deskBox(label: "front", x0: 10.89, x1: 10.91, y0: 0.08, y1: 0.54, z0: 24.53, z1: 24.72, slot: 1, bevel: 0.003)
+      boundsBox(label: "case", x0: 10.42, x1: 10.9, y0: 0.07, y1: 0.55, z0: 24.52, z1: 24.73, slot: 0, bevel: 0.004)
+      boundsBox(label: "front", x0: 10.89, x1: 10.91, y0: 0.08, y1: 0.54, z0: 24.53, z1: 24.72, slot: 1, bevel: 0.003)
       for x in [10.46, 10.86] {
         for z in [24.545, 24.705] {
-          deskBox(
+          boundsBox(
             label: $"foot-{x}-{z}",
             x0: (x - 0.02),
             x1: (x + 0.02),
@@ -272,7 +263,7 @@ prototypes {
         { color: "#25272B", roughness: 0.55, specular: 0.05 }
         { color: "#3A3D44", roughness: 0.4, specular: 0.05 }
       ]
-      deskBox(
+      boundsBox(
         label: "deck",
         x0: 10.82,
         x1: 10.96,
@@ -289,7 +280,7 @@ prototypes {
         scale [0.007, 0.004, 0.007]
         domain [repeat(spacing: [0.019, 1, 0.019], limit: [2, 0, 10], origin: [10.89, (deskTop + 0.02), 23.7])]
       }
-      deskBox(
+      boundsBox(
         label: "space",
         x0: 10.921,
         x1: 10.935,
@@ -341,7 +332,7 @@ prototypes {
         position [(0 - chairX), 0.29, (0 - chairZ)]
         scale [0.022, 0.14, 0.022]
       }
-      deskBox(
+      boundsBox(
         label: "mechanism",
         x0: (chairX - 0.09),
         x1: (chairX + 0.09),
@@ -357,7 +348,7 @@ prototypes {
         scale [0.25, 0.045, 0.25]
         exponent: 4
       }
-      deskBox(
+      boundsBox(
         label: "spine",
         x0: (chairX + 0.225),
         x1: (chairX + 0.255),
@@ -375,7 +366,7 @@ prototypes {
         exponent: 4
       }
       for side in [-1, 1] {
-        deskBox(
+        boundsBox(
           label: $"arm-post-{side}",
           x0: (chairX + 0.005),
           x1: (chairX + 0.035),
@@ -385,7 +376,7 @@ prototypes {
           z1: ((chairZ + (0.255 * side)) + 0.015),
           slot: 1
         )
-        deskBox(
+        boundsBox(
           label: $"arm-rest-{side}",
           x0: (chairX - 0.1),
           x1: (chairX + 0.14),

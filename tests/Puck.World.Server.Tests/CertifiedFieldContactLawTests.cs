@@ -238,6 +238,35 @@ public sealed class CertifiedFieldContactLawTests {
             position: ref position, previousPosition: FixedVector3.Zero, up: FixedVector3.UnitY, velocity: ref velocity, volumes: [Ball(radius: 0.35d)]).Unproved);
     }
 
+    // The relief is charged only what it reaches inside the box a proof reads: a capsule half a metre above rock relieved
+    // by the valley's 4 m fBm is proved clear by its first box, where charging the relief's whole reach proved nothing
+    // within 4 m; resting on the rock it is a contact, never clear.
+    [Fact]
+    public void ACapsuleHalfAMetreAboveReliefIsProvedClear() {
+        var collider = Collider(definition: Document(
+            noise: new CreationNoiseDocument(Frequency: 0.02f, Amplitude: 4f, Octaves: 6, Gain: 0.5f, Lacunarity: 2f, Seed: 7u),
+            shapes: [Shape(id: 0, scale: new Vector3(value: 100f), type: SdfSolidPrimitive.Sphere)]));
+        var capsule = new FixedBodyColliderVolume(Center: V(x: 0d, y: 0.35d, z: 0d), Endpoint: V(x: 0d, y: 1.2d, z: 0d), HalfExtents: FixedVector3.Zero,
+            Kind: FixedBodyColliderKind.Capsule, Radius: Q(value: 0.35d), Rotation: FixedQuaternion.Identity);
+        var (top, bottom) = (110d, 90d);
+
+        // The relieved surface above the sphere's pole, by bisection on the field's sign.
+        for (var halving = 0; (halving < 40); halving++) {
+            var middle = ((top + bottom) / 2d);
+
+            Assert.True(condition: Reads(collider: collider, value: out var value, world: V(x: 0d, y: middle, z: 0d)));
+            (top, bottom) = ((value > FixedQ4816.Zero) ? (middle, bottom) : (top, middle));
+        }
+
+        var above = FixedFieldColliderContact.Solve(collider: in collider, orientation: FixedQuaternion.Identity, position: V(x: 0d, y: (top + 0.5d), z: 0d),
+            skin: Q(value: 0.02d), volume: in capsule);
+        var resting = FixedFieldColliderContact.Solve(collider: in collider, orientation: FixedQuaternion.Identity, position: V(x: 0d, y: top, z: 0d),
+            skin: Q(value: 0.02d), volume: in capsule);
+
+        Assert.Equal(expected: FixedFieldContactOutcome.Clear, actual: above.Outcome);
+        Assert.Equal(expected: FixedFieldContactOutcome.Contact, actual: resting.Outcome);
+    }
+
     // A pipe subtraction's bead lies outside its subject; the relief collider's bound holds it. A creation clamps the
     // blend radius to half a unit, so the bead reaches past 1.3 on the spheres' shared seam.
     [Fact]

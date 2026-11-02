@@ -7,8 +7,10 @@ namespace Puck.Cli.Test;
 public static partial class TestCommand {
     private static string WorldDirectory(string runDirectory, int index) => Path.Combine(
         path1: runDirectory, path2: "worlds", path3: index.ToString(format: "D6", provider: CultureInfo.InvariantCulture));
-    // A worker process stays alive across its legs and boots each scenario in a fresh native host.
-    private static bool RunBatch(IReadOnlyList<TestWorld> worlds, string artifact, string runDirectory, int chunk, int[] indices, bool reproduce, string? cacheDirectory, TestLeg leg, bool record) {
+    // A worker process stays alive across its legs and boots each scenario in a fresh native host. VerifyHash checks
+    // every recorded tick's incremental authority hash against a full recompute during the authored run; the first
+    // --workers count carries it, since every count runs the same writes, and --reproduce checks its replay instead.
+    private static bool RunBatch(IReadOnlyList<TestWorld> worlds, string artifact, string runDirectory, int chunk, int[] indices, bool reproduce, string? cacheDirectory, TestLeg leg, bool record, bool verifyHash) {
         var legs = new List<object>();
 
         foreach (var index in indices) {
@@ -29,10 +31,14 @@ public static partial class TestCommand {
                 ExitAfterSeconds = ((int)Math.Ceiling(a: LegCeiling(exportTick: schedule!.ExportTick, rateHz: schedule.RateHz).TotalSeconds)),
                 leg.Workers,
                 Record = record,
+                VerifyHash = verifyHash,
             });
         }
-        var batch = Path.Combine(path1: runDirectory, path2: $"batch-{chunk}-{leg.Name}.json");
-
+        return RunWorker(artifact: artifact, batch: Path.Combine(path1: runDirectory, path2: $"batch-{chunk}-{leg.Name}.json"), legs: legs);
+    }
+    // Writes the legs to `batch` and runs them in one worker process, its streams beside the batch file. A worker that
+    // stops advancing (no leg begun or tick reported within the budgets) is cancelled.
+    private static bool RunWorker(string artifact, string batch, IReadOnlyList<object> legs) {
         File.WriteAllText(path: batch, contents: JsonSerializer.Serialize(value: legs));
         using var watchdog = new CancellationTokenSource(delay: StartupBudget);
         using var output = new StreamWriter(path: (batch + ".stdout.log"));

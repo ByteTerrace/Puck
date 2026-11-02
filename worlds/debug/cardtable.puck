@@ -558,18 +558,9 @@ template klondikeTableRead(turn, z, pile) {
   }
 }
 
-klondikeTableRead(turn: 0, z: 1, pile: solitaireKlondikePile1)
-klondikeTableRead(turn: 1, z: 2, pile: solitaireKlondikePile2)
-klondikeTableRead(turn: 2, z: 3, pile: solitaireKlondikePile3)
-klondikeTableRead(turn: 3, z: 4, pile: solitaireKlondikePile4)
-klondikeTableRead(turn: 4, z: 5, pile: solitaireKlondikePile5)
-klondikeTableRead(turn: 5, z: 6, pile: solitaireKlondikePile6)
-klondikeTableRead(turn: 6, z: 7, pile: solitaireKlondikePile7)
-klondikeTableRead(turn: 7, z: 8, pile: solitaireKlondikePile8)
-klondikeTableRead(turn: 8, z: 10, pile: solitaireKlondikePile10)
-klondikeTableRead(turn: 9, z: 11, pile: solitaireKlondikePile11)
-klondikeTableRead(turn: 10, z: 12, pile: solitaireKlondikePile12)
-klondikeTableRead(turn: 11, z: 13, pile: solitaireKlondikePile13)
+for (z, turn) in [1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13] {
+  klondikeTableRead(turn: turn, z: z, pile: $"solitaireKlondikePile{z}")
+}
 
 // Then each card lies at its slot, face up or face down. `kCardNo` is keyed by the cards' placement names.
 rule "klondike-table-up" {
@@ -622,22 +613,9 @@ template freecellTableRead(turn, z, pile) {
   }
 }
 
-freecellTableRead(turn: 0, z: 0, pile: solitaireFreecellPile0)
-freecellTableRead(turn: 1, z: 1, pile: solitaireFreecellPile1)
-freecellTableRead(turn: 2, z: 2, pile: solitaireFreecellPile2)
-freecellTableRead(turn: 3, z: 3, pile: solitaireFreecellPile3)
-freecellTableRead(turn: 4, z: 4, pile: solitaireFreecellPile4)
-freecellTableRead(turn: 5, z: 5, pile: solitaireFreecellPile5)
-freecellTableRead(turn: 6, z: 6, pile: solitaireFreecellPile6)
-freecellTableRead(turn: 7, z: 7, pile: solitaireFreecellPile7)
-freecellTableRead(turn: 8, z: 8, pile: solitaireFreecellPile8)
-freecellTableRead(turn: 9, z: 9, pile: solitaireFreecellPile9)
-freecellTableRead(turn: 10, z: 10, pile: solitaireFreecellPile10)
-freecellTableRead(turn: 11, z: 11, pile: solitaireFreecellPile11)
-freecellTableRead(turn: 12, z: 12, pile: solitaireFreecellPile12)
-freecellTableRead(turn: 13, z: 13, pile: solitaireFreecellPile13)
-freecellTableRead(turn: 14, z: 14, pile: solitaireFreecellPile14)
-freecellTableRead(turn: 15, z: 15, pile: solitaireFreecellPile15)
+for z in range(0, 16) {
+  freecellTableRead(turn: z, z: z, pile: $"solitaireFreecellPile{z}")
+}
 
 // The cards lie face up at their slots, and the deck during a deal lies face down in its stack over the first cell.
 rule "freecell-table-up" {

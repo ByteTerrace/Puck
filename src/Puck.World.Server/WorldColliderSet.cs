@@ -20,7 +20,7 @@ namespace Puck.World.Server;
 /// <para>Single-pass-per-iteration relaxation (up to <c>MaxIterations</c>): two adjacent solid boxes can push a body
 /// back and forth within one tick. Accepted at authoring scale; the fix (push-order by penetration depth) is cheap and
 /// additive. Boxes retain the drawn fillet through <see cref="FixedStaticCollider.RoundedBox"/>; chamfered Boxes
-/// and Superellipsoids use their exact convex support maps. Spheres and plain circular cylinders
+/// and Superellipsoids use their exact convex support maps, and a round capsule is the rounded box around its segment. Spheres and plain circular cylinders
 /// use their closest-point geometry; rounded/chamfered circular rims use contained cores with computed error bounds.
 /// Boolean carving, smoothing, and other finite primitive
 /// surfaces are not modelled: those primitives use their oriented bounding box (<see cref="FixedStaticCollider.Box"/>). A
@@ -290,6 +290,8 @@ public sealed partial class WorldColliderSet : IContactField {
     // primitives retain a bound.
     private static readonly FixedQ4816 SqrtTwo = FixedQ4816.Sqrt(value: FixedQ4816.FromInteger(value: 2));
     private static readonly FixedQ4816 BevelFactor = (FixedQ4816.FromInteger(value: 2) - SqrtTwo);
+    // A capsule's half segment per unit of its scale.y: the segment is 0.5·scale.y long.
+    private static readonly FixedQ4816 CapsuleHalfSegment = FixedQ4816.FromDouble(value: 0.25);
 
     private static FixedStaticCollider PlacementFinite(in FixedCreationStampPrimitiveCopy copy, FixedQ4816 margin) {
         if (copy.Shape.Type == SdfSolidPrimitive.Box) {
@@ -309,6 +311,22 @@ public sealed partial class WorldColliderSet : IContactField {
                 return FixedStaticCollider.ChamferedBox(copy.Center, copy.Rotation, inner, insetChamfer, (radius + margin));
             }
             return FixedStaticCollider.RoundedBox(copy.Center, copy.Rotation, inner, (radius + margin));
+        }
+        if ((copy.Shape.Type == SdfSolidPrimitive.Capsule) && (MathF.Abs(x: copy.Shape.Scale.X) == MathF.Abs(x: copy.Shape.Scale.Z))) {
+            // A capsule is a rounded box whose inner box is its segment, which runs 0.5·scale.y from the shape's position
+            // along its own Y (SdfSolidGeometry's unit law): scale.y stretches the segment, never the radius, so the
+            // capsule's scaled unit bound would reach a whole radius-scaled length past either end.
+            var radiusScale = FixedQ4816.Max(x: FixedQ4816.Abs(value: FixedQ4816.FromDouble(value: copy.Shape.Scale.X)),
+                y: FixedQ4816.FromDouble(value: SdfSolidGeometry.MinimumScale));
+            var stampScale = (copy.LocalHalfExtents.X / radiusScale);
+            var halfSegment = ((FixedQ4816.Abs(value: FixedQ4816.FromDouble(value: copy.Shape.Scale.Y)) * stampScale) * CapsuleHalfSegment);
+
+            return FixedStaticCollider.RoundedBox(
+                (copy.Center + (copy.Rotation.Rotate(vector: FixedVector3.UnitY) * halfSegment)),
+                copy.Rotation,
+                new FixedVector3(X: FixedQ4816.Zero, Y: halfSegment, Z: FixedQ4816.Zero),
+                (copy.LocalHalfExtents.X + margin)
+            );
         }
         if (copy.Shape.Type == SdfSolidPrimitive.Superellipsoid) {
             return FixedStaticCollider.Superellipsoid(copy.Center, copy.Rotation, copy.LocalHalfExtents,

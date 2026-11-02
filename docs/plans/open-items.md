@@ -54,9 +54,8 @@ experimental worlds have that it lacks is ported into it
    `CloseSheets` and the collapse.
 5. [Transfers](#transfers-federation-and-server) [high]: the companion steps 6
    to 10.
-6. [Certified field contact](#certified-field-contact) [high]: a relief
-   enclosure tight enough to prove clearance near the rock, then box and
-   ellipsoid bodies.
+6. [Certified field contact](#certified-field-contact): box and ellipsoid
+   bodies, then clearance on slopes within a third of a metre.
 7. [Delivery](#delivery-launcher-and-ci): CI's steady state, the shader cache
    and the GC-hole retirement.
 8. [Author leaks to the standard](#author-leaks-to-the-standard): the overlay
@@ -946,14 +945,35 @@ store (AGENTS.md), and work proportional to change.
   and the plan spreads it over a 400 m floor, so this decides whether the
   cold-bake bar can hold: bake a static copy in its prototype's frame and
   share it across copies whose transform is rigid (a uniform scale admitted),
-  as the dynamic path does. (from: c1-groundcover)
+  as the dynamic path does. The debug world's placement stamper opens a group
+  per placement (`WorldPlacementStamper.cs:694-725`): the lawn has 307
+  placements, the meadow 121, Chess 64 squares, Reversi 68 tiles and dots, the
+  card table 29 spots and the granaries 16 tiles. (from: c1-groundcover,
+  puck-audit)
+- [medium] Static bake grouping depends on spelling, which breaks the
+  ergonomic-is-optimal ruling (AGENTS.md):
+  - A static group's mesh detail follows the whole group's size, so authors
+    split one object into separate prototypes to keep detail
+    (`devices.puck:16-22`, `desktop.puck:52`, `hall.puck:497-500`).
+  - A warped shape bakes alone and forces the next shape alone, so shape order
+    changes grouping (`WorldPlacementStamper.cs:714-725`).
+  - Every text run bakes as its own group.
+  - One non-union blend anywhere makes the whole creation one scope, refusing
+    panels, trims and cells on every shape.
+  - A subtraction collides as its whole bounding box, so walls with openings
+    are tiled from boxes (`paintings.puck:249-251`).
+  - Folds are cheaper than copies but cannot swing, slide, carry panels or
+    always collide.
+  Design them with the static-copy fix above: grouping and detail are derived
+  from what the document means, never from how it splits or orders rows.
+  (from: puck-audit)
 
 ### Certified field contact
 
-Owner: geometry and bake lane (sdf-authoring, rendering, physics) · high · Next:
-a relief enclosure tight enough to prove clearance near the rock (the noise's
-gradient in closed form), then box and ellipsoid bodies. The terrain pass's
-step 5 is this packet ([terrain pass](terrain-pass.md#order-of-work)).
+Owner: geometry and bake lane (sdf-authoring, rendering, physics) · medium ·
+Next: box and ellipsoid bodies, then clearance on slopes within a third of a
+metre. The terrain pass's step 5 is this packet
+([terrain pass](terrain-pass.md#order-of-work)).
 
 Relief colliders and the field provider read one certified surface solve
 (`FixedFieldColliderContact.Solve`, `src/Puck.Physics/FixedColliderField.cs`).
@@ -962,17 +982,31 @@ closed in it, each pinned in its stated case by `CertifiedFieldContactLawTests`:
 clearance rests only on the evaluator's box bounds, the core's pieces cover it end
 to end, a union scope's scale is kept wherever a later operator reads its
 magnitude, an unproved or stuck volume reaches both contact paths' resolutions,
-and every blend's outward growth comes from `SdfBoundAlgebra.Growth`. Remaining:
+and every blend's outward growth comes from `SdfBoundAlgebra.Growth`. The box
+bounds charge a relief only what it reaches inside the box
+(`SdfFieldEvaluator.NoiseDisplaceBounds`, `Pcg3dLatticeNoise.Fbm3Bounds`: per
+octave the exact trilinear range at the vertices of the box's fade range, its
+rounding allowance pinned against an exact oracle by
+`sampling.lattice-noise-fade-and-box-bounds`), so a capsule half a metre above
+the valley's relief is proved clear by its first box. The ground snap acts on an
+unproved step and lands it on support it proves; the landing may carry the
+uncertainty the step already did (`FixedStepUp.TrySnap`'s `uncertain`), so a
+volume elsewhere in the band no longer lifts a walking body off its ground.
+Remaining:
 
-- **[high] Clearance near relief is unproved, not certified.** The box bounds
-  (`Sampler.Clears`, `FixedColliderField.cs:129`) charge a noise relief its whole
-  reach (`SdfFieldEvaluator.NoiseReach`, `SdfFieldEvaluator.RenderBounds.cs:139`),
-  so nothing within the amplitude (4 m in the valley) of the unrelieved shapes is
-  ever proved clear. A body touching the surface it measured is a contact without
-  a push, but one whose nearest found surface lies past its reach is `Unproved`,
-  which the carry release, the step-up and the ground snap refuse. The cure is a
-  tighter enclosure of the relief: the noise's gradient in closed form beside its
-  value, with a curvature bound or interval mean-value bounds in the box walk.
+- **[medium] Clearance within about a third of a metre of a slope is
+  unproved.** The box a proof reads is axis-aligned, and on a slope its corners
+  protrude past the reach sphere by up to `(√3 − 1)·reach` along the normal. On
+  a 100 m sphere under the valley's relief (frequency 0.02, 4 m, six octaves), a
+  capsule of radius 0.35 m is proved clear 0.1 m above level rock but only from
+  0.3 to 0.5 m above a 13° to 20° slope; below that, short of its reach, it is
+  `Unproved`. The step-up's across move and the carry release still refuse such
+  a pose. The relief is no longer what limits it: the box's interval lower end
+  sits within 0.05 m of the gap on level rock. Three axis slabs, each a reach
+  long on its own axis and 0.71 of a reach on the other two, cover the sphere
+  with about 60 % of the cube's excess at 30°; an oriented box in the surface's
+  frame removes it. Either costs more box
+  walks per unproved query, which are few (0 to 12 a tick at the rim).
 - **[medium] Box and ellipsoid bodies solve from their centre**
   (`FixedFieldColliderContact.SolveVolume`, `FixedColliderField.cs:580`): the
   support along the measured normal, not the volume's own nearest point. Cover
@@ -983,22 +1017,23 @@ and every blend's outward growth comes from `SdfBoundAlgebra.Growth`. Remaining:
   by its gauge and every blend's growth is charged, but a primitive whose field
   reads under its distance (the cone family) grows only by the reach. Take each
   shape's gain from the evaluator's reach certificates.
-- **[medium] The noise reach's rounding allowance is argued, not pinned**
-  (`NoiseReach`): a raw per rounded product and four raws per octave for the
-  quintic fade's overshoot. Pin the fixed-point fBm's extreme against an exact
-  oracle in a Maths law.
-- Cost at the valley rim (headless, unpaced, 500 bodies; `dotnet-trace`
-  sampled thread time under `FixedStepPump.Step`): relief contact was 14.6 % of
-  a tick on the old first-order collider, 13.6 % on the first certified solve,
-  and is 18.9 % now that clearance rests on box bounds (about 670 box reads a
-  tick, against the envelope's one point read a query). It reads the field 71
-  times a tick at 17.5 samples a read. Further cuts: the closed-form gradient
-  above, a cached box walk, and contact over the job system's parallel
-  partitions. An octave cut is only the drawn relief's own cut (the terrain
-  pass's step 3), never a contact approximation.
-- `FixedStepUp.TrySnap`'s landing probes issue most relief contact queries:
-  about 98 % of field-contact time at the rim runs under it. Measure whether
-  each probe is needed before cutting the solve itself. (from: field-contact)
+- Cost at the valley rim, the Moth standing at (0, 376, 470) for 1,200
+  headless unpaced ticks among 500 bodies (`dotnet-trace` sampled thread time,
+  `FixedFieldColliderContact.Solve` under `FixedStepPump.Step`): 7.0 % of a
+  tick, from 15.7 % with the relief charged its whole reach on the same
+  workload. The proofs ask about 615 boxes a tick, and each relief collider's
+  `SdfBoundsCache` answers 84 % of them from an identical earlier box (a body at
+  rest asks the same box every tick), so about 100 box walks a tick run; the
+  field is read 59 times a tick at 14 samples a read (71 at 17.5 before). A
+  relief bound walks each octave's cells, about two fifths of a walk's time.
+  Further cuts: contact over the job system's parallel partitions. A gradient
+  in closed form would not tighten the enclosure, which is already the exact
+  range of each octave's blend over the box, and the solve's direction taps
+  read the whole field, not the relief alone. An octave cut is only the drawn
+  relief's own cut (the terrain pass's step 3), never a contact approximation.
+- `FixedStepUp.TrySnap`'s landing probes issue most relief contact queries while
+  walking, and the snap now also runs on unproved steps. Measure whether each
+  probe is needed before cutting the solve itself. (from: field-contact)
 - [low] Relieved instances are never culled from `WorldSolidField`'s program,
   because `NoiseDisplace` has no reach certificate (`SdfFieldEvaluator.Cull.cs`,
   `TryCertifyInstance`). (from: field-contact)
@@ -1007,6 +1042,20 @@ and every blend's outward growth comes from `SdfBoundAlgebra.Growth`. Remaining:
   (from: field-contact)
 - The terrain pass's step 5 face check (58°) is not yet run on the certified
   solve. (from: field-contact)
+- [medium] `world.collision.probe` (`FixedFieldContactSolver.Probe`, through
+  `FixedColliderField.TryMeasure`) answers nothing at 36 of 105 points of a
+  1 m grid around a lawn flat-crown tree (x 6 to 20, y 0.5 to 6.5, z -27.3 in
+  the debug world), and beside a crown it can read the floor 6 m below instead
+  of the crown 0.3 m away. Contact resolution does not read it; the measure's
+  projection and bracketing need a look against the Superellipsoid's
+  lower-bound field. (from: far-hit)
+- [medium] The Superellipsoid's field (`SdfFieldEvaluator`, `mapCore`) is a
+  1-Lipschitz lower bound whose far value is about its least radius over its
+  greatest times the true distance (0.24 for a 2.3 × 0.55 m crown): a sphere
+  cast accepts a hit up to four eye radii from a flat crown, and the cull
+  certificates (`TryShapeSphere`) cover no Superellipsoid, so no tree instance
+  is ever skipped. A maximum with the bounding sphere's distance keeps the
+  zero set and tightens the far field in both interpreters. (from: far-hit)
 
 ### Transfers, federation and server
 
@@ -1453,16 +1502,6 @@ and warm builds measured.
   shader package directory holding binaries but no manifest; clearing
   `src/Puck.World/obj/Release/net11.0/worlds` and building again passed.
   Unconfirmed as a packaging race.
-- [high] A windowed Direct3D 12 debug World died on its sixth `world.reload` in
-  about ten minutes with an access violation in the native allocator, on a
-  bake worker loading a stored mesh: `MimallocAllocator.mi_malloc` ←
-  `OwnedBuffer<Vector3>.Resize` ← `SdfMesh.NativeCopy` ←
-  `SdfMeshLibrary.TryLoad` ← `SdfMeshPathBake.Load` ← `SdfMeshPathBake.Work`
-  (exit 139, `0xC0000005`, right after the reload's `[sdf.mesh-gi] scene`
-  line; the machine was short of memory, its working set paged down to
-  1.4 GB). Reproduce with repeated reloads under `world.wait bakes`, and check
-  whether a load can run against a mimalloc heap another thread owns or one a
-  reload has torn down. (from: c1-groundcover)
 
 ### The valley's terrain
 
@@ -1508,6 +1547,12 @@ lowers it to the same JSON as before, except where the look changes on purpose.
 
 Code that grew a second implementation (AGENTS.md rule 7) or costs velocity:
 
+- [low] Four copies of a `NativeMemory`-backed test `IAllocator` named `HeapAllocator`
+  (`tests/Puck.Vulkan.Tests/VulkanIndirectCountLawTests.cs:117`,
+  `VulkanValidationLivenessTests.cs:247`, `VulkanGroupedPipelineLayoutLawTests.cs:233`,
+  `VulkanGroupedBindingLawTests.cs:206`), while `IAllocator`'s documentation names a
+  `NativeMemory`-backed implementation that `src` does not have. One shared allocator
+  serves them, and `GuardedAllocator` can wrap it where a suite wants misuse checks.
 - Make `GpuRegion.Grow` the only way to grow a GPU region, and enforce the uniform
   view limit there (one lane):
   - [low] Growing the program region on `world.reload` waits for the device to go
@@ -2074,47 +2119,41 @@ derived products, removed from git and built on demand.
 ### Test runner and replay
 
 Owner: test runner and replay specialist · medium and low ·
-Next: make the per-tick authority hash incremental (measured below), its digest
-segments designed with the parallel tick's partitions in the
-[job-system memo](#engine-job-system); keep the recompute-comparison law.
+Next: the per-tick authority hash is incremental
+([design](engine-job-system.md#the-incremental-state-hash)); re-profile Go's
+reproduce worker for what remains.
 
+- [high] The incremental hash's caches miss invalidations (cross-family
+  review): a standalone `RowDigest` refresh leaves its parent segment stale
+  (`ArenaHash.cs:74-76,138-168`); a sleeping body's continuation stays cached
+  through `SetIntentSource`, an untimed `PressChannel`, `MergeLaneTimer` and the
+  late tether solve (`WorldBody.Tether.cs:119-143`); an off-thread hash between
+  a write's version bump and its store poisons a row digest; and live replay
+  never runs the full-recompute oracle. The incr-hash lane redesigns the body
+  cache around one write chokepoint (or deletes it if that costs more than it
+  saves), hashes only at a stable read boundary, and adds a rotating per-tick
+  spot check. (from: incrhash-astra)
 - [low · fix when touched] `Fixtures.FreshServer` (`tests/Shared/World/Fixtures.Server.cs:112`) deserializes without `WorldStateSettlement.SettleBeforeAdmission`, so a boot from a raw document with a seeded responsive placement can show the response's prototype while colliding as the authored one, which the real loader never does. Settle in the fixture as the loader does. (from: the tip-reds lane)
-- [medium] `--reproduce` costs about twice the ordinary run, and the cost is
-  per-tick hashing and recording, not host reuse. Recording slows the authored
-  phase itself (alchemy's 1,204-tick scenario 14.0 s ordinary against 20.1 s
-  recorded; Go's 2,804-tick scenarios 15 s against 31 s under the trace), the
-  replay then repeats it (replay time equals recorded authored time), and a
-  replica has a fixed 2.4-4 s floor even for a 16-tick scenario. A
-  `dotnet-sampled-thread-time` trace of Go's reproduce worker (481 CPU-s on the
-  tick threads) splits it: `WorldReplayProbe.Verify` 51 %, the authored steps 49 %;
-  `WorldPersistence.AppendStateHashComponent` 36.5 % of all of it
-  (`WorldPopulation.AppendContinuationHash` 16.4 %, `StateArena.ComputeHash`
-  13.9 %), `WorldReplayTape.NoteTick` 20.7 % (with
-  `WorldAuthorityCheckpointCodec.WritePopulationEntry` 10.3 %), the session
-  sinks' snapshot delivery to the garden and night mirrors 16.7 %
-  (`WorldDocumentStateView.ApplyFieldCells` 11.4 %), replica arena construction
-  and load 7 %, and the simulation itself (rules 13 %, bodies and contact sweeps
-  about 15 %) the rest. Make the per-tick hash incremental (fold only changed
-  arena columns and changed body continuations), and find whether a headless
-  test worker's session mirrors have any reader before delivering to them;
-  then re-time Go. The hash is one sequential FNV-1a stream over the
-  components in `WorldStateHashComposition.AuthoritativeOrder`, so an
-  incremental form changes its structure to a combination of per-segment
-  digests (hash values change, which rule 4 allows) and needs a change signal
-  at every write path: the arena's numeric columns are row-local
-  `ArenaColumnBuffer<T>` arrays but text, vector, visibility and observation
-  columns, import, restore, growth and relayout write beside them; a body's
-  continuation (`WorldAuthorityCheckpointCodec.WriteContinuationEntry`) has no
-  version at all. A missed signal makes the hash stale and a divergence
-  invisible, so land it with a law that compares the incremental digest against
-  a full recompute over the same states, tick by tick, in `--reproduce`.
-  Raw: `.claude/scratch/quiet-measure/` in the quiet-measure worktree (ignored).
-  (from: quiet-measure) A live scope's per-tick hash
-  (`WorldScopedReplayRuntime.Hash`) now refolds its rows only when the arena,
-  its layout or one of the rows' versions moved, which leaves its value
-  unchanged; its body continuations (`AppendContinuationHash`, about as costly
-  as the rows were) and rule latches still fold whole every tick, for want of a
-  body continuation version. (from: tick-cost-2)
+- [medium] Recording still costs about a third of the plain authored run.
+  The per-tick authority hash is incremental: the arena by `RowVersion`-cached
+  row digests in 32-row segments, resting identity-less bodies by rest epoch in
+  32-slot segments, the scoped replay runtime through the same row digests
+  ([design and measurements](engine-job-system.md#the-incremental-state-hash)),
+  checked against a full recompute on every replayed tick of `--reproduce` and
+  every recorded tick of the first `--workers` count. A headless host's
+  screen-session mirrors drop their snapshots. Go's authored seconds at
+  `--jobs 1`: plain 256.7 s to 180.4 s, recorded 441.4 s to 247.1 s; a tick
+  refolds 1.6 of about 368 rows and 22 of about 559 slots. Left: the
+  recording's 66.7 s over plain is the components that still fold whole every
+  tick (`PopulationPose`, `BodyActionState`, `Navigation`, `Flock`, `Input`)
+  and the probe's per-tick input copy, unprofiled; `--reproduce`'s replay
+  (415.7 s for Go) pays the full recompute every tick, which is the check's
+  price; a replica's fixed 2.4-4 s floor per scenario is unmeasured since.
+  Re-profile Go's reproduce worker (`dotnet-sampled-thread-time`) before
+  choosing the next segment. A moving body still encodes its whole
+  continuation every tick; a write-side version per body would cover it, and
+  is the larger change the measurement has to justify. (from: quiet-measure,
+  tick-cost-2, incr-hash)
 - [medium] Hall's test fixture uses `documentId: "hall-tests"`, so the garden
   and night references admit a separate full `debug` authority. Its root's
   stopped-machines import does not stop that companion's six machines;
@@ -2694,22 +2733,6 @@ movement-facing scheme returns.
   the room-first `fade` hides her, the design working as built).
 - The tight-space camera course's three-up `camera-compare` layout and a live
   mode toggle on the Debug page remain to author (`camera-course.puck`).
-- [high] Solid copies of an unscoped flat-crown tree (the standard's
-  `flatCrownTree` without its relief noise: a trunk, three yawed Capsule
-  branches and six flat `SmoothUnion` Superellipsoid crowns) made the chase
-  camera's clearance read an obstruction with nothing near: at the stage
-  `world.view.camera` read `boom=2.144/4.2 clearance=shortened`, and at
-  (0, 0, 150), (-150, 0, 0) and (60, 0, -100) the eye sat on the target. With
-  the lawn's solids off it read `clearance=open` at 4.012; bisecting by kind
-  with `world.reload` left the flat crowns (oak and boulder solids alone kept
-  it open or nearly so), and straightening their branches or thickening their
-  crowns live did not clear it. The clearance sphere-casts the presentation
-  field of every solid placement (`WorldCameraClearance.cs:186`, built at
-  `WorldFramePresenter.cs:480-511`), so one creation's field poisons the
-  camera valley-wide. The lawn keeps the trees in one scope with a 2.5 cm
-  relief; find why the unscoped creation's field answers a hit far from it
-  (a sphere cast through the fixed-point evaluator with smooth unions joining
-  the global accumulator is the first suspect). (from: c1-groundcover)
 
 ### Temporal shimmer and cadence flicker
 
@@ -3153,6 +3176,14 @@ Owner: specialist lane (puck-world, build and hot reload, input) · ordinary · 
 Owner: debug-world content lanes, each started by the owner's direction ·
 ordinary · Next: new content and art on the owner's call.
 
+- [medium] `motion-pulse` (`shapes.puck` ~:2276) runs its six petals on a
+  continuous clock, so their seams stay stretched (PUCK122). Fix the exhibit's
+  motion so the seams close; its siblings `motion-smooth-blend` and
+  `motion-carve` show PUCK122 on purpose. (from: puck-audit)
+- [low] Board-game seats build button edges as hand-made cells (29 blocks
+  across go, alchemy, reversi, cardtable, granaries and chess) where a rule
+  with `mode: Edge` would do; switching changes behaviour, so verify each
+  game's tests when converting. (from: puck-audit)
 - Owed: `puck verbs --check` with a windowed boot after clearance-op removed
   `player.camera.clearance` by hand (the first settle window runs it). (from: clearance-op)
 - The faerie: the companion becomes small, abstract and original (nothing that

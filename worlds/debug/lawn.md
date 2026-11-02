@@ -42,9 +42,8 @@ whose flower would land on a neighbouring path is dropped.
 | Turf masses | `sceneryPatch` | `lawn-patch-0..9`, shade under the groves and lighter sweeps |
 
 Each tree family is a `groupedTree`: a trunk, roots and branches in bark and
-overlapping `Superellipsoid` crowns in three flat leaf values, under a faint
-2.5 cm relief that keeps each creation in one field scope (a solid tree
-without it broke the chase camera's clearance across the valley). Every family
+overlapping `Superellipsoid` crowns in three flat leaf values, joined by smooth
+unions with no scope of their own. Every family
 takes `height`, `spread`, `lean` (radians, tipping everything
 above the roots) and `leaves`, so the floor mixes species and no two trees of one
 species read as a clone. To change the floor's mix, change a group's `kind` in

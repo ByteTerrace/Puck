@@ -74,12 +74,14 @@ public sealed partial class WorldBody {
             }
 
             // Keep walking contact across crests and descending slopes. A jump or deliberate launch clears
-            // m_grounded before integration; direct upward input also owns its departure.
+            // m_grounded before integration; direct upward input also owns its departure. An unproved step is snapped
+            // too, onto support the snap proves: a step that leaves its ground by less than a field's box bounds can
+            // prove clear is unproved by construction, which is the pose a snap exists to settle, and its landing may
+            // carry the uncertainty the step already did.
             if (m_grounded && m_bodyMotionProgram.OwnsVerticalContactState && !HoldOwnsVerticalChannel &&
                 (scratch.DirectVerticalVelocity <= FixedQ4816.Zero) && !contactResolution.Grounded &&
-                !contactResolution.Unproved &&
                 FixedStepUp.TrySnap(step: ref step, start: in scratch.NextPosition, velocity: in resolvedVelocity,
-                    up: in scratch.Up, distance: GroundSnap, result: out var snapped)) {
+                    up: in scratch.Up, distance: GroundSnap, result: out var snapped, uncertain: contactResolution.Unproved)) {
                 scratch.NextPosition = snapped.Position;
                 resolvedVelocity = snapped.Velocity;
                 contactResolution = snapped.Resolution with { ObstructionNormal = contactResolution.ObstructionNormal };
