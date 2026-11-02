@@ -340,7 +340,7 @@ the first frame at it
 ([loading and installing](../../../reference/shaders.md#loading-and-installing)).
 
 A view whose ceiling is native and whose quality does not ask for temporal
-reconstruction keeps the ten-pass native fragment and writes its output
+reconstruction keeps the eleven-pass native fragment and writes its output
 directly. It allocates no resolve resources and ignores the current
 grid, so a layout transition does not dip it. A changed ceiling rebuilds the
 view's graph beside the installed one, which presents its last image until the
@@ -380,8 +380,8 @@ the same pass timestamps `world.gpu-timing` reads; a present-paced swapchain
 reports every kept present as exactly its period, so only the GPU's time shows
 the headroom to raise the grid again. A device that times nothing falls back to
 the present interval, and a host with neither, an offscreen one, to the view's
-counted march steps against the floor tier's committed ceilings per output
-pixel. Counted work per frame then scales with the grid, which
+counted march steps against `WorldDynamicResolution.StepBudgetPerPixel` per
+output pixel. Counted work per frame then scales with the grid, which
 `world.counters gpu` shows as the sky pass's texels written.
 
 A sample counts only at the grid the views render now. Each view's node
@@ -640,8 +640,8 @@ surfaces, the harmonic mean lies toward the nearer one; a medium lying between
 the two is the one case the clip does not reproduce sample by sample.
 
 The transport is two words of four half floats an output pixel, and the history
-surface fits it in its four words by holding the distance and the weight as half
-floats. A pixel the resolve copies whole from one render sample, which every
+surface keeps it among its per-pixel words (`SdfWorldPackage.HistorySurfaceWords`)
+by holding the distance and the weight as half floats. A pixel the resolve copies whole from one render sample, which every
 pixel is when the output has the render grid's extent and no jitter, as on the
 first frame of a temporal epoch at native scale, carries that sample's ray
 distance in the first word instead, marked by its top bit. The composite then derives the sample's transport at the
@@ -861,14 +861,13 @@ capture. A presented capture, which holds no frame, also skips the period of
 renders a restarted history takes to converge, so its frames show the steady
 image the display settles back to.
 
-The [`temporal-standing` canary](../../../../experimental/tests/Puck.World.Canaries/temporal-standing/canary.json)
-checks this through the real World's GPU counters. A camera pan starts another
-convergence period, during which the World submits new shading and resolve
-work. After settling, its completed submission stays unchanged across further
-frames while the root's submission advances. The counters retain the last
-completed sample's counts; an unchanged submission means no additional work,
-rather than a new sample reporting zero. The control pans again and observes
-another submission.
+This shows in the World's GPU counters (`world.counters gpu` in the debug
+world). A camera pan starts another convergence period, during which the World
+submits new shading and resolve work. After settling, a view's completed
+submission stays unchanged across further frames while the root's submission
+advances. The counters retain the last completed sample's counts; an unchanged
+submission means no additional work, rather than a new sample reporting zero.
+Panning again produces another submission.
 
 A temporal view that follows a portal crossing into another world keeps
 reconstructing there. The other world's residency builds its resolve pipeline
@@ -884,12 +883,9 @@ pass and no texel written; at sharpness 0 the copy stays exact. A lone
 whole-display view that sharpens is placed by the root for that pass, as a
 tonemapped one is.
 
-The [`place-sharpen` canary](../../../../experimental/tests/Puck.World.Canaries/place-sharpen/canary.json)
-captures the production Place kernel's output at equal extent. It checks exact
-pixel codes derived from the kernel at zero, full, and partial strength, and
-checks flat colors and saturated edges. Disabling `sharpen` at full strength
-returns the source codes, making the sharpened-edge claims fail. Both canaries
-require a GPU and run in the merge selection on Vulkan and Direct3D 12.
+At equal extent the Place kernel's output is predictable from the kernel: flat
+colors pass through unchanged, saturated edges sharpen, and disabling `sharpen`
+at full strength returns the source codes.
 
 ## The bake
 
@@ -1467,7 +1463,7 @@ the thread pool carries the words it differs in from the one held before it
 (`SdfFrame.ProgramDelta`), which its build measured, so tables holding that
 program copy only those words (`GpuRegion.WriteRuns`) and compare nothing on the
 frame thread; any other upload compares the program with the live one. Mesh draws (`SdfFrame.MeshDraws`)
-are packed into the mesh region (`SdfMeshRegion`: one 80-byte record a draw,
+are packed into the mesh region (`SdfMeshRegion`: one `SdfMeshRecord.DrawWords`-word record a draw,
 then each distinct mesh's positions and indices once) only when the frame hands
 a different draw list. Each scene emitter states its draws, a static placement's
 fixed at its rebuild and a stamp's posed at its root each frame, and returns the
@@ -1516,8 +1512,9 @@ surface pass that binds the tables' filler in their place.
 
 ## Reading per-pass GPU cost
 
-Performance is judged by code, disassembly, and deterministic work counters —
-never by wall-clock or GPU timestamps. The residency counts the work of its
+This section defines what each pass counts; the measurement procedure, and how
+counts combine with elapsed time, is in [SDF performance](performance.md#the-measurement-loop).
+The residency counts the work of its
 upload's passes, and each view's node counts the work each of its passes
 (`sdf.world$mask` through `sdf.world$composite`) records, with no arming and no
 effect on the image: dispatches, indirect dispatches, barriers, pipeline and
@@ -1556,18 +1553,12 @@ all: the render graph keeps its latest output, and its passes record nothing.
 Counts are published only once the GPU has finished the submission, so
 `world.counters gpu` shows the newest completed frame.
 
-In `Puck.World`, read the previous frame's passes with `world.counters gpu`. A still
-scene keeps each view's retained output instead of rendering, so run
-`world.cadence off` before measuring one. Hold the camera at a fixed pose
-while comparing runs; [SDF performance](performance.md) turns this into the
-general rule: frame-index a measurement camera, never wall-clock it. The
+In `Puck.World`, read the previous frame's passes with `world.counters gpu`;
+[SDF performance](performance.md#the-measurement-loop) gives the procedure. The
 counts are exact: the calls a pass records are the same on every backend for
 the same inputs, and its march steps and texels written the same on every run
-of one backend, so no banding or averaging is needed the way a timestamp sample
-would require. `puck counters compare` holds a pinned workload's counts from
-before a change to those from after it, pass by pass. When
-a counted-work comparison alone cannot answer the question, read the kernel
-disassembly or trace the code path instead.
+of one backend. `puck counters compare` holds a pinned workload's counts from
+before a change to those from after it, pass by pass.
 
 ---
 

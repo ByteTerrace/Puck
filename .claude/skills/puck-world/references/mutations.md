@@ -237,9 +237,6 @@ table — a row added there grants nothing until relaunch.
   section, except that moved render ceilings, view quality and editor values
   create their valid section when absent. `world.status`'s drift hint names
   each section the snapshot replaced (`WorldSessionCapture.DescribeDrift`).
-  `WorldSaveAuthoredDocumentLawTests` (`tests/Puck.World.Presentation.Tests`) saves every
-  shipped, fixture (`experimental/tests/Puck.World.Fixtures`), and canary world and
-  reloads it.
 
 Named machine rows use the same mutation and undo pipeline. UpsertMachine and
 RemoveMachine affect machine preparation independently of screen, population,

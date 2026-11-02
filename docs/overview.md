@@ -21,7 +21,7 @@ The engine includes several systems that can also be studied independently:
   pipelines. Vulkan and Direct3D 12 provide the GPU implementations.
 - **Emulation:** Game Boy/Game Boy Color and Game Boy Advance machine cores
   with cartridge authoring and hosting in World; the Humble Gaming Deck
-  emulates the NTSC NES/Famicom console, not yet placed in World.
+  emulates the NTSC NES/Famicom console and is mounted in the debug world.
 - **World services:** authority, permissions, networking, storage and transfers
   between worlds.
 
@@ -76,8 +76,8 @@ The [authoring guide](authoring/README.md) then helps you choose a world, shader
 or cartridge workflow. For implementation work, follow
 [development](development/README.md) to the relevant project and checks.
 
-The current rendering path and the proposed hybrid mesh/SDF work are described
-separately in the [rendering guide](rendering/README.md) and
+The baked-mesh SDF rendering path is described in the
+[rendering guide](rendering/README.md), and open rendering work is tracked in the
 [rendering programme](plans/rendering.md). Proposed features are not a
 promise that every configuration is supported. Check the relevant subsystem
 guide for restrictions before depending on a capability.

@@ -12,8 +12,10 @@ wholly sky: the lit image carries no partial silhouette coverage. A view that
 reconstructs over time (`world.temporal`) jitters its sample each frame and
 resolves the samples over its history, which antialiases silhouettes and thin
 features ([temporal reconstruction](../handbook/frame-rendering.md#temporal-reconstruction)).
-Features thinner than the bake's final cell (no finer than 1.5 cm) do not reach
-the mesh at all.
+Features thinner than the bake's cell do not reach the mesh at all. The cell
+is the final lattice's spacing (`SdfMeshPathBake.MinimumCell` is its floor),
+refined locally to a finer spacing, and finer still where an instance declares
+its own detail (`SdfInstanceRange.Detail`).
 
 ## Surface filtering
 

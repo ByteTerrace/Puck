@@ -1,55 +1,75 @@
 # Manual pointer gesture checks
 
-These PowerShell harnesses exercise Puck.World's pointer, cursor, drag-and-drop,
-and camera-focus behavior by injecting operating-system input through `SendInput`.
-They are repeatable manual checks for interactions that require the actual
-window and input path. No build or CI job runs them automatically.
+Two behaviors of Puck.World's pointer path need the real window and the
+operating system's input queue, so no headless run reaches them. They are run
+by hand, on a granted GPU leg, when the pointer, cursor or camera-orbit
+gesture grammar changes enough that their claim might no longer hold. No build
+or CI job runs them.
 
 ## Desktop requirements
 
-`SendInput` delivers input to whichever window has operating-system focus.
-Another application, another World process, or a second harness can therefore
-receive input intended for the test window. The scripts check foreground
-ownership before each injection, but focus can still change between checks.
-This dependence on exclusive desktop access prevents reliable unattended runs.
+Real mouse input goes to whichever window has operating-system focus. Another
+application, another World process or another run can therefore receive input
+meant for the test window. A check needs exclusive desktop access: close or
+park other windows, and touch neither mouse nor keyboard while it runs.
 
-## Run a check
+Start the World with the `puck` server's `puck_world_start` (`windowed: true`
+under `puck lease gpu`, `checkout` set to the worktree), `world: worlds/debug`
+and the owner's device policy for real input, and end it with `puck_world_stop`.
+Drive it with `puck_exec` console verbs. The operator (or a desktop-control
+tool the owner granted) supplies the physical input. Synchronize on read-back
+lines rather than elapsed time, because tick pacing under shared load is not a
+clock: read a verb, act, then read it again. The world's tick rate is the
+`WorldDefinition` default unless the document authors one, so convert any
+wait to ticks from the document's rate rather than from a remembered figure.
 
-Each script:
+## Pointer button across a keyboard-seat reassignment
 
-- **Requires exclusive desktop foreground for its whole run.** Close or
-  park other windows first. Every script gates on no foreign `Puck.World`
-  process being alive before it injects anything, and asserts
-  `GetForegroundWindow()` equals its own window before every injection—
-  but it cannot protect itself from a human moving focus away mid-run, or
-  from a *second* manual harness running at the same time.
-- **Injects global mouse/keyboard input.** Don't touch the mouse or
-  keyboard while one is running.
-- **Cannot run concurrently** with another instance of itself, another
-  manual harness here, or any other windowed `Puck.World` process on the
-  same machine.
-- Builds `Puck.World` itself if needed, then drives it over stdin plus
-  `SendInput`, polling the transcript for each expected line rather than
-  guessing wall-clock timing (tick pacing is not reliable under concurrent
-  load on a shared machine—a fixed sleep schedule races the very state
-  it is trying to observe).
-- Writes its scratch state (process transcripts, saved-world snapshots,
-  driver logs) under `$env:TEMP`, never into the repository tree.
+Claim: a held pointer button cannot survive a keyboard-seat reassignment as a
+phantom drag (`WorldPointer.ReleaseAllButtons`), and `SystemReleaseCount`
+advances only on a forced release, never on a genuine one. The mouse rides
+whichever seat owns the keyboard, so reassigning the keyboard away and back
+must clear the old seat's held-button bit.
 
-Run one directly from a PowerShell prompt at the repository root:
+Read `world.view.pointer` after each step and compare its `reason` and
+release-count fields:
 
-```powershell
-pwsh -File docs/verification/manual/pointer-cross-slot-latch.ps1
-```
+1. Control: hold the right button on seat 1. The reason is the orbit drag and
+   the release count is 0.
+2. Genuine release: release the right button. The reason flips to visible and
+   the release count is unchanged. The button must have been freshly pressed
+   and untouched since step 1, or the flip proves nothing: a release landing on
+   an already-cleared button looks the same whether it was delivered or never
+   sent.
+3. The fix: press the right button again and keep it down. Send
+   `player.assign keyboard1 2` then `player.assign keyboard1 1`. The reason is
+   no longer the orbit drag and the release count advanced by 2, one
+   `ReleaseAllButtons` per assignment.
+4. Liveness: press the right button again on seat 1. The reason is the orbit
+   drag again and the count is unchanged. Without this step, step 3's null
+   could mean a dead pointer path rather than a cleared stale bit.
 
-Each script's own header comment describes the behavior it checks. Re-run the
-relevant one whenever the pointer/cursor/camera-orbit gesture grammar changes
-enough that its claim might no longer hold—there is no automated trigger
-to remind you.
+Also send a burst of wheel input with no wheel consumer registered. The World
+must keep running; `WorldPointerSink` drains the accumulator in the branch the
+wheel arrives on.
 
-## Available checks
+## Camera orbit across focus loss
 
-| Script | Checks |
-|---|---|
-| `pointer-cross-slot-latch.ps1` | A held pointer button cannot survive a keyboard-seat reassignment as a phantom drag (`WorldPointer.ReleaseAllButtons`), `SystemReleaseCount` advances only on a force-release and never on a genuine one, and a wheel burst with no registered consumer drains cleanly. |
-| `camera-orbit-focus-loss.ps1` (+ `camera-orbit-focus-loss-sink.ps1`, its inert Alt-away target) | An armed camera-orbit drag stops responding to motion the instant OS focus is lost mid-drag, and resumes normally once re-armed and refocused—the orbit path is provably alive, not just silent by coincidence. |
+Claim: the per-seat pointer store's focus-lost handling releases an armed
+camera-orbit drag without killing the orbit path.
+
+Read the camera with `world.view.camera <player> full` (or name the fields the
+check needs, and compare them by key) and compare readings at five points:
+
+1. Boot: the baseline.
+2. Control: right-drag inside the window. The orbit moved.
+3. Focus loss: while the drag is held, switch to another window with Alt+Tab,
+   then return and move the mouse with no button held. The orbit has not
+   moved since the focus loss.
+4. Liveness: press the right button and drag again. The orbit moves. Without
+   this step, step 3's null could mean the pointer path died at the refocus.
+5. Wheel: wheel input over the window is skipped by the window pump and the
+   process stays alive.
+
+Stop the run on a failed focus check before injecting: input sent to the wrong
+window proves nothing about this one.

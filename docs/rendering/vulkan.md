@@ -272,6 +272,7 @@ Resources must be created in a strict order. Assuming the factories are already 
 (each holding the API dependencies it needs):
 
 ```csharp
+using Puck.Abstractions.Gpu;
 using Puck.Vulkan;
 using Puck.Vulkan.Factories;
 
@@ -279,7 +280,7 @@ using Puck.Vulkan.Factories;
 VulkanInstance instance = instanceFactory.Create(
     applicationName: "Puck.World",
     displayKind: NativeDisplayKind.Win32,   // from Puck.Abstractions
-    enableValidation: true
+    validation: GpuValidation.Basic
 );
 
 // 2. Surface — from a native window binding (NativeSurfaceBinding, from Puck.Abstractions).
@@ -431,12 +432,14 @@ The logical-device factory refuses a device, naming the feature, unless it repor
 `fragmentStoresAndAtomics` (the mesh pass's fragments count the texels they write),
 `shaderSampledImageArrayDynamicIndexing` (the SDF screen shading indexes its sources and samplers),
 and `shaderStorageImageExtendedFormats` (incoming shadow visibility writes use R8 or R8G8 storage
-images). No shader discards a fragment, so a `discard`, which DXC compiles to
-`OpDemoteToHelperInvocation`, is refused like any capability no device enables. Before a shader module is created,
-`VulkanShaderCapabilities` reads the SPIR-V capabilities it declares and refuses, naming the module
-and the capability, any capability outside `VulkanShaderCapabilities.Enabled`: Vulkan core's
-`Shader`, `ImageQuery` and subgroup capabilities, and the capabilities a required feature grants,
-including `StorageImageExtendedFormats` for those incoming-visibility formats.
+images). It likewise requires `shaderClipDistance` (the portal clip), `shaderDrawParameters`
+(indirect mesh identities through `DrawIndex`) and `shaderDemoteToHelperInvocation` (the view-local
+character fade's `discard`, which DXC compiles to `OpDemoteToHelperInvocation`). Before a shader
+module is created, `VulkanShaderCapabilities` reads the SPIR-V capabilities it declares and refuses,
+naming the module and the capability, any capability outside `VulkanShaderCapabilities.Enabled`:
+Vulkan core's `Shader`, `ImageQuery` and subgroup capabilities, and the capabilities a required
+feature grants, including `StorageImageExtendedFormats` for those incoming-visibility formats,
+`ClipDistance`, `DrawParameters` and `DemoteToHelperInvocation`.
 A kernel that needs a new feature-gated capability therefore fails at startup until the factory
 requires its feature and the list names it, and `VulkanShaderCapabilitiesLawTests` holds every
 module the World ships to that list.
@@ -697,17 +700,13 @@ object created before the link is destroyed once in reverse order and that no
 later link runs; a completed chain is destroyed the same way by `Dispose`. The readback, upload
 staging and acceleration-structure buffers are created inside paths that also
 record device commands, so only their usage constants are checked. It creates
-no real instance or device. The backend itself is verified by running the engine on
-Vulkan and by `puck parity`, which boots the authored parity world
-(`experimental/tests/Puck.Parity/parity.puck`) offscreen once per backend and gives
-each of the world's scheduled captures three verdicts: its content gate, its
-exact `stateHash`, and per-tile pixels under the contract versioned beside the
-world:
+no real instance or device. The backend itself is verified by a windowed Vulkan boot of the debug world
+(`puck_world_start` with `windowed: true` and `backend: vulkan`, under a granted
+GPU lease), reading its captures and counters beside the Direct3D 12 boot. Full
+cross-backend parity qualification waits for the owner's call:
 
 ```powershell
 dotnet test tests/Puck.Vulkan.Tests/Puck.Vulkan.Tests.csproj -c Release
-dotnet build Puck.slnx -c Release
-dotnet src/Puck.Cli/bin/Release/net11.0/Puck.Cli.dll parity
 ```
 
 ## Packaging

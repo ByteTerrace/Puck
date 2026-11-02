@@ -71,14 +71,17 @@ builder
 
 A `Plane` has no natural bounding sphere—it's infinite by construction —
 so it belongs in the **world set**: instructions declared outside any
-`Instance`, always evaluated, never masked out by the tile-cull passes.
+`Instance`, always evaluated, never skipped by a bounding sphere.
 
 ### A shaped object
 
-Most content isn't infinite, and the renderer's tile-cull pass wants a
-bounding sphere it can test per screen tile instead of paying to evaluate
-every object everywhere. `Instance` opens exactly that: a bounding sphere,
-and everything emitted inside it belongs to that one culling unit.
+Most content isn't infinite, and a field sample is cheaper when it can skip an
+object whose bounding sphere it provably cannot reach. `Instance` opens exactly
+that: a bounding sphere, and everything emitted inside it belongs to that one
+culling unit. The sphere serves the field walk at each sample (the evaluator
+skips a segment whose sphere lies farther than the running distance); the bake
+chooses which instances a lattice samples by transform slot or instance range,
+not by sphere overlap.
 
 ```csharp
 var bronzeId = builder.AddMaterial(new SdfMaterial(Albedo: new Vector3(0.4f, 0.3f, 0.1f), Specular: 0.6f));
@@ -94,8 +97,8 @@ builder.Instance(boundCenter: new Vector3(0f, 1f, 0f), boundRadius: 1.6f, emit: 
 A pedestal (`Box`) with a rounded finial (`Sphere`) melted into it with
 `SmoothUnion`—a shaped statue from two primitives and one blend. The
 instance's bounding sphere (center, radius) must actually cover the finished
-shape; the tile-cull pass trusts it completely; understating it clips the
-statue at the tiles the pass wrongly decides it can skip.
+shape; the field walk trusts it completely, and understating it clips the
+statue at the samples that wrongly skip it.
 
 ### A repeated colonnade
 
@@ -320,33 +323,30 @@ of these automatically.
 > never triggers—it's a safety net for the case where it isn't, not a new
 > step you have to think about on the happy path.
 
-## Capacity probes define the envelope
+## Live counts define the layout
 
-The construction probe reserves GPU space for expected content. A live edit
-can exceed that reserve: `UploadProgram` grows the program buffer, instance
-masks, culling bounds, and frame-grid buffers together after waiting for
-in-flight frames. It allocates replacements before changing descriptors and
-keeps persistent images, pipelines, screen bindings, and baked bricks intact.
-Growth is geometric and happens only on a program change, not on ordinary frames.
+An emitter does not declare a worst case. Each frame the composition host calls
+`ISdfSceneEmitter.PrepareFrame` on every emitter, reads each emitter's actual
+`DynamicSlotCount`, and assigns every emitter a contiguous run of dynamic
+transform slots starting at its `SlotBase`. It resizes the transform table when
+the total changes and rebuilds the program when the layout or any revision
+counter changed; every composed frame is emitted with `Probe` false.
 
-> **Rule: declare your worst case up front.** Every emitter's `Emit` needs a
-> branch—selected by `context.Probe`—that takes its single largest
-> legal form: every optional shape present, every modifier at its worst
-> magnitude, every dynamic slot in use. One construction-time call with
-> `Probe: true` runs every registered emitter's worst-case branch into one
-> combined program, and *that* program's word count, instance count, and
-> dynamic-transform count establish the initial buffer reserves and the fixed
-> transform-slot layout. Program and instance buffers may grow later.
+> **Rule: report live counts and bump a revision when content changes.**
+> `DynamicSlotCount` is the number of transforms the emitter encoded after
+> `PrepareFrame`, and `WriteRevision` must move whenever the next `Emit` would
+> produce different content. A stale count or an unmoved revision leaves the
+> host holding the old program.
 
-The probe program itself is never rendered—it exists purely to be
-measured. The rule this creates for you as an author: when you add a new
-*optional* piece of content to an emitter (a toggleable decoration, an
-occasionally-present dynamic entity), you must grow that emitter's probe
-branch to match, in the same change. Skip it, and the first live session
-that uses the new content may pay an avoidable allocation and GPU wait.
-The World admission check still measures the entire composed candidate before
-accepting it. Growable renderers enforce engine limits; a fixed-capacity
-consumer can still register a smaller ceiling and refuse the edit.
+A live edit can exceed the buffers the program was uploaded into:
+`UploadProgram` grows the program buffer, instance masks, culling bounds, and
+frame-grid buffers together after waiting for in-flight frames. It allocates
+replacements before changing descriptors and keeps persistent images,
+pipelines, screen bindings, and baked bricks intact. Growth happens only on a
+program change, not on ordinary frames. The World admission check still
+measures the entire composed candidate before accepting it. Growable renderers
+enforce engine limits; a fixed-capacity consumer can still register a smaller
+ceiling and refuse the edit.
 
 ## Authoring rules
 
