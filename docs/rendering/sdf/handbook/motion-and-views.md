@@ -60,21 +60,27 @@ state: by the time a pose becomes an anchor, the simulation has already
 finished deciding where things are. The anchor is downstream evidence of a
 decision, not part of making one.
 
-## Five camera rigs
+## Camera programs and the rig classes
 
 A camera rig answers one question every frame: given a subject's anchor,
 where is the eye, where is it looking, and at what field of view? The rig also
-receives the presentation clocks (`SdfCameraClock`) for camera-only motion;
-none of the five rigs below reads them.
+receives the presentation clocks (`SdfCameraClock`) for camera-only motion.
+
+A world authors its cameras as camera programs: authored ops, subjects and
+state bindings that `WorldCameraRigCompiler` compiles into one presentation rig
+and `SdfCameraProgramEvaluator` walks each frame. The standard package ships
+the concrete designs, such as `chaseCamera` in `worlds/standard/camera.puck`,
+and a world selects one by a state key, imports it, overrides it by id or
+replaces it. The engine also keeps the five C# rig classes below as a small
+vocabulary of named shapes; none of them reads the clocks.
 
 ```text
 (Vector3 Eye, Vector3 Target, float FovRadians) Resolve(in SdfAnchor anchor, in SdfCameraClock clock);
 ```
 
-Every rig in the engine is a small, named shape covering one way a camera
-has ever needed to relate to a subject in this codebase—not a
-general-purpose camera-scripting language, a short vocabulary extracted from
-what the earlier hand-rolled camera code was already computing.
+Each rig class is a small, named shape covering one way a camera relates to a
+subject. They are implementation helpers; a camera's concrete design belongs
+in an authored program.
 
 | Rig | Shape | When to reach for it |
 |---|---|---|
