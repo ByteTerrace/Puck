@@ -5,8 +5,9 @@ namespace Puck.World.Server;
 public sealed partial class WorldPersistence {
     // The one switch over the world hash's component vocabulary. WorldStateHashComposition owns which components a
     // scope folds and in what order; each arm here folds one of them through its own owner, and a component with no
-    // arm throws rather than folding nothing.
-    internal void AppendStateHashComponent(ref Fnv1aHash hash, WorldStateHashComponent component, ulong seed, ulong tick) {
+    // arm throws rather than folding nothing. Recompute folds the incremental components (the arena's rows, the body
+    // slots' continuations) afresh instead of from their version-keyed caches; every other arm folds whole either way.
+    internal void AppendStateHashComponent(ref Fnv1aHash hash, WorldStateHashComponent component, ulong seed, ulong tick, bool recompute) {
         switch (component) {
             case WorldStateHashComponent.Input:
                 Host.Input.AppendStateHash(hash: ref hash);
@@ -21,7 +22,9 @@ public sealed partial class WorldPersistence {
                 foreach (var scope in Host.ScopedReplaySpan) { scope.AppendStateHash(hash: ref hash); }
                 break;
             case WorldStateHashComponent.Arena:
-                hash.Add(value: Host.Arena.ComputeHash());
+                hash.Add(value: (recompute
+                    ? Host.Arena.RecomputeHash()
+                    : Host.Arena.ComputeHash()));
 
                 break;
             case WorldStateHashComponent.BoardEnforcement:
@@ -47,7 +50,7 @@ public sealed partial class WorldPersistence {
 
                 break;
             case WorldStateHashComponent.BodyContinuation:
-                Host.Population.AppendContinuationHash(hash: ref hash);
+                Host.Population.AppendContinuationHash(hash: ref hash, recompute: recompute);
                 Host.Population.AppendSleepStateHash(hash: ref hash);
                 Host.Events.AppendDiscoveryHash(hash: ref hash);
 

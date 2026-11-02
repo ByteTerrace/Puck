@@ -54,9 +54,8 @@ experimental worlds have that it lacks is ported into it
    `CloseSheets` and the collapse.
 5. [Transfers](#transfers-federation-and-server) [high]: the companion steps 6
    to 10.
-6. [Certified field contact](#certified-field-contact) [high]: a relief
-   enclosure tight enough to prove clearance near the rock, then box and
-   ellipsoid bodies.
+6. [Certified field contact](#certified-field-contact): box and ellipsoid
+   bodies, then clearance on slopes within a third of a metre.
 7. [Delivery](#delivery-launcher-and-ci): CI's steady state, the shader cache
    and the GC-hole retirement.
 8. [Author leaks to the standard](#author-leaks-to-the-standard): the overlay
@@ -112,6 +111,17 @@ Each waits on the owner: what the engine should do, how it looks and feels, and 
   ([input](#input-channels)).
 - Whether proof of possession is a product requirement for Entra bearer tokens
   and for initial binding issuance ([security](#security-review)).
+- Whether a `search` job whose public outputs are judged over restricted rows
+  is refused, linted or left to the author, as a binding to a restricted row on
+  the shared screen is; the fog-of-war skirmish fixture shows what it leaks
+  first ([disclosure](disclosure.md#open-items)). The owner waits for that
+  evidence before deciding.
+- Decided by the owner: night exposure is the lead's call, provided authors can
+  style it as their vision demands (the floor and curve stay authored data,
+  keyable on the day clock; the debug world authors a readable deep-blue
+  night). The Moth supports both cel and plain styles, swappable live for
+  playtesting the way binding layouts are, through a generic material-style
+  switch (the illum1-fix2 lane).
 - Mesh shipping: nothing is built until a presenting client downloads packages,
   and then on a self-hosted GPU runner (the owner's deferral;
   [rendering plan](rendering.md)).
@@ -935,14 +945,35 @@ store (AGENTS.md), and work proportional to change.
   and the plan spreads it over a 400 m floor, so this decides whether the
   cold-bake bar can hold: bake a static copy in its prototype's frame and
   share it across copies whose transform is rigid (a uniform scale admitted),
-  as the dynamic path does. (from: c1-groundcover)
+  as the dynamic path does. The debug world's placement stamper opens a group
+  per placement (`WorldPlacementStamper.cs:694-725`): the lawn has 307
+  placements, the meadow 121, Chess 64 squares, Reversi 68 tiles and dots, the
+  card table 29 spots and the granaries 16 tiles. (from: c1-groundcover,
+  puck-audit)
+- [medium] Static bake grouping depends on spelling, which breaks the
+  ergonomic-is-optimal ruling (AGENTS.md):
+  - A static group's mesh detail follows the whole group's size, so authors
+    split one object into separate prototypes to keep detail
+    (`devices.puck:16-22`, `desktop.puck:52`, `hall.puck:497-500`).
+  - A warped shape bakes alone and forces the next shape alone, so shape order
+    changes grouping (`WorldPlacementStamper.cs:714-725`).
+  - Every text run bakes as its own group.
+  - One non-union blend anywhere makes the whole creation one scope, refusing
+    panels, trims and cells on every shape.
+  - A subtraction collides as its whole bounding box, so walls with openings
+    are tiled from boxes (`paintings.puck:249-251`).
+  - Folds are cheaper than copies but cannot swing, slide, carry panels or
+    always collide.
+  Design them with the static-copy fix above: grouping and detail are derived
+  from what the document means, never from how it splits or orders rows.
+  (from: puck-audit)
 
 ### Certified field contact
 
-Owner: geometry and bake lane (sdf-authoring, rendering, physics) · high · Next:
-a relief enclosure tight enough to prove clearance near the rock (the noise's
-gradient in closed form), then box and ellipsoid bodies. The terrain pass's
-step 5 is this packet ([terrain pass](terrain-pass.md#order-of-work)).
+Owner: geometry and bake lane (sdf-authoring, rendering, physics) · medium ·
+Next: box and ellipsoid bodies, then clearance on slopes within a third of a
+metre. The terrain pass's step 5 is this packet
+([terrain pass](terrain-pass.md#order-of-work)).
 
 Relief colliders and the field provider read one certified surface solve
 (`FixedFieldColliderContact.Solve`, `src/Puck.Physics/FixedColliderField.cs`).
@@ -951,17 +982,31 @@ closed in it, each pinned in its stated case by `CertifiedFieldContactLawTests`:
 clearance rests only on the evaluator's box bounds, the core's pieces cover it end
 to end, a union scope's scale is kept wherever a later operator reads its
 magnitude, an unproved or stuck volume reaches both contact paths' resolutions,
-and every blend's outward growth comes from `SdfBoundAlgebra.Growth`. Remaining:
+and every blend's outward growth comes from `SdfBoundAlgebra.Growth`. The box
+bounds charge a relief only what it reaches inside the box
+(`SdfFieldEvaluator.NoiseDisplaceBounds`, `Pcg3dLatticeNoise.Fbm3Bounds`: per
+octave the exact trilinear range at the vertices of the box's fade range, its
+rounding allowance pinned against an exact oracle by
+`sampling.lattice-noise-fade-and-box-bounds`), so a capsule half a metre above
+the valley's relief is proved clear by its first box. The ground snap acts on an
+unproved step and lands it on support it proves; the landing may carry the
+uncertainty the step already did (`FixedStepUp.TrySnap`'s `uncertain`), so a
+volume elsewhere in the band no longer lifts a walking body off its ground.
+Remaining:
 
-- **[high] Clearance near relief is unproved, not certified.** The box bounds
-  (`Sampler.Clears`, `FixedColliderField.cs:129`) charge a noise relief its whole
-  reach (`SdfFieldEvaluator.NoiseReach`, `SdfFieldEvaluator.RenderBounds.cs:139`),
-  so nothing within the amplitude (4 m in the valley) of the unrelieved shapes is
-  ever proved clear. A body touching the surface it measured is a contact without
-  a push, but one whose nearest found surface lies past its reach is `Unproved`,
-  which the carry release, the step-up and the ground snap refuse. The cure is a
-  tighter enclosure of the relief: the noise's gradient in closed form beside its
-  value, with a curvature bound or interval mean-value bounds in the box walk.
+- **[medium] Clearance within about a third of a metre of a slope is
+  unproved.** The box a proof reads is axis-aligned, and on a slope its corners
+  protrude past the reach sphere by up to `(√3 − 1)·reach` along the normal. On
+  a 100 m sphere under the valley's relief (frequency 0.02, 4 m, six octaves), a
+  capsule of radius 0.35 m is proved clear 0.1 m above level rock but only from
+  0.3 to 0.5 m above a 13° to 20° slope; below that, short of its reach, it is
+  `Unproved`. The step-up's across move and the carry release still refuse such
+  a pose. The relief is no longer what limits it: the box's interval lower end
+  sits within 0.05 m of the gap on level rock. Three axis slabs, each a reach
+  long on its own axis and 0.71 of a reach on the other two, cover the sphere
+  with about 60 % of the cube's excess at 30°; an oriented box in the surface's
+  frame removes it. Either costs more box
+  walks per unproved query, which are few (0 to 12 a tick at the rim).
 - **[medium] Box and ellipsoid bodies solve from their centre**
   (`FixedFieldColliderContact.SolveVolume`, `FixedColliderField.cs:580`): the
   support along the measured normal, not the volume's own nearest point. Cover
@@ -972,22 +1017,23 @@ and every blend's outward growth comes from `SdfBoundAlgebra.Growth`. Remaining:
   by its gauge and every blend's growth is charged, but a primitive whose field
   reads under its distance (the cone family) grows only by the reach. Take each
   shape's gain from the evaluator's reach certificates.
-- **[medium] The noise reach's rounding allowance is argued, not pinned**
-  (`NoiseReach`): a raw per rounded product and four raws per octave for the
-  quintic fade's overshoot. Pin the fixed-point fBm's extreme against an exact
-  oracle in a Maths law.
-- Cost at the valley rim (headless, unpaced, 500 bodies; `dotnet-trace`
-  sampled thread time under `FixedStepPump.Step`): relief contact was 14.6 % of
-  a tick on the old first-order collider, 13.6 % on the first certified solve,
-  and is 18.9 % now that clearance rests on box bounds (about 670 box reads a
-  tick, against the envelope's one point read a query). It reads the field 71
-  times a tick at 17.5 samples a read. Further cuts: the closed-form gradient
-  above, a cached box walk, and contact over the job system's parallel
-  partitions. An octave cut is only the drawn relief's own cut (the terrain
-  pass's step 3), never a contact approximation.
-- `FixedStepUp.TrySnap`'s landing probes issue most relief contact queries:
-  about 98 % of field-contact time at the rim runs under it. Measure whether
-  each probe is needed before cutting the solve itself. (from: field-contact)
+- Cost at the valley rim, the Moth standing at (0, 376, 470) for 1,200
+  headless unpaced ticks among 500 bodies (`dotnet-trace` sampled thread time,
+  `FixedFieldColliderContact.Solve` under `FixedStepPump.Step`): 7.0 % of a
+  tick, from 15.7 % with the relief charged its whole reach on the same
+  workload. The proofs ask about 615 boxes a tick, and each relief collider's
+  `SdfBoundsCache` answers 84 % of them from an identical earlier box (a body at
+  rest asks the same box every tick), so about 100 box walks a tick run; the
+  field is read 59 times a tick at 14 samples a read (71 at 17.5 before). A
+  relief bound walks each octave's cells, about two fifths of a walk's time.
+  Further cuts: contact over the job system's parallel partitions. A gradient
+  in closed form would not tighten the enclosure, which is already the exact
+  range of each octave's blend over the box, and the solve's direction taps
+  read the whole field, not the relief alone. An octave cut is only the drawn
+  relief's own cut (the terrain pass's step 3), never a contact approximation.
+- `FixedStepUp.TrySnap`'s landing probes issue most relief contact queries while
+  walking, and the snap now also runs on unproved steps. Measure whether each
+  probe is needed before cutting the solve itself. (from: field-contact)
 - [low] Relieved instances are never culled from `WorldSolidField`'s program,
   because `NoiseDisplace` has no reach certificate (`SdfFieldEvaluator.Cull.cs`,
   `TryCertifyInstance`). (from: field-contact)
@@ -1191,16 +1237,6 @@ The engine provides mechanisms; every concrete design is `.puck` data in
 `worlds/standard/`, which the debug world imports and develops. Each item below is
 a design built into C# or living only in the debug world.
 
-- The leaks-2 review (Codex Astra; the leaks3 lane is fixing all four):
-  [medium] Presentation-tier projection and hydration drop the screen-material
-  table (`src/Puck.World.Schema/WorldProjection.cs:115`, `:316`, `:792`), so a
-  disclosed world's screens render untreated; [medium] screen material ids and
-  both reference sites are absent from `WorldNameRegistry`, so aliased modules
-  collide on a material id; [medium] a neutral or scanline-only material drops
-  the screen edge's footprint protection
-  (`src/Puck.SdfVm/Assets/Shaders/Sdf/shade/sdf-environment.hlsli:312`);
-  [low] `worlds/standard/walker.puck:22` copies the Moth's `walk` program
-  (`worlds/debug/avatars/moth.puck:223`).
 - [low] Flight and fuel are authored only in the Moth
   (`worlds/debug/avatars/moth.puck:1860-1925`). When the assisted-flight pass
   comes it is a standard ability template, with `dashAbility` in
@@ -1221,6 +1257,12 @@ a design built into C# or living only in the debug world.
   preference needs a camera program's `state.<row>.$body` binding to resolve
   against the framed body (`StateBinding.BodyKey`), which the rig compiler's
   scalar slots (`WorldCameraRigCompiler`, `CompiledRig.Refresh`) do not do.
+- [low] `screenMaterials` has no `world.row` section
+  (`src/Puck.World.Console/WorldRowCommandModule.cs` refuses the path), so a
+  material is read back and tuned only through its source and `world.reload`.
+  Add the row section with an upsert/remove mutation kind
+  ([mutations](../../.claude/skills/puck-world/references/mutations.md)), keyed
+  by `id`.
 - The standard's binding bar slot set (`worlds/standard/controls.puck`, the
   `bare` overlay) still lists keys only the Moth binds (1 to 5 and F4); they
   show as unbound plates in a world without her controls.
@@ -1774,6 +1816,21 @@ and the order they land in; the items below are its findings and checks.
   pixels white like lit ones; at the noon sun the meadow lies in the east
   wall's shadow. Step 1's checks and the frame bar are owed again on the moving
   day cycle, with a low-sun cel style for the dawn penumbra check.
+- From illum1-fix: the cascades' exit layer doubles each cascade pass's draws
+  and vertices (`world.counters gpu pass sdf.world$shadow-near` at the stage:
+  460 draws and 2.62 M vertices on Direct3D 12, two render passes) and adds a
+  depth image per cascade (16 MiB each at 2048 texels); its frame time is owed
+  on a quiet machine. At a grazing light (a wrapped side at n·l = -0.25) the
+  filter's slope clearance (`SdfMeshShadowSlopeBias`, 2.5 texels of depth per
+  texel of lateral distance) still lets a parallel slab within about 0.1 m
+  along the light half through; the exit layer removed the leak beyond that.
+  The debug world authors no `render.toon`, so `world.toon on` there bands only
+  materials with styles of their own until a default style is authored there,
+  which takes either a copy of `celStyle`'s values with `enabled: false` or a
+  `.puck` way to override one field of an imported value.
+  `SdfPassPlanLawTests.ATemporalViewAddsOnlyItsHistoryAndReactivityOverTheSpatialGraph`
+  fails on its own constant (201,139,200 bytes against 1,221,350,400 from the
+  current `HistorySurfaceWords`), unrelated to the cascades.
 - [high] A sun that moves every frame freezes indirect light. Each direction
   change starts a new lighting generation (`SdfMeshIrradiance.RefreshLighting`
   hashes every directional and traced light record), and a trace batch landing
@@ -2048,47 +2105,41 @@ derived products, removed from git and built on demand.
 ### Test runner and replay
 
 Owner: test runner and replay specialist · medium and low ·
-Next: make the per-tick authority hash incremental (measured below), its digest
-segments designed with the parallel tick's partitions in the
-[job-system memo](#engine-job-system); keep the recompute-comparison law.
+Next: the per-tick authority hash is incremental
+([design](engine-job-system.md#the-incremental-state-hash)); re-profile Go's
+reproduce worker for what remains.
 
+- [high] The incremental hash's caches miss invalidations (cross-family
+  review): a standalone `RowDigest` refresh leaves its parent segment stale
+  (`ArenaHash.cs:74-76,138-168`); a sleeping body's continuation stays cached
+  through `SetIntentSource`, an untimed `PressChannel`, `MergeLaneTimer` and the
+  late tether solve (`WorldBody.Tether.cs:119-143`); an off-thread hash between
+  a write's version bump and its store poisons a row digest; and live replay
+  never runs the full-recompute oracle. The incr-hash lane redesigns the body
+  cache around one write chokepoint (or deletes it if that costs more than it
+  saves), hashes only at a stable read boundary, and adds a rotating per-tick
+  spot check. (from: incrhash-astra)
 - [low · fix when touched] `Fixtures.FreshServer` (`tests/Shared/World/Fixtures.Server.cs:112`) deserializes without `WorldStateSettlement.SettleBeforeAdmission`, so a boot from a raw document with a seeded responsive placement can show the response's prototype while colliding as the authored one, which the real loader never does. Settle in the fixture as the loader does. (from: the tip-reds lane)
-- [medium] `--reproduce` costs about twice the ordinary run, and the cost is
-  per-tick hashing and recording, not host reuse. Recording slows the authored
-  phase itself (alchemy's 1,204-tick scenario 14.0 s ordinary against 20.1 s
-  recorded; Go's 2,804-tick scenarios 15 s against 31 s under the trace), the
-  replay then repeats it (replay time equals recorded authored time), and a
-  replica has a fixed 2.4-4 s floor even for a 16-tick scenario. A
-  `dotnet-sampled-thread-time` trace of Go's reproduce worker (481 CPU-s on the
-  tick threads) splits it: `WorldReplayProbe.Verify` 51 %, the authored steps 49 %;
-  `WorldPersistence.AppendStateHashComponent` 36.5 % of all of it
-  (`WorldPopulation.AppendContinuationHash` 16.4 %, `StateArena.ComputeHash`
-  13.9 %), `WorldReplayTape.NoteTick` 20.7 % (with
-  `WorldAuthorityCheckpointCodec.WritePopulationEntry` 10.3 %), the session
-  sinks' snapshot delivery to the garden and night mirrors 16.7 %
-  (`WorldDocumentStateView.ApplyFieldCells` 11.4 %), replica arena construction
-  and load 7 %, and the simulation itself (rules 13 %, bodies and contact sweeps
-  about 15 %) the rest. Make the per-tick hash incremental (fold only changed
-  arena columns and changed body continuations), and find whether a headless
-  test worker's session mirrors have any reader before delivering to them;
-  then re-time Go. The hash is one sequential FNV-1a stream over the
-  components in `WorldStateHashComposition.AuthoritativeOrder`, so an
-  incremental form changes its structure to a combination of per-segment
-  digests (hash values change, which rule 4 allows) and needs a change signal
-  at every write path: the arena's numeric columns are row-local
-  `ArenaColumnBuffer<T>` arrays but text, vector, visibility and observation
-  columns, import, restore, growth and relayout write beside them; a body's
-  continuation (`WorldAuthorityCheckpointCodec.WriteContinuationEntry`) has no
-  version at all. A missed signal makes the hash stale and a divergence
-  invisible, so land it with a law that compares the incremental digest against
-  a full recompute over the same states, tick by tick, in `--reproduce`.
-  Raw: `.claude/scratch/quiet-measure/` in the quiet-measure worktree (ignored).
-  (from: quiet-measure) A live scope's per-tick hash
-  (`WorldScopedReplayRuntime.Hash`) now refolds its rows only when the arena,
-  its layout or one of the rows' versions moved, which leaves its value
-  unchanged; its body continuations (`AppendContinuationHash`, about as costly
-  as the rows were) and rule latches still fold whole every tick, for want of a
-  body continuation version. (from: tick-cost-2)
+- [medium] Recording still costs about a third of the plain authored run.
+  The per-tick authority hash is incremental: the arena by `RowVersion`-cached
+  row digests in 32-row segments, resting identity-less bodies by rest epoch in
+  32-slot segments, the scoped replay runtime through the same row digests
+  ([design and measurements](engine-job-system.md#the-incremental-state-hash)),
+  checked against a full recompute on every replayed tick of `--reproduce` and
+  every recorded tick of the first `--workers` count. A headless host's
+  screen-session mirrors drop their snapshots. Go's authored seconds at
+  `--jobs 1`: plain 256.7 s to 180.4 s, recorded 441.4 s to 247.1 s; a tick
+  refolds 1.6 of about 368 rows and 22 of about 559 slots. Left: the
+  recording's 66.7 s over plain is the components that still fold whole every
+  tick (`PopulationPose`, `BodyActionState`, `Navigation`, `Flock`, `Input`)
+  and the probe's per-tick input copy, unprofiled; `--reproduce`'s replay
+  (415.7 s for Go) pays the full recompute every tick, which is the check's
+  price; a replica's fixed 2.4-4 s floor per scenario is unmeasured since.
+  Re-profile Go's reproduce worker (`dotnet-sampled-thread-time`) before
+  choosing the next segment. A moving body still encodes its whole
+  continuation every tick; a write-side version per body would cover it, and
+  is the larger change the measurement has to justify. (from: quiet-measure,
+  tick-cost-2, incr-hash)
 - [medium] Hall's test fixture uses `documentId: "hall-tests"`, so the garden
   and night references admit a separate full `debug` authority. Its root's
   stopped-machines import does not stop that companion's six machines;
@@ -2475,6 +2526,12 @@ Klondike table stands north of the Go table in the board game room
    rules), ten stock deals of one card a column, and a run K to A of one suit
    leaving to a completed pile.
 2. Poker: seats, computer players and the hand judge; its own step.
+3. The [disclosure plan](disclosure.md#the-build-order)'s four fixture games
+   are tables-room content too (the owner's direction): a sealed-bid auction,
+   a card game with a draw pile, a discard pile and hands under `Count` and
+   `Placeholder`, social deduction with private chat, and a small fog-of-war
+   skirmish, each at its own table and each the pair script of the
+   noninterference harness.
 - Residency: none of it waits on streaming; at 52 to 104 cards a table it is a
   stress case for nearest-first bake order
   ([streaming](#residency-and-streaming)).
@@ -2728,6 +2785,18 @@ hang, then the pre-`main` language findings.
   refuse the missing position before the domain-expansion walk. The port
   authors the explicit position and boots successfully. (from: meadow)
 
+- [low] Two `exports { … }` blocks in one document keep only the later block's
+  lists (the object section replaces, where the `export <facet> <names>`
+  statement appends, `WorldDocumentEmitter.cs` `ExportNode`), and `export` does
+  not parse inside a template, so a template that exports
+  (`cameraResponse` in `worlds/standard/camera.puck`) makes every document
+  expanding it write its own exports as statements after the expansion
+  (`worlds/standard/standard.puck`, `walker.puck`). Merge repeated `exports`
+  blocks the way the statement does, or admit `export` in a template body.
+  Related: a material the standard's skin declares is re-exported by every
+  document a world imports in the skin's place (`standard.puck`, `walker.puck`,
+  `worlds/debug/moth-controls.puck`, `controls.puck`); decide whether an
+  import's surface should carry its own imports' exports. (from: leaks3)
 - [low] An imported module named `roles` changes how its importer lints. Add a
   file `worlds/standard/roles.puck` holding only a `roles [ { name: "companion"
   accept: true } ]` section and append `import "roles"` to
@@ -2831,45 +2900,89 @@ step's completion criteria; C1 to C7 are in.
 Owner: an independent reviewer (Argon) · unconfirmed · Next: the researcher
 brief's priorities ([security review](../development/security-review.md)).
 
-- [high, the disclosure-2 lane is fixing] The state-correctness review
-  (Claude) found doors that decide "restricted for this reader" from live
-  membership instead of declared policy, so a non-operator seat can count or
-  locate hidden cells: `world.row state` prints `cellSlots`
-  (`src/Puck.World.Schema/WorldStateDisclosure.cs:440`); `world.hud.template`
-  answers hidden and absent differently (`src/Puck.World/WorldHudCommandModule.cs:236-249`);
-  observations list a row only when a restricted cell exists
-  (`WorldStateDisclosure.cs:219-227`). Mediums on the same cause: row edits,
-  `world.projection` bindings, replica deltas; plus arithmetic faults in a
-  dynamic key or ring age read as absent instead of faulting, and a derived
-  board outside a replay scope going stale on restore. All of it is in the
-  lane's brief. (from: statecorr-review)
-- [low] `world.identify` exposes a SHA-256 of the definition, authored hidden
-  seeds included, to a seat with Control over a screen. Closing a gate on a
-  fault re-arms an Edge rule after a one-tick fault and fires a decision's
-  `OnNoChoice`; decide whether a fault should hold the previous state instead.
-  `WorldBody.GateOpen` and `MotionGateOpen` are near-copies. (from: statecorr-review)
-- [unconfirmed] `ArenaSearchEffectHost` (`src/Puck.State.Search/ArenaSearchEffectHost.cs:30-32`)
-  is documented to reproduce the live host's draws, so a search over an arena
-  holding private (keyed) sites may compute the private outcomes. Confirm
-  whether a search can run where the secret is not granted. (from: unbiased-review)
-- [medium] A seat writes a cell under its grants alone, before disclosure
-  (`WorldDocument.Compose.Cells.cs` `ReadsThroughDisclosure` covers addons,
-  peers and sessions only), so a seat holding Edit over a restricted row learns
-  which hidden keys exist: `world.state.cell.remove hand secret0` removes a
-  hidden cell where an absent key is refused "has no cell keyed", and a set over
-  a hidden key keeps its readers where a minted one is readable. Seats write
-  rows they cannot read on purpose (a sealed bid into an authority-only row), so
-  the fix decides what a seat's write to an unreadable or absent key answers,
-  identically for both. (from: disclosure-2)
-- [low] A Text comparison in a gate (`RuleEvaluation.TryReadText`,
-  `RuleEvaluation.cs:285`) reads a Text operand whose live row index or key
-  faults as "not answered" rather than raising `ExpressionFault.Domain`, so a
-  negated Text comparison over it can still open; numeric operands fault.
-  (from: disclosure-2)
-- [low] `world.timeline` withholds a state clock's presented phase from a caller
-  whose policy restricts the clock's row (`WorldTimelineCommandModule.cs`), but
-  only a windowed World carries the local presentation mirror it reads, so the
-  headless probe cannot show it. (from: disclosure-2)
+- [high] Hidden state is distinguishable from absent state at doors the
+  door-by-door fixes (`state-correctness`, `disclosure-2`) did not reach, and
+  each review found more. [The disclosure plan](disclosure.md) is the structural
+  fix; its [findings table](disclosure.md#the-findings-this-plan-answers) keeps
+  every finding's file, line and step, and its [build order](disclosure.md#the-build-order)
+  is the queue; the adversarial review of its first draft is answered in its
+  [review table](disclosure.md#the-design-reviews-findings). Open by step:
+  - Step 0, the noninterference harness and the four authored games in
+    `worlds/debug/` (a sealed-bid auction, a card game with piles and hands,
+    social deduction with private chat, a fog-of-war skirmish), with the input
+    fuzzer; the games settle the `search` lint and whether an authored private
+    inbox gives a sealed bid what it needs. The harness green over the fixtures
+    and the fuzzer is the definition of done.
+  - Step 1, deltas and versions first ([decision 5](disclosure.md#5-a-delta-is-a-difference-of-views-owned-by-the-stream)):
+    [high] forgetting the delta cache reopens a timing oracle after
+    re-disclosure (`src/Puck.World.Server/WorldStateChangeDisclosure.cs:85,97`);
+    [medium] the last-sent image aliases live vector memory (`:90`); [high]
+    versions, revisions, delivery counts and stream invalidation signal hidden
+    installs (`src/Puck.World.Server/WorldTravelerProjection.cs:47-50`,
+    `WorldFederationProjectionSink.cs:52-55`); `host.frames`, `host.memory`,
+    `world.counters`, `world.gpu-timing` and `world.collision.probe` become
+    Operator. (from: disc2-review, discdesign-review)
+  - Step 2, reads through the view ([decision 1](disclosure.md#1-one-capability-the-recipients-view)):
+    [high] replica resume delivers `server.Definition` raw
+    (`src/Puck.World.Server/WorldSessionSink.cs:188`); [high] `world.budget`
+    publishes raw placement counts (`src/Puck.World/WorldPopulationCommandModule.cs:225`,
+    no audience at `:460`); [high] `world.reflow.preview` runs over the
+    authority's placements (`src/Puck.World.Server/WorldServer.Reflow.cs:98-131,358`);
+    [low] `world.identify` hashes authored hidden seeds for a seat with Control
+    over a screen (`src/Puck.World/WorldIdentifyCommandModule.cs:72`); [low]
+    `world.timeline` withholds through a predicate of its own
+    (`src/Puck.World.Console/WorldTimelineCommandModule.cs:137-140`);
+    [unconfirmed] a `search` over an arena holding private keyed sites may
+    compute private outcomes (`src/Puck.State.Search/ArenaSearchEffectHost.cs:30-32`).
+    (from: disc2-review, discdesign-review, statecorr-review, unbiased-review)
+  - Step 3, the write door refuses by policy ([decision 3](disclosure.md#3-a-writer-that-cannot-read-a-row-whole-cannot-write-it)):
+    [high] batch `ExpectedCells` is a read oracle, implemented twice
+    (`src/Puck.World.Server/WorldDocument.StateCommands.cs:135`,
+    `WorldDocument.Compose.Batch.cs:82`) behind an Observe-only admission
+    (`WorldDocument.StateTransformAdmission.cs:127`), and `ExpectedSpatialReads`
+    is never checked (`src/Puck.World.Schema/WorldDefinitionFingerprint.cs:109`);
+    [high] transform and generate admission scan current membership
+    (`StateCommands.cs:97-116`); [high] per-cell upsert and remove receipts
+    distinguish hidden from absent for peers, addons and sessions
+    (`WorldDocument.Compose.Cells.cs:292,576,636`, `WorldServer.Arena.cs:98`);
+    [medium] a seat writes under its grants alone (`Compose.Cells.cs:574`).
+    (from: disc2-review, discdesign-review, disclosure-2)
+  - Step 4, the layout ([decision 4](disclosure.md#4-the-physical-layout-follows-the-hidden-policy)):
+    [high] dealt children keep hidden-dependent slots and positions
+    (`src/Puck.World.Schema/WorldStateDisclosure.cs:481,621`,
+    `src/Puck.World.Server/WorldTick.Deals.cs:426,544-552,561`), printed by
+    `world.placements` (`WorldTick.Deals.cs:102`); [high] a restricted
+    template's `Solid`, `Grip`, `Spatial`, `Region` and `Emission` facets act on
+    the world for every body (`WorldTick.Deals.cs:558-571`). (from:
+    disc2-review, discdesign-review)
+  - Steps 5 and 6, the compiler and the deletion of every other predicate
+    ([decision 6](disclosure.md#6-the-compiler-holds-the-line)): the authority
+    `internal` to `Puck.World.Server` (`WorldServer.RuleHostSeam.cs:8,23` are
+    public routes today), `WorldOperatorAuthority`, `CommandDefinition.Operator`,
+    DISC001 over module declarations, the public-surface law,
+    `WorldStateDisclosure` deleted. Step 7, the red-team extension.
+- [high] A faulting remove key is treated as success, so a partial firing
+  commits: `src/Puck.State.Rules/Evaluation/RuleEvaluator.Effects.cs:723` calls
+  the `ResolveKey` overload that discards `KeyNaming`, and its invalid-key arm
+  returns true when `strict` is false (`:730`; ordinary firings pass
+  `strict: false` at `:149` and commit at `:98`). A rule that increments score
+  and then removes `labels[1 / zero]` commits the score instead of rewinding the
+  firing. (from: disc2-review)
+- [medium] Read operands still erase key faults beyond the Text case:
+  `src/Puck.State.Rules/Compiler/Operands.Vectors.cs:87` discards the naming
+  result and `VectorCallOperand.Read` answers Absent (`:154`);
+  `Compiler/Operands.cs:534` does the same for board origins and answers
+  `-1` for an invalid offset origin (`:554`), its symmetry reader at `:660` reads
+  through an invalid key as a default number; pattern reads discard the result
+  at `Compiler/Operands.Patterns.cs:88` and `:212`; Text at
+  `Evaluation/RuleEvaluation.cs:285-288` never raises a fault from the branch
+  at `:113`, so `not (labels[1 / zero] == "yes")` opens. Each should produce
+  `Domain`; the status-discarding overloads in `RuleReads.cs:207` and `:268`
+  make new misses easy. (from: disc2-review, disclosure-2)
+- [low] Closing a gate on a fault re-arms an Edge rule after a one-tick fault
+  and fires a decision's `OnNoChoice`; decide whether a fault should hold the
+  previous state instead. `WorldBody.GateOpen` and `MotionGateOpen` are
+  near-copies. (from: statecorr-review)
 - [low] `worlds/hosting/granaries.extensions.json` grants its `console` client
   `mutate` over `section:state` to write six feed rows; scope it to those rows if
   the extension grant vocabulary allows. (from: the lead, landing granaries)
@@ -3033,13 +3146,16 @@ Owner: specialist lane (puck-world, build and hot reload, input) · ordinary · 
 Owner: debug-world content lanes, each started by the owner's direction ·
 ordinary · Next: new content and art on the owner's call.
 
-- [medium] `worlds/debug/controls-dash-tests.puck` fails on its own: booted
-  alone it reports binding group `$empty`, because the Moth basis
-  (`worlds/debug/avatars/moth.puck`) no longer imports bindings since they
-  moved to `moth-controls.puck` (leaks-2), so its keyboard input does nothing.
-  In the full debug world D plus J still dashes. Make the fixture import the
-  controls it exercises. Also owed: `puck verbs --check` with a windowed boot
-  after clearance-op removed `player.camera.clearance` by hand. (from: clearance-op)
+- [medium] `motion-pulse` (`shapes.puck` ~:2276) runs its six petals on a
+  continuous clock, so their seams stay stretched (PUCK122). Fix the exhibit's
+  motion so the seams close; its siblings `motion-smooth-blend` and
+  `motion-carve` show PUCK122 on purpose. (from: puck-audit)
+- [low] Board-game seats build button edges as hand-made cells (29 blocks
+  across go, alchemy, reversi, cardtable, granaries and chess) where a rule
+  with `mode: Edge` would do; switching changes behaviour, so verify each
+  game's tests when converting. (from: puck-audit)
+- Owed: `puck verbs --check` with a windowed boot after clearance-op removed
+  `player.camera.clearance` by hand (the first settle window runs it). (from: clearance-op)
 - The faerie: the companion becomes small, abstract and original (nothing that
   reads as Ocarina of Time's) beside the moth, its animation rich, varied and
   reactive, dodging a swat through one generic threat input (a point and
@@ -3271,6 +3387,11 @@ read one. The plans that keep open items:
 - [Records and pools](records-and-pools.md): the pair contract (MaxLive-sized
   storage, explicit endpoints, generation-safe handles), generated rows as the
   representation S10 replaces, and remote home adoption.
+- [Disclosure](disclosure.md#the-build-order): the noninterference harness and
+  the four authored games, then six steps from deltas-first to the deletion of
+  every door predicate but the view's and the red-team extension; the
+  [owner's call](disclosure.md#open-items) on a `search` lint waits on the
+  skirmish fixture.
 - [Runtime and delivery](runtime-and-delivery.md#open-items): asset packages,
   the ledger, compiled worlds, the presentation view and the evidence package;
   release pairs wait for the first shipped release.

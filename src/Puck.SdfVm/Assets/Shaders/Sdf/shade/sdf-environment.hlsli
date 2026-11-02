@@ -266,23 +266,31 @@ bool sampleScreenSurface(int material, float3 hitPoint, float3 rayDirection, flo
         return true;
     }
 
-    // A display with no treatment shows its picture as its source made it. The pixel or so along the face's own edge,
-    // which the temporal jitter moves, is kept out of `picture`.
-    if (mapping.treatmentShape.w == 0.0) {
-        float2 edge = ((min(uv, (1.0 - uv)) * 2.0) * float2(surface.right.w, surface.up.w));
+    // The view's screen fidelity (SdfViewSnapshot.ScreenFidelity) scales every term of the treatment: at one the
+    // picture's pixels leave exactly as sampled and the face's edge is a hard edge, which a framed seat's matte hides, so
+    // a framed screen shows its source as a desktop emulator does; at zero the face is the in-world display.
+    float treatment = (mapping.treatmentShape.w * (1.0 - saturate(passGroup.screenFidelity)));
+    float2 faceSize = (2.0 * float2(surface.right.w, surface.up.w));
 
+    // The edge band the temporal jitter moves (the face's own edge, inset by a material's rounded, softened edge), and
+    // every pixel within a footprint of it, is kept out of `picture`, with or without a treatment: the distance, in
+    // metres, from the pixel to the region the material draws at full strength. The band's rounding uses the face's
+    // shorter side, which only shrinks that region, so the protection errs toward keeping history.
+    float bandRadius = (mapping.treatmentShape.y * treatment);
+    float2 band = ((((abs(image - 0.5) - 0.5) * float2(mapping.warpU.w, mapping.warpV.w)) + (bandRadius + (mapping.treatmentShape.z * treatment))) * faceSize);
+    float bandInside = ((bandRadius * min(faceSize.x, faceSize.y)) - (length(max(band, 0.0)) + min(max(band.x, band.y), 0.0)));
+
+    picture = saturate(((bandInside / max(footprintDiameter, 1.0e-6)) - 1.0));
+
+    // A display with no treatment shows its picture as its source made it.
+    if (mapping.treatmentShape.w == 0.0) {
         outColor = sampled;
-        picture = saturate(((min(edge.x, edge.y) / max(footprintDiameter, 1.0e-6)) - 1.0));
 
         return true;
     }
 
     // How many source texels the pixel's footprint spans along each axis.
     float2 footprintTexels = (footprint * sourceSize);
-    // The view's screen fidelity (SdfViewSnapshot.ScreenFidelity) scales every term of the treatment below: at one the
-    // picture's pixels leave exactly as sampled and the face's edge is a hard edge, which a framed seat's matte hides, so
-    // a framed screen shows its source as a desktop emulator does; at zero the face is the in-world display.
-    float treatment = (1.0 - saturate(passGroup.screenFidelity));
     bool inPicture = all(image >= 0.0) && all(image <= 1.0);
     float cornerRadius = mapping.treatmentShape.y;
     float edgeSoftness = mapping.treatmentShape.z;
@@ -309,7 +317,6 @@ bool sampleScreenSurface(int material, float3 hitPoint, float3 rayDirection, flo
 
     edge = lerp((inPicture ? 1.0 : 0.0), edge, treatment);
     outColor = ((((sampled * scanline) * vignette) * edge) + ((mapping.treatment.w * treatment) * glint));
-    picture = edge;
 
     return true;
 }

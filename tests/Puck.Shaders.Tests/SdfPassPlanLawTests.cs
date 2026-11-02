@@ -102,6 +102,7 @@ public sealed partial class SdfPassPlanLawTests {
         string[] cascades = [
             SdfWorldPackage.Parts.ShadowNear, SdfWorldPackage.Parts.ShadowFar, SdfWorldPackage.Parts.ShadowSecond,
             SdfWorldPackage.Parts.ShadowNearDepth, SdfWorldPackage.Parts.ShadowFarDepth, SdfWorldPackage.Parts.ShadowSecondDepth,
+            SdfWorldPackage.Parts.ShadowNearExit, SdfWorldPackage.Parts.ShadowFarExit, SdfWorldPackage.Parts.ShadowSecondExit,
         ];
 
         foreach (var fragment in new[] { SdfWorldPackage.NativeFragment, SdfWorldPackage.Fragment, SdfWorldPackage.TemporalFragment }) {
@@ -130,15 +131,15 @@ public sealed partial class SdfPassPlanLawTests {
             var depths = single.Resources.Where(predicate: static resource => resource.Name.StartsWith(value: "shadow", comparisonType: StringComparison.Ordinal)).ToArray();
 
             Assert.DoesNotContain(collection: single.Passes, filter: static pass => (pass.Name == SdfWorldPackage.Parts.ShadowSecond));
-            Assert.Equal(actual: depths.Select(selector: static resource => resource.Name), expected: [SdfWorldPackage.Parts.ShadowNearDepth, SdfWorldPackage.Parts.ShadowFarDepth]);
+            Assert.Equal(actual: depths.Select(selector: static resource => resource.Name), expected: [SdfWorldPackage.Parts.ShadowNearDepth, SdfWorldPackage.Parts.ShadowFarDepth, SdfWorldPackage.Parts.ShadowNearExit, SdfWorldPackage.Parts.ShadowFarExit]);
             Assert.All(collection: depths, action: static resource => {
                 Assert.Equal(expected: ShaderPipelineResourceKind.Depth, actual: resource.Kind);
                 Assert.Equal(expected: ShaderPipelineDimensions.Absolute(height: 512, width: 512), actual: resource.Dimensions);
             });
-            Assert.Equal(actual: surface.Inputs.Select(selector: static input => input.Name), expected: [SdfWorldPackage.Parts.MeshTarget, SdfWorldPackage.Parts.MeshPyramid, SdfWorldPackage.Parts.ShadowNearDepth, SdfWorldPackage.Parts.ShadowFarDepth, SdfWorldPackage.Parts.BakeSamples]);
+            Assert.Equal(actual: surface.Inputs.Select(selector: static input => input.Name), expected: [SdfWorldPackage.Parts.MeshTarget, SdfWorldPackage.Parts.MeshPyramid, SdfWorldPackage.Parts.ShadowNearDepth, SdfWorldPackage.Parts.ShadowFarDepth, SdfWorldPackage.Parts.ShadowNearExit, SdfWorldPackage.Parts.ShadowFarExit, SdfWorldPackage.Parts.BakeSamples]);
             Assert.Equal(
                 actual: SdfWorldPackage.WithShadows(fragment: fragment, second: true, texels: 1024).Resources.Count(predicate: static resource => resource.Dimensions == ShaderPipelineDimensions.Absolute(height: 1024, width: 1024)),
-                expected: 3
+                expected: 6
             );
         }
 
@@ -158,12 +159,12 @@ public sealed partial class SdfPassPlanLawTests {
             expected: [
                 (SdfWorldPackage.Parts.Mask, "", SdfWorldPackage.Parts.InstanceMasks),
                 (SdfWorldPackage.Parts.Bake, SdfWorldPackage.Parts.InstanceMasks, SdfWorldPackage.Parts.BakeSamples),
-                (SdfWorldPackage.Parts.ShadowNear, "", SdfWorldPackage.Parts.ShadowNearDepth),
-                (SdfWorldPackage.Parts.ShadowFar, "", SdfWorldPackage.Parts.ShadowFarDepth),
-                (SdfWorldPackage.Parts.ShadowSecond, "", SdfWorldPackage.Parts.ShadowSecondDepth),
+                (SdfWorldPackage.Parts.ShadowNear, "", $"{SdfWorldPackage.Parts.ShadowNearDepth},{SdfWorldPackage.Parts.ShadowNearExit}"),
+                (SdfWorldPackage.Parts.ShadowFar, "", $"{SdfWorldPackage.Parts.ShadowFarDepth},{SdfWorldPackage.Parts.ShadowFarExit}"),
+                (SdfWorldPackage.Parts.ShadowSecond, "", $"{SdfWorldPackage.Parts.ShadowSecondDepth},{SdfWorldPackage.Parts.ShadowSecondExit}"),
                 (SdfWorldPackage.Parts.Mesh, "", $"{SdfWorldPackage.Parts.MeshTarget},{SdfWorldPackage.Parts.MeshDepth}"),
                 (SdfWorldPackage.Parts.Pyramid, SdfWorldPackage.Parts.MeshTarget, SdfWorldPackage.Parts.MeshPyramid),
-                (SdfWorldPackage.Parts.Surface, string.Join(separator: ",", values: [SdfWorldPackage.Parts.MeshTarget, SdfWorldPackage.Parts.MeshPyramid, SdfWorldPackage.Parts.ShadowNearDepth, SdfWorldPackage.Parts.ShadowFarDepth, SdfWorldPackage.Parts.ShadowSecondDepth, SdfWorldPackage.Parts.BakeSamples]), SdfWorldPackage.Parts.Visibility),
+                (SdfWorldPackage.Parts.Surface, string.Join(separator: ",", values: [SdfWorldPackage.Parts.MeshTarget, SdfWorldPackage.Parts.MeshPyramid, SdfWorldPackage.Parts.ShadowNearDepth, SdfWorldPackage.Parts.ShadowFarDepth, SdfWorldPackage.Parts.ShadowSecondDepth, SdfWorldPackage.Parts.ShadowNearExit, SdfWorldPackage.Parts.ShadowFarExit, SdfWorldPackage.Parts.ShadowSecondExit, SdfWorldPackage.Parts.BakeSamples]), SdfWorldPackage.Parts.Visibility),
                 (SdfWorldPackage.Parts.Views, SdfWorldPackage.Parts.Visibility, SdfWorldPackage.Parts.Lit),
                 (SdfWorldPackage.Parts.Sky, SdfWorldPackage.Parts.Lit, string.Join(separator: ",", values: runs)),
                 (SdfWorldPackage.Parts.Composite, string.Join(separator: ",", values: [SdfWorldPackage.Parts.Lit, SdfWorldPackage.Parts.Visibility, .. runs]), SdfWorldPackage.Color),
@@ -251,8 +252,11 @@ public sealed partial class SdfPassPlanLawTests {
                 SdfWorldPackage.Parts.MeshPyramid,
                 SdfWorldPackage.Parts.MeshTarget,
                 SdfWorldPackage.Parts.ShadowFarDepth,
+                SdfWorldPackage.Parts.ShadowFarExit,
                 SdfWorldPackage.Parts.ShadowNearDepth,
+                SdfWorldPackage.Parts.ShadowNearExit,
                 SdfWorldPackage.Parts.ShadowSecondDepth,
+                SdfWorldPackage.Parts.ShadowSecondExit,
                 SdfWorldPackage.Parts.SkyBase,
                 SdfWorldPackage.Parts.SkyUpper0,
                 SdfWorldPackage.Parts.SkyUpper1,

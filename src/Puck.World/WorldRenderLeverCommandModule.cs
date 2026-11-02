@@ -376,7 +376,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: "world.toon",
-            description: "Cel shading, live: world.toon [on|off|toggle]. No argument echoes the mode. Two diffuse bands, tinted shadows, shaped highlights and depth/normal outlines; render.toon tunes the look on reload. Screens, portals and sky are not posterised. Presentation only, under the render grant.",
+            description: "Cel shading, live: world.toon [on|off|toggle]. No argument echoes the mode. Switches each world's default style, render.toon (the standard's styles.puck authors celStyle); a world that authors none has no style to band with, and a material with a style of its own keeps it. Screens, portals and sky are not posterised. Presentation only, under the render grant.",
             handler: (context, args) => {
                 CommandResult Echo() => new(Output: $"[world.toon: {(settings.Toon ? "on" : "off")}]");
                 if (args.Count == 0) { return Echo(); }
