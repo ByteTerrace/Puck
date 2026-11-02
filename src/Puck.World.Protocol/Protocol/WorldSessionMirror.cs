@@ -246,13 +246,19 @@ public sealed class WorldSessionMirror : IClientSink {
 
     private int m_arrivalCount;
 
+    private readonly bool m_unread;
+
     /// <summary>Initializes the mirror with an empty placeholder definition — <c>Server.WorldServer.AttachSink</c>
     /// always delivers the live definition synchronously before returning its lease, so no caller ever observes this
     /// placeholder.</summary>
     /// <param name="placeholder">The definition to hold until the first delivery.</param>
-    public WorldSessionMirror(WorldDefinition placeholder) {
+    /// <param name="unread">Whether nothing will ever read the mirror's poses, field cells or inputs, as in a host
+    /// that presents nothing: every snapshot is then dropped on arrival, and only definitions and state stamps are
+    /// kept.</param>
+    public WorldSessionMirror(WorldDefinition placeholder, bool unread = false) {
         ArgumentNullException.ThrowIfNull(argument: placeholder);
 
+        m_unread = unread;
         m_document = new WorldDeliveredDocument(
             Definition: placeholder,
             Lifetime: 0,
@@ -513,6 +519,7 @@ public sealed class WorldSessionMirror : IClientSink {
     /// (including <see cref="EntityContinuityKind.Correction"/>, which the boot client eases with a decaying render-
     /// error offset this mirror does not reproduce) shifts current into previous, ordinary double-buffering.</remarks>
     public void DeliverSnapshot(in WorldSnapshot snapshot) {
+        if (m_unread) { return; }
         lock (m_snapshotWriteGate) {
             m_inputs.Clear();
             foreach (var input in snapshot.Inputs.Span) { m_inputs[input.Owner] = input; }

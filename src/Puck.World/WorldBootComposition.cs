@@ -841,7 +841,8 @@ public static class WorldBootComposition {
                 addonHostFactory: sp.GetRequiredService<Func<WorldDefinition, WorldServer, IWorldAddonHost>>(),
                 catalogFingerprint: MachineCatalogFingerprint(machineCatalog: sp.GetRequiredService<WorldMachineCatalog>()),
                 machineCatalog: sp.GetRequiredService<WorldMachineCatalog>(),
-                pacing: sp.GetRequiredService<HostPacing>()
+                pacing: sp.GetRequiredService<HostPacing>(),
+                presents: (sp.GetService<WorldHostSettings>() is not { Headless: true })
             );
             var bootOrigin = sp.GetRequiredService<WorldDefinitionSource>();
             var bootServer = sp.GetRequiredService<WorldServer>();
