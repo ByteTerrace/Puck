@@ -35,7 +35,8 @@ public static partial class CreationCanonicalizer {
     }
     // A bound rotation keeps its reference: normalizing it would store the cell's value of the moment as a literal
     // and drop the binding from every later canonical write-back. A zero or non-finite literal has no unit rotation and
-    // is kept as written. Written as statements: a conditional whose arms are the holder and a Quaternion takes
+    // is kept as written. A literal takes its one sign, as lowering writes it (WorldDocumentRowDefaults.CanonicalizeRotation):
+    // q and -q are one rotation. Written as statements: a conditional whose arms are the holder and a Quaternion takes
     // Quaternion as its natural type and re-wraps a literal.
     private static DocumentQuaternion NormalizeRotation(DocumentQuaternion? rotation) {
         if (rotation is null) {
@@ -49,11 +50,16 @@ public static partial class CreationCanonicalizer {
         var value = rotation.Value;
         var lengthSquared = LengthSquared(value: value);
 
-        if (!double.IsFinite(d: lengthSquared) || (lengthSquared == 0.0) || (Math.Abs(value: (lengthSquared - 1.0)) <= UnitBand)) {
+        if (!double.IsFinite(d: lengthSquared) || (lengthSquared == 0.0)) {
             return rotation;
         }
+        var sign = ((value.W != 0f) ? value.W : ((value.X != 0f) ? value.X : ((value.Y != 0f) ? value.Y : value.Z)));
 
-        var length = Math.Sqrt(d: lengthSquared);
+        if (Math.Abs(value: (lengthSquared - 1.0)) <= UnitBand) {
+            return ((sign < 0f) ? new Quaternion(w: (0f - value.W), x: (0f - value.X), y: (0f - value.Y), z: (0f - value.Z)) : rotation);
+        }
+
+        var length = (Math.Sqrt(d: lengthSquared) * ((sign < 0f) ? -1.0 : 1.0));
 
         return new Quaternion(
             w: ((float)(value.W / length)),

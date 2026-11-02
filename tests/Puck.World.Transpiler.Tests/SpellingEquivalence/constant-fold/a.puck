@@ -1,0 +1,20 @@
+// Operators over compile-time constants fold: an effect's value, a gate's comparand and a constant conjunct are the
+// values they compute.
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+let width = 4
+let enabled = true
+
+state {
+  world {
+    slot level = 0
+    slot moves = 0
+  }
+}
+
+rule "climb" {
+  when enabled and level < (width * 5 - 1)
+  moves += width * 2
+  level = (width > 3) ? level + 1 : level
+}

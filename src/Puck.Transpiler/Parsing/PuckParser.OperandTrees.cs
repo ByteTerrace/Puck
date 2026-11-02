@@ -78,8 +78,12 @@ public static partial class PuckParser {
             }
         }
     }
-
-    internal static OperandExpressionNode RebuildOperand(OperandExpressionNode original, Syntax.SyntaxNode syntax, IReadOnlyList<InterpolatedStringNode> atoms) {
+    /// <summary>Rebuilds an operand around a rewritten syntax tree, keeping its span and the atoms the tree still names.</summary>
+    /// <param name="original">The operand the tree was rewritten from.</param>
+    /// <param name="syntax">The rewritten tree; its atom indices index <paramref name="atoms"/>.</param>
+    /// <param name="atoms">The atoms the original operand carried, in its order.</param>
+    /// <returns>The operand whose text and atoms spell <paramref name="syntax"/>.</returns>
+    public static OperandExpressionNode RebuildOperand(OperandExpressionNode original, Syntax.SyntaxNode syntax, IReadOnlyList<InterpolatedStringNode> atoms) {
         var ordered = new List<InterpolatedStringNode>();
 
         syntax = MapAtoms(syntax, index => {

@@ -377,7 +377,7 @@ public class TestLoweringLawTests {
         // fires once and a verdict that would be false before the last tick is never written as a failure.
         Assert.Equal(
             actual: rule["gate"]!.ToJsonString(),
-            expected: """{"$type":"compareState","comparison":"Equal","state":{"channel":"tick"},"value":9}"""
+            expected: """{"$type":"compareState","state":{"channel":"tick"},"comparison":"Equal","value":9}"""
         );
         Assert.Equal(
             actual: rule["effects"]!.AsArray()[0]!["$type"]!.GetValue<string>(),

@@ -64,22 +64,18 @@ public sealed class EnumConstantLawTests {
     [Fact]
     public void RenamedTheLetAndTheMemberEachReadAsWritten() {
         var json = WorldSources.LowerClean(body: (("let Tower = 7\n\nenum Piece {\n    Pawn,\n    Rook\n}\n\n" + State) + "rule \"pick\" {\n    picked = Rook + Tower + Piece.Rook\n}\n"));
-        var constants = json["rules"]![0]!["effects"]![0]!["expression"]!["instructions"]!.AsArray()
-            .Where(predicate: static instruction => (instruction!["op"]!.GetValue<string>() == "Constant"))
-            .Select(selector: static instruction => instruction!["value"]!.ToJsonString())
-            .ToArray();
+        var value = json["rules"]![0]!["effects"]![0]!["value"]!.ToJsonString();
 
-        Assert.Equal(actual: constants, expected: ["1", "7", "1"]);
+        // Each reads as written (Rook 1, Tower 7, Piece.Rook 1), and the sum of constants folds.
+        Assert.Equal(actual: value, expected: "9");
     }
     // The control for the shared-member row: the same two enums read qualified each read their own ordinal.
     [Fact]
     public void TwoEnumsSharingAMemberEachReadItQualified() {
         var json = WorldSources.LowerClean(body: (("enum Piece {\n    Pawn,\n    Rook\n}\n\nenum Tower {\n    Keep,\n    Rook\n}\n\n" + State) + "rule \"pick\" {\n    picked = Piece.Rook + Tower.Rook * 10\n}\n"));
-        var constants = json["rules"]![0]!["effects"]![0]!["expression"]!["instructions"]!.AsArray()
-            .Where(predicate: static instruction => (instruction!["op"]!.GetValue<string>() == "Constant"))
-            .Select(selector: static instruction => instruction!["value"]!.ToJsonString())
-            .ToArray();
+        var value = json["rules"]![0]!["effects"]![0]!["value"]!.ToJsonString();
 
-        Assert.Equal(actual: constants, expected: ["1", "1", "10"]);
+        // Piece.Rook 1 and Tower.Rook 1, each its own enum's ordinal: the constants fold to 1 + 1 * 10.
+        Assert.Equal(actual: value, expected: "11");
     }
 }

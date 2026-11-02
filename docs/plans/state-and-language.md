@@ -814,7 +814,7 @@ them.
 The owner's ruling ([AGENTS.md](../../AGENTS.md#puck-is-pre-release)): cost
 follows what a document means, never how it is spelled, and every spelling
 lowers to one canonical form. An audit of the debug world's sources listed the
-gaps; this package holds what landed and the designs still to choose.
+gaps; this package holds what landed and the designs the owner chose.
 
 Landed:
 
@@ -833,6 +833,30 @@ Landed:
   sign (`w > 0`, or the first nonzero of `x`, `y`, `z` positive when `w` is 0),
   so `q` and `-q` key one creation (the audit's S10, confirmed: the
   canonicalizer normalized length only, so the two hashed apart).
+- **The compiled document is canonical by the model's types.** After lowering,
+  one walk over the document along `WorldModelShape`
+  (`src/Puck.World.Transpiler/WorldDocumentMembers.cs`), creation documents
+  included, writes: every number at a single-precision position in the float's
+  shortest spelling (`30.24` and `30.240000000000002` are one value); every
+  literal rotation (shapes, text runs, frames, palette paints, volumes,
+  colliders) in its one sign, as the canonicalizer's `NormalizeRotation` now
+  does too; a convex profile's vertices from their least rotation
+  (`SdfPrismProfile.CanonicalStart`, in the canonicalizer as well, so the start
+  vertex no longer moves the creation's identity: two listings compiled to
+  different `.puckb` before); a zero `chamfer` or `rounding` omitted
+  (`ShapeDocument.ZeroIsAbsent`, G13 (a), in `Normalize` as well); a
+  `setState` or `addState` whose expression is one constant or one unkeyed row
+  as the `value` or `fromState` the sugar writes; and every typed object's
+  members in the model's declared order, discriminator first. Placements carry
+  a yaw, not a quaternion, so they have no rotation sign.
+- **Constants fold before lowering** (G14's fold). A name bound to a number,
+  an enum member, and an operator over constants whose result is exact in
+  Q48.16 (comparisons, `and`, `or`, `not`, `+`, `-`, a product with a whole
+  factor) become the number; a ternary on a constant condition becomes its
+  arm. A gate a constant decides lowers to `all []` (true) or `not all []`
+  (false); an `and` or `or` drops a constant that does not decide it, and one
+  that decides it after a read stays as written, since the junction
+  short-circuits left to right and a faulting read still closes the gate.
 - **`allow CODE "why"`** on the line before a row, `let` or other statement
   acknowledges one warning or note over that statement's span. It never
   reaches the document. An unknown code, a missing reason or nothing to cover
@@ -849,10 +873,21 @@ Landed:
   substitutes as `{item}`; `repeat n { }` repeats steps. Both expand at
   compile time to the lines written out (the corpus holds both).
 
-#### Designs to choose
+#### Designs chosen
 
 Each lowers to the existing canonical form, so the corpus proves it with a pair
-the day it lands. Each lists options and a recommendation; the owner chooses.
+the day it lands. Each lists the options considered; the owner chose the
+recommendation in every case, and each entry's **Decided** line records the
+choice:
+
+- **G1, G2:** `base with { ... }`, shallow, from a library `let` (G2 (b)).
+- **G3, G8:** `function name(p) = expression`, inlined into values and gates.
+- **G7:** derived by the engine; the hand-summed totals go.
+- **G13:** canonical form first: a zero member that means none is omitted.
+- **G14:** constants fold; a template whose body splices into a rule body.
+- **G15:** a `let`'s object refuses a quoted enum word (PUCK110).
+- **G16:** renumber the Moth's right side by one offset, then a `side` template.
+- **G17:** one lowering for a write whatever names its row, key or value.
 
 **G1 — Deriving a record from another.** A value cannot be another with
 overrides. Sites: the gallery map re-lists every text-run field to move six
@@ -869,7 +904,7 @@ emboss runs in `shapes.puck`.
 - (c) A builtin: `merge(base, { … })`. No grammar change; reads worst at the
   sites above.
 
-Recommendation: (a), shallow, with a nested override spelled by nesting
+Decided: (a), shallow, with a nested override spelled by nesting
 (`weathering: plate.weathering with { seed: 72 }`). It lowers to the object
 written out, so the pair is a `with` against the literal.
 
@@ -884,7 +919,7 @@ for the same id, so `range-walker` copies the walker kit
   with G1's `with` (`kits [ walkerKit with { name: "range-walker" … } ]`).
 - (c) A template the walker's library exports, called with overrides.
 
-Recommendation: (b) now, since it needs only G1 and the existing library
+Decided: (b) now, since it needs only G1 and the existing library
 import, then (a) only if a site needs to derive from a row that is a
 document's own and cannot move into a library. (a) needs the compile to read
 a basis's or import's rows, which today it reads only for enums.
@@ -904,7 +939,7 @@ decides `function`: compile-time, inlined, non-recursive
 - (b) Admit a lambda in a `let` (`let run = (text, at) => { … }`): no new
   keyword, but a value that is sometimes a function, and two ways to name one.
 
-Recommendation: (a), as decided. The pair is a call against the expression
+Decided: (a). The pair is a call against the expression
 written out with the arguments substituted.
 
 **G7 — Totals summed by hand across documents.** `bodies.capacity`
@@ -920,7 +955,7 @@ declare, and drift when an import changes.
   and composition sums the shares, as a basis merge does for keyed rows.
 - (c) A compile-time fold over imports (`sum(imports, d => d.cardBodies)`).
 
-Recommendation: (a) for both, since each is a function of the composed world;
+Decided: (a) for both, since each is a function of the composed world;
 (b) only for a budget the author must choose rather than count. With (a) the
 pair is an authored total against none.
 
@@ -937,7 +972,7 @@ cell (`klondike.puck:504`) partly to keep the work budget's price low.
 - (c) A `let` holding an unevaluated expression, inlined where read: a second
   meaning for `let`.
 
-Recommendation: (a), one construct for G3 and G8. The pair is a guard named by
+Decided: (a), one construct for G3 and G8. The pair is a guard named by
 a function against the guard written out. Whether a latch cell and the guard it
 factors price the same (the audit's S9) is a cost question for the work
 budget, not a spelling pair: the latch is extra state.
@@ -965,9 +1000,10 @@ SDF program and its bake agree, but `CreationCanonicalizer.Normalize` keeps
   written. Simple, but a document member that is a meaningful `null` (an
   explicit null name, a basis-merge removal) then needs another spelling.
 
-Recommendation: (a) now, since it removes the need at this site and fixes the
+Decided: (a) now, since it removes the need at this site and fixes the
 pair at its cause; (b) as an `if` around members if a site needs a member whose
-zero is not "none".
+zero is not "none". Landed with the typed canonical walk above; the
+`chamfer-default` pair holds.
 
 **G14 — A template inside a rule, and a branch folded at compile time.** A
 template's body is document statements, so it cannot carry a gate, a local or
@@ -992,8 +1028,9 @@ and chess (`worlds/debug/go.puck` around `:1153` and its siblings).
   per game; (c) a template emitting whole rules (possible today) with the
   per-game differences as parameters.
 
-Recommendation: fold constants now; then (a), since the shared part of the
-seat-input rules is effects and locals as well as gates.
+Decided: fold constants now; then (a), since the shared part of the
+seat-input rules is effects and locals as well as gates. The fold landed (see
+above); the `ternary-fold` and `constant-fold` pairs hold.
 
 **G15 — Enum words in a `let` and in a row.** A row or a template's body takes
 a closed-vocabulary word bare and refuses it quoted (`bond: "Surface"` in a
@@ -1003,7 +1040,7 @@ model is not known until a row reads it (the `enum-word-in-let` pair holds:
 `worlds/standard/kits.puck`'s `groundHold` quotes its words). One spelling is the
 fix: a `let`'s object refuses the quoted word too, once lowering can type the
 let's value where a row reads it, or the row admits the quoted word and the
-printer writes it bare. Recommendation: refuse it in the `let` (PUCK110 names
+printer writes it bare. Decided: refuse it in the `let` (PUCK110 names
 the bare spelling), migrating the standard's lets with `puck migrate`.
 
 **G16 — The Moth's mirrored halves.** The right half of `moth.puck` (from about
@@ -1022,7 +1059,7 @@ to sign (now one canonical sign), swing amplitudes, axes and phases flip.
   reflected copies at compile time; it lowers to both halves written out, so
   the corpus pair is the construct against the halves.
 
-Recommendation: (a). The irregular offsets are history, not design; once the
+Decided: (a). The irregular offsets are history, not design; once the
 ids are regular the existing template expresses the side, and the language
 needs (b) only if several creatures (the pond's spider and hound) want it.
 
@@ -1048,7 +1085,7 @@ World. A rule-body template and `schedule … in` with a parameter are G14's.
 - `export read` refuses a backquoted dashed name (`` `card-back` ``, PUCK001)
   and takes a quoted one.
 
-Recommendation: one lowering for a write whatever names its row, key or value:
+Decided: one lowering for a write whatever names its row, key or value:
 an interpolated name is a write target wherever a literal is, a local or a
 `for` variable resolves in every argument of a call form as it does in the
 sugar, a compile-time string on a right side is text, and the export list takes

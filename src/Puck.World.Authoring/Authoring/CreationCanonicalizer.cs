@@ -2264,6 +2264,10 @@ public static partial class CreationCanonicalizer {
                 Panel = NormalizePanel(panel: shape.Panel),
                 Trims = NormalizeTrims(trims: shape.Trims),
                 Rotation = NormalizeRotation(rotation: shape.Rotation),
+                // ShapeDocument.ZeroIsAbsent: the member at zero is the member omitted.
+                Chamfer = ((shape.Chamfer == 0f) ? null : shape.Chamfer),
+                Rounding = ((shape.Rounding == 0f) ? null : shape.Rounding),
+                Profile = NormalizeProfile(profile: shape.Profile),
                 Scale = ((shape.Scale == default)
                 ? Vector3.One
                 : shape.Scale),
@@ -2283,7 +2287,7 @@ public static partial class CreationCanonicalizer {
                 Warp = NormalizeWarp(warp: shape.Warp),
                 Displace = NormalizeDisplace(displace: shape.Displace),
                 Elongate = NormalizeElongate(elongate: shape.Elongate),
-                Steps = ((shape.Steps is { } steps) ? Math.Clamp(value: steps, min: 1, max: ShapeScope.MaxSteps) : null),
+                Steps = ((shape.Steps is { } steps) ? Math.Clamp(max: ShapeScope.MaxSteps, min: 1, value: steps) : null),
             });
             _ = shapeIds.Add(item: shape.Id);
         }

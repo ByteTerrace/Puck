@@ -22,6 +22,7 @@ public class EmitterSugarTests {
 
         return Assert.IsType<JsonObject>(@object: rules[0]);
     }
+
     [Fact]
     public void AddCellWithMultiTokenRhsLowersToVerbatimExpression() {
         var rule = FirstRule(body: """
@@ -881,11 +882,10 @@ public class EmitterSugarTests {
             scale.Select(selector: static n => n!.GetValue<int>())
         );
     }
-    // `group` is null (omitted from the wire JSON) on an ungrouped shape and an explicit value — including an
-    // explicit 0 — on a grouped one; those are two different JSON shapes with no shared default, so the emitter
-    // never fills it and an unauthored shape carries no `group` key at all.
+    // An ungrouped shape is group 0 (the canonicalizer reads an absent group as 0), so the described default fills
+    // it and the shape written with `group: 0` and the shape without it are one row.
     [Fact]
-    public void ShapeNeverFillsGroupWhenAbsent() {
+    public void ShapeFillsGroupDefaultWhenAbsent() {
         var (json, diagnostics) = WorldSources.Lower(body: """
             shape Box "board" {
                 position [0, -2.5, 0]
@@ -897,7 +897,7 @@ public class EmitterSugarTests {
         );
         var shape = Assert.IsType<JsonObject>(@object: Assert.IsType<JsonArray>(@object: json["shapes"])[0]);
 
-        Assert.False(condition: shape.ContainsKey(propertyName: "group"));
+        Assert.Equal(expected: 0, actual: LoweredNumbers.AsDouble(node: shape["group"]));
     }
     [Fact]
     public void ShapeWithNoNameLeavesTheBareTypeIdentifierAsType() {

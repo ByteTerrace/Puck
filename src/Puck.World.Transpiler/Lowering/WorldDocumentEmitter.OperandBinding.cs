@@ -4,6 +4,7 @@ using System.Text.Json.Nodes;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Diagnostics;
 using Puck.Transpiler.Lowering;
+using Puck.Transpiler.Parsing;
 using Syntax = Puck.State.ExpressionSpelling;
 
 namespace Puck.World.Transpiler.Lowering;
@@ -13,8 +14,14 @@ public static partial class WorldDocumentEmitter {
     // ever sent back through symbol resolution, so a binding cannot inject an operator or capture another name.
     internal static string BindOperand(OperandExpressionNode operand, DocumentScope scope) =>
         new OperandBinder(scope: scope).Bind(operand: operand);
+
     private static ExpressionNode CompileTimeOperand(OperandExpressionNode operand, DocumentScope scope) =>
         new OperandBinder(scope: scope).CompileTime(operand: operand);
+    // The operand with what its compile-time constants decide folded (OperandBinder.Fold), or itself when nothing folds.
+    private static OperandExpressionNode FoldOperand(OperandExpressionNode operand, DocumentScope scope) =>
+        (((operand.Form == DocumentValueForm.Expression) && (operand.Syntax is { } syntax) && (new OperandBinder(scope: scope).Fold(node: syntax, operand: operand) is var folded) && !ReferenceEquals(objA: folded, objB: syntax))
+            ? PuckParser.RebuildOperand(atoms: [.. operand.Atoms.Select(selector: static atom => atom.Value)], original: operand, syntax: folded)
+            : operand);
 
     private sealed class OperandBinder(DocumentScope scope) {
         private readonly StringBuilder m_text = new();
@@ -24,6 +31,7 @@ public static partial class WorldDocumentEmitter {
         private int m_keyDepth;
 
         internal string Bind(OperandExpressionNode operand) {
+            operand = FoldOperand(operand: operand, scope: scope);
             WriteOperand(operand: operand);
             var text = m_text.ToString();
             // A literal string can be the comparand of a text gate. Arithmetic still compiles through the
@@ -47,7 +55,130 @@ public static partial class WorldDocumentEmitter {
         }
         internal ExpressionNode CompileTime(OperandExpressionNode operand) => ((operand.Syntax is { } syntax)
             ? ToCompileTime(node: syntax, operand: operand) : RefuseCompileTime(operand: operand));
+        // Folds what compile-time constants decide, so a spelling's program and price never depend on whether the
+        // author wrote a constant or an expression of constants: a name bound to a number becomes that number, a
+        // choice on a constant condition becomes its arm, and an operator over constants becomes its result where
+        // the result is exact in the runtime's Q48.16 arithmetic. Calls, indexes and accesses keep their spelling,
+        // since a name inside one may be a row or a key rather than a value.
+        internal Syntax.SyntaxNode Fold(Syntax.SyntaxNode node, OperandExpressionNode operand) {
+            switch (node) {
+                case Syntax.SourceGroup group: {
+                        var value = Fold(node: group.Value, operand: operand);
 
+                        return ((value is Syntax.Literal) ? value : (ReferenceEquals(objA: value, objB: group.Value) ? group : group with { Value = value }));
+                    }
+                case Syntax.SourceName name when (Constant(name: name, operand: operand) is { } constant):
+                    return new Syntax.Literal(Value: constant);
+                case Syntax.SourceAccess access when (Constant(access: access) is { } constant):
+                    return new Syntax.Literal(Value: constant);
+                case Syntax.Unary unary: {
+                        var value = Fold(node: unary.Operand, operand: operand);
+
+                        if ((value is Syntax.Literal { Value: var number }) && IsExact(value: number)) {
+                            switch (unary.Operator) {
+                                case "-": return new Syntax.Literal(Value: -number);
+                                case "not": return Truth(value: (number == 0m));
+                            }
+                        }
+                        return (ReferenceEquals(objA: value, objB: unary.Operand) ? unary : unary with { Operand = value });
+                    }
+                case Syntax.Binary binary: {
+                        var left = Fold(node: binary.Left, operand: operand);
+                        var right = Fold(node: binary.Right, operand: operand);
+
+                        if (FoldBinary(left: left, operation: binary.Operator, right: right) is { } result) { return result; }
+                        return ((ReferenceEquals(objA: left, objB: binary.Left) && ReferenceEquals(objA: right, objB: binary.Right)) ? binary : binary with { Left = left, Right = right });
+                    }
+                case Syntax.Ternary ternary: {
+                        var condition = Fold(node: ternary.Condition, operand: operand);
+
+                        if ((condition is Syntax.Literal { Value: var number }) && IsExact(value: number)) {
+                            return Fold(node: ((number != 0m) ? ternary.WhenTrue : ternary.WhenFalse), operand: operand);
+                        }
+                        var whenTrue = Fold(node: ternary.WhenTrue, operand: operand);
+                        var whenFalse = Fold(node: ternary.WhenFalse, operand: operand);
+
+                        return ((ReferenceEquals(objA: condition, objB: ternary.Condition) && ReferenceEquals(objA: whenTrue, objB: ternary.WhenTrue) && ReferenceEquals(objA: whenFalse, objB: ternary.WhenFalse))
+                            ? ternary
+                            : new Syntax.Ternary(Condition: condition, WhenFalse: whenFalse, WhenTrue: whenTrue));
+                    }
+                default:
+                    return node;
+            }
+        }
+
+        // The number a bare name stands for at compile time, resolved in WriteName's order: a runtime binder, a
+        // pool binding or derived state is never a constant, and a let or loop binding is one when it holds a number.
+        private decimal? Constant(Syntax.SourceName name, OperandExpressionNode operand) {
+            if (name.Quoted || name.Name.StartsWith(value: '$') || (name.Name == m_binder) || GetPoolBindings(scope: scope).Contains(item: name.Name) ||
+                GetOrCreateDerivedState(scope: scope).ContainsKey(key: name.Name)) {
+                return null;
+            }
+            if (name.Name is "true" or "false") { return ((name.Name == "true") ? 1m : 0m); }
+            if (!scope.TryLowerBinding(name.Name, out var bound) || scope.TryRefuseRead(name: name.Name, span: operand.Span)) {
+                return null;
+            }
+            return Number(value: bound);
+        }
+        // The number a dotted read stands for, resolved in Write's order: a qualified binding, then an enum member.
+        private decimal? Constant(Syntax.SourceAccess access) {
+            if (HasRuntimeRoot(node: access)) { return null; }
+            if ((QualifiedName.From(syntax: access)?.ToString() is { } qualified) && scope.TryLowerBinding(qualified, out var bound)) {
+                return Number(value: bound);
+            }
+            if ((InstanceName(node: access) is null) && (access.Target is Syntax.SourceName { Quoted: false } enumName) &&
+                GetOrCreateEnums(scope: scope).TryGetValue(key: enumName.Name, value: out var definition)) {
+                for (var ordinal = 0; (ordinal < definition.Members.Count); ordinal++) {
+                    if (definition.Members[ordinal] == access.Member) { return ordinal; }
+                }
+            }
+            return null;
+        }
+        private static decimal? Number(JsonNode? value) {
+            if (value is not JsonValue scalar) {
+                return null;
+            }
+            // The number WriteValue would write for the binding, read back from the same text.
+            var text = (scalar.TryGetValue<string>(value: out var written) ? written : scalar.ToJsonString());
+            decimal? number = (scalar.TryGetValue<bool>(value: out var flag) ? (flag ? 1m : 0m)
+                : (decimal.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed) ? parsed : null));
+
+            return (((number is { } exact) && IsExact(value: exact)) ? exact : null);
+        }
+
+        internal static Syntax.Literal? FoldBinary(Syntax.SyntaxNode left, string operation, Syntax.SyntaxNode right) {
+            if ((left is Syntax.Literal { Value: var a }) && IsExact(value: a)) {
+                // A constant decides a short-circuit whatever the other side reads.
+                if ((operation == "and") && (a == 0m)) { return Truth(value: false); }
+                if ((operation == "or") && (a != 0m)) { return Truth(value: true); }
+            }
+            if ((left is not Syntax.Literal { Value: var x }) || (right is not Syntax.Literal { Value: var y }) || !IsExact(value: x) || !IsExact(value: y)) {
+                return null;
+            }
+            decimal? result = operation switch {
+                "==" => Bool(value: (x == y)),
+                "!=" => Bool(value: (x != y)),
+                "<" => Bool(value: (x < y)),
+                "<=" => Bool(value: (x <= y)),
+                ">" => Bool(value: (x > y)),
+                ">=" => Bool(value: (x >= y)),
+                "and" => Bool(value: ((x != 0m) && (y != 0m))),
+                "or" => Bool(value: ((x != 0m) || (y != 0m))),
+                "+" => (x + y),
+                "-" => (x - y),
+                // A product is exact in Q48.16 when one factor is whole.
+                "*" when ((decimal.Truncate(d: x) == x) || (decimal.Truncate(d: y) == y)) => (x * y),
+                _ => null,
+            };
+
+            return (((result is { } value) && IsExact(value: value)) ? new Syntax.Literal(Value: value) : null);
+
+            static decimal Bool(bool value) => (value ? 1m : 0m);
+        }
+
+        private static Syntax.Literal Truth(bool value) => new(Value: (value ? 1m : 0m));
+        // A decimal is exact in the runtime's arithmetic when it is a whole number of 2^-16 steps inside Q48.16's range.
+        private static bool IsExact(decimal value) => ((Math.Abs(value: value) < 140_737_488_355_328m) && (decimal.Truncate(d: (value * 65_536m)) == (value * 65_536m)));
         private void Refuse(string message, SourceSpan span) => scope.Diagnostics.ReportError(
             code: PuckDiagnosticCodes.OperandParse, message: message, span: span);
         private void WriteOperand(OperandExpressionNode operand) {
@@ -215,11 +346,12 @@ public static partial class WorldDocumentEmitter {
         }
         private void WriteIndex(Syntax.SourceIndex index, OperandExpressionNode operand) {
             var key = index.Index;
+
             if (key is Syntax.SourceGroup) {
                 Refuse(message: "row[(expression)] is retired; use row[expression]. Brackets already evaluate their contents.", span: operand.Span);
             }
             while (key is Syntax.SourceGroup group) { key = group.Value; }
-            if ((m_keyDepth > 0) && key is Syntax.SourceName { Name: "$value" }) {
+            if ((m_keyDepth > 0) && (key is Syntax.SourceName { Name: "$value" })) {
                 Refuse(message: "slot[$value] inside brackets is retired; use the slot name directly: row[slot].", span: operand.Span);
                 Write(index.Target, DocumentValueForm.Expression, operand);
                 return;
@@ -245,16 +377,16 @@ public static partial class WorldDocumentEmitter {
             m_keyDepth++;
             // Brackets evaluate their contents. Literal and reserved keys already have a document spelling;
             // all other values go through the expression binder, including bare lexical names.
-            if (key is Syntax.SourceName { Quoted: false } boundName && scope.TryLowerBinding(boundName.Name, out var boundKey)) {
+            if ((key is Syntax.SourceName { Quoted: false } boundName) && scope.TryLowerBinding(boundName.Name, out var boundKey)) {
                 WriteValue(boundKey, DocumentValueForm.Key, operand.Span);
             } else if (key is Syntax.SourceAccess or Syntax.SourceIndex or Syntax.SourceCall) {
-                Write(key, DocumentValueForm.Expression, operand);
+                Write(form: DocumentValueForm.Expression, node: key, operand: operand);
             } else if (key is not (Syntax.Literal or Syntax.SourceString or Syntax.SourceAtom or Syntax.SourceName { Quoted: true } or Syntax.SourceName { Name: ['$', ..] })) {
                 m_text.Append(value: '(');
-                Write(key, DocumentValueForm.Expression, operand);
+                Write(form: DocumentValueForm.Expression, node: key, operand: operand);
                 m_text.Append(value: ')');
             } else {
-                Write(key, DocumentValueForm.Key, operand);
+                Write(form: DocumentValueForm.Key, node: key, operand: operand);
             }
             m_keyDepth--;
             m_text.Append(value: ']');
@@ -265,8 +397,8 @@ public static partial class WorldDocumentEmitter {
                 m_text.Append(value: '0');
                 return;
             }
-            if (call is { Name: "maximum", Arguments: [var left, var right] } &&
-                BooleanSyntax(left.Value) && BooleanSyntax(right.Value)) {
+            if ((call is { Name: "maximum", Arguments: [var left, var right] }) &&
+                BooleanSyntax(node: left.Value) && BooleanSyntax(node: right.Value)) {
                 Refuse(message: "maximum() over Boolean expressions is retired; write 'left or right'.", span: operand.Span);
                 m_text.Append(value: '0');
                 return;
@@ -291,7 +423,7 @@ public static partial class WorldDocumentEmitter {
             m_text.Append(value: ')');
         }
         private static bool BooleanSyntax(Syntax.SyntaxNode node) => node switch {
-            Syntax.SourceGroup group => BooleanSyntax(group.Value),
+            Syntax.SourceGroup group => BooleanSyntax(node: group.Value),
             Syntax.Binary { Operator: "==" or "!=" or "<" or "<=" or ">" or ">=" or "and" or "or" } => true,
             Syntax.Unary { Operator: "not" } => true,
             _ => false,

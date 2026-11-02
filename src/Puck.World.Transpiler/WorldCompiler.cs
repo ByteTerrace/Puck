@@ -299,11 +299,16 @@ public static class WorldCompiler {
         assets?.Validate(diagnostics: diagnostics);
 
         if (worlds.Count == 0) {
-            WorldDocumentMembers.Validate(document: loweringResult.Value, sourceMap: sourceMap, diagnostics: diagnostics);
+            WorldDocumentMembers.Canonicalize(document: loweringResult.Value, sourceMap: sourceMap, diagnostics: diagnostics);
         } else {
             foreach (var world in worlds) {
-                WorldDocumentMembers.Validate(document: world.Json, sourceMap: world.SourceMap, diagnostics: diagnostics);
+                WorldDocumentMembers.Canonicalize(document: world.Json, sourceMap: world.SourceMap, diagnostics: diagnostics);
             }
+        }
+        // A generated test world composes the documents above; it takes their canonical form, and their refusals
+        // were already reported against them.
+        foreach (var test in testWorlds.Concat(second: worlds.SelectMany(selector: static world => world.TestWorlds)).Distinct()) {
+            WorldDocumentMembers.Canonicalize(document: test.Json, sourceMap: sourceMap, diagnostics: null);
         }
 
         return new WorldCompilation(

@@ -191,6 +191,10 @@ public sealed record ShapeDocument(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Steps = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ShapeMorphDocument? Morph = null
 ) {
+    /// <summary>Gets the document names of the members whose zero is the member omitted: a zero
+    /// <see cref="Chamfer"/> or <see cref="Rounding"/> shapes nothing, so canonical form never writes one.</summary>
+    public static IReadOnlyList<string> ZeroIsAbsent { get; } = ["chamfer", "rounding"];
+
     /// <summary>The largest half-extent <see cref="Elongate"/> sweeps a cross-section over, per axis.</summary>
     public const float MaxElongate = 2f;
     /// <summary>The largest bend rate, in radians per unit of local Y, moderated below <see cref="MaxTwist"/>'s
@@ -260,9 +264,8 @@ public sealed record CreationNoiseDocument(
     public const float MinGain = 0.05f;
     /// <summary>The smallest per-octave lacunarity.</summary>
     public const float MinLacunarity = 1f;
-
     /// <summary>The share of the relief's amplitude below which an octave is too faint for the bake to resolve.</summary>
-    public const float ResolvedOctaveShare = 1f / 16f;
+    public const float ResolvedOctaveShare = (1f / 16f);
 
     /// <summary>Returns the spacing a bake resolves this relief at: a quarter of the wavelength of the finest octave that
     /// carries at least <see cref="ResolvedOctaveShare"/> of the amplitude, in creation units. A static creation declares

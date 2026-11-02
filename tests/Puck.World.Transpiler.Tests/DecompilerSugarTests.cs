@@ -208,17 +208,16 @@ public class DecompilerSugarTests {
             comparisonType: StringComparison.Ordinal,
             expectedSubstring: "scale"
         );
-        // `group` carries no default (an ungrouped shape omits the key entirely instead) — an authored 0 is a
-        // different, meaningful state from absence, so it always prints rather than eliding.
-        Assert.Contains(
+        // `group` and `position` carry described defaults (0 and the origin), so a row at them elides them too.
+        Assert.DoesNotContain(
             actualString: firstShape,
             comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "group: 0"
+            expectedSubstring: "group"
         );
-        Assert.Contains(
+        Assert.DoesNotContain(
             actualString: firstShape,
             comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "position [0, 0, 0]"
+            expectedSubstring: "position"
         );
 
         Assert.Contains(

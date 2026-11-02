@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Puck.World.Authoring;
 using Puck.World.Transpiler.Vocabulary;
 
 namespace Puck.World.Transpiler.Lowering;
@@ -131,21 +132,20 @@ public static class WorldDocumentRowDefaults {
         return false;
     }
 
-    /// <summary>Writes a row's literal <c>rotation</c> quaternion in its one canonical sign. A quaternion and its
-    /// negation are the same rotation, so the canonical one has a positive <c>w</c>, or, when <c>w</c> is zero, a
-    /// positive first nonzero component of <c>x</c>, <c>y</c>, <c>z</c>. A binding reference, or anything other than
-    /// four numbers, is left as written.</summary>
-    /// <param name="row">The lowered row; its <c>rotation</c> member is rewritten in place.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="row"/> is <see langword="null"/>.</exception>
-    public static void CanonicalizeRotation(JsonObject row) {
-        ArgumentNullException.ThrowIfNull(argument: row);
+    /// <summary>Writes a literal rotation quaternion in its one canonical sign. A quaternion and its negation are the
+    /// same rotation, so the canonical one has a positive <c>w</c>, or, when <c>w</c> is zero, a positive first
+    /// nonzero component of <c>x</c>, <c>y</c>, <c>z</c>. Anything other than four numbers is left as written.</summary>
+    /// <param name="rotation">The lowered <c>[x, y, z, w]</c> array; rewritten in place.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="rotation"/> is <see langword="null"/>.</exception>
+    public static void CanonicalizeRotation(JsonArray rotation) {
+        ArgumentNullException.ThrowIfNull(argument: rotation);
 
-        if ((row["rotation"] is not JsonArray { Count: 4 } rotation) || !rotation.All(predicate: static component => ((component is JsonValue value) && TryGetNumber(number: out _, value: value)))) {
+        if ((rotation.Count != 4) || !rotation.All(predicate: static component => ((component is JsonValue value) && TryGetNumber(number: out _, value: value)))) {
             return;
         }
 
         var components = rotation.Select(selector: static component => {
-            _ = TryGetNumber(number: out var number, value: (JsonValue)component!);
+            _ = TryGetNumber(number: out var number, value: ((JsonValue)component!));
 
             return number;
         }).ToArray();
@@ -158,13 +158,78 @@ public static class WorldDocumentRowDefaults {
         for (var index = 0; (index < 4); index++) {
             // Negating zero writes 0, never -0, so a component the author wrote as 0 stays 0; each other component
             // keeps the numeric type it was lowered as, so its spelling is the authored one less its sign.
-            var value = (JsonValue)rotation[index]!;
+            var value = ((JsonValue)rotation[index]!);
 
             rotation[index] = ((components[index] == 0.0)
                 ? value.DeepClone()
                 : (value.TryGetValue<long>(value: out var whole)
                     ? JsonValue.Create(value: -whole)
                     : (value.TryGetValue<decimal>(value: out var exact) ? JsonValue.Create(value: -exact) : JsonValue.Create(value: -components[index]))));
+        }
+    }
+    /// <summary>Returns a number the model reads as a single-precision float in the float's one spelling: the shortest
+    /// decimal that reads back as the same float, so <c>30.24</c> and <c>30.240000000000002</c> are one value.</summary>
+    /// <param name="value">The lowered value.</param>
+    /// <returns>The canonical number, or <paramref name="value"/> itself when it is already canonical, is not a
+    /// number, or has no finite float.</returns>
+    public static JsonNode? CanonicalFloat(JsonNode? value) {
+        if ((value is not JsonValue scalar) || !TryGetNumber(number: out _, value: scalar)) {
+            return value;
+        }
+        var written = scalar.ToJsonString();
+
+        if (!float.TryParse(s: written, style: System.Globalization.NumberStyles.Float, provider: System.Globalization.CultureInfo.InvariantCulture, result: out var single) || !float.IsFinite(f: single) ||
+            !decimal.TryParse(s: single.ToString(format: "R", provider: System.Globalization.CultureInfo.InvariantCulture), style: System.Globalization.NumberStyles.Float, provider: System.Globalization.CultureInfo.InvariantCulture, result: out var shortest)) {
+            return value;
+        }
+        var canonical = JsonValue.Create(value: shortest);
+
+        return (string.Equals(a: canonical.ToJsonString(), b: written, comparisonType: StringComparison.Ordinal) ? value : canonical);
+    }
+    /// <summary>Lists a convex profile's vertices from their canonical start (<see cref="Puck.SignedDistance.SdfPrismProfile.CanonicalStart"/>),
+    /// so one polygon listed from another vertex is one profile. Any other profile, or vertices that are not number
+    /// pairs, is left as written.</summary>
+    /// <param name="profile">The lowered profile object; its <c>vertices</c> member is rewritten in place.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="profile"/> is <see langword="null"/>.</exception>
+    public static void CanonicalizeProfile(JsonObject profile) {
+        ArgumentNullException.ThrowIfNull(argument: profile);
+
+        if (!string.Equals(a: profile["kind"]?.ToString(), b: nameof(Puck.SignedDistance.SdfPrismProfileKind.Convex), comparisonType: StringComparison.Ordinal) ||
+            (profile["vertices"] is not JsonArray vertices)) {
+            return;
+        }
+        var points = new List<System.Numerics.Vector2>(capacity: vertices.Count);
+
+        foreach (var vertex in vertices) {
+            if ((vertex is not JsonArray { Count: 2 } pair) || (pair[0] is not JsonValue x) || (pair[1] is not JsonValue y) ||
+                !TryGetNumber(number: out var px, value: x) || !TryGetNumber(number: out var py, value: y)) {
+                return;
+            }
+            points.Add(item: new System.Numerics.Vector2(x: ((float)px), y: ((float)py)));
+        }
+        var start = Puck.SignedDistance.SdfPrismProfile.CanonicalStart(vertices: points);
+
+        if (start == 0) {
+            return;
+        }
+        var listed = vertices.Select(selector: static vertex => vertex!.DeepClone()).ToArray();
+
+        vertices.Clear();
+        for (var index = 0; (index < listed.Length); index++) {
+            vertices.Add(item: listed[((start + index) % listed.Length)]);
+        }
+    }
+    /// <summary>Removes each shape member written at the zero that means the member is absent
+    /// (<see cref="ShapeDocument.ZeroIsAbsent"/>), so the member at zero and the member omitted are one row.</summary>
+    /// <param name="shape">The lowered shape row; rewritten in place.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="shape"/> is <see langword="null"/>.</exception>
+    public static void OmitAbsentShapeMembers(JsonObject shape) {
+        ArgumentNullException.ThrowIfNull(argument: shape);
+
+        foreach (var key in ShapeDocument.ZeroIsAbsent) {
+            if ((shape[key] is JsonValue value) && IsNumberEqualTo(expected: 0.0, value: value)) {
+                _ = shape.Remove(propertyName: key);
+            }
         }
     }
     /// <summary>The value the bare <c>solid</c> flag stands for. <c>WorldSolid</c> carries exactly one field, so

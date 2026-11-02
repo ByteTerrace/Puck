@@ -3,6 +3,7 @@ using Puck.State;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Lowering;
 using Puck.Transpiler.Diagnostics;
+using Puck.Transpiler.Parsing;
 
 namespace Puck.World.Transpiler.Lowering;
 
@@ -230,19 +231,18 @@ public static partial class WorldDocumentEmitter {
             ["expression"] = DocumentExpression(text: text),
         };
     }
-
     private static void RefuseLateLocals(IEnumerable<StatementNode> statements, DocumentScope scope, bool afterGate = false) {
         foreach (var statement in statements) {
-            if (statement is LocalStatementNode local && afterGate) {
+            if ((statement is LocalStatementNode local) && afterGate) {
                 scope.Diagnostics.ReportError(
                     code: PuckDiagnosticCodes.InvalidValue,
                     message: $"local '{local.Name}' after a gate or effect would read before that statement. Move the local declaration before the first gate or effect.",
                     span: local.Span
                 );
             }
-            afterGate |= statement is WhenStatementNode or EffectStatementNode or ExpressionStatementNode or
-                DecisionBlockNode or RuleBlockNode or RuleScopeNode or StabilizeGroupNode or WorkflowNode ||
-                statement is PropertyNode { Name: "gate" or "effects" or "decision" };
+            afterGate |= ((statement is WhenStatementNode or EffectStatementNode or ExpressionStatementNode or
+                DecisionBlockNode or RuleBlockNode or RuleScopeNode or StabilizeGroupNode or WorkflowNode) ||
+                (statement is PropertyNode { Name: "gate" or "effects" or "decision" }));
         }
     }
 
@@ -460,7 +460,78 @@ public static partial class WorldDocumentEmitter {
     };
     // ---- Gate lowering (§1) --------------------------------------------------------------------------------
 
-    private static JsonObject LowerPredicate(PredicateNode node, DocumentScope scope, JsonObject? ruleObj = null) => node switch {
+    // A gate lowers after its compile-time constants fold, so a gate a constant decides is the gate it chooses: a
+    // constant comparison is `all []` (true) or `not all []` (false), and an `and` or `or` keeps only what it
+    // still reads.
+    private static JsonObject LowerPredicate(PredicateNode node, DocumentScope scope, JsonObject? ruleObj = null) => (FoldGate(node: node, scope: scope) switch {
+        (null, true) => new JsonObject { ["$type"] = "all", ["predicates"] = new JsonArray() },
+        (null, false) => new JsonObject { ["$type"] = "not", ["predicate"] = new JsonObject { ["$type"] = "all", ["predicates"] = new JsonArray() } },
+        ( { } gate, _) => LowerGate(node: gate, ruleObj: ruleObj, scope: scope),
+    });
+    // The gate with its constants folded, or null and the constant truth it folds to.
+    private static (PredicateNode? Gate, bool Constant) FoldGate(PredicateNode node, DocumentScope scope) {
+        switch (node) {
+            case ComparisonPredicateNode cmp: {
+                    var left = FoldOperand(operand: cmp.Left, scope: scope);
+                    var right = FoldOperand(operand: cmp.Right, scope: scope);
+
+                    if ((Unwrap(node: left.Syntax) is { } x) && (Unwrap(node: right.Syntax) is { } y) && (OperandBinder.FoldBinary(left: x, operation: cmp.Comparator, right: y) is { } decided)) {
+                        return (null, (decided.Value != 0m));
+                    }
+                    // A truth test of a gate is the gate: comparisons, and, or and not already yield 0 or 1.
+                    if ((cmp.Comparator is "!=" or "==") && (Unwrap(node: right.Syntax) is ExpressionSpelling.Literal { Value: 0m }) && IsGateSyntax(node: Unwrap(node: left.Syntax))) {
+                        var gate = PuckParser.CreateGate(operand: left);
+
+                        return FoldGate(node: ((cmp.Comparator == "!=") ? gate : new NotPredicateNode(Operand: gate, Offset: cmp.Offset, Length: cmp.Length, Line: cmp.Line, Column: cmp.Column)), scope: scope);
+                    }
+                    return ((ReferenceEquals(objA: left, objB: cmp.Left) && ReferenceEquals(objA: right, objB: cmp.Right)) ? (cmp, false) : (cmp with { Left = left, Right = right }, false));
+                }
+            case AndPredicateNode and: {
+                    return Junction(operands: and.Operands, decides: false, rebuild: kept => and with { Operands = kept });
+                }
+            case OrPredicateNode or: {
+                    return Junction(operands: or.Operands, decides: true, rebuild: kept => or with { Operands = kept });
+                }
+            case NotPredicateNode not: {
+                    var (gate, constant) = FoldGate(node: not.Operand, scope: scope);
+
+                    return ((gate is null) ? (null, !constant) : (not with { Operand = gate }, false));
+                }
+            default:
+                return (node, false);
+        }
+
+        // An `and` (decided by false) or `or` (decided by true) keeps the operands it still reads, in order. A constant
+        // that does not decide it drops out. One that decides it decides the whole gate when nothing before it is read;
+        // after a read it stays as written and ends the list, because the junction short-circuits left to right and a
+        // read before it that faults still closes the gate.
+        (PredicateNode? Gate, bool Constant) Junction(IReadOnlyList<PredicateNode> operands, bool decides, Func<IReadOnlyList<PredicateNode>, PredicateNode> rebuild) {
+            var kept = new List<PredicateNode>();
+
+            foreach (var operand in operands) {
+                var (gate, constant) = FoldGate(node: operand, scope: scope);
+
+                if (gate is not null) {
+                    kept.Add(item: gate);
+                } else if (constant == decides) {
+                    if (kept.Count == 0) { return (null, decides); }
+                    kept.Add(item: operand);
+                    break;
+                }
+            }
+            return kept switch { [] => (null, !decides), [var only] => (only, false), _ => (rebuild(kept), false) };
+        }
+        static ExpressionSpelling.SyntaxNode? Unwrap(ExpressionSpelling.SyntaxNode? node) {
+            while (node is ExpressionSpelling.SourceGroup group) { node = group.Value; }
+            return node;
+        }
+        static bool IsGateSyntax(ExpressionSpelling.SyntaxNode? node) => node switch {
+            ExpressionSpelling.Binary { Operator: "==" or "!=" or "<" or "<=" or ">" or ">=" or "and" or "or" } => true,
+            ExpressionSpelling.Unary { Operator: "not" } => true,
+            _ => false,
+        };
+    }
+    private static JsonObject LowerGate(PredicateNode node, DocumentScope scope, JsonObject? ruleObj = null) => node switch {
         ComparisonPredicateNode cmp => LowerComparison(
             cmp: cmp,
             ruleObj: ruleObj,
@@ -482,7 +553,7 @@ public static partial class WorldDocumentEmitter {
         ),
         NotPredicateNode not => new JsonObject {
             ["$type"] = "not",
-            ["predicate"] = LowerPredicate(
+            ["predicate"] = LowerGate(
                 node: not.Operand,
                 ruleObj: ruleObj,
                 scope: scope
@@ -510,7 +581,7 @@ public static partial class WorldDocumentEmitter {
         var arr = new JsonArray();
 
         foreach (var operand in operands) {
-            arr.AppendNode(item: LowerPredicate(
+            arr.AppendNode(item: LowerGate(
                 node: operand,
                 ruleObj: ruleObj,
                 scope: scope
@@ -537,15 +608,16 @@ public static partial class WorldDocumentEmitter {
         }
         var comparison = Enum.GetName(value: parsedComparison)!;
 
-        if (cmp.Left.Syntax is ExpressionSpelling.SourceString || cmp.Right.Syntax is ExpressionSpelling.SourceString) {
-            var literal = (cmp.Right.Syntax as ExpressionSpelling.SourceString) ?? (ExpressionSpelling.SourceString)cmp.Left.Syntax!;
-            var stateText = cmp.Right.Syntax is ExpressionSpelling.SourceString ? leftText : rightText;
-            if (ClassifyBareComparison(stateText, "0", out var stateToken, out _) == BareComparisonShape.StateAgainstConstant &&
-                stateToken!.Payload is InstructionPayload.State state) {
+        if ((cmp.Left.Syntax is ExpressionSpelling.SourceString) || (cmp.Right.Syntax is ExpressionSpelling.SourceString)) {
+            var literal = ((cmp.Right.Syntax as ExpressionSpelling.SourceString) ?? ((ExpressionSpelling.SourceString)cmp.Left.Syntax!));
+            var stateText = ((cmp.Right.Syntax is ExpressionSpelling.SourceString) ? leftText : rightText);
+
+            if ((ClassifyBareComparison(leftText: stateText, leftToken: out var stateToken, rightText: "0", rightToken: out _) == BareComparisonShape.StateAgainstConstant) &&
+                (stateToken!.Payload is InstructionPayload.State state)) {
                 return NewCompareState(state.Name.Spelling, state.Key?.Spelling, comparison, text: literal.Value);
             }
-            scope.Diagnostics.ReportError(PuckDiagnosticCodes.OperandParse,
-                "A text comparison requires a named state row on the other side", cmp.Span);
+            scope.Diagnostics.ReportError(code: PuckDiagnosticCodes.OperandParse,
+                message: "A text comparison requires a named state row on the other side", span: cmp.Span);
             return new JsonObject { ["$type"] = "all", ["predicates"] = new JsonArray() };
         }
 
@@ -997,20 +1069,24 @@ public static partial class WorldDocumentEmitter {
         }
         if (compound.Operator == "-") {
             return LowerCellEffect(discriminator: "addState", target: compound.Target,
-                rhs: operand with { Expression = Puck.Transpiler.Parsing.PuckParser.CreateOperand(
-                    form: DocumentValueForm.Expression, text: $"-({operand.Expression.Text})") },
+                rhs: operand with {
+                    Expression = Puck.Transpiler.Parsing.PuckParser.CreateOperand(
+                    form: DocumentValueForm.Expression, text: $"-({operand.Expression.Text})"),
+                },
                 allowText: false, scope: scope, ruleObj: ruleObj);
         }
         var resolved = ResolveEffectTarget(target: compound.Target, scope: scope);
         var obj = new JsonObject { ["$type"] = "setState", ["state"] = resolved.State };
+
         if (resolved.Key is not null) { obj["key"] = resolved.Key; }
         // The write resolves its key before evaluating this expression. Its read uses that same key,
         // without hoisting the computation into the rule's pre-gate locals.
-        var key = (resolved.Key?.StartsWith(value: '$') == true) ? "$write" : resolved.Key;
+        var key = ((resolved.Key?.StartsWith(value: '$') == true) ? "$write" : resolved.Key);
         var left = ExpressionSpelling.Print(program: new ExpressionProgram(Instructions: [Instruction.Operand(
             name: StateChannelRefJsonConverter.FromNode(node: resolved.State), key: StateChannelRef.OfNullable(spelling: key)
         )]));
         var right = BindOperand(operand: operand.Expression, scope: scope);
+
         obj["expression"] = DocumentExpression(text: $"{left} {compound.Operator} ({right})");
         return obj;
     }
@@ -1232,6 +1308,31 @@ public static partial class WorldDocumentEmitter {
         }
     }
 
+    /// <summary>Writes a state write's source in the one form ApplyOperandRhs gives the sugar: an <c>expression</c>
+    /// that is one constant is that <c>value</c>, and one that is one unkeyed row read is that <c>fromState</c>, so
+    /// <c>row = 4</c> and <c>setState(state: row, expression: 4)</c> are one effect.</summary>
+    /// <param name="effect">A <c>setState</c> or <c>addState</c> effect; rewritten in place.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="effect"/> is <see langword="null"/>.</exception>
+    public static void CanonicalizeEffectSource(JsonObject effect) {
+        ArgumentNullException.ThrowIfNull(argument: effect);
+
+        if (effect.ContainsKey(propertyName: "value") || effect.ContainsKey(propertyName: "fromState") ||
+            (effect["expression"] is not JsonObject { } expression) || (expression["instructions"] is not JsonArray { Count: 1 } instructions) ||
+            (instructions[0] is not JsonObject instruction)) {
+            return;
+        }
+        switch (instruction["op"]?.ToString()) {
+            case "Constant" when ((instruction["value"] is JsonValue constant) && (instruction.Count == 2)):
+                _ = effect.Remove(propertyName: "expression");
+                effect["value"] = constant.DeepClone();
+                break;
+            case "Operand" when ((instruction["name"] is { } name) && (instruction.Count == 2)):
+                _ = effect.Remove(propertyName: "expression");
+                effect["fromState"] = name.DeepClone();
+                break;
+        }
+    }
+
     // Calls, sugar and classified block members bind the same operand tree. Quoted names and computed atoms
     // are terminal values, so binding never interprets their contents as further source syntax.
     internal static JsonNode? LowerOperandArgument(OperandExpressionNode operand, DocumentScope scope) {
@@ -1381,10 +1482,11 @@ public static partial class WorldDocumentEmitter {
             scope.Diagnostics.ReportError(code: PuckDiagnosticCodes.InvalidValue,
                 message: $"Derived state '{target.Name}' is read-only; assign to its source row", span: target.Span);
         }
-        if (target.Operand is { } operand && !GetOrCreateStateFamilies(scope: scope).ContainsKey(key: target.Name)) {
+        if ((target.Operand is { } operand) && !GetOrCreateStateFamilies(scope: scope).ContainsKey(key: target.Name)) {
             var bound = BindOperand(operand: operand, scope: scope);
-            if (ExpressionSpelling.TryParse(text: bound, program: out var program, error: out _) &&
-                program.Instructions is [{ Payload: InstructionPayload.State state }]) {
+
+            if (ExpressionSpelling.TryParse(error: out _, program: out var program, text: bound) &&
+                (program.Instructions is [{ Payload: InstructionPayload.State state }])) {
                 return new EffectTarget(
                     Key: state.Key?.Spelling,
                     Row: state.Name.Spelling,
