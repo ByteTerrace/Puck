@@ -144,8 +144,16 @@ owner ruled the second (a style per material, not one look per world).
   the exit layer for every receiver (second-depth shadow mapping, Wang and
   Molnar 1994) would leak light along every lit floor beside a wall's foot,
   where the wall's far face meets the floor, so a receiver facing the light
-  keeps the depth. The exit layer costs a second raster of each cascade's draws
-  (the faces toward the light culled) and one more depth image per cascade.
+  keeps the depth. Winding marks an exit only on geometry that encloses a
+  solid: baked meshes, and authored meshes whose triangles close a volume,
+  which are wound outward like the bake's. Everything else an author can make
+  (an open or two-sided authored mesh, a body clipped at a portal's glass, a
+  mirrored draw) enters the exit layer whole as a thin caster, so it still
+  shadows a wrapped side behind it, and only its own wrapped side loses its
+  transmission. A depth peel (the second-nearest surface) would need a
+  closed-receiver flag anyway and a fragment-discard pass, and the field's own
+  interior distance does not exist for authored meshes. The exit layer costs a
+  second raster of each cascade's draws and one more depth image per cascade.
 - **The band shapes the light, not the shadow.** A cel style bands a light's
   cosine and keeps its visibility as a separate factor,
   `band(cosine) × visibility`, so the filtered penumbra keeps its softness and

@@ -121,7 +121,11 @@ Each waits on the owner: what the engine should do, how it looks and feels, and 
   keyable on the day clock; the debug world authors a readable deep-blue
   night). The Moth supports both cel and plain styles, swappable live for
   playtesting the way binding layouts are, through a generic material-style
-  switch (the illum1-fix2 lane).
+  switch: a palette row's `toonSelect` binds its style to a state cell, and
+  `moth.style Cel|Plain` swaps it with no rebake.
+- Which of the Moth's slots band under Cel: today all 31 palette slots do,
+  skin, hair and eyes included; removing `toonSelect` from a slot in
+  `worlds/debug/avatars/moth.puck` keeps it continuous.
 - Mesh shipping: nothing is built until a presenting client downloads packages,
   and then on a self-hosted GPU runner (the owner's deferral;
   [rendering plan](rendering.md)).
@@ -1830,18 +1834,29 @@ and the order they land in; the items below are its findings and checks.
   pixels white like lit ones; at the noon sun the meadow lies in the east
   wall's shadow. Step 1's checks and the frame bar are owed again on the moving
   day cycle, with a low-sun cel style for the dawn penumbra check.
+- [high] The wrapped side's self-shadow term has failed three reviews, each
+  in a new mesh-topology case: curvature transmission, then the exit layer,
+  then the exit layer with closed/open classification. The last review found
+  grazing self-shadowing from the receiver-plane clamp
+  (`sdf-surface-stage.hlsli` ~:214, :232-234), multi-shell meshes oriented by
+  one signed volume (`WorldPlacementStamper.cs` ~:398, :411), T-junctions
+  demoting a solid to a thin caster, and skins whose deformation inverts
+  winding while `EnclosesSolid` holds. A design pass (transmit-design) replaces
+  class-by-class patching with a term correct by construction; implementation
+  follows its plan. (from: illum1fix2-astra)
 - From illum1-fix: the cascades' exit layer doubles each cascade pass's draws
   and vertices (`world.counters gpu pass sdf.world$shadow-near` at the stage:
   460 draws and 2.62 M vertices on Direct3D 12, two render passes) and adds a
   depth image per cascade (16 MiB each at 2048 texels); its frame time is owed
   on a quiet machine. At a grazing light (a wrapped side at n·l = -0.25) the
   filter's slope clearance (`SdfMeshShadowSlopeBias`, 2.5 texels of depth per
-  texel of lateral distance) still lets a parallel slab within about 0.1 m
-  along the light half through; the exit layer removed the leak beyond that.
-  The debug world authors no `render.toon`, so `world.toon on` there bands only
-  materials with styles of their own until a default style is authored there,
-  which takes either a copy of `celStyle`'s values with `enabled: false` or a
-  `.puck` way to override one field of an imported value.
+  texel of lateral distance) still clears a parallel blocker that stands within
+  a few texels of depth of a receiver turned from the light: a 2 cm slab 0.10 m
+  along the light from a 3 mm panel at n·l = -0.25 shadows only speckles of it
+  on both backends, where 0.3 m at n·l = -0.45 shadows it whole.
+  A body clipped at a portal's glass or drawn under a mirror is a thin caster in
+  the exit layer (`SdfMeshDraw.EnclosesSolid`), so its own wrapped side past
+  the terminator is shadowed by its own lit side while it straddles the glass.
   `SdfPassPlanLawTests.ATemporalViewAddsOnlyItsHistoryAndReactivityOverTheSpatialGraph`
   fails on its own constant (201,139,200 bytes against 1,221,350,400 from the
   current `HistorySurfaceWords`), unrelated to the cascades.
@@ -2746,6 +2761,12 @@ the completed 70-stop comparison manifest.
 Owner: language lane (transpiler) · medium · Next: the inline console command
 hang, then the pre-`main` language findings.
 
+- [medium] `.puck` has no way to take an imported value and override one field
+  of it (`celStyle` with `enabled: false`), so a world that wants the standard's
+  cel style as a default that boots off copies all eleven values
+  (`worlds/debug/debug.puck`'s `render.toon`). Add the override (an object
+  update over a `let`, or a merge builtin beside `concat`), then point the
+  debug world's default at `celStyle`. (from: illum1-fix2)
 - [medium] An `enum` block inside a template is silently dropped from the
   compiled document, so a row naming the enum fails with PUCK119; the
   standard's `chaseCamera` writes its enum as a `state.enums` row to work around

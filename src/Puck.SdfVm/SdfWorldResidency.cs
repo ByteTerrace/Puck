@@ -491,6 +491,8 @@ public sealed partial class SdfWorldResidency : IDisposable {
 
         var tables = m_tables!;
 
+        // A frame that stands as it was packs nothing, so a trim the account asked for is serviced here, every frame.
+        tables.ServiceMemoryTrim();
         if ((IndirectTierOverride is { } tier) && (frame.IndirectTier != tier)) { frame = frame with { IndirectTier = tier }; }
 
         ApplyPendingShaderReload();
