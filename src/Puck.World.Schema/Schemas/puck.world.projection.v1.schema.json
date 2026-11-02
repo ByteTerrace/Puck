@@ -10641,7 +10641,7 @@
           ],
           "properties": {
             "enabled": {
-              "description": "Whether the style bands; absent is on. False on a palette row keeps that material continuous whatever the world\u0027s default is; false on render.toon boots the world\u0027s default off until the lever turns it on.",
+              "description": "Whether the style bands; absent is on. False on a palette row keeps that material continuous whatever the world\u0027s default is; false on render.toon boots the world\u0027s default off until the lever turns it on, which a style with every value then bands with.",
               "type": [
                 "boolean",
                 "null"
@@ -10650,13 +10650,19 @@
             },
             "threshold": {
               "description": "Diffuse band threshold in [0, 1].",
-              "type": "number",
-              "default": 0.45
+              "type": [
+                "number",
+                "null"
+              ],
+              "default": null
             },
             "softness": {
               "description": "Full terminator width in [0.001, 0.5].",
-              "type": "number",
-              "default": 0.08
+              "type": [
+                "number",
+                "null"
+              ],
+              "default": null
             },
             "shadowTint": {
               "description": "Shadow-band reflectance, three linear RGB values in [0, 1].",
@@ -10680,18 +10686,27 @@
             },
             "outlineWidth": {
               "description": "Close outline radius in output pixels, in [0, 4]; zero disables outlines.",
-              "type": "number",
-              "default": 1.5
+              "type": [
+                "number",
+                "null"
+              ],
+              "default": null
             },
             "outlineDistance": {
               "description": "Distance in metres at which the outline radius halves, in [0.1, 1000].",
-              "type": "number",
-              "default": 12
+              "type": [
+                "number",
+                "null"
+              ],
+              "default": null
             },
             "outlineNormal": {
               "description": "Crease normal cosine in [0, 0.95].",
-              "type": "number",
-              "default": 0.65
+              "type": [
+                "number",
+                "null"
+              ],
+              "default": null
             },
             "outlineTint": {
               "description": "Outline multiplier, three linear RGB values in [0, 1].",
@@ -10715,18 +10730,27 @@
             },
             "specularSize": {
               "description": "Highlight size as one minus the half-vector cosine, in [0.001, 0.25].",
-              "type": "number",
-              "default": 0.025
+              "type": [
+                "number",
+                "null"
+              ],
+              "default": null
             },
             "exposure": {
               "description": "Reflected-light exposure compensation in stops, in [-4, 4].",
-              "type": "number",
-              "default": 0.5
+              "type": [
+                "number",
+                "null"
+              ],
+              "default": null
             },
             "shoulder": {
               "description": "Hue-preserving highlight compression in [0, 2]; zero disables it.",
-              "type": "number",
-              "default": 0.65
+              "type": [
+                "number",
+                "null"
+              ],
+              "default": null
             },
             "band": {
               "description": "How the band treats a light\u0027s shadow visibility: Visibility (the default) keeps the penumbra, Combined snaps it to the band\u0027s edge.",
@@ -11573,6 +11597,63 @@
         ],
         "additionalProperties": false,
         "title": "WorldScreen"
+      }
+    },
+    "screenMaterials": {
+      "description": "The screen materials the screens and the placements\u0027 creation faces name by id, so a presentation peer draws each display through the treatment its authority authored.",
+      "type": "array",
+      "items": {
+        "description": "An authored screen material: how a display\u0027s face draws its picture through the screen shading\u0027s display treatment, a row of the document\u0027s screenMaterials that screens and creation faces name by Id. The treatment models a display\u0027s own pixel structure over the picture, which always fills the face: a darkening between source rows, coloured stripes across each source column, a radial vignette, a glint at grazing angles, and the face\u0027s rounded, softened edge. Every term is the author\u0027s (the standard package authors a cathode-ray tube, worlds/standard/skin.puck); zero turns a term off, and a view\u0027s screen fidelity fades the whole treatment out as a seat frames the screen. Presentation only: a material never moves the mapping a pointer hit takes.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "id": {
+            "description": "The id screens and faces name the material by; unique among the document\u0027s materials.",
+            "type": "string"
+          },
+          "scanlines": {
+            "description": "How dark the gap between source rows draws, in [0, 1]: one source row a cosine period.",
+            "type": "number",
+            "default": 0
+          },
+          "subpixelStripes": {
+            "description": "How strong the red, green and blue stripes across each source column draw, in [0, 1].",
+            "type": "number",
+            "default": 0
+          },
+          "vignette": {
+            "description": "How much the face darkens toward its corners, in [0, 1].",
+            "type": "number",
+            "default": 0
+          },
+          "glint": {
+            "description": "How bright the glass\u0027s rim glint at grazing view angles adds, in [0, 1].",
+            "type": "number",
+            "default": 0
+          },
+          "glintPower": {
+            "description": "How tightly the glint hugs grazing angles: the exponent of one minus the view cosine, positive.",
+            "type": "number",
+            "default": 1
+          },
+          "cornerRadius": {
+            "description": "The face\u0027s corner rounding, as a fraction of the face, in [0, 0.5).",
+            "type": "number",
+            "default": 0
+          },
+          "edgeSoftness": {
+            "description": "The width over which the face\u0027s edge fades to black, as a fraction of the face, in [0, 0.5).",
+            "type": "number",
+            "default": 0
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false,
+        "title": "WorldScreenMaterial"
       }
     },
     "cameras": {
@@ -47234,6 +47315,7 @@
     "spawnPoints",
     "render",
     "screens",
+    "screenMaterials",
     "cameras",
     "population",
     "playerDefaults",

@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using Puck.Maths;
 using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
@@ -63,6 +64,7 @@ public sealed partial class SdfWorldTables {
 
         m_liveInstanceMaskWordCount = program.InstanceMaskWordCount;
         m_liveProgram = program;
+        m_wrapSignature = WrapSignatureOf(program: program);
         m_requiredDynamicTransformCapacity = program.RequiredDynamicTransformCapacity;
         // CADENCE GATE: whether ANY declared screen forces every frame to render — see m_programDeclaresScreenSlab.
         m_programDeclaresScreenSlab = ProgramDeclaresShape(
@@ -78,6 +80,17 @@ public sealed partial class SdfWorldTables {
         ReconfigureWork();
     }
 
+    // The hash of every material's wrap in table order: the one material value the surface pass reads, deciding which
+    // pixels past a light's terminator query its cascades (sdfMaterialWrap in passes/sdf-surface-stage.hlsli).
+    private static ulong WrapSignatureOf(SdfProgram program) {
+        var hash = Fnv1aHash.Create();
+
+        foreach (var material in program.Materials) {
+            hash.Add(value: BitConverter.SingleToUInt32Bits(value: material.Wrap));
+        }
+
+        return hash.Value;
+    }
     // Only paint and material values are lighting-only. The exact prefix and suffix retain every instruction material
     // ID, compiled-part binding, shape/instance flag, bound and auxiliary table; a reordered palette is not inferred.
     private static bool SameProgramGeometry(SdfProgram previous, SdfProgram current) {

@@ -188,32 +188,50 @@ public static partial class WorldStateHashComposition {
     /// this boundary.</summary>
     /// <param name="server">The live server.</param>
     /// <param name="tick">The simulation tick.</param>
-    /// <returns>The digest.</returns>
+    /// <returns>The digest: one fold over each component's own digest (<see cref="AuthoritativeComponents"/>), in
+    /// <see cref="Authoritative"/> order.</returns>
+    /// <remarks>The arena and the body continuations fold incrementally: a row or a body slot whose version has not
+    /// moved contributes its cached digest. <see cref="RecomputeAuthoritative"/> is the same value with nothing
+    /// cached.</remarks>
     /// <exception cref="ArgumentNullException"><paramref name="server"/> is <see langword="null"/>.</exception>
     public static ulong HashAuthoritative(WorldServer server, ulong tick) => Fold(
         order: AuthoritativeOrder,
+        recompute: false,
         seed: AuthoritativeDomain,
         server: server,
         tick: tick
     );
-
-    // One single-component order per authoritative component, so a per-component read allocates no order per call.
-    private static readonly WorldStateHashComponent[][] AuthoritativeSingles = [.. AuthoritativeOrder.Select(selector: static component => new[] { component })];
-
-    /// <summary>Folds each component of <see cref="Authoritative"/> on its own, under the authoritative domain, in
-    /// fold order: the read that names which component two authoritative digests disagree in.</summary>
+    /// <summary>Computes <see cref="HashAuthoritative"/>'s value with every incremental component folded afresh,
+    /// reading and writing no cached digest: the full recompute a verification run compares the incremental digest
+    /// against.</summary>
     /// <param name="server">The live server.</param>
     /// <param name="tick">The simulation tick.</param>
+    /// <returns>The digest.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="server"/> is <see langword="null"/>.</exception>
+    public static ulong RecomputeAuthoritative(WorldServer server, ulong tick) => Fold(
+        order: AuthoritativeOrder,
+        recompute: true,
+        seed: AuthoritativeDomain,
+        server: server,
+        tick: tick
+    );
+    /// <summary>Returns each component of <see cref="Authoritative"/>'s own digest under the authoritative domain, in
+    /// fold order: the values <see cref="HashAuthoritative"/> folds, and the read that names which component two
+    /// authoritative digests disagree in.</summary>
+    /// <param name="server">The live server.</param>
+    /// <param name="tick">The simulation tick.</param>
+    /// <param name="recompute">Whether the incremental components fold afresh rather than from their caches.</param>
     /// <returns>One digest per component of <see cref="Authoritative"/>, in its order.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="server"/> is <see langword="null"/>.</exception>
-    public static ulong[] AuthoritativeComponents(WorldServer server, ulong tick) {
+    public static ulong[] AuthoritativeComponents(WorldServer server, ulong tick, bool recompute = false) {
         ArgumentNullException.ThrowIfNull(argument: server);
 
-        var digests = new ulong[AuthoritativeSingles.Length];
+        var digests = new ulong[AuthoritativeOrder.Length];
 
         for (var index = 0; (index < digests.Length); index++) {
-            digests[index] = Fold(
-                order: AuthoritativeSingles[index],
+            digests[index] = ComponentDigest(
+                component: AuthoritativeOrder[index],
+                recompute: recompute,
                 seed: AuthoritativeDomain,
                 server: server,
                 tick: tick
@@ -250,6 +268,28 @@ public static partial class WorldStateHashComposition {
 
         return differing;
     }
+    /// <summary>Checks the incremental authoritative digest against a full recompute of the server's current state.
+    /// A stale component is one whose cached digests no longer describe what it stores: a write moved its state
+    /// without moving the version the cache is keyed by, which would hide a divergence.</summary>
+    /// <param name="server">The live server.</param>
+    /// <param name="tick">The simulation tick.</param>
+    /// <param name="hash">The incremental digest the caller already took at this state.</param>
+    /// <returns>An empty string when the recomputed digest is <paramref name="hash"/>; otherwise the stale components
+    /// with both digests.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="server"/> is <see langword="null"/>.</exception>
+    public static string DescribeStaleDigest(WorldServer server, ulong tick, ulong hash) {
+        ArgumentNullException.ThrowIfNull(argument: server);
+
+        var recomputed = RecomputeAuthoritative(server: server, tick: tick);
+
+        if (recomputed == hash) { return string.Empty; }
+        var stale = DifferingComponents(
+            left: AuthoritativeComponents(server: server, tick: tick),
+            right: AuthoritativeComponents(recompute: true, server: server, tick: tick)
+        );
+
+        return $"incremental state hash {hash:x16} at tick {tick} differs from its full recompute {recomputed:x16} in {((stale.Count == 0) ? "no single component" : string.Join(separator: ", ", values: stale))}";
+    }
     /// <summary>Folds the store's own contents, the rows its host owns, and the topologies they are declared
     /// over.</summary>
     /// <param name="server">The live server.</param>
@@ -258,11 +298,13 @@ public static partial class WorldStateHashComposition {
     /// <exception cref="ArgumentNullException"><paramref name="server"/> is <see langword="null"/>.</exception>
     public static ulong HashWorld(WorldServer server, ulong tick) => Fold(
         order: WorldOrder,
+        recompute: false,
         seed: WorldDomain,
         server: server,
         tick: tick
     );
-    /// <summary>Folds an explicit component order under an explicit seed.</summary>
+    /// <summary>Folds an explicit component order under an explicit seed: one fold over each component's own
+    /// digest.</summary>
     /// <param name="server">The live server.</param>
     /// <param name="tick">The simulation tick.</param>
     /// <param name="seed">The domain separator the <see cref="WorldStateHashComponent.Seed"/> component folds.</param>
@@ -278,31 +320,48 @@ public static partial class WorldStateHashComposition {
 
         // Walked by index: an interface enumerator would allocate one box per composed hash.
         for (var index = 0; (index < order.Count); index++) {
-            server.Persistence.AppendStateHashComponent(
+            hash.Add(value: ComponentDigest(
                 component: order[index],
-                hash: ref hash,
+                recompute: false,
                 seed: seed,
+                server: server,
                 tick: tick
-            );
+            ));
         }
 
         return hash.Value;
     }
 
+    // Each component folds into its own fresh hash and a scope folds those digests, so a component's digest is a value
+    // of its own: a per-component read is exactly what the scope combines, and a component that folds in segments
+    // (the arena by rows, the bodies by slots) does so behind its digest without moving any other.
+    private static ulong ComponentDigest(WorldServer server, WorldStateHashComponent component, ulong seed, ulong tick, bool recompute) {
+        var hash = Fnv1aHash.Create();
+
+        server.Persistence.AppendStateHashComponent(
+            component: component,
+            hash: ref hash,
+            recompute: recompute,
+            seed: seed,
+            tick: tick
+        );
+        return hash.Value;
+    }
     // The array is walked by index rather than through IReadOnlyList: every authoritative hash a replay tick takes
     // runs here, and an interface enumerator would allocate one box per call.
-    private static ulong Fold(WorldServer server, ulong tick, ulong seed, WorldStateHashComponent[] order) {
+    private static ulong Fold(WorldServer server, ulong tick, ulong seed, WorldStateHashComponent[] order, bool recompute) {
         ArgumentNullException.ThrowIfNull(argument: server);
 
         var hash = Fnv1aHash.Create();
 
         for (var index = 0; (index < order.Length); index++) {
-            server.Persistence.AppendStateHashComponent(
+            hash.Add(value: ComponentDigest(
                 component: order[index],
-                hash: ref hash,
+                recompute: recompute,
                 seed: seed,
+                server: server,
                 tick: tick
-            );
+            ));
         }
 
         return hash.Value;

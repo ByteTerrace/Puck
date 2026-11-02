@@ -3,6 +3,9 @@
 import "moth-controls"
 import "pad-kit"
 
+// The standard's screen material, re-exported so the debug world's devices and range name it.
+export binding crt
+
 commands [
   {
     name: "gallery.lights.all"
