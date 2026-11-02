@@ -929,9 +929,29 @@ store (AGENTS.md), and work proportional to change.
   hash the HLSL source closure of `MeshBake` and `MeshBakeMask` instead and share
   one store, which halves the cold cost of using both. (from: refactoring survey,
   hot reload)
-- Measured on the lead machine (RTX 4070, windowed, `--devices none`, an empty
-  `--cache-dir`, stdin `world.gpu-timing on`, `world.wait bakes 600`,
-  `host.frames`; other lanes building beside it): Direct3D 12's `world`
+- The cold bake on the quiet lead machine (the lead's settle window: RTX 4070,
+  windowed, `--devices none`, an empty `--cache-dir`, nothing else running),
+  against the one-minute bar:
+
+  | | Direct3D 12 | Vulkan |
+  |---|---:|---:|
+  | Launch to `[engine: ready]` | 26.4 s | 27.6 s |
+  | Launch to `[bakes: settled]` | 154.8 s | 250.3 s |
+  | The `world` residency's bake (`done … seconds=`) | 135.4 s | 229.7 s |
+  | Groups (baked / shared / dynamic) | 7,254 (1,689 / 5,565 / 6,178) | the same |
+  | Samples / triangles | 1,364,275,957 / 56,281,322 | 1,364,454,930 / 56,265,909 |
+  | Bake frames | 744 | 705 |
+  | Thread seconds: crossings / land / contour / prepare / store / split / answer | 649 / 525 / 166 / 140 / 42 / 35 / 31 | 389 / 341 / 112 / 96 / 17 / 24 / 24 |
+
+  Crossings (`CloseSheets`, `CrossingEdges`) and land (`SdfMeshCollapse`) are
+  74 % of Direct3D 12's 1,593 thread seconds; the kinds counted are fine
+  423 M, crossing 344 M, material 208 M, slab 137 M, gradient 125 M and refine
+  113 M samples. Vulkan spends fewer thread seconds and takes 70 % longer: its
+  bake frames are slower (the earlier produce reading below), so the bake is
+  bound by how often a frame admits work. The same tree's first boot of the
+  merged tip, as a sweep's warm-up, baked in 136.8 s (Direct3D 12) and
+  230.5 s (Vulkan). The bar fails on both backends by more than double.
+- The earlier readings (other lanes building beside them): Direct3D 12's `world`
   residency bakes its 2,090 groups in 132.0 s on the cuts merged with the
   integration tip (170.5 s before that merge, the same session's base 259.0 s;
   446 s before the shared pool, 384 s when the owner set the bar), and Vulkan in
@@ -2430,13 +2450,28 @@ no sooner than in plan order (near 4 m: 47 of 135 at 160 s, all at 434 s).
   `sdf-mesh-shadow.vert.hlsl:8-9`, `IGpuRecorder.cs:111-122`; and, unconfirmed,
   a discarded recording that grew history leaves it uninitialized.
 
-- [low · unconfirmed] The bake's output may differ by backend. One after-run
-  read 1,101,923,007 samples and 45,044,555 triangles on Vulkan against
-  999,550,075 and 38,652,955 on Direct3D 12, but those runs straddled the
-  meadow's merge. The meadow lane read 1,101,618,980 (Direct3D 12) against
-  1,101,543,801 (Vulkan) on one tree. Compare both backends' counts on one
-  tree; a bake whose geometry depends on the backend is a defect. (from:
-  mem-fixes, meadow)
+- [medium] The bake's output differs by backend and, on Vulkan, from run to
+  run. On one tree, from empty stores, Direct3D 12 baked the `world` residency
+  twice to identical counts (1,364,275,957 samples, 56,281,322 triangles,
+  113,311,110 refine samples), while Vulkan's two bakes read 1,364,201,366 /
+  56,267,827 / 113,311,110 and 1,364,454,930 / 56,265,909 / 113,363,019. The
+  refine and slab counts move between Vulkan runs, so a refinement decision
+  there depends on something besides the field (a readback's order or timing,
+  or a float reduction's); find it with the two runs' `[sdf.mesh-bake] slow`
+  and per-group counts. A bake whose geometry depends on the backend or the
+  run is a defect. (from: mem-fixes, meadow, settle-1)
+- Vulkan's draw-count gap is gone. At fifteen stops on one tree, root draws
+  across every pass agree within 1 % (stage 16,239 / 16,240, meadow 29,556 /
+  29,659, gallery 12,652 / 12,652, rim 1,571 / 1,572), and so do the mesh
+  pass's (1,061 / 1,062 at the stage, 3,782 / 3,887 at the meadow, where the
+  wind moves which blades a box keeps). Both backends bake the same 1,689
+  groups and the trace scene holds the same 2,041 static draws, where Vulkan
+  once counted 2,033 static draws against 1,689. The one stop apart is the
+  camera course, 7,612 / 10,401 with the mesh pass equal (282 / 281): the
+  difference is in the cascades, whose refresh frames a single counter read
+  catches or misses, so read it as two windows before calling it a gap.
+  R2's meadow 2,506 against 26,657 does not reproduce (29,590 / 29,668 in M1's
+  leg 1). (from: settle-1)
 
 Owner: rendering (GPU leg, lead GPU scheduling) · ordinary · Next: Vulkan's
 crossing frame (52.5 ms of produce) and the pixel-pass gap at locked clocks.
@@ -2734,6 +2769,39 @@ Owner: sweep follow-up, with the lead scheduling the GPU slot · medium ·
 Next: reproduce the companion overlaps, then one paired windowed tour (about 18
 minutes of GPU) when no lane holds the GPU, compared stop by stop, with
 `--attach` on one World for both runs.
+
+- [high] The windowed leg never reaches its tour while the day cycle runs.
+  After settling, the sweep runs `world.rate resume`, `world.wait 300`,
+  `world.rate pause` in one 120 s call (`SweepCommand.cs:267`) with lockstep on,
+  and a lockstep frame drains the irradiance relight to the end before it
+  renders (`SdfMeshIrradiance.Stage`, `SdfMeshIrradiance.cs:538-559`). The day
+  cycle moves the sun every tick, which moves the lighting version in
+  `DrainKey()` (`:578`), so every frame relights all 589,824 probes, about 10 s
+  (`[sdf.mesh-gi] done … traced=0 relit=589824 … seconds=9.8`). Reproduced on
+  Direct3D 12: with lockstep on and the day running, 3 ticks took 34.4 s; with
+  the sun held (`world.row.set state day advance
+  {"perSecondNumerator":0,"perSecondDenominator":1}`), 300 ticks took 22.2 s.
+  Both of the settle window's sweeps failed this way (owned on Direct3D 12,
+  attached on Vulkan: the call timed out and the attachment closed, so every
+  windowed signal and still is unmeasured). An attached Direct3D 12 tour with
+  the sun held before attaching passed the warm-up, read its signals and took
+  74 of the tour's 75 stills (all but `night-field`) before the session's
+  memory reaper stopped the run, so it wrote no report. Fix at the cause: a
+  lockstep frame relights only what the frame's own time moved (or holds the
+  sun at the tick it presents), rather than draining a full relight per tick;
+  holding the sun in the plan's prelude does not help, since the warm-up runs
+  before the prelude. (from: settle-1)
+- [medium] `world.debug-view report colliders --json` throws
+  `DivideByZeroException` (`[world.debug-view: handler threw
+  DivideByZeroException: Attempted to divide by zero.]`) on the debug world,
+  headless and windowed, so the sweep's colliders signal is red on a refusal;
+  the answer carries no stack. Reproduce it in a headless World and fix the
+  division. (from: settle-1)
+- [low] A sweep's `--baseline` names one report, but a split run (a headless
+  report and a windowed one, as the last kept baseline was) marks every signal
+  the other leg read as `baseline: new signal`, red. Keep each window's sweep as
+  one report, both legs together, so the next window compares whole.
+  (from: settle-1)
 
 - [medium] The windowed `--tour` does not repeat to its 2 % threshold on a long-running World: an identical re-run of the same build on the same World put 17 stops past 2 % (wing-door-far 99.3 %, revolved-floor 41.7 %), and the GI counters differ with World history (`sdf.mesh-gi.camera-traces` 304 against 573), so a cross-build comparison through it cannot separate a change from lighting history. A difference in nearly every pixel looks like exposure: a camera moved by a stop's teleport is a cut, so the exposure jumps to the meter's target, and the meter's camera-trace sample ring (`SdfMeshIrradiance`) reused samples by where the camera stood before. A cut now meters fresh at the camera (`TryMeter(fresh:)`) and snaps to that first reading, so the cut's sample no longer depends on history; the probe reading still depends on which cells the trace has cached. The tour reads `world.exposure` at each held tick (`SweepStillResult.Exposure`) and a still past the amber fraction says whether its exposure differs from the baseline's; the paired tour on one `--attach`ed World confirms whether the remaining difference is the probe cache's. (from: bake-scale lane)
 - Finish sweep-honest's paired motion qualification: its first final tour

@@ -67,6 +67,53 @@ The numbers below are the packet's, measured on the quiet lead machine
   A collection suspends every managed thread, so background allocation is a
   frame cost whichever thread allocates.
 
+### The frame bar at the standard stops
+
+The settle window's reading on the quiet lead machine (RTX 4070, 1280×900,
+`world.quality high`, the day cycle running, bakes settled, a fresh World per
+backend; `host.frames` over 10 s at each stop). The bar is 16.7 ms; no stop
+meets it on either backend, and the presenter never waits on the GPU (`begin`
+0), so every stop is bound by the frame thread:
+
+| Stop | D3D12 avg / p99, ms | Produce / simulate, ms | Vulkan avg / p99, ms | Produce / simulate, ms | Root GPU, D3D12 / Vulkan, ms | Largest root passes (D3D12, ms) |
+|---|---:|---:|---:|---:|---:|---|
+| `stage` | 38.7 / 56.1 | 29.2 / 9.3 | 39.1 / 59.2 | 29.3 / 9.6 | 11.8 / 12.5 | views 3.72, resolve 3.53, shadow-far 1.11 |
+| `hero` | 24.7 / 33.2 | 15.5 / 6.1 | 25.3 / 41.6 | 16.0 / 6.4 | 10.8 / 9.6 | resolve 3.43, views 3.22, shadow-far 0.86 |
+| `meadow` | 67.1 / 83.5 | 48.8 / 18.0 | 68.1 / 90.2 | 49.2 / 18.6 | 21.4 / 21.0 | views 8.76, resolve 4.66, composite 1.39 |
+| `range` | 47.4 / 67.9 | 34.5 / 12.6 | 43.8 / 63.3 | 32.9 / 10.8 | 13.4 / 13.6 | views 4.03, resolve 3.82, shadow-far 2.02 |
+| `camera-course` | 26.4 / 35.5 | 18.1 / 6.8 | 26.6 / 47.5 | 17.8 / 6.8 | 11.3 / 10.0 | views 3.54, resolve 3.50, shadow-far 1.03 |
+| `gallery` | 28.1 / 42.3 | 20.1 / 7.2 | 26.8 / 39.2 | 18.6 / 6.9 | 11.4 / 10.2 | views 3.54, resolve 3.48, shadow-far 1.07 |
+| `gallery-level-0` | 28.9 / 40.9 | 20.4 / 7.4 | 28.6 / 38.7 | 19.8 / 7.4 | 13.5 / 12.1 | views 3.65, resolve 3.46, shadow-far 1.88 |
+| `gallery-level-2` | 33.2 / 48.9 | 24.3 / 8.4 | 32.4 / 49.1 | 23.4 / 8.4 | 12.4 / 11.3 | views 3.29, resolve 3.03, shadow-far 1.71 |
+| `stairs` | 25.1 / 33.7 | 15.5 / 6.3 | 28.6 / 43.7 | 18.5 / 7.2 | 11.9 / 10.9 | views 3.73, shadow-far 1.91, resolve 1.88 |
+| `boardroom` | 27.5 / 41.7 | 19.6 / 7.0 | 27.3 / 41.2 | 19.0 / 7.0 | 12.5 / 11.1 | resolve 3.41, views 3.29, shadow-second 1.50 |
+| `wonderland-room` | 26.9 / 35.2 | 19.1 / 6.7 | 27.0 / 38.4 | 18.8 / 6.8 | 11.6 / 10.2 | views 3.83, resolve 3.45, shadow-far 0.87 |
+| `portals` | 34.9 / 64.8 | 25.3 / 8.9 | 31.8 / 61.9 | 22.9 / 7.9 | 12.0 / 10.7 | views 3.59, resolve 3.44, shadow-second 0.99 |
+| `valley-rim` | 74.7 / 140.9 | 48.2 / 26.1 | 57.5 / 139.3 | 40.3 / 17.0 | 15.4 / 16.5 | resolve 5.58, views 4.77, mesh 0.90 |
+| `overlook` | 31.1 / 74.3 | 20.3 / 9.5 | 26.3 / 44.1 | 17.3 / 6.8 | 9.2 / 8.2 | resolve 3.42, views 2.34, composite 0.54 |
+| valley draw distance | 44.9 / 63.4 | 34.5 / 10.1 | 46.1 / 69.0 | 34.6 / 11.2 | 10.0 / 11.5 | resolve 4.38, composite 1.12, mesh 0.81 |
+
+- **Produce dominates every stop**, 15 to 49 ms, and the tick adds 6 to 26 ms;
+  the root queue's GPU time (8 to 22 ms) is under produce everywhere. The
+  frame-thread trace at the meadow
+  ([visibility M1](visibility.md#what-the-first-settle-window-read)) puts 45 %
+  of the frame in CPU field queries inside `WorldFramePresenter.CaptureFrame`:
+  the creation effectors' surface probes (27 %) and the chase camera's
+  clearance march (18 %), about 31 ms. The tick-to-produce section's 2.4 ms of
+  effector probes at the lobby is about 19 ms at the meadow, where the field
+  holds the most shapes.
+- **Holding the sun saves 1 to 3 ms.** The same stops with the day cycle
+  running and then held (`world.row.set state day advance` to zero): stage 37.9
+  to 35.5 ms, gallery 26.0 to 24.7, meadow 65.6 to 62.6 on Direct3D 12, the same
+  on Vulkan. The day cycle's continuous irradiance relight (`[sdf.mesh-gi]
+  behind`, about 4,000 of the 7,680 probes a second it needs) runs on the
+  background workers and is not what holds the frame over the bar.
+- **Off the root queue**, the screen and portal sessions add timed GPU work
+  the root's means leave out: their per-node means sum to 31 to 36 ms on
+  Direct3D 12 against 16 to 21 on Vulkan at the same stops (Vulkan's first
+  stop timed fewer nodes). Rated nodes submit less often than every frame, so
+  the sum overstates a frame's share; `world.gpu-timing timeline` places them.
+
 ## 1. The scheduler
 
 ### One pool, sized from the machine

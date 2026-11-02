@@ -332,7 +332,7 @@
     { "name": "world.state.act", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "world.state.cell.remove", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "world.state.cell.set", "bindable": true, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
-    { "name": "world.state.hash", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
+    { "name": "world.state.hash", "bindable": false, "audience": "operator", "valueKind": "digital", "wireArgs": true },
     { "name": "world.state.observe", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": false },
     { "name": "world.state.similar", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "world.state.transform", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
