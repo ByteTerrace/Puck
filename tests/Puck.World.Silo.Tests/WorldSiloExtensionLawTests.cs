@@ -134,7 +134,7 @@ public sealed class WorldSiloExtensionLawTests {
                 instances: instances,
                 row: boot.Instance,
                 store: PuckStorageTestComposition.BuildStore(),
-                target: new DirectoryObjectStorageTarget(stateDirectory)
+                target: WorldAuthorityBlobStore.DirectoryTarget(rootPath: stateDirectory)
             ));
         } catch (ArgumentException error) {
             return (error.Message, null);
@@ -195,7 +195,7 @@ public sealed class WorldSiloExtensionLawTests {
                     source: () => source,
                     tagging: new SiloConsoleTagging(output: m_output)
                 ),
-                storageTarget: new DirectoryObjectStorageTarget(m_directory.RootPath),
+                storageTarget: WorldAuthorityBlobStore.DirectoryTarget(rootPath: m_directory.RootPath),
                 timeProvider: Clock
             );
         }
@@ -211,7 +211,7 @@ public sealed class WorldSiloExtensionLawTests {
         public async Task<bool> ActivateAsync() {
             Assert.True(condition: (await new WorldAuthorityBlobStore(
                 store: Store,
-                target: new DirectoryObjectStorageTarget(m_directory.RootPath),
+                target: WorldAuthorityBlobStore.DirectoryTarget(rootPath: m_directory.RootPath),
                 timeProvider: Clock
             ).PublishDefinitionAsync(
                 Identity,

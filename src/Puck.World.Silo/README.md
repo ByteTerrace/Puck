@@ -108,7 +108,13 @@ file at activation, and an unreadable file, a mismatched `world`, or an unknown
 or ambiguous provider type refuses the activation by name. No two rows may share
 a file. `world.extensions` reads back the addressed row's runtime.
 
-Persistence enters `WorldSiloHost` as an `ObjectStorageTarget`. An optional
+Persistence enters `WorldSiloHost` as an `ObjectStorageTarget`. The built-in
+`directory` store admits `WorldAuthorityBlobStore.MaximumBlobBytes` per blob, the
+checkpoint codec's own bound, and the authority store refuses a smaller directory
+target when it is built rather than at its first checkpoint. A pinned row that
+cannot activate and checkpoint stops the silo: the drain runs and reports
+`[silo.drain: …]`, the host reports `[silo.host: stopped by a failed service (…)]`,
+and the process exits 1. An optional
 `lifecycle.observer` selects an `IWorldHostRetirementObserver`, which supplies a
 UTC deadline to the same `WorldSiloHost.DrainAsync` operation used by shutdown and
 loopback-only `POST /drain`. Provider settings and metadata protocols belong to

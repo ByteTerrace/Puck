@@ -36,7 +36,7 @@ public sealed class WorldReleaseQualificationRunner(string fixture, string outpu
     private readonly TimeProvider m_clock = (clock ?? TimeProvider.System);
     private readonly IWorldReleaseQualificationContainers m_containers = (containers ?? new WorldReleaseQualificationDocker(clock: (clock ?? TimeProvider.System)));
 
-    private const int MaximumFileBytes = WorldReleaseFixtureArchive.MaximumCheckpointBytes;
+    private const int MaximumFileBytes = WorldAuthorityBlobStore.MaximumBlobBytes;
 
     private static void CopyFixture(string source, string destination, WorldSiloDefinition definition) {
         Directory.CreateDirectory(path: destination);
@@ -237,7 +237,7 @@ public sealed class WorldReleaseQualificationRunner(string fixture, string outpu
         using var provider = services.BuildServiceProvider();
         var authority = new WorldAuthorityBlobStore(
             store: provider.GetRequiredService<IObjectBlobStore>(),
-            target: new DirectoryObjectStorageTarget(Path.Combine(
+            target: WorldAuthorityBlobStore.DirectoryTarget(rootPath: Path.Combine(
                 path1: leg,
                 path2: "store"
             )),

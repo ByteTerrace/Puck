@@ -90,9 +90,9 @@ public static class LauncherHostRun {
             }
         }
 
-        // The host's RunAsync returns normally while a BackgroundService's ExecuteTask is faulted, so pump failures are
-        // read from the tasks themselves. A pump's fault ended the run, so it precedes anything RunAsync raised while
-        // stopping or disposing the host, and it is the failure the run reports.
+        // Pump failures are read from the tasks themselves: a StopHost host rethrows a pump's fault from RunAsync only
+        // after stopping, beside anything stopping or disposing raised. A pump's fault ended the run, so it precedes
+        // those, and it is the failure the run reports.
         Exception? pumpFault = null;
 
         foreach (var pump in pumps) {
@@ -109,7 +109,8 @@ public static class LauncherHostRun {
 
         if (
             (pumpFault is not null) &&
-            (runFailure is not null)
+            (runFailure is not null) &&
+            !ReferenceEquals(objA: pumpFault, objB: runFailure)
         ) {
             WriteSecondary(
                 error: error,

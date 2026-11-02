@@ -145,7 +145,7 @@ public sealed partial class WorldSiloCrossingRecoveryLawTests {
             Store = new FailingJournalStore(inner: PuckStorageTestComposition.BuildStore());
             Backend = new WorldAuthorityBlobStore(
                 store: Store,
-                target: new DirectoryObjectStorageTarget(m_directory.RootPath),
+                target: WorldAuthorityBlobStore.DirectoryTarget(rootPath: m_directory.RootPath),
                 timeProvider: new VirtualClock()
             );
         }
@@ -216,7 +216,7 @@ public sealed partial class WorldSiloCrossingRecoveryLawTests {
                 source: () => source,
                 tagging: new SiloConsoleTagging(output: output)
             ),
-            new DirectoryObjectStorageTarget(directory),
+            WorldAuthorityBlobStore.DirectoryTarget(rootPath: directory),
             timeProvider: new VirtualClock()
         );
     }

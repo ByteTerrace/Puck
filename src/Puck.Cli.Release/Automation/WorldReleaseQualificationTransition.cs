@@ -44,13 +44,10 @@ public sealed class WorldReleaseQualificationTransition(IObjectBlobStore blobs, 
             cancellationToken: token,
             manifest: target
         ).ConfigureAwait(continueOnCapturedContext: false);
-        var storage = new DirectoryObjectStorageTarget(
-            Path.Combine(
-                path1: directory,
-                path2: "store"
-            ),
-            maximumBlobBytes: WorldReleaseFixtureArchive.MaximumCheckpointBytes
-        );
+        var storage = WorldAuthorityBlobStore.DirectoryTarget(rootPath: Path.Combine(
+            path1: directory,
+            path2: "store"
+        ));
         var authority = new WorldAuthorityBlobStore(
             store: blobs,
             target: storage

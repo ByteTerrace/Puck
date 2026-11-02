@@ -30,7 +30,7 @@ public sealed class WorldSiloLifecycleLawTests {
                 source: () => source,
                 tagging: new SiloConsoleTagging(output: output)
             ),
-            new DirectoryObjectStorageTarget(directory),
+            WorldAuthorityBlobStore.DirectoryTarget(rootPath: directory),
             timeProvider: new VirtualClock()
         );
     }
@@ -117,7 +117,7 @@ public sealed class WorldSiloLifecycleLawTests {
         var store = PuckStorageTestComposition.BuildStore();
         var backend = new WorldAuthorityBlobStore(
             store: store,
-            target: new DirectoryObjectStorageTarget(directory.RootPath),
+            target: WorldAuthorityBlobStore.DirectoryTarget(rootPath: directory.RootPath),
             timeProvider: new VirtualClock()
         );
         var definition = Fixtures.BuildDocument() with {
@@ -239,7 +239,7 @@ public sealed class WorldSiloLifecycleLawTests {
         var store = PuckStorageTestComposition.BuildStore();
         var backend = new WorldAuthorityBlobStore(
             store: store,
-            target: new DirectoryObjectStorageTarget(directory.RootPath),
+            target: WorldAuthorityBlobStore.DirectoryTarget(rootPath: directory.RootPath),
             timeProvider: new VirtualClock()
         );
         var definition = Fixtures.BuildDocument() with {
@@ -391,7 +391,7 @@ public sealed class WorldSiloLifecycleLawTests {
             World: SafeName.Parse(candidate: "row")
         );
         var store = new FailingWrites(inner: PuckStorageTestComposition.BuildStore());
-        var target = new DirectoryObjectStorageTarget(directory.RootPath);
+        var target = WorldAuthorityBlobStore.DirectoryTarget(rootPath: directory.RootPath);
         var backend = new WorldAuthorityBlobStore(
             store: store,
             target: target,
@@ -483,7 +483,7 @@ public sealed class WorldSiloLifecycleLawTests {
             World: SafeName.Parse(candidate: "row")
         );
         var store = new FailingWrites(inner: PuckStorageTestComposition.BuildStore());
-        var target = new DirectoryObjectStorageTarget(directory.RootPath);
+        var target = WorldAuthorityBlobStore.DirectoryTarget(rootPath: directory.RootPath);
         var backend = new WorldAuthorityBlobStore(
             store: store,
             target: target,
@@ -752,7 +752,7 @@ public sealed class WorldSiloLifecycleLawTests {
         var store = PuckStorageTestComposition.BuildStore();
         var backend = new WorldAuthorityBlobStore(
             store: store,
-            target: new DirectoryObjectStorageTarget(directory.RootPath),
+            target: WorldAuthorityBlobStore.DirectoryTarget(rootPath: directory.RootPath),
             timeProvider: new VirtualClock()
         );
         var definition = Fixtures.BuildDocument();
@@ -919,7 +919,7 @@ public sealed class WorldSiloLifecycleLawTests {
             var store = PuckStorageTestComposition.BuildStore();
             var backend = new WorldAuthorityBlobStore(
                 store: store,
-                target: new DirectoryObjectStorageTarget(directory.RootPath),
+                target: WorldAuthorityBlobStore.DirectoryTarget(rootPath: directory.RootPath),
                 timeProvider: new VirtualClock()
             );
 

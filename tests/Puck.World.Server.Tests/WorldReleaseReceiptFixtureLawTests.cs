@@ -368,7 +368,7 @@ public sealed class WorldReleaseReceiptFixtureLawTests {
             ));
             Source = new(
                 store: Blobs,
-                target: new DirectoryObjectStorageTarget(Path.Combine(
+                target: WorldAuthorityBlobStore.DirectoryTarget(rootPath: Path.Combine(
                     path1: m_directory.RootPath,
                     path2: "source"
                 )),

@@ -23,7 +23,7 @@ public sealed class WorldReleaseBootstrapTests {
 
         Puck.Storage.DependencyInjection.PuckStorageServiceRegistration.AddCore(services: services);
         using var provider = services.BuildServiceProvider();
-        var target = new DirectoryObjectStorageTarget(Path.Combine(
+        var target = WorldAuthorityBlobStore.DirectoryTarget(rootPath: Path.Combine(
             path1: directory.RootPath,
             path2: "store"
         ));
@@ -169,7 +169,7 @@ public sealed class WorldReleaseBootstrapTests {
 
         Puck.Storage.DependencyInjection.PuckStorageServiceRegistration.AddCore(services: services);
         using var provider = services.BuildServiceProvider();
-        var target = new DirectoryObjectStorageTarget(Path.Combine(
+        var target = WorldAuthorityBlobStore.DirectoryTarget(rootPath: Path.Combine(
             path1: directory.RootPath,
             path2: "store"
         ));

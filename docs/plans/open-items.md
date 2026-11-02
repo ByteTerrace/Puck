@@ -1334,6 +1334,23 @@ then CI's steady state, the shader cache and the GC-hole retirement.
   neither a speedup nor the review's inferred ten seconds of JIT. Profile that
   admission phase and compare cold/warm activations in one process in the lead's
   quiet window before choosing a publish or cache change. (from: silo-fixes)
+- [medium] A checkpoint carries the whole world document, twice once the base
+  and the live document differ (`WorldServerCheckpoint.DefinitionJson` and
+  `BaseDefinitionJson`, written by `WorldPersistence.Checkpoint.cs` through
+  `WorldServerCheckpoint.DocumentBytes`). The debug world's steady-state silo
+  checkpoint holds two 10.7 MB compact copies that differ by one addon edit,
+  re-uploaded at every cadence, though the authority store already keeps the
+  published definition content-addressed. Store a checkpoint's documents by
+  content hash beside it (written create-only like the checkpoint) and keep only
+  the hashes in the server section; restore reads them through the same store.
+  The compact form keeps the debug world near 31 MB against the codec's 128 MiB
+  body bound until then. (from: silo-budget)
+- [low] Embedded documents outside the server section still use the indented
+  form: owned-world documents (`src/Puck.World.Server/WorldOwnedWorlds.cs:796`),
+  escrow destinations (`src/Puck.World.Server/WorldTransferEscrow.cs:373`, compared
+  by hash at `:465`), and crossing targets
+  (`src/Puck.World.Server/WorldInstanceHost.CrossingLog.cs:16`). Move each to the
+  compact form with its comparison in one change. (from: silo-budget)
 - [low] Extend addon checkpoints to table/reference and segment-drop state.
   Mounting currently refuses these resources by name
   (`src/Puck.Assets/WasmModuleDeclarations.Checkpoint.cs:15`,

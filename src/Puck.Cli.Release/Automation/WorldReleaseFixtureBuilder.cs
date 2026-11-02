@@ -45,13 +45,10 @@ public sealed class WorldReleaseFixtureBuilder(IObjectBlobStore blobs, WorldRele
             manifest: release
         ).ConfigureAwait(continueOnCapturedContext: false);
         Directory.CreateDirectory(path: directory);
-        var target = new DirectoryObjectStorageTarget(
-            Path.Combine(
-                path1: directory,
-                path2: "store"
-            ),
-            maximumBlobBytes: WorldReleaseFixtureArchive.MaximumCheckpointBytes
-        );
+        var target = WorldAuthorityBlobStore.DirectoryTarget(rootPath: Path.Combine(
+            path1: directory,
+            path2: "store"
+        ));
         var authority = new WorldAuthorityBlobStore(
             store: blobs,
             target: target

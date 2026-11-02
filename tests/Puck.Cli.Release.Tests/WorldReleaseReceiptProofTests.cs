@@ -21,7 +21,7 @@ public sealed class WorldReleaseReceiptProofTests {
         using var provider = services.BuildServiceProvider();
         var store = new WorldAuthorityBlobStore(
             store: provider.GetRequiredService<IObjectBlobStore>(),
-            target: new DirectoryObjectStorageTarget(temporary.RootPath)
+            target: WorldAuthorityBlobStore.DirectoryTarget(rootPath: temporary.RootPath)
         );
         var identity = new WorldAuthorityIdentity(
             Owner: Guid.NewGuid(),
