@@ -26,44 +26,18 @@ lined up and duplicated by pointer and grid, a dark corner diagnosed with
 session saved back into the place's `.puck` source. Highest-quality frame targets are 60 FPS on the RTX
 2060 and RTX 4070, and 45 FPS (every frame under 22.2 ms) on Steam Deck.
 
-## Implementation status
+## What the packages build on
 
-E1 is in place, its design authored in `worlds/standard/editor.puck` (the
-`editor` section's grid, snapping, camera feel, build toggle, read-only label
-and build bar, and the `editor` binding overlay's build page and context row; a
-world without the section has no build controls, and the editor verbs refuse by
-name): every seat can enter build mode (`player.build`, the built-in
-`editor` context family), draw its own grid on the ground it works on, and put
-down, nudge and turn placements by whole grid and angle steps from bound keys
-(`world.grid`, `world.snap`, `world.place`, `world.nudge`, `world.turn`). The
-World guide's *Build mode* section describes them. The other verbs that change
-a world are `world.row.set`, `world.row.add`, `world.row.remove` and
-`world.row.step` (these row-edit verbs are unbindable; the last steps one scalar field and refuses a
-vector field such as a position), `world.reflow.preview`/`status`/`commit`/`cancel`,
-`world.undo`, `world.reload`, `world.save`, the `pipeline.*` verbs for shader
-pipelines, and the `forge.*` verbs for cartridges. `world.undo` replays the
-journal minus its tail and is unbindable; there is no redo anywhere except the
-forge draft's one-level swap (`CartridgeDraft.Undo`). There are no gizmos, no
-selection, no copy or paste, and no measurement. GPU hover identifies a
-placement but does not select it; `world.place` aims at a surface. `world.nudge` and
-`world.turn` act on a named placement or the one the seat last placed or moved.
-`world.save` writes each authored edit into the `.puck` source that authors it,
-the root or a document it imports, preserving unrelated text and proving the
-recomposed document before the atomic writes; a value read from a `let` is
-written in the `let` when nothing else reads it, and the simulation's `state`
-stays as authored. Generated rows refuse by name and offer a JSON delta.
-
-`world.history` is deterministic time travel over the boot world (the
+Build mode (E1), the inspector (E5), cost per object and GPU pass timing (E9),
+and deterministic time travel (`world.history`) are in place; the
+[World guide](../../src/Puck.World/README.md#build-mode) and the
 [state reference](../reference/state/worlds.md#travel-through-recorded-time)
-lists its forms). With it on, a builder seeks or steps to any tick of a bounded
-window, backward or forward, each move proved against the hash recorded there;
-resumes from the past, discarding the future or keeping it as a named branch;
-re-enters a kept branch or saves it as a tape; diffs the state at two ticks; and
-replays an edit some ticks earlier to see where it would first have changed the
-world. A building seat scrubs it from bound keys and by dragging the scrubber row
-its view draws, under its own principal (E14). An authored HUD shows the cursor
-and window through the `history.cursor` and `history.window` bindings, as text or
-gauges.
+describe them. `world.undo` replays the journal minus its tail and is
+unbindable; there is no redo anywhere except the forge draft's one-level swap
+(`CartridgeDraft.Undo`). There are no gizmos, no selection, no copy or paste,
+and no measurement. GPU hover identifies a placement but does not select it.
+The inspector's `selection=` field reads the placement the seat last put down
+or moved until E2 gives a seat a selection.
 
 Several pieces exist with nothing using them:
 
@@ -74,241 +48,44 @@ Several pieces exist with nothing using them:
 - One shading lever reaches the pass block with no producer:
   `DisableScreenLights`.
 - The GPU carve bake (`SdfWorldTables.RequestBrickBake`, the `sdf.bricks`
-  pass) has no producer: the debug scene that drove it, and its carve planner,
-  are deleted with the per-pixel interpreter. The brick pool itself is live:
-  height fields upload their bricks into it (`WorldFieldEmitter`), and the bake
-  samples them.
+  pass) has no producer. The brick pool itself is live: height fields upload
+  their bricks into it (`WorldFieldEmitter`), and the bake samples them.
 
-The inspector (E5) is in place. `world.inspect on|off|toggle` is bindable and draws a
-panel on the `Editor` overlay channel (`InspectorWriter`); `world.inspect` alone
-prints the same text, because `WorldInspectorText` in `Puck.World.Client` is the
-one formatter both read and `WorldInspectionCommandModule` registers the verb.
-The text covers the placement under the seat's pointer (id, prototype, material
-and its name, point, normal, distance, march steps and queries), the camera, the
-simulation and presentation ticks, the render scale and quality levers, the
-active debug view, the frame's counted work, the `world.budget` words and
-instance headroom, the latest reload diagnostic, and the frame rate and GPU pass
-times while `world.gpu-timing` is on. Its `selection=` field reads the
-placement the seat last put down or moved, and `none` otherwise, until E2 gives
-a seat a selection. `WorldInspectorLawTests` holds its laws and the
-`editor-inspector` canary checks the panel's pixels and the surface it names.
+The overlay draws rects, rings, wedges, panels, icons and text
+(`OverlayFrameBuilder`), and has no line primitive. `MarkerWriter` projects
+world points into each seat's viewport. `WorldPointerRayCapture` casts the OS
+pointer through a seat's camera, and the cursor already outlines a hovered pane
+(`WorldViewGraphHost.Hover`, `CursorWriter`).
 
-Cost per object and GPU pass timing (E9) are in place. `world.cost [<placement>]`
-and `world.cost top [<n>]` read a live placement's counted cost from the
-composed program (`WorldPlacementCostReport`; `WorldCostLawTests`), and
-append the pointer pixel's step and query counts when the pointer is on that
-placement. GPU work remains counted for correctness and quality decisions. The
-optional `world.gpu-timing` readout (bindable, off by default) records named
-pass timestamp pairs through `IGpuTimestampFactory` on both backends, after
-submission fences (`ShaderPipelineRenderNodeLawTests.Timing.cs`, the
-`gpu-pass-timing` canary). Timing never judges correctness. Its one rendering
-reader is dynamic resolution (`world.render-scale [view] auto`,
-`WorldDynamicResolution`; [rendering plan P15-6](rendering.md#p15--temporal-reconstruction)),
-off by default, which holds each view's GPU frame time to the display period and
-asks for the timestamps while it is on; `world.gpu-timing off` then stops only
-the readout.
+The presenter's CPU `SdfFieldEvaluator` (`WorldClient.StaticField`) implements
+`IWorldQuery.Raycast`, but it is not everything a builder sees: it holds only
+the placements a body can touch, plus screens, derived faces and adjacency
+geometry, and it refuses what has no deterministic interpreter (non-uniform
+scale, warp ops, render-only shapes such as Path and multi-strand Sweep), and
+one refused instruction leaves the whole field null. The shared GPU picker is
+[P13](rendering.md#p13--hit-to-source-mapping-and-input-destinations)'s
+`SdfWorldPicker`, one per rendered view (`SdfWorldPasses.PickerOf`), whose
+answer names the source and the winning shape's transform slot against the
+frame the record was rendered from (`SdfPickResult`).
 
-The building blocks the packages reuse are in place. The overlay draws rects,
-rings, wedges, panels, icons and text (`OverlayFrameBuilder`), and has no line
-primitive. `MarkerWriter` projects world points into each seat's viewport.
-`WorldPointerRayCapture` casts the OS pointer through a seat's camera
-(`SourceRay.Through` over `WorldSeatViewports`), and the cursor already outlines
-a hovered pane (`WorldViewGraphHost.Hover`, `CursorWriter`).
+Free Cam exists as a gameplay mode that possesses an authored
+`camera-seat-<n>` body (`WorldSeatModeState.CameraTarget`).
 
-The presenter rebuilds a CPU `SdfFieldEvaluator`
-(`WorldFramePresenter.RebuildStaticField`, published as `WorldClient.StaticField`),
-and the evaluator implements `IWorldQuery.Raycast`, which returns the hit point,
-normal and material. That field is not everything a builder sees. It holds only
-the placements a body can touch (those with a `solid` facet), plus screens,
-derived faces and adjacency geometry, and the evaluator refuses what has no
-deterministic interpreter: non-uniform scale, warp ops, render-only shapes such
-as Path and multi-strand Sweep. One refused instruction leaves the whole field
-null, so in such a world nothing can be picked on the CPU.
-
-The shared GPU picker is supplied by [P13](rendering.md#p13--hit-to-source-mapping-and-input-destinations):
-`SdfWorldPasses.PickerOf` exposes one `SdfWorldPicker` per rendered view. Its
-asynchronous readback copies the requested pixel's visibility V, C and L.x
-words and the frame's dispatch box, only while demanded. `SdfVisibility` states
-the identity's kind (`SdfVisibilityKind`: background, SDF, mesh) and source
-fields for the host and, generated, for the kernels: the source is the SDF
-instance's program ordinal plus one, or the mesh draw ordinal. SDF source zero
-means geometry outside any instance. A pixel outside its frame's dispatch box
-answers nothing. The request captures an immutable host lookup, so a later
-program rebuild or reused draw ordinal cannot name a replacement placement.
-The exact winning shape's transform slot is retained in L.x
-(`SdfPickResult.TransformSlot`, null for static geometry); an articulated
-instance's bound slot can differ. The answer resolves that slot against the
-transform table of the frame the record was rendered from
-(`SdfPickResult.Transform`). Anonymous lanes are loaded from that transform's
-existing row, preserving the 64-byte visibility record.
-
-Free Cam exists as a gameplay mode
-that possesses an authored `camera-seat-<n>` body
-(`WorldSeatModeState.CameraTarget`).
-
-Prior art lives in git history under `experimental/Puck.Demo/`, which has left
-the tree (`git log -- experimental/Puck.Demo` finds the last revision holding
-it): the world sculptor (`World/WorldSculptController.cs`: ghost placement preview,
-pad-driven select, move, rotate, scale and delete, and a grid-snap toggle), the
-shared undo and redo ring (`EditHistory`), the snap-to-overlay policy
-(`Editing/GridOverlayFactory.cs`), the creator workbench (`Creator/`), the SDF
-debug verbs (`SdfDebug/SdfDebugCommandModule.cs`: `sdf.slice`, `sdf.normals`,
-`sdf.shadowcull`, `sdf.gallery`, `sdf.carve` and more) and the bench's
-per-pass GPU timing. Read it as evidence of a solved problem, never as code to
-revive.
+Prior art lives in git history under `experimental/Puck.Demo/`
+(`git log -- experimental/Puck.Demo` finds the last revision holding it): the
+world sculptor (`World/WorldSculptController.cs`), the shared undo and redo
+ring (`EditHistory`), the snap-to-overlay policy
+(`Editing/GridOverlayFactory.cs`), the creator workbench (`Creator/`) and the
+SDF debug verbs (`SdfDebug/SdfDebugCommandModule.cs`). Read it as evidence of a
+solved problem, never as code to revive.
 
 ## How a package closes
 
-Each package's check is a set of laws in the test project that owns the code.
-Every law has a red leg: the same assertion run against the feature switched
-off, or against a planted defect, which must fail. A check that cannot fail
-proves nothing. A package adds a `puck canary` only where pixels are the honest
-evidence (a grid, a highlight or a debug view drawn on screen). A package that adds
-a verb adds its read-back and its entry in the build-mode binding group in the
-same change.
+Each package is verified by running what it changed in the World. A package
+that adds a verb adds its read-back and its entry in the build-mode binding
+group in the same change.
 
 ## Packages
-
-### E1 — Build mode, the grid and snapping
-
-**Problem:** a builder cannot place anything on a grid, because positions are
-typed numbers and the grid the kernels can already draw is never switched on.
-
-**Delivers:**
-
-1. **Build mode.** A built-in seat mode family, `editor`, with the states `play`
-   and `build`, flipped with `player.mode editor build` and bound to one
-   key or button. In `build` the seat's movement input drives the editor rather
-   than the body, through the same context-family machinery layouts use
-   (`WorldContextFamilies`). The build bindings, pages, keys, and binding-bar
-   layout are authored in a new `worlds/standard/editor.puck`, imported by the
-   debug world, so authors can override or replace the design by id.
-   A seat whose principal lacks `Mutate` on the section it points at still
-   enters build mode and sees a read-only badge; its edits are refused by
-   name, as they are from the console.
-2. **The `editor` section.** Grid pitch and visibility, angle step, surface
-   snapping, patch radius, and camera feel are required authored values in
-   `worlds/standard/editor.puck`. The engine validates and executes mode
-   switching, commands, layout, selection, snapping, and camera operations.
-   Moving the same constants to a schema fallback does not complete this work.
-   `world.save` folds a live override back into its authored source.
-
-3. **The grid overlay.** The presenter computes a `GridOverlayState` per seat
-   from that seat's snap state (the policy `GridOverlayFactory` had: the world
-   grid whenever the grid is visible, the object grid when a reference is
-   captured) and writes it into the `Grid*` fields of the frame the seat's view
-   renders. The grid rides the view's pass block, so one seat can build on a
-   grid while another plays; this is the per-view lever work the
-   [rendering plan's P14-8 follow-up](rendering.md#p14--the-sdf-engine-as-a-pass-package)
-   also needs, and whichever lands first owns it.
-4. **A grid on the ground being worked on.** The kernel work that makes the
-   grid appear where the builder is building, replacing the fixed
-   0.02-of-`gridFloorY` test in `sdf-light-stage.hlsli` and `applyObjectGrid`:
-   - *The working plane.* The world grid draws on a horizontal plane at the
-     working height, which follows the surface under the pointer when the grid
-     is set to follow, the selection's base, or a height set with
-     `world.grid plane <y>`. The band that counts as "on the plane" scales with
-     the pitch and the pixel footprint at that distance, so the lines neither
-     vanish up close nor shimmer far away.
-   - *The surface-projected grid.* In `surface` mode the lattice is drawn on
-     every surface a view hits, projected along the surface normal: the XZ
-     lines on floors and platforms at any height, the XY or ZY lines on walls,
-     and a blend weighted by the normal on slopes, fading at grazing angles.
-     The lines are the world lattice's, so a line on a ramp meets the same
-     line on the floor at the ramp's foot.
-   - *The object grid.* The reference's lattice draws on the reference's own
-     faces and on the surface under it, inside its patch radius, rather than
-     only on the floor plane.
-   - New pass-block values (the plane height, the mode, the band scale) are
-     rows in `SdfWorldPackage.Values`, written by `SdfFrameBlock` and
-     regenerated into the interface with `puck shaders generate`, with
-     `SdfFrameBlockLawTests` moving with them.
-5. **`world.grid` and `world.snap`.** `world.grid on|off|pitch <x> [<z>]|plane <y>|follow|surface`
-   and `world.snap on|off|angle <degrees>|surface on|off|reference <placement>|clear`,
-   both bindable (a toggle and a pitch step as constant values), both echoing
-   the seat's whole state when given no argument.
-6. **Snapping in placement editing.** `world.place <prototype> [<id>]` places at
-   the surface under the seat's pointer, or ahead of its camera when the pointer
-   hits nothing. `world.nudge <placement> <axis> <steps>` moves a placement by
-   whole grid steps and `world.turn <placement> <steps>` turns it by whole angle
-   steps; both are bindable, with axis and sign carried as constant values. Each
-   verb snaps through `GridSnap` (grid, angle, the captured object reference's
-   faces, and the surface through `IWorldQuery.Raycast` over the client's
-   static field) and submits one `placements` upsert through the section upsert
-   `world.row.step` uses, never a second write path. Snapping is authoring
-   float math: its result is the authored number, which the server quantizes as
-   it does any authored position.
-
-**Touches:** `Puck.World.Schema` (the `editor` section, validator, schema
-output), `Puck.World.Client` (`WorldContextFamilies`, `WorldSeatBindings`,
-`WorldFramePresenter`, a per-seat editor state), `Puck.World.Authoring`
-(`GridSnap`), `Puck.SdfVm` (`GridOverlayState`, `SdfFrame`, `SdfFrameBlock`,
-`shade/sdf-surface-shading.hlsli`, `passes/sdf-light-stage.hlsli`),
-`Puck.Shaders` (`SdfWorldPackage.Values`), a new editor command module in
-`src/Puck.World`, the shipped worlds, and the World guide.
-
-**Check:** `GridSnapLawTests` (world lattice per axis, a free axis at zero
-pitch, the magnetize release band, 24 orientations at 90 degrees, face and
-center candidates against a reference; red leg: a disabled config returns its
-input); `WorldEditorSectionLawTests` (every shipped world validates and round
-trips with the default, a non-positive pitch refuses by name); a presenter law
-that a seat in `build` with the grid on renders a frame carrying exactly its
-`GridOverlayState` and a seat in `play` renders none (red leg: the grid on
-while in `play`); placement-verb laws through the real command registry (a
-nudge lands exactly one pitch away, then `world.undo` restores it; a surface
-place rests on the fixture floor); `SdfFrameBlockLawTests` for the new
-values. Canary `editor-grid`, over a fixture with a floor, a raised platform, a
-ramp and a wall: with the grid on the working plane at the platform's height,
-the platform's region shows grid pixels and the floor's does not; in `surface`
-mode all four regions show them; with the grid off each region agrees with a
-grid-free capture (the red leg). Pixels are the honest check here, since the
-lines exist only in the image.
-
-**Depends on:** nothing.
-
-**Status:** delivered. The laws are `GridSnapLawTests`,
-`WorldEditorSectionLawTests`, `SdfFrameBlockLawTests`,
-`WorldEditorBuildModeLawTests` (the presenter law, and a surface place through
-the host's own registry resting on a fixture floor),
-`WorldEditorPlacementLawTests` (nudge, snapped nudge, turn and `world.undo`
-through a real registry over a live row), `WorldEditorEditQueueLawTests` (the
-pending-edit queue: each edit under its own principal, refusal before queueing,
-ids minted past every pending edit, order by document version, one refusal
-path, retirement with the world, an atomic read and admission, and a seeded
-random interleaving) and `WorldEditorSeatsLawTests`
-(the save fold, the build layer and the build bar); the canary is `editor-grid`.
-The placement verbs cast against the presentation's static field, so a world
-whose static field is refused (see above) places ahead of the camera and does
-not rest on its surfaces. A placement's extent for reference snapping is half
-its scale on each axis until E2 gives placements bounds.
-
-**Edit order.** The pending-edit queue (`WorldEditorEditQueue`) orders a
-world's documents against its verdicts by the world's own
-`WorldDocumentVersion`, which every mutation verdict and every delivered
-document carries: the server's activation and the install it reflects. A
-confirmed value is released at the first delivered document at or past its
-verdict's version, whatever that document shows, so an undo, a reload or
-another editor's write in the same batch is simply a newer document and a late
-document never moves a placement back
-(`ADocumentOlderThanAConfirmedValueNeverReplacesItAndANewerOneAlwaysDoes`,
-`AnUndoneEditIsNeverRestoredByTheNextNudge`). A queue is keyed by its world's
-authority and activation; every transition happens under its lock against the
-world's newest known state (the newest document any of its endpoints delivered)
-and its retirement state,
-and each edit goes out through its own endpoint. The queue only claims an edit in
-flight under its lock; the editor hands the claim to its link after the lock is
-released, since a local link's submit waits on the world's authority while that
-world's tick settles verdicts through the queue, so a verdict settling off the
-tick never deadlocks the tick settling its own
-(`AVerdictSettlingOffTheTickNeverDeadlocksTheTickSettlingItsOwn`). A crossing onward or a closed
-endpoint abandons that endpoint's edits by name, a stopped or reaped instance
-answers its pending edits with `world.authority.stopped`, and a malformed
-version is refused at the wire and ignored by the queue. Every edit carries the
-activation its base was read from, which the receiving world checks, so an edit
-sent over a traveler link that already reached the next world is refused and
-rolled back
-(`WorldEditorEditQueueStateLawTests`, `DocumentVersionWireLawTests`,
-`WorldInstanceStopLawTests`).
 
 ### E2 — Selection, picking and highlight
 
@@ -414,7 +191,7 @@ those items (`OverlaySegmentLawTests`, `WorldEditorPickLawTests`,
 `WorldEditorSelectionLawTests`, `editor-selection`) do not exist yet.
 The selection also joins the reload retention that
 `WorldEditorReloadRetentionLawTests` holds
-([E10](#e10--live-reload-and-before-and-after)), and fills the inspector's
+(the live reload's, [World guide](../../src/Puck.World/README.md)), and fills the inspector's
 `selection=` field.
 
 ### E3 — Undo, redo, duplicate, delete and measure
@@ -568,13 +345,13 @@ and FPS appear only while `world.gpu-timing` is enabled.
 
 **Depends on:** the shared GPU picking mechanism, which is in place.
 
-**Status:** delivered. The laws are `WorldInspectorLawTests` (the real verb and
-panel share one text, a sky pointer prints `hit=none`, long diagnostics fit the
-reservation with their file and location first, a steady frame allocates
-nothing) and `OverlayLeaseTableFitsBackstopsLawTests` (the storage rule); the
-canary is `editor-inspector`. The summary of the selection reads the placement
-the seat last put down or moved, so it is `selection=none` on a fresh seat;
-[E2](#e2--selection-picking-and-highlight) owns feeding it a real selection.
+**Status:** built ([World guide](../../src/Puck.World/README.md)). The panel's
+text fits a fixed reservation on the overlay lease table, long diagnostics with
+their file and location first, and a steady frame allocates nothing; that is
+the storage rule overlay writers follow. The summary of the selection reads the
+placement the seat last put down or moved, so it is `selection=none` on a fresh
+seat; [E2](#e2--selection-picking-and-highlight) owns feeding it a real
+selection.
 
 ### E6 — Why is this dark or invisible
 
@@ -741,73 +518,11 @@ dynamic resolution is the one quality input that reads the timing.
 
 **Depends on:** nothing.
 
-**Status:** delivered. `world.cost` prints every figure of step 1 beside the
-share of the live program (`WorldCostLawTests`, including the bake
-representation law); step 2 is `world.gpu-timing` with
-`ShaderPipelineRenderNodeLawTests.Timing.cs` (demand, pairing, fences, release on
-loss, creation faults refusing by name) and the `gpu-pass-timing` canary; step 3
-is the `pixel=` line of `world.cost` and the inspector's `steps=` and
-`queries=`. [E13](#e13--carving-and-the-brick-bake) extends `world.cost` with a
+**Status:** built ([World guide](../../src/Puck.World/README.md)): `world.cost`
+for step 1, the optional `world.gpu-timing` readout for step 2, and the
+`pixel=` line of `world.cost` with the inspector's `steps=` and `queries=` for
+step 3. [E13](#e13--carving-and-the-brick-bake) extends `world.cost` with a
 placement's carves.
-
-### E10 — Live reload and before-and-after
-
-**Status:** delivered. The source watch uses the graph watch's shared debounce and the
-existing reload command. It covers compile and document-composition inputs,
-reads contents only for inputs whose file-system stamp moved, keeps the latest
-reload diagnostic for the inspector and toast, and reconciles the seat's
-current placement and snap reference against the rebuilt document. A seat can hold its displayed frame and compare it with the
-live view through the ordinary capture and `place` paths, under the overlay. Split,
-wipe, difference, cropped sampling and return to the live view are checked on
-both backends by `editor-compare`.
-
-**Delivers:**
-
-1. **`world.watch on|off`** watches every file the loaded source's compile read
-   (the compile cache's `CompileInputs`) and submits `world.reload` after a
-   quiet period, as `pipeline.watch` does for a graph. The reload is the
-   existing verb, recorded on the tape as always. A failed reload shows its
-   diagnostic, with file and line, in the inspector and as a toast as well as
-   on stderr.
-2. **Reload keeps your place.** Build mode, the grid, the snap state, the seat's
-   view angles, and its current placement and snap reference (by id) survive a
-   reload; an id the reload removed leaves them. The selection
-   ([E2](#e2--selection-picking-and-highlight)) and the editor camera
-   ([E8](#e8--editor-camera)) join that retention in their own packages.
-3. **Before and after.** `world.compare hold` keeps the seat's current frame;
-   `world.compare wipe [position]|split|diff|off` shows it against the live view in a pane
-   the `place` package draws. A bound `Axis1D` value controls the wipe position
-   in `0..1` without capturing or rebuilding the graph. The echo includes
-   the changed-pixel count (pixels moving at least 2 LSB, measured by the shared
-   `RgbaFrameDifference` used by the canaries). Captures use the existing scene
-   instance target before the comparison wrapper and the overlay, so a comparison
-   never holds itself or the console, cursor, toasts and inspector drawn over it.
-   A capture names the frame that rendered it and is cropped by that frame's
-   viewport, whatever the layout became while it was read back, and a paused
-   capture keeps its last rendered viewport. Active comparisons add ordinary static uploads and `place` passes;
-   off removes those resources and retains the CPU hold. A changed crop extent
-   requires a new hold before measuring differences. Completed typed commands
-   report once through the terminal, tape and toast; late refusals enter
-   `wire.errors`. A root screenshot follows the next composed root across a
-   comparison mode change, while a named instance capture keeps its target.
-
-**Touches:** `src/Puck.World` (the watch, the compare verbs, the capture path),
-`Puck.World.Client` (`WorldViewGraphHost`, editor state retention).
-
-**Check:** `WorldWatchLawTests` (touching a compile input submits exactly one
-reload; red leg: touching an unrelated file submits none; an unchanged tree
-reads no content per poll);
-`WorldEditorReloadRetentionLawTests` (build mode, the grid, the snap state, the
-view angles, and the current placement and snap reference survive a reload, and
-a removed id drops out). Canary `editor-compare`: hold a frame, move a render
-lever, and the split view's halves differ. `WorldFrameComparisonLawTests`
-checks crop rounding and authored root extents, owned pixels, the shared
-difference threshold, graph revision, refusal atomicity, capture settlement,
-paused metadata, the captured frame's own viewport across a layout change,
-the comparison composed under the overlay's instance with the scene as its
-capture target, and the existing axis binding contract.
-
-**Depends on:** nothing.
 
 ### E11 — Save edits back to source
 
@@ -902,58 +617,6 @@ has none (a height field's host-baked brick is held by
 stroke, and the shared field/bake invalidation and
 [engine job system](open-items.md#engine-job-system) for scheduled bake work.
 
-### E14 — Scrub the recorded past
-
-**Status:** all three deliveries are in place. A building seat's view draws the
-scrubber row on the editor overlay (`HistoryRowWriter`, fed by `WorldHistoryRow`
-from what `WorldHistory` publishes), and `world.history row` echoes it. The row
-does not wait for E2. It hit-tests its own drawn rectangle in overlay space and
-needs no world picking, and the left mouse button on the build page binds the
-held `world.history.drag`, which seeks to the tick under the pressing seat's
-pointer. `step`, `scrub`, `resume` and `branch` are bindable, and the build page
-binds `z`, `x`, `v` and `b` to a tick back, a tick on, resume and keep. Each is
-checked when it runs against `control` over the `history` grant subject, under
-the seat's principal. `world.history switch` and `world.history save` take a kept
-branch somewhere. A tape can start from a checkpoint, so `replay.record` armed
-mid-session matches from its first tick, and the `ArmedAfterFirstStep` refusal is
-gone. The laws are `HistoryScrubLawTests`, `HistoryRowDrawLawTests`,
-`ReplayArmingLawTests` and `ReplayStartPrivacyLawTests`. The pointer drag is checked through the row's own
-hit test and the seat's command session. No canary drives a physical mouse
-press onto the row.
-
-**Problem:** time travel answered on the console only. A builder could not drag
-through the window, step a tick from a key, or take a branch anywhere: a kept
-branch could be neither re-entered nor saved, and a tape could only start from
-a world's boot image.
-
-**Delivers:**
-
-1. **A scrubber row.** An editor HUD row draws the window as a bar — keyframes as
-   ticks, the cursor, kept branches as forks — and a drag on it seeks. It reads
-   what the `history.cursor` and `history.window` bindings already read and
-   submits `world.history seek`; it draws nothing a verb cannot echo.
-2. **Bindable stepping.** `world.history step <±n>`, `resume` and `branch` become
-   bindable in the build-mode binding group, checked at dispatch under the
-   pressing seat's principal, with a grant that names them, so a seat can scrub
-   without the operator console.
-3. **Branches that go somewhere.** `world.history switch <name>` re-enters a
-   kept branch (the current future becomes a branch in its place), and
-   `world.history save <name> <tape>` writes a branch as a `.puckreplay` with
-   `ForkedFrom` naming its fork. Both need a tape that starts from a
-   checkpoint instead of a boot image, which also lets a mid-session
-   `replay.record` match from its first tick.
-
-**Touches:** `Puck.World.Server` (`WorldHistory`, `WorldReplaySnapshot`,
-`WorldReplayTape`), the history command module, the editor HUD.
-
-**Check:** a scrubber law drives the row by a seat's pointer and reads the seek
-back (red leg: a seat without the grant is refused by name); a switch law
-proves the re-entered branch reproduces its recorded hashes; a saved branch
-passes `replay.verify` (red leg: a tape whose checkpoint was taken at the wrong
-tick reports MISMATCH at its first tick).
-
-**Depends on:** nothing further. The row hit-tests its own overlay rectangle, so
-it does not need E2's world picking.
 
 ## Decisions
 
@@ -1090,11 +753,7 @@ bindings are authored in `worlds/standard/editor.puck`.
 - [E13](#e13--carving-and-the-brick-bake): a carve brush whose dabs are document
   rows, one authored edit per stroke, using shared field/bake invalidation and
   the engine job system for bake work.
-- [E14](#e14--scrub-the-recorded-past) remainder:
-  - Prove the rest of its laws red with `puck laws prove`: the four
-    `HistoryScrubLawTests`, and `ReplayArmingLawTests.ATapeWhoseCheckpointWasTakenAtTheWrongTickReportsMismatchAtItsFirstTick`
-    and `ARecordingArmedBeforeTheFirstStepReDrivesToEveryRecordedState`. No
-    canary presses a physical mouse button onto the scrubber row.
+- Time travel's remainder (E14's scrubbing is built):
   - A live coupled machine link still refuses a checkpoint by name; ordinary
     console machine operations are refused while a recording is armed (no tape
     entry), while receipt-pinned addon-derived operations are re-derived by
