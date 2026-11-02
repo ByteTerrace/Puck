@@ -31,6 +31,10 @@ public sealed partial class SdfMeshPathBake {
                 settles.Count(kind: SdfMeshSettle.Refused);
                 continue;
             }
+            // The landed mesh replaces the skinned one: the replaced group retires here, its one place, and releases its
+            // mesh once its last work ends. A rebake that meshed no surface hands it back above instead.
+            m_retiredGroups.Add(item: replaced);
+            replaced.Retired = true;
             group.Replaces = null;
             settles.Count(kind: SdfMeshSettle.Done);
             if (group.Stored) { settles.Count(kind: SdfMeshSettle.Reused); }

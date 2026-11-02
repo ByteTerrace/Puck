@@ -1945,7 +1945,6 @@ public sealed partial class SdfMeshPathBake {
     // one lands, so the count of drawn meshes alone does not move: the draws are marked stale so Dress lists the new one.
     private void Draw(Group group, SdfMesh? mesh) {
         group.Mesh = mesh;
-        if (group.Replaces is { } replaced) { m_retiredGroups.Add(item: replaced); replaced.Retired = true; group.Replaces = null; }
         group.ResidentAt = 0;
         m_allResident = false;
         m_drawnMeshes = -1;

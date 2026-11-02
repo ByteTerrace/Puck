@@ -136,9 +136,14 @@ public sealed partial class SdfMeshPathBakeLawTests {
         var after = bake.Dress(frame: SettleFrame(groups: Groups, offset: 0.55f, program: program, time: 0.7f)).MeshDraws.Select(selector: static draw => draw.Mesh).ToArray();
 
         Assert.Equal(expected: before.Take(count: 2), actual: after.Take(count: 2));
-        _ = bake.Dress(frame: SettleFrame(groups: Groups, offset: 0.55f, program: program, time: 5f));
-        Assert.Equal(expected: 2L, actual: settles.Read(kind: SdfMeshSettle.Refused));
-        Assert.Equal(expected: 9L, actual: settles.Read(kind: SdfMeshSettle.Queued));
+
+        // The other three start as the caps allow and mesh nothing too. Each of the five rebakes once toward the pose and
+        // is handed back its mesh, and a refused group stands, starting nothing more, until its member moves.
+        DriveSettle(bake: bake, empty: true, frame: SettleFrame(groups: Groups, offset: 0.55f, program: program, time: 5f), index: ref index, until: () => (settles.Read(kind: SdfMeshSettle.Refused) == 5L));
+        _ = bake.Dress(frame: SettleFrame(groups: Groups, offset: 0.55f, program: program, time: 7f));
+        Assert.Equal(expected: 5L, actual: settles.Read(kind: SdfMeshSettle.Refused));
+        Assert.Equal(expected: 10L, actual: settles.Read(kind: SdfMeshSettle.Queued));
+        Assert.Equal(expected: before, actual: bake.Dress(frame: SettleFrame(groups: Groups, offset: 0.55f, program: program, time: 7.1f)).MeshDraws.Select(selector: static draw => draw.Mesh));
     }
 
     // Groups of a box on slot 2g+1 and a smaller box memberGap slots later, smooth-free: each a dynamic instance on its own slot.

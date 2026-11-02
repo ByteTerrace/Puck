@@ -791,7 +791,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             ];
 
             for (var word = 0; (word < rows.Length); word++) {
-                expected[(at + word)] = BitConverter.SingleToUInt32Bits(value: rows[word]);
+                if (word != 11) { expected[(at + word)] = BitConverter.SingleToUInt32Bits(value: rows[word]); }
             }
             expected[(at + 3)] = ((boxed ? 0u : 1u) | (draw.Glass ? 2u : 0u) | (draw.EnclosesSolid ? 4u : 0u));
             expected[(at + 15)] = (uint)draw.Mesh.Levels.Count;

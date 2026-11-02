@@ -190,18 +190,27 @@ public sealed partial class SdfWorldPassesLawTests {
     public void CadenceAtTheFloorLeavesTheSurfaceStandingOnDrift() {
         using var rig = new TemporalRig(sky: Layered, views: 1, cadence: true, renderScale: 0.25f);
 
-        // Skipping shadows installs the shadowless fragment, whose rebuild dispatches again the bake batch its old graph
-        // held, so the bake's passes may run beside the shading passes on this frame.
+        // Skipping shadows and occlusion installs the shadowless fragment. The old graph stands while the rebuild compiles;
+        // the installed graph draws no cascade and no pyramid, and renders the mesh and every shading pass at the new
+        // quality.
         rig.SourceFrame = rig.SourceFrame with { Views = [rig.SourceFrame.Views[0] with { Quality = new SdfViewQuality { DisableAmbientOcclusion = true, DisableSoftShadows = true } }] };
-        rig.Produce();
-        var diagWork = CadenceWork(rig: rig);
-        var diagText = "DIAG f0 " + string.Join(" ", Enumerable.Range(0, diagWork.PassLabels.Length).Select(p => $"{diagWork.PassLabels[p].Split((char)36)[^1]}={diagWork.GetPassState(pass: p)}")) + $" building={rig.World.IsBuildingCandidate} pending={rig.Selected.MeshPathBake.Pending} shadowsOff={rig.Selected.Frame?.Views[0].Quality.DisableSoftShadows}"; for (var diagFrame = 1; diagFrame < 4; diagFrame++) { rig.Produce(); var w = CadenceWork(rig: rig); diagText += $" || f{diagFrame} " + string.Join(" ", Enumerable.Range(0, w.PassLabels.Length).Select(p => $"{w.PassLabels[p].Split((char)36)[^1]}={w.GetPassState(pass: p)}")) + $" building={rig.World.IsBuildingCandidate} pending={rig.Selected.MeshPathBake.Pending}"; } Assert.Fail(diagText);
-        Assert.Equal(expected: new[] { SdfWorldPackage.Parts.Surface,
+        var rendered = Array.Empty<string>();
+
+        TestLiveness.Until(
+            reason: () => $"building={rig.World.IsBuildingCandidate} executed={string.Join(separator: ",", values: rendered)}",
+            step: () => {
+                rig.Produce();
+                rendered = [.. Executed(work: CadenceWork(rig: rig)).Where(predicate: static part => (part is not (SdfWorldPackage.Parts.Mask or SdfWorldPackage.Parts.Bake)))];
+
+                return rendered.Contains(value: SdfWorldPackage.Parts.Surface);
+            },
+            wait: rig.Selected.WaitPipelineBuilds
+        );
+        Assert.Equal(expected: new[] { SdfWorldPackage.Parts.Mesh, SdfWorldPackage.Parts.Surface,
             SdfWorldPackage.Parts.Views, SdfWorldPackage.Resolve, SdfWorldPackage.Parts.Sky,
-            SdfWorldPackage.Parts.Composite }, actual: Executed(work: CadenceWork(rig: rig)).Where(predicate: static part => (part is not (SdfWorldPackage.Parts.Mask or SdfWorldPackage.Parts.Bake))));
-        // The view stands once the rebuilt graph installs and the bake it dispatches again settles. The rebuild compiles
-        // on the thread pool, so no count of frames bounds it: until it installs, a frame stands only because the
-        // candidate has not rendered, and the bake's passes run on the first frame after it does.
+            SdfWorldPackage.Parts.Composite }, actual: rendered);
+        // The view then stands once its temporal window settles. The rebuild compiles on the thread pool, so no count of
+        // frames bounds either wait.
         TestLiveness.Until(
             reason: () => $"building={rig.World.IsBuildingCandidate} pending={rig.Selected.MeshPathBake.Pending} {rig.Selected.NotReadyReason}",
             step: () => {
