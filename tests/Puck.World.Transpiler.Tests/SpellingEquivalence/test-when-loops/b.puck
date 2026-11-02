@@ -1,0 +1,29 @@
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+state {
+  world {
+    table board {
+      a = 0
+      b = 0
+      c = 0
+    }
+  }
+}
+
+
+test "steps" {
+  when {
+    ticks 1
+    seat1: world.state.cell.set board a 1
+    ticks 1
+    seat1: world.state.cell.set board a 1
+    seat1: world.state.cell.set board b 0
+    ticks 1
+    seat1: world.state.cell.set board c 1
+    ticks 1
+  }
+  expect {
+    board.a == 1
+  }
+}

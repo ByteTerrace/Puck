@@ -103,8 +103,9 @@ public static partial class WorldSessionLevers {
             RenderScale = settings.RenderScale,
             UpscaleSharpness = settings.UpscaleSharpness,
             Temporal = settings.Temporal,
-            // A world that authors no style has nothing for the lever to switch, so nothing folds.
-            Toon = ((render.Toon is { } toon) && (settings.Toon != toon.IsOn)) ? (toon with { Enabled = settings.Toon }) : render.Toon,
+            // The lever switches only a complete style (ToonStyleDocument.ResolveDefault); a world with none, or with a
+            // disabled one that leaves its values out, renders continuous whatever the lever says, and saves as authored.
+            Toon = ((render.Toon is { IsComplete: true } toon) && (settings.Toon != toon.IsOn)) ? (toon with { Enabled = settings.Toon }) : render.Toon,
             SkyQuality = settings.SkyQuality,
             SkyFieldScale = settings.SkyFieldScale,
             DynamicResolution = settings.DynamicResolution,

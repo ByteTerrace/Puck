@@ -78,6 +78,11 @@ When you are the delegate:
   not. So a Codex review brief names `<worktree>/.claude/scratch/<lane>-findings.md`
   as the fallback. The lead creates that worktree, checks both paths when the
   lane ends, and copies the findings out.
+- The worktree isolation guard refuses a shell command it cannot prove stays
+  in the worktree: a compound line that names a path or command through a
+  variable, `cd`, a heredoc or a nested shell. Write the steps to a
+  `<lane>-*.sh` or `.py` scratch script and run it as one plain command; the
+  guard admits that.
 - Never write the lead's scratch checklists or ledger; `docs/plans/open-items.md` and the plans are repository documents, and you update them for what you deliver.
 - Before reporting, merge the integration branch's current tip into your branch
   and re-run your checks, except on a read-only brief or after a stop order.

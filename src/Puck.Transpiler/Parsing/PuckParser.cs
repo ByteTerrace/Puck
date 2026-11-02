@@ -249,6 +249,25 @@ public static partial class PuckParser {
             throw CreateException(context: context, message: "Unexpected end of input while expecting statement");
         }
 
+        if (TryParseAllow(allow: out var allow, context: context, diagnostics: diagnostics)) {
+            ConsumeSeparator(context: context);
+            SkipWhiteSpace(context: context);
+            if (cursor.Eof || (cursor.Current == '}')) {
+                const string Refusal = "'allow' covers the statement written after it, and none follows";
+
+                if (diagnostics is null) {
+                    throw new PuckParseException(Refusal, offset: startOffset, line: line, column: col) { Code = PuckDiagnosticCodes.AllowRefused };
+                }
+                diagnostics.ReportError(code: PuckDiagnosticCodes.AllowRefused, message: Refusal, span: new SourceSpan(startOffset, Math.Max(val1: 1, val2: (cursor.Offset - startOffset)), line, col));
+
+                return new ErrorStatementNode(Refusal, startOffset, Math.Max(val1: 1, val2: (cursor.Offset - startOffset)), line, col);
+            }
+
+            var covered = ParseStatement(context: context, diagnostics: diagnostics, schema: schema, vocabulary: vocabulary);
+
+            return ((allow is null) ? covered : (covered with { Allows = [allow, .. covered.Allows] }));
+        }
+
         try {
             return ParseStatementCore(context: context, diagnostics: diagnostics, schema: schema, vocabulary: vocabulary);
         } catch (PuckParseException ex) {
@@ -270,6 +289,43 @@ public static partial class PuckParser {
 
             return new ErrorStatementNode(ex.Message, startOffset, len, line, col);
         }
+    }
+    // `allow CODE "reason"` acknowledges one diagnostic over the statement that follows it. A property or block named
+    // `allow` (`allow: x`, `allow { }`) is not one: the keyword must be followed on its line by a code. An `allow` the
+    // compile cannot honour is refused by name and covers nothing (allow is null), and the statement still parses.
+    private static bool TryParseAllow(ParseContext context, DiagnosticBag? diagnostics, out AllowNode? allow) {
+        allow = null;
+
+        var cursor = context.Scanner.Cursor;
+        var start = cursor.Offset;
+
+        if (!TryMatchKeywordFollowedByName(admitted: NameForms.Identifier, context: context, keyword: "allow")) {
+            return false;
+        }
+
+        var (line, col) = GetLineAndColumn(buffer: context.Scanner.Buffer, offset: start);
+
+        _ = SkipSpacesOnLine(context: context);
+        _ = TryReadName(admitted: NameForms.Identifier, context: context, spelling: out _, text: out var code);
+        _ = SkipSpacesOnLine(context: context);
+
+        var reason = (TryReadName(admitted: NameForms.String, context: context, spelling: out _, text: out var text) ? text : null);
+        var span = new SourceSpan(start, (cursor.Offset - start), line, col);
+        var refusal = (!PuckDiagnosticCodes.Declares(code: code)
+            ? $"'allow {code}' names no diagnostic the compiler reports"
+            : (string.IsNullOrWhiteSpace(value: reason)
+                ? $"'allow {code}' needs a reason: write why the statement keeps what {code} reports, as 'allow {code} \"...\"'"
+                : null));
+
+        if (refusal is null) {
+            allow = new AllowNode(code, reason!, start, span.Length, line, col);
+        } else if (diagnostics is null) {
+            throw new PuckParseException(refusal, offset: start, line: line, column: col) { Code = PuckDiagnosticCodes.AllowRefused };
+        } else {
+            diagnostics.ReportError(code: PuckDiagnosticCodes.AllowRefused, message: refusal, span: span);
+        }
+
+        return true;
     }
     // Recovers a rule-body statement one level inside the rule's own '{', mirroring ParseStatement above. Recovering
     // here rather than letting a fault escape to ParseStatement's own catch matters: that catch resynchronizes
@@ -895,6 +951,28 @@ public static partial class PuckParser {
     // such as a rule group's body; null parses document statements.
     private static ForStatementNode ParseForStatement(ParseContext context, int startOffset, int line, int col, DiagnosticBag? diagnostics, string? schema = null, IDocumentVocabulary? vocabulary = null, Func<ParseContext, DiagnosticBag?, StatementNode?>? body = null) {
         var cursor = context.Scanner.Cursor;
+        var (item, index, sequence) = ParseForHead(context: context);
+        var statements = new List<StatementNode>();
+
+        SkipWhiteSpace(context: context);
+
+        while (!cursor.Eof && (cursor.Current != '}')) {
+            if (((body is null) ? ParseStatement(context: context, diagnostics: diagnostics, schema: schema, vocabulary: vocabulary) : body(arg1: context, arg2: diagnostics)) is { } statement) {
+                statements.Add(item: statement);
+            }
+            ConsumeSeparator(context: context);
+            SkipWhiteSpace(context: context);
+        }
+
+        if (!TryConsume(c: '}', context: context)) {
+            throw CreateException(context: context, message: "Expected '}' closing a 'for' body");
+        }
+
+        return new ForStatementNode(item, index, sequence, statements, startOffset, (cursor.Offset - startOffset), line, col);
+    }
+    // `item in sequence {` or `(item, index) in sequence {` after the `for` keyword, through the body's opening brace.
+    private static (string Item, string? Index, ExpressionNode Sequence) ParseForHead(ParseContext context) {
+        var cursor = context.Scanner.Cursor;
 
         SkipWhiteSpace(context: context);
 
@@ -942,23 +1020,7 @@ public static partial class PuckParser {
             throw CreateException(context: context, message: "Expected '{' starting a 'for' body");
         }
 
-        var statements = new List<StatementNode>();
-
-        SkipWhiteSpace(context: context);
-
-        while (!cursor.Eof && (cursor.Current != '}')) {
-            if (((body is null) ? ParseStatement(context: context, diagnostics: diagnostics, schema: schema, vocabulary: vocabulary) : body(arg1: context, arg2: diagnostics)) is { } statement) {
-                statements.Add(item: statement);
-            }
-            ConsumeSeparator(context: context);
-            SkipWhiteSpace(context: context);
-        }
-
-        if (!TryConsume(c: '}', context: context)) {
-            throw CreateException(context: context, message: "Expected '}' closing a 'for' body");
-        }
-
-        return new ForStatementNode(item, index, sequence, statements, startOffset, (cursor.Offset - startOffset), line, col);
+        return (item, index, sequence);
     }
     private static BlockNode ParseBlock(ParseContext context, string identifier, string? name, string? target, int startOffset, int line, int col, DiagnosticBag? diagnostics = null, string? schema = null, IDocumentVocabulary? vocabulary = null) {
         if (!TryConsume(c: '{', context: context)) {

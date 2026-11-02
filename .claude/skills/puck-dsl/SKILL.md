@@ -109,6 +109,16 @@ A document's `schema:` field selects its vocabulary, never the filename.
   when nothing crossed. An absent body reads every register as 0, so a claim of
   `0` there also claims presence
   ([testing a world](../../../docs/authoring/testing-a-world.md#crossing-into-another-document)).
+- **`allow CODE "why"` acknowledges a deliberate warning or note** over the
+  statement on the next line (a row, a `let`, a template call), never an error.
+  It changes nothing in the document; an unknown code, a missing reason or
+  nothing to cover is **PUCK124**. A diagnostic is reported against the file and
+  line that authored it, an imported library's or a basis's included, and
+  `puck lint <dir>` prints one placed in another file once.
+- **Spellings that mean the same compile to one document.** The
+  spelling-equivalence corpus
+  (`tests/Puck.World.Transpiler.Tests/SpellingEquivalence/`) holds each pair; a
+  new spelling lands with its pair, and a pair that fails is a compiler defect.
 - Gates (`when`, `if`, `expect`) accept ordinary expressions. Zero and absence
   are false; nonzero numeric values are true. `and` and `or` short-circuit;
   `not` negates truth. They yield Int 0/1 and bind below comparisons. Bitwise
@@ -190,7 +200,9 @@ puck test <path-or-dir>               # boots each test block headless, one verd
   generated is refused by name: those are written in source, never printed
   from a document (decision P1).
 - `puck format` prints `.puck` through `PuckPrinter` (two-space indent, lines
-  broken past 120 columns, no options); the language server and `puck
+  broken past 120 columns, no options). A list of numbers written one to a line
+  prints on one line when it fits and in filled rows otherwise; strings and
+  rows of several elements keep the author's lines; the language server and `puck
   decompile` print through the same printer. Formatting is a fixed point and
   never moves a compiled document; reformat sources after a printer change.
 - `puck lsp` serves completion, hover, symbols, formatting and diagnostics.

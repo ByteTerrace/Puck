@@ -662,6 +662,70 @@ principals are driven in-process. No GPU leg: the one door a headless run
 cannot reach is the local HUD mirror, which is unfiltered by design.
 `worlds/debug/disclosure-probe.puck` becomes the harness's smallest fixture.
 
+Step 0 drives the seat console, presentation and replica sessions. **Step 0b**
+adds the remaining principals, each as another writer into the same transcript
+so existing fixtures stand: a socket peer over QUIC, a mounted addon (a WASM
+guest that records what it receives), a federated traveller, and Observe
+revoked and regranted mid-run. The harness is not "green over the four games"
+until 0b has run; a step may land before 0b, but its doors on those principals
+are unproved until then.
+
+### The harness's fixture contract
+
+The harness is `puck disclosure <world>` ([CLI reference](../reference/cli.md#puck-disclosurethe-noninterference-harness)).
+A fixture is a world plus a `<stem>.disclosure.json` beside it
+(`puck.disclosure.fixture.v1`, read by `WorldDisclosureFixture` in
+`src/Puck.World.Server/WorldDisclosureFixture.cs`); the probe's
+`disclosure-probe.disclosure.json` is the worked example. A game fixture authors:
+
+- **A `schedule` in the world.** Its export tick ends every run of the pair; its
+  rows are the authored script for any seat (in the schedule's admitted verbs).
+  The observed seat's rows are compared; another seat's rows are inputs only,
+  identical in every world.
+- **`admission` rows for the sessions it observes.** One row per tier, its
+  `domain` the authority's name, `mode: FederatedAuthority` and an `Observe
+  all` grant; the probe names them `replica` and `presentation`.
+- **`observer`**: the seat (`seat1`..`seat4`) whose console session is compared.
+- **`variants`**, at least two: each a `name` and operator `steps`
+  (`{ "at": <tick>, "run": "<console line>" }`, run as the operator after the
+  completed tick, as `world.at` runs a line) that author that world's hidden
+  state: another value, a hidden cell present or absent, zero, one or two hidden
+  members, or a hidden-only change later in the run. The first variant is the
+  base the others are compared with, and the verb boots it twice: the second
+  boot is the control, which must compare equal, or the run is refused as noise.
+  Variants run the same number of installs when the fixture means to isolate
+  content; a variant with one extra hidden-only install (the probe's `late`)
+  puts the install's own timing (versions, delivery count) under test.
+- **`script`**: the observer's own lines (`{at, run}`, any verb, operator-only
+  verbs included so their refusal is compared too).
+- **`sessions`**: the authorities in-process sessions are admitted from.
+- **`fuzz`**: `seed`; `lines`, console lines the observer submits, drawn over
+  every verb the registry lets anyone run less the fixture's `exclude` and the
+  wall-time and resource verbs outside the guarantee
+  (`WorldDisclosureFixture.OutsideTheGuarantee`); `actions`, per session, drawn
+  over `query.state`, `query.where`, `query.properties`, `set`, `add` and
+  `remove`; the window `from`..`until`; and `words`, every row, key, placement,
+  seat and value name the principal can spell, hidden and absent ones included.
+  The words are the fixture's own, never read from either world.
+
+A game's pair script is its schedule plus `script`: a sealed bid placed, a card
+dealt and discarded, a whisper sent, a unit moved under fog. What a game cannot
+spell as a console line or a session action is a door the harness does not yet
+drive. Today that is a socket peer, a mounted addon, a federated traveller and
+an Observe revoked and regranted mid-run; each is added as a principal of the
+same transcript, so a fixture written now gains those doors without changing.
+
+On the probe the harness is red at these doors, each the cause a later step
+removes; the control pair agrees at every door:
+
+| Door | Pair | What differs | Step |
+|---|---|---|---|
+| `world.budget` (seat2) | any hidden member | the raw placement count and rows, dealt children included | 2 |
+| `world.placements` (seat2) | one or two hidden members dealt before `pub` | `pub`'s `dealSlot` and position (`offsets[1]`, `offsets[2]`) | 4 |
+| `world.projection` (seat2) | any hidden member | the presentation projection's byte count | 2 |
+| `deliver.definition` (presentation session), `deliver.state` (replica session) | a hidden-only install mid-run (`late`) | a delivery in one world and none in the other, with the replica's moved-row list | 1 |
+| `outcome.*` (both sessions) | `late` | the typed outcome's document version | 1, 3 |
+
 **No step opens a door before its protection lands.** The order puts the
 delivery protections (the cursor, recipient-scoped versions, the delta over
 images) first, since every later step changes what recipients are shown and

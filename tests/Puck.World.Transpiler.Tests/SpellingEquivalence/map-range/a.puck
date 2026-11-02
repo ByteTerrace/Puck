@@ -1,0 +1,14 @@
+// map(range(0, n), i => v) is the n values written out.
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+prototypes {
+  prototype "p" {
+    document {
+      shape Box "b" {
+        position: map(range(0, 3), i => 0)
+        scale: map(range(0, 3), i => 0.5)
+      }
+    }
+  }
+}
