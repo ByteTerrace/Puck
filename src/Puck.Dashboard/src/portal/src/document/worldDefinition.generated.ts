@@ -12801,7 +12801,7 @@ export type WorldStorageDefaults = {
 };
 
 /**
- * A tabletop's engagement: a seat standing within Radius of the board's centre presses Channel (its context button) and sits down at the table. The seat is captured (its avatar stands still) on a control placement:<id> application, its camera eases to a view of the whole board from the side it stands on, and the same button leaves. While engaged, the world's rules read the seat's channels as play (channel(...)), and the board reads where the seat points (board(pointer, <row>, <seat>)), whether the seat sits at it (board(engaged, …)) and from which side (board(side, …)), so the game itself stays document rules.
+ * A tabletop's engagement: a seat standing within Radius of the board's centre presses Channel (its context button) and sits down at the table, in the authored chair nearest it (Seats). The seat is captured (its avatar stands still) on a control placement:<id> application, its camera eases to a view of the whole board from that chair's side, and the same button leaves. While engaged, the world's rules read the seat's channels as play (channel(...)), and the board reads where the seat points (board(pointer, <row>, <seat>)), whether the seat sits at it (board(engaged, …)) and which chair's side it plays from (board(side, …)), so the game itself stays document rules.
  */
 export type WorldTabletopEngage = {
   /**
@@ -12824,6 +12824,20 @@ export type WorldTabletopEngage = {
    * The height above the topology's origin, in world units, of the plane a pointer ray meets when it picks a cell: the playing surface, so a cell under the pointer is the cell the eye sees. Non-negative.
    */
   surface?: number;
+  /**
+   * The chairs a seat sits in, each at one edge of the board facing across it; a seat sits in the one nearest where it stands (SeatSide). Absent, the table has a chair at each of its four edges. A board laid out for one player's view (a solitaire tableau, a lectern behind the board) names the chair it is laid out for, so its layout and controls read the right way round wherever the player walks up.
+   */
+  seats?: (WorldTabletopSeat | null)[] | null;
+};
+
+/**
+ * One chair at a tabletop: the edge of the board a seat sits at, given as the way it faces.
+ */
+export type WorldTabletopSeat = {
+  /**
+   * The chair's facing, in the convention of a spawn point's and a body's yaw: 0 faces -Z (the chair stands at the board's +Z edge), 90 faces -X, 180 faces +Z and 270 faces +X. A board's topology is world-axis-aligned, so a chair faces across one of its four edges: a whole number of quarter turns.
+   */
+  yawDegrees: number;
 };
 
 export type WorldTargetRegister = {

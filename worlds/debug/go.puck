@@ -101,12 +101,14 @@ placements {
       verdict: "goVerdict"
       // The context button within 2.5 m of the board's centre sits the seat down at the table; seated, the camera
       // looks down on the board from the seat's side and the pointer picks points 2 cm over the board's face.
+      // Two chairs face each other across the board, at its -Z and +Z edges.
       engage {
         channel: "interact"
         radius: 2.5
         pitch: 62
         margin: 0.12
         surface: 0.02
+        seats [{ yawDegrees: 180 }, { yawDegrees: 0 }]
       }
     }
     position: goTable
@@ -897,23 +899,13 @@ rule "go-seat-point" {
   goSeat.pointer = pointed
 }
 
-// A step moves the cursor one point in the seat's own frame: from the -Z side up the board is +row and right is
-// -column (the camera's right is its forward crossed with up), and each other side turns both a quarter.
+// A step moves the cursor one point in the seat's own frame (the standard seat library's step).
 rule "go-seat-step" {
-  local seatSide = board(side, goBoard, 1)
-  local cursorColumn = (
-    goSeat.cursor % goSize +
-    (goSeat.aheadEdge - goSeat.behindEdge) * (seatSide == 3 ? 1 : seatSide == 1 ? -1 : 0) +
-    (goSeat.rightEdge - goSeat.leftEdge) * (seatSide == 2 ? 1 : seatSide == 0 ? -1 : 0)
-  )
-  local cursorRow = (
-    goSeat.cursor / goSize +
-    (goSeat.aheadEdge - goSeat.behindEdge) * (seatSide == 0 ? 1 : seatSide == 2 ? -1 : 0) +
-    (goSeat.rightEdge - goSeat.leftEdge) * (seatSide == 3 ? 1 : seatSide == 1 ? -1 : 0)
-  )
-  when (goSeat.aheadEdge - goSeat.behindEdge) or (goSeat.rightEdge - goSeat.leftEdge)
+  local aheadStep = goSeat.aheadEdge - goSeat.behindEdge
+  local rightStep = goSeat.rightEdge - goSeat.leftEdge
+  when aheadStep or rightStep
   mode: Level
-  goSeat.cursor = clamp(cursorRow, 0, goSize - 1) * goSize + clamp(cursorColumn, 0, goSize - 1)
+  goSeat.cursor = seatStepCell(goBoard, goSeat.cursor, goSize, goSize, aheadStep, rightStep)
 }
 
 // The seat's turn, once the table has rested and matches the position.

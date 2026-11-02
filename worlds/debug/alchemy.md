@@ -37,7 +37,7 @@ Cells 1 to 31 hold the 31 element tokens (`alchemyToken1` to `alchemyToken31`)
 on inlaid shelf tiles tinted with each element's colour from
 [`elements.puck`](elements.puck), cell 0 is a brass reset tile at the south-west
 corner, and row 4 holds the cauldron (cells 35 and 36) between the left hand
-well (cell 34) and right hand well (cell 37). All 31 tokens share one rigid
+well (cell 37) and right hand well (cell 34). All 31 tokens share one rigid
 two-faced medallion geometry (`alchemyToken`): bright alchemical brass and ivory
 on the discovered (`+Y`) face and dark sealed iron on the undiscovered (`-Y`)
 face. Behind the cauldron on the north (`+Z`) edge of the table stands a wooden
@@ -55,8 +55,9 @@ keeps Alchemy unsettled until it is released and rests.
 ## Playing at the table
 
 Walk within 2.5 m of the workbench and press the context button (E, or the pad's
-RB): the Moth sits down and the camera frames the workbench and lectern from her
-side. `debug.go alchemy` stands her at the south (`-Z`) edge of the table,
+RB): the Moth sits down in the table's one chair, at the south (`-Z`) edge, and
+the camera frames the workbench and lectern from it. `debug.go alchemy` stands her
+at that edge of the table,
 facing the cauldron and lectern and close enough to sit. While she sits, the
 controls switch to the shared tabletop board page (`chess.puck`).
 
@@ -76,13 +77,13 @@ with itself (`Water` + `Water` → `Sea`).
 
 A cell's ordinal is `8 × row + column`, the column along `+X` and the row along
 `+Z`: cell 0 is the `-X, -Z` reset tile, cells 1 to 31 are the 31 elements in
-enum order (`Air` = 1 .. `House` = 31), cell 34 is the left hand well, and cell
-37 is the right hand well. Cell `(column, row)` is centred at
-`x = 64.51 + 0.14 × column`, `z = 30.32 + 0.14 × row` (so cell 34 is
-`(64.79, 9.905, 30.88)` and cell 37 is `(65.21, 9.905, 30.88)`). Element token
+enum order (`Air` = 1 .. `House` = 31), cell 37 is the left hand well, and cell
+34 is the right hand well (seated at the `-Z` edge, the seat's left is `+X`). Cell
+`(column, row)` is centred at `x = 64.51 + 0.14 × column`, `z = 30.32 + 0.14 × row`
+(so cell 37 is `(65.21, 9.905, 30.88)` and cell 34 is `(64.79, 9.905, 30.88)`). Element token
 `e` (`alchemyToken{e}`, `1..31`) is body `503 - e`, below `alchemyCursor` (body
 503), and seat 1 drives all 31 tokens, so posing a token over a hand well drops
-it in: `body.pose 64.79 9.97 30.88 0 0 0 500` drops `Fire` (`alchemyToken3`)
+it in: `body.pose 65.21 9.97 30.88 0 0 0 500` drops `Fire` (`alchemyToken3`)
 into the left hand well.
 
 | To | Console line |

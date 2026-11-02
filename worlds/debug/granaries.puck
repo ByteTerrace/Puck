@@ -60,12 +60,14 @@ placements {
       topology: "granaryGrid"
       // The context button within 2.5 m of the board's centre sits the seat down at the table; seated, the camera looks
       // down on the board from the seat's side and the pointer picks cells 2 cm over the board's face.
+      // One chair, at the -Z edge facing the lectern screen across the board.
       engage {
         channel: "interact"
         radius: 2.5
         pitch: 62
         margin: 0.12
         surface: 0.02
+        seats [{ yawDegrees: 180 }]
       }
     }
     position: granaryTable
@@ -684,22 +686,13 @@ rule "granary-seat-point" {
   granarySeat.pointer = pointed
 }
 
-// A step moves the cursor one cell in the seat's own frame, as the other tables do.
+// A step moves the cursor one cell in the seat's own frame (the standard seat library's step).
 rule "granary-seat-step" {
-  local seatSide = board(side, granaryBoard, 1)
-  local cursorColumn = (
-    granarySeat.cursor % granarySize +
-    (granarySeat.aheadEdge - granarySeat.behindEdge) * (seatSide == 3 ? 1 : seatSide == 1 ? -1 : 0) +
-    (granarySeat.rightEdge - granarySeat.leftEdge) * (seatSide == 2 ? 1 : seatSide == 0 ? -1 : 0)
-  )
-  local cursorRow = (
-    granarySeat.cursor / granarySize +
-    (granarySeat.aheadEdge - granarySeat.behindEdge) * (seatSide == 0 ? 1 : seatSide == 2 ? -1 : 0) +
-    (granarySeat.rightEdge - granarySeat.leftEdge) * (seatSide == 3 ? 1 : seatSide == 1 ? -1 : 0)
-  )
-  when (granarySeat.aheadEdge - granarySeat.behindEdge) or (granarySeat.rightEdge - granarySeat.leftEdge)
+  local aheadStep = granarySeat.aheadEdge - granarySeat.behindEdge
+  local rightStep = granarySeat.rightEdge - granarySeat.leftEdge
+  when aheadStep or rightStep
   mode: Level
-  granarySeat.cursor = clamp(cursorRow, 0, granarySize - 1) * granarySize + clamp(cursorColumn, 0, granarySize - 1)
+  granarySeat.cursor = seatStepCell(granaryBoard, granarySeat.cursor, granarySize, granarySize, aheadStep, rightStep)
 }
 
 // The cursor stands on its cell while the seat sits at the table, and rests inside the board otherwise.

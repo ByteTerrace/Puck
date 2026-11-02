@@ -127,9 +127,9 @@ let a guarded, undoable batch rearrange footprints
 ## Playing at the table
 
 Walk within 2.5 m of the board and press the context button (E, or the pad's RB):
-the Moth sits down and the camera looks over the board from her side.
-`debug.go granaries` stands her at the south (`-Z`) edge, facing the board and
-close enough to sit. While she sits, the controls are the shared tabletop board
+the Moth sits down in the table's one chair, at the south (`-Z`) edge facing the
+lectern, and the camera looks over the board from it. `debug.go granaries` stands
+her at that edge, close enough to sit. While she sits, the controls are the shared tabletop board
 page (`chess.puck`).
 
 | Device | Move the cursor | Stand up |

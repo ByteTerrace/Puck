@@ -286,7 +286,7 @@ public sealed partial class WorldRuleHost {
         return Host.Body(index: seat)?.ChannelReadComposed.SourceRay;
     }
     // $board:engaged|pointer|side: — one local seat at an engageable tabletop: whether its application set names the
-    // tabletop's placement, the cell its pointer ray meets on the playing surface, or the side its body stands on.
+    // tabletop's placement, the cell its pointer ray meets on the playing surface, or the side of the chair nearest its body.
     private long ReadBoardSeat(BoardSeatOperand operand) {
         switch (operand.Facet) {
             case BoardSeatFacet.Engaged:
@@ -313,7 +313,8 @@ public sealed partial class WorldRuleHost {
                     : -1L);
             default:
                 return ((Host.Body(index: operand.Seat) is { } body)
-                    ? WorldTabletopFrame.SideOf(
+                    ? WorldTabletopFrame.SeatSide(
+                        engage: operand.Engage,
                         position: body.FixedPosition,
                         topology: operand.Topology
                     )

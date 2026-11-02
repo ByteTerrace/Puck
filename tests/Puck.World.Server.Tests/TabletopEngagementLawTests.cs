@@ -248,9 +248,22 @@ public sealed class TabletopEngagementLawTests {
         var down = new FixedVector3(X: FixedQ4816.Zero, Y: -Full, Z: FixedQ4816.Zero);
 
         Assert.Equal(expected: new FixedVector3(X: FixedQ4816.FromInteger(value: 4L), Y: FixedQ4816.Zero, Z: Full), actual: WorldTabletopFrame.Centre(topology: topology));
-        Assert.Equal(expected: WorldTabletopFrame.SidePositiveX, actual: WorldTabletopFrame.SideOf(position: FixedVector3.FromVector3(value: new Vector3(x: 12f, y: 0f, z: 2f)), topology: topology));
-        Assert.Equal(expected: WorldTabletopFrame.SideNegativeX, actual: WorldTabletopFrame.SideOf(position: FixedVector3.FromVector3(value: new Vector3(x: -4f, y: 0f, z: 2f)), topology: topology));
-        Assert.Equal(expected: WorldTabletopFrame.SidePositiveZ, actual: WorldTabletopFrame.SideOf(position: FixedVector3.FromVector3(value: new Vector3(x: 4f, y: 0f, z: 3f)), topology: topology));
+        var everyEdge = new WorldTabletopEngage(Channel: "interact");
+        var facingEachOther = new WorldTabletopEngage(Channel: "interact", Seats: [new WorldTabletopSeat(YawDegrees: 180d), new WorldTabletopSeat(YawDegrees: 0d)]);
+        var oneChair = new WorldTabletopEngage(Channel: "interact", Seats: [new WorldTabletopSeat(YawDegrees: 180d)]);
+        var east = FixedVector3.FromVector3(value: new Vector3(x: 12f, y: 0f, z: 2f));
+        var west = FixedVector3.FromVector3(value: new Vector3(x: -4f, y: 0f, z: 2f));
+        var north = FixedVector3.FromVector3(value: new Vector3(x: 4f, y: 0f, z: 3f));
+        var eastNorth = FixedVector3.FromVector3(value: new Vector3(x: 12f, y: 0f, z: 1.5f));
+
+        Assert.Equal(expected: WorldTabletopFrame.SidePositiveX, actual: WorldTabletopFrame.SeatSide(engage: everyEdge, position: east, topology: topology));
+        Assert.Equal(expected: WorldTabletopFrame.SideNegativeX, actual: WorldTabletopFrame.SeatSide(engage: everyEdge, position: west, topology: topology));
+        Assert.Equal(expected: WorldTabletopFrame.SidePositiveZ, actual: WorldTabletopFrame.SeatSide(engage: everyEdge, position: north, topology: topology));
+        // With chairs authored, a seat sits in the one facing it most squarely, never at an edge that has none.
+        Assert.Equal(expected: WorldTabletopFrame.SidePositiveZ, actual: WorldTabletopFrame.SeatSide(engage: facingEachOther, position: eastNorth, topology: topology));
+        Assert.Equal(expected: WorldTabletopFrame.SidePositiveZ, actual: WorldTabletopFrame.SeatSide(engage: facingEachOther, position: north, topology: topology));
+        Assert.Equal(expected: WorldTabletopFrame.SideNegativeZ, actual: WorldTabletopFrame.SeatSide(engage: oneChair, position: north, topology: topology));
+        Assert.Equal(expected: WorldTabletopFrame.SideNegativeZ, actual: WorldTabletopFrame.SeatSide(engage: oneChair, position: east, topology: topology));
 
         // A slanted ray meets the surface, not the topology's origin plane: from (1, 2.5, 1) along (1, -1, 0) it lands
         // at x = 3 on the surface 0.5 up (cell 1), where the origin plane would have been x = 3.5.

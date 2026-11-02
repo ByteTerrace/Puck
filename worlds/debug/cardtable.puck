@@ -20,9 +20,11 @@ export read `card-back`, `card-s-a`, `card-s-2`, `card-s-3`, `card-s-4`, `card-s
 // the piles change (`kSync`), every card is read for its pile and its depth in it and posed at the matching slot of the
 // `kSlots` graph, lying flat, face up or face down. The seat plays through the same mailbox the console uses.
 //
-// Seated at the table's +Z edge, looking -Z, Klondike's top row runs left to right: stock, waste, a gap, four foundations
-// (suits in the order spades, hearts, clubs, diamonds) and below it the seven tableau columns, each fanning toward the
-// seat; FreeCell's is four free cells and the four foundations over its eight columns. The pointer, or the movement keys,
+// The table has one chair, at its -Z edge facing +Z (the engage block's `seats`), and both games are laid out for it: away
+// from the seat is +Z and its right is -X (its forward crossed with up, as the board view sees it). Seated there,
+// Klondike's top row runs across the far side from left to right: stock, waste, a gap, four foundations (suits in the
+// order spades, hearts, clubs, diamonds), and nearer the seat the seven tableau columns, each fanning toward it, every
+// face reading upright; FreeCell's is four free cells and the four foundations over its eight columns. The pointer, or the movement keys,
 // moves a cursor over a card; the pick button lifts the run from there, and again on another pile it plays the move. On
 // Klondike's stock it draws, or turns the waste over once the stock is empty.
 
@@ -37,8 +39,9 @@ let cardHalfTall = 0.0744
 let cardLayer = 0.0032
 
 // The pick grid: 0.02 m cells in 48 columns (six to a card column: FreeCell's eight columns fill it and Klondike's seven
-// stand centred between half a column of margin) and 54 rows counting from the far (-Z) edge toward the seat, so the whole
-// grid is 0.96 m by 1.08 m. The felt (1.08 m by 0.78 m, its far edge 6 cm past the grid's) is cut to a game in play, not to
+// stand centred between half a column of margin) and 54 rows, so the whole grid is 0.96 m by 1.08 m. The grid's cells run
+// +X and +Z like every board's, so its column 0 is at the seat's right and its row 0 at the seat: `cardAcross` and
+// `cardFarRow` count a cell's column from the seat's left and its row from the far edge, the order the piles are laid in. The felt (1.08 m by 0.78 m, its far edge 6 cm past the grid's) is cut to a game in play, not to
 // the longest fan a column could ever grow: a deal's seven-card fans end 13 cm short of its near edge, and a fan of ten
 // cards reaches it; deeper fans run on over the table's wood, and the pointer still picks them (the grid's depth). A cell
 // names the pile under it (`kBoard` for Klondike, `kBoardF` for FreeCell); a tableau column's depth is read off its row,
@@ -49,13 +52,19 @@ let cardWide = 48
 let cardDeep = 54
 let cardColumnPitch = 0.12
 let cardX0 = (0 - ((cardWide * cardCell) / 2))
-let cardZ0 = -0.42
+// The grid's far edge, 0.42 m beyond the table's origin, and its near corner.
+let cardFarZ = 0.42
+let cardZ0 = (cardFarZ - (cardDeep * cardCell))
 let cardCells = (cardWide * cardDeep)
-// The top row's cards fill the grid's first eight rows; the tableau's first card begins at the eleventh, so its fan's
-// card j shows its strip on rows 10 + 2j and 11 + 2j, and the deepest column (six face-down cards and a king to an ace)
-// ends on the last row.
-let cardTopRowZ = (cardZ0 + cardHalfTall + 0.004)
-let cardTableauZ = (cardZ0 + cardFan * 5 + cardHalfTall)
+let cardAcross = map(range(0, cardCells), i => (cardWide - 1) - i % cardWide)
+let cardFarRow = map(range(0, cardCells), i => (cardDeep - 1) - (i - i % cardWide) / cardWide)
+// A cell's row from the far edge, for a rule reading the pointed cell.
+function cardFarRowOf(cell) = (cardDeep - 1) - (cell - cell % cardWide) / cardWide
+// The top row's cards fill the first eight rows from the far edge; the tableau's first card begins at the eleventh, so its
+// fan's card j shows its strip on rows 10 + 2j and 11 + 2j, and the deepest column (six face-down cards and a king to an
+// ace) ends on the row nearest the seat.
+let cardTopRowZ = ((cardFarZ - cardHalfTall) - 0.004)
+let cardTableauZ = ((cardFarZ - cardFan * 5) - cardHalfTall)
 
 // The piles' slots: pile z holds up to kCaps[z] cards, its slots numbered from kBase[z] on. Zone 9 is unused; zone 0 is
 // the stock (52 before a deal), 1 the waste, 2 to 8 the tableau, 10 to 13 the foundations.
@@ -66,9 +75,9 @@ let kSlotCount = (kBase[13] + kCaps[13])
 let kColumn = [0, 1, 0, 1, 2, 3, 4, 5, 6, 0, 3, 4, 5, 6]
 let kTopRow = [1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1]
 let kTopRowZones = [0, 1, -1, 10, 11, 12, 13]
-// Where slot j of zone z stands: its column across the table, its row along it (tableau cards fan by one cell a card)
-// and a layer above the surface a card thick.
-let kSlotX = map(range(0, 14), z => (kColumn[z] - 3) * cardColumnPitch)
+// Where slot j of zone z stands: its column across the table from the seat's left (+X) to its right, its row along it
+// (tableau cards fan toward the seat) and a layer above the surface a card thick.
+let kSlotX = map(range(0, 14), z => (3 - kColumn[z]) * cardColumnPitch)
 
 // FreeCell's slots follow Klondike's in the graph: zones 0 to 3 the free cells, 4 to 7 the foundations and 8 to 15 the
 // columns, then the deck's 24 layers. Its top row stands over the same eight columns as its tableau.
@@ -76,7 +85,7 @@ let fCaps = [1, 1, 1, 1, 13, 13, 13, 13, 19, 19, 19, 19, 19, 19, 19, 19]
 let fBase = map(range(0, 16), z => kSlotCount + reduce(range(0, z), 0, (sum, k) => sum + fCaps[k]))
 let fDeckBase = (fBase[15] + fCaps[15])
 let fSlotCount = (fDeckBase + 24)
-let fSlotX = map(range(0, 16), z => ((z < 8 ? z : z - 8) - 3.5) * cardColumnPitch)
+let fSlotX = map(range(0, 16), z => (3.5 - (z < 8 ? z : z - 8)) * cardColumnPitch)
 
 // The deck's faces, in card order: key = suit * 13 + rank - 1, suits spades, hearts, clubs, diamonds.
 let kSuitCodes = ["s", "h", "c", "d"]
@@ -187,14 +196,16 @@ placements {
     board {
       occupancy: "kBoard"
       topology: "kGrid"
-      // The context button within 2.5 m of the board's centre sits the seat down at the table; seated, the camera looks
-      // down on the board from the seat's side and the pointer picks cards 2 cm over the surface.
+      // The context button within 2.5 m of the board's centre sits the seat down in the table's one chair, at its -Z edge
+      // facing +Z, wherever it stands; seated, the camera looks down on the board from the chair and the pointer picks
+      // cards 2 cm over the surface.
       engage {
         channel: "interact"
         radius: 2.5
         pitch: 62
         margin: 0.12
         surface: 0.02
+        seats [{ yawDegrees: 180 }]
       }
     }
     position: cardTable
@@ -244,10 +255,10 @@ grants: concat(
   map(range(0, 52), k => { capability: Drive, grantee: "seat1", subject: $"body:{cardsTop - 1 - k}" })
 )
 
-// At the table's +Z edge, 1.5 m from the board's centre and facing -Z across it, inside the engage radius: the context
-// button sits her down.
+// At the table's chair, its -Z edge, 1.5 m from the board's centre and facing +Z across it, inside the engage radius: the
+// context button sits her down.
 spawnPoints [
-  { id: "cards", position [cardTable[0], galleryFloor[2], (cardTable[2] + 1.5)], yawDegrees: 0 }
+  { id: "cards", position [cardTable[0], galleryFloor[2], (cardTable[2] - 1.5)], yawDegrees: 180 }
 ]
 
 prototypes {
@@ -255,7 +266,7 @@ prototypes {
     id: "cardTable",
     cloth: "#1F5A38",
     top: [0.8, 0.05, 0.75],
-    feltAt: [0, 1.3045, -0.09],
+    feltAt: [0, 1.3045, 0.09],
     felt: [0.54, 0.0045, 0.39]
   )
 
@@ -316,7 +327,7 @@ state {
           centre [
             cardTable[0] + kSlotX[z],
             cardTable[1] + cardSurface + 0.0018 + cardLayer * j,
-            cardTable[2] + (kTopRow[z] == 1 ? cardTopRowZ : cardTableauZ + cardFan * j)
+            cardTable[2] + (kTopRow[z] == 1 ? cardTopRowZ : cardTableauZ - cardFan * j)
           ]
         }))),
         reduce(range(0, 16), [], (cells, z) => concat(cells, map(range(0, fCaps[z]), j => {
@@ -324,7 +335,7 @@ state {
           centre [
             cardTable[0] + fSlotX[z],
             cardTable[1] + cardSurface + 0.0018 + cardLayer * j,
-            cardTable[2] + (z < 8 ? cardTopRowZ : cardTableauZ + cardFan * j)
+            cardTable[2] + (z < 8 ? cardTopRowZ : cardTableauZ - cardFan * j)
           ]
         }))),
         map(range(0, 24), j => {
@@ -354,9 +365,9 @@ state {
       domain: cellsOf(topology: kGrid)
       cells: map(range(0, cardCells), i => {
         key: $"{i}",
-        value: (i % cardWide < 3 or i % cardWide > 44) ? -1 :
-          (((i - i % cardWide) / cardWide) <= 7 ? kTopRowZones[(((i % cardWide) - 3) - ((i % cardWide) - 3) % 6) / 6] :
-            2 + (((i % cardWide) - 3) - ((i % cardWide) - 3) % 6) / 6)
+        value: (cardAcross[i] < 3 or cardAcross[i] > 44) ? -1 :
+          (cardFarRow[i] <= 7 ? kTopRowZones[((cardAcross[i] - 3) - (cardAcross[i] - 3) % 6) / 6] :
+            2 + ((cardAcross[i] - 3) - (cardAcross[i] - 3) % 6) / 6)
       })
     }
     row {
@@ -368,7 +379,7 @@ state {
       domain: cellsOf(topology: kGrid)
       cells: map(range(0, cardCells), i => {
         key: $"{i}",
-        value: (((i - i % cardWide) / cardWide) <= 7 ? 0 : 8) + ((i % cardWide) - (i % cardWide) % 6) / 6
+        value: (cardFarRow[i] <= 7 ? 0 : 8) + (cardAcross[i] - cardAcross[i] % 6) / 6
       })
     }
 
@@ -636,7 +647,7 @@ rule "klondike-seat-presses" {
 rule "klondike-seat-point" {
   local pointed = board(pointer, kBoard, 1)
   local pile = kBoard[pointed] ?? -1
-  local fanned = maximum((pointed - pointed % cardWide) / cardWide, 10) - 10
+  local fanned = maximum(cardFarRowOf(pointed), 10) - 10
   when solitaire.table == 1 and board(engaged, kBoard, 1) == 1
   mode: Level
   if pointed >= 0 and pointed != kSeat.pointer and pile >= 0 {
@@ -648,8 +659,8 @@ rule "klondike-seat-point" {
   kSeat.pointer = pointed
 }
 
-// A step moves the cursor one pile across, or between the top row and the tableau, onto a pile's last card. Seated at
-// the +Z edge, forward is away from the seat (to the top row) and right is +X.
+// A step moves the cursor one pile across, or between the top row and the tableau, onto a pile's last card. The piles
+// are laid out in the seat's own frame, so ahead is toward the top row and right is the next pile to the seat's right.
 rule "klondike-seat-step" {
   local across = kSeat.rightEdge - kSeat.leftEdge
   local away = kSeat.aheadEdge - kSeat.behindEdge
@@ -822,7 +833,7 @@ rule "klondike-seat-held-parked" {
 rule "freecell-seat-point" {
   local pointed = board(pointer, kBoard, 1)
   local pile = kBoardF[pointed] ?? -1
-  local fanned = maximum((pointed - pointed % cardWide) / cardWide, 10) - 10
+  local fanned = maximum(cardFarRowOf(pointed), 10) - 10
   when solitaire.table == 2 and board(engaged, kBoard, 1) == 1
   mode: Level
   if pointed >= 0 and pointed != kSeat.pointer and pile >= 0 {
