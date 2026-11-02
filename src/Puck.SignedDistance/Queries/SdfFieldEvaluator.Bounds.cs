@@ -792,7 +792,13 @@ public sealed partial class SdfFieldEvaluator {
             _ => FixedInterval.Min(first: current, second: candidate),
         };
     }
-    // BlendSmoothUnion over intervals: the h ≤ 0 select joins both arms wherever the box reaches both.
+    // BlendSmoothUnion over intervals. The exact polynomial smooth minimum rises with each operand (its gradient is
+    // (h, 1 − h)), so over the box it lies between its values at the operands' lower ends and at their upper ends, and
+    // the point blend lies within its rounding allowance r of the exact one (SmoothBlendRoundingRaws): the answer is the
+    // point blend at those two corners widened by 2r, so a chain of smooth unions widens by 4r a blend. The operation-for-
+    // operation hull (the h ≤ 0 select joining both arms wherever the box reaches both) reads b − a twice and doubles its
+    // width at every blend, which leaves the carrier over a few trees' smooth unions and with it collapses the frame; it
+    // is kept only as the proof that no step of the point blend leaves the carrier, and the two are intersected.
     private static FixedInterval SmoothUnionBounds(FixedInterval a, FixedInterval b, FixedQ4816 k) {
         var h = FixedInterval.Clamp(
             value: (Point(value: Half) + ((Point(value: Half) * (b - a)) / Point(value: k))),
@@ -806,9 +812,28 @@ public sealed partial class SdfFieldEvaluator {
             : ((h.Lower > FixedQ4816.Zero)
                 ? lerp
                 : FixedInterval.Union(first: b, second: lerp)));
+        var stepped = (blended - ((Point(value: k) * h) * oneMinusH));
 
-        return (blended - ((Point(value: k) * h) * oneMinusH));
+        if (stepped.IsUnbounded) {
+            return stepped;
+        }
+
+        var rounding = (2L * SmoothBlendRoundingRaws(k: k));
+
+        return Intersect(
+            first: stepped,
+            second: Within(
+                lower: (((Int128)BlendSmoothUnion(a: a.Lower, b: b.Lower, k: k).Value) - rounding),
+                upper: (((Int128)BlendSmoothUnion(a: a.Upper, b: b.Upper, k: k).Value) + rounding)
+            )
+        );
     }
+    // The interval between two raw ends, each held to the carrier: every point answer lies in the carrier, so clamping an
+    // end that bounds them keeps it a bound.
+    private static FixedInterval Within(Int128 lower, Int128 upper) => new(
+        lower: FixedQ4816.FromRawBits(value: ((long)Int128.Clamp(value: lower, min: FixedQ4816.MinValue.Value, max: FixedQ4816.MaxValue.Value))),
+        upper: FixedQ4816.FromRawBits(value: ((long)Int128.Clamp(value: upper, min: FixedQ4816.MinValue.Value, max: FixedQ4816.MaxValue.Value)))
+    );
     // SampleCells over a box: walked exactly when the box stays inside one lattice cell on every axis, otherwise bounded by
     // the reach of the two nearest features (every feature offset lies within 1/2 + |randomness|/2 of its cell's centre, and
     // the second nearest is no farther than the nearer of two adjacent cells' features).

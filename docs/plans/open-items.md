@@ -1042,6 +1042,20 @@ Remaining:
   (from: field-contact)
 - The terrain pass's step 5 face check (58°) is not yet run on the certified
   solve. (from: field-contact)
+- [medium] `world.collision.probe` (`FixedFieldContactSolver.Probe`, through
+  `FixedColliderField.TryMeasure`) answers nothing at 36 of 105 points of a
+  1 m grid around a lawn flat-crown tree (x 6 to 20, y 0.5 to 6.5, z -27.3 in
+  the debug world), and beside a crown it can read the floor 6 m below instead
+  of the crown 0.3 m away. Contact resolution does not read it; the measure's
+  projection and bracketing need a look against the Superellipsoid's
+  lower-bound field. (from: far-hit)
+- [medium] The Superellipsoid's field (`SdfFieldEvaluator`, `mapCore`) is a
+  1-Lipschitz lower bound whose far value is about its least radius over its
+  greatest times the true distance (0.24 for a 2.3 × 0.55 m crown): a sphere
+  cast accepts a hit up to four eye radii from a flat crown, and the cull
+  certificates (`TryShapeSphere`) cover no Superellipsoid, so no tree instance
+  is ever skipped. A maximum with the bounding sphere's distance keeps the
+  zero set and tightens the far field in both interpreters. (from: far-hit)
 
 ### Transfers, federation and server
 
@@ -2691,22 +2705,6 @@ movement-facing scheme returns.
   the room-first `fade` hides her, the design working as built).
 - The tight-space camera course's three-up `camera-compare` layout and a live
   mode toggle on the Debug page remain to author (`camera-course.puck`).
-- [high] Solid copies of an unscoped flat-crown tree (the standard's
-  `flatCrownTree` without its relief noise: a trunk, three yawed Capsule
-  branches and six flat `SmoothUnion` Superellipsoid crowns) made the chase
-  camera's clearance read an obstruction with nothing near: at the stage
-  `world.view.camera` read `boom=2.144/4.2 clearance=shortened`, and at
-  (0, 0, 150), (-150, 0, 0) and (60, 0, -100) the eye sat on the target. With
-  the lawn's solids off it read `clearance=open` at 4.012; bisecting by kind
-  with `world.reload` left the flat crowns (oak and boulder solids alone kept
-  it open or nearly so), and straightening their branches or thickening their
-  crowns live did not clear it. The clearance sphere-casts the presentation
-  field of every solid placement (`WorldCameraClearance.cs:186`, built at
-  `WorldFramePresenter.cs:480-511`), so one creation's field poisons the
-  camera valley-wide. The lawn keeps the trees in one scope with a 2.5 cm
-  relief; find why the unscoped creation's field answers a hit far from it
-  (a sphere cast through the fixed-point evaluator with smooth unions joining
-  the global accumulator is the first suspect). (from: c1-groundcover)
 
 ### Temporal shimmer and cadence flicker
 
