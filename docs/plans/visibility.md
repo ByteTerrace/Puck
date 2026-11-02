@@ -366,6 +366,20 @@ documentation warns of deforming geometry
 and a cached 2048² D32 layer is 16 MiB a cascade before its copy, so caching
 waits for evidence.
 
+**With the transmission term** ([transmission](transmission.md#v5-caster-culling-and-the-two-phase-update)):
+a cascade holds the nearest surface's depth and body identity and a peel of
+it keyed by identity, and a wrapped receiver turned from the light reads the
+peel. The two-phase update applies to the depth and identity pass alone, with
+the light-space occlusion pyramid built from that depth; the peel runs once
+after both phases, over every box-kept draw, because a closer surface found
+in phase two makes phase one's depth the correct second layer and no redraw
+of the new surface can promote it. A caster wholly behind the first layer's
+pyramid may be dropped from the depth pass and never from the peel, and no
+earlier frame's second layer may cull the peel: the peel's target reports
+nothing about what became a second surface. The receiver mask and the box
+cull apply to both passes alike, and a cached cascade caches all three
+images together.
+
 ## What serves authors
 
 | Decision | Any density | Mostly unique geometry | Huge single objects | Animated and skinned | Portals and nested views | Camera cuts |
