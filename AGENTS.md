@@ -85,22 +85,24 @@ agent works in that mode by default, without asking:
   where running cannot show the behavior and the test will outlive the next
   rewrite. An existing test that a change breaks is updated or deleted in that
   change, never preserved as a constraint.
+- In force now: "Unreached" is not "unwanted" (the owner's ruling). A product
+  capability (capture, input devices, audio or speech, probes, a world or
+  exhibit) that nothing calls yet is wired or covered; ask the owner before
+  deleting one. Exact-output hashes and recorded artifacts that prove real
+  behaviour (render floors over committed test ROMs, determinism replay
+  hashes) are worth keeping. Eradication is for ledgers, dead internals and
+  duplicates, not for its own sake.
 - Suspended during the refactoring campaign above. The owner's target for the
-  suite: the smallest set of tests that reaches 100%
-  line coverage, plus a short keep-list of invariant tests the owner approves
+  suite is the smallest set of tests that reaches 100% line coverage. It also
+  includes a short keep-list of invariant tests the owner approves
   (determinism replay hashes, exact fixed-point results), which coverage alone
   cannot see. Dead internals, duplicates and ledgers that no test and no live
-  world reaches are deleted, not tested. "Unreached" is not "unwanted" (the
-  owner's ruling): a product capability (capture, input devices, audio or
-  speech, probes, a world or exhibit) that nothing calls yet is wired or
-  covered; ask the owner before deleting one. Exact-output hashes and recorded
-  artifacts that prove real behaviour (render floors over committed test
-  ROMs, determinism replay hashes) are worth keeping. Eradication is for
-  ledgers, dead internals and duplicates, not for its own sake.
-  CI checks the 100% on every push to `main` (`puck artifacts coverage`, the
-  `coverage` job in `azure.yml`, outside what deploy waits for); code only
-  real hardware reaches (a GPU, or a session's real mouse and foreground
-  window) is left out through one list, `build/CoverageHardwareOnly.txt`.
+  world reaches are deleted, not tested. The `coverage` job in `azure.yml`
+  (`puck artifacts coverage`) still runs on every push to `main` as a report.
+  Deploy does not wait for it, and while the target is suspended a red result
+  holds nothing back. Code only real hardware reaches (a GPU, or a session's
+  real mouse and foreground window) is left out through one list,
+  `build/CoverageHardwareOnly.txt`.
 - The owner's velocity rulings:
   - Edit to running: under 30 seconds from changing a C# or HLSL file in the
     engine to seeing it in the running debug world.
@@ -368,7 +370,8 @@ Workflows orchestrate verbs and bash composite actions; harness hooks are the sc
 ## When you are the delegate
 
 Every lane works under the [`delegate` skill](.claude/skills/delegate/SKILL.md):
-Claude's project agents preload it, and a Codex or Antigravity brief names it
+Claude's writing and review agents preload it (the read-only `scout` does not),
+and a Codex or Antigravity brief names it
 to read first. These rules hold for every family whatever it loads:
 
 - Merge the integration tip into your own branch before reporting and re-run

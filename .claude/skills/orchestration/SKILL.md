@@ -151,7 +151,7 @@ brief:
 
 - for a Codex or Antigravity lane, an instruction to read the
   [`delegate` skill](../delegate/SKILL.md) before anything else (Claude's
-  project agents preload it); it owns the lane's own working contract.
+  agents other than `scout` preload it); it owns the lane's own working contract.
 
 When a lane demonstrates stale-rule behavior, the lead starts a fresh session
 before launching its continuation. Editing a skill alone does not require a new session.
@@ -648,7 +648,7 @@ Every build, a Codex brief's included, passes `-nodeReuse:false`
 
 ## Select models and route findings
 
-All three families implement, and model selection is by fit. Choose the model and effort per lane by fit: put the strongest available
+All three families implement. Choose the model and effort per lane by fit: put the strongest available
 model on subtle or correctness-heavy work. Codex's two models, Astra
 (`gpt-6-astra`, the frontier model) and Sol (`gpt-6.1-sol`, the workhorse), are
 both free to use and encouraged, for implementation and for review-and-fix
@@ -874,15 +874,15 @@ and not a spiral:
   in a decision (pruning's three rounds were all hostile same-user
   interleavings, outside the install root's model) or have a design memo
   written and reviewed before any more code (the companion custody rework).
-- "Conserve Fable" means no new principal (Fable) lane without the owner's
-  go-ahead, however hard the problem: route it to specialist (Opus) and say so.
-  Twice the lead started principal lanes after that instruction, and the owner
-  found Fable past half its usage. The owner's standing go-ahead: Fable may
-  design (a design memo, an architecture, a review of a
-  design) and review, sparingly, above all when repeated review rounds point
-  at a fundamental flaw rather than a list of fixes, as a way to climb a
-  steep hill; it never does the hard labor of implementing,
-  measuring or bisecting, which goes to specialist or implementer.
+- "Conserve Fable" (the owner's standing rule): a principal (Fable) lane
+  designs or reviews, sparingly:
+  - a design memo, an architecture, or a review of a design;
+  - above all, a review when repeated rounds point at a fundamental flaw
+    rather than a list of fixes, as a way to climb a steep hill.
+
+  It never does the hard labor of implementing, measuring or bisecting, which
+  goes to specialist or implementer. Anything else hard routes to specialist
+  (Opus), and the lead says so.
 - Before putting a semantics question to the owner, look for the decision it
   follows from (`docs/decisions/`, the plan's requirements). A behaviour a
   recorded contract implies is derived, written down with its derivation, and

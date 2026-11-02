@@ -441,6 +441,23 @@ A change that adds teaching to a skill or to a preloaded agent skill
 A review of a skill's text is not an evaluation of whether agents behave
 better with it.
 
+The ablation compares the skill with no skill, which shows the skill as a
+whole helps. It does not show whether an edit helped. To measure an edit, run
+the same cases against the skill before and after it:
+
+1. Check the earlier revision out as a detached worktree.
+2. Copy the current `evals/` into it, so both sides run identical cases.
+3. Run that tree's with-arm (`--ablation none`) beside the current tree's
+   run.
+
+The edit's effect is the difference between the two with-arms. Run both
+from frozen detached worktrees, never the tree you are editing, because the
+eval reads the skill live.
+
+The lead runs suites, as with any measurement. The lane hook refuses every
+`claude` launch from a lane, including `plugin eval`, so a lane writes cases
+and the lead runs them.
+
 `claude plugin eval .claude/skills/<name>` runs a skill's `evals/` cases
 ([plugin evals](https://code.claude.com/docs/en/plugin-evals)). A bare skills
 directory resolves as a plugin, and the run adds a no-skill baseline arm.

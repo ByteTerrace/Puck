@@ -34,7 +34,7 @@ carrier can diverge in rounding, overflow or floor and ceiling convention.
 | A rotation | `FixedComplex` (2D), `FixedQuaternion` (3D), `FixedRigidTransform` (rotation plus translation) | Hand-built matrices |
 | A world position beyond a small scene | `FixedPosition` (cell indices plus a local offset) | A bare `FixedVector3`, which is a displacement |
 | A rate integrated over ticks | `FixedRateAccumulator` / `FixedVector3RateAccumulator` | A per-second velocity pre-rounded into one per-tick delta |
-| A target that eases or overshoots | `SecondOrderDynamics` | `SecondOrderFollower`, the presentation-only float twin |
+| A target that eases or overshoots | `SecondOrderDynamics` | `SecondOrderFollower3` and `SecondOrderFollower4`, the presentation-only float twins |
 | Lerp or clamp | `FixedQ4816.Lerp` / `.Clamp`, `FixedVector3.Lerp`, `FixedQuaternion.Slerp` | A hand-rolled `a + (b - a) * t` |
 | Sequential random draws | `Pcg32XshRr` | `System.Random`, `Random.Shared` |
 | A bounded index over a fallible or budgeted raw-word source | `BoundedRandomSampling.TrySampleRange` (or `TrySampleWide` past 32 bits) over an `IRawWordSource`, with a caller-set attempt budget; it counts every raw word and refuses on exhaustion. `TryMap` is the per-word step | A multiply-high map without rejection; a second Lemire implementation |
