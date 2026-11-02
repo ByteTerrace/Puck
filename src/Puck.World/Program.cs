@@ -262,7 +262,11 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
     }
     // Before any service resolves the allocator, so every native block the run owns carries the guard.
     if (parseResult.GetValue(option: debugAllocatorOption)) {
-        Puck.Memory.Allocator.Current = new Puck.Abstractions.Memory.GuardedAllocator(inner: Puck.Memory.Allocator.Current);
+        var guard = new Puck.Abstractions.Memory.GuardedAllocator(inner: Puck.Memory.Allocator.Current);
+
+        Puck.Memory.Allocator.Current = guard;
+        // The blocks still quarantined at exit are checked too; collection checks them sooner (host.memory collect).
+        AppDomain.CurrentDomain.ProcessExit += (_, _) => Console.Error.WriteLine(value: $"[memory.guard] exit: {guard.Verify()} quarantined native blocks unwritten since their free");
         Console.Error.WriteLine(value: "[memory.guard] native allocations are guarded: double frees, overruns and writes after free end the run");
     }
     var connectTarget = parseResult.GetValue(option: connectOption);

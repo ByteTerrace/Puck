@@ -1156,7 +1156,10 @@ unverified when no device run exists.
   word is zero is this case. Native heap misuse (a double free, an overrun, a
   write after free) is the other: boot `Puck.World --debug-allocator`, which
   wraps the allocator in `GuardedAllocator` and ends the run at the misuse with
-  `[memory.guard]`, the block and the stack that freed it.
+  `[memory.guard]`, the block and the stack that freed it. A write into a freed
+  block is found when the block leaves the 1 GiB quarantine, on
+  `host.memory collect`, or at exit, which prints how many quarantined blocks
+  it checked.
 - Incremental builds can retain corrupted reference assemblies. Confirm
   suspicious behavior in a fresh worktree before attributing it to source
   changes, then clean only the affected `bin`/`obj` directories.
