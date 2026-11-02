@@ -224,6 +224,8 @@ fixtures moved (canaries, parity, determinism, the counters workloads other
 than the debug world's, the qualification profile and the world baselines)
 keep their verbs and wait, unrun, until the owner calls for qualification; the
 [open items](../plans/open-items.md#quarantined-gates) record what each covered.
+One live canary remains, `tests/Puck.World.Canaries/self-update`, over the
+debug world.
 A quarantined world does not return (the owner's ruling): what it has that the
 debug world lacks is ported into the debug world
 ([the port packet](../plans/open-items.md#port-the-experimental-worlds-missing-features)),

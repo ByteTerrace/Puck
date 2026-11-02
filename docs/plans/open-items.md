@@ -2614,8 +2614,7 @@ brief's priorities ([security review](../development/security-review.md)).
   each review found more. [The disclosure plan](disclosure.md) is the structural
   fix; its [findings table](disclosure.md#the-findings-this-plan-answers) keeps
   every finding's file, line and step, and its [build order](disclosure.md#the-build-order)
-  is the queue; the adversarial review of its first draft is answered in its
-  [review table](disclosure.md#the-design-reviews-findings). Open by step:
+  is the queue. Open by step:
   - Step 0: the noninterference harness (`puck disclosure`) and the four
     authored games (`worlds/debug/auction.puck`, `shedding.puck`,
     `deduction.puck`, `skirmish.puck`, each with a `<game>-disclosure.puck`

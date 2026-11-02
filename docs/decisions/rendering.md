@@ -14,14 +14,12 @@ Their observable guarantees are preserved, not every current API shape.
 
 The frame does not evaluate SDF bytecode per pixel: every view rasterizes the
 meshes the residency bakes the program into, and the interpreter's frame
-passes, kernels and levers are deleted. The interpreter's ceiling was measured. With the interpreter compiled away
-entirely, the upper bound of per-world specialization,
-the avatar-free debug workload still spent 8.6 ms in primary and 54 ms in shadow
-on the RTX 2060 against a 16.7 ms frame. On the debug world at `high`, cutting
-primary march steps fourfold and shadow steps twofold cut their time only
-1.4-fold (primary 47 to 33 ms, shadow 123 to 85 ms, 4.9 to 6.8 FPS), because
-the remaining cost is the fixed price of each program walk. No tuning of the
-walk reaches the frame-rate bar.
+passes, kernels and levers are deleted. The interpreter's ceiling was measured:
+even with the interpreter compiled away entirely (the upper bound of per-world
+specialization) the primary and shadow passes stayed several times over the
+RTX 2060's frame, and cutting march steps cut their time far less than in
+proportion, because the remaining cost is the fixed price of each program walk.
+No tuning of the walk reaches the frame-rate bar.
 
 Worlds are mostly static and sculpted in the editor, so evaluation belongs at
 edit time, as in the shipped SDF engines that hold 60 FPS on weaker hardware.
@@ -31,9 +29,9 @@ produced: baked meshes, rasterized with shadow maps. Two bake targets were
 built and measured on the debug world. The baked-mesh path drew it in about
 9 ms of GPU time with the geometry intact. A sparse distance volume marched by
 texture reads took about 10.6 ms, but lost the scene's materials and broke the
-avatar's composite. The frame-rate bar is still read on a quiet machine:
-the whole frame holds 16.7 ms worst-case on the RTX 2060 at `high`,
-1280×900. Interpreter tuning stops; the specialization plan is withdrawn.
+avatar's composite. The frame-rate bar is read on a quiet machine
+([below](#limits-price-the-mesh-pipeline-not-the-interpreter)). Interpreter
+tuning stops; the specialization plan is withdrawn.
 Curvature shading, the field's partial silhouette coverage and per-pixel
 material blending at smooth seams do not survive the bake: the mesh carries no
 curvature, a rasterized pixel is covered or not, and the bake point-samples a
@@ -74,9 +72,9 @@ the lead settled the points where they differed.
 - **Machine budgets are bytes.** Mesh residency, the geometry cache and brick
   pools are sized from the machine and evicted by size and age, never cleared
   wholesale and never refused on a miss.
-- **Performance is read, not ledgered.** At the highest quality the RTX 2060
-  and RTX 4070 hold 60 FPS, every frame under 16.7 ms, and the Steam Deck holds
-  45 FPS, every frame under 22.2 ms. Read the worst frame on a quiet machine,
+- **Performance is read, not ledgered.** The targets at the highest quality:
+  the RTX 2060 and RTX 4070 at 60 FPS, every frame under 16.7 ms, and the Steam
+  Deck at 45 FPS, every frame under 22.2 ms. Read the worst frame on a quiet machine,
   with GPU counts beside it. A lower tier, a coarser snap or a frame of latency
   is never the fix for a missed bar.
 
