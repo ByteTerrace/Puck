@@ -42,6 +42,7 @@ public sealed class WorldAuthorityEndpoint : IDisposable {
                 );
             }
         }
+        public Guid NextOperationId(Principal principal) => inner.NextOperationId(principal: principal);
         public long SubmitEnvelope(WorldSubmissionPayload payload, Principal principal) => (retired.IsCancellationRequested
             ? 0L
             : inner.SubmitEnvelope(

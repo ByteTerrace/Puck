@@ -662,13 +662,61 @@ principals are driven in-process. No GPU leg: the one door a headless run
 cannot reach is the local HUD mirror, which is unfiltered by design.
 `worlds/debug/disclosure-probe.puck` becomes the harness's smallest fixture.
 
-Step 0 drives the seat console, presentation and replica sessions. **Step 0b**
-adds the remaining principals, each as another writer into the same transcript
-so existing fixtures stand: a socket peer over QUIC, a mounted addon (a WASM
-guest that records what it receives), a federated traveller, and Observe
-revoked and regranted mid-run. The harness is not "green over the four games"
-until 0b has run; a step may land before 0b, but its doors on those principals
-are unproved until then.
+The oracle is the recipient's own stream. A transcript (`WorldDisclosureTranscript`)
+is one ordered stream of raw events per recipient, each recorded at the boundary
+where it leaves the authority for that recipient (a session's sink, a
+submission's completion, a console line's answer as its handler returned it, the
+edit echo, a stream's attach and end with its cause) and stamped with the tick
+the run's clock reads as it arrives, never reconstructed from the input that
+caused it. Every field is encoded whole: a snapshot as the federation wire
+encodes it (`WorldFederationCodec.EncodeSnapshot`, so vector components, body
+colours and input epochs are bytes), a typed outcome as the peer wire's
+Completion lane does (`WorldPeerWireFormat.EncodeResult`, operation id, actor,
+digest, watermark and version included), a document delivery as its version,
+stamp and canonical JSON, console text with its line breaks. The one
+normalization is the named run-local nonce, a server's activation id
+(`WorldDocumentVersion.Activation`), replaced by its order of first appearance.
+The edit echo's connection and correlation ids are left out, not normalized:
+the in-process transport mints them before the world sees the submission, from
+one counter the observed seat shares with the variant's operator steps, so they
+count the run's inputs (a variant with an extra step shifts every later one)
+and carry nothing of its state.
+The comparison (`WorldDisclosureComparison`) compares each recipient's whole
+stream, so an event at another tick, in another order across doors, or
+missing, differs as another byte does; grouping by door is the report's aid.
+Operation ids are seeded per principal (`WorldOperationIds`, through the
+console's `LoopbackTransport` and the sessions' envelopes alike), so the paired
+worlds receive identical envelopes on every ingress.
+
+Step 0 drives the seat console, presentation and replica sessions and a
+session holding Edit over the rows under test. **Step 0b** adds the remaining
+principals, each as another writer into the same transcript through
+`RecordText` and `RecordBytes` under doors of its own, so existing fixtures and
+the comparison stand unchanged. Each needs capture at its own boundary, because
+its path is separate code the in-process session never runs:
+
+- **A socket peer over QUIC**, recorded as the frames its connection writes:
+  the peer wire's Completion lane (`WorldPeerWireFormat.EncodeResult`, already
+  shared with the sessions' outcome door) and the projection stream
+  (`WorldFederationProjectionSink`, `src/Puck.World.Server/WorldFederationProjectionSink.cs:65-108`),
+  whose encoded projection deltas, definition leaves and named invalidation
+  records (`ProjectionInvalidated` with its reason) are not the hydrated
+  definitions a session sink is handed.
+- **Observe revoked and regranted mid-run**, through the operator in both worlds
+  at the same tick, recorded at the session sink's withheld span and resume: the
+  replica resume path delivers `server.Definition` directly after withholding
+  (`src/Puck.World.Server/WorldSessionSink.cs:180-193`), which an always-observing
+  session never reaches.
+- **A federated traveller**, with transfer credentials and forwarding state:
+  traveller stream validity depends on the authority definition object's
+  identity (`src/Puck.World.Server/WorldTravelerProjection.cs:47-50`), so a
+  hidden-only install can invalidate that stream.
+- **A mounted addon** (a WASM guest that records what it receives), at the ABI
+  boundary: binds and writes use their own cached handles and verdicts
+  (`src/Puck.World.Addons/WorldAddonRuntime.Cells.cs:76-128`).
+
+The harness is not "green over the four games" until 0b has run; a step may
+land before 0b, but its doors on those principals are unproved until then.
 
 ### The harness's fixture contract
 
@@ -684,7 +732,14 @@ A fixture is a world plus a `<stem>.disclosure.json` beside it
   identical in every world.
 - **`admission` rows for the sessions it observes.** One row per tier, its
   `domain` the authority's name, `mode: FederatedAuthority` and an `Observe
-  all` grant; the probe names them `replica` and `presentation`.
+  all` grant; the probe names them `replica` and `presentation`. A session meant
+  to reach the write path also holds Mutate over the state section and Edit
+  over the rows under test (the probe's `writer`: `Observe all`, `Mutate
+  section:State` with an explicit `kindMask`, which an untrusted principal's
+  Mutate row requires, `Edit state:hand` and `Edit state:pile`), or its
+  writes stop at a capability denial before the policy under review. A session
+  the world does not admit leaves the run INVALID: a fixture that names it
+  claims its doors.
 - **`observer`**: the seat (`seat1`..`seat4`) whose console session is compared.
 - **`variants`**, at least two: each a `name` and operator `steps`
   (`{ "at": <tick>, "run": "<console line>" }`, run as the operator after the
@@ -695,36 +750,71 @@ A fixture is a world plus a `<stem>.disclosure.json` beside it
   boot is the control, which must compare equal, or the run is refused as noise.
   Variants run the same number of installs when the fixture means to isolate
   content; a variant with one extra hidden-only install (the probe's `late`)
-  puts the install's own timing (versions, delivery count) under test.
+  puts the install's own timing (versions, delivery count) under test. A
+  variant's setup must succeed and settle, or the run is INVALID rather than
+  judged: every step and script line is pinned before the schedule's export
+  tick; every step answers without a refusal or fault, and no operator act is
+  refused on the edit echo; and a step armed before the fuzz window's `from`
+  settles before `from`, so the probes that depend on it see the world the
+  fixture describes. A step inside the window (the probe's `late`) need only
+  settle before the export.
 - **`script`**: the observer's own lines (`{at, run}`, any verb, operator-only
   verbs included so their refusal is compared too).
 - **`sessions`**: the authorities in-process sessions are admitted from.
 - **`fuzz`**: `seed`; `lines`, console lines the observer submits, drawn over
   every verb the registry lets anyone run less the fixture's `exclude` and the
   wall-time and resource verbs outside the guarantee
-  (`WorldDisclosureFixture.OutsideTheGuarantee`); `actions`, per session, drawn
-  over `query.state`, `query.where`, `query.properties`, `set`, `add` and
-  `remove`; the window `from`..`until`; and `words`, every row, key, placement,
-  seat and value name the principal can spell, hidden and absent ones included.
-  The words are the fixture's own, never read from either world.
+  (`WorldDisclosureFixture.OutsideTheGuarantee`), each in one of the argument
+  forms its `help` text spells (`CommandRegistry.Usage`); `actions`, per
+  session, drawn over `query.state [<row>]`, `query.where <index>`,
+  `query.properties`, `set|add <row> <key> <value>`, `remove <row> <key>`,
+  `generate <row> [<key>]`, `transform <transform-json>`,
+  `act <phase-row> <sequence> <transform-json>`, `guarded <row> <key> <value>
+  <row> <key> <value>` (a write guarded by a cell expectation) and
+  `spatial <row> <key> <value> <x> <z> <x> <z>` (a write guarded by a spatial
+  read); the window `from`..`until`; `slots`, each placeholder's vocabulary by
+  the name the usage gives it (`row`, `key`, `value`, `transform-json`,
+  `phase-row`, `sequence`, `index`, `x`, `z`, `text`, `principal`, `placement`,
+  …), aimed at hidden, absent, public and other players' targets, with
+  structured payloads (transform JSON) written whole; and `words`, the loose
+  words and the vocabulary of any placeholder `slots` does not name. One draw in
+  eight of a verb with forms takes loose words instead, which reaches its parse
+  refusals. The vocabulary is the fixture's own, never read from either world.
+  `slots` is optional: a fixture without it draws every placeholder from
+  `words`, as before.
 
 A game's pair script is its schedule plus `script`: a sealed bid placed, a card
 dealt and discarded, a whisper sent, a unit moved under fog. What a game cannot
 spell as a console line or a session action is a door the harness does not yet
 drive. Today that is a socket peer, a mounted addon, a federated traveller and
-an Observe revoked and regranted mid-run; each is added as a principal of the
-same transcript, so a fixture written now gains those doors without changing.
+an Observe revoked and regranted mid-run (step 0b); each is added as a principal
+of the same transcript, so a fixture written now gains those doors without
+changing.
 
 On the probe the harness is red at these doors, each the cause a later step
-removes; the control pair agrees at every door:
+removes; the control pair agrees for every recipient. Seat2's script removes
+`hand.secret0` and sets `hand.secret1` at tick 23, cells it cannot read, so
+from that tick the variants' worlds differ by what those blind writes did:
 
-| Door | Pair | What differs | Step |
-|---|---|---|---|
-| `world.budget` (seat2) | any hidden member | the raw placement count and rows, dealt children included | 2 |
-| `world.placements` (seat2) | one or two hidden members dealt before `pub` | `pub`'s `dealSlot` and position (`offsets[1]`, `offsets[2]`) | 4 |
-| `world.projection` (seat2) | any hidden member | the presentation projection's byte count | 2 |
-| `deliver.definition` (presentation session), `deliver.state` (replica session) | a hidden-only install mid-run (`late`) | a delivery in one world and none in the other, with the replica's moved-row list | 1 |
-| `outcome.*` (both sessions) | `late` | the typed outcome's document version | 1, 3 |
+| Door | Recipient | Pair | What differs | Step |
+|---|---|---|---|---|
+| `world.budget` | seat2 | any hidden member | the raw placement count and rows, dealt children included | 2 |
+| `world.placements` | seat2 | any hidden member dealt before `pub` | `pub`'s `dealSlot` and position | 4 |
+| `world.projection` | seat2 | any hidden member | the presentation projection's byte count | 2 |
+| `echo` | seat2 | any hidden member | `world.state.cell.remove hand secret0` answers `ran` with no text in both, and its echo says `applied` against `has no cell keyed 'secret0'`: a membership oracle a fire-and-forget verb carries only on the echo | 3 |
+| `deliver.state`, `deliver.definition` | every session | any hidden member | the re-deal after seat2's blind removal moves `pub`'s dealt position (`$.placements.rows[2].position[0]`) | 3, 4 |
+| `world.state.transform`, `world.state.act` | seat2 | two hidden members | after seat2 overwrites the hidden `secret1`, a transfer out of `hand` is refused as `state operation is not disclosed` against `not an ordered token zone` | 3 |
+| `outcome.transform`, `outcome.act` | writer | two hidden members | the same refusal texts on the typed outcome | 3 |
+| `deliver.snapshot`, `query.state` | every session | two hidden members | the field deltas and state observations after the blind overwrite | 1, 2, 3 |
+| `world.state.observe`, `world.observe`, `world.state` | seat2 | two hidden members | the observations of `hand` after the blind overwrite | 2, 3 |
+| `deliver.state`, `deliver.definition`, `deliver.snapshot` | every session | a hidden-only install mid-run (`late`) | a delivery in one world and none in the other at tick 40, the replica's moved-row list, and a field delta for the installed row | 1 |
+| `outcome.*`, `query.state` | every session | `late` | the typed outcome's document version, and the observations after the install | 1, 3 |
+| `echo`, `world.state.transform` | seat2 | `late` | a drawn transfer out of `hand` is refused as `state operation is not disclosed` against `not an ordered token zone` (a drawn `Generate 'hand'` likewise as `draw site is not disclosed` against `requires a redrawable draw site`) | 3 |
+| `world.state`, `world.observe`, `world.budget`, `world.placements` | seat2 | `late` | the install's cells, counts and deal | 2, 4 |
+
+The drawn doors move with the registry, since the fuzzer draws over every verb
+anyone may run: a verb added or removed elsewhere changes which lines a seed
+draws. The authored rows (the schedule's and the script's) stay where they are.
 
 **No step opens a door before its protection lands.** The order puts the
 delivery protections (the cursor, recipient-scoped versions, the delta over

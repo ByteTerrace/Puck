@@ -1,7 +1,7 @@
 {
   "schema": "puck.disclosure.fixture.v1",
   "observer": "seat2",
-  "sessions": ["replica", "presentation"],
+  "sessions": ["replica", "presentation", "writer"],
   "variants": [
     {
       "name": "zero",
@@ -48,16 +48,41 @@
     { "at": 22, "run": "world.projection" },
     { "at": 22, "run": "world.identify" },
     { "at": 22, "run": "world.topologies" },
+    { "at": 23, "run": "world.state.cell.remove hand secret0" },
+    { "at": 23, "run": "world.state.cell.remove hand nothing" },
+    { "at": 23, "run": "world.state.cell.set hand secret1 5" },
+    { "at": 23, "run": "world.state.cell.set hand nothing 5" },
+    { "at": 23, "run": "world.state.transform {\"$type\":\"transfer\",\"from\":\"hand\",\"to\":\"pile\",\"selector\":\"Last\"}" },
     { "at": 50, "run": "world.budget" },
     { "at": 50, "run": "world.placements" },
     { "at": 50, "run": "world.state hand" }
   ],
   "fuzz": {
     "seed": 1,
-    "lines": 64,
-    "actions": 16,
+    "lines": 256,
+    "actions": 48,
     "from": 24,
     "until": 56,
-    "words": ["hand", "a", "pub", "secret0", "secret1", "nothing", "state", "state.hand", "seat1", "seat2", "probe-hand", "probe-hand/pub", "probe-hand/secret0", "0", "1", "7", "{state.hand.secret0}", "{state.hand.pub}", "$value"]
+    "words": ["hand", "pile", "a", "pub", "secret0", "secret1", "nothing", "state", "state.hand", "seat1", "seat2", "probe-hand", "probe-hand/pub", "probe-hand/secret0", "0", "1", "7", "{state.hand.secret0}", "{state.hand.pub}", "$value"],
+    "slots": {
+      "row": ["hand", "pile", "nothing"],
+      "phase-row": ["hand", "nothing"],
+      "key": ["pub", "secret0", "secret1", "a", "top", "nothing"],
+      "value": ["0", "1", "7"],
+      "sequence": ["0", "1"],
+      "index": ["0", "1"],
+      "x": ["-1", "0", "1"],
+      "z": ["3", "4", "5"],
+      "text": ["p={state.hand.pub}", "s={state.hand.secret0}", "n={state.hand.nothing}"],
+      "principal": ["seat1", "seat2", "console"],
+      "placement": ["probe-hand", "probe-hand/pub", "probe-hand/secret0", "probe-hand/nothing"],
+      "transform-json": [
+        "{\"$type\":\"transfer\",\"from\":\"hand\",\"to\":\"pile\",\"selector\":\"First\"}",
+        "{\"$type\":\"transfer\",\"from\":\"hand\",\"to\":\"pile\",\"selector\":\"Last\"}",
+        "{\"$type\":\"transfer\",\"from\":\"hand\",\"to\":\"pile\",\"selector\":\"Key\",\"key\":\"secret0\"}",
+        "{\"$type\":\"transfer\",\"from\":\"hand\",\"to\":\"pile\",\"selector\":\"Key\",\"key\":\"nothing\"}",
+        "{\"$type\":\"transfer\",\"from\":\"pile\",\"to\":\"hand\",\"selector\":\"First\"}"
+      ]
+    }
   }
 }

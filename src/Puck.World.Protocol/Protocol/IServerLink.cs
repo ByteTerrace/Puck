@@ -80,6 +80,10 @@ public interface IServerLink {
     /// <param name="query">The read-back query.</param>
     /// <param name="completion">Invoked once with the composed answer.</param>
     void Query(WorldQuery query, Action<QueryAnswer> completion);
+    /// <summary>Mints the operation id of a mutation whose caller named none, at the ingress that submits it.</summary>
+    /// <param name="principal">The acting principal.</param>
+    /// <returns>The id; never <see cref="Guid.Empty"/>.</returns>
+    Guid NextOperationId(Principal principal) => WorldOperationIds.Random.Next(principal: principal);
 }
 /// <summary>An <see cref="IServerLink"/> that can attribute an in-process query to an explicit
 /// <see cref="Principal"/>. Use this boundary for embedded automation whose reads must cross the same
@@ -325,7 +329,7 @@ public static class ServerLinkSubmissions {
         payload: new WorldSubmissionPayload.Mutation(ExpectedActivation: expectedActivation, Value: mutation),
         principal: mutation.Principal,
         operationId: ((operationId == Guid.Empty)
-        ? Guid.NewGuid()
+        ? link.NextOperationId(principal: mutation.Principal)
         : operationId),
         completion: completion
     );
