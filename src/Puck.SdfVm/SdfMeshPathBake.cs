@@ -37,6 +37,20 @@ public readonly record struct SdfMeshBakeRequest(Vector3 Origin, Vector3 Cell, (
     /// <c>Origin + (x, y, Slab + z) * Cell</c>, where the whole lattice's would.</summary>
     public int Slab { get; init; } = -1;
 
+    /// <summary>Returns where one of the lattice's samples lies, as the bake kernel places it: a points lattice's point,
+    /// otherwise its grid position from <see cref="Origin"/>, a slab's planes counted from <see cref="Slab"/>.</summary>
+    /// <param name="local">The sample's index within the lattice, from zero to <see cref="Samples"/>.</param>
+    /// <returns>The sample's position, in the frame <see cref="Origin"/> is in.</returns>
+    public Vector3 SampleAt(int local) {
+        if (!Points.IsEmpty) {
+            var point = Points.Span[local];
+
+            return new Vector3(x: point.X, y: point.Y, z: point.Z);
+        }
+
+        return (Origin + (new Vector3(x: (local % Dims.X), y: ((local / Dims.X) % Dims.Y), z: ((local / (Dims.X * Dims.Y)) + Math.Max(val1: 0, val2: Slab))) * Cell));
+    }
+
     /// <summary>Gets the surface points a points lattice samples, one a sample, in place of a grid, in the frame
     /// <see cref="Origin"/> is in; empty for a grid lattice.</summary>
     public ReadOnlyMemory<Vector4> Points { get; init; }

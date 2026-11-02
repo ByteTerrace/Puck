@@ -92,9 +92,7 @@ public static class MeshCpuBake {
                 toExclusive: lattice.Samples,
                 localInit: () => new SdfFieldEvaluator(program: program, reading: SdfFieldReading.Render),
                 body: (local, state, field) => {
-                    var position = (request.Points.IsEmpty
-                        ? (request.Origin + (new Vector3(x: (local % request.Dims.X), y: ((local / request.Dims.X) % request.Dims.Y), z: ((local / (request.Dims.X * request.Dims.Y)) + Math.Max(val1: 0, val2: request.Slab))) * request.Cell))
-                        : new Vector3(x: request.Points.Span[local].X, y: request.Points.Span[local].Y, z: request.Points.Span[local].Z));
+                    var position = request.SampleAt(local: local);
                     var value = Sample(field: field, material: out var material, point: position);
                     var record = bytes.AsSpan(start: (((start + local) * SdfWorldPackage.MeshBakeSampleWords) * sizeof(uint)));
 

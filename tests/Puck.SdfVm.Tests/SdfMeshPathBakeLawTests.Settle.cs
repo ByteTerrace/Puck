@@ -215,9 +215,7 @@ public sealed partial class SdfMeshPathBakeLawTests {
             var spacing = (0.015625f * MathF.Min(x: request.Cell.X, y: MathF.Min(x: request.Cell.Y, y: request.Cell.Z)));
 
             for (var local = 0; (local < request.Samples); local++, sample++) {
-                var position = (request.Points.IsEmpty
-                    ? (request.Origin + (new Vector3(x: (local % request.Dims.X), y: ((local / request.Dims.X) % request.Dims.Y), z: (local / (request.Dims.X * request.Dims.Y))) * request.Cell))
-                    : new Vector3(x: request.Points.Span[local].X, y: request.Points.Span[local].Y, z: request.Points.Span[local].Z));
+                var position = request.SampleAt(local: local);
 
                 var (value, shape) = (empty ? (1f, 0) : Nearest(count: 2, first: 0, point: position, shapes: shapes));
                 var record = bytes.AsSpan(start: ((sample * SdfWorldPackage.MeshBakeSampleWords) * sizeof(uint)));

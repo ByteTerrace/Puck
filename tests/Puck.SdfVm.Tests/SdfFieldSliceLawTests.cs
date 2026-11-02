@@ -37,9 +37,7 @@ public sealed class SdfFieldSliceLawTests {
             var spacing = (0.015625f * MathF.Min(lattice.Cell.X, MathF.Min(lattice.Cell.Y, lattice.Cell.Z)));
 
             for (var local = 0; (local < lattice.Samples); local++, sample++) {
-                var position = (lattice.Points.IsEmpty
-                    ? (lattice.Origin + (new Vector3(x: (local % lattice.Dims.X), y: ((local / lattice.Dims.X) % lattice.Dims.Y), z: (local / (lattice.Dims.X * lattice.Dims.Y))) * lattice.Cell))
-                    : new Vector3(x: lattice.Points.Span[local].X, y: lattice.Points.Span[local].Y, z: lattice.Points.Span[local].Z));
+                var position = lattice.SampleAt(local: local);
                 var gradient = Vector3.Zero;
 
                 if (lattice.Gradients) {

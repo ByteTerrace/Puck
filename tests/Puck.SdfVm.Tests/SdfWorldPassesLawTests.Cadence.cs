@@ -195,7 +195,7 @@ public sealed partial class SdfWorldPassesLawTests {
         rig.SourceFrame = rig.SourceFrame with { Views = [rig.SourceFrame.Views[0] with { Quality = new SdfViewQuality { DisableAmbientOcclusion = true, DisableSoftShadows = true } }] };
         rig.Produce();
         var diagWork = CadenceWork(rig: rig);
-        Assert.Fail("DIAG " + string.Join(" ", Enumerable.Range(0, diagWork.PassLabels.Length).Select(p => $"{diagWork.PassLabels[p]}={diagWork.GetPassState(pass: p)}")) + $" building={rig.World.IsBuildingCandidate} pending={rig.Selected.MeshPathBake.Pending} reason={rig.Selected.NotReadyReason}");
+        var diagText = "DIAG f0 " + string.Join(" ", Enumerable.Range(0, diagWork.PassLabels.Length).Select(p => $"{diagWork.PassLabels[p].Split((char)36)[^1]}={diagWork.GetPassState(pass: p)}")) + $" building={rig.World.IsBuildingCandidate} pending={rig.Selected.MeshPathBake.Pending} shadowsOff={rig.Selected.Frame?.Views[0].Quality.DisableSoftShadows}"; for (var diagFrame = 1; diagFrame < 4; diagFrame++) { rig.Produce(); var w = CadenceWork(rig: rig); diagText += $" || f{diagFrame} " + string.Join(" ", Enumerable.Range(0, w.PassLabels.Length).Select(p => $"{w.PassLabels[p].Split((char)36)[^1]}={w.GetPassState(pass: p)}")) + $" building={rig.World.IsBuildingCandidate} pending={rig.Selected.MeshPathBake.Pending}"; } Assert.Fail(diagText);
         Assert.Equal(expected: new[] { SdfWorldPackage.Parts.Surface,
             SdfWorldPackage.Parts.Views, SdfWorldPackage.Resolve, SdfWorldPackage.Parts.Sky,
             SdfWorldPackage.Parts.Composite }, actual: Executed(work: CadenceWork(rig: rig)).Where(predicate: static part => (part is not (SdfWorldPackage.Parts.Mask or SdfWorldPackage.Parts.Bake))));
