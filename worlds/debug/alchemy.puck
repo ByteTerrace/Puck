@@ -1,5 +1,6 @@
 import "elements"
 import "../standard/inputs"
+import "../standard/kits"
 import "shapes"
 
 // Physical Alchemy at the board room's north-east table on level 2 (hall.puck): 31 element tokens, four starters (Air,
@@ -108,50 +109,11 @@ looks: map(["alchemyToken", "alchemyCursor"], name => {
   source: creation(prototypeId: name)
 })
 
-kits [
-  {
-    bodyContact: Solid
-    bodyMotionProgram: "walk"
-    collider: box(halfExtents: [0.048, 0.014, 0.048], rotation: [0, 0, 0, 1])
-    motion {
-      facingSnap: true
-      holds [
-        {
-          bond: Free
-          envelope {
-            sinkSpeed: 40
-          }
-          gravity {
-            fall: 46
-            rise: 28
-          }
-          hold: Gravity
-          name: "air"
-        }
-      ]
-      shaping [
-        {
-          along {}
-        }
-      ]
-      speed {
-        value: 0.001
-      }
-      turn {
-        rate: 0.001
-      }
-    }
-    name: "alchemyToken"
-    rigid {
-      angularDamping: 0.05
-      friction: 0.6
-      linearDamping: 0.05
-      mass: 0.04
-      restitution: 0.05
-      rollingFriction: 0.2
-    }
-  }
-]
+pieceKit(
+  name: "alchemyToken",
+  collider: box(halfExtents: [0.048, 0.014, 0.048], rotation: [0, 0, 0, 1]),
+  mass: 0.04
+)
 
 placements {
   placement "alchemyTable" {

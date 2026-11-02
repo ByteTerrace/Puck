@@ -220,11 +220,11 @@ region; when the Moth enters one it writes the exhibit's name and a one-line
 note into the `guide` row (and its walking-order position into `guideAt`), and
 when she leaves it clears them and the panel hides. A region event names its
 region by its position in the guide's own requests, which list the exhibits in
-the gallery's walking order. The `guideCopy` list in [guide.puck](guide.puck)
-authors each title and note in that order and lowers them into the Text row
-`guideExhibits`, with keys `<ordinal>-title` and `<ordinal>-note`. Keep that
-list in step when adding, moving or removing an exhibit. `gallery.go <exhibit>`
-stands her at one.
+the gallery's walking order. The `guideCopy` table in [guide.puck](guide.puck)
+authors each title and note by exhibit name and lowers them, in walking order,
+into the Text row `guideExhibits`, with keys `<ordinal>-title` and
+`<ordinal>-note`. A new exhibit needs a row there under its name; moving one
+needs nothing. `gallery.go <exhibit>` stands her at one.
 
 The guest asks for Observe over that row and uses `ReadStateText` to assemble
 each field, 16 UTF-8 bytes at a time, under a shared two-read budget. It has no

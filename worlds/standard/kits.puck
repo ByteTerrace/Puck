@@ -1,0 +1,83 @@
+// Kit parts bodies share: the gravity and holds a walking body wears and the kits of a piece that stays where it is
+// put. A module library: it hands its importers lets and templates and emits no document.
+
+// The world's feel of gravity: a body falls at 46 m/s² and rises against it at 28, and sinks no faster than 40 m/s.
+let standardGravity = { fall: 46, rise: 28 }
+let standardSink = { sinkSpeed: 40 }
+
+// A walking body's holds: the ground it stands on within reach, and the fall that takes over off it.
+let groundHold = {
+  name: "ground"
+  bond: "Surface"
+  hold: "Gravity"
+  cone [0, 60]
+  reach: 1.2
+  forward: "Heading"
+  gravity: standardGravity
+  envelope: standardSink
+}
+let fallHold = {
+  name: "fall"
+  bond: "Free"
+  hold: "Gravity"
+  forward: "Heading"
+  gravity: standardGravity
+  envelope: standardSink
+}
+
+// A piece's hold in the air: it falls and settles under gravity wherever it is let go.
+let airHold = { name: "air", bond: "Free", hold: "Gravity", gravity: standardGravity, envelope: standardSink }
+
+// A body posed by the rules, held where they put it, with no gravity.
+let heldHold = { name: "held", bond: "Free", hold: "None" }
+
+// What a still piece's motion is made of: it has no gait, so the walk program gets a speed and a turn rate too small to
+// move it, and the rules and the physics place it.
+let stillShaping = [{ along {} }]
+let stillSpeed = { value: 0.001 }
+let stillTurn = { rate: 0.001 }
+
+// A rigid piece (a stone, a token, a chess piece): it falls under gravity and settles where it is let go, and stays.
+template pieceKit(name, collider, mass, friction = 0.6, restitution = 0.05, rollingFriction = 0.2) {
+  kits [
+    {
+      bodyContact: Solid
+      bodyMotionProgram: "walk"
+      collider: collider
+      motion {
+        facingSnap: true
+        holds [airHold]
+        shaping: stillShaping
+        speed: stillSpeed
+        turn: stillTurn
+      }
+      name: name
+      rigid {
+        angularDamping: 0.05
+        friction: friction
+        linearDamping: 0.05
+        mass: mass
+        restitution: restitution
+        rollingFriction: rollingFriction
+      }
+    }
+  ]
+}
+
+// A cursor: volumeless and overlapping, so it touches no piece, and posed by the rules every tick.
+template heldKit(name) {
+  kits [
+    {
+      bodyContact: Overlap
+      bodyMotionProgram: "walk"
+      motion {
+        facingSnap: true
+        holds [heldHold]
+        shaping: stillShaping
+        speed: stillSpeed
+        turn: stillTurn
+      }
+      name: name
+    }
+  ]
+}

@@ -13,6 +13,8 @@
 // hounds and spiders by body number, so they are the last placements: they sit just above the reserve and keep their
 // numbers at every count, while the flocks that read no rule, the dragonflies and the fish, take the rest above them.
 
+import "../standard/kits"
+
 // The basis's own room for seats and travellers, and the rule-keyed populations above it.
 let reserve = 8
 let houndCount = 6
@@ -25,6 +27,180 @@ let yardAt = [-18, 0, -8]
 let boneAt = [-20, 0, -11]
 let hedgeAt = [-19.5, 0, -13.8]
 let denAt = [-21, 0, -27]
+
+// The spiders' and hounds' limbs mirror across x. A side is its name in the shape names, the sign its x takes and a shift
+// into the stride: its legs plant on the half of the stride that the opposite side's matching leg swings through.
+let spiderSides = [{ name: "Left", sign: 1, shift: 0 }, { name: "Right", sign: -1, shift: 1 }]
+let stridePhases = [[0, 3.141592653589793], [3.141592653589793, 6.28]]
+let strideSway = [0, 3.14159]
+let strideLift = [1.5708, 4.71239]
+
+// The spider's four legs on the left, front to back: where the coxa roots on the thorax and how it turns (the x and z
+// of its rotation), the z of the pivot it swings about, the axis it lifts about (x and z), and the femur's tip and turn.
+let spiderLegs = [
+  {
+    root [0.2532, 0.2886]
+    turn [-0.5594, 0.6666]
+    pivotZ: 0.16
+    axis [0.6427876096865393, -0.766044443118978]
+    tip [0.3758, 0.3914]
+    tipTurn [-0.1402, 0.1671]
+  }
+  {
+    root [0.2932, 0.1218]
+    turn [-0.2252, 0.8405]
+    pivotZ: 0.07
+    axis [0.25881904510252074, -0.9659258262890683]
+    tip [0.4477, 0.1632]
+    tipTurn [-0.0565, 0.2107]
+  }
+  {
+    root [0.2932, -0.0718]
+    turn [0.2252, 0.8405]
+    pivotZ: -0.02
+    axis [-0.25881904510252074, -0.9659258262890683]
+    tip [0.4477, -0.1132]
+    tipTurn [0.0565, 0.2107]
+  }
+  {
+    root [0.2532, -0.2386]
+    turn [0.5594, 0.6666]
+    pivotZ: -0.11
+    axis [-0.6427876096865393, -0.766044443118978]
+    tip [0.3758, -0.3414]
+    tipTurn [0.1402, 0.1671]
+  }
+]
+
+// One leg of `side`, a coxa and its femur; `leg` is a row of spiderLegs, `i` its place, `sign` the side's x.
+template spiderLeg(side, sign, shift, i, leg) {
+  shape Capsule $"coxa{side}{i + 1}" {
+    group: 0
+    material: 1
+    parent: "thorax"
+    position [sign * leg.root[0], 0.34, leg.root[1]]
+    rotation [leg.turn[0], 0, sign * leg.turn[1], 0.4927]
+    scale [0.02, 0.4665, 0.02]
+    swings [
+      {
+        amplitude: sign * 0.35
+        axis [0, 1, 0]
+        driver: "stride"
+        phase: strideSway[(i + shift) % 2]
+        pivot [sign * 0.1, 0.22, leg.pivotZ]
+        wave: "sine"
+      }
+      {
+        amplitude: 0.5
+        axis [leg.axis[0], 0, sign * leg.axis[1]]
+        driver: "stride"
+        phase: strideLift[(i + shift) % 2]
+        pivot [sign * 0.1, 0.22, leg.pivotZ]
+        wave: "halfSine"
+      }
+    ]
+  }
+  shape Capsule $"femur{side}{i + 1}" {
+    group: 0
+    material: 1
+    parent: $"coxa{side}{i + 1}"
+    position [sign * leg.tip[0], 0, leg.tip[1]]
+    rotation [leg.tipTurn[0], 0, sign * leg.tipTurn[1], 0.9759]
+    scale [0.016, 0.7515, 0.016]
+    swings [
+      {
+        amplitude: -0.6
+        axis [leg.axis[0], 0, sign * leg.axis[1]]
+        driver: "stride"
+        phase: strideLift[(i + shift) % 2]
+        pivot [sign * leg.root[0], 0.34, leg.root[1]]
+        wave: "halfSine"
+      }
+    ]
+  }
+}
+
+// The dragonfly's two wings a side, each a flat box that beats about a pivot at the thorax: where its centre stands,
+// its half-length and the beat's phase.
+let wingSides = [{ name: "Left", sign: 1 }, { name: "Right", sign: -1 }]
+let dragonflyWings = [
+  { x: 0.21, z: 0.03, length: 0.16, phase: 0 }
+  { x: 0.2, z: -0.03, length: 0.15, phase: 3.14159 }
+]
+
+template dragonflyWing(side, sign, n, wing) {
+  shape Box $"wing{side}{n + 1}" {
+    group: 0
+    material: 1
+    parent: "thorax"
+    position [sign * wing.x, 0.94, wing.z]
+    scale [wing.length, 0.005, 0.05]
+    swings [
+      {
+        amplitude: sign * -0.6
+        axis [0, 0, 1]
+        driver: "wingbeat"
+        phase: wing.phase
+        pivot [sign * 0.05, 0.94, wing.z]
+        wave: "sine"
+      }
+    ]
+  }
+}
+
+// The hound's forelegs and hindlegs: the end's name, the z its upper leg stands at and its swing pivots at, the z of the
+// lower leg and of the paw.
+let houndEnds = [
+  { name: "Fore", upperZ: 0.22, pivotZ: 0.24, lowerZ: 0.26, pawZ: 0.29 }
+  { name: "Hind", upperZ: -0.24, pivotZ: -0.22, lowerZ: -0.2, pawZ: -0.17 }
+]
+
+// One end of `side`: an upper leg, a lower leg and a paw.
+template houndLeg(side, sign, shift, e, end) {
+  shape Capsule $"upper{end.name}{side}" {
+    group: 0
+    material: 0
+    parent: "chest"
+    position [sign * 0.12, 0.26, end.upperZ]
+    rotation [0.0453, 0, sign * 0.0226, 0.9987]
+    scale [0.045, 0.4423, 0.045]
+    swings [
+      {
+        amplitude: -0.55
+        axis [1, 0, 0]
+        driver: "stride"
+        phase: strideSway[(e + shift) % 2]
+        pivot [sign * 0.11, 0.48, end.pivotZ]
+        wave: "sine"
+      }
+    ]
+  }
+  shape Capsule $"lower{end.name}{side}" {
+    group: 0
+    material: 0
+    parent: $"upper{end.name}{side}"
+    position [sign * 0.12, 0.05, end.lowerZ]
+    rotation [-0.094, 0, 0, 0.9956]
+    scale [0.035, 0.4276, 0.035]
+    swings [
+      {
+        amplitude: 0.8
+        axis [1, 0, 0]
+        driver: "stride"
+        phase: strideLift[(e + shift) % 2]
+        pivot [sign * 0.12, 0.26, end.upperZ]
+        wave: "halfSine"
+      }
+    ]
+  }
+  shape Sphere $"paw{end.name}{side}" {
+    group: 0
+    material: 1
+    parent: $"lower{end.name}{side}"
+    position [sign * 0.12, 0.04, end.pawZ]
+    scale [0.045, 0.035, 0.05]
+  }
+}
 
 template pond() {
   state {
@@ -201,15 +377,15 @@ template pond() {
             hold: Gravity
             cone [0, 60]
             reach: 0.8
-            gravity { fall: 46, rise: 28 }
-            envelope { sinkSpeed: 40 }
+            gravity: standardGravity
+            envelope: standardSink
           }
           {
             name: "air"
             bond: Free
             hold: Gravity
-            gravity { fall: 46, rise: 28 }
-            envelope { sinkSpeed: 40 }
+            gravity: standardGravity
+            envelope: standardSink
           }
         ]
         shaping [{ along {} }]
@@ -256,15 +432,15 @@ template pond() {
             hold: Gravity
             cone [0, 60]
             reach: 0.6
-            gravity { fall: 46, rise: 28 }
-            envelope { sinkSpeed: 40 }
+            gravity: standardGravity
+            envelope: standardSink
           }
           {
             name: "air"
             bond: Free
             hold: Gravity
-            gravity { fall: 46, rise: 28 }
-            envelope { sinkSpeed: 40 }
+            gravity: standardGravity
+            envelope: standardSink
           }
         ]
         shaping [{ along {} }]
@@ -322,7 +498,7 @@ template pond() {
             speed: 3
             thrust: 1
             upLean: 0
-            gravity { fall: 46, rise: 28 }
+            gravity: standardGravity
           }
         ]
         shaping [{ along {} }]
@@ -375,7 +551,7 @@ template pond() {
             speed: 1.2
             thrust: 1
             upLean: 0
-            gravity { fall: 46, rise: 28 }
+            gravity: standardGravity
           }
         ]
         shaping [{ along {} }]
@@ -670,176 +846,29 @@ template pond() {
             ]
           }
         ]
-        effectors [
-          {
-            chain [
-              "coxaLeft1"
-              "femurLeft1"
-            ]
-            name: "footLeft1"
-            plant {
-              driver: "stride"
-              window [0, 3.141592653589793]
-            }
-            target {
-              direction [0, -1, 0]
-              kind: "surface"
-              reach: 0.45
-              standoff: 0.02
-            }
-            tip: "femurLeft1"
-            when [
-              "always"
-            ]
-          }
-          {
-            chain [
-              "coxaLeft2"
-              "femurLeft2"
-            ]
-            name: "footLeft2"
-            plant {
-              driver: "stride"
-              window [3.141592653589793, 6.28]
-            }
-            target {
-              direction [0, -1, 0]
-              kind: "surface"
-              reach: 0.45
-              standoff: 0.02
-            }
-            tip: "femurLeft2"
-            when [
-              "always"
-            ]
-          }
-          {
-            chain [
-              "coxaLeft3"
-              "femurLeft3"
-            ]
-            name: "footLeft3"
-            plant {
-              driver: "stride"
-              window [0, 3.141592653589793]
-            }
-            target {
-              direction [0, -1, 0]
-              kind: "surface"
-              reach: 0.45
-              standoff: 0.02
-            }
-            tip: "femurLeft3"
-            when [
-              "always"
-            ]
-          }
-          {
-            chain [
-              "coxaLeft4"
-              "femurLeft4"
-            ]
-            name: "footLeft4"
-            plant {
-              driver: "stride"
-              window [3.141592653589793, 6.28]
-            }
-            target {
-              direction [0, -1, 0]
-              kind: "surface"
-              reach: 0.45
-              standoff: 0.02
-            }
-            tip: "femurLeft4"
-            when [
-              "always"
-            ]
-          }
-          {
-            chain [
-              "coxaRight1"
-              "femurRight1"
-            ]
-            name: "footRight1"
-            plant {
-              driver: "stride"
-              window [3.141592653589793, 6.28]
-            }
-            target {
-              direction [0, -1, 0]
-              kind: "surface"
-              reach: 0.45
-              standoff: 0.02
-            }
-            tip: "femurRight1"
-            when [
-              "always"
-            ]
-          }
-          {
-            chain [
-              "coxaRight2"
-              "femurRight2"
-            ]
-            name: "footRight2"
-            plant {
-              driver: "stride"
-              window [0, 3.141592653589793]
-            }
-            target {
-              direction [0, -1, 0]
-              kind: "surface"
-              reach: 0.45
-              standoff: 0.02
-            }
-            tip: "femurRight2"
-            when [
-              "always"
-            ]
-          }
-          {
-            chain [
-              "coxaRight3"
-              "femurRight3"
-            ]
-            name: "footRight3"
-            plant {
-              driver: "stride"
-              window [3.141592653589793, 6.28]
-            }
-            target {
-              direction [0, -1, 0]
-              kind: "surface"
-              reach: 0.45
-              standoff: 0.02
-            }
-            tip: "femurRight3"
-            when [
-              "always"
-            ]
-          }
-          {
-            chain [
-              "coxaRight4"
-              "femurRight4"
-            ]
-            name: "footRight4"
-            plant {
-              driver: "stride"
-              window [0, 3.141592653589793]
-            }
-            target {
-              direction [0, -1, 0]
-              kind: "surface"
-              reach: 0.45
-              standoff: 0.02
-            }
-            tip: "femurRight4"
-            when [
-              "always"
-            ]
-          }
-        ]
+        effectors: reduce(
+          spiderSides,
+          [],
+          (feet, side) => concat(
+            feet,
+            map(range(0, 4), i => {
+              chain [$"coxa{side.name}{i + 1}", $"femur{side.name}{i + 1}"]
+              name: $"foot{side.name}{i + 1}"
+              plant {
+                driver: "stride"
+                window: stridePhases[(i + side.shift) % 2]
+              }
+              target {
+                direction [0, -1, 0]
+                kind: "surface"
+                reach: 0.45
+                standoff: 0.02
+              }
+              tip: $"femur{side.name}{i + 1}"
+              when ["always"]
+            })
+          )
+        )
         name: "spider"
         palette [
           {
@@ -897,372 +926,10 @@ template pond() {
           scale [0.025, 0.025, 0.02]
         }
 
-        shape Capsule "coxaLeft1" {
-          group: 0
-          material: 1
-          parent: "thorax"
-          position [0.2532, 0.34, 0.2886]
-          rotation [-0.5594, 0, 0.6666, 0.4927]
-          scale [0.02, 0.4665, 0.02]
-          swings [
-            {
-              amplitude: 0.35
-              axis [0, 1, 0]
-              driver: "stride"
-              phase: 0
-              pivot [0.1, 0.22, 0.16]
-              wave: "sine"
-            }
-            {
-              amplitude: 0.5
-              axis [0.6427876096865393, 0, -0.766044443118978]
-              driver: "stride"
-              phase: 1.5708
-              pivot [0.1, 0.22, 0.16]
-              wave: "halfSine"
-            }
-          ]
-        }
-
-        shape Capsule "femurLeft1" {
-          group: 0
-          material: 1
-          parent: "coxaLeft1"
-          position [0.3758, 0, 0.3914]
-          rotation [-0.1402, 0, 0.1671, 0.9759]
-          scale [0.016, 0.7515, 0.016]
-          swings [
-            {
-              amplitude: -0.6
-              axis [0.6427876096865393, 0, -0.766044443118978]
-              driver: "stride"
-              phase: 1.5708
-              pivot [0.2532, 0.34, 0.2886]
-              wave: "halfSine"
-            }
-          ]
-        }
-
-        shape Capsule "coxaLeft2" {
-          group: 0
-          material: 1
-          parent: "thorax"
-          position [0.2932, 0.34, 0.1218]
-          rotation [-0.2252, 0, 0.8405, 0.4927]
-          scale [0.02, 0.4665, 0.02]
-          swings [
-            {
-              amplitude: 0.35
-              axis [0, 1, 0]
-              driver: "stride"
-              phase: 3.14159
-              pivot [0.1, 0.22, 0.07]
-              wave: "sine"
-            }
-            {
-              amplitude: 0.5
-              axis [0.25881904510252074, 0, -0.9659258262890683]
-              driver: "stride"
-              phase: 4.71239
-              pivot [0.1, 0.22, 0.07]
-              wave: "halfSine"
-            }
-          ]
-        }
-
-        shape Capsule "femurLeft2" {
-          group: 0
-          material: 1
-          parent: "coxaLeft2"
-          position [0.4477, 0, 0.1632]
-          rotation [-0.0565, 0, 0.2107, 0.9759]
-          scale [0.016, 0.7515, 0.016]
-          swings [
-            {
-              amplitude: -0.6
-              axis [0.25881904510252074, 0, -0.9659258262890683]
-              driver: "stride"
-              phase: 4.71239
-              pivot [0.2932, 0.34, 0.1218]
-              wave: "halfSine"
-            }
-          ]
-        }
-
-        shape Capsule "coxaLeft3" {
-          group: 0
-          material: 1
-          parent: "thorax"
-          position [0.2932, 0.34, -0.0718]
-          rotation [0.2252, 0, 0.8405, 0.4927]
-          scale [0.02, 0.4665, 0.02]
-          swings [
-            {
-              amplitude: 0.35
-              axis [0, 1, 0]
-              driver: "stride"
-              phase: 0
-              pivot [0.1, 0.22, -0.02]
-              wave: "sine"
-            }
-            {
-              amplitude: 0.5
-              axis [-0.25881904510252074, 0, -0.9659258262890683]
-              driver: "stride"
-              phase: 1.5708
-              pivot [0.1, 0.22, -0.02]
-              wave: "halfSine"
-            }
-          ]
-        }
-
-        shape Capsule "femurLeft3" {
-          group: 0
-          material: 1
-          parent: "coxaLeft3"
-          position [0.4477, 0, -0.1132]
-          rotation [0.0565, 0, 0.2107, 0.9759]
-          scale [0.016, 0.7515, 0.016]
-          swings [
-            {
-              amplitude: -0.6
-              axis [-0.25881904510252074, 0, -0.9659258262890683]
-              driver: "stride"
-              phase: 1.5708
-              pivot [0.2932, 0.34, -0.0718]
-              wave: "halfSine"
-            }
-          ]
-        }
-
-        shape Capsule "coxaLeft4" {
-          group: 0
-          material: 1
-          parent: "thorax"
-          position [0.2532, 0.34, -0.2386]
-          rotation [0.5594, 0, 0.6666, 0.4927]
-          scale [0.02, 0.4665, 0.02]
-          swings [
-            {
-              amplitude: 0.35
-              axis [0, 1, 0]
-              driver: "stride"
-              phase: 3.14159
-              pivot [0.1, 0.22, -0.11]
-              wave: "sine"
-            }
-            {
-              amplitude: 0.5
-              axis [-0.6427876096865393, 0, -0.766044443118978]
-              driver: "stride"
-              phase: 4.71239
-              pivot [0.1, 0.22, -0.11]
-              wave: "halfSine"
-            }
-          ]
-        }
-
-        shape Capsule "femurLeft4" {
-          group: 0
-          material: 1
-          parent: "coxaLeft4"
-          position [0.3758, 0, -0.3414]
-          rotation [0.1402, 0, 0.1671, 0.9759]
-          scale [0.016, 0.7515, 0.016]
-          swings [
-            {
-              amplitude: -0.6
-              axis [-0.6427876096865393, 0, -0.766044443118978]
-              driver: "stride"
-              phase: 4.71239
-              pivot [0.2532, 0.34, -0.2386]
-              wave: "halfSine"
-            }
-          ]
-        }
-
-        shape Capsule "coxaRight1" {
-          group: 0
-          material: 1
-          parent: "thorax"
-          position [-0.2532, 0.34, 0.2886]
-          rotation [-0.5594, 0, -0.6666, 0.4927]
-          scale [0.02, 0.4665, 0.02]
-          swings [
-            {
-              amplitude: -0.35
-              axis [0, 1, 0]
-              driver: "stride"
-              phase: 3.14159
-              pivot [-0.1, 0.22, 0.16]
-              wave: "sine"
-            }
-            {
-              amplitude: 0.5
-              axis [0.6427876096865393, 0, 0.766044443118978]
-              driver: "stride"
-              phase: 4.71239
-              pivot [-0.1, 0.22, 0.16]
-              wave: "halfSine"
-            }
-          ]
-        }
-
-        shape Capsule "femurRight1" {
-          group: 0
-          material: 1
-          parent: "coxaRight1"
-          position [-0.3758, 0, 0.3914]
-          rotation [-0.1402, 0, -0.1671, 0.9759]
-          scale [0.016, 0.7515, 0.016]
-          swings [
-            {
-              amplitude: -0.6
-              axis [0.6427876096865393, 0, 0.766044443118978]
-              driver: "stride"
-              phase: 4.71239
-              pivot [-0.2532, 0.34, 0.2886]
-              wave: "halfSine"
-            }
-          ]
-        }
-
-        shape Capsule "coxaRight2" {
-          group: 0
-          material: 1
-          parent: "thorax"
-          position [-0.2932, 0.34, 0.1218]
-          rotation [-0.2252, 0, -0.8405, 0.4927]
-          scale [0.02, 0.4665, 0.02]
-          swings [
-            {
-              amplitude: -0.35
-              axis [0, 1, 0]
-              driver: "stride"
-              phase: 0
-              pivot [-0.1, 0.22, 0.07]
-              wave: "sine"
-            }
-            {
-              amplitude: 0.5
-              axis [0.25881904510252074, 0, 0.9659258262890683]
-              driver: "stride"
-              phase: 1.5708
-              pivot [-0.1, 0.22, 0.07]
-              wave: "halfSine"
-            }
-          ]
-        }
-
-        shape Capsule "femurRight2" {
-          group: 0
-          material: 1
-          parent: "coxaRight2"
-          position [-0.4477, 0, 0.1632]
-          rotation [-0.0565, 0, -0.2107, 0.9759]
-          scale [0.016, 0.7515, 0.016]
-          swings [
-            {
-              amplitude: -0.6
-              axis [0.25881904510252074, 0, 0.9659258262890683]
-              driver: "stride"
-              phase: 1.5708
-              pivot [-0.2932, 0.34, 0.1218]
-              wave: "halfSine"
-            }
-          ]
-        }
-
-        shape Capsule "coxaRight3" {
-          group: 0
-          material: 1
-          parent: "thorax"
-          position [-0.2932, 0.34, -0.0718]
-          rotation [0.2252, 0, -0.8405, 0.4927]
-          scale [0.02, 0.4665, 0.02]
-          swings [
-            {
-              amplitude: -0.35
-              axis [0, 1, 0]
-              driver: "stride"
-              phase: 3.14159
-              pivot [-0.1, 0.22, -0.02]
-              wave: "sine"
-            }
-            {
-              amplitude: 0.5
-              axis [-0.25881904510252074, 0, 0.9659258262890683]
-              driver: "stride"
-              phase: 4.71239
-              pivot [-0.1, 0.22, -0.02]
-              wave: "halfSine"
-            }
-          ]
-        }
-
-        shape Capsule "femurRight3" {
-          group: 0
-          material: 1
-          parent: "coxaRight3"
-          position [-0.4477, 0, -0.1132]
-          rotation [0.0565, 0, -0.2107, 0.9759]
-          scale [0.016, 0.7515, 0.016]
-          swings [
-            {
-              amplitude: -0.6
-              axis [-0.25881904510252074, 0, 0.9659258262890683]
-              driver: "stride"
-              phase: 4.71239
-              pivot [-0.2932, 0.34, -0.0718]
-              wave: "halfSine"
-            }
-          ]
-        }
-
-        shape Capsule "coxaRight4" {
-          group: 0
-          material: 1
-          parent: "thorax"
-          position [-0.2532, 0.34, -0.2386]
-          rotation [0.5594, 0, -0.6666, 0.4927]
-          scale [0.02, 0.4665, 0.02]
-          swings [
-            {
-              amplitude: -0.35
-              axis [0, 1, 0]
-              driver: "stride"
-              phase: 0
-              pivot [-0.1, 0.22, -0.11]
-              wave: "sine"
-            }
-            {
-              amplitude: 0.5
-              axis [-0.6427876096865393, 0, 0.766044443118978]
-              driver: "stride"
-              phase: 1.5708
-              pivot [-0.1, 0.22, -0.11]
-              wave: "halfSine"
-            }
-          ]
-        }
-
-        shape Capsule "femurRight4" {
-          group: 0
-          material: 1
-          parent: "coxaRight4"
-          position [-0.3758, 0, -0.3414]
-          rotation [0.1402, 0, -0.1671, 0.9759]
-          scale [0.016, 0.7515, 0.016]
-          swings [
-            {
-              amplitude: -0.6
-              axis [-0.6427876096865393, 0, 0.766044443118978]
-              driver: "stride"
-              phase: 1.5708
-              pivot [-0.2532, 0.34, -0.2386]
-              wave: "halfSine"
-            }
-          ]
+        for side in spiderSides {
+          for (leg, i) in spiderLegs {
+            spiderLeg(side: side.name, sign: side.sign, shift: side.shift, i: i, leg: leg)
+          }
         }
       }
     }
@@ -1351,76 +1018,10 @@ template pond() {
           scale [0.025, 0.028, 0.025]
         }
 
-        shape Box "wingLeft1" {
-          group: 0
-          material: 1
-          parent: "thorax"
-          position [0.21, 0.94, 0.03]
-          scale [0.16, 0.005, 0.05]
-          swings [
-            {
-              amplitude: -0.6
-              axis [0, 0, 1]
-              driver: "wingbeat"
-              phase: 0
-              pivot [0.05, 0.94, 0.03]
-              wave: "sine"
-            }
-          ]
-        }
-
-        shape Box "wingLeft2" {
-          group: 0
-          material: 1
-          parent: "thorax"
-          position [0.2, 0.94, -0.03]
-          scale [0.15, 0.005, 0.05]
-          swings [
-            {
-              amplitude: -0.6
-              axis [0, 0, 1]
-              driver: "wingbeat"
-              phase: 3.14159
-              pivot [0.05, 0.94, -0.03]
-              wave: "sine"
-            }
-          ]
-        }
-
-        shape Box "wingRight1" {
-          group: 0
-          material: 1
-          parent: "thorax"
-          position [-0.21, 0.94, 0.03]
-          scale [0.16, 0.005, 0.05]
-          swings [
-            {
-              amplitude: 0.6
-              axis [0, 0, 1]
-              driver: "wingbeat"
-              phase: 0
-              pivot [-0.05, 0.94, 0.03]
-              wave: "sine"
-            }
-          ]
-        }
-
-        shape Box "wingRight2" {
-          group: 0
-          material: 1
-          parent: "thorax"
-          position [-0.2, 0.94, -0.03]
-          scale [0.15, 0.005, 0.05]
-          swings [
-            {
-              amplitude: 0.6
-              axis [0, 0, 1]
-              driver: "wingbeat"
-              phase: 3.14159
-              pivot [-0.05, 0.94, -0.03]
-              wave: "sine"
-            }
-          ]
+        for side in wingSides {
+          for (wing, n) in dragonflyWings {
+            dragonflyWing(side: side.name, sign: side.sign, n: n, wing: wing)
+          }
         }
       }
     }
@@ -1455,92 +1056,29 @@ template pond() {
             ]
           }
         ]
-        effectors [
-          {
-            chain [
-              "upperForeLeft"
-              "lowerForeLeft"
-            ]
-            name: "pawForeLeft"
-            plant {
-              driver: "stride"
-              window [0, 3.141592653589793]
-            }
-            target {
-              direction [0, -1, 0]
-              kind: "surface"
-              reach: 0.4
-              standoff: 0.03
-            }
-            tip: "pawForeLeft"
-            when [
-              "Grounded"
-            ]
-          }
-          {
-            chain [
-              "upperHindLeft"
-              "lowerHindLeft"
-            ]
-            name: "pawHindLeft"
-            plant {
-              driver: "stride"
-              window [3.141592653589793, 6.28]
-            }
-            target {
-              direction [0, -1, 0]
-              kind: "surface"
-              reach: 0.4
-              standoff: 0.03
-            }
-            tip: "pawHindLeft"
-            when [
-              "Grounded"
-            ]
-          }
-          {
-            chain [
-              "upperForeRight"
-              "lowerForeRight"
-            ]
-            name: "pawForeRight"
-            plant {
-              driver: "stride"
-              window [3.141592653589793, 6.28]
-            }
-            target {
-              direction [0, -1, 0]
-              kind: "surface"
-              reach: 0.4
-              standoff: 0.03
-            }
-            tip: "pawForeRight"
-            when [
-              "Grounded"
-            ]
-          }
-          {
-            chain [
-              "upperHindRight"
-              "lowerHindRight"
-            ]
-            name: "pawHindRight"
-            plant {
-              driver: "stride"
-              window [0, 3.141592653589793]
-            }
-            target {
-              direction [0, -1, 0]
-              kind: "surface"
-              reach: 0.4
-              standoff: 0.03
-            }
-            tip: "pawHindRight"
-            when [
-              "Grounded"
-            ]
-          }
-        ]
+        effectors: reduce(
+          spiderSides,
+          [],
+          (paws, side) => concat(
+            paws,
+            map(range(0, 2), end => {
+              chain [$"upper{houndEnds[end].name}{side.name}", $"lower{houndEnds[end].name}{side.name}"]
+              name: $"paw{houndEnds[end].name}{side.name}"
+              plant {
+                driver: "stride"
+                window: stridePhases[(end + side.shift) % 2]
+              }
+              target {
+                direction [0, -1, 0]
+                kind: "surface"
+                reach: 0.4
+                standoff: 0.03
+              }
+              tip: $"paw{houndEnds[end].name}{side.name}"
+              when ["Grounded"]
+            })
+          )
+        )
         name: "hound"
         palette [
           {
@@ -1673,188 +1211,10 @@ template pond() {
           ]
         }
 
-        shape Capsule "upperForeLeft" {
-          group: 0
-          material: 0
-          parent: "chest"
-          position [0.12, 0.26, 0.22]
-          rotation [0.0453, 0, 0.0226, 0.9987]
-          scale [0.045, 0.4423, 0.045]
-          swings [
-            {
-              amplitude: -0.55
-              axis [1, 0, 0]
-              driver: "stride"
-              phase: 0
-              pivot [0.11, 0.48, 0.24]
-              wave: "sine"
-            }
-          ]
-        }
-
-        shape Capsule "lowerForeLeft" {
-          group: 0
-          material: 0
-          parent: "upperForeLeft"
-          position [0.12, 0.05, 0.26]
-          rotation [-0.094, 0, 0, 0.9956]
-          scale [0.035, 0.4276, 0.035]
-          swings [
-            {
-              amplitude: 0.8
-              axis [1, 0, 0]
-              driver: "stride"
-              phase: 1.5708
-              pivot [0.12, 0.26, 0.22]
-              wave: "halfSine"
-            }
-          ]
-        }
-
-        shape Sphere "pawForeLeft" {
-          group: 0
-          material: 1
-          parent: "lowerForeLeft"
-          position [0.12, 0.04, 0.29]
-          scale [0.045, 0.035, 0.05]
-        }
-
-        shape Capsule "upperHindLeft" {
-          group: 0
-          material: 0
-          parent: "chest"
-          position [0.12, 0.26, -0.24]
-          rotation [0.0453, 0, 0.0226, 0.9987]
-          scale [0.045, 0.4423, 0.045]
-          swings [
-            {
-              amplitude: -0.55
-              axis [1, 0, 0]
-              driver: "stride"
-              phase: 3.14159
-              pivot [0.11, 0.48, -0.22]
-              wave: "sine"
-            }
-          ]
-        }
-
-        shape Capsule "lowerHindLeft" {
-          group: 0
-          material: 0
-          parent: "upperHindLeft"
-          position [0.12, 0.05, -0.2]
-          rotation [-0.094, 0, 0, 0.9956]
-          scale [0.035, 0.4276, 0.035]
-          swings [
-            {
-              amplitude: 0.8
-              axis [1, 0, 0]
-              driver: "stride"
-              phase: 4.71239
-              pivot [0.12, 0.26, -0.24]
-              wave: "halfSine"
-            }
-          ]
-        }
-
-        shape Sphere "pawHindLeft" {
-          group: 0
-          material: 1
-          parent: "lowerHindLeft"
-          position [0.12, 0.04, -0.17]
-          scale [0.045, 0.035, 0.05]
-        }
-
-        shape Capsule "upperForeRight" {
-          group: 0
-          material: 0
-          parent: "chest"
-          position [-0.12, 0.26, 0.22]
-          rotation [0.0453, 0, -0.0226, 0.9987]
-          scale [0.045, 0.4423, 0.045]
-          swings [
-            {
-              amplitude: -0.55
-              axis [1, 0, 0]
-              driver: "stride"
-              phase: 3.14159
-              pivot [-0.11, 0.48, 0.24]
-              wave: "sine"
-            }
-          ]
-        }
-
-        shape Capsule "lowerForeRight" {
-          group: 0
-          material: 0
-          parent: "upperForeRight"
-          position [-0.12, 0.05, 0.26]
-          rotation [-0.094, 0, 0, 0.9956]
-          scale [0.035, 0.4276, 0.035]
-          swings [
-            {
-              amplitude: 0.8
-              axis [1, 0, 0]
-              driver: "stride"
-              phase: 4.71239
-              pivot [-0.12, 0.26, 0.22]
-              wave: "halfSine"
-            }
-          ]
-        }
-
-        shape Sphere "pawForeRight" {
-          group: 0
-          material: 1
-          parent: "lowerForeRight"
-          position [-0.12, 0.04, 0.29]
-          scale [0.045, 0.035, 0.05]
-        }
-
-        shape Capsule "upperHindRight" {
-          group: 0
-          material: 0
-          parent: "chest"
-          position [-0.12, 0.26, -0.24]
-          rotation [0.0453, 0, -0.0226, 0.9987]
-          scale [0.045, 0.4423, 0.045]
-          swings [
-            {
-              amplitude: -0.55
-              axis [1, 0, 0]
-              driver: "stride"
-              phase: 0
-              pivot [-0.11, 0.48, -0.22]
-              wave: "sine"
-            }
-          ]
-        }
-
-        shape Capsule "lowerHindRight" {
-          group: 0
-          material: 0
-          parent: "upperHindRight"
-          position [-0.12, 0.05, -0.2]
-          rotation [-0.094, 0, 0, 0.9956]
-          scale [0.035, 0.4276, 0.035]
-          swings [
-            {
-              amplitude: 0.8
-              axis [1, 0, 0]
-              driver: "stride"
-              phase: 1.5708
-              pivot [-0.12, 0.26, -0.24]
-              wave: "halfSine"
-            }
-          ]
-        }
-
-        shape Sphere "pawHindRight" {
-          group: 0
-          material: 1
-          parent: "lowerHindRight"
-          position [-0.12, 0.04, -0.17]
-          scale [0.045, 0.035, 0.05]
+        for side in spiderSides {
+          for (end, e) in houndEnds {
+            houndLeg(side: side.name, sign: side.sign, shift: side.shift, e: e, end: end)
+          }
         }
       }
     }
