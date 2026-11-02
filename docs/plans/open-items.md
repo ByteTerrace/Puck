@@ -3031,8 +3031,14 @@ Owner: the lead · ordinary · Next: the Monitor hook check.
 
 - After the first settle window: give Antigravity (Gemini Argon) a fair
   coding trial before deciding its role (the owner's direction: it has so far
-  done research only, where its code citations were unreliable and one figure
-  was invented, so its numbers are checked before use). Two bounded issue fixes
+  done research and reading only, so its numbers are checked before use). Its
+  record so far:
+  - The aspnetcore research audit found real errors in Claude's report, and
+    the lead's spot checks held. It also invented one figure and misread one
+    PR.
+  - In the documentation sweep's domain manuals, Codex verified its findings:
+    14 confirmed, 13 amended, 1 rejected. About 60% of its findings were ones
+    the second reader, Codex, did not make. Two bounded issue fixes
   from this file, each in its own worktree with a mechanical check: the five
   duplicate `HeapAllocator` test allocators and `IAllocator`'s untrue
   documentation (small, [refactoring](#refactoring-campaign)), and the

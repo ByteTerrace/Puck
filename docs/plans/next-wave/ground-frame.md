@@ -1,6 +1,6 @@
 # ground-frame: premises for Next items 0 and 1, checked against the code
 
-Lane `ground-frame`, read-only. Worktree `agent-a0cf27d2c6048536c` at the main landing. Every claim below cites the
+Lane `ground-frame`, read-only. At the main landing. Every claim below cites the
 source read in this pass. Usage and symbol questions were answered by text search over `src/` (Grep), not by
 `puck references`/`puck declarations`: no lane CLI was built, so no lease was taken. A lane that renames or deletes a
 symbol named here runs `puck references` on it first.

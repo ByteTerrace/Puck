@@ -44,7 +44,5 @@ view.override camera look 124 2 -60 119.5 0.3 -55.3 55
 
 [meadow-tests.puck](meadow-tests.puck) reproduces a walk over the lawn and
 support on a relieved bank through the real debug world. The
-[port plan](../../docs/plans/port-experimental.md#9-meadow-and-foliage) records
-the before/after bake, frame, memory and instancing measurements. The
 [job-system packet](../../docs/plans/open-items.md#engine-job-system) owns
 the remaining cost of packing animated placements every frame.

@@ -1,6 +1,6 @@
 # Ground: where a debug World's memory goes (lane ground-memory)
 
-Grounding pass, read-only. Tree: `worktree-agent-aa95247f5b9b74dcd` at the main landing. Every claim carries its kind:
+Grounding pass, read-only. Tree: the main landing. Every claim carries its kind:
 **[M]** measured in this pass, **[R]** recorded earlier (open-items / job-system memo / an earlier World log, cited),
 **[S]** derived from the source (file:line), not reproduced. No windowed World and no cold bake were run (the brief
 forbade both), so everything about meshes, GI and the GPU is [R] or [S].

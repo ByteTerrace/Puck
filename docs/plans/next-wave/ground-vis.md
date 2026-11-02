@@ -1,6 +1,6 @@
 # ground-vis: grounding for the visibility wave
 
-Read-only grounding pass on `worktree-agent-a3c298d9ef8f26bc2` at the main landing. No builds, Worlds or GPU.
+Read-only grounding pass at the main landing. No builds, Worlds or GPU.
 Every `file:line` below was read in this tree. Paths are under `src/Puck.SdfVm/` unless they name another root.
 R2 has landed: its selection kernel and counted indirect draws are in the current tree, so the visibility plan's
 "R2's code is on its lane's branch" (`docs/plans/visibility.md:33-34`) is stale.
@@ -367,7 +367,7 @@ so this matters next. Take `world.gpu-timing` per pass in legs 1 and 2 before V2
 
 **The stamper.** Every static placement instance emits instances whose bound and transforms are in world space:
 
-- `WorldPlacementStamper.Visit` (`src/Puck.World.Client/WorldPlacementStamper.cs:742-899`) calls `BeginInstance` with
+- `WorldPlacementStamper.StaticInstanceVisitor.Visit` (`src/Puck.World.Client/WorldPlacementStamper.cs:742-899`) calls `BeginInstance` with
   `boundCenter: instance.Origin` (`:828`, `:848`, `:892`, glass at `:696`).
 - Each shape opens its own instance, run-joined by `bakesWithPrevious` (`:806-812`).
 - The shapes go through `CreationStampTransform(Origin, Rotation, Scale)`, and `StampPrefix` (Authoring
@@ -472,7 +472,7 @@ Nothing in the collider path:
   `CreationCommand.StepClamps.cs:22`, the adjacency emitter and the session emitters. Each one either builds an
   evaluator or feeds a composition.
 - The door is the program itself: the builder records each fixed frame (slot → rigid pose), and a single method writes
-  them into any transform table. A working name is `SdfProgram.FixedFrames` and `WriteFixedFrames`. The composition
+  them into any transform table. A working name is a new `FixedFrames` member on `SdfProgram`, written by `WriteFixedFrames`. The composition
   source writes them on `Everything` frames, and every CPU evaluator takes its table through the same method.
 - The frame rows never move, so `SdfMovedTransforms` owes them nothing after the first frame.
 
