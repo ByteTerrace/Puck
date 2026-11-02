@@ -105,7 +105,7 @@ bindingOverlays [{
 ]
 rule "remember-note" {
   forEach: $inputEvents:1
-  when inputEdge(1, note, Press, each)
+  when inputEdge(1, note, Press, each) != 0
   mode: Level
   notePresses += 1
   noteOrigin = inputHeldSince(1, note)
@@ -113,13 +113,13 @@ rule "remember-note" {
 }
 rule "remember-charge" {
   forEach: $inputEvents:1
-  when inputEdge(1, charge, Press, each)
+  when inputEdge(1, charge, Press, each) != 0
   mode: Level
   chargeOrigin = inputHeldSince(1, charge)
   chargeIdentity = inputHeldPress(1, charge)
 }
 rule "change-section" {
-  when inputEdge(1, section, Press, 0)
+  when inputEdge(1, section, Press, 0) != 0
   mode: Level
   setBodyState(key: 0, state: "section", expression: 1 - bodyState(body, 0, section))
 }
@@ -139,26 +139,26 @@ rule "charge-continues" {
 }
 rule "release-note" {
   forEach: $inputEvents:1
-  when inputEdge(1, note, Release, each)
+  when inputEdge(1, note, Release, each) != 0
   mode: Level
   noteReleases += 1
 }
 rule "release-charge" {
   forEach: $inputEvents:1
   local released = inputTime(1, charge, Release, each) ?? 0.0
-  when inputEdge(1, charge, Release, each) and (released - chargeOrigin) >= 0.5
+  when inputEdge(1, charge, Release, each) != 0 and (released - chargeOrigin) >= 0.5
   mode: Level
   chargedRelease += 1
 }
 rule "cancel-note" {
   forEach: $inputEvents:1
-  when inputEdge(1, note, Cancel, each)
+  when inputEdge(1, note, Cancel, each) != 0
   mode: Level
   cancelledNotes += 1
 }
 rule "cancel-charge" {
   forEach: $inputEvents:1
-  when inputEdge(1, charge, Cancel, each)
+  when inputEdge(1, charge, Cancel, each) != 0
   mode: Level
   cancelledCharges += 1
 }

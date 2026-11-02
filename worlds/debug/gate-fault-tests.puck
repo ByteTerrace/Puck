@@ -10,34 +10,66 @@ documentId: "gate-fault-tests"
 
 state {
   world {
-    row { name: "a", kind: "Int", value: 0 }
-    row { name: "b", kind: "Int", value: 5 }
-    row { name: "cards", kind: "Int", cells [{ key: "1", value: 3 }] }
-    row { name: "hist", kind: "Int", domain: ring(capacity: 4, empty: -1) }
-    row { name: "keyFired", kind: "Int", value: 0 }
-    row { name: "ageFired", kind: "Int", value: 0 }
-    row { name: "keyControl", kind: "Int", value: 0 }
-    row { name: "ageControl", kind: "Int", value: 0 }
+    row {
+      name: "a"
+      kind: "Int"
+      value: 0
+    }
+    row {
+      name: "b"
+      kind: "Int"
+      value: 5
+    }
+    row {
+      name: "cards"
+      kind: "Int"
+      cells [{ key: "1", value: 3 }]
+    }
+    row {
+      name: "hist"
+      kind: "Int"
+      domain: ring(capacity: 4, empty: -1)
+    }
+    row {
+      name: "keyFired"
+      kind: "Int"
+      value: 0
+    }
+    row {
+      name: "ageFired"
+      kind: "Int"
+      value: 0
+    }
+    row {
+      name: "keyControl"
+      kind: "Int"
+      value: 0
+    }
+    row {
+      name: "ageControl"
+      kind: "Int"
+      value: 0
+    }
   }
 }
 
 rule "dynamic-key-fault" {
-  when not (cards[1 / a] == 3)
+  when not cards[1 / a] == 3
   mode: Level
   keyFired += 1
 }
 rule "ring-age-fault" {
-  when not (history(hist, 1 / a) > 5)
+  when not history(hist, 1 / a) > 5
   mode: Level
   ageFired += 1
 }
 rule "dynamic-key-absent" {
-  when not (cards[b] == 3)
+  when not cards[b] == 3
   mode: Level
   keyControl += 1
 }
 rule "ring-age-absent" {
-  when not (history(hist, b) > 5)
+  when not history(hist, b) > 5
   mode: Level
   ageControl += 1
 }

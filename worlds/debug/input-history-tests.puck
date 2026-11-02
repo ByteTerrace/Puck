@@ -120,23 +120,23 @@ bindingOverlays [{
 
 rule "count-presses" {
   forEach: $inputEvents:1
-  when inputEdge(1, tapA, Press, each)
+  when inputEdge(1, tapA, Press, each) != 0
   mode: Level
   presses += 1
 }
 rule "count-current-owner" {
-  when inputEdge(`cell:inputOwner:$value`, tapA, Press, 0)
+  when inputEdge(`cell:inputOwner:$value`, tapA, Press, 0) != 0
   mode: Edge
   dynamicOwnerPresses += 1
 }
 rule "count-releases" {
   forEach: $inputEvents:1
-  when inputEdge(1, tapA, Release, each)
+  when inputEdge(1, tapA, Release, each) != 0
   mode: Level
   releases += 1
 }
 rule "score-simultaneous" {
-  when inputMatch(1, `two-buttons`)
+  when inputMatch(1, `two-buttons`) != 0
   mode: Level
   simultaneous += 1
   consumeInput(owner: "1", pattern: "two-buttons")
@@ -145,7 +145,7 @@ rule "score-typed-line" {
   forEach: $inputEvents:1
   local scalar = inputValue(1, typed, Text, each) ?? 0
   local time = inputTime(1, typed, Text, each) ?? 0.0
-  when inputEdge(1, typed, Text, each)
+  when inputEdge(1, typed, Text, each) != 0
   mode: Level
   if characters == 0 {
     firstTextTime = time

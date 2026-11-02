@@ -20,28 +20,36 @@ placements {
   placement "flat-0" {
     prototype: "flat-0"
     position [5, 0, 1.5]
-    solid { margin: 0 }
+    solid {
+      margin: 0
+    }
   }
   placement "flat-1" {
     prototype: "flat-1"
     position [-6, 0, 6]
     yawDegrees: 147
     scale: 1.08
-    solid { margin: 0 }
+    solid {
+      margin: 0
+    }
   }
   placement "flat-2" {
     prototype: "flat-2"
     position [-3, 0, -7]
     yawDegrees: 50
     scale: 0.93
-    solid { margin: 0 }
+    solid {
+      margin: 0
+    }
   }
   placement "flat-3" {
     prototype: "flat-0"
     position [9, 0, -6]
     yawDegrees: 113
     scale: 1.06
-    solid { margin: 0 }
+    solid {
+      margin: 0
+    }
   }
 }
 

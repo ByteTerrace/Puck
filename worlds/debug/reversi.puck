@@ -447,7 +447,7 @@ rules "" when reversiHold == reversiSettleTicks and search(ply) == 0 {
   rule "reversi-read-illegal" {
     when ((reversiChangedCount > 0 or reversiCollisions > 0) and
       reversiLegal == 0 and
-      (board(mask, reversiSeen, 1, 2) & ~((board(mask, reversiBoard, 1, 2)))))
+      (board(mask, reversiSeen, 1, 2) & ~((board(mask, reversiBoard, 1, 2)))) != 0)
     reversiIllegal += 1
   }
 
