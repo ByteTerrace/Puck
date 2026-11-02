@@ -179,8 +179,9 @@ from the shared retained mesh records; a pass uploads only 224 bytes of
 controls. Each pass retains visibility, level and mesh identity per draw on
 the GPU, preserving the 1/1.1 display-pixel band and resetting level history
 when the mesh changes or a settled capture holds the frame. Buffer growth
-copies that history. Opaque occlusion keeps its early/late phases; other
-raster passes issue one indirect phase. CPU `Choose` and per-draw recording
+copies that history. Opaque occlusion keeps its early/late phases; glass uses
+one. A cascade selects once and reuses its arguments in the entry and exit
+render passes, each recording one counted call. CPU `Choose` and per-draw recording
 are removed. Vulkan's native-count fallback reads the same initialized
 argument slots through `vkCmdDrawIndirect`; `DrawIndex` reads their identities
 without the optional first-instance feature. Hardware observations are

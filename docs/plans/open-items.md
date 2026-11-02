@@ -718,6 +718,9 @@ system can take, from `dotnet-trace` thread-time samples of the frame thread
   part at `world.detail 0`, `1` and `2`, on the RTX 2060 and at the Deck's
   resolution; it decides whether V3 and V4 come ahead of V2 there. Every
   frame number taken so far, R2's included, is load-bound and ranks nothing.
+  Include R2's unresolved Direct3D 12 lobby reading (68.78 ms produce against
+  39.25–40.16 ms CPU controls) in that quiet-window trace; [R2 observations](engine-job-system.md#r2-observations)
+  holds the paired counters and GPU pass costs.
   Owner: the lead.
 - [medium] `SdfMeshPathBake.Dress` rebuilds every draw of every group whenever
   one dynamic slot moved, and for each dynamic group scans `MeshAssetSlots`

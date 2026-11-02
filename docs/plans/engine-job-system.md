@@ -561,7 +561,9 @@ The per-draw GPU history carries visibility, the previous level and mesh
 identity, keeps the 1/1.1 display-pixel band while the mesh is unchanged,
 survives buffer growth and ignores prior levels for a settled still. Rejected
 commands are empty slots, preserving staged order and depth ties. Opaque
-occlusion retains its early and late phases; other raster passes use one.
+occlusion retains its early and late phases; glass uses one. Each cascade
+selects once, and its entry and exit render passes consume the same selected
+phase, with one counted call each and no intervening selection or history write.
 The CPU records one counted indirect call per phase regardless of draw count;
 CPU `Choose` and its direct-draw loop are deleted. Vulkan without native
 counting consumes the same initialized arguments, in one multi-draw where
@@ -747,104 +749,97 @@ as `puck mesh audit` for bake defects.
 
 ### R2 observations
 
-The November 1 lane runs use the real debug package on the RTX 4070 at
-1280×900, highest quality, native render scale, temporal accumulation and AO
-on. Bakes settled before these readings. CPU `Choose` runs 2 and 3 establish
-the before range; GPU run 1 uses the merged memory work and the new selection
-path. Shared-machine load, differing code outside R2 and unpinned ticks limit
-attribution. The 60 FPS bar remains unmet; quality was not reduced.
+November 1, RTX 4070, 1280×900, highest quality, native render scale, temporal
+accumulation and AO on. Bakes settle before the paired readings. CPU controls
+10 and 11 restore CPU `Choose` while retaining the same memory/camera work,
+complete geometry tables and motion-copy fix as GPU run 10. Both use the same
+frozen debug documents. These pairs precede integration's new shadow exit
+layers; their purpose is to isolate R2. Shared-machine load prevents causal
+ranking. Quality was not reduced and the 60 FPS bar remains unmet.
 
-| Direct3D 12 place | CPU produce avg, ms | GPU produce avg, ms | CPU world draws, all passes | GPU world draws, all passes |
+| Backend / place | CPU produce avg, ms | GPU produce avg, ms | CPU root draws, all passes | GPU root draws, all passes |
 |---|---:|---:|---:|---:|
-| Lobby (`desktop`) | 39.40–40.21 | 41.65 | 5,648–5,649 | 5,649 |
-| Rim (`overlook`) | 22.39–49.71 | 20.16 | 465–466 | 465 |
-| Gallery interior | 35.11–40.90 | 30.49 | 6,650–6,659 | 6,659 |
-| Meadow | 55.95–59.86 | 52.25 | 11,933–11,974 | 11,854 |
+| Direct3D 12 lobby | 39.25–40.16 | 68.78 | 5,649–5,650 | 5,646 |
+| Direct3D 12 rim | 22.81–41.23 | 21.83 | 465 | 465 |
+| Direct3D 12 gallery | 36.86–39.35 | 30.32 | 6,659 | 6,659 |
+| Direct3D 12 meadow | 59.53–59.76 | 50.75 | 11,862–12,022 | 11,813 |
+| Vulkan lobby | 34.53–40.21 | 38.12 | 5,650 | 5,647 |
+| Vulkan rim | 21.40–24.62 | 26.56 | 465 | 465 |
+| Vulkan gallery | 29.68–36.50 | 33.84 | 6,659 | 6,659 |
+| Vulkan meadow | 58.41–59.43 | 51.82 | 11,821–11,890 | 12,069 |
 
-Root-pass GPU timestamps, 32 samples per reading (near shadow / far shadow /
-opaque / glass, ms): lobby CPU `0.468–0.480 / 1.172–1.206 / 0.493–0.528 /
-0.012`, GPU `0.516 / 1.097 / 0.655 / 0.183`; meadow CPU `0.620–2.116 /
-0.777–2.196 / 1.339–3.863 / 0.015–0.017`, GPU `0.477 / 0.623 / 1.097 /
-0.182`. Selection and scanning empty indirect slots cost GPU work, especially
-for the two glass draws among 7,578 retained draws; removed CPU work is not
-free GPU work. The meadow's 4,215 blade draws share 288 geometries (14.6
-draws/geometry); sparse instance mapping and per-geometry/per-level ranges
-remain with the rendering owner in the [packet](open-items.md#engine-job-system).
+The slower Direct3D 12 GPU lobby reading is unresolved, not discarded: produce
+p99 is 216.56 ms against the CPU controls' 54.48–54.82 ms. The lead's quiet
+settle window must measure it before attributing it to R2 or machine load.
+Animated poses also vary the draw/vertex totals. Root vertices at the meadow:
+Direct3D 12 CPU 9,536,304–9,681,789 / GPU 9,515,166; Vulkan CPU
+9,596,163–9,641,541 / GPU 9,762,255. CPU root dispatches are 31, GPU 34.
 
-The normal still comparison measures mean absolute RGB differences per 64×64
-region against two CPU runs. It flags 26 lobby regions, none at the rim, 240
-in the gallery and three at the meadow. Inspection shows broad lighting and
-shadow variation, including nearly black interiors in one unchanged CPU run;
-no geometry mismatch has been identified. This is not an image-equivalence
-verdict. Tick-pinned comparisons are pending. The initial cold/incomplete
-baseline legs and the stopped Direct3D 12 validation attempt support no pass
-claim. Matched Direct3D 12 performance and image controls remain open behind
-the shared GPU lease. Release builds for both backends pass; input allocation
-(two fixtures) and granaries (five) pass `--reproduce` after the integration
-merge. Scratch transcripts and images carry the `r2-cull-` prefix.
+Root raster GPU timestamps, 32 samples per reading; each cell is CPU range
+then GPU, in milliseconds:
 
-Full Direct3D 12 GPU-based validation subsequently passes on integration
-merge `c72a9b3a3c` and the current debug package. The layer reports GPU-based
-validation with state tracking and synchronized queue validation live; bakes
-settle at tick 2,289, and lobby / rim / gallery / meadow read 6,749 / 470 /
-7,892 / 11,967 root draws. No validation warning or error is reported. The
-leg takes about 576 seconds, including a slow native resolve pipeline bind
-and cache misses. Its transcript is `r2-cull-gpu-directx-20`. The following
-CPU performance control exceeded its shorter bake wait with two jobs still
-pending and is excluded; it does not replace the matched performance runs.
+| Backend / place | Near shadow | Far shadow | Opaque | Glass |
+|---|---:|---:|---:|---:|
+| Direct3D 12 lobby | 0.506–0.594 → 0.422 | 1.208–1.293 → 0.812 | 0.467–0.528 → 0.511 | 0.009–0.013 → 0.163 |
+| Direct3D 12 meadow | 1.827–1.887 → 0.537 | 2.023–2.068 → 0.675 | 3.771–3.783 → 1.232 | 0.018–0.022 → 0.166 |
+| Vulkan lobby | 0.369–0.437 → 0.495 | 0.936–1.262 → 1.206 | 0.399–0.559 → 0.592 | 0.014–0.023 → 0.066 |
+| Vulkan meadow | 1.239–1.473 → 0.555 | 1.586–1.798 → 0.772 | 2.907–3.195 → 1.386 | 0.022–0.027 → 0.067 |
 
-The subsequent Vulkan comparison freezes the same debug documents and uses
-matched CPU and GPU controls: both include the integration's memory and camera
-changes, complete shared geometry tables and the motion-copy synchronization
-fix. CPU runs 10 and 11 bound the before observations; GPU run 10 is unlayered.
-These are loaded-machine observations, not the lead's quiet-window ranking.
+The unused third root cascade has no samples. The complete render-graph pass
+readings and counters are in scratch `r2-cull-performance-directx.json` and
+`r2-cull-performance-vulkan.json`. Selection and empty-command scanning add
+GPU work, visible especially in glass. Ordered compaction and instance
+buckets remain [visibility V1](visibility.md#the-build-order). The meadow's
+4,215 blade draws share 288 geometries (14.6 draws/geometry); grouping needs
+a sparse per-geometry/per-level instance map and every draw-identity consumer
+moved while preserving depth ties, beyond a small argument extension.
 
-| Vulkan place | CPU produce avg, ms | GPU produce avg, ms |
-|---|---:|---:|
-| Lobby (`desktop`) | 34.53–40.21 | 38.12 |
-| Rim (`overlook`) | 21.40–24.62 | 26.56 |
-| Gallery interior | 29.68–36.50 | 33.84 |
-| Meadow | 58.41–59.43 | 51.82 |
+Stills use mean absolute RGB channel differences per 64×64 region against
+two CPU runs. Every positive excess over that region's measured noise is
+flagged, as section 6 specifies. Normal Direct3D 12 flags lobby / rim /
+gallery / meadow regions 122 / 0 / 0 / 90; Vulkan flags 16 / 0 / 54 / 122.
+All image pairs were inspected: flagged lobby regions include the Moth's
+head and monitor, meadow regions the animated grass; normal gallery lighting
+varies broadly even between CPU controls. No missing geometry was identified.
+These flags are reported, not a pixel-equivalence claim.
 
-Root counters: lobby CPU 5,650 draws / 9,090,555–9,090,591 vertices,
-GPU 5,647 / 9,092,643; meadow CPU 11,821–11,890 / 9,596,163–9,641,541,
-GPU 12,069 / 9,762,255. Root near-shadow / far-shadow / opaque / glass
-timestamps (32 samples, ms): lobby CPU `0.369–0.437 / 0.936–1.262 /
-0.399–0.559 / 0.014–0.023`, GPU `0.495 / 1.206 / 0.592 / 0.066`;
-meadow CPU `1.239–1.473 / 1.586–1.798 / 2.907–3.195 / 0.022–0.027`,
-GPU `0.555 / 0.772 / 1.386 / 0.067`. Draw counts vary with animated poses
-and are not an image-equivalence check.
-
-The Vulkan validation layer is clean across all four places after fixing a
-real motion-history copy write-after-write dependency and overlapping upload
-ranges. The unpinned image comparison flags 16 lobby regions, none at the rim,
-54 in the gallery and 122 at the meadow. Inspected lobby/gallery regions show
-lighting differences; meadow regions show grass pose and lighting differences.
-The subsequent lockstep controls capture ticks 150 / 300 / 450 / 600 after
-bakes settle at tick zero. Both CPU runs and the GPU run have identical
-authority hashes and camera/pose stamps at every capture. Vulkan synchronization
-validation is clean for this GPU run too.
+The additional Vulkan lockstep controls capture ticks 150 / 300 / 450 / 600
+after bakes settle at tick zero. Both CPU runs and the GPU run have identical
+authority hashes and camera/pose stamps at every capture:
 
 | Pinned Vulkan place | CPU mean region noise | CPU/GPU mean region difference | Regions above noise |
 |---|---:|---:|---:|
 | Lobby | 0.00004015 | 0.00098606 | 103 |
 | Rim | 0 | 0 | 0 |
-| Gallery interior | 0.00008735 | 0.00013238 | 96 |
+| Gallery | 0.00008735 | 0.00013238 | 96 |
 | Meadow | 0.00000109 | 0.00000109 | 0 |
 
-These are mean absolute RGB channel steps (0–255) per 64×64 region, with
-every positive excess flagged. All four image pairs and enlarged monitor
-crops were inspected. The gallery's 428 changed pixels differ in one channel
-by one step; the meadow's four such pixels are within the CPU noise. The
+Units are 0–255 channel steps. The gallery's 428 changed pixels differ in one
+channel by one step; the meadow's four such pixels are within CPU noise. The
 lobby has 633 changed pixels. Its 339 channel differences larger than one
-step (maximum 48) all lie on the striped monitor face, x269–323 / y391–490;
-its geometry aligns in the enlarged crops. The sampled stripe difference
-exceeds this unusually small pinned noise and its cause remains unconfirmed;
-it is not a claim of pixel equivalence. No missing geometry was identified.
+step (maximum 48) all lie on the static striped monitor face, x269–323 /
+y391–490. Enlarged CPU/GPU crops align geometrically. The sampled stripe
+difference exceeds the small pinned noise and its cause remains unconfirmed.
 
-Two single-World debug fixtures, `input-clock30-tests.puck` (four verdicts)
-and `unbiased-draws-tests.puck` (six), pass `--reproduce` again after integration
-merge `c72a9b3a3c`; presentation selection does not enter simulation state.
+Vulkan synchronization validation is clean over four settled places in both
+the measured and pinned GPU runs. Full Direct3D 12 GPU-based validation,
+including state tracking and synchronized queue validation, passes on merge
+`c72a9b3a3c` and its current debug package: bakes settle at tick 2,289; lobby /
+rim / gallery / meadow read 6,749 / 470 / 7,892 / 11,967 root draws, with no
+validation warning or error. This leg takes about 576 seconds, including a
+slow native resolve pipeline bind and cache misses. Initial incomplete
+controls and a stopped validation attempt are excluded. A later current
+Vulkan boot reaches readiness and submits 17 world dispatches while cold
+geometry is still pending; it does not replace the settled four-place check.
+
+Integration merge `e147b701a` adds shadow exit layers. R2 reuses the cascade's
+selected arguments for that second raster pass; fresh four-place Direct3D 12
+GPU validation and Vulkan synchronization validation of this merge are queued.
+Release CLI and World builds, including DXIL and SPIR-V, pass with zero
+warnings/errors. Two debug fixtures pass `--reproduce` again on this merge:
+`input-clock30-tests.puck` (four verdicts) and `unbiased-draws-tests.puck`
+(six); presentation selection does not enter simulation state.
+
 
 ### What becomes of the tick-to-produce memo's phases
 
