@@ -2,6 +2,7 @@ import "../standard/inputs"
 import "shapes"
 import "solitaire"
 import "../standard/cards"
+import "../standard/kits"
 import "gametable"
 
 // The deck's back and its ace to six of each suit, which the shedding table (shedding.puck) deals in the same debug world.
@@ -122,28 +123,7 @@ kits [
   {
     bodyContact: Overlap
     bodyMotionProgram: "cardSlab"
-    motion {
-      facingSnap: true
-      holds [
-        {
-          bond: Free
-          hold: None
-          name: "held"
-        }
-      ]
-      shaping [
-        {
-          along {}
-        }
-      ]
-      speed {
-        value: 0.001
-      }
-      turn {
-        rate: 0.001
-        maxPitch: 1.5707
-      }
-    }
+    motion: stillMotion with { facingSnap: true, turn: stillTurn with { maxPitch: 1.5707 } }
     name: "cardSlab"
   }
 ]

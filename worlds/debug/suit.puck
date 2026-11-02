@@ -67,38 +67,7 @@ kits {
       bodyMotionProgram: "walk"
       collider: capsule(endpoint: [0, 1.18, 0], radius: 0.25)
       mass: 0
-      motion {
-        facingSnap: false
-        groundSnap: 0.3
-        holds [
-          groundHold
-          fallHold
-        ]
-        moveFrame: World
-        shaping [
-          {
-            along {
-              engage: 40
-              release: 50
-            }
-            turnScale: 1
-          }
-        ]
-        speed {
-          value: 5
-          held {
-            channel: "run"
-            multiplier: 2
-          }
-        }
-        stepHeight: 0.3
-        turn {
-          falloff: 1
-          maxPitch: 1.2
-          pitchRate: 0
-          rate: 2.5
-        }
-      }
+      motion: walkerMotion with { speed: walkerMotion.speed with { value: 5 } }
       // One grounded jump from the ground, spent by leaving it either way, so she never jumps in the air: 3.7 m/s lifts
       // her feet 0.56 m, a fit woman's standing jump, where the suit's 5.1 m/s clears 1.1 m.
       actions {

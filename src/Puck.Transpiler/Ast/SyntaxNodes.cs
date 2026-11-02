@@ -495,6 +495,29 @@ public sealed record ConditionalExpressionNode(
     Line,
     Column
 );
+/// <summary>A record derived from another: <c>base with { member: value }</c>. It evaluates to <paramref name="Base"/>'s
+/// object with each member <paramref name="Overrides"/> names replaced, and those it does not have added; shallow, so a
+/// nested override is spelled by nesting (<c>weathering: plate.weathering with { seed: 72 }</c>). It lowers to the
+/// object written out.</summary>
+/// <param name="Base">The record derived from; it evaluates to an object at compile time.</param>
+/// <param name="Overrides">The members that replace or join the base's.</param>
+/// <param name="Offset">The character offset within the source text.</param>
+/// <param name="Length">The character length of the node span.</param>
+/// <param name="Line">The 1-based line number in source text.</param>
+/// <param name="Column">The 1-based column number in source text.</param>
+public sealed record WithExpressionNode(
+    ExpressionNode Base,
+    ObjectExpressionNode Overrides,
+    int Offset = 0,
+    int Length = 0,
+    int Line = 1,
+    int Column = 1
+) : ExpressionNode(
+    Offset,
+    Length,
+    Line,
+    Column
+);
 /// <summary>A prefix operator expression: <c>-operand</c> or <c>~operand</c>, the rule language's two prefix
 /// operators. A negative NUMERIC LITERAL never reaches this node — the primary reader folds the sign into the literal
 /// so a unit suffix still reads against the value it signs (<c>-1.5m</c>) — so a <c>-</c> node's operand is always an

@@ -45,36 +45,8 @@ kits [
     // Its 0.3 m spheres span the ground to 1.7 m: the endpoint is the top sphere's centre above the bottom one's.
     collider: capsule(endpoint: [0, 1.1, 0], radius: 0.3)
     mass: 0
-    motion {
-      facingSnap: false
-      groundSnap: 0.3
-      holds [groundHold, fallHold]
-      moveFrame: World
-      shaping [
-        {
-          along {
-            engage: 40
-            release: 50
-          }
-          turnScale: 1
-        }
-      ]
-      // A 4 m/s walk, doubled while the run channel is held.
-      speed {
-        value: 4
-        held {
-          channel: "run"
-          multiplier: 2
-        }
-      }
-      stepHeight: 0.3
-      turn {
-        falloff: 1
-        maxPitch: 1.2
-        pitchRate: 0
-        rate: 2.5
-      }
-    }
+    // A 4 m/s walk, doubled while the run channel is held.
+    motion: walkerMotion
     // One jump from the ground, cut short by letting go while still rising.
     actions {
       jump {

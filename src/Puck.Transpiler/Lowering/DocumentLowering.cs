@@ -265,6 +265,29 @@ public static partial class DocumentLowering {
                     return jsonObj;
                 }
 
+            // The base's object with the overrides' members in place of its own, the ones it lacks added: the object
+            // written out, lowered at this value's position like any object literal.
+            case WithExpressionNode derived: {
+                    if (EvaluateValue(expr: derived.Base, fieldKey: fieldKey, scope: scope) is not JsonObject based) {
+                        scope.Diagnostics.ReportError(
+                            code: PuckDiagnosticCodes.InvalidValue,
+                            message: "'with' derives a record from an object; its base is not one",
+                            span: derived.Base.Span
+                        );
+
+                        return null;
+                    }
+                    var result = ((JsonObject)based.DeepClone());
+
+                    if (Evaluate(expr: derived.Overrides, fieldKey: fieldKey, owned: out _, scope: scope) is JsonObject overrides) {
+                        foreach (var (key, value) in overrides.ToArray()) {
+                            result[key] = value?.DeepClone();
+                        }
+                    }
+
+                    return result;
+                }
+
             case CallExpressionNode call: {
                     var context = MemberContext(scope: scope);
                     var arm = scope.Vocabulary.CallContext(callName: call.Name, context: context);
@@ -641,10 +664,11 @@ public static partial class DocumentLowering {
         }
         if (bin.Operator is "and" or "or") {
             var left = IsTruthy(node: leftNode);
-            if ((bin.Operator == "and" && !left) || (bin.Operator == "or" && left)) {
-                return JsonValue.Create(value: left ? 1L : 0L);
+
+            if (((bin.Operator == "and") && !left) || ((bin.Operator == "or") && left)) {
+                return JsonValue.Create(value: (left ? 1L : 0L));
             }
-            return JsonValue.Create(value: IsTruthy(node: EvaluateValue(bin.Right, scope, fieldKey)) ? 1L : 0L);
+            return JsonValue.Create(value: (IsTruthy(node: EvaluateValue(bin.Right, scope, fieldKey)) ? 1L : 0L));
         }
 
         var rightNode = EvaluateValue(
@@ -939,7 +963,8 @@ public static partial class DocumentLowering {
             scope,
             fieldKey
         );
-        if (un.Operator == "not") { return JsonValue.Create(value: IsTruthy(node: operand) ? 0L : 1L); }
+
+        if (un.Operator == "not") { return JsonValue.Create(value: (IsTruthy(node: operand) ? 0L : 1L)); }
 
         if (un.Operator == "~") {
             if (

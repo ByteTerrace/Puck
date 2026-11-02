@@ -122,34 +122,8 @@ kits [
     name: "range-walker"
     bodyMotionProgram: "walk"
     collider: capsule(endpoint: [0, 1.36, 0], radius: 0.35)
-    motion {
-      facingSnap: false
-      groundSnap: 0.3
-      holds [
-        groundHold
-        fallHold
-      ]
-      moveFrame: World
-      shaping [
-        {
-          along {
-            engage: 40
-            release: 50
-          }
-          turnScale: 1
-        }
-      ]
-      speed {
-        value: 5
-      }
-      stepHeight: 0.3
-      turn {
-        falloff: 1
-        maxPitch: 1.2
-        pitchRate: 0
-        rate: 2.5
-      }
-    }
+    // A 5 m/s walk with no run.
+    motion: walkerMotion with { speed { value: 5 } }
     producers {
       rangeLoop {
         scalars {

@@ -956,6 +956,22 @@ host {
   width: 1280
 }
 
+// Her flight holds spend flightFuel at one rate: the ground hold that thrusts as well, and the lift that carries her in
+// the air at her running pace (running in the air doubles it).
+let flightSpend = { state: "flightFuel", ratePerSecond: 0.001 }
+let groundFlightHold = groundHold with { name: "groundFlight", thrust: 1, spend: flightSpend }
+let flightHold = {
+  name: "flight"
+  bond: Free
+  hold: Lift
+  forward: Heading
+  lift: 1
+  speed: 5
+  gravity: standardGravity
+  thrust: 1
+  spend: flightSpend
+}
+
 kits [
   {
     bodyContact: Solid
@@ -963,72 +979,13 @@ kits [
     // The capsule stands as tall as the drawn Moth: its 0.35 m spheres span 0 to 2.06 m, the top of the helmet.
     collider: capsule(endpoint: [0, 1.36, 0], radius: 0.35)
     mass: 0
-    motion {
-      facingSnap: false
-      groundSnap: 0.3
-      // Flight mode's rows come first and spend flightFuel, so they are offered only while it is switched on: on the
-      // ground the rise channel lifts her off, and in the air she hovers and thrusts. Out of flight mode she walks and
-      // falls with no hover and no thrust, and jumps instead.
-      holds [
-        {
-          name: "groundFlight"
-          bond: Surface
-          hold: Gravity
-          cone [0, 60]
-          reach: 1.2
-          forward: Heading
-          gravity: standardGravity
-          envelope: standardSink
-          thrust: 1
-          spend {
-            state: "flightFuel"
-            ratePerSecond: 0.001
-          }
-        }
-        groundHold
-        {
-          name: "flight"
-          bond: Free
-          hold: Lift
-          forward: Heading
-          lift: 1
-          // She flies at her running pace, and running in the air doubles it.
-          speed: 5
-          gravity: standardGravity
-          thrust: 1
-          spend {
-            state: "flightFuel"
-            ratePerSecond: 0.001
-          }
-        }
-        fallHold
-      ]
-      moveFrame: World
-      shaping [
-        {
-          along {
-            engage: 40
-            release: 50
-          }
-          turnScale: 1
-        }
-      ]
-      // She walks at 5 m/s and runs at 10 while the run channel is held.
-      speed {
-        value: 5
-        held {
-          channel: "run"
-          multiplier: 2
-        }
-      }
-      // Knee height: she walks up a kerb or the test room's raised floor; anything taller stops her.
-      stepHeight: 0.3
-      turn {
-        falloff: 1
-        maxPitch: 1.2
-        pitchRate: 0
-        rate: 2.5
-      }
+    // Flight mode's rows come first and spend flightFuel, so they are offered only while it is switched on: on the
+    // ground the rise channel lifts her off, and in the air she hovers and thrusts. Out of flight mode she walks and
+    // falls with no hover and no thrust, and jumps instead. She walks at 5 m/s and runs at 10 while the run channel is
+    // held, and steps up to knee height: a kerb or the test room's raised floor, and nothing taller.
+    motion: walkerMotion with {
+      holds [groundFlightHold, groundHold, flightHold, fallHold]
+      speed: walkerMotion.speed with { value: 5 }
     }
     // Out of flight mode, south or space jumps: 5.1 m/s peaks about 1.2 m under the rise the world's 18 m/s² gravity
     // makes of the holds' 28:46 arc, a second press in the air fires the boot jets for one more, and letting go while still rising cuts the

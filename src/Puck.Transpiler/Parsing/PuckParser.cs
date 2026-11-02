@@ -951,6 +951,7 @@ public static partial class PuckParser {
     // such as a rule group's body; null parses document statements.
     private static ForStatementNode ParseForStatement(ParseContext context, int startOffset, int line, int col, DiagnosticBag? diagnostics, string? schema = null, IDocumentVocabulary? vocabulary = null, Func<ParseContext, DiagnosticBag?, StatementNode?>? body = null) {
         var cursor = context.Scanner.Cursor;
+
         var (item, index, sequence) = ParseForHead(context: context);
         var statements = new List<StatementNode>();
 
@@ -1182,6 +1183,23 @@ public static partial class PuckParser {
                 continue;
             }
 
+            // A derived record: `base with { member: value }`. Only a block after the keyword reads as one, so a
+            // statement's own `with` (`shuffle deck with stream`) is never taken for it.
+            if (!separated && (cur == 'w')) {
+                var before = context.Scanner.Cursor.Position;
+
+                if (TryMatchKeyword(context: context, keyword: "with")) {
+                    SkipWhiteSpace(context: context);
+                    if (context.Scanner.Cursor.Current == '{') {
+                        var overrides = ParseObjectExpression(context: context);
+
+                        expr = new WithExpressionNode(Base: expr, Overrides: overrides, Offset: expr.Offset, Length: (context.Scanner.Cursor.Offset - expr.Offset), Line: expr.Line, Column: expr.Column);
+                        continue;
+                    }
+                }
+                context.Scanner.Cursor.ResetPosition(position: before);
+            }
+
             break;
         }
 
@@ -1199,14 +1217,15 @@ public static partial class PuckParser {
         }
 
         if (cursor.Current == '`') {
-            if (!TryReadBackquotedName(context, out var quoted)) {
-                throw CreateException(context, "Expected a nonempty backquoted name");
+            if (!TryReadBackquotedName(context: context, name: out var quoted)) {
+                throw CreateException(context: context, message: "Expected a nonempty backquoted name");
             }
-            var length = cursor.Offset - startOffset;
-            SkipWhiteSpace(context);
-            return cursor.Current == '('
-                ? ParseCallExpression(context, quoted, startOffset, line, col)
-                : new IdentifierExpressionNode(Name: $"`{quoted}`", Offset: startOffset, Length: length, Line: line, Column: col);
+            var length = (cursor.Offset - startOffset);
+
+            SkipWhiteSpace(context: context);
+            return ((cursor.Current == '(')
+                ? ParseCallExpression(col: col, context: context, functionName: quoted, line: line, startOffset: startOffset)
+                : new IdentifierExpressionNode(Column: col, Length: length, Line: line, Name: $"`{quoted}`", Offset: startOffset));
         }
 
         if (TryMatchKeyword(context: context, keyword: "asset")) {

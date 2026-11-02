@@ -37,6 +37,42 @@ let stillShaping = [{ along {} }]
 let stillSpeed = { value: 0.001 }
 let stillTurn = { rate: 0.001 }
 
+// A body the rules pose: held where they put it, with no gait. A piece derives its own from it (its hold, a facing
+// snap, a pitch limit).
+let stillMotion = { holds [heldHold], shaping: stillShaping, speed: stillSpeed, turn: stillTurn }
+
+// A walking body's motion: it stands on the ground and falls off it, walks at 4 m/s and runs at twice that while the run
+// channel is held, steps up a kerb, and turns towards where it is driven. An avatar derives its own pace from it.
+let walkerMotion = {
+  facingSnap: false
+  groundSnap: 0.3
+  holds [groundHold, fallHold]
+  moveFrame: World
+  shaping [
+    {
+      along {
+        engage: 40
+        release: 50
+      }
+      turnScale: 1
+    }
+  ]
+  speed {
+    value: 4
+    held {
+      channel: "run"
+      multiplier: 2
+    }
+  }
+  stepHeight: 0.3
+  turn {
+    falloff: 1
+    maxPitch: 1.2
+    pitchRate: 0
+    rate: 2.5
+  }
+}
+
 // A rigid piece (a stone, a token, a chess piece): it falls under gravity and settles where it is let go, and stays.
 template pieceKit(name, collider, mass, friction = 0.6, restitution = 0.05, rollingFriction = 0.2) {
   kits [
@@ -44,13 +80,7 @@ template pieceKit(name, collider, mass, friction = 0.6, restitution = 0.05, roll
       bodyContact: Solid
       bodyMotionProgram: "walk"
       collider: collider
-      motion {
-        facingSnap: true
-        holds [airHold]
-        shaping: stillShaping
-        speed: stillSpeed
-        turn: stillTurn
-      }
+      motion: stillMotion with { facingSnap: true, holds [airHold] }
       name: name
       rigid {
         angularDamping: 0.05
@@ -70,13 +100,7 @@ template heldKit(name) {
     {
       bodyContact: Overlap
       bodyMotionProgram: "walk"
-      motion {
-        facingSnap: true
-        holds [heldHold]
-        shaping: stillShaping
-        speed: stillSpeed
-        turn: stillTurn
-      }
+      motion: stillMotion with { facingSnap: true }
       name: name
     }
   ]

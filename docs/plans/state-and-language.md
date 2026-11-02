@@ -919,6 +919,16 @@ for the same id, so `range-walker` copies the walker kit
   with G1's `with` (`kits [ walkerKit with { name: "range-walker" … } ]`).
 - (c) A template the walker's library exports, called with overrides.
 
+Landed, G1 and G2 (b): `base with { ... }` (`WithExpressionNode`), a postfix
+on its base, read only when a block follows the keyword. The standard kits
+library holds `walkerMotion` and `stillMotion`; the walker, suit pilot, range
+walker and Moth kits, the piece and held kits, `cardSlab` and the lift derive
+from them, and the Moth's `groundFlight` hold derives from `groundHold`. Her
+`flight` hold stays written out (with a shared `flightSpend`): it is
+`fallHold` without the `envelope`, and `with` cannot remove a member. The
+corpus holds `with-record` and `with-library`. The Moth's per-slot
+`weathering`, the gallery's text runs and the emboss runs are still to convert.
+
 Decided: (b) now, since it needs only G1 and the existing library
 import, then (a) only if a site needs to derive from a row that is a
 document's own and cannot move into a library. (a) needs the compile to read

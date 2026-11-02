@@ -24,6 +24,7 @@
 // bounds and writes the author-frame row, so every number below is a world coordinate.
 
 import "../standard/bounds"
+import "../standard/kits"
 import "shapes"
 // The companion hears the lift's authored door edge through its read-only sensory projection.
 exports {
@@ -1579,26 +1580,7 @@ kits [
     name: "lift"
     bodyMotionProgram: "walk"
     collider: sphere(radius: 0.1)
-    motion {
-      holds [
-        {
-          bond: Free
-          hold: None
-          name: "held"
-        }
-      ]
-      shaping [
-        {
-          along {}
-        }
-      ]
-      speed {
-        value: 0.001
-      }
-      turn {
-        rate: 0.001
-      }
-    }
+    motion: stillMotion
   }
 ]
 

@@ -203,6 +203,7 @@ public abstract partial class PuckSyntaxRewriter {
         OperandExpressionNode operand => this.RewrittenOperand(operand: operand),
         RangeExpressionNode range => (range with { End = this.RewrittenOrNull(node: range.End), Start = this.RewrittenOrNull(node: range.Start) }),
         UnaryExpressionNode unary => (unary with { Operand = this.Rewritten(node: unary.Operand) }),
+        WithExpressionNode derived => (derived with { Base = this.Rewritten(node: derived.Base), Overrides = this.Rewritten(node: derived.Overrides) }),
         _ => throw PuckRewriteException.UnknownKind(node: expression),
     });
     /// <summary>Returns <paramref name="node"/> with every child rewritten.</summary>
