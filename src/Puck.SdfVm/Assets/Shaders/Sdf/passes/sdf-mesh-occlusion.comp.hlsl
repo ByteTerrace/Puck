@@ -27,6 +27,7 @@ static const uint SdfOcclusionDepth = 1u;
 static const uint SdfOcclusionLate = 2u;
 static const uint SdfOcclusionUncovered = 0x7F800000u;
 static const uint SdfOcclusionCommandWords = 5u;
+static const uint SdfOcclusionPhases = 3u;
 static const uint SdfOcclusionDrawnWords = 4u;
 static const uint SdfOcclusionUnboxed = 1u;
 
@@ -84,7 +85,7 @@ void sdfOcclusionEmit(uint phase, uint candidate, uint identity, uint vertices, 
 
     sdfMeshOcclusionDrawsRW.GetDimensions(words, stride);
 
-    uint capacity = (words / (2u * SdfOcclusionCommandWords));
+    uint capacity = (words / (SdfOcclusionPhases * SdfOcclusionCommandWords));
 
     if (candidate < capacity) {
         uint word = (((phase * capacity) + candidate) * SdfOcclusionCommandWords);
@@ -184,12 +185,17 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     }
 
     uint4 header = sdfMeshOcclusionCandidates[0];
+    bool splitExit = (header.z & 2u) != 0u;
     uint draws = 0u;
     uint vertices = 0u;
 
     // Each phase draws one command a candidate, empty or not.
     if (id.x == 0u) {
         sdfMeshOcclusionCountsRW[((step == SdfOcclusionLate) ? 1u : 0u)] = header.x;
+        if (splitExit && step == SdfOcclusionEarly) {
+            sdfMeshOcclusionCountsRW[1] = header.x;
+            sdfMeshOcclusionCountsRW[2] = header.x;
+        }
     }
     if (id.x < header.x) {
         uint draw = id.x;
@@ -200,7 +206,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         uint4 d = sdfSelectionRow(record, 3u);
         bool unboxed = (a.w & 1u) != 0u;
         uint4 state = sdfMeshOcclusionVisibleRW[draw];
-        bool occlude = header.z != 0u;
+        bool occlude = (header.z & 1u) != 0u;
         bool kept = state.w != 0u;
         // A culled draw can retain another mesh's level in history; its current table may have fewer levels.
         uint level = min(state.y, d.w);
@@ -223,12 +229,20 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         sdfMeshOcclusionVisibleRW[draw] = state;
         uint count = sdfSelectionVertices(record, level);
         sdfOcclusionEmit(((step == SdfOcclusionLate) ? 1u : 0u), id.x, (draw | (level << SDF_MESH_LEVEL_SHIFT)), count, emit);
+        if (splitExit && step == SdfOcclusionEarly) {
+            bool encloses = (a.w & 4u) != 0u;
+            uint identity = draw | (level << SDF_MESH_LEVEL_SHIFT);
+            sdfOcclusionEmit(1u, id.x, identity, count, emit && encloses);
+            sdfOcclusionEmit(2u, id.x, identity, count, emit && !encloses);
+        }
         draws = emit ? 1u : 0u;
         vertices = emit ? count : 0u;
+        if (splitExit && step == SdfOcclusionEarly) {
+            // Entry and exactly one exit bucket emit a nonempty command for each selected draw.
+            draws += emit ? 1u : 0u;
+            vertices += emit ? count : 0u;
+        }
     }
 
-    // Stage supplies the number of raster consumers in the otherwise unused light-forward row's w.
-    // A cascade's entry and exit share arguments, but both executions count as work.
-    uint executions = sdfMeshOcclusionCandidates[13].w;
-    sdfOcclusionCount(draws * executions, vertices * executions);
+    sdfOcclusionCount(draws, vertices);
 }

@@ -153,6 +153,17 @@ public readonly record struct FixedInterval {
             upper: Ceiling(value: Int128.Max(x: Int128.Max(x: a, y: b), y: Int128.Max(x: c, y: d)), shift: FractionBitCount)
         );
     }
+    /// <summary>Returns the interval of every product <see cref="FixedQ4816"/> multiplication answers for a representable
+    /// value inside the operand and a fixed factor: the rounded products of the two ends, since rounding to nearest keeps
+    /// the order of the exact products. It holds the rounded products, not every real one, so a chain of them tracks a
+    /// point computation's own roundings without the raw a directed rounding adds at each step.</summary>
+    /// <param name="value">The operand interval.</param>
+    /// <param name="factor">The factor.</param>
+    /// <returns>The hull of <c>value.Lower · factor</c> and <c>value.Upper · factor</c>, each rounded as
+    /// <see cref="FixedQ4816"/> rounds it; <see cref="Entire"/> where an exact product leaves the carrier.</returns>
+    public static FixedInterval RoundedProduct(FixedInterval value, FixedQ4816 factor) => ((value * FromPoint(value: factor)).IsUnbounded
+        ? Entire
+        : Hull(first: (value.Lower * factor), second: (value.Upper * factor)));
     /// <summary>Returns the interval of every quotient, or <see cref="Entire"/> when the divisor holds zero.</summary>
     public static FixedInterval operator /(FixedInterval left, FixedInterval right) {
         if (left.IsUnbounded || right.IsUnbounded || right.Contains(value: FixedQ4816.Zero)) {

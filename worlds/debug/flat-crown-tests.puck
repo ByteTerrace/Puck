@@ -1,0 +1,61 @@
+// Solid copies of the standard's flatCrownTree, whose shapes join by smooth unions with no field scope of their own,
+// on a floor as wide as the valley's. A walk passes under a crown 1.5 m from its trunk, clear of the branches' capsule
+// colliders, and the chase camera's
+// clearance (world.view.camera) reads open beside them and far from them: booted with `--world`, `body.pose 0 0.05 0 0
+// 0 0 0` stands the Moth among the trees and `body.pose 0 0.05 150 0 0 0 0` far from them.
+schema: "puck.world.definition.v1"
+basis: "avatars/moth"
+documentId: "flat-crown-tests"
+
+import "../standard/foliage"
+
+prototypes {
+  paintedGround(id: "floor", radius: 400, turf: "#6C8A33", paving: "#BC7F58")
+  flatCrownTree(id: "flat-0")
+  flatCrownTree(id: "flat-1", height: 1.15, spread: 1.2, lean: 0.08)
+  flatCrownTree(id: "flat-2", height: 0.85, spread: 0.9, lean: -0.1)
+}
+
+placements {
+  placement "flat-0" {
+    prototype: "flat-0"
+    position [5, 0, 1.5]
+    solid { margin: 0 }
+  }
+  placement "flat-1" {
+    prototype: "flat-1"
+    position [-6, 0, 6]
+    yawDegrees: 147
+    scale: 1.08
+    solid { margin: 0 }
+  }
+  placement "flat-2" {
+    prototype: "flat-2"
+    position [-3, 0, -7]
+    yawDegrees: 50
+    scale: 0.93
+    solid { margin: 0 }
+  }
+  placement "flat-3" {
+    prototype: "flat-0"
+    position [9, 0, -6]
+    yawDegrees: 113
+    scale: 1.06
+    solid { margin: 0 }
+  }
+}
+
+test "a body walks under a flat crown and past its trunk" {
+  when {
+    ticks 15
+    seat1: body.pose 0 0.05 0 0 0 0 0
+    ticks 5
+    seat1: body.press strafe 1 2
+    ticks 140
+  }
+  expect {
+    bodyPosition(body, 0, x) > 8
+    bodyPosition(body, 0, z) > -0.2
+    bodyPosition(body, 0, z) < 0.2
+  }
+}

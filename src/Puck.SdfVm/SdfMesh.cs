@@ -16,6 +16,11 @@ public sealed partial record SdfMesh {
     /// <summary>Gets the independently drawn pieces of a large static union; empty for a single mesh. The mesh's own
     /// triangles concatenate their merged surfaces for whole-group queries; only the pieces enter the mesh region.</summary>
     public IReadOnlyList<SdfMesh> Chunks { get; init; } = [];
+    /// <summary>Gets whether the triangles are outward-wound pieces of closed surfaces, so a face turned from a light is
+    /// where that light leaves a solid: true for every baked mesh, and for an authored mesh whose triangles close a volume
+    /// (<c>WorldPlacementStamper.MeshOf</c>); false for an authored sheet or soup, which is drawn in both windings and
+    /// bounds no solid.</summary>
+    public bool Encloses { get; init; } = true;
 
     /// <summary>Creates a mesh, refusing a malformed index list, a non-finite vertex, or a vertex or triangle attribute
     /// of the wrong length.</summary>
@@ -278,6 +283,15 @@ public readonly record struct SdfMeshDraw(SdfMesh Mesh, Matrix4x4 ObjectToWorld,
     /// negative is not drawn, in any view or shadow. Zero, the default, draws everything; a body straddling a portal's
     /// glass is drawn clipped to the glass's front on each side.</summary>
     public Vector4 ClipPlane { get; init; }
+
+    /// <summary>Gets whether the draw's faces turned from a light are exactly where that light leaves a solid: its mesh
+    /// encloses (<see cref="SdfMesh.Encloses"/>), no clip plane cuts it open, and its matrix keeps its winding. A shadow
+    /// cascade's exit layer draws such a draw's faces turned from the light alone and every other draw whole, as a thin
+    /// caster.</summary>
+    public bool EnclosesSolid => (Mesh.Encloses && (ClipPlane == Vector4.Zero) &&
+        (((ObjectToWorld.M11 * ((ObjectToWorld.M22 * ObjectToWorld.M33) - (ObjectToWorld.M23 * ObjectToWorld.M32))) -
+          (ObjectToWorld.M12 * ((ObjectToWorld.M21 * ObjectToWorld.M33) - (ObjectToWorld.M23 * ObjectToWorld.M31))) +
+          (ObjectToWorld.M13 * ((ObjectToWorld.M21 * ObjectToWorld.M32) - (ObjectToWorld.M22 * ObjectToWorld.M31)))) > 0f));
 }
 /// <summary>
 /// The raw word layout of the region a frame's mesh draws upload into, read as a structured buffer of uints so every
@@ -591,7 +605,7 @@ public static class SdfMeshRegion {
         var selection = record.Slice(start: SdfMeshRecord.SelectionWord, length: 16);
         selection.Clear();
         WriteSelectionVector(words: selection, value: box.Center);
-        selection[3] = (boxed ? 0u : 1u) | (draw.Glass ? 2u : 0u);
+        selection[3] = (boxed ? 0u : 1u) | (draw.Glass ? 2u : 0u) | (draw.EnclosesSolid ? 4u : 0u);
         WriteSelectionVector(words: selection[4..], value: box.HalfX);
         selection[7] = BitConverter.SingleToUInt32Bits(box.Stretch);
         WriteSelectionVector(words: selection[8..], value: box.HalfY);

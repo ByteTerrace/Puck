@@ -148,7 +148,8 @@ public static partial class TestCommand {
             Parallel.For(fromInclusive: 0, toExclusive: batches.Length,
                 parallelOptions: new ParallelOptions { MaxDegreeOfParallelism = parallelism },
                 body: worker => batchPassed[(offset + worker)] = RunBatch(artifact: artifact!, chunk: worker, indices: batches[worker],
-                    reproduce: reproduce, runDirectory: runDirectory, worlds: worlds, cacheDirectory: cacheDirectory, leg: leg, record: recorded));
+                    reproduce: reproduce, runDirectory: runDirectory, worlds: worlds, cacheDirectory: cacheDirectory, leg: leg, record: recorded,
+                    verifyHash: ((legIndex == 0) && (leg.Workers is not null))));
             if (leg.Workers is { }) {
                 Console.WriteLine(value: string.Create(provider: CultureInfo.InvariantCulture,
                     handler: $"test: {leg.Label} ran {worlds.Count} world(s) in {Stopwatch.GetElapsedTime(startingTimestamp: started).TotalSeconds:F1} s"));

@@ -21,6 +21,8 @@ internal sealed class SdfMeshOcclusion : IDisposable {
     // Controls only; bounds and level metadata live in the shared mesh region. Paired with sdf-mesh-selection.hlsli:
     // one header row, three detail rows, ten cull rows.
     private const int HeaderWords = 14 * 4;
+    // Entry/early, late/solid exit, thin exit; paired with SdfOcclusionPhases in the kernel.
+    private const uint ArgumentPhases = 3u;
     private const ulong CountsBytes = 4 * sizeof(uint);
 
     private readonly IGpuBufferFactory m_buffers;
@@ -56,8 +58,8 @@ internal sealed class SdfMeshOcclusion : IDisposable {
     public uint CandidateCount => m_count;
 
     // Each pass uploads constant-sized controls. The residency already uploaded each changed draw once.
-    public void Stage(int slot, uint count, uint width, uint height, in SdfMeshCull cull, in SdfMeshDetail detail, bool held, bool glass, bool occlude, uint phaseExecutions = 1) {
-        ArgumentOutOfRangeException.ThrowIfZero(phaseExecutions);
+    public void Stage(int slot, uint count, uint width, uint height, in SdfMeshCull cull, in SdfMeshDetail detail, bool held, bool glass, bool occlude, bool splitExit = false) {
+        if (occlude && splitExit) { throw new ArgumentException("A selection cannot combine depth occlusion and exit partitioning."); }
         // The recording slot's fence has completed before Stage. Retire replacements only on its next reuse, after all
         // preceding submissions and this slot's history copy have completed.
         foreach (var buffer in m_retired[slot]) { buffer.Dispose(); }
@@ -71,13 +73,10 @@ internal sealed class SdfMeshOcclusion : IDisposable {
         var words = System.Runtime.InteropServices.MemoryMarshal.Cast<System.Numerics.Vector4, uint>(rows);
         words[0] = count;
         words[1] = m_levels;
-        words[2] = occlude ? 1u : 0u;
+        words[2] = (occlude ? 1u : 0u) | (splitExit ? 2u : 0u);
         words[3] = glass ? 1u : 0u;
         detail.WriteGpu(rows: rows[1..4], held: held);
         cull.WriteGpu(rows: rows[4..]);
-        // The final cull row uses xyz for light forward; w counts consumers of each selected phase.
-        // KEEP IN SYNC with sdf-mesh-occlusion.comp.hlsl: row13.w, within the same 224-byte controls.
-        words[^1] = phaseExecutions;
         EnsureBuffers(draws: count, depth: occlude);
         m_candidates[slot]!.Write(data: words);
     }
@@ -274,7 +273,7 @@ internal sealed class SdfMeshOcclusion : IDisposable {
             m_capacity = System.Numerics.BitOperations.RoundUpToPowerOf2(value: capacity);
             m_draws = m_buffers.CreateDeviceLocal(
                 name: Name(detail: "occlusion draws"),
-                sizeBytes: ((2UL * m_capacity) * GpuDrawIndirectCommand.StrideBytes),
+                sizeBytes: (((ulong)ArgumentPhases * m_capacity) * GpuDrawIndirectCommand.StrideBytes),
                 usage: GpuBufferUsage.Storage | GpuBufferUsage.Indirect
             );
         }

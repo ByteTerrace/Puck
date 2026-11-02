@@ -88,7 +88,11 @@ cross-family review is required and never blocks a landing
 change to simulation state stays deterministic; `puck test --reproduce` shows
 recorded input reproduces every authority from its checkpoint in the same worker,
 including per-tick authoritative hashes, final machine cores and canonical exports. A differing trace names
-its first sampled tick and instance. Use the test preparation/work counts beside
+its first sampled tick and instance. The authoritative hash is incremental (arena rows cached by
+`RowVersion`, resting body slots by rest epoch), so `--reproduce` also checks every replayed tick, and the
+first `--workers` count every recorded tick, against a full recompute: `differs from its full recompute in
+Arena` (or `BodyContinuation`) means a write changed state without moving the version its digest is keyed
+by; move the version at that write rather than widening the recompute. Use the test preparation/work counts beside
 wall time when measuring it on a shared machine; build-lease waits are contention,
 and exported authority ticks exclude the extra shutdown ticks.
 
@@ -323,7 +327,7 @@ deferred is a protocol step the engine has not built.
 ## What uses the GPU
 
 A windowed World driven by a stdin script spells its backend `--backend directx` or `--backend vulkan` (`auto` picks), waits for bakes with `world.wait bakes <s>` where `<s>` is 1 to 600, and is stopped by its PID once its readings are in: a windowed World has been seen running long past `--exit-after-seconds`.
-Use the private CLI copy's `puck lease gpu --holder <lane> --wait 1200 -- <command...>` for a granted GPU leg, and `puck lease heavy --holder <lane> --wait 1200 -- <command...>` for a heavy suite. The verb owns acquisition, stale recovery and release, including failure and cancellation. A windowed World started with `puck_world_start` takes the same GPU lease itself (`holder`: your lane), waits at most its `timeoutSeconds` for it, and releases it when `puck_world_stop` ends the World or the World exits.
+Use the private CLI copy's `puck lease gpu --holder <lane> --wait 1200 -- <command...>` for a granted GPU leg, and `puck lease heavy --holder <lane> --wait 7200 -- <command...>` for a heavy suite: heavy holders run long recorded suites back to back, and a one-hour wait can time out behind them. Run the request in the background and keep working. Without `--wait` a held lease refuses at once, so a script that runs its next step regardless (a boot after a build) must check the lease's exit code, or it measures a stale binary. Rebuild the private CLI copy after merging the integration tip: a copy older than the merge rejects documents that use new schema members. The verb owns acquisition, stale recovery and release, including failure and cancellation. A windowed World started with `puck_world_start` takes the same GPU lease itself (`holder`: your lane), waits at most its `timeoutSeconds` for it, and releases it when `puck_world_stop` ends the World or the World exits.
 Keep a granted batch within its brief's time box (at most 20 minutes for a GPU lease).
 `gate` and `affected` hold the same heavy lease through each heavy suite and
 check host headroom after acquisition. `puck test` holds it too whenever it runs

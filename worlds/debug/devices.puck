@@ -29,6 +29,8 @@
 // the seat plays it until the same button leaves. devices.md beside this file gives the console lines that list, swap,
 // engage, reset and eject each one, and the camera lines that frame each device.
 
+import "../standard/kits"
+
 // The room's floor top (wonderland.puck).
 let deviceFloor = 0.05
 // The handhelds' plinths: 0.4 m square and 0.8 m tall, so a handheld's screen stands about 0.95 m up, well under the
@@ -1215,20 +1217,7 @@ kits [
     name: "devicePad"
     bodyMotionProgram: "walk"
     motion {
-      holds [
-        {
-          bond: Free
-          envelope {
-            sinkSpeed: 40
-          }
-          gravity {
-            fall: 46
-            rise: 28
-          }
-          hold: Gravity
-          name: "air"
-        }
-      ]
+      holds [airHold]
       shaping [
         {
           along {}

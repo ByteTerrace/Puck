@@ -816,7 +816,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             SdfMeshOcclusion.Unbind(bound: m_meshSetOcclusion[meshSet], boundTarget: ref m_meshSetTargets[meshSet], first: 0, set: set, tables: tables);
 
             if (occlusion is not null) {
-                occlusion.Stage(count: count, height: recording.RenderHeight, width: recording.RenderWidth, slot: slot, cull: in cull, detail: in detail, held: tables.HoldsFrame, glass: IsGlass, occlude: twoPhase, phaseExecutions: (IsShadowCascade ? 2u : 1u));
+                occlusion.Stage(count: count, height: recording.RenderHeight, width: recording.RenderWidth, slot: slot, cull: in cull, detail: in detail, held: tables.HoldsFrame, glass: IsGlass, occlude: twoPhase, splitExit: IsShadowCascade);
                 occlusion.BindDraws(tables: tables, set: set, bound: m_meshSetOcclusion[meshSet]);
                 for (var phase = 0; (phase < OcclusionSetsPerMesh); phase++) {
                     var index = ((meshSet * OcclusionSetsPerMesh) + phase);
@@ -854,10 +854,11 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         recorder.EndRenderPass(commandBufferHandle: commandBuffer);
 
         if (IsShadowCascade) {
-            // Entry and exit consume the same selected arguments; only the raster face cull differs.
+            // Exit solids use front-face culling; sheets and clipped draws use the unculled pipeline.
             recorder.BeginRenderPass(area: area, commandBufferHandle: commandBuffer, framebuffer: lateFramebuffer!);
             if (occlusion is not null) {
-                RecordMeshPhase(commandBuffer: commandBuffer, pipeline: tables.ShadowExitPipeline, recorder: recorder, set: set, selection: occlusion, phase: 0);
+                RecordMeshPhase(commandBuffer: commandBuffer, pipeline: tables.ShadowExitPipeline, recorder: recorder, set: set, selection: occlusion, phase: 1);
+                RecordMeshPhase(commandBuffer: commandBuffer, pipeline: tables.ShadowPipeline, recorder: recorder, set: set, selection: occlusion, phase: 2);
             }
             recorder.EndRenderPass(commandBufferHandle: commandBuffer);
         }
@@ -890,6 +891,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         );
         selection.RecordDraws(commandBuffer: commandBuffer, phase: phase, pipeline: pipeline, recorder: recorder);
     }
+
     private void BindCounters(in RenderGraphPackageRecording recording, nint set, SdfWorldTables tables) {
         var counters = WorkCountersOf(recording: in recording).Buffer;
 

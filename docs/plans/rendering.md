@@ -180,8 +180,8 @@ controls. Each pass retains visibility, level and mesh identity per draw on
 the GPU, preserving the 1/1.1 display-pixel band and resetting level history
 when the mesh changes or a settled capture holds the frame. Buffer growth
 copies that history. Opaque occlusion keeps its early/late phases; glass uses
-one. A cascade selects once and reuses its arguments in the entry and exit
-render passes, each recording one counted call. CPU `Choose` and per-draw recording
+one. A cascade selects once into entry, solid-exit and thin-exit argument
+phases, recording one counted call per phase. CPU `Choose` and per-draw recording
 are removed. Vulkan's native-count fallback reads the same initialized
 argument slots through `vkCmdDrawIndirect`; `DrawIndex` reads their identities
 without the optional first-instance feature. Hardware observations are

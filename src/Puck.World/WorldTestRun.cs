@@ -124,6 +124,11 @@ internal sealed class WorldTestRun {
 
     public event Action? Exported;
     public event Action<ulong>? Progress;
+    /// <summary>Raised at every completed tick of an armed run, before the export it may take.</summary>
+    public event Action<ulong>? Ticked;
+
+    /// <summary>Gets each declared schedule row's principal and its armed line, in declaration order.</summary>
+    public IEnumerable<(string Principal, WorldTickScript.Line Line)> Lines => m_landed.Select(selector: static landed => (landed.PrincipalLabel, landed.Line));
 
     public WorldTestRun(WorldServer server, WorldDefinitionSource definitionSource, WorldTickScript tickScript, Func<InputRouter> router, WorldInstanceHost instances, WorldScheduleRoot scheduleRoot) {
         ArgumentNullException.ThrowIfNull(argument: server);
@@ -445,6 +450,7 @@ internal sealed class WorldTestRun {
         }
         if (AuthorityTicks == 0) { FirstTick?.Invoke(); }
         if ((tick % 120) == 0) { Progress?.Invoke(tick); }
+        Ticked?.Invoke(tick);
         // Replay probes own per-authority tick hashes. A verdict-only run needs only the export and answers;
         // hashing again here duplicates the probe during reproduction and serves no manifest reader.
         AuthorityTicks++;

@@ -139,7 +139,7 @@ of its passes. The upload and the view's passes, in order:
 | `upload` | `region-copy.comp` (`Puck.Shaders`, one pipeline a device) | Copies the words each staged table owes (program words, dynamic transforms, screen surfaces, screen mappings, volumes, decals, mesh draws, the bake's points, the irradiance volume, the lights, active shadow handoff controls, and the sky's block and layers) from the ring slot's staging buffer, which states the copy in a header and run table, into the region's device-local buffer, one dispatch per region that owes any, then transitions each copied buffer for reading (`SdfWorldTables.Regions.cs`). Under the ring policy nothing is copied and the kernels bind the slot's buffer. A view's camera, quality and levers, the light count, the shadow slot table and the curvature shading are no table: each pass writes them into its pass block (`SdfFrameBlock`). |
 | `mask` | `sdf-mesh-bake-mask.comp` | Writes each of the frame's bake lattices' instance selection; only while a bake is pending (`Skips`). |
 | `bake` | `sdf-mesh-bake.comp` | Samples the frame's lattices through `mapCore` (the one GPU field walk) into `bakeSamples`, which the host reads back and contours, or draws as a field slice (`SdfFieldSlice`); only while a bake or a slice is pending. |
-| `shadow-near`, `shadow-far`, `shadow-second` | `sdf-mesh-shadow.vert`, `sdf-mesh-shadow.frag` | Draw the cascade's selected arguments into entry depth without face culling and exit depth with front faces culled; one counted call per layer, reusing the same selection. 2048, 1024 or 512 texels a side by the shadow tier; skip a frame with no draw or no cascade of their own. |
+| `shadow-near`, `shadow-far`, `shadow-second` | `sdf-mesh-shadow.vert`, `sdf-mesh-shadow.frag` | One selection emits entry and solid/thin exit arguments. Entry is unculled; solid exit culls front faces, thin/clipped exit is unculled. One counted call per argument phase. 2048, 1024 or 512 texels a side by the shadow tier; skip a frame with no draw or no cascade of their own. |
 | `mesh` | `sdf-mesh.vert`, `sdf-mesh.frag` | Rasterizes the view's mesh visibility; skips a frame with no mesh draws, its target and depth barriers with it (`Skips`). |
 | `pyramid` | `sdf-mesh-pyramid.comp` | Reduces the mesh target into the ambient occlusion's depth pyramid (`frame/sdf-mesh-pyramid.hlsli`): levels one to four, each texel one actual pixel's ray parameter and coordinate; skips a frame with no mesh draws. It is not the draw-occlusion pyramid `SdfMeshOcclusion` builds between the mesh pass's phases (farthest forward depth per block), and neither replaces the other ([visibility plan](../../../../docs/plans/visibility.md#where-visibility-stands)). |
 | `surface` | `sdf-world-surface.comp` | Writes every pixel's whole visibility record from the mesh target, misses included: the hit, its frame slot and normal, the screen-space ambient occlusion and the stable slots' cascade soft shadows into K, each one 4×4-tile tap pattern's estimate per pixel (`sdfMeshPattern`), unfiltered. Calls no field query. |
@@ -182,8 +182,8 @@ compiles only its own stage over the pixel the entry gathers
 (`sdfSurfaceStage`, `sdfViewsStage`). Every raster pass first dispatches
 `sdf-mesh-occlusion.comp` for box culling and level choice from retained mesh
 metadata. Opaque occlusion retains its two phases; glass uses one. Each shadow
-cascade selects once and consumes that phase in both its entry and exit layers,
-with one counted call per layer. Per-pass GPU state retains level and mesh identity across frames and
+cascade selects once into entry and solid/thin exit phases, with one counted
+call per phase. Per-pass GPU state retains level and mesh identity across frames and
 buffer growth. The raster passes draw with their own
 `sdf-mesh` interface, one set per frame slot from a pool of their own, push the
 indirect command identity (`SdfKernelInterfaces.MeshPushedIndex`), and skip a frame with no mesh

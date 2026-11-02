@@ -13,12 +13,13 @@
 //                     the south end so the Moth can step from one to the other
 //
 // Everything is a box, because the analytic contact provider collides a carved shape as its whole bounding box, and
-// one placement carries all of them. `courseBox` takes bounds in the course's own frame (x east, z south from the
-// placement's origin) and writes the author-frame row (`hallBox`, shapes.puck), so every number below reads as a
+// one placement carries all of them. `boundsBox` takes bounds in the course's own frame (x east, z south from the
+// placement's origin) and writes the author-frame row (`boundsBox`, standard/bounds.puck), so every number below reads as a
 // distance from the course's north-west corner at (-26, 0, 18). The bays' lamps are emissive slabs lit through the
 // irradiance volume. A screen on the cool bay's back wall shows the debug world's probe (probe-beacon.puck): a camera's
 // view of the reference cubes tinted by a recorded track.
 
+import "../standard/bounds"
 import "shapes"
 
 let courseWall = 0
@@ -28,43 +29,39 @@ let courseWarm = 3
 let courseCool = 4
 let courseAlcove = 5
 
-template courseBox(label, x0, x1, y0, y1, z0, z1, slot) {
-  hallBox(label: label, x0: x0, x1: x1, y0: y0, y1: y1, z0: z0, z1: z1, slot: slot)
-}
-
 // The L-corridor: leg 1 runs east along z 0 .. 1.6, the corner is x 6.4 .. 8, and leg 2 runs south along x 6.4 .. 8 to a
 // dead end at z 8. Walls are 0.2 m thick, the ceiling is a 0.2 m slab on them at 2.6 m.
 template courseCorridor() {
-  courseBox(label: "corridor-north-west", x0: -0.2, x1: 2.4, y0: 0, y1: 2.6, z0: -0.2, z1: 0, slot: courseWall)
-  courseBox(label: "corridor-north-east", x0: 4, x1: 8.2, y0: 0, y1: 2.6, z0: -0.2, z1: 0, slot: courseWall)
-  courseBox(label: "corridor-south", x0: -0.2, x1: 6.4, y0: 0, y1: 2.6, z0: 1.6, z1: 1.8, slot: courseWall)
-  courseBox(label: "corridor-east", x0: 8, x1: 8.2, y0: 0, y1: 2.6, z0: 0, z1: 8.2, slot: courseWall)
-  courseBox(label: "corridor-leg-two-west", x0: 6.2, x1: 6.4, y0: 0, y1: 2.6, z0: 1.8, z1: 8.2, slot: courseWall)
-  courseBox(label: "corridor-dead-end", x0: 6.4, x1: 8, y0: 0, y1: 2.6, z0: 8, z1: 8.2, slot: courseAlcove)
-  courseBox(label: "niche-west", x0: 2.2, x1: 2.4, y0: 0, y1: 2.6, z0: -1.8, z1: 0, slot: courseWall)
-  courseBox(label: "niche-east", x0: 4, x1: 4.2, y0: 0, y1: 2.6, z0: -1.8, z1: 0, slot: courseWall)
-  courseBox(label: "niche-back", x0: 2.4, x1: 4, y0: 0, y1: 2.6, z0: -1.8, z1: -1.6, slot: courseAlcove)
-  courseBox(label: "corridor-ceiling", x0: -0.2, x1: 8.2, y0: 2.6, y1: 2.8, z0: -0.2, z1: 1.8, slot: courseSoffit)
-  courseBox(label: "corridor-leg-two-ceiling", x0: 6.2, x1: 8.2, y0: 2.6, y1: 2.8, z0: 1.8, z1: 8.2, slot: courseSoffit)
-  courseBox(label: "niche-ceiling", x0: 2.2, x1: 4.2, y0: 2.6, y1: 2.8, z0: -1.8, z1: -0.2, slot: courseSoffit)
+  boundsBox(label: "corridor-north-west", x0: -0.2, x1: 2.4, y0: 0, y1: 2.6, z0: -0.2, z1: 0, slot: courseWall)
+  boundsBox(label: "corridor-north-east", x0: 4, x1: 8.2, y0: 0, y1: 2.6, z0: -0.2, z1: 0, slot: courseWall)
+  boundsBox(label: "corridor-south", x0: -0.2, x1: 6.4, y0: 0, y1: 2.6, z0: 1.6, z1: 1.8, slot: courseWall)
+  boundsBox(label: "corridor-east", x0: 8, x1: 8.2, y0: 0, y1: 2.6, z0: 0, z1: 8.2, slot: courseWall)
+  boundsBox(label: "corridor-leg-two-west", x0: 6.2, x1: 6.4, y0: 0, y1: 2.6, z0: 1.8, z1: 8.2, slot: courseWall)
+  boundsBox(label: "corridor-dead-end", x0: 6.4, x1: 8, y0: 0, y1: 2.6, z0: 8, z1: 8.2, slot: courseAlcove)
+  boundsBox(label: "niche-west", x0: 2.2, x1: 2.4, y0: 0, y1: 2.6, z0: -1.8, z1: 0, slot: courseWall)
+  boundsBox(label: "niche-east", x0: 4, x1: 4.2, y0: 0, y1: 2.6, z0: -1.8, z1: 0, slot: courseWall)
+  boundsBox(label: "niche-back", x0: 2.4, x1: 4, y0: 0, y1: 2.6, z0: -1.8, z1: -1.6, slot: courseAlcove)
+  boundsBox(label: "corridor-ceiling", x0: -0.2, x1: 8.2, y0: 2.6, y1: 2.8, z0: -0.2, z1: 1.8, slot: courseSoffit)
+  boundsBox(label: "corridor-leg-two-ceiling", x0: 6.2, x1: 8.2, y0: 2.6, y1: 2.8, z0: 1.8, z1: 8.2, slot: courseSoffit)
+  boundsBox(label: "niche-ceiling", x0: 2.2, x1: 4.2, y0: 2.6, y1: 2.8, z0: -1.8, z1: -0.2, slot: courseSoffit)
 }
 
 // The low-soffit tunnel along x 0 .. 10 at z 11 .. 13.4: a 3.5 m ceiling over the first 3.5 m, then a lintel and a
 // 2.25 m soffit the rest of the way.
 template courseTunnel() {
-  courseBox(label: "tunnel-north", x0: -0.2, x1: 10.2, y0: 0, y1: 3.7, z0: 10.8, z1: 11, slot: courseWall)
-  courseBox(label: "tunnel-south", x0: -0.2, x1: 10.2, y0: 0, y1: 3.7, z0: 13.4, z1: 13.6, slot: courseWall)
-  courseBox(label: "tunnel-high-ceiling", x0: -0.2, x1: 3.5, y0: 3.5, y1: 3.7, z0: 10.8, z1: 13.6, slot: courseSoffit)
-  courseBox(label: "tunnel-lintel", x0: 3.5, x1: 3.7, y0: 2.45, y1: 3.7, z0: 10.8, z1: 13.6, slot: courseSoffit)
-  courseBox(label: "tunnel-soffit", x0: 3.7, x1: 10.2, y0: 2.25, y1: 2.45, z0: 10.8, z1: 13.6, slot: courseSoffit)
+  boundsBox(label: "tunnel-north", x0: -0.2, x1: 10.2, y0: 0, y1: 3.7, z0: 10.8, z1: 11, slot: courseWall)
+  boundsBox(label: "tunnel-south", x0: -0.2, x1: 10.2, y0: 0, y1: 3.7, z0: 13.4, z1: 13.6, slot: courseWall)
+  boundsBox(label: "tunnel-high-ceiling", x0: -0.2, x1: 3.5, y0: 3.5, y1: 3.7, z0: 10.8, z1: 13.6, slot: courseSoffit)
+  boundsBox(label: "tunnel-lintel", x0: 3.5, x1: 3.7, y0: 2.45, y1: 3.7, z0: 10.8, z1: 13.6, slot: courseSoffit)
+  boundsBox(label: "tunnel-soffit", x0: 3.7, x1: 10.2, y0: 2.25, y1: 2.45, z0: 10.8, z1: 13.6, slot: courseSoffit)
 }
 
 // The colonnade: a wall along z 16.4 .. 16.6 from x 0 to 13, and eight 0.35 m pillars 3 m high at z 15, on a 1.6 m
 // pitch from x 1, leaving 1.2 m of walkway behind them.
 template courseColonnade() {
-  courseBox(label: "colonnade-wall", x0: 0, x1: 13, y0: 0, y1: 3, z0: 16.4, z1: 16.6, slot: courseWall)
+  boundsBox(label: "colonnade-wall", x0: 0, x1: 13, y0: 0, y1: 3, z0: 16.4, z1: 16.6, slot: courseWall)
   for k in range(0, 8) {
-    courseBox(
+    boundsBox(
       label: $"pillar-{k}",
       x0: ((1 + (1.6 * k)) - 0.175),
       x1: ((1 + (1.6 * k)) + 0.175),
@@ -81,13 +78,13 @@ template courseColonnade() {
 // 0.15 m partition on x 4.925 .. 5.075 from the back wall to z 21.6, leaving a 1.6 m opening at the south end. A lamp
 // slab hangs under the ceiling in each bay, warm in the west one and cool in the east.
 template courseBays() {
-  courseBox(label: "bays-back", x0: -0.2, x1: 10.2, y0: 0, y1: 2.8, z0: 26, z1: 26.2, slot: courseWall)
-  courseBox(label: "bays-west", x0: -0.2, x1: 0, y0: 0, y1: 2.8, z0: 20, z1: 26, slot: courseWall)
-  courseBox(label: "bays-east", x0: 10, x1: 10.2, y0: 0, y1: 2.8, z0: 20, z1: 26, slot: courseWall)
-  courseBox(label: "bays-partition", x0: 4.925, x1: 5.075, y0: 0, y1: 2.8, z0: 21.6, z1: 26, slot: courseWall)
-  courseBox(label: "bays-ceiling", x0: -0.2, x1: 10.2, y0: 2.8, y1: 3, z0: 20, z1: 26.2, slot: courseSoffit)
-  courseBox(label: "bays-lamp-warm", x0: 1, x1: 4, y0: 2.74, y1: 2.8, z0: 22, z1: 25, slot: courseWarm)
-  courseBox(label: "bays-lamp-cool", x0: 6, x1: 9, y0: 2.74, y1: 2.8, z0: 22, z1: 25, slot: courseCool)
+  boundsBox(label: "bays-back", x0: -0.2, x1: 10.2, y0: 0, y1: 2.8, z0: 26, z1: 26.2, slot: courseWall)
+  boundsBox(label: "bays-west", x0: -0.2, x1: 0, y0: 0, y1: 2.8, z0: 20, z1: 26, slot: courseWall)
+  boundsBox(label: "bays-east", x0: 10, x1: 10.2, y0: 0, y1: 2.8, z0: 20, z1: 26, slot: courseWall)
+  boundsBox(label: "bays-partition", x0: 4.925, x1: 5.075, y0: 0, y1: 2.8, z0: 21.6, z1: 26, slot: courseWall)
+  boundsBox(label: "bays-ceiling", x0: -0.2, x1: 10.2, y0: 2.8, y1: 3, z0: 20, z1: 26.2, slot: courseSoffit)
+  boundsBox(label: "bays-lamp-warm", x0: 1, x1: 4, y0: 2.74, y1: 2.8, z0: 22, z1: 25, slot: courseWarm)
+  boundsBox(label: "bays-lamp-cool", x0: 6, x1: 9, y0: 2.74, y1: 2.8, z0: 22, z1: 25, slot: courseCool)
 }
 
 placements {

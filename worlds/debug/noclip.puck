@@ -1,4 +1,5 @@
 import "../standard/inputs"
+import "../standard/kits"
 // Noclip, the debug world's own: a seat's noclip channel (P, or the left stick's press while the right trigger is held;
 // `body.press noclip` from the console) switches her collision off and on. `noclip` is a body register (state.body)
 // holding 1 while her collision is off, and the kit assignment selects by it as it selects by the suit (suit.puck):
@@ -75,10 +76,7 @@ kits {
             forward: Heading
             lift: 1
             speed: 5
-            gravity {
-              fall: 46
-              rise: 28
-            }
+            gravity: standardGravity
             thrust: 1
           }
         ]

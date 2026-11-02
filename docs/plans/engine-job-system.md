@@ -410,10 +410,61 @@ its first offset; partitions then write their rows in index order from that
 offset. The delivered sequence is byte-identical to today's at any count.
 
 Serial phases stay serial: the kit bodies and seats, rigid pair contacts,
-`EvaluateWorldRules` whole (below), the scoped replay hash
-(`WorldScopedReplayRuntime.cs:68`; the [test runner](open-items.md#test-runner-and-replay)
-packet's incremental hash designs its digest segments over these same
-partitions), events, addons, machines and the shell.
+`EvaluateWorldRules` whole (below), the authority hash, events, addons,
+machines and the shell.
+
+### The incremental state hash
+
+The per-tick authority hash a recording, `--reproduce` and `--workers` take
+(`WorldStateHashComposition.HashAuthoritative`) is a combination of digests
+whose segments are this section's partitions, so a later step can fold them in
+parallel without changing a value:
+
+- **Components.** Each component of `Authoritative` folds into its own fresh
+  hash and the scope folds those digests in order; `AuthoritativeComponents`
+  returns exactly the digests the scope combines.
+- **Arena.** `StateArena.ComputeHash` folds one digest per segment of
+  `HashSegmentRows` (32) catalog rows, each over its rows' `RowDigest`, then
+  the positions no row owns (the lane roster), the key ledger and the undo
+  history. A row digest is cached by `RowVersion`, which every committed write
+  that changes a row's bytes moves (number, text, vector, visibility and
+  observation columns through one door each; growth, snapshot and scope
+  restore, undo and adoption move it or replace the layout, which drops the
+  cache). Inside an open scope the arena folds afresh. The scoped replay
+  runtime folds its rows through the same `RowDigest`, so there is one cache.
+- **Body continuations.** `WorldPopulation.AppendContinuationHash` folds one
+  digest per segment of `HashSegmentSlots` (32) entity slots, the E1 body
+  partition, which divides E4's 256-row partition evenly. A slot's digest is
+  cached only while its body rests (asleep, or parked in a rigid island) and
+  stands while the body's rest epoch (moved by every wake, park, sleep, pose,
+  restore and transfer), its generation, the population's admission revision,
+  the contact-field version and the body's action-state lane values hold. A
+  body with an identity is never cached, since a fact or record written on the
+  identity moves its continuation without touching the body. A moving body
+  encodes every tick, as before. Over go-tests (15 worlds, 18,204 ticks, about
+  368 rows and 559 slots each) a tick refolds 1.6 rows and 22 slots.
+- **The recompute check.** A write that changes state without moving the
+  version its digest is keyed by would hide a divergence, so
+  `StateArena.RecomputeHash`, `AppendContinuationHash(recompute: true)` and
+  `WorldStateHashComposition.RecomputeAuthoritative` give the same value with
+  nothing cached, and `DescribeStaleDigest` names the stale component.
+  `puck test --reproduce` checks every replayed tick and the first count of
+  `--workers` every recorded tick; a mismatch fails the leg by name. Plain
+  `--record` legs and later `--workers` counts take only the incremental hash.
+
+A headless host also stops delivering snapshots to its screen-session mirrors
+(`WorldSessionMirror(unread: true)`), which only a presentation reads; the
+destination still runs and discloses.
+
+Measured on go-tests at `--jobs 1` under the heavy lease, authored seconds
+summed from each leg's `timing.json`, the build before against the build
+after: plain 256.7 s against 180.4 s (the mirrors), recorded (`--record`)
+441.4 s against 247.1 s, so the recording's own cost fell from 184.7 s to
+66.7 s. `--reproduce` after: 228.6 s authored and 415.7 s replay, the replay
+paying the full recompute every tick; `--workers 1,2,0` after: 346.9 s at the
+checked first count, 254.7 s and 265.2 s at the others. What the recording
+still costs is the components that fold whole every tick (poses, body action
+state, navigation, flock and input), unprofiled.
 
 ### Rule evaluation stays serial
 
@@ -562,8 +613,9 @@ identity, keeps the 1/1.1 display-pixel band while the mesh is unchanged,
 survives buffer growth and ignores prior levels for a settled still. Rejected
 commands are empty slots, preserving staged order and depth ties. Opaque
 occlusion retains its early and late phases; glass uses one. Each cascade
-selects once, and its entry and exit render passes consume the same selected
-phase, with one counted call each and no intervening selection or history write.
+selects once, emitting entry, solid-exit and thin-exit argument phases. Entry
+uses one counted call; exit uses one per pipeline bucket, with no intervening
+selection or history write.
 The CPU records one counted indirect call per phase regardless of draw count;
 CPU `Choose` and its direct-draw loop are deleted. Vulkan without native
 counting consumes the same initialized arguments, in one multi-draw where
@@ -742,7 +794,7 @@ as `puck mesh audit` for bake defects.
 | **T3 Crossing scan partitions** | E3 by seat partition with occupancy deltas. | T0 on a fixture of 40 seats where two seats enter one party-travel door on one tick and seats straddle the 32-seat boundary; the crossing log (transfer tick, cohort) identical across counts and against the recording. |
 | **T2 Rigid advance partitions** | E1 for rigid bodies with partition scratch; the rigid share measured first; the one pose-read change re-recorded. | T0 on a fixture of 200 rigid bodies (a rack and a domino line) beside kit bodies whose producers target a rigid body; hashes identical across counts; `puck bench world` at 0 B median a tick; a standing `host.frames` simulate read against 6.3 ms. |
 | **R1 Parallel recording in waves** | Waves, prepare-before-fork with the fence first, residency upload and extent in preparation, in-order submission; the pose pack fork. Direct3D 12 and a windowed Vulkan boot. | `host.frames` produce avg at the lobby against 6.5 ms; a `world.at` script that moves a portal view and changes a screen's source every frame for 120 frames, with stills at three ticks compared as above with the serial build's on both backends (a one-frame-late read or a descriptor overwritten under a slot in flight shows as a localized difference beyond the noise); GPU-based validation clean on Direct3D 12 and the validation layer clean on Vulkan. |
-| **R2 GPU culling in the indirect path — built, checks recorded** | GPU selection through `SdfMeshOcclusion`'s counted indirect draws for every raster pass, with persistent level history; CPU `Choose` removed. Cascade entry/exit share selected arguments and count both executions. Ordered compaction, (geometry, level) instance buckets and proportional updates follow in the [visibility plan](visibility.md#the-build-order). | Settled meadow produce CPU → GPU: Direct3D 12 59.53–59.76 → 50.75 ms; Vulkan 58.41–59.43 → 51.82 ms. Full Direct3D 12 GPU validation and Vulkan synchronization validation clean; tolerant still comparisons inspected. [R2 observations](#r2-observations) records the counts, pass costs, unresolved Direct3D 12 lobby outlier and monitor residual. |
+| **R2 GPU culling in the indirect path — built, checks recorded** | GPU selection through `SdfMeshOcclusion`'s counted indirect draws for every raster pass, with persistent level history; CPU `Choose` removed. Cascades select once into entry and solid/thin exit phases. Ordered compaction, (geometry, level) instance buckets and proportional updates follow in the [visibility plan](visibility.md#the-build-order). | Settled meadow produce CPU → GPU: Direct3D 12 59.53–59.76 → 50.75 ms; Vulkan 58.41–59.43 → 51.82 ms. Full Direct3D 12 GPU validation and Vulkan synchronization validation clean; tolerant still comparisons inspected. [R2 observations](#r2-observations) records the counts, pass costs, unresolved Direct3D 12 lobby outlier and monitor residual. |
 | **B1 GI proportional to change** | The change-set closure; GI jobs under `Lighting`. | After a `world.reload` that removes a wall and one that moves a draw: the probe tables and a still compared with a full retrace's; `[sdf.mesh-gi]` probes traced against the whole window; the cold bake's GI seconds against 201 to 222. |
 | **M2b Probe block ownership** | Blocks owned by the cache with live-slice counts, native. | A walk into an untraced area for 60 s with `host.memory collect` every 10 s: managed heap flat, native blocks freed as sweeps converge (block count printed by `[sdf.mesh-gi]`); stills before and after compared as above. |
 | **M3 Native movers 4 and 5** | Unmanaged scratch leases, the split journal, numeric columns; the tick's deliveries. | T0 at every count; `puck bench world` unchanged; a scratch world whose rules overwrite text cells and rewind (`world.undo`) reads the restored text. |
@@ -832,11 +884,9 @@ controls and a stopped validation attempt are excluded. A later current
 Vulkan boot reaches readiness and submits 17 world dispatches while cold
 geometry is still pending; it does not replace the settled four-place check.
 
-Integration merge `e147b701a` adds shadow exit layers. R2 reuses the cascade's
-selected arguments for that second raster pass. `b8a3fb1b5` stages each phase's
-execution count in the unused last control word (row 13.w), so generated
-draw/vertex totals include both consumers without selecting twice; arguments
-and history are unchanged. Vulkan synchronization validation passes on this
+Integration merge `e147b701a` adds shadow exit layers. Its initial R2 integration
+reuses selected arguments and weights statistics for both executions.
+Vulkan synchronization validation passes on this
 exact build with bakes settled at tick 2,154: lobby / rim / gallery / meadow
 read 13,178 / 841 / 15,487 / 20,381 physical draws, with no warning or error.
 Full Direct3D 12 GPU/state-tracking/synchronized-queue validation also passes

@@ -374,6 +374,10 @@ internal static partial class LawRegistry {
             id: "sampling.pcg3d-lattice-noise-reference-and-corners"
         ),
         ClaimCase(
+            claim: Subjects.LatticeNoiseFadeAndBoxBounds,
+            id: "sampling.lattice-noise-fade-and-box-bounds"
+        ),
+        ClaimCase(
             claim: Subjects.NormalQuantileLadderAndRefusals,
             id: "sampling.normal-quantile-ladder"
         ),
