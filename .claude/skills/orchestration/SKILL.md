@@ -149,6 +149,13 @@ had just written, a second retry loop in a change built to remove one among
 them, so duplicates were created about as fast as they were found; naming the
 mechanism up front is cheaper than the review that catches it.
 
+When a second fix lane in one area comes back and its review finds the same
+class of defect in places the fix did not reach (disclosure took two lanes
+and three reviews, each finding new leaking doors), stop patching. The
+property is enforced in too many places; brief a design for the one
+chokepoint that makes the property structural (a type or project boundary,
+one derived view), then migrate behind it.
+
 Before briefing a step that decides how a pipeline works (what the renderer
 draws and submits, how the tick schedules, a camera or physics model), ask
 whether a research round has covered that design, even when the step arrives

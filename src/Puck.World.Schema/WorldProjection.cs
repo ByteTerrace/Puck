@@ -71,6 +71,8 @@ public sealed record WorldProjectionProvenance(string Authority, string? Documen
 /// <param name="SpawnPoints">The authored spawn points.</param>
 /// <param name="Render">The render defaults.</param>
 /// <param name="Screens">The screen surfaces.</param>
+/// <param name="ScreenMaterials">The screen materials the screens and the placements' creation faces name by id, so a
+/// presentation peer draws each display through the treatment its authority authored.</param>
 /// <param name="Cameras">The camera rows.</param>
 /// <param name="Population">The population defaults — capacity, distribution, seat activation.</param>
 /// <param name="PlayerDefaults">The player defaults.</param>
@@ -118,6 +120,7 @@ public sealed record WorldProjectionDocument(
     IReadOnlyList<WorldSpawnPoint> SpawnPoints,
     WorldRenderDefaults Render,
     IReadOnlyList<WorldScreen> Screens,
+    IReadOnlyList<WorldScreenMaterial> ScreenMaterials,
     IReadOnlyList<WorldCamera> Cameras,
     WorldBodiesDefaults Population,
     WorldPlayerDefaults PlayerDefaults,
@@ -314,6 +317,7 @@ public static class WorldProjection {
             SpawnPoints: definition.SpawnPoints,
             Render: definition.Render,
             Screens: definition.Screens,
+            ScreenMaterials: definition.ScreenMaterials,
             Cameras: definition.Cameras,
             Population: definition.Population,
             PlayerDefaults: definition.PlayerDefaults,
@@ -790,6 +794,7 @@ public static class WorldProjection {
             SpawnPointsRaw: projection.SpawnPoints,
             RenderRaw: projection.Render,
             ScreensRaw: projection.Screens,
+            ScreenMaterialsRaw: projection.ScreenMaterials,
             CamerasRaw: projection.Cameras,
             PopulationRaw: projection.Population,
             PlayerDefaultsRaw: projection.PlayerDefaults,
