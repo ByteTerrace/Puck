@@ -94,6 +94,8 @@ Later, with their designs done: the [rule-faults](rule-faults.md) steps, the
      - what a player save holds, refined from what Puck already persists;
      - true pause only in solo sessions;
      - exit to menu and exit to desktop.
+
+     The memo is [the hub, player saves and the player menu](hub-and-saves.md).
   3. Fable reviews the memo before any lane builds it.
 
 ## The settle window that closes the wave

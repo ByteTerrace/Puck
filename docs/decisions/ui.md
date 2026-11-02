@@ -100,8 +100,11 @@ ruling that the engine is generic is in [AGENTS.md](../../AGENTS.md).
   observing or changing state.
 - **A host menu is always reachable** from a reserved input and from the bar:
   it holds escape, the Mods surface, settings and focus recovery, draws only
-  while open, and no world or mod can cover, restyle or intercept it (the lead's
-  call, which the owner deferred).
+  while open, and no world or mod can cover, restyle or intercept it. The
+  owner's two-layer ruling ([play decisions](play.md#the-game)) makes it the
+  host escape beneath the authored Start menu, always offering exit to the hub
+  and exit to the desktop; [the hub memo](../plans/hub-and-saves.md#12-the-two-menus)
+  designs it.
 - **The player sees what each mod does**: a Mods surface lists each mod's
   permissions and use with per-mod show-UI, input and sound toggles, and a held
   key shows who drew anything on screen.
