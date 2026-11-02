@@ -67,10 +67,9 @@ public static partial class EvalsRun {
                than HEAD, HEAD's .claude/skills/<skill>/evals/ replaces the revision's, so the old
                and new skill run identical cases.
             2. Adds the fixture to every case in that tree: HEAD's AGENTS.md text (and, for a skill
-               a lane loads, HEAD's delegate SKILL.md text) in case.yaml
-               execution.append_system_prompt, where a real session has them loaded. Both arms
-               carry it, so the delta measures what the skill adds over the rules a session already
-               has. A case whose prompt.md or case.yaml sets append_system_prompt is refused. The
+               a lane loads, HEAD's delegate SKILL.md text) as a project-instructions block ahead of
+               each prompt.md's task, as a real session delivers them. Both arms carry it, so the
+               delta measures what the skill adds over the rules a session already has. The
                repository and .claude/skills/ are never granted.
             3. Runs claude plugin eval on the tree's skill directory with --trust-plugin,
                --no-publish, --keep-temp, --threshold 0 and the models given, writing
@@ -185,7 +184,7 @@ public static partial class EvalsRun {
         Console.WriteLine(value: $"{Verb}: {settings.Skill} at {settings.Revision} ({revision[..12]}), cases from HEAD ({head[..12]}){((revision == head) ? string.Empty : ", copied into the old tree")}");
         Console.WriteLine(value: $"{Verb}: frozen tree {Display(path: tree)} (detached at {revision[..12]}; {(settings.KeepTree ? "kept" : "removed after the run")})");
         Console.WriteLine(value: (settings.Fixture
-            ? $"{Verb}: fixture in every case's case.yaml execution.append_system_prompt, both arms: HEAD's AGENTS.md{(withDelegate ? " and delegate SKILL.md" : string.Empty)} text"
+            ? $"{Verb}: fixture ahead of every case's prompt, both arms: HEAD's AGENTS.md{(withDelegate ? " and delegate SKILL.md" : string.Empty)} text"
             : $"{Verb}: no fixture (--no-fixture): the cases run without the rules file"));
         Console.WriteLine(value: $"{Verb}: model {settings.Model}, judge {settings.Judge}, ablation {settings.Ablation}, ceiling ${settings.MaxCostUsd.ToString(provider: CultureInfo.InvariantCulture)}");
         Console.WriteLine(value: $"{Verb}: results {Display(path: results)}");
@@ -250,9 +249,11 @@ public static partial class EvalsRun {
         }
     }
 
-    /// <summary>Adds the rules-file fixture to every case directory: <see cref="FixturePrompt"/> as the
-    /// <c>execution.append_system_prompt</c> of its <c>case.yaml</c>, which both arms run with. Every case is checked
-    /// before any is written.</summary>
+    /// <summary>Adds the rules-file fixture to every case directory: <see cref="FixturePrompt"/> as a
+    /// <c>project-instructions</c> block ahead of the task in its <c>prompt.md</c> body, the same in both arms, as a
+    /// session delivers project instructions in the user turn. It is never <c>append_system_prompt</c>:
+    /// <c>claude plugin eval</c> passes that on the child's command line, which Windows caps far below the rules file's
+    /// size. Every case is checked before any is written.</summary>
     /// <param name="caseDirectories">The case directories, in a tree the run owns.</param>
     /// <param name="agents">The text of <c>AGENTS.md</c>.</param>
     /// <param name="delegateSkill">The text of the delegate skill, or <see langword="null"/> to leave it out.</param>
@@ -260,13 +261,18 @@ public static partial class EvalsRun {
     /// refusal writes nothing.</returns>
     public static (string Case, string Why)? AddFixture(IReadOnlyList<string> caseDirectories, string agents, string? delegateSkill) {
         foreach (var caseDirectory in caseDirectories) {
-            if (CaseFiles.PromptSets(caseDirectory: caseDirectory, key: "append_system_prompt")) { return (caseDirectory, "its prompt.md sets append_system_prompt, which would override the fixture; move that text into the prompt."); }
-            if (CaseFiles.CaseSets(caseDirectory: caseDirectory, key: "append_system_prompt")) { return (caseDirectory, "its case.yaml sets append_system_prompt, which the fixture writes; move that text into the prompt."); }
+            if (!File.Exists(path: Path.Combine(caseDirectory, CaseFiles.Prompt))) { return (caseDirectory, "it has no prompt.md body to carry the fixture; keep the prompt in prompt.md."); }
         }
-        var prompt = FixturePrompt(agents: agents, delegateSkill: delegateSkill);
+        var block = $"<project-instructions>\n{FixturePrompt(agents: agents, delegateSkill: delegateSkill)}\n</project-instructions>\n\n";
 
         foreach (var caseDirectory in caseDirectories) {
-            CaseFiles.SetCaseKey(caseDirectory: caseDirectory, key: "append_system_prompt", section: "execution", text: prompt);
+            var path = Path.Combine(caseDirectory, CaseFiles.Prompt);
+            var lines = File.ReadAllText(path: path).ReplaceLineEndings(replacementText: "\n").Split(separator: '\n');
+            var end = CaseFiles.FrontmatterEnd(lines: lines);
+            var head = ((end < 0) ? string.Empty : (string.Join(separator: '\n', value: lines[..(end + 1)]) + "\n"));
+            var body = string.Join(separator: '\n', value: lines[((end < 0) ? 0 : (end + 1))..]);
+
+            File.WriteAllText(contents: (head + block + body), path: path);
         }
         return null;
     }
