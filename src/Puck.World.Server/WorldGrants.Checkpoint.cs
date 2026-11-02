@@ -55,6 +55,7 @@ public sealed partial class WorldGrants {
             DriveGates: [.. m_driveGates.Select(selector: static pair => (pair.Key, pair.Value))],
             SessionEpochs: [.. m_sessionEpochs.OrderBy(keySelector: static pair => pair.Key).Select(selector: static pair => (pair.Key, pair.Value))],
             Sessions: CaptureSessions(),
+            HandleTables: [.. m_handleTables.Values.Select(selector: static table => table.Capture())],
             Revision: m_revision
         );
     }
@@ -179,6 +180,14 @@ public sealed partial class WorldGrants {
         }
 
         RestoreSessions(sessions: checkpoint.Sessions);
+        foreach (var table in checkpoint.HandleTables) {
+            if (!m_handleTables.TryAdd(
+                key: (table.Principal, table.Capability),
+                value: WorldHandleTable.Restore(checkpoint: table, grants: this)
+            )) {
+                throw new ArgumentException(message: $"checkpoint holds the handle table {table.Principal.Describe()} {table.Capability} twice", paramName: nameof(checkpoint));
+            }
+        }
         m_revision = checkpoint.Revision;
     }
 

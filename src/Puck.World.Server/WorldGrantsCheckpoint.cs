@@ -22,8 +22,22 @@ public sealed record WorldSessionCheckpoint(
     bool ObserverEnded,
     PlayerIntent Input
 );
-/// <summary>The grant table's own checkpointed state — every table this class owns, the admitted sessions
-/// included.</summary>
+/// <summary>One handle table as a checkpoint carries it: the handles a guest holds name a slot index and generation,
+/// so the slots, the generation counter and the grant revision the slots were projected at are state.</summary>
+/// <param name="Principal">The addon or peer principal the table is for.</param>
+/// <param name="Capability">The capability the table designates handles over.</param>
+/// <param name="Slots">Each slot's designated subject and generation, in slot order.</param>
+/// <param name="NextGeneration">The generation the next changed slot takes.</param>
+/// <param name="BuiltAtRevision">The grant revision the slots were projected at; -1 for a table never projected.</param>
+public sealed record WorldHandleTableCheckpoint(
+    Principal Principal,
+    WorldCapability Capability,
+    IReadOnlyList<(GrantSubject Subject, int Generation)> Slots,
+    int NextGeneration,
+    int BuiltAtRevision
+);
+/// <summary>The grant table's own checkpointed state — every table this class owns, the admitted sessions and the
+/// handle tables included.</summary>
 public sealed record WorldGrantsCheckpoint(
     IReadOnlyList<WorldGrantsGranteeCheckpoint> Grantees,
     IReadOnlyList<(WorldCapability Capability, GrantSubject Subject, Grantee Holder)> Exclusive,
@@ -38,5 +52,6 @@ public sealed record WorldGrantsCheckpoint(
     IReadOnlyList<(int BodyIndex, string Reason)> DriveGates,
     IReadOnlyList<(int Ordinal, int Epoch)> SessionEpochs,
     IReadOnlyList<WorldSessionCheckpoint> Sessions,
+    IReadOnlyList<WorldHandleTableCheckpoint> HandleTables,
     int Revision
 );
