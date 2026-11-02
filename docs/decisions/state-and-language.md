@@ -521,9 +521,22 @@ one it read successfully. An `Edge` rule whose gate faults neither fires nor
 re-arms (treating the fault as false would re-arm it and fire on recovery), and
 a world decision that faults keeps its choice and its interrupt edge and runs
 no `onNoChoice` (treating the fault as "no choice" would turn it into an
-answer). Every fault starts in `RuleExpressions.TryEvaluate` and is recorded in
-the reader's fault register, which each deciding place reads within its own
-scope.
+answer). An effect that faults refuses the whole firing, and a firing's
+verdict covers everything the firing decides: the arena scope, the edge latch,
+a decision's choice and the arms it queued commit through one door after the
+verdict is in, or not at all.
+
+The mechanism that carries this is decided in
+[the rule-faults plan](../plans/rule-faults.md): the fault is a case of the
+value every evaluation returns (`Outcome`, with no numeric accessor outside a
+match on the finite case), one interpreter produces every evaluated value and
+resolves every address before an operand reads through it, and a firing is a
+read phase producing a proposal that one commit door installs. A fault
+register beside the value, read by each deciding place within its own scope,
+was the mechanism under review; four review rounds showed it cannot be closed
+(a nested success can clear it, it lives on a replaceable arena, every deciding
+place must poll it, and it cannot order the writes a firing makes), so it is
+replaced rather than patched.
 The printer elides a numeric truth test only when its operand reparses as the
 identical test. Explicit compound expression boundaries remain, because fact
 comparisons have special absence and infinity semantics.

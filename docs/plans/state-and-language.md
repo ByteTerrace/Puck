@@ -1166,6 +1166,10 @@ ticked; the [open items](open-items.md#next) rank the work packets drawn from it
 
 - C1: the charged-operation, failed-work, and report inventory above feeds
   [S10 step 7](#s10--the-state-review).
+- Rule-fault propagation: the fault register on `ArenaScratch` is replaced by
+  the in-band `Outcome`, the one interpreter and the transactional firing of
+  [the rule-faults plan](rule-faults.md), in its nine steps with their
+  witnesses and checks.
 
 - S7's substrate and World integration are present: generation-aware single and
   pair pools, snapshots, lexical claim/release/iteration, logical body carriers,
