@@ -117,6 +117,31 @@ public sealed class WorldBakedColors {
             : fallback
         );
     }
+    /// <summary>Resolves a bound whole-number cell for the build under way (an enum member's ordinal, an integer, or a
+    /// boolean as zero or one, which
+    /// a palette slot's style selection names its case by) and remembers it, so a write to the cell rebuilds.</summary>
+    /// <param name="token">The <c>state.&lt;row&gt;[.&lt;key&gt;]</c> binding naming the cell.</param>
+    /// <returns>The cell's value, or <see langword="null"/> when the token binds nothing, the manifest registers no
+    /// slot for it, or the cell holds no whole number.</returns>
+    public long? ResolveWhole(string? token) {
+        if (!StateBinding.TryParse(binding: out _, token: token)) {
+            return null;
+        }
+
+        var mirror = Mirror();
+        var slot = mirror.SlotOf(conversion: WorldStateConversion.Number, token: token);
+
+        m_hasValueBindings = true;
+        Remember(changed: mirror.Changed(slot: slot), conversion: WorldStateConversion.Number, token: token!);
+
+        var value = mirror.Sample(slot: slot).Value;
+
+        return (!value.HasValue ? null : (value.Kind switch {
+            CellKind.Int => value.AsInt,
+            CellKind.Bool => (value.AsBool ? 1L : 0L),
+            _ => null,
+        }));
+    }
     /// <summary>Resolves one authored text screen line for the build under way, replacing any
     /// <c>{state.&lt;row&gt;[.&lt;key&gt;]}</c> placeholders (<see cref="HudTemplate"/>) from the state mirror and
     /// remembering each bound cell.</summary>
