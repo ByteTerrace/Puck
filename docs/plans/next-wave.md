@@ -74,7 +74,8 @@ Later, with their designs done: the [rule-faults](rule-faults.md) steps, the
   code ([the owner's rulings](../decisions/play.md#the-game)).
   1. A read-only grounding pass finds what already exists: identity and
      owned worlds, checkpoints and persistence, crossings and transfers, the
-     avatar studio, `world.save`, `quit`, the wheel and the UI plan's tree.
+     avatar studio, `world.save`, `quit`, the wheel and the UI plan's tree
+     ([done](next-wave/ground-hub.md)).
   2. A design memo reasons abstractly through:
      - the hub as the release's launching point;
      - character creation and selection;
