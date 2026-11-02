@@ -366,6 +366,14 @@ documentation warns of deforming geometry
 and a cached 2048² D32 layer is 16 MiB a cascade before its copy, so caching
 waits for evidence.
 
+**With the transmission term** ([transmission](transmission.md#composition)):
+a cascade holds two layers, the nearest surface and a peel of it, and a
+wrapped receiver turned from the light reads the second. Light-space caster
+occlusion therefore tests casters against the second layer's pyramid, never
+the first: a caster behind one sheet is what the second layer records, and
+only a caster wholly behind both layers can be dropped. The receiver mask and
+the box cull are unaffected.
+
 ## What serves authors
 
 | Decision | Any density | Mostly unique geometry | Huge single objects | Animated and skinned | Portals and nested views | Camera cuts |

@@ -1834,6 +1834,16 @@ and the order they land in; the items below are its findings and checks.
   pixels white like lit ones; at the noon sun the meadow lies in the east
   wall's shadow. Step 1's checks and the frame bar are owed again on the moving
   day cycle, with a low-sun cel style for the dawn penumbra check.
+- [high] The exit layer's correctness rests on mesh winding, closure, rigid
+  transform and no clip, which the raster path cannot guarantee; three
+  review rounds each broke one (illum1fix2: the receiver-plane clamp
+  self-shadows grazing plates, `sdf-surface-stage.hlsli`; one signed volume
+  misorients multi-shell authored meshes, `WorldPlacementStamper.cs`;
+  T-junctions make solids thin casters; skinned deformation can invert
+  winding under `EnclosesSolid`). The [transmission plan](transmission.md)
+  replaces the exit layer with a depth peel read by one receiver bit and
+  lists its lanes; the packet's exit-layer items below close with it.
+  (from: illum1fix2-astra, transmit-design)
 - From illum1-fix: the cascades' exit layer doubles each cascade pass's draws
   and vertices (`world.counters gpu pass sdf.world$shadow-near` at the stage:
   460 draws and 2.62 M vertices on Direct3D 12, two render passes) and adds a

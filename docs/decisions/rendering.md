@@ -154,6 +154,13 @@ owner ruled the second (a style per material, not one look per world).
   closed-receiver flag anyway and a fragment-discard pass, and the field's own
   interior distance does not exist for authored meshes. The exit layer costs a
   second raster of each cascade's draws and one more depth image per cascade.
+  Review of the exit layer found its reading of winding as facing rests on
+  closure, consistent orientation, a rigid transform and no clip, none of
+  which the raster path guarantees for an authored, clipped, mirrored or
+  deformed mesh, and the depth peel's closed-receiver flag errs only toward
+  shadow where the exit layer's missing exit leaks light. The
+  [transmission plan](../plans/transmission.md) therefore replaces the exit
+  layer with the peel and that flag; this entry is rewritten when it lands.
 - **The band shapes the light, not the shadow.** A cel style bands a light's
   cosine and keeps its visibility as a separate factor,
   `band(cosine) × visibility`, so the filtered penumbra keeps its softness and
