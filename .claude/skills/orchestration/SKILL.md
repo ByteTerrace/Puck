@@ -583,7 +583,7 @@ allows, in order of rising cost:
 | `scout` | Haiku 5.5 | medium | Read-only search, log triage, live-World probes and captures. No source edits or commits; authorized CLI bootstrap is allowed. |
 | `implementer` | Sonnet 5.5 | high | A specified brief with a finish line. It is the default writer. |
 | `specialist` | Opus 5.5 | high | Design judgement across projects, diagnosis of an unknown cause, review-and-fix passes. |
-| `principal` | Fable 5.1 | high | Design only, sparingly: a design memo, an architecture or a design review (determinism and fixed-point maths, the bake, renderer architecture, a design review keeps breaking). Never implementing, measuring or bisecting. |
+| `principal` | Fable 5.1 | high | Design and review, sparingly: a design memo, an architecture, a design review, or a review where repeated rounds point at a fundamental flaw (determinism and fixed-point maths, the bake, renderer architecture). Never implementing, measuring or bisecting. |
 
 Route each brief to the cheapest role that fits it (the owner's ruling): a
 brief with a known cause or a specified result, such as content, a document
@@ -776,7 +776,9 @@ not a spiral:
   Twice the lead started principal lanes after that instruction, and the owner
   found Fable past half its usage. The owner's standing go-ahead: Fable may
   design (a design memo, an architecture, a review of a
-  design), sparingly; it never does the hard labor of implementing,
+  design) and review, sparingly, above all when repeated review rounds point
+  at a fundamental flaw rather than a list of fixes, as a way to climb a
+  steep hill; it never does the hard labor of implementing,
   measuring or bisecting, which goes to specialist or implementer.
 - A defect the owner can see (a walkthrough, a sweep still, a capture) ranks
   at the top of Next and gets a lane at once, aimed at the root cause, not a
