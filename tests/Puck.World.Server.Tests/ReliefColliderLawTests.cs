@@ -17,10 +17,10 @@ public sealed class ReliefColliderLawTests {
     private static ShapeDocument Shape(int id, SdfSolidPrimitive type, Vector3 position, Vector3 scale, float? exponent = null) =>
         new(Id: id, Name: $"shape-{id}", Type: type, Position: position, Rotation: Quaternion.Identity, Scale: scale, Material: 0,
             Blend: SdfBlendOp.Union, Smooth: 0f, Group: 0, Exponent: exponent);
-    private static WorldDefinition Document(IReadOnlyList<ShapeDocument> shapes, float yawDegrees = 30f) {
+    private static WorldDefinition Document(IReadOnlyList<ShapeDocument> shapes, float yawDegrees = 30f, bool relieved = true) {
         var canonical = CreationCanonicalizer.Canonicalize(document: new CreationDocument(
             Schema: CreationDocument.CurrentSchema, Name: "rock", Palette: null, Shapes: shapes, Frames: null,
-            Noise: new CreationNoiseDocument(Frequency: 0.5f, Amplitude: 0.4f, Octaves: 3, Seed: 7u)), source: "rock");
+            Noise: (relieved ? new CreationNoiseDocument(Frequency: 0.5f, Amplitude: 0.4f, Octaves: 3, Seed: 7u) : null)), source: "rock");
         var source = Fixtures.BuildGradientUpDocument(gradientUp: false);
 
         return source with {
@@ -35,6 +35,22 @@ public sealed class ReliefColliderLawTests {
         Shape(id: 2, position: new Vector3(x: -5f, y: 1f, z: 0f), scale: new Vector3(value: 1.5f), type: SdfSolidPrimitive.Sphere),
     ];
 
+    // A smooth join collides as drawn without relief: two coincident unit crowns smooth-unioned at 0.25 draw their top a
+    // quarter radius, 0.0625, above either primitive's, and the copy is one field collider whose surface is there.
+    [Fact]
+    public void ASmoothJoinWithoutReliefCollidesAsItsComposedField() {
+        ShapeDocument[] crowns = [
+            Shape(id: 0, position: new Vector3(x: 0f, y: 3f, z: 0f), scale: Vector3.One, type: SdfSolidPrimitive.Superellipsoid, exponent: 2f),
+            (Shape(id: 1, position: new Vector3(x: 0f, y: 3f, z: 0f), scale: Vector3.One, type: SdfSolidPrimitive.Superellipsoid, exponent: 2f) with {
+                Blend = SdfBlendOp.SmoothUnion, Smooth = 0.25f }),
+        ];
+        var set = WorldColliderSet.Build(definition: Document(shapes: crowns, relieved: false));
+
+        Assert.Equal(expected: 1, actual: set.FieldCount);
+        Assert.True(condition: set.TryNearestSurfaceAlongDirection(origin: V(x: 3, y: 6, z: -2), direction: -FixedVector3.UnitY,
+            maxDistance: Q(value: 3), assistHalfAngle: Q(value: 0.01), candidate: out var top));
+        Assert.InRange(actual: ((double)top.Point.Y), low: 4.06, high: 4.065);
+    }
     [Fact]
     public void ARelievedCopyCompilesOneFieldColliderOnTheProvidersRelievedField() {
         var definition = Document(shapes: Masses);
