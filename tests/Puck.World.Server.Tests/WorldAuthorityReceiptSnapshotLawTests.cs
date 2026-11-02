@@ -25,7 +25,7 @@ public sealed class WorldAuthorityReceiptSnapshotLawTests {
     public async Task CapturedRootSelectsExactReceiptHistoryDespiteLaterPublications() {
         using var directory = new TemporaryDirectory();
         var blobs = PuckStorageTestComposition.BuildStore();
-        var target = new DirectoryObjectStorageTarget(directory.RootPath);
+        var target = WorldAuthorityBlobStore.DirectoryTarget(rootPath: directory.RootPath);
         var store = new WorldAuthorityBlobStore(
             store: blobs,
             target: target,
@@ -236,7 +236,7 @@ public sealed class WorldAuthorityReceiptSnapshotLawTests {
     public async Task EmptyHistoryIsExplicitAndCorruptSourceObjectsRefuse() {
         using var directory = new TemporaryDirectory();
         var blobs = PuckStorageTestComposition.BuildStore();
-        var target = new DirectoryObjectStorageTarget(directory.RootPath);
+        var target = WorldAuthorityBlobStore.DirectoryTarget(rootPath: directory.RootPath);
         var store = new WorldAuthorityBlobStore(
             store: blobs,
             target: target,

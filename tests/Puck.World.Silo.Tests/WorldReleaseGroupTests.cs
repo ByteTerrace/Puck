@@ -332,7 +332,7 @@ public sealed class WorldReleaseGroupTests {
             World: SafeName.Parse(candidate: "row")
         );
         var store = PuckStorageTestComposition.BuildStore();
-        var target = new DirectoryObjectStorageTarget(directory.RootPath);
+        var target = WorldAuthorityBlobStore.DirectoryTarget(rootPath: directory.RootPath);
         var document = Fixtures.BuildDocument() with { HostRaw = Fixtures.StandardHost with { Authority = "localhost:7825", Listen = null, Presentation = WorldHostPresentation.None } };
         var backend = new WorldAuthorityBlobStore(
             store: store,
@@ -486,7 +486,7 @@ public sealed class WorldReleaseGroupTests {
             World: SafeName.Parse(candidate: "row")
         );
         var store = PuckStorageTestComposition.BuildStore();
-        var target = new DirectoryObjectStorageTarget(directory.RootPath);
+        var target = WorldAuthorityBlobStore.DirectoryTarget(rootPath: directory.RootPath);
         var document = Fixtures.BuildDocument() with { HostRaw = Fixtures.StandardHost with { Authority = "localhost:7825", Listen = null, Presentation = WorldHostPresentation.None } };
         var backend = new WorldAuthorityBlobStore(
             store: store,

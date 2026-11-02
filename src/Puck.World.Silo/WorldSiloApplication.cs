@@ -257,6 +257,10 @@ public static class WorldSiloApplication {
             // shutdown race, not a fault; every terminal command already ran on the tick thread before this unwound.
         } catch (Exception failure) when ((LauncherHostRun.FindUnavailable(exception: failure) is { } found)) {
             unavailable = found;
+        } catch (Exception failure) when (backgroundServices.Any(predicate: static service => (service.ExecuteTask?.IsFaulted == true))) {
+            // A StopHost host rethrows the background failure that stopped it once shutdown (and the drain) has run.
+            // The host logged that failure with its trace; the run reports it as a failed worker below.
+            Console.Error.WriteLine(value: $"[silo.host: stopped by a failed service ({failure.Message.ReplaceLineEndings(replacementText: " ")})]");
         }
         var faulted = backgroundServices.Where(predicate: static service => (service.ExecuteTask?.IsFaulted == true)).ToArray();
 

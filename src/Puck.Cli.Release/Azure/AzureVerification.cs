@@ -530,7 +530,7 @@ public static partial class AzureCommand {
         using (var provider = services.BuildServiceProvider()) {
             var authority = new WorldAuthorityBlobStore(
                 store: provider.GetRequiredService<IObjectBlobStore>(),
-                target: new DirectoryObjectStorageTarget(Path.Combine(
+                target: WorldAuthorityBlobStore.DirectoryTarget(rootPath: Path.Combine(
                     path1: fixture,
                     path2: "store"
                 ))

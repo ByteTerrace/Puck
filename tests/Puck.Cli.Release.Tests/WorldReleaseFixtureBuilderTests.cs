@@ -177,7 +177,7 @@ public sealed class WorldReleaseFixtureBuilderTests {
         using var provider = services.BuildServiceProvider();
         var blobs = provider.GetRequiredService<IObjectBlobStore>();
         var owner = Guid.NewGuid();
-        var remote = new DirectoryObjectStorageTarget(Path.Combine(
+        var remote = WorldAuthorityBlobStore.DirectoryTarget(rootPath: Path.Combine(
             path1: temporary.RootPath,
             path2: "remote"
         ));
@@ -285,7 +285,7 @@ public sealed class WorldReleaseFixtureBuilderTests {
             2,
             silo.Worlds.Select(selector: row => row.Federation.KeyFile).Distinct().Count()
         );
-        var local = new DirectoryObjectStorageTarget(Path.Combine(
+        var local = WorldAuthorityBlobStore.DirectoryTarget(rootPath: Path.Combine(
             path1: output,
             path2: "store"
         ));
@@ -508,7 +508,7 @@ public sealed class WorldReleaseFixtureBuilderTests {
         );
         var restored = new WorldAuthorityBlobStore(
             store: blobs,
-            target: new DirectoryObjectStorageTarget(Path.Combine(
+            target: WorldAuthorityBlobStore.DirectoryTarget(rootPath: Path.Combine(
                 path1: complete,
                 path2: "store"
             ))
@@ -631,7 +631,7 @@ public sealed class WorldReleaseFixtureBuilderTests {
         );
         var transformed = new WorldAuthorityBlobStore(
             store: blobs,
-            target: new DirectoryObjectStorageTarget(Path.Combine(
+            target: WorldAuthorityBlobStore.DirectoryTarget(rootPath: Path.Combine(
                 path1: metadataCopy,
                 path2: "store"
             ))
@@ -869,7 +869,7 @@ public sealed class WorldReleaseFixtureBuilderTests {
             foreach (var leg in new[] { "target-import", "source-reverse-import" }) {
                 var legStore = new WorldAuthorityBlobStore(
                     store: blobs,
-                    target: new DirectoryObjectStorageTarget(Path.Combine(
+                    target: WorldAuthorityBlobStore.DirectoryTarget(rootPath: Path.Combine(
                         path1: Path.GetDirectoryName(path: proofPath)!,
                         path2: leg,
                         path3: "store"

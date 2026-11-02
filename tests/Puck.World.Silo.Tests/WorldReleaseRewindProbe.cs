@@ -19,7 +19,7 @@ public sealed partial class WorldReleaseCutoverLawTests {
         using var output = new BufferedConsoleOutput();
         var owner = Guid.NewGuid();
         var blobs = new RewindInterruptionStore(inner: PuckStorageTestComposition.BuildStore());
-        var target = new DirectoryObjectStorageTarget(directory.RootPath);
+        var target = WorldAuthorityBlobStore.DirectoryTarget(rootPath: directory.RootPath);
         var groups = new WorldReleaseGroupStore(
             owner: owner,
             store: blobs,

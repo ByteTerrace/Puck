@@ -29,7 +29,7 @@ public sealed partial class WorldPersistence {
             return cached.Json;
         }
 
-        var json = WorldDefinitionSerialization.Serialize(definition: baseDefinition);
+        var json = WorldServerCheckpoint.DocumentBytes(definition: baseDefinition);
 
         m_baseJson = (baseDefinition, json);
 
@@ -682,7 +682,7 @@ public sealed partial class WorldPersistence {
                 );
             }
 
-            var definitionJson = WorldDefinitionSerialization.Serialize(definition: Host.Configuration);
+            var definitionJson = WorldServerCheckpoint.DocumentBytes(definition: Host.Configuration);
             var server = new WorldServerCheckpoint(
                 AuthorityIdentity: Host.AuthorityIdentity,
                 Input: Host.Input.Capture(),

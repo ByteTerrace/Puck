@@ -3,8 +3,6 @@ using System.Numerics;
 
 using Xunit;
 
-using Puck.Storage;
-
 namespace Puck.World.Server.Tests;
 
 /// <summary>Proves the hosted-origin read path end to end: five quilt-shaped documents published to a directory
@@ -271,7 +269,7 @@ public sealed class WorldHostedOriginLawTests {
     public async Task FiveQuiltDocuments_PublishedToADirectoryStore_ResolveByIdAndValidate() {
         using var directory = new TemporaryDirectory();
 
-        var target = new DirectoryObjectStorageTarget(rootPath: directory.RootPath);
+        var target = WorldAuthorityBlobStore.DirectoryTarget(rootPath: directory.RootPath);
         var store = PuckStorageTestComposition.BuildStore();
         var backend = new WorldAuthorityBlobStore(
             store: store,
@@ -348,7 +346,7 @@ public sealed class WorldHostedOriginLawTests {
     [Fact]
     public async Task NeighbourSeamReadsDoNotRequireUnrelatedHostSettingsToValidate() {
         using var directory = new TemporaryDirectory();
-        var target = new DirectoryObjectStorageTarget(directory.RootPath);
+        var target = WorldAuthorityBlobStore.DirectoryTarget(rootPath: directory.RootPath);
         var store = PuckStorageTestComposition.BuildStore();
         var owner = Guid.NewGuid();
         var definition = BuildQuilt()["quilt-island"] with { HostRaw = Fixtures.StandardHost with { Width = -1 } };

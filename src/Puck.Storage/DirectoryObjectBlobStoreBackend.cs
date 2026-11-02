@@ -15,7 +15,7 @@ internal sealed class DirectoryObjectBlobStoreBackend : IObjectBlobStoreBackend 
         using var stream = directory.OpenFile(name);
 
         if (stream is null) { return null; }
-        if (stream.Length > maximum) { throw new IOException(message: "Storage blob exceeds its byte budget."); }
+        if (stream.Length > maximum) { throw OverBudget(length: stream.Length, maximum: maximum); }
         var bytes = new byte[checked((int)stream.Length)];
 
         stream.ReadExactly(buffer: bytes);
@@ -24,6 +24,7 @@ internal sealed class DirectoryObjectBlobStoreBackend : IObjectBlobStoreBackend 
             VersionToken: Token(content: bytes)
         );
     }
+    private static IOException OverBudget(long length, int maximum) => new(message: $"Storage blob of {length} bytes exceeds its {maximum}-byte budget.");
     private static (string Parent, string Name) Resolve(DirectoryObjectStorageTarget target, ObjectBlobAddress address) {
         var segments = ObjectBlobAddressPath.GetKeySegments(address: address);
         var path = Path.Combine(
@@ -148,7 +149,7 @@ internal sealed class DirectoryObjectBlobStoreBackend : IObjectBlobStoreBackend 
             target: target
         );
 
-        if (content.Length > local.MaximumBlobBytes) { throw new IOException(message: "Storage blob exceeds its byte budget."); }
+        if (content.Length > local.MaximumBlobBytes) { throw OverBudget(length: content.Length, maximum: local.MaximumBlobBytes); }
         if (!Enum.IsDefined(value: mode)) { throw new ArgumentOutOfRangeException(paramName: nameof(mode)); }
         var (parent, name) = Resolve(
             address: address,

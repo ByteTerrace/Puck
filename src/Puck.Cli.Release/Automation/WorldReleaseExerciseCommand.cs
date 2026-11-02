@@ -88,13 +88,10 @@ public static class WorldReleaseExerciseCommand {
             throw new InvalidDataException(message: "qualification requires a local single-owner pinned inventory without production release or authentication configuration");
         }
         var owner = definition.Worlds[0].Owner;
-        var target = new DirectoryObjectStorageTarget(
-            Path.Combine(
-                path1: fixture,
-                path2: "store"
-            ),
-            maximumBlobBytes: WorldReleaseFixtureArchive.MaximumCheckpointBytes
-        );
+        var target = WorldAuthorityBlobStore.DirectoryTarget(rootPath: Path.Combine(
+            path1: fixture,
+            path2: "store"
+        ));
 
         definition = definition with {
             StateDir = Path.Combine(

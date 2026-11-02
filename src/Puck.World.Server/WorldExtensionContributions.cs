@@ -1,6 +1,5 @@
 using System.Text.Json;
 using Puck.Abstractions;
-using Puck.Storage;
 
 namespace Puck.World.Server;
 
@@ -84,7 +83,7 @@ public sealed class WorldServerExtension : IPuckExtension {
                 ) {
                     throw new ArgumentException(message: "directory storage requires exactly one nonempty path setting.");
                 }
-                return new DirectoryObjectStorageTarget(path.GetString()!);
+                return WorldAuthorityBlobStore.DirectoryTarget(rootPath: path.GetString()!);
             }
         ));
     }

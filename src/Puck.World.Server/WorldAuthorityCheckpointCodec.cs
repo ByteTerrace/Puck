@@ -12,8 +12,9 @@ namespace Puck.World.Server;
 /// <see cref="WorldPendingOpCheckpoint.Mutate"/> op reuse <see cref="WorldSubmissionCodec"/>'s own mutation leaf.
 /// Committed journal entries permit the canonical world actor through the trusted-storage entry point; pending
 /// external submissions retain the live actor restriction. Every embedded document (the definition, the base definition, an escrow lease's destination definition)
-/// reuses <see cref="WorldDefinitionSerialization.Serialize"/> bytes verbatim — this codec never re-serializes a
-/// document itself — and a base byte-identical to the definition is written once, behind a flag. Every read is bounded; every decoder — the outer envelope, the body, and each of the
+/// is written verbatim as the capture serialized it — this codec never re-serializes a document itself; the server
+/// section's documents are <see cref="WorldServerCheckpoint.DocumentBytes"/> — and a base byte-identical to the
+/// definition is written once, behind a flag. Every read is bounded; every decoder — the outer envelope, the body, and each of the
 /// sections — asks its own <see cref="WireReader.TryFinish"/> exactly once, so a truncated or trailing-byte payload
 /// refuses by name at the scope that actually owns the leftover bytes.</summary>
 public static partial class WorldAuthorityCheckpointCodec {
@@ -35,6 +36,11 @@ public static partial class WorldAuthorityCheckpointCodec {
     private const int MaxServerSectionBytes = (2 * MaxSectionBytes);
     private const int MaxCheckpointBodyBytes = (2 * MaxSectionBytes);
     private const int MaxStringBytes = WireLimits.MaxStringBytes;
+
+    /// <summary>The largest encoded checkpoint this codec writes or reads: the body bound plus the envelope that frames
+    /// it (magic, version, the length-prefixed body pin, and the body's length prefix). Storage that holds checkpoints
+    /// sizes its per-blob budget from this, never from a separate number.</summary>
+    public const int MaxEncodedBytes = (MaxCheckpointBodyBytes + sizeof(uint) + sizeof(ushort) + sizeof(ushort) + MaxHashChars + sizeof(int));
 
     /// <summary>The one envelope version this codec writes and reads. An envelope of any other version is refused
     /// before its payload is read; there is no compatibility reader. Raise it whenever the envelope or body layout
