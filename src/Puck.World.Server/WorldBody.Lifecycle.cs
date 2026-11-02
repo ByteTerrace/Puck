@@ -296,7 +296,6 @@ public sealed partial class WorldBody {
     }
     /// <summary>Teleports to a full pose already expressed in deterministic numerics.</summary>
     public void Pose(FixedVector3 position, FixedQ4816 yawRadians, FixedQ4816 pitchRadians, FixedQ4816 rollRadians) {
-        MoveRestEpoch();
         m_position = position;
         m_yaw = yawRadians;
         // The drive pitch scalar mirrors the posed pitch inside its own clamp, so the next drive frame rebuilds
@@ -361,6 +360,8 @@ public sealed partial class WorldBody {
             return;
         }
 
+        // A press is input: the body's program must run to read it, so a sleeping body wakes.
+        WakeIfResting();
         m_pendingDefaultChannelPress[ordinal] = true;
         m_pendingDefaultChannelValue[ordinal] = value;
         m_pendingScriptActors[ordinal] = actor;
@@ -449,6 +450,8 @@ public sealed partial class WorldBody {
         ));
         var holdTicks = FixedTickConversion.DurationEngineTicks(seconds: hold);
 
+        // A press is input: the body's program must run to read it, so a sleeping body wakes.
+        WakeIfResting();
         MergeLaneTimer(
             actor: actor,
             holdTicks: holdTicks,
@@ -804,6 +807,8 @@ public sealed partial class WorldBody {
             return;
         }
 
+        // A new source is a new producer of intents for a program that slept under the old one, so the body wakes.
+        WakeIfResting();
         m_source = source;
         ClearTransientInput();
     }

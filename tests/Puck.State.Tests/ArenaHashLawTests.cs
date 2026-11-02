@@ -48,6 +48,28 @@ public sealed class ArenaHashLawTests {
             expected: before
         );
     }
+    // THE LAW: the incremental hash is the full recompute after any single write, however the cache was read in
+    // between. A standalone RowDigest read refolds the written row before the next ComputeHash; the red leg is a
+    // refold that leaves its segment's digest standing, which returns the pre-write segment from then on.
+    [MemberData(memberName: nameof(Mutations))]
+    [Theory]
+    public void TheIncrementalHashIsTheRecomputeAfterAnyWriteAndAnyRowRead(string mutation) {
+        var (catalog, arena) = ArenaFixture.Build();
+
+        _ = arena.ComputeHash();
+        Mutate(
+            arena: arena,
+            catalog: catalog,
+            mutation: mutation
+        );
+        for (var row = 0; (row < arena.Layout.RowCount); row++) { _ = arena.RowDigest(rowOrdinal: row); }
+
+        Assert.Equal(
+            actual: arena.ComputeHash(),
+            expected: arena.RecomputeHash()
+        );
+        for (var sample = 0; (sample < arena.Layout.RowCount); sample++) { Assert.Null(arena.CheckDigests()); }
+    }
     [Fact]
     public void TwoArenasOverOneDocumentAndTheSameWritesFoldTheSameValue() {
         var (firstCatalog, first) = ArenaFixture.Build();

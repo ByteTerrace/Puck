@@ -42,18 +42,21 @@ public sealed class WorldReplayProbe : IDisposable {
     /// recompute of the same state (<see cref="WorldStateHashComposition.DescribeStaleDigest"/>), the check that finds a
     /// write which moved state without moving the version a cached digest is keyed by.</summary>
     public bool VerifiesIncrementalHash { get; set; }
-    /// <summary>Gets the first stale digest <see cref="VerifiesIncrementalHash"/> found, naming the recorded tick and
-    /// the stale components, or <see langword="null"/> when every checked tick agreed.</summary>
-    public string? StaleDigest { get; private set; }
+    /// <summary>Gets the first stale digest found on this authority, naming its tick and what disagreed: by
+    /// <see cref="VerifiesIncrementalHash"/>'s full recompute, or by the always-on sample every authority hash takes
+    /// (<see cref="WorldPersistence.StaleDigest"/>); <see langword="null"/> when every check agreed.</summary>
+    public string? StaleDigest => (m_staleDigest ?? m_server.Persistence.StaleDigest);
+
+    private string? m_staleDigest;
 
     internal void NoteTick(WorldReplayTickInput input, ulong hash) {
         m_inputs.Add(item: new WorldReplayTickInput(Authority: [.. input.Authority.Skip(count: m_skipAuthority)], Intents: [.. input.Intents.Skip(count: m_skipIntents)]));
         m_skipAuthority = 0;
         m_skipIntents = 0;
         m_hashes.Add(item: hash);
-        if (VerifiesIncrementalHash && (StaleDigest is null) &&
+        if (VerifiesIncrementalHash && (m_staleDigest is null) &&
             (WorldStateHashComposition.DescribeStaleDigest(hash: hash, server: m_server, tick: (m_server.NextInputTick - 1)) is { Length: > 0 } stale)) {
-            StaleDigest = $"recorded tick {(m_hashes.Count - 1)}: {stale}";
+            m_staleDigest = $"recorded tick {(m_hashes.Count - 1)}: {stale}";
         }
     }
 

@@ -3,10 +3,35 @@ using Puck.Maths;
 namespace Puck.World.Server;
 
 public sealed partial class WorldPersistence {
+    /// <summary>Gets the first stale arena digest the always-on sample (<see cref="Puck.State.StateArena.CheckDigests"/>) found
+    /// beside an authority hash, or <see langword="null"/> while every sample agreed.</summary>
+    public string? StaleDigest { get; private set; }
+    /// <summary>Gets the <see cref="System.Diagnostics.Stopwatch"/> ticks the always-on digest sample has taken: a
+    /// diagnostic read beside the hash, never folded into state.</summary>
+    public long DigestCheckTicks { get; private set; }
+
+    // The arena's incremental digest, sampled against its stored bytes every time it is taken (one row and one
+    // segment in rotation). A stale sample is reported once by name and healed: the arena dropped its cache, so the
+    // digest this hash folds is taken afresh.
+    private ulong CheckedArenaHash() {
+        var digest = Host.Arena.ComputeHash();
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
+
+        if (Host.Arena.CheckDigests() is { } fault) {
+            if (StaleDigest is null) {
+                StaleDigest = $"tick {(Host.NextInputTick - 1UL)}: {fault}";
+                Host.Output.Narrate(channel: "world.state.hash", text: $"[world.state.hash: stale digest at {StaleDigest}]");
+            }
+            digest = Host.Arena.ComputeHash();
+        }
+        DigestCheckTicks += (System.Diagnostics.Stopwatch.GetTimestamp() - started);
+        return digest;
+    }
+
     // The one switch over the world hash's component vocabulary. WorldStateHashComposition owns which components a
     // scope folds and in what order; each arm here folds one of them through its own owner, and a component with no
-    // arm throws rather than folding nothing. Recompute folds the incremental components (the arena's rows, the body
-    // slots' continuations) afresh instead of from their version-keyed caches; every other arm folds whole either way.
+    // arm throws rather than folding nothing. Recompute folds the arena's rows afresh instead of from their
+    // version-keyed digests; every other arm folds whole either way.
     internal void AppendStateHashComponent(ref Fnv1aHash hash, WorldStateHashComponent component, ulong seed, ulong tick, bool recompute) {
         switch (component) {
             case WorldStateHashComponent.Input:
@@ -24,7 +49,7 @@ public sealed partial class WorldPersistence {
             case WorldStateHashComponent.Arena:
                 hash.Add(value: (recompute
                     ? Host.Arena.RecomputeHash()
-                    : Host.Arena.ComputeHash()));
+                    : CheckedArenaHash()));
 
                 break;
             case WorldStateHashComponent.BoardEnforcement:
@@ -50,7 +75,7 @@ public sealed partial class WorldPersistence {
 
                 break;
             case WorldStateHashComponent.BodyContinuation:
-                Host.Population.AppendContinuationHash(hash: ref hash, recompute: recompute);
+                Host.Population.AppendContinuationHash(hash: ref hash);
                 Host.Population.AppendSleepStateHash(hash: ref hash);
                 Host.Events.AppendDiscoveryHash(hash: ref hash);
 

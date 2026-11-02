@@ -1551,6 +1551,23 @@ lowers it to the same JSON as before, except where the look changes on purpose.
 
 Code that grew a second implementation (AGENTS.md rule 7) or costs velocity:
 
+- [medium] A body's simulation continuation has no single write door, so
+  nothing can say it is unchanged. `WorldPopulation.AppendContinuationHash`
+  encodes every active slot on every authority hash
+  (`src/Puck.World.Server/WorldPopulation.Checkpoint.cs`); the fields it
+  serializes (`WorldBody.Transfer.cs` `TransferState` and
+  `ApplyIntegrationResidue`, the pose, the lane timer and press arrays, the
+  tether residue, and the population entry's producer, autonomy and navigation
+  state) are written directly from the step, commands, contacts and tethers. A
+  rest-epoch cache missed four such writes to sleeping bodies, so it was
+  deleted. The redesign: group those fields in storage the body reaches only
+  through one accessor that moves a version (arrays included, which a plain
+  field write bypasses), so the compiler rather than convention enforces it;
+  the population's entry state the same way; then cache a slot's digest by that
+  version. Measured stake on go-tests: 21 s of a 310 s recording (7 %), the
+  share of resting bodies; a version that also covers moving bodies' unchanged
+  fields would not help, since a moving body's pose changes every tick.
+  (from: incr-hash)
 - [low] Four copies of a `NativeMemory`-backed test `IAllocator` named `HeapAllocator`
   (`tests/Puck.Vulkan.Tests/VulkanIndirectCountLawTests.cs:117`,
   `VulkanValidationLivenessTests.cs:247`, `VulkanGroupedPipelineLayoutLawTests.cs:233`,
@@ -2150,25 +2167,24 @@ reproduce worker for what remains.
   spot check. (from: incrhash-astra)
 - [low · fix when touched] `Fixtures.FreshServer` (`tests/Shared/World/Fixtures.Server.cs:112`) deserializes without `WorldStateSettlement.SettleBeforeAdmission`, so a boot from a raw document with a seeded responsive placement can show the response's prototype while colliding as the authored one, which the real loader never does. Settle in the fixture as the loader does. (from: the tip-reds lane)
 - [medium] Recording still costs about a third of the plain authored run.
-  The per-tick authority hash is incremental: the arena by `RowVersion`-cached
-  row digests in 32-row segments, resting identity-less bodies by rest epoch in
-  32-slot segments, the scoped replay runtime through the same row digests
-  ([design and measurements](engine-job-system.md#the-incremental-state-hash)),
-  checked against a full recompute on every replayed tick of `--reproduce` and
-  every recorded tick of the first `--workers` count. A headless host's
-  screen-session mirrors drop their snapshots. Go's authored seconds at
-  `--jobs 1`: plain 256.7 s to 180.4 s, recorded 441.4 s to 247.1 s; a tick
-  refolds 1.6 of about 368 rows and 22 of about 559 slots. Left: the
-  recording's 66.7 s over plain is the components that still fold whole every
-  tick (`PopulationPose`, `BodyActionState`, `Navigation`, `Flock`, `Input`)
-  and the probe's per-tick input copy, unprofiled; `--reproduce`'s replay
-  (415.7 s for Go) pays the full recompute every tick, which is the check's
-  price; a replica's fixed 2.4-4 s floor per scenario is unmeasured since.
-  Re-profile Go's reproduce worker (`dotnet-sampled-thread-time`) before
-  choosing the next segment. A moving body still encodes its whole
-  continuation every tick; a write-side version per body would cover it, and
-  is the larger change the measurement has to justify. (from: quiet-measure,
-  tick-cost-2, incr-hash)
+  The per-tick authority hash folds the arena from `RowVersion`-cached row
+  digests in 32-row segments, and every body slot's continuation afresh in
+  32-slot segments; the scoped replay runtime reads the same row digests
+  ([design and measurements](engine-job-system.md#the-incremental-state-hash)).
+  Hashes fold under the authority gate. `--reproduce` checks every replayed
+  tick against a full recompute and the first `--workers` count every recorded
+  tick; every other hash samples one row and one segment of the cache. A
+  headless host's screen-session mirrors drop their snapshots. Go's authored
+  seconds at `--jobs 1`: plain 256.7 s to 180.4 s, recorded 441.4 s to 247.1 s
+  with a body cache since deleted, which a back-to-back pair put at 21 s of a
+  310 s recording; the [packet](#refactoring-campaign) holds the body
+  write-door redesign a sound one needs. Left: the components that still fold whole every tick (body
+  continuations, `PopulationPose`, `BodyActionState`, `Navigation`, `Flock`,
+  `Input`) and the probe's per-tick input copy, unprofiled; `--reproduce`'s
+  replay pays the full recompute every tick, which is the check's price; a
+  replica's fixed 2.4-4 s floor per scenario is unmeasured since. Re-profile
+  Go's reproduce worker (`dotnet-sampled-thread-time`) before choosing the
+  next segment. (from: quiet-measure, tick-cost-2, incr-hash)
 - [medium] Hall's test fixture uses `documentId: "hall-tests"`, so the garden
   and night references admit a separate full `debug` authority. Its root's
   stopped-machines import does not stop that companion's six machines;

@@ -125,6 +125,7 @@ public sealed partial class WorldBody {
         }
 
         var velocity = ComposedVelocity();
+        var before = m_position;
         var result = tether.Solve(
             anchor: in anchor,
             position: ref m_position,
@@ -135,6 +136,11 @@ public sealed partial class WorldBody {
 
         if (!result.Taut) {
             return;
+        }
+        // The rope moved the body: its program must run again to carry the correction, as a contact push does. A
+        // taut rope that holds a resting body where it already is moves nothing and leaves it asleep.
+        if (m_position != before) {
+            WakeIfResting();
         }
 
         SplitVelocity(

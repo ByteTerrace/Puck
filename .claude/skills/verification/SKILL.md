@@ -88,11 +88,13 @@ cross-family review is required and never blocks a landing
 change to simulation state stays deterministic; `puck test --reproduce` shows
 recorded input reproduces every authority from its checkpoint in the same worker,
 including per-tick authoritative hashes, final machine cores and canonical exports. A differing trace names
-its first sampled tick and instance. The authoritative hash is incremental (arena rows cached by
-`RowVersion`, resting body slots by rest epoch), so `--reproduce` also checks every replayed tick, and the
-first `--workers` count every recorded tick, against a full recompute: `differs from its full recompute in
-Arena` (or `BodyContinuation`) means a write changed state without moving the version its digest is keyed
-by; move the version at that write rather than widening the recompute. Use the test preparation/work counts beside
+its first sampled tick and instance. The authoritative hash folds arena rows from digests cached by
+`RowVersion`, so `--reproduce` also checks every replayed tick, and the first `--workers` count every
+recorded tick, against a full recompute, and every authority hash samples one row and one segment of the cache
+(`[world.state.hash: stale digest ...]`, which fails a probed leg): `differs from its full recompute in Arena`
+or a stale digest means a write changed a row without moving its version, or a refold left its segment
+stale; move the version at that write rather than widening the recompute. Body continuations encode every
+fold; nothing caches them. Use the test preparation/work counts beside
 wall time when measuring it on a shared machine; build-lease waits are contention,
 and exported authority ticks exclude the extra shutdown ticks.
 
@@ -345,6 +347,13 @@ On Windows, a forwarded bare `bash` resolves to WSL's `bash.exe`, which cannot s
 `D:/` paths and exits 127 after the lease was granted; forward Git Bash by its full
 path (`"C:/Program Files/Git/usr/bin/bash.exe" <script>`) to run several commands
 under one lease.
+
+Take the heavy lease once per suite run: one `puck test` invocation (or one
+suite) per `puck lease heavy` acquisition, never a batch of runs under one hold,
+so the queue rotates between lanes. Keep each hold to about 30 minutes; a run
+that genuinely needs longer (Go's `--reproduce` with its full recompute) holds
+it alone and releases before the next. A script of several runs wraps each run
+in its own `puck lease heavy` call.
 
 
 GPU work is `puck parity`, `puck counters`, a canary requiring `gpu`, a windowed
