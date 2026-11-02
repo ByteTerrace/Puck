@@ -100,7 +100,7 @@ naming what its still must show.
 | Contact | analytic provider, 512 placement colliders, skin 0.02 m, slope 60 degrees |
 | Headless simulate per iteration (`host.frames 300`) | p50 8.9 ms, avg 17.3 ms (the machines' emulation is most of it) |
 | `puck bench world` | idle tick 13.3 ms median, paced tick 3.9 ms, 488 sleeping rigid bodies, 14.1 body visits a tick |
-| Rules | 735 rules, 2,783,787 of 4,000,000 work units a tick |
+| Rules | 735 rules, 2,783,787 work units a tick, against `RuleCapacity.MaxWorkUnitsPerTick` |
 | Cold bake, every group on the CPU (`puck mesh audit --cpu`) | 987 groups, 791 meshes, 476 M samples, 4.1 M refined cells, 13.09 M triangles (level 1 1.56 M, level 2 0.97 M), 0 discarded, 477 s |
 | Mesh audit over the same bake | 774 groups audited and 213 not (the CPU audit then read only unchunked groups); 53,965 open and 84 non-manifold edges summed over the audited groups |
 

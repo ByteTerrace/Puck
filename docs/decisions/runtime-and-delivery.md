@@ -97,9 +97,10 @@ package's `cartridges/<target>`, one folder per forge target. The compiled
 document is a cache that `puck compile` derives from it when needed and is never
 committed ([a derived product is a cache](engine-design.md#a-derived-product-is-a-cache-never-the-truth)).
 
-**Licensed images stay usable as evidence, recorded by hash only.** Their bytes
-never enter the repository; the ledger records id and SHA-256, and the battery
-refuses an image whose hash matches no accepted value.
+**Licensed images are run by hand, never by an automated stage.** Their bytes
+never enter the repository, and no test, battery stage or CI job depends on one
+(AGENTS.md). The ledger describes each by id so a by-hand run can find a
+developer's own copy; it records no accepted hash and refuses nothing.
 
 **`roms/` (planned) holds the engine's verification ROMs; cartridges live in the
 package that ships them.** The directory does not exist yet; the
@@ -109,10 +110,12 @@ build, publish or image. The ledger splits firmware by origin: a hand-authored
 image is source and its bytes stay committed; a generated image is a derived
 product, built on demand and never committed or compared by bytes.
 
-**The ledger governs `bios=` and `firmware.path` too.** They are player-facing
-inputs for a player's own images, but one home for every path that reaches a
-ROM is worth more than the exemption. `tetromino` is an arcade cabinet in the
-package, not a test fixture: a cabinet is what gives it a player.
+**`bios=` and `firmware.path` stay player inputs.** A player names their own
+image by path; a ledger id is one more way to name an image the ledger
+describes, so every path that reaches a ROM resolves through one resolver. The
+engine never requires an id or a recorded hash to run a player's image.
+`tetromino` is an arcade cabinet in the package, not a test fixture: a cabinet
+is what gives it a player.
 
 ## Compiled worlds
 

@@ -34,6 +34,13 @@ authority steps everything; each client keeps residency for its own views, and
 split-screen seats and nested views are separate demand points whose demands are
 united, so no player's position constrains another's.
 
+**Presentation rates stay tiers.** The 30 and 15 Hz presentation tiers are
+kept rather than a continuous rate. On a fixed grid a floor's period is whole
+refreshes (`PresentationRate.GridSteps`), and with a 30 Hz tick on a 60 Hz
+display only every other refresh is free of a step, so the useful periods are
+two and four refreshes, which the tiers already are; a continuous rate would be
+quantized back to them and add no placement freedom.
+
 ## Portals are edges; worlds and areas are nodes
 
 A Metroid area is a node: geometry made resident as a unit. A door is an edge
