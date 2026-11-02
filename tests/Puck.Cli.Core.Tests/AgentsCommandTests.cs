@@ -48,6 +48,33 @@ public sealed class AgentsCommandTests : IDisposable {
         Directory.Delete(path: moved);
         Assert.Equal(expected: "kept", actual: File.ReadAllText(path: Path.Combine(path1: source, path2: "marker")));
     }
+    [Fact]
+    public async Task ProvenanceComparesTheWorkingCheckoutWithTheProjectRootAndTheMainCheckout() {
+        using var main = new GitScratchCheckout();
+        var token = TestContext.Current.CancellationToken;
+
+        main.Write(name: ".claude/agents/scout.md", text: "scout\n");
+        main.Write(name: "AGENTS.md", text: "rules\n");
+        _ = main.Commit(message: "base");
+        _ = main.Git("branch", "lane");
+        var lane = main.AddWorktree(name: "lane", revision: "lane");
+
+        Assert.Equal(expected: 0, actual: await AgentsCommand.ProvenanceAsync(cancellationToken: token, checkout: lane, projectRoot: main.Root));
+        // An uncommitted agent edit in the working checkout differs from the project root and main checkout.
+        File.WriteAllText(path: Path.Combine(path1: lane, path2: ".claude/agents/scout.md"), contents: "changed\n");
+        Assert.Equal(expected: 1, actual: await AgentsCommand.ProvenanceAsync(cancellationToken: token, checkout: lane, projectRoot: main.Root));
+        // Committed on the lane's branch, it still differs until the main checkout fast-forwards to it.
+        _ = CliGit.Run(lane, "add", "--all");
+        Assert.Equal(expected: 0, actual: CliGit.Run(lane, "-c", "user.name=law", "-c", "user.email=law@example.invalid", "-c", "commit.gpgsign=false", "commit", "--quiet", "--message", "agents").ExitCode);
+        Assert.Equal(expected: 1, actual: await AgentsCommand.ProvenanceAsync(cancellationToken: token, checkout: lane, projectRoot: null));
+        _ = main.Git("merge", "--ff-only", "--quiet", "lane");
+        Assert.Equal(expected: 0, actual: await AgentsCommand.ProvenanceAsync(cancellationToken: token, checkout: lane, projectRoot: main.Root));
+        // A change outside the configuration paths is no difference.
+        File.WriteAllText(path: Path.Combine(path1: lane, path2: "notes.txt"), contents: "notes\n");
+        Assert.Equal(expected: 0, actual: await AgentsCommand.ProvenanceAsync(cancellationToken: token, checkout: lane, projectRoot: main.Root));
+        Directory.CreateDirectory(path: m_root);
+        Assert.Equal(expected: 2, actual: await AgentsCommand.ProvenanceAsync(cancellationToken: token, checkout: m_root, projectRoot: null));
+    }
     public void Dispose() {
         ConfinedDirectory.RemoveTree(path: m_root);
     }

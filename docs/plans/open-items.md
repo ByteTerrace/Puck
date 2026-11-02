@@ -3441,6 +3441,25 @@ ordinary · Next: new content and art on the owner's call.
 
 Owner: the lead · ordinary · Next: the Monitor hook check.
 
+- [medium] The lead session's own `puck` MCP server may run a stale CLI: the
+  project root's build is never checked against its HEAD (the fallback now is,
+  `.claude/hooks/puck-mcp.ps1`). Apply the same "the build finished after HEAD
+  last moved" rule to the root's own build, so every session's server boots
+  current sources. (from: agents-b)
+- [low] `puck lanes` cannot see lanes the lead's launch scripts start: they log
+  to the job's tmp folder and print `<lane> exit=N` to stdout rather than
+  `.claude/scratch/<lane>.log`; a findings-only lane also needs a
+  `.claude/scratch/<lane>.task` (`mode: findings-only`), since a Codex review can
+  run with a workspace-write sandbox. `puck lanes --base` still defaults to
+  `lead/catch-up` instead of the integration branch. (from: agents-b)
+- [low] The reviewer's "builds nothing" is prose only: the read-only policy
+  derives read-only agents from their definitions and cannot tell reviewer
+  from scout, whose definition allows CLI builds. (from: agents-b)
+- [low] Probe once whether a `claude` session started from a worktree loads
+  that worktree's `.claude/agents` and unscoped skills; orchestration § Launch
+  capabilities says it is unprobed. Until it is, the main checkout tracks the
+  integration branch. (from: agents-b)
+
 - After the first settle window: give Antigravity (Gemini Argon) a fair
   coding trial before deciding its role (the owner's direction: it has so far
   done research only, where its code citations were unreliable). Two bounded

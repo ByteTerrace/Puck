@@ -20,8 +20,15 @@ public static partial class LanesCommand {
     private static readonly JsonSerializerOptions JsonOptions = new() { NewLine = "\n", PropertyNamingPolicy = JsonNamingPolicy.CamelCase, WriteIndented = true };
     private static readonly string[] GitPrefix = ["--no-optional-locks", "-c", "core.fsmonitor=false", "-c", "maintenance.auto=false", "-c", "gc.auto=0"];
 
+    private const int LogHeadBytes = 4096;
+    private const string WriteMode = "write";
+    private const string FindingsMode = "findings-only";
+
     [GeneratedRegex(pattern: @"^(codex|agy) exit (-?\d+)$")]
     private static partial Regex ExitLine();
+    // Codex prints its sandbox in the header of every exec run: "sandbox: read-only".
+    [GeneratedRegex(pattern: @"^sandbox: read-only\b", options: RegexOptions.Multiline)]
+    private static partial Regex ReadOnlySandbox();
 
     /// <summary>One lane's use of a lease.</summary>
     /// <param name="Resource">The lease: gpu, heavy or build.</param>
@@ -52,8 +59,13 @@ public static partial class LanesCommand {
     /// <param name="LogAt">When the lane's log was last written.</param>
     /// <param name="LogExit">The log's final <c>codex exit N</c> or <c>agy exit N</c> line, when the log ends with one.</param>
     /// <param name="Leases">The leases the lane holds or waits for.</param>
-    /// <param name="State">active, done, blocked or exited; main for the main checkout.</param>
-    /// <param name="Stall">Whether an active lane has written nothing for the stall interval while neither holding nor waiting for a lease.</param>
+    /// <param name="Mode">write, or findings-only for a lane that delivers a report instead of commits: its task file
+    /// says so or its log's Codex header names a read-only sandbox.</param>
+    /// <param name="Report">The findings-only lane's delivered report, a non-empty file, or null.</param>
+    /// <param name="State">active; done or blocked (the Brief trailer); reported (a findings-only lane's report is
+    /// delivered); exited (the log ends with an exit line and nothing was delivered); main for the main checkout.</param>
+    /// <param name="Stall">Whether an active lane shows no progress for the stall interval while neither holding nor
+    /// waiting for a lease: no write for a writer, and no log growth for a findings-only lane whose log has output.</param>
     /// <param name="Error">Why part of the row could not be read.</param>
     public sealed record LaneRow(
         string Name,
@@ -71,6 +83,8 @@ public static partial class LanesCommand {
         DateTimeOffset? LogAt,
         string? LogExit,
         IReadOnlyList<LeaseUse> Leases,
+        string Mode,
+        string? Report,
         string State,
         bool Stall,
         string? Error
@@ -152,19 +166,45 @@ public static partial class LanesCommand {
         return newest;
     }
 
-    /// <summary>Reads the final line of a lane log when it is an exit line, from the log's tail alone.</summary>
-    private static string? LogExitLine(string log) {
+    /// <summary>What a lane log says, from its head and tail alone: the final line when it is an exit line, whether
+    /// its header names a read-only sandbox, and its length.</summary>
+    private static (string? Exit, bool ReadOnly, long Length) ReadLog(string log) {
         try {
             using var stream = new FileStream(access: FileAccess.Read, mode: FileMode.Open, path: log, share: (FileShare.ReadWrite | FileShare.Delete));
             var length = stream.Length;
+            var head = new byte[(int)Math.Min(val1: length, val2: LogHeadBytes)];
+            var headRead = stream.Read(buffer: head, offset: 0, count: head.Length);
+            var readOnly = ReadOnlySandbox().IsMatch(input: Encoding.UTF8.GetString(bytes: head, index: 0, count: headRead).Replace(oldValue: "\r", newValue: string.Empty));
 
             _ = stream.Seek(offset: Math.Max(val1: 0, val2: (length - LogTailBytes)), origin: SeekOrigin.Begin);
             var buffer = new byte[(int)Math.Min(val1: length, val2: LogTailBytes)];
             var read = stream.Read(buffer: buffer, offset: 0, count: buffer.Length);
             var last = Encoding.UTF8.GetString(bytes: buffer, index: 0, count: read).Split(separator: '\n').Select(selector: static line => line.Trim()).LastOrDefault(predicate: static line => (line.Length > 0));
 
-            return ((last is not null) && ExitLine().IsMatch(input: last)) ? last : null;
-        } catch (Exception error) when (error is IOException or UnauthorizedAccessException) { return null; }
+            return ((((last is not null) && ExitLine().IsMatch(input: last)) ? last : null), readOnly, length);
+        } catch (Exception error) when (error is IOException or UnauthorizedAccessException) { return (null, false, 0); }
+    }
+
+    /// <summary>Reads a lane's task file, <c>.claude/scratch/&lt;lane&gt;.task</c>: <c>key: value</c> lines, of which
+    /// <c>mode</c> (write or findings-only) and <c>report</c> (where a findings-only lane delivers) are read.</summary>
+    private static Dictionary<string, string> ReadTask(string path) {
+        var fields = new Dictionary<string, string>(comparer: StringComparer.OrdinalIgnoreCase);
+
+        try {
+            foreach (var line in File.ReadLines(path: path)) {
+                var colon = line.IndexOf(value: ':');
+
+                if (colon > 0) { fields[line[..colon].Trim()] = line[(colon + 1)..].Trim(); }
+            }
+        } catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
+        return fields;
+    }
+    private static bool Delivered(string path) {
+        try {
+            var file = new FileInfo(fileName: path);
+
+            return (file.Exists && (file.Length > 0));
+        } catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException) { return false; }
     }
 
     private static string BriefState(string? headBrief) {
@@ -180,7 +220,7 @@ public static partial class LanesCommand {
         string? error = null;
 
         if (!Directory.Exists(path: worktree.Path)) {
-            return new LaneRow(Ahead: null, Branch: branch, Brief: null, CommitAt: null, Error: "directory is missing", Files: 0, Leases: [], LogAt: null, LogExit: null, Main: main, Name: name, Path: worktree.Path, State: "missing", Stall: false, Staged: 0, Subject: string.Empty, Unstaged: 0, WriteAt: null);
+            return new LaneRow(Ahead: null, Branch: branch, Brief: null, CommitAt: null, Error: "directory is missing", Files: 0, Leases: [], LogAt: null, LogExit: null, Main: main, Mode: WriteMode, Name: name, Path: worktree.Path, Report: null, State: "missing", Stall: false, Staged: 0, Subject: string.Empty, Unstaged: 0, WriteAt: null);
         }
         var statusTask = GitAsync(worktree.Path, cancellationToken, "status", "--porcelain=v1", "-z", "--untracked-files=no");
         var headTask = GitAsync(worktree.Path, cancellationToken, "log", "-1", "--format=%ct%x1f%s%x1f%(trailers:key=Brief,valueonly,separator=%x2c)");
@@ -234,20 +274,40 @@ public static partial class LanesCommand {
         foreach (var path in changed.Take(count: ChangedFileCap)) { writeAt = Newest(a: writeAt, b: Stamp(path: System.IO.Path.Combine(path1: worktree.Path, path2: path))); }
         DateTimeOffset? logAt = null;
         string? logExit = null;
+        var logLength = 0L;
+        var readOnlyLog = false;
+        string? declaredMode = null;
+        string? reportPath = null;
+        var scratchRoots = new[] { worktree.Path, mainRoot }.Distinct(comparer: StringComparer.OrdinalIgnoreCase).Select(selector: static root => System.IO.Path.Combine(path1: root, path2: ".claude", path3: "scratch")).ToArray();
 
-        foreach (var root in new[] { worktree.Path, mainRoot }.Distinct(comparer: StringComparer.OrdinalIgnoreCase)) {
+        foreach (var scratch in scratchRoots) {
             foreach (var candidate in LogNames(branch: worktree.Branch, name: name)) {
-                var log = System.IO.Path.Combine(path1: root, path2: ".claude", path3: "scratch", path4: (candidate + ".log"));
+                var log = System.IO.Path.Combine(path1: scratch, path2: (candidate + ".log"));
                 var stamp = Stamp(path: log);
 
-                if ((stamp is null) || !File.Exists(path: log)) { continue; }
-                if ((logAt is null) || (stamp > logAt)) {
+                if ((stamp is not null) && File.Exists(path: log) && ((logAt is null) || (stamp > logAt))) {
+                    var read = ReadLog(log: log);
+
                     logAt = stamp;
-                    logExit = LogExitLine(log: log);
+                    logExit = read.Exit;
+                    logLength = read.Length;
+                    readOnlyLog = read.ReadOnly;
                 }
+                var task = ReadTask(path: System.IO.Path.Combine(path1: scratch, path2: (candidate + ".task")));
+
+                if (task.TryGetValue(key: "mode", value: out var declared) && (declared is WriteMode or FindingsMode)) { declaredMode ??= declared; }
+                if (task.TryGetValue(key: "report", value: out var declaredReport) && (declaredReport.Length > 0)) { reportPath ??= System.IO.Path.GetFullPath(basePath: worktree.Path, path: declaredReport); }
             }
         }
         writeAt = Newest(a: writeAt, b: logAt);
+        var mode = (declaredMode ?? (readOnlyLog ? FindingsMode : WriteMode));
+        string? report = null;
+
+        if (mode == FindingsMode) {
+            var reports = ((reportPath is { } declaredPath) ? new[] { declaredPath } : scratchRoots.SelectMany(selector: scratch => LogNames(branch: worktree.Branch, name: name).Select(selector: candidate => System.IO.Path.Combine(path1: scratch, path2: (candidate + "-findings.md")))));
+
+            report = reports.FirstOrDefault(predicate: Delivered)?.Replace(oldChar: '\\', newChar: '/');
+        }
         var names = LaneNames(branch: worktree.Branch, name: name);
         var uses = new List<LeaseUse>();
 
@@ -260,10 +320,16 @@ public static partial class LanesCommand {
                 break;
             }
         }
-        var lifecycle = (main ? "main" : ((logExit is not null) ? "exited" : BriefState(headBrief: headBrief)));
-        var stalled = ((lifecycle == "active") && (uses.Count == 0) && (writeAt is { } written) && ((now - written) >= stall));
+        // A delivered result outranks the process's exit: a lane that committed its Brief trailer or wrote its report
+        // and then exited is finished, while one that exited with neither handed nothing back.
+        var delivered = BriefState(headBrief: headBrief);
+        var lifecycle = (main ? "main" : ((delivered != "active") ? delivered : ((report is not null) ? "reported" : ((logExit is not null) ? "exited" : "active"))));
+        // Progress depends on the task: a writer writes, while a findings-only lane writes nothing until it reports and
+        // shows progress only through its log, if its tool logs as it goes.
+        var progressAt = ((mode == FindingsMode) ? ((logLength > 0) ? logAt : null) : writeAt);
+        var stalled = ((lifecycle == "active") && (uses.Count == 0) && (progressAt is { } progressed) && ((now - progressed) >= stall));
 
-        return new LaneRow(Ahead: ahead, Branch: branch, Brief: brief, CommitAt: commitAt, Error: error, Files: changed.Count, Leases: uses, LogAt: logAt, LogExit: logExit, Main: main, Name: name, Path: worktree.Path, State: lifecycle, Stall: stalled, Staged: staged, Subject: subject, Unstaged: unstaged, WriteAt: writeAt);
+        return new LaneRow(Ahead: ahead, Branch: branch, Brief: brief, CommitAt: commitAt, Error: error, Files: changed.Count, Leases: uses, LogAt: logAt, LogExit: logExit, Main: main, Mode: mode, Name: name, Path: worktree.Path, Report: report, State: lifecycle, Stall: stalled, Staged: staged, Subject: subject, Unstaged: unstaged, WriteAt: writeAt);
     }
 
     private static IEnumerable<string> LogNames(string? branch, string name) => new[] { name, LaneName(branch: branch) }.Where(predicate: static value => !string.IsNullOrEmpty(value: value)).Distinct(comparer: StringComparer.OrdinalIgnoreCase)!;
@@ -325,6 +391,8 @@ public static partial class LanesCommand {
         _ = line.Append(string.Create(CultureInfo.InvariantCulture, $" commit {AgeOf(time: row.CommitAt, now: now)} \"{Shorten(text: row.Subject, length: 60)}\" write {AgeOf(time: row.WriteAt, now: now)}"));
         if (row.LogAt is not null) { _ = line.Append(string.Create(CultureInfo.InvariantCulture, $" log {AgeOf(time: row.LogAt, now: now)}{((row.LogExit is null) ? string.Empty : (" (" + row.LogExit + ")"))}")); }
         _ = line.Append(string.Create(CultureInfo.InvariantCulture, $" lease {LeaseText(row: row)}"));
+        if (row.Mode != WriteMode) { _ = line.Append(string.Create(CultureInfo.InvariantCulture, $" mode {row.Mode}")); }
+        if (row.Report is not null) { _ = line.Append(string.Create(CultureInfo.InvariantCulture, $" report {row.Report}")); }
         if (row.Brief is not null) { _ = line.Append(string.Create(CultureInfo.InvariantCulture, $" brief {row.Brief}")); }
         if (row.Error is not null) { _ = line.Append(string.Create(CultureInfo.InvariantCulture, $" error: {row.Error}")); }
         return line.ToString();
@@ -345,11 +413,13 @@ public static partial class LanesCommand {
                 continue;
             }
             if (!row.Main && (old.State == "active") && (row.State != "active")) {
-                messages.Add(item: $"{row.Name}: finished ({row.State}{((row.LogExit is null) ? string.Empty : (", " + row.LogExit))}{((row.Brief is null) ? string.Empty : (", brief " + row.Brief))})");
+                var undelivered = ((row.State == "exited") ? $"; the process exited without {((row.Mode == FindingsMode) ? "a report" : "a Brief trailer")}" : string.Empty);
+
+                messages.Add(item: $"{row.Name}: finished ({row.State}{((row.LogExit is null) ? string.Empty : (", " + row.LogExit))}{((row.Brief is null) ? string.Empty : (", brief " + row.Brief))}{((row.Report is null) ? string.Empty : (", report " + row.Report))}{undelivered})");
             } else if (!row.Main && (old.State != "active") && (row.State == "active")) {
                 messages.Add(item: $"{row.Name}: active again");
             }
-            if (row.Stall && !old.Stall) { messages.Add(item: $"{row.Name}: STALL, no write for {AgeOf(time: row.WriteAt, now: now)}"); }
+            if (row.Stall && !old.Stall) { messages.Add(item: ((row.Mode == FindingsMode) ? $"{row.Name}: STALL, no log output for {AgeOf(time: row.LogAt, now: now)}" : $"{row.Name}: STALL, no write for {AgeOf(time: row.WriteAt, now: now)}")); }
             if (!row.Stall && old.Stall && (row.State == "active")) { messages.Add(item: $"{row.Name}: no longer stalled"); }
             if (LeaseText(row: row) != LeaseText(row: old)) { messages.Add(item: $"{row.Name}: lease {LeaseText(row: old)} -> {LeaseText(row: row)}"); }
         }
@@ -417,7 +487,7 @@ public static partial class LanesCommand {
     public static Command Create(TimeProvider clock) {
         var baseOption = new Option<string>(name: "--base") { DefaultValueFactory = static _ => "lead/catch-up", Description = "The integration branch commits ahead are counted from." };
         var jsonOption = new Option<bool>(name: "--json") { Description = "Print the rows as one JSON document." };
-        var stallOption = new Option<int>(name: "--stall") { DefaultValueFactory = static _ => 30, Description = "Minutes without any write after which an active lane that holds no lease and waits for none is marked STALL." };
+        var stallOption = new Option<int>(name: "--stall") { DefaultValueFactory = static _ => 30, Description = "Minutes without progress (a writer's write, a findings-only lane's log output) after which an active lane that holds no lease and waits for none is marked STALL." };
         var watchOption = new Option<int?>(name: "--watch") { Description = "Poll for this many minutes (0 until cancelled) and print only what changes: a lane finishing, stalling or resuming, a lease changing, a lane appearing or leaving." };
         var intervalOption = new Option<int>(name: "--interval") { DefaultValueFactory = static _ => 30, Description = "Seconds between polls under --watch." };
         var command = new Command(description: "Print one line per worktree: branch, commits ahead, changes, last commit, newest write, log, lease and stall state.", name: Verb) { baseOption, jsonOption, stallOption, watchOption, intervalOption };
@@ -440,9 +510,19 @@ public static partial class LanesCommand {
             admissions before it), matched by lane name: the worktree name, the branch, or the
             branch's last segment.
 
-            state is active, done or blocked (the last commit's Brief trailer), exited (the log ends
-            with an exit line), main, or STALL: an active lane whose newest write is older than
-            --stall minutes (default 30) while it neither holds nor waits for a lease.
+            mode is write, or findings-only for a lane that delivers a report instead of commits:
+            its .claude/scratch/<name>.task file says `mode: findings-only` (and may name
+            `report: <path>`), or its log's Codex header names a read-only sandbox. A findings-only
+            lane's report is the task's report path, else .claude/scratch/<name>-findings.md in the
+            worktree or the main checkout, counted once it is a non-empty file.
+
+            state is what the lane delivered first, then whether its process ended: done or blocked
+            (the last commit's Brief trailer), reported (a findings-only lane's report), exited (the
+            log ends with an exit line and nothing was delivered), active, main, or STALL: an
+            active lane that shows no progress for --stall minutes (default 30) while it neither
+            holds nor waits for a lease. A writer's progress is its newest write; a findings-only
+            lane writes nothing until it reports, so its progress is its log's growth, and one whose
+            log is still empty is never marked.
 
             --watch <minutes> polls every --interval seconds (default 30) for that long (0 until
             cancelled) and prints one line per change after a first summary line. Run it as one

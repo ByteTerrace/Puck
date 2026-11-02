@@ -83,7 +83,7 @@ whose command no longer breaks its rule, until the row is deleted.
 | Verb | What it is |
 |---|---|
 | [`puck affected`](#puck-affectedthe-checks-a-change-needs) | names the test suites, canaries and parity run a change needs, from the project graph and recorded canary coverage; `--run` runs the suites and worlds, and `--run --gpu` the canaries too. |
-| [`puck agents`](#puck-agents-linknative-skill-discovery) | creates or checks the checkout's native skills link. |
+| [`puck agents`](#puck-agents-linknative-skill-discovery) | creates or checks the checkout's native skills link, and compares the agent configuration of the working checkout, the project root and the main checkout. |
 | [`puck architecture`](../project-map.md) | the project-layering report: explains the build-time layering gate, `--map` prints the generated layering block of `docs/project-map.md`, and `--check` fails when the checked-in block drifts from the projects' declarations. |
 | [`puck artifacts`](#automation-commands) | capture, restore, and test the compiled-solution archive CI passes between jobs. |
 | [`puck azure`](../development/ci.md#azure-production-deployment) | build, deploy, publish, and verify Puck's Azure production; run from the repository root. |
@@ -4457,10 +4457,21 @@ active  controls  codex/controls  ahead 3 files 2 commit 14m "controls: ..." wri
   lane's turn 2 of 3 in the round, four admissions before it). A lane is matched
   by the lease's lane name against the worktree name, the branch, or the
   branch's last segment.
-- The first column is the lane's state: `active`; `done` or `blocked` (the last
-  commit's `Brief:` trailer); `exited` (the log ends with an exit line); `main`;
-  or `STALL`, an active lane whose newest write is older than `--stall` minutes
-  (default 30) while it neither holds a lease nor waits for one.
+- `mode findings-only` marks a lane that delivers a report instead of commits:
+  its `.claude/scratch/<name>.task` file holds `mode: findings-only` (and may
+  name `report: <path>`), or its log's Codex header names a read-only sandbox.
+  Its report is that path, else `.claude/scratch/<name>-findings.md` in the
+  worktree or the main checkout; `report <path>` shows it once it is a
+  non-empty file.
+- The first column is the lane's state, what it delivered before whether its
+  process ended: `done` or `blocked` (the last commit's `Brief:` trailer);
+  `reported` (a findings-only lane's report); `exited` (the log ends with an
+  exit line and nothing was delivered, which `--watch` says); `active`; `main`;
+  or `STALL`, an active lane that shows no progress for `--stall` minutes
+  (default 30) while it neither holds a lease nor waits for one. A writer's
+  progress is its newest write; a findings-only lane writes nothing until it
+  reports, so its progress is its log's growth, and one whose log is still
+  empty is never marked.
 
 `--json` prints the same rows as one JSON document with ages in seconds.
 `--watch <minutes>` polls every `--interval` seconds (default 30) for that long
@@ -4543,3 +4554,19 @@ link aimed elsewhere, or a missing source is refused without replacement.
 Only the link is ignored; the `.agents/` JSON configurations remain tracked.
 Exit 0 means the link is correct, exit 1 means `--check` found drift, and exit 2
 means creation was refused or failed. The verb never edits home configuration or hook trust.
+
+`puck agents provenance [--checkout <dir>] [--project-root <dir>]` checks which
+checkout a session's agent configuration comes from. It reads `.claude/agents`,
+`.claude/skills`, `.claude/hooks`, `.claude/settings.json` and `AGENTS.md` in
+the checkout the session works in (`--checkout`, default the current
+directory's), the project root Claude Code loads agents, skills and hooks from
+(`--project-root`, the `CLAUDE_PROJECT_DIR` its hooks see; without it only the
+other two are compared), and the main checkout (the
+parent of git's common directory). Each path's key is computed at run time from
+git's committed entry and the bytes of every changed or untracked file under
+it, and nothing is recorded. It prints each checkout with its branch, and exits
+0 when all agree, 1 with a `MISMATCH` line per differing checkout naming the
+paths, both checkouts and their branches, and 2 when a checkout cannot be read.
+Claude's SessionStart hook runs it on startup, resume and compact, and the lead
+runs it before dispatching lanes
+([orchestration](../../.claude/skills/orchestration/SKILL.md#launch-capabilities)).

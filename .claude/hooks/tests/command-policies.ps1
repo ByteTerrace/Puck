@@ -292,18 +292,33 @@ Add-Case git-safety 'GIT_DIR=../x/.git git status' pass deny posix
 Add-Case git-safety 'git commit --file clean.txt' pass pass
 Add-Case git-safety 'git reset --hard HEAD' pass pass
 Add-Case git-safety 'git status' pass pass
-# codex-launch
-Add-Case codex-launch 'codex exec "plain brief"' pass pass
-Add-Case codex-launch 'codex exec --sandbox danger-full-access "echo"' ask deny
-Add-Case codex-launch 'codex exec -s danger-full-access "echo"' ask deny
-Add-Case codex-launch 'codex exec --dangerously-bypass-approvals-and-sandbox "echo"' ask deny
-Add-Case codex-launch 'codex exec --full-auto "echo"' ask deny
-Add-Case codex-launch 'codex exec -c approval_policy=never "echo"' ask deny
-Add-Case codex-launch 'codex exec --config=sandbox_mode=danger-full-access "echo"' ask deny
-Add-Case codex-launch 'codex exec -c permissions.puck.network.enabled=true "echo"' ask deny
-Add-Case codex-launch 'codex exec -c model_reasoning_effort=high "echo"' pass pass
-Add-Case codex-launch 'codex -p fast exec "echo"' ask deny
-Add-Case codex-launch 'codex execpolicy check --rules .codex/rules/git.rules git push' pass pass
+# session-launch: a lane starts no agent session; the lead is asked only before a permission-changing Codex launch.
+Add-Case session-launch 'codex exec "plain brief"' pass deny
+Add-Case session-launch 'codex exec --sandbox danger-full-access "echo"' ask deny
+Add-Case session-launch 'codex exec -s danger-full-access "echo"' ask deny
+Add-Case session-launch 'codex exec --dangerously-bypass-approvals-and-sandbox "echo"' ask deny
+Add-Case session-launch 'codex exec --full-auto "echo"' ask deny
+Add-Case session-launch 'codex exec -c approval_policy=never "echo"' ask deny
+Add-Case session-launch 'codex exec --config=sandbox_mode=danger-full-access "echo"' ask deny
+Add-Case session-launch 'codex exec -c permissions.puck.network.enabled=true "echo"' ask deny
+Add-Case session-launch 'codex exec -c model_reasoning_effort=high "echo"' pass deny
+Add-Case session-launch 'codex -p fast exec "echo"' ask deny
+Add-Case session-launch 'codex execpolicy check --rules .codex/rules/git.rules git push' pass pass
+Add-Case session-launch 'codex --version' pass pass
+Add-Case session-launch 'codex mcp list' pass pass
+Add-Case session-launch 'codex' pass deny
+Add-Case session-launch 'codex resume --last' pass deny
+Add-Case session-launch 'agy -p "brief" --output-format text' pass deny
+Add-Case session-launch 'agy --help' pass pass
+Add-Case session-launch 'agy models' pass pass
+Add-Case session-launch 'claude -p "list your agents"' pass deny
+Add-Case session-launch 'claude --bg "brief"' pass deny
+Add-Case session-launch 'claude --version' pass pass
+Add-Case session-launch 'claude mcp list' pass pass
+Add-Case session-launch 'node "C:/Users/x/.claude/plugins/cache/openai-codex/codex/1.0.6/scripts/codex-companion.mjs" task --write --prompt-file brief.md' pass deny
+Add-Case session-launch 'node "$CLAUDE_PLUGIN_ROOT/scripts/codex-companion.mjs" status' pass deny posix
+Add-Case session-launch 'bash -c "codex exec brief"' pass deny
+Add-Case session-launch 'node build/tool.mjs' pass pass
 # opaque-command
 Add-Case opaque-command 'pwsh -EncodedCommand ZABpAHIA' ask deny
 Add-Case opaque-command '$g = "git"; & $g push' ask deny pwsh
@@ -356,19 +371,88 @@ Add-Case git-safety 'echo `git stash`' pass deny posix
 Add-Case git-safety 'echo `git stash`' pass pass pwsh-known
 Add-Case git-safety '$env:DOTNET_NOLOGO = 1; git status' pass pass pwsh
 # Attached and = forms of Codex's short options.
-Add-Case codex-launch 'codex exec -punsafe "hi"' ask deny
-Add-Case codex-launch 'codex exec -p=unsafe "hi"' ask deny posix
-Add-Case codex-launch 'codex -punsafe exec "hi"' ask deny
-Add-Case codex-launch 'codex exec --profile=unsafe "hi"' ask deny
-Add-Case codex-launch 'codex exec -sdanger-full-access "hi"' ask deny
-Add-Case codex-launch 'codex exec -s=danger-full-access "hi"' ask deny posix
-Add-Case codex-launch 'codex exec -capproval_policy=never "hi"' ask deny
-Add-Case codex-launch 'codex exec -c=approval_policy=never "hi"' ask deny posix
-Add-Case codex-launch 'codex exec -m gpt-6.1-sol "hi"' pass pass
+Add-Case session-launch 'codex exec -punsafe "hi"' ask deny
+Add-Case session-launch 'codex exec -p=unsafe "hi"' ask deny posix
+Add-Case session-launch 'codex -punsafe exec "hi"' ask deny
+Add-Case session-launch 'codex exec --profile=unsafe "hi"' ask deny
+Add-Case session-launch 'codex exec -sdanger-full-access "hi"' ask deny
+Add-Case session-launch 'codex exec -s=danger-full-access "hi"' ask deny posix
+Add-Case session-launch 'codex exec -capproval_policy=never "hi"' ask deny
+Add-Case session-launch 'codex exec -c=approval_policy=never "hi"' ask deny posix
+Add-Case session-launch 'codex exec -m gpt-6.1-sol "hi"' pass deny
 # command with a combined option cluster holding v or V only reports how a name resolves.
 Add-Case git-safety 'command -pv git stash' pass pass posix
 Add-Case git-safety 'command -pV git stash' pass pass posix
 Add-Case git-safety 'command -p git stash' pass deny posix
+
+# read-only-agent: the Claude subagents whose definitions deny them Edit and Write (scout, reviewer) against writers
+# (implementer, specialist). Command, read-only verdict, writer verdict, dialect (any, posix or pwsh). The cases run from this
+# checkout's root, since the scratch repositories sit in the temp directory, where a read-only agent may write; the
+# policies only resolve paths, and nothing runs.
+$readOnlyCwd = (Split-Path -Parent (Split-Path -Parent $hooks)).Replace('\', '/')
+$readOnlyCases = [Collections.Generic.List[object]]::new()
+function Add-ReadOnlyCase {
+    param([string] $Command, [string] $ReadOnly, [string] $Writer, [string] $Dialect = 'any')
+    $readOnlyCases.Add([pscustomobject]@{ Command = $Command; ReadOnly = $ReadOnly; Writer = $Writer; Dialect = $Dialect })
+}
+Add-ReadOnlyCase 'git status' pass pass
+Add-ReadOnlyCase 'git diff HEAD -- a.txt' pass pass
+Add-ReadOnlyCase 'git log --oneline -5' pass pass
+Add-ReadOnlyCase 'git show HEAD:a.txt' pass pass
+Add-ReadOnlyCase 'git merge-base --is-ancestor HEAD main' pass pass
+Add-ReadOnlyCase 'git branch -a' pass pass
+Add-ReadOnlyCase 'git branch --contains HEAD' pass pass
+Add-ReadOnlyCase 'git branch new-topic' deny pass
+Add-ReadOnlyCase 'git tag -l' pass pass
+Add-ReadOnlyCase 'git tag v2' deny pass
+Add-ReadOnlyCase 'git stash list' pass pass
+Add-ReadOnlyCase 'git worktree list' pass pass
+Add-ReadOnlyCase 'git config --get user.name' pass pass
+Add-ReadOnlyCase 'git commit -m "x"' deny pass
+Add-ReadOnlyCase 'git ci -m "x"' deny pass
+Add-ReadOnlyCase 'git add a.txt' deny pass
+Add-ReadOnlyCase 'git checkout HEAD -- a.txt' deny pass
+Add-ReadOnlyCase 'git restore a.txt' deny pass
+Add-ReadOnlyCase 'git reset --hard HEAD' deny pass
+Add-ReadOnlyCase 'git merge topic' deny pass
+Add-ReadOnlyCase 'git apply --check fix.patch' pass pass
+Add-ReadOnlyCase 'git apply fix.patch' deny pass
+Add-ReadOnlyCase 'bash -c "git commit -m x"' deny pass
+Add-ReadOnlyCase 'echo hi > notes.md' deny pass
+Add-ReadOnlyCase 'echo hi > .claude/scratch/scout-notes.md' pass pass
+Add-ReadOnlyCase 'echo hi > ~/.claude/jobs/j/scout-findings.md' pass pass posix
+Add-ReadOnlyCase 'echo hi > /tmp/scout-notes.md' pass pass posix
+Add-ReadOnlyCase "echo hi > '$([IO.Path]::GetTempPath().Replace('\', '/'))scout-notes.md'" pass pass
+Add-ReadOnlyCase 'echo hi > .claude/scratch/../../src/x.cs' deny pass
+Add-ReadOnlyCase 'echo hi > $OUT' deny pass posix
+Add-ReadOnlyCase 'git log 2>/dev/null' pass pass posix
+Add-ReadOnlyCase 'git log 2>&1 | head -5' pass pass posix
+Add-ReadOnlyCase "cat > notes.md <<'EOF'`nx`nEOF" deny pass posix
+Add-ReadOnlyCase "cat > .claude/scratch/scout-findings.md <<'EOF'`nx`nEOF" pass pass posix
+Add-ReadOnlyCase 'cd .claude/scratch && echo hi > notes.md' pass pass posix
+Add-ReadOnlyCase 'rm a.txt' deny pass
+Add-ReadOnlyCase 'rm .claude/scratch/scout-x.md' pass pass
+Add-ReadOnlyCase 'cp a.txt .claude/scratch/scout-a.txt' pass pass
+Add-ReadOnlyCase 'cp .claude/scratch/scout-a.txt a.txt' deny pass
+Add-ReadOnlyCase 'mv a.txt b.txt' deny pass
+Add-ReadOnlyCase 'mkdir -p .claude/scratch/scout-dir' pass pass
+Add-ReadOnlyCase 'touch src.cs' deny pass
+Add-ReadOnlyCase 'sed -i s/a/b/ a.txt' deny pass
+Add-ReadOnlyCase 'sed -n 1p a.txt' pass pass
+Add-ReadOnlyCase 'echo x | tee a.txt' deny pass
+Add-ReadOnlyCase '"x" > notes.md' deny pass pwsh
+Add-ReadOnlyCase 'git status 2>$null' pass pass pwsh
+Add-ReadOnlyCase 'Set-Content -Path a.txt -Value x' deny pass pwsh
+Add-ReadOnlyCase 'Set-Content .claude/scratch/scout-x.md "x"' pass pass pwsh
+Add-ReadOnlyCase '"x" | Out-File notes.md' deny pass pwsh
+Add-ReadOnlyCase 'New-Item -ItemType Directory -Force src/x' deny pass pwsh
+Add-ReadOnlyCase 'Remove-Item -Recurse .claude/scratch/scout-dir' pass pass pwsh
+Add-ReadOnlyCase 'Copy-Item a.txt -Destination .claude/scratch/scout-a.txt' pass pass pwsh
+Add-ReadOnlyCase 'dotnet build src/Puck.Cli -c Release -nodeReuse:false' pass pass
+Add-ReadOnlyCase 'dotnet format Puck.slnx' deny pass
+Add-ReadOnlyCase 'dotnet .claude/scratch/scout-cli/Puck.Cli.dll search -M 0 Foo' pass pass
+Add-ReadOnlyCase 'dotnet .claude/scratch/scout-cli/Puck.Cli.dll schema' deny pass
+Add-ReadOnlyCase 'dotnet .claude/scratch/scout-cli/Puck.Cli.dll schema --check' pass pass
 
 function Get-Verdict {
     param([string] $Reply)
@@ -410,6 +494,18 @@ try {
             if ($verdict -ne $expected) { $failures.Add("$shape $($case.Policy): expected $expected, got $verdict for $($case.Command.Replace("`n", '\n')) -> $reply") }
         }
     }
+    $readOnlyTools = @{ any = @('Bash', 'PowerShell'); posix = @('Bash'); pwsh = @('PowerShell') }
+    foreach ($case in $readOnlyCases) {
+        foreach ($toolName in $readOnlyTools[$case.Dialect]) {
+            foreach ($agent in @(@{ Type = 'scout'; Expected = $case.ReadOnly }, @{ Type = 'reviewer'; Expected = $case.ReadOnly }, @{ Type = 'implementer'; Expected = $case.Writer }, @{ Type = 'specialist'; Expected = $case.Writer })) {
+                $payload = @{ session_id = 's'; hook_event_name = 'PreToolUse'; tool_name = $toolName; tool_input = @{ command = $case.Command }; cwd = $readOnlyCwd; agent_id = 'a1'; agent_type = $agent.Type }
+                $reply = Invoke-AgentPolicy $payload 'claude'
+                $verdict = Get-Verdict $reply
+                $count++
+                if ($verdict -ne $agent.Expected) { $failures.Add("$toolName $($agent.Type) read-only-agent: expected $($agent.Expected), got $verdict for $($case.Command.Replace("`n", '\n')) -> $reply") }
+            }
+        }
+    }
 
     # The real scripts, as each tool starts them.
     function Invoke-Hook {
@@ -440,6 +536,8 @@ try {
     $processCases = @(
         @{ Name = 'claude lead main push asks'; Script = 'agent-policy.ps1'; Arguments = @('-Tool', 'claude'); Payload = (& $claude 'git push origin main'); Expect = { $_.hookSpecificOutput.permissionDecision -eq 'ask' } }
         @{ Name = 'claude subagent stash is refused'; Script = 'agent-policy.ps1'; Arguments = @('-Tool', 'claude'); Payload = ((& $claude 'git stash') + @{ agent_id = 'a1'; agent_type = 'specialist' }); Expect = { $_.hookSpecificOutput.permissionDecision -eq 'deny' } }
+        @{ Name = 'claude scout commit is refused as read-only'; Script = 'agent-policy.ps1'; Arguments = @('-Tool', 'claude'); Payload = ((& $claude 'git commit -m x') + @{ agent_id = 'a1'; agent_type = 'scout' }); Expect = { $_.hookSpecificOutput.permissionDecision -eq 'deny' -and $_.hookSpecificOutput.permissionDecisionReason -match 'read-only scout' } }
+        @{ Name = 'claude subagent codex launch is refused'; Script = 'agent-policy.ps1'; Arguments = @('-Tool', 'claude'); Payload = ((& $claude 'codex exec "brief"') + @{ agent_id = 'a1'; agent_type = 'implementer' }); Expect = { $_.hookSpecificOutput.permissionDecision -eq 'deny' -and $_.hookSpecificOutput.permissionDecisionReason -match 'starts no agent session' } }
         @{ Name = 'codex lane push is refused'; Script = 'agent-policy.ps1'; Arguments = @('-Tool', 'codex'); Payload = @{ turn_id = 't'; tool_name = 'Bash'; tool_input = @{ command = 'git --no-pager push --dry-run origin HEAD:main' }; cwd = $topic }; Expect = { $_.hookSpecificOutput.permissionDecision -eq 'deny' } }
         @{ Name = 'antigravity lane branch delete is refused'; Script = 'agent-policy.ps1'; Arguments = @('-Tool', 'agy'); Payload = @{ conversationId = 'c'; workspacePaths = @($topic); toolCall = @{ name = 'run_command'; args = @{ CommandLine = '(git branch -D probe-x)' } } }; Expect = { $_.decision -eq 'deny' -and $_.reason } }
         @{ Name = 'antigravity passing command abstains'; Script = 'agent-policy.ps1'; Arguments = @('-Tool', 'agy'); Payload = @{ conversationId = 'c'; workspacePaths = @($topic); toolCall = @{ name = 'run_command'; args = @{ CommandLine = 'git status' } } }; Expect = $null }
