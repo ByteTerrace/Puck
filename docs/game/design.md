@@ -21,6 +21,10 @@ It plans portable membership, recoverable group operations and the complete in-w
 the existing authority, storage and transfer systems. This is requested work, not shipped behavior;
 engine prerequisites precede the cooperative experience, with other activity types sharing its foundation.
 
+For readable player interaction (telegraphs that are the true future of an
+authored motion, answered in space and time), use the
+[readable interaction plan](../plans/readable-interaction.md).
+
 ## Design decisions
 
 The charter was ratified and remains the design authority for

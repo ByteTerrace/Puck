@@ -114,7 +114,8 @@ Each waits on the owner: what the engine should do, how it looks and feels, and 
   and for initial binding issuance ([security](#security-review)).
 - Whether a `search` job whose public outputs are judged over restricted rows
   is refused, linted or left to the author, as a binding to a restricted row on
-  the shared screen is ([disclosure](disclosure.md#open-items)).
+  the shared screen is; the fog-of-war skirmish fixture shows what it leaks
+  first ([disclosure](disclosure.md#open-items)).
 - Mesh shipping: nothing is built until a presenting client downloads packages,
   and then on a self-hosted GPU runner (the owner's deferral;
   [rendering plan](rendering.md)).
@@ -2480,6 +2481,12 @@ Klondike table stands north of the Go table in the board game room
    rules), ten stock deals of one card a column, and a run K to A of one suit
    leaving to a completed pile.
 2. Poker: seats, computer players and the hand judge; its own step.
+3. The [disclosure plan](disclosure.md#the-build-order)'s four fixture games
+   are tables-room content too (the owner's direction): a sealed-bid auction,
+   a card game with a draw pile, a discard pile and hands under `Count` and
+   `Placeholder`, social deduction with private chat, and a small fog-of-war
+   skirmish, each at its own table and each the pair script of the
+   noninterference harness.
 - Residency: none of it waits on streaming; at 52 to 104 cards a table it is a
   stress case for nearest-first bake order
   ([streaming](#residency-and-streaming)).
@@ -2853,46 +2860,62 @@ brief's priorities ([security review](../development/security-review.md)).
   each review found more. [The disclosure plan](disclosure.md) is the structural
   fix; its [findings table](disclosure.md#the-findings-this-plan-answers) keeps
   every finding's file, line and step, and its [build order](disclosure.md#the-build-order)
-  is the queue. Open by step:
-  - Step 0, the probe as the check: `worlds/debug/disclosure-probe.puck` grown
-    to every door below and `DisclosureProbeLawTests` diffing seat2 and a
-    session across zero, one and two hidden cells.
-  - Step 1, the view ([decision 1](disclosure.md#1-one-capability-the-recipients-view)):
+  is the queue; the adversarial review of its first draft is answered in its
+  [review table](disclosure.md#the-design-reviews-findings). Open by step:
+  - Step 0, the noninterference harness and the four authored games in
+    `worlds/debug/` (a sealed-bid auction, a card game with piles and hands,
+    social deduction with private chat, a fog-of-war skirmish), with the input
+    fuzzer; the games settle the `search` lint and whether an authored private
+    inbox gives a sealed bid what it needs. The harness green over the fixtures
+    and the fuzzer is the definition of done.
+  - Step 1, deltas and versions first ([decision 5](disclosure.md#5-a-delta-is-a-difference-of-views-owned-by-the-stream)):
+    [high] forgetting the delta cache reopens a timing oracle after
+    re-disclosure (`src/Puck.World.Server/WorldStateChangeDisclosure.cs:85,97`);
+    [medium] the last-sent image aliases live vector memory (`:90`); [high]
+    versions, revisions, delivery counts and stream invalidation signal hidden
+    installs (`src/Puck.World.Server/WorldTravelerProjection.cs:47-50`,
+    `WorldFederationProjectionSink.cs:52-55`); `host.frames`, `host.memory`,
+    `world.counters`, `world.gpu-timing` and `world.collision.probe` become
+    Operator. (from: disc2-review, discdesign-review)
+  - Step 2, reads through the view ([decision 1](disclosure.md#1-one-capability-the-recipients-view)):
     [high] replica resume delivers `server.Definition` raw
     (`src/Puck.World.Server/WorldSessionSink.cs:188`); [high] `world.budget`
     publishes raw placement counts (`src/Puck.World/WorldPopulationCommandModule.cs:225`,
-    no audience at `:460`); [low] `world.identify` hashes authored hidden seeds
-    for a seat with Control over a screen (`src/Puck.World/WorldIdentifyCommandModule.cs:72`);
-    [low] `world.timeline` withholds through a predicate of its own that only
-    a windowed World can show (`src/Puck.World.Console/WorldTimelineCommandModule.cs:137-140`);
+    no audience at `:460`); [high] `world.reflow.preview` runs over the
+    authority's placements (`src/Puck.World.Server/WorldServer.Reflow.cs:98-131,358`);
+    [low] `world.identify` hashes authored hidden seeds for a seat with Control
+    over a screen (`src/Puck.World/WorldIdentifyCommandModule.cs:72`); [low]
+    `world.timeline` withholds through a predicate of its own
+    (`src/Puck.World.Console/WorldTimelineCommandModule.cs:137-140`);
     [unconfirmed] a `search` over an arena holding private keyed sites may
-    compute private outcomes (`src/Puck.State.Search/ArenaSearchEffectHost.cs:30-32`);
-    confirm whether its outputs carry the policy their rows declare. (from:
-    disc2-review, statecorr-review, unbiased-review)
-  - Step 2, the write door ([decision 3](disclosure.md#3-writes-by-readers-who-cannot-read-are-blind-writes)):
+    compute private outcomes (`src/Puck.State.Search/ArenaSearchEffectHost.cs:30-32`).
+    (from: disc2-review, discdesign-review, statecorr-review, unbiased-review)
+  - Step 3, the write door refuses by policy ([decision 3](disclosure.md#3-a-writer-that-cannot-read-a-row-whole-cannot-write-it)):
     [high] batch `ExpectedCells` is a read oracle, implemented twice
     (`src/Puck.World.Server/WorldDocument.StateCommands.cs:135`,
     `WorldDocument.Compose.Batch.cs:82`) behind an Observe-only admission
-    (`WorldDocument.StateTransformAdmission.cs:127`); [high] transform and
-    generate admission scan current membership (`StateCommands.cs:97-116`);
-    [high] per-cell upsert and remove receipts distinguish hidden from absent
-    for peers, addons and sessions (`WorldDocument.Compose.Cells.cs:292,576,636`);
-    [medium] a seat writes under its grants alone (`Compose.Cells.cs:574`):
-    `world.state.cell.remove hand secret0` removes a hidden cell where an
-    absent key is refused "has no cell keyed". (from: disc2-review, disclosure-2)
-  - Step 3, the layout ([decision 4](disclosure.md#4-the-physical-layout-follows-the-hidden-policy)):
+    (`WorldDocument.StateTransformAdmission.cs:127`), and `ExpectedSpatialReads`
+    is never checked (`src/Puck.World.Schema/WorldDefinitionFingerprint.cs:109`);
+    [high] transform and generate admission scan current membership
+    (`StateCommands.cs:97-116`); [high] per-cell upsert and remove receipts
+    distinguish hidden from absent for peers, addons and sessions
+    (`WorldDocument.Compose.Cells.cs:292,576,636`, `WorldServer.Arena.cs:98`);
+    [medium] a seat writes under its grants alone (`Compose.Cells.cs:574`).
+    (from: disc2-review, discdesign-review, disclosure-2)
+  - Step 4, the layout ([decision 4](disclosure.md#4-the-physical-layout-follows-the-hidden-policy)):
     [high] dealt children keep hidden-dependent slots and positions
     (`src/Puck.World.Schema/WorldStateDisclosure.cs:481,621`,
-    `src/Puck.World.Server/WorldTick.Deals.cs:426`), printed by
-    `world.placements` (`WorldTick.Deals.cs:102`). (from: disc2-review)
-  - Step 4, deltas ([decision 5](disclosure.md#5-a-delta-is-a-difference-of-views)):
-    [high] forgetting the delta cache reopens a timing oracle after
-    re-disclosure (`src/Puck.World.Server/WorldStateChangeDisclosure.cs:85,97`);
-    [medium] the last-sent image aliases live vector memory (`:90`). (from:
-    disc2-review)
+    `src/Puck.World.Server/WorldTick.Deals.cs:426,544-552,561`), printed by
+    `world.placements` (`WorldTick.Deals.cs:102`); [high] a restricted
+    template's `Solid`, `Grip`, `Spatial`, `Region` and `Emission` facets act on
+    the world for every body (`WorldTick.Deals.cs:558-571`). (from:
+    disc2-review, discdesign-review)
   - Steps 5 and 6, the compiler and the deletion of every other predicate
-    ([decision 6](disclosure.md#6-the-compiler-holds-the-line)): DISC001 and its
-    allowlist, `CommandDefinition.Operator`, `WorldStateDisclosure` deleted.
+    ([decision 6](disclosure.md#6-the-compiler-holds-the-line)): the authority
+    `internal` to `Puck.World.Server` (`WorldServer.RuleHostSeam.cs:8,23` are
+    public routes today), `WorldOperatorAuthority`, `CommandDefinition.Operator`,
+    DISC001 over module declarations, the public-surface law,
+    `WorldStateDisclosure` deleted. Step 7, the red-team extension.
 - [high] A faulting remove key is treated as success, so a partial firing
   commits: `src/Puck.State.Rules/Evaluation/RuleEvaluator.Effects.cs:723` calls
   the `ResolveKey` overload that discards `KeyNaming`, and its invalid-key arm
@@ -3311,9 +3334,11 @@ read one. The plans that keep open items:
 - [Records and pools](records-and-pools.md): the pair contract (MaxLive-sized
   storage, explicit endpoints, generation-safe handles), generated rows as the
   representation S10 replaces, and remote home adoption.
-- [Disclosure](disclosure.md#the-build-order): the six steps from the probe as
-  the check to the deletion of every door predicate but the view's, and the
-  [owner's call](disclosure.md#open-items) on a `search` lint.
+- [Disclosure](disclosure.md#the-build-order): the noninterference harness and
+  the four authored games, then six steps from deltas-first to the deletion of
+  every door predicate but the view's and the red-team extension; the
+  [owner's call](disclosure.md#open-items) on a `search` lint waits on the
+  skirmish fixture.
 - [Runtime and delivery](runtime-and-delivery.md#open-items): asset packages,
   the ledger, compiled worlds, the presentation view and the evidence package;
   release pairs wait for the first shipped release.
