@@ -1128,6 +1128,20 @@ Decided: (a). The irregular offsets are history, not design; once the
 ids are regular the existing template expresses the side, and the language
 needs (b) only if several creatures (the pond's spider and hound) want it.
 
+Measured, not yet done: the compiled Moth pairs 125 left and right shapes at
+eleven id offsets (100: 43, 68: 35, 16: 15, 20: 8, 7: 7, 1: 5, 8: 5, 6: 3,
+2: 2, 48 and 69). Beyond the mirror (x negated in positions, a rotation
+reflected to `(x, -y, -z, w)` up to sign, a sweep's curve points and a
+swing's axis and phase flipped, a side's own group and material), what
+differs: 8 axially symmetric cylinders and 4 prisms keep the left's rotation
+(the same geometry, so a template may mirror them); the right back pod's 40
+parts (ids 1200 to 1240) carry rotations that are not the mirrors of the left
+pod's (1100 to 1140), one systematic difference; `sideLock`'s and
+`blinkCrease`'s positions are not mirrored; `kneeGuard`'s profile differs.
+Writing the right side through a `side` template makes the right half the
+left's mirror wherever these differ, so which half is right is a look to
+judge in a windowed capture before the template lands.
+
 **G17 — What the hidden-information games hit.** Authoring the four games
 (`worlds/games/auction.puck`, `shedding.puck`, `deduction.puck`,
 `skirmish.puck`), each wall checked against the compiled document or a running
