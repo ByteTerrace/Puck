@@ -108,7 +108,7 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck format`](#puck-formatthe-one-formatter) | formats every source kind Puck owns, C# and `.puck`, to its one canonical form. |
 | [`puck gate`](#puck-gatethe-change-scoped-gate) | the change-scoped gate for a branch: checks the lock files with a locked restore, builds the solution and the file app, copies the CLI it built, and runs the affected suites and the repository checks against the merge base with the target; `--gpu` adds canaries, parity, device suites, all recorded counters workloads and citations; `--record` refreshes coverage after a green GPU qualification. |
 | [`puck host`](#puck-host-loadadmission-lines-for-the-machine) | the machine-admission family: `host load` reports the machine's CPU, memory, disk and GPU busyness as `GPU busy`/`GPU idle`, `PRESSURE`, `CAPACITY` and `LOADED` lines an agent admits or holds work by; `--watch` streams each line when due. |
-| [`puck landing`](#puck-landinggit-loss-check) | refuses a commit that silently drops content its author never worked from. |
+| [`puck landing`](#puck-landingthe-leads-landing-checks) | the lead's checks before landing a lane: `landing loss` refuses a commit that silently drops content its author never worked from, and `landing handback` checks a lane branch's commits against the hand-back contract (the `Brief:` line, subjects, trailers, plumbing and docs links). |
 | [`puck lanes`](#puck-lanesone-line-per-worktree) | prints one line per worktree: branch, commits ahead, changes, last commit, newest write, log, lease and stall state; `--watch` prints only the changes. |
 | [`puck laws`](#puck-laws-provea-law-against-its-fix) | `laws prove` shows, in an isolated proof tree, that a law fails with its fix withheld and passes with it, and prints the evidence for a commit body. |
 | [`puck lease`](#puck-leaseexclusive-machine-work) | run a command while exclusively holding the shared GPU, heavy-work or World-build resource, or all three once the machine is idle (`lease quiet`, the settle window for timing measurements); `lease list` prints each lease's holder and queue. |
@@ -1456,9 +1456,12 @@ dotnet src/Puck.Cli/bin/Release/net11.0/Puck.Cli.dll canary self-update
 
 ---
 
-## `puck landing`—git-loss check
+## `puck landing`—the lead's landing checks
 
-`puck landing --against <tip> --base <authoring-base>` refuses a commit that
+The lead runs two checks before landing a lane. Both read Git state only, build
+nothing and boot no World.
+
+`puck landing loss --against <tip> --base <authoring-base>` refuses a commit that
 drops content its author never worked from — the shape a `git reset --soft
 <tip>` before a squash produces, which re-parents the author's own tree onto
 a newer tip and silently reverts everything that tip added. It compares the
@@ -1472,9 +1475,29 @@ the same reason.
 
 Preserve the authoring base across integration merges. Merge the integration
 tip and inspect deleted content; reconstruct a re-parented tree from the
-intended change instead of guessing a new base. The verb reads Git state only,
-builds nothing and boots no World. Exit codes: 0 deletions accounted for;
-1 unaccounted deletions; 2 invalid input or Git refusal.
+intended change instead of guessing a new base. Exit codes: 0 deletions
+accounted for; 1 unaccounted deletions; 2 invalid input or Git refusal.
+
+`puck landing handback --against <integration tip> [--base <rev>] [--checkout <lane worktree>]`
+checks the commits a lane wrote against the hand-back contract the
+[`delegate` skill](../../.claude/skills/delegate/SKILL.md#finish) states. The
+lane's commits are the first-parent chain from the checkout's HEAD back to the
+integration tip and the branch's creation point (its reflog's creation entry,
+or `--base`), less what a fast-forward or reset brought onto that chain. A merge
+of the integration tip keeps the lane as first parent, so what it brings in is
+not judged. It prints one verdict line per leg:
+
+| Leg | Passes when |
+|---|---|
+| `brief` | HEAD carries `Brief: <id> done` or `Brief: <id> blocked: <question>`, and no other lane commit carries a `Brief:` line. |
+| `subjects` | Every non-merge lane commit's subject is a lowercase `area: sentence`. |
+| `coauthor` | No lane commit carries a `Co-Authored-By` trailer. |
+| `plumbing` | Every lane commit is the new value of a `commit`, `merge`, `cherry-pick` or `revert` entry in the branch reflog, and none records the empty tree. A branch with no reflog fails the leg as unverifiable. |
+| `docs` | The checkout is clean, so its files are HEAD's, and `puck docs links` passes on the whole corpus there. |
+
+A lane runs it after its final commit and amends that commit to fix a finding.
+Exit codes: 0 every leg passed; 1 a leg failed; 2 invalid input or a Git
+refusal.
 
 ---
 

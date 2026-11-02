@@ -318,6 +318,20 @@ Add-Case session-launch 'claude -p "list your agents"' pass deny
 Add-Case session-launch 'claude --bg "brief"' pass deny
 Add-Case session-launch 'claude --version' pass pass
 Add-Case session-launch 'claude mcp list' pass pass
+Add-Case session-launch 'claude plugin eval --help' pass pass
+Add-Case session-launch 'claude plugin eval .claude/skills/delegate --help' pass deny
+Add-Case session-launch 'claude plugin eval .claude/skills/delegate --trust-plugin' pass deny
+Add-Case session-launch 'puck evals run delegate' pass deny
+Add-Case session-launch 'puck evals run delegate --revision HEAD~1 --dry-run' pass pass
+Add-Case session-launch 'puck evals run --help' pass pass
+Add-Case session-launch 'puck evals compare a.json b.json' pass pass
+Add-Case session-launch 'puck evals graders a.json' pass pass
+Add-Case session-launch '.claude/scratch/lane-cli/puck.exe evals run delegate' pass deny
+Add-Case session-launch 'dotnet .claude/scratch/lane-cli/Puck.Cli.dll evals run delegate --runs 5' pass deny
+Add-Case session-launch 'dotnet exec --roll-forward Major .claude/scratch/lane-cli/Puck.Cli.dll evals run delegate' pass deny
+Add-Case session-launch 'dotnet run --project src/Puck.Cli -c Release -- evals run delegate' pass deny
+Add-Case session-launch 'dotnet run --project src/Puck.Cli -c Release -- evals compare a.json b.json' pass pass
+Add-Case session-launch 'puck $VERB run delegate' pass deny posix
 Add-Case session-launch 'node "C:/Users/x/.claude/plugins/cache/openai-codex/codex/1.0.6/scripts/codex-companion.mjs" task --write --prompt-file brief.md' pass deny
 Add-Case session-launch 'node "$CLAUDE_PLUGIN_ROOT/scripts/codex-companion.mjs" status' pass deny posix
 Add-Case session-launch 'bash -c "codex exec brief"' pass deny

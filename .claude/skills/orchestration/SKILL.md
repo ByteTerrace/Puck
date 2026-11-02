@@ -211,8 +211,10 @@ status, and count the commits behind with
 Only the assignment's last commit carries the `Brief:` trailer the
 [`delegate` skill](../delegate/SKILL.md#finish) names (`done` or
 `blocked: <question>`); progress and WIP commits carry none, and no other value
-follows `Brief: <id>`. The lead checks the final commit's trailer and subject
-format before merging a lane.
+follows `Brief: <id>`. Before merging a lane the lead runs
+`puck landing handback --against <integration branch> --checkout <lane worktree>`,
+which checks the trailer, every subject's format, Co-Authored-By trailers,
+plumbing-built commits and `puck docs links` at the lane's head.
 
 The lead's ledger and plan files that a delegate never writes are the lead's
 own scratch checklists under `<worktree>/.claude/scratch/<lane>-*`. A scratch

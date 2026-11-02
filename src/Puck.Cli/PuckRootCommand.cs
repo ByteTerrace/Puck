@@ -14,6 +14,7 @@ using Puck.Cli.Cartridges;
 using Puck.Cli.Counters;
 using Puck.Cli.Determinism;
 using Puck.Cli.Docs;
+using Puck.Cli.Evals;
 using Puck.Cli.Firmware;
 using Puck.Cli.FontAtlas;
 using Puck.Cli.Format;
@@ -86,6 +87,7 @@ public static class PuckRootCommand {
             DeclarationsCommand.Create(),
             DeterminismCommand.Create(),
             DocsCommand.Create(),
+            EvalsCommand.Create(clock: clock),
             FirmwareCommand.Create(),
             FontAtlasCommand.Create(),
             FormatCommand.Create(),

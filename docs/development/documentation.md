@@ -418,14 +418,22 @@ shows it changes outcomes ([evaluating a skill](#evaluate-an-agent-skill)).
 ## Evaluate an agent skill
 
 These evals measure Claude in the named harness and model, not Codex or
-Antigravity. Report the harness, model and ablation arms with the result.
-Separate executed grader passes/failures from skipped and errored runs and
-from skill activation. Compute each ratio over executed graders only: one
-pass plus two cost-ceiling skips is 1/1 with two skips; all-skipped cases are
-unmeasured. A max-turn or API error is infrastructure evidence, never failed
-teaching. Show incomplete or unpaired ablation arms explicitly. Inspect the
-prompt, grader and actual response before adding teaching; repair a stale
-fixture or grader when the skill already teaches the behavior.
+Antigravity. Three `puck evals` verbs wrap `claude plugin eval`
+([plugin evals](https://code.claude.com/docs/en/plugin-evals)); never run it
+by hand or through a script, which is how one comparison mixed ablation modes
+and reported edit effects the data did not hold:
+
+| Verb | Does |
+|---|---|
+| `puck evals run <skill>` | Runs the skill's `evals/` suite against a frozen detached worktree at `--revision` (default HEAD), with HEAD's cases copied into an older tree, the rules-file fixture in every case, full model IDs and a judge at least as strong as the model. Writes `aggregate-result.json`, `report.html`, `run.json` and `traces/` under the skill's git-ignored `evals/results/<stamp>/`. `--dry-run` prints the plan and the `claude` command line. |
+| `puck evals compare <a.json> <b.json>` | Compares two results case by case on the comparable score (below). |
+| `puck evals graders <result.json>` | Lists every grader below ceiling with its rubric, votes, evidence and trace: the hand-labelling work list. |
+
+The lead runs suites, as with any measurement: the session-launch hook
+refuses `puck evals run` from a lane, as it refuses `claude`, and passes its
+`--dry-run` and help forms. A lane writes cases and can run `compare`,
+`graders` and `run --dry-run`. `puck evals <verb> --help` holds each verb's
+contract.
 
 **A skill edit is unproven until its evals run.** Anthropic's guidance is to
 write evaluations before the teaching
@@ -435,65 +443,137 @@ A change that adds teaching to a skill or to a preloaded agent skill
 
 - **A capability case:** a new case drawn from the real failure the teaching
   fixes. Such a case may start at a low pass rate.
-- **A regression run:** the skill's existing suite, re-run with the change.
-  Its cases should pass nearly every run.
+- **A regression run:** the skill's regression cases, re-run with the change.
 
 A review of a skill's text is not an evaluation of whether agents behave
 better with it.
 
+### Regression and capability cases
+
+Tag every case in its `prompt.md` frontmatter, `tags: [regression]` or
+`tags: [capability]`. The two answer different questions, and `compare`
+reports them apart:
+
+- **Regression:** behavior the skill already teaches and must keep. Three
+  runs; the case holds when every run passes every grader (pass^k), and a case
+  that held and now fails is a stop until it is explained.
+- **Capability:** behavior the skill is learning. Five runs; report the mean
+  and the per-run vector, with no threshold.
+
+Most saturated vocabulary regexes (every with-arm run passes, every
+without-arm run fails) are regression cases. The runner's `casesPassed` at
+`--threshold 1.0` over three runs and several graders is mostly arithmetic,
+so neither verb reads it, and `run` passes `--threshold 0`.
+
+### Measure an edit
+
 The ablation compares the skill with no skill, which shows the skill as a
-whole helps. It does not show whether an edit helped. To measure an edit, run
-the same cases against the skill before and after it:
+whole helps. It does not show whether an edit helped. To measure an edit,
+run only the cases the edit should move, before and after it, in the same
+ablation mode with the same model and judge:
 
-1. Check the earlier revision out as a detached worktree.
-2. Copy the current `evals/` into it, so both sides run identical cases.
-3. Run that tree's with-arm (`--ablation none`) beside the current tree's
-   run.
+```text
+puck evals run <skill> --revision <before> --cases '<glob>' --runs 5
+puck evals run <skill> --cases '<glob>' --runs 5
+puck evals compare <before>/aggregate-result.json <after>/aggregate-result.json
+```
 
-The edit's effect is the difference between the two with-arms. Run both
-from frozen detached worktrees, never the tree you are editing, because the
-eval reads the skill live.
+`compare` recomputes each run's score so the two sides are comparable:
 
-The lead runs suites, as with any measurement. The lane hook refuses every
-`claude` launch from a lane, including `plugin eval`, so a lane writes cases
-and the lead runs them.
+- Activation graders (`tool_used` on `Skill`, or `arm: with-only`) are left
+  out on both sides. The runner scores them under `--ablation none` and
+  excludes them under `with-without`, so its own scores differ between the
+  modes by those graders alone.
+- Only executed graders count: one pass plus two cost-ceiling skips is 1/1.
+- A run that reached `max_turns`, ended on an error, was aborted by a mock or
+  had its judge graders skipped is infrastructure evidence, never failed
+  teaching: it is left out and listed. A diagnosis prompt says no checkout is
+  reachable, or the case raises `max_turns`, since an agent that follows a
+  skill's path into a repository it cannot reach spends every turn looking.
+- A difference is real when it exceeds one grader's share of a run's score
+  and the two run vectors do not overlap. One run swings by about 0.2, so at
+  three runs a case's difference under about 0.1 is noise; a suite mean hides
+  which cases moved.
 
-`claude plugin eval .claude/skills/<name>` runs a skill's `evals/` cases
-([plugin evals](https://code.claude.com/docs/en/plugin-evals)). A bare skills
-directory resolves as a plugin, and the run adds a no-skill baseline arm.
+To compare the skill against no skill on one result, name it twice:
+`puck evals compare r.json r.json --a-arm without`.
 
-**Case layout:** one directory per case, holding:
+### The rules-file fixture
 
-- `prompt.md`: frontmatter `runs` (default 3), `max_turns`,
+A Puck session always has `AGENTS.md` loaded, and a lane also preloads
+`delegate`, so the honest baseline is the rules without the skill, not an
+empty context. `run` adds a `puck-rules/` directory to every case holding
+HEAD's `AGENTS.md`, plus HEAD's `delegate/SKILL.md` as `delegate-SKILL.md`
+for every skill a lane loads (all but `delegate` and `orchestration`). It
+grants the directory through `case.yaml` `context.add_dirs` (directories
+inside the case directory, granted read-only), names it in an
+`append_system_prompt` line telling the agent to read it, and adds one
+`max_turns` for that read. The session lists the directory among its
+additional working directories, so the line names it by its basename. Both
+arms read it, so the delta measures what the skill adds over the rules, and a
+case whose delta collapses marks skill text that duplicates `AGENTS.md`.
+Never grant the repository or `.claude/skills/`: the baseline arm would read
+the skill and the ablation would measure nothing. `--no-fixture` repeats a run
+made without the fixture, for comparison with it.
+
+### Judge and model tiers
+
+- **Models:** full model IDs only (`claude-sonnet-5-5`, never `sonnet`), so a
+  model rollout never reads as a skill change. `run` refuses an alias.
+- **Judge:** at least as strong as the model under test, since a weaker judge
+  fails correct replies it cannot follow (a Haiku judge failed the `delegate`
+  suite's correct answers). Judge Sonnet suites with Sonnet, and the
+  judgement-heavy `delegate`, `orchestration` and `review-passes` suites with
+  Opus. Judge calls are about 8% of a run's cost. `run`'s judge defaults to
+  the model and refuses a weaker tier.
+- **Tiers:** run a skill at each tier that loads it, not every skill at every
+  tier. A skill that helps one tier can hurt another.
+
+  | Tier | Model | Loads |
+  |---|---|---|
+  | `scout` | `claude-haiku-5-5` | `content-search`, `symbol-analysis` |
+  | `implementer` | `claude-sonnet-5-5` | `delegate`, and the area skills its briefs name |
+  | `specialist` | `claude-opus-5-5` | `delegate`, and the area skills its briefs name |
+  | `reviewer` | `claude-opus-5-5` | `delegate`, `review-passes`, `content-search`, `symbol-analysis` |
+  | `principal` | `claude-fable-5-1` | `delegate`, and the area skills its design touches |
+  | The lead | Opus | `orchestration` |
+
+- **Load and cost:** `run` defaults to `-j 4` and a $20 `--max-cost-usd`
+  ceiling; keep `-j` at 4 or below on a shared machine. A Sonnet case costs
+  about $0.20 per run with both arms.
+
+### Write cases and graders
+
+`claude plugin eval` runs a bare skills directory as a plugin, and adds a
+no-skill baseline arm. A case is one directory under the skill's `evals/`:
+
+- `prompt.md`: frontmatter `tags`, `runs` (default 3), `max_turns`,
   `timeout_seconds`, `allowed_tools` and `model`, then a realistic task.
 - `graders/*.md`: each grader one of `regex`, `tool_used`, `tool_order`,
   `file_exists`, `llm` or `baseline`. There are no custom-code graders.
+- `case.yaml`, when the case needs `context` fields (`add_dirs`,
+  `scaffold_script`, `history_file`). `run` adds the fixture's keys to it, or
+  creates it.
 
-**Writing graders:**
+Cases are not split into training and held-out sets. An agent editing a skill
+reads every case, so a held-out set it can read holds nothing out, and at five
+or so cases a skill a held-out score is noise. The guard against teaching to
+the test is the rule below, stated generally, and capability cases drawn from
+real failures.
 
-- Write every criterion as a statement about what the reply contains, one
-  fact per grader.
+- Write every criterion as a statement about what the reply says, one fact
+  per grader, with an explicit PASS condition and FAIL condition. A sandboxed
+  reply cannot fix, run or commit anything, so a rubric that asks whether it
+  did fails correct replies.
+- Key a rubric on meaning, never on the phrase the skill uses: a reply that
+  gives the skill's answer in other words passes.
 - Prefer a deterministic grader. Use a `regex` for anything a token settles,
   and `llm` only where meaning needs judging.
-- Read the transcripts of a sample of runs and check each LLM grader's verdict
-  against your own. A grader that disagrees with a careful reading is
-  repaired before any score built on it is believed.
-
-**How to run it:**
-
-- **Arms and runs:** `--ablation with-without`, at least three runs per case.
-  A case's score is the mean of its runs, and it passes at `--threshold`
-  (default 1.0: every run passes every grader).
-- **Noise:** one run swings by about 0.2, so a delta under about 0.1 is
-  noise.
-- **Judge:** the LLM judge defaults to Haiku. Set `--judge-model` to a model
-  other than the one under test where the cost allows.
-- **Load and cost:** keep `-j` at 4 or below on a shared machine, and set
-  `--max-cost-usd` for any suite run. A Sonnet case costs about $0.20 per run
-  with both arms.
-- **Model tiers:** run a skill on every model that loads it: Sonnet for
-  `implementer`, Opus for `specialist`, `reviewer` and the lead, and Haiku for
-  `scout`. A skill that helps one tier can hurt another.
+- Validate graders before believing any score built on them. For each grader
+  `puck evals graders` lists, label each run's reply PASS or FAIL yourself,
+  record your agreement with the judge, and repair the rubric where you
+  disagree. About half the failing teaching in the first full round was
+  grading.
 
 **The sandbox:** the agent runs in an empty temporary workspace with your user
 settings, hooks, CLAUDE.md and MCP servers absent, so a case measures what the

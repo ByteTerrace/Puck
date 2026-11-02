@@ -1,6 +1,6 @@
 # Puck.Cli.Source
 
-Puck.Cli.Source holds the source and repository verbs: `search`, `scan`, `references`, `declarations`, `derivations`, `architecture` and the `docs` family. They read the tree through Roslyn and the analyzers, never through the engine.
+Puck.Cli.Source holds the source and repository verbs: `search`, `scan`, `references`, `declarations`, `derivations`, `architecture`, the `docs` family and the `landing` checks a lead runs before landing a lane. They read the tree through Roslyn and the analyzers, never through the engine.
 
 ## Documentation
 

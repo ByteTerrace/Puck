@@ -3,9 +3,11 @@ using System.CommandLine;
 namespace Puck.Cli.Landing;
 
 /// <summary>
-/// <c>puck landing</c> — refuses a commit that deletes content its author never worked from.
+/// <c>puck landing</c>: the checks the lead runs before landing a lane: <c>loss</c> refuses a commit that deletes
+/// content its author never worked from, and <c>handback</c> (<see cref="LandingHandback"/>) checks a lane branch's
+/// commits against the hand-back contract.
 /// </summary>
-/// <remarks>The check compares deletions against an explicitly supplied authoring base. A merge or squash
+/// <remarks>The loss check compares deletions against an explicitly supplied authoring base. A merge or squash
 /// can have valid ancestry while dropping content; the diff, not ancestry alone, exposes that loss.</remarks>
 public static class LandingCommand {
     private static string Clip(string text) {
@@ -66,7 +68,7 @@ public static class LandingCommand {
         Console.Error.WriteLine(value: "  --base is the commit your work was AUTHORED FROM. Preserve it across integration merges.");
         Console.Error.WriteLine(value: "  Do not substitute the new parent of a reconstructed or squashed tree.");
         Console.Error.WriteLine(value: "  merge-base(tip, HEAD) cannot recover the authoring base of a re-parented tree.");
-        Console.Error.WriteLine(value: $"  Inspect branch history and reflog, then run puck landing --against {tip[..12]} --base <authoring-base>.");
+        Console.Error.WriteLine(value: $"  Inspect branch history and reflog, then run puck landing loss --against {tip[..12]} --base <authoring-base>.");
 
         return 2;
     }
@@ -183,14 +185,21 @@ public static class LandingCommand {
         return 0;
     }
 
-    public static Command Create() {
+    public static Command Create() => new(
+        description: "The lead's checks before landing a lane: lost content (loss) and the hand-back contract (handback).",
+        name: "landing"
+    ) {
+        CreateLoss(),
+        LandingHandback.Create(),
+    };
+    private static Command CreateLoss() {
         var againstOption = new Option<string>(name: "--against") { Description = "The commit you are landing ONTO (e.g. origin/features/x).", Required = true };
         // Optional at the parser, refused with authoring-base guidance at the verb: the refusal needs the resolved tip
         // to print a runnable command, which only exists after --against resolves.
         var baseOption = new Option<string>(name: "--base") { Description = "The commit your work was AUTHORED FROM, preserved across integration merges. A new parent after squash or reconstruction is not that base. Equal --base and --against are refused." };
         var command = new Command(
             description: "Refuse a commit that drops someone else's landing.",
-            name: "landing"
+            name: "loss"
         ) { againstOption, baseOption };
 
         command.Detail(detail: """
