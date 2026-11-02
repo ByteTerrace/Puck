@@ -225,7 +225,7 @@ public sealed class HistoryRefusalLawTests {
         Assert.False(condition: harness.History.TryReplayEdit(
             documentPath: null, refusal: out var refusal, report: out _, ticksBack: 5
         ));
-        Assert.Contains(actualString: refusal, expectedSubstring: "an addon edit requires guest state");
+        Assert.Contains(actualString: refusal, expectedSubstring: "history does not rewind addon declarations");
     }
     // A session admitted before the history switched on records no session event at all, so only the live session
     // itself — whose observer's view the history does not rewind — can stop the history taking a keyframe and refuse

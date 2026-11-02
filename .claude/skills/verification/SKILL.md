@@ -213,6 +213,11 @@ reports drift. Restore a fresh worktree once
 On Windows, refresh the private CLI only after any lease command hosted by that copy has exited: the lease
 process itself keeps its loaded DLLs locked while the child build runs. Copy after lease completion, or host
 the build lease from another CLI copy.
+Copy portable output into a fresh destination, or copy its contents when
+refreshing an existing one. PowerShell `Copy-Item <output-directory>
+-Destination <existing-directory> -Recurse` nests the output directory and
+leaves stale DLLs at the destination root. Check the entry DLL before launch;
+publish any queued runner's artifact pointer only after the copy finishes.
 
 When `puck schema` reports missing XML documentation, do not accept the resulting
 removal of schema descriptions: on the restricted Windows harness the generator's
@@ -276,9 +281,11 @@ because it looks in the default `bin` and `obj` directories.
   <law> --fix <revision>` proves a law against its fix in its own clone and
   never touches your tree.
 
-A custom test traversal outside `tests/` must pass `-p:PuckShaderSpirvEnabled=true`
-explicitly. It does not inherit `tests/Directory.Build.rsp`; a Windows project
-build otherwise removes SPIR-V outputs. CPU shader tests use a fake device but
+A Windows project build intended for a Vulkan run must pass
+`-p:PuckShaderSpirvEnabled=true` explicitly, including a private World artifact.
+A custom test traversal outside `tests/` needs the same flag because it does not
+inherit `tests/Directory.Build.rsp`; a Windows project build otherwise removes
+SPIR-V outputs. CPU shader tests use a fake device but
 still read the compiled bytecode, so missing fixtures cause failures and can leave
 asynchronous package tests waiting. Building both bytecode formats uses no GPU.
 
@@ -324,7 +331,7 @@ deferred is a protocol step the engine has not built.
 ## What uses the GPU
 
 A windowed World driven by a stdin script spells its backend `--backend directx` or `--backend vulkan` (`auto` picks), waits for bakes with `world.wait bakes <s>` where `<s>` is 1 to 600, and is stopped by its PID once its readings are in: a windowed World has been seen running long past `--exit-after-seconds`.
-Use the private CLI copy's `puck lease gpu --holder <lane> --wait 1200 -- <command...>` for a granted GPU leg, and `puck lease heavy --holder <lane> --wait 7200 -- <command...>` for a heavy suite: heavy holders run long recorded suites back to back, and a one-hour wait can time out behind them. Run the request in the background and keep working. Without `--wait` a held lease refuses at once, so a script that runs its next step regardless (a boot after a build) must check the lease's exit code, or it measures a stale binary. Rebuild the private CLI copy after merging the integration tip: a copy older than the merge rejects documents that use new schema members. The verb owns acquisition, stale recovery and release, including failure and cancellation. A windowed World started with `puck_world_start` takes the same GPU lease itself (`holder`: your lane), waits at most its `timeoutSeconds` for it, and releases it when `puck_world_stop` ends the World or the World exits.
+Use the private CLI copy's `puck lease gpu --holder <lane> --wait 1200 -- <command...>` for a granted GPU leg, and `puck lease heavy --holder <lane> --wait 7200 -- <command...>` for a heavy suite: heavy holders run long recorded suites back to back, and a one-hour wait can time out behind them. Run the request in the background and keep working. Without `--wait` a held lease refuses at once, so a script that runs its next step regardless (a boot after a build) must check the lease's exit code, or it measures a stale binary. Rebuild the private CLI copy after merging the integration tip: a copy older than the merge rejects documents that use new schema members. The verb owns acquisition, stale recovery and release, including failure and cancellation. A windowed World started with `puck_world_start` takes the same GPU lease itself (`holder`: your lane), waits for it up to `CliLease.DefaultWait` (its `timeoutSeconds` bounds only the boot), and releases it when `puck_world_stop` ends the World or the World exits.
 To hold one lease across several commands, run a script the lease starts. On Windows name Git Bash by its full
 path (`"C:/Program Files/Git/usr/bin/bash.exe" <script>`): a bare `bash` resolves to WSL's, which sees no `D:/`
 path, so the script fails only after the queued lease is finally granted.

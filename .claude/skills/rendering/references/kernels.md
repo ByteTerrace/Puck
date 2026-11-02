@@ -139,7 +139,7 @@ of its passes. The upload and the view's passes, in order:
 | `upload` | `region-copy.comp` (`Puck.Shaders`, one pipeline a device) | Copies the words each staged table owes (program words, dynamic transforms, screen surfaces, screen mappings, volumes, decals, mesh draws, the bake's points, the irradiance volume, the lights, active shadow handoff controls, and the sky's block and layers) from the ring slot's staging buffer, which states the copy in a header and run table, into the region's device-local buffer, one dispatch per region that owes any, then transitions each copied buffer for reading (`SdfWorldTables.Regions.cs`). Under the ring policy nothing is copied and the kernels bind the slot's buffer. A view's camera, quality and levers, the light count, the shadow slot table and the curvature shading are no table: each pass writes them into its pass block (`SdfFrameBlock`). |
 | `mask` | `sdf-mesh-bake-mask.comp` | Writes each of the frame's bake lattices' instance selection; only while a bake is pending (`Skips`). |
 | `bake` | `sdf-mesh-bake.comp` | Samples the frame's lattices through `mapCore` (the one GPU field walk) into `bakeSamples`, which the host reads back and contours, or draws as a field slice (`SdfFieldSlice`); only while a bake or a slice is pending. |
-| `shadow-near`, `shadow-far`, `shadow-second` | `sdf-mesh-shadow.vert`, `sdf-mesh-shadow.frag` | Draw every mesh draw from the cascade's light camera into its sampled depth alone, 2048, 1024 or 512 texels a side by the shadow tier; skip a frame with no draw or no cascade of their own. |
+| `shadow-near`, `shadow-far`, `shadow-second` | `sdf-mesh-shadow.vert`, `sdf-mesh-shadow.frag` | One selection emits entry and solid/thin exit arguments. Entry is unculled; solid exit culls front faces, thin/clipped exit is unculled. One counted call per argument phase. 2048, 1024 or 512 texels a side by the shadow tier; skip a frame with no draw or no cascade of their own. |
 | `mesh` | `sdf-mesh.vert`, `sdf-mesh.frag` | Rasterizes the view's mesh visibility; skips a frame with no mesh draws, its target and depth barriers with it (`Skips`). |
 | `pyramid` | `sdf-mesh-pyramid.comp` | Reduces the mesh target into the ambient occlusion's depth pyramid (`frame/sdf-mesh-pyramid.hlsli`): levels one to four, each texel one actual pixel's ray parameter and coordinate; skips a frame with no mesh draws. It is not the draw-occlusion pyramid `SdfMeshOcclusion` builds between the mesh pass's phases (farthest forward depth per block), and neither replaces the other ([visibility plan](../../../../docs/plans/visibility.md#where-visibility-stands)). |
 | `surface` | `sdf-world-surface.comp` | Writes every pixel's whole visibility record from the mesh target, misses included: the hit, its frame slot and normal, the screen-space ambient occlusion and the stable slots' cascade soft shadows into K, each one 4×4-tile tap pattern's estimate per pixel (`sdfMeshPattern`), unfiltered. Calls no field query. |
@@ -179,9 +179,14 @@ the render grid. Each wrapper includes the common head
 include closure holds no other pass's stage; the surface wrapper defines
 `SDF_SURFACE_PASS`, which binds the records read-write, and each kernel
 compiles only its own stage over the pixel the entry gathers
-(`sdfSurfaceStage`, `sdfViewsStage`). The raster passes draw with their own
+(`sdfSurfaceStage`, `sdfViewsStage`). Every raster pass first dispatches
+`sdf-mesh-occlusion.comp` for box culling and level choice from retained mesh
+metadata. Opaque occlusion retains its two phases; glass uses one. Each shadow
+cascade selects once into entry and solid/thin exit phases, with one counted
+call per phase. Per-pass GPU state retains level and mesh identity across frames and
+buffer growth. The raster passes draw with their own
 `sdf-mesh` interface, one set per frame slot from a pool of their own, push the
-draw (`SdfKernelInterfaces.MeshPushedIndex`), and skip a frame with no mesh
+indirect command identity (`SdfKernelInterfaces.MeshPushedIndex`), and skip a frame with no mesh
 draws (`IRenderGraphPackageRecorder.Skips`), recording neither their draws nor
 their target and depth barriers. A view the cadence gate declares unchanged
 records none of its passes, and its latest output stands. Each pass also
@@ -250,6 +255,53 @@ image is already shader-readable from the read that established the alias.
 Transitioning the unused allocation instead produces Vulkan's
 undefined-to-read-only warning at startup; the composition-chain runtime law
 also exercises the return to drawing after all frame slots forwarded inputs.
+
+Vulkan's [DrawIndex](https://docs.vulkan.org/refpages/latest/refpages/source/DrawIndex.html)
+starts at zero per native call. Its vertex stage reads each command's identity
+at the pushed word base plus five times that index, through the
+[`vk::builtin` mapping](https://github.com/microsoft/DirectXShaderCompiler/blob/main/docs/SPIR-V.rst)
+in DXC. These sources agree on the mapping. Without native counted drawing,
+[`vkCmdDrawIndirect`](https://docs.vulkan.org/refpages/latest/refpages/source/vkCmdDrawIndirect.html)
+issues the initialized slots in one call when multi-draw is enabled; without
+multi-draw it issues one slot per call and advances the base with it. Empty
+rejected slots preserve order. `VulkanIndirectCountLawTests` exercises native,
+fixed multi-draw and single-slot fallback offsets without a driver. First
+instance is zero in every path. Selection dispatches use bounded two-dimensional
+groups so the draw capacity does not depend on the API's single-axis limit.
+The DrawIndex shader requires both device feature `shaderDrawParameters` and
+SPIR-V capability [DrawParameters](https://github.khronos.org/SPIRV-Registry/extensions/KHR/SPV_KHR_shader_draw_parameters.html)
+(4427) in `VulkanShaderCapabilities.Enabled`.
+Enabling the device feature alone still refuses the module before a pipeline
+can be created.
+
+On Direct3D 12 an indirect argument buffer read by a vertex shader needs both
+`INDIRECT_ARGUMENT` and shader-resource state. Growing the per-draw history
+clears its new tail through UAV access, transitions it to `COPY_DEST`, copies
+the previous history and then makes it shader-readable/writable. `TransferWrite`
+names the storage clear; `CopyWrite` names the copy destination.
+The retired history source is first used by the copy in a new recording;
+do not declare a current-recording UAV state for it. A global barrier includes
+transfer reads for Vulkan, and Direct3D 12 implicitly promotes its decayed
+COMMON state to COPY_SOURCE. The
+[legacy barrier documentation](https://learn.microsoft.com/en-us/windows/win32/direct3d12/using-resource-barriers-to-synchronize-resource-states-in-direct3d-12)
+and [Dawn's buffer state implementation](https://dawn.googlesource.com/dawn/+/c0064c5a73bfeff720c15d8d09c5b87a48e51160/src/dawn/native/d3d12/BufferD3D12.cpp)
+agree on buffer decay and promotion; these are legacy-barrier rules, not
+enhanced-barrier rules. Hardware validation still checks the actual use.
+
+Motion history can be copied twice without a shader reading it in between,
+especially in an unread routed world. `SdfWorldTables.Motion.BeginHistoryCopy`
+orders prior shader writes/reads and transfer writes before copy reads/writes;
+its source/destination transitions use COMMON as Direct3D 12's first state,
+with current-recording states supplied by its tracker. A shader-read-only
+dependency misses the earlier copy. The
+[Vulkan synchronization specification](https://docs.vulkan.org/spec/latest/chapters/synchronization.html)
+and [LunarG's validation guide](https://www.lunarg.com/wp-content/uploads/2024/01/Guide-to-Vulkan-Synchronization-Validation-FINAL-01-18-2024.pdf)
+agree that WAW needs a memory dependency. `GpuUploadRuns` also keeps every
+range disjoint: a bridge absorbs all touched runs so a batch never copies
+the same destination word twice without a barrier.
+Clamp a carried selection level to the current mesh's table before reading
+its vertex count even when no draw will be emitted: a culled draw retains
+history while its mesh can change to one with fewer levels.
 
 ## Registers and bindings
 

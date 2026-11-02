@@ -13,7 +13,7 @@ namespace Puck.SdfVm.Tests;
 /// probe's directional depth stops at the slab, so a read on the slab's far side takes nothing from it;
 /// and the meter reads the upper room lit and the lower room dark.
 /// </summary>
-public sealed class SdfMeshIrradianceLawTests {
+public sealed partial class SdfMeshIrradianceLawTests {
     [Fact]
     public void ASparselySampledSphereKeepsItsVisibleSurfaceLit() {
         var centre = new Vector3(x: 0f, y: 0f, z: 2f);

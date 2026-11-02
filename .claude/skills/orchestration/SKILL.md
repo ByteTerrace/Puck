@@ -156,6 +156,19 @@ property is enforced in too many places; brief a design for the one
 chokepoint that makes the property structural (a type or project boundary,
 one derived view), then migrate behind it.
 
+Better still, do it first. Work whose correctness rests on an invariant (a
+cache and its invalidation, an oracle and what it records, a visibility or
+shadow term and the geometry it assumes, a concurrency primitive and its
+wakeups) gets a written design and a Codex design review before any code,
+and its brief names the invariant and what enforces it: the compiler, a
+single door, or a derived view, never "every caller remembers". Every first
+draft of such work this session came back with highs from review (the
+incremental hash's caches, the disclosure harness, the exit layer three times,
+the transmission design), each from an invariant kept by convention; a design
+review costs a quarter hour, a failed fix round a lane's afternoon. A new
+check or oracle is shown failing without the fix it guards (fault injection),
+not only passing with it.
+
 Before briefing a step that decides how a pipeline works (what the renderer
 draws and submits, how the tick schedules, a camera or physics model), ask
 whether a research round has covered that design, even when the step arrives
@@ -197,6 +210,18 @@ changes and what the lane ran to show them working before merging
 ([landing bar](../verification/SKILL.md#the-landing-bar)).
 
 ## Land in batches
+
+The main checkout tracks the integration branch (the owner's ruling). Claude
+Code loads `.claude/agents/`, hooks and unscoped skills from the project root,
+the main checkout, not from the lead's worktree, so a lane runs whatever agent
+definitions and skills the main checkout holds; one session's agent fixes did
+nothing for its lanes until this was found. After each push of the integration
+branch the lead fast-forwards the main checkout's branch to it: leave the
+worktree with `ExitWorktree` (`keep`), confirm the main checkout is clean, run
+`git merge --ff-only <integration branch>` there, and return with
+`EnterWorktree` (`path`). The main checkout keeps its own branch name, because
+the integration branch is checked out in the lead's worktree; it never carries
+work of its own.
 
 A lane is ready when it meets its own focused checks
 ([landing bar](../verification/SKILL.md#the-landing-bar)): it builds what it
@@ -381,7 +406,11 @@ names. The owner-approved list allows every command
 ([contributing](../../../docs/development/contributing.md#antigravity-user-settings));
 a machine whose list names only `git`, `dotnet`, `pwsh` and `node` auto-denies any
 other command, such as `rm` or `Remove-Item`, and the run ends with no output, so
-a brief that deletes files says to use `git rm`. A headless run also ends when the agent
+a brief that deletes files says to use `git rm`. Reading a file outside the
+workspace is auto-denied the same way ("a tool required the read_file
+permission that headless mode cannot prompt for"), so the lead copies any
+shared brief, findings or facts into the lane's worktree (`.claude/scratch/`)
+and the brief names workspace-relative paths only. A headless run also ends when the agent
 goes idle waiting on a background task of its own (a background build), leaving
 its edits uncommitted, so a brief tells it to build and test in the foreground.
 A headless run can also stall with its process alive and its log empty, so the
@@ -438,10 +467,20 @@ window it has cleared of every other lane's builds, suites, evals and World
 runs. A brief that measures boot, compile or frame time grants no GPU and
 takes no timing while other lanes run.
 
+`puck lease list` is how the lead sees lease pressure: each of build, gpu and
+heavy with its holder, lane and how long it has held, then its queue in
+admission order with each waiter's wait. Read it before granting a GPU or heavy
+leg and while draining for a settle window, to see which lane a window waits on
+(a holder far past its time box is the one to ask), and `puck lanes` for the same
+queues per lane.
+
 Settle windows are how the lead clears it. The owner's loose deadlines were
 meant as these periods; the lead now schedules them by state, not the clock:
 - **Trigger:** a wave of related lanes has landed, or a decision waits on a
-  measurement (the culling order waits on M1). Never on a timer.
+  measurement (the culling order waits on M1). Never on a timer, and never
+  by waiting for the machine to go quiet on its own: with a dozen lanes it
+  never does, and one session's first window slipped for that reason. The lead
+  drains deliberately.
 - **Drain:** launch no new lanes; let running ones reach a stopping point.
   Lanes may keep editing; their builds, tests and GPU legs queue.
 - **Hold:** `puck lease quiet --holder lead -- <recipe>` takes the build, GPU
@@ -567,7 +606,7 @@ allows, in order of rising cost:
 | `scout` | Haiku 5.5 | medium | Read-only search, log triage, live-World probes and captures. No source edits or commits; authorized CLI bootstrap is allowed. |
 | `implementer` | Sonnet 5.5 | high | A specified brief with a finish line. It is the default writer. |
 | `specialist` | Opus 5.5 | high | Design judgement across projects, diagnosis of an unknown cause, review-and-fix passes. |
-| `principal` | Fable 5.1 | high | Correctness-critical or long-horizon work: determinism and fixed-point maths, the bake and its kernels, renderer architecture, a defect other lanes failed to crack. |
+| `principal` | Fable 5.1 | high | Design and review, sparingly: a design memo, an architecture, a design review, or a review where repeated rounds point at a fundamental flaw (determinism and fixed-point maths, the bake, renderer architecture). Never implementing, measuring or bisecting. |
 
 Route each brief to the cheapest role that fits it (the owner's ruling): a
 brief with a known cause or a specified result, such as content, a document
@@ -760,7 +799,9 @@ not a spiral:
   Twice the lead started principal lanes after that instruction, and the owner
   found Fable past half its usage. The owner's standing go-ahead: Fable may
   design (a design memo, an architecture, a review of a
-  design), sparingly; it never does the hard labor of implementing,
+  design) and review, sparingly, above all when repeated review rounds point
+  at a fundamental flaw rather than a list of fixes, as a way to climb a
+  steep hill; it never does the hard labor of implementing,
   measuring or bisecting, which goes to specialist or implementer.
 - A defect the owner can see (a walkthrough, a sweep still, a capture) ranks
   at the top of Next and gets a lane at once, aimed at the root cause, not a

@@ -30,7 +30,6 @@ public sealed partial class SdfWorldTables {
         Retire(replaced: m_previousDynamicTransforms);
         m_previousDynamicTransforms = previous;
         m_dynamicTransformCapacity = count;
-        m_dynamicHistoryWritten = false;
         m_seedDynamicHistory = true;
         m_dynamicTransformsPacked = false;
         m_bindingRevision++;

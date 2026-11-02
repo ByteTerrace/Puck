@@ -28,6 +28,9 @@ public static class VulkanShaderCapabilities {
     public const uint GroupNonUniformArithmetic = 63u;
     /// <summary>The SPIR-V <c>GroupNonUniformBallot</c> capability, for subgroup ballots.</summary>
     public const uint GroupNonUniformBallot = 64u;
+    /// <summary>The SPIR-V <c>DrawParameters</c> capability used to read indirect mesh identities through
+    /// <c>DrawIndex</c>. Requires <c>shaderDrawParameters</c>.</summary>
+    public const uint DrawParameters = 4427u;
     /// <summary>The SPIR-V fragment demotion capability used by the view-local character fade. Requires
     /// <c>shaderDemoteToHelperInvocation</c>.</summary>
     public const uint DemoteToHelperInvocation = 5379u;
@@ -49,6 +52,7 @@ public static class VulkanShaderCapabilities {
         (GroupNonUniform, "GroupNonUniform", "Vulkan 1.1 core"),
         (GroupNonUniformArithmetic, "GroupNonUniformArithmetic", "Vulkan 1.1 core"),
         (GroupNonUniformBallot, "GroupNonUniformBallot", "Vulkan 1.1 core"),
+        (DrawParameters, "DrawParameters", "the shaderDrawParameters feature every device is created with"),
         (DemoteToHelperInvocation, "DemoteToHelperInvocation", "the shaderDemoteToHelperInvocation feature every device is created with"),
     ];
 
