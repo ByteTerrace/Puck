@@ -119,6 +119,42 @@ public sealed class LanesCommandLawTests {
     }
 
     [Fact]
+    public async Task AFindingsOnlyLaneIsJudgedByItsLogAndReportAndADeliveryOutranksTheExit() {
+        using var layout = new Layout();
+        var scratch = Path.Combine(path1: layout.Checkout.Root, path2: ".claude", path3: "scratch");
+        var later = TimeSpan.FromHours(hours: 2);
+
+        // lane-e declares itself findings-only: two hours without a write is no stall while its log is still empty.
+        File.WriteAllText(path: Path.Combine(path1: scratch, path2: "lane-e.task"), contents: "mode: findings-only\n");
+        var e = (await layout.SnapshotAsync(later: later)).Single(predicate: static row => (row.Name == "lane-e"));
+
+        Assert.Equal(expected: ("findings-only", "active", false), actual: (e.Mode, e.State, e.Stall));
+        // Once its log has output, two hours without more is a stall, reported as log silence.
+        File.WriteAllText(path: Path.Combine(path1: scratch, path2: "lane-e.log"), contents: "working\n");
+        var before = await layout.SnapshotAsync(later: later);
+
+        Assert.True(condition: before.Single(predicate: static row => (row.Name == "lane-e")).Stall);
+        // Its report arrives and then its process exits: the lane reported; it did not merely exit.
+        File.WriteAllText(path: Path.Combine(path1: scratch, path2: "lane-e-findings.md"), contents: "findings\n");
+        layout.ExitLog(lane: "lane-e", line: "agy exit 0");
+        // lane-c committed its Brief trailer and then its process exited: done.
+        layout.ExitLog(lane: "lane-c", line: "codex exit 0");
+        // lane-d ran Codex in a read-only sandbox and exited without a report.
+        File.WriteAllText(path: Path.Combine(path1: scratch, path2: "lane-d.log"), contents: "OpenAI Codex v0.164.0\n--------\nsandbox: read-only\n--------\nworking\ncodex exit 1\n");
+        var after = await layout.SnapshotAsync(later: later);
+        var rows = after.ToDictionary(keySelector: static row => row.Name);
+
+        Assert.Equal(expected: ("reported", false), actual: (rows["lane-e"].State, rows["lane-e"].Stall));
+        Assert.EndsWith(expectedEndString: "lane-e-findings.md", actualString: rows["lane-e"].Report);
+        Assert.Equal(expected: "done", actual: rows["lane-c"].State);
+        Assert.Equal(expected: ("findings-only", "exited", null), actual: (rows["lane-d"].Mode, rows["lane-d"].State, rows["lane-d"].Report));
+        var messages = LanesCommand.Changes(previous: before, current: after, now: DateTimeOffset.UtcNow.Add(later));
+
+        Assert.Contains(collection: messages, filter: static message => (message.StartsWith(comparisonType: StringComparison.Ordinal, value: "lane-e: finished (reported, agy exit 0") && message.Contains(value: "report ", comparisonType: StringComparison.Ordinal)));
+        Assert.Contains(collection: messages, filter: static message => (message == "lane-d: finished (exited, codex exit 1; the process exited without a report)"));
+    }
+
+    [Fact]
     public async Task WatchingPrintsOnlyWhatChanged() {
         using var layout = new Layout();
         var before = await layout.SnapshotAsync(later: TimeSpan.FromHours(hours: 2));

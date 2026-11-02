@@ -1,9 +1,19 @@
 #Requires -Version 7.0
-# codex-launch: a Codex launch that changes its own approvals or sandbox. Claude's settings allow `codex exec`
-# and ask on these forms textually; this check applies the same set to every form the classifier sees (a moved or
-# PowerShell launch, options before the subcommand), asking the lead and refusing a lane.
+# session-launch: starting another agent session. A lane does its brief itself and starts no session of its own
+# (AGENTS.md: a lane that fans out hands back before its children finish), so a lane is refused every launch of
+# `codex`, `agy`, `claude` and the Codex companion script (`codex-companion.mjs`), except the forms that only print
+# help, a version or a listing. The lead may launch sessions; it is asked only before a Codex launch that changes its
+# own approvals or sandbox, the same set Claude's settings ask on textually, here applied to every form the classifier
+# sees (a moved or PowerShell launch, options before the subcommand).
 
 $script:CodexConfigKeys = '^(approval_policy|sandbox_mode|default_permissions|permissions|approvals_reviewer|sandbox_workspace_write|shell_environment_policy|hooks)(\.|$)'
+
+# The leading words of each agent CLI's forms that start no session.
+$script:SessionInspectionForms = @{
+    codex  = @('execpolicy', 'login status', 'mcp list', 'mcp get', 'completion', 'help', '--version', '-V', '--help', '-h')
+    agy    = @('agent', 'agents', 'changelog', 'models', 'mcp list', 'plugin list', 'plugins list', 'help', '--version', 'version', '--help', '-h')
+    claude = @('doctor', 'mcp list', 'mcp get', 'auth status', 'plugin list', 'plugins list', '--version', '-v', '--help', '-h')
+}
 
 # Returns the permission-changing option a codex call names, or $null.
 function Get-CodexPermissionChange {
@@ -30,10 +40,52 @@ function Get-CodexPermissionChange {
     return $null
 }
 
-function Test-CodexLaunchPolicy {
+# Returns the agent CLI an invocation starts (codex, agy, claude or the companion), with the words after it, or $null.
+function Get-SessionLaunch {
+    param($Invocation)
+    $name = $Invocation.Name.ToLowerInvariant()
+    if ($name -in @('codex', 'agy', 'claude')) {
+        return @{ Cli = $name; Rest = @($Invocation.Argv | Select-Object -Skip 1); Dynamic = @($Invocation.Dynamic | Select-Object -Skip 1) }
+    }
+    # node <...>/codex-companion.mjs <subcommand>: the script path may hold a variable, but its name is literal.
+    if ($name -in @('node', 'bun', 'deno')) {
+        for ($j = 1; $j -lt $Invocation.Argv.Count; $j++) {
+            if ($Invocation.Argv[$j] -match 'codex-companion\.m?js$') { return @{ Cli = 'companion'; Rest = @(); Dynamic = @() } }
+        }
+    }
+    return $null
+}
+
+# True when the words after an agent CLI only print help, a version or a listing.
+function Test-SessionInspection {
+    param([hashtable] $Launch)
+    if ($Launch.Cli -eq 'companion') { return $false }
+    if (@($Launch.Dynamic | Where-Object { $_ }).Count) { return $false }
+    $words = @($Launch.Rest)
+    if (-not $words.Count) { return $false }
+    foreach ($form in $script:SessionInspectionForms[$Launch.Cli]) {
+        $parts = @($form -split ' ')
+        if ($words.Count -lt $parts.Count) { continue }
+        $matched = $true
+        for ($k = 0; $k -lt $parts.Count; $k++) {
+            if ($words[$k] -cne $parts[$k]) { $matched = $false; break }
+        }
+        if ($matched) { return $true }
+    }
+    return $false
+}
+
+function Test-SessionLaunchPolicy {
     param([hashtable] $Context, $Invocation)
-    if ($Invocation.Name -ne 'codex') { return }
+    $launch = Get-SessionLaunch $Invocation
+    if ($null -eq $launch) { return }
+    if ($Context.Role -eq 'lane') {
+        if (Test-SessionInspection $launch) { return }
+        $what = ($launch.Cli -eq 'companion') ? 'the Codex companion' : $launch.Cli
+        return New-PolicyDecision 'deny' "A lane starts no agent session of its own ($what): do the brief yourself, and hand back what needs another lane so the lead launches it. $($Invocation.Text)"
+    }
+    if ($launch.Cli -ne 'codex') { return }
     $change = Get-CodexPermissionChange $Invocation.Argv
     if ($null -eq $change) { return }
-    return New-PolicyRoleDecision $Context "A lane starts no Codex session, least of all one that changes its approvals or sandbox ($change)." "This Codex launch changes its approvals or sandbox ($change): $($Invocation.Text)"
+    return New-PolicyDecision 'ask' "This Codex launch changes its approvals or sandbox ($change): $($Invocation.Text)"
 }

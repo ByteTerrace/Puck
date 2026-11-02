@@ -2,15 +2,32 @@
 # The persistent MCP front follows activated builds while previous workers retain their owned Worlds.
 $ErrorActionPreference = 'Stop'
 
+. "$PSScriptRoot/cli-build.ps1"
+
 function Write-Note([string] $message) {
     [Console]::Error.WriteLine("puck-mcp: $message")
 }
 
-function Get-CliBuild([string] $checkout) {
-    $build = Join-Path $checkout 'src/Puck.Cli/bin/Release/net11.0'
-    if ((Test-Path -LiteralPath (Join-Path $build 'Puck.Cli.dll')) -and (Test-Path -LiteralPath (Join-Path $build 'puck-build-ready'))) {
-        return $build
+# What src/Puck.Cli builds from: every project under src and build, and the repository-wide build inputs.
+$buildInputs = @('src', 'build', 'lib', 'Directory.Build.props', 'Directory.Build.targets', 'global.json', 'nuget.config', '.editorconfig')
+
+# Returns why the main checkout's build cannot stand in for the asking checkout's, or $null when it can: both hold the
+# same committed build inputs with nothing changed or untracked under them, and the main checkout's build completed
+# after its HEAD last moved, so the build is of those inputs and not of an older head.
+function Get-MainBuildRefusal([string] $root, [string] $main, [string] $build) {
+    $mine = & git -C $root ls-tree HEAD -- @buildInputs 2>$null
+    if ($LASTEXITCODE -ne 0) { return "git could not read this checkout's HEAD" }
+    $theirs = & git -C $main ls-tree HEAD -- @buildInputs 2>$null
+    if ($LASTEXITCODE -ne 0) { return "git could not read the main checkout's HEAD" }
+    if ((@($mine) -join "`n") -cne (@($theirs) -join "`n")) { return 'its committed sources differ from this checkout''s' }
+    foreach ($checkout in @($root, $main)) {
+        $changed = & git -C $checkout status --porcelain --untracked-files=all -- @buildInputs 2>$null
+        if (($LASTEXITCODE -ne 0) -or $changed) { return "$checkout has uncommitted source changes" }
     }
+    $moved = & git -C $main log -g -1 --date=unix --format=%gd HEAD 2>$null
+    if (($LASTEXITCODE -ne 0) -or ($moved -notmatch '\{(\d+)\}')) { return 'its HEAD reflog does not say when HEAD last moved' }
+    $builtAt = [DateTimeOffset]::new((Get-Item -LiteralPath (Join-Path $build 'puck-build-ready')).LastWriteTimeUtc).ToUnixTimeSeconds()
+    if ($builtAt -lt [long]$Matches[1]) { return 'its build predates its current HEAD' }
     return $null
 }
 
@@ -19,14 +36,17 @@ $source = $root
 $build = Get-CliBuild $root
 
 if ($null -eq $build) {
-    $common = & git -C $root rev-parse --path-format=absolute --git-common-dir 2>$null
-    if (($LASTEXITCODE -eq 0) -and $common) {
-        $main = (Resolve-Path -LiteralPath (Split-Path -Parent $common)).Path
-        if ($main -ne $root) {
-            $build = Get-CliBuild $main
-            if ($null -ne $build) {
+    $main = Get-MainCheckout $root
+    if ($main -and ($main -ne $root)) {
+        $mainBuild = Get-CliBuild $main
+        if ($null -ne $mainBuild) {
+            $refusal = Get-MainBuildRefusal $root $main $mainBuild
+            if ($null -eq $refusal) {
+                $build = $mainBuild
                 $source = $main
-                Write-Note "this worktree has no Release build of src/Puck.Cli; using the main checkout's at $build."
+                Write-Note "this worktree has no Release build of src/Puck.Cli; using the main checkout's at $build, built from the same sources."
+            } else {
+                Write-Note "this worktree has no Release build of src/Puck.Cli, and the main checkout's is not used: $refusal."
             }
         }
     }

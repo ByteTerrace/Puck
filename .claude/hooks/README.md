@@ -9,7 +9,8 @@ no policy speaks to gets no output, so the tool's own permission rules decide.
 | Policy | Refuses or asks |
 |---|---|
 | `git-safety` | Pushes and `gh` writes, and the git that touches what every lane shares (the table is in the script's header) |
-| `codex-launch` | A Codex launch that changes its own approvals or sandbox |
+| `read-only-agent` | A read-only Claude agent's git other than reads, writes outside a scratch or findings path, and generators that rewrite tracked files |
+| `session-launch` | A lane's launch of another agent session (`codex`, `agy`, `claude`, the Codex companion script), and the lead's Codex launch that changes its own approvals or sandbox |
 | `no-coauthor` | A commit, merge, commit-tree or cherry-pick whose message carries `Co-Authored-By` |
 | `no-node-reuse` | `dotnet build`, `msbuild`, `restore`, `pack` or `publish` without `-nodeReuse:false` |
 | `world-devices` | A `Puck.World` boot that names no `--devices` |
@@ -19,13 +20,31 @@ no policy speaks to gets no output, so the tool's own permission rules decide.
 
 A lane is a Claude subagent (its payload carries `agent_id`), a Codex session or
 an Antigravity session. A lane is refused every push, every shared-state git
-command and anything the classifier cannot see into. The Claude session with no
+command, every launch of another agent session (only help, version and listing
+forms pass) and anything the classifier cannot see into. The Claude session with no
 `agent_id` is the lead: it is asked before a push or `gh` write that reaches
 `main`, force-pushes, deletes, mirrors or cannot be resolved, before a
 permission-changing Codex launch and before an opaque command; its other pushes
 and shared-state commands are left to its settings. A remote partner pushing its
 own branch from its own session is the exception AGENTS.md states in prose;
 nothing here carves it out.
+
+A read-only Claude agent is one whose `.claude/agents` definition, read from
+this hook's checkout (the one the harness loaded it from), disallows both
+`Edit` and `Write`, or lists `tools` without either: `scout` and `reviewer`.
+Its `agent_type` keys `read-only-agent`, which refuses its git other than reads
+(status, diff, show, log, blame, grep, the `ls-*` and `rev-*` plumbing, and the
+listing forms of branch, tag, stash, worktree, config, reflog, remote and
+notes), any write outside a `.claude/scratch/` directory, the temp directory or
+`~/.claude/jobs/` (output redirections and the file commands and cmdlets), and
+`dotnet format|new|add|remove|sln` and the generator verbs run without
+`--check`. Builds stay allowed: `bin/` and `obj/` are derived outputs. Where it
+stops: the hook sees Bash and PowerShell payloads only, so an MCP tool call (a
+World mutation through `puck_exec`) is outside it, as are a script file a
+command runs, an interpreter's inline program (`python -c`, `node -e`) and a
+.NET call inside a PowerShell expression. The definition's `disallowedTools`
+keeps the editor tools away; a Codex or Antigravity lane carries no
+`agent_type`, so its read-only mode is its own sandbox's.
 
 ## Registration
 
@@ -57,7 +76,21 @@ shows each surface once per session, agent and checkout.
 
 `puck-mcp.ps1` starts the `puck` MCP adapter for Claude (`.mcp.json`), Codex
 (`.codex/config.toml`), VS Code and Antigravity (the workspace plugin
-`.agents/plugins/puck/`, registered by `.agents/plugins.json`).
+`.agents/plugins/puck/`, registered by `.agents/plugins.json`). It boots the
+asking checkout's Release build of `src/Puck.Cli`, building it when there is
+none. It boots the main checkout's build instead only when both checkouts
+commit the same build inputs (`src`, `build`, `lib` and the repository-wide
+build files), neither has changes under them, and the main checkout's build
+completed after its HEAD last moved; otherwise it names the reason and builds.
+
+`provenance.ps1` is Claude's SessionStart hook on startup, resume and compact.
+It runs `puck agents provenance` from the first of the working checkout, the
+project root and the main checkout that has a Release build with the verb, and
+shows the owner and the session the expected and actual paths and branches
+when their agent configuration differs (`systemMessage` and
+`additionalContext`); it is silent when they agree, and says so when no build
+could run the check. `cli-build.ps1` holds the build and main-checkout lookup
+both hooks share.
 
 ## What the classifier sees
 
@@ -74,7 +107,10 @@ double quotes too), heredocs, redirections, `NAME=value` prefixes and `(`, `)`,
 lease's `--`, `bash -c`, `pwsh -Command`,
 `cmd /c`, `eval` of literal text, `Invoke-Expression` of a literal and
 `Start-Process`, and follows `cd` and `Set-Location`. Quoted text, heredoc
-bodies and here-strings are data. A computed command name, `-EncodedCommand`,
+bodies and here-strings are data. A command's output redirections (`>`, `>>`,
+`&>`, `>|`, `<>`, a `>&` to a file, and PowerShell's file redirections other
+than to `$null`) arrive as an invocation of their own named `:` whose `Writes`
+lists the targets. A computed command name, `-EncodedCommand`,
 `eval` or `Invoke-Expression` of a variable and a shell reading its script from
 stdin are opaque. Each argument also records whether it is known only at run
 time (a variable or a substitution): git-safety asks the lead and refuses a
