@@ -119,7 +119,6 @@ authority handoff) and identity facts carried across a crossing are built
 | A pool whose `field` lattice is a medium: swimming, buoyancy, depth rows read from regions | `modules/dive.puck` (`lattices field(name: "pool"...)`, `bond: Medium` holds, `dive-depth-*` rules); canaries `dive-medium`, `medium-submersion` | wire ([documents-motion](../../.claude/skills/puck-world/references/documents-motion.md)); standard: a swim hold row the Moth refines, as `abilities.puck` holds `dashAbility` | A courtyard pool; the first `field` lattice and `Medium` hold in the debug world, and the base the climate wing's wetness and puddles stand on | medium |
 | Flow across basins: a source topped up each step, boundary spill, a drawn whole-field pass | canaries `flow-conservation-live`, `lattice-draw-fill` | wire | The pool's inflow; proves reactions run live | small |
 
-
 ### 5. Second seat and hidden information
 
 Every private-information game needs a second reader that the first cannot read
@@ -171,7 +170,6 @@ left the well and the snake field undrawn and read through the console.
 | Bowling: a ball and pins judged by settling | `games/bowling.puck` | wire | A lane beside it | small |
 | Dominoes: a run of tiles toppling | `games/dominoes.puck` | wire | The same room | small |
 | Paddleball: a physical court judged by three `interactions` latches (Distance and Region, Edge and Level), a spin follower | `games/paddleball.puck`; games tests `PaddleballContactLawTests` | wire; first user of `interactions` in the debug world | The same room | medium |
-
 
 ### 10. Packages as worked examples
 

@@ -11,7 +11,6 @@ quarantined. The reasoning behind every decision here is in
 [the decisions register](../decisions/state-and-language.md); this page holds
 the work.
 
-
 ## The forcing world
 
 The forcing artifact is the debug world, running its authored programs through
@@ -58,8 +57,6 @@ survive budget refusal and expose arena bytes separately from measured runtime
 headroom. Server, console, browser, and portal consumers read the same report.
 The operation and failed-work inventory feeds S10 step 7 rather than activating
 or recapturing a reference-machine schedule.
-
-
 
 ### S6 — Modules, and the forcing world
 
@@ -164,8 +161,6 @@ distinct instantiation. What remains:
   a claim about what crossed into it.
 - A `test` written inside a module body reaches only the module's own names.
 
-
-
 ### Deferred games
 
 Each is scheduled unchanged if the capability it forces turns out to be
@@ -251,7 +246,6 @@ The owner's ruling ([AGENTS.md](../../AGENTS.md#puck-is-pre-release)): cost
 follows what a document means, never how it is spelled, and every spelling
 lowers to one canonical form. An audit of the debug world's sources listed the
 gaps; this package holds the designs the owner chose and what they leave open.
-
 
 #### Designs chosen
 
@@ -577,7 +571,6 @@ over a `knowledge` row finishes only when the observe runs on change.
 
 ## Sequencing
 
-
 What is open, in order:
 
 | Step | In parallel | Why here |
@@ -586,7 +579,6 @@ What is open, in order:
 | 2 | S6's reusable modules in the debug package, after the fundamentals | Proves the language on the live proving ground; missing experimental features are ported there. |
 | 3 | S7's two open steps: [remote home adoption](records-and-pools.md#remote-home-adoption) and records carrying timed row traits | Remote adoption closes the debug-world record round trip across separate authorities. |
 | 4 | The deferred games, each when the capability it forces is otherwise unproven | See the table above. |
-
 
 ## Debug-world authoring workloads
 

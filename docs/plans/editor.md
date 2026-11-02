@@ -617,7 +617,6 @@ has none (a height field's host-baked brick is held by
 stroke, and the shared field/bake invalidation and
 [engine job system](open-items.md#engine-job-system) for scheduled bake work.
 
-
 ## Decisions
 
 **The editor is the World.** Every package is a verb, a lever, overlay drawing

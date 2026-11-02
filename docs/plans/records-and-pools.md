@@ -126,73 +126,29 @@ coming home adopts the carried records into its owned identity
 [Worlds and federation](../architecture/worlds.md#joining-authority-and-admission)
 owns the crossing rules.
 
-## Implementation order and evidence
+## What remains
 
-1. Land the complete single-pool model, expansion, arena operations, journal,
-   export/import, scoped rule bindings, language projection, and refusal laws.
-2. Integrate World publication, replacement, checkpoints, declaration hashing,
-   module composition, and cache invalidation. Exercise real host scenarios.
-3. Add bounded pairs, logical enum carriers, and identity-owned record transfer.
-4. Migrate static record families and Paddleball/Arena. Remove superseded regex paths
-   after their supported behavior has a typed replacement. Paddleball and Arena
-   are migrated, and no regex path for a record family remains.
-5. Run affected Release suites, architecture/vocabulary/schema checks, authored
-   scenarios and real-World verification. Re-record changed baselines only after
-   independent behavior and deterministic replay checks pass.
-6. Close [remote home adoption](#remote-home-adoption).
+The single-pool model, World integration, bounded pairs, logical enum carriers,
+identity-owned record transfer and the record families' migration are built.
+What remains is [remote home adoption](#remote-home-adoption) and the row traits
+records do not carry: record fields carry bounds, defaults, enums, vector
+spaces and advancing numeric fields, while `dynamics`, `cycle`, `phase`,
+`visibility` and `knowledge` stay row-only, and a world that needs one keeps a
+row.
 
-Regression cases include middle-slot release/reclaim, stale handles, dead-slot
-generations, generation exhaustion, nested claim rollback, release/reclaim during
-iteration, typed defaults, malformed snapshots, protected-row mutations, name
-collisions, section replacement, checkpoint/export reload, pair cascades, body
-capacity changes, and identity travel. Warmed claim/release and judged-search
-workloads must retain bounded work and avoid per-candidate allocation.
-
-The fixed-slot gate compares equal record widths at 4, 256, and 4096 slots:
-non-cascading mutation journal bytes must stay constant, and a warmed
-claim/read/release/rewind candidate must allocate zero bytes. Test sparse ordinary
-and pair slots across occupancy-word boundaries, including retained undo after
-reload. Use the Chinese Checkers judged candidate plus rewind for the ordinary-row
-performance check; record repeated before/after samples and reject a repeatable
-slowdown. Capacity scans and dependent-pair cascades remain explicitly priced.
-
-The [records-pools canary](../../experimental/tests/Puck.World.Canaries/records-pools/canary.json)
-exercises the real executable: an ordinary state mutation triggers claim, field
-write, release, reclaim with defaults, and deterministic replay. The shipped-game
-behavior laws check Paddleball scoring and Arena elimination independently of recorded
-export hashes, so a changed baseline cannot hide a migration regression.
-
-Current status: the engine and source-language substrate includes
-generation-aware handles, fixed identity-slot rows, snapshots, pairs, lexical effects,
-round-trip projection, structurally typed pool-field references, enums on record
-fields, and advancing numeric fields with persisted clocks. Logical enum carriers
-cover reclaimed generations and pair-pool carriers. Both Arena and Paddleball use this
-path; Arena keeps fighter health, respawn continuation, pickup state, and carrier
-roles in its records, and Paddleball keeps its ball and paddle roles and state there.
-Identity-owned record transfer and pair interactions have World integration laws
-(`WorldIdentityRecordLawTests` and `CrossingIdentityPrivacyLawTests` for transfer,
-adoption, rollback and replay; `WorldPoolCarrierLawTests` for carriers and pair
-pools through the host evaluator). Record fields carry bounds, defaults, enums,
-vector spaces and advancing numeric fields; the other row traits (`dynamics`,
-`cycle`, `phase`, `visibility` and `knowledge`) stay row-only, and a world that
-needs one keeps a row.
-
-Retained turns use a load-time row closure and bounded depth. Claim/release rows
-(domain, generation, and fields, including real advancing-field clocks) share the
-same retained segment as ordinary writes. The ring reserves its closed depth plus
-one pending segment, hashes and checkpoints its continuation, refuses or
-invalidates turns that write outside the declared closure, and restores a turn
-atomically through `rewindGroup`. The tree includes a 32-turn, 256-slot
-release/reclaim stress law and the executable records-pools canary; coordinated
-Release, generated-schema/vocabulary/name-registry, real-host, and replay checks
-remain the acceptance gate for this working tree. Equal live values alone are not
-the fresh-state hash criterion: allocator generations and retained continuation
-must also agree, as recorded in the
-[generation decision](../decisions/state-and-language.md). The authored rulepush
-scenario is met by the [rulepush package](../../experimental/worlds/rulepush/README.md). Its tests
-cover selective push, blocking, overlap, noun rewrite and undo. Its canaries
-check deterministic replay and an eight-turn undo whose state hash matches the
-earlier turn.
+The cases any change here keeps working: middle-slot release and reclaim, stale
+handles, dead-slot generations, generation exhaustion, nested claim rollback,
+release and reclaim during iteration, typed defaults, malformed snapshots,
+protected-row mutations, name collisions, section replacement, checkpoint and
+export reload, pair cascades, body capacity changes, and identity travel.
+Warmed claim, read, release and rewind allocate nothing, and non-cascading
+mutation journal bytes stay constant across 4, 256 and 4096 slots; capacity
+scans and dependent-pair cascades stay explicitly priced. Equal live values
+alone are not the fresh-state hash criterion: allocator generations and
+retained continuation must also agree, as recorded in the
+[generation decision](../decisions/state-and-language.md). The proof worlds
+that exercised records (Arena, Paddleball, rulepush) are quarantined under
+`experimental/`, so the debug world's pooled game entities are where these run.
 
 ## Remote home adoption
 

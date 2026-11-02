@@ -624,7 +624,6 @@ defect was found; the weaknesses are structural and economic.
   where declared, and disclosure policy is evaluated per recipient while its
   future-affecting inputs stay authoritative state.
 
-
 ## Costing
 
 The compiled semantic operations share one deterministic allowance. Compose

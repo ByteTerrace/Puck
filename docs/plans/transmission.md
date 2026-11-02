@@ -469,7 +469,6 @@ None of these is a leak of a blocker at a distance.
 | Baked thin foliage (closed slabs) | Entry and exit; thinner than `ε` along the light, one surface | `Solid`; another placement's leaf is another body |
 | Glass | Skipped by the cascades, as today | — |
 
-
 ## Cost: a measurement plan
 
 What is known from the illum1-fix measurement at the stage on Direct3D 12

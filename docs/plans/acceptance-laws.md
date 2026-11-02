@@ -35,8 +35,6 @@ re-deriving the design:
 
 ## Law 2: a crossing replays to the same traveller
 
-
-
 **Claim.** A crossing, then record and replay: identity and arrival state match.
 
 **Scenario.** Two rows under one instance host, with a mapped portal turned a
@@ -442,8 +440,6 @@ a field paint, a save) are outside the atomic promise by contract: they fire
 after the commit, and a refusal there is one counted `IrreversibleArmFailed`
 that undoes nothing. They are not classified as unsupported operations, and the
 classification says so for each of their refusals.
-
-
 
 ## Open items
 

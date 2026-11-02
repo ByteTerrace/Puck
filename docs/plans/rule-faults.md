@@ -673,4 +673,3 @@ Determinism (AGENTS.md rule 4): every previously lost fault now closes a gate,
 holds a latch or refuses a firing that used to proceed, so a recorded replay
 or hash that reached one of those paths moves; each step re-records what it
 invalidates. Step 1 is the exception and the control: it moves nothing.
-
