@@ -1,16 +1,17 @@
-// The snapshot's entity-row partitions (256 rows each) under worker counts: 300 idle stand-ins in a 320-slot table,
-// whose middle placement grows, shrinks and regrows so the inactive holes it leaves straddle row 256. Run it at every
+// The snapshot's entity-row partitions (256 rows each) under worker counts: 619 idle stand-ins and a seat in a
+// 640-slot table, enough rows that the snapshot forks (it writes serially under two full partitions), whose middle
+// placement grows, shrinks and regrows so the inactive holes it leaves straddle row 256. Run it at every
 // count against a recording taken before a change to snapshot emission:
 // `puck test worlds/debug/snapshot-partitions-tests.puck --workers 1,2,0 --compare <dir>`.
 // Inhabited placements fill the table from the top down in document order once their counts move, so `upper` holds
-// 319..270, `middle` 269..240 and `lower` 239..21; `middle` retires its lowest bodies first and regrows from its top.
+// 639..270, `middle` 269..240 and `lower` 239..21; `middle` retires its lowest bodies first and regrows from its top.
 schema: "puck.world.definition.v1"
 basis: "avatars/moth"
 documentId: "snapshot-partitions-tests"
 import "stand-in"
 
 bodies {
-  capacity: 320
+  capacity: 640
 }
 
 state {
@@ -18,7 +19,7 @@ state {
     row {
       name: "upperCount"
       kind: Int
-      value: 50
+      value: 370
     }
     row {
       name: "middleCount"
