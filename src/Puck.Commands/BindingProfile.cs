@@ -17,6 +17,11 @@ namespace Puck.Commands;
 /// within an effective page. The resting row must be a page, since an empty chord has no completion edge to fire a
 /// command with. Page ids are unique across the whole document (they address pages in editors and guided sessions).
 /// The first row's group is the default group.
+/// <para>Any other group (one a context selects: a board's, a vehicle's) replaces only what it declares. Its rows are
+/// its own, then every default-group row it leaves alone: a default page or command row drops out only when the group
+/// declares a row of the same members, or when the group's own pages bind one of that row's member controls. So a
+/// board's resting page replaces the player's resting page, and the trigger pages, the wheel and the chord commands
+/// stay reachable. Input routing and every page view read this one compiled set.</para>
 /// </remarks>
 public static class BindingProfile {
     /// <summary>The command-name prefix a channel destination compiles down to (see
@@ -504,23 +509,95 @@ public static class BindingProfile {
             PageId: page.Id
         );
     }
-    // The pages one more held modifier opens from the page at `rowIndex`: a page row of the same group whose members are
-    // this row's plus exactly one, keyed by each source of that extra modifier (first page in profile order wins).
-    private static FrozenDictionary<string, BindingPageOpenerView> OpenersOf(
-        int rowIndex,
+    // Each group's effective rows: its own, in profile order, then the default group's rows it leaves alone. A context
+    // group (a board's, a vehicle's) replaces only what it declares: a default row is left out when the group declares
+    // a row of the same members (the page or command at that chord position), or when the group's own pages bind one
+    // of the row's member controls (binding a control takes it over). Everything else stays the player's, reachable
+    // from the context group exactly as from the default one. The default group is its own rows alone.
+    private static int[][] EffectiveRowsByGroup(
+        int groupCount,
         IReadOnlyList<BindingModifierDefinition> modifiers,
         BindingPageDefinition?[] effectivePages,
         int[] rowGroups,
         int[][] rowHelds,
         int[][] rowChords
     ) {
+        const int DefaultGroup = 0;
+
+        var rowCount = rowGroups.Length;
+        var memberKeys = new string[rowCount];
+
+        for (var rowIndex = 0; (rowIndex < rowCount); rowIndex++) {
+            memberKeys[rowIndex] = $"{string.Join(separator: ',', values: rowHelds[rowIndex].Order())}|{string.Join(separator: ',', values: rowChords[rowIndex])}";
+        }
+
+        var effective = new int[groupCount][];
+
+        for (var groupIndex = 0; (groupIndex < groupCount); groupIndex++) {
+            var rows = new List<int>();
+            var declaredKeys = new HashSet<string>(comparer: StringComparer.Ordinal);
+            var boundSources = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
+
+            for (var rowIndex = 0; (rowIndex < rowCount); rowIndex++) {
+                if (rowGroups[rowIndex] != groupIndex) {
+                    continue;
+                }
+
+                rows.Add(item: rowIndex);
+                _ = declaredKeys.Add(item: memberKeys[rowIndex]);
+
+                foreach (var entry in (effectivePages[rowIndex]?.Entries ?? [])) {
+                    boundSources.UnionWith(other: (entry.Sources ?? []));
+                }
+            }
+
+            if (groupIndex != DefaultGroup) {
+                for (var rowIndex = 0; (rowIndex < rowCount); rowIndex++) {
+                    if (
+                        (rowGroups[rowIndex] == DefaultGroup) &&
+                        !declaredKeys.Contains(item: memberKeys[rowIndex]) &&
+                        !TakesOver(boundSources: boundSources, members: rowHelds[rowIndex], modifiers: modifiers) &&
+                        !TakesOver(boundSources: boundSources, members: rowChords[rowIndex], modifiers: modifiers)
+                    ) {
+                        rows.Add(item: rowIndex);
+                    }
+                }
+            }
+
+            effective[groupIndex] = [.. rows];
+        }
+
+        return effective;
+
+        static bool TakesOver(HashSet<string> boundSources, int[] members, IReadOnlyList<BindingModifierDefinition> modifiers) {
+            foreach (var member in members) {
+                foreach (var source in modifiers[member].Sources) {
+                    if (boundSources.Contains(item: source)) {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+    }
+    // The pages one more held modifier opens from the page at `rowIndex`: a page row of the group's effective pages
+    // whose members are this row's plus exactly one, keyed by each source of that extra modifier (first page in the
+    // group's effective order wins).
+    private static FrozenDictionary<string, BindingPageOpenerView> OpenersOf(
+        int rowIndex,
+        IReadOnlyList<BindingModifierDefinition> modifiers,
+        BindingPageDefinition?[] effectivePages,
+        int[] pageRows,
+        int[][] rowHelds,
+        int[][] rowChords
+    ) {
         var members = new HashSet<int>(collection: [.. rowHelds[rowIndex], .. rowChords[rowIndex]]);
         var openers = new Dictionary<string, BindingPageOpenerView>(comparer: StringComparer.OrdinalIgnoreCase);
 
-        for (var other = 0; (other < effectivePages.Length); other++) {
+        foreach (var other in pageRows) {
             if (
                 (other == rowIndex) ||
-                (rowGroups[other] != rowGroups[rowIndex]) ||
                 (effectivePages[other] is not { } opened)
             ) {
                 continue;
@@ -1681,21 +1758,33 @@ public static class BindingProfile {
             }
         }
 
-        // Second pass: the per-group command-chord hint lists (shared by every page view of the group), then the rows.
+        // Second pass: each group's effective rows (its own, then the default group's it leaves alone), the per-group
+        // command-chord hint lists (shared by every page view of the group), then the rows.
+        var effectiveRowsByGroup = EffectiveRowsByGroup(
+            effectivePages: effectivePages,
+            groupCount: groupNames.Count,
+            modifiers: modifiers,
+            rowChords: rowChords,
+            rowGroups: rowGroups,
+            rowHelds: rowHelds
+        );
         var commandRowsByGroup = new int[groupNames.Count][];
+        var pageRowsByGroup = new int[groupNames.Count][];
         var hintsByGroup = new IReadOnlyList<BindingChordCommandView>[groupNames.Count];
 
         for (var groupIndex = 0; (groupIndex < groupNames.Count); groupIndex++) {
             var commandRows = new List<int>();
+            var pageRows = new List<int>();
             var hints = new List<BindingChordCommandView>();
 
-            for (var rowIndex = 0; (rowIndex < documentRows.Count); rowIndex++) {
-                if (
-                    (rowGroups[rowIndex] != groupIndex) ||
-                    (documentRows[rowIndex].Command is not { } command)
-                ) {
+            foreach (var rowIndex in effectiveRowsByGroup[groupIndex]) {
+                if (effectivePages[rowIndex] is not null) {
+                    pageRows.Add(item: rowIndex);
+
                     continue;
                 }
+
+                var command = documentRows[rowIndex].Command!;
 
                 var effectiveCommand = ((command.Channel is { } channel)
                     ? channelCommandName(arg: channel)
@@ -1718,6 +1807,7 @@ public static class BindingProfile {
             }
 
             commandRowsByGroup[groupIndex] = [.. commandRows];
+            pageRowsByGroup[groupIndex] = [.. pageRows];
             hintsByGroup[groupIndex] = hints.ToImmutableArray();
         }
 
@@ -1754,8 +1844,8 @@ public static class BindingProfile {
                         openers: OpenersOf(
                             effectivePages: effectivePages,
                             modifiers: modifiers,
+                            pageRows: pageRowsByGroup[groupIndex],
                             rowChords: rowChords,
-                            rowGroups: rowGroups,
                             rowHelds: rowHelds,
                             rowIndex: rowIndex
                         ),
@@ -1806,23 +1896,6 @@ public static class BindingProfile {
                     View: null
                 );
             }
-        }
-
-        var pageRowsByGroup = new int[groupNames.Count][];
-
-        for (var groupIndex = 0; (groupIndex < groupNames.Count); groupIndex++) {
-            var pageRows = new List<int>();
-
-            for (var rowIndex = 0; (rowIndex < rows.Length); rowIndex++) {
-                if (
-                    (rowGroups[rowIndex] == groupIndex) &&
-                    (rows[rowIndex].Table is not null)
-                ) {
-                    pageRows.Add(item: rowIndex);
-                }
-            }
-
-            pageRowsByGroup[groupIndex] = [.. pageRows];
         }
 
         return new CompiledBindingProfile(

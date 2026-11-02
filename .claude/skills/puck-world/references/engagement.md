@@ -275,7 +275,11 @@ seated seat's ray reaches the rules every tick.
 Presentation: `WorldSeatContextSync` publishes the seated placement into
 `WorldPerceptionAnchor.EngagedTabletop` and the `engagement` context family's
 `tabletop` state (instead of `engaged`), so a binding overlay's context row
-`{engagement, tabletop, <group>}` swaps the seat to the table's controls; the
+`{engagement, tabletop, <group>}` swaps in the table's controls. The group
+replaces only what it declares: its resting page replaces the player's, and
+every page and chord command it leaves alone stays reachable
+(`BindingProfile.Compile`'s effective rows,
+[decision](../../../../docs/decisions/input-channels.md#an-overlay-replaces-only-what-it-declares)); the
 seat camera eases to `WorldTabletopFraming`'s board view (the whole board from
 the chair's side at `pitch`, near plane at the board) on the rig's dynamics
 through `WorldFramingEase`. `TabletopEngagementLawTests` (Server) and

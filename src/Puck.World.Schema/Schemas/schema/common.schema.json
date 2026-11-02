@@ -8835,7 +8835,7 @@
           "type": "string"
         },
         "pageId": {
-          "description": "The BindingPageDefinition.Id this bank renders \u2014 validated to exist somewhere in the composed binding profile. While a context group (a board\u0027s) makes another page active that no bank names, that page renders in the first bank whose page the same held modifiers select, so the group\u0027s resting page takes the resting page\u0027s bank and the bar\u0027s layout and model stay as the seat set them.",
+          "description": "The BindingPageDefinition.Id this bank renders \u2014 validated to exist somewhere in the composed binding profile. A context overlay (a board\u0027s) replaces only the pages it declares, so a page no bank names can be active: it renders in the first bank whose page the same held modifiers select. The board\u0027s resting page takes the resting page\u0027s bank, the pages it leaves to the player stay in their own banks, and the bar\u0027s layout and model stay as the seat set them.",
           "type": "string"
         },
         "alpha": {

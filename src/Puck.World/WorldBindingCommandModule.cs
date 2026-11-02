@@ -354,20 +354,19 @@ public sealed partial class WorldBindingCommandModule(PlayerRoster roster, World
         var builder = new StringBuilder(value: $"[player.bindings: seat {PlayerRoster.DisplayNumber(slot: slot)}");
 
         builder.Append(value: ' ').Append(value: input.Text);
-        var defaultGroup = ((document.Chords is { Count: > 0 } chords)
-            ? (string)chords[0].Group
-            : string.Empty
-        );
         var seen = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
         var any = true;
 
         // The context derivation first — the read-back rule's half of context-derived groups: the resolved active
-        // group with its derivation step, then every admitted family's state and match (winner marked, a shadowed
-        // match visibly distinct from "no row"), then the requested group (marked shadowed when a row overrides it).
+        // group with its derivation step and the page the seat's held chord selects in it (the page the bar draws),
+        // then every admitted family's state and match (winner marked, a shadowed match visibly distinct from
+        // "no row"), then the requested group (marked shadowed when a row overrides it).
         var derivation = m_seatBindings.DescribeContextDerivation(slot: slot);
+        var activeGroup = derivation.ActiveGroup;
 
-        _ = builder.Append(value: " group=").Append(value: derivation.ActiveGroup)
-            .Append(value: " (").Append(value: derivation.Step).Append(value: ") | contexts:");
+        _ = builder.Append(value: " group=").Append(value: activeGroup)
+            .Append(value: " (").Append(value: derivation.Step).Append(value: ") page=").Append(value: m_seatBindings.PageView(slot: slot).PageId)
+            .Append(value: " | contexts:");
 
         foreach (var family in derivation.Families) {
             _ = builder.Append(value: ' ').Append(value: family.Family).Append(value: '=').Append(value: family.State).Append(value: '→');
@@ -381,14 +380,14 @@ public sealed partial class WorldBindingCommandModule(PlayerRoster roster, World
         }
 
 
-        // The default group's resting-page entries first (the classic source→command glance)...
+        // The active group's resting-page entries first (the classic source→command glance: page 1 as it is now)...
         foreach (var row in (document.Chords ?? [])) {
             if (
                 !row.IsResting ||
                 (row.Page?.Entries is not { } entries) ||
                 !string.Equals(
                 a: row.Group,
-                b: defaultGroup,
+                b: activeGroup,
                 comparisonType: StringComparison.Ordinal
             )
             ) {
@@ -1058,7 +1057,7 @@ public sealed partial class WorldBindingCommandModule(PlayerRoster roster, World
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "player.bindings",
-            description: "Echoes a seat's composed ACTIVE mapping after the world overlays ⊕ profile bindings ⊕ live session rebinds merge. Leads with the seat's context derivation — group=<active> (<step>) where <step> is context <family>=<state>, requested, or default — then contexts: one segment per admitted family (<family>=<state>→<group> (wins), →<group> (shadowed), or →(no row)) and requested=<group|(none)> (marked (shadowed) when a context row overrides it); then the default group's resting-page trigger→destination entries and every chord row with its meaning (chord <group>:[m1+m2]→<destination> or →page <id>); a destination is a command name (with a trailing value:<v> when the entry carries a constant activation value — see player.bind) or channel:<name>; a trigger is a plain source id, or activator:held[...]/activator:tapped[...] for a row whose trigger is an ordered sequence, with a trailing [toggle] when the entry's mode is Toggle: player.bindings [seat] (optional seat 1..4, default 1).",
+            description: "Echoes a seat's composed ACTIVE mapping after the world overlays ⊕ profile bindings ⊕ live session rebinds merge. Leads with the seat's context derivation — group=<active> (<step>) page=<id> where <step> is context <family>=<state>, requested, or default and page is the page the held chord selects (a page the active group leaves to the player's default group included) — then contexts: one segment per admitted family (<family>=<state>→<group> (wins), →<group> (shadowed), or →(no row)) and requested=<group|(none)> (marked (shadowed) when a context row overrides it); then the active group's resting-page trigger→destination entries and every chord row with its meaning (chord <group>:[m1+m2]→<destination> or →page <id>); a destination is a command name (with a trailing value:<v> when the entry carries a constant activation value — see player.bind) or channel:<name>; a trigger is a plain source id, or activator:held[...]/activator:tapped[...] for a row whose trigger is an ordered sequence, with a trailing [toggle] when the entry's mode is Toggle: player.bindings [seat] (optional seat 1..4, default 1).",
             handler: BindingsHandler
         );
         yield return CommandDefinition.WithWireArgs(
