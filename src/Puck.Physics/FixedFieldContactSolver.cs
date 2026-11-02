@@ -322,7 +322,7 @@ public sealed class FixedFieldContactSolver(
         var grounded = false;
         var groundNormal = FixedVector3.Zero;
         var lastNormal = FixedVector3.Zero;
-        var uncertain = false;
+        var uncertain = default(ContactUncertainty);
 
         for (var iteration = 0; (iteration < m_iterations); iteration++) {
             // A field authoring its own up samples it HERE, per iteration and at the body's current position: that is
@@ -338,10 +338,11 @@ public sealed class FixedFieldContactSolver(
             var pushed = false;
 
             // Only the last pass, at the pose the body keeps, says whether that pose is proved.
-            uncertain = false;
+            uncertain = default;
             var extracted = false;
 
-            foreach (ref readonly var volume in volumes) {
+            for (var volumeIndex = 0; (volumeIndex < volumes.Length); volumeIndex++) {
+                ref readonly var volume = ref volumes[volumeIndex];
                 var contact = FixedFieldColliderContact.Solve(
                     collider: in m_surface,
                     orientation: in orientation,
@@ -350,7 +351,9 @@ public sealed class FixedFieldContactSolver(
                     volume: in volume
                 );
 
-                uncertain |= contact.Uncertain;
+                if (contact.Uncertain) {
+                    uncertain = uncertain.With(pair: new ContactUncertainPair(Collider: 0, Span: ContactUncertaintySpan.Field, Volume: volumeIndex));
+                }
 
                 if ((contact.Outcome == FixedFieldContactOutcome.Contact) && contact.Pushes) {
                     FixedContactPushMath.Commit(
@@ -391,7 +394,7 @@ public sealed class FixedFieldContactSolver(
             GroundNormal: groundNormal,
             Grounded: grounded,
             ObstructionNormal: lastNormal,
-            Unproved: uncertain
+            Uncertainty: uncertain
         );
     }
     /// <inheritdoc/>
@@ -438,7 +441,7 @@ public sealed class FixedFieldContactSolver(
                             up: in up,
                             velocity: ref velocity,
                             volumes: volumes
-                        ) with { Unproved = true });
+                        ) with { Uncertainty = ContactUncertainty.Unknown });
                     }
                 }
             }
