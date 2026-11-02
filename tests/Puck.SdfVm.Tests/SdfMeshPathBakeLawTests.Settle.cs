@@ -12,11 +12,14 @@ namespace Puck.SdfVm.Tests;
 public sealed partial class SdfMeshPathBakeLawTests {
     private static readonly Vector3 OwnHalf = new(value: 0.2f);
     private static readonly Vector3 MemberHalf = new(value: 0.1f);
+    // A member this many slots past its group's own: the group's poses span three rows a slot over the gap, more point
+    // table entries than one dispatch's samples (SdfWorldPackage.MeshBakeMaxSamples).
+    private const int PosedGap = ((SdfWorldPackage.MeshBakeMaxSamples / 3) + 1);
 
     [Fact]
     public void ACubicLatticeDispatchesWhenItsPosesExceedTheSampleBudget() {
         var bake = new SdfMeshPathBake { Library = new SdfMeshLibrary(), Residency = "posed-cube" };
-        var frame = SettleFrame(groups: 1, memberGap: 100000, offset: 0f, program: SettleProgram(groups: 1, memberGap: 100000, scale: 4f), time: 0f);
+        var frame = SettleFrame(groups: 1, memberGap: PosedGap, offset: 0f, program: SettleProgram(groups: 1, memberGap: PosedGap, scale: 4f), time: 0f);
         var index = 0L;
         var full = false;
 
@@ -30,7 +33,7 @@ public sealed partial class SdfMeshPathBakeLawTests {
                     full = true;
                 }
                 bake.Record(batch: batch);
-                bake.Complete(batch: batch, samples: AnswerPosed(batch: batch, empty: false, memberGap: 100000, scale: 4f));
+                bake.Complete(batch: batch, samples: AnswerPosed(batch: batch, empty: false, memberGap: PosedGap, scale: 4f));
             }
             return !bake.Pending;
         });

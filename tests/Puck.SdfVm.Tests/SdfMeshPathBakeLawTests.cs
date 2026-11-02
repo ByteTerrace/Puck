@@ -53,7 +53,8 @@ public sealed partial class SdfMeshPathBakeLawTests {
         var worst = positions.Max(selector: static point => MathF.Abs(x: Union(point: point, count: 2)));
         var worstAt = positions.MaxBy(keySelector: static point => MathF.Abs(x: Union(point: point, count: 2)));
 
-        Assert.True(condition: (worst < 0.004f), userMessage: $"a vertex at {worstAt} lies {worst} from the union, {Field(shape: Shapes[0], point: worstAt)} from the plate and {Field(shape: Shapes[1], point: worstAt)} from the block");
+        var diag = string.Join(" ; ", copies.Select(m => { var p = m.Positions.ToArray(); var ix = m.Indices.ToArray(); var w = Array.FindIndex(p, q => q == worstAt); return $"mesh verts={p.Length} idx={ix.Length} maxIdx={(ix.Length > 0 ? ix.Max() : 0)} tris={m.TriangleCount} levelled={m.LevelledTriangleCount} worstIndex={w} referenced={(w >= 0 && ix.Contains((uint)w))} levelsRef={(w >= 0 && m.Levels.Any(l => l.Indices.ToArray().Contains((uint)w)))}"; }));
+        Assert.True(condition: (worst < 0.004f), userMessage: $"DIAG {diag} :: a vertex at {worstAt} lies {worst} from the union, {Field(shape: Shapes[0], point: worstAt)} from the plate and {Field(shape: Shapes[1], point: worstAt)} from the block");
         Assert.DoesNotContain(collection: positions, filter: static point => ((MathF.Abs(x: (point.Y - 0.6f)) < 0.002f) && (Field(shape: Shapes[1], point: new Vector3(x: point.X, y: 0.7f, z: point.Z)) < -0.005f)));
 
         // The block keeps the resolution its own lattice gave it (MinimumCell), finer than the union's lattice: its

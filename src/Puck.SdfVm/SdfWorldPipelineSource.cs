@@ -186,21 +186,7 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
     // other kind never reads it. Release (a device loss or disposal) forgets the refusal. The inputs are read with inputsOf only when a build is due or a refusal is being
     // checked, never while the set builds. A device loss is never refused: it reaches the host's recovery.
     public SdfWorldTables? TryBuild<TState, TInputs>(IGpuDeviceContext device, SdfKernelSet? kernels, bool hostsOnDirectX, bool includeBrickPipelines, string label, TState state, Func<TState, TInputs> inputsOf, Func<SdfWorldPipelines, SdfWorldPassPipelines, TInputs, SdfWorldTables> construct) where TInputs : IEquatable<TInputs> {
-        var key = new BuildKey(
-            Device: device,
-            FaultsRevision: (device.Services.Faults?.Revision ?? 0L),
-            HostsOnDirectX: hostsOnDirectX,
-            IncludeBrickPipelines: includeBrickPipelines,
-            Kernels: kernels,
-            MeshRaster: MeshRaster,
-            RegionCopy: RegionCopy,
-            Set: Current,
-            ShadowRaster: ShadowRaster,
-            ShadowExitRaster: ShadowExitRaster,
-            GlassRaster: GlassRaster,
-            Occlusion: Occlusion,
-            SetKernels: Current?.Kernels
-        );
+        var key = KeyOf(device: device, hostsOnDirectX: hostsOnDirectX, includeBrickPipelines: includeBrickPipelines, kernels: kernels);
         TInputs inputs = default!;
         var inputsRead = false;
         var heapRevision = device.Services.Bindings.HeapReleaseRevision;
@@ -266,16 +252,7 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
             // creation fault that fired inside it moved the faults' revision, which is no change the build could retry on.
             m_refusal = refusal;
             m_refusedHeapRevision = heapRevision;
-            m_refusedKey = (key with {
-                FaultsRevision = (device.Services.Faults?.Revision ?? 0L),
-                MeshRaster = MeshRaster,
-                RegionCopy = RegionCopy,
-                Set = Current,
-                ShadowRaster = ShadowRaster,
-                GlassRaster = GlassRaster,
-                Occlusion = Occlusion,
-                SetKernels = Current?.Kernels,
-            });
+            m_refusedKey = KeyOf(device: device, hostsOnDirectX: hostsOnDirectX, includeBrickPipelines: includeBrickPipelines, kernels: kernels);
             m_refusedInputs = (inputsRead
                 ? inputs
                 : inputsOf(arg: state)
@@ -285,6 +262,23 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
         }
     }
 
+    // The key of a build from these arguments and the leases and set held now. A refusal reads it again after the failed
+    // attempt, which may have taken the leases; both readings come from here so neither can miss a lease.
+    private BuildKey KeyOf(IGpuDeviceContext device, SdfKernelSet? kernels, bool hostsOnDirectX, bool includeBrickPipelines) => new(
+        Device: device,
+        FaultsRevision: (device.Services.Faults?.Revision ?? 0L),
+        HostsOnDirectX: hostsOnDirectX,
+        IncludeBrickPipelines: includeBrickPipelines,
+        Kernels: kernels,
+        MeshRaster: MeshRaster,
+        RegionCopy: RegionCopy,
+        Set: Current,
+        ShadowRaster: ShadowRaster,
+        ShadowExitRaster: ShadowExitRaster,
+        GlassRaster: GlassRaster,
+        Occlusion: Occlusion,
+        SetKernels: Current?.Kernels
+    );
     // What a build is made from besides the holder's own inputs; a refused build is tried again when any of it changes.
     private readonly record struct BuildKey(IGpuDeviceContext? Device, long FaultsRevision, SdfKernelSet? Kernels, bool HostsOnDirectX, bool IncludeBrickPipelines, GpuPassPipeline? MeshRaster, IGpuComputePipeline? RegionCopy, SdfWorldPipelines? Set, GpuPassPipeline? ShadowRaster, GpuPassPipeline? ShadowExitRaster, GpuPassPipeline? GlassRaster, GpuPassPipeline? Occlusion, SdfKernelSet? SetKernels);
 

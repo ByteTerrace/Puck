@@ -194,6 +194,8 @@ public sealed partial class SdfWorldPassesLawTests {
         // held, so the bake's passes may run beside the shading passes on this frame.
         rig.SourceFrame = rig.SourceFrame with { Views = [rig.SourceFrame.Views[0] with { Quality = new SdfViewQuality { DisableAmbientOcclusion = true, DisableSoftShadows = true } }] };
         rig.Produce();
+        var diagWork = CadenceWork(rig: rig);
+        Assert.Fail("DIAG " + string.Join(" ", Enumerable.Range(0, diagWork.PassLabels.Length).Select(p => $"{diagWork.PassLabels[p]}={diagWork.GetPassState(pass: p)}")) + $" building={rig.World.IsBuildingCandidate} pending={rig.Selected.MeshPathBake.Pending} reason={rig.Selected.NotReadyReason}");
         Assert.Equal(expected: new[] { SdfWorldPackage.Parts.Surface,
             SdfWorldPackage.Parts.Views, SdfWorldPackage.Resolve, SdfWorldPackage.Parts.Sky,
             SdfWorldPackage.Parts.Composite }, actual: Executed(work: CadenceWork(rig: rig)).Where(predicate: static part => (part is not (SdfWorldPackage.Parts.Mask or SdfWorldPackage.Parts.Bake))));
