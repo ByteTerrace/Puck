@@ -3088,17 +3088,17 @@ export type TilingFamily = "Triangular" | "Kagome" | "TruncatedSquare" | "Rhombi
 
 export type ToonStyleDocument = {
   /**
-   * Whether the style bands; absent is on. False on a palette row keeps that material continuous whatever the world's default is; false on render.toon boots the world's default off until the lever turns it on.
+   * Whether the style bands; absent is on. False on a palette row keeps that material continuous whatever the world's default is; false on render.toon boots the world's default off until the lever turns it on, which a style with every value then bands with.
    */
   enabled?: boolean | null;
   /**
    * Diffuse band threshold in [0, 1].
    */
-  threshold?: number;
+  threshold?: number | null;
   /**
    * Full terminator width in [0.001, 0.5].
    */
-  softness?: number;
+  softness?: number | null;
   /**
    * Shadow-band reflectance, three linear RGB values in [0, 1].
    */
@@ -3106,15 +3106,15 @@ export type ToonStyleDocument = {
   /**
    * Close outline radius in output pixels, in [0, 4]; zero disables outlines.
    */
-  outlineWidth?: number;
+  outlineWidth?: number | null;
   /**
    * Distance in metres at which the outline radius halves, in [0.1, 1000].
    */
-  outlineDistance?: number;
+  outlineDistance?: number | null;
   /**
    * Crease normal cosine in [0, 0.95].
    */
-  outlineNormal?: number;
+  outlineNormal?: number | null;
   /**
    * Outline multiplier, three linear RGB values in [0, 1].
    */
@@ -3122,15 +3122,15 @@ export type ToonStyleDocument = {
   /**
    * Highlight size as one minus the half-vector cosine, in [0.001, 0.25].
    */
-  specularSize?: number;
+  specularSize?: number | null;
   /**
    * Reflected-light exposure compensation in stops, in [-4, 4].
    */
-  exposure?: number;
+  exposure?: number | null;
   /**
    * Hue-preserving highlight compression in [0, 2]; zero disables it.
    */
-  shoulder?: number;
+  shoulder?: number | null;
   /**
    * How the band treats a light's shadow visibility: Visibility (the default) keeps the penumbra, Combined snaps it to the band's edge.
    */
@@ -8447,17 +8447,17 @@ export type WorldPrototype = {
        */
       toon?: {
         /**
-         * Whether the style bands; absent is on. False on a palette row keeps that material continuous whatever the world's default is; false on render.toon boots the world's default off until the lever turns it on.
+         * Whether the style bands; absent is on. False on a palette row keeps that material continuous whatever the world's default is; false on render.toon boots the world's default off until the lever turns it on, which a style with every value then bands with.
          */
         enabled?: boolean | null;
         /**
          * Diffuse band threshold in [0, 1].
          */
-        threshold?: number;
+        threshold?: number | null;
         /**
          * Full terminator width in [0.001, 0.5].
          */
-        softness?: number;
+        softness?: number | null;
         /**
          * Shadow-band reflectance, three linear RGB values in [0, 1].
          */
@@ -8465,15 +8465,15 @@ export type WorldPrototype = {
         /**
          * Close outline radius in output pixels, in [0, 4]; zero disables outlines.
          */
-        outlineWidth?: number;
+        outlineWidth?: number | null;
         /**
          * Distance in metres at which the outline radius halves, in [0.1, 1000].
          */
-        outlineDistance?: number;
+        outlineDistance?: number | null;
         /**
          * Crease normal cosine in [0, 0.95].
          */
-        outlineNormal?: number;
+        outlineNormal?: number | null;
         /**
          * Outline multiplier, three linear RGB values in [0, 1].
          */
@@ -8481,15 +8481,15 @@ export type WorldPrototype = {
         /**
          * Highlight size as one minus the half-vector cosine, in [0.001, 0.25].
          */
-        specularSize?: number;
+        specularSize?: number | null;
         /**
          * Reflected-light exposure compensation in stops, in [-4, 4].
          */
-        exposure?: number;
+        exposure?: number | null;
         /**
          * Hue-preserving highlight compression in [0, 2]; zero disables it.
          */
-        shoulder?: number;
+        shoulder?: number | null;
         /**
          * How the band treats a light's shadow visibility: Visibility (the default) keeps the penumbra, Combined snaps it to the band's edge.
          */

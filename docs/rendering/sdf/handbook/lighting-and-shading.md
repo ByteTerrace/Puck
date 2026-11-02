@@ -481,13 +481,17 @@ mixes cel-styled creations with continuous ones (the gallery's `shape-cel` and
 `shape-cel-hard` exhibits on level 3). The standard package authors styles as
 data in `worlds/standard/styles.puck` (`celStyle`, `celHardStyle`,
 `continuousStyle`): a row names one with `toon: celStyle` and a world with
-`render { toon: celStyle }`.
+`render { toon: celStyle }`. The engine holds no look of its own: a style that
+bands authors every value below, and validation names each one it leaves out;
+a style that says `enabled: false` needs none.
 
 `world.toon on|off|toggle` is the live lever over the world's default style.
 With no argument it echoes the choice. It uses the same render-section grant and
 session-lever delivery as `world.ao`, and contributes no simulation state. A
 material with a style of its own keeps it whichever way the lever is set. The
-default starts on when `render.toon` is present and not `enabled: false`. Until
+default starts on when `render.toon` is present and not `enabled: false`. A
+world that authors no `render.toon`, or one without every value, has no default
+style for the lever to switch on. Until
 the live lever is used, reload follows the document default; afterwards the
 session choice applies to the host, routed worlds and nested views, with each
 world's own style. `world.save` folds the live choice into the render settings.
