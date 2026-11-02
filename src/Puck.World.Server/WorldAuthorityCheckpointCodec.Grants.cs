@@ -297,9 +297,69 @@ public static partial class WorldAuthorityCheckpointCodec {
                 );
             }
         );
+        writer.WriteArray(
+            items: section.HandleTables,
+            writeItem: static (w, table) => {
+                WritePrincipal(
+                    principal: table.Principal,
+                    writer: w
+                );
+                WriteCapability(
+                    capability: table.Capability,
+                    writer: w
+                );
+                w.WriteArray(
+                    items: table.Slots,
+                    writeItem: static (w2, slot) => {
+                        WriteSubject(
+                            subject: slot.Subject,
+                            writer: w2
+                        );
+                        w2.WriteInt32(value: slot.Generation);
+                    }
+                );
+                w.WriteInt32(value: table.NextGeneration);
+                w.WriteInt32(value: table.BuiltAtRevision);
+            }
+        );
         writer.WriteInt32(value: section.Revision);
 
         return writer.ToArray();
+    }
+    private static WorldHandleTableCheckpoint ReadHandleTable(ref WireReader reader) {
+        var principal = WorldWireCodec.ReadPrincipal(reader: ref reader);
+        var capability = WorldWireCodec.ReadCapability(reader: ref reader);
+        var slots = reader.ReadArray(
+            field: "grants handle table slots",
+            readItem: static (ref WireReader r) => {
+                var subject = WorldWireCodec.ReadSubject(reader: ref r);
+                var generation = r.ReadInt32();
+
+                return (subject, generation);
+            },
+            maximum: MaxCollectionCount
+        );
+        var nextGeneration = reader.ReadInt32();
+        var builtAtRevision = reader.ReadInt32();
+
+        if (
+            !reader.Failed &&
+            ((principal.Kind is not (PrincipalKind.Addon or PrincipalKind.Peer)) ||
+            slots.Any(predicate: slot => ((slot.generation < 0) || (slot.generation >= nextGeneration))))
+        ) {
+            reader.Fail(
+                detail: $"grants handle table {principal.Describe()} {capability} names a principal inside the trust boundary or a slot generation outside its counter {nextGeneration}",
+                refusal: WireRefusal.PayloadMalformed
+            );
+        }
+
+        return new WorldHandleTableCheckpoint(
+            BuiltAtRevision: builtAtRevision,
+            Capability: capability,
+            NextGeneration: nextGeneration,
+            Principal: principal,
+            Slots: [.. slots.Select(selector: static slot => (slot.subject, slot.generation))]
+        );
     }
     private static WorldSessionCheckpoint ReadSession(ref WireReader reader) {
         var session = WorldWireCodec.ReadPrincipal(reader: ref reader);
@@ -488,6 +548,22 @@ public static partial class WorldAuthorityCheckpointCodec {
             );
         }
 
+        var handleTables = reader.ReadArray(
+            field: "grants handle tables",
+            readItem: static (ref WireReader r) => ReadHandleTable(reader: ref r),
+            maximum: MaxCollectionCount
+        );
+
+        if (
+            !reader.Failed &&
+            (handleTables.Select(selector: static table => (table.Principal, table.Capability)).Distinct().Count() != handleTables.Length)
+        ) {
+            reader.Fail(
+                detail: "grants hold one handle table twice",
+                refusal: WireRefusal.PayloadMalformed
+            );
+        }
+
         var revision = reader.ReadInt32();
 
         if (!reader.TryFinish(failure: out var failure)) {
@@ -504,6 +580,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             EventBudgets: eventBudgets,
             Exclusive: exclusive,
             Grantees: grantees,
+            HandleTables: handleTables,
             HoldCeilings: holdCeilings,
             KindMasks: kindMasks,
             PoolCeilings: poolCeilings,

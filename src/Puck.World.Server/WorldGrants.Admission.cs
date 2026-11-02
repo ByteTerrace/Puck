@@ -35,7 +35,8 @@ public sealed partial class WorldGrants {
         ApplyLifecycleEvents(
             admitted: [admitted],
             disconnected: [],
-            ordered: false
+            ordered: false,
+            input: false
         );
         if (identity is not null) {
             Host.Population.SetSeatProfile(
@@ -93,7 +94,8 @@ public sealed partial class WorldGrants {
         ApplyLifecycleEvents(
             admitted: [],
             disconnected: [peer],
-            ordered: true
+            ordered: true,
+            input: true
         );
     }
     /// <summary>Removes a peer admitted by a transfer whose multi-member commit is rolling back, including every
@@ -201,6 +203,7 @@ public sealed partial class WorldGrants {
                 admitted: [admitted],
                 disconnected: [],
                 ordered: true,
+                input: true,
                 mintedGrants: BuildAdmissionGrants(
                     principal: admitted.Identity,
                     bodyIndex: admitted.BodyIndex,
@@ -238,10 +241,12 @@ public sealed partial class WorldGrants {
             return false;
         }
 
+        // A transfer commit's admission is its landing's consequence: the tape's arrival entry lands it again.
         ApplyLifecycleEvents(
             admitted: [admitted],
             disconnected: [],
             ordered: !authorityTransferred,
+            input: !authorityTransferred,
             mintedGrants: BuildAdmissionGrants(
                 principal: admitted.Identity,
                 bodyIndex: admitted.BodyIndex,
@@ -279,7 +284,9 @@ public sealed partial class WorldGrants {
 
         return templates;
     }
-    internal void ApplyLifecycleEvents(IReadOnlyList<WorldPeerEventEntry> admitted, IReadOnlyList<WorldPeerEventEntry> disconnected, bool ordered, IReadOnlyList<WorldGrant>? mintedGrants = null) {
+    // input: whether these events are authority inputs (a connection opened or closed) rather than the consequences of a
+    // recorded cause a replay re-executes; WorldTick.DispatchServerEvent states the rule.
+    internal void ApplyLifecycleEvents(IReadOnlyList<WorldPeerEventEntry> admitted, IReadOnlyList<WorldPeerEventEntry> disconnected, bool ordered, bool input, IReadOnlyList<WorldGrant>? mintedGrants = null) {
         if (disconnected.Count > 0) {
             var revoked = new List<WorldGrant>();
 
@@ -292,7 +299,8 @@ public sealed partial class WorldGrants {
                     Entries: [.. disconnected],
                     RevokedGrants: revoked
                 ),
-                ordered: ordered
+                ordered: ordered,
+                input: input
             );
         }
 
@@ -313,7 +321,8 @@ public sealed partial class WorldGrants {
                     Entries: [.. admitted],
                     MintedGrants: minted
                 ),
-                ordered: ordered
+                ordered: ordered,
+                input: input
             );
         }
     }
@@ -427,7 +436,7 @@ public sealed partial class WorldGrants {
             if (stillTrusted is not { } current) {
                 if (Host.Population.PeerAuthorityTransferred(bodyIndex: index) &&
                     Host.Population.TryCaptureTransferredEntity(index: index, peer: out var peer)) {
-                    ApplyLifecycleEvents(admitted: [], disconnected: [peer], ordered: false);
+                    ApplyLifecycleEvents(admitted: [], disconnected: [peer], ordered: false, input: false);
                 } else {
                     // The socket/control-session owner still owes its one cleanup. Disconnecting here too could
                     // park this body, let a fresh credential resume its generation, then revoke that fresh session
@@ -716,10 +725,12 @@ public sealed partial class WorldGrants {
                         disconnected: disconnected
                     );
 
+                    // The session request is the recorded input; re-executing it re-derives these events.
                     ApplyLifecycleEvents(
                         admitted: admitted,
                         disconnected: disconnected,
-                        ordered: true
+                        ordered: true,
+                        input: false
                     );
 
                     return new SessionReply(

@@ -436,8 +436,11 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// rebuild, a screen op applies synchronously with no drain-time gap for its content to move between submission
     /// and apply, so the authority gate runs first). The replay tape attaches only while armed; clients never receive this submission-only seam.</summary>
     public Action<WorldScreenOp, Principal>? ScreenOpTap { get; set; }
-    /// <summary>Observes server-authored ordered events after they take effect. The replay tape attaches only while
-    /// armed; clients never receive this submission-only seam.</summary>
+    /// <summary>Observes each server-authored event that is an authority input after it takes effect: a peer
+    /// connection admitted or closed, or a session admitted, embodied or ended. An event a recorded cause produces (a
+    /// document install's inhabitant reconciliation, a census change, a boot, a transfer landing) is not observed,
+    /// because re-executing that cause dispatches it again. The replay tape attaches only while armed; clients never
+    /// receive this submission-only seam.</summary>
     public Action<WorldServerEvent>? ServerEventTap { get; set; }
     /// <summary>Gets the live SDF contact field under the field provider, or <see langword="null"/> under the analytic
     /// provider — the <c>world.collision.probe</c>/<c>world.collision.status</c> reads' window onto the
@@ -689,7 +692,8 @@ public sealed partial class WorldServer : IWorldServerHost {
         m_grants.ApplyLifecycleEvents(
             admitted: admittedAtBoot,
             disconnected: disconnectedAtBoot,
-            ordered: false
+            ordered: false,
+            input: false
         );
 
         // The document's SHIPPED grants: applied AFTER the permissive seed, in document order, through the identical Grant() path

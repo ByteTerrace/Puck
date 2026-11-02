@@ -359,7 +359,13 @@ re-derive during the drive, so taping them (mutation OR outcome) would apply
 each twice. A tap that captured only the loopback
 would silently drop every forwarded mutation — the rule is that any kind
 reachable from a socket or a forwarder belongs on the server twin. `WorldServer.ServerEventTap` records each lifecycle event
-after it takes effect, in drain order; `WorldServer.RebuildTap` is the same
+that is an authority input (a peer connection opened or closed, a session admitted, embodied or ended) after it
+takes effect, in drain order. A lifecycle event a recorded cause produces is never taped: a document install's
+inhabitant reconciliation (a mutation, a rebuild, a rule effect or a state write removing an inhabited placement),
+a census `SetPopulation` session request, the boot and a transfer landing all dispatch theirs with `input: false`
+(`WorldTick.DispatchServerEvent`), because the re-drive re-executes the cause and dispatches the event again at the
+cause's own point in the tick. A taped copy would apply it twice, the copy ahead of the tick's rules, where a rule
+reading `$population` sees it (`rule-faults-tests.puck` reproduces exactly that). `WorldServer.RebuildTap` is the same
 apply-time shape, fired from inside `ApplyRebuild` once it has RESOLVED its
 candidate and computed the CAS content hash but BEFORE any refusal gate
 (grant check, dirty-journal guard, validate, capacity, solids) runs — so a

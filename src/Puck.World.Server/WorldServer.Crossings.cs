@@ -6,9 +6,6 @@ public sealed partial class WorldServer {
     private ulong? m_uncertainCrossing;
     private WorldCrossingRecord? m_uncertainRecord;
 
-    // Set while the escrow lands a committed cohort: the admissions it makes are the arrival's own consequences.
-    internal bool LandingArrival { get; set; }
-
     /// <summary>Gets or sets the observer of every arrival a commit here decided with at least one traveler landed: the
     /// arrival as the commit bound it, and its outcome (each landed traveler's generation, and whether the commit rolled
     /// the landings back because a member was refused or its record could not be made durable). A commit lands under the
