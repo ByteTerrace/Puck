@@ -604,7 +604,10 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
         var drawIndirectCount = device.CmdDrawIndirectCountKhr;
 
         if (drawIndirectCount is null) {
-            throw new NotSupportedException(message: $"The Vulkan device was created without {VulkanDeviceCommands.DrawIndirectCountExtension}.");
+            // Every supplied record is initialized, with zero vertex/instance counts for a rejected draw. The recorder
+            // calls once per slot on this fallback, so multiDrawIndirect is not needed either.
+            device.CmdDrawIndirect(commandBufferHandle, bufferHandle, offset, maxDrawCount, stride);
+            return;
         }
 
         drawIndirectCount(

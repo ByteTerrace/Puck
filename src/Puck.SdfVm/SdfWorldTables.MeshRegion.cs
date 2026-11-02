@@ -76,7 +76,6 @@ public sealed partial class SdfWorldTables {
     private uint m_meshDrawCount;
     private uint m_glassDrawCount;
 
-    private SdfMeshBox?[] m_meshDrawBoxes = [];
     // The draw records as the next write sends them, and one mesh's words as a flush stages them.
     private uint[] m_meshDrawWords = [];
     private uint[] m_meshWords = [];
@@ -133,12 +132,6 @@ public sealed partial class SdfWorldTables {
     public uint GlassDrawCount => m_glassDrawCount;
     /// <summary>Gets the opaque draws the latest frame's mesh pass and shadow cascades rasterize.</summary>
     public uint OpaqueDrawCount => (m_meshDrawCount - m_glassDrawCount);
-
-    // The draw list the latest frame staged, whose draws a view's mesh pass records one call each.
-    internal ReadOnlySpan<SdfMeshDraw> MeshDraws => m_stagedDraws.AsSpan(length: m_stagedCount, start: 0);
-    // The world box of each staged draw, by its index in MeshDraws, or null for a draw no host box bounds
-    // (SdfMeshBox.TryOf), which every pass draws.
-    internal ReadOnlySpan<SdfMeshBox?> MeshDrawBoxes => m_meshDrawBoxes.AsSpan(length: ((int)m_meshDrawCount), start: 0);
 
     // Packs new draws or a new revision, growing the region when the list needs more
     // bytes; the upload sends the slot what it owes.
@@ -254,14 +247,10 @@ public sealed partial class SdfWorldTables {
 
         m_meshDrawCount = ((uint)staged.Count);
         m_glassDrawCount = 0;
-        if (m_meshDrawBoxes.Length < staged.Count) {
-            m_meshDrawBoxes = new SdfMeshBox?[Math.Max(val1: staged.Count, val2: (2 * m_meshDrawBoxes.Length))];
-        }
         for (var index = 0; (index < staged.Count); index++) {
             var draw = staged[index];
 
             if (draw.Glass) { m_glassDrawCount++; }
-            m_meshDrawBoxes[index] = (SdfMeshBox.TryOf(box: out var box, draw: in draw) ? box : null);
         }
         if (m_stagedDraws.Length < staged.Count) {
             m_stagedDraws = new SdfMeshDraw[Math.Max(val1: staged.Count, val2: (2 * m_stagedDraws.Length))];
@@ -305,7 +294,6 @@ public sealed partial class SdfWorldTables {
                 if (draw.Glass != m_stagedDraws[index].Glass) {
                     m_glassDrawCount = (draw.Glass ? (m_glassDrawCount + 1) : (m_glassDrawCount - 1));
                 }
-                m_meshDrawBoxes[index] = (SdfMeshBox.TryOf(box: out var box, draw: in draw) ? box : null);
                 m_stagedDraws[index] = draw;
                 if (run < 0) { run = index; }
 

@@ -27,73 +27,81 @@ Ranked by payoff at the latest batch. Lanes in flight are named; the lead
 resolves their edits to this file at merge.
 
 The owner's direction: fundamentals first, known or found along the way
-(AGENTS.md), with vigilance against duplication. The first six items are the
-highs: the three stages of the engine job system, the bake, the companion
-custody build and certified field contact. The debug
+(AGENTS.md), with vigilance against duplication. The frame bar, the cold-bake
+bar and the highs that stand before `main` lead. Work whose correctness rests
+on an invariant is designed and reviewed before code
+([orchestration](../../.claude/skills/orchestration/SKILL.md)). The debug
 world is the proving ground, so every plan's checks run on it, and what the
 experimental worlds have that it lacks is ported into it
 ([port](#port-the-experimental-worlds-missing-features)).
 
-1. [Engine job system](#engine-job-system), scheduling [high]: the rated burst
-   is off tick frames and unseen bodies hold; what remains is spreading the
-   rated views' and screens' phases and the tick frame's own tick-bound view
-   recording, which a tick plus produce still pushes past 16.7 ms.
-2. [Engine job system](#engine-job-system), the garbage-collection cuts on
-   today's runtime [high]: the bake's managed contour and refinement working
-   memory, and steady irradiance blocks and dressed-pick snapshots; measured
-   residuals are in the packet. Native storage uses `IAllocator` and
-   `MimallocAllocator`.
-3. [Engine job system](#engine-job-system), the memo [high]: the scheduler, the
-   deterministic parallel tick (about 70 % of a tick partitions), parallel view
-   recording (about 36 % of produce), memory ownership (scratch, borrowing and
-   handoff; one byte-accounting owner; the native-storage list) and the
-   state/jobs contract, reviewed before any build; phase 3 and F17 of the
-   [tick-to-produce memo](simulation-thread.md) meanwhile.
-4. [Bake proportional to change](#bake-proportional-to-change) [high]: narrow
-   the bake closure and share one store across both backends, then
-   `CloseSheets` and the collapse.
-5. [Transfers](#transfers-federation-and-server) [high]: the companion steps 6
-   to 10.
+0. The first settle window (the lead): drain, then under `puck lease quiet`
+   the culling measurements M1/M2 on R2's GPU selection, a cold bake per
+   backend against the one-minute bar, the frame bar at the standard stops on
+   both backends with the day cycle running, the exit layer's cost as the
+   transmission baseline, Vulkan's draw-count gap, and `puck verbs --check`.
+   It decides V1 against V2 and sets every later timing's baseline.
+1. [Visibility](visibility.md) V1 or V2 as M1 decides [high, the frame bar],
+   after the draw-identity fix R2's review found
+   ([GPU robustness](#vulkan-regressions-and-gpu-robustness)).
+2. [Transmission](transmission.md) [high]: its implementation lanes in order,
+   once the owner's look calls are answered or the design's choices stand.
+3. [Bake proportional to change](#bake-proportional-to-change) [high, the
+   cold-bake bar]: a static copy bakes in its prototype's frame and is shared,
+   bake grouping and detail derive from meaning rather than spelling, then
+   narrow the closure and share one store across both backends.
+4. [Disclosure](disclosure.md#the-build-order) [high, the long pole before
+   `main`]: steps 1-6 behind the harness, step 0b's principals, and the
+   owner's search-output decision.
+5. [Engine job system](#engine-job-system) [high]: scheduling (spread the
+   rated views and the tick frame's tick-bound recording), the
+   garbage-collection cuts, then J1 with T1's measurements; profile snapshot
+   emission before T3.
 6. [Certified field contact](#certified-field-contact): box and ellipsoid
    bodies, then clearance on slopes within a third of a metre.
-7. [Delivery](#delivery-launcher-and-ci): CI's steady state, the shader cache
-   and the GC-hole retirement.
-8. [Author leaks to the standard](#author-leaks-to-the-standard): the overlay
-   text advance and the helper templates.
-9. [Port the experimental worlds' missing features](#port-the-experimental-worlds-missing-features):
+7. [Transfers](#transfers-federation-and-server) [high]: the companion steps 6
+   to 10.
+8. [Language and authoring](#language-and-authoring) and [author leaks to the
+   standard](#author-leaks-to-the-standard): what lang-2 leaves of S11, the
+   cost corpus, the overlay text advance.
+9. Antigravity's coding trial ([agent tooling](#agent-tooling-and-skills)),
+   after the settle window.
+10. [Delivery](#delivery-launcher-and-ci): CI's steady state, the shader cache
+    and the GC-hole retirement.
+11. [Port the experimental worlds' missing features](#port-the-experimental-worlds-missing-features):
    the meadow and the creature garden now, as the bake's and the parallel
    tick's forcing workloads; the second seat, the authored passes and the
    quilt each ahead of the job-system step they prove (the owner's ruling,
    [order](port-experimental.md#lanes-in-order)).
-10. [Edit to running, hot reload and boot](#edit-to-running-hot-reload-and-boot):
+12. [Edit to running, hot reload and boot](#edit-to-running-hot-reload-and-boot):
     the boot's JSON round trip in `BindLive` (about 0.7 s), then a reboot for
     an edit outside `PuckHotReload`; measure the cold and warm builds.
-11. [The valley's terrain](#the-valleys-terrain): terrain pass step 1 (the image
+13. [The valley's terrain](#the-valleys-terrain): terrain pass step 1 (the image
     meter), with steps 2, 3, 6 and step 4's bound fix in parallel.
-12. [Refactoring campaign](#refactoring-campaign): `GpuRegion.Grow` as the only
+14. [Refactoring campaign](#refactoring-campaign): `GpuRegion.Grow` as the only
     growth path with the uniform view limit enforced there, the two overlay
     writers, the survey's remaining groups.
-13. [Collision versus drawn mesh](#collision-versus-drawn-mesh): the groups sharp
+15. [Collision versus drawn mesh](#collision-versus-drawn-mesh): the groups sharp
     boxes left worse (the board game room's table, gallery floors 0, 2 and 3,
     the Wonderland room, the lift doors, the deck television).
-14. [Lighting and GI](#lighting-and-gi): light a cold area from the coarser
+16. [Lighting and GI](#lighting-and-gi): light a cold area from the coarser
     levels or the sky term the moment a view arrives; the rest after the image
     meter.
-15. [Derived products are caches](#derived-products-are-caches): build the
+17. [Derived products are caches](#derived-products-are-caches): build the
     generated `.nes` cartridges and firmware images on demand and remove the
     bytes from git; narrow the compiled-world key; measure the wasm modules.
-16. [Test runner and replay](#test-runner-and-replay): the incremental authority
-    hash, its segments the memo's partitions.
-17. [Bake detail](#bake-detail): measure the static round-section term.
-18. [Residency and streaming](#residency-and-streaming): step 2 after the memo
+18. [Test runner and replay](#test-runner-and-replay): profile what recording
+    still folds whole every tick before choosing the next segment.
+19. [Bake detail](#bake-detail): measure the static round-section term.
+20. [Residency and streaming](#residency-and-streaming): step 2 after the memo
     names GI's work units; re-measure with the display on.
-19. [Vulkan regressions and GPU robustness](#vulkan-regressions-and-gpu-robustness):
+21. [Vulkan regressions and GPU robustness](#vulkan-regressions-and-gpu-robustness):
     the crossing frame and the pixel-pass gap.
-20. [MCP and the operator attachment](#mcp-and-the-operator-attachment): the
+22. [MCP and the operator attachment](#mcp-and-the-operator-attachment): the
     schema switch; the stale lease holder.
-21. [Tests (suspended)](#tests-suspended): triage the failing Windows shards by
+23. [Tests (suspended)](#tests-suspended): triage the failing Windows shards by
     cause.
-22. [Card tables](#card-tables-in-the-board-game-room) (the windowed look, then
+24. [Card tables](#card-tables-in-the-board-game-room) (the windowed look, then
     Spider), [Debug tools](#debug-tools) (windowed checks and exhibits),
     [Sweep](#sweep-and-visual-checks) (the paired tour) and
     [Temporal](#temporal-shimmer-and-cadence-flicker) (the blink re-measure).
@@ -123,15 +131,24 @@ Each waits on the owner: what the engine should do, how it looks and feels, and 
   the same every time. No engine check stands between the restricted read and
   the public write today (transforms have `TransformWidensAudience`; search
   outputs do not).
-- Two looks in the transmission design ([transmission](transmission.md)):
-  whether a body's own overhang (the Moth's wing over her torso) shadows its
-  wrapped dark side continuously across the terminator (the design's choice,
-  two depth layers and an identity), or never (one layer and an identity,
-  showing a seam of about a quarter of the sun at `wrap: 0.35`); and whether
-  wrap stays independent of thickness (the design's choice) or a thick body's
-  dark side darkens as light passes through it, as a separate material term.
-  The resolution floors, stated in the plan, follow from the shadow map's
-  texel size; the grazing allowance `S` defaults to 4 texels.
+- Looks in the transmission design ([transmission](transmission.md)), each
+  with the design's choice first:
+  - A body's own overhangs and hollows shadow its wrapped dark side (the
+    next-surface rule): the Moth's wing shadows her torso's dark side as it
+    does her lit side; a hollow box's outer back reads dark; overlapping
+    components of one authored mesh over-shadow each other. The alternative,
+    own matter never shading its own dark side, costs one layer less and shows
+    a seam of `wrap/(1+wrap)` (about a quarter of the sun at `wrap: 0.35`) at
+    the terminator under every overhang.
+  - A receiver the shadow map cannot resolve reads from same-body neighbours,
+    or dark, never lit: about 2.5° of surface on smooth baked bodies (under a
+    millimetre on the Moth), wider on authored meshes without vertex normals.
+    Reading lit there is the leak every earlier round chased.
+  - Wrap stays independent of thickness; light passing through a thick body
+    can come later as a separate material term.
+  - The Steam Deck is measured at Full quality, the bar's highest quality:
+    3.5 ms for three cascades inside its 22.2 ms frame, with a live-byte budget
+    at the portal stop. Confirm or set the budgets.
 - Decided by the owner: night exposure is the lead's call, provided authors can
   style it as their vision demands (the floor and curve stay authored data,
   keyable on the day clock; the debug world authors a readable deep-blue
@@ -169,11 +186,17 @@ M1 and M2a are built.
 - [medium] T1's snapshot row phase is about 0.21 ms of a debug tick, so most of
   the memo's 9-13 % snapshot-emission share lies elsewhere (the serial tail or
   the subscribers' `DeliverSnapshot`); profile it before T3 or any R step
-  assumes otherwise. J1 inherits two T1 measurements: the fork pays only past
-  about 500 rows, and a preempted worker holding a partition holds the join
-  (mean up to 836 µs against a 125 µs median), so J1 sizes partitions to bound
-  that tail. The headless debug world also builds snapshots for its night and
-  garden session instances every tick. (from: t1-snapshot)
+  assumes otherwise. The snapshot now writes serially under two full
+  partitions (512 delivered rows), where T1 measured no gain from a fork. J1
+  inherits the other measurement: a preempted worker holding a partition holds
+  the join (mean up to 836 µs against a 125 µs median). Smaller partitions do
+  not bound it: 128-row partitions lowered the debug world's median from 123 to
+  129 µs to 78 to 86 µs while their means stayed 205 to 794 µs, because the tail
+  is the host's preemption, not the partition's work. Bounding it is a pool
+  matter for J1 (its cap against oversubscription), measured on a quiet machine
+  before anything else is tried. The headless debug world also builds
+  snapshots for its night and garden session instances every tick.
+  (from: t1-snapshot)
 
 The owner's direction: performance with quality means removing a cost at its
 cause, never trading latency or lighting quality for frame time. The engine
@@ -731,14 +754,16 @@ system can take, from `dotnet-trace` thread-time samples of the frame thread
   mechanism to placement roots, measure pose packing and draw recording, and
   preserve planted roots, continuous world-phased gusts and independent tip
   flutter (the [visibility plan](visibility.md#v2-instance-updates-proportional-to-change-and-authored-motion-on-the-gpu)'s
-  step V2a). Triangle detail already exists (`SdfWorldPassRecorder.cs:886`);
-  do not infer that triangle LOD is missing. Draw count is the other cost:
-  4,215 draws for 288 unique blade geometries, one draw per blade part. Its
-  cause fix (ordered compaction and (geometry, level) instance buckets on R2's
-  counted indirect path, with every consumer of per-draw identity moved) is
-  the visibility plan's V1, not fewer blades. The meadow is also R1's forcing
-  workload: measure produce's draw-recording share before and after. The
-  controlled-engine-build
+  step V2a). R2 moves raster culling and existing triangle detail into
+  `frame/sdf-mesh-selection.hlsli`, through the same counted indirect path;
+  [R2 observations](engine-job-system.md#r2-observations) holds its measurements.
+  Draw count is the other cost: 4,215 draws for 288 unique blade geometries,
+  one draw per blade part, or 14.6 draws per geometry. Its cause fix (ordered
+  compaction and (geometry, level) instance buckets, with every consumer of
+  per-draw identity moved and depth-tie order preserved) is the visibility
+  plan's V1, beyond R2's constant CPU recording, not fewer blades. The meadow
+  is also R1's forcing workload: measure produce's draw-recording share before
+  and after. The controlled-engine-build
   before/after observations and their machine-load limits are in
   [port lane 9](port-experimental.md#9-meadow-and-foliage).
 - [high] Measure the meadow before ordering the visibility work, in the lead's
@@ -751,6 +776,12 @@ system can take, from `dotnet-trace` thread-time samples of the frame thread
   part at `world.detail 0`, `1` and `2`, on the RTX 2060 and at the Deck's
   resolution; it decides whether V3 and V4 come ahead of V2 there. Every
   frame number taken so far, R2's included, is load-bound and ranks nothing.
+  Include R2's unresolved Direct3D 12 lobby reading (68.78 ms produce against
+  39.25–40.16 ms CPU controls) in that quiet-window trace; [R2 observations](engine-job-system.md#r2-observations)
+  holds the paired counters and GPU pass costs.
+  Include the unmatched final-merge draw-count variance there too: after
+  `5a73e11295`, Vulkan / Direct3D 12 meadow validation reads 2,506 / 26,657
+  draws at high/native settings; its cause is unconfirmed (same observations).
   Owner: the lead.
 - [medium] `SdfMeshPathBake.Dress` rebuilds every draw of every group whenever
   one dynamic slot moved, and for each dynamic group scans `MeshAssetSlots`
@@ -1863,11 +1894,6 @@ them verbatim repeats) under-use the language:
 The [illumination plan](illumination.md) holds the research round's decisions
 and the order they land in; the items below are its findings and checks.
 
-- [medium] The standard's `dayCycle` (`worlds/standard/skies.puck`) now needs
-  every world that expands it to author a light named `moon`. A standard
-  template that only works once an author adds a named row is a trap: the
-  template emits its own moon light, overridable by id like any standard row.
-  (from: illum-step2)
 
 - [high, the illum1-fix lane is fixing] Step 1's self-transmission allowance
   (`passes/sdf-surface-stage.hlsli:219,282`) estimates thickness from
@@ -1933,7 +1959,7 @@ and the order they land in; the items below are its findings and checks.
   bounce converges over relights toward the multi-bounce limit rather than
   stopping at the tier's two or three sweeps, so interiors lit mostly by
   bounce may read brighter than step 1's stills. A switched-off lamp's bounce
-  fades over up to sixteen relights rather than vanishing. Compare the gather
+  fades over the bounce sweeps rather than vanishing. Compare the gather
   stops with step 1's stills on a quiet machine. (from: illum-step2)
 - [high] The wrapped side's self-shadow term has failed three reviews, each
   in a new mesh-topology case: curvature transmission, then the exit layer,
@@ -1950,9 +1976,16 @@ and the order they land in; the items below are its findings and checks.
   sheet with a box front; a doubled triangle passes edge pairing). The
   [transmission plan](transmission.md) now records a body identity per
   cascade texel beside the depth, peels by identity, and shadows a wrapped
-  receiver by any other body in front and by its own body's second chord;
-  the packet's exit-layer items below close with it. (from: illum1fix2-astra,
-  transmit-astra, transmit-design)
+  receiver by any other body in front and by its own body's next surface
+  along the light. Its second review settled the body index's lifetime (one
+  table per residency, no reuse under a held cascade, a generation in the
+  word), a canonical body key apart from `MotionIdentity`, that two surfaces
+  cannot infer occupancy (overlapping authored components over-shadow), an
+  unresolved-footprint policy that never reads a distant blocker absent, a
+  receiver handle in the GI's cached hits, and the Deck measured at Full; its
+  remaining mediums are the implementation lanes' checks. The packet's
+  exit-layer items below close with it. (from: illum1fix2-astra,
+  transmit-astra, transmit2-astra, transmit-design)
 - From illum1-fix: the cascades' exit layer doubles each cascade pass's draws
   and vertices (`world.counters gpu pass sdf.world$shadow-near` at the stage:
   460 draws and 2.62 M vertices on Direct3D 12, two render passes) and adds a
@@ -2387,6 +2420,29 @@ no sooner than in plan order (near 4 m: 47 of 135 at 160 s, all at 434 s).
    the moons.
 
 ### Vulkan regressions and GPU robustness
+
+- [medium, before V1] Draw identity is tracked twice and the occlusion visible
+  bit uses neither: R2's per-mesh identity counter (`SdfMesh.cs:331-335`,
+  `:612`, read at `sdf-mesh-selection.hlsli:79`) beside the residency's
+  per-index identity for motion history (`SdfWorldTables.MeshRegion.cs:280-293`),
+  while `sdf-mesh-occlusion.comp.hlsl:208-227` checks no identity. A
+  renumbering at the meadow (an inserted draw, or the landing subset at
+  `MeshRegion.cs:201-207`) hands each blade a neighbour's level and visible bit:
+  a cost spike and a pop in the 1.0-1.1 band. One per-record generation checked
+  for both; V1 swaps it for instance identity. (from: r2-review)
+- [low] R2's lows (r2-review): the box cull exists in C# (`SdfMeshCull.Keeps`,
+  now only the pose rates) and HLSL with nothing keeping them equal; Vulkan
+  never checks `maxDrawIndirectCount` (`VulkanGpuRecorder.cs:285-296`), so a
+  world past 65,535 draws breaks on a spec-minimum driver; the single-slot
+  Vulkan fallback grows CPU recording with candidates and hard-codes the mesh
+  push stages in the generic backend (`:291`); the wave-sum proof assumes 64
+  lanes; per-geometry facts are copied into every draw record and the level
+  count is stored twice (`SdfMesh.cs:603`, `:614`); a mesh with 256 or more
+  levels throws at staging (`:553`) instead of being refused where it is
+  built; `IGpuRecorder.CanDrawIndirectCount` is dead; stale docs at
+  `SdfMeshOcclusion.cs:11`, `SdfWorldPassRecorder.cs:755`, `SdfMesh.cs:322-324`,
+  `sdf-mesh-shadow.vert.hlsl:8-9`, `IGpuRecorder.cs:111-122`; and, unconfirmed,
+  a discarded recording that grew history leaves it uninitialized.
 
 - [low · unconfirmed] The bake's output may differ by backend. One after-run
   read 1,101,923,007 samples and 45,044,555 triangles on Vulkan against
@@ -3409,6 +3465,21 @@ ordinary · Next: new content and art on the owner's call.
 ### Agent tooling and skills
 
 Owner: the lead · ordinary · Next: the Monitor hook check.
+
+- After the first settle window: give Antigravity (Gemini Argon) a fair
+  coding trial before deciding its role (the owner's direction: it has so far
+  done research only, where its code citations were unreliable). Two bounded
+  issue fixes from this file, each in its own worktree with a mechanical check:
+  the four duplicate `HeapAllocator` test allocators and `IAllocator`'s untrue
+  documentation (small), and the Superellipsoid's loose far field plus its
+  small-radius CPU/GPU disagreement in both interpreters (medium, with laws
+  shown failing first). Score each objectively, beside comparable Claude and
+  Codex lanes: does it build and pass what it claims (the lead reruns every
+  command); high and medium findings from a Claude and a Codex review; brief
+  adherence (scope, reuse of existing mechanisms, no shared-state git); report
+  honesty (every claimed file:line and result checked); and whether its runs
+  finish headless without stalling. Record the verdict in the orchestration
+  skill's routing table either way.
 
 - The agent-policy hook may not cover Claude Code's `Monitor` tool:
   `.claude/settings.json` matches `Bash|PowerShell`, and whether a Monitor

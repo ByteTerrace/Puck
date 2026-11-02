@@ -9,16 +9,17 @@ namespace Puck.SdfVm;
 /// frame slot or -1, the word the mesh's members sit at, the carry every world position and normal the draw resolves
 /// goes through last (a unit rotation quaternion, a translation, then the uniform scale a position takes before the
 /// translation), the world-space clip plane (<c>dot(n, x) + d</c>, a point with a negative value not drawn; all zeros
-/// draws everything), and the first triangle of each coarser level of detail.
+/// draws everything), the shared level table's address and count, and the draw's bounds and selection metadata.
 /// </summary>
 public static class SdfMeshRecord {
     /// <summary>The words of one draw's record.</summary>
-    public const int DrawWords = 47;
-    /// <summary>The first of two words: the first triangle of the mesh's first and second coarser levels of detail among
-    /// its levelled triangles (<c>SdfMesh.Levels</c>; a level past the mesh's coarsest names the coarsest). A draw of a
-    /// level (<see cref="SdfKernelInterfaces.MeshLevelShift"/>) draws its triangles from there, its vertex id counting
-    /// from zero on every backend.</summary>
-    public const int LevelTriangleWord = 45;
+    public const int DrawWords = 63;
+    /// <summary>The first of four four-word rows used by GPU draw selection: center and flags; half X and stretch;
+    /// half Y and mesh identity; half Z and level count.</summary>
+    public const int SelectionWord = 47;
+    /// <summary>The first of two words: the absolute word of the mesh's shared level table, then its coarser level count.
+    /// Each level, zero included, stores its first triangle, vertex count and error as three words.</summary>
+    public const int LevelTableWord = 45;
     /// <summary>The first of the carry rotation's four words (x, y, z, w).</summary>
     public const int CarryRotationWord = 33;
     /// <summary>The first of the carry translation's three words.</summary>

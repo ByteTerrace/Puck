@@ -14,18 +14,20 @@
 //   visible set takes the verdict, and a visible candidate the first phase did not draw is drawn by the second phase.
 //
 // Draws are counted on the GPU, into the pass's drawn counts past the work counter rows (GpuKernelCounters.DrawnWords).
-// The candidates' header holds their count and the pyramid's levels; each phase writes one GpuDrawIndirectCommand a
-// candidate at the candidate's place, empty where it draws nothing, the identity first and the first instance the draw.
-// KEEP IN SYNC with SdfMeshOcclusion.
+// The controls' header holds the draw count and pyramid levels; each phase writes one GpuDrawIndirectCommand a
+// candidate at the candidate's place, empty where it draws nothing, with the identity first and first instance zero.
+// KEEP IN SYNC with SdfMeshOcclusion. Bounds, levels and mesh identity come from the retained mesh region.
 #include "../isa/sdf-mesh.interface.hlsli"
 #include "../frame/sdf-viewport.hlsli"
 #include "../frame/sdf-mesh.hlsli"
+#include "../frame/sdf-mesh-selection.hlsli"
 
 static const uint SdfOcclusionEarly = 0u;
 static const uint SdfOcclusionDepth = 1u;
 static const uint SdfOcclusionLate = 2u;
 static const uint SdfOcclusionUncovered = 0x7F800000u;
 static const uint SdfOcclusionCommandWords = 5u;
+static const uint SdfOcclusionPhases = 3u;
 static const uint SdfOcclusionDrawnWords = 4u;
 static const uint SdfOcclusionUnboxed = 1u;
 
@@ -75,7 +77,7 @@ void sdfOcclusionCount(uint draws, uint vertices) {
 }
 // Writes a candidate's command into a phase's list at the candidate's own record, so each phase draws in the order the
 // host staged its draws, as the box cull alone does: depth ties resolve alike. A candidate the phase does not draw gets
-// an empty command. The identity is the draw with the level the host chose for it from bit SDF_MESH_LEVEL_SHIFT up, which
+// an empty command. The identity is the draw with the level the selection kernel chose for it from bit SDF_MESH_LEVEL_SHIFT up, which
 // the vertex stage reads its level's first triangle by.
 void sdfOcclusionEmit(uint phase, uint candidate, uint identity, uint vertices, bool emit) {
     uint words;
@@ -83,7 +85,7 @@ void sdfOcclusionEmit(uint phase, uint candidate, uint identity, uint vertices, 
 
     sdfMeshOcclusionDrawsRW.GetDimensions(words, stride);
 
-    uint capacity = (words / (2u * SdfOcclusionCommandWords));
+    uint capacity = (words / (SdfOcclusionPhases * SdfOcclusionCommandWords));
 
     if (candidate < capacity) {
         uint word = (((phase * capacity) + candidate) * SdfOcclusionCommandWords);
@@ -92,7 +94,7 @@ void sdfOcclusionEmit(uint phase, uint candidate, uint identity, uint vertices, 
         sdfMeshOcclusionDrawsRW[(word + 1u)] = (emit ? vertices : 0u);
         sdfMeshOcclusionDrawsRW[(word + 2u)] = (emit ? 1u : 0u);
         sdfMeshOcclusionDrawsRW[(word + 3u)] = 0u;
-        sdfMeshOcclusionDrawsRW[(word + 4u)] = identity;
+        sdfMeshOcclusionDrawsRW[(word + 4u)] = 0u;
     }
 }
 
@@ -153,8 +155,9 @@ bool sdfOcclusionMaySee(float3 center, float3 halfX, float3 halfY, float3 halfZ,
     return (farthest == SdfOcclusionUncovered) || ((((asfloat(farthest) * 1.0001) + 1.0e-3)) >= nearest);
 }
 
-[numthreads(64, 1, 1)]
+[numthreads(SDF_MESH_SELECTION_GROUP_SIZE, 1, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID) {
+    id.x += id.y * (SDF_MESH_SELECTION_GROUP_SIZE * SDF_MESH_SELECTION_GROUPS_PER_ROW);
     uint step = (pushedIndex.index >> SDF_MESH_LEVEL_SHIFT);
 
     if (step == SdfOcclusionDepth) {
@@ -182,41 +185,64 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     }
 
     uint4 header = sdfMeshOcclusionCandidates[0];
+    bool splitExit = (header.z & 2u) != 0u;
     uint draws = 0u;
     uint vertices = 0u;
 
     // Each phase draws one command a candidate, empty or not.
     if (id.x == 0u) {
         sdfMeshOcclusionCountsRW[((step == SdfOcclusionLate) ? 1u : 0u)] = header.x;
+        if (splitExit && step == SdfOcclusionEarly) {
+            sdfMeshOcclusionCountsRW[1] = header.x;
+            sdfMeshOcclusionCountsRW[2] = header.x;
+        }
     }
     if (id.x < header.x) {
-        uint4 a = sdfMeshOcclusionCandidates[(1u + (4u * id.x))];
-        uint draw = a.x;
-        uint4 d = sdfMeshOcclusionCandidates[(4u + (4u * id.x))];
-        // A draw with no host box (its flag in the candidate's fifteenth word) is visible, and drawn by the first phase;
-        // the sixteenth word is the level the host chose for it.
-        bool unboxed = ((d.z & SdfOcclusionUnboxed) != 0u);
-        bool was = (unboxed || (sdfMeshOcclusionVisibleRW[draw] != 0u));
-        bool emit = was;
-
-        if (step == SdfOcclusionLate) {
-            uint4 b = sdfMeshOcclusionCandidates[(2u + (4u * id.x))];
-            uint4 c = sdfMeshOcclusionCandidates[(3u + (4u * id.x))];
-            bool visible = unboxed || sdfOcclusionMaySee(
-                asfloat(uint3(a.zw, b.x)),
-                asfloat(b.yzw),
-                asfloat(c.xyz),
-                asfloat(uint3(c.w, d.xy)),
-                header.y
-            );
-
-            emit = (visible && !was);
-            sdfMeshOcclusionVisibleRW[draw] = (visible ? 1u : 0u);
+        uint draw = id.x;
+        uint record = sdfMeshRecord(draw);
+        uint4 a = sdfSelectionRow(record, 0u);
+        uint4 b = sdfSelectionRow(record, 1u);
+        uint4 c = sdfSelectionRow(record, 2u);
+        uint4 d = sdfSelectionRow(record, 3u);
+        bool unboxed = (a.w & 1u) != 0u;
+        uint4 state = sdfMeshOcclusionVisibleRW[draw];
+        bool occlude = (header.z & 1u) != 0u;
+        bool kept = state.w != 0u;
+        // A culled draw can retain another mesh's level in history; its current table may have fewer levels.
+        uint level = min(state.y, d.w);
+        if (step == SdfOcclusionEarly) {
+            kept = (((a.w >> 1u) & 1u) == header.w) && (unboxed || sdfSelectionKeeps(asfloat(a.xyz), asfloat(b.xyz), asfloat(c.xyz), asfloat(d.xyz)));
+            if (kept) {
+                level = sdfSelectionLevel(record, state, unboxed);
+                state.y = level;
+                state.z = c.w;
+            }
+            state.w = kept ? 1u : 0u;
         }
-        sdfOcclusionEmit(((step == SdfOcclusionLate) ? 1u : 0u), id.x, (draw | (d.w << SDF_MESH_LEVEL_SHIFT)), a.y, emit);
-        draws = (emit ? 1u : 0u);
-        vertices = (emit ? a.y : 0u);
+        bool was = unboxed || state.x != 0u;
+        bool emit = kept && (!occlude || was);
+        if (step == SdfOcclusionLate) {
+            bool visible = kept && (unboxed || sdfOcclusionMaySee(asfloat(a.xyz), asfloat(b.xyz), asfloat(c.xyz), asfloat(d.xyz), header.y));
+            emit = visible && !was;
+            state.x = visible ? 1u : 0u;
+        }
+        sdfMeshOcclusionVisibleRW[draw] = state;
+        uint count = sdfSelectionVertices(record, level);
+        sdfOcclusionEmit(((step == SdfOcclusionLate) ? 1u : 0u), id.x, (draw | (level << SDF_MESH_LEVEL_SHIFT)), count, emit);
+        if (splitExit && step == SdfOcclusionEarly) {
+            bool encloses = (a.w & 4u) != 0u;
+            uint identity = draw | (level << SDF_MESH_LEVEL_SHIFT);
+            sdfOcclusionEmit(1u, id.x, identity, count, emit && encloses);
+            sdfOcclusionEmit(2u, id.x, identity, count, emit && !encloses);
+        }
+        draws = emit ? 1u : 0u;
+        vertices = emit ? count : 0u;
     }
 
     sdfOcclusionCount(draws, vertices);
+    if (splitExit && step == SdfOcclusionEarly) {
+        // Count entry and exit separately: 64 * (3 * MaxTriangles) fits a uint wave sum, twice that does not.
+        // Each kept draw emits exactly one exit command; puckAddWork carries into the 64-bit accumulator.
+        sdfOcclusionCount(draws, vertices);
+    }
 }

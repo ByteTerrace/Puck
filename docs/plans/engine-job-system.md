@@ -98,7 +98,12 @@ IJobPartitions)` hands out partition indices from one counter to those
 threads and the forking thread, which then waits on an event for the
 partitions others still hold. One fork runs at a time; a second concurrent
 fork, a fork of one partition and every fork of a serial pool run inline in
-partition order. J1 grows this object into the class-ordered pool above (the
+partition order. Both paths share one completion and error policy: every
+partition runs, then the lowest-numbered failing partition's exception is
+rethrown, so what a fork completes never depends on the worker count, and the
+inline path keeps that state local to its call. A fork tops the untaken wake
+signals up to the workers it can use rather than adding to them, so they never
+exceed the worker count however many forks have run (`PendingWakes`). J1 grows this object into the class-ordered pool above (the
 classes and comparers, bounded background units, channels, and `0`'s count
 reconciled with `max(2, ProcessorCount - 2)`); it does not add another.
 
@@ -423,15 +428,18 @@ claim's own parameter and document identity (`WorldFaceFrame.cs:277`), not on
 scan order.
 
 **E4's offsets.** The snapshot is compact: inactive slots are skipped and each
-active body writes at `count++` (`WriteSnapshotRows`, `WorldDocument.Apply.cs:1013-1059`),
-and only that prefix is delivered (`:987`). A serial pass on the forking thread
+active body writes at `count++` (`WriteSnapshotRows`, `WorldDocument.Apply.cs:1024-1070`),
+and only that prefix is delivered (`:971`). A serial pass on the forking thread
 counts each partition's delivered rows and assigns each partition the running
-total before it, an exclusive prefix sum (`:922-933`); the fork then has each
-partition write its rows in index order from that offset (`SnapshotRows`,
-`:1068-1077`). The count pass reads two fields per slot, so it stays serial
-rather than costing a second fork and join. The serial path, taken at one
-worker or one partition, is the same `WriteSnapshotRows` over every row, so the
-delivered sequence is byte-identical to the serial code's at any count.
+total before it, an exclusive prefix sum (`CountSnapshotPartitions`,
+`:994-1012`); the fork then has each partition write its rows in index order
+from that offset (`SnapshotRows`, `:1079-1088`). The count pass reads two fields
+per slot, so it stays serial rather than costing a second fork and join. Under
+two full partitions of delivered rows (`SnapshotForkRows`, 512, `:989`), where
+T1 measured no gain, the snapshot does not fork. The serial path, taken then,
+at one worker or at one partition, is the same `WriteSnapshotRows` over every
+row, so the delivered sequence is byte-identical to the serial code's at any
+count.
 
 Serial phases stay serial: the kit bodies and seats, rigid pair contacts,
 `EvaluateWorldRules` whole (below), the authority hash, events, addons,
@@ -639,23 +647,29 @@ second, and recording third; recording alone would not reach it.
 
 ### The cause fix beside it
 
-`SdfWorldPassRecorder.Choose` culls and levels every draw for every pass on the
-CPU (`SdfWorldPassRecorder.cs:752`, `:886`), and 160,000 draws took 700 ms a
-frame. Threads would divide that, not remove it. The engine already records
-counted indirect draws for opaque occlusion: `SdfMeshOcclusion.RecordDraws`
-(`SdfMeshOcclusion.cs:185-193`) through `ExecuteIndirect` on Direct3D 12
-(`DirectXGpuRecorder.Device.cs:18-29`) and non-indexed `DrawIndirectCount` on
-Vulkan (`VulkanGpuRecorder.cs:277-282`), matching the vertex-pulling draw
-(`SdfWorldPassRecorder.cs:912-933`), in an early phase of last frame's visible
-draws and a late phase of newly visible ones (`:839-864`). Decision: extend that
-mechanism, not build a second indirect path. A compute cull-and-level pass
-writes the per-phase argument buffers for every pass kind (opaque, shadow
-cascades, glass), carrying the level hysteresis `Choose` keeps today
-(`:902-907`, a draw keeps its level while its mesh is unchanged) as a per-draw
-previous-level buffer the pass reads and writes, so the CPU records one counted
-indirect draw per phase per pass whatever the draw count. This is a rendering
-change the [rendering plan](rendering.md) owns; the memo names it so parallel
-recording is not asked to hide it.
+At R2's input (`997fb2d002`), `SdfWorldPassRecorder.Choose` culled and levelled
+every draw for every pass on the CPU, and 160,000 draws took 700 ms a frame.
+Threads would divide that, not remove it. R2 extends the existing opaque
+occlusion mechanism, `SdfMeshOcclusion.RecordDraws`, through `ExecuteIndirect`
+on Direct3D 12 and non-indexed `DrawIndirectCount` on Vulkan. Its existing
+compute kernel now writes the per-phase arguments for opaque, every shadow
+cascade and glass. Each pass uploads 224 bytes of controls; bounds and the
+complete shared geometry level table live in the retained mesh region.
+
+The per-draw GPU history carries visibility, the previous level and mesh
+identity, keeps the 1/1.1 display-pixel band while the mesh is unchanged,
+survives buffer growth and ignores prior levels for a settled still. Rejected
+commands are empty slots, preserving staged order and depth ties. Opaque
+occlusion retains its early and late phases; glass uses one. Each cascade
+selects once, emitting entry, solid-exit and thin-exit argument phases. Entry
+uses one counted call; exit uses one per pipeline bucket, with no intervening
+selection or history write.
+The CPU records one counted indirect call per phase regardless of draw count;
+CPU `Choose` and its direct-draw loop are deleted. Vulkan without native
+counting consumes the same initialized arguments, in one multi-draw where
+available or individual slots otherwise. This is a rendering change the
+[rendering plan](rendering.md) owns; parallel recording need not hide the
+removed per-pass walk.
 
 ## 4. Memory ownership
 
@@ -828,14 +842,124 @@ as `puck mesh audit` for bake defects.
 | **M2a Native movers 1 and 2 — built** | Published mesh payloads, readback copies, lattice storage and point workspaces on `IAllocator`; reference-bearing contour storage and worker-slot refinement indexes retain managed ownership. | Collections during a cold bake (`host.frames`) against 345; windowed stills at `debug.go desktop` before and after on both backends, compared as above; `host.memory collect` after `world.reload` of a one-group edit shows the replaced group's bytes released. The [packet](open-items.md#memory-ownership) records the measurements. |
 | **J1 The pool and the channels** | `Puck.Hosting.Jobs`: classes with their comparers, bounded units, the dependency rules, the cap with hysteresis, per-owner channels drained at each owner's install point, parking, shutdown settlement; every site in section 1's table moved; the bake's static pool, the irradiance worker counts and the engine's `Parallel.For` deleted. | A cold bake with `host.frames` sampled through it against 96 / 183 ms, and the process's thread count at `workers + 2` plus the dedicated threads. A lockstep `world.at` still after a `world.reload` traces its own scene (`[sdf.mesh-gi]` reports the frame's draw count). A channel forced full by a scratch world with more groups than its capacity lands every group (`[sdf.mesh-bake] done` counts match). A headless boot with a reflow verb answers it. `quit` during a cold bake exits cleanly with no device-after-dispose message in stderr on both backends. The first visible group bakes before any unseen one (`[sdf.mesh-bake]` order against `world.view.pick`). |
 | **T0 The worker-count harness — built** | `--workers N` on `Puck.World`, carried as `Puck.Hosting.Jobs.JobWorkers` (the one setting `AddWorldBoot` registers; `0` is `Environment.ProcessorCount`, frame thread included); `puck test --workers 1,2,0` as full host runs compared across counts, and `--record <dir>` / `--compare <dir>` as the recorded oracle ([CLI reference](../reference/cli.md#puck-testtest-worlds)). Deviations: the crossing log is the instance host's crossing narration (`world.transfer`, `world.portal`, `world.adjacency`, `world.continuum`) stamped with the booted authority's tick, since a `Puck.World` host installs no durable `IWorldCrossingLog`; the per-tick hashes reuse `reproduction.json` from the same replay probe; the focused fixtures are left to T1, T3 and T2, which name them; J1 reconciles `0`'s count with the pool's `max(2, ProcessorCount - 2)` workers plus the frame thread. Baseline: `puck test worlds/debug --workers 1,2,0` (106 worlds; the standard authors no test worlds) agrees at every count with the serial code, at 1,790 / 1,672 / 1,910 s per count with `--jobs 2` on a shared lead machine; the recording probe's per-tick authority hash roughly doubles a world's authored time (go-tests: 255 s plain, 478 s recorded, 18,204 ticks), and boots are about a quarter of the rest. | `puck test --workers 1,2,0` on the four debug sources and the standard's test worlds passes with the serial code (a baseline for the T-steps). |
-| **T1 Snapshot partitions — built, check passed** | E4 with the serial count pass and prefix sum, on `JobPool` (section 1). No `PrepareReads`: the row phase reads no linked row (contract rule 2). No semantic change. T0's legs gained `snapshots.json`, each delivered snapshot's tick and entity entries hashed per delivery, compared like the authority hashes. Measured (the row phase alone, boot authority, unpaced headless, p50 over 600-tick windows, shared lead machine): the garden crowd (`garden-crowd.puck`, 129 rows) is one partition and runs the serial path at every count (34 to 40 µs); the fixture (300 rows, two partitions) is within noise (42 to 61 µs serial, 37 to 56 µs at 0); the debug world (558 rows, three partitions) drops from 206 to 216 µs at one worker to 123 to 129 µs at 0, p90 233 to 262 against 147 to 166, and 78 to 86 µs with 128-row partitions; a 2,001-row scratch crowd drops from 297 to 329 µs to 119 to 140 µs. The debug world's saving is about 0.09 ms of a 15 to 21 ms headless tick. A fork's mean is worse than serial on the shared machine (182 to 836 µs against 209 to 351): a worker preempted while it holds a partition holds the join, which the memo's "bounded by one partition's work" does not account for. Forcing 64-row partitions on 129 rows costs about 6 µs at p50 and a long tail, so the fork pays at the median from about 500 rows (two full partitions) and by a tenth of a millisecond only past about 1,500. | Passed: `puck test worlds/debug/snapshot-partitions-tests.puck --workers 1,2,0 --compare <recording of the serial code>` agrees across counts and with the recording; `--workers 1,2,0` on `garden-tests`, `suit-tests` and `granaries-tests` agrees at every count, and again after merging the integration tip (whose own changes move the fixture's authority hash from tick 0 while its snapshot entries still match the recording). |
+| **T1 Snapshot partitions — built, check passed** | E4 with the serial count pass and prefix sum, on `JobPool` (section 1). No `PrepareReads`: the row phase reads no linked row (contract rule 2). No semantic change. T0's legs gained `snapshots.json`, each delivered snapshot's tick and entity entries hashed per delivery, compared like the authority hashes. Measured (the row phase alone, boot authority, unpaced headless, p50 over 600-tick windows, shared lead machine): the garden crowd (`garden-crowd.puck`, 129 rows) is one partition and runs the serial path at every count (34 to 40 µs); a first 300-row fixture (two partitions) is within noise (42 to 61 µs serial, 37 to 56 µs at 0); the debug world (558 rows, three partitions) drops from 206 to 216 µs at one worker to 123 to 129 µs at 0, p90 233 to 262 against 147 to 166, and 78 to 86 µs with 128-row partitions; a 2,001-row scratch crowd drops from 297 to 329 µs to 119 to 140 µs. The debug world's saving is about 0.09 ms of a 15 to 21 ms headless tick. A fork's mean is worse than serial on the shared machine (182 to 836 µs against 209 to 351): a worker preempted while it holds a partition holds the join, which the memo's "bounded by one partition's work" does not account for. Forcing 64-row partitions on 129 rows costs about 6 µs at p50 and a long tail, so the fork pays at the median from about 500 rows and by a tenth of a millisecond only past about 1,500; the snapshot therefore forks only from 512 delivered rows (`SnapshotForkRows`), and the fixture grew to 619 stand-ins and a seat in 640 slots so it still forks. The cross-family review's two mediums on `JobPool` are fixed: the inline path ran no partition after the first that threw while the parallel path ran them all (so `JobWorkers(1)` left work undone that two workers completed, and a parallel fork rethrew whichever failure it recorded first), and every fork added wake signals that a busy or descheduled worker had not taken. Both paths now share one policy (every partition runs, the lowest-numbered failure is rethrown, inline state is local to the call), and a fork tops the untaken wake signals up to the workers it can use, never past the worker count. | Passed: `puck test worlds/debug/snapshot-partitions-tests.puck --workers 1,2,0 --compare <recording of the serial code>` agrees across counts and with the recording; `--workers 1,2,0` on `garden-tests`, `suit-tests` and `granaries-tests` agrees at every count, and again after merging the integration tip (whose own changes move the fixture's authority hash from tick 0 while its snapshot entries still match the recording). After the review fixes: `JobPoolLawTests` (`tests/Puck.Hosting.Tests`) pass, and three of them fail on the previous pool (at `JobWorkers(1)` the review's three-partition case leaves both later cells unwritten, and two workers rethrow partition 2 where partition 0 also failed); the 640-slot fixture and the three test files agree at `--workers 1,2,0`. |
 | **T3 Crossing scan partitions** | E3 by seat partition with occupancy deltas. | T0 on a fixture of 40 seats where two seats enter one party-travel door on one tick and seats straddle the 32-seat boundary; the crossing log (transfer tick, cohort) identical across counts and against the recording. |
 | **T2 Rigid advance partitions** | E1 for rigid bodies with partition scratch; the rigid share measured first; the one pose-read change re-recorded. | T0 on a fixture of 200 rigid bodies (a rack and a domino line) beside kit bodies whose producers target a rigid body; hashes identical across counts; `puck bench world` at 0 B median a tick; a standing `host.frames` simulate read against 6.3 ms. |
 | **R1 Parallel recording in waves** | Waves, prepare-before-fork with the fence first, residency upload and extent in preparation, in-order submission; the pose pack fork. Direct3D 12 and a windowed Vulkan boot. | `host.frames` produce avg at the lobby against 6.5 ms; a `world.at` script that moves a portal view and changes a screen's source every frame for 120 frames, with stills at three ticks compared as above with the serial build's on both backends (a one-frame-late read or a descriptor overwritten under a slot in flight shows as a localized difference beyond the noise); GPU-based validation clean on Direct3D 12 and the validation layer clean on Vulkan. |
-| **R2 GPU culling in the indirect path** | `Choose` on the GPU through `SdfMeshOcclusion`'s counted indirect draws, every pass kind, hysteresis kept. Owned by the rendering plan; ordered here because R1 exposes it. It moves the work rather than reducing it; the next steps (ordered compaction, (geometry, level) instance buckets, instance updates proportional to change and authored motion on the GPU) are the [visibility plan](visibility.md#the-build-order)'s. | The 160,000-draw scene's produce time; stills compared as above with the CPU `Choose` build at the lobby, the rim and inside the gallery (where hysteresis holds levels). |
+| **R2 GPU culling in the indirect path — built, checks recorded** | GPU selection through `SdfMeshOcclusion`'s counted indirect draws for every raster pass, with persistent level history; CPU `Choose` removed. Cascades select once into entry and solid/thin exit phases. Ordered compaction, (geometry, level) instance buckets and proportional updates follow in the [visibility plan](visibility.md#the-build-order). | Settled meadow produce CPU → GPU: Direct3D 12 59.53–59.76 → 50.75 ms; Vulkan 58.41–59.43 → 51.82 ms. Full Direct3D 12 GPU validation and Vulkan synchronization validation clean; tolerant still comparisons inspected. [R2 observations](#r2-observations) records the counts, pass costs, unresolved Direct3D 12 lobby outlier and monitor residual. |
 | **B1 GI proportional to change** | The change-set closure; GI jobs under `Lighting`. | After a `world.reload` that removes a wall and one that moves a draw: the probe tables and a still compared with a full retrace's; `[sdf.mesh-gi]` probes traced against the whole window; the cold bake's GI seconds against 201 to 222. |
 | **M2b Probe block ownership** | Blocks owned by the cache with live-slice counts, native. | A walk into an untraced area for 60 s with `host.memory collect` every 10 s: managed heap flat, native blocks freed as sweeps converge (block count printed by `[sdf.mesh-gi]`); stills before and after compared as above. |
 | **M3 Native movers 4 and 5** | Unmanaged scratch leases, the split journal, numeric columns; the tick's deliveries. | T0 at every count; `puck bench world` unchanged; a scratch world whose rules overwrite text cells and rewind (`world.undo`) reads the restored text. |
+
+### R2 observations
+
+November 1, RTX 4070, 1280×900, highest quality, native render scale, temporal
+accumulation and AO on. Bakes settle before the paired readings. CPU controls
+10 and 11 restore CPU `Choose` while retaining the same memory/camera work,
+complete geometry tables and motion-copy fix as GPU run 10. Both use the same
+frozen debug documents. These pairs precede integration's new shadow exit
+layers; their purpose is to isolate R2. Shared-machine load prevents causal
+ranking. Quality was not reduced and the 60 FPS bar remains unmet.
+
+| Backend / place | CPU produce avg, ms | GPU produce avg, ms | CPU root draws, all passes | GPU root draws, all passes |
+|---|---:|---:|---:|---:|
+| Direct3D 12 lobby | 39.25–40.16 | 68.78 | 5,649–5,650 | 5,646 |
+| Direct3D 12 rim | 22.81–41.23 | 21.83 | 465 | 465 |
+| Direct3D 12 gallery | 36.86–39.35 | 30.32 | 6,659 | 6,659 |
+| Direct3D 12 meadow | 59.53–59.76 | 50.75 | 11,862–12,022 | 11,813 |
+| Vulkan lobby | 34.53–40.21 | 38.12 | 5,650 | 5,647 |
+| Vulkan rim | 21.40–24.62 | 26.56 | 465 | 465 |
+| Vulkan gallery | 29.68–36.50 | 33.84 | 6,659 | 6,659 |
+| Vulkan meadow | 58.41–59.43 | 51.82 | 11,821–11,890 | 12,069 |
+
+The slower Direct3D 12 GPU lobby reading is unresolved, not discarded: produce
+p99 is 216.56 ms against the CPU controls' 54.48–54.82 ms. The lead's quiet
+settle window must measure it before attributing it to R2 or machine load.
+Animated poses also vary the draw/vertex totals. Root vertices at the meadow:
+Direct3D 12 CPU 9,536,304–9,681,789 / GPU 9,515,166; Vulkan CPU
+9,596,163–9,641,541 / GPU 9,762,255. CPU root dispatches are 31, GPU 34.
+
+Root raster GPU timestamps, 32 samples per reading; each cell is CPU range
+then GPU, in milliseconds:
+
+| Backend / place | Near shadow | Far shadow | Opaque | Glass |
+|---|---:|---:|---:|---:|
+| Direct3D 12 lobby | 0.506–0.594 → 0.422 | 1.208–1.293 → 0.812 | 0.467–0.528 → 0.511 | 0.009–0.013 → 0.163 |
+| Direct3D 12 meadow | 1.827–1.887 → 0.537 | 2.023–2.068 → 0.675 | 3.771–3.783 → 1.232 | 0.018–0.022 → 0.166 |
+| Vulkan lobby | 0.369–0.437 → 0.495 | 0.936–1.262 → 1.206 | 0.399–0.559 → 0.592 | 0.014–0.023 → 0.066 |
+| Vulkan meadow | 1.239–1.473 → 0.555 | 1.586–1.798 → 0.772 | 2.907–3.195 → 1.386 | 0.022–0.027 → 0.067 |
+
+The unused third root cascade has no samples. The complete render-graph pass
+readings and counters are in scratch `r2-cull-performance-directx.json` and
+`r2-cull-performance-vulkan.json`. Selection and empty-command scanning add
+GPU work, visible especially in glass. Ordered compaction and instance
+buckets remain [visibility V1](visibility.md#the-build-order). The meadow's
+4,215 blade draws share 288 geometries (14.6 draws/geometry); grouping needs
+a sparse per-geometry/per-level instance map and every draw-identity consumer
+moved while preserving depth ties, beyond a small argument extension.
+
+Stills use mean absolute RGB channel differences per 64×64 region against
+two CPU runs. Every positive excess over that region's measured noise is
+flagged, as section 6 specifies. Normal Direct3D 12 flags lobby / rim /
+gallery / meadow regions 122 / 0 / 0 / 90; Vulkan flags 16 / 0 / 54 / 122.
+All image pairs were inspected: flagged lobby regions include the Moth's
+head and monitor, meadow regions the animated grass; normal gallery lighting
+varies broadly even between CPU controls. No missing geometry was identified.
+These flags are reported, not a pixel-equivalence claim.
+
+The additional Vulkan lockstep controls capture ticks 150 / 300 / 450 / 600
+after bakes settle at tick zero. Both CPU runs and the GPU run have identical
+authority hashes and camera/pose stamps at every capture:
+
+| Pinned Vulkan place | CPU mean region noise | CPU/GPU mean region difference | Regions above noise |
+|---|---:|---:|---:|
+| Lobby | 0.00004015 | 0.00098606 | 103 |
+| Rim | 0 | 0 | 0 |
+| Gallery | 0.00008735 | 0.00013238 | 96 |
+| Meadow | 0.00000109 | 0.00000109 | 0 |
+
+Units are 0–255 channel steps. The gallery's 428 changed pixels differ in one
+channel by one step; the meadow's four such pixels are within CPU noise. The
+lobby has 633 changed pixels. Its 339 channel differences larger than one
+step (maximum 48) all lie on the static striped monitor face, x269–323 /
+y391–490. Enlarged CPU/GPU crops align geometrically. The sampled stripe
+difference exceeds the small pinned noise and its cause remains unconfirmed.
+
+R2's shadow integration (`b63e7191e`, then `d6f1624dfa`) carries the solid
+versus thin/clipped shadow-exit rule. One selection emits entry, solid-exit
+and thin-exit argument phases; each kept draw contributes an entry and exactly
+one exit to the generated statistics. `d231e5bec` counts the two executions
+with separate wave reductions: 64 lanes of a legal maximum mesh fit a uint
+sum, twice that does not; the existing accumulator carries each addition
+into 64 bits. Selection, arguments and history are unchanged by this fix.
+
+Final handback merge `5a73e11295` includes lead `5679a09f1a`'s GI, job-pool,
+language and simulation work; R2's selection, layout and backend sources are
+unchanged. Vulkan synchronization validation and full Direct3D 12 GPU-based
+validation (state tracking and synchronized queues) pass at all four places
+after bakes settle, without warnings or errors:
+
+| Backend | Bakes settled, tick | Lobby draws | Rim draws | Gallery draws | Meadow draws |
+|---|---:|---:|---:|---:|---:|
+| Vulkan | 369 | 7,186 | 1,298 | 8,925 | 2,506 |
+| Direct3D 12 | 388 | 15,143 | 1,290 | 18,070 | 26,657 |
+
+These current-world validation reads follow each pose by 12 ticks, with the
+same spawn positions and high/native settings; they are not a new matched
+timing pair. Their variance, especially the Vulkan meadow count, remains
+unexplained and belongs in the lead's quiet-window trace. Before this last
+integration, the corrected R2 artifact read 20,675 Vulkan / 20,484 Direct3D 12
+meadow draws. Do not attribute the later count change to an R2 speedup.
+The final full Direct3D leg takes about 394 seconds; both native legs fit
+one 850-second batch. Earlier cold preparation rebuilt 7,242 groups.
+
+Final Release CLI and dual-backend World builds pass with zero warnings/errors.
+Two debug fixtures pass `--reproduce` on the final artifact:
+`input-clock30-tests.puck` (four verdicts) and `unbiased-draws-tests.puck` (six).
+Presentation selection does not enter simulation state. Incomplete controls,
+time-boxed cold/full-validation attempts and an initial private Windows
+artifact refused for missing SPIR-V are excluded from the results.
+
 
 ### What becomes of the tick-to-produce memo's phases
 

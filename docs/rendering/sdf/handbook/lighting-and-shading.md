@@ -393,7 +393,7 @@ after a camera cut (`SdfViewExposures`); a cut the meter cannot read yet stays
 owed until it can. The meter reads the probes as last relit, so it follows a
 moving sun into the night. A camera with no visible lattice probe traces a hit
 buffer of its own, cached by camera cell and geometry with storage bounded by
-the view count, and relights it when the lighting changes or the volume
+the view count, and relights it from that origin when the lighting changes or the volume
 settles. Turning the camera reweights it; movement within the cell reuses it
 only across an unblocked segment from its actual origin, and never at a cut,
 whose reading is taken where the camera stands. The `camera-traces` counter

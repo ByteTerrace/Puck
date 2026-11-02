@@ -10,8 +10,10 @@ namespace Puck.Hosting.Jobs;
 /// </summary>
 /// <remarks>The pool holds <see cref="JobWorkers.Count"/> less one threads, at normal priority; the forking thread is
 /// the remaining one. Idle workers block on an operating-system semaphore and the forking thread on an event, so
-/// nothing spins. One fork runs at a time: a fork requested while another is in flight, a fork of one partition, and
-/// every fork of a serial pool run inline on the calling thread, in partition order.</remarks>
+/// nothing spins. One fork runs across the workers at a time: a fork requested while another is in flight, a fork of
+/// one partition, and every fork of a serial pool run on the calling thread in partition order. Every fork, wherever
+/// it runs, runs every partition and then rethrows the lowest-numbered failing partition's exception, so what a fork
+/// completes never depends on the worker count or on which path it took.</remarks>
 public sealed class JobPool : IDisposable {
     // The open fork: the high 32 bits its generation, the low 32 bits the next unclaimed partition. Closed while a
     // fork is being set up, so a worker that read an earlier generation can never claim a partition of the next.
@@ -20,13 +22,16 @@ public sealed class JobPool : IDisposable {
     private readonly Thread[] m_threads;
     private readonly Semaphore m_wake = new(initialCount: 0, maximumCount: int.MaxValue);
     private readonly AutoResetEvent m_done = new(initialState: false);
+    private readonly Lock m_faultGate = new();
 
     private long m_state = Closed;
     private IJobPartitions? m_body;
     private int m_count;
     private int m_remaining;
     private int m_busy;
-    private ExceptionDispatchInfo? m_fault;
+    // Wake signals released to the semaphore that no worker has taken yet; never more than the worker count.
+    private int m_pendingWakes;
+    private PartitionFault m_fault;
     private volatile bool m_stopping;
 
     /// <summary>Initializes a new instance of the <see cref="JobPool"/> class with one thread less than the host's
@@ -51,6 +56,10 @@ public sealed class JobPool : IDisposable {
     public JobWorkers Workers { get; }
     /// <summary>Gets whether every fork runs inline on the calling thread.</summary>
     public bool Serial => (m_threads.Length == 0);
+    /// <summary>Gets the wake signals issued to idle workers that no worker has taken yet: at most the pool's worker
+    /// thread count however many forks have run, so an idle worker never wakes for a fork that has finished more
+    /// than that many times.</summary>
+    public int PendingWakes => Volatile.Read(location: ref m_pendingWakes);
 
     /// <summary>Runs every partition of <paramref name="body"/> and returns once all have finished. The calling
     /// thread runs partitions too.</summary>
@@ -58,8 +67,8 @@ public sealed class JobPool : IDisposable {
     /// <param name="body">The partitions' work.</param>
     /// <exception cref="ArgumentNullException"><paramref name="body"/> is <see langword="null"/>.</exception>
     /// <exception cref="ObjectDisposedException">The pool has been disposed.</exception>
-    /// <remarks>An exception a partition throws is rethrown here, on the calling thread, after every partition has
-    /// finished; when several throw, the first recorded is rethrown.</remarks>
+    /// <remarks>A partition that throws does not stop the others: every partition runs, and then the exception of the
+    /// lowest-numbered partition that threw is rethrown here, on the calling thread.</remarks>
     public void Fork(int partitions, IJobPartitions body) {
         ArgumentNullException.ThrowIfNull(argument: body);
         ObjectDisposedException.ThrowIf(condition: m_stopping, instance: this);
@@ -72,9 +81,14 @@ public sealed class JobPool : IDisposable {
             (partitions == 1) ||
             (Interlocked.CompareExchange(location1: ref m_busy, value: 1, comparand: 0) != 0)
         ) {
+            // The inline path's fault is local to this call, so a fork nested in a partition, or one on another
+            // thread that found the workers busy, never touches the fork in flight.
+            var fault = default(PartitionFault);
+
             for (var partition = 0; (partition < partitions); partition++) {
-                body.Run(partition: partition);
+                fault.Run(body: body, partition: partition);
             }
+            fault.Rethrow();
             return;
         }
 
@@ -84,16 +98,16 @@ public sealed class JobPool : IDisposable {
             _ = Interlocked.Exchange(location1: ref m_state, value: ((generation << 32) | Closed));
             m_body = body;
             m_count = partitions;
-            m_fault = null;
+            m_fault = default;
             Volatile.Write(location: ref m_remaining, value: partitions);
             _ = Interlocked.Exchange(location1: ref m_state, value: (generation << 32));
-            _ = m_wake.Release(releaseCount: Math.Min(val1: m_threads.Length, val2: (partitions - 1)));
+            Wake(wanted: (partitions - 1));
 
             if (!Drain()) {
                 _ = m_done.WaitOne();
             }
             m_body = null;
-            m_fault?.Throw();
+            m_fault.Rethrow();
         } finally {
             Volatile.Write(location: ref m_busy, value: 0);
         }
@@ -115,6 +129,23 @@ public sealed class JobPool : IDisposable {
         m_done.Dispose();
     }
 
+    // Tops the untaken wake signals up to the workers this fork can use, never past the worker count: a signal still
+    // pending from an earlier fork serves this one, so signals never pile up behind forks that already finished.
+    private void Wake(int wanted) {
+        wanted = Math.Min(val1: m_threads.Length, val2: wanted);
+        while (true) {
+            var pending = Volatile.Read(location: ref m_pendingWakes);
+            var add = (wanted - pending);
+
+            if (add <= 0) {
+                return;
+            }
+            if (Interlocked.CompareExchange(location1: ref m_pendingWakes, value: wanted, comparand: pending) == pending) {
+                _ = m_wake.Release(releaseCount: add);
+                return;
+            }
+        }
+    }
     // Runs partitions until none is unclaimed; true when this thread finished the fork's last partition.
     private bool Drain() {
         var last = false;
@@ -144,16 +175,17 @@ public sealed class JobPool : IDisposable {
         }
     }
     private bool Complete(IJobPartitions body, int partition) {
-        try {
-            body.Run(partition: partition);
-        } catch (Exception exception) {
-            _ = Interlocked.CompareExchange(location1: ref m_fault, value: ExceptionDispatchInfo.Capture(source: exception), comparand: null);
+        if (!PartitionFault.TryRun(body: body, error: out var error, partition: partition)) {
+            lock (m_faultGate) {
+                m_fault.Record(error: error!, partition: partition);
+            }
         }
         return (Interlocked.Decrement(location: ref m_remaining) == 0);
     }
     private void Work() {
         while (true) {
             _ = m_wake.WaitOne();
+            _ = Interlocked.Decrement(location: ref m_pendingWakes);
             if (m_stopping) {
                 return;
             }
@@ -163,5 +195,35 @@ public sealed class JobPool : IDisposable {
                 }
             }
         }
+    }
+
+    // One fork's error policy, shared by the inline and the parallel path: run every partition, keep the exception of
+    // the lowest-numbered one that threw, and rethrow it once all have run.
+    private struct PartitionFault {
+        private ExceptionDispatchInfo? m_error;
+        private int m_partition;
+
+        public static bool TryRun(IJobPartitions body, int partition, out Exception? error) {
+            try {
+                body.Run(partition: partition);
+                error = null;
+                return true;
+            } catch (Exception exception) {
+                error = exception;
+                return false;
+            }
+        }
+        public void Run(IJobPartitions body, int partition) {
+            if (!TryRun(body: body, error: out var error, partition: partition)) {
+                Record(error: error!, partition: partition);
+            }
+        }
+        public void Record(Exception error, int partition) {
+            if ((m_error is null) || (partition < m_partition)) {
+                m_error = ExceptionDispatchInfo.Capture(source: error);
+                m_partition = partition;
+            }
+        }
+        public readonly void Rethrow() => m_error?.Throw();
     }
 }
