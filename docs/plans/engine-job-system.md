@@ -834,7 +834,7 @@ it is not a claim of pixel equivalence. No missing geometry was identified.
 
 Two single-World debug fixtures, `input-clock30-tests.puck` (four verdicts)
 and `unbiased-draws-tests.puck` (six), pass `--reproduce` again after integration
-merge `207f6d511`; presentation selection does not enter simulation state.
+merge `c72a9b3a3c`; presentation selection does not enter simulation state.
 
 ### What becomes of the tick-to-produce memo's phases
 

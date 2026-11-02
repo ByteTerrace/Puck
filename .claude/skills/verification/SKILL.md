@@ -207,6 +207,11 @@ reports drift. Restore a fresh worktree once
 On Windows, refresh the private CLI only after any lease command hosted by that copy has exited: the lease
 process itself keeps its loaded DLLs locked while the child build runs. Copy after lease completion, or host
 the build lease from another CLI copy.
+Copy portable output into a fresh destination, or copy its contents when
+refreshing an existing one. PowerShell `Copy-Item <output-directory>
+-Destination <existing-directory> -Recurse` nests the output directory and
+leaves stale DLLs at the destination root. Check the entry DLL before launch;
+publish any queued runner's artifact pointer only after the copy finishes.
 
 When `puck schema` reports missing XML documentation, do not accept the resulting
 removal of schema descriptions: on the restricted Windows harness the generator's
