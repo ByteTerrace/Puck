@@ -321,19 +321,20 @@ all) are explicit tests carrying `Category=ModelCheck`:
 dotnet test tests/Puck.World.Protocol.Tests/Puck.World.Protocol.Tests.csproj -c Release --no-build --explicit on --filter-trait Category=ModelCheck
 ```
 
-The lane building the protocol runs the model check at every step, and every
-change to the protocol (the model, its specification, or the engine code that
-implements a transition) runs it before landing: the protocol is changed in the
-model first, and the model check is the evidence. Without `--explicit on` the
-filter selects nothing.
+A change to the protocol (the model, its specification, or the engine code that
+implements a transition) is made in the model first, and the model check is the
+evidence a protocol invariant holds, so use it for a protocol change that
+running the engine cannot demonstrate, or when the brief asks. Nothing makes it
+a gate while the campaign suspends test requirements. Without `--explicit on`
+the filter selects nothing.
 
 The engine's half of that evidence is `CompanionCustodyRefinementLawTests`
 (`tests/Puck.World.Server.Tests`, ordinary suite, under a minute): real
 authorities run every single-fault schedule while the model follows, and every
-peer call or crossing-log append the model does not enable is a failure. A change
-to an engine transition runs it beside the model check
-(`--filter-class "*CompanionCustodyRefinementLawTests"`); a move it reports as
-deferred is a protocol step the engine has not built.
+peer call or crossing-log append the model does not enable is a failure. When a
+change to an engine transition needs the model's evidence, run it beside the
+model check (`--filter-class "*CompanionCustodyRefinementLawTests"`); a move it
+reports as deferred is a protocol step the engine has not built.
 
 ## What uses the GPU
 

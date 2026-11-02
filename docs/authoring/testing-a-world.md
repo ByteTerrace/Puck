@@ -13,25 +13,30 @@ world that reads no machine stops its machines (the debug world's fixtures
 import `stopped-machines`), since emulating them is most of a tick's cost.
 
 ```puck
-test "all marbles settle into the star" {
+schema: "puck.world.definition.v1"
+basis: "debug"
+documentId: "addons-tests"
+import "stopped-machines"
+
+test "the watchdog records the tick a body is first under the floor" {
   when {
-    ticks 500
+    seat1: body.pose 5 -3 5 0 0 0 0
+    ticks 10
   }
   expect {
-    missingCount == 0
-    boardCollisions == 0
-    movedCount == 0
-    verdict == 1
-    turn == 0
-    winner == -1
+    watchdog.count == 1
+    watchdog.first == 2
+    watchdog.tick == 2
   }
 }
 ```
 
-Run it:
+This is `worlds/debug/addons-tests.puck`: a file that imports the debug world's
+basis, then one `test` block. The `when` block poses body 0 under the floor and
+runs ten ticks; each `expect` line must hold at the end. Run it:
 
 ```bash
-puck test worlds/parlor/chinese-checkers.puck
+puck test worlds/debug/addons-tests.puck
 ```
 
 Independent test worlds run with at most two concurrent workers by default, and
@@ -45,11 +50,12 @@ native host, so no scenario inherits state, rules or expectations from the one
 before it.
 
 ```text
-test: chinese-checkers~all-marbles-settle-into-the-star <- .../chinese-checkers.puck test "all marbles settle into the star"
-  expect$1: pass gate="missingCount == 0" saw=[missingCount=0] firedTick=501
-  ...
-  6/6 verdict(s) passed at export tick 501.
-PASS: every verdict in 2 test world(s) passed.
+test: addons-tests~the-watchdog-records-the-tick-a-body-is-first-under-the-floor <- .../addons-tests.puck test "the watchdog records the tick a body is first under the floor"
+  expect$1: pass gate="watchdog.count == 1" saw=[watchdog$count=1] firedTick=11
+  expect$2: pass gate="watchdog.first == 2" saw=[watchdog$first=2] firedTick=11
+  expect$3: pass gate="watchdog.tick == 2" saw=[watchdog$tick=2] firedTick=11
+  3/3 verdict(s) passed at export tick 11.
+PASS: every verdict in 1 test world(s) passed.
 ```
 
 ## A test is a world

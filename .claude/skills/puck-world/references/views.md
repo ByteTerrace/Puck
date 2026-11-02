@@ -153,8 +153,9 @@ orientation/tilt-to-move adapter can share it. `player.look.free` holds free
 look: right-stick yaw/pitch continues to orbit the camera, but yaw does not
 write body heading and left-stick movement resolves against authoritative
 character heading until it releases; the hold also suppresses automatic camera
-follow. No live world binds these three; the quarantined standard profile bound
-them to `LT` chords.
+follow. The standard package binds `player.look.free` on the pad's `LT` View page
+(`worlds/standard/controls.puck`); no live world binds `player.motion.controls` or
+`player.motion.angular`.
 
 Binding contexts can derive a complete control group from gameplay state. A
 family named `state:<row>` reads the routed world's declared state row after a

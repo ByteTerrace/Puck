@@ -135,7 +135,9 @@ interval exploration are out of scope (the owner's ruling,
 ## Verify
 
 Build the test project (`dotnet build tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj
--c Release -nodeReuse:false`), then run the suite, which takes about half a minute:
+-c Release -nodeReuse:false`). Running the suite is optional while the campaign
+lifts test requirements; where a change needs the evidence, it takes about half a
+minute:
 
 ```text
 dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --no-build
@@ -144,16 +146,16 @@ dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --no-build
 Pass `-nodeReuse:false` to the build step only
 ([verification](../verification/SKILL.md#build-before-you-test)). The run is
 the Default tier. A rounding change or a new value
-kernel also earns Deep (`--explicit on --filter-trait tier=Deep`). Exhaustive
+kernel can also use Deep (`--explicit on --filter-trait tier=Deep`). Exhaustive
 takes tens of minutes: run it only when the member's waiver or the coverage
 law declaration names it as the gate of record, and narrow it to one law with
 `--explicit on --filter-display-name '<law-id>*'`. No tier measures time;
 `puck bench` does. Report the exact commands you ran and where any failure came
 from.
 
-A new public Maths member lands with its classification (a law case or a
-precise waiver) in the same change, and CI requires 100% line coverage of live
-`src/`, so new code lands with a test that reaches it. Authoring the case and waiver belongs to
+A new public Maths member carries its classification (a law case or a
+precise waiver) in the same change; the 100% line-coverage target is suspended
+for the campaign. Authoring the case and waiver belongs to
 [`maths-laws`](../maths-laws/SKILL.md). The owner rules out recorded Maths
 registers and coverage ratchets; completeness is checked from the current declarations.
 

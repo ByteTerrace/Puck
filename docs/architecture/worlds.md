@@ -909,10 +909,7 @@ extent through the ease, which `place` resamples its eased rect from, and alloca
 settled rect, so every transition allocates at most once. Collapsed arriving slots keep a
 finite camera while positive extents retain their fractional-pixel aspect. Frozen convergence
 frames publish their retained placements on every prepared frame. Editor comparisons record their
-viewports after that placement. `WorldCameraPlacementLawTests` pins agreement on every transition
-frame, one rebuild for a shrinking transition across quantization steps and for an opposite-axis one,
-and the split layout's half-display
-allocation.
+viewports after that placement.
 
 Both rendered hosts hold the completed simulation tick while a tick-scheduled capture is owed.
 Repeated window resizes can delay frame production, but cannot advance the capture to a later tick

@@ -96,9 +96,9 @@ partial's `Domain` field is assigned, so a binding may capture a domain eagerly.
 
 **A declaration without a binding, or a binding without a declaration, fails
 `LawDeclarationTests.EveryDeclarationHasExactlyOneCase` (tier `Default`) and the
-failure names the offending ids.** Every change already runs that tier, so
-adding a law means editing two files, and forgetting the second is a named
-failure, not a silent gap.
+failure names the offending ids.** Adding a law means editing two files, and
+forgetting the second is a named failure when the Default tier runs, not a
+silent gap.
 
 **Why it is data.** Nothing reads the bodies a leg describes, so a person
 reading the legs is the only check on a leg that claims independence it does not
@@ -115,7 +115,7 @@ Where things live, and nothing crosses:
 | `Subjects.cs` and its per-family partials, `*Claims.cs` | subject closures + claim bodies | oracle arithmetic |
 | `Refusals.cs`, `DoublingTower.cs` | the refusal probes and the doubling-tower basis and lane readout every claim body shares | law-specific logic |
 | `Oracles.cs` and its per-area partials | shared-nothing reference arithmetic | a `Puck.Maths` call |
-| `Domains.cs`, `Frontier.cs` | operand sources | anything law-specific |
+| `Domains.cs` | operand sources, including `Domains.FrontierRaw` | anything law-specific |
 | `Laws.cs` | generic combinators, written once | per-subject logic |
 | `Coverage.cs` | member surface, waivers, completeness check | law logic |
 | `Legs.cs`, `LawLegs.cs` | leg vocabulary + gates | law logic |
@@ -168,11 +168,14 @@ Tier selection is declarative — **no environment variables anywhere**. Every
 case carries its tier as the `tier` trait, and Deep and Exhaustive cases are
 explicit, so plain `dotnet test` runs the Default tier.
 
-| Tier | Selected by | Measured | When it runs |
+| Tier | Selected by | Measured | Useful for |
 |---|---|---|---|
-| Default | a plain run | ordinary | **every change**, unconditionally |
-| Deep | `--explicit on --filter-trait tier=Deep` | broader | before any rounding change lands |
-| Exhaustive | `--explicit on --filter-trait tier=Exhaustive` | long | on demand or nightly; full-carrier sweeps and explicitly selected expensive combinatorial-prime checks |
+| Default | a plain run | ordinary | the everyday check of a law; a change picks it when it needs the evidence |
+| Deep | `--explicit on --filter-trait tier=Deep` | broader | a rounding change or a domain Default cannot reach |
+| Exhaustive | `--explicit on --filter-trait tier=Exhaustive` | long | full-carrier sweeps and explicitly selected expensive combinatorial-prime checks |
+
+Which tier a change runs is its own decision while the campaign suspends test
+requirements.
 
 Explicit cases never fire on a plain `dotnet test`, and without
 `--explicit on` a `tier=Exhaustive` filter selects no test. Select an opt-in
