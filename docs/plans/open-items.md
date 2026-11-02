@@ -169,11 +169,17 @@ M1 and M2a are built.
 - [medium] T1's snapshot row phase is about 0.21 ms of a debug tick, so most of
   the memo's 9-13 % snapshot-emission share lies elsewhere (the serial tail or
   the subscribers' `DeliverSnapshot`); profile it before T3 or any R step
-  assumes otherwise. J1 inherits two T1 measurements: the fork pays only past
-  about 500 rows, and a preempted worker holding a partition holds the join
-  (mean up to 836 µs against a 125 µs median), so J1 sizes partitions to bound
-  that tail. The headless debug world also builds snapshots for its night and
-  garden session instances every tick. (from: t1-snapshot)
+  assumes otherwise. The snapshot now writes serially under two full
+  partitions (512 delivered rows), where T1 measured no gain from a fork. J1
+  inherits the other measurement: a preempted worker holding a partition holds
+  the join (mean up to 836 µs against a 125 µs median). Smaller partitions do
+  not bound it: 128-row partitions lowered the debug world's median from 123 to
+  129 µs to 78 to 86 µs while their means stayed 205 to 794 µs, because the tail
+  is the host's preemption, not the partition's work. Bounding it is a pool
+  matter for J1 (its cap against oversubscription), measured on a quiet machine
+  before anything else is tried. The headless debug world also builds
+  snapshots for its night and garden session instances every tick.
+  (from: t1-snapshot)
 
 The owner's direction: performance with quality means removing a cost at its
 cause, never trading latency or lighting quality for frame time. The engine
