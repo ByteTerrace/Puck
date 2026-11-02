@@ -156,6 +156,19 @@ property is enforced in too many places; brief a design for the one
 chokepoint that makes the property structural (a type or project boundary,
 one derived view), then migrate behind it.
 
+Better still, do it first. Work whose correctness rests on an invariant (a
+cache and its invalidation, an oracle and what it records, a visibility or
+shadow term and the geometry it assumes, a concurrency primitive and its
+wakeups) gets a written design and a Codex design review before any code,
+and its brief names the invariant and what enforces it: the compiler, a
+single door, or a derived view, never "every caller remembers". Every first
+draft of such work this session came back with highs from review (the
+incremental hash's caches, the disclosure harness, the exit layer three times,
+the transmission design), each from an invariant kept by convention; a design
+review costs a quarter hour, a failed fix round a lane's afternoon. A new
+check or oracle is shown failing without the fix it guards (fault injection),
+not only passing with it.
+
 Before briefing a step that decides how a pipeline works (what the renderer
 draws and submits, how the tick schedules, a camera or physics model), ask
 whether a research round has covered that design, even when the step arrives
@@ -441,7 +454,10 @@ takes no timing while other lanes run.
 Settle windows are how the lead clears it. The owner's loose deadlines were
 meant as these periods; the lead now schedules them by state, not the clock:
 - **Trigger:** a wave of related lanes has landed, or a decision waits on a
-  measurement (the culling order waits on M1). Never on a timer.
+  measurement (the culling order waits on M1). Never on a timer, and never
+  by waiting for the machine to go quiet on its own: with a dozen lanes it
+  never does, and one session's first window slipped for that reason. The lead
+  drains deliberately.
 - **Drain:** launch no new lanes; let running ones reach a stopping point.
   Lanes may keep editing; their builds, tests and GPU legs queue.
 - **Hold:** `puck lease quiet --holder lead -- <recipe>` takes the build, GPU
