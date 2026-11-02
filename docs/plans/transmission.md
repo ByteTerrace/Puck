@@ -524,8 +524,30 @@ work); front-face culling discards after the vertex stage and saves
 fragments, not vertices. The term's second pass costs the
 same vertex work and the depth pass's fragments, each running two loads and a
 compare, and the first pass gains a colour write. Up to three cascades can
-refresh in one frame. No timing of the exit layer on a quiet machine exists,
-so the plan is to measure, not to estimate:
+refresh in one frame.
+
+The exit layer's quiet baseline, from the lead's settle window (RTX 4070,
+1280×900, `world.quality high` (`shadows=high`), the day cycle running,
+`world.gpu-timing` 32-sample means on the root node; `world.cadence` and
+`world.rates` as authored):
+
+| Stop | Backend | `shadow-near`, ms | `shadow-far`, ms | `shadow-second`, ms | Three together, ms | `surface`, ms |
+|---|---|---:|---:|---:|---:|---:|
+| `debug.go stage` | Direct3D 12 | 0.665 | 1.109 | 0.724 | 2.50 | 0.371 |
+| `debug.go stage` | Vulkan | 0.614 | 1.259 | 0.686 | 2.56 | 0.405 |
+| `valley-rim` | Direct3D 12 | 0.515 | 0.494 | 0.492 | 1.50 | 0.523 |
+| `valley-rim` | Vulkan | 0.276 | 0.290 | 0.315 | 0.88 | 0.487 |
+| `debug.go meadow` | Direct3D 12 | 1.071 | 1.279 | 1.036 | 3.39 | 0.854 |
+| `debug.go meadow` | Vulkan | 0.930 | 1.174 | 0.962 | 3.07 | 0.870 |
+| `debug.go portals` | Direct3D 12 | 0.884 | 0.986 | 0.995 | 2.87 | 0.403 |
+| `debug.go portals` | Vulkan | 0.625 | 0.842 | 0.804 | 2.27 | 0.373 |
+
+On the 4070 the three cascades already reach or pass the 2060's 1.5 ms budget
+below at every stop but the Vulkan rim. These are the before readings; the
+redesign's after readings follow the plan below, which also wants the
+per-cascade draw and vertex counts (`world.counters gpu pass
+sdf.world$shadow-near`; a pass label is matched by whole segments, so
+`sdf.world$shadow` names no pass), the 2060 and the Deck. The plan:
 
 - **Devices and tiers.** The bar is the highest quality on every bar device
   ([the register](../decisions/rendering.md#the-pipeline-foundation)), so the

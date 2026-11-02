@@ -87,10 +87,10 @@ branch until it lands.
   `views` shade from that record; no material code runs per fragment
   (`passes/sdf-mesh.frag.hlsl:20`; Burns and Hunt, "The Visibility Buffer",
   JCGT 2(2), 2013, <https://jcgt.org/published/0002/02/04/paper.pdf>).
-- **No frame time taken so far ranks anything.** Every number, R2's included,
-  was read on a loaded machine: the lobby read 39 to 42 ms produce in R2's runs
-  against 6.5 to 9.4 ms quiet ([packet](open-items.md#engine-job-system)). The
-  meadow's 52 to 60 ms is not its cost.
+- **R2's own frame times rank nothing.** They were read on a loaded machine:
+  the lobby read 39 to 42 ms produce in R2's runs against 6.5 to 9.4 ms quiet
+  ([packet](open-items.md#engine-job-system)). The quiet readings that rank the
+  steps are [the first settle window's](#what-the-first-settle-window-read).
 
 ## Measure first
 
@@ -123,6 +123,61 @@ triangles per blade part at `world.detail 0`, `1` and `2`
 (`puck mesh audit --world worlds/debug --group stem-`, then `--group tip-`).
 Hundreds of triangles a part, or the mesh pass and cascades taking a large
 share of the Deck's 22.2 ms, put V3 and V4 ahead of V2 on that device.
+
+### What the first settle window read
+
+On the quiet lead machine (RTX 4070, R2's GPU selection, `world.quality high`,
+1280×900, the day cycle running, `world.cadence off`, `world.gpu-timing on`,
+bakes settled; frames are `host.frames` over 10 s, GPU times the root node's
+32-sample means):
+
+| M1 leg at `debug.go meadow` | Direct3D 12 frame avg / p99, ms | produce / simulate, ms | Vulkan frame avg / p99, ms | produce / simulate, ms | Root GPU, D3D12 / Vulkan, ms | Mesh-pass draws, D3D12 / Vulkan |
+|---|---:|---:|---:|---:|---:|---:|
+| 1. As authored | 66.9 / 82.0 | 47.9 / 18.7 | 69.1 / 104.2 | 49.0 / 19.9 | 21.7 / 21.1 | 3,908 / 3,832 |
+| 2. Poses held | 60.5 / 75.7 | 43.5 / 16.7 | 59.7 / 74.2 | 43.0 / 16.4 | 17.4 / 17.9 | 3,881 / 3,896 |
+| 3. Leg 1 under a thread-time trace | 70.0 / 84.5 | 49.8 / 19.9 | 72.0 / 102.8 | 50.7 / 21.2 | 22.3 / 21.9 | — |
+
+The trace (`dotnet-trace`, `dotnet-sampled-thread-time`, 15 s) finds the frame
+thread busy all the time, and both backends within a point of each other:
+produce 71 %, of which `WorldFramePresenter.CaptureFrame` is 50 %; inside it the
+creation effectors' surface probes (`WorldCreationInstances.ApplyEffectors` into
+`WorldEffectorSolver.Probe`, CPU `SdfFieldEvaluator` marches) take 27 % and the
+chase camera's clearance march (`WorldCameraClearance.Clear`) 18 %. The
+presenter's `Dress` is 18.6 %, of which `SdfMeshPathBake.Dress` is 4.4 % and
+`SdfWorldTables.StageChangedDraws` 4.4 %; `SdfWorldResidency.PrepareOnce` 9.8 %;
+`SdfWorldTables.Pack` 6 %; command recording (`ShaderPipelineRenderNode.RenderFrame`)
+2.5 to 4.7 %; the tick 23 to 28 %; GC polling 7 to 8 %.
+
+**M1's verdict.** Leg 1 less leg 2 is 6.3 ms on Direct3D 12 and 9.4 ms on
+Vulkan, against the meadow's 42 ms over the hero studio (24.7 ms), so per-slot
+motion is not most of the increase. The plan's rule would then send V1 first,
+but the trace refutes its premise that the rest is per-draw cost: recording,
+V1's CPU target, is 2 to 3 ms, while motion and record churn, V2's target, is
+6 to 9 ms. The numbers support **V2's first steps (V2a, V2b) ahead of V1a**,
+and both behind a cost no V-step names: CPU field queries on the frame thread
+(effector probes and camera clearance, about 31 ms of the meadow's 70) and the
+tick (about 20 ms). The root queue's GPU time (21 ms) is under produce (48 ms),
+so V3 and V4 do not lead on the 4070; its largest pass is `views` (8.7 to 9.2 ms).
+Holding the sun at the meadow saves 3 ms (65.6 to 62.6 ms on Direct3D 12), so the
+day cycle's continuous relight is not the cause.
+
+**M2 on the lead machine.** No RTX 2060 or Steam Deck was reachable; the
+4070 at the Deck's resolution (1280×800), meadow, both backends:
+
+| `world.detail` | Mesh-pass vertices | Vertices a draw (÷ 3 = triangles) | Mesh GPU, D3D12 / Vulkan, ms | Three cascades, D3D12 / Vulkan, ms | Root GPU, D3D12 / Vulkan, ms |
+|---|---:|---:|---:|---:|---:|
+| auto | 5.14 M | 1,364 | 0.93 / 0.78 | 3.03 / 2.51 | 16.1 / 13.9 |
+| 0 | 11.8 M | 3,039 | 1.07 / 0.94 | 7.01 / 6.60 | 15.8 / 14.3 |
+| 1 | 2.37 M | 629 | 0.68 / 0.59 | 3.29 / 3.31 | 15.6 / 16.6 |
+| 2 | 1.54 M | 398 | 0.61 / 0.48 | 2.67 / 2.37 | 15.2 / 14.7 |
+
+At `auto` a meadow draw averages about 455 triangles (blade parts with the
+trees and rocks among them), so blade parts are in the hundreds, the
+threshold M2 names. On the 4070 the mesh pass and cascades take about 4 ms
+at the Deck's resolution; whether that is a large share of the Deck's 22.2 ms
+waits on the Deck or the 2060. `puck mesh audit --group stem-` (M2's
+per-part count) selects no group: the audit's rest scene labels a body's
+group by slot and does not name the meadow's placement blades.
 
 ## R2 is the foundation
 
