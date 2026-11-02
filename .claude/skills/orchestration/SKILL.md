@@ -33,12 +33,15 @@ shared files, its own capacity to inspect and merge) and launches more only
 when that judgement says the machine and the lead can absorb them. The owner's
 direction:
 
-- **Review before landing where a defect does damage before review lands.** Code
-  that deletes files, crosses a trust boundary (grants, federation, admission,
-  credentials) or rewrites persisted data gets its cross-family review before it
-  lands; everything else lands on its evidence and is reviewed alongside. A
-  pruning change that could delete outside its install root and a cap that
-  trusted the sender both landed first and had to be reverted or refixed.
+- **Review risky changes early, without gating them.** Code that deletes
+  files, crosses a trust boundary (grants, federation, admission, credentials)
+  or rewrites persisted data has its cross-family review started the moment it
+  hands back, ahead of other reviews, and the lead reads its diff for those
+  hazards before merging; like everything else, it lands on its evidence and is
+  never held for the review (AGENTS.md: review is never a landing
+  precondition). A pruning change that could delete outside its install root
+  and a cap that trusted the sender both had to be reverted or refixed after
+  landing.
 - **The lead's verification window outranks lane legs.** Windowed checks owed by
   several lanes are one session the lead runs with GPU priority; it is never
   queued behind the lanes it verifies.
@@ -46,8 +49,9 @@ direction:
   run, so the lead holds a short quiet window at a natural pause (lanes parked at
   WIP commits) to re-measure the speedups landed since the last one; a speed
   claim stands only once measured there.
-- **An Antigravity lane is bounded and always reviewed before it lands**: its
-  output has carried fabricated claims and high findings.
+- **An Antigravity lane is bounded, its claims are checked against the code
+  before it merges, and its review starts first**: its output has carried
+  fabricated claims and high findings.
 
 - **Batch, including unrelated areas.** Several lanes work independent areas at
   once, and the integration lane verifies them together in one sweep of the
@@ -65,8 +69,9 @@ direction:
   security, large-context and UI reviews. The reviewer gets the diff and the
   author's claim, not the author's reasoning, and tries to break it with a repro,
   a counterexample or a missed caller. Review depth follows risk: determinism,
-  maths and renderer changes get an Astra- or `principal`-grade reviewer, ordinary
-  engine code Sol or `specialist`, docs and world content none or a scout's
+  maths and renderer changes get Astra or an Opus `reviewer` or `specialist`
+  (`principal` only as [Conserve Fable](#no-bad-loops) allows), ordinary engine
+  code Sol, `reviewer` or `specialist`, docs and world content none or a scout's
   spot-check.
   - The author starts its next item when it hands back and is never paused; the
     change lands in its batch whether or not the review has finished.
@@ -590,30 +595,32 @@ state its plan and cost to the owner in one sentence before launching it.
 
 When the owner pairs with the lead, the lead stays free for that conversation
 and subagents do the work: implementation, investigation, verification runs and
-reviews. The lead writes briefs, inspects results, merges and reports. The
-project agents under `.claude/agents/` carry the four Claude models the owner
-allows, in order of rising cost:
+reviews. The lead writes briefs, inspects results, merges and reports. The five
+project agents under `.claude/agents/` use the four Claude models the owner
+allows, in order of rising cost. Each agent's description says what it takes
+and what it does not, and the lead routes by those descriptions; the table
+holds only what they leave out:
 
-| Agent | Model | Effort | Use for |
-|---|---|---|---|
-| `scout` | Haiku 5.5 | medium | Read-only search, log triage, live-World probes and captures. No source edits or commits; authorized CLI bootstrap is allowed. |
-| `implementer` | Sonnet 5.5 | high | A specified brief with a finish line. It is the default writer. |
-| `reviewer` | Opus 5.5 | high | Findings-only review, audit or memo review; no worktree, no edits, no build. |
-| `specialist` | Opus 5.5 | high | Design judgement across projects, diagnosis of an unknown cause, review-and-fix passes. |
-| `principal` | Fable 5.1 | high | Design and review, sparingly: a design memo, an architecture, a design review, or a review where repeated rounds point at a fundamental flaw (determinism and fixed-point maths, the bake, renderer architecture). Never implementing, measuring or bisecting. |
+| Agent | Model | Effort | Worktree | Preloads |
+|---|---|---|---|---|
+| `scout` | Haiku 5.5 | medium | none | `content-search`, `symbol-analysis` |
+| `implementer` | Sonnet 5.5 | high | own | `delegate` |
+| `reviewer` | Opus 5.5 | high | none | `delegate`, `review-passes`, `content-search`, `symbol-analysis` |
+| `specialist` | Opus 5.5 | high | own | `delegate` |
+| `principal` | Fable 5.1 | high | own | `delegate` |
 
 Route each brief to the cheapest role that fits it (the owner's ruling): a
-brief with a known cause or a specified result, such as content, a document
-change, a world edit or a fix with a repro, goes to `implementer`, even when it
-is large. `specialist` is for an unknown cause or a design call across projects.
-`principal` is for the problems the table names and nothing else, and its usage
-is conserved (the owner's ruling): an unknown cause starts on `specialist` or
-Astra, and `principal` takes a problem only after one of them has failed to
-crack it. When a lane on
-a cheaper role stalls, escalate that lane; never start on the expensive role
-because a brief is long. Codex is part of the same lineup: Sol is a peer of
-`implementer` and takes the same briefs, and Astra is comparable to `principal`
-and takes only what `principal` would. Spread implementer briefs across
+brief with a known cause or a specified result goes to `implementer` even when
+it is large. When a lane on a cheaper role stalls, escalate that lane; never
+start on the expensive role because a brief is long. `principal` is conserved
+(the owner's ruling, [Conserve Fable](#no-bad-loops)): an unknown cause stays
+with `specialist` or Astra, at a higher effort or in the other family when a
+lane stalls, and `principal` enters only as a design review when repeated
+rounds point at a fundamental flaw in the approach, never to run the
+diagnosis. Codex is part of the same lineup: Sol is a peer of `implementer` and
+takes the same briefs, and Astra, the frontier model, takes demanding
+implementation, diagnosis and review, the work of `specialist`; Fable's
+design-only limit does not apply to it. Spread implementer briefs across
 `implementer` and Sol, so both families' slots stay busy. Concept art and
 other image generation go to Codex as the primary artist and judge (the
 owner's ruling): its built-in `image_generation` tool makes the images and its
@@ -736,9 +743,8 @@ In Claude, arm a recurring audit as a background monitor, which reports while th
 busy; a session cron fires only when the lead is idle and misses exactly the
 drift it exists for. On each audit, act on what degraded in the same turn: a
 ready lane waiting more than an hour for a batch, an idle slot with ready work,
-a lane held for anything but the integration lane's next batch, a lane that
-repeats a failure or has made no writes for 30 minutes ([no bad
-loops](#no-bad-loops)), or a stale board.
+a lane held for anything but the integration lane's next batch, a stalled lane
+([no bad loops](#no-bad-loops)), or a stale board.
 
 When an owner correction reveals a process rule, change the repository skill
 that drives the behavior (this one, `review-passes`, `verification`) in the
@@ -747,12 +753,14 @@ beside a skill that still says otherwise changes nothing.
 
 ## No bad loops
 
-Every lane and the lead follow five rules, so that a failure costs one retry and
-not a spiral:
+Every lane and the lead follow these rules, so that a failure costs one retry
+and not a spiral:
 
-- Retry a failing step (a build, test, boot, start, review or restart) once. If
-  it fails again, stop, record what failed and what was tried, and take the next
-  item.
+- Retry an unchanged failing step (a build, test, boot, start, review or
+  restart) once; a new attempt after diagnosing and fixing a cause is not a
+  retry. If the unchanged step fails again, stop, record what failed and what
+  was tried, and take the next item the brief or track already authorizes; a
+  one-shot lane with none hands back blocked.
 - Every poll has a deadline and a spacing that fits the work. A lane waits on a
   run of minutes by starting it in the background and checking every few
   minutes (or blocking on its exit), never by re-running a status script every
@@ -779,8 +787,12 @@ not a spiral:
   next batch or filed into their packet, and that fix lands on its own evidence
   without a second review round. A lane that lands is followed at once by the
   next open item, and each batch deletes the items it closed.
-- The lead's audit stops a lane that repeats a failure or makes no writes for 30
-  minutes, saves its tree as a WIP commit, and hands the work to another lane.
+- The lead's audit stops a stalled lane, saves a writing lane's tree as a WIP
+  commit, and hands the work to another lane. A lane is stalled when it repeats
+  a failure, or when its progress stops for 30 minutes: writes for a writing
+  lane; findings, job output or exit for a read-only lane (`reviewer`, `scout`,
+  a findings-only Codex lane), which writes no source by design. A leased job
+  still producing output is not stalled.
 - When the review of a fix finds more instances of the class it fixed, the next
   fix is structural: one check that holds the invariant everywhere and a test
   over every case, not another path-by-path round. When the structural round
@@ -811,8 +823,10 @@ not a spiral:
   card table and a corrected influence price did.
 - A Codex run that ends `Selected model is at capacity` is retried once on the
   other Codex model (Sol to Astra or back), not on the same one.
-- A read-only lane in a worktree commits what it writes or returns it as text:
-  an uncommitted file in an auto-cleaned worktree is gone when the lane ends.
+- A read-only lane makes no commit: it writes its findings to the path its
+  brief names and repeats them in its hand-back, and the lead copies any
+  findings out of a worktree before removing it
+  ([lane work](references/lane-work.md#delegated-work)).
 
 ## Rule on collisions
 
