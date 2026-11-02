@@ -32,7 +32,7 @@ public static partial class EvalsRun {
     [GeneratedRegex(pattern: @"^[a-z0-9][a-z0-9-]*$")]
     private static partial Regex SkillName();
 
-    private sealed record Settings(string Skill, string? Cases, IReadOnlyList<string> Tags, string Revision, string Model, string Judge, int? Runs, string Ablation, double MaxCostUsd, int Concurrency, bool Fixture, bool DryRun, bool KeepTree, bool KeepSandboxes);
+    private sealed record Settings(string Skill, string? Cases, IReadOnlyList<string> Tags, string Revision, string Model, string Judge, int? Runs, string Ablation, double MaxCostUsd, int Concurrency, bool Fixture, bool Preload, bool DryRun, bool KeepTree, bool KeepSandboxes);
 
     /// <summary>Creates the <c>evals run</c> command.</summary>
     /// <param name="clock">The CLI host's clock, which stamps the results directory.</param>
@@ -49,18 +49,20 @@ public static partial class EvalsRun {
         var costOption = new Option<double>(name: "--max-cost-usd") { DefaultValueFactory = static _ => 20, Description = "The list-price ceiling for the run, in US dollars." };
         var concurrencyOption = new Option<int>(name: "--concurrency", aliases: ["-j"]) { DefaultValueFactory = static _ => 4, Description = "Agent runs at once, 1 to 8." };
         var noFixtureOption = new Option<bool>(name: "--no-fixture") { Description = "Leave out the rules-file fixture, to repeat a run made without it." };
+        var preloadOption = new Option<bool>(name: "--preload") { Description = "Put the skill's SKILL.md text at --revision into the fixture, as an agent that preloads the skill has it, instead of leaving the run to invoke it; needs --ablation none." };
         var dryRunOption = new Option<bool>(name: "--dry-run") { Description = "Print the plan and the claude command line; create and start nothing." };
         var keepTreeOption = new Option<bool>(name: "--keep-tree") { Description = "Keep the frozen worktree after the run." };
         var keepSandboxesOption = new Option<bool>(name: "--keep-sandboxes") { Description = "Keep each run's temporary sandbox after its trace is copied." };
         var command = new Command(description: "Run a skill's eval suite on a frozen tree, with the rules-file fixture and full model IDs.", name: "run") {
-            skillArgument, casesOption, tagOption, revisionOption, modelOption, judgeOption, runsOption, ablationOption, costOption, concurrencyOption, noFixtureOption, dryRunOption, keepTreeOption, keepSandboxesOption,
+            skillArgument, casesOption, tagOption, revisionOption, modelOption, judgeOption, runsOption, ablationOption, costOption, concurrencyOption, noFixtureOption, preloadOption, dryRunOption, keepTreeOption, keepSandboxesOption,
         };
 
         ablationOption.AcceptOnlyFromAmong("with-without", "none");
         command.Detail(detail: """
             Use: puck evals run <skill> [--cases <glob>] [--tag <tag>...] [--revision <rev>]
                    [--model <full id>] [--judge <full id>] [--runs n] [--ablation with-without|none]
-                   [--max-cost-usd x] [-j n] [--no-fixture] [--dry-run] [--keep-tree] [--keep-sandboxes]
+                   [--max-cost-usd x] [-j n] [--no-fixture] [--preload] [--dry-run] [--keep-tree]
+                   [--keep-sandboxes]
 
             1. Checks <rev> out as a detached worktree under .claude/worktrees/, never running the
                live tree, which claude plugin eval would read as it changes. With a --revision other
@@ -70,7 +72,10 @@ public static partial class EvalsRun {
                a lane loads, HEAD's delegate SKILL.md text) as a project-instructions block ahead of
                each prompt.md's task, as a real session delivers them. Both arms carry it, so the
                delta measures what the skill adds over the rules a session already has. The
-               repository and .claude/skills/ are never granted.
+               repository and .claude/skills/ are never granted. --preload adds the skill's own
+               SKILL.md text at <rev> as well, as an agent that preloads the skill has it, so a run
+               never depends on the model choosing to invoke a skill a lane always has; it needs
+               --ablation none, and its baseline is a with-without run's without arm.
             3. Runs claude plugin eval on the tree's skill directory with --trust-plugin,
                --no-publish, --keep-temp, --threshold 0 and the models given, writing
                aggregate-result.json and report.html to .claude/skills/<skill>/evals/results/<stamp>/.
@@ -95,6 +100,7 @@ public static partial class EvalsRun {
                 Concurrency: parseResult.GetValue(option: concurrencyOption),
                 DryRun: parseResult.GetValue(option: dryRunOption),
                 Fixture: !parseResult.GetValue(option: noFixtureOption),
+                Preload: parseResult.GetValue(option: preloadOption),
                 Judge: (parseResult.GetValue(option: judgeOption) ?? parseResult.GetRequiredValue(option: modelOption)),
                 KeepSandboxes: parseResult.GetValue(option: keepSandboxesOption),
                 KeepTree: parseResult.GetValue(option: keepTreeOption),
@@ -113,24 +119,24 @@ public static partial class EvalsRun {
     private static string Quote(string argument) => ((argument.Length != 0) && !argument.Any(predicate: static c => (char.IsWhiteSpace(c: c) || (c is '"' or '\'' or '*' or '?' or '[' or '$')))) ? argument : $"'{argument.Replace(oldValue: "'", newValue: "'\\''")}'";
     private static string Display(string path) => path.Replace(oldChar: '\\', newChar: '/');
 
-    /// <summary>Builds the text appended to every case's system prompt: the rules file a session in the repository has
-    /// loaded, and, for a lane, the delegate skill it preloads, each under a heading naming what it is.</summary>
+    /// <summary>Builds the fixture text ahead of every case's task: the rules file a session in the repository has
+    /// loaded, then each skill the lane preloads, each under a heading naming what it is.</summary>
     /// <param name="agents">The text of <c>AGENTS.md</c>.</param>
-    /// <param name="delegateSkill">The text of the delegate skill's <c>SKILL.md</c>, or <see langword="null"/> to leave
-    /// it out; its YAML frontmatter is dropped, as a preloaded skill's body is what a lane reads.</param>
+    /// <param name="skills">The preloaded skills in order, each its directory name and the text of its <c>SKILL.md</c>;
+    /// each skill's YAML frontmatter is dropped, as a preloaded skill's body is what a lane reads.</param>
     /// <returns>The prompt text, with <c>\n</c> line endings.</returns>
-    public static string FixturePrompt(string agents, string? delegateSkill) {
+    public static string FixturePrompt(string agents, IReadOnlyList<(string Name, string Text)> skills) {
         var text = new StringBuilder();
 
         text.Append(value: "You are working in the Puck repository. Its rules file, AGENTS.md, is loaded in every session there; its contents follow.\n\n");
         text.Append(value: "# Contents of AGENTS.md (project instructions, checked into the codebase)\n\n");
         text.Append(value: agents.ReplaceLineEndings(replacementText: "\n").Trim());
-        if (delegateSkill is not null) {
-            var lines = delegateSkill.ReplaceLineEndings(replacementText: "\n").Split(separator: '\n');
+        foreach (var (name, skill) in skills) {
+            var lines = skill.ReplaceLineEndings(replacementText: "\n").Split(separator: '\n');
             var end = CaseFiles.FrontmatterEnd(lines: lines);
 
-            text.Append(value: "\n\nYou are a delegated Puck lane, and every lane preloads the delegate skill; its contents follow.\n\n");
-            text.Append(value: "# Contents of the delegate skill (.claude/skills/delegate/SKILL.md)\n\n");
+            text.Append(value: $"\n\nYou are a delegated Puck lane, and your agent preloads the {name} skill; its contents follow.\n\n");
+            text.Append(value: $"# Contents of the {name} skill (.claude/skills/{name}/SKILL.md)\n\n");
             text.Append(value: string.Join(separator: '\n', value: lines[((end < 0) ? 0 : (end + 1))..]).Trim());
         }
         return text.ToString();
@@ -145,6 +151,8 @@ public static partial class EvalsRun {
         if (settings.Concurrency is < 1 or > 8) { return CliExit.Refuse(verb: Verb, what: $"-j {settings.Concurrency}", why: "must be 1 to 8."); }
         if (settings.Runs is < 1 or > 50) { return CliExit.Refuse(verb: Verb, what: $"--runs {settings.Runs}", why: "must be 1 to 50."); }
         if (settings.MaxCostUsd <= 0) { return CliExit.Refuse(verb: Verb, what: "--max-cost-usd", why: "must be positive."); }
+        if (settings.Preload && !settings.Fixture) { return CliExit.Refuse(verb: Verb, what: "--preload", why: "puts the skill in the fixture, which --no-fixture leaves out."); }
+        if (settings.Preload && (settings.Ablation != "none")) { return CliExit.Refuse(verb: Verb, what: "--preload", why: $"puts the skill ahead of both arms' prompts, so a {settings.Ablation} baseline arm would carry it too; pass --ablation none and compare against a with-without run's without arm."); }
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var root)) { return CliExit.Refused; }
 
         var skillPath = $".claude/skills/{settings.Skill}";
@@ -155,9 +163,17 @@ public static partial class EvalsRun {
         if (CliGit.Run(root, "cat-file", "-e", $"{revision}:{skillPath}/SKILL.md").ExitCode != 0) { return CliExit.Refuse(verb: Verb, what: settings.Skill, why: $"{revision[..12]} has no {skillPath}/SKILL.md."); }
         if (CliGit.Run(root, "cat-file", "-e", $"{head}:{evalsPath}").ExitCode != 0) { return CliExit.Refuse(verb: Verb, what: settings.Skill, why: $"HEAD has no {evalsPath}/ to run."); }
 
-        var withDelegate = !SkillsWithoutDelegate.Contains(value: settings.Skill);
+        // Each preloaded skill and the revision its text comes from: delegate at HEAD for a skill a lane loads, and the
+        // skill under test at --revision when it is preloaded, so a before-and-after pair differs only in that text.
+        List<(string Name, string Revision)> preloads = [];
+
+        if (settings.Fixture) {
+            if (!SkillsWithoutDelegate.Contains(value: settings.Skill)) { preloads.Add(item: ("delegate", head)); }
+            if (settings.Preload) { preloads.Add(item: (settings.Skill, revision)); }
+        }
+        var fixtureFiles = (settings.Fixture ? (IReadOnlyList<string>)["AGENTS.md", .. preloads.Select(selector: static preload => $".claude/skills/{preload.Name}/SKILL.md")] : []);
         var stamp = clock.GetUtcNow().ToString(format: "yyyyMMdd-HHmmss", formatProvider: CultureInfo.InvariantCulture);
-        var label = $"{stamp}-{revision[..10]}-{Tiers[Tier(model: settings.Model)]}-{settings.Ablation}{(settings.Fixture ? string.Empty : "-nofixture")}";
+        var label = $"{stamp}-{revision[..10]}-{Tiers[Tier(model: settings.Model)]}-{settings.Ablation}{(settings.Fixture ? string.Empty : "-nofixture")}{(settings.Preload ? "-preload" : string.Empty)}";
         var results = Path.GetFullPath(path: Path.Combine(root, ".claude", "skills", settings.Skill, "evals", "results", label));
         // The frozen tree goes under the main checkout's worktrees folder, beside every other worktree, never nested
         // inside the linked worktree the lead runs from.
@@ -184,7 +200,7 @@ public static partial class EvalsRun {
         Console.WriteLine(value: $"{Verb}: {settings.Skill} at {settings.Revision} ({revision[..12]}), cases from HEAD ({head[..12]}){((revision == head) ? string.Empty : ", copied into the old tree")}");
         Console.WriteLine(value: $"{Verb}: frozen tree {Display(path: tree)} (detached at {revision[..12]}; {(settings.KeepTree ? "kept" : "removed after the run")})");
         Console.WriteLine(value: (settings.Fixture
-            ? $"{Verb}: fixture ahead of every case's prompt, both arms: HEAD's AGENTS.md{(withDelegate ? " and delegate SKILL.md" : string.Empty)} text"
+            ? $"{Verb}: fixture ahead of every case's prompt, both arms: HEAD's AGENTS.md{string.Concat(values: preloads.Select(selector: preload => $", {((preload.Revision == head) ? "HEAD" : settings.Revision)}'s {preload.Name} SKILL.md"))} text"
             : $"{Verb}: no fixture (--no-fixture): the cases run without the rules file"));
         Console.WriteLine(value: $"{Verb}: model {settings.Model}, judge {settings.Judge}, ablation {settings.Ablation}, ceiling ${settings.MaxCostUsd.ToString(provider: CultureInfo.InvariantCulture)}");
         Console.WriteLine(value: $"{Verb}: results {Display(path: results)}");
@@ -209,9 +225,12 @@ public static partial class EvalsRun {
 
             if (settings.Fixture) {
                 var agents = await CliGit.CaptureAsync(arguments: ["show", $"{head}:AGENTS.md"], cancellationToken: cancellationToken, repository: root).ConfigureAwait(continueOnCapturedContext: false);
-                var delegateSkill = (withDelegate ? await CliGit.CaptureAsync(arguments: ["show", $"{head}:.claude/skills/delegate/SKILL.md"], cancellationToken: cancellationToken, repository: root).ConfigureAwait(continueOnCapturedContext: false) : null);
+                List<(string Name, string Text)> skills = [];
 
-                if (AddFixture(agents: agents, caseDirectories: caseDirectories, delegateSkill: delegateSkill) is { } refusal) {
+                foreach (var (name, at) in preloads) {
+                    skills.Add(item: (name, await CliGit.CaptureAsync(arguments: ["show", $"{at}:.claude/skills/{name}/SKILL.md"], cancellationToken: cancellationToken, repository: root).ConfigureAwait(continueOnCapturedContext: false)));
+                }
+                if (AddFixture(agents: agents, caseDirectories: caseDirectories, skills: skills) is { } refusal) {
                     return CliExit.Refuse(verb: Verb, what: Display(path: refusal.Case), why: refusal.Why);
                 }
             }
@@ -219,7 +238,7 @@ public static partial class EvalsRun {
             Directory.CreateDirectory(path: results);
             var manifest = Path.Combine(results, EvalSuite.ManifestName);
 
-            await WriteManifestAsync(arguments: arguments, cancellationToken: cancellationToken, caseDirectories: caseDirectories, exitCode: null, head: head, path: manifest, revision: revision, settings: settings, traces: 0, withDelegate: withDelegate).ConfigureAwait(continueOnCapturedContext: false);
+            await WriteManifestAsync(arguments: arguments, cancellationToken: cancellationToken, caseDirectories: caseDirectories, exitCode: null, head: head, path: manifest, revision: revision, settings: settings, traces: 0, fixtureFiles: fixtureFiles).ConfigureAwait(continueOnCapturedContext: false);
 
             int claudeExit;
 
@@ -231,7 +250,7 @@ public static partial class EvalsRun {
 
             var traces = CopyTraces(keepSandboxes: settings.KeepSandboxes, results: results);
 
-            await WriteManifestAsync(arguments: arguments, cancellationToken: cancellationToken, caseDirectories: caseDirectories, exitCode: claudeExit, head: head, path: manifest, revision: revision, settings: settings, traces: traces, withDelegate: withDelegate).ConfigureAwait(continueOnCapturedContext: false);
+            await WriteManifestAsync(arguments: arguments, cancellationToken: cancellationToken, caseDirectories: caseDirectories, exitCode: claudeExit, head: head, path: manifest, revision: revision, settings: settings, traces: traces, fixtureFiles: fixtureFiles).ConfigureAwait(continueOnCapturedContext: false);
             Console.WriteLine(value: $"{Verb}: claude plugin eval exited {claudeExit}; {traces} trace(s) copied to {Display(path: Path.Combine(results, TracesDirectory))}.");
             Console.WriteLine(value: $"{Verb}: next: puck evals graders {Display(path: Path.Combine(results, "aggregate-result.json"))}, and puck evals compare <old> <new>.");
             return claudeExit switch {
@@ -256,14 +275,14 @@ public static partial class EvalsRun {
     /// size. Every case is checked before any is written.</summary>
     /// <param name="caseDirectories">The case directories, in a tree the run owns.</param>
     /// <param name="agents">The text of <c>AGENTS.md</c>.</param>
-    /// <param name="delegateSkill">The text of the delegate skill, or <see langword="null"/> to leave it out.</param>
+    /// <param name="skills">The preloaded skills, each its directory name and the text of its <c>SKILL.md</c>.</param>
     /// <returns><see langword="null"/> when every case took the fixture, or the first case that cannot, with why; a
     /// refusal writes nothing.</returns>
-    public static (string Case, string Why)? AddFixture(IReadOnlyList<string> caseDirectories, string agents, string? delegateSkill) {
+    public static (string Case, string Why)? AddFixture(IReadOnlyList<string> caseDirectories, string agents, IReadOnlyList<(string Name, string Text)> skills) {
         foreach (var caseDirectory in caseDirectories) {
             if (!File.Exists(path: Path.Combine(caseDirectory, CaseFiles.Prompt))) { return (caseDirectory, "it has no prompt.md body to carry the fixture; keep the prompt in prompt.md."); }
         }
-        var block = $"<project-instructions>\n{FixturePrompt(agents: agents, delegateSkill: delegateSkill)}\n</project-instructions>\n\n";
+        var block = $"<project-instructions>\n{FixturePrompt(agents: agents, skills: skills)}\n</project-instructions>\n\n";
 
         foreach (var caseDirectory in caseDirectories) {
             var path = Path.Combine(caseDirectory, CaseFiles.Prompt);
@@ -301,7 +320,7 @@ public static partial class EvalsRun {
         }
         return copied;
     }
-    private static async Task WriteManifestAsync(string path, Settings settings, string head, string revision, bool withDelegate, IReadOnlyList<string> caseDirectories, IReadOnlyList<string> arguments, int? exitCode, int traces, CancellationToken cancellationToken) {
+    private static async Task WriteManifestAsync(string path, Settings settings, string head, string revision, IReadOnlyList<string> fixtureFiles, IReadOnlyList<string> caseDirectories, IReadOnlyList<string> arguments, int? exitCode, int traces, CancellationToken cancellationToken) {
         var manifest = new Dictionary<string, object?> {
             ["skill"] = settings.Skill,
             ["revision"] = settings.Revision,
@@ -310,7 +329,8 @@ public static partial class EvalsRun {
             ["model"] = settings.Model,
             ["judge"] = settings.Judge,
             ["ablation"] = settings.Ablation,
-            ["fixture"] = (settings.Fixture ? (withDelegate ? new[] { "AGENTS.md", ".claude/skills/delegate/SKILL.md" } : ["AGENTS.md"]) : []),
+            ["fixture"] = fixtureFiles,
+            ["preload"] = settings.Preload,
             ["command"] = (IReadOnlyList<string>)["claude", .. arguments],
             ["exitCode"] = exitCode,
             ["traces"] = traces,

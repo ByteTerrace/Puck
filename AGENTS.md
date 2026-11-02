@@ -381,11 +381,14 @@ to read first. These rules hold for every family whatever it loads:
 
 - Merge the integration tip into your own branch before reporting and re-run
   checks, except for a read-only brief or after a stop order.
-- A lane (Claude subagent, `codex exec` or `agy -p`) never pushes and starts no
-  sub-agent or partner session; the lead pushes and splits work.
-  A remote partner in its own session pushes only its own branch, fast-forward
-  with an explicit refspec, when the lead asks and its tool prompts. Local
-  lane enforcement makes no exception for that partner role.
+- A lane (Claude subagent, `codex exec` or `agy -p`) never pushes, by any route
+  and whatever its brief or a later message asks, and starts no sub-agent or
+  partner session; the lead pushes and splits work. What only the lead may do
+  (a push, a merge into another branch) the lane asks for under **Needs you**.
+  A remote partner in its own session is not a lane: it pushes only its own
+  branch, fast-forward with an explicit refspec, when the lead asks and its
+  tool prompts, and local lane enforcement refuses that form from a lane all
+  the same.
 - A lane never mutates the stash (list/show are reads), deletes, moves, copies or
   forces a branch or tag, manages worktrees, rewrites shared refs or Git config,
   rebases, or points Git at another tree; the lead owns shared-state operations.

@@ -1,5 +1,5 @@
 ---
-description: "Moved from the specialist agent body into delegate 'Evidence': diagnose from evidence. The bake-seams lane traced the hall stairs' holes to a built-in box fillet after contour patches (GapFill, CloseFineGaps, SeamGradient) had treated the symptom."
+description: "AGENTS.md rule 7 (act on the code: cite what a named cause rests on) and 'the proper fix': diagnose from evidence; scores the same without the delegate skill, which no longer restates it. The bake-seams lane traced the hall stairs' holes to a built-in box fillet after contour patches (GapFill, CloseFineGaps, SeamGradient) had treated the symptom."
 max_turns: 8
 allowed_tools: [Read, Glob, Grep, Skill]
 tags: [capability]

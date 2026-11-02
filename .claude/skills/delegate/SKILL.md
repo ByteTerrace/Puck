@@ -8,14 +8,16 @@ description: "Holds the working contract of every delegated Puck lane: grants, b
 You work autonomously: the lead may be offline, and only your commits and your hand-back reach it.
 Proceed on reversible work that follows from your brief; stop only for a look or product call, an
 owner-only action or the brief's stopping condition. [AGENTS.md](../../../AGENTS.md#when-you-are-the-delegate)
-holds the Git, push and stop-order rules every family shares.
+holds the rules every family shares, and this skill does not repeat them: Git, pushing and stop
+orders, verifying a change by building and running it, and fixing a defect at its named cause
+(rule 7 and "the proper fix").
 
 ## Start
 
 - Re-read this worktree's AGENTS.md and the skill that owns your area: they correct stale startup
   text, and current owner and system instructions still outrank them.
 - Your brief grants your task, what you may write and which World mutations you may make; nothing
-  else is granted. Reuse the mechanisms it names and add no second one.
+  else is granted. Reuse the mechanisms it names.
 - Read [the recurring hazards](../../../docs/development/hazards.md) before writing code: most high
   findings are one of its shapes, and its analyzers (`STALE001`, `puck scan --only clones`,
   `identity-counters`, `exact-keys`) run on what you change.
@@ -46,31 +48,29 @@ holds the Git, push and stop-order rules every family shares.
   PowerShell tool runs; run a PowerShell script from the PowerShell tool (`& pwsh -File <script>`).
 - Name scratch `<worktree>/.claude/scratch/<lane>-*`. Claude removes a worktree holding only ignored
   files when the lane ends, so output that must survive goes to the path your brief names.
-- Set work aside with a WIP commit or a copy to a path your brief allows, never `git checkout --` or
-  `git restore` over uncommitted edits: a fault-injection round wiped a lane's own unsaved file that way.
+- Before anything takes uncommitted work out of the tree (showing a check fail on the old code,
+  trying another approach), commit it as WIP or copy it to a path your brief allows, then bring the
+  old code back from a commit. Never let `git checkout --`, `git restore` or a script that runs on
+  past a failed copy be what removes uncommitted edits: a fault-injection round wiped a lane's own
+  unsaved file that way.
 
 ## Evidence
 
-- Show a change working by building what it touched and running what it changed.
-- Diagnose from evidence: reproduce a defect first, name its cause with the code, log line or
-  capture that shows it, and fix the cause, not its symptom. A change that makes a symptom go away
-  with its cause still unnamed is not a fix. Report what you reproduced or measured apart from what
-  you argued from the source.
 - Before writing code whose correctness rests on an invariant (a cache's invalidation, an oracle's
-  coverage, a geometric assumption, a concurrency handoff), write down the invariant and the one
-  place that enforces it (the compiler, a type, one door, a derived view), build behind it, and name
-  both in the commit body and the hand-back; "every caller remembers" is not enforcement, and saying
-  plainly that nothing enforces it yet is better than implying something does. When a fix needs the
-  same guard in several places, design the one chokepoint they all pass through instead of copying
-  the guard.
-- A design (a memo, an architecture, a design review) names its invariant and what enforces it,
-  states where its guarantee stops, and answers each finding its review raised, one by one. Its
-  implementation steps each carry a mechanical check. A question it cannot settle without a
-  measurement or a prototype becomes a step for another lane, named with what it would show: a
-  design lane builds, prototypes and measures nothing itself.
-- Showing a new check failing without the fix it guards (fault injection or the old code) is a
-  technique for when it is cheap and telling, never a standing requirement: AGENTS.md suspends tests
-  and red legs during the campaign. Commit the fix as WIP before injecting a fault.
+  coverage, a geometric assumption, a concurrency handoff, a guard every read or write must pass),
+  write down the invariant and the one place that enforces it (the compiler, a type, one door, a
+  derived view), build behind it, and name both in the commit body and the hand-back. Enforcement
+  means a new caller cannot get around it. When the same guard is needed in several places, make the
+  unguarded path unreachable (narrow its visibility, or hand callers a type only the guarded path
+  produces) instead of copying the guard or adding a helper every caller must remember to call. If
+  nothing enforces the invariant yet, say so plainly rather than implying something does.
+- A design lane (a memo, an architecture, a design review) delivers a document, never code or
+  numbers. The document names its invariant, what enforces it and where that guarantee stops; it
+  answers each finding its review raised, one by one; and it gives every implementation step a
+  mechanical check that shows the step worked. Each question the design cannot settle without a
+  measurement or a prototype becomes a step for another lane, named with what it would show and what
+  it decides. The design lane builds, prototypes and measures nothing itself, however quick the
+  measurement looks.
 
 ## Finish
 
@@ -84,16 +84,15 @@ holds the Git, push and stop-order rules every family shares.
   runs beside your next work, and what else you noticed goes under **Found**.
 - Before your final commit, run `puck docs links` from your CLI copy. Fix every failure your change
   introduced: a renamed symbol, a moved file, a closed plan item. A failure older than your change goes
-  in your hand-back. Documents rot when the change that broke them does not fix them
-  ([keep documents from rotting](../../../docs/development/documentation.md#keep-documents-from-rotting)).
+  in your hand-back.
 - A writing lane commits on its own branch: a lowercase `area: sentence` subject, what you ran to
   show it working in the body, and on the assignment's last commit only a final line
-  `Brief: <id> done` or `Brief: <id> blocked: <question>`. A lane never pushes, whatever its brief
-  says (the lead pushes; AGENTS.md names the one exception, a remote partner's own branch), and
-  never modifies `main`.
-- Commit only with `git commit` over an index you inspected. Never build a commit from plumbing
-  (`git commit-tree`, `git read-tree`, or anything else that could write an empty or unrelated tree);
-  the lane guard refuses both. ASP.NET's agent effort (dotnet/aspnetcore#70219) pushed five
+  `Brief: <id> done` or `Brief: <id> blocked: <question>`.
+- Commit only with `git commit` over an index you inspected. Entries staged by something other than
+  you stay staged and uncommitted: name your own paths to `git commit` rather than unstaging,
+  resetting or committing theirs. Never build a commit from plumbing (`git commit-tree`,
+  `git read-tree`, or anything else that could write an empty or unrelated tree); the lane guard
+  refuses both. ASP.NET's agent effort (dotnet/aspnetcore#70219) pushed five
   empty-tree retrigger commits that deleted the whole repository. An `--allow-empty` hand-back commit
   on your own tree stays allowed.
 - Hand back under **Needs you** (decisions you could not make and GPU legs you need, with options and
