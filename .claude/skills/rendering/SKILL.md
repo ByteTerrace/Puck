@@ -266,7 +266,10 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   `gpu.vertices` include them. Cascade selection emits entry and exactly one
   exit command per kept draw: solid exits use front-face culling, thin/clipped
   exits the unculled pipeline. Count those emitted commands, without another
-  selection or history write. `GpuWorkCounting.DrawIndirectCount` counts the API call,
+  selection or history write. Count entry and exit with separate wave reductions:
+  64 lanes of a maximum mesh's vertices fit a uint sum, twice that does not;
+  `puckAddWork` carries each addition into the 64-bit accumulator.
+  `GpuWorkCounting.DrawIndirectCount` counts the API call,
   not its unknown draw/vertex totals. An object `world.cull frustum` brings back is the
   occlusion's. The identity is a root constant on Direct3D 12. Vulkan reads it
   from the

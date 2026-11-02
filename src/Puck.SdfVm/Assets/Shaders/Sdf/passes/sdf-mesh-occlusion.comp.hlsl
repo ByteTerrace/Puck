@@ -237,12 +237,12 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         }
         draws = emit ? 1u : 0u;
         vertices = emit ? count : 0u;
-        if (splitExit && step == SdfOcclusionEarly) {
-            // Entry and exactly one exit bucket emit a nonempty command for each selected draw.
-            draws += emit ? 1u : 0u;
-            vertices += emit ? count : 0u;
-        }
     }
 
     sdfOcclusionCount(draws, vertices);
+    if (splitExit && step == SdfOcclusionEarly) {
+        // Count entry and exit separately: 64 * (3 * MaxTriangles) fits a uint wave sum, twice that does not.
+        // Each kept draw emits exactly one exit command; puckAddWork carries into the 64-bit accumulator.
+        sdfOcclusionCount(draws, vertices);
+    }
 }
