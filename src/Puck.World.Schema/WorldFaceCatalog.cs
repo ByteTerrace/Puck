@@ -20,11 +20,8 @@ namespace Puck.World;
 /// <param name="Aperture">The region recipe the named shape's primitive opens (<see cref="WorldFaceApertures"/>), or
 /// <see langword="null"/> when it opens none — the face can be drawn, but not walked through.</param>
 /// <param name="Source">The resolved screen source.</param>
-/// <param name="ScreenIndex">The reserved derived-face screen index this row occupies, or <c>-1</c> when it holds
-/// none — either because <paramref name="Source"/> renders nothing or because the band was exhausted (see
-/// <paramref name="SlotStarved"/>).</param>
-/// <param name="SlotStarved">Whether this row wanted a slot and the reserved band had none left. Geometry is
-/// unaffected: the face still opens, it just shows nothing.</param>
+/// <param name="ScreenIndex">The derived-face screen index this row occupies, or <c>-1</c> when
+/// <paramref name="Source"/> renders nothing.</param>
 /// <param name="Filter">How the face's screen samples its source: the placement's face row's
 /// <see cref="WorldPlacementFace.Filter"/>, or <see cref="GpuSamplerFilter.Nearest"/> when no row overrides the face.</param>
 /// <param name="Material">The screen material the face's screen draws its picture through: the placement's face row's
@@ -38,7 +35,6 @@ public readonly record struct WorldFaceRow(
     WorldFaceApertureRecipe? Aperture,
     WorldScreenSource Source,
     int ScreenIndex,
-    bool SlotStarved,
     GpuSamplerFilter Filter = GpuSamplerFilter.Nearest,
     string? Material = null
 );
@@ -48,9 +44,9 @@ public readonly record struct WorldFaceRow(
 /// <c>world.faces</c> read-back all consume these rows rather than re-walking the same order independently.
 /// </summary>
 /// <remarks>
-/// <para>GEOMETRY BEFORE SLOTS. Every face gets a frame regardless of whether a screen slot is available: a door is
-/// a geometric fact, and slot exhaustion may only darken presentation. A face whose resolved source renders nothing
-/// (<see cref="WorldScreenSource.None"/>) claims no slot at all.</para>
+/// <para>GEOMETRY BEFORE SLOTS. Every face gets a frame: a door is a geometric fact. A face whose resolved source
+/// renders nothing (<see cref="WorldScreenSource.None"/>) claims no slot; every other face takes the next slot of a
+/// band exactly as wide as the faces that claim one (<see cref="WorldDefinition.DerivedFaceScreens"/>).</para>
 /// <para>FIXED POINT END TO END. Every frame constant is derived through <see cref="FixedQuaternion"/> and
 /// <see cref="FixedQ4816"/> — yaw through the integer SinCos path, shape orientation through
 /// <see cref="FixedQuaternion.FromQuaternion"/> — because the trigger decision these frames feed is simulation
@@ -86,11 +82,10 @@ public sealed class WorldFaceCatalog {
     private static readonly FixedQ4816 FallbackHalfHeightFixed = FixedQ4816.FromDouble(value: FallbackHalfHeight);
     private static readonly FixedQ4816 FallbackHalfWidthFixed = FixedQ4816.FromDouble(value: FallbackHalfWidth);
 
-    private WorldFaceCatalog(IReadOnlyList<WorldFaceRow> rows, IReadOnlyList<string> notices, int claimingFaceCount, int slotCapacity) {
+    private WorldFaceCatalog(IReadOnlyList<WorldFaceRow> rows, IReadOnlyList<string> notices, int claimingFaceCount) {
         Rows = rows;
         Notices = notices;
         ClaimingFaceCount = claimingFaceCount;
-        SlotCapacity = slotCapacity;
         m_index = new Dictionary<(string, string), int>(capacity: rows.Count);
         m_apertures = new WorldFaceAperture?[rows.Count];
         m_screens = [];
@@ -113,15 +108,11 @@ public sealed class WorldFaceCatalog {
 
     /// <summary>Gets how many rows resolved to a source that renders something, and so asked for a screen slot.</summary>
     public int ClaimingFaceCount { get; }
-    /// <summary>Gets the named echoes this derivation produced — an unresolvable default-source token, or a face the
-    /// reserved band could not seat.</summary>
+    /// <summary>Gets the named echoes this derivation produced: an unresolvable default-source token.</summary>
     public IReadOnlyList<string> Notices { get; }
     /// <summary>Gets the derived rows, in document order: placements outer, each placement's declared creation faces
     /// inner.</summary>
     public IReadOnlyList<WorldFaceRow> Rows { get; }
-    /// <summary>Gets the reserved derived-face slot count this derivation allocated against
-    /// (<c>authoring.derivedFaceScreens</c>).</summary>
-    public int SlotCapacity { get; }
 
     private static bool DeclaresCamera(WorldDefinition definition, string name) {
         foreach (var camera in definition.Cameras) {
@@ -140,9 +131,8 @@ public sealed class WorldFaceCatalog {
         var rows = new List<WorldFaceRow>();
         var notices = new List<string>();
         var cameras = DerivedCameraNames(definition: definition);
-        var capacity = definition.Authoring.DerivedFaceScreens;
         var claiming = 0;
-        var screenIndex = WorldPlacementPolicy.DerivedFaceBase(definition);
+        var screenIndex = WorldPlacementPolicy.DerivedFaceBase(definition: definition);
 
         foreach (var placement in definition.Placements) {
             if (
@@ -174,20 +164,12 @@ public sealed class WorldFaceCatalog {
                     notices: notices
                 )
                     ?? new WorldScreenSource.None()));
-                var claimsSlot = (source is not WorldScreenSource.None);
                 var seated = -1;
-                var starved = false;
 
-                if (claimsSlot) {
+                if (source is not WorldScreenSource.None) {
                     claiming++;
-
-                    if (screenIndex < (WorldPlacementPolicy.DerivedFaceBase(definition) + capacity)) {
-                        seated = screenIndex;
-                        screenIndex++;
-                    } else {
-                        starved = true;
-                        notices.Add(item: $"[world.faces: '{placement.Id}':'{face.Name}' is DARKENED — the {capacity}-slot reserved derived-face band is full, so this face shows nothing. Its geometry is unaffected: the door still opens]");
-                    }
+                    seated = screenIndex;
+                    screenIndex++;
                 }
 
                 rows.Add(item: new WorldFaceRow(
@@ -204,8 +186,7 @@ public sealed class WorldFaceCatalog {
                     Filter: (faceOverride?.Filter ?? GpuSamplerFilter.Nearest),
                     Material: faceOverride?.Material,
                     Source: source,
-                    ScreenIndex: seated,
-                    SlotStarved: starved
+                    ScreenIndex: seated
                 ));
             }
         }
@@ -213,8 +194,7 @@ public sealed class WorldFaceCatalog {
         return new WorldFaceCatalog(
             claimingFaceCount: claiming,
             notices: notices,
-            rows: rows,
-            slotCapacity: capacity
+            rows: rows
         );
     }
     // The face frame. Origin is the named shape's own stamped center; the plane basis composes the placement's

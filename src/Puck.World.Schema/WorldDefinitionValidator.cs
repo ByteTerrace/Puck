@@ -1673,8 +1673,8 @@ public static partial class WorldDefinitionValidator {
         // dict-fill, so the range is carved out of the authored screen-index space here. The membership test itself is
         // WorldPrototypeFacets.IsReservedFaceIndex — shared with the authoring-headroom scan, which excludes the same
         // band; these two are the only rules that hand out a screen index, and they must exclude ONE set.
-        if ((WorldPlacementPolicy.DerivedFaceBase(definition: definition) + authoring.DerivedFaceScreens) > SdfProgramBuilder.MaxScreenSurfaces) {
-            errors.Add(item: $"Authored screens and {authoring.DerivedFaceScreens} derived-face bindings exceed the {SdfProgramBuilder.MaxScreenSurfaces} screen bindings.");
+        if ((WorldPlacementPolicy.DerivedFaceBase(definition: definition) + definition.DerivedFaceScreens) > SdfProgramBuilder.MaxScreenSurfaces) {
+            errors.Add(item: $"Authored screens and {definition.DerivedFaceScreens} derived-face bindings exceed the {SdfProgramBuilder.MaxScreenSurfaces} screen bindings.");
         }
         // The kits a screen route may name: only a kit carrying a pad map assigns channels a meaning at a machine,
         // so a route naming any other kit would compile to an empty pad and silently press nothing.
@@ -1812,13 +1812,13 @@ public static partial class WorldDefinitionValidator {
                 }
             }
 
-            var availableHeadroom = ((SdfProgramBuilder.MaxScreenSurfaces - authoring.DerivedFaceScreens) - screenIndices.Count);
+            var availableHeadroom = ((SdfProgramBuilder.MaxScreenSurfaces - definition.DerivedFaceScreens) - screenIndices.Count);
 
             if (authoring.AuthoringHeadroomScreens > availableHeadroom) {
                 errors.Add(item: $"placements.policy.authoringHeadroomScreens asks for {authoring.AuthoringHeadroomScreens} slot(s), but only {Math.Max(
                     val1: 0,
                     val2: availableHeadroom
-                )} remain after {screenIndices.Count} authored screen(s) and {authoring.DerivedFaceScreens} derived-face reservation(s).");
+                )} remain after {screenIndices.Count} authored screen(s) and {definition.DerivedFaceScreens} derived-face reservation(s).");
             }
         }
 

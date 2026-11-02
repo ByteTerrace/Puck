@@ -145,7 +145,6 @@ public sealed partial class WorldRenderEnvelopeLawTests {
                 AuthoringHeadroomScreens: 0,
                 CandidateCap: 4,
                 CandidateRadius: 10,
-                DerivedFaceScreens: 2,
                 MaxPlacementScale: 1,
                 MinPlacementScale: 1,
                 PreviewDeadlineFrames: 8
@@ -160,7 +159,6 @@ public sealed partial class WorldRenderEnvelopeLawTests {
         0,
         1
     );
-
     // The scene emitter WorldFramePresenter composes, over a client that runs no server.
     private static (WorldClient Client, WorldSceneEmitter Scene) SceneEmitter(WorldDefinition definition) {
         var routes = new WorldSeatAuthorityRouter();

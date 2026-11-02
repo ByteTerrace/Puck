@@ -93,8 +93,8 @@ public static class WorldPrototypeFacets {
 
         return [.. Derive(
             definition: definition,
-            derivedFaceBase: WorldPlacementPolicy.DerivedFaceBase(definition),
-            derivedFaceScreens: definition.Authoring.DerivedFaceScreens
+            derivedFaceBase: WorldPlacementPolicy.DerivedFaceBase(definition: definition),
+            derivedFaceScreens: definition.DerivedFaceScreens
         ).Faces.Where(predicate: static face => (face.Source is not WorldScreenSource.None))];
     }
 
@@ -215,7 +215,7 @@ public static class WorldPrototypeFacets {
             }
 
             if (row.ScreenIndex >= (derivedFaceBase + derivedFaceScreens)) {
-                // Unreachable while the server refuses a live authoring.derivedFaceScreens raise past the boot
+                // Unreachable while the server refuses a live definition whose derived face screens pass the boot
                 // reservation (Server.WorldServer.BootDerivedFaceScreens). Named rather than skipped, because a
                 // seated row the renderer silently dropped is exactly the disagreement that gate exists to prevent.
                 Console.Error.WriteLine(value: $"[world.faces: '{row.PlacementId}':'{row.FaceName}' was seated at screen {row.ScreenIndex}, past this renderer's boot-reserved band [{derivedFaceBase}, {(derivedFaceBase + derivedFaceScreens)}) — it cannot be shown]");

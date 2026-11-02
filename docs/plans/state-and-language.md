@@ -969,6 +969,27 @@ Decided: (a) for both, since each is a function of the composed world;
 (b) only for a budget the author must choose rather than count. With (a) the
 pair is an authored total against none.
 
+Landed for the face screens: `placements.policy.derivedFaceScreens` is gone,
+and `WorldDefinition.DerivedFaceScreens` is the composed world's claiming
+faces (`WorldFaceCatalog.ClaimingFaceCount`), so every claiming face is seated
+and none starves; the debug world boots with its twelve at screens 18 to 29.
+A live definition that lights more faces than boot reserved is refused by
+`WorldDocument.Compose`, naming the restart, as before.
+
+Open for the capacity: `bodies.capacity` is not a count of the composed
+world. It is the inhabitants plus seat slots a document reserves (the Moth
+basis authors 8 with no inhabitants; chess 41 = those 8, 32 pieces and a
+cursor; the debug world 559 = 1 + its 558 inhabitants, which a headless boot's
+`world.population` confirms), and every game addresses its pieces by body
+index computed from the same hand sum (`goTop`, `reversiTop`, `cardsTop`,
+chess's "bodies 8 to 39") through grants such as `body:{goTop - 1 - i}`.
+Deriving the total therefore moves the drift into those grants, where it
+fails silently. The fix at the cause addresses a piece by its placement (a
+grant or a rule naming `goStones`' body `i`, resolved at load) so no source
+computes an index; then the capacity is `reserve + inhabitants`, `reserve`
+being the seat slots a document chooses (`pond.puck` already writes
+`reserve + creatures`).
+
 **G8 — Naming a rule expression.** A `let` cannot name a state expression, so
 the idle-door guard is restated in nine Klondike rules and eight FreeCell rules
 (`worlds/debug/klondike.puck:246` on), and Klondike adds a `moveReady` latch

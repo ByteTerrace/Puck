@@ -219,7 +219,7 @@ internal sealed partial class WorldPlacementCommandModule(WorldServer server, Wo
                 yawRadians: out var yaw
             )) {
                 var worldPosition = position.ToVector3();
-                var yawDegrees = float.RadiansToDegrees(radians: (float)yaw);
+                var yawDegrees = float.RadiansToDegrees(radians: ((float)yaw));
 
                 _ = builder.Append(value: $" {placement.Id}[body={attach.BodyIndex} pos=({worldPosition.X:0.00}, {worldPosition.Y:0.00}, {worldPosition.Z:0.00}) yaw={yawDegrees:0}°]");
             } else {
@@ -312,12 +312,10 @@ internal sealed partial class WorldPlacementCommandModule(WorldServer server, Wo
                 placements: definition.Placements,
                 id: row.PlacementId
             );
-            var slot = (row.SlotStarved
-                ? "darkened (band full)"
-                : ((row.ScreenIndex < 0)
-                    ? "unlit (source shows nothing)"
-                    : row.ScreenIndex.ToString(provider: CultureInfo.InvariantCulture)
-            ));
+            var slot = ((row.ScreenIndex < 0)
+                ? "unlit (source shows nothing)"
+                : row.ScreenIndex.ToString(provider: CultureInfo.InvariantCulture)
+            );
             var handle = ((row.ScreenIndex >= 0)
                 ? binder.CurrentHandle(index: row.ScreenIndex)
                 : nint.Zero

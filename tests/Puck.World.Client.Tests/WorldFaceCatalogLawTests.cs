@@ -52,7 +52,7 @@ public sealed class WorldFaceCatalogLawTests {
 
     // ---- The slot budget ----
 
-    private static WorldDefinition BuildBudgetDocument(int liveFaces, int reservedSlots) {
+    private static WorldDefinition BuildBudgetDocument(int liveFaces) {
         var creation = BuildDoorCreation();
         var placements = new WorldPlacement[liveFaces];
 
@@ -83,7 +83,7 @@ public sealed class WorldFaceCatalogLawTests {
         return Fixtures.BuildDocument() with {
             CreationsRaw = [creation],
             PlacementRowsRaw = placements,
-            AuthoringRaw = (Fixtures.StandardAuthoring with { DerivedFaceScreens = reservedSlots }),
+            AuthoringRaw = Fixtures.StandardAuthoring,
         };
     }
     private static WorldPrototype BuildDoorCreation(SdfSolidPrimitive faceShape = SdfSolidPrimitive.Box, bool faceNamesShape = true, bool animated = false, bool pitched = false, bool halfTurned = false) {
@@ -251,8 +251,8 @@ public sealed class WorldFaceCatalogLawTests {
         var screen = Assert.Single(
             collection: WorldPrototypeFacets.Derive(
                 definition: linear,
-                derivedFaceBase: WorldPlacementPolicy.DerivedFaceBase(linear),
-                derivedFaceScreens: ((row.ScreenIndex - WorldPlacementPolicy.DerivedFaceBase(linear)) + 1)
+                derivedFaceBase: WorldPlacementPolicy.DerivedFaceBase(definition: linear),
+                derivedFaceScreens: ((row.ScreenIndex - WorldPlacementPolicy.DerivedFaceBase(definition: linear)) + 1)
             ).Faces,
             predicate: face => (face.Index == row.ScreenIndex)
         );
@@ -294,8 +294,8 @@ public sealed class WorldFaceCatalogLawTests {
             return Assert.Single(
                 collection: WorldPrototypeFacets.Derive(
                     definition: definition,
-                    derivedFaceBase: WorldPlacementPolicy.DerivedFaceBase(definition),
-                    derivedFaceScreens: ((row.ScreenIndex - WorldPlacementPolicy.DerivedFaceBase(definition)) + 1)
+                    derivedFaceBase: WorldPlacementPolicy.DerivedFaceBase(definition: definition),
+                    derivedFaceScreens: ((row.ScreenIndex - WorldPlacementPolicy.DerivedFaceBase(definition: definition)) + 1)
                 ).Faces,
                 predicate: face => (face.Index == row.ScreenIndex)
             );
@@ -318,7 +318,7 @@ public sealed class WorldFaceCatalogLawTests {
         var (insetBack, insetFront) = WorldPrototypeFacets.GlassSpan(frame: frame, source: inset.Source);
 
         // The opening's glass is centred on the face's mid-plane and its front face is the glass's sampled origin.
-        Assert.Equal(expected: -back, actual: front);
+        Assert.Equal(actual: front, expected: -back);
         Assert.Equal(expected: opening.HalfDepth, actual: front);
         Assert.True(condition: (Vector3.Distance(value1: ((Vector3)opening.Origin), value2: (frame.Origin.ToVector3() + (frame.Normal.ToVector3() * front))) < 1e-5f));
         Assert.True(condition: ((front > 0f) && (front < ((float)((double)frame.HalfDepth)))));
@@ -337,8 +337,7 @@ public sealed class WorldFaceCatalogLawTests {
         // The reason play's dark cabinet stops competing with its doors: a source that renders nothing asks for no
         // screen, so an at-capacity band still seats every live face.
         var dark = BuildBudgetDocument(
-            liveFaces: 3,
-            reservedSlots: 2
+            liveFaces: 3
         );
         var placements = new List<WorldPlacement>(collection: dark.Placements);
 
@@ -360,7 +359,6 @@ public sealed class WorldFaceCatalogLawTests {
             expected: -1,
             actual: catalog.Rows[0].ScreenIndex
         );
-        Assert.False(condition: catalog.Rows[0].SlotStarved);
     }
     [Fact]
     public void AFaceWithNoApertureStillDrawsWithoutAPortal() {
@@ -538,36 +536,6 @@ public sealed class WorldFaceCatalogLawTests {
         )));
     }
     [Fact]
-    public void MoreLiveFacesThanReservedSlots_RefusesByName() {
-        Assert.False(condition: WorldDefinitionValidator.TryValidate(
-            definition: BuildBudgetDocument(
-                liveFaces: 3,
-                reservedSlots: 2
-            ),
-            reason: out var reason,
-            neighbours: null
-        ));
-        Assert.Contains(
-            actualString: reason,
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "derivedFaceScreens"
-        );
-    }
-    [Fact]
-    public void MoreLiveFacesThanReservedSlots_RefusesByName_AtBudgetControlBoots() {
-        Laws.RefusalWithControl(
-            lawId: "face-frame.static-slot-budget",
-            deniedOutcome: static () => Validates(definition: BuildBudgetDocument(
-                liveFaces: 3,
-                reservedSlots: 2
-            )),
-            controlOutcome: static () => Validates(definition: BuildBudgetDocument(
-                liveFaces: 2,
-                reservedSlots: 2
-            ))
-        );
-    }
-    [Fact]
     public void RotatingThePlacementMovesTheWholeFrame() {
         // THE sensitivity instrument: an instrument that cannot detect the rotation proves nothing about the ones
         // that consume it. Origin, basis, and normal must all move — a frame that only rotated its basis would leave
@@ -605,48 +573,6 @@ public sealed class WorldFaceCatalogLawTests {
             userMessage: $"the frame heading turned by {turn} radians, not pi/6"
         );
     }
-    [Fact]
-    public void SlotExhaustionDarkensTheNewestClaimant_ButNeverRemovesItsGeometry() {
-        // The dynamic half of the budget: a band that cannot seat everything must darken, loudly and by name, and
-        // the darkened face must still carry the frame its door is derived from.
-        var definition = BuildBudgetDocument(liveFaces: 3, reservedSlots: 2);
-        var catalog = WorldFaceCatalog.For(definition);
-        var starved = catalog.Rows[^1];
-
-        Assert.True(condition: starved.SlotStarved);
-        Assert.Equal(
-            expected: -1,
-            actual: starved.ScreenIndex
-        );
-        Assert.NotEqual(
-            expected: default,
-            actual: starved.Frame
-        );
-        Assert.Equal(
-            expected: SdfSolidPrimitive.Box,
-            actual: starved.Aperture?.Primitive
-        );
-        Assert.Contains(
-            collection: catalog.Notices,
-            filter: notice => (notice.Contains(
-                value: starved.PlacementId,
-                comparisonType: StringComparison.Ordinal
-            ) && notice.Contains(
-                comparisonType: StringComparison.Ordinal,
-                value: "DARKENED"
-            ))
-        );
-        Assert.Equal(
-            expected: WorldPlacementPolicy.DerivedFaceBase(definition),
-            actual: catalog.Rows[0].ScreenIndex
-        );
-        Assert.Equal(
-            expected: (WorldPlacementPolicy.DerivedFaceBase(definition) + 1),
-            actual: catalog.Rows[1].ScreenIndex
-        );
-    }
-    // ---- The trigger policy ----
-
     [Fact]
     public void TheBandIsNeverThinnerThanOneStepOfDeclaredTravel() {
         var definition = BuildDoorDocument();

@@ -390,7 +390,7 @@ public static class WorldBootComposition {
         static IReadOnlyList<WorldScreen> ExpandedScreens(WorldDefinition definition) =>
             [.. definition.Screens, .. WorldPrototypeFacets.ReservedFaceSlots(
                     derivedFaceBase: WorldPlacementPolicy.DerivedFaceBase(definition: definition),
-                    derivedFaceScreens: definition.Authoring.DerivedFaceScreens
+                    derivedFaceScreens: definition.DerivedFaceScreens
                 )];
 
         // The narration hub of the peers constructed before WorldServer: WorldMachineHost (a constructor parameter of

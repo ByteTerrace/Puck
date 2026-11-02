@@ -489,7 +489,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             var facets = WorldPrototypeFacets.Derive(
                 definition: definition,
                 derivedFaceBase: WorldPlacementPolicy.DerivedFaceBase(definition: definition),
-                derivedFaceScreens: definition.Authoring.DerivedFaceScreens
+                derivedFaceScreens: definition.DerivedFaceScreens
             );
 
             WorldStaticSceneEmit.Emit(
@@ -2364,7 +2364,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
 
         m_text.Reconcile(definition: definition);
 
-        m_derivedFaceScreens = definition.Authoring.DerivedFaceScreens;
+        m_derivedFaceScreens = definition.DerivedFaceScreens;
         // The emitter freezes the boot authoring policy, seeds the stamp pool, and takes the shimmer baseline; the
         // audio director's boot derivation follows (a booted world may already author speakers/facets/sounds).
         m_emitter = new WorldSceneEmitter(
