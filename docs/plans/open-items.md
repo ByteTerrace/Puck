@@ -3230,12 +3230,12 @@ hang, then the pre-`main` language findings.
   - `chamfer-default`: a zero `chamfer` and none are one SDF program but two
     documents and two creation hashes (`CreationCanonicalizer.Normalize` keeps
     `Chamfer` as written). Design and recommendation:
-    [G13](state-and-language.md#designs-to-choose).
+    [G13](state-and-language.md#designs-chosen).
   - `ternary-fold`: a compile-time constant condition in a gate is not folded,
     so `(c == 1) ? (a < 3) : (a <= 3)` lowers to a `compareValue` evaluating
     both arms where `a < 3` lowers to `compareState`: a different rule program
     and price. Fold constant expressions before lowering
-    ([G14](state-and-language.md#designs-to-choose)).
+    ([G14](state-and-language.md#designs-chosen)).
   - A literal `rotation` is lowered in one sign on shape rows only
     (`WorldDocumentRowDefaults.CanonicalizeRotation`); text runs, placements
     and animation frames still keep the authored sign. Apply the one helper to
