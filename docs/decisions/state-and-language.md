@@ -515,6 +515,15 @@ disjunction too, through the shared gate evaluator. Ordinary rules, group
 triggers and conditional effects obey the same verdict. Thus `(not (1 / a > 0))
 != 0` and its printed truth condition both stay closed with `a = 0`, reporting
 `Arithmetic`; printing cannot turn a failed comparison into a firing.
+A fault is not a false: closing the gate means the rule does not fire, never
+that the gate read false. So anything that remembers a verdict keeps the last
+one it read successfully. An `Edge` rule whose gate faults neither fires nor
+re-arms (treating the fault as false would re-arm it and fire on recovery), and
+a world decision that faults keeps its choice and its interrupt edge and runs
+no `onNoChoice` (treating the fault as "no choice" would turn it into an
+answer). Every fault starts in `RuleExpressions.TryEvaluate` and is recorded in
+the reader's fault register, which each deciding place reads within its own
+scope.
 The printer elides a numeric truth test only when its operand reparses as the
 identical test. Explicit compound expression boundaries remain, because fact
 comparisons have special absence and infinity semantics.
