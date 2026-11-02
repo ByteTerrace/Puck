@@ -113,9 +113,25 @@ Each waits on the owner: what the engine should do, how it looks and feels, and 
   and for initial binding issuance ([security](#security-review)).
 - Whether a `search` job whose public outputs are judged over restricted rows
   is refused, linted or left to the author, as a binding to a restricted row on
-  the shared screen is; the fog-of-war skirmish fixture shows what it leaks
-  first ([disclosure](disclosure.md#open-items)). The owner waits for that
-  evidence before deciding.
+  the shared screen is. The evidence is in
+  ([disclosure](disclosure.md#open-items)): in the skirmish, blue's job scoring
+  over red's fogged positions writes a public best move whose destination
+  shows which side of the board the hidden unit stands on and whose score
+  gives its exact distance (cell 25 at -4, 26 at -7, 24 at -4, 24 at -5 for
+  four fog positions); the harness sees it at `world.state` and
+  `deliver.snapshot`. The honest twin scoring over blue's own memory answers
+  the same every time. No engine check stands between the restricted read and
+  the public write today (transforms have `TransformWidensAudience`; search
+  outputs do not).
+- Two looks in the transmission design ([transmission](transmission.md)):
+  whether a body's own overhang (the Moth's wing over her torso) shadows its
+  wrapped dark side continuously across the terminator (the design's choice,
+  two depth layers and an identity), or never (one layer and an identity,
+  showing a seam of about a quarter of the sun at `wrap: 0.35`); and whether
+  wrap stays independent of thickness (the design's choice) or a thick body's
+  dark side darkens as light passes through it, as a separate material term.
+  The resolution floors, stated in the plan, follow from the shadow map's
+  texel size; the grazing allowance `S` defaults to 4 texels.
 - Decided by the owner: night exposure is the lead's call, provided authors can
   style it as their vision demands (the floor and curve stay authored data,
   keyable on the day clock; the debug world authors a readable deep-blue
@@ -149,6 +165,15 @@ memo; phase 3 and F17 of [the tick-to-produce memo](simulation-thread.md) now,
 its phase 2 after the job-system memo. The memo is
 [engine-job-system.md](engine-job-system.md), reviewed with dispositions;
 M1 and M2a are built.
+
+- [medium] T1's snapshot row phase is about 0.21 ms of a debug tick, so most of
+  the memo's 9-13 % snapshot-emission share lies elsewhere (the serial tail or
+  the subscribers' `DeliverSnapshot`); profile it before T3 or any R step
+  assumes otherwise. J1 inherits two T1 measurements: the fork pays only past
+  about 500 rows, and a preempted worker holding a partition holds the join
+  (mean up to 836 µs against a 125 µs median), so J1 sizes partitions to bound
+  that tail. The headless debug world also builds snapshots for its night and
+  garden session instances every tick. (from: t1-snapshot)
 
 The owner's direction: performance with quality means removing a cost at its
 cause, never trading latency or lighting quality for frame time. The engine
@@ -1838,6 +1863,12 @@ them verbatim repeats) under-use the language:
 The [illumination plan](illumination.md) holds the research round's decisions
 and the order they land in; the items below are its findings and checks.
 
+- [medium] The standard's `dayCycle` (`worlds/standard/skies.puck`) now needs
+  every world that expands it to author a light named `moon`. A standard
+  template that only works once an author adds a named row is a trap: the
+  template emits its own moon light, overridable by id like any standard row.
+  (from: illum-step2)
+
 - [high, the illum1-fix lane is fixing] Step 1's self-transmission allowance
   (`passes/sdf-surface-stage.hlsli:219,282`) estimates thickness from
   curvature, so a flat mm-thick wing ignores a separate slab 10 cm toward the
@@ -2073,6 +2104,17 @@ Owner: next geometry and bake lane · ordinary · Next: the regressions sharp
 boxes left (the item below), then the valley sectors' buried colliders. The rendered
 colliders report's only red findings left are the valley's relief
 ([the valley's terrain](#the-valleys-terrain)).
+
+- [low] Carving blends (Subtraction and the rest) now collide as their composed
+  field instead of their whole bounding box (`WorldColliderSet.CollidesAsField`).
+  Check the places that relied on the box: the camera course's comment says it
+  does, and the paintings' walls were tiled from boxes for the same reason
+  (`paintings.puck:249-251`), which can now become one wall with openings.
+  (from: far-hit)
+- [low] A headless World grants one peer slot, so contact cost under many
+  bodies (the relief lane's 500 standing bodies) cannot be measured through
+  `puck_world_start`; give the headless host a way to admit a crowd for
+  measurement. (from: far-hit)
 
 - [medium] Sub-cell features draw badly across the gallery (the root is addressed
   by the delivered work below; the regressions it left are the Next; the owner's
