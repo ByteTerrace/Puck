@@ -77,9 +77,10 @@ direction:
     new packet with an owner role and a next action, never a list of its own. A
     high finding goes to the top of [Next](../../../docs/plans/open-items.md#next)
     and so into the next integration batch.
-  - The reviewer's fixes are a follow-up branch of their own in that batch
-    (review-and-fix, [`review-passes`](../review-passes/SKILL.md)), never edits
-    to the author's branch.
+  - The brief picks the [review mode](../review-passes/SKILL.md#when-a-lane-gets-a-review).
+    A review-and-fix pass's fixes are a follow-up branch of their own in that
+    batch, never edits to the author's branch; a findings-only review's highs
+    go back to the lane that wrote the code or to their packet's owner.
   - The integration lane may revert a landed change when leaving it in is worse
     than removing it.
   - The only blocking review gate is before the owner pushes `main`: every high
@@ -597,6 +598,7 @@ allows, in order of rising cost:
 |---|---|---|---|
 | `scout` | Haiku 5.5 | medium | Read-only search, log triage, live-World probes and captures. No source edits or commits; authorized CLI bootstrap is allowed. |
 | `implementer` | Sonnet 5.5 | high | A specified brief with a finish line. It is the default writer. |
+| `reviewer` | Opus 5.5 | high | Findings-only review, audit or memo review; no worktree, no edits, no build. |
 | `specialist` | Opus 5.5 | high | Design judgement across projects, diagnosis of an unknown cause, review-and-fix passes. |
 | `principal` | Fable 5.1 | high | Design and review, sparingly: a design memo, an architecture, a design review, or a review where repeated rounds point at a fundamental flaw (determinism and fixed-point maths, the bake, renderer architecture). Never implementing, measuring or bisecting. |
 
@@ -854,5 +856,5 @@ listed name, which survives a restart where its bridge address does not.
 | Skill | Route there for |
 |---|---|
 | [`verification`](../verification/SKILL.md) | The landing bar, optional checks, private CLI copies and GPU execution. |
-| [`review-passes`](../review-passes/SKILL.md) | Review-and-fix passes: briefs, companion launch commands and the follow-up branch a pass hands over. |
+| [`review-passes`](../review-passes/SKILL.md) | Review passes in either mode, findings-only or review-and-fix: briefs, launch commands and the follow-up branch a fixing pass hands over. |
 | [`boy-scout`](../boy-scout/SKILL.md) | Keeping agent-facing documents and skills in step with a change; [Writing documentation](../../../docs/development/documentation.md) owns their prose and the skill evaluation procedure. |

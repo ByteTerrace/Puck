@@ -483,7 +483,7 @@ prune or repack objects another worktree on the machine still reads.
 | Skill | Route there for |
 |---|---|
 | [`orchestration`](../orchestration/SKILL.md) | Coordinating lanes, landings and machines. |
-| [`review-passes`](../review-passes/SKILL.md) | A review-and-fix pass and verifying its fixes. |
+| [`review-passes`](../review-passes/SKILL.md) | A review pass in either mode, and verifying a review-and-fix pass's fixes. |
 | [`maths-laws`](../maths-laws/SKILL.md) | The Maths law suite's tiers and structural completeness. |
 | [`gaming-bricks`](../gaming-bricks/SKILL.md) | The emulator suites. |
 | [`rendering`](../rendering/SKILL.md) | Captures, parity and GPU counters for render work. |

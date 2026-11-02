@@ -1,14 +1,15 @@
 ---
 name: review-passes
-description: "Runs a review-and-fix pass on a Puck lane. Use for review briefs and scope ranges, Codex task flags (--write, --cwd, --help), job status, findings, blockers, second rounds, follow-up fix branches."
+description: "Runs a Puck review pass, findings-only or review-and-fix. Use for review briefs and scope ranges, Codex task flags (--write, --cwd), job status, findings, blockers, follow-up fix branches."
 ---
 
 # Review passes
 
 A review pass is one run by the selected reviewer that reads a lane's commits
-adversarially, fixes what is local and clear, and reports the rest. This skill
-owns the brief that starts it and the protocol that turns its uncommitted
-output into a verified follow-up branch. It does not choose the model, effort or
+adversarially and reports what breaks; in review-and-fix mode it also fixes
+what is local and clear. This skill owns the brief that starts it, the finding
+format, and the protocol that turns a pass's uncommitted fixes into a verified
+follow-up branch. It does not choose the model, effort or
 concurrency; the lead's brief names those. The user's current instruction
 outranks this skill; a rule here that argues against a requested change is
 stale and is corrected in the same change. What the owner says in a session
@@ -19,8 +20,9 @@ overrides this skill and is written into it in that session.
 - An engine change gets an adversarial cross-family review, required and sized
   to its risk; docs and world content get none or a scout's spot-check
   ([orchestration](../orchestration/SKILL.md#spend-verification-not-writing)).
-  Codex reviews Claude-written code and a Claude agent reviews Codex-written
-  code; Argon takes security, large-context and UI reviews.
+  Codex reviews Claude-written code and a Claude agent (`reviewer`, or
+  `specialist` for review-and-fix) reviews Codex-written code; Argon takes
+  security, large-context and UI reviews.
 - The review runs while the author implements its next item and never blocks
   the landing or pauses the author. The brief gives the reviewer the diff and the
   author's claim, not the author's reasoning, and asks it to break the change.
@@ -28,13 +30,21 @@ overrides this skill and is written into it in that session.
   [work packets](../../../docs/plans/open-items.md#work-packets), each with its
   severity, one owner, its file and line and its failing case, in the packet
   that shares its cause or area or in a new one; a high finding goes to the top
-  of Next and so into the next integration batch. The pass's fixes are a
+  of Next and so into the next integration batch. A pass's fixes are a
   follow-up branch of their own in that batch, never edits to the author's
   branch.
-- Every pass is review-and-fix, never report-only. Both Codex models, Astra
-  (`gpt-6-astra`) and Sol (`gpt-6.1-sol`), are free to use for a pass. The
-  installed Codex plugin's result-handling guidance not to auto-apply a
-  review's fixes does not apply in this repository.
+- The brief chooses one of two modes, and a pass never turns into the other:
+  - **Findings-only** reads the named revisions and reports, changing no
+    source, merging nothing and committing nothing: the `reviewer` agent, or a
+    `codex exec` lane with `--sandbox read-only`. Use it for design and memo
+    reviews, audits and consensus rounds, and whenever the owner asks for a
+    read-only review. Its highs go to the lane that wrote the code or to their
+    packet's owner.
+  - **Review-and-fix** also fixes what is local and clear, in a worktree of
+    its own: the `specialist` agent, or Codex Astra (`gpt-6-astra`) or Sol
+    (`gpt-6.1-sol`) with write access, both free to use. The installed Codex
+    plugin's result-handling guidance not to auto-apply a review's fixes does
+    not apply to this mode in this repository.
 - An explicit owner request starts a review with the owner's named model and
   effort, including a same-family reviewer.
 - There is no second round. The lead reads the pass's fix diff and rules on
@@ -46,8 +56,12 @@ overrides this skill and is written into it in that session.
 Use [verification](../verification/SKILL.md#what-uses-the-gpu) for private CLI
 copies, granted GPU legs and heavy-work leases.
 
-- Run the pass in a worktree of its own, detached at the lane's head, so the
-  author's branch and worktree stay untouched and the author keeps working. Push
+- A findings-only pass needs no tree of its own: it reads the revisions the
+  brief names through Git's object commands. A findings-only Codex lane still
+  gets a worktree the lead creates, for the fallback findings path
+  [lane work](../orchestration/references/lane-work.md#delegated-work) names.
+- Run a review-and-fix pass in a worktree of its own, detached at the lane's
+  head, so the author's branch and worktree stay untouched and the author keeps working. Push
   nothing for the pass: its fixes are commits on that detached head, and the
   lead puts a local follow-up branch on the verified head for the next batch.
   Never point it at another lane's checkout, and never run two passes in one
@@ -62,7 +76,10 @@ copies, granted GPU legs and heavy-work leases.
 - Native `codex exec` and Antigravity `agy -p` passes use the
   [launch capability table](../orchestration/SKILL.md#launch-capabilities) and
   recipes there; native writers commit their WIP on their own branch.
-- Launch a Codex pass as the companion's `task --write`. The subcommand takes
+- Launch a findings-only Codex pass as native `codex exec --sandbox read-only`,
+  which sees no `puck` World tools
+  ([launch capabilities](../orchestration/SKILL.md#launch-capabilities)).
+- Launch a review-and-fix Codex pass as the companion's `task --write`. The subcommand takes
   `--write`, `--model`, `--effort`, `--cwd`, `--prompt-file`, `--background`
   and `--resume-last` (with `--resume` and `--fresh`).
   Set `--cwd` to the review worktree and use the model and effort the lead
@@ -90,13 +107,15 @@ copies, granted GPU legs and heavy-work leases.
   with `task --resume-last`, and tighten later briefs so the pass settles that
   kind of question itself.
 - Launch a Claude pass as a project agent (the roster is in
-  [`orchestration`](../orchestration/SKILL.md#the-claude-roster)). A project
-  agent runs in a worktree of its own, branched from the lead's HEAD, and is
-  refused git work in any other tree, so its brief names the lane's head commit
-  and tells it to run `git checkout --detach <lane head>` in its own worktree
-  before reading anything. It may commit WIP as
-  `review: <lane> pass, unverified`; the lead then puts the follow-up branch on
-  the verified head as in step 4 below.
+  [`orchestration`](../orchestration/SKILL.md#the-claude-roster)). A
+  findings-only pass is `reviewer`, which runs in the lead's checkout with no
+  worktree; its brief names the base and head commits and the findings path. A
+  review-and-fix pass is `specialist`, which runs in a worktree of its own,
+  branched from the lead's HEAD, and is refused git work in any other tree, so
+  its brief names the lane's head commit and tells it to run
+  `git checkout --detach <lane head>` in its own worktree before reading
+  anything. It may commit WIP as `review: <lane> pass, unverified`; the lead
+  then puts the follow-up branch on the verified head as in step 4 below.
 - Preserve the launch's working-directory spelling for `status`, `result` and
   `cancel`: the companion keys job state by that spelling. A Git Bash `/c/...`
   launch is invisible to a PowerShell `C:/...` query, and the reverse. A job
@@ -116,17 +135,20 @@ copies, granted GPU legs and heavy-work leases.
 
 Write the parts in this order. Each is short; the hunt list is the longest.
 
-1. **Frame.** One sentence: an adversarial review-and-fix pass in the Puck
-   repo, naming the domains the diff touches (deterministic fixed-point
-   simulation; a render-graph runtime over Vulkan and Direct3D 12; federation
-   authority and recipients). Add "thorough" for a large or risky lane.
-2. **Tree.** The worktree's absolute path and branch, and "Edit only in this
-   tree." Add "don't commit" for companion `task`; for a native writer or
-   Claude pass add "commit WIP as `review: <lane> pass, unverified`."
-   Name the detached tree's head; its commits become a follow-up branch, never
-   commits on the author's branch.
+1. **Frame.** One sentence: an adversarial findings-only or review-and-fix
+   pass in the Puck repo, naming the domains the diff touches (deterministic
+   fixed-point simulation; a render-graph runtime over Vulkan and Direct3D 12;
+   federation authority and recipients). Add "thorough" for a large or risky
+   lane.
+2. **Tree.** For findings-only, the findings file's absolute path outside the
+   repository and "Change nothing." For review-and-fix, the worktree's absolute
+   path and branch, and "Edit only in this tree." Add "don't commit" for
+   companion `task`; for a native writer or Claude pass add "commit WIP as
+   `review: <lane> pass, unverified`." Name the detached tree's head; its
+   commits become a follow-up branch, never commits on the author's branch.
 3. **Scope.** An exact range, `git diff <base> <head>`, with the base as a
-   commit when the integration branch may move. Two dots compare the two tips
+   commit when the integration branch may move, and both as commits for a
+   findings-only pass, which reads them by revision. Two dots compare the two tips
    (`git diff A..B` is `git diff A B`) and three dots start at their merge base;
    neither says A is an ancestor of B, so check that with
    `git merge-base --is-ancestor A B` before calling the range the lane's own
@@ -172,13 +194,19 @@ Write the parts in this order. Each is short; the hunt list is the longest.
    Repo rules: read AGENTS.md at the worktree root, docs/development/contributing.md, docs/development/documentation.md for docs, and the skills that own the areas the diff touches. This brief adds scope, authority, exceptions and the finish line.
    ```
 
-8. **Instructions block,** verbatim:
+8. **Instructions block,** verbatim, for the brief's mode. Findings-only:
+
+   ```text
+   Hunt for problems that break the contract; landing proceeds independently of this review. Read only the revisions this brief names (git diff, git show, git log). For each problem give file:line, why it's wrong, a concrete failing scenario, a severity (high, medium or low), and whether you reproduced it or argued it from the source. Report every finding, marking the uncertain ones rather than dropping them; don't file style preferences or the suspended test requirements as defects. Change no file and no Git state, and build nothing. Write the findings to the path this brief names. End with a list, one line per finding: <id> file:line severity - summary. If you find nothing substantiated, say so plainly.
+   ```
+
+   Review-and-fix:
 
    ```text
    Hunt for problems that break the contract; landing proceeds independently of this review. For each give file:line, why it's wrong, a concrete failing scenario and a severity (high, medium or low). Fix it in the tree when the fix is local and clear; add a test only where running cannot show the fix and the test will outlive the next rewrite. Otherwise describe it. Compile every project you changed (dotnet build <project> -c Release -nodeReuse:false) and leave nothing that fails to compile. Don't run tests unless a finding can't be settled any other way, one heavy command at a time. Never run GPU work (no puck canary, puck parity, or Puck.World runs). Follow the Tree paragraph's launch-specific commit instruction. End with a list, one line per finding: <id> file:line severity - fixed (files) | open (why) | dismissed (why). If you find nothing, say so plainly.
    ```
 
-   For a documentation-only pass, append: "Edit only Markdown, eval case files,
+   For a documentation-only review-and-fix pass, append: "Edit only Markdown, eval case files,
    and XML comments; do not add tests. Check changed Markdown links and
    anchors. Build only when XML comments change."
 
@@ -206,10 +234,11 @@ no brief, so it raises compatibility findings and tries to run tests.
    verified in step 3, not reviewed again. A non-blocking
    finding is reported, and its fix, if any, is verified the same way; neither
    ever opens another review, and findings never go back and forth between the
-   reviewer and the author. If the
-   pass changes nothing, it has no follow-up branch: skip steps 2 to 5, place its
-   findings in their work packets with their severity and owners, and end. Never
-   create an empty WIP.
+   reviewer and the author. A findings-only pass, or a
+   pass that changes nothing, has no follow-up branch: copy its findings file
+   out of any worktree before that worktree is removed, skip steps 2 to 5, place
+   its findings in their work packets with their severity and owners, and end.
+   Never create an empty WIP.
 2. **Commit the pass as a WIP.** Stage the review worktree's changes
    explicitly and commit them unbuilt in that worktree
    (`review: <lane> pass, unverified`), so the output is never lost and its
