@@ -139,6 +139,9 @@ agent works in that mode by default, without asking:
     gate. The owner explicitly includes cartridge JSON twins: commit the
     authored `.puck` sources and compile them when needed
     ([decision](docs/decisions/engine-design.md#a-derived-product-is-a-cache-never-the-truth)).
+    A player's build may ship such caches prewarmed (a mesh store, or any
+    prebuilt derived product) when a local build or CI produces them at
+    shipping time (the owner's ruling); they never enter the repository.
   - Direct3D 12 is the primary backend during development. Vulkan never falls
     far behind on the lead machine: a change to rendering or GPU code also gets a
     windowed Vulkan boot of the debug world, and a Vulkan regression is fixed as

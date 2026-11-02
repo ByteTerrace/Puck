@@ -44,79 +44,98 @@ experimental worlds have that it lacks is ported into it
    31 ms of 70 (the presenter's `Dress`, 18.6 %, is that clearance march); the
    draw list's dressing and staging are 9 % (its per-group scans and boxed
    motion identities are under [other frame-time findings](#other-frame-time-findings))
-   and the tick 23-28 %. Design
-   these as the job system's and the evaluator's work (batched, cached by what
-   changed, off the frame thread) before any visibility step.
-1. [Lighting and GI](#lighting-and-gi) [high]: under lockstep a moving sun
-   relights all 589,824 probes every tick (about 10 s a tick,
-   `SdfMeshIrradiance.cs:538-559`, `DrainKey` at `:578`), so the sweep's
-   windowed leg cannot run with the day cycle and the sweep baseline is still
-   owed; then the sweep baseline in the next settle window.
-2. [Visibility](visibility.md): V2's first steps (V2a, V2b) ahead of V1a, as
+   and the tick 23-28 %. Grounded in the code: the effector ring is flushed every
+   frame by 56 fieldless probes that can never match (`WorldEffectorSolver.cs:239-280`,
+   sourced at `WorldSessionStampSource.cs:33`); probes also run for planted feet
+   and failed conditions and are discarded (`WorldCreationInstances.Effectors.cs:82-98`,
+   `:419-424`); the clearance cache matches bit for bit (`WorldCameraClearance.cs:118-166`);
+   the two answer rings are one copied pattern to replace once. Distance rating
+   exists but its 15 Hz floor never holds a pose at 67-74 ms frames
+   (`PresentationRate.cs:60-72`). The gradient's six taps are not the marched
+   point and are shared with physics (bit-identical per point), so batching
+   them is a design step.
+1. [Memory](#residency-and-streaming) [high, the Deck]: the debug world's
+   process plus GPU memory stays at or under 10 GB on the Deck tier (the lead's
+   budget; the owner set no figure), measured in every settle window. A
+   windowed World holds 10.5-14.5 GB, a tour doubles it and the cold bake passes
+   16 GB; headless is 0.55 GB, so nearly all of it is presentation a player's
+   build carries. Grounded: the mesh library budgets meshes residencies still
+   hold and forgets them, so a re-plan reloads a second copy (`SdfMeshLibrary.cs:32`,
+   `:285-304`); the GI probe cache has no byte bound (`SdfMeshIrradiance.cs:2266-2417`);
+   the memory account sees little of the process and Puck reads no device memory;
+   about 8.4 GB is unattributed, so attribution comes first. A prewarmed mesh
+   store may ship in a player's build (AGENTS.md).
+2. [Lighting and GI](#lighting-and-gi) [high]: under lockstep a moving sun
+   relights the whole probe window every tick from no bounce (61,440 probes at
+   High, up to 32 passes; `SdfMeshIrradiance.cs:538-563`, `:578`, the capture
+   limit skipped at `:1084`), so the sweep's windowed leg cannot run with the
+   day cycle. Quantize the sun on a fixed grid under lockstep (never against
+   the last capture, which would make the image depend on when a run started).
+3. [Visibility](visibility.md): V2's first steps (V2a, V2b) ahead of V1a, as
    M1 read, after the draw-identity fix R2's review found
    ([GPU robustness](#vulkan-regressions-and-gpu-robustness)).
-3. [Transmission](transmission.md) [high]: its implementation lanes in order,
+4. [Transmission](transmission.md) [high]: its implementation lanes in order,
    once the owner's look calls are answered or the design's choices stand.
-4. [Bake proportional to change](#bake-proportional-to-change) [high, the
+5. [Bake proportional to change](#bake-proportional-to-change) [high, the
    cold-bake bar]: a static copy bakes in its prototype's frame and is shared,
    bake grouping and detail derive from meaning rather than spelling, then
    narrow the closure and share one store across both backends.
-5. [Disclosure](disclosure.md#the-build-order) [high, the long pole before
+6. [Disclosure](disclosure.md#the-build-order) [high, the long pole before
    `main`]: steps 1-6 behind the harness, step 0b's principals, and the
    owner's search-output decision.
-6. [Rule faults](rule-faults.md) [high, before `main`]: the class is not
+7. [Rule faults](rule-faults.md) [high, before `main`]: the class is not
    closed by the register (a fourth review found escapes); build the designed
    outcome type, single interpreter and journal-backed firing in its steps,
    each reviewed.
-7. [Engine job system](#engine-job-system) [high]: scheduling (spread the
+8. [Engine job system](#engine-job-system) [high]: scheduling (spread the
    rated views and the tick frame's tick-bound recording), the
    garbage-collection cuts, then J1 with T1's measurements; profile snapshot
    emission before T3.
-8. [Certified field contact](#certified-field-contact): box and ellipsoid
+9. [Certified field contact](#certified-field-contact): box and ellipsoid
    bodies, then clearance on slopes within a third of a metre.
-9. [Transfers](#transfers-federation-and-server) [high]: the companion steps 6
+10. [Transfers](#transfers-federation-and-server) [high]: the companion steps 6
    to 10.
-10. [Language and authoring](#language-and-authoring) and [author leaks to the
+11. [Language and authoring](#language-and-authoring) and [author leaks to the
    standard](#author-leaks-to-the-standard): what lang-2 leaves of S11, the
    cost corpus, the overlay text advance.
-11. Antigravity's coding trial ([agent tooling](#agent-tooling-and-skills)),
+12. Antigravity's coding trial ([agent tooling](#agent-tooling-and-skills)),
    after the settle window.
-12. [Delivery](#delivery-launcher-and-ci): CI's steady state, the shader cache
+13. [Delivery](#delivery-launcher-and-ci): CI's steady state, the shader cache
     and the GC-hole retirement.
-13. [Port the experimental worlds' missing features](#port-the-experimental-worlds-missing-features):
+14. [Port the experimental worlds' missing features](#port-the-experimental-worlds-missing-features):
    the meadow and the creature garden now, as the bake's and the parallel
    tick's forcing workloads; the second seat, the authored passes and the
    quilt each ahead of the job-system step they prove (the owner's ruling,
    [order](port-experimental.md#lanes-in-order)).
-14. [Edit to running, hot reload and boot](#edit-to-running-hot-reload-and-boot):
+15. [Edit to running, hot reload and boot](#edit-to-running-hot-reload-and-boot):
     the boot's JSON round trip in `BindLive` (about 0.7 s), then a reboot for
     an edit outside `PuckHotReload`; measure the cold and warm builds.
-15. [The valley's terrain](#the-valleys-terrain): terrain pass step 1 (the image
+16. [The valley's terrain](#the-valleys-terrain): terrain pass step 1 (the image
     meter), with steps 2, 3, 6 and step 4's bound fix in parallel.
-16. [Refactoring campaign](#refactoring-campaign): `GpuRegion.Grow` as the only
+17. [Refactoring campaign](#refactoring-campaign): `GpuRegion.Grow` as the only
     growth path with the uniform view limit enforced there, the two overlay
     writers, the survey's remaining groups.
-17. [Collision versus drawn mesh](#collision-versus-drawn-mesh): the groups sharp
+18. [Collision versus drawn mesh](#collision-versus-drawn-mesh): the groups sharp
     boxes left worse (the board game room's table, gallery floors 0, 2 and 3,
     the Wonderland room, the lift doors, the deck television).
-18. [Lighting and GI](#lighting-and-gi): light a cold area from the coarser
+19. [Lighting and GI](#lighting-and-gi): light a cold area from the coarser
     levels or the sky term the moment a view arrives; the rest after the image
     meter.
-19. [Derived products are caches](#derived-products-are-caches): build the
+20. [Derived products are caches](#derived-products-are-caches): build the
     generated `.nes` cartridges and firmware images on demand and remove the
     bytes from git; narrow the compiled-world key; measure the wasm modules.
-20. [Test runner and replay](#test-runner-and-replay): profile what recording
+21. [Test runner and replay](#test-runner-and-replay): profile what recording
     still folds whole every tick before choosing the next segment.
-21. [Bake detail](#bake-detail): measure the static round-section term.
-22. [Residency and streaming](#residency-and-streaming): step 2 after the memo
+22. [Bake detail](#bake-detail): measure the static round-section term.
+23. [Residency and streaming](#residency-and-streaming): step 2 after the memo
     names GI's work units; re-measure with the display on.
-23. [Vulkan regressions and GPU robustness](#vulkan-regressions-and-gpu-robustness):
+24. [Vulkan regressions and GPU robustness](#vulkan-regressions-and-gpu-robustness):
     the crossing frame and the pixel-pass gap.
-24. [MCP and the operator attachment](#mcp-and-the-operator-attachment): the
+25. [MCP and the operator attachment](#mcp-and-the-operator-attachment): the
     schema switch; the stale lease holder.
-25. [Tests (suspended)](#tests-suspended): triage the failing Windows shards by
+26. [Tests (suspended)](#tests-suspended): triage the failing Windows shards by
     cause.
-26. [Card tables](#card-tables-in-the-board-game-room) (the windowed look, then
+27. [Card tables](#card-tables-in-the-board-game-room) (the windowed look, then
     Spider), [Debug tools](#debug-tools) (windowed checks and exhibits),
     [Sweep](#sweep-and-visual-checks) (the paired tour) and
     [Temporal](#temporal-shimmer-and-cadence-flicker) (the blink re-measure).
@@ -184,6 +203,10 @@ Each waits on the owner: what the engine should do, how it looks and feels, and 
   differently from the left pod's (1100-1140), and `sideLock`'s position,
   `blinkCrease`'s position and `kneeGuard`'s profile differ. Once chosen, the
   right half becomes the left's exact mirror through a `side` template.
+- Whether bodies inside session scenes (screens and portals) plant their feet:
+  those scenes give them no field today (`WorldSessionStampSource.cs:33`),
+  though the session emitter builds one for picking; wiring it adds surface
+  probes, so it is a look call with a frame cost.
 - Whether `motion-pulse`'s new look reads right: its petals and core now blend
   in their own groups (no stretched seams), so the petals no longer smooth into
   the core.
