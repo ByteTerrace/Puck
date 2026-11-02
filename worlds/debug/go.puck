@@ -176,7 +176,20 @@ spawnPoints [
 // run the length of the board, its z paints the width). A face wears its three boxes along each axis (in centimetres
 // from the board's centre: the centre of the box, its half-width) and its one star point (the hoshi at 3, 9 and 15
 // lines in: -48, 0 and 48 cm; the centre line is on the border of the two middle faces, so both wear it).
-let goGridBoxes = [[-80, 8], [-60, 4], [-44, 4], [-36, 4], [-20, 4], [-4, 4], [4, 4], [20, 4], [36, 4], [44, 4], [60, 4], [80, 8]]
+let goGridBoxes = [
+  [-80, 8]
+  [-60, 4]
+  [-44, 4]
+  [-36, 4]
+  [-20, 4]
+  [-4, 4]
+  [4, 4]
+  [20, 4]
+  [36, 4]
+  [44, 4]
+  [60, 4]
+  [80, 8]
+]
 let goGridStars = [-48, 0, 0, 48]
 let goFaceSlots = reduce(
   range(0, 4),
