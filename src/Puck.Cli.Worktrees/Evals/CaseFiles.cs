@@ -18,8 +18,6 @@ public static partial class CaseFiles {
     private static partial Regex BlockTags();
     [GeneratedRegex(pattern: @"^\s+-\s*(?<item>.+?)\s*$")]
     private static partial Regex BlockItem();
-    [GeneratedRegex(pattern: @"^max_turns:\s*(?<turns>\d+)\s*$")]
-    private static partial Regex MaxTurns();
 
     /// <summary>Indicates whether <paramref name="directory"/> is a case: it holds a <c>prompt.md</c> or a
     /// <c>case.yaml</c>.</summary>
@@ -102,37 +100,39 @@ public static partial class CaseFiles {
 
         return ((end > 0) && lines[1..end].Any(predicate: line => line.StartsWith(value: $"{key}:", comparisonType: StringComparison.Ordinal)));
     }
-    /// <summary>Raises the <c>max_turns</c> a case's <c>prompt.md</c> frontmatter sets by <paramref name="extra"/>.</summary>
+    /// <summary>Reads whether a case's <c>case.yaml</c> sets <paramref name="key"/> at any depth.</summary>
     /// <param name="caseDirectory">The case directory.</param>
-    /// <param name="extra">The turns to add.</param>
-    /// <returns>The new cap, or <see langword="null"/> when the frontmatter sets none and the runner's default holds.</returns>
-    public static int? RaiseMaxTurns(string caseDirectory, int extra) {
-        var prompt = Path.Combine(path1: caseDirectory, path2: Prompt);
+    /// <param name="key">The key.</param>
+    /// <returns><see langword="true"/> when a line of the file opens with the key, after its indentation.</returns>
+    public static bool CaseSets(string caseDirectory, string key) {
+        var file = Path.Combine(path1: caseDirectory, path2: Case);
 
-        if (!File.Exists(path: prompt)) { return null; }
-        var lines = File.ReadAllLines(path: prompt);
-        var end = FrontmatterEnd(lines: lines);
-
-        for (var index = 1; (index < end); index++) {
-            if (MaxTurns().Match(input: lines[index]) is { Success: true } match) {
-                var turns = (int.Parse(s: match.Groups["turns"].Value, provider: System.Globalization.CultureInfo.InvariantCulture) + extra);
-
-                lines[index] = $"max_turns: {turns}";
-                File.WriteAllText(path: prompt, contents: (string.Join(separator: '\n', value: lines) + "\n"));
-                return turns;
-            }
-        }
-        return null;
+        return (File.Exists(path: file) && File.ReadAllLines(path: file).Any(predicate: line => line.TrimStart().StartsWith(value: $"{key}:", comparisonType: StringComparison.Ordinal)));
     }
-    /// <summary>Sets <c>key: value</c> under the top-level mapping <paramref name="section"/> of a case's
-    /// <c>case.yaml</c>, creating the file (with <c>schema_version</c> and <c>name</c>) or the section when absent and
-    /// matching the indentation the section's children already use.</summary>
+    // One string entry at the given indentation: a double-quoted scalar for one line, or a literal block scalar for
+    // several. The block's explicit indentation indicator (2, relative to the key) lets its first line open with
+    // spaces, and its strip chomping (-) adds no trailing newline; an empty line stays empty, which a literal block
+    // reads as an empty line of the text.
+    private static IEnumerable<string> Entry(string indent, string key, string text) {
+        var normalized = text.ReplaceLineEndings(replacementText: "\n");
+
+        if (!normalized.Contains(value: '\n')) {
+            yield return $"{indent}{key}: \"{normalized.Replace(oldValue: "\\", newValue: "\\\\").Replace(oldValue: "\"", newValue: "\\\"")}\"";
+            yield break;
+        }
+        yield return $"{indent}{key}: |2-";
+        foreach (var line in normalized.Split(separator: '\n')) { yield return ((line.Length == 0) ? string.Empty : $"{indent}  {line}"); }
+    }
+    /// <summary>Sets the string <paramref name="text"/> as <paramref name="key"/> under the top-level mapping
+    /// <paramref name="section"/> of a case's <c>case.yaml</c>, creating the file (with <c>schema_version</c> and
+    /// <c>name</c>) or the section when absent and matching the indentation the section's children already use. One
+    /// line is written as a double-quoted scalar, several as a literal block scalar whose value is the text exactly.</summary>
     /// <param name="caseDirectory">The case directory.</param>
-    /// <param name="section">The top-level key, such as <c>context</c>.</param>
-    /// <param name="key">The child key, such as <c>add_dirs</c>.</param>
-    /// <param name="value">The YAML value text, already quoted where it needs to be.</param>
+    /// <param name="section">The top-level key, such as <c>execution</c>.</param>
+    /// <param name="key">The child key, such as <c>append_system_prompt</c>.</param>
+    /// <param name="text">The string value; any line endings become <c>\n</c>.</param>
     /// <exception cref="InvalidOperationException">The section already sets <paramref name="key"/>.</exception>
-    public static void SetCaseKey(string caseDirectory, string section, string key, string value) {
+    public static void SetCaseKey(string caseDirectory, string section, string key, string text) {
         var file = Path.Combine(path1: caseDirectory, path2: Case);
         var lines = (File.Exists(path: file)
             ? File.ReadAllLines(path: file).ToList()
@@ -141,7 +141,7 @@ public static partial class CaseFiles {
 
         if (header < 0) {
             lines.Add(item: $"{section}:");
-            lines.Add(item: $"  {key}: {value}");
+            lines.AddRange(collection: Entry(indent: "  ", key: key, text: text));
         } else {
             string? indent = null;
 
@@ -157,8 +157,7 @@ public static partial class CaseFiles {
                     throw new InvalidOperationException(message: $"{file} already sets {section}.{key}.");
                 }
             }
-            indent ??= "  ";
-            lines.Insert(index: (header + 1), item: $"{indent}{key}: {value}");
+            lines.InsertRange(index: (header + 1), collection: Entry(indent: (indent ?? "  "), key: key, text: text));
         }
         File.WriteAllText(path: file, contents: (string.Join(separator: '\n', values: lines) + "\n"));
     }

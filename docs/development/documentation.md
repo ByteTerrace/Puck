@@ -504,19 +504,20 @@ To compare the skill against no skill on one result, name it twice:
 
 A Puck session always has `AGENTS.md` loaded, and a lane also preloads
 `delegate`, so the honest baseline is the rules without the skill, not an
-empty context. `run` adds a `puck-rules/` directory to every case holding
-HEAD's `AGENTS.md`, plus HEAD's `delegate/SKILL.md` as `delegate-SKILL.md`
-for every skill a lane loads (all but `delegate` and `orchestration`). It
-grants the directory through `case.yaml` `context.add_dirs` (directories
-inside the case directory, granted read-only), names it in an
-`append_system_prompt` line telling the agent to read it, and adds one
-`max_turns` for that read. The session lists the directory among its
-additional working directories, so the line names it by its basename. Both
-arms read it, so the delta measures what the skill adds over the rules, and a
-case whose delta collapses marks skill text that duplicates `AGENTS.md`.
-Never grant the repository or `.claude/skills/`: the baseline arm would read
-the skill and the ablation would measure nothing. `--no-fixture` repeats a run
-made without the fixture, for comparison with it.
+empty context. `run` puts that context where a real session has it, in the
+system prompt: every case's `case.yaml` gets `execution.append_system_prompt`
+holding HEAD's `AGENTS.md` text, plus HEAD's `delegate/SKILL.md` body for
+every skill a lane loads (all but `delegate` and `orchestration`), each under
+a heading naming it. Both arms run with it, so the delta measures what the
+skill adds over the rules, and a case whose delta collapses marks skill text
+that duplicates `AGENTS.md`. A case that sets `append_system_prompt` itself is
+refused, since the runner would override one with the other. A fixture
+directory granted through `context.add_dirs` does not work: on Claude Code
+2.1.316 on Windows the session's `additional_directories` stays empty and the
+agent's reads of it are denied. Never grant the repository or
+`.claude/skills/`: the baseline arm would read the skill and the ablation would
+measure nothing. `--no-fixture` repeats a run made without the fixture, for
+comparison with it.
 
 ### Judge and model tiers
 
@@ -552,9 +553,9 @@ no-skill baseline arm. A case is one directory under the skill's `evals/`:
   `timeout_seconds`, `allowed_tools` and `model`, then a realistic task.
 - `graders/*.md`: each grader one of `regex`, `tool_used`, `tool_order`,
   `file_exists`, `llm` or `baseline`. There are no custom-code graders.
-- `case.yaml`, when the case needs `context` fields (`add_dirs`,
-  `scaffold_script`, `history_file`). `run` adds the fixture's keys to it, or
-  creates it.
+- `case.yaml`, when the case needs `context` fields (`scaffold_script`,
+  `history_file`). `run` adds the fixture's `execution.append_system_prompt`
+  to it, or creates it.
 
 Cases are not split into training and held-out sets. An agent editing a skill
 reads every case, so a held-out set it can read holds nothing out, and the

@@ -1490,7 +1490,7 @@ not judged. It prints one verdict line per leg:
 
 | Leg | Passes when |
 |---|---|
-| `brief` | HEAD carries `Brief: <id> done` or `Brief: <id> blocked: <question>`, and no other lane commit carries a `Brief:` line. |
+| `brief` | The final commit (the newest non-merge lane commit) carries `Brief: <id> done` or `Brief: <id> blocked: <question>`, no other lane commit carries a `Brief:` line, and only merges of the integration tip follow it. |
 | `subjects` | Every non-merge lane commit's subject is a lowercase `area: sentence`. |
 | `coauthor` | No lane commit carries a `Co-Authored-By` trailer. |
 | `plumbing` | Every lane commit is the new value of a `commit`, `merge`, `cherry-pick` or `revert` entry in the branch reflog, and none records the empty tree. A branch with no reflog fails the leg as unverifiable. |
@@ -2661,10 +2661,11 @@ The family the [skill evaluation procedure](../development/documentation.md#eval
 runs on. Each verb's `--help` holds its full contract.
 
 - `puck evals run <skill> [--cases <glob>] [--tag <tag>...] [--revision <rev>] [--model <id>] [--judge <id>] [--runs n] [--ablation with-without|none] [--max-cost-usd x] [-j n] [--dry-run]`
-  checks `<rev>` (default HEAD) out as a detached worktree, copies HEAD's
-  `evals/` into it when `<rev>` is older, adds the `puck-rules/` fixture
-  (HEAD's `AGENTS.md`, and the delegate skill for a skill a lane loads) to
-  every case through `case.yaml` `context.add_dirs`, and runs
+  checks `<rev>` (default HEAD) out as a detached worktree under the main
+  checkout's `.claude/worktrees/`, copies HEAD's `evals/` into it when `<rev>`
+  is older, puts the rules-file fixture (HEAD's `AGENTS.md` text, and the
+  delegate skill's for a skill a lane loads) into every case's `case.yaml`
+  `execution.append_system_prompt`, both arms, and runs
   `claude plugin eval` on that tree's skill with full model IDs and a judge no
   weaker than the model. The result, report, `run.json` manifest and each run's
   trace go under `.claude/skills/<skill>/evals/results/<stamp>/`, and the
