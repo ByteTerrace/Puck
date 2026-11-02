@@ -542,6 +542,12 @@ public sealed class WorldPresentationManifest {
                     AddColor(token: entry.Color);
                     AddColor(token: entry.Fill);
                     AddColor(token: entry.Bleed);
+                    if (entry.ToonSelect is { } select) {
+                        Add(
+                            binding: StateBinding.Parse(token: select.State),
+                            conversion: WorldStateConversion.Number
+                        );
+                    }
 
                     return true;
                 case PaletteRadialStopDocument stop:

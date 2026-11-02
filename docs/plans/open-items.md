@@ -1836,12 +1836,13 @@ and the order they land in; the items below are its findings and checks.
   depth image per cascade (16 MiB each at 2048 texels); its frame time is owed
   on a quiet machine. At a grazing light (a wrapped side at n·l = -0.25) the
   filter's slope clearance (`SdfMeshShadowSlopeBias`, 2.5 texels of depth per
-  texel of lateral distance) still lets a parallel slab within about 0.1 m
-  along the light half through; the exit layer removed the leak beyond that.
-  The debug world authors no `render.toon`, so `world.toon on` there bands only
-  materials with styles of their own until a default style is authored there,
-  which takes either a copy of `celStyle`'s values with `enabled: false` or a
-  `.puck` way to override one field of an imported value.
+  texel of lateral distance) still clears a parallel blocker that stands within
+  a few texels of depth of a receiver turned from the light: a 2 cm slab 0.10 m
+  along the light from a 3 mm panel at n·l = -0.25 shadows only speckles of it
+  on both backends, where 0.3 m at n·l = -0.45 shadows it whole.
+  A body clipped at a portal's glass or drawn under a mirror is a thin caster in
+  the exit layer (`SdfMeshDraw.EnclosesSolid`), so its own wrapped side past
+  the terminator is shadowed by its own lit side while it straddles the glass.
   `SdfPassPlanLawTests.ATemporalViewAddsOnlyItsHistoryAndReactivityOverTheSpatialGraph`
   fails on its own constant (201,139,200 bytes against 1,221,350,400 from the
   current `HistorySurfaceWords`), unrelated to the cascades.
@@ -2746,6 +2747,12 @@ the completed 70-stop comparison manifest.
 Owner: language lane (transpiler) · medium · Next: the inline console command
 hang, then the pre-`main` language findings.
 
+- [medium] `.puck` has no way to take an imported value and override one field
+  of it (`celStyle` with `enabled: false`), so a world that wants the standard's
+  cel style as a default that boots off copies all eleven values
+  (`worlds/debug/debug.puck`'s `render.toon`). Add the override (an object
+  update over a `let`, or a merge builtin beside `concat`), then point the
+  debug world's default at `celStyle`. (from: illum1-fix2)
 - [medium] An `enum` block inside a template is silently dropped from the
   compiled document, so a row naming the enum fails with PUCK119; the
   standard's `chaseCamera` writes its enum as a `state.enums` row to work around
