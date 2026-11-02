@@ -1,0 +1,17 @@
+// A 'let' is its value written where it is read.
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+let edge = 0.5
+let lift = [0, 1.2, 0]
+
+prototypes {
+  prototype "p" {
+    document {
+      shape Box "b" {
+        position: lift
+        scale [edge, edge, edge]
+      }
+    }
+  }
+}

@@ -1,3 +1,5 @@
+using System.Collections.Frozen;
+
 namespace Puck.Transpiler.Diagnostics;
 
 /// <summary>Every diagnostic identifier the transpiler reports, each declared exactly once. Report sites name a
@@ -312,5 +314,19 @@ public static class PuckDiagnosticCodes {
     /// <summary>PUCK_LINT_011: division or remainder by a potentially zero divisor in an eager ternary arm.
     /// Selecting the other arm does not guard the operation.</summary>
     public const string EagerConditionalArithmetic = "PUCK_LINT_011";
+    /// <summary>PUCK124: an <c>allow</c> line that cannot acknowledge anything: it names a code no constant here
+    /// declares, gives no reason, or stands where no statement follows it to cover.</summary>
+    public const string AllowRefused = "PUCK124";
+
+    private static readonly FrozenSet<string> DeclaredCodes = typeof(PuckDiagnosticCodes)
+        .GetFields(bindingAttr: (System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static))
+        .Where(predicate: static field => field.IsLiteral)
+        .Select(selector: static field => (string)field.GetRawConstantValue()!)
+        .ToFrozenSet(comparer: StringComparer.Ordinal);
+
+    /// <summary>Returns whether a constant here declares <paramref name="code"/>.</summary>
+    /// <param name="code">The diagnostic code, spelled as reported (<c>PUCK122</c>, <c>PUCK_LINT_001</c>).</param>
+    /// <returns><see langword="true"/> when the code is declared.</returns>
+    public static bool Declares(string code) => DeclaredCodes.Contains(item: code);
 }
 

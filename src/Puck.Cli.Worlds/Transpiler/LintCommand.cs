@@ -1,5 +1,6 @@
 using Puck.Cli.Format;
 using Puck.World.Machines;
+using Puck.Transpiler.Diagnostics;
 using Puck.World.Transpiler.Validation;
 using System.CommandLine;
 
@@ -7,7 +8,17 @@ namespace Puck.Cli.Transpiler;
 
 /// <summary><c>puck lint</c> — runs static analysis and semantic linting over Puck DSL files.</summary>
 public static class LintCommand {
-    private static int LintFile(string filePath, bool strict, WorldMachineCatalog machines) {
+    // A finding placed in another file (an import's declaration, a basis's row) is that file's, so a directory lint
+    // prints it once, under the first source that composes it, however many sources compose that file.
+    private static string ReportedKey(Diagnostic diagnostic) => string.Join(
+        separator: '\n',
+        diagnostic.Code,
+        diagnostic.Severity,
+        Puck.Abstractions.PuckPaths.Normalize(path: diagnostic.SourcePath!),
+        diagnostic.Span.Offset,
+        diagnostic.Message
+    );
+    private static int LintFile(string filePath, bool strict, WorldMachineCatalog machines, HashSet<string>? reported = null) {
         var catalogFingerprint = Puck.Cli.CliWorldVocabulary.Fingerprint(catalog: machines);
         string sourceText;
 
@@ -26,6 +37,10 @@ public static class LintCommand {
             sourcePath: filePath,
             vocabularies: CliVocabularyResolver.Instance
         );
+
+        if (reported is not null) {
+            _ = diagnostics.RemoveAll(match: diagnostic => ((diagnostic.SourcePath is not null) && !reported.Add(item: ReportedKey(diagnostic: diagnostic))));
+        }
 
         if (diagnostics.Count > 0) {
             Console.WriteLine(value: diagnostics.FormatReport(
@@ -90,11 +105,13 @@ public static class LintCommand {
                 searchPattern: "*.puck"
             ).Order(comparer: StringComparer.Ordinal).ToArray();
             var failureCount = 0;
+            var reported = new HashSet<string>(comparer: StringComparer.Ordinal);
 
             foreach (var file in files) {
                 var code = LintFile(
                     filePath: file,
                     machines: machines,
+                    reported: reported,
                     strict: strict
                 );
 

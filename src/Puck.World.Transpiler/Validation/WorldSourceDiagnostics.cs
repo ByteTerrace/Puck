@@ -133,8 +133,10 @@ public static class WorldSourceDiagnostics {
         if (compilation.Document is not null) {
             PuckLinter.Lint(
                 diagnostics: diagnostics,
-                document: compilation.Document
+                document: compilation.Document,
+                library: !compilation.EmitsDocument
             );
+            SourceAcknowledgements.Of(document: compilation.Document, sourcePath: sourcePath).Apply(diagnostics: diagnostics, rootPath: sourcePath);
         }
 
         return new WorldSourceDiagnosis(
@@ -179,20 +181,23 @@ public static class WorldSourceDiagnostics {
                 cancellationToken.ThrowIfCancellationRequested();
 
                 if (sourcePath is not null) {
-                    if (WorldSemanticValidator.TryComposeWorld(output.Json, output.SourceMap, diagnostics, sourcePath, out var composedWorld, machines: machines, catalogFingerprint: catalogFingerprint, sourceCompilation: sourceCompilation)) {
-                        WorldSemanticValidator.ValidateWorld(composedWorld, output.SourceMap, diagnostics, machines: machines, catalogFingerprint: catalogFingerprint, source: output.Json, sourcePath: sourcePath);
+                    var worldOrigins = new WorldDocumentOrigins();
+
+                    if (WorldSemanticValidator.TryComposeWorld(output.Json, output.SourceMap, diagnostics, sourcePath, out var composedWorld, machines: machines, catalogFingerprint: catalogFingerprint, sourceCompilation: sourceCompilation, origins: worldOrigins)) {
+                        WorldSemanticValidator.ValidateWorld(composedWorld, output.SourceMap, diagnostics, machines: machines, catalogFingerprint: catalogFingerprint, source: output.Json, sourcePath: sourcePath, origins: worldOrigins);
                         PuckLinter.LintReferences(catalogFingerprint: catalogFingerprint, composed: composedWorld, diagnostics: diagnostics, document: output.Json, machines: machines, sourceMap: output.SourceMap, sourcePath: sourcePath);
                     }
                 } else if ((output.Json["basis"] is null) && (output.Json["imports"] is null)) {
                     WorldSemanticValidator.ValidateWorld(output.Json, output.SourceMap, diagnostics, machines: machines, catalogFingerprint: catalogFingerprint);
                 }
             }
-            return diagnostics;
+            return Acknowledged(diagnosis: diagnosis, diagnostics: diagnostics);
         }
 
         var json = compilation.Json!;
         var sourceMap = compilation.SourceMap;
         var composes = ((json["basis"] is not null) || (json["imports"] is not null));
+        var origins = new WorldDocumentOrigins();
 
         if (sourcePath is null) {
             if (!composes && WorldSemanticValidator.IsRootDocument(loweredJson: json)) {
@@ -205,7 +210,7 @@ public static class WorldSourceDiagnostics {
                 );
             }
 
-            return diagnostics;
+            return Acknowledged(diagnosis: diagnosis, diagnostics: diagnostics);
         }
 
         // The source composes once, and a refused composition is reported once (PUCK035); the validation and the
@@ -216,11 +221,12 @@ public static class WorldSourceDiagnostics {
             diagnostics: diagnostics,
             loweredJson: json,
             machines: machines,
+            origins: origins,
             sourceCompilation: sourceCompilation,
             sourceMap: sourceMap,
             sourcePath: sourcePath
         )) {
-            return diagnostics;
+            return Acknowledged(diagnosis: diagnosis, diagnostics: diagnostics);
         }
 
         // Only a root composes to a whole world; validating a module as one reports as missing every field
@@ -231,6 +237,7 @@ public static class WorldSourceDiagnostics {
                 diagnostics: diagnostics,
                 loweredJson: composed,
                 machines: machines,
+                origins: origins,
                 source: json,
                 sourceMap: sourceMap,
                 sourcePath: sourcePath
@@ -247,6 +254,15 @@ public static class WorldSourceDiagnostics {
             sourceMap: sourceMap,
             sourcePath: sourcePath
         );
+
+        return Acknowledged(diagnosis: diagnosis, diagnostics: diagnostics);
+    }
+    // A finding the source itself, or a library it imports, acknowledges with an `allow` line is not reported; the
+    // locator already dropped one a basis or an import document acknowledges.
+    private static DiagnosticBag Acknowledged(WorldSourceDiagnosis diagnosis, DiagnosticBag diagnostics) {
+        if (diagnosis.Document is { } document) {
+            SourceAcknowledgements.Of(document: document, sourcePath: diagnosis.SourcePath).Apply(diagnostics: diagnostics, rootPath: diagnosis.SourcePath);
+        }
 
         return diagnostics;
     }

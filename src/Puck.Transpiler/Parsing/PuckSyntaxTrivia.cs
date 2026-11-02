@@ -314,13 +314,28 @@ public static class PuckSyntaxTrivia {
                 items: addressed.Expectations,
                 rebuild: static (block, expectations, inner) => (block with { Expectations = expectations, Trivia = (block.Trivia with { Inner = inner }) })
             ))),
+            // A loop's body holds the same entries as the block it stands in, so its own are walked the same way.
+            TestGivenForNode loop => ((TItem)((SyntaxNode)TestWorldBlock(
+                block: loop,
+                from: (loop.Sequence.Offset + loop.Sequence.Length),
+                items: loop.Body,
+                rebuild: static (block, body, inner) => (block with { Body = body, Trivia = (block.Trivia with { Inner = inner }) }),
+                visit: TestItem
+            ))),
+            TestWhenLoopNode loop => ((TItem)((SyntaxNode)TestWorldBlock(
+                block: loop,
+                from: (loop.Sequence.Offset + loop.Sequence.Length),
+                items: loop.Body,
+                rebuild: static (block, body, inner) => (block with { Body = body, Trivia = (block.Trivia with { Inner = inner }) }),
+                visit: TestItem
+            ))),
             _ => item,
         });
-        private TBlock TestWorldBlock<TBlock, TItem>(TBlock block, IReadOnlyList<TItem> items, Func<TBlock, IReadOnlyList<TItem>, IReadOnlyList<TriviaPiece>, TBlock> rebuild)
+        private TBlock TestWorldBlock<TBlock, TItem>(TBlock block, IReadOnlyList<TItem> items, Func<TBlock, IReadOnlyList<TItem>, IReadOnlyList<TriviaPiece>, TBlock> rebuild, int from = -1, Func<TItem, TItem>? visit = null)
             where TBlock : SyntaxNode
             where TItem : SyntaxNode {
             var open = FindNext(
-                from: block.Offset,
+                from: ((from < 0) ? block.Offset : from),
                 limit: ContentEnd(node: block),
                 target: '{'
             );
@@ -334,7 +349,7 @@ public static class PuckSyntaxTrivia {
                 bodyEnd: close,
                 bodyStart: (open + 1),
                 items: items,
-                visit: static item => item
+                visit: (visit ?? (static item => item))
             );
             // The enclosing List reads m_opening only after its own last visit, so the nested read has to happen
             // here, while it still holds this block's own opening comment.

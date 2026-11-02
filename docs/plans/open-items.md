@@ -2752,13 +2752,48 @@ hang, then the pre-`main` language findings.
   4,000,000 in the valley plan. Reconcile both pages against `world.budget`.
   (from: composition)
 - [medium] A solid creation shape without `position` throws instead of giving
-  an authoring diagnostic. Removing `position [0, 0, 0]` from
-  `worlds/standard/foliage.puck`'s `sceneryPatch` makes both `compile --validate`
-  and a headless debug boot throw `NullReferenceException` at
-  `WorldDefinitionValidator.Placements.cs:1723`, through
-  `DocumentSpatialValues.cs:143`. Owner: language lane. Default or
-  refuse the missing position before the domain-expansion walk. The port
-  authors the explicit position and boots successfully. (from: meadow)
+  an authoring diagnostic: `WorldDefinitionValidator.Placements.cs:1723`,
+  through `DocumentSpatialValues.cs:143`, throws `NullReferenceException`. A
+  `.puck` source no longer reaches it (lowering fills the shape's described
+  `position` default), but a hand-written JSON document can. Default or refuse
+  the missing position in the validator before the domain-expansion walk.
+  (from: meadow)
+- [medium] Spelling pairs the compiler does not yet hold
+  (`SpellingEquivalenceCorpusTests.Open`), each fixed by choosing one canonical
+  form in lowering:
+  - `float-spelling`: `30.24` and `30.240000000000002` are one float32, the
+    precision a creation reads, but two documents (`worlds/debug/go.puck`'s
+    grid paints carry the long spelling). Round a creation's scalars to the
+    shortest float32 round-trip spelling on lowering, or keep doubles and say
+    so; either way the corpus pair records the choice.
+  - `profile-start`: a closed profile listed from another start vertex is one
+    polygon and two documents (and two bake keys). Start the ring at its least
+    vertex on lowering, for closed profiles only (a sweep's path and an open
+    revolve profile keep their order).
+  - `chamfer-default`: a zero `chamfer` and none are one SDF program but two
+    documents and two creation hashes (`CreationCanonicalizer.Normalize` keeps
+    `Chamfer` as written). Design and recommendation:
+    [G13](state-and-language.md#designs-to-choose).
+  - `ternary-fold`: a compile-time constant condition in a gate is not folded,
+    so `(c == 1) ? (a < 3) : (a <= 3)` lowers to a `compareValue` evaluating
+    both arms where `a < 3` lowers to `compareState`: a different rule program
+    and price. Fold constant expressions before lowering
+    ([G14](state-and-language.md#designs-to-choose)).
+  - A literal `rotation` is lowered in one sign on shape rows only
+    (`WorldDocumentRowDefaults.CanonicalizeRotation`); text runs, placements
+    and animation frames still keep the authored sign. Apply the one helper to
+    each.
+  - The audit's cost pairs that two documents cannot share (static placements
+    against one creation, split prototypes against one, `wall - opening`
+    against its box tiling, a mirrored pair against a `symmetry` fold, union
+    shape order, `x += 3` against `x = x + 3`, a latch cell against its
+    repeated guard) need a cost corpus over bake groups and the work sheet,
+    beside this document corpus.
+- [low] A module library's lets and templates are never reported unused (each is
+  an export), so an export nothing in the repository reads goes unflagged
+  (`worlds/debug/elements.puck` `elementFamilyGlyphs`,
+  `worlds/standard/styles.puck` `continuousStyle`). A directory lint could
+  report a library declaration no linted source reads.
 
 - [low] Two `exports { … }` blocks in one document keep only the later block's
   lists (the object section replaces, where the `export <facet> <names>`
@@ -3123,6 +3158,13 @@ ordinary · Next: new content and art on the owner's call.
 
 - Owed: `puck verbs --check` with a windowed boot after clearance-op removed
   `player.camera.clearance` by hand (the first settle window runs it). (from: clearance-op)
+- [low] The gallery's `motion-pulse` exhibit (`worlds/debug/shapes.puck`, its
+  six petals smooth-unioned to the core in one pooled group) draws a stretched
+  seam all the time, since a continuous clock drives it: lint reports PUCK122
+  six times. Its look needs the owner's eye: one group per petal and core, or
+  no group and a union crease. The two exhibits that show the stretched seam on
+  purpose (`motion-smooth-blend`, `motion-carve`) acknowledge it with `allow`.
+  (from: puck-lang)
 - The faerie: the companion becomes small, abstract and original (nothing that
   reads as Ocarina of Time's) beside the moth, its animation rich, varied and
   reactive, dodging a swat through one generic threat input (a point and

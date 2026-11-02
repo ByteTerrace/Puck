@@ -1,0 +1,16 @@
+// An enum word quoted in a let's object is the word written bare in the row.
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+let ground = { name: "ground", bond: "Surface", hold: "Gravity", forward: "Heading", reach: 1.2 }
+
+kits [
+  {
+    name: "walker"
+    bodyMotionProgram: "walk"
+    collider: capsule(endpoint: [0, 1.1, 0], radius: 0.3)
+    motion {
+      holds [ground]
+    }
+  }
+]

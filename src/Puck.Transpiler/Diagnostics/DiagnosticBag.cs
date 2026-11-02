@@ -110,6 +110,15 @@ public sealed class DiagnosticBag : IReadOnlyList<Diagnostic> {
     }
     /// <inheritdoc/>
     public IEnumerator<Diagnostic> GetEnumerator() => m_diagnostics.GetEnumerator();
+    /// <summary>Removes every diagnostic <paramref name="match"/> selects.</summary>
+    /// <param name="match">The predicate selecting the diagnostics to remove.</param>
+    /// <returns>The number removed.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="match"/> is <see langword="null"/>.</exception>
+    public int RemoveAll(Predicate<Diagnostic> match) {
+        ArgumentNullException.ThrowIfNull(match);
+
+        return m_diagnostics.RemoveAll(match: match);
+    }
     /// <summary>Reports an existing diagnostic instance.</summary>
     public void Report(Diagnostic diagnostic) {
         ArgumentNullException.ThrowIfNull(diagnostic);

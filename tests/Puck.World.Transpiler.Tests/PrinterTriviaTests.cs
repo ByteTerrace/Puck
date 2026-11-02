@@ -67,14 +67,27 @@ public class PrinterTriviaTests {
     [Fact]
     public void AnArrayWrittenOverSeveralLinesKeepsThem() {
         RoundTrips(source: """
-            palette {
-              colors [
-                6209
-                32767
+            tile {
+              pixels [
+                "33000000"
+                "33000000"
               ]
             }
 
             """);
+    }
+    [Fact]
+    public void NumbersWrittenOneToALineFillTheirLines() {
+        Assert.Equal(
+            actual: PuckFormat.Format(source: "palette {\n  colors [\n    6209\n    32767\n  ]\n}\n"),
+            expected: "palette {\n  colors [6209, 32767]\n}\n"
+        );
+
+        var run = $"map [\n{string.Concat(values: Enumerable.Repeat(count: 100, element: "  0\n"))}]\n";
+        var filled = PuckFormat.Format(source: run);
+
+        Assert.True(condition: (filled.Split(separator: '\n').Length < 10), userMessage: filled);
+        Assert.Equal(actual: PuckFormat.Format(source: filled), expected: filled);
     }
     [Fact]
     public void ACommentInsideAnArrayKeepsItsElement() {
