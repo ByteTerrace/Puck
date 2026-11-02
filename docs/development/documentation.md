@@ -217,6 +217,56 @@ record of when this repository changed:
 - An external protocol's version string, such as MCP's `2026-07-28`, which is
   the protocol's own name for the revision Puck speaks.
 
+## Keep documents from rotting
+
+Puck changes constantly, and a document that copies the code drifts from it.
+A whole-corpus sweep found the same causes over and over:
+
+- done work left in plans;
+- one fact kept in two homes whose copies drifted apart;
+- measurements and dates written into plans instead of commits;
+- owner rulings never swept through older pages;
+- line-number citations that no longer point at their code;
+- checks that existed but ran nowhere.
+
+Each rule below removes one of those causes at its source. Rules a check can
+hold are held by a check; the rest are procedure.
+
+- **Derive, don't copy.** A fact the code holds (a verb's flags, a constant, a
+  limit, a schema field) is generated from the code or cited by name, never
+  retyped. Write `Rule.MaxWorkUnitsPerTick`, not its value; the value goes into
+  prose only where the code is its single source and a check compares them.
+- **Cite symbols in durable pages.** The manual, decisions, skills, references
+  and code comments cite a type or member by name (`SdfMeshIrradiance.ProbeCache`;
+  in C#, `<see cref="…"/>`), which survives every edit around it. A `file:line`
+  belongs only in a page that is rechecked before use and deleted when it is
+  consumed: plans, open items, review findings, hand-backs and commit messages.
+- **A plan holds only open work.** The change that closes an item deletes it,
+  after moving any lasting fact to its owning home; a status line such as
+  "done", "landed" or "is green" is a deletion that has not happened yet.
+  Evidence (timings, hashes, run outputs) goes into the commit message that
+  lands the change, never into the plan.
+- **One fact, one home.** A second page links to the owner instead of restating
+  it ([choose the authoritative home](#choose-the-authoritative-home)). A list
+  that ranks work, such as open items' Next, names and links its packets; it
+  does not copy their citations.
+- **A ruling sweeps the corpus in the change that makes it.** When AGENTS.md
+  gains or changes an owner ruling, the same change searches `docs/` and
+  `.claude/` for text that contradicts it and fixes or deletes that text.
+- **Checks run where rot is born.** `puck docs links` runs over every
+  hand-written page and skill on every push. It checks current state only,
+  against no recorded file, and covers:
+  - links and anchors;
+  - repository paths;
+  - cited symbols;
+  - dates and commit SHAs outside the exemptions above;
+  - scratch paths;
+  - branch names that no longer exist.
+- **Every wave closes with a corpus sweep.** The settle window that closes a
+  wave includes a documentation sweep with a reduction lens (keep, shrink,
+  merge or delete before fixing). Its report states, per area, how many model
+  families read it ([orchestration](../../.claude/skills/orchestration/SKILL.md)).
+
 ## Prose rules for every surface
 
 Three registers share one standard. Human narrative (READMEs and `docs/`)

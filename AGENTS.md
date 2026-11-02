@@ -356,6 +356,11 @@ Decide, don't ask, except for product/taste decisions and owner-only actions: th
 The owner's Azure subscription ID is not a secret and may appear in committed configuration (the owner's ruling); credentials, keys and tokens never do.
 End runs with **Needs you**, **Changed**, **Found**; state verification and unconfirmed findings.
 
+Documents rot when they copy the code ([keep documents from rotting](docs/development/documentation.md#keep-documents-from-rotting)):
+- derive facts from the code or cite them by symbol, never by retyping them;
+- a closing change deletes its plan item, and its evidence goes in the commit;
+- a new ruling sweeps the corpus in the same change.
+
 Maintained repository automation is a `puck` verb, never a script; [CI](docs/development/ci.md#repository-automation) owns procedures.
 Ordinary Git commands and reading the source are normal work, not automation.
 Workflows orchestrate verbs and bash composite actions; harness hooks are the script exception.

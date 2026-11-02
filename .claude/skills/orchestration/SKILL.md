@@ -534,8 +534,21 @@ meant as these periods; the lead now schedules them by state, not the clock:
 - **Measure:** one fixed recipe so windows compare: `puck sweep --baseline
   <last>` (frames at the standard stops, both backends, the day cycle
   running), a cold bake per backend, and the measurement of the moment.
-- **Record and release:** the numbers go into the owning plan as a dated-free
-  baseline row with the commit in its message, then the leases return.
+- **Record and release:** the numbers replace the owning plan's current
+  reading, with no date in the text and the commit in the message. Earlier
+  readings live only in commits. Then the leases return.
+- **Sweep the corpus:** a wave's closing window also sweeps the documentation
+  ([keep documents from rotting](../../../docs/development/documentation.md#keep-documents-from-rotting)).
+  1. Run `puck docs links` over every hand-written page.
+  2. Split the corpus into areas, one reader family each, and give the least
+     reliable family's area a second full reader.
+  3. Each reader sorts every page and large section into keep, shrink (with a
+     target size), merge or delete before writing fix findings.
+  4. A second family checks every finding against the code.
+  5. One lane applies the result; the lead reviews its diff.
+
+  The report states each area's reader count, because consensus on findings
+  is not coverage of pages.
 A lane's own timing taken under load is recorded as load-bound, and the plan
 does not rank on it. Booting a windowed `Puck.World` is a GPU
 leg even when only its startup is measured; a headless one is not. Use

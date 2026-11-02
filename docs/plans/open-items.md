@@ -1383,8 +1383,23 @@ Still open from the companion build:
 
 ### Delivery, launcher and CI
 
-Owner: delivery lane · medium · Next: the silo's cold activation,
-then CI's steady state, the shader cache and the GC-hole retirement.
+Owner: delivery lane · medium · Next: the production deploy below, then the
+silo's cold activation, CI's steady state, the shader cache and the GC-hole
+retirement.
+
+- [high] Production deploy fails at "Publish containers and apply application
+  configuration", leaving production on its previous release. The four main
+  runs before it skipped the deploy job, so this is its first run in a while.
+  Platform reconcile succeeded; nothing after the container step ran.
+  - Error: `az acr repository list` returns "authentication required".
+  - Cause: `ReusePublishedContainerAsync` begins with a catalog listing
+    (`AzureContainerRetention.cs:9`). The publishing identity deliberately
+    holds only "Container Registry Repository Contributor" under
+    `AbacRepositoryPermissions` (`main.bicep:2144-2151`), and
+    `abacConditions.bicep:135` says catalog listing is not needed.
+  - Fix: ask for the known tag directly (`az acr repository show --image
+    <repo>:<commit>`) and treat only a not-found answer as "not published".
+    Do not grant the catalog role.
 
 - [medium] A solution build intermittently fails in `Puck.Azure.Functions`:
   the Functions worker's generated `obj/azure_functions/azure_functions.g.csproj`
