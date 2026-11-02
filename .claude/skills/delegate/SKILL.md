@@ -66,6 +66,11 @@ holds the Git, push and stop-order rules every family shares.
 - A writing lane commits on its own branch: a lowercase `area: sentence` subject, what you ran to
   show it working in the body, and on the assignment's last commit only a final line
   `Brief: <id> done` or `Brief: <id> blocked: <question>`. Never modify or push `main`.
+- Commit only with `git commit` over an index you inspected. Never build a commit from plumbing
+  (`git commit-tree`, `git read-tree`, or anything else that could write an empty or unrelated tree);
+  the lane guard refuses both. ASP.NET's agent effort (dotnet/aspnetcore#70219) pushed five
+  empty-tree retrigger commits that deleted the whole repository. An `--allow-empty` hand-back commit
+  on your own tree stays allowed.
 - Hand back under **Needs you** (decisions you could not make and GPU legs you need, with options and
   their cost), **Changed** (what landed and what you ran; a read-only lane names its findings file)
   and **Found** (defects, risks and follow-ups with `file:line`, and what you could not confirm).

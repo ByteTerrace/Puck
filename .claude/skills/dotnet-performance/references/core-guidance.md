@@ -35,7 +35,10 @@ When reviewing code, scan **Folklore to delete** below — flagging obsolete han
 
 - **Dynamic PGO underlies several of the wins below.** Interface-typed `foreach`,
   guarded devirtualization and the escape-analysis payoffs assume tiered code that
-  PGO has profiled; `Puck.World` sets `TieredPGO=false`, so confirm them in the
+  PGO has profiled. `Puck.World` sets `TieredPGO=false`
+  ([`Puck.World.csproj:20`](../../../../src/Puck.World/Puck.World.csproj)) for
+  its whole process, so every library a World loads runs without it, while
+  `puck bench` runs in the CLI with it: confirm a PGO-dependent win in the
   World's own disassembly.
 - **Idiomatic C# is the fast path.** The JIT flattens abstraction for you (devirtualize → inline → escape-analyze → stack-allocate → range-analyze): interfaces, `foreach`, lambdas, `params` arrays, `^1`, guard-then-index, switch-on-length all compile to what hand-tuned code used to. Write for clarity; delete contortions.
 - **Inlining is the gateway; escape analysis is the payoff.** Delegates, temporary arrays, spans-over-arrays, enumerators, even `Stopwatch` instances get stack-allocated — but only if *every* use of the object inlines. One opaque virtual call (even a no-op `Dispose`) makes the whole object escape to the heap. Keep hot members small and whole.
@@ -48,7 +51,7 @@ When reviewing code, scan **Folklore to delete** below — flagging obsolete han
 
 ## Free wins (just target net11.0)
 
-- **JIT/escape analysis:** `foreach` over `IEnumerable<T>`-typed arrays/`List<T>` alloc-free and ~2-3x; non-escaping delegates ~3x; temp `new T[]{...}`/`params` arrays stack-allocated ~3x; array→`AsSpan`→`CopyTo` chains ~11x; `Stopwatch.StartNew` alloc-free.
+- **JIT/escape analysis:** `foreach` over `IEnumerable<T>`-typed arrays/`List<T>` alloc-free and ~2-3x where PGO runs (not in the World); non-escaping delegates ~3x; temp `new T[]{...}`/`params` arrays stack-allocated ~3x; array→`AsSpan`→`CopyTo` chains ~11x; `Stopwatch.StartNew` alloc-free.
 - **Devirtualization:** array interface methods devirtualize (`ReadOnlyCollection` for-loop ~3x, array-backed LINQ `Skip/Take/Sum` ~2x); `static readonly` interface-typed fields get exact-typed without PGO (~8x); `EqualityComparer<T>.Default` in shared generics ~2x.
 - **Inlining/EH:** try/finally no longer blocks inlining (`lock`/`using`/`foreach` helpers inline); provably-non-throwing try/catch deleted entirely; inlining budget >2x.
 - **Checks/barriers:** big bounds-check-elimination expansion (bit-math ranges, `x[0]`/`x[^1]`, switch-on-length, order-independent guards, span loop cloning); struct returns and ref-struct fields skip GC write barriers.
@@ -64,8 +67,8 @@ When reviewing code, scan **Folklore to delete** below — flagging obsolete han
 ## Pattern changes (write code differently now)
 
 **Allocation & abstraction**
-- Take/return `IEnumerable<T>` freely in hot paths — PGO+escape analysis stack-allocates the enumerator for arrays/`List<T>`/`Stack`/`Queue`/`ConcurrentDictionary`; stop adding concrete-type overloads for this. (references/collections-and-linq.md)
-- Do NOT split cold tails into separate `SlowPath()` methods — PGO classifies them cold, blocks inlining, and kills stack allocation of the containing object (the BCL deleted its own `MoveNextRare`). (references/collections-and-linq.md)
+- On a PGO host, take/return `IEnumerable<T>` freely in hot paths — PGO+escape analysis stack-allocates the enumerator for arrays/`List<T>`/`Stack`/`Queue`/`ConcurrentDictionary`. In code the World runs (no PGO), read the disassembly; where the interface enumerator still boxes, loop over the concrete collection (the shape dotnet/aspnetcore#70147 measured). (references/collections-and-linq.md)
+- On a PGO host, do NOT split cold tails into separate `SlowPath()` methods — PGO classifies them cold, blocks inlining, and kills stack allocation of the containing object (the BCL deleted its own `MoveNextRare`). Without PGO a `NoInlining` helper holding a rare loop can keep the hot method small (dotnet/aspnetcore#70121's author measured inlining it regress common input); decide by disassembly and counts. (references/collections-and-linq.md)
 - Replace `switch`/`goto case` state machines with plain `while` loops — irreducible loops defeat JIT analysis and inlining (~6.4x on `ConcurrentDictionary`'s enumerator). (references/collections-and-linq.md)
 - Return multi-field structs (record structs of strings included) by value — return buffers are stack-guaranteed, write barriers elided; drop `out`-param contortions. (references/jit-and-codegen.md)
 - Declare constant collections/singletons as `static readonly`, interface-typed is fine — the JIT retypes to the concrete type without PGO. (references/jit-and-codegen.md)
@@ -155,7 +158,7 @@ When reviewing code, scan **Folklore to delete** below — flagging obsolete han
 
 ## Folklore to delete
 
-- **"Never take `IEnumerable<T>` in hot paths — the enumerator allocates."** PGO → guarded devirt → escape analysis stack-allocates it for arrays, `List<T>`, `Stack`, `Queue`, `ConcurrentDictionary`.
+- **"Never take `IEnumerable<T>` in hot paths — the enumerator allocates."** Retired on a PGO host: PGO → guarded devirt → escape analysis stack-allocates it for arrays, `List<T>`, `Stack`, `Queue`, `ConcurrentDictionary`. Not retired in the World, which runs without PGO: check its disassembly.
 - **Custom `ValueStopwatch` structs / `GetTimestamp` bookkeeping for zero-alloc timing.** `Stopwatch.StartNew()` is alloc-free via escape analysis.
 - **"Avoid lambdas/`Func<>` — a delegate always allocates."** Non-escaping delegates whose consumer inlines are elided. (Captured-state display classes still allocate.)
 - **"Never pass temporary `new T[]{...}` / `params` arrays in hot code."** Array stack allocation via escape analysis; spans remain the guarantee, not the only remedy.
@@ -165,7 +168,7 @@ When reviewing code, scan **Folklore to delete** below — flagging obsolete han
 - **"Spans don't get loop cloning — use `T[]` in the hottest loops."** Span loops clone like array loops now.
 - **"Methods with `lock`/`using`/try-finally can't inline — flatten them."** try/finally no longer blocks inlining; provably-non-throwing try/catch is deleted outright.
 - **Sprinkling `[MethodImpl(AggressiveInlining)]` to beat the inlining budget.** Budget >2x, local cap ~2x; budget-motivated annotations are mostly dead weight.
-- **The `MoveNextRare` cold-split pattern ("keep the hot method thin").** Under PGO the split-out method goes cold, blocks inlining, and kills stack allocation — the BCL reverted it.
+- **The `MoveNextRare` cold-split pattern ("keep the hot method thin") on a PGO host.** Under PGO the split-out method goes cold, blocks inlining, and kills stack allocation — the BCL reverted it. Without PGO (the World) it is not retired; measure.
 - **`switch`/`goto` state machines "for speed".** Irreducible loops defeat the JIT; a boring `while` loop was ~6.4x faster.
 - **`if (cond) return true; return false;` "optimizes better than" `=> cond;`.** Normalized to identical codegen.
 - **Avoiding by-value struct returns / object refs in ref structs over write-barrier cost.** Both barrier classes are elided now.

@@ -267,6 +267,9 @@ Add-Case git-safety 'git tag -fa v1 -m x' pass deny
 Add-Case git-safety 'git reflog show' pass pass
 Add-Case git-safety 'git reflog expire --all' pass deny
 Add-Case git-safety 'git update-ref refs/heads/x HEAD' pass deny
+Add-Case git-safety 'git commit-tree 4b825dc642cb6eb9a060e54bf8d69288fbee4904 -m retrigger' pass deny
+Add-Case git-safety 'git read-tree --empty' pass deny
+Add-Case git-safety 'git commit --allow-empty -m handback' pass pass
 Add-Case git-safety 'git symbolic-ref HEAD' pass pass
 Add-Case git-safety 'git symbolic-ref HEAD refs/heads/x' pass deny
 Add-Case git-safety 'git gc' pass deny

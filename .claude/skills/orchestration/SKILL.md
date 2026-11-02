@@ -46,9 +46,19 @@ direction:
   several lanes are one session the lead runs with GPU priority; it is never
   queued behind the lanes it verifies.
 - **Speed claims get a quiet window.** The machine is never idle while lanes
-  run, so the lead holds a short quiet window at a natural pause (lanes parked at
-  WIP commits) to re-measure the speedups landed since the last one; a speed
-  claim stands only once measured there.
+  run, so a lane proves its win on load-independent counters (allocated bytes,
+  march and ray step counts, `world.budget` work counts) and lands on them. The
+  lead holds a short quiet window at a natural pause (lanes parked at WIP
+  commits) to re-measure the speedups landed since the last one with
+  interleaved A/B wall-clock rounds, or a lane runs those rounds under the heavy
+  lease; a timing claim stands only once measured there, and the window never
+  holds a landing. Every benchmark or counter check first shows that its steady
+  state runs the changed branch, not a warm cache or a default path: in the
+  ASP.NET agent effort (dotnet/aspnetcore#70219), review repeatedly found
+  benchmarks and tests that never reached the changed code. A change is
+  judged by what it measures and what it makes possible, never by its isolated
+  delta alone (AGENTS.md, "Changes pay dividends";
+  [measured changes](../dotnet-performance/references/measured-changes.md)).
 - **An Antigravity lane is bounded, its claims are checked against the code
   before it merges, and its review starts first**: its output has carried
   fabricated claims and high findings.
@@ -68,7 +78,10 @@ direction:
   change is reviewed by Codex, a Codex author's by Claude, and Argon takes
   security, large-context and UI reviews. The reviewer gets the diff and the
   author's claim, not the author's reasoning, and tries to break it with a repro,
-  a counterexample or a missed caller. Review depth follows risk: determinism,
+  a counterexample or a missed caller. It reads a change's benchmark, harness
+  and counters as code under review: a measurement that cannot fail, or that
+  runs another path, is a finding at the severity of the claim it supports.
+  Review depth follows risk: determinism,
   maths and renderer changes get Astra or an Opus `reviewer` or `specialist`
   (`principal` only as [Conserve Fable](#no-bad-loops) allows), ordinary engine
   code Sol, `reviewer` or `specialist`, docs and world content none or a scout's
@@ -154,6 +167,12 @@ says no second one may be added. Reviews kept finding duplicates that lanes
 had just written, a second retry loop in a change built to remove one among
 them, so duplicates were created about as fast as they were found; naming the
 mechanism up front is cheaper than the review that catches it.
+
+A performance sweep partitions its lanes by target type or method, never by
+benchmark scenario: two scenarios share hot code, so lanes split by scenario
+rewrite the same method twice. ASP.NET's agent effort produced pairs of PRs
+that rewrote one method the same way (dotnet/aspnetcore#70148 and #70199) and
+four new pooled-buffer helpers, two of them byte-identical (#70187 and #70191).
 
 When a second fix lane in one area comes back and its review finds the same
 class of defect in places the fix did not reach (disclosure took two lanes
@@ -481,8 +500,9 @@ times out under load is re-run once alone and reported as a flake. Only
 wall-clock work needs a quiet machine, and the lead takes it: a lane judges
 by counts and lists the timing reads it wants, and the lead runs them in a
 window it has cleared of every other lane's builds, suites, evals and World
-runs. A brief that measures boot, compile or frame time grants no GPU and
-takes no timing while other lanes run.
+runs, or grants the lane interleaved A/B rounds under the heavy lease. A
+brief that measures boot, compile or frame time grants no GPU and takes no
+timing while other lanes run.
 
 `puck lease list` is how the lead sees lease pressure: each of build, gpu and
 heavy with its holder, lane and how long it has held, then its queue in

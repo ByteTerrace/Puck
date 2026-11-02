@@ -11,7 +11,8 @@
 # | fetch --prune or into a local ref, reflog expire/delete,    |             |                                            |
 # | update-ref, symbolic-ref writes, remote and notes writes,   |             |                                            |
 # | gc, prune, repack, maintenance, pack-refs, filter-branch,   |             |                                            |
-# | filter-repo, replace, rebase, config writes; git -C, -c,    |             |                                            |
+# | filter-repo, replace, rebase, commit-tree, read-tree,       |             |                                            |
+# | config writes; git -C, -c,                                  |             |                                            |
 # | --git-dir, --work-tree and GIT_DIR-style variables          |             |                                            |
 # | A git verb or global option known only at run time, or an   | ask         | deny                                       |
 # | argument of a push or gh call known only at run time        |             |                                            |
@@ -183,6 +184,9 @@ function Get-GitSharedStateReason {
         }
         'config' {
             if (Test-GitConfigWrite $rest) { return 'Repository configuration is shared by every lane; read it with --get or --list, and let the lead change it.' }
+        }
+        { $_ -in @('commit-tree', 'read-tree') } {
+            return "git $($Git.Verb) builds a commit or index from raw trees, which can record an empty or unrelated tree that deletes the repository; commit with git commit over an index you inspected."
         }
         { $_ -in @('update-ref', 'filter-branch', 'filter-repo', 'replace', 'gc', 'prune', 'repack', 'maintenance', 'pack-refs', 'rebase') } {
             if ($Git.Verb -eq 'replace' -and ($rest.Count -eq 0 -or $first -in @('-l', '--list'))) { return $null }

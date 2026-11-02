@@ -172,6 +172,13 @@ nothing.
 - **Zeroed arrays you overwrite** can come from `GC.AllocateUninitializedArray<T>`
   when the array is large and written whole before any read; check the allocation
   is the cost first.
+- **Never read what you did not write.** Memory that skipped its fill (a rented
+  array, `preserve: false` growth, an uninitialized array, a `[SkipLocalsInit]`
+  local, a native block) holds an earlier owner's bytes; on a value path that is
+  a determinism defect. Name the call that writes every element a reader
+  reaches: `WorldTick.LatticeDraws.cs:51` rents a buffer that
+  `GeneratorEngine.TryRunBatch` fills to its length
+  ([`GeneratorEngine.cs:567-569`](../../../../src/Puck.State.Generators/GeneratorEngine.cs)).
 
 Sources: `stackalloc` memory limits, the threshold-and-fallback pattern and
 avoiding it in loops ([MS-STACKALLOC], analyzer [CA2014]); a large array's
@@ -187,12 +194,18 @@ way.
 
 - **Measured here.** `SdfMeshPathBake.Pending` touched all 2,596 groups on every
   footprint call until it kept a done-through cursor
-  ([`SdfMeshPathBake.cs:279`](../../../../src/Puck.SdfVm/SdfMeshPathBake.cs));
+  ([`SdfMeshPathBake.cs:312`](../../../../src/Puck.SdfVm/SdfMeshPathBake.cs));
   `BindScreens` searched a list for each routed window until the window's index
   became its latched order (sampled 439 to 134 ms per 20 s).
 - **Hash once, compare once.** The tables' cadence signatures hashed each region
   byte-wise with FNV twice a frame; they now hash each region once with
-  `XxHash3` ([`SdfWorldTables.Cadence.cs:267`](../../../../src/Puck.SdfVm/SdfWorldTables.Cadence.cs)).
+  `XxHash3` ([`SdfWorldTables.Cadence.cs:272`](../../../../src/Puck.SdfVm/SdfWorldTables.Cadence.cs)).
+- **A short fixed scan is not the quadratic.** The cost is items × a list that
+  grows with the world; a scan over a few entries that never grow beats sorting
+  or hashing them (dotnet/aspnetcore#70209 skips the sort at eight keys or
+  fewer). Measure N before replacing a scan with a set: `Dress`'s
+  `MeshAssetSlots` scan grows with the world
+  ([frame time](../../../../docs/plans/open-items.md#other-frame-time-findings)).
 
 ## Touch the bytes once
 

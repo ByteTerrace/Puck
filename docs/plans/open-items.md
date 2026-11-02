@@ -42,7 +42,9 @@ experimental worlds have that it lacks is ported into it
    frame thread is `CaptureFrame`, chiefly CPU SDF field queries: creation-effector
    surface probes (27 %) and the chase camera's clearance march (18 %), about
    31 ms of 70 (the presenter's `Dress`, 18.6 %, is that clearance march); the
-   draw list's dressing and staging are 9 % and the tick 23-28 %. Design
+   draw list's dressing and staging are 9 % (its per-group scans and boxed
+   motion identities are under [other frame-time findings](#other-frame-time-findings))
+   and the tick 23-28 %. Design
    these as the job system's and the evaluator's work (batched, cached by what
    changed, off the frame thread) before any visibility step.
 1. [Lighting and GI](#lighting-and-gi) [high]: under lockstep a moving sun
@@ -295,7 +297,9 @@ One engine-wide job system answers all of it:
     to 169.2 MiB sampled; remaining sites are irradiance probe blocks, 103.3 MiB
     (`SdfMeshIrradiance`), dressed-pick arrays, 32.0 MiB
     (`SdfDressedPickMap.cs:24-25`), and dressed motion identities, 9.1 MiB
-    (`SdfMeshPathBake.cs:389`). Zero steady gen0 is not yet reached.
+    (`SdfMeshPathBake.cs:408, :425`; the `Dress` item under
+    [other frame-time findings](#other-frame-time-findings)). Zero steady gen0
+    is not yet reached.
   - Empty, lane-owned `--cache-dir` boots through bake settlement sample
     174,453 to 159,435 MiB, but collections increase from 555 to 619 and GC
     suspension from 12,813 to 15,083 ms. Counts include higher generations and
@@ -819,17 +823,51 @@ system can take, from `dotnet-trace` thread-time samples of the frame thread
   Owner: the lead.
 - [medium] `SdfMeshPathBake.Dress` rebuilds every draw of every group whenever
   one dynamic slot moved, and for each dynamic group scans `MeshAssetSlots`
-  (`Enumerable.Contains` over an `IReadOnlyList<int>`) and every mesh instance
-  (`SdfMeshPathBake.cs:375-388`): 0.6 to 1.2 ms a frame at the lobby and the
-  rim, `Enumerable.Contains` alone 0.45 to 0.62 ms. Index the frame's instances
-  by slot once and redress only the moved groups; this is the first cut of the
-  [visibility plan](visibility.md#the-build-order)'s V2b, which retains the
-  instance table and stops the rebuild. (from: slow-frames)
+  (`Enumerable.Contains` over an `IReadOnlyList<int>`, `SdfMeshPathBake.cs:404`)
+  and every mesh instance (`:405-406`, again at `:424`): 0.6 to 1.2 ms a frame
+  at the lobby and the rim, `Enumerable.Contains` alone 0.45 to 0.62 ms. Each
+  rebuild also boxes a fresh `ValueTuple` motion identity per dynamic draw
+  (`:408`, `:425`; `SdfMesh.cs:255` types it `object?`), which the staging
+  compares by virtual `object.Equals` per draw (`SdfWorldTables.Motion.cs:214`,
+  `SdfWorldTables.MeshRegion.cs:286`), and copies the instance list
+  (`SdfMeshPathBake.cs:434`); every frame that misses the early return at `:395` allocates a
+  new `SdfFrame` record (`:458`). Index
+  the frame's instances by slot once, redress only the moved groups, and give
+  motion identity a typed, equatable key cached per copy and selector; this is
+  the first cut of the [visibility plan](visibility.md#the-build-order)'s V2b,
+  which retains the instance table and stops the rebuild. In the World process
+  (no dynamic PGO, `Puck.World.csproj:20`) the `foreach` over
+  `IReadOnlyList<SdfMeshInstance>` may box its enumerator: read the
+  disassembly. (from: slow-frames, perf-guidance)
 - [medium] The portal crossing scan visits every population slot for every
   portal face each tick, with an occupancy dictionary `Observe` or `Forget` per
   pair (`WorldInstanceHost.Adjacency.cs:294-434`): 1.1 to 1.2 ms, 16 to 19 % of
   a tick standing still. A body-major loop with a bounds test before the
   occupancy write cuts it. (from: slow-frames)
+- [low] The rule VM's latch scheduling, what remains of
+  `RuleEvaluator.Evaluate`'s 1.66 to 1.77 ms a tick after gates and firings
+  ([measurements](#measurements-and-evidence)), hashes each rule's name every
+  tick (`RuleLatch.Rule`, `RuleLatch.cs:181-189`, from `RuleEvaluator.cs:385`)
+  and keeps a binding in two dictionaries: `Held` (`TryGetValue` at
+  `RuleEvaluator.cs:523`, `GetValueRefOrAddDefault` at `:579`) and `Scheduling`
+  (`RuleLatch.cs:66`), both walked by `EndSweep` after each swept rule
+  (`RuleLatch.cs:244-257`). Resolve each compiled rule's `RuleState` once, when
+  its family compiles, and keep a binding's edge bit and schedule in one entry
+  of one table. The state hash sorts the bindings and folds only the edge bit
+  (`RuleLatch.cs:109-165`), so the merge leaves it unchanged, provided the
+  hashed, checkpointed bit stays apart from the unhashed schedule cache.
+  Unmeasured. (from: perf-guidance)
+- [low] `PaintLatticeDraw` rents its draw buffer from `ArrayPool<long>.Shared`
+  (`WorldTick.LatticeDraws.cs:51`) and paints from it. That is safe because
+  `GeneratorEngine.TryRunBatch` writes every index below `values.Length` on
+  success (`GeneratorEngine.cs:567-569`, `sampleCount: values.Length` at
+  `:1407`) and the caller slices to the lattice's cell count (`:54-57`), but a
+  rented array holds an earlier owner's bytes, so the determinism of the paint
+  rests on that loop. It runs at server construction and after a `Generate`
+  advances a row's pass, not every tick. Keep the buffer with the lattice that
+  owns the row, sized once: whatever it holds is then that row's own earlier
+  paint, a function of the simulation, never another caller's bytes.
+  (from: perf-guidance)
 - [low] A body resting at the overlook pays two ground snaps a tick (ten
   sweeps each): `WorldBody.IntegratePlanarAndVerticalVelocity` searches for
   support whenever the body is grounded, and `ResolveProgramContacts`'s own
@@ -1002,6 +1040,22 @@ store (AGENTS.md), and work proportional to change.
   the bake into contour, prepare, land and store CPU, GPU dispatch waits and
   idle frames needs either a cold bake that stays under the machine's memory
   or the window's memory rule raised for that leg. (from: settle-2)
+- [medium] Per-group allocation in the contour stages that the sampled sites
+  (the allocation churn item under [engine job system](#engine-job-system))
+  have not ranked, read from source and unmeasured:
+  `SdfContour.SplitAtCreases` passes a collection expression to
+  `List<int>.AddRange(IEnumerable<int>)` for every quad, which lowers to a new
+  array and a read-only wrapper per quad (`SdfSampledLattice.cs:78, :84`);
+  `SdfSampledLattice.Contour` copies the contour's `double[]` normals and
+  positions to `float[]` through LINQ `Select` (`SdfSampledLattice.cs:1971-1972`)
+  after `SdfDualContouring` has already copied its `List<double>`s to those
+  arrays (`SdfDualContouring.cs:229-230`); and every group with creases builds a
+  `ContourProjection` of its own lists and arrays
+  (`SdfMeshPathBake.cs:1618-1625`, `:2002-2051`). Count them with
+  `--profile gc-verbose` in the same leg as the memory split above, then write
+  each into storage its worker owns: one `float` buffer filled once, appends
+  without the wrapper, and a projection workspace per worker.
+  (from: perf-guidance)
 - The earlier readings (other lanes building beside them): Direct3D 12's `world`
   residency bakes its 2,090 groups in 132.0 s on the cuts merged with the
   integration tip (170.5 s before that merge, the same session's base 259.0 s;

@@ -22,7 +22,7 @@ $shared = @(
     @('deny', 'git config --unset user.name'), @('deny', 'git config set user.name x'), @('deny', 'git -C ../x status'),
     @('deny', 'git -c foo=bar status'), @('deny', 'git symbolic-ref -d HEAD'), @('deny', 'git replace -d x'),
     @('deny', 'git -C ../x add -- file.txt'), @('deny', 'git -C ../x commit -q -m wip'),
-    @('deny', 'git maintenance run'), @('deny', 'gh pr merge 1'), @('deny', 'gh pr create --fill'), @('deny', 'gh repo sync'),
+    @('deny', 'git maintenance run'), @('deny', 'git commit-tree 4b825dc6 -m x'), @('deny', 'git read-tree --empty'), @('deny', 'gh pr merge 1'), @('deny', 'gh pr create --fill'), @('deny', 'gh repo sync'),
     @('deny', 'gh api -X POST repos/o/r/merges'), @('deny', 'gh workflow run deploy'),
     @('pass', 'git stash list'), @('pass', 'git stash show -p'), @('pass', 'git status'), @('pass', 'git branch -a'),
     @('pass', 'git branch new'), @('pass', 'git checkout -b new'), @('pass', 'git switch -c new'), @('pass', 'git fetch origin'),
