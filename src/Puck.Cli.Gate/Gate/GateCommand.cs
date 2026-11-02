@@ -70,7 +70,7 @@ public static class GateCommand {
             (Puck.World.Tests or Puck.World.Presentation.Tests, also inside affected --run) holds the shared
             heavy lease through admission and execution. Nested runs use serialized child leases after
             validating the ancestor holder, so they never wait on their own enclosing lease.
-            A step waits at most {HostAdmission.Timeout.TotalMinutes:0} minutes and a heavy suite {HeavyLease.Timeout.TotalHours:0} hours, reporting when waiting
+            A step waits at most {HostAdmission.Timeout.TotalMinutes:0} minutes and a heavy suite {CliLease.DefaultWait.TotalHours:0} hours, reporting when waiting
             starts, each new holder, a still-waiting line every {HostAdmission.Heartbeat.TotalMinutes:0} minutes, and when capacity returns.
             The locks check runs first, from this CLI rather than the copy it builds, and the solution build restores nothing.
             A failed locked restore, build or CLI copy stops the run. Other failures allow later checks, but skip recording.

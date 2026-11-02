@@ -9,6 +9,15 @@ namespace Puck.Cli;
 
 /// <summary>Serializes lane work under a shared checkout's lease directory, rotating admission between lanes.</summary>
 public sealed class CliLease : IDisposable {
+    /// <summary>How long a run waits in a machine-wide lease queue before it is refused, when its caller names no other.
+    /// Holders run long (a heavy suite can take half an hour under load, a GPU leg is time-boxed to twenty minutes) and
+    /// queues are several deep, so refusing sooner throws away work that was only waiting its turn. A wait is never part
+    /// of what a run's own timeout measures: the lease wait and the work under the lease have separate limits.</summary>
+    public static readonly TimeSpan DefaultWait = TimeSpan.FromHours(hours: 2);
+
+    /// <summary>How often a wait that has said nothing new repeats where it stands, so a long queue is seen to be alive.</summary>
+    private static readonly TimeSpan Heartbeat = TimeSpan.FromMinutes(minutes: 5);
+
     private readonly FileStream m_gate;
     private readonly string m_directory;
 
@@ -41,6 +50,7 @@ public sealed class CliLease : IDisposable {
         var directory = Path.Combine(path1: root, path2: name);
         var started = clock.GetTimestamp();
         string? reported = null;
+        var reportedAt = started;
         string? ticket = null;
 
         try {
@@ -75,9 +85,12 @@ public sealed class CliLease : IDisposable {
                 var waitingOn = ((metadata is { Length: > 0 }) ? metadata[0] : null);
                 var report = $"lease: {holder} waiting for {name} lease{((waitingOn is null) ? ((ahead == 0) ? " held by another holder" : string.Empty) : $" held by {waitingOn}")}{((ahead == 0) ? string.Empty : $"; {ahead} queued ahead, lane {lane} is {place.Position} of {place.Lanes} in the round")}.";
 
-                if (reported != report) {
-                    Console.Error.WriteLine(value: report);
+                if ((reported != report) || (clock.GetElapsedTime(startingTimestamp: reportedAt) >= Heartbeat)) {
+                    var waited = clock.GetElapsedTime(startingTimestamp: started);
+
+                    Console.Error.WriteLine(value: ((waited < Heartbeat) ? report : $"{report[..^1]} (waited {waited.TotalMinutes.ToString(format: "0", provider: CultureInfo.InvariantCulture)} min)."));
                     reported = report;
+                    reportedAt = clock.GetTimestamp();
                 }
                 await Task.Delay(delay: ((remaining < TimeSpan.FromMilliseconds(milliseconds: 100)) ? remaining : TimeSpan.FromMilliseconds(milliseconds: 100)), timeProvider: clock, cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
             } while (true);

@@ -76,14 +76,13 @@ public static class ParityCommand {
             artifact: out var world,
             repositoryRoot: repositoryRoot,
             runDirectory: runDirectory,
-            timeout: CliProcess.RemainingBudget(
-                budget: SuiteBudget,
-                clock: suiteClock
-            ),
             verb: "parity"
         )) {
             return CliExit.Refused;
         }
+
+        // The suite's budget measures its legs; the wait for the build lease and the build are their own limits.
+        suiteClock.Restart();
 
         using var lease = world;
 

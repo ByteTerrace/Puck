@@ -22,7 +22,6 @@ namespace Puck.Cli.Test;
 public static partial class TestCommand {
     private const string ScratchPrefix = "puck-test-";
 
-    private static readonly TimeSpan BuildBudget = TimeSpan.FromSeconds(value: 600);
 
     private static int Run(string path, TestHost host, string? worldArtifact, string? keep, int jobs, bool reproduce, string? cacheDirectory, string? workers, string? record, string? compare) {
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {

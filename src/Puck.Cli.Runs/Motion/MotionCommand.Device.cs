@@ -21,7 +21,7 @@ public static partial class MotionCommand {
             named: worldArtifact,
             path: out var artifact,
             repositoryRoot: repositoryRoot,
-            timeout: TimeSpan.FromMinutes(value: 30),
+            timeout: WorldArtifactBuild.BuildTimeout,
             verb: Verb
         )) {
             return CliExit.Refuse(verb: Verb, what: "the World build", why: buildError.ReplaceLineEndings(replacementText: " "));

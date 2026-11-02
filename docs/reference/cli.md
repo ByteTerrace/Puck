@@ -1621,14 +1621,29 @@ per source state, and build only when the store has no build for the
 checkout's current sources. A second run over an unchanged checkout builds
 nothing. `puck test --world-artifact <dll>` and `puck canary --world-artifact
 <dll>` bypass the store and launch the named entry assembly as given, which is
-how `puck qualify` runs canaries on a published package.
+how `puck qualify` runs canaries on a published package, or how a run boots a
+build made some other way.
 
 A build the store lacks takes the machine's `build` lease first
 (`puck lease build`), so runs over different source states build one at a
 time rather than all at once; a run that finds its build in the store takes no
 lease, and a run that finds another building the same source state waits for
 that build instead. The `build` lease is separate from `heavy`, which a gate holds for a whole
-suite. A start with `puck_world_start`'s `backend: vulkan` builds with
+suite.
+
+Waiting and building have separate limits. A run waits for other runs'
+builds of its source state and for the `build` lease for at most two hours
+(`CliLease.DefaultWait`, the one wait every machine-wide lease takes unless its
+caller names another: the heavy lease, the build lease, a sweep's GPU lease and
+the MCP adapter's GPU lease). While it waits, the lease prints
+`lease: <holder> waiting for build lease held by <holder>; N queued ahead, ...` to standard
+error when its place changes, and again every five minutes. The build itself
+then gets its own thirty minutes (`WorldArtifactBuild.BuildTimeout`), counted from
+the moment it starts. No verb's own run budget (`puck sweep --timeout`, a
+suite's leg time) counts either wait or the build: a deep queue never shortens
+the build, and never fails a run whose build was fine. `puck lease <name>
+--wait <seconds>` is the one place a caller sets the wait, and its default is
+zero. A start with `puck_world_start`'s `backend: vulkan` builds with
 `-p:PuckShaderSpirvEnabled=true`, a different source state in the store from the
 Direct3D 12 build, because a Windows build of one project otherwise ships no
 SPIR-V and a Vulkan boot refuses.

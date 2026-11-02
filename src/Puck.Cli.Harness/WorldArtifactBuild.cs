@@ -29,6 +29,10 @@ public static class WorldArtifactBuild {
     /// <summary>The artifact a leg launches, inside every build.</summary>
     public const string ArtifactName = "Puck.World.dll";
 
+    /// <summary>How long the build of one source state may run, when its caller names no other. It measures the build
+    /// alone: time spent waiting for other runs (see <see cref="CliLease.DefaultWait"/>) is never part of it.</summary>
+    public static readonly TimeSpan BuildTimeout = TimeSpan.FromMinutes(minutes: 30);
+
     /// <summary>Resolves the World build for the checkout's current sources, building it only when the store holds
     /// none.</summary>
     /// <param name="verb">The calling verb's name, which prefixes the progress lines written to standard error;
@@ -36,7 +40,8 @@ public static class WorldArtifactBuild {
     /// <param name="repositoryRoot">The checkout whose sources are built.</param>
     /// <param name="logDirectory">The calling run's directory, which keeps <c>Puck.World.build.log</c> when this run
     /// builds; created only when the build's output is kept.</param>
-    /// <param name="timeout">How long resolving may take, waiting for another run's build included.</param>
+    /// <param name="timeout">How long the build itself may run. Waiting for other runs is not counted; see
+    /// <paramref name="wait"/>.</param>
     /// <param name="artifact">The leased build, which the caller disposes once its last World process has exited;
     /// <see langword="null"/> on failure.</param>
     /// <param name="error">Why the artifact is unavailable, or empty on success. A failed build's reason quotes its
@@ -44,8 +49,10 @@ public static class WorldArtifactBuild {
     /// <param name="spirv">Whether the build carries Vulkan SPIR-V beside the Direct3D 12 bytecode. A Windows build of
     /// one project ships Direct3D 12 bytecode alone, so a World that boots on Vulkan asks for it; it is a different
     /// source state, so the store keeps it apart from the Direct3D 12 build.</param>
+    /// <param name="wait">How long the run may wait, in total, for other runs' builds of this source state and for the
+    /// machine's build lease, or <see langword="null"/> for <see cref="CliLease.DefaultWait"/>.</param>
     /// <returns><see langword="true"/> when an artifact is available.</returns>
-    public static bool TryResolve(string verb, string repositoryRoot, string logDirectory, TimeSpan timeout, [NotNullWhen(returnValue: true)] out WorldArtifact? artifact, out string error, bool spirv = false) =>
+    public static bool TryResolve(string verb, string repositoryRoot, string logDirectory, TimeSpan timeout, [NotNullWhen(returnValue: true)] out WorldArtifact? artifact, out string error, bool spirv = false, TimeSpan? wait = null) =>
         TryResolve(
             artifact: out artifact,
             builder: null,
@@ -56,7 +63,8 @@ public static class WorldArtifactBuild {
             spirv: spirv,
             store: new WorldArtifactStore(root: WorldArtifactStore.DefaultRoot),
             timeout: timeout,
-            verb: verb
+            verb: verb,
+            wait: wait
         );
     /// <summary>Resolves the World a verb boots: the build a caller names with <c>--world-artifact</c> (a producer-built
     /// package's entry assembly, say), used as given, or else the build of the checkout's current sources.</summary>
@@ -65,13 +73,15 @@ public static class WorldArtifactBuild {
     /// <param name="repositoryRoot">The checkout whose sources are built when nothing is named.</param>
     /// <param name="logDirectory">The calling run's directory, which keeps <c>Puck.World.build.log</c> when this run
     /// builds.</param>
-    /// <param name="timeout">How long resolving the checkout's build may take.</param>
+    /// <param name="timeout">How long the checkout's build itself may run; waiting for other runs is not counted.</param>
     /// <param name="path">The entry assembly every leg launches, or <see langword="null"/> on failure.</param>
     /// <param name="lease">The leased checkout build, which the caller disposes once its last World process has
     /// exited; <see langword="null"/> for a named artifact or on failure.</param>
     /// <param name="error">Why no artifact is available, or empty on success.</param>
+    /// <param name="wait">How long the run may wait for other runs' builds and the machine's build lease, or
+    /// <see langword="null"/> for <see cref="CliLease.DefaultWait"/>.</param>
     /// <returns><see langword="true"/> when an artifact is available.</returns>
-    public static bool TryResolveNamed(string? named, string verb, string repositoryRoot, string logDirectory, TimeSpan timeout, [NotNullWhen(returnValue: true)] out string? path, out WorldArtifact? lease, out string error) {
+    public static bool TryResolveNamed(string? named, string verb, string repositoryRoot, string logDirectory, TimeSpan timeout, [NotNullWhen(returnValue: true)] out string? path, out WorldArtifact? lease, out string error, TimeSpan? wait = null) {
         lease = null;
 
         if (named is { }) {
@@ -94,7 +104,8 @@ public static class WorldArtifactBuild {
             logDirectory: logDirectory,
             repositoryRoot: repositoryRoot,
             timeout: timeout,
-            verb: verb
+            verb: verb,
+            wait: wait
         )) {
             path = null;
 
@@ -112,10 +123,14 @@ public static class WorldArtifactBuild {
     /// <param name="builder">A captured build runner, or null to launch dotnet.</param>
     /// <param name="logDirectory">The calling run's directory, which keeps <c>Puck.World.build.log</c> when this run
     /// builds.</param>
-    /// <param name="timeout">How long resolving may take, waiting for another run's build included.</param>
+    /// <param name="timeout">How long the build itself may run; waiting for other runs is not counted.</param>
     /// <param name="artifact">The leased build, or <see langword="null"/> on failure.</param>
     /// <param name="error">Why the artifact is unavailable, or empty on success.</param>
     /// <returns><see langword="true"/> when an artifact is available.</returns>
+    /// <param name="wait">How long the run may wait, in total, for another run's build of this source state and for the
+    /// build lease, or <see langword="null"/> for <see cref="CliLease.DefaultWait"/>. The wait and the build have
+    /// separate limits, so a deep queue never shortens the build. The lease prints the queue position while it
+    /// waits.</param>
     /// <param name="waiting">Called synchronously on this resolver's thread once its first build-lock attempt finds
     /// another holder, before it waits.</param>
     /// <param name="leaseRoot">Gives the shared lease directory whose <c>build</c> lease a build holds, or
@@ -124,8 +139,9 @@ public static class WorldArtifactBuild {
     /// it, and the lease is held only for the build and its publication.</param>
     /// <param name="spirv">Whether the build carries Vulkan SPIR-V (<c>-p:PuckShaderSpirvEnabled=true</c>), which
     /// keys it apart from a Direct3D 12 build of the same sources.</param>
-    public static bool TryResolve(string verb, string repositoryRoot, WorldArtifactStore store, Func<IReadOnlyList<string>, TimeSpan, CliProcessResult>? builder, string logDirectory, TimeSpan timeout, [NotNullWhen(returnValue: true)] out WorldArtifact? artifact, out string error, Action? waiting = null, Func<string>? leaseRoot = null, bool spirv = false) {
-        var clock = Stopwatch.StartNew();
+    public static bool TryResolve(string verb, string repositoryRoot, WorldArtifactStore store, Func<IReadOnlyList<string>, TimeSpan, CliProcessResult>? builder, string logDirectory, TimeSpan timeout, [NotNullWhen(returnValue: true)] out WorldArtifact? artifact, out string error, Action? waiting = null, Func<string>? leaseRoot = null, bool spirv = false, TimeSpan? wait = null) {
+        var queue = Stopwatch.StartNew();
+        var limit = (wait ?? CliLease.DefaultWait);
         IReadOnlyList<string> properties = (spirv ? ["-p:PuckShaderSpirvEnabled=true"] : []);
 
         artifact = null;
@@ -149,8 +165,8 @@ public static class WorldArtifactBuild {
         try {
             if (store.TryTake(
                 artifactName: ArtifactName,
-                budget: timeout,
-                clock: clock,
+                budget: limit,
+                clock: queue,
                 key: key,
                 reused: true
             ) is { } stored) {
@@ -162,8 +178,8 @@ public static class WorldArtifactBuild {
             }
 
             using var buildLock = store.AcquireBuild(
-                budget: timeout,
-                clock: clock,
+                budget: limit,
+                clock: queue,
                 key: key,
                 waited: out var waited,
                 waiting: waiting
@@ -173,7 +189,7 @@ public static class WorldArtifactBuild {
                 Console.Error.WriteLine(value: $"{verb}: another run is building source state {key}; waiting for it.");
             }
             if (buildLock is null) {
-                error = $"another run's Puck.World build of source state {key} did not finish inside the {timeout.TotalSeconds.ToString(format: "0", provider: CultureInfo.InvariantCulture)}-second budget.";
+                error = $"another run's Puck.World build of source state {key} did not finish inside the {Minutes(span: limit)}-minute wait.";
 
                 return false;
             }
@@ -181,8 +197,8 @@ public static class WorldArtifactBuild {
             // The run that held the lock may have published this key while this one waited.
             if (store.TryTake(
                 artifactName: ArtifactName,
-                budget: timeout,
-                clock: clock,
+                budget: limit,
+                clock: queue,
                 key: key,
                 reused: true
             ) is { } awaited) {
@@ -203,7 +219,7 @@ public static class WorldArtifactBuild {
                     lane: CliLease.LaneOf(checkout: repositoryRoot),
                     name: "build",
                     root: leaseRoot(),
-                    wait: CliProcess.RemainingBudget(budget: timeout, clock: clock)
+                    wait: TimeSpan.FromTicks(value: Math.Max(val1: 0L, val2: (limit - queue.Elapsed).Ticks))
                 ).GetAwaiter().GetResult());
 
             if (SourcesChanged()) {
@@ -224,10 +240,7 @@ public static class WorldArtifactBuild {
                 error: out error,
                 outputDirectory: staging,
                 properties: properties,
-                timeout: CliProcess.RemainingBudget(
-                    budget: timeout,
-                    clock: clock
-                )
+                timeout: timeout
             );
 
             if (!built) {
@@ -243,14 +256,14 @@ public static class WorldArtifactBuild {
 
             artifact = store.Publish(
                 artifactName: ArtifactName,
-                budget: timeout,
-                clock: clock,
+                budget: limit,
+                clock: Stopwatch.StartNew(),
                 key: key,
                 staging: staging
             );
 
             if (artifact is null) {
-                error = $"the Puck.World build store {store.Root} stayed locked past the {timeout.TotalSeconds.ToString(format: "0", provider: CultureInfo.InvariantCulture)}-second budget.";
+                error = $"the Puck.World build store {store.Root} stayed locked past the {Minutes(span: limit)}-minute wait.";
 
                 return false;
             }
@@ -259,7 +272,7 @@ public static class WorldArtifactBuild {
 
             return true;
         } catch (TimeoutException exception) {
-            error = $"the Puck.World build of source state {key} waited the whole {timeout.TotalSeconds.ToString(format: "0", provider: CultureInfo.InvariantCulture)}-second budget for other runs' builds: {exception.Message}";
+            error = $"the Puck.World build of source state {key} waited the whole {Minutes(span: limit)}-minute limit for other runs' builds: {exception.Message}";
 
             return false;
         } catch (InvalidOperationException exception) {
@@ -271,6 +284,8 @@ public static class WorldArtifactBuild {
 
             return false;
         }
+
+        static string Minutes(TimeSpan span) => span.TotalMinutes.ToString(format: "0", provider: CultureInfo.InvariantCulture);
 
         bool SourcesChanged() {
             if (!keyed) { return false; }
