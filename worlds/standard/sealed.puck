@@ -1,0 +1,42 @@
+// Sealed inboxes: how a seat hands the world's rules a value no other seat may read (a sealed bid, a hidden vote, a
+// whisper, an order to a unit in the fog). It is a library: import it
+//
+//   import "../standard/sealed"
+//
+// and expand `sealedInbox(name: "auctionIn", seats: 4, fields: ["bid"])` inside the world's `state { world { } }`
+// block. Seat `s` gets the row `<name><s>`, which only `seat<s>` and the world's own rules read: one Int cell per field,
+// starting at `empty`, and `taken`, which counts the values the rules have collected. Naming `texts` adds a `Text` row
+// beside it, `<name>Text<s>`, under the same policy, one cell per text field, starting empty.
+//
+// A seat writes its own row (`world.state.cell.set auctionIn2 bid 45`) and reads its own receipt there. A rule of the
+// game collects it: it reads the field, moves the value where the game keeps it (a row only the authority reads, or one
+// the game's audience widens later), puts the field back to `empty` and adds one to `taken`, in one firing
+// (../games/auction.puck's `auction-collect-<s>` rules). What the move learns (whether there was a value, when it
+// arrived, what it was) stays in the rows the rules write, under the policy those rows declare. A writer never writes a
+// row it cannot read whole, so its write has no outcome that depends on a cell it may not read.
+
+template sealedInbox(name, seats, fields, empty = 0, texts = []) {
+  for s in range(1, seats) {
+    row {
+      name: $"{name}{s}"
+      kind: "Int"
+      capacity: length(fields) + 1
+      cells: concat(map(fields, field => { key: field, value: empty }), [{ key: "taken", value: 0 }])
+      visibility {
+        readers [$"seat{s}"]
+      }
+    }
+
+    for text in filter([0], k => length(texts) > 0) {
+      row {
+        name: $"{name}Text{s}"
+        kind: "Text"
+        capacity: length(texts)
+        cells: map(texts, field => { key: field, value: "" })
+        visibility {
+          readers [$"seat{s}"]
+        }
+      }
+    }
+  }
+}

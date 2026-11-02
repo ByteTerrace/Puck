@@ -1,0 +1,99 @@
+import "../games/skirmish"
+import "gametable"
+
+// The skirmish table: a fog-of-war skirmish for two seats (../games/skirmish.puck) on a 6 by 6 board, at the board game
+// room's north-east table on level 2. The debug world imports this file whole; skirmish-tests.puck boots it on its own
+// as the disclosure harness's fixture for hidden positions, line of sight and a search over what a side may see. Seat 1
+// is red, seat 2 blue; `skirmish.move <seat> <unit> <cell>` orders a unit (1 to 3) one step, and `skirmish.computer
+// sharp|fair` lets one of blue's computer players work out its move into `skirmishSharpBest` or `skirmishFairBest`.
+
+export action skirmishOrder1, skirmishOrder2, skirmishSharpOn, skirmishFairOn, skirmishTurn
+export read skirmish, skirmishTurn, skirmishVerdict, skirmishUnits, skirmishPos, skirmishLast, skirmishWall, skirmishSight
+export read skirmishView, skirmishSeen1, skirmishSeen2, skirmishKnows1, skirmishKnows2, skirmishOrder1, skirmishOrder2
+export read skirmishSharpOn, skirmishSharpRevision, skirmishSharpBest, skirmishFairOn, skirmishFairRevision, skirmishFairBest
+
+let skirmishTable = [67, boardRoomFloor - 0.5, 36.5]
+let skirmishCellSize = 0.1
+
+state {
+  world {
+    skirmishState(
+      origin: [skirmishTable[0] - 0.3, skirmishTable[1] + gameTableTop + 0.05, skirmishTable[2] - 0.3],
+      cellSize: skirmishCellSize
+    )
+  }
+}
+
+skirmishRules()
+skirmishSearch()
+
+commands [
+  {
+    name: "skirmish.move"
+    help: "Orders a seat's unit (seat 1 red, 2 blue; unit 1 to 3) one step onto a cell (row * 6 + column) at the skirmish table."
+    parameters [
+      { name: "seat", kind: Choice, values ["1", "2"] }
+      { name: "unit", kind: Choice, values ["1", "2", "3"] }
+      { name: "cell", kind: Integer }
+    ]
+    lines [
+      "world.state.cell.set skirmishOrder{seat} to {cell}"
+      "world.state.cell.set skirmishOrder{seat} unit {unit}"
+    ]
+  }
+  {
+    name: "skirmish.computer"
+    help: "Starts one of blue's computer players at the skirmish table: sharp reads where red really stands, fair only what blue has seen."
+    parameters [
+      { name: "player", kind: Choice, values ["Sharp", "Fair"] }
+    ]
+    lines [
+      "world.state.cell.set skirmish{player}On $value 1"
+    ]
+  }
+]
+
+// North of the table, facing -Z across it.
+spawnPoints [
+  { id: "skirmish", position [skirmishTable[0], boardRoomFloor, skirmishTable[2] + 1.6], yawDegrees: 0 }
+]
+
+prototypes {
+  gameTablePrototype(id: "skirmishTable", cloth: "#4A4F3A")
+
+  // The board: a 0.6 m square of 0.1 m cells, its two walls standing on their cells (14 and 21).
+  prototype "skirmishBoard" {
+    document {
+      name: "skirmishBoard"
+      palette [
+        { color: "#7D8A5C", roughness: 0.85, specular: 0.05 }
+        { color: "#4B4038", roughness: 0.7, specular: 0.1 }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "board" {
+        material: 0
+        position [0, 0.004, 0]
+        scale [0.3, 0.004, 0.3]
+      }
+      for wall in [14, 21] {
+        shape Box $"wall{wall}" {
+          material: 1
+          position [(wall % 6) * 0.1 - 0.25, 0.04, floor(wall / 6) * 0.1 - 0.25]
+          scale [0.045, 0.035, 0.045]
+        }
+      }
+    }
+  }
+}
+
+placements {
+  placement "skirmishTable" {
+    prototype: "skirmishTable"
+    position: skirmishTable
+  }
+
+  placement "skirmishBoard" {
+    prototype: "skirmishBoard"
+    position [skirmishTable[0], skirmishTable[1] + gameTableTop + 0.05, skirmishTable[2]]
+  }
+}

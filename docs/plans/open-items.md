@@ -2605,11 +2605,17 @@ Klondike table stands north of the Go table in the board game room
    leaving to a completed pile.
 2. Poker: seats, computer players and the hand judge; its own step.
 3. The [disclosure plan](disclosure.md#the-build-order)'s four fixture games
-   are tables-room content too (the owner's direction): a sealed-bid auction,
-   a card game with a draw pile, a discard pile and hands under `Count` and
-   `Placeholder`, social deduction with private chat, and a small fog-of-war
-   skirmish, each at its own table and each the pair script of the
-   noninterference harness.
+   stand at their own tables (`debug.go auction`, `shedding`, `deduction`,
+   `skirmish`; rules in `worlds/games/auction.puck`, `shedding.puck`,
+   `deduction.puck`, `skirmish.puck`, the sealed inbox in
+   `worlds/standard/sealed.puck`), each with a `<game>-tests.puck` world of
+   scenarios and a `<game>-disclosure.puck` harness fixture
+   ([what the harness finds](disclosure.md#open-items)). Owed: the windowed look (four 1.2 m tables
+   south and north of the room's middle, the shedding racks' card orientation
+   by yaw unchecked), physical units on the skirmish board (a deal lays
+   children out by slot, never by a cell value, so a unit standing on its cell
+   needs a body or a `respond` placement per cell). The language walls the
+   games hit are [S11's G17](state-and-language.md#s11--ergonomic-is-optimal).
 - Residency: none of it waits on streaming; at 52 to 104 cards a table it is a
   stress case for nearest-first bake order
   ([streaming](#residency-and-streaming)).

@@ -1,0 +1,67 @@
+// The skirmish table (skirmish.puck) as a fixture of the noninterference harness: `puck disclosure
+// worlds/debug/skirmish-disclosure.puck` boots one world per variant of skirmish-disclosure.disclosure.json beside it.
+// The variants put red's first unit somewhere in blue's fog (cell 1, 5 or 0), take it off the board, or move red's third
+// unit within the fog later in the run; red's second unit steps in every world, then seat 2 (blue) starts both of its
+// computer players and reads the same way in each, with a replica and a presentation session watching. The sharp
+// player's answer is public and scored over red's real cells, so the search door is expected to differ; the fair
+// player's is blue's own and scored over blue's memory.
+
+schema: "puck.world.definition.v1"
+basis: "avatars/moth"
+documentId: "skirmish-disclosure"
+import "skirmish"
+
+bodies {
+  localSeats: 2
+  seatActivation [Eager, Eager]
+  seatSpawns ["stage", "stage"]
+}
+
+// The sessions the harness observes from: the authority's name decides the tier. The editor session may also write
+// the restricted rows it names, so its drawn writes reach the mutation path rather than stopping at a missing grant.
+admission [
+  {
+    disclosure: Replica
+    domain: "replica"
+    grants [{ budget: 64, capability: Observe, subject: "all" }]
+    mode: FederatedAuthority
+  }
+  {
+    disclosure: Presentation
+    domain: "presentation"
+    grants [{ budget: 64, capability: Observe, subject: "all" }]
+    mode: FederatedAuthority
+  }
+  {
+    disclosure: Replica
+    domain: "editor"
+    grants: concat(
+      [
+        { budget: 64, capability: Observe, subject: "all" }
+        { budget: 64, capability: Mutate, subject: "section:State", kindMask: "UpsertStateCell,RemoveStateCell" }
+      ],
+      map(
+        ["skirmishPos", "skirmishLast", "skirmishKnows1", "skirmishSeen1", "skirmishOrder1", "skirmishSharpBest"],
+        row => { budget: 64, capability: Edit, subject: $"state:{row}" }
+      )
+    )
+    mode: FederatedAuthority
+  }
+]
+
+schedule {
+  settleTicks: 4
+  rows [
+    { tick: 5, principal: "seat1", command: "world.state.cell.set skirmishOrder1 to 8" }
+    { tick: 5, principal: "seat1", command: "world.state.cell.set skirmishOrder1 unit 2" }
+    { tick: 10, principal: "seat2", command: "world.state.cell.set skirmishSharpOn $value 1" }
+    { tick: 10, principal: "seat2", command: "world.state.cell.set skirmishFairOn $value 1" }
+    { tick: 60, principal: "seat2", command: "world.state skirmishSharpBest" }
+    { tick: 60, principal: "seat2", command: "world.state skirmishFairBest" }
+    { tick: 60, principal: "seat2", command: "world.state skirmishKnows2" }
+    { tick: 60, principal: "seat2", command: "world.state skirmishPos" }
+    { tick: 60, principal: "seat2", command: "world.state skirmishPos 1" }
+    { tick: 60, principal: "seat2", command: "world.state skirmishSeen2" }
+    { tick: 110, principal: "seat2", command: "world.state skirmishSharpBest" }
+  ]
+}

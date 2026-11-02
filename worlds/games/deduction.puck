@@ -1,0 +1,337 @@
+import "../standard/sealed"
+
+// The rules of a social-deduction game as a library: `seats` players (3 or 4), `moles` of them (1 or 2) moles drawn
+// secretly, the rest crew. Players talk at the table, whisper to one another and, if moles, talk in the den; then each
+// casts a sealed vote, and the seat with the most votes (the lower seat on a tie) is turned out. The crew wins when it
+// turns out a mole. A table imports it and expands `deductionState` inside its `state { world { } }` block and
+// `deductionRules` at the document's top level:
+//
+//   import "../games/deduction"
+//   state { world { deductionState(seats: 4, moles: 2) } }
+//   deductionRules(seats: 4, moles: 2)
+//
+// `deduction.phase`: 0 waiting, 1 drawing roles, 2 the day (talking and voting), 3 counting, 4 over. Setting it to 1
+// starts a game (`deduction.start`), clearing the last one.
+//
+// Who reads what, all by declaration:
+//
+// - `deductionRole` and `deductionPartners`, keyed by seat: a seat's role (1 crew, 2 mole) and, for a mole, the mask of
+//   the moles' seats (bit `s` for seat `s`). Each cell reads only to its own seat until the game ends, when
+//   `deductionReveal` lists every seat and each cell's `readersFrom` admits them all.
+// - `deductionDen<t>`/`deductionDenFrom<t>`: the den's last four lines as seat `t` holds them, written only while `t` is
+//   a mole; only `seat<t>` reads them. The den is a row per mole, not one row whose `readersFrom` lists the moles,
+//   because a `readersFrom` row must be public, and who the moles are is the game's secret.
+// - `deductionTalk`/`deductionTalkFrom`: the table's public talk, the last eight lines.
+// - `deductionHeard<t>`/`deductionHeardFrom<t>`: what was whispered to seat `t` and by whom, the last four; only `seat<t>`
+//   reads them, so who whispers to whom is the two seats' alone.
+// - `deductionVotes`, keyed by voter (0 for none): only the world, until the reveal.
+//
+// A seat speaks through its own sealed inbox (../standard/sealed.puck): it writes `deductionMailText<s>.text` (one word),
+// then `deductionMail<s>.to`, 0 for the table, a seat's number to whisper, 9 for the den; `vote` names a seat. The rules
+// answer in the same row (`result` 1 taken, -1 refused: a whisper to oneself or to no seat, the den from crew, a vote
+// outside the day). The day ends at `deduction.close` (any seat), or 30 s after it began.
+//
+// The disclosure fixture (../debug/deduction-disclosure.puck): the principals are `seat1` to `seat<seats>`; the
+// hidden cells are `deductionSecret`, the draw sites, every `deductionRole`, `deductionPartners`, `deductionLines` cell
+// but the reader's own, every `deductionDen<t>`, `deductionDenFrom<t>`, `deductionHeard<t>` and `deductionHeardFrom<t>`
+// row but the reader's own, the inboxes, and `deductionVotes` before the reveal.
+
+let deductionDenSeat = 9
+
+template deductionState(seats, moles) {
+  sealedInbox(name: "deductionMail", seats: seats, fields: ["to", "vote", "result"], empty: -1, texts: ["text"])
+
+  // `winner`: 1 the crew, 2 the moles. `out` is the seat turned out and `outRole` its role, both shown at the end.
+  table deduction capacity(16) {
+    phase = 0
+    drawn = 0
+    closeAt = 0
+    close = 0
+    said = 0
+    counting = 0
+    most = 0
+    out = 0
+    outRole = 0
+    winner = 0
+  }
+
+  row {
+    name: "deductionSecret"
+    kind: "Int"
+    capacity: 3
+    cells [{ key: "mole1", value: 0 }, { key: "mole2", value: 0 }, { key: "mask", value: 0 }]
+    visibility {
+      readers []
+    }
+  }
+
+  row {
+    name: "deductionPickA"
+    kind: "Int"
+    draw {
+      generator {
+        source: "UniformRange"
+        rangeMin: 1
+        rangeMax: seats
+      }
+      timing: "Event"
+    }
+    visibility {
+      readers []
+    }
+  }
+
+  row {
+    name: "deductionPickB"
+    kind: "Int"
+    draw {
+      generator {
+        source: "UniformRange"
+        rangeMin: 1
+        rangeMax: seats - 1
+      }
+      timing: "Event"
+    }
+    visibility {
+      readers []
+    }
+  }
+
+  row {
+    name: "deductionReveal"
+    kind: "Text"
+    capacity: seats
+    cells: map(range(1, seats), s => { key: $"{s}", value: "" })
+  }
+
+  // Each seat's own: its role, its fellow moles, and how many den and whispered lines it has been handed.
+  for table in ["deductionRole", "deductionPartners", "deductionLines", "deductionDenLines"] {
+    row {
+      name: table
+      kind: "Int"
+      capacity: seats
+      cells: map(range(1, seats), s => {
+        key: $"{s}"
+        value: 0
+        visibility {
+          readers [$"seat{s}"]
+          readersFrom: "deductionReveal"
+        }
+      })
+      visibility {}
+    }
+  }
+
+  // A channel's slots are declared up front, the line empty and its speaker 0, since a rule's write never mints a key.
+  row {
+    name: "deductionTalk"
+    kind: "Text"
+    capacity: 8
+    cells: map(range(0, 8), i => { key: $"{i}", value: "" })
+  }
+
+  row {
+    name: "deductionTalkFrom"
+    kind: "Int"
+    capacity: 8
+    cells: map(range(0, 8), i => { key: $"{i}", value: 0 })
+  }
+
+  for t in range(1, seats) {
+    for channel in ["Heard", "Den"] {
+      row {
+        name: $"deduction{channel}{t}"
+        kind: "Text"
+        capacity: 4
+        cells: map(range(0, 4), i => { key: $"{i}", value: "" })
+        visibility {
+          readers [$"seat{t}"]
+        }
+      }
+
+      row {
+        name: $"deduction{channel}From{t}"
+        kind: "Int"
+        capacity: 4
+        cells: map(range(0, 4), i => { key: $"{i}", value: 0 })
+        visibility {
+          readers [$"seat{t}"]
+        }
+      }
+    }
+  }
+
+  row {
+    name: "deductionVotes"
+    kind: "Int"
+    capacity: seats
+    cells: map(range(1, seats), s => { key: $"{s}", value: 0 })
+    visibility {
+      readers []
+      readersFrom: "deductionReveal"
+    }
+  }
+
+  row {
+    name: "deductionTally"
+    kind: "Int"
+    capacity: seats
+    cells: map(range(1, seats), t => { key: $"{t}", value: 0 })
+  }
+}
+
+template deductionRules(seats, moles) {
+  // A new game: clear the last one's roles, votes and reveal, then draw.
+  rule "deduction-clear" {
+    when deduction.phase == 1 and deduction.drawn == 0
+    for s in range(1, seats) {
+      setState(state: deductionReveal, key: $"{s}", text: "")
+      deductionVotes[$"{s}"] = 0
+      deductionRole[$"{s}"] = 0
+      deductionPartners[$"{s}"] = 0
+      deductionTally[$"{s}"] = 0
+    }
+    deduction.out = 0
+    deduction.outRole = 0
+    deduction.winner = 0
+    deduction.close = 0
+    generate(row: deductionPickA)
+    generate(row: deductionPickB)
+    deduction.drawn = 1
+  }
+
+  // The moles: the first draw names one seat, the second how far round the table the other sits.
+  rule "deduction-draw" {
+    local second = (deductionPickA - 1 + deductionPickB) % seats + 1
+    when deduction.phase == 1 and deduction.drawn == 1
+    deductionSecret.mole1 = deductionPickA
+    deductionSecret.mole2 = moles > 1 ? second : 0
+    deductionSecret.mask = (1 << deductionPickA) | (moles > 1 ? 1 << second : 0)
+    deduction.drawn = 2
+  }
+
+  for s in range(1, seats) {
+    rule $"deduction-role-{s}" {
+      local mole = deductionSecret.mole1 == s or deductionSecret.mole2 == s
+      when deduction.phase == 1 and deduction.drawn == 2
+      deductionRole[$"{s}"] = mole ? 2 : 1
+      deductionPartners[$"{s}"] = mole ? deductionSecret.mask : 0
+    }
+  }
+
+  rule "deduction-day" {
+    when deduction.phase == 1 and deduction.drawn == 2
+    deduction.phase = 2
+    deduction.drawn = 0
+    schedule deduction.closeAt in 30s
+  }
+
+  for s in range(1, seats) {
+    // Talk at the table: the line and its speaker into the next of the eight public slots.
+    rule $"deduction-say-{s}" {
+      when deduction.phase == 2 and $"deductionMail{s}".to == 0
+      setState(state: deductionTalk, key: expr(deduction.said % 8), fromState: $"deductionMailText{s}", fromKey: text)
+      setState(state: deductionTalkFrom, key: expr(deduction.said % 8), expression: s)
+      deduction.said += 1
+      setState(state: $"deductionMail{s}", key: to, expression: -1)
+      setState(state: $"deductionMail{s}", key: result, expression: 1)
+      addState(state: $"deductionMail{s}", key: taken, expression: 1)
+    }
+
+    // A whisper to seat `t`: into seat `t`'s own rows alone, so nothing another seat reads moves.
+    for t in filter(range(1, seats), t => t != s) {
+      rule $"deduction-whisper-{s}-{t}" {
+        when deduction.phase == 2 and $"deductionMail{s}".to == t
+        setState(state: $"deductionHeard{t}", key: expr(deductionLines[$"{t}"] % 4), fromState: $"deductionMailText{s}",
+          fromKey: text
+        )
+        setState(state: $"deductionHeardFrom{t}", key: expr(deductionLines[$"{t}"] % 4), expression: s)
+        deductionLines[$"{t}"] += 1
+        setState(state: $"deductionMail{s}", key: to, expression: -1)
+        setState(state: $"deductionMail{s}", key: result, expression: 1)
+        addState(state: $"deductionMail{s}", key: taken, expression: 1)
+      }
+    }
+
+    // The den: a mole's line into every mole's own den rows, the speaker's included; then its receipt, refused for
+    // crew.
+    for t in range(1, seats) {
+      rule $"deduction-den-{s}-{t}" {
+        when (deduction.phase == 2 and
+          $"deductionMail{s}".to == deductionDenSeat and
+          deductionRole[$"{s}"] == 2 and
+          deductionRole[$"{t}"] == 2)
+        setState(state: $"deductionDen{t}", key: expr(deductionDenLines[$"{t}"] % 4), fromState: $"deductionMailText{s}",
+          fromKey: text
+        )
+        setState(state: $"deductionDenFrom{t}", key: expr(deductionDenLines[$"{t}"] % 4), expression: s)
+        deductionDenLines[$"{t}"] += 1
+      }
+    }
+
+    rule $"deduction-den-{s}" {
+      local mole = deductionRole[$"{s}"] == 2
+      when deduction.phase == 2 and $"deductionMail{s}".to == deductionDenSeat
+      setState(state: $"deductionMail{s}", key: to, expression: -1)
+      setState(state: $"deductionMail{s}", key: result, expression: mole ? 1 : -1)
+      addState(state: $"deductionMail{s}", key: taken, expression: 1)
+    }
+
+    // Anything else addressed is refused: oneself, or no seat.
+    rule $"deduction-misaddressed-{s}" {
+      local to = $"deductionMail{s}".to
+      when deduction.phase == 2 and to > 0 and to != deductionDenSeat and (to == s or to > seats)
+      setState(state: $"deductionMail{s}", key: to, expression: -1)
+      setState(state: $"deductionMail{s}", key: result, expression: -1)
+      addState(state: $"deductionMail{s}", key: taken, expression: 1)
+    }
+
+    // A sealed vote, collected while the day lasts; a later vote replaces an earlier one.
+    rule $"deduction-vote-{s}" {
+      local vote = $"deductionMail{s}".vote
+      local valid = deduction.phase == 2 and vote >= 1 and vote <= seats
+      when vote >= 0
+      if valid {
+        deductionVotes[$"{s}"] = vote
+      }
+      setState(state: $"deductionMail{s}", key: vote, expression: -1)
+      setState(state: $"deductionMail{s}", key: result, expression: valid ? 1 : -1)
+      addState(state: $"deductionMail{s}", key: taken, expression: 1)
+    }
+  }
+
+  // The close: count the votes, then turn out the most voted and reveal every role and vote.
+  rule "deduction-close" {
+    when deduction.phase == 2 and (deduction.close == 1 or $tick >= deduction.closeAt)
+    deduction.phase = 3
+    deduction.counting = 1
+    deduction.most = 0
+  }
+
+  for s in range(1, seats) {
+    rule $"deduction-count-{s}" {
+      local vote = deductionVotes[$"{s}"]
+      when deduction.counting == 1 and vote > 0
+      deductionTally[vote] += 1
+    }
+  }
+
+  for t in range(1, seats) {
+    rule $"deduction-most-{t}" {
+      when deduction.counting == 1 and deductionTally[$"{t}"] > deduction.most
+      deduction.most = deductionTally[$"{t}"]
+      deduction.out = t
+    }
+  }
+
+  rule "deduction-over" {
+    when deduction.counting == 1
+    deduction.counting = 0
+    deduction.phase = 4
+    deduction.outRole = deduction.out > 0 ? deductionRole[deduction.out] : 0
+    deduction.winner = deduction.outRole == 2 ? 1 : 2
+    for s in range(1, seats) {
+      setState(state: deductionReveal, key: $"{s}", text: $"seat{s}")
+    }
+  }
+}
