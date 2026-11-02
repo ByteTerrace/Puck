@@ -63,6 +63,8 @@ public sealed class WorldConsoleServerLink : IConsoleServerLink {
         principal: principal
     );
     /// <inheritdoc/>
+    public Guid NextOperationId(Principal principal) => m_transport.NextOperationId(principal: principal);
+    /// <inheritdoc/>
     public void SubmitIntent(in IntentSubmission submission) => m_transport.SubmitIntent(submission: in submission);
     /// <inheritdoc/>
     public void SubmitSession(SessionRequest request, Action<SessionReply> completion) => m_transport.SubmitSession(

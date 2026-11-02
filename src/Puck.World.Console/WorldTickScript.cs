@@ -73,6 +73,11 @@ public sealed class WorldTickScript(Func<ulong> completedTick, Func<TextCommandS
     /// <summary>Gets the number of lines armed and not yet run.</summary>
     public int PendingCount => m_pending.PendingCount;
 
+    /// <summary>Raised on the host pump as each armed line answers, with the handler's result exactly as it returned
+    /// it (its output's line breaks intact), before <see cref="Line.Answer"/> records the one-line form: a refusal at
+    /// submission, an immediate answer, or a simulation line's settled verdict when its tick applies.</summary>
+    public event Action<Line, CommandResult>? Answered;
+
     /// <summary>Arms a test step through a seat's ordinary ingress, on the same scheduler as world.at. It submits
     /// at the authority tick-complete hook, before sibling instances advance.</summary>
     /// <param name="tick">The completed tick after which to submit.</param>
@@ -93,12 +98,19 @@ public sealed class WorldTickScript(Func<ulong> completedTick, Func<TextCommandS
     /// <param name="tick">The boot world's tick after which the line runs; later than <see cref="CompletedTick"/>.</param>
     /// <param name="line">The console line.</param>
     /// <returns>Why the line was refused, or <see langword="null"/> when it is armed.</returns>
-    public string? Arm(ulong tick, string line) {
+    public string? Arm(ulong tick, string line) => Arm(armed: out _, line: line, tick: tick);
+    /// <summary>Arms one line for a tick and returns it, so its caller can tell its answer from any other line's.</summary>
+    /// <param name="tick">The boot world's tick after which the line runs; later than <see cref="CompletedTick"/>.</param>
+    /// <param name="line">The console line.</param>
+    /// <param name="armed">The armed line, or <see langword="null"/> when it was refused.</param>
+    /// <returns>Why the line was refused, or <see langword="null"/> when it is armed.</returns>
+    public string? Arm(ulong tick, string line, out Line? armed) {
+        armed = null;
         if (RefusalOf(line: line, tick: tick) is { } refusal) {
             return refusal;
         }
 
-        Add(tick: tick, line: line.Trim());
+        armed = Add(tick: tick, line: line.Trim());
 
         return null;
     }
@@ -120,7 +132,7 @@ public sealed class WorldTickScript(Func<ulong> completedTick, Func<TextCommandS
         }
 
         foreach (var (tick, line) in lines) {
-            Add(tick: tick, line: line.Trim());
+            _ = Add(tick: tick, line: line.Trim());
         }
 
         return null;
@@ -194,8 +206,11 @@ public sealed class WorldTickScript(Func<ulong> completedTick, Func<TextCommandS
         });
     }
 
-    private void Add(ulong tick, string line) {
-        m_pending.Add(tick: tick, row: new Line(text: line, tick: tick));
+    private Line Add(ulong tick, string line) {
+        var armed = new Line(text: line, tick: tick);
+
+        m_pending.Add(tick: tick, row: armed);
+        return armed;
     }
     private void Log(Line line) {
         _ = m_log.AddLast(value: line);
@@ -204,8 +219,10 @@ public sealed class WorldTickScript(Func<ulong> completedTick, Func<TextCommandS
             m_log.RemoveFirst();
         }
     }
-    // Records a ran line's answer and narrates it on stderr, beside the lines it caused.
-    private static void Answer(Line line, in CommandResult result) {
+    // Records a ran line's answer and narrates it on stderr, beside the lines it caused. Answered sees the handler's
+    // result itself, before the line's one-line form flattens it.
+    private void Answer(Line line, in CommandResult result) {
+        Answered?.Invoke(arg1: line, arg2: result);
         line.Answer = result.Output.ReplaceLineEndings(replacementText: " ");
         line.Outcome = (result.Faulted ? "faulted" : (result.IsError ? "refused" : "ran"));
         Console.Error.WriteLine(value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"[world.at] tick {line.Tick} {line.Outcome}: {line.Text}{((line.Answer.Length > 0) ? $" -> {line.Answer}" : string.Empty)}"));

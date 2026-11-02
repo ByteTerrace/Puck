@@ -59,11 +59,19 @@ public sealed class WorldSessionObservation : IDisposable {
     internal WorldDefinition? ReadDefinition() => (AllowsQuery(query: new WorldQuery.StateObservations())
         ? m_sink!.Disclose(definition: m_server.Definition)
         : null);
-    // An ended observation is delivered nothing further, so its sink's feed lets go of what it held for it.
-    internal void MarkEnded() {
+    // An ended observation is delivered nothing further, so its sink's feed lets go of what it held for it. The first
+    // end names the cause its observer is told.
+    internal void MarkEnded(string reason) {
+        var first = !m_ended;
+
         m_ended = true;
         m_sink?.Release();
+        if (first) { EndedBecause?.Invoke(obj: reason); }
     }
+
+    /// <summary>Raised once, on the thread that ends the observation, when it ends for any cause, with that cause:
+    /// the stream-lifetime event its observer receives at the tick it occurs.</summary>
+    public event Action<string>? EndedBecause;
 
     /// <summary>Discloses a candidate definition as it would reach this observation's renderer, for a consumer that
     /// measures a world document for that renderer on the observed world's side (a render envelope sizing the
@@ -145,7 +153,7 @@ public sealed class WorldSessionObservation : IDisposable {
                     refusal: out _,
                     session: Session
                 );
-                m_server.DetachSessionSink(session: Session);
+                m_server.DetachSessionSink(reason: "world.session.disposed", session: Session);
             });
         } catch (InvalidOperationException) {
             // The activation froze for retirement; its sessions and sinks end with it.

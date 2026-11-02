@@ -102,7 +102,7 @@ public sealed partial class WorldServer {
                 refusal: out _,
                 session: session
             );
-            admitted.MarkEnded();
+            admitted.MarkEnded(reason: exception.Message);
 
             return (Observation: ((WorldSessionObservation?)null), Reason: exception.Message);
         }
@@ -119,7 +119,7 @@ public sealed partial class WorldServer {
                 refusal: out _,
                 session: session
             );
-            DetachSessionSink(session: session);
+            DetachSessionSink(reason: "world.session.primer-ended", session: session);
 
             return (Observation: ((WorldSessionObservation?)null), Reason: ((observed.Fault is { } fault)
                 ? $"the observer faulted on its first delivery: {fault.Message}"
@@ -131,13 +131,14 @@ public sealed partial class WorldServer {
 
     /// <summary>Detaches a session's observation, marking it ended; nothing when it has none.</summary>
     /// <param name="session">The session principal.</param>
-    internal void DetachSessionSink(Principal session) {
+    /// <param name="reason">The cause its observer is told, when this is the observation's first end.</param>
+    internal void DetachSessionSink(Principal session, string reason) {
         if (m_sessionSinks.Remove(
             key: session,
             value: out var attached
         )) {
             attached.Lease.Dispose();
-            attached.Observation.MarkEnded();
+            attached.Observation.MarkEnded(reason: reason);
         }
     }
     /// <summary>Notes a session whose observer faulted or detached itself during a delivery; the next step ends
@@ -157,7 +158,7 @@ public sealed partial class WorldServer {
                 refusal: out _,
                 session: session
             );
-            DetachSessionSink(session: session);
+            DetachSessionSink(reason: "world.session.observer-ended", session: session);
         }
 
         m_observerEndedSessions.Clear();
@@ -182,7 +183,7 @@ public sealed partial class WorldServer {
     /// <summary>Detaches every session's observation.</summary>
     internal void DetachSessionSinks() {
         foreach (var session in m_sessionSinks.Keys.ToList()) {
-            DetachSessionSink(session: session);
+            DetachSessionSink(reason: "world.session.rebuilt", session: session);
         }
     }
 

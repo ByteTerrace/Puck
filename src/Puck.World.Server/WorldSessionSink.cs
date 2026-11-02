@@ -78,7 +78,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
     // Ends the observation once its observer takes no more deliveries, by a fault or by its own detach reason: from
     // this moment the session acts no more, and the next step ends it.
     private void EndObservation() {
-        observation.MarkEnded();
+        observation.MarkEnded(reason: (DetachReason ?? $"world.session.observer-faulted: {Fault?.Message}"));
         server.GrantTable.MarkObserverEnded(session: observation.Session);
         server.NoteObserverEnded(session: observation.Session);
     }

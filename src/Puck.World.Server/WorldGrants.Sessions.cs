@@ -328,7 +328,7 @@ public sealed partial class WorldGrants {
                 );
             }
 
-            Host.DetachSessionSink(session: displaced.Principal);
+            Host.DetachSessionSink(reason: "world.session.displaced", session: displaced.Principal);
         }
 
         m_sessionOrdinalBound = Math.Max(
@@ -376,7 +376,7 @@ public sealed partial class WorldGrants {
         }
 
         _ = m_sessions.Remove(key: ended.Session.Index);
-        Host.DetachSessionSink(session: ended.Session);
+        Host.DetachSessionSink(reason: "world.session.ended", session: ended.Session);
     }
     /// <summary>Describes every live session as the events that would re-establish it as it stands: its admission,
     /// carrying every row it holds now, then its embodiment when it has one. A replay tape armed while sessions live

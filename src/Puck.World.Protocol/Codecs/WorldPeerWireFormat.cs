@@ -672,16 +672,27 @@ public static class WorldPeerWireFormat {
     /// <param name="ct">Cancellation.</param>
     /// <exception cref="ArgumentNullException"><paramref name="result"/> is <see langword="null"/>.</exception>
     public static Task WriteResultAsync(Stream stream, WorldSubmissionResult result, CancellationToken ct) {
+        var (kind, body) = EncodeResult(result: result);
+
+        return WriteDownstreamAsync(
+            body: body,
+            ct: ct,
+            kind: kind,
+            stream: stream
+        );
+    }
+    /// <summary>Encodes a <see cref="WorldSubmissionResult"/> as the v1 Completion lane carries it: the downstream kind
+    /// and the body a peer receives after the frame prefix. A result the lane cannot carry encodes as a
+    /// <see cref="DownstreamKind.Refusal"/> naming why.</summary>
+    /// <param name="result">The typed submission result.</param>
+    /// <returns>The downstream kind and body.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="result"/> is <see langword="null"/>.</exception>
+    public static (DownstreamKind Kind, byte[] Body) EncodeResult(WorldSubmissionResult result) {
         ArgumentNullException.ThrowIfNull(argument: result);
 
         switch (result) {
             case WorldSubmissionResult.Ack:
-                return WriteDownstreamAsync(
-                    body: ReadOnlyMemory<byte>.Empty,
-                    ct: ct,
-                    kind: DownstreamKind.Ack,
-                    stream: stream
-                );
+                return (DownstreamKind.Ack, []);
             case WorldSubmissionResult.Session session: {
                     // [u8 Accepted][i32 AssignedIndex][u16 reasonLen][reason utf8] — WireWriter.WriteBoolean/
                     // WriteInt32/WriteString lay out exactly this shape.
@@ -691,12 +702,7 @@ public static class WorldPeerWireFormat {
                     writer.WriteInt32(value: session.Reply.AssignedIndex);
                     writer.WriteString(value: session.Reply.Reason);
 
-                    return WriteDownstreamAsync(
-                        body: writer.WrittenMemory,
-                        ct: ct,
-                        kind: DownstreamKind.Session,
-                        stream: stream
-                    );
+                    return (DownstreamKind.Session, writer.ToArray());
                 }
             case WorldSubmissionResult.Query query: {
                     if (query.Answer.Payload is WorldPlacementProposal) {
@@ -705,20 +711,10 @@ public static class WorldPeerWireFormat {
                             body: out var proposalBody,
                             reason: out var proposalFailure
                         )) {
-                            return WriteDownstreamAsync(
-                                stream: stream,
-                                kind: DownstreamKind.Refusal,
-                                body: EncodeText(text: proposalFailure),
-                                ct: ct
-                            );
+                            return (DownstreamKind.Refusal, EncodeText(text: proposalFailure));
                         }
 
-                        return WriteDownstreamAsync(
-                            body: proposalBody,
-                            ct: ct,
-                            kind: DownstreamKind.QueryPlacementProposal,
-                            stream: stream
-                        );
+                        return (DownstreamKind.QueryPlacementProposal, proposalBody);
                     }
 
                     // [u8 Refused][u16 textLen][text utf8].
@@ -727,28 +723,13 @@ public static class WorldPeerWireFormat {
                     writer.WriteBoolean(value: query.Answer.Refused);
                     writer.WriteString(value: query.Answer.Text);
 
-                    return WriteDownstreamAsync(
-                        body: writer.WrittenMemory,
-                        ct: ct,
-                        kind: DownstreamKind.Query,
-                        stream: stream
-                    );
+                    return (DownstreamKind.Query, writer.ToArray());
                 }
             case WorldSubmissionResult.MachineOperation machineOperation:
-                return WriteDownstreamAsync(
-                    stream: stream,
-                    kind: DownstreamKind.MachineOperationOutcome,
-                    body: EncodeMachineOperationResult(result: machineOperation.Result),
-                    ct: ct
-                );
+                return (DownstreamKind.MachineOperationOutcome, EncodeMachineOperationResult(result: machineOperation.Result));
             case WorldSubmissionResult.Mutation mutation: {
                     if (!mutation.Outcome.IsValid) {
-                        return WriteDownstreamAsync(
-                            stream: stream,
-                            kind: DownstreamKind.Refusal,
-                            body: EncodeText(text: "mutation outcome is malformed"),
-                            ct: ct
-                        );
+                        return (DownstreamKind.Refusal, EncodeText(text: "mutation outcome is malformed"));
                     }
 
                     try {
@@ -781,35 +762,15 @@ public static class WorldPeerWireFormat {
                         writer.WriteGuid(value: mutation.Outcome.Version.Activation);
                         writer.WriteInt64(value: mutation.Outcome.Version.Sequence);
 
-                        return WriteDownstreamAsync(
-                            body: writer.WrittenMemory,
-                            ct: ct,
-                            kind: DownstreamKind.MutationOutcome,
-                            stream: stream
-                        );
+                        return (DownstreamKind.MutationOutcome, writer.ToArray());
                     } catch (ArgumentException exception) {
-                        return WriteDownstreamAsync(
-                            stream: stream,
-                            kind: DownstreamKind.Refusal,
-                            body: EncodeText(text: $"mutation outcome is not encodable: {exception.Message}"),
-                            ct: ct
-                        );
+                        return (DownstreamKind.Refusal, EncodeText(text: $"mutation outcome is not encodable: {exception.Message}"));
                     }
                 }
             case WorldSubmissionResult.Refusal refusal:
-                return WriteDownstreamAsync(
-                    stream: stream,
-                    kind: DownstreamKind.Refusal,
-                    body: EncodeText(text: $"{refusal.Code}: {refusal.Detail}"),
-                    ct: ct
-                );
+                return (DownstreamKind.Refusal, EncodeText(text: $"{refusal.Code}: {refusal.Detail}"));
             default:
-                return WriteDownstreamAsync(
-                    stream: stream,
-                    kind: DownstreamKind.Refusal,
-                    body: EncodeText(text: $"no downstream encoding for {result.GetType().Name}"),
-                    ct: ct
-                );
+                return (DownstreamKind.Refusal, EncodeText(text: $"no downstream encoding for {result.GetType().Name}"));
         }
     }
 

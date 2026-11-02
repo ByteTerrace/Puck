@@ -1,9 +1,9 @@
 // What a seat and a session that may not read some of a row's cells are told about that row: the smallest fixture of
 // the noninterference harness. `puck disclosure worlds/debug/disclosure-probe.puck` boots one world per variant of
 // disclosure-probe.disclosure.json beside it. Each variant's operator steps mint zero, one or two cells only seat1
-// reads into `hand` (or one only later), seat2 runs the same console lines in every world, and a replica and a
-// presentation session observe each world; anything seat2 or a session receives that differs between two variants is
-// a leak, named by the door that answered it.
+// reads into `hand` (or one only later), seat2 runs the same console lines in every world, and a replica, a
+// presentation and a writing session observe each world; anything seat2 or a session receives that differs between
+// two variants is a leak, named by where its stream first differs and by the doors that answered differently.
 //
 // The variants replace `hand` (dropping the public `a`) with their hidden cells first and add the public `pub` after,
 // so `pub` lands behind them in the row's storage and in `probe-hand`'s deal, a shape no reader's answer may reflect.
@@ -21,7 +21,9 @@ bodies {
   seatSpawns ["stage", "stage"]
 }
 
-// The sessions the harness observes from: the authority's name decides the tier.
+// The sessions the harness observes from: the authority's name decides the tier. The writer may mutate the state
+// section and edit `hand` and `pile` as well as observe, so its drawn writes, transforms and guarded batches reach the
+// mutation path rather than stopping at a capability denial.
 admission [
   {
     disclosure: Replica
@@ -35,8 +37,21 @@ admission [
     grants [{ budget: 64, capability: Observe, subject: "all" }]
     mode: FederatedAuthority
   }
+  {
+    disclosure: Replica
+    domain: "writer"
+    grants [
+      { budget: 64, capability: Observe, subject: "all" }
+      { budget: 64, capability: Mutate, subject: "section:State", kindMask: "UpsertStateCell,RemoveStateCell,Generate,TransformState,Batch" }
+      { budget: 64, capability: Edit, subject: "state:hand" }
+      { budget: 64, capability: Edit, subject: "state:pile" }
+    ]
+    mode: FederatedAuthority
+  }
 ]
 
+// `pile` is public: a transform moving a card from `hand` to it, or a write guarded on a `hand` cell, is a door from
+// the hidden row into a public one.
 state {
   world {
     row {
@@ -45,6 +60,12 @@ state {
       capacity: 4
       visibility {}
       cells [{ key: "a", value: 1 }]
+    }
+    row {
+      name: "pile"
+      kind: "Int"
+      capacity: 8
+      cells [{ key: "top", value: 0 }]
     }
   }
 }
