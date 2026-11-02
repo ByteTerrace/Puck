@@ -263,6 +263,8 @@ touched" includes what consumes it:
 - a change that adds a project reference to a packable project (`IsPackable` in its project file) runs `puck nuget pack --output <scratch> --no-build` after a solution build, as CI's artifact job does: a reference to a non-packable project builds cleanly and fails only at packing;
 - a change to a world document is shown by booting the world; the shipped-source suites (`Puck.World.Transpiler.Tests`, `Puck.Cli.Worlds.Tests`) are an optional technique for it;
 - a change to simulation state, maths or determinism can run the `worlds/debug/*-tests.puck` files it touches with `--reproduce`, which shows two runs agree;
+- every batch runs `puck docs links`, because two lanes that each pass can still break each other's
+  citations, and CI checks only `main`; a failure the batch caused is fixed before the fast-forward;
 - every check runs from a CLI and test binaries rebuilt after the merge, never stale copies.
 
 A merge is not finished until every line of the lane's Found section, and every

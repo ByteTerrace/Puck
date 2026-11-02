@@ -66,6 +66,10 @@ holds the Git, push and stop-order rules every family shares.
   progress or blocked, never done. Keep one watcher per running job, ending on success, failure or
   exit; no `sleep` timers and no polling a job that reports its own exit
   ([your harness](../orchestration/references/lane-work.md#running-long-tasks)).
+- Before your final commit, run `puck docs links` from your CLI copy. Fix every failure your change
+  introduced: a renamed symbol, a moved file, a closed plan item. A failure older than your change goes
+  in your hand-back. Documents rot when the change that broke them does not fix them
+  ([keep documents from rotting](../../../docs/development/documentation.md#keep-documents-from-rotting)).
 - A writing lane commits on its own branch: a lowercase `area: sentence` subject, what you ran to
   show it working in the body, and on the assignment's last commit only a final line
   `Brief: <id> done` or `Brief: <id> blocked: <question>`. Never modify or push `main`.
