@@ -6,15 +6,17 @@ description: "Tunes Puck .NET 11 performance: allocation, gen0 pauses, data layo
 # .NET 11 performance
 
 Judge a change by code, disassembly and load-independent counts (allocations,
-operation counts). A wall-clock benchmark (`puck bench`) is evidence beside
-those counts, never alone, and runs on a quiet machine. Keep runtime
-improvements apart from workload-specific evidence.
+operation counts, work counters). A wall-clock benchmark (`puck bench`) is
+evidence beside those counts, never alone, and runs as interleaved A/B rounds
+in the lead's quiet window or under the heavy lease. Keep runtime improvements
+apart from workload-specific evidence.
 
 ## Route to the relevant evidence
 
 | Area | Read |
 |---|---|
 | Cross-domain mental model, pattern changes, API shortlist, folklore | [references/core-guidance.md](references/core-guidance.md) |
+| Landing a speed change: what keeps it, counters versus A/B timing, proving the changed path ran, PGO in the World, techniques and the hazards review finds | [references/measured-changes.md](references/measured-changes.md) |
 | What the data costs: steady-state allocation, gen0 pauses and old-to-young references, LOH, layout and hot/cold splitting, struct copies, zero-fill and `stackalloc`, scans, bandwidth, false sharing, branches; measuring them here | [references/data-and-memory.md](references/data-and-memory.md) |
 | JIT, codegen, allocation, inlining, bounds checks, ISA | [references/jit-and-codegen.md](references/jit-and-codegen.md) |
 | Collections, LINQ, Frozen/Immutable, `CollectionsMarshal` | [references/collections-and-linq.md](references/collections-and-linq.md) |
@@ -44,10 +46,13 @@ project file before changing code.
   formatting guidance collapses to the invariant case.
 - **`PlatformTarget` is x64 and `OptimizationPreference` is Speed.** Arm-specific
   and size-tuning material is background rather than a work item.
-- **`Puck.World` sets `TieredPGO=false`.** Advice that rests on dynamic PGO
-  (guarded devirtualization, stack-allocated `foreach` enumerators over
-  `IEnumerable<T>`, hot and cold splitting) describes other hosts; for World
-  code, read the disassembly of the actual build before relying on it.
+- **`Puck.World` sets `TieredPGO=false`**
+  ([`Puck.World.csproj:20`](../../../src/Puck.World/Puck.World.csproj)). The
+  setting is process-wide, so every library a World loads runs without dynamic
+  PGO, while `puck bench` runs in the CLI with it. Advice that rests on dynamic
+  PGO (guarded devirtualization, stack-allocated `foreach` enumerators over
+  `IEnumerable<T>`, hot and cold splitting) describes other hosts; for code the
+  World runs, read the disassembly of the actual build before relying on it.
 - **Test hosts shape allocation evidence.** Test projects run blocking server GC
   (no background GC) so `GC.GetAllocatedBytesForCurrentThread` stays exact, and
   several suites set `System.Runtime.TieredCompilation` to `false` so allocation
@@ -120,7 +125,10 @@ are not written about this repository.
 - **Randomness and parallel completion order are not optimization knobs.**
   `Random.Shared`, `RandomNumberGenerator` and `Parallel.*` never touch a value
   path; [`maths-usage`](../maths-usage/SKILL.md) names the reproducible
-  primitives that replace them.
+  primitives that replace them. Neither is uninitialized memory: a rented,
+  native, `preserve: false` or `[SkipLocalsInit]` buffer read before it is
+  written makes the next run differ
+  ([data and memory](references/data-and-memory.md#zero-only-what-you-read)).
 
 Presentation-only float (shaders, renderer and UI math, capture output) sits
 outside this contract and takes the references as written.
@@ -132,8 +140,12 @@ outside this contract and takes the references as written.
   closure-bearing slow rebuild. A test of it measures warmed calls on an active
   path; an inactive-tick test cannot see the allocation.
 - Start with a profile, benchmark, allocation trace or demonstrated hot path. A
-  suspected hot path is not one; ask for the evidence, and keep the clearer
-  form (LINQ, `foreach`, an interface call) when it does not show a win.
+  suspected hot path is not one; ask for the evidence. A change is kept when it
+  wins on a measured metric (time, bytes, work counters) or when it simplifies,
+  unifies or opens a design the next step builds on; never judge it by its
+  isolated delta alone (AGENTS.md, "Changes pay dividends"). A measurement
+  counts once it is shown to run the changed branch
+  ([measured changes](references/measured-changes.md#measure)).
 - Route measurements through the existing harnesses: `puck bench kernels` for
   BenchmarkDotNet timing, allocation and disassembly; `puck bench world` for
   server construction and tick workloads; `puck bench startup` for fresh-process
@@ -161,10 +173,11 @@ outside this contract and takes the references as written.
 - Check the folklore section of the core guidance before preserving an old
   hand-optimization, and confirm specialization and call boundaries in optimized
   assembly. Prefer idiomatic code the .NET 11 JIT and libraries recognize.
-- Preserve semantics, exception behavior, traversal order and sinks; performance
-  evidence does not silently authorize changing them. A hand-written loop
-  replaces a LINQ pipeline only with the same deferred-versus-immediate
-  execution, the same empty-input and null exceptions and the same ordering.
+- Preserve determinism (AGENTS.md rule 4) and observable behaviour. Traversal
+  order matters where simulation state or deterministic output depends on it.
+  Deferred execution and exact exception types are not constraints: a loop
+  that replaces a LINQ pipeline may run eagerly and throw differently, and the
+  internal callers are updated in the same change.
 - Record first-use work separately from warm tables, and distinguish allocated
   bytes from retained pools or peak workspace. Use idle, serial runs; sampled
   timings alone never establish an algorithmic or full-domain claim.

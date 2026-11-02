@@ -97,6 +97,12 @@ prefix_rule(
 )
 
 prefix_rule(
+    pattern = ["git", ["commit-tree", "read-tree"]],
+    decision = "forbidden",
+    justification = "Builds a commit or index from raw trees, which can record an empty or unrelated tree that deletes the repository; commit with git commit over an index you inspected.",
+)
+
+prefix_rule(
     pattern = ["git", "replace", ["-d", "--delete", "-f", "--force", "--edit", "--graft", "--convert-graft-file"]],
     decision = "forbidden",
     justification = "Replacement refs are shared by every lane; the lead decides.",

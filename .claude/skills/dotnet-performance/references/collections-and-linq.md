@@ -68,7 +68,7 @@
 
 Distilled from the BCL rewrites above — these apply to any code you write:
 
-1. **Do NOT split cold tails into separate methods to "keep the hot method inlineable"** (the `MoveNextRare` pattern). Under dynamic PGO the split-out method gets classified cold, isn't inlined, and one non-inlined call blocks escape analysis for the whole containing object. Write the whole small method; measure before splitting.
+1. **Do NOT split cold tails into separate methods to "keep the hot method inlineable"** (the `MoveNextRare` pattern). Under dynamic PGO the split-out method gets classified cold, isn't inlined, and one non-inlined call blocks escape analysis for the whole containing object. Write the whole small method; measure before splitting. Without PGO (the World process) the cold classification does not happen, so decide by disassembly and counts.
    ```csharp
    // Anti-pattern (was folklore):
    public bool MoveNext()
@@ -249,7 +249,7 @@ The design underneath all of these: LINQ's internal concrete iterator types (`Ar
 
 ### Folklore to delete
 
-- **"Never take/return `IEnumerable<T>` in hot paths — the enumerator allocates."** On .NET 11, for arrays, `List<T>`, `Stack<T>`, `Queue<T>`, `ConcurrentDictionary<,>` and friends in tiered/PGO'd code, the enumerator is devirtualized and stack-allocated. Stop distorting API shapes over this (exposing struct enumerators is still fine; just stop fearing the interface).
+- **"Never take/return `IEnumerable<T>` in hot paths — the enumerator allocates."** On .NET 11, for arrays, `List<T>`, `Stack<T>`, `Queue<T>`, `ConcurrentDictionary<,>` and friends in tiered/PGO'd code, the enumerator is devirtualized and stack-allocated. Stop distorting API shapes over this (exposing struct enumerators is still fine; just stop fearing the interface). The World process runs without PGO ([SKILL.md](../SKILL.md#apply-repository-constraints)): there, read the disassembly.
 - **"Split the cold tail into a separate method so the hot method stays inlineable" (the `MoveNextRare` pattern).** Under dynamic PGO this backfires: the split-out method is classified cold, not inlined, and blocks escape analysis. The runtime itself deleted this pattern from `List<T>` and `PriorityQueue<,>`.
 - **"Hand-rolled switch/goto state machines are faster than plain loops."** Opposite: `goto case` webs create irreducible loops the JIT can't optimize or inline. `ConcurrentDictionary`'s enumerator got ~6x faster by becoming a boring `while` loop.
 - **"Rewrite `query.OrderBy(...).Contains(x)` / `Distinct().Contains(x)` manually or LINQ will sort/dedup first."** `Contains` is specialized behind ~30 iterator types; the composed form is ~50–350x faster than before and near raw-scan cost.
