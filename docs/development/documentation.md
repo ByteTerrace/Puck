@@ -427,25 +427,91 @@ teaching. Show incomplete or unpaired ablation arms explicitly. Inspect the
 prompt, grader and actual response before adding teaching; repair a stale
 fixture or grader when the skill already teaches the behavior.
 
-`claude plugin eval .claude/skills/<name>` runs a skill's `evals/` cases, one
-directory per case: `prompt.md` (frontmatter `max_turns` and `allowed_tools`,
-then a realistic task) beside `graders/*.md`, each grader a `regex`, `llm` or
-`tool_used` check. Write every criterion as a statement about what the reply
-contains, one fact per grader, and use a `regex` grader for anything a token
-settles. Run it from PowerShell with `--ablation with-without`, which adds a
-no-skill baseline arm and reports the score delta, a Sonnet-class
-`--judge-model`, and `-j` no higher than 4 on a shared machine. The agent
-under test runs in an empty temporary directory, not the repository, so a
-case measures what the skill itself teaches. Nothing is copied into that
-directory and Bash and Edit are denied unless `--allow-tools` grants them, so
-a case inlines any source it needs into its prompt and grades what the reply
-says, never a tool run. A prompt shaped as a bare order ("fix X") sends the
-agent searching the empty directory without loading the skill; phrase it as
-the developer's question, naming the Puck files, verbs or symptoms involved,
-without stating the answer a grader checks. Re-run a reply that starts with
-"API Error"; never score one. One run per case swings by about 0.2, so read a
-delta under about 0.1 as noise. A rule added to fix a failing case is stated
-generally, never as that case's answer.
+**A skill edit is unproven until its evals run.** Anthropic's guidance is to
+write evaluations before the teaching
+([skill best practices](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices)).
+A change that adds teaching to a skill or to a preloaded agent skill
+(`delegate`) owes two things:
+
+- **A capability case:** a new case drawn from the real failure the teaching
+  fixes. Such a case may start at a low pass rate.
+- **A regression run:** the skill's existing suite, re-run with the change.
+  Its cases should pass nearly every run.
+
+A review of a skill's text is not an evaluation of whether agents behave
+better with it.
+
+`claude plugin eval .claude/skills/<name>` runs a skill's `evals/` cases
+([plugin evals](https://code.claude.com/docs/en/plugin-evals)). A bare skills
+directory resolves as a plugin, and the run adds a no-skill baseline arm.
+
+**Case layout:** one directory per case, holding:
+
+- `prompt.md`: frontmatter `runs` (default 3), `max_turns`,
+  `timeout_seconds`, `allowed_tools` and `model`, then a realistic task.
+- `graders/*.md`: each grader one of `regex`, `tool_used`, `tool_order`,
+  `file_exists`, `llm` or `baseline`. There are no custom-code graders.
+
+**Writing graders:**
+
+- Write every criterion as a statement about what the reply contains, one
+  fact per grader.
+- Prefer a deterministic grader. Use a `regex` for anything a token settles,
+  and `llm` only where meaning needs judging.
+- Read the transcripts of a sample of runs and check each LLM grader's verdict
+  against your own. A grader that disagrees with a careful reading is
+  repaired before any score built on it is believed.
+
+**How to run it:**
+
+- **Arms and runs:** `--ablation with-without`, at least three runs per case.
+  A case's score is the mean of its runs, and it passes at `--threshold`
+  (default 1.0: every run passes every grader).
+- **Noise:** one run swings by about 0.2, so a delta under about 0.1 is
+  noise.
+- **Judge:** the LLM judge defaults to Haiku. Set `--judge-model` to a model
+  other than the one under test where the cost allows.
+- **Load and cost:** keep `-j` at 4 or below on a shared machine, and set
+  `--max-cost-usd` for any suite run. A Sonnet case costs about $0.20 per run
+  with both arms.
+- **Model tiers:** run a skill on every model that loads it: Sonnet for
+  `implementer`, Opus for `specialist`, `reviewer` and the lead, and Haiku for
+  `scout`. A skill that helps one tier can hurt another.
+
+**The sandbox:** the agent runs in an empty temporary workspace with your user
+settings, hooks, CLAUDE.md and MCP servers absent, so a case measures what the
+skill itself teaches.
+
+- Bash and Edit are denied unless `--allow-tools` grants them. A
+  shell-granting suite needs WSL2 on Windows, since native Windows has no
+  backend.
+- A case inlines any source it needs into its prompt and grades what the
+  reply says.
+- `case.yaml` can add `add_dirs` or a `scaffold_script`. Never add the
+  repository: the baseline arm would then read `.claude/skills/` and the
+  ablation would measure nothing.
+- A prompt shaped as a bare order ("fix X") sends the agent searching the
+  empty directory without loading the skill. Phrase it as the developer's
+  question, naming the Puck files, verbs or symptoms involved, without stating
+  the answer a grader checks.
+
+**Reading results:**
+
+- Re-run a reply that starts with "API Error"; never score one.
+- A rule added to fix a failing case is stated generally, never as that
+  case's answer.
+
+**Agent definitions:** plugin eval does not evaluate a standalone
+`.claude/agents/*.md`. An agent is evaluated through what it loads: its
+preloaded skills, run at the agent's model. Delegation reliability is not
+measured, because the lead names the agent explicitly.
+
+**Two cheap checks beside the evals:**
+
+- `/skill-doctor` reports each skill's context cost and how often it fires.
+- `/doctor prompt-audit` checks instruction files for conflicts. Run it after
+  a rule change to AGENTS.md or a skill
+  ([skills](https://code.claude.com/docs/en/skills)).
 
 ## Further guidance
 

@@ -263,6 +263,10 @@ touched" includes what consumes it:
 - a change that adds a project reference to a packable project (`IsPackable` in its project file) runs `puck nuget pack --output <scratch> --no-build` after a solution build, as CI's artifact job does: a reference to a non-packable project builds cleanly and fails only at packing;
 - a change to a world document is shown by booting the world; the shipped-source suites (`Puck.World.Transpiler.Tests`, `Puck.Cli.Worlds.Tests`) are an optional technique for it;
 - a change to simulation state, maths or determinism can run the `worlds/debug/*-tests.puck` files it touches with `--reproduce`, which shows two runs agree;
+- a change that adds teaching to a skill or agent lands with its eval results in the commit message: the
+  capability case for that teaching, plus a regression run of the skill's suite, with arms, runs, models
+  and the delta. Otherwise the commit says plainly that the teaching is unproven, and the lead queues
+  the eval ([evaluate an agent skill](../../../docs/development/documentation.md#evaluate-an-agent-skill));
 - every batch runs `puck docs links`, because two lanes that each pass can still break each other's
   citations, and CI checks only `main`; a failure the batch caused is fixed before the fast-forward;
 - every check runs from a CLI and test binaries rebuilt after the merge, never stale copies.
