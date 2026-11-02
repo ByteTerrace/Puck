@@ -122,7 +122,8 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
         ref FixedVector3 lastNormal,
         ref FixedVector3 groundNormal,
         ref FixedQ4816 requiredStepHeight,
-        ref bool uncertain
+        ref ContactUncertainty uncertain,
+        int volumeIndex
     ) {
         var pushed = false;
         var culls = (extents.Length == colliders.Length);
@@ -152,7 +153,10 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
                 volume: in volume
             );
 
-            uncertain |= unsure;
+            if (unsure) {
+                uncertain = uncertain.With(pair: new ContactUncertainPair(Collider: index, Volume: volumeIndex,
+                    Span: ((source == FixedSurfaceColliderSource.Static) ? ContactUncertaintySpan.Static : ContactUncertaintySpan.Dynamic)));
+            }
 
             FixedStaticContactWork.Process.CountQuery(pushed: pushes);
             if (pushes) {
@@ -282,7 +286,7 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
         }
         if (parts > long.MaxValue) {
             position = previousPosition;
-            return new ContactResolution(Grounded: false, ObstructionNormal: default, Unproved: true);
+            return new ContactResolution(Grounded: false, ObstructionNormal: default, Uncertainty: ContactUncertainty.Unknown);
         }
         var split = new FixedVector3RateAccumulator(ticksPerSecond: ((long)parts));
         var count = ((int)Int128.Min(x: parts, y: FixedFieldContactSolver.DefaultSweepBoundsQueryBudget));
@@ -291,7 +295,7 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
         var result = default(ContactResolution);
         var obstruction = FixedVector3.Zero;
         var stepHeight = FixedQ4816.Zero;
-        var uncertain = false;
+        var uncertain = default(ContactUncertainty);
 
         for (var part = 0; (part < count); part++) {
             var increment = split.Integrate(elapsedTicks: 1UL, ratePerSecond: movement);
@@ -305,11 +309,12 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
             resolved = position;
             if (result.ObstructionNormal != FixedVector3.Zero) { obstruction = result.ObstructionNormal; }
             stepHeight = FixedQ4816.Max(x: stepHeight, y: result.RequiredStepHeight);
-            uncertain |= result.Unproved;
+            uncertain = uncertain.Union(other: result.Uncertainty);
         }
         // Match field-sweep budget exhaustion: keep only the proved prefix and report it as unproved,
         // without turning a work limit into a physical obstruction or integrating the unvisited suffix.
-        return result with { ObstructionNormal = obstruction, RequiredStepHeight = stepHeight, Unproved = (uncertain || (parts > count)) };
+        return result with { ObstructionNormal = obstruction, RequiredStepHeight = stepHeight,
+            Uncertainty = ((parts > count) ? uncertain.Union(other: ContactUncertainty.Unknown) : uncertain) };
     }
 
     // Every intermediate pose of a straight move lies inside the box spanning its start and end bounds. A collider
@@ -371,15 +376,17 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
             val2: MaxIterations
         );
 
-        var uncertain = false;
+        var uncertain = default(ContactUncertainty);
 
         for (var iteration = 0; (iteration < iterations); iteration++) {
             var pushed = false;
 
             // Only the last pass, at the pose the body keeps, says whether that pose is proved.
-            uncertain = false;
+            uncertain = default;
 
-            foreach (ref readonly var volume in volumes) {
+            for (var volumeIndex = 0; (volumeIndex < volumes.Length); volumeIndex++) {
+                ref readonly var volume = ref volumes[volumeIndex];
+
                 pushed |= Sweep(
                     candidates: in candidates,
                     colliders: colliders,
@@ -397,7 +404,8 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
                     up: in up,
                     velocity: ref velocity,
                     uncertain: ref uncertain,
-                    volume: in volume
+                    volume: in volume,
+                    volumeIndex: volumeIndex
                 );
                 pushed |= Sweep(
                     candidates: default,
@@ -416,7 +424,8 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
                     up: in up,
                     velocity: ref velocity,
                     uncertain: ref uncertain,
-                    volume: in volume
+                    volume: in volume,
+                    volumeIndex: volumeIndex
                 );
             }
 
@@ -430,7 +439,7 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
             GroundNormal: groundNormal,
             Grounded: grounded,
             ObstructionNormal: lastNormal,
-            Unproved: uncertain
+            Uncertainty: uncertain
         ) { Support = support };
     }
 }

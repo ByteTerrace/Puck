@@ -993,9 +993,13 @@ octave the exact trilinear range at the vertices of the box's fade range, its
 rounding allowance pinned against an exact oracle by
 `sampling.lattice-noise-fade-and-box-bounds`), so a capsule half a metre above
 the valley's relief is proved clear by its first box. The ground snap acts on an
-unproved step and lands it on support it proves; the landing may carry the
-uncertainty the step already did (`FixedStepUp.TrySnap`'s `uncertain`), so a
-volume elsewhere in the band no longer lifts a walking body off its ground.
+unproved step and lands it on support it proves. A resolution names the volume
+and collider pairs it left uncertain (`ContactResolution.Uncertainty`, up to
+four by name, otherwise unnamed), and the landing may leave uncertain only pairs
+the step already did (`ContactUncertainty.IsWithin`): a pair still in the band
+no longer lifts a walking body off its ground, and a field clear at the start
+and newly unproved at the landing refuses it
+(`ASnapRefusesALandingThatOverlapsAFieldClearAtItsStart`).
 Remaining:
 
 - **[medium] Clearance within about a third of a metre of a slope is

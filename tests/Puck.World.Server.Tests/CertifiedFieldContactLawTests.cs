@@ -267,6 +267,53 @@ public sealed class CertifiedFieldContactLawTests {
         Assert.Equal(expected: FixedFieldContactOutcome.Contact, actual: resting.Outcome);
     }
 
+    // One swept move a snap runs, through the static solver over fixed colliders.
+    private readonly struct StaticStep(FixedStaticContactSolver solver, FixedStaticCollider[] colliders, FixedBodyColliderVolume[] volumes) : IFixedContactStep {
+        public ContactResolution Sweep(in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity) =>
+            solver.ResolveSweep(colliders: colliders, dynamicColliders: [], orientation: FixedQuaternion.Identity, position: ref position,
+                previousPosition: previousPosition, up: FixedVector3.UnitY, velocity: ref velocity, volumes: volumes);
+    }
+    // Two radius-1/32 spheres either side of the axis at a height, as one field collider.
+    private static FixedStaticCollider SpherePair(double x, double y) {
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+        _ = builder.Translate(offset: new Vector3(x: (float)x, y: (float)y, z: 0f)).Sphere(material: material, radius: (1f / 32f));
+        _ = builder.ResetPoint().Translate(offset: new Vector3(x: (float)-x, y: (float)y, z: 0f)).Sphere(material: material, radius: (1f / 32f));
+        return ProgramCollider(program: builder.Build());
+    }
+
+    // A snap lowers an uncertain body only onto support that adds no uncertainty of its own. A unit sphere starts
+    // unproved against one field (A, a symmetric pair it cannot measure past) and clear of another (B, below its box);
+    // lowered onto a floor half a metre down, it would overlap B's pair, which its symmetry also hides, while the floor
+    // grounds it. The landing's uncertainty is B's, which the start did not carry, so the snap refuses it.
+    [Fact]
+    public void ASnapRefusesALandingThatOverlapsAFieldClearAtItsStart() {
+        var solver = new FixedStaticContactSolver(ContactSkin: FixedQ4816.Zero, GroundedThreshold: Q(value: 0.7d), MaxIterations: 4);
+        var colliders = new[] {
+            SpherePair(x: 0.75d, y: 0.8125d),
+            SpherePair(x: 0.5d, y: -1.125d),
+            FixedStaticCollider.HalfSpace(normal: FixedVector3.UnitY, point: V(x: 0d, y: -1.25d, z: 0d)),
+        };
+        var step = new StaticStep(colliders: colliders, solver: solver, volumes: [Ball(radius: 1d)]);
+        var start = FixedVector3.Zero;
+        var velocity = FixedVector3.Zero;
+        var at = start;
+        var startResolution = step.Sweep(position: ref at, previousPosition: in start, velocity: ref velocity);
+
+        Assert.True(condition: startResolution.Unproved);
+        Assert.Equal(expected: start, actual: at);
+        Assert.False(condition: FixedStepUp.TrySnap(distance: Q(value: 0.5d), result: out var landing, start: in start, step: ref step,
+            uncertain: startResolution.Uncertainty, up: FixedVector3.UnitY, velocity: FixedVector3.Zero), userMessage: $"landed at {landing.Position}");
+
+        // Without B the same unproved start lands: the floor grounds it and nothing newly uncertain comes with it.
+        var unhidden = new StaticStep(colliders: [colliders[0], colliders[2]], solver: solver, volumes: [Ball(radius: 1d)]);
+
+        Assert.True(condition: FixedStepUp.TrySnap(distance: Q(value: 0.5d), result: out landing, start: in start, step: ref unhidden,
+            uncertain: startResolution.Uncertainty, up: FixedVector3.UnitY, velocity: FixedVector3.Zero));
+        Assert.Equal(expected: Q(value: -0.25d), actual: landing.Position.Y);
+    }
+
     // A pipe subtraction's bead lies outside its subject; the relief collider's bound holds it. A creation clamps the
     // blend radius to half a unit, so the bead reaches past 1.3 on the spheres' shared seam.
     [Fact]

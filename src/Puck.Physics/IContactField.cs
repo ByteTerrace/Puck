@@ -119,13 +119,15 @@ public enum ContactRefusal {
 /// consuming integrator's frame policy decides whether to adopt it.</param>
 /// <param name="Refusal">Why the step was refused, or <see cref="ContactRefusal.None"/> when it was resolved; a refused
 /// step reports no contact.</param>
-/// <param name="Unproved">Whether the solve proved neither contact nor clearance where it mattered: the sweep that held
-/// the step short of its target ran out of its bounds-query budget or reached a box its field could not bound, or a
-/// volume lies embedded where the field measures no way out (<see cref="FixedFieldContact.Stuck"/>). The body keeps only
-/// the ground it proved, and nothing may treat the result as a contact's correction or as clear.</param>
+/// <param name="Uncertainty">Which volume and collider pairs the solve proved neither contact nor clearance for where it
+/// mattered: a field the body neither clears nor touches, a volume embedded where the field measures no way out
+/// (<see cref="FixedFieldContact.Stuck"/>), or a sweep that ran out of its bounds-query budget, which names none. The
+/// body keeps only the ground it proved, and nothing may treat the result as a contact's correction or as clear.</param>
 /// <param name="RequiredStepHeight">The lift needed to clear the local approached edge, including its fillet and
 /// skin, measured from the pre-move body's bottom. A step must buy this whole clearance.</param>
-public readonly record struct ContactResolution(bool Grounded, FixedVector3 ObstructionNormal, FixedVector3 GroundNormal = default, ContactRefusal Refusal = ContactRefusal.None, bool Unproved = false, FixedQ4816 RequiredStepHeight = default) {
+public readonly record struct ContactResolution(bool Grounded, FixedVector3 ObstructionNormal, FixedVector3 GroundNormal = default, ContactRefusal Refusal = ContactRefusal.None, ContactUncertainty Uncertainty = default, FixedQ4816 RequiredStepHeight = default) {
+    /// <summary>Gets whether the solve left any pair uncertain (<see cref="Uncertainty"/>).</summary>
+    public bool Unproved => !Uncertainty.IsEmpty;
     /// <summary>The actual walkable analytic solve, retained for diagnostics only; absent for providers that do not publish it.</summary>
     public ContactSupportWitness? Support { get; init; }
 }
