@@ -873,43 +873,30 @@ step (maximum 48) all lie on the static striped monitor face, x269–323 /
 y391–490. Enlarged CPU/GPU crops align geometrically. The sampled stripe
 difference exceeds the small pinned noise and its cause remains unconfirmed.
 
-Vulkan synchronization validation is clean over four settled places in both
-the measured and pinned GPU runs. Full Direct3D 12 GPU-based validation,
-including state tracking and synchronized queue validation, passes on merge
-`c72a9b3a3c` and its current debug package: bakes settle at tick 2,289; lobby /
-rim / gallery / meadow read 6,749 / 470 / 7,892 / 11,967 root draws, with no
-validation warning or error. This leg takes about 576 seconds, including a
-slow native resolve pipeline bind and cache misses. Initial incomplete
-controls and a stopped validation attempt are excluded. A later current
-Vulkan boot reaches readiness and submits 17 world dispatches while cold
-geometry is still pending; it does not replace the settled four-place check.
-
-Integration merge `e147b701a` adds shadow exit layers. Its initial R2 integration
-reuses selected arguments and weights statistics for both executions.
-Vulkan synchronization validation passes on this
-exact build with bakes settled at tick 2,154: lobby / rim / gallery / meadow
-read 13,178 / 841 / 15,487 / 20,381 physical draws, with no warning or error.
-Full Direct3D 12 GPU/state-tracking/synchronized-queue validation also passes
-on this exact accounting build with bakes settled at tick 8: lobby / rim /
-gallery / meadow read 13,845 / 830 / 15,891 / 20,650 physical draws, with no
-warning or error. The cold bake is prepared before the instrumented run;
-an earlier combined cold-bake/full-validation attempt exceeded its 845-second
-time box and is excluded. Both completed final legs stay under 15 minutes.
-Release CLI and World builds, including DXIL and SPIR-V, pass with zero
-warnings/errors. Two debug fixtures pass `--reproduce` again on this merge:
-`input-clock30-tests.puck` (four verdicts) and `unbiased-draws-tests.puck`
-(six); presentation selection does not enter simulation state.
-
-The final integration (`b63e7191e`, then `d6f1624dfa`) also carries the solid
+The final integration (`b63e7191e`, then `d6f1624dfa`) carries the solid
 versus thin/clipped shadow-exit rule. One selection emits entry, solid-exit
 and thin-exit argument phases; each kept draw contributes an entry and exactly
-one exit to the generated statistics. This replaces the earlier execution
-multiplier. Vulkan synchronization validation passes at all four settled
-places on this three-phase artifact: lobby / rim / gallery / meadow read
-13,415 / 839 / 16,523 / 20,360 physical draws. Its cold bake rebuilds 7,242
-groups and settles at tick 2,721; no validation warning or error appears.
-Final Release CLI and dual-backend World builds pass with zero warnings/errors,
-and both debug fixtures reproduce again (four and six verdicts).
+one exit to the generated statistics. `d231e5bec` counts the two executions
+with separate wave reductions: 64 lanes of a legal maximum mesh fit a uint
+sum, twice that does not; the existing accumulator carries each addition
+into 64 bits. Selection, arguments and history are unchanged by this fix.
+
+Vulkan synchronization validation passes at all four settled places on this
+exact final artifact: lobby / rim / gallery / meadow read 13,802 / 830 /
+16,842 / 20,675 physical draws, with bakes settled at tick 73 and no warning
+or error. Full Direct3D 12 GPU-based validation, including state tracking and
+synchronized queue validation, passes on the same final artifact: lobby /
+rim / gallery / meadow read 13,853 / 830 / 16,987 / 20,484 physical draws,
+with bakes settled at tick 7 and no warning or error. That leg takes about
+303 seconds; the Vulkan and Direct3D batch stays below its 850-second bound.
+The earlier cold preparation rebuilt 7,242 groups.
+
+Final Release CLI and dual-backend World builds pass with zero warnings/errors.
+Two debug fixtures pass `--reproduce` on the final artifact:
+`input-clock30-tests.puck` (four verdicts) and `unbiased-draws-tests.puck` (six).
+Presentation selection does not enter simulation state. Incomplete controls,
+time-boxed cold/full-validation attempts and an initial private Windows
+artifact refused for missing SPIR-V are excluded from the results.
 
 
 ### What becomes of the tick-to-produce memo's phases
