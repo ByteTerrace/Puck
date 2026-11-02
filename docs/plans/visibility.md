@@ -51,7 +51,7 @@ branch until it lands.
   (`Assets/Shaders/Sdf/passes/sdf-mesh.vert.hlsl:1`;
   [port lane 9](port-experimental.md#9-meadow-and-foliage)).
 - **A blade's pose is an authored program**: three or four `swings` per part
-  driven by state cells (`worlds/standard/foliage.puck:304-397`). Animated
+  driven by state cells (`worlds/standard/foliage.puck:409-554`). Animated
   placements bypass the pose-rate holds
   (`src/Puck.World.Client/WorldCreationInstances.Pack.cs:246-249`,
   `WorldCreationInstances.Rates.cs:192-195`), so every slot poses every frame.
