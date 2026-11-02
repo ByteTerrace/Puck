@@ -4,10 +4,10 @@ namespace Puck.Abstractions.Gpu;
 /// The ranges of one host table that still have to reach the GPU, as half-open <c>[start, start + length)</c> runs in
 /// the table's own unit (words for a device-local copy, bytes or words for a host-visible buffer). A range that
 /// touches the last run, or starts within the merge gap after it, extends that run, so a table dirtied in increasing
-/// order coalesces into as few runs as its changes allow; an out-of-order range merges into any run it overlaps or
+/// order coalesces into as few runs as its changes allow; an out-of-order range absorbs every run it overlaps or
 /// touches. The run count is bounded by the construction capacity: when a new run would exceed it, the runs closest
 /// together merge across the narrowest gaps until half the capacity remains, which keeps the upload correct and its run
-/// list bounded at the price of re-sending those gaps, and never joins two runs far apart (a table's head and a write at
+/// list sorted and disjoint at the price of re-sending those gaps, and never joins two runs far apart (a table's head and a write at
 /// its far end) while nearer runs stay apart. Allocation-free after construction.
 /// </summary>
 public sealed class GpuUploadRuns {
@@ -19,9 +19,6 @@ public sealed class GpuUploadRuns {
     private readonly int[] m_starts;
 
     private int m_count;
-    // The furthest end of any run, so a range that starts past it appends without looking for a run it overlaps: a
-    // table written in increasing order with scattered differences records each in constant time.
-    private int m_end;
 
     /// <summary>Initializes a new instance of the <see cref="GpuUploadRuns"/> class.</summary>
     /// <param name="capacity">The most runs held at once; at least two.</param>
@@ -55,61 +52,39 @@ public sealed class GpuUploadRuns {
 
         var end = checked((start + length));
 
-        if (m_count > 0) {
-            var last = (m_count - 1);
-
-            if (
-                (start >= m_starts[last]) &&
-                (start <= (m_ends[last] + m_mergeGap))
-            ) {
-                m_ends[last] = Math.Max(
-                    val1: end,
-                    val2: m_ends[last]
-                );
-                m_end = Math.Max(
-                    val1: end,
-                    val2: m_end
-                );
-
+        // Increasing writes keep the common append/extend case constant-time. The last run is the rightmost one.
+        if ((m_count > 0) && (start >= m_starts[(m_count - 1)])) {
+            if (((long)start) <= (((long)m_ends[(m_count - 1)]) + m_mergeGap)) {
+                m_ends[(m_count - 1)] = Math.Max(val1: end, val2: m_ends[(m_count - 1)]);
                 return;
             }
-
-            for (var index = 0; ((start <= m_end) && (index < m_count)); index++) {
-                if (
-                    (start <= m_ends[index]) &&
-                    (end >= m_starts[index])
-                ) {
-                    m_starts[index] = Math.Min(
-                        val1: start,
-                        val2: m_starts[index]
-                    );
-                    m_ends[index] = Math.Max(
-                        val1: end,
-                        val2: m_ends[index]
-                    );
-                    m_end = Math.Max(
-                        val1: end,
-                        val2: m_end
-                    );
-
-                    return;
-                }
-            }
-
-            if (m_count == m_starts.Length) {
-                Coarsen();
+            if (m_count < m_starts.Length) {
+                m_starts[m_count] = start;
+                m_ends[m_count++] = end;
+                return;
             }
         }
 
-        m_end = ((m_count == 0)
-            ? end
-            : Math.Max(
-                val1: end,
-                val2: m_end
-            ));
-        m_starts[m_count] = start;
-        m_ends[m_count] = end;
-        m_count++;
+        var first = 0;
+        while ((first < m_count) && (m_ends[first] < start)) { first++; }
+        var after = first;
+        while ((after < m_count) && (m_starts[after] <= end)) {
+            start = Math.Min(val1: start, val2: m_starts[after]);
+            end = Math.Max(val1: end, val2: m_ends[after]);
+            after++;
+        }
+        if ((first == after) && (m_count == m_starts.Length)) {
+            Coarsen();
+            Add(start: start, length: (end - start));
+            return;
+        }
+
+        // Absorb every touched run, not only the first: otherwise a bridging write leaves overlapping GPU copies.
+        Array.Copy(sourceArray: m_starts, sourceIndex: after, destinationArray: m_starts, destinationIndex: (first + 1), length: (m_count - after));
+        Array.Copy(sourceArray: m_ends, sourceIndex: after, destinationArray: m_ends, destinationIndex: (first + 1), length: (m_count - after));
+        m_starts[first] = start;
+        m_ends[first] = end;
+        m_count += (1 - (after - first));
     }
     /// <summary>Records as owed each run of words in which <paramref name="current"/> differs from
     /// <paramref name="previous"/> at the same index, and every word of <paramref name="current"/> past
@@ -160,24 +135,10 @@ public sealed class GpuUploadRuns {
     /// <returns>The run's start.</returns>
     public int Start(int index) => m_starts[index];
 
-    // Halves the run count by closing the smallest gaps: the runs are put in order of their starts, and each gap no wider
+    // Halves the run count by closing the smallest gaps: the runs are already ordered, and each gap no wider
     // than the one that leaves half the runs is closed, so the units re-sent are the narrowest gaps between runs and never
     // a span between runs far apart while nearer ones stay separate.
     private void Coarsen() {
-        // Runs recorded in increasing order, as a table's writes mostly are, are in order already.
-        for (var index = 1; (index < m_count); index++) {
-            if (m_starts[index] < m_starts[(index - 1)]) {
-                Array.Sort(
-                    items: m_ends,
-                    keys: m_starts,
-                    index: 0,
-                    length: m_count
-                );
-
-                break;
-            }
-        }
-
         var target = (m_starts.Length / 2);
         var closing = (m_count - target);
 

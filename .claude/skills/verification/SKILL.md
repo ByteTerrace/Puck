@@ -213,6 +213,11 @@ reports drift. Restore a fresh worktree once
 On Windows, refresh the private CLI only after any lease command hosted by that copy has exited: the lease
 process itself keeps its loaded DLLs locked while the child build runs. Copy after lease completion, or host
 the build lease from another CLI copy.
+Copy portable output into a fresh destination, or copy its contents when
+refreshing an existing one. PowerShell `Copy-Item <output-directory>
+-Destination <existing-directory> -Recurse` nests the output directory and
+leaves stale DLLs at the destination root. Check the entry DLL before launch;
+publish any queued runner's artifact pointer only after the copy finishes.
 
 When `puck schema` reports missing XML documentation, do not accept the resulting
 removal of schema descriptions: on the restricted Windows harness the generator's
@@ -276,9 +281,11 @@ because it looks in the default `bin` and `obj` directories.
   <law> --fix <revision>` proves a law against its fix in its own clone and
   never touches your tree.
 
-A custom test traversal outside `tests/` must pass `-p:PuckShaderSpirvEnabled=true`
-explicitly. It does not inherit `tests/Directory.Build.rsp`; a Windows project
-build otherwise removes SPIR-V outputs. CPU shader tests use a fake device but
+A Windows project build intended for a Vulkan run must pass
+`-p:PuckShaderSpirvEnabled=true` explicitly, including a private World artifact.
+A custom test traversal outside `tests/` needs the same flag because it does not
+inherit `tests/Directory.Build.rsp`; a Windows project build otherwise removes
+SPIR-V outputs. CPU shader tests use a fake device but
 still read the compiled bytecode, so missing fixtures cause failures and can leave
 asynchronous package tests waiting. Building both bytecode formats uses no GPU.
 

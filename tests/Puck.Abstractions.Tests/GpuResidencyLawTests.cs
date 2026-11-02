@@ -854,6 +854,20 @@ public sealed class GpuResidencyLawTests {
 
         _ = Assert.Throws<InvalidOperationException>(testCode: () => external.WriteRuns(runs: none, words: before));
     }
+    [Fact]
+    public void BridgingDirtyRangesCopyEveryWordOnceInEitherInsertionOrder() {
+        int[][] orders = [[0, 1, 2], [2, 1, 0], [1, 2, 0]];
+        foreach (var order in orders) {
+            var runs = new GpuUploadRuns(capacity: 8);
+            foreach (var index in order) { runs.Add(start: (10 * index), length: 2); }
+            runs.Add(start: 1, length: 20);
+            var writes = new int[22];
+            for (var run = 0; (run < runs.Count); run++) {
+                for (var word = runs.Start(index: run); (word < (runs.Start(index: run) + runs.Length(index: run))); word++) { writes[word]++; }
+            }
+            Assert.All(collection: writes, action: count => Assert.Equal(expected: 1, actual: count));
+        }
+    }
     // A run list past its capacity closes its narrowest gaps: runs packed at a table's head merge among themselves and a
     // run at its far end stays apart, so the units a flush stages stay near the units written rather than spanning the
     // table, as a mesh region's draw records and a mesh landing at its end would.

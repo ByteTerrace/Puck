@@ -1,4 +1,3 @@
-using System.Numerics;
 using Puck.Abstractions.Cameras;
 
 namespace Puck.SdfVm;
@@ -36,6 +35,13 @@ public readonly struct SdfMeshDetail {
     /// <summary>Gets the choice that draws every mesh's own triangles.</summary>
     public static SdfMeshDetail Finest => default;
 
+    // GPU selection's level controls, paired with sdf-mesh-selection.hlsli.
+    internal void WriteGpu(Span<System.Numerics.Vector4> rows, bool held) {
+        rows[0] = new(m_kind, m_forced, m_pixels / CoarserPixels, m_texel);
+        rows[1] = new(m_camera.Position, held ? 1f : 0f);
+        rows[2] = new(m_camera.Forward, FinerPixels / CoarserPixels);
+    }
+
     /// <summary>Returns the choice of a view's mesh pass.</summary>
     /// <param name="camera">The view's camera.</param>
     /// <param name="displayHeight">The pixels down the view's display extent, after upscaling.</param>
@@ -66,52 +72,6 @@ public readonly struct SdfMeshDetail {
         return new SdfMeshDetail(camera: default, forced: level, kind: 3, pixels: 0f, texel: 0f);
     }
 
-    /// <summary>Returns the level a pass draws a draw at.</summary>
-    /// <param name="mesh">The draw's mesh.</param>
-    /// <param name="box">The draw's box, or <see langword="null"/> for a draw no host box bounds.</param>
-    /// <param name="previous">The level the pass drew the draw at last frame, or a negative value for none, as a settled
-    /// capture passes so its still owes nothing to earlier frames.</param>
-    /// <returns>The level, from zero, the mesh's own triangles, to its <see cref="SdfMesh.Levels"/> count.</returns>
-    public int LevelOf(SdfMesh mesh, in SdfMeshBox? box, int previous) {
-        var levels = mesh.Levels;
-
-        if ((levels.Count == 0) || (m_kind == 0) || (box is not { } bounded)) {
-            return 0;
-        }
-        if (m_kind == 3) {
-            return Math.Min(val1: m_forced, val2: levels.Count);
-        }
-        if (m_kind == 2) {
-            var level = 0;
-
-            while ((level < levels.Count) && ((levels[level].Error * bounded.Stretch) <= m_texel)) {
-                level++;
-            }
-
-            return level;
-        }
-
-        // The box's nearest forward depth; a box reaching the eye's plane shows any error, so it draws its own triangles.
-        var toward = (bounded.Center - m_camera.Position);
-        var forward = m_camera.Forward;
-        var depth = ((((Vector3.Dot(vector1: toward, vector2: forward) - MathF.Abs(x: Vector3.Dot(vector1: bounded.HalfX, vector2: forward))) - MathF.Abs(x: Vector3.Dot(vector1: bounded.HalfY, vector2: forward))) - MathF.Abs(x: Vector3.Dot(vector1: bounded.HalfZ, vector2: forward))));
-
-        if (!(depth > 0f)) {
-            return 0;
-        }
-
-        var scale = ((m_pixels * bounded.Stretch) / depth);
-        var chosen = ((previous < 0) ? 0 : Math.Min(val1: previous, val2: levels.Count));
-
-        while ((chosen < levels.Count) && ((levels[chosen].Error * scale) <= CoarserPixels)) {
-            chosen++;
-        }
-        while ((chosen > 0) && ((levels[(chosen - 1)].Error * scale) > FinerPixels)) {
-            chosen--;
-        }
-
-        return chosen;
-    }
 }
 /// <summary>
 /// Which levels of detail a frame's raster passes draw (<see cref="SdfFrame.MeshDetail"/>): the choice by error each pass

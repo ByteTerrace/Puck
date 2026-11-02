@@ -10,16 +10,17 @@
 #include "../isa/sdf-mesh.interface.hlsli"
 #include "../frame/sdf-viewport.hlsli"
 #include "../frame/sdf-mesh.hlsli"
+#include "../frame/sdf-mesh-raster.hlsli"
 
 struct ShadowVertex {
     float4 position : SV_Position;
     float clip : SV_ClipDistance0;
 };
 
-ShadowVertex VSMain(uint vertexId : SV_VertexID) {
-    uint record = sdfMeshRecord((pushedIndex.index & SdfMeshDrawMask));
+ShadowVertex VSMain(uint vertexId : SV_VertexID SDF_MESH_DRAW_INPUT) {
+    uint record = sdfMeshRecord(sdfMeshRasterDraw(drawId));
     ViewportData view = worldView();
-    float3 world = sdfMeshWorldPosition(record, (vertexId + sdfMeshLevelIndex(record, (pushedIndex.index >> SDF_MESH_LEVEL_SHIFT))));
+    float3 world = sdfMeshWorldPosition(record, (vertexId + sdfMeshLevelIndex(record, sdfMeshRasterLevel(drawId))));
     float3 relative = (world - view.position.xyz);
     float w = dot(relative, view.forward.xyz);
     float near = worldNearDistance(view);
