@@ -504,21 +504,36 @@ To compare the skill against no skill on one result, name it twice:
 
 A Puck session always has `AGENTS.md` loaded, and a lane also preloads
 `delegate`, so the honest baseline is the rules without the skill, not an
-empty context. `run` puts that context where a real session delivers it, in
-the user turn: every case's `prompt.md` gets a `project-instructions` block
-ahead of its task, holding HEAD's `AGENTS.md` text, plus HEAD's
-`delegate/SKILL.md` body for every skill a lane loads (all but `delegate` and
-`orchestration`), each under a heading naming it. Both arms run with it, so
-the delta measures what the skill adds over the rules, and a case whose delta
-collapses marks skill text that duplicates `AGENTS.md`. The fixture never
-travels as `execution.append_system_prompt`: `claude plugin eval` passes that
-on the child's command line, which Windows caps far below the rules file's
-size. A fixture directory granted through `context.add_dirs` does not work: on Claude Code
-2.1.316 on Windows the session's `additional_directories` stays empty and the
-agent's reads of it are denied. Never grant the repository or
-`.claude/skills/`: the baseline arm would read the skill and the ablation would
-measure nothing. `--no-fixture` repeats a run made without the fixture, for
-comparison with it.
+empty context. `run` puts that context ahead of the task in every case's
+`prompt.md`, as a `project-instructions` block, the way a session delivers
+project instructions: HEAD's `AGENTS.md` text, plus HEAD's `delegate/SKILL.md`
+body for every skill a lane loads (all but `delegate` and `orchestration`),
+each under a heading naming it. It is never `append_system_prompt`, which
+`claude plugin eval` passes on the child's command line, where Windows caps it
+far below the rules file's size. Both arms run with the fixture, so the delta
+measures what the skill adds over the rules, and a case whose delta collapses
+marks skill text that duplicates `AGENTS.md`. A fixture directory granted
+through `context.add_dirs` does not work: on Claude Code 2.1.316 on Windows
+the session's `additional_directories` stays empty and the agent's reads of it
+are denied. Never grant the repository or `.claude/skills/`: the baseline arm
+would read the skill and the ablation would measure nothing. `--no-fixture`
+repeats a run made without the fixture, for comparison with it.
+
+**A preloaded skill is measured preloaded.** In a `with-without` run the
+with-arm only offers the skill, and the model decides whether to invoke it. An
+agent whose frontmatter preloads a skill (`delegate` in every writing lane,
+`review-passes` in the reviewer) always has it, so a with-arm run that never
+invoked it measures the rules alone and reads as the skill failing. Check a
+with-arm trace for the `Skill` call before blaming the teaching. `--preload` adds the skill's own body at `--revision` to the
+fixture and needs `--ablation none`, since the fixture reaches both arms. Its
+baseline is a `with-without` run's without arm:
+
+```text
+puck evals run delegate --preload --ablation none --revision <before> --cases '<glob>' --runs 5
+puck evals run delegate --preload --ablation none --cases '<glob>' --runs 5
+puck evals compare <before>/aggregate-result.json <after>/aggregate-result.json
+puck evals compare <with-without>/aggregate-result.json <after>/aggregate-result.json --a-arm without
+```
 
 ### Judge and model tiers
 
@@ -556,7 +571,7 @@ no-skill baseline arm. A case is one directory under the skill's `evals/`:
 - `graders/*.md`: each grader one of `regex`, `tool_used`, `tool_order`,
   `file_exists`, `llm` or `baseline`. There are no custom-code graders.
 - `case.yaml`, when the case needs `context` fields (`scaffold_script`,
-  `history_file`).
+  `history_file`). The fixture goes in `prompt.md`, never here.
 
 Cases are not split into training and held-out sets. An agent editing a skill
 reads every case, so a held-out set it can read holds nothing out, and the

@@ -2884,6 +2884,19 @@ Owner: specialist lane (puck-world, build and hot reload, input) · ordinary · 
 Owner: debug-world content lanes, each started by the owner's direction ·
 ordinary · Next: new content and art on the owner's call.
 
+- [high] Player-state defects found grounding the hub design
+  ([ground-hub.md](next-wave/ground-hub.md)). The design memo decides the
+  shape; these are defects whatever it decides:
+  - `WorldInstanceHost.DurableImages` is never assigned, so a persisted
+    destination loses its state when the process quits;
+  - `MachineCreationRequest.SavePath` is never set, so a cartridge's battery
+    save dies with the process;
+  - `WorldOwnedWorlds.IdentityBase` copies the whole host world into every
+    identity (30 MB in the debug world);
+  - `world.save` refuses on the debug world: it names the loop-generated
+    `sheddingRack1` as a parent, which `shedding.puck` does not export. Note
+    that `world.save` writes the world's source when it succeeds, so never run
+    it as a read against a working tree.
 - [high] The trees read as inflatable toys (owner's walkthrough, the lawn).
   - Canopies are a few smooth, drooping blended lobes, with no branch
     structure, leaf clumps, gaps or silhouette breakup.
@@ -3049,16 +3062,13 @@ the Monitor hook check.
     suite.
   - **Next:**
     1. Validate every below-ceiling grader against its traces
-       (`puck evals graders`).
-    2. Fix the real gaps:
-       - delegate d14 (one chokepoint), d16 (a design lane measures
-         nothing), and on Sonnet d03 (set aside) and d15 (finish line);
-       - Fable's one failed d01 run with the skill.
-    3. Cut the delegate text that only restates AGENTS.md (d06-d08 and d13
-       score the same in both arms).
-    4. Measure each edit before and after with `--revision`.
-    5. Run review-passes on Opus and Haiku.
-    6. A Fable review of the results before anything is called proven.
+       (`puck evals graders`) for the suites other than `delegate`.
+    2. Re-run `delegate` with `--preload --ablation none` on each tier, at
+       the revision before its grader repairs and at HEAD: its with-without
+       results mostly measured AGENTS.md, because the with-arm rarely invoked
+       the skill it preloads in a real lane.
+    3. Run review-passes on Opus and Haiku, preloaded as the reviewer has it.
+    4. A Fable review of the results before anything is called proven.
   - **Harness limits on Windows (Claude Code 2.1.316):**
     - `case.yaml` `context.add_dirs` grants nothing;
     - `append_system_prompt` travels on the command line and overflows it.
