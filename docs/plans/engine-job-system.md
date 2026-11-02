@@ -742,7 +742,7 @@ as `puck mesh audit` for bake defects.
 | **T3 Crossing scan partitions** | E3 by seat partition with occupancy deltas. | T0 on a fixture of 40 seats where two seats enter one party-travel door on one tick and seats straddle the 32-seat boundary; the crossing log (transfer tick, cohort) identical across counts and against the recording. |
 | **T2 Rigid advance partitions** | E1 for rigid bodies with partition scratch; the rigid share measured first; the one pose-read change re-recorded. | T0 on a fixture of 200 rigid bodies (a rack and a domino line) beside kit bodies whose producers target a rigid body; hashes identical across counts; `puck bench world` at 0 B median a tick; a standing `host.frames` simulate read against 6.3 ms. |
 | **R1 Parallel recording in waves** | Waves, prepare-before-fork with the fence first, residency upload and extent in preparation, in-order submission; the pose pack fork. Direct3D 12 and a windowed Vulkan boot. | `host.frames` produce avg at the lobby against 6.5 ms; a `world.at` script that moves a portal view and changes a screen's source every frame for 120 frames, with stills at three ticks compared as above with the serial build's on both backends (a one-frame-late read or a descriptor overwritten under a slot in flight shows as a localized difference beyond the noise); GPU-based validation clean on Direct3D 12 and the validation layer clean on Vulkan. |
-| **R2 GPU culling in the indirect path — built; hardware checks open** | GPU selection through `SdfMeshOcclusion`'s counted indirect draws for every raster pass, with persistent level history; CPU `Choose` removed. Owned by the rendering plan. Ordered compaction, (geometry, level) instance buckets and proportional updates follow in the [visibility plan](visibility.md#the-build-order). | [R2 observations](#r2-observations) records matched Vulkan produce, counts and pass costs, initial Direct3D 12 readings and the outstanding image and validation checks. |
+| **R2 GPU culling in the indirect path — built, checks recorded** | GPU selection through `SdfMeshOcclusion`'s counted indirect draws for every raster pass, with persistent level history; CPU `Choose` removed. Cascade entry/exit share selected arguments and count both executions. Ordered compaction, (geometry, level) instance buckets and proportional updates follow in the [visibility plan](visibility.md#the-build-order). | Settled meadow produce CPU → GPU: Direct3D 12 59.53–59.76 → 50.75 ms; Vulkan 58.41–59.43 → 51.82 ms. Full Direct3D 12 GPU validation and Vulkan synchronization validation clean; tolerant still comparisons inspected. [R2 observations](#r2-observations) records the counts, pass costs, unresolved Direct3D 12 lobby outlier and monitor residual. |
 | **B1 GI proportional to change** | The change-set closure; GI jobs under `Lighting`. | After a `world.reload` that removes a wall and one that moves a draw: the probe tables and a still compared with a full retrace's; `[sdf.mesh-gi]` probes traced against the whole window; the cold bake's GI seconds against 201 to 222. |
 | **M2b Probe block ownership** | Blocks owned by the cache with live-slice counts, native. | A walk into an untraced area for 60 s with `host.memory collect` every 10 s: managed heap flat, native blocks freed as sweeps converge (block count printed by `[sdf.mesh-gi]`); stills before and after compared as above. |
 | **M3 Native movers 4 and 5** | Unmanaged scratch leases, the split journal, numeric columns; the tick's deliveries. | T0 at every count; `puck bench world` unchanged; a scratch world whose rules overwrite text cells and rewind (`world.undo`) reads the restored text. |
@@ -833,8 +833,18 @@ Vulkan boot reaches readiness and submits 17 world dispatches while cold
 geometry is still pending; it does not replace the settled four-place check.
 
 Integration merge `e147b701a` adds shadow exit layers. R2 reuses the cascade's
-selected arguments for that second raster pass; fresh four-place Direct3D 12
-GPU validation and Vulkan synchronization validation of this merge are queued.
+selected arguments for that second raster pass. `b8a3fb1b5` stages each phase's
+execution count in the unused last control word (row 13.w), so generated
+draw/vertex totals include both consumers without selecting twice; arguments
+and history are unchanged. Vulkan synchronization validation passes on this
+exact build with bakes settled at tick 2,154: lobby / rim / gallery / meadow
+read 13,178 / 841 / 15,487 / 20,381 physical draws, with no warning or error.
+Full Direct3D 12 GPU/state-tracking/synchronized-queue validation also passes
+on this exact accounting build with bakes settled at tick 8: lobby / rim /
+gallery / meadow read 13,845 / 830 / 15,891 / 20,650 physical draws, with no
+warning or error. The cold bake is prepared before the instrumented run;
+an earlier combined cold-bake/full-validation attempt exceeded its 845-second
+time box and is excluded. Both completed final legs stay under 15 minutes.
 Release CLI and World builds, including DXIL and SPIR-V, pass with zero
 warnings/errors. Two debug fixtures pass `--reproduce` again on this merge:
 `input-clock30-tests.puck` (four verdicts) and `unbiased-draws-tests.puck`
