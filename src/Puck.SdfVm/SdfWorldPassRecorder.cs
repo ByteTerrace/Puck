@@ -879,19 +879,21 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         recorder.EndRenderPass(commandBufferHandle: commandBuffer);
 
         if (IsShadowCascade) {
-            // The exit layer: the same draws with the faces toward the light culled, into the part's second output.
+            // The exit layer, into the part's second output: a draw that encloses a solid with the faces toward the light
+            // culled, every other draw whole, as a thin caster whose faces are both where the light meets and leaves it.
             recorder.BeginRenderPass(
                 area: area,
                 commandBufferHandle: commandBuffer,
                 framebuffer: lateFramebuffer!
             );
             if (count > 0) {
-                RecordMeshDraws(
+                RecordExitDraws(
                     commandBuffer: commandBuffer,
                     count: count,
-                    pipeline: tables.ShadowExitPipeline,
+                    draws: draws,
                     recorder: recorder,
-                    set: set
+                    set: set,
+                    tables: tables
                 );
             }
             recorder.EndRenderPass(commandBufferHandle: commandBuffer);
@@ -985,6 +987,27 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
 
         for (var draw = 0u; (draw < count); draw++) {
             if (m_kept[draw]) {
+                RecordMeshDraw(commandBuffer: commandBuffer, draw: draw, pipeline: pipeline, recorder: recorder);
+            }
+        }
+    }
+    // Draws a cascade's exit layer: every kept draw that encloses a solid through the exit pipeline, then every other kept
+    // draw through the depth's, which culls nothing (SdfMeshDraw.EnclosesSolid).
+    private void RecordExitDraws(uint count, ReadOnlySpan<SdfMeshDraw> draws, SdfWorldTables tables, IGpuRecorder recorder, nint commandBuffer, nint set) {
+        for (var pass = 0; (pass < 2); pass++) {
+            var encloses = (pass == 0);
+            var pipeline = (encloses ? tables.ShadowExitPipeline : tables.ShadowPipeline);
+            var bound = false;
+
+            for (var draw = 0u; (draw < count); draw++) {
+                if (!m_kept[draw] || (draws[(int)draw].EnclosesSolid != encloses)) {
+                    continue;
+                }
+                if (!bound) {
+                    BindMesh(commandBuffer: commandBuffer, pipeline: pipeline, recorder: recorder, set: set);
+                    bound = true;
+                }
+
                 RecordMeshDraw(commandBuffer: commandBuffer, draw: draw, pipeline: pipeline, recorder: recorder);
             }
         }

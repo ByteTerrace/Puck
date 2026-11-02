@@ -121,7 +121,11 @@ Each waits on the owner: what the engine should do, how it looks and feels, and 
   keyable on the day clock; the debug world authors a readable deep-blue
   night). The Moth supports both cel and plain styles, swappable live for
   playtesting the way binding layouts are, through a generic material-style
-  switch (the illum1-fix2 lane).
+  switch: a palette row's `toonSelect` binds its style to a state cell, and
+  `moth.style Cel|Plain` swaps it with no rebake.
+- Which of the Moth's slots band under Cel: today all 31 palette slots do,
+  skin, hair and eyes included; removing `toonSelect` from a slot in
+  `worlds/debug/avatars/moth.puck` keeps it continuous.
 - Mesh shipping: nothing is built until a presenting client downloads packages,
   and then on a self-hosted GPU runner (the owner's deferral;
   [rendering plan](rendering.md)).
@@ -1502,16 +1506,6 @@ and warm builds measured.
   shader package directory holding binaries but no manifest; clearing
   `src/Puck.World/obj/Release/net11.0/worlds` and building again passed.
   Unconfirmed as a packaging race.
-- [high] A windowed Direct3D 12 debug World died on its sixth `world.reload` in
-  about ten minutes with an access violation in the native allocator, on a
-  bake worker loading a stored mesh: `MimallocAllocator.mi_malloc` ←
-  `OwnedBuffer<Vector3>.Resize` ← `SdfMesh.NativeCopy` ←
-  `SdfMeshLibrary.TryLoad` ← `SdfMeshPathBake.Load` ← `SdfMeshPathBake.Work`
-  (exit 139, `0xC0000005`, right after the reload's `[sdf.mesh-gi] scene`
-  line; the machine was short of memory, its working set paged down to
-  1.4 GB). Reproduce with repeated reloads under `world.wait bakes`, and check
-  whether a load can run against a mimalloc heap another thread owns or one a
-  reload has torn down. (from: c1-groundcover)
 
 ### The valley's terrain
 
@@ -1557,6 +1551,12 @@ lowers it to the same JSON as before, except where the look changes on purpose.
 
 Code that grew a second implementation (AGENTS.md rule 7) or costs velocity:
 
+- [low] Four copies of a `NativeMemory`-backed test `IAllocator` named `HeapAllocator`
+  (`tests/Puck.Vulkan.Tests/VulkanIndirectCountLawTests.cs:117`,
+  `VulkanValidationLivenessTests.cs:247`, `VulkanGroupedPipelineLayoutLawTests.cs:233`,
+  `VulkanGroupedBindingLawTests.cs:206`), while `IAllocator`'s documentation names a
+  `NativeMemory`-backed implementation that `src` does not have. One shared allocator
+  serves them, and `GuardedAllocator` can wrap it where a suite wants misuse checks.
 - Make `GpuRegion.Grow` the only way to grow a GPU region, and enforce the uniform
   view limit there (one lane):
   - [low] Growing the program region on `world.reload` waits for the device to go
@@ -1840,12 +1840,13 @@ and the order they land in; the items below are its findings and checks.
   depth image per cascade (16 MiB each at 2048 texels); its frame time is owed
   on a quiet machine. At a grazing light (a wrapped side at n·l = -0.25) the
   filter's slope clearance (`SdfMeshShadowSlopeBias`, 2.5 texels of depth per
-  texel of lateral distance) still lets a parallel slab within about 0.1 m
-  along the light half through; the exit layer removed the leak beyond that.
-  The debug world authors no `render.toon`, so `world.toon on` there bands only
-  materials with styles of their own until a default style is authored there,
-  which takes either a copy of `celStyle`'s values with `enabled: false` or a
-  `.puck` way to override one field of an imported value.
+  texel of lateral distance) still clears a parallel blocker that stands within
+  a few texels of depth of a receiver turned from the light: a 2 cm slab 0.10 m
+  along the light from a 3 mm panel at n·l = -0.25 shadows only speckles of it
+  on both backends, where 0.3 m at n·l = -0.45 shadows it whole.
+  A body clipped at a portal's glass or drawn under a mirror is a thin caster in
+  the exit layer (`SdfMeshDraw.EnclosesSolid`), so its own wrapped side past
+  the terminator is shadowed by its own lit side while it straddles the glass.
   `SdfPassPlanLawTests.ATemporalViewAddsOnlyItsHistoryAndReactivityOverTheSpatialGraph`
   fails on its own constant (201,139,200 bytes against 1,221,350,400 from the
   current `HistorySurfaceWords`), unrelated to the cascades.
@@ -2750,6 +2751,12 @@ the completed 70-stop comparison manifest.
 Owner: language lane (transpiler) · medium · Next: the inline console command
 hang, then the pre-`main` language findings.
 
+- [medium] `.puck` has no way to take an imported value and override one field
+  of it (`celStyle` with `enabled: false`), so a world that wants the standard's
+  cel style as a default that boots off copies all eleven values
+  (`worlds/debug/debug.puck`'s `render.toon`). Add the override (an object
+  update over a `let`, or a merge builtin beside `concat`), then point the
+  debug world's default at `celStyle`. (from: illum1-fix2)
 - [medium] An `enum` block inside a template is silently dropped from the
   compiled document, so a row naming the enum fails with PUCK119; the
   standard's `chaseCamera` writes its enum as a `state.enums` row to work around

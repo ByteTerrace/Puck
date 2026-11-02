@@ -1,21 +1,15 @@
-// What a seat that may not read some of a row's cells is told about that row, at every door a seat reaches: the probe
-// for "hidden answers as absent". Boot it headless with a schedule directory and an operator prelude on stdin that
-// mints zero, one or two cells only seat1 reads into `hand`, and the second seat's answers in the run's
-// test-run.json come out byte-identical whatever the prelude minted:
+// What a seat and a session that may not read some of a row's cells are told about that row: the smallest fixture of
+// the noninterference harness. `puck disclosure worlds/debug/disclosure-probe.puck` boots one world per variant of
+// disclosure-probe.disclosure.json beside it. Each variant's operator steps mint zero, one or two cells only seat1
+// reads into `hand` (or one only later), seat2 runs the same console lines in every world, and a replica and a
+// presentation session observe each world; anything seat2 or a session receives that differs between two variants is
+// a leak, named by the door that answered it.
 //
-//   dotnet run --project src/Puck.World -c Release -- --world worlds/debug/disclosure-probe.puck --devices none
-//     --headless --exit-after-seconds 4 --state-dir <dir> --schedule-dir <dir> < prelude.txt
-//
-// A prelude for two hidden members, operator lines the schedule runs after:
-//
-//   world.row.set state {"name":"hand","kind":"Int","visibility":{},"cells":[{"key":"a","value":1},
-//     {"key":"secret0","value":7,"visibility":{"readers":["seat1"]}},{"key":"secret1","value":8,
-//     "visibility":{"readers":["seat1"]}},{"key":"pub","value":3}]}
-//   world.state.cell.remove hand a
-//
-// Removing `a` leaves the row's members in non-contiguous slots, a storage shape no reader's answer may reflect. The
-// row's own `visibility {}` declares that its cells may carry their own readers, so it is a restricted row for every
-// seat whether or not a hidden member is present now.
+// The variants replace `hand` (dropping the public `a`) with their hidden cells first and add the public `pub` after,
+// so `pub` lands behind them in the row's storage and in `probe-hand`'s deal, a shape no reader's answer may reflect.
+// The row's own `visibility {}` declares that its cells may carry their own readers, so it is a restricted row for
+// every seat whether or not a hidden member is present now. `probe-hand` deals one card per cell of `hand`: what a
+// reader is shown of the dealt cards (their count, slots and positions) is a door too.
 
 schema: "puck.world.definition.v1"
 basis: "avatars/moth"
@@ -27,13 +21,63 @@ bodies {
   seatSpawns ["stage", "stage"]
 }
 
+// The sessions the harness observes from: the authority's name decides the tier.
+admission [
+  {
+    disclosure: Replica
+    domain: "replica"
+    grants [{ budget: 64, capability: Observe, subject: "all" }]
+    mode: FederatedAuthority
+  }
+  {
+    disclosure: Presentation
+    domain: "presentation"
+    grants [{ budget: 64, capability: Observe, subject: "all" }]
+    mode: FederatedAuthority
+  }
+]
+
 state {
   world {
     row {
       name: "hand"
       kind: "Int"
+      capacity: 4
       visibility {}
-      cells [{ key: "a", value: 1 }, { key: "pub", value: 3 }]
+      cells [{ key: "a", value: 1 }]
+    }
+  }
+}
+
+prototypes {
+  prototype "probeCard" {
+    document {
+      name: "probeCard"
+      palette [{ color: "#E8E2D0", roughness: 0.8 }]
+      schema: "puck.creation.v1"
+      shape Box "card" {
+        material: 0
+        position [0, 0, 0]
+        scale [0.06, 0.002, 0.09]
+      }
+    }
+  }
+}
+
+placements {
+  placement "probe-hand" {
+    prototype: "probeCard"
+    position [0, 0.8, 4]
+    distribution {
+      fill {
+        name: "none"
+        offset: 0
+        step: 0
+      }
+      region: lattice(stepA: [0.15, 0, 0], countA: 4, stepB: [0, 0, 0.2], countB: 1)
+    }
+    deal {
+      row: "hand"
     }
   }
 }
@@ -49,5 +93,6 @@ schedule {
     { tick: 20, principal: "seat2", command: "world.state.observe" }
     { tick: 20, principal: "seat2", command: "world.observe seat2" }
     { tick: 21, principal: "seat2", command: "world.row.step state.hand.max 1" }
+    { tick: 60, principal: "seat2", command: "world.state hand" }
   ]
 }

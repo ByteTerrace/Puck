@@ -27,6 +27,7 @@ public sealed partial class WorldRenderSettings {
     private Client.WorldShadowSettings m_shadowSlots;
     private bool m_temporal;
     private bool m_toonDefault;
+    private bool m_toonStyled;
     private bool? m_toonOverride;
     private float m_upscaleSharpness;
     private WorldSkyTier m_skyQuality;
@@ -46,6 +47,7 @@ public sealed partial class WorldRenderSettings {
         UpscaleSharpness = defaults.UpscaleSharpness;
         Temporal = defaults.Temporal;
         m_toonDefault = defaults.Toon?.IsOn ?? false;
+        m_toonStyled = defaults.Toon?.IsComplete ?? false;
         SkyQuality = defaults.SkyQuality;
         SkyFieldScale = defaults.SkyFieldScale;
         IndirectTier = (defaults.Indirect?.Tier ?? SdfIndirectTier.Medium);
@@ -147,6 +149,9 @@ public sealed partial class WorldRenderSettings {
     /// <summary>The live choice of the world's default cel style; until written it follows the document on reload. A
     /// material with a style of its own keeps it either way.</summary>
     public bool Toon { get => m_toonOverride ?? m_toonDefault; set { m_toonOverride = value; m_revision++; } }
+    /// <summary>Whether the world authors a complete default style (<c>render.toon</c> with every value), which
+    /// <see cref="Toon"/> switches; without one the world's default stays continuous whatever the lever says.</summary>
+    public bool ToonStyled => m_toonStyled;
     /// <summary>The session's override for nested worlds; null lets each world use its document default.</summary>
     public bool? ToonOverride => m_toonOverride;
     /// <summary>Reads the reloadable default cel style and updates the default echoed by the live lever.</summary>
@@ -155,6 +160,7 @@ public sealed partial class WorldRenderSettings {
     public SdfToon ResolveToon(WorldRenderDefaults render) {
         ArgumentNullException.ThrowIfNull(render);
         m_toonDefault = render.Toon?.IsOn ?? false;
+        m_toonStyled = render.Toon?.IsComplete ?? false;
         return ToonStyleDocument.ResolveDefault(toon: render.Toon, enabled: m_toonOverride);
     }
     /// <summary>The sky's quality tier (<c>world.sky-quality</c>): a layer below it writes no entry and counts no work,

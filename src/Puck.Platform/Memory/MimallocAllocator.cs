@@ -4,8 +4,41 @@ using System.Text.Json;
 
 namespace Puck.Memory;
 
+/// <summary>
+/// The engine's native allocator over mimalloc. The library is loaded and initialized by a thread of its own, named
+/// <c>mimalloc owner</c>, that waits without running until the process exits: mimalloc records the thread that loads
+/// it as its main thread, keeps that thread's heap state in static storage and tears it down when that thread exits,
+/// and a later thread that reuses the dead thread's TEB address then faults inside <c>mi_malloc</c>. A thread-pool
+/// worker, which exits when idle, must therefore never be the one that loads it.
+/// </summary>
 public sealed partial class MimallocAllocator : IAllocator, IAllocatorStatistics {
     private const string LibraryName = "mimalloc";
+    private const string OwnerThreadName = "mimalloc owner";
+
+    // Runs before any import of this class loads the library. The owner thread must not call into this class: its type
+    // initializer is still running, so the call would wait on it (Loader holds the import it makes instead).
+    static MimallocAllocator() {
+        var loaded = new TaskCompletionSource(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
+        var owner = new Thread(start: () => {
+            try {
+                Loader.mi_process_init();
+            } catch (Exception exception) {
+                _ = loaded.TrySetException(exception: exception);
+                return;
+            }
+            _ = loaded.TrySetResult();
+            Thread.Sleep(millisecondsTimeout: Timeout.Infinite);
+        }) { IsBackground = true, Name = OwnerThreadName };
+
+        owner.Start();
+        loaded.Task.GetAwaiter().GetResult();
+    }
+
+    private static partial class Loader {
+        [LibraryImport(LibraryName, EntryPoint = "mi_process_init")]
+        [UnmanagedCallConv(CallConvs = new[] { typeof(CallConvCdecl) })]
+        internal static partial void mi_process_init();
+    }
 
     [LibraryImport(LibraryName, EntryPoint = "mi_stats_get_json")]
     [UnmanagedCallConv(CallConvs = new[] { typeof(CallConvCdecl) })]
