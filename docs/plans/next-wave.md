@@ -49,8 +49,9 @@ Parallel lanes, with no shared files except where an order is named:
    share `SdfMeshPathBake.Dress`). An unboxed motion identity, slot-indexed
    instances, and no `ToArray` per rebuild.
 8. **Antigravity coding trial**: the `HeapAllocator` dedupe (five copies) and
-   the Superellipsoid far field and small radius
-   ([agent tooling](open-items.md#agent-tooling-and-skills)).
+   the Superellipsoid's far field ([certified field contact](open-items.md#certified-field-contact))
+   and small radius ([the valley's terrain](open-items.md#the-valleys-terrain));
+   the trial's scoring is in [agent tooling](open-items.md#agent-tooling-and-skills).
 
 Later, with their designs done: the [rule-faults](rule-faults.md) steps, the
 [transmission](transmission.md) lanes, and [disclosure](disclosure.md) steps

@@ -177,27 +177,17 @@ that precedes them.
 one execution path there is nothing to compare against itself, and the
 arena's hash differs from the frame's by construction. The comparable
 artifact is the canonical exported state document after a fixed scripted
-input sequence; the gate is the ported law suites, the acceptance corpus
-compiled and decompiled without diagnostics, every shipped world's export
-equal to the pre-rebuild export or different only where a named decision
-moved it, the browser determinism canary, and `puck landing`. Work units are
-exact and re-recorded with no tolerance, because the rebuild re-prices the
-operator table by design; wall time is the advisory tolerance, the median
-tick per world over five runs on the named recording machine within 1.25
-times the pre-rebuild record, and a faster run on different hardware is not
-evidence.
+input sequence, replayed at a fixed code version: `puck test --reproduce` runs
+a world twice and compares the exports byte for byte. A deliberate change to
+the operator table or to the state's meaning moves the export and is
+re-recorded in the change that makes it (AGENTS.md rule 4). Work units are
+exact, because they are counted, not timed. Wall time is a measurement read on
+a quiet machine, useful as a before-and-after comparison within one change,
+and never a recorded threshold a later run must stay within.
 
 **Search.** A position is keyed over the rows its plan names, not the whole
 arena; a tree job's draw seed is an authored plan field; chance nodes and
 per-seat scores refuse by name until their package lands.
-
-**Two spellings the rebuild fixed in shipped worlds.** The reveal gates in
-`klondike` and `spider` read an absent zone endpoint and recorded a counted
-refusal; a `when` gate now admits an expression comparison and they read
-`?? 1`, which keeps the same answer. The ribbon a Penrose board slides along
-is the de Bruijn ribbon, the long straight run through a rhomb's parallel
-sides, numbered one row per axis; the literal chain of thin rhombs is never
-longer than two tiles.
 
 ## Capacities
 
