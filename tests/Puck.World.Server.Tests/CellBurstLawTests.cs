@@ -20,8 +20,12 @@ public sealed class CellBurstLawTests {
             KindMask: WorldMutationKindCatalog.KindsOf(section: WorldSection.State)), Principal.Console);
     }
 
-    [Fact]
-    public void AGuestBurstKeepsEveryJournalEntryAndReplaysAsIndividualMutations() {
+    // A guest's decisions belong to the checkpoint's tick, so they never enter the external-edit recovery tail; an
+    // external burst does, one entry per write, and replays as individual mutations.
+    [InlineData(false, 13)]
+    [InlineData(true, 0)]
+    [Theory]
+    public void ABurstKeepsEveryAppliedWriteAndJournalsOnlyExternalEntries(bool guest, int journaled) {
         var definition = Fixtures.BuildDocument().WithWorldState([Row(name: "counter")]);
         using var fixture = Fixtures.FreshServer(definition);
 
@@ -32,10 +36,10 @@ public sealed class CellBurstLawTests {
         fixture.Server.MutationJournalTap = (tick, engineTick, mutation) => journal.Add(item: (tick, engineTick, mutation));
         fixture.Server.EchoTap = echoes.Add;
         for (var index = 0; (index < 13); index++) {
-            fixture.Server.EnqueueMutation(Write(kind: WorldDocumentWriteKind.Add, row: "counter", value: 1), sourceAddonInstanceId: 7, actOrdinal: ((ushort)index));
+            fixture.Server.EnqueueMutation(Write(kind: WorldDocumentWriteKind.Add, row: "counter", value: 1), sourceAddonInstanceId: (guest ? 7L : -1L), actOrdinal: ((ushort)index));
         }
         fixture.Step();
-        Assert.Equal(13, journal.Count);
+        Assert.Equal(journaled, journal.Count);
         Assert.Equal(13, echoes.Count);
         Assert.All(echoes, echo => Assert.False(condition: echo.Rejected));
         Assert.All(journal, entry => Assert.IsType<WorldMutation.UpsertStateCell>(@object: entry.Mutation));
@@ -46,9 +50,9 @@ public sealed class CellBurstLawTests {
         foreach (var entry in journal) {
             Assert.True(condition: replay.Server.TryApplyJournalTailMutation(engineTick: entry.EngineTick, mutation: entry.Mutation, tick: entry.Tick));
         }
-        Assert.Equal(fixture.DefinitionBytes(), replay.DefinitionBytes());
+        Assert.Equal((guest ? 0 : 13), replay.Server.ExportDefinition().State[0].Cells![0].Value.AsInt);
         // Reuse must start from today's row, with neither yesterday's values nor a rejected load left in scratch.
-        fixture.Server.EnqueueMutation(Write(kind: WorldDocumentWriteKind.Add, row: "counter", value: 2), sourceAddonInstanceId: 7);
+        fixture.Server.EnqueueMutation(Write(kind: WorldDocumentWriteKind.Add, row: "counter", value: 2), sourceAddonInstanceId: (guest ? 7L : -1L));
         fixture.Step();
         Assert.Equal(15, fixture.Server.ExportDefinition().State[0].Cells![0].Value.AsInt);
     }

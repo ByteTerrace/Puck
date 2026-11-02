@@ -56,6 +56,7 @@
         <Compile Include="../Shared/World/CrossingIdentityFixtures.cs" Link="World/CrossingIdentityFixtures.cs" />
         <Compile Include="../Shared/World/DeferredVerbFixtures.cs" Link="World/DeferredVerbFixtures.cs" />
         <Compile Include="../Shared/World/DocumentCompositionCollection.cs" Link="World/DocumentCompositionCollection.cs" />
+        <Compile Include="../Shared/World/EditorBarFixtures.cs" Link="World/EditorBarFixtures.cs" />
         <Compile Include="../Shared/World/EditorPlacementFixtures.cs" Link="World/EditorPlacementFixtures.cs" />
         <Compile Include="../Shared/World/EndingSink.cs" Link="World/EndingSink.cs" />
         <Compile Include="../Shared/World/FakeObjectBlobStore.cs" Link="World/FakeObjectBlobStore.cs" />

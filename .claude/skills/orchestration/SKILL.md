@@ -467,6 +467,13 @@ window it has cleared of every other lane's builds, suites, evals and World
 runs. A brief that measures boot, compile or frame time grants no GPU and
 takes no timing while other lanes run.
 
+`puck lease list` is how the lead sees lease pressure: each of build, gpu and
+heavy with its holder, lane and how long it has held, then its queue in
+admission order with each waiter's wait. Read it before granting a GPU or heavy
+leg and while draining for a settle window, to see which lane a window waits on
+(a holder far past its time box is the one to ask), and `puck lanes` for the same
+queues per lane.
+
 Settle windows are how the lead clears it. The owner's loose deadlines were
 meant as these periods; the lead now schedules them by state, not the clock:
 - **Trigger:** a wave of related lanes has landed, or a decision waits on a

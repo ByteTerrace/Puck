@@ -11,4 +11,14 @@ exports {
   reads [day]
 }
 
-dayCycle(daySeconds: 1440, start: 10, noonElevation: 46, heading: 37, cloudiness: 0.3, moonPeak: 6, moonColor: "#7088E8", nightLuminance: 1, starLuminance: 3)
+dayCycle(
+  daySeconds: 1440,
+  start: 10,
+  noonElevation: 46,
+  heading: 37,
+  cloudiness: 0.3,
+  moonPeak: 6,
+  moonColor: "#7088E8",
+  nightLuminance: 1,
+  starLuminance: 3
+)

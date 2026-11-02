@@ -8,7 +8,7 @@ namespace Puck.World.Games.Tests;
 /// passes.</summary>
 public sealed class WorldEditorSectionLawTests {
     private static readonly WorldEditorDefaults Valid = new(
-        Bar: WorldBindingBarAuthoring.Absent,
+        Bar: EditorBarFixtures.Bar,
         Camera: new WorldEditorCamera(FlyRate: 6f, MaxDistance: 14f, MaxPitch: 1.35f, MinDistance: 0.5f, MinPitch: 0.05f, OrbitRate: 2.4f, PanRate: 3f, ZoomRate: 1.2f),
         Grid: new WorldEditorGrid(LineWidth: 1.5f, Mode: WorldEditorGridMode.Surface, Pitch: new DocumentVector3(x: 1f, y: 1f, z: 1f), PlaneY: 0f, Visible: false),
         ReadOnlyLabel: "read-only",
@@ -21,7 +21,7 @@ public sealed class WorldEditorSectionLawTests {
 
         _ = WorldDefinitionValidator.TryValidateLocally(
             compilation: out _,
-            definition: (Fixtures.BuildDocument() with { EditorRaw = editor }),
+            definition: (Fixtures.BuildDocument() with { EditorRaw = editor }).WithRestingPage(),
             errors: errors
         );
 
