@@ -257,6 +257,19 @@ compiled-catalog budget by family and cardinality, before materializing it.
 Expose those costs through `world.budget`; they are load-time resource limits,
 not a justification to charge dormant actions as live channels.
 
+## An overlay replaces only what it declares
+
+A context overlay that takes over the player's controls while they are engaged
+replaces only the pages it declares; every other binding stays the player's
+(the owner's ruling). Today's case is a board: its Board page replaces page 1,
+the resting page, while the trigger pages, the wheel and the rest keep working
+as the player set them. The board is the simple test of what vehicles will do.
+
+An overlay takes over more only by declaring it explicitly, and an overlay may
+declare several pages. Undeclared pages and binds fall through to the player's
+own. Neither the engine nor an overlay strips them implicitly, and the bar's
+layout, model and scale stay the player's preference.
+
 ## Switching releases input
 
 Switching releases input **by default**. A document may keep an action's held
