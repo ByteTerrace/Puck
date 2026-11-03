@@ -171,6 +171,9 @@ public static class WorldBootComposition {
         // The bodies each tick steps, and the parked rigid bodies a contact-field change wakes.
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: WorldBodyWork.Process);
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: Puck.SignedDistance.Queries.SdfBoundsCache.ProcessWork);
+        services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: Puck.SignedDistance.Queries.SdfFieldEvaluator.PointWork);
+        services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: Puck.SignedDistance.Queries.SdfQueryWork.ProcessWork);
+        services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: WorldCreationWork.ProcessWork);
 
         // The owned-world catalog (files under the state root; the storage.* verbs sync it to the per-user cloud
         // container): loaded once at startup, malformed documents refused by name — the roster and the settings verbs

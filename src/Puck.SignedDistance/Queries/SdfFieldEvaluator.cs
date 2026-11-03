@@ -1587,12 +1587,12 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
         difference = FixedQ4816.Zero;
 
         if (
-            !TryDistance(
+            !TryGradientTap(
             distance: out var positive,
             material: out _,
             position: (position + offset)
         ) ||
-            !TryDistance(
+            !TryGradientTap(
             distance: out var negative,
             material: out _,
             position: (position + (-offset))
@@ -1604,6 +1604,10 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
         difference = (positive - negative);
 
         return true;
+    }
+    private bool TryGradientTap(FixedPosition position, out FixedQ4816 distance, out int material) {
+        SdfQueryWork.ProcessWork.Count(kind: SdfQueryWork.GradientTaps);
+        return TryDistance(position: position, distance: out distance, material: out material);
     }
     // === Elementwise FixedVector3 helpers (System.Numerics.Vector3 offers these as instance methods; FixedVector3
     // does not, so this file supplies the handful the interpreted op set needs) ==========================================
@@ -1684,6 +1688,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
     /// <returns><see langword="true"/> when every probe <see cref="TryDistance(FixedPosition, out FixedQ4816, out int)"/> call succeeded and the raw gradient was
     /// non-zero.</returns>
     public bool TryFieldGradient(FixedPosition position, FixedQ4816 epsilon, out FixedVector3 gradient) {
+        SdfQueryWork.ProcessWork.Count(kind: SdfQueryWork.Gradients);
         gradient = FixedVector3.Zero;
 
         var step = ((epsilon > FixedQ4816.Zero)
@@ -1720,6 +1725,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
             difference: out var differenceZ
         )
         ) {
+            SdfQueryWork.ProcessWork.Count(kind: SdfQueryWork.FailedGradients);
             return false;
         }
 
@@ -1730,6 +1736,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
         ).Normalize();
 
         if (normalized == FixedVector3.Zero) {
+            SdfQueryWork.ProcessWork.Count(kind: SdfQueryWork.FailedGradients);
             return false;
         }
 

@@ -27,6 +27,12 @@ weighs a Puck-native combination beside the borrowed technique and says which
 wins. Every published number below keeps its original hardware and workload;
 none is a prediction for Puck.
 
+The current [dense-landscape milestone](dense-landscapes.md) includes continuous
+forest, roads, shrubs and grass. Its fresh baseline and L0/L1 sequencing focus
+this plan's V1/V2 work together with static-copy sharing and CPU field queries.
+This page continues to own the visibility/instance design; the landscape page
+owns the composed workload and its measurements.
+
 ## Where visibility stands
 
 The round read the code, and the plan rests on these facts. Paths are under

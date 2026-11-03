@@ -158,120 +158,137 @@ internal static class SdfFieldMarch {
     // travel it needs without re-marching.
     internal static MarchOutcome Run<TSampler>(ref TSampler sampler, FixedPosition origin, FixedVector3 direction, FixedQ4816 maxDistance, FixedQ4816 radius, FixedQ4816 stepScale, int exactBudget, int boundBudget, bool hasShape, out RayHit hit)
         where TSampler : struct, ISdfMarchSampler {
-        hit = default;
+        var observedSamples = 0;
+        var observedExact = 0;
+        var observedBounds = 0;
+        var failedSamples = 0;
+        SdfQueryWork.ProcessWork.Count(kind: SdfQueryWork.Marches);
 
-        var unit = direction.Normalize();
+        try {
+            hit = default;
 
-        if (
-            (unit == FixedVector3.Zero) ||
-            (maxDistance <= FixedQ4816.Zero)
-        ) {
-            return MarchOutcome.Miss;
-        }
+            var unit = direction.Normalize();
 
-        var position = origin;
-        var traveled = FixedQ4816.Zero;
-        var lastMaterial = 0;
-        var exactSamples = 0;
-        var boundSamples = 0;
+            if (
+                (unit == FixedVector3.Zero) ||
+                (maxDistance <= FixedQ4816.Zero)
+            ) {
+                return MarchOutcome.Miss;
+            }
 
-        while (true) {
-            if (!sampler.TrySample(
-                distance: out var fieldDistance,
-                exact: out var exact,
-                material: out var material,
-                position: position,
-                radius: radius
-            )) {
-                // A shape-free program genuinely has nothing on the ray; anything else is a point the program's frame
-                // cannot express, which proves neither hit nor miss.
-                return (hasShape
-                    ? Exhaust(
+            var position = origin;
+            var traveled = FixedQ4816.Zero;
+            var lastMaterial = 0;
+            var exactSamples = 0;
+            var boundSamples = 0;
+
+            while (true) {
+                observedSamples++;
+                if (!sampler.TrySample(
+                    distance: out var fieldDistance,
+                    exact: out var exact,
+                    material: out var material,
+                    position: position,
+                    radius: radius
+                )) {
+                    failedSamples++;
+                    // A shape-free program genuinely has nothing on the ray; anything else is a point the program's frame
+                    // cannot express, which proves neither hit nor miss.
+                    return (hasShape
+                        ? Exhaust(
+                            hit: out hit,
+                            material: lastMaterial,
+                            position: position,
+                            traveled: traveled
+                        )
+                        : MarchOutcome.Miss
+                    );
+                }
+
+                if (exact) { observedExact++; } else { observedBounds++; }
+
+                if (exact
+                    ? (exactSamples >= exactBudget)
+                    : (boundSamples >= boundBudget)) {
+                    return Exhaust(
                         hit: out hit,
                         material: lastMaterial,
                         position: position,
                         traveled: traveled
-                    )
-                    : MarchOutcome.Miss
+                    );
+                }
+
+                if (exact) {
+                    exactSamples++;
+                } else {
+                    boundSamples++;
+                }
+
+                lastMaterial = material;
+
+                var clearance = (fieldDistance - radius);
+
+                if (clearance <= HitEpsilon) {
+                    // Normal is deliberately NOT computed here — see RayHit.Normal's remarks. Call TryFieldGradient at
+                    // hit.Point if a future consumer needs it.
+                    hit = new RayHit(
+                        Confidence: WorldQueryConfidence.Exact,
+                        Distance: traveled,
+                        Material: material,
+                        Normal: FixedVector3.Zero,
+                        Point: position
+                    );
+
+                    return MarchOutcome.Hit;
+                }
+
+                if (traveled >= maxDistance) {
+                    return MarchOutcome.Miss;
+                }
+
+                // The tick floor sits on the field, before the radius comes off, and it is what makes this stop condition
+                // subordinate to the accept arm for a point cast. The two are otherwise in different units — accept tests
+                // the raw field against HitEpsilon (raw 66), this tests the scaled field against zero — and they cross at
+                // stepScale 978/65536 (~0.0149): below it a descent stops one raw tick short of a surface the accept arm's
+                // own premise places within HitEpsilon + 1 tick, and TryGroundHeight folds that to "no ground" over every
+                // column of such a program. Floored, a point advance is at least one tick at every representable step
+                // scale, so the only non-accepting end to a point march is a sample budget.
+                // Overstep bound: the floor bites only where the proof-backed advance is already under one tick, and one
+                // tick (2^-16 world units) is both the smallest step the format expresses and 1/66 of the band the accept
+                // arm already calls contact, so a point march passes the true surface by less than one tick and the next
+                // iteration accepts on the negative field inside. Geometry thinner than one tick is under the format.
+                // Radius casts are bit-identical: for radius >= one tick, max(floor(f*s), tick) - radius <= 0 exactly when
+                // floor(f*s) - radius <= 0, so a sweep still stops before advancing into the contact envelope.
+                var safeAdvance = (FixedQ4816.Max(
+                    x: ScaleDistanceDown(
+                        distance: fieldDistance,
+                        scale: stepScale
+                    ),
+                    y: FixedQ4816.Epsilon
+                ) - radius);
+
+                if (safeAdvance <= FixedQ4816.Zero) {
+                    return Exhaust(
+                        hit: out hit,
+                        material: material,
+                        position: position,
+                        traveled: traveled
+                    );
+                }
+
+                var step = FixedQ4816.Min(
+                    x: safeAdvance,
+                    y: (maxDistance - traveled)
                 );
+
+                traveled += step;
+                position += (unit * step);
             }
-
-            if (exact
-                ? (exactSamples >= exactBudget)
-                : (boundSamples >= boundBudget)) {
-                return Exhaust(
-                    hit: out hit,
-                    material: lastMaterial,
-                    position: position,
-                    traveled: traveled
-                );
-            }
-
-            if (exact) {
-                exactSamples++;
-            } else {
-                boundSamples++;
-            }
-
-            lastMaterial = material;
-
-            var clearance = (fieldDistance - radius);
-
-            if (clearance <= HitEpsilon) {
-                // Normal is deliberately NOT computed here — see RayHit.Normal's remarks. Call TryFieldGradient at
-                // hit.Point if a future consumer needs it.
-                hit = new RayHit(
-                    Confidence: WorldQueryConfidence.Exact,
-                    Distance: traveled,
-                    Material: material,
-                    Normal: FixedVector3.Zero,
-                    Point: position
-                );
-
-                return MarchOutcome.Hit;
-            }
-
-            if (traveled >= maxDistance) {
-                return MarchOutcome.Miss;
-            }
-
-            // The tick floor sits on the field, before the radius comes off, and it is what makes this stop condition
-            // subordinate to the accept arm for a point cast. The two are otherwise in different units — accept tests
-            // the raw field against HitEpsilon (raw 66), this tests the scaled field against zero — and they cross at
-            // stepScale 978/65536 (~0.0149): below it a descent stops one raw tick short of a surface the accept arm's
-            // own premise places within HitEpsilon + 1 tick, and TryGroundHeight folds that to "no ground" over every
-            // column of such a program. Floored, a point advance is at least one tick at every representable step
-            // scale, so the only non-accepting end to a point march is a sample budget.
-            // Overstep bound: the floor bites only where the proof-backed advance is already under one tick, and one
-            // tick (2^-16 world units) is both the smallest step the format expresses and 1/66 of the band the accept
-            // arm already calls contact, so a point march passes the true surface by less than one tick and the next
-            // iteration accepts on the negative field inside. Geometry thinner than one tick is under the format.
-            // Radius casts are bit-identical: for radius >= one tick, max(floor(f*s), tick) - radius <= 0 exactly when
-            // floor(f*s) - radius <= 0, so a sweep still stops before advancing into the contact envelope.
-            var safeAdvance = (FixedQ4816.Max(
-                x: ScaleDistanceDown(
-                    distance: fieldDistance,
-                    scale: stepScale
-                ),
-                y: FixedQ4816.Epsilon
-            ) - radius);
-
-            if (safeAdvance <= FixedQ4816.Zero) {
-                return Exhaust(
-                    hit: out hit,
-                    material: material,
-                    position: position,
-                    traveled: traveled
-                );
-            }
-
-            var step = FixedQ4816.Min(
-                x: safeAdvance,
-                y: (maxDistance - traveled)
-            );
-
-            traveled += step;
-            position += (unit * step);
+        } finally {
+            SdfQueryWork.ProcessWork.Add(amount: observedSamples, kind: SdfQueryWork.Samples);
+            SdfQueryWork.ProcessWork.Add(amount: observedExact, kind: SdfQueryWork.ExactSamples);
+            SdfQueryWork.ProcessWork.Add(amount: observedBounds, kind: SdfQueryWork.BoundSamples);
+            SdfQueryWork.ProcessWork.Add(amount: failedSamples, kind: SdfQueryWork.FailedSamples);
         }
     }
     // Both operands are non-negative on every call. FixedQ4816 multiplication rounds to nearest, which can round a

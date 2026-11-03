@@ -152,7 +152,10 @@ agent works in that mode by default, without asking:
     but none is judged by its isolated delta alone: a small measured gain is
     kept when it simplifies, unifies or opens a design the next step builds
     on, because Puck's code and processes should pay dividends, not incur
-    debt. Practices from established projects that exist for compatibility
+    debt. Wall clock is one metric: watch the counted work, allocations,
+    storage, transfers and other costs that can improve it alongside timing;
+    a timing sample alone never describes the value of a change (the owner's
+    reminder). Practices from established projects that exist for compatibility
     (no API or behaviour change, the smallest possible change) do not carry
     over; their evidence practices do.
   - Ergonomic is optimal (the owner's ruling). Cost depends on what a

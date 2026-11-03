@@ -34,14 +34,17 @@ on an invariant is designed and reviewed before code
 ([orchestration](../../.claude/skills/orchestration/SKILL.md)). The debug
 world is the proving ground, so every plan's checks run on it, and what the
 experimental worlds have that it lacks is ported into it
-([port](#port-the-experimental-worlds-missing-features)). Items 0 to 3 are
-planned as lanes in [the next wave](next-wave.md), which starts on the owner's
-word.
+([port](#port-the-experimental-worlds-missing-features)). The current focus is
+[dense landscapes](#dense-landscapes), including continuous forest in the first
+milestone. The owner requested its baseline and implementation plan; the
+[next-wave lanes](next-wave.md) supply its existing engineering work.
 
-0. [The frame thread's CPU field queries](#other-frame-time-findings) [high,
-   the frame bar]: every standard stop fails 60 FPS on both backends, bound by
-   the frame thread, and at the meadow half of it is creation-effector surface
-   probes and the chase camera's clearance march.
+0. [Dense landscapes](#dense-landscapes) [high, the first landscape milestone]:
+   continuous forest, roads, shrubs and grass at the performance target; lead
+   with counted query/motion work and the shared instance contract. The fresh
+   [baseline and implementation order](dense-landscapes.md) keep CPU field
+   queries first and connect static-copy sharing, retained updates, GPU
+   instancing, geometry/shadow work and memory to one proving landscape.
 1. [Memory](#memory-on-the-deck-tier) [high, the Deck]: the debug world's
    process plus GPU memory at or under 10 GB on the Deck tier, attribution
    first.
@@ -195,6 +198,20 @@ Each waits on the owner: what the engine should do, how it looks and feels, and 
 - The ideas [awaiting review](#awaiting-the-owners-review).
 
 ## Work packets
+
+### Dense landscapes
+
+Owner: the lead, with performance, rendering and world-authoring owners per
+step · high · Next: [L0, L0m and L1](dense-landscapes.md#implementation-order),
+query/motion accounting, early memory attribution and the one geometry/instance
+contract, including wind-deformed canopy GI semantics. The owner
+includes continuous forest in the first milestone, alongside roads, shrubs,
+grass and trees; scattered groves do not satisfy it. The
+[plan](dense-landscapes.md) owns the fresh measurements, connected woodland
+proposal, counted-work metrics and implementation dependencies. Existing
+visibility, bake, memory, terrain and job-system packets own the mechanisms.
+The first baseline contains no forest or cold-store qualification; motion
+witnesses and target-device measurements remain explicit next work.
 
 ### Engine job system
 
@@ -3044,8 +3061,9 @@ ordinary · Next: new content and art on the owner's call.
 
 ### Agent tooling and skills
 
-Owner: the lead · ordinary · Next: finish the skill-eval program below, then
-the Monitor hook check.
+Owner: the lead · ordinary · Next: address skill-readiness issues affecting
+the selected landscape lanes. The broader skill-eval program below and the
+Monitor hook check remain supporting work alongside the landscape priority.
 
 - [high] The skill-eval program
   ([evaluate an agent skill](../development/documentation.md#evaluate-an-agent-skill),
@@ -3308,13 +3326,6 @@ runs until the owner calls for qualification; then each is a packet.
 Ideas discussed with the owner and not yet queued. None starts until the owner
 reviews it and says so (the owner's ruling).
 
-- **Ground cover and vegetation.** Forests are authorable today (a tree creation
-  with a `Noise` or `Scatter` placement distribution under the one-pixel rule),
-  but dense ground cover is a gap: presentation-only GPU instancing of grass and
-  low plants placed by density masks from terrain material, slope and height and
-  fading into the ground material; wind motion by vertex displacement; billboard
-  or impostor tiers for distant forest; bending and trampling through the weather
-  decision's track layer; terrain material blending by slope and height.
 - **Tonemapping.** One curve exists (`render.tonemap` `Filmic`: Uchimura's Gran
   Turismo fit, per RGB channel, SDR peak 1.0, in `place.comp.hlsl`), and the
   debug world authors none, so its sky, sun and emissives clip at white.

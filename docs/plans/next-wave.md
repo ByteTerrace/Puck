@@ -1,5 +1,12 @@
 # The next wave
 
+The owner's current focus is [dense landscapes](dense-landscapes.md), including
+continuous forest in the first milestone. Its current-source baseline and
+implementation plan are requested now. The lanes below are inputs to that
+plan; its L0/L1 order leads the next engineering batch. Ground cover no longer
+waits in the owner-review ideas list. Broad skill evaluation is supporting work,
+with readiness issues for the selected lanes addressed as they are found.
+
 The lane plan for [Next](open-items.md#next) items 0 to 3, ready to launch. It
 starts only on the owner's explicit word (the owner's ruling). Three read-only
 grounding passes checked every premise against the code at the main landing; each
@@ -15,8 +22,10 @@ has consumed them.
 The integration branch is `lead/fundamentals`, pushed and complete.
 1. Check it out in the main checkout, which tracks the integration branch.
 2. Work from a worktree off it.
-3. Pick up from the [agent tooling](open-items.md#agent-tooling-and-skills)
-   item's skill-eval program, then the steps below, before the owner's go.
+3. Read the [landscape baseline and next action](dense-landscapes.md#next-action)
+   and recheck its cited sources. Keep the remaining
+   [agent-tooling work](open-items.md#agent-tooling-and-skills) alongside the
+   selected lanes rather than restarting the whole eval program first.
 
 Eval results and traces stay under each skill's git-ignored
 `evals/results/` on the machine that ran them. Another machine re-runs both
@@ -91,9 +100,9 @@ Later, with their designs done: the [rule-faults](rule-faults.md) steps, the
 ## Before the owner's go
 
 - The lift waits on the owner's go.
-- The skill-eval program finishes first, so the lanes start on proven
-  `delegate` and orchestration skills
-  ([agent tooling](open-items.md#agent-tooling-and-skills)).
+- Address demonstrated skill-readiness issues for the selected lanes; the
+  remaining broad [skill-eval program](open-items.md#agent-tooling-and-skills)
+  runs alongside the landscape work.
 - Design the player menu, player saves and the hub to worlds shape before any
   code ([the owner's rulings](../decisions/play.md#the-game)).
   1. A read-only grounding pass finds what already exists: identity and

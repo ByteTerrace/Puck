@@ -191,6 +191,7 @@ public sealed partial class WorldCreationInstances {
                 continue;
             }
 
+            WorldCreationWork.ProcessWork.Count(kind: WorldCreationWork.Visited);
             var (rootPosition, rootRotation, placementScale) = RootPose(
                 client: client,
                 live: live
@@ -269,6 +270,8 @@ public sealed partial class WorldCreationInstances {
                     live.RateSeconds += deltaSeconds;
                     live.RateOwed = true;
                     m_rateCounts?.Count(kind: SdfUpdateRateCounts.BodiesHeld);
+                    WorldCreationWork.ProcessWork.Count(kind: WorldCreationWork.RateHeld);
+                    WorldCreationWork.ProcessWork.Add(amount: packedSlots, kind: WorldCreationWork.SlotsRetained);
                 } else {
                     // A pose held while nothing could show it resumes as a continuity cut: its followers, plants and
                     // drivers relatch where the body is now, as after a teleport, rather than advancing over every
@@ -279,6 +282,9 @@ public sealed partial class WorldCreationInstances {
                         live.RootEpoch = -1;
                     }
 
+                    WorldCreationWork.ProcessWork.Count(kind: WorldCreationWork.Posed);
+                    WorldCreationWork.ProcessWork.Add(amount: packedSlots, kind: WorldCreationWork.SlotsPosed);
+                    if (live.BodyIndex is null) { WorldCreationWork.ProcessWork.Count(kind: WorldCreationWork.PlacementsPosed); }
                     PackRegistration(
                         client: client,
                         deltaSeconds: (unseen ? deltaSeconds : (live.RateSeconds + deltaSeconds)),
@@ -311,6 +317,9 @@ public sealed partial class WorldCreationInstances {
                 ),
                     owner: index
                 );
+            } else {
+                WorldCreationWork.ProcessWork.Count(kind: WorldCreationWork.Retained);
+                WorldCreationWork.ProcessWork.Add(amount: packedSlots, kind: WorldCreationWork.SlotsRetained);
             }
 
             NoteRate(center: rootPosition, live: live, packedSlots: packedSlots, posed: posed, radius: RateReach(live: live, placementScale: placementScale), rootSlot: rootSlot);

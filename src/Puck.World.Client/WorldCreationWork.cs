@@ -1,0 +1,31 @@
+using Puck.Abstractions.Counting;
+
+namespace Puck.World.Client;
+
+/// <summary>Actual creation posing and surface-probe work across the composed World, including authored placements.</summary>
+public static class WorldCreationWork {
+    /// <summary>Live registrations considered by a pose pack.</summary>
+    public static WorkKind Visited { get; } = new(name: "sdf.creations.registrations.visited", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Registrations whose authored pose programs ran.</summary>
+    public static WorkKind Posed { get; } = new(name: "sdf.creations.registrations.posed", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Registrations retaining their pose because no input or continuation owed work.</summary>
+    public static WorkKind Retained { get; } = new(name: "sdf.creations.registrations.retained", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Registrations whose pose evaluation was held by the existing rate mechanism.</summary>
+    public static WorkKind RateHeld { get; } = new(name: "sdf.creations.registrations.rate-held", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Placed registrations, rather than body-rooted registrations, whose pose programs ran.</summary>
+    public static WorkKind PlacementsPosed { get; } = new(name: "sdf.creations.placements.posed", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Transform slots owned by evaluated registrations.</summary>
+    public static WorkKind SlotsPosed { get; } = new(name: "sdf.creations.slots.posed", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Transform slots retained without authored pose evaluation.</summary>
+    public static WorkKind SlotsRetained { get; } = new(name: "sdf.creations.slots.retained", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Surface-target requests, including invalid or fieldless ones.</summary>
+    public static WorkKind Probes { get; } = new(name: "sdf.creations.probes.requests", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Surface-target requests answered by the existing exact-input answer cache.</summary>
+    public static WorkKind ProbeHits { get; } = new(name: "sdf.creations.probes.cache-hits", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Valid surface-target requests that missed that cache and ran the query.</summary>
+    public static WorkKind ProbeMisses { get; } = new(name: "sdf.creations.probes.cache-misses", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Requests with no field, positive reach or direction, answered without occupying the cache.</summary>
+    public static WorkKind ProbeSkipped { get; } = new(name: "sdf.creations.probes.skipped", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Process totals; read twice to measure a window. Posed, retained and rate-held partition visited registrations.</summary>
+    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.creations", kinds: [Visited, Posed, Retained, RateHeld, PlacementsPosed, SlotsPosed, SlotsRetained, Probes, ProbeHits, ProbeMisses, ProbeSkipped]);
+}
