@@ -128,4 +128,15 @@ public static class CliGit {
             : string.Empty);
         return (mainCheckout.Length != 0);
     }
+    /// <summary>Resolves the integration branch: the branch the main checkout holds, which by the repository's
+    /// convention tracks the integration branch while lanes work in linked worktrees.</summary>
+    /// <param name="repository">Any worktree of the repository.</param>
+    /// <param name="branch">The branch's short name, or empty when the main checkout cannot be named or is detached.</param>
+    /// <returns><see langword="true"/> when resolved.</returns>
+    public static bool TryResolveIntegrationBranch(string repository, out string branch) {
+        branch = (TryResolveMainCheckout(repository: repository, mainCheckout: out var mainCheckout)
+            ? Run(mainCheckout, "symbolic-ref", "--short", "-q", "HEAD").Stdout.Trim()
+            : string.Empty);
+        return (branch.Length != 0);
+    }
 }

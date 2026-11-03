@@ -485,7 +485,7 @@ public static partial class LanesCommand {
     /// <param name="clock">The CLI clock.</param>
     /// <returns>The command.</returns>
     public static Command Create(TimeProvider clock) {
-        var baseOption = new Option<string>(name: "--base") { DefaultValueFactory = static _ => "lead/catch-up", Description = "The integration branch commits ahead are counted from." };
+        var baseOption = new Option<string?>(name: "--base") { Description = "The integration branch commits ahead are counted from; defaults to the branch the main checkout holds." };
         var jsonOption = new Option<bool>(name: "--json") { Description = "Print the rows as one JSON document." };
         var stallOption = new Option<int>(name: "--stall") { DefaultValueFactory = static _ => 30, Description = "Minutes without progress (a writer's write, a findings-only lane's log output) after which an active lane that holds no lease and waits for none is marked STALL." };
         var watchOption = new Option<int?>(name: "--watch") { Description = "Poll for this many minutes (0 until cancelled) and print only what changes: a lane finishing, stalling or resuming, a lease changing, a lane appearing or leaving." };
@@ -500,7 +500,7 @@ public static partial class LanesCommand {
 
             One line per worktree, the main checkout first, then by name:
               state name branch ahead N files N commit <age> "<subject>" write <age> log <age> (<exit>) lease <uses> brief <trailer>
-            ahead counts commits on the branch not on --base (default lead/catch-up). files is
+            ahead counts commits on the branch not on --base (default: the branch the main checkout holds). files is
             paths with a staged or unstaged change. write is the newest write among the git index,
             the git log of HEAD, the changed files, the worktree's .claude/scratch/ entries and the
             lane's log; the log is .claude/scratch/<name>.log (or <branch>.log) in the worktree or the
@@ -537,9 +537,16 @@ public static partial class LanesCommand {
             if (interval < 1) { return Task.FromResult(result: CliExit.Refuse(verb: Verb, what: "--interval", why: "must be at least one second.")); }
             if (watch < 0) { return Task.FromResult(result: CliExit.Refuse(verb: Verb, what: "--watch", why: "must be nonnegative.")); }
             if ((watch is not null) && result.GetValue(option: jsonOption)) { return Task.FromResult(result: CliExit.Refuse(verb: Verb, what: "--json", why: "cannot combine with --watch.")); }
+            string baseRef;
+
+            if (result.GetValue(option: baseOption) is { Length: > 0 } given) {
+                baseRef = given;
+            } else if (!CliGit.TryResolveIntegrationBranch(repository: ".", branch: out baseRef)) {
+                return Task.FromResult(result: CliExit.Refuse(verb: Verb, what: "--base", why: "has no default: the main checkout holds no branch; pass the integration branch."));
+            }
             return ((watch is { } minutes)
-                ? WatchAsync(baseRef: result.GetValue(option: baseOption)!, cancellationToken: cancellationToken, clock: clock, interval: TimeSpan.FromSeconds(seconds: interval), leaseRoot: null, minutes: minutes, repository: ".", stall: TimeSpan.FromMinutes(minutes: stall))
-                : ExecuteAsync(baseRef: result.GetValue(option: baseOption)!, cancellationToken: cancellationToken, clock: clock, json: result.GetValue(option: jsonOption), leaseRoot: null, repository: ".", stall: TimeSpan.FromMinutes(minutes: stall)));
+                ? WatchAsync(baseRef: baseRef, cancellationToken: cancellationToken, clock: clock, interval: TimeSpan.FromSeconds(seconds: interval), leaseRoot: null, minutes: minutes, repository: ".", stall: TimeSpan.FromMinutes(minutes: stall))
+                : ExecuteAsync(baseRef: baseRef, cancellationToken: cancellationToken, clock: clock, json: result.GetValue(option: jsonOption), leaseRoot: null, repository: ".", stall: TimeSpan.FromMinutes(minutes: stall)));
         });
         return command;
     }

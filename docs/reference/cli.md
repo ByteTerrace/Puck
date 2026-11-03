@@ -4293,8 +4293,8 @@ with read-only calls and stats the git index, the changed files, the worktree's
 active  controls  codex/controls  ahead 3 files 2 commit 14m "controls: ..." write 2m log 2m lease gpu:queued#5(2/3,ahead 4) brief controls done
 ```
 
-- `ahead` counts commits on the branch that `--base` (default
-  `lead/catch-up`) lacks; `files` counts paths with a staged or unstaged change.
+- `ahead` counts commits on the branch that `--base` (default:
+  the branch the main checkout holds) lacks; `files` counts paths with a staged or unstaged change.
 - `commit` is the last commit's age and subject; `brief` is the last `Brief:`
   trailer between the base and HEAD.
 - `write` is the age of the newest write among the git index, the git log of
