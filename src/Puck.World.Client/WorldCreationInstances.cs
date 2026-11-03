@@ -221,6 +221,7 @@ public sealed partial class WorldCreationInstances {
         // WorldGaitDrivers. A placement without a body reads its root pose and world state with no body facts;
         // time and ungated/state-driven swings work there too.
         public bool DriverSeeded;
+        public WorldGaitDrivers.Activity DriverActivity;
         public WorldEntityAddress DriverAddress;
         public Vector3 DriverPosition;
 

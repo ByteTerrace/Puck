@@ -77,6 +77,10 @@ public sealed class WorldStateLease {
                 }
             }
 
+            foreach (var slot in m_templates) {
+                changed = Math.Max(val1: changed, val2: mirror.Changed(slot: slot));
+            }
+
             return changed;
         }
     }

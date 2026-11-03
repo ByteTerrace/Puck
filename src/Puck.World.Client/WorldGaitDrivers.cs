@@ -18,6 +18,15 @@ namespace Puck.World.Client;
 /// (default <see cref="CreationDriverDocument.WeightSeconds"/>) instead of freezing mid-stride when the gate flips.</remarks>
 public static class WorldGaitDrivers {
 
+    /// <summary>One driver evaluation's counted work and remaining activity. Initialization charges no clock;
+    /// integration counts positive-time nonzero-cadence updates, while phase changes count actual stored changes.</summary>
+    /// <param name="Initialized">Whether the runtime seeded its pose and cleared the driver state.</param>
+    /// <param name="Evaluations">The number of declared drivers evaluated.</param>
+    /// <param name="Integrations">The number of integrating drivers charged a positive-time signal.</param>
+    /// <param name="PhaseChanges">The number of drivers whose stored phase changed.</param>
+    /// <param name="Continues">Whether a later positive-time evaluation is still owed without an external change.</param>
+    public readonly record struct Activity(bool Initialized, int Evaluations, int Integrations, int PhaseChanges, bool Continues);
+
     /// <summary>The travel one frame may charge to an integrating phase, world units — clamps a teleport or an
     /// authority snap so it cannot spin a limb through dozens of cycles in one frame. Shared with the procedural
     /// catalog rig's own gait so a creation limb and a catalog limb answer a jump the same way.</summary>
@@ -62,7 +71,9 @@ public static class WorldGaitDrivers {
     /// <param name="definition">The live definition whose <c>curves</c> rows a driver's
     /// <see cref="CreationDriverDocument.CadenceBy"/> and <see cref="CreationDriverDocument.WeightBy"/> read, or
     /// <see langword="null"/>, which leaves both unscaled.</param>
-    public static void Advance(IReadOnlyList<CreationDriverDocument>? drivers, Span<float> phases, Span<float> weights, float deltaSeconds, BodyFacts facts, Vector3 position, Quaternion orientation, ref Vector3 lastPosition, ref Quaternion lastOrientation, ref bool seeded, ref WorldEntityAddress lastAddress, ref float easedSpeed, WorldEntityAddress address, WorldStateLease? reads = null, WorldGaitKinematics? kinematics = null, WorldDefinition? definition = null) {
+    /// <returns>The work performed and whether a later positive-time advance remains eligible, independently of
+    /// output pose equality.</returns>
+    public static Activity Advance(IReadOnlyList<CreationDriverDocument>? drivers, Span<float> phases, Span<float> weights, float deltaSeconds, BodyFacts facts, Vector3 position, Quaternion orientation, ref Vector3 lastPosition, ref Quaternion lastOrientation, ref bool seeded, ref WorldEntityAddress lastAddress, ref float easedSpeed, WorldEntityAddress address, WorldStateLease? reads = null, WorldGaitKinematics? kinematics = null, WorldDefinition? definition = null) {
         if (
             !seeded ||
             (lastAddress != address)
@@ -76,7 +87,7 @@ public static class WorldGaitDrivers {
             weights.Clear();
             kinematics?.Reset();
 
-            return;
+            return new(Initialized: true, Evaluations: 0, Integrations: 0, PhaseChanges: 0, Continues: (drivers is { Count: > 0 }));
         }
 
         var travel = (position - lastPosition);
@@ -94,6 +105,8 @@ public static class WorldGaitDrivers {
             x: travel.X,
             y: travel.Z
         ).Length();
+
+        var previousSpeed = easedSpeed;
 
         easedSpeed += (((((deltaSeconds > 0f)
             ? (groundTravel / deltaSeconds)
@@ -113,7 +126,7 @@ public static class WorldGaitDrivers {
         );
 
         if (drivers is not { Count: > 0 } rows) {
-            return;
+            return default;
         }
 
         var planar = MathF.Min(
@@ -134,8 +147,14 @@ public static class WorldGaitDrivers {
             val2: phases.Length
         );
 
+        var integrations = 0;
+        var phaseChanges = 0;
+        var continues = ((previousSpeed != easedSpeed) || ((blend <= 0f) && (easedSpeed != 0f)) || (kinematics?.MotionContinues ?? false));
+
         for (var index = 0; (index < count); index++) {
             var driver = rows[index];
+            var previousPhase = phases[index];
+            var previousWeight = weights[index];
             var holds = GateHolds(
                 facts: facts,
                 gate: driver.When,
@@ -176,6 +195,8 @@ public static class WorldGaitDrivers {
                 : weight
             );
 
+            continues |= ((weights[index] != previousWeight) || ((driverBlend <= 0f) && (weights[index] != level)));
+
             var cadence = (driver.Cadence.Value * ((driver.CadenceBy is { } cadenceBy)
                 ? CurveOf(
                     curve: cadenceBy,
@@ -198,6 +219,7 @@ public static class WorldGaitDrivers {
                     rows: rows
                 ));
 
+                phaseChanges += ((phases[index] != previousPhase) ? 1 : 0);
                 continue;
             }
             if (CreationDriverDocument.IsStateSignal(signal: driver.Signal)) {
@@ -219,12 +241,15 @@ public static class WorldGaitDrivers {
                     target: stateTarget
                 ) ?? stateTarget);
 
+                phaseChanges += ((phases[index] != previousPhase) ? 1 : 0);
+                continues |= (kinematics?.FollowerContinues(index: index) ?? false);
                 continue;
             }
             if (!CreationDriverDocument.Integrates(signal: driver.Signal)) {
                 // A frame that charged no time (a held capture) has no rate to read: the phase holds what the last
                 // frame with time read, where a zero rate would drop a speed-driven swing to rest.
                 if (deltaSeconds <= 0f) {
+                    continues |= (kinematics?.FollowerContinues(index: index) ?? false);
                     continue;
                 }
 
@@ -250,6 +275,8 @@ public static class WorldGaitDrivers {
                     target: target
                 ) ?? target);
 
+                phaseChanges += ((phases[index] != previousPhase) ? 1 : 0);
+                continues |= (kinematics?.FollowerContinues(index: index) ?? false);
                 continue;
             }
 
@@ -257,6 +284,12 @@ public static class WorldGaitDrivers {
                 continue;
             }
 
+            continues |= ((driver.Signal is CreationDriverDocument.SignalTime) && (cadence != 0f));
+            if ((deltaSeconds <= 0f) || (cadence == 0f)) {
+                continue;
+            }
+
+            integrations++;
             // Wrapped into [0, 2π) every frame: both waveforms are 2π-periodic in their argument, so wrapping is
             // exact for the motion and is what keeps a rotor's phase from losing float precision after an hour.
             phases[index] = VectorFunctions.WrapTurn(radians: (phases[index] + (cadence * (driver.Signal switch {
@@ -264,7 +297,10 @@ public static class WorldGaitDrivers {
                 CreationDriverDocument.SignalTravel => total,
                 _ => deltaSeconds,
             }))));
+            phaseChanges += ((phases[index] != previousPhase) ? 1 : 0);
         }
+
+        return new(Initialized: false, Evaluations: count, Integrations: integrations, PhaseChanges: phaseChanges, Continues: continues);
     }
     /// <summary>Applies a rigid delta (<c>x → R·x + t</c>) to a shape's creation-space pose.</summary>
     /// <param name="deltaRotation">The delta's rotation.</param>

@@ -744,6 +744,26 @@ public sealed partial class WorldCreationInstances {
             return false;
         }
 
+        state = RigState(live: live, shapeName: shapeName);
+        return true;
+    }
+
+    /// <summary>Reads a live registration's last packed rig state, including placements that have no body.</summary>
+    /// <param name="registration">The registration index reported by creation inspection.</param>
+    /// <param name="state">The last packed rig state, or null when no registration occupies the index.</param>
+    /// <param name="shapeName">An optional shape whose chained delta to read.</param>
+    /// <returns>Whether a live registration answered.</returns>
+    public bool TryRegistrationRig(int registration, out WorldRigState? state, string? shapeName = null) {
+        state = null;
+        if (((uint)registration >= (uint)m_pool.Length) || (m_pool[registration] is not { } live)) {
+            return false;
+        }
+
+        state = RigState(live: live, shapeName: shapeName);
+        return true;
+    }
+
+    private static WorldRigState RigState(Registration live, string? shapeName) {
         var document = live.Creation.EngineDocument;
         var drivers = new List<WorldRigDriver>();
         var effectors = new List<WorldRigEffector>();
@@ -784,16 +804,15 @@ public sealed partial class WorldCreationInstances {
             ));
         }
 
-        state = new WorldRigState(
+        return new WorldRigState(
             Creation: live.Creation.Id,
             Drivers: drivers,
             Effectors: effectors,
             Speed: live.DriverSpeed
         ) {
             Shape = ((shapeName is null) ? null : RigShape(live: live, shapes: (document.Shapes ?? []), shapeName: shapeName)),
+            Activity = live.DriverActivity,
         };
-
-        return true;
     }
 
     // The named shape's resolved parent and chained delta as the last pack left them; an absent shape answers with
@@ -868,4 +887,6 @@ public readonly record struct WorldRigEffector(string Name, float Weight, bool P
 public sealed record WorldRigState(string Creation, float Speed, IReadOnlyList<WorldRigDriver> Drivers, IReadOnlyList<WorldRigEffector> Effectors) {
     /// <summary>Gets the shape the read asked about, or <see langword="null"/> when it named none.</summary>
     public WorldRigShape? Shape { get; init; }
+    /// <summary>Gets the last driver advance's counted work and retained continuation.</summary>
+    public WorldGaitDrivers.Activity Activity { get; init; }
 }
