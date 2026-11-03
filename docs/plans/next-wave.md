@@ -98,6 +98,10 @@ Later, with their designs done: the [rule-faults](rule-faults.md) steps, the
      The memo is [the hub, player saves and the player menu](hub-and-saves.md).
   3. Fable reviews the memo before any lane builds it.
 
+  Parked by the owner after step 2, to talk the design through first. The
+  memo ([hub-and-saves.md](hub-and-saves.md)) is a draft for that
+  conversation; no review or lane runs until it ends.
+
 ## The settle window that closes the wave
 
 It measures:
