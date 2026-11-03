@@ -3052,23 +3052,31 @@ the Monitor hook check.
   run with `puck evals`). The lead runs every suite; lanes write cases.
   Results stay on disk under each skill's git-ignored `evals/results/`, with
   traces.
-  - **Done:**
-    - `delegate` on Sonnet, Opus and Fable, judged by Opus and Fable;
-    - `orchestration` on Opus.
-  - **To run:** the six skills whose graders were repaired (boy-scout,
-    content-search, dotnet-performance, gaming-bricks, maths-laws and
-    maths-usage), on Sonnet with a Sonnet judge. Use the `puck evals run`
-    loop the lead ran: `--ablation with-without`, `-j 4`, a cost ceiling per
-    suite.
-  - **Next:**
-    1. Validate every below-ceiling grader against its traces
-       (`puck evals graders`) for the suites other than `delegate`.
-    2. Re-run `delegate` with `--preload --ablation none` on each tier, at
-       the revision before its grader repairs and at HEAD: its with-without
-       results mostly measured AGENTS.md, because the with-arm rarely invoked
-       the skill it preloads in a real lane.
-    3. Run review-passes on Opus and Haiku, preloaded as the reviewer has it.
-    4. A Fable review of the results before anything is called proven.
+  - **Done and graders validated:**
+    - delegate: graders repaired, gaps fixed, AGENTS.md duplicates cut.
+    - orchestration: 42 graders rewritten and 13 deleted; the lead fixed four
+      contradictions in the skill.
+    - The six suites ran on Sonnet with the AGENTS.md fixture. Skill vs none:
+      maths-laws, maths-usage, content-search and dotnet-performance gain
+      strongly. boy-scout gains only +0.04 over AGENTS.md, so shrink it to
+      what only it adds. gaming-bricks needs a `--preload` run to separate
+      teaching from triggering.
+  - **Partly run:** delegate's before/after with `--preload`. Sonnet before
+    (rev 2ad8ce0b46) is done.
+  - **To run, in value order** (no Fable, the owner's instruction):
+    1. delegate after, Sonnet: `--preload --ablation none --runs 5`, Opus
+       judge;
+    2. delegate before and after, Opus;
+    3. delegate with-without at HEAD, Sonnet and Opus;
+    4. orchestration with-without at HEAD, Opus;
+    5. orchestration before (rev 3349359b6d) and after, `--preload
+       --ablation none`, Opus;
+    6. gaming-bricks and review-passes with `--preload`.
+
+    Then: `puck evals compare`, and a review of the results by an Opus
+    reviewer plus a Codex cross-check.
+  - **Usage:** the week's subscription was at 96% when this was written. Runs
+    bill the same subscription, so gate each run on `claude -p "/usage"`.
   - **Harness limits on Windows (Claude Code 2.1.316):**
     - `case.yaml` `context.add_dirs` grants nothing;
     - `append_system_prompt` travels on the command line and overflows it.
