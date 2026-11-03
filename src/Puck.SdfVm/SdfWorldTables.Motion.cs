@@ -24,7 +24,6 @@ public sealed partial class SdfWorldTables {
     private readonly GpuUploadRuns m_changedMeshMatrices = new(capacity: GpuRegion.MaxCopyRuns);
     private readonly GpuUploadRuns m_previousMeshCopies = new(capacity: GpuRegion.MaxCopyRuns);
     private readonly GpuUploadRuns m_seededMeshDraws = new(capacity: GpuRegion.MaxCopyRuns);
-
     // Whether the next upload seeds a whole previous table from the current one.
     private bool m_seedDynamicHistory = true;
     private bool m_seedMeshHistory = true;
@@ -175,9 +174,9 @@ public sealed partial class SdfWorldTables {
         // as well as readers and region-upload shader writes. First use in a new Direct3D 12 recording is COMMON;
         // its tracker supplies any state established earlier in this recording instead.
         m_gpu.Recorder.MemoryBarrier(commandBufferHandle: commandBuffer,
-            sourceAccessMask: GpuAccess.ShaderRead | GpuAccess.ShaderWrite | GpuAccess.CopyWrite,
-            sourceStageMask: TableReaders | GpuStage.Transfer,
-            destinationAccessMask: GpuAccess.TransferRead | GpuAccess.CopyWrite, destinationStageMask: GpuStage.Transfer);
+            destinationAccessMask: GpuAccess.TransferRead | GpuAccess.CopyWrite,
+            destinationStageMask: GpuStage.Transfer,
+            sourceAccessMask: GpuAccess.ShaderRead | GpuAccess.ShaderWrite | GpuAccess.CopyWrite, sourceStageMask: TableReaders | GpuStage.Transfer);
         m_gpu.Recorder.TransitionBuffer(bufferHandle: source.BufferHandle, commandBufferHandle: commandBuffer,
             sourceAccessMask: GpuAccess.None, sourceStageMask: GpuStage.TopOfPipe,
             destinationAccessMask: GpuAccess.TransferRead, destinationStageMask: GpuStage.Transfer);
@@ -195,7 +194,7 @@ public sealed partial class SdfWorldTables {
     }
     // Observes and packs one record through the same door for full and incremental staging.
     private void StageMeshDraw(int index, in SdfMeshDraw draw, Span<uint> record, ReadOnlySpan<byte> old) {
-        var observation = m_meshHistory.Observe(index: index, draw: in draw);
+        var observation = m_meshHistory.Observe(draw: in draw, index: index);
 
         SdfMeshRegion.WriteDraw(draw: in draw, placement: m_meshArena.Placements[draw.Mesh], generation: observation.Generation, record: record);
         SdfMeshHistory.ProcessWork.Count(kind: SdfMeshHistory.RecordsPacked);
@@ -220,10 +219,10 @@ public sealed partial class SdfWorldTables {
             offset: 0
         );
 
-        for (var index = 0; index < draws.Count; index++) {
+        for (var index = 0; (index < draws.Count); index++) {
             var draw = draws[index];
 
-            StageMeshDraw(index: index, draw: in draw, record: words.Slice(start: (index * SdfMeshRecord.DrawWords), length: SdfMeshRecord.DrawWords), old: old);
+            StageMeshDraw(index: index, draw: in draw, record: words.Slice(length: SdfMeshRecord.DrawWords, start: (index * SdfMeshRecord.DrawWords)), old: old);
         }
         m_meshHistory.RetireAfter(count: draws.Count);
 

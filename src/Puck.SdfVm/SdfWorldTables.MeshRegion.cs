@@ -28,6 +28,7 @@ public sealed partial class SdfWorldTables {
         if (m_disposed) { return; }
         if (Interlocked.Exchange(location1: ref m_meshTrimRequested, value: 1) == 0) { Puck.Hosting.Jobs.MemoryAccount.Shared.DeferTrim(); }
     }
+
     /// <summary>Releases, on the frame thread, the placement claims of meshes the latest draws no longer name when the
     /// process account has asked its caches to trim since the last call; otherwise does nothing.</summary>
     internal void ServiceMemoryTrim() {
@@ -275,7 +276,7 @@ public sealed partial class SdfWorldTables {
             if ((index < draws.Count) && (draws[index] is var draw) && !SameDraw(left: in draw, right: in m_stagedDraws[index])) {
                 var record = records.Slice(length: SdfMeshRecord.DrawWords, start: (index * SdfMeshRecord.DrawWords));
 
-                StageMeshDraw(index: index, draw: in draw, record: record, old: old);
+                StageMeshDraw(draw: in draw, index: index, old: old, record: record);
                 if (draw.Glass != m_stagedDraws[index].Glass) {
                     m_glassDrawCount = (draw.Glass ? (m_glassDrawCount + 1) : (m_glassDrawCount - 1));
                 }

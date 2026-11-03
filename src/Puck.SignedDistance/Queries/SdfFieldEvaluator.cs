@@ -501,7 +501,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
         var depths = new int[instructions.Count];
         // Per pop, the shapes its scope holds; -1 for every other instruction.
         var held = new int[instructions.Count];
-        Span<int> shapesAtPush = stackalloc int[SdfProgramBuilder.MaxFieldScopeDepth + 1];
+        Span<int> shapesAtPush = stackalloc int[(SdfProgramBuilder.MaxFieldScopeDepth + 1)];
         var depth = 0;
         var shapes = 0;
 
@@ -528,7 +528,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
             }
         }
 
-        Span<bool> ok = stackalloc bool[SdfProgramBuilder.MaxFieldScopeDepth + 2];
+        Span<bool> ok = stackalloc bool[(SdfProgramBuilder.MaxFieldScopeDepth + 2)];
 
         ok.Fill(value: true);
 
@@ -540,9 +540,9 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
                 case SdfOp.PopField: {
                         var hard = HardCompose(blend: instruction.Blend);
 
-                        deferred[index] = ((instruction.Blend == ((uint)SdfBlendOp.Union)) && (instruction.Data1.Y > 0f) && ok[at - 1] && (held[index] == shapes));
-                        ok[at] = (hard && ok[at - 1]);
-                        ok[at - 1] &= hard;
+                        deferred[index] = ((instruction.Blend == ((uint)SdfBlendOp.Union)) && (instruction.Data1.Y > 0f) && ok[(at - 1)] && (held[index] == shapes));
+                        ok[at] = (hard && ok[(at - 1)]);
+                        ok[(at - 1)] &= hard;
                         break;
                     }
                 case SdfOp.ShapeBlend: {
@@ -577,7 +577,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
     // carries the factor its own deferred scopes left; every composition is at most as steep as its steepest operand
     // times that factor, so the factors multiply down a nesting and take the greatest across siblings.
     private static FixedQ4816 CertifiedStepScale(SdfProgram program, CompiledInstruction[] compiled) {
-        Span<double> content = stackalloc double[SdfProgramBuilder.MaxFieldScopeDepth + 1];
+        Span<double> content = stackalloc double[(SdfProgramBuilder.MaxFieldScopeDepth + 1)];
         var depth = 0;
 
         content[0] = 1.0;
@@ -592,7 +592,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
                 continue;
             }
 
-            var baked = (double)program.Instructions[index].Data1.Y;
+            var baked = ((double)program.Instructions[index].Data1.Y);
             var factor = content[depth--];
 
             if ((compiled[index].ScopeScale == 0L) && (baked > 0.0)) {
@@ -787,6 +787,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
             _ => throw new UnreachableException(message: $"The constructor validated every shape is supported; shape {((SdfShapeType)instruction.Shape)} reached EvaluateShape unvalidated."),
         };
     }
+
     // The shared sphere-trace march over this evaluator's own exact samples — see SdfFieldMarch for the accept and
     // advance rules. Every sample is exact, so the bound budget is never spent.
     MarchOutcome ISdfFieldMarcher.March(FixedPosition origin, FixedVector3 direction, FixedQ4816 maxDistance, FixedQ4816 radius, out RayHit hit) {
@@ -805,6 +806,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
             stepScale: m_stepScale
         );
     }
+
     // The iteration budget that keeps a point cast's guaranteed pre-exhaustion reach at BaseMarchIterations *
     // HitEpsilon however far the step scale clamps the advance. A non-accepting point iteration advances at least
     // max(floor(HitEpsilon * stepScale), one Q48.16 tick), so the budget is that reach divided by the same floor,
@@ -974,6 +976,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
             y: inverseExponent
         )) - minRadius);
     }
+
     // The product |p_i| · min(r) fits the carrier below 2^20 m on a radius under 2^26 m; past either the ratio divides
     // first, at the coarser resolution, rather than wrap.
     private const long SuperellipsoidScaledMagnitudeLimit = (1L << 36);
@@ -1032,6 +1035,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
     /// <summary>The golden-section rounds a sweep's distance search takes about its nearest sample; <c>SdfIsaHlsl</c>
     /// writes it into the kernels as <c>SDF_SWEEP_ROUNDS</c>.</summary>
     public const int SweepRounds = 12;
+
     private static readonly FixedQ4816 SweepBulgeExponent = FixedQ4816.FromDouble(value: 0.65);
     private static readonly FixedQ4816 SweepPi = FixedQ4816.FromDouble(value: Math.PI);
     private static readonly FixedQ4816 SweepGoldenLow = FixedQ4816.FromDouble(value: 0.381966);
@@ -1253,6 +1257,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
             left: tangentDirection,
             right: u
         );
+
         var (sinPhase, cosPhase) = FixedQ4816.SinCos(angle: (((t * twist) * FixedQ4816.Tau) + phase));
 
         return (basePoint + (((u * cosPhase) + (v * sinPhase)) * strandOffset));
@@ -1607,7 +1612,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
     }
     private bool TryGradientTap(FixedPosition position, out FixedQ4816 distance, out int material) {
         SdfQueryWork.ProcessWork.Count(kind: SdfQueryWork.GradientTaps);
-        return TryDistance(position: position, distance: out distance, material: out material);
+        return TryDistance(distance: out distance, material: out material, position: position);
     }
     // === Elementwise FixedVector3 helpers (System.Numerics.Vector3 offers these as instance methods; FixedVector3
     // does not, so this file supplies the handful the interpreted op set needs) ==========================================

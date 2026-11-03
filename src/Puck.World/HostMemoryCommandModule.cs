@@ -20,35 +20,34 @@ namespace Puck.World;
 /// Presentation-independent; it reads the process, never the simulation.
 /// </summary>
 internal sealed class HostMemoryCommandModule(IAllocator allocator, IEnumerable<IWorkCounterSource> sources) : ICommandModule {
-    private readonly IWorkCounterSource[] m_memorySources = [.. sources.Where(static source => WorkCounterReport.Matches(name: source.Name, filter: "memory")).OrderBy(static source => source.Name, StringComparer.Ordinal)];
+    private readonly IWorkCounterSource[] m_memorySources = [.. sources.Where(predicate: static source => WorkCounterReport.Matches(name: source.Name, filter: "memory")).OrderBy(static source => source.Name, StringComparer.Ordinal)];
 
     private string DescribeOwners(int limit) {
         var snapshot = MemoryAccount.Shared.ReadOwners();
         var account = snapshot.Account;
-        var owners = snapshot.Owners.OrderByDescending(static owner => owner.Owned)
-            .ThenByDescending(static owner => owner.Reserved).ThenBy(static owner => owner.Name, StringComparer.Ordinal).ToArray();
-        var shown = ((limit == 0) ? owners.Length : Math.Min(limit, owners.Length));
+        var owners = snapshot.Owners.OrderByDescending(keySelector: static owner => owner.Owned)
+            .ThenByDescending(keySelector: static owner => owner.Reserved).ThenBy(static owner => owner.Name, StringComparer.Ordinal).ToArray();
+        var shown = ((limit == 0) ? owners.Length : Math.Min(val1: limit, val2: owners.Length));
         var text = new StringBuilder();
 
         text.Append(CultureInfo.InvariantCulture, $"[host.memory: charged/reserved owners shown={shown} total={owners.Length} | account bytes owned={account.Owned} live={account.Live} cached={account.Cached} retirement={account.Retirement} metadata={account.Metadata} reserved={account.Reserved} budget={account.Budget} headroom={account.Headroom}\n");
-        for (var index = 0; index < shown; index++) {
+        for (var index = 0; (index < shown); index++) {
             var owner = owners[index];
 
             text.Append(CultureInfo.InvariantCulture, $"owner {JsonSerializer.Serialize(owner.Name)} category={owner.Category} owned={owner.Owned} reserved={owner.Reserved} peak-owned={owner.PeakOwned} reservation-peak={owner.ReservationPeak} disposed={owner.Disposed.ToString().ToLowerInvariant()}\n");
         }
-        long omittedOwned = 0;
-        long omittedReserved = 0;
+        var omittedOwned = 0L;
+        var omittedReserved = 0L;
 
-        for (var index = shown; index < owners.Length; index++) {
+        for (var index = shown; (index < owners.Length); index++) {
             omittedOwned += owners[index].Owned;
             omittedReserved += owners[index].Reserved;
         }
-        text.Append(CultureInfo.InvariantCulture, $"omitted owners={owners.Length - shown} owned={omittedOwned} reserved={omittedReserved}\n");
+        text.Append(CultureInfo.InvariantCulture, $"omitted owners={(owners.Length - shown)} owned={omittedOwned} reserved={omittedReserved}\n");
         foreach (var source in m_memorySources) { WorkCounterReport.AppendSection(builder: text, source: source); }
-        text.Append("Backend counters are separate observations; host-visible-device-local bytes are a subset of device-local bytes. Process, managed, allocator, account and backend readings overlap; unified physical total is unavailable.]");
+        text.Append(value: "Backend counters are separate observations; host-visible-device-local bytes are a subset of device-local bytes. Process, managed, allocator, account and backend readings overlap; unified physical total is unavailable.]");
         return text.ToString();
     }
-
     private static string Mebibytes(long bytes) =>
         (bytes / (1L << 20)).ToString(provider: CultureInfo.InvariantCulture);
     // One line: the process, then the managed heap as the last collection left it, in MiB.
@@ -71,7 +70,7 @@ internal sealed class HostMemoryCommandModule(IAllocator allocator, IEnumerable<
 
         return string.Create(
             provider: CultureInfo.InvariantCulture,
-            handler: $"[host.memory: process ws={Mebibytes(bytes: process.WorkingSet64)} peak-ws={Mebibytes(bytes: process.PeakWorkingSet64)} private={Mebibytes(bytes: process.PrivateMemorySize64)} MiB uptime={(long)uptime.TotalMilliseconds}ms | managed heap={Mebibytes(bytes: info.HeapSizeBytes)} committed={Mebibytes(bytes: info.TotalCommittedBytes)} fragmented={Mebibytes(bytes: info.FragmentedBytes)} {heap} MiB pinned-objects={info.PinnedObjectsCount} collections gen0={GC.CollectionCount(generation: 0)} gen1={GC.CollectionCount(generation: 1)} gen2={GC.CollectionCount(generation: 2)} last={info.Generation}{(info.Compacted ? " compacted" : string.Empty)}{accounting} | jit methods={System.Runtime.JitInfo.GetCompiledMethodCount()} il={Mebibytes(bytes: System.Runtime.JitInfo.GetCompiledILBytes())} MiB compile={(long)System.Runtime.JitInfo.GetCompilationTime().TotalMilliseconds}ms]"
+            handler: $"[host.memory: process ws={Mebibytes(bytes: process.WorkingSet64)} peak-ws={Mebibytes(bytes: process.PeakWorkingSet64)} private={Mebibytes(bytes: process.PrivateMemorySize64)} MiB uptime={((long)uptime.TotalMilliseconds)}ms | managed heap={Mebibytes(bytes: info.HeapSizeBytes)} committed={Mebibytes(bytes: info.TotalCommittedBytes)} fragmented={Mebibytes(bytes: info.FragmentedBytes)} {heap} MiB pinned-objects={info.PinnedObjectsCount} collections gen0={GC.CollectionCount(generation: 0)} gen1={GC.CollectionCount(generation: 1)} gen2={GC.CollectionCount(generation: 2)} last={info.Generation}{(info.Compacted ? " compacted" : string.Empty)}{accounting} | jit methods={System.Runtime.JitInfo.GetCompiledMethodCount()} il={Mebibytes(bytes: System.Runtime.JitInfo.GetCompiledILBytes())} MiB compile={((long)System.Runtime.JitInfo.GetCompilationTime().TotalMilliseconds)}ms]"
         );
     }
 

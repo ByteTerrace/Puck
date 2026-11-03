@@ -17,7 +17,6 @@ namespace Puck.World.Client;
 /// (or elapsed time) sets the rate; the weight eases on wall time using the driver's authored blend times
 /// (default <see cref="CreationDriverDocument.WeightSeconds"/>) instead of freezing mid-stride when the gate flips.</remarks>
 public static class WorldGaitDrivers {
-
     /// <summary>One driver evaluation's counted work and remaining activity. Initialization charges no clock;
     /// integration counts positive-time nonzero-cadence updates, while phase changes count actual stored changes.</summary>
     /// <param name="Initialized">Whether the runtime seeded its pose and cleared the driver state.</param>
@@ -300,7 +299,7 @@ public static class WorldGaitDrivers {
             phaseChanges += ((phases[index] != previousPhase) ? 1 : 0);
         }
 
-        return new(Initialized: false, Evaluations: count, Integrations: integrations, PhaseChanges: phaseChanges, Continues: continues);
+        return new(Continues: continues, Evaluations: count, Initialized: false, Integrations: integrations, PhaseChanges: phaseChanges);
     }
     /// <summary>Applies a rigid delta (<c>x → R·x + t</c>) to a shape's creation-space pose.</summary>
     /// <param name="deltaRotation">The delta's rotation.</param>
@@ -466,6 +465,7 @@ public static class WorldGaitDrivers {
 
         return ((float)compiled.EvaluateRaw(arcRaw: low).Position.Z);
     }
+
     // A driver's curve modulator: the height of the named row at the named earlier driver's phase this frame; a row
     // the definition does not declare (refused at boot, missed only mid-swap) leaves the driver unscaled.
     private static float CurveOf(CreationDriverCurveDocument curve, IReadOnlyList<CreationDriverDocument> rows, ReadOnlySpan<float> phases, int index, WorldDefinition? definition) => (((definition is not null) && (WorldDefinitionRows.FindCurve(
@@ -493,6 +493,7 @@ public static class WorldGaitDrivers {
 
         return 0f;
     }
+
     /// <summary>Returns whether a driver's gate holds — every token must, and an absent or empty gate is ungated.
     /// A <c>state.&lt;row&gt;[.&lt;key&gt;]</c> token holds while the cell's STORED value is nonzero (the truth a rule
     /// reads, never an eased sample). The world validator refuses a token naming no fact or row before a document

@@ -21,27 +21,34 @@ let forestTrees = filter(map(range(0, forestColumns * forestRows), i => {
   yaw: i * 137.507764
 }), tree => lawnPathClear(tree.position[0], tree.position[2], 1.0))
 
-function forestRootClear(x, z, radius) = reduce(forestTrees, true, (clear, tree) => clear and
-  (x - tree.position[0]) * (x - tree.position[0]) + (z - tree.position[2]) * (z - tree.position[2]) >= radius * radius
-)
+function forestRootClear(x, z, radius) = reduce(forestTrees, true, (clear, tree) => clear and (x - tree.position[0]) *
+  (x - tree.position[0]) + (z - tree.position[2]) * (z - tree.position[2]) >= radius * radius)
 
 let forestShrubs = filter(map(range(0, 70), i => {
   id: i
   position [forestOrigin[0] + 1.5 + (i % 7) * 4.4 + 0.8 * sine(i * 5.31), 0,
-    forestOrigin[1] - 1.5 - floor(i / 7) * 3.6 + 0.7 * cosine(i * 9.13)]
+    forestOrigin[1] - 1.5 - floor(i / 7) * 3.6 + 0.7 * cosine(i * 9.13)
+  ]
   scale: 0.7 + 0.35 * (i * 0.754878 - floor(i * 0.754878))
   yaw: i * 87.7
-}), shrub => lawnPathClear(shrub.position[0], shrub.position[2], 0.8) and
-  forestRootClear(shrub.position[0], shrub.position[2], 1.2))
+}), shrub => lawnPathClear(shrub.position[0], shrub.position[2], 0.8) and forestRootClear(
+  shrub.position[0],
+  shrub.position[2],
+  1.2
+))
 
 let forestTufts = filter(map(range(0, 160), i => {
   id: i
   position [forestOrigin[0] + 0.8 + (i % 10) * 3.3 + 0.7 * sine(i * 3.71), 0.025,
-    forestOrigin[1] - 0.8 - floor(i / 10) * 2.3 + 0.6 * cosine(i * 8.13)]
+    forestOrigin[1] - 0.8 - floor(i / 10) * 2.3 + 0.6 * cosine(i * 8.13)
+  ]
   scale: 0.85 + 0.4 * (i * 0.56984 - floor(i * 0.56984))
   yaw: i * 67.3
-}), tuft => lawnPathClear(tuft.position[0], tuft.position[2], 0.4) and
-  forestRootClear(tuft.position[0], tuft.position[2], 0.9))
+}), tuft => lawnPathClear(tuft.position[0], tuft.position[2], 0.4) and forestRootClear(
+  tuft.position[0],
+  tuft.position[2],
+  0.9
+))
 
 let forestGrassOrigin = [38, 0, -147]
 let forestGrassTiles = [[5.05, 6.25], [5.95, 6.25], [5.05, 7.15], [5.95, 7.15]]
@@ -54,7 +61,8 @@ prototypes {
   grassTuft(id: "forest-tuft")
   for (tile, i) in forestGrassTiles {
     windMeadowTile(id: $"forest-grass-{i}", tile: tile, origin: forestGrassOrigin,
-      fringe: [5.5, 6.7, 0.67, 0.67], clearing: [0, 0, 0])
+      fringe: [5.5, 6.7, 0.67, 0.67], clearing: [0, 0, 0]
+    )
   }
 }
 
@@ -65,7 +73,9 @@ placements {
       position: tree.position
       scale: tree.scale
       yawDegrees: tree.yaw
-      solid { margin: 0 }
+      solid {
+        margin: 0
+      }
     }
   }
   for shrub in forestShrubs {

@@ -187,6 +187,19 @@ still frames copy nothing. These copies add device-local bytes and counted
 buffer copies, with no second host upload. Mesh history is a table of its own so
 the host-written mesh region's CPU shadow stays exact.
 
+`SdfMeshHistory.Observe` supplies one per-index surface generation and CPU matrix
+seed decision. Changing the stable motion key, mesh or surface interpretation
+seeds a new incarnation; continuous matrix changes retain it. Retirement releases
+references while preserving token lifetimes through regrowth. Selection history
+belongs to the actual `SdfWorldTables` owner and that generation:
+`SdfMeshOcclusion.Stage` clears it when a retained recorder changes tables.
+Visibility and detail validate the token before reading prior state.
+`SdfMeshInstance.IsDynamic` is required semantic information, independent of having
+a transform slot; both dressing paths preserve it. Fixed local copies can enter
+static irradiance geometry; wind-deformed canopies still need a traced-surface and
+invalidation design. `sdf.instances` counts observed/seeded/retired cells, changed
+matrices and packed records/bytes; packed bytes are not GPU transfer bytes.
+
 Previous-transform transfers contribute their range lengths to `gpu.copies.buffer-bytes`
 in the existing upload pass. A dynamic row contributes 48 bytes and a mesh draw
 its record's bytes; the first still frame settles the preceding change, and later still

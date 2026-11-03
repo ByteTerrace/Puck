@@ -8,7 +8,6 @@ namespace Puck.SdfVm;
 /// <param name="Generation">The observed cell generation, never zero and never reused by that cell.</param>
 /// <param name="Seed">Whether this observation starts a new surface incarnation at its index.</param>
 public readonly record struct SdfMeshObservation(uint Generation, bool Seed);
-
 /// <summary>One staged draw table's history owner. Indices are transient addresses; changing an occupant, mesh or
 /// surface frame starts a new nonzero generation. Retirement releases keys and meshes but preserves generations,
 /// so a later grow/reuse cannot adopt the GPU history still stored for a former occupant.</summary>
@@ -42,6 +41,7 @@ public sealed class SdfMeshHistory {
         public Vector3 CarryTranslation;
         public float CarryScale;
     }
+
     private Cell[] m_cells = [];
     private int m_activeCount;
 
@@ -57,18 +57,18 @@ public sealed class SdfMeshHistory {
     /// <exception cref="ArgumentException">The draw names no identity.</exception>
     /// <exception cref="InvalidOperationException">This cell exhausted its uint generation lifetime.</exception>
     public SdfMeshObservation Observe(int index, in SdfMeshDraw draw) {
-        if ((index < 0) || (index >= SdfMeshRegion.MaxDraws)) { throw new ArgumentOutOfRangeException(nameof(index)); }
-        var key = (draw.MotionIdentity ?? draw.Identity) ?? throw new ArgumentException(message: "A mesh draw needs a stable surface identity.", paramName: nameof(draw));
+        if ((index < 0) || (index >= SdfMeshRegion.MaxDraws)) { throw new ArgumentOutOfRangeException(paramName: nameof(index)); }
+        var key = ((draw.MotionIdentity ?? draw.Identity) ?? throw new ArgumentException(message: "A mesh draw needs a stable surface identity.", paramName: nameof(draw)));
 
         if (index >= m_cells.Length) { Array.Resize(array: ref m_cells, newSize: Math.Max(val1: (index + 1), val2: Math.Max(val1: 4, val2: (2 * m_cells.Length)))); }
         ref var cell = ref m_cells[index];
-        var seed = !Equals(objA: cell.Key, objB: key) || !ReferenceEquals(objA: cell.Mesh, objB: draw.Mesh) ||
+        var seed = (!Equals(objA: cell.Key, objB: key) || !ReferenceEquals(objA: cell.Mesh, objB: draw.Mesh) ||
             (cell.FrameSlot != draw.FrameSlot) || (cell.Dynamic != draw.IsDynamic) || (cell.Glass != draw.Glass) ||
             (cell.Clip != draw.ClipPlane) || (cell.CarryRotation != draw.CarryRotation) ||
-            (cell.CarryTranslation != draw.CarryTranslation) || (cell.CarryScale != draw.CarryScale);
+            (cell.CarryTranslation != draw.CarryTranslation) || (cell.CarryScale != draw.CarryScale));
 
         if (seed) {
-            if (cell.Generation == uint.MaxValue) { throw new InvalidOperationException("A staged mesh cell exhausted its generation lifetime; its GPU history cannot safely reuse a token."); }
+            if (cell.Generation == uint.MaxValue) { throw new InvalidOperationException(message: "A staged mesh cell exhausted its generation lifetime; its GPU history cannot safely reuse a token."); }
             cell.Generation++;
             cell.Key = key;
             cell.Mesh = draw.Mesh;
@@ -85,14 +85,13 @@ public sealed class SdfMeshHistory {
         ProcessWork.Count(kind: Observed);
         return new(Generation: cell.Generation, Seed: seed);
     }
-
     /// <summary>Retires a vanished suffix without reusing its generations. Passing zero retires an empty draw list.</summary>
     /// <param name="count">The staged list's current length, at most the observed prefix.</param>
     public void RetireAfter(int count) {
-        if ((count < 0) || (count > m_activeCount)) { throw new ArgumentOutOfRangeException(nameof(count)); }
+        if ((count < 0) || (count > m_activeCount)) { throw new ArgumentOutOfRangeException(paramName: nameof(count)); }
         var retired = 0;
 
-        for (var index = count; index < m_activeCount; index++) {
+        for (var index = count; (index < m_activeCount); index++) {
             ref var cell = ref m_cells[index];
 
             if (cell.Key is null) { continue; }

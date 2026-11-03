@@ -85,7 +85,7 @@ Deck's unified physical footprint.
 
 ## Current-source baseline
 
-Measured on 2026-11-03 at d0bcdbd9ee, Ryzen 7 7800X3D (8 cores/16 threads),
+Measured at d0bcdbd9ee, Ryzen 7 7800X3D (8 cores/16 threads),
 32 GB installed memory, RTX 4070, Windows driver 32.0.16.1742, the pinned .NET
 11 Release World artifact d40bbd495784e113230c44674f054673. Both Worlds were
 started by the Puck MCP, windowed under the GPU lease, with physical devices
@@ -311,9 +311,77 @@ forest workload. No new art-style decision is needed to measure density.
 
 ## Next action
 
-L0: validate sustained grass motion and expose missing query/placement work
-counts; design/review the field-cache invalidation contract from the current
-probe and camera sources. L0m establishes physical memory ownership and budgets
-in parallel. L1's single instance contract joins the existing static-copy and
-retained-update designs, including fixed-root versus wind-deformed GI semantics. Keep this baseline and its
-limitations beside the resulting counted-work and full-frame measurements.
+Use the new query/motion/instance counters to design field-cache invalidation
+and local static-copy sharing against the connected forest. Join that sharing to
+retained instance updates before GPU buckets, keeping fixed-root semantics
+separate from wind-deformed canopy GI. Complete physical memory attribution and
+quiet, interleaved density/route measurements; owner snapshots alone do not close
+the Deck footprint. Resolve the recorded cross-family review before a main push.
+
+## First implementation slice
+
+The first L0/L0m/L1 foundation is implemented. The source contracts are
+[creation activity](../../src/Puck.World.Client/WorldCreationWork.cs),
+[query work](../../src/Puck.SignedDistance/Queries/SdfQueryWork.cs),
+[memory-owner readback](../../src/Puck.World/HostMemoryCommandModule.cs) and
+[shared surface history](../../src/Puck.SdfVm/SdfMeshHistory.cs). March samples
+include failed/final over-budget attempts. Gradients count actual taps.
+Posed/retained/rate-held partition visited registrations. Driver evaluations,
+integrations and actual phase changes are distinct. Invalid or fieldless probes
+bypass the answer cache. The existing point-work source is now registered.
+
+Driver scalar operands participate in manifest/lease invalidation; restoring zero
+cadence wakes a placement. Active clocks and remaining follower/easing motion
+cannot settle because one pose was equal. `world.sdf.rig` reads placements and
+bodies through one builder. Exact follower residuals conservatively retain work;
+there is no new numerical cutoff.
+
+`host.memory owners [limit]` takes one locked account/owner snapshot, retaining
+disposed-but-charged owners until storage actually releases. Owned peaks and
+reservation targets are distinct. Backend observations carry explicit
+overlap/subset language; unified physical footprint remains unproven.
+
+One per-cell generation now drives CPU history seeding and GPU LOD/visibility,
+including retirement/regrowth. A retained recorder clears selection history on
+actual table-owner switches, including switches during growth. Portal copies
+have distinct stable motion keys, and local copies carry required fixed/moving
+semantics through both dressing paths. Packed bytes count packing, not transfers.
+Static-copy sharing, retained updates and GPU instance buckets remain next work.
+
+The [forest patch](../../worlds/debug/forest.md) compiles to 84 trees, 58 shrubs,
+115 tufts and four wind patches with 750 shape parts (375 two-part blades), in a
+32 by 36 m envelope. Road paving/exclusions share controls. This is a connected
+canopy pressure portion, not the full southern belt.
+
+D3D12 rendered both forest spawn points. Grass phases held at gust
+5.6315966/flutter 4.5943117 through several stopped-cadence reads. Restoration
+immediately resumed integrations/phase changes and later reads kept advancing.
+All seven pairs in an eight-frame grass-only burst changed with wind active.
+Stopped phases still showed temporal/lighting noise, so pixels alone prove no motion.
+
+Costs remain high: root budget 9687 retained draws, 6502 dynamic slots and 7394
+static instances from 1888 placement rows; mesh region 2,284,836,732 bytes.
+With zero meshes loaded, the root bake reported 156.876 s, 8249 groups,
+40,043 dispatches and 1,574,632,455 samples, missing the one-minute bar.
+A settled forest-entry diagnostic window read 20.28 ms average / 28.52 ms p99
+over 120 iterations. This is not a quiet A/B speed comparison. Close-grass and
+collection windows are not comparable to the earlier baseline.
+Post-collection working set reached 10,960 MiB, managed heap 2792 MiB; account
+owned about 2.30 GB with no reservations. These overlapping readings cannot be added.
+
+PIX attach saved a 31,367,168-byte timing capture including bake activity, not a
+steady-state qualification. `pixtool open-capture` accepts GPU captures only and
+cannot export this timing file. Nsight Graphics GPU Trace attach reported
+“Cannot find process” for the live MCP-owned World; no successful Nsight trace
+is claimed. NVIDIA telemetry showed RTX 4070, driver 617.42, P0 and 9863 MiB
+device memory used at one post-bake observation, including other host consumers.
+
+Release World and CLI builds passed with zero warnings/errors. Actual-built-code
+CPU witnesses covered memory lifecycle, scalar wake/continuation, instance ABA
+and selection-owner switches. Supplemental review found and fixed table-local
+token collisions across retained-recorder switches. Required cross-family review
+remains outstanding: the session-launch hook classifies every Codex session as a
+lane and refused the Claude reviewer; it was not bypassed. Raw readbacks/captures
+are local artifacts in this chat's `landscape-implementation` directory.
+The full route/density sweep, physical memory, wind-canopy GI, and 2060/Deck
+qualification remain open. Backend live evidence is recorded in the implementation commit.

@@ -747,7 +747,6 @@ public sealed partial class WorldCreationInstances {
         state = RigState(live: live, shapeName: shapeName);
         return true;
     }
-
     /// <summary>Reads a live registration's last packed rig state, including placements that have no body.</summary>
     /// <param name="registration">The registration index reported by creation inspection.</param>
     /// <param name="state">The last packed rig state, or null when no registration occupies the index.</param>
@@ -755,7 +754,7 @@ public sealed partial class WorldCreationInstances {
     /// <returns>Whether a live registration answered.</returns>
     public bool TryRegistrationRig(int registration, out WorldRigState? state, string? shapeName = null) {
         state = null;
-        if (((uint)registration >= (uint)m_pool.Length) || (m_pool[registration] is not { } live)) {
+        if ((((uint)registration) >= ((uint)m_pool.Length)) || (m_pool[registration] is not { } live)) {
             return false;
         }
 
@@ -814,7 +813,6 @@ public sealed partial class WorldCreationInstances {
             Activity = live.DriverActivity,
         };
     }
-
     // The named shape's resolved parent and chained delta as the last pack left them; an absent shape answers with
     // no index, and a registration not yet packed with no parent resolved.
     private static WorldRigShape RigShape(Registration live, IReadOnlyList<ShapeDocument> shapes, string shapeName) {

@@ -199,8 +199,8 @@ public sealed partial class WorldCreationInstances {
             var document = live.Creation.EngineDocument;
             var shapeCount = (document.Shapes?.Count ?? 0);
 
-            if (m_partSpheres.Length < shapeCount) { Array.Resize(ref m_partSpheres, shapeCount); }
-            if (m_previousSlots.Length < live.Slots) { Array.Resize(ref m_previousSlots, live.Slots); }
+            if (m_partSpheres.Length < shapeCount) { Array.Resize(array: ref m_partSpheres, newSize: shapeCount); }
+            if (m_previousSlots.Length < live.Slots) { Array.Resize(array: ref m_previousSlots, newSize: live.Slots); }
             // The root, the shapes, and the slot text baked apart rides (TextApart).
             var packedSlots = live.Slots;
 
@@ -324,9 +324,9 @@ public sealed partial class WorldCreationInstances {
 
             NoteRate(center: rootPosition, live: live, packedSlots: packedSlots, posed: posed, radius: RateReach(live: live, placementScale: placementScale), rootSlot: rootSlot);
             AppendVolumes(
-                live: live,
                 document: document,
                 hidden: live.Hidden,
+                live: live,
                 placementScale: placementScale,
                 rootSlot: rootSlot,
                 shapeCount: shapeCount
@@ -630,6 +630,7 @@ public sealed partial class WorldCreationInstances {
                 definition: client.Definition
             );
             var activity = live.DriverActivity;
+
             if (activity.Initialized) { WorldCreationWork.ProcessWork.Count(kind: WorldCreationWork.DriverInitializations); }
             WorldCreationWork.ProcessWork.Add(kind: WorldCreationWork.DriverEvaluations, amount: activity.Evaluations);
             WorldCreationWork.ProcessWork.Add(kind: WorldCreationWork.DriverIntegrations, amount: activity.Integrations);
@@ -756,7 +757,7 @@ public sealed partial class WorldCreationInstances {
             var posed = live.ShapeTransforms[shapeIndex];
 
             if (shape.Domain is { Count: > 0 }) { transforms[((rootSlot + owner) + 1)] = posed; continue; }
-            var turn = Quaternion.Normalize((posed.Orientation * Quaternion.Inverse(shape.Rotation.Value)));
+            var turn = Quaternion.Normalize(value: (posed.Orientation * Quaternion.Inverse(value: shape.Rotation.Value)));
 
             transforms[((rootSlot + owner) + 1)] = new DynamicTransform(
                 Position: (posed.Position - Vector3.Transform((shape.Position.Value * placementScale), turn)),

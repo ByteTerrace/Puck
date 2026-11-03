@@ -1,5 +1,8 @@
 # Puck standard
 
+[paths.puck](paths.puck) supplies reusable quadratic corridor masks for paving and
+scenery exclusions. It is a pure authoring library; a world owns its routes and widths.
+
 The standard is an optional authored design package. The engine supplies input,
 layout, camera and motion mechanisms; these documents supply their design.
 

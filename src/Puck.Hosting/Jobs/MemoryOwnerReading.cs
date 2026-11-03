@@ -10,7 +10,6 @@ namespace Puck.Hosting.Jobs;
 /// <param name="ReservationPeak">The owner's current reserved simultaneous-peak target, which is not an allocation.</param>
 /// <param name="Disposed">Whether the owner has closed; any outstanding storage still releases through its observer.</param>
 public readonly record struct MemoryOwnerReading(string Name, MemoryCategory Category, long Owned, long Reserved, long PeakOwned, long ReservationPeak, bool Disposed);
-
 /// <summary>A detached account reading and the charged/reserved owners that reconcile to it, captured under one
 /// account lock. Backend, process, managed-heap and allocator readings belong to their own observation windows.</summary>
 /// <param name="Account">The existing account's category totals and future promises.</param>

@@ -283,14 +283,13 @@ public readonly record struct SdfMeshDraw(SdfMesh Mesh, Matrix4x4 ObjectToWorld,
     /// negative is not drawn, in any view or shadow. Zero, the default, draws everything; a body straddling a portal's
     /// glass is drawn clipped to the glass's front on each side.</summary>
     public Vector4 ClipPlane { get; init; }
-
     /// <summary>Gets whether the draw's faces turned from a light are exactly where that light leaves a solid: its mesh
     /// encloses (<see cref="SdfMesh.Encloses"/>), no clip plane cuts it open, and its matrix keeps its winding. A shadow
     /// cascade's exit layer draws such a draw's faces turned from the light alone and every other draw whole, as a thin
     /// caster.</summary>
     public bool EnclosesSolid => (Mesh.Encloses && (ClipPlane == Vector4.Zero) &&
-        (((ObjectToWorld.M11 * ((ObjectToWorld.M22 * ObjectToWorld.M33) - (ObjectToWorld.M23 * ObjectToWorld.M32))) -
-          (ObjectToWorld.M12 * ((ObjectToWorld.M21 * ObjectToWorld.M33) - (ObjectToWorld.M23 * ObjectToWorld.M31))) +
+        ((((ObjectToWorld.M11 * ((ObjectToWorld.M22 * ObjectToWorld.M33) - (ObjectToWorld.M23 * ObjectToWorld.M32))) -
+          (ObjectToWorld.M12 * ((ObjectToWorld.M21 * ObjectToWorld.M33) - (ObjectToWorld.M23 * ObjectToWorld.M31)))) +
           (ObjectToWorld.M13 * ((ObjectToWorld.M21 * ObjectToWorld.M32) - (ObjectToWorld.M22 * ObjectToWorld.M31)))) > 0f));
 }
 /// <summary>
@@ -436,7 +435,7 @@ public static class SdfMeshRegion {
     public static int IndexWordsOf(SdfMesh mesh) {
         ArgumentNullException.ThrowIfNull(mesh);
 
-        return checked((3 * mesh.LevelledTriangleCount) + (3 * (mesh.Levels.Count + 1)));
+        return checked(((3 * mesh.LevelledTriangleCount) + (3 * (mesh.Levels.Count + 1))));
     }
     /// <summary>The triangle-material words a mesh takes: one a triangle of every level, laid out as its indices are, or
     /// none for a mesh without them.</summary>
@@ -599,25 +598,28 @@ public static class SdfMeshRegion {
         record[(SdfMeshRecord.ClipPlaneWord + 1)] = BitConverter.SingleToUInt32Bits(value: clip.Y);
         record[(SdfMeshRecord.ClipPlaneWord + 2)] = BitConverter.SingleToUInt32Bits(value: clip.Z);
         record[(SdfMeshRecord.ClipPlaneWord + 3)] = BitConverter.SingleToUInt32Bits(value: clip.W);
-        record[SdfMeshRecord.LevelTableWord] = (uint)(placement.IndexWord + (3 * mesh.LevelledTriangleCount));
-        record[SdfMeshRecord.LevelTableWord + 1] = (uint)mesh.Levels.Count;
-        var boxed = SdfMeshBox.TryOf(draw: in draw, box: out var box);
-        var selection = record.Slice(start: SdfMeshRecord.SelectionWord, length: 16);
+        record[SdfMeshRecord.LevelTableWord] = ((uint)(placement.IndexWord + (3 * mesh.LevelledTriangleCount)));
+        record[(SdfMeshRecord.LevelTableWord + 1)] = ((uint)mesh.Levels.Count);
+        var boxed = SdfMeshBox.TryOf(box: out var box, draw: in draw);
+        var selection = record.Slice(length: 16, start: SdfMeshRecord.SelectionWord);
+
         selection.Clear();
         WriteSelectionVector(words: selection, value: box.Center);
         selection[3] = (boxed ? 0u : 1u) | (draw.Glass ? 2u : 0u) | (draw.EnclosesSolid ? 4u : 0u);
         WriteSelectionVector(words: selection[4..], value: box.HalfX);
-        selection[7] = BitConverter.SingleToUInt32Bits(box.Stretch);
+        selection[7] = BitConverter.SingleToUInt32Bits(value: box.Stretch);
         WriteSelectionVector(words: selection[8..], value: box.HalfY);
         selection[11] = generation;
         WriteSelectionVector(words: selection[12..], value: box.HalfZ);
-        selection[15] = (uint)mesh.Levels.Count;
+        selection[15] = ((uint)mesh.Levels.Count);
     }
+
     private static void WriteSelectionVector(Span<uint> words, Vector3 value) {
-        words[0] = BitConverter.SingleToUInt32Bits(value.X);
-        words[1] = BitConverter.SingleToUInt32Bits(value.Y);
-        words[2] = BitConverter.SingleToUInt32Bits(value.Z);
+        words[0] = BitConverter.SingleToUInt32Bits(value: value.X);
+        words[1] = BitConverter.SingleToUInt32Bits(value: value.Y);
+        words[2] = BitConverter.SingleToUInt32Bits(value: value.Z);
     }
+
     /// <summary>Writes only the meshes a list of draws names, every word past the draw records, as <see cref="Write"/>
     /// writes them.</summary>
     /// <param name="meshes">The placements <see cref="Plan"/> wrote.</param>
@@ -679,11 +681,13 @@ public static class SdfMeshRegion {
         }
         // A shared table after this mesh's indices, independent of draw count and of the baker's current two levels.
         var firstTriangle = 0;
-        for (var level = 0; level <= mesh.Levels.Count; level++) {
-            var triangles = level == 0 ? mesh.TriangleCount : mesh.Levels[level - 1].TriangleCount;
-            destination[indexWord++] = (uint)firstTriangle;
-            destination[indexWord++] = (uint)(3 * triangles);
-            destination[indexWord++] = BitConverter.SingleToUInt32Bits(level == 0 ? 0f : mesh.Levels[level - 1].Error);
+
+        for (var level = 0; (level <= mesh.Levels.Count); level++) {
+            var triangles = ((level == 0) ? mesh.TriangleCount : mesh.Levels[(level - 1)].TriangleCount);
+
+            destination[indexWord++] = ((uint)firstTriangle);
+            destination[indexWord++] = ((uint)(3 * triangles));
+            destination[indexWord++] = BitConverter.SingleToUInt32Bits(value: ((level == 0) ? 0f : mesh.Levels[(level - 1)].Error));
             firstTriangle += triangles;
         }
         if (mesh.VertexMembers.IsEmpty) { return; }

@@ -653,7 +653,7 @@ public sealed partial class SdfMeshPathBake {
     private long? AvailablePhysicalBytes() {
         var now = Stopwatch.GetTimestamp();
 
-        if ((m_availableAt == 0) || (Stopwatch.GetElapsedTime(startingTimestamp: m_availableAt, endingTimestamp: now).TotalSeconds >= AvailableSeconds)) {
+        if ((m_availableAt == 0) || (Stopwatch.GetElapsedTime(endingTimestamp: now, startingTimestamp: m_availableAt).TotalSeconds >= AvailableSeconds)) {
             m_available = HostMemory.AvailablePhysicalBytes();
             m_availableAt = now;
         }
@@ -852,7 +852,6 @@ public sealed partial class SdfMeshPathBake {
             throw;
         }
     }
-
     // Answers one lattice of a group on a worker: a refining lattice narrows its group's box, a final slab fills its
     // lattice, and a points lattice answers its stage. Each handler works on the group's own storage outside the gate,
     // where only the group's one running job reads it, and takes the gate only to publish the group's next step.
@@ -1471,8 +1470,7 @@ public sealed partial class SdfMeshPathBake {
         var empty = ((refusal is not null) || (points is null) || (points.Length == 0));
 
         if (empty) {
-            if (refusal is not null) { Console.Error.WriteLine(value: $"[sdf.mesh-bake] group {group.Selector} refused: {refusal}"); }
-            else { Library.StoreEmpty(geometry: group.Sealed, identity: group.Identity, persist: true); }
+            if (refusal is not null) { Console.Error.WriteLine(value: $"[sdf.mesh-bake] group {group.Selector} refused: {refusal}"); } else { Library.StoreEmpty(geometry: group.Sealed, identity: group.Identity, persist: true); }
         } else {
             // The refinement now names its fine samples, so the admission narrows from their bound to their count.
             _ = group.Memory.TryReserve(peak: PeakOf(final: final, fineSamples: ((final.Stage == FinalStage.Refinement) ? points!.Length : 0)));
@@ -1508,6 +1506,7 @@ public sealed partial class SdfMeshPathBake {
             ? final.Factor
             : Math.Min(val1: MaxRefinement, val2: ((int)MathF.Ceiling(x: (MathF.Min(x: cell.X, y: MathF.Min(x: cell.Y, y: cell.Z)) / FineCell)))));
     }
+
     // The workspace bytes a final lattice's bake holds at once, per lattice sample and per fine sample: the lattice's
     // values, materials and gradients, its per-cell refinement state and contour, the fine samples' keys, values,
     // materials, slots and points, and the crossing and gradient rounds' points. An upper estimate of the sum of those

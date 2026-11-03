@@ -44,7 +44,8 @@ public sealed partial class SdfMeshPathBakeLawTests {
         Assert.Contains(expectedSubstring: "groups=2 meshes=2", actualString: bake.Describe());
 
         var meshes = bake.Dress(frame: frame).MeshDraws.Select(selector: static draw => draw.Mesh).ToArray();
-        var copies = meshes.Where(static mesh => mesh.Positions.ToArray().Any(static point => MathF.Abs(point.X) < 1f)).ToArray();
+        var copies = meshes.Where(static mesh => mesh.Positions.ToArray().Any(static point => (MathF.Abs(point.X) < 1f))).ToArray();
+
         Assert.NotEmpty(copies);
         var positions = copies.SelectMany(static mesh => mesh.Positions.ToArray()).ToArray();
 
@@ -69,6 +70,7 @@ public sealed partial class SdfMeshPathBakeLawTests {
     [Fact]
     public void AStaticCopyOfThinPlatesBetweenSampleRowsKeepsEveryPlate() {
         var plates = new[] { 13.6f, 19.6f, 25.6f, 31.6f }.Select(selector: static z => new Shape(Center: new Vector3(x: 45f, y: 4.215f, z: z), Half: new Vector3(x: 24f, y: 0.035f, z: 0.2f), Rotation: Quaternion.Identity, Material: 0)).ToArray();
+
         var (program, materials) = Program(oneCopy: true, shapes: plates);
         var bake = new SdfMeshPathBake { Residency = "plates" };
         var frame = new SdfFrame(Program: program, ProgramChanged: true, Time: 0f, Views: []) { FarDistance = 100f };
@@ -263,15 +265,17 @@ public sealed partial class SdfMeshPathBakeLawTests {
         void SameMeshes(SdfMeshPathBake expected, SdfMeshPathBake actual) {
             var first = expected.Dress(frame: frame).MeshDraws;
             var second = actual.Dress(frame: frame).MeshDraws;
+
             Assert.Equal(first.Count, second.Count);
-            for (var draw = 0; draw < first.Count; draw++) {
+            for (var draw = 0; (draw < first.Count); draw++) {
                 var source = first[draw].Mesh;
                 var decoded = second[draw].Mesh;
+
                 Assert.Equal(source.Indices.ToArray(), decoded.Indices.ToArray());
                 Assert.Equal(source.TriangleMaterials.ToArray(), decoded.TriangleMaterials.ToArray());
                 Assert.Equal(source.Positions.Length, decoded.Positions.Length);
-                for (var vertex = 0; vertex < source.Positions.Length; vertex++) {
-                    Assert.InRange(Vector3.Distance(source.Positions.Span[vertex], decoded.Positions.Span[vertex]), 0f, source.BakeCell.Length() / 1024f);
+                for (var vertex = 0; (vertex < source.Positions.Length); vertex++) {
+                    Assert.InRange(Vector3.Distance(source.Positions.Span[vertex], decoded.Positions.Span[vertex]), 0f, (source.BakeCell.Length() / 1024f));
                 }
             }
         }

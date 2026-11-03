@@ -57,9 +57,11 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     private readonly string m_part;
     // Whether the pass belongs to the temporal fragment (SdfWorldPackage.TemporalFragment).
     private readonly bool m_temporal;
+
     // The bake pass's readback: per frame slot a buffer, the lattice its latest recording dispatched and the fence that
     // completes it.
     private readonly BakeSlot[] m_bakeSlots = [];
+
     private readonly bool m_resolved;
 
     // The view the pass records, followed in place when the instance resolves another its passes can record
@@ -78,7 +80,6 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     // grow, so the binding follows the buffer the recording names rather than the one the ports were first written with.
     private readonly IGpuBuffer?[] m_boundCounters;
     private readonly nint[][] m_screens;
-
     // The mesh part's pool, its set per frame slot and tables ring slot (MeshSetOf), and a framebuffer over each instance
     // of its target and depth.
     private readonly nint m_meshPool;
@@ -87,18 +88,22 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     // The buffers each mesh set binds now: its mesh region, its dynamic transforms, its work counters, and the
     // visibility records and glass sums the glass pass reads and accumulates (the dummy in every other raster part).
     private readonly IGpuBuffer?[][] m_meshSetBuffers = [];
-    private const int MeshSetCounters = 2;
-    private const int MeshSetVisibility = 3;
-    private const int MeshSetGlassSums = 4;
+
     private const int MeshSetBuffers = 5;
+    private const int MeshSetCounters = 2;
+    private const int MeshSetGlassSums = 4;
     private const int MeshSetOcclusionBuffers = 6;
+    private const int MeshSetVisibility = 3;
     private const int OcclusionSetsPerMesh = 2;
+
     private readonly IReadOnlyList<IGpuImage> m_meshTargets = [];
     private readonly IGpuFramebuffer[] m_framebuffers = [];
+
     // The mesh part's occlusion (SdfMeshOcclusion): its state, the render pass its second phase draws in, loading what
     // the first drew, and per mesh set the occlusion's buffers and the target view the set binds.
     private readonly SdfMeshOcclusion? m_occlusion;
     private readonly IGpuRenderPass? m_lateRenderPass;
+
     // The framebuffers a raster part's second render pass draws in, one per instance of its target: the mesh part's
     // occlusion phase over the target and depth, a cascade's exit layer over its second output.
     private readonly IGpuFramebuffer[] m_lateFramebuffers = [];
@@ -112,6 +117,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     private readonly nint[] m_occlusionSetTargets = [];
     // Whether each instance of the mesh part's or a cascade's target has been drawn or cleared once.
     private readonly bool[] m_targetsWritten = [];
+
     private bool m_disposed;
     // What made the latest views render read external content, or null when nothing did.
     private string? m_sourceTaint;
@@ -212,6 +218,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             m_meshSetOcclusion = new IGpuBuffer?[sets][];
             m_meshSetTargets = new nint[sets];
             var occlusionSets = (occludes ? (sets * OcclusionSetsPerMesh) : 0);
+
             m_occlusionSets = new nint[occlusionSets];
             m_occlusionSetBuffers = new IGpuBuffer?[occlusionSets][];
             m_occlusionSetTargets = new nint[occlusionSets];
@@ -225,7 +232,8 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
                 if (occludes) {
                     for (var phase = 0; (phase < OcclusionSetsPerMesh); phase++) {
                         var occlusionSet = ((set * OcclusionSetsPerMesh) + phase);
-                        m_occlusionSetBuffers[occlusionSet] = new IGpuBuffer?[MeshSetBuffers + MeshSetOcclusionBuffers];
+
+                        m_occlusionSetBuffers[occlusionSet] = new IGpuBuffer?[(MeshSetBuffers + MeshSetOcclusionBuffers)];
                         m_occlusionSets[occlusionSet] = bindings.AllocateSet(
                             descriptorSetLayoutHandle: tables.OcclusionPipeline.GroupLayoutHandles[((int)ShaderInterfaceGroup.Pass)],
                             name: new GpuObjectName(
@@ -328,14 +336,14 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
 
     // Whether the part rasterizes the frame's mesh draws through the mesh pipeline: the mesh pass, one of the shadow
     // cascades, which draw from the cascade's light camera, or the glass pass, which draws the glass draws alone.
-    private bool IsMesh => (m_part is SdfWorldPackage.Parts.Mesh or SdfWorldPackage.Parts.Glass || IsShadowCascade);
+    private bool IsMesh => ((m_part is SdfWorldPackage.Parts.Mesh or SdfWorldPackage.Parts.Glass) || IsShadowCascade);
     private bool IsGlass => (m_part is SdfWorldPackage.Parts.Glass);
     // Whether the part is one of the bake's, which read the bake's interface (SdfWorldInterfaces.MeshBakeLayout).
     private bool IsBake => (m_part is SdfWorldPackage.Parts.Mask or SdfWorldPackage.Parts.Bake);
     // The interface the part's pass set is laid out by.
     private ShaderInterfaceLayout PassLayout => (IsBake ? SdfWorldInterfaces.MeshBakeLayout : SdfWorldInterfaces.WorldLayout);
-    private bool TargetsWritten => Array.TrueForAll(array: m_targetsWritten, match: static written => written);
     private bool IsShadowCascade => (m_part is SdfWorldPackage.Parts.ShadowNear or SdfWorldPackage.Parts.ShadowFar or SdfWorldPackage.Parts.ShadowSecond);
+    private bool TargetsWritten => Array.TrueForAll(array: m_targetsWritten, match: static written => written);
 
     public void Dispose() {
         if (m_disposed) {
@@ -379,41 +387,41 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         switch (m_part) {
             case SdfWorldPackage.Parts.Mask:
             case SdfWorldPackage.Parts.Bake: {
-                Follow();
-                m_owner.Begin(residency: m_view.Residency);
-                PollBake();
-                _ = m_view.Residency.Submit(context: in context);
-                return !ClaimsBake(batch: out _);
-            }
+                    Follow();
+                    m_owner.Begin(residency: m_view.Residency);
+                    PollBake();
+                    _ = m_view.Residency.Submit(context: in context);
+                    return !ClaimsBake(batch: out _);
+                }
             case SdfWorldPackage.Parts.Mesh: {
-                Follow();
-                m_owner.Begin(residency: m_view.Residency);
-                return ((m_view.Residency.Submit(context: in context).OpaqueDrawCount == 0) && TargetsWritten);
-            }
+                    Follow();
+                    m_owner.Begin(residency: m_view.Residency);
+                    return ((m_view.Residency.Submit(context: in context).OpaqueDrawCount == 0) && TargetsWritten);
+                }
             // The glass pass skips a frame with no glass draw once its target holds a clear; the clear and the shading
             // pass never skip, since the shading pass writes the lit image every pass after it reads.
             case SdfWorldPackage.Parts.Glass: {
-                Follow();
-                m_owner.Begin(residency: m_view.Residency);
-                return ((m_view.Residency.Submit(context: in context).GlassDrawCount == 0) && TargetsWritten);
-            }
+                    Follow();
+                    m_owner.Begin(residency: m_view.Residency);
+                    return ((m_view.Residency.Submit(context: in context).GlassDrawCount == 0) && TargetsWritten);
+                }
             // The surface pass reads the pyramid only for a pixel the mesh covers, which a frame with no draws has none of.
             case SdfWorldPackage.Parts.Pyramid: {
-                Follow();
-                m_owner.Begin(residency: m_view.Residency);
-                return (m_view.Residency.Submit(context: in context).MeshDrawCount == 0);
-            }
+                    Follow();
+                    m_owner.Begin(residency: m_view.Residency);
+                    return (m_view.Residency.Submit(context: in context).MeshDrawCount == 0);
+                }
             case SdfWorldPackage.Parts.ShadowNear:
             case SdfWorldPackage.Parts.ShadowFar:
             case SdfWorldPackage.Parts.ShadowSecond: {
-                Follow();
-                m_owner.Begin(residency: m_view.Residency);
-                var tables = m_view.Residency.Submit(context: in context);
-                var cascades = SdfMeshShadowCascades.Fit(frame: m_view.Residency.Frame!, view: m_view.View);
+                    Follow();
+                    m_owner.Begin(residency: m_view.Residency);
+                    var tables = m_view.Residency.Submit(context: in context);
+                    var cascades = SdfMeshShadowCascades.Fit(frame: m_view.Residency.Frame!, view: m_view.View);
 
-                return ((cascades.Count == 0) || ((tables.OpaqueDrawCount == 0) && TargetsWritten) ||
-                    ((m_part == SdfWorldPackage.Parts.ShadowSecond) && (cascades.SecondPenumbraSlope <= 0f)));
-            }
+                    return ((cascades.Count == 0) || ((tables.OpaqueDrawCount == 0) && TargetsWritten) ||
+                        ((m_part == SdfWorldPackage.Parts.ShadowSecond) && (cascades.SecondPenumbraSlope <= 0f)));
+                }
             default:
                 return false;
         }
@@ -421,7 +429,6 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     // The bake's passes record whenever they do not skip: a pending bake dispatches a lattice each frame.
     public ulong? Signature(in FrameContext context, RenderGraphExternalReads? reads) => ((m_part is SdfWorldPackage.Parts.Bake or SdfWorldPackage.Parts.Mask)
         ? null : m_owner.SignatureOf(instance: m_context.Instance, part: m_part, temporal: m_temporal, context: in context));
-
     public void Submitted() {
         if (m_part == SdfWorldPackage.Parts.Views) {
             m_owner.SubmittedTaint(m_context.Instance, m_sourceTaint, m_readsHistory);
@@ -577,16 +584,16 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     }
     public bool TryReadback(int slot, int index, out RenderGraphBufferReadback readback) {
         if (m_pick is not null) {
-            return m_pick.Take(index: 0, readback: out readback, slot: slot) ||
-                m_diagnosticPick!.Take(index: 0, readback: out readback, slot: slot);
+            return (m_pick.Take(index: 0, readback: out readback, slot: slot) ||
+                m_diagnosticPick!.Take(index: 0, readback: out readback, slot: slot));
         }
         if ((m_bakeSlots.Length > 0) && (index == 0) && m_bakeSlots[slot].Record) {
             var target = m_bakeSlots[slot];
-            var bytes = (ulong)(target.Batch!.Samples * SdfWorldPackage.MeshBakeSampleWords * sizeof(uint));
+            var bytes = ((ulong)((target.Batch!.Samples * SdfWorldPackage.MeshBakeSampleWords) * sizeof(uint)));
 
             target.Buffer ??= m_context.Services.BufferFactory.CreateReadback(
                 name: new GpuObjectName(detail: "bake", index: slot, owner: m_context.Instance, part: m_context.Pass),
-                sizeBytes: (((ulong)SdfWorldPackage.MeshBakeMaxSamples) * SdfWorldPackage.MeshBakeSampleWords * sizeof(uint))
+                sizeBytes: ((((ulong)SdfWorldPackage.MeshBakeMaxSamples) * SdfWorldPackage.MeshBakeSampleWords) * sizeof(uint))
             );
             target.Record = false;
             target.Submit = true;
@@ -597,7 +604,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         return false;
     }
 
-    public ulong ReadbackBytes => ((m_pick?.ReadbackBytes ?? 0UL) + (m_diagnosticPick?.ReadbackBytes ?? 0UL) + (ulong)m_bakeSlots.Sum(selector: static slot => (long)(slot.Buffer?.SizeBytes ?? 0UL)));
+    public ulong ReadbackBytes => (((m_pick?.ReadbackBytes ?? 0UL) + (m_diagnosticPick?.ReadbackBytes ?? 0UL)) + ((ulong)m_bakeSlots.Sum(selector: static slot => ((long)(slot.Buffer?.SizeBytes ?? 0UL)))));
 
     public void Submitted(int slot, IGpuSubmissionFence fence) {
         if ((m_bakeSlots.Length > 0) && m_bakeSlots[slot].Submit) {
@@ -738,7 +745,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         );
 
         var (x, y) = m_part switch {
-            SdfWorldPackage.Parts.Mask => ((uint)SdfWorldPackage.MeshBakeBatch, 1u),
+            SdfWorldPackage.Parts.Mask => (((uint)SdfWorldPackage.MeshBakeBatch), 1u),
             SdfWorldPackage.Parts.Bake => (((uint)m_bakeSlots[recording.Slot].Batch!.Samples).CeilingDivide(divisor: 64u), 1u),
             // One invocation a texel of the pyramid's first level, half the extent rounded up.
             SdfWorldPackage.Parts.Pyramid => (recording.Width.CeilingDivide(divisor: 2u).CeilingDivide(divisor: 8u), recording.Height.CeilingDivide(divisor: 2u).CeilingDivide(divisor: 8u)),
@@ -771,7 +778,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         var target = recording.Outputs[0].Owned!;
         var framebuffer = m_framebuffers[0];
         var lateFramebuffer = ((m_lateFramebuffers.Length > 0) ? m_lateFramebuffers[0] : null);
-        var occlusion = (count > 0 ? m_occlusion : null);
+        var occlusion = ((count > 0) ? m_occlusion : null);
         var twoPhase = (occlude && !IsShadowCascade && !IsGlass);
 
         for (var index = 0; (index < m_meshTargets.Count); index++) {
@@ -828,7 +835,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
                     tables.WriteMeshBuffer(bound: ref bound[MeshSetVisibility], buffer: tables.DummyBuffer, member: SdfWorldPackage.VisibilityRecords, set: occlusionSet);
                     tables.WriteMeshBuffer(bound: ref bound[MeshSetGlassSums], buffer: tables.DummyBuffer, member: SdfWorldPackage.GlassSumsWritten, set: occlusionSet);
                     occlusion.Bind(bound: bound, boundTarget: ref m_occlusionSetTargets[index], first: MeshSetBuffers, set: occlusionSet, tables: tables,
-                        target: ((phase == 0 || !twoPhase) ? tables.SampledFiller.ImageViewHandle : target.ImageViewHandle));
+                        target: (((phase == 0) || !twoPhase) ? tables.SampledFiller.ImageViewHandle : target.ImageViewHandle));
                 }
                 occlusion.RecordEarly(commandBuffer: commandBuffer, pipeline: tables.OcclusionPipeline, recorder: recorder, set: m_occlusionSets[(meshSet * OcclusionSetsPerMesh)]);
             }
@@ -849,7 +856,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         );
         if (occlusion is not null) {
             // The first phase: what the previous frame found visible, and every draw no host box bounds.
-            RecordMeshPhase(commandBuffer: commandBuffer, pipeline: pipeline, recorder: recorder, set: set, selection: occlusion, phase: 0);
+            RecordMeshPhase(commandBuffer: commandBuffer, phase: 0, pipeline: pipeline, recorder: recorder, selection: occlusion, set: set);
         }
         recorder.EndRenderPass(commandBufferHandle: commandBuffer);
 
@@ -871,7 +878,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
                 commandBufferHandle: commandBuffer,
                 framebuffer: lateFramebuffer!
             );
-            RecordMeshPhase(commandBuffer: commandBuffer, pipeline: pipeline, recorder: recorder, set: set, selection: occlusion, phase: 1);
+            RecordMeshPhase(commandBuffer: commandBuffer, phase: 1, pipeline: pipeline, recorder: recorder, selection: occlusion, set: set);
             recorder.EndRenderPass(commandBufferHandle: commandBuffer);
         }
     }
@@ -891,7 +898,6 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         );
         selection.RecordDraws(commandBuffer: commandBuffer, phase: phase, pipeline: pipeline, recorder: recorder);
     }
-
     private void BindCounters(in RenderGraphPackageRecording recording, nint set, SdfWorldTables tables) {
         var counters = WorkCountersOf(recording: in recording).Buffer;
 
@@ -1037,7 +1043,6 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         SdfWorldPackage.Parts.MeshPyramid => SdfWorldPackage.MeshPyramidWritten,
         _ => null,
     };
-
     // Takes the frame's bake batch for this view's instance: the first instance whose mask or bake pass asks claims it,
     // and every other view of the residency skips its own.
     private bool ClaimsBake([System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out SdfMeshBakeBatch? batch) {
@@ -1049,6 +1054,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
 
         return batch.Claim(instance: m_context.Instance);
     }
+
     // Reads every bake slot whose submission completed and answers the bake that dispatched its batch with its samples.
     internal void PollBake() {
         foreach (var slot in m_bakeSlots) {
@@ -1057,7 +1063,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
 
             if (slot.Batch is not { } batch) { continue; }
 
-            var bytes = (batch.Samples * SdfWorldPackage.MeshBakeSampleWords * sizeof(uint));
+            var bytes = ((batch.Samples * SdfWorldPackage.MeshBakeSampleWords) * sizeof(uint));
 
             if (slot.Bytes.Length < bytes) { slot.Bytes = new byte[bytes]; }
             slot.Buffer!.Read(destination: slot.Bytes.AsSpan(length: bytes, start: 0));
@@ -1069,12 +1075,12 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     // One frame slot's bake readback: the buffer the samples are copied into, the batch its latest recording dispatched,
     // and the fence of the submission that copies them.
     private sealed class BakeSlot {
+        public SdfMeshBakeBatch? Batch { get; set; }
         public IGpuReadbackBuffer? Buffer { get; set; }
         public byte[] Bytes { get; set; } = [];
+        public IGpuSubmissionFence? Fence { get; set; }
         public bool Record { get; set; }
         public bool Submit { get; set; }
-        public IGpuSubmissionFence? Fence { get; set; }
-        public SdfMeshBakeBatch? Batch { get; set; }
         public string? Version { get; set; }
     }
 }

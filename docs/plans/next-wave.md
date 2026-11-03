@@ -67,9 +67,9 @@ Parallel lanes, with no shared files except where an order is named:
      `ShaderPipelineMemoryBudget` and `MemoryAccount`.
 
    Budget: 10 GB on the Deck tier. Proof: a GPU leg and one budgeted cold bake.
-4. **draw-identity, then V2b** (specialist). One per-index generation
-   (`SelectionWord+11`) and one Observe method, honoured by the occlusion
-   kernel; this folds the two identity comparisons.
+4. **V2b** (specialist). The shared draw-history contract is implemented;
+   retained instance updates now build on `SdfMeshHistory.Observe` and its
+   table-owner-scoped GPU selection history.
 5. **v2a** (implementer or specialist). Rate holds per registration; it pays
    on the lawn's far tiles. Pre-read `world.rates` first.
 6. **static-copy** (a principal design note, then specialist). Static copies

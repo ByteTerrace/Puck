@@ -11,6 +11,7 @@ namespace Puck.World;
 /// Client-local presentation state (like <c>world.screenshot</c>), never a simulation mutation, so it stays Immediate.
 /// </summary>
 internal sealed class WorldSdfCommandModule(WorldSdfDocumentEmitter documents, WorldRenderProbe renderProbe, WorldCreationInstances creations) : ICommandModule {
+    private static readonly System.Text.Json.JsonSerializerOptions RigJson = new() { IncludeFields = true };
     private readonly WorldSdfDocumentEmitter m_documents = documents;
     private readonly WorldRenderProbe m_renderProbe = renderProbe;
 
@@ -69,22 +70,22 @@ internal sealed class WorldSdfCommandModule(WorldSdfDocumentEmitter documents, W
             return CommandResult.Error(output: $"[world.sdf.load: {exception.Message.ReplaceLineEndings(replacementText: " ")}]");
         }
     }
-
     private CommandResult RigHandler(CommandContext context, WireArgs args) {
         if (args.Count == 0) {
             var rows = new List<string>();
-            for (var index = 0; index < creations.RegistrationCount; index++) {
-                if (creations.TryRegistrationRig(registration: index, state: out var state) && state is not null) {
-                    rows.Add($"{index}: {state.Creation}");
+
+            for (var index = 0; (index < creations.RegistrationCount); index++) {
+                if (creations.TryRegistrationRig(registration: index, state: out var state) && (state is not null)) {
+                    rows.Add(item: $"{index}: {state.Creation}");
                 }
             }
             return new CommandResult(Output: string.Join(separator: "\n", values: rows));
         }
         if ((args.Count > 2) || !int.TryParse(args[0].ToString(), out var registration) ||
-            !creations.TryRegistrationRig(registration: registration, state: out var rig, shapeName: args.Count == 2 ? args[1].ToString() : null)) {
+            !creations.TryRegistrationRig(registration: registration, state: out var rig, shapeName: ((args.Count == 2) ? args[1].ToString() : null))) {
             return CommandResult.Error(output: "[world.sdf.rig: expected a live registration index and optional shape; omit arguments to list registrations]");
         }
-        return new CommandResult(Output: System.Text.Json.JsonSerializer.Serialize(value: rig));
+        return new CommandResult(Output: System.Text.Json.JsonSerializer.Serialize(value: rig, options: RigJson));
     }
 
     /// <inheritdoc/>

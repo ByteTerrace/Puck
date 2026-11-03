@@ -29,14 +29,14 @@ public sealed class SdfMeshLawTests {
 
         SdfMeshRegion.Write(destination: words, generations: Enumerable.Repeat(1u, draws.Length).ToArray(), draws: draws, layout: layout, meshes: placements);
         var table = words[SdfMeshRecord.LevelTableWord];
-        Assert.Equal(expected: table, actual: words[SdfMeshRecord.DrawWords + SdfMeshRecord.LevelTableWord]);
-        Assert.Equal(expected: 3u, actual: words[SdfMeshRecord.LevelTableWord + 1]);
+
+        Assert.Equal(expected: table, actual: words[(SdfMeshRecord.DrawWords + SdfMeshRecord.LevelTableWord)]);
+        Assert.Equal(expected: 3u, actual: words[(SdfMeshRecord.LevelTableWord + 1)]);
         Assert.Equal(expected: new uint[] {
             0, 3, 0, 1, 3, BitConverter.SingleToUInt32Bits(0.1f),
             2, 3, BitConverter.SingleToUInt32Bits(0.2f), 3, 3, BitConverter.SingleToUInt32Bits(0.3f),
-        }, actual: words.AsSpan((int)table, 12).ToArray());
+        }, actual: words.AsSpan(((int)table), 12).ToArray());
     }
-
     [Fact]
     public void AMeshCarriesEachAttributeWhole() {
         var plain = new SdfMesh(
@@ -88,7 +88,6 @@ public sealed class SdfMeshLawTests {
         Assert.Equal(expected: "members", actual: Assert.Throws<ArgumentException>(testCode: () => new SdfMesh(indices: Indices, members: new[] { (member with { Position = new Vector3(x: float.NaN, y: 0f, z: 0f) }) }, positions: Positions)).ParamName);
         Assert.Equal(expected: "members", actual: Assert.Throws<ArgumentException>(testCode: () => new SdfMesh(indices: Indices, members: Enumerable.Repeat(element: member, count: (SdfMesh.MaxMembers + 1)).ToArray(), positions: Positions)).ParamName);
     }
-
     /// <summary>A mesh's levels are triangle lists over its own vertices, numbered after its own triangles in the region,
     /// with materials where the mesh has them and errors that only grow; the region lays each level's indices and
     /// materials after the finer ones', and a level past the coarsest draws the coarsest.</summary>
@@ -112,20 +111,20 @@ public sealed class SdfMeshLawTests {
         SdfMeshRegion.Write(destination: words, generations: Enumerable.Repeat(1u, draws.Length).ToArray(), draws: draws, layout: layout, meshes: placements);
         Assert.Equal(expected: [0u, 1u, 2u, 0u, 2u, 1u, 2u, 1u, 0u, 1u, 0u, 2u], actual: words.AsSpan(length: 12, start: placements[mesh].IndexWord).ToArray());
         Assert.Equal(expected: [1u, 2u, 3u, 4u], actual: words.AsSpan(length: 4, start: placements[mesh].MaterialWord).ToArray());
-        Assert.Equal(expected: layout.Words - SdfMeshRecord.DrawWords, actual: SdfMeshRegion.WordsOf(mesh: mesh));
+        Assert.Equal(expected: (layout.Words - SdfMeshRecord.DrawWords), actual: SdfMeshRegion.WordsOf(mesh: mesh));
 
         // A level without the mesh's materials, with materials the mesh lacks, empty, naming no vertex, or finer in error
         // than the level before it, is refused.
         var plain = new SdfMesh(indices: Indices, positions: Positions);
 
-        foreach (var levels in (SdfMeshLevel[][])[
+        foreach (var levels in ((SdfMeshLevel[][])[
             [new SdfMeshLevel(Error: 0f, Indices: Indices, TriangleMaterials: default)],
             [new SdfMeshLevel(Error: 0f, Indices: Indices, TriangleMaterials: new uint[] { 1, 2 })],
             [new SdfMeshLevel(Error: 0f, Indices: new uint[] { 0, 1 }, TriangleMaterials: new uint[] { 1 })],
             [new SdfMeshLevel(Error: 0f, Indices: new uint[] { 0, 1, 3 }, TriangleMaterials: new uint[] { 1 })],
             [new SdfMeshLevel(Error: 1f, Indices: Indices, TriangleMaterials: new uint[] { 1 }), new SdfMeshLevel(Error: 0.5f, Indices: Indices, TriangleMaterials: new uint[] { 1 })],
             [new SdfMeshLevel(Error: float.NaN, Indices: Indices, TriangleMaterials: new uint[] { 1 })],
-        ]) {
+        ])) {
             Assert.Equal(expected: "Levels", actual: Assert.Throws<ArgumentException>(testCode: () => mesh with { Levels = levels }).ParamName);
         }
 

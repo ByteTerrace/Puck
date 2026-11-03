@@ -47,6 +47,7 @@ public sealed class MemoryAccount {
 
     /// <summary>Gets the trims a cache owner deferred to its own thread that have not run yet.</summary>
     public int DeferredTrims => Volatile.Read(location: ref m_deferredTrims);
+
     /// <summary>Records a trim request a cache owner will service on its own thread; it calls
     /// <see cref="CompleteDeferredTrim"/> once it has.</summary>
     public void DeferTrim() => _ = Interlocked.Increment(location: ref m_deferredTrims);
@@ -131,8 +132,7 @@ public sealed class MemoryAccount {
             var charged = ((m_bytes != 0) || (Promise != 0));
 
             if (charged == m_tracked) { return; }
-            if (charged) { _ = m_account.m_owners.Add(item: this); }
-            else { _ = m_account.m_owners.Remove(item: this); }
+            if (charged) { _ = m_account.m_owners.Add(item: this); } else { _ = m_account.m_owners.Remove(item: this); }
             m_tracked = charged;
         }
 

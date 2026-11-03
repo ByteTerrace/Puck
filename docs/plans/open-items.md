@@ -210,8 +210,13 @@ grass and trees; scattered groves do not satisfy it. The
 [plan](dense-landscapes.md) owns the fresh measurements, connected woodland
 proposal, counted-work metrics and implementation dependencies. Existing
 visibility, bake, memory, terrain and job-system packets own the mechanisms.
-The first baseline contains no forest or cold-store qualification; motion
-witnesses and target-device measurements remain explicit next work.
+Query/pose/driver counters, charged-memory snapshots, shared CPU/GPU surface
+history and a connected forest patch are implemented; wind stop/restore is
+witnessed. Next: local static-copy sharing and retained updates, GPU instance
+buckets, then the wider forest and density/route qualification. The measured cold
+bake misses its bar; physical-memory and target-device qualification remain open.
+Cross-family review is owed: the session-launch hook refused the Claude reviewer
+from this Codex lead session; the supplemental review finding was fixed.
 
 ### Engine job system
 

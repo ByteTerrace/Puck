@@ -60,7 +60,10 @@ in the tree.
   driven by state cells (`worlds/standard/foliage.puck:409-554`). Animated
   placements bypass the pose-rate holds
   (`src/Puck.World.Client/WorldCreationInstances.Pack.cs:246-249`,
-  `WorldCreationInstances.Rates.cs:192-195`), so every slot poses every frame.
+  `WorldCreationInstances.Rates.cs:192-195`). The outer owner wake guard can retain
+  their poses; the body-only rate hold is a separate decision. Driver continuation
+  now prevents an active authored clock from settling merely because one output
+  pose was equal.
 - **`SdfMeshPathBake.Dress` rebuilds the whole draw list** when any dynamic
   slot moved (`SdfMeshPathBake.cs:384-425`), allocating a draw per copy and
   scanning every mesh instance for each dynamic group (`:390-395`); the scan

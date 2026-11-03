@@ -162,6 +162,7 @@ internal static class SdfFieldMarch {
         var observedExact = 0;
         var observedBounds = 0;
         var failedSamples = 0;
+
         SdfQueryWork.ProcessWork.Count(kind: SdfQueryWork.Marches);
 
         try {

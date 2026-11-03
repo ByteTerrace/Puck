@@ -165,6 +165,12 @@ Rigid creation copies share one local bake and palette. Each live copy owns one 
   frames. Uninhabited placements advance from their root pose, presentation time
   and world state, with no body facts and no body-key substitution. This lets
   scenery use the same swings and parent chains as inhabitants.
+  The outer owner wake guard retains unchanged placements. Driver scalar references
+  participate in the manifest and lease revision, so restoring a zero cadence wakes
+  its registration. `WorldGaitDrivers.Activity` keeps active clocks and remaining
+  easing/follower motion scheduled independently of equal output poses, reporting
+  evaluations, integrations and actual phase changes separately. `world.sdf.rig`
+  lists indices or reads one placement/body rig through the shared `body.rig` builder.
 - `WorldSessionSceneEmitter.cs`, `WorldAdjacencySceneEmitter.cs`—the session
   projection's and adjacency neighbour's own content emission, parallel to
   `WorldSceneEmitter`'s boot-world path. A session view keeps a `WorldCreationInstances`

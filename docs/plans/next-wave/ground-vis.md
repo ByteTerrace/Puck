@@ -13,163 +13,31 @@ parallel lanes.
 
 ## 1. Draw identity: one per-record generation (before V1/V2b)
 
-### What is there
+The generation prerequisite is implemented by
+[`SdfMeshHistory.Observe`](../../../src/Puck.SdfVm/SdfMeshHistory.cs).
+It supplies one CPU seed decision and required packed GPU generation.
+Retirement preserves per-cell generation lifetimes; exhausted tokens refuse
+reuse rather than wrapping. Mesh or surface-frame changes seed history, while
+ordinary matrix motion retains it.
 
-There are two identities, and neither is the draw's own:
+GPU visibility and LOD validate the generation before consuming prior state.
+Selection state also belongs to the actual tables owner:
+[`SdfMeshOcclusion.Stage`](../../../src/Puck.SdfVm/SdfMeshOcclusion.cs)
+clears it when a retained recorder switches tables, including during growth.
+Same-owner growth retains the old prefix. This closes the collision between two
+tables whose first occupants both use generation 1.
 
-- **R2's selection identity is per *mesh*, not per draw.** `SdfMeshRegion` keeps a
-  `ConditionalWeakTable<SdfMesh, SelectionIdentity>` with a process-global `Interlocked` counter (`SdfMesh.cs:329-335`).
-  `WriteDraw` stores it in selection row 2's `w` (`SdfMesh.cs:612`, `selection[11]`). Every draw that shares a mesh
-  carries the same value: at the meadow that is 14.6 draws per geometry (`visibility.md:51-53`).
-- **The residency's motion identity is per *index*.** `m_meshIdentities[index]` holds `MotionIdentity ?? Identity`
-  (`SdfWorldTables.Motion.cs:35`). It is compared at two sites: `StageMeshMotion` on a whole restage
-  (`SdfWorldTables.Motion.cs:200-233`, compare at `:213-216`), and `StageChangedDraws` on a same-size restage
-  (`SdfWorldTables.MeshRegion.cs:278-297`, compare at `:280-293`). A mismatch seeds the draw's previous matrix
-  (`m_seededMeshDraws`). The two compares are the same logic written twice (see Found).
-- **The GPU per-draw state is keyed by draw index** (`sdfMeshOcclusionVisibleRW[draw]`, `uint4` = visible, level, mesh
-  identity, kept; `passes/sdf-mesh-occlusion.comp.hlsl:208-229`).
-  - The **level history** is checked against the *mesh* identity (`frame/sdf-mesh-selection.hlsli:79`:
-    `previous.z == y.w`), so a neighbour that shares the mesh passes the check.
-  - The **visible bit** `state.x` is checked against nothing (`:222`, `was = unboxed || state.x != 0u`).
-  - `state.z` is refreshed only when the draw is kept (`:215-219`).
-  - The buffer is cleared to zero on creation, and history is copied across growth (`SdfMeshOcclusion.cs:120-135`,
-    `:244-268`).
+The [renderer contract](../../../src/Puck.SdfVm/README.md) owns current semantics;
+[dense-landscape implementation](../dense-landscapes.md#first-implementation-slice)
+owns workload/readback evidence. The old duplicate identity comparisons and
+mesh-only token source are removed. CPU `sdf.instances` counts actual observations,
+seeds, retirements, changed matrices and packed records/bytes. These are not
+device-transfer bytes or a per-pass GPU history-reset count.
 
-### What renumbers draws
-
-Each of these reads from the code:
-
-- **Dress.** `SdfMeshPathBake.Dress` rebuilds the list in group order (`SdfMeshPathBake.cs:398-433`). A group that
-  finishes baking inserts its draws mid-list, which shifts every later index. That happens on every landing during a
-  cold bake.
-- **Straddling bodies.** `SdfSlotClip.Apply` inserts the extra draws of a body straddling a portal (`:428-431`).
-- **Bodies.** A new or retired body adds or removes copies.
-- **The landing subset.** The residency stages only the draws whose meshes have landed (`SdfWorldTables.MeshRegion.cs:197-207`).
-  While meshes are owed, every frame's staged list is a different subset, so indices shift frame to frame.
-- **Program rebuilds.** `Restart` and `Refresh` replace the static group objects, which are the static draws'
-  `Identity`. Every static draw then reads as a new identity at its index. That is correct, but it costs a one-frame
-  spike on every rebuild; V1 removes it.
-
-**Consequence.** Phase one draws index *i*'s old visible bit for whatever now sits at *i*. The level choice inherits a
-neighbour's level whenever the two share a mesh, which is the common case. Phase two re-tests every kept box, so the
-image stays correct. The cost is a spike, plus a level pop inside the 1.0-1.1 pixel band, which is the open item's
-diagnosis (`docs/plans/open-items.md:2509-2517`). No run has exercised it.
-
-### Callers
-
-Of the record writers:
-
-- `SdfMeshRegion.WriteDraws` and `WriteDraw` (`SdfMesh.cs:525-614`), called by `SdfWorldTables.StageMeshRegionCore`
-  (`MeshRegion.cs:234`) and `StageChangedDraws` (`:287`).
-- `SdfMeshRegion.Write` (`SdfMesh.cs:501-512`).
-- Tests: `tests/Puck.World.Tests/SdfReprojectionDeviceLawTests.cs:144`, and
-  `tests/Puck.SdfVm.Tests/SdfWorldTablesUploadLawTests.cs:785-869`, which reads word 11 as "identity".
-
-Of the GPU state: the occlusion kernel alone (`sdf-mesh-occlusion.comp.hlsl`), plus `sdfSelectionLevel`
-(`sdf-mesh-selection.hlsli:56-86`), which reads the state through the `previous` argument.
-
-### Invariant and its one door
-
-> **Invariant G.** For every staged record index *i*, word `SelectionWord + 11` holds `G[i]`, the generation of the
-> occupant at *i*. `G[i]` is never 0 and changes whenever the occupant changes. The occupant is the motion identity
-> (`MotionIdentity ?? Identity`) together with the mesh reference. A pass's per-index GPU state (visible bit, level,
-> kept) is honoured only when its stored generation equals the record's `G[i]`. Otherwise the state reads as fresh:
-> not visible last frame, and no level hysteresis.
-
-The generation is a per-index counter, `m_meshGenerations[i]++`, skipping 0. A cleared GPU buffer therefore never
-matches, and aliasing would need 2^32 changes at one index between two reads. A process-global counter is not used: it
-wraps across all indices about 17,000 s at the meadow's churn.
-
-Enforcement, CPU side (one door plus the compiler):
-
-- One private type in `SdfWorldTables` (it replaces `m_meshIdentities`; a working name is `MeshRecordIdentities`).
-- `Observe(int index, in SdfMeshDraw draw) -> (uint Generation, bool Reseated)` is the only code that compares an
-  occupant with the previous one:
-  - `Reseated` means the motion identity changed, which seeds the previous matrix as today.
-  - The generation moves when the motion identity *or* the mesh changes. A rebake that lands under the same body
-    changes the level table, so it must reset the level, but it must not seed motion.
-- `SdfMeshRegion.WriteDraw` and `WriteDraws` take the generation as a required parameter (a `uint` or a span), so no
-  record can be written without one.
-- Both staging paths call `Observe` *before* writing the record. Today `WriteDraws` runs at `MeshRegion.cs:234`, before
-  `StageMeshMotion` at `:239`, so the order is swapped.
-- This deletes the duplicate compare in `StageChangedDraws` (`:288-293`), and deletes `SelectionIdentities` and its
-  counter (`SdfMesh.cs:329-335`).
-
-Enforcement, GPU side (one function):
-
-- A single helper in the occlusion kernel is the only reader and writer of `sdfMeshOcclusionVisibleRW`. When `state.z`
-  differs from the record's generation it zeroes `state.x` and `state.y`, and it writes `state.z = generation` every
-  early step, kept or not.
-- `sdfSelectionLevel`'s `previous.z == y.w` (`sdf-mesh-selection.hlsli:79`) becomes a generation comparison.
-- Phase two reads the zeroed visible bit that the early step wrote, so a reset occupant is drawn in phase two if its
-  box can show. That is exactly the frame's own correct work.
-
-Renaming: `SdfMeshRecord.SelectionWord`'s doc says "half Y and mesh identity" (`src/Puck.SdfVm.Model/SdfMeshRecord.cs:17-18`).
-It becomes "half Y and the record's generation".
-
-### Reuse
-
-Nothing new is needed beyond the door:
-
-- The identity-at-index comparison already exists twice. Fold the two into the door.
-- The record's `selection[11]` word already exists. Repurpose it, so the layout stays at 63 words.
-- History preservation across growth (`SdfMeshOcclusion.cs:259-268`) stays as it is.
-- The generation is the draw-list analogue of `SdfMovedTransforms`' **reseat** (`SdfMovedTransforms.cs:30-32`, `:233-249`).
-  V2b should feed the door from a moved set rather than from a per-index compare (item 2).
-
-### What V1's instance identity later replaces
-
-The per-*index* generation exists only because the record's position is its identity. V1 gives each instance a stable
-slot in a retained instance table, which history is keyed by (`visibility.md:204-207`, the identity-consumer table at
-`:236-245`). `Observe` then becomes the instance table's allocator: generation per instance slot, bumped on reuse of
-the slot, and never on renumbering, because nothing renumbers. A program rebuild that keeps an instance keeps its
-history, which removes the rebuild spike above. The `selection[11]` word moves to the per-instance part of the split
-record.
-
-### Counter that proves it
-
-There are no counters for any of this today. Add two:
-
-- **CPU:** `sdf.mesh.records.reseated` and `sdf.mesh.records.regenerated`, counted per frame in the residency's work
-  set (the `residency.Work` the screen binder registers).
-- **GPU:** a fourth drawn-word count, `history-resets`, reduced per wave like `sdfOcclusionCount`
-  (`sdf-mesh-occlusion.comp.hlsl:61-77`). It counts kept draws whose stored generation mismatched.
-
-The check:
-
-1. Drive a deterministic renumbering at the meadow: spawn or retire a body, or `debug.go portals` with a body straddling
-   the garden portal (`SdfSlotClip`).
-2. On the renumber frame, GPU `history-resets` is at most the CPU `regenerated` count.
-3. Phase-one `gpu.draws` holds only generation-matched draws.
-4. On the next frame both counters read 0 and the phase-one/phase-two split returns to steady state.
-5. In a presented burst of eight frames, `world.debug-view material-id` shows no level pop.
-
-Today step 3 cannot be checked at all.
-
-### Draft brief (lane `draw-gen`, rendering, small, invariant-bearing)
-
-> Make draw history follow the occupant, not the index. Add one per-index generation in `SdfWorldTables`, written into
-> each record's `SelectionWord + 11` and checked by the occlusion kernel for both the visible bit and the level history,
-> per Invariant G (ground-vis §1).
->
-> - One door, `Observe(index, draw)`, replaces `m_meshIdentities` and both identity compares
->   (`SdfWorldTables.Motion.cs:213-216`, `SdfWorldTables.MeshRegion.cs:288-293`).
-> - `SdfMeshRegion.WriteDraw` and `WriteDraws` take the generation as a required parameter.
-> - Delete `SdfMeshRegion.SelectionIdentities` (`SdfMesh.cs:329-335`).
-> - In HLSL, one helper owns `sdfMeshOcclusionVisibleRW`, and `sdfSelectionLevel` compares generations.
-> - Add `sdf.mesh.records.reseated` and `sdf.mesh.records.regenerated` (CPU) and the `history-resets` drawn word (GPU).
-> - Update or delete `SdfWorldTablesUploadLawTests`' identity expectations and the `SdfReprojectionDeviceLawTests`
->   `WriteDraws` call.
->
-> Verify with a build of `Puck.SdfVm` (DXIL) plus a SPIR-V build. GPU leg, granted: the meadow on Direct3D 12 plus a
-> windowed Vulkan boot, a body spawn and a portal straddle, with both counters and a presented burst under
-> `material-id`.
->
-> State the invariant and the door in the commit body. The change does not touch the bake closure: it is
-> renderer-only, and the bake kernels do not include the occlusion kernel. Confirm with
-> `puck mesh identity --against`. Owns: `SdfMesh.cs` (`SdfMeshRegion`), `SdfWorldTables.MeshRegion.cs`,
-> `SdfWorldTables.Motion.cs`, `SdfMeshOcclusion.cs` (doc), `sdf-mesh-occlusion.comp.hlsl`, `sdf-mesh-selection.hlsli`,
-> `Puck.SdfVm.Model/SdfMeshRecord.cs` (doc), and the two test files.
+V1/V2b still owe stable retained instance slots and change-proportional updates.
+They should move this existing generation/owner contract into the retained table,
+not invent another history identity. The full renumber/portal/nested-view
+qualification and GPU reset attribution remain in that work.
 
 ---
 

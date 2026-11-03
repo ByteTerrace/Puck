@@ -21,18 +21,18 @@ internal sealed class SdfMeshOcclusion : IDisposable {
     private const uint LateStep = 2u;
     // Controls only; bounds and level metadata live in the shared mesh region. Paired with sdf-mesh-selection.hlsli:
     // one header row, three detail rows, ten cull rows.
-    private const int HeaderWords = 14 * 4;
+    private const int HeaderWords = (14 * 4);
     // Entry/early, late/solid exit, thin exit; paired with SdfOcclusionPhases in the kernel.
     private const uint ArgumentPhases = 3u;
-    private const ulong CountsBytes = 4 * sizeof(uint);
+    private const ulong CountsBytes = (4 * sizeof(uint));
 
     private readonly IGpuBufferFactory m_buffers;
     private readonly string m_owner;
     private readonly string m_part;
     private readonly IGpuStorageBuffer?[] m_candidates;
     private readonly List<IGpuBuffer>[] m_retired;
-
     private readonly byte[] m_pushed = new byte[GpuPipelineLayoutDescription.PushIndexBytes];
+
     private IGpuBuffer? m_visible;
     private IGpuBuffer? m_seedVisible;
     private IGpuBuffer? m_draws;
@@ -51,7 +51,7 @@ internal sealed class SdfMeshOcclusion : IDisposable {
     public SdfMeshOcclusion(IGpuBufferFactory buffers, int slots, string owner, string part) {
         m_buffers = buffers;
         m_candidates = new IGpuStorageBuffer?[slots];
-        m_retired = Enumerable.Range(0, slots).Select(static _ => new List<IGpuBuffer>()).ToArray();
+        m_retired = Enumerable.Range(count: slots, start: 0).Select(selector: static _ => new List<IGpuBuffer>()).ToArray();
         m_owner = owner;
         m_part = part;
     }
@@ -61,25 +61,26 @@ internal sealed class SdfMeshOcclusion : IDisposable {
 
     // Each pass uploads constant-sized controls. The residency already uploaded each changed draw once.
     public void Stage(SdfWorldTables tables, int slot, uint count, uint width, uint height, in SdfMeshCull cull, in SdfMeshDetail detail, bool held, bool glass, bool occlude, bool splitExit = false) {
-        if (occlude && splitExit) { throw new ArgumentException("A selection cannot combine depth occlusion and exit partitioning."); }
+        if (occlude && splitExit) { throw new ArgumentException(message: "A selection cannot combine depth occlusion and exit partitioning."); }
         // The recording slot's fence has completed before Stage. Retire replacements only on its next reuse, after all
         // preceding submissions and this slot's history copy have completed.
         foreach (var buffer in m_retired[slot]) { buffer.Dispose(); }
         m_retired[slot].Clear();
         m_slot = slot;
         m_count = count;
-        m_width = Math.Max(width, 1u);
-        m_height = Math.Max(height, 1u);
+        m_width = Math.Max(val1: width, val2: 1u);
+        m_height = Math.Max(val1: height, val2: 1u);
         m_levels = LevelsOf(height: m_height, width: m_width);
         Span<System.Numerics.Vector4> rows = stackalloc System.Numerics.Vector4[14];
-        var words = System.Runtime.InteropServices.MemoryMarshal.Cast<System.Numerics.Vector4, uint>(rows);
+        var words = System.Runtime.InteropServices.MemoryMarshal.Cast<System.Numerics.Vector4, uint>(span: rows);
+
         words[0] = count;
         words[1] = m_levels;
         words[2] = (occlude ? 1u : 0u) | (splitExit ? 2u : 0u);
-        words[3] = glass ? 1u : 0u;
+        words[3] = (glass ? 1u : 0u);
         detail.WriteGpu(rows: rows[1..4], held: held);
         cull.WriteGpu(rows: rows[4..]);
-        EnsureBuffers(draws: count, depth: occlude);
+        EnsureBuffers(depth: occlude, draws: count);
         // Generations are table-local. Follow can preserve this pass while changing its tables, whose first cells
         // can carry the same tokens as the previous owner. Reset after growth so its seed cannot restore old history.
         if (!ReferenceEquals(objA: m_historyOwner, objB: tables)) {
@@ -96,7 +97,7 @@ internal sealed class SdfMeshOcclusion : IDisposable {
         tables.WriteMeshBuffer(bound: ref bound[(first + 1)], buffer: m_visible!, member: SdfKernelInterfaces.MeshOcclusionVisibleWritten, set: set);
         tables.WriteMeshBuffer(bound: ref bound[(first + 2)], buffer: m_draws!, member: SdfKernelInterfaces.MeshOcclusionDrawsWritten, set: set);
         tables.WriteMeshBuffer(bound: ref bound[(first + 3)], buffer: m_counts!, member: SdfKernelInterfaces.MeshOcclusionCountsWritten, set: set);
-        tables.WriteMeshBuffer(bound: ref bound[(first + 4)], buffer: m_depth ?? tables.DummyBuffer, member: SdfKernelInterfaces.MeshOcclusionDepthWritten, set: set);
+        tables.WriteMeshBuffer(bound: ref bound[(first + 4)], buffer: (m_depth ?? tables.DummyBuffer), member: SdfKernelInterfaces.MeshOcclusionDepthWritten, set: set);
         tables.WriteMeshBuffer(bound: ref bound[(first + 5)], buffer: tables.DummyBuffer, member: SdfKernelInterfaces.MeshIndirectCommands, set: set);
         tables.WriteMeshTarget(bound: ref boundTarget, set: set, view: target);
     }
@@ -127,7 +128,8 @@ internal sealed class SdfMeshOcclusion : IDisposable {
         Ready(buffer: m_counts, commandBuffer: commandBuffer, recorder: recorder, source: GpuAccess.TransferWrite, sourceStage: GpuStage.Transfer);
 
         if (!m_visibleCleared) {
-            var copied = m_seedVisible is not null;
+            var copied = (m_seedVisible is not null);
+
             recorder.ClearStorageBuffer(commandBufferHandle: commandBuffer, bufferHandle: m_visible!.BufferHandle, sizeBytes: m_visible.SizeBytes);
             if (m_seedVisible is { } previous) {
                 // The old buffer's only use in this recording is the copy. The global barrier above makes its prior
@@ -140,7 +142,7 @@ internal sealed class SdfMeshOcclusion : IDisposable {
                     destinationBufferHandle: m_visible.BufferHandle, sizeBytes: previous.SizeBytes);
                 m_seedVisible = null;
             }
-            Ready(buffer: m_visible, commandBuffer: commandBuffer, recorder: recorder, source: copied ? GpuAccess.CopyWrite : GpuAccess.TransferWrite, sourceStage: GpuStage.Transfer);
+            Ready(buffer: m_visible, commandBuffer: commandBuffer, recorder: recorder, source: (copied ? GpuAccess.CopyWrite : GpuAccess.TransferWrite), sourceStage: GpuStage.Transfer);
             m_visibleCleared = true;
         }
 
@@ -254,7 +256,7 @@ internal sealed class SdfMeshOcclusion : IDisposable {
     // first opaque occlusion frame tests every new candidate in the second phase.
     private void EnsureBuffers(uint draws, bool depth) {
         var capacity = Math.Max(val1: draws, val2: 1u);
-        var candidateBytes = (ulong)(HeaderWords * sizeof(uint));
+        var candidateBytes = ((ulong)(HeaderWords * sizeof(uint)));
 
         if ((m_candidates[m_slot] is not { } candidates) || (candidates.SizeBytes < candidateBytes)) {
             m_candidates[m_slot]?.Dispose();
@@ -265,24 +267,24 @@ internal sealed class SdfMeshOcclusion : IDisposable {
                 usage: GpuBufferUsage.Storage
             );
         }
-        if ((m_visible is null) || (m_visible.SizeBytes < (((ulong)capacity) * 4 * sizeof(uint)))) {
+        if ((m_visible is null) || (m_visible.SizeBytes < ((((ulong)capacity) * 4) * sizeof(uint)))) {
             m_seedVisible = m_visible;
-            if (m_visible is { } previous) { m_retired[m_slot].Add(previous); }
+            if (m_visible is { } previous) { m_retired[m_slot].Add(item: previous); }
             m_visible = null;
             m_visible = m_buffers.CreateDeviceLocal(
                 name: Name(detail: "occlusion visible"),
-                sizeBytes: (((ulong)System.Numerics.BitOperations.RoundUpToPowerOf2(value: capacity)) * 4 * sizeof(uint)),
+                sizeBytes: ((((ulong)System.Numerics.BitOperations.RoundUpToPowerOf2(value: capacity)) * 4) * sizeof(uint)),
                 usage: GpuBufferUsage.Storage
             );
             m_visibleCleared = false;
         }
         if ((m_draws is null) || (m_capacity < capacity)) {
-            if (m_draws is { } previous) { m_retired[m_slot].Add(previous); }
+            if (m_draws is { } previous) { m_retired[m_slot].Add(item: previous); }
             m_draws = null;
             m_capacity = System.Numerics.BitOperations.RoundUpToPowerOf2(value: capacity);
             m_draws = m_buffers.CreateDeviceLocal(
                 name: Name(detail: "occlusion draws"),
-                sizeBytes: (((ulong)ArgumentPhases * m_capacity) * GpuDrawIndirectCommand.StrideBytes),
+                sizeBytes: ((((ulong)ArgumentPhases) * m_capacity) * GpuDrawIndirectCommand.StrideBytes),
                 usage: GpuBufferUsage.Storage | GpuBufferUsage.Indirect
             );
         }
@@ -297,7 +299,7 @@ internal sealed class SdfMeshOcclusion : IDisposable {
         var depthBytes = (DepthWords(height: m_height, levels: m_levels, width: m_width) * sizeof(uint));
 
         if ((m_depth is null) || (m_depth.SizeBytes < depthBytes)) {
-            if (m_depth is { } previous) { m_retired[m_slot].Add(previous); }
+            if (m_depth is { } previous) { m_retired[m_slot].Add(item: previous); }
             m_depth = null;
             m_depth = m_buffers.CreateDeviceLocal(
                 name: Name(detail: "occlusion depth"),
@@ -332,8 +334,9 @@ internal sealed class SdfMeshOcclusion : IDisposable {
             stageFlags: GpuShaderStage.Compute
         );
         var groups = invocations.CeilingDivide(divisor: SdfKernelInterfaces.MeshSelectionGroupSize);
+
         recorder.Dispatch(commandBufferHandle: commandBuffer,
-            groupCountX: Math.Min(groups, SdfKernelInterfaces.MeshSelectionGroupsPerRow),
+            groupCountX: Math.Min(val1: groups, val2: SdfKernelInterfaces.MeshSelectionGroupsPerRow),
             groupCountY: groups.CeilingDivide(divisor: SdfKernelInterfaces.MeshSelectionGroupsPerRow), groupCountZ: 1u);
     }
     // Readies a buffer a kernel wrote or read for the next kernel's reads and writes.

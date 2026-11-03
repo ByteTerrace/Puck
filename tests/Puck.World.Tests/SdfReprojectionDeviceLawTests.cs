@@ -47,6 +47,7 @@ public sealed class SdfReprojectionDeviceLawTests {
         var still = Vector3.Transform(matrix: StillMesh, position: point);
         var behind = Vector3.Transform(matrix: BehindMesh, position: point);
         var sliver = Vector3.Transform(matrix: StillMesh, position: new Vector3(32f, (1f / 16384f), 0f));
+
         uint Draw(int draw) => (SdfVisibility.IdentityOf(kind: SdfVisibilityKind.Mesh, source: ((uint)draw)));
 
         return [
@@ -181,7 +182,7 @@ public sealed class SdfReprojectionDeviceLawTests {
             var previousTransforms = services.BufferFactory.CreateHostVisible(sizeBytes: (3 * 16), usage: GpuBufferUsage.Storage, name: default);
 
             buffers.Add(item: previousTransforms);
-            previousTransforms.Write<byte>(data: new byte[3 * 16]);
+            previousTransforms.Write<byte>(data: new byte[(3 * 16)]);
             services.Bindings.WriteBuffer(binding: 6, bufferHandle: previousTransforms.BufferHandle, bufferSize: previousTransforms.SizeBytes,
                 descriptorSetHandle: set, elementStride: 16u, kind: GpuBindingKind.ReadOnlyBuffer);
             var recorder = services.Recorder;
