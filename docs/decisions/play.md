@@ -44,6 +44,18 @@ The owner's further rulings on the shape:
   menu. Beneath it, a small host-owned escape that no world can cover,
   restyle or intercept always offers exit to the hub and exit to desktop.
 
+The owner's rulings on the hub design's open calls:
+- **A couch pauses too, by default.** Whether local multiplayer pauses is
+  authored per world, and the standard's default pauses a session whose
+  players are all local to the machine. Any remote player makes it a shared
+  session.
+- **The first character is a default, then the studio.** A new player gets a
+  default character at once and starts at the hub's character place, where
+  they can change it.
+- **The host escape gestures.** On a pad, the Menu button itself is the
+  escape, with no chord. On a keyboard it is the existing Ctrl+Alt+Escape
+  chord.
+
 A player save is, today, the owned identity document
 ([grounding](../plans/next-wave/ground-hub.md#1-player-persistence-today)).
 The design refines it rather than inventing another.
