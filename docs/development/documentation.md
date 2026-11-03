@@ -254,6 +254,10 @@ hold are held by a check; the rest are procedure.
   "done", "landed" or "is green" is a deletion that has not happened yet.
   Evidence (timings, hashes, run outputs) goes into the commit message that
   lands the change, never into the plan.
+- **No one machine's details.** A skill, plan or doc holds no single
+  machine's paths, installed tools, hardware events or readings. Evidence
+  goes in the commit message, and setup every machine needs goes in
+  [machine setup](contributing.md#setting-up-a-machine).
 - **One fact, one home.** A second page links to the owner instead of restating
   it ([choose the authoritative home](#choose-the-authoritative-home)). A list
   that ranks work, such as open items' Next, names and links its packets; it
