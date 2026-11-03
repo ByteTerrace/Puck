@@ -1,0 +1,4 @@
+schema_version: "1.1"
+name: d22-foreign-entries-at-the-final-commit
+context:
+  history_file: history.jsonl
