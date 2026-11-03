@@ -3161,8 +3161,7 @@ the Monitor hook check.
   to the job's tmp folder and print `<lane> exit=N` to stdout rather than
   `.claude/scratch/<lane>.log`; a findings-only lane also needs a
   `.claude/scratch/<lane>.task` (`mode: findings-only`), since a Codex review can
-  run with a workspace-write sandbox. `puck lanes --base` still defaults to
-  `lead/catch-up` instead of the integration branch. (from: agents-b)
+  run with a workspace-write sandbox. (from: agents-b)
 - [low] The reviewer's "builds nothing" is prose only: the read-only policy
   derives read-only agents from their definitions and cannot tell reviewer
   from scout, whose definition allows CLI builds. (from: agents-b)
