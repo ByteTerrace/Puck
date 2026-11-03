@@ -35,6 +35,16 @@ public sealed class WorldGaitKinematics {
     /// forward.</summary>
     public float ForwardAcceleration { get; private set; }
 
+    /// <summary>Gets whether the eased motion still has velocity to release into a later rate signal.</summary>
+    public bool MotionContinues => ((m_localVelocity != Vector2.Zero) || (m_worldVelocity != Vector2.Zero));
+
+    /// <summary>Reports an existing follower's remaining displacement or velocity, independently of whether its last
+    /// output happened to equal the preceding output. No follower is advanced by this read.</summary>
+    /// <param name="index">The driver's row index.</param>
+    /// <returns>Whether the follower has a continuation under a constant target.</returns>
+    public bool FollowerContinues(int index) => (m_follows[index] && m_seeded[index] &&
+        ((m_value[index] != m_previousTarget[index]) || (m_velocity[index] != 0f)));
+
     /// <summary>Clears the eased motion and every follower, so a reused body slot starts at rest facing forward.</summary>
     public void Reset() {
         m_localVelocity = Vector2.Zero;

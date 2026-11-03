@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using Puck.Commands;
+using Puck.Assets.Documents;
 using Puck.World.Authoring;
 
 namespace Puck.World.Client;
@@ -19,7 +20,7 @@ public readonly record struct WorldPresentationBinding(StateBinding Binding, Wor
 /// weathering and inset colors, a height field's color, a text screen's ink), and each height field's row read whole,
 /// which its brick is baked from. <see cref="BodyBindings"/> are templates a body reads through its own
 /// <c>WorldStateLease</c>: the population's scale row, a look's pose references and lane operands, a creation
-/// driver's state signal and gate tokens, and an effector's gate tokens and state target. A template keeps its
+/// driver's state signal, gate tokens and scalar expressions, and an effector's gate tokens and state target. A template keeps its
 /// <see cref="StateBinding.BodyKey"/> key as authored; a body's lease resolves that key to the body's index when it
 /// acquires the template, so every body reads its own slot of one table, and the slot is released when the body leaves.
 /// Each template is also recorded under the document object that carries it (<see cref="TemplatesOf"/>): the
@@ -51,6 +52,7 @@ public sealed class WorldPresentationManifest {
         typeof(BindableColor),
         typeof(BindableScalar),
         typeof(CreationDriverDocument),
+        typeof(DocumentScalar),
         typeof(CreationEffectorDocument),
         typeof(CreationEffectorTargetDocument),
         typeof(OverlayPredicate.State),
@@ -508,6 +510,14 @@ public sealed class WorldPresentationManifest {
         // Records the bindings a surface carries; returns whether the walk continues into its members.
         private bool Collect(object value) {
             switch (value) {
+                case DocumentScalar scalar:
+                    if (Owner is not null) {
+                        AddBodyToken(token: scalar.Reference, truth: false);
+                    } else if (StateBinding.TryParse(binding: out var binding, token: scalar.Reference)) {
+                        Add(binding: binding, conversion: WorldStateConversion.Number);
+                    }
+
+                    return false;
                 case BindableScalar scalar:
                     // A token naming a keyed row with no key binds the whole row, which a pass's array reads.
                     Add(
@@ -626,7 +636,8 @@ public sealed class WorldPresentationManifest {
 
                     AddGate(gate: driver.When);
 
-                    return false;
+                    // Scalar expressions are surfaces too, wherever a driver carries them.
+                    return true;
                 case CreationEffectorDocument effector:
                     // The walk continues into the effector's target.
                     AddGate(gate: effector.When);

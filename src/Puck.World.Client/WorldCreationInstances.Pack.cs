@@ -446,7 +446,7 @@ public sealed partial class WorldCreationInstances {
             second: live.Look
         );
 
-        return m_owners.Wake(
+        var wake = m_owners.Wake(
             deltaSeconds: deltaSeconds,
             discontinuity: discontinuity,
             moved: moved,
@@ -459,6 +459,9 @@ public sealed partial class WorldCreationInstances {
             value3: live.Reads.Changed
         )
         );
+
+        // Owner output equality cannot cancel an authored clock or a follower's remaining motion.
+        return (wake || ((deltaSeconds > 0f) && live.DriverActivity.Continues));
     }
     // Carries everything a body-rooted registration latched in world space through an in-place crossing's rigid
     // motion: the root and part followers, the drivers' last pose and eased world velocity, and every effector's
@@ -599,7 +602,7 @@ public sealed partial class WorldCreationInstances {
         );
 
         if (!cut) {
-            WorldGaitDrivers.Advance(
+            live.DriverActivity = WorldGaitDrivers.Advance(
                 address: ((live.BodyIndex is { } drivenBody) ? client.EntityAddress(index: drivenBody) : new WorldEntityAddress(Authority: string.Empty, Generation: 0, Index: -1)),
                 deltaSeconds: deltaSeconds,
                 drivers: drivers,
