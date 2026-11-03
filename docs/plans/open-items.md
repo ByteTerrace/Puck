@@ -551,6 +551,13 @@ store (AGENTS.md), and work proportional to change.
   hash the HLSL source closure of `MeshBake` and `MeshBakeMask` instead and share
   one store, which halves the cold cost of using both. (from: refactoring survey,
   hot reload)
+- The landscape accounting slice reproduced the overbroad closure with a result-equivalent
+  named-argument reorder in `SdfMeshPathBake.AvailablePhysicalBytes`
+  (`src/Puck.SdfVm/SdfMeshPathBake.cs:656`). Its IL/locals moved and it alone
+  invalidated the final D3D12 bake key while entry format and kernels stayed
+  unchanged. Final zero-load root bakes measured 155.061 s on D3D12 and
+  281.138 s on Vulkan; the [landscape evidence](dense-landscapes.md#first-implementation-slice)
+  keeps work counts and measurement limits.
 - The cold bake fails the one-minute bar on both backends by more than double
   on the quiet lead machine. Crossings (`CloseSheets`, `CrossingEdges`) and land
   (`SdfMeshCollapse`) are about three quarters of its thread seconds, and Vulkan
