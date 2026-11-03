@@ -57,6 +57,7 @@ import "machine-debugger"
 import "range"
 import "valley"
 import "lawn"
+import "forest"
 // The time of day: the sun and the sky on one clock (day.puck).
 import "day"
 

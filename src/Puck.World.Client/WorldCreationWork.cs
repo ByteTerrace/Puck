@@ -26,6 +26,16 @@ public static class WorldCreationWork {
     public static WorkKind ProbeMisses { get; } = new(name: "sdf.creations.probes.cache-misses", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Requests with no field, positive reach or direction, answered without occupying the cache.</summary>
     public static WorkKind ProbeSkipped { get; } = new(name: "sdf.creations.probes.skipped", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>New driver state initializations.</summary>
+    public static WorkKind DriverInitializations { get; } = new(name: "sdf.creations.drivers.initializations", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Driver rows evaluated.</summary>
+    public static WorkKind DriverEvaluations { get; } = new(name: "sdf.creations.drivers.evaluations", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Positive-time nonzero-cadence driver integrations with positive weight.</summary>
+    public static WorkKind DriverIntegrations { get; } = new(name: "sdf.creations.drivers.integrations", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Driver integrations that actually changed their float phase.</summary>
+    public static WorkKind DriverPhaseChanges { get; } = new(name: "sdf.creations.drivers.phase-changes", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Evaluated registrations with ongoing authored driver work.</summary>
+    public static WorkKind DriverContinuations { get; } = new(name: "sdf.creations.drivers.continuations", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Process totals; read twice to measure a window. Posed, retained and rate-held partition visited registrations.</summary>
-    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.creations", kinds: [Visited, Posed, Retained, RateHeld, PlacementsPosed, SlotsPosed, SlotsRetained, Probes, ProbeHits, ProbeMisses, ProbeSkipped]);
+    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.creations", kinds: [Visited, Posed, Retained, RateHeld, PlacementsPosed, SlotsPosed, SlotsRetained, Probes, ProbeHits, ProbeMisses, ProbeSkipped, DriverInitializations, DriverEvaluations, DriverIntegrations, DriverPhaseChanges, DriverContinuations]);
 }

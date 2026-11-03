@@ -629,6 +629,12 @@ public sealed partial class WorldCreationInstances {
                 kinematics: live.Kinematics,
                 definition: client.Definition
             );
+            var activity = live.DriverActivity;
+            if (activity.Initialized) { WorldCreationWork.ProcessWork.Count(kind: WorldCreationWork.DriverInitializations); }
+            WorldCreationWork.ProcessWork.Add(kind: WorldCreationWork.DriverEvaluations, amount: activity.Evaluations);
+            WorldCreationWork.ProcessWork.Add(kind: WorldCreationWork.DriverIntegrations, amount: activity.Integrations);
+            WorldCreationWork.ProcessWork.Add(kind: WorldCreationWork.DriverPhaseChanges, amount: activity.PhaseChanges);
+            if (activity.Continues) { WorldCreationWork.ProcessWork.Count(kind: WorldCreationWork.DriverContinuations); }
         }
 
         var shapes = (document.Shapes ?? []);

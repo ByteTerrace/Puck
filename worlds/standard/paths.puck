@@ -1,0 +1,58 @@
+// Compile-time quadratic path masks shared by authored paving and scenery placement.
+// A path has a/b/c [x, z] controls. Segment distance plus the chord-error bound conservatively excludes its corridor.
+function quadraticPathPoint(path, t) = {
+  x: (1 - t) * (1 - t) * path.a[0] + 2 * t * (1 - t) * path.b[0] + t * t * path.c[0]
+  z: (1 - t) * (1 - t) * path.a[1] + 2 * t * (1 - t) * path.b[1] + t * t * path.c[1]
+}
+function quadraticPathSegments(paths, steps = 40) = reduce(paths, [], (segments, path) => concat(segments,
+  map(range(0, steps), i => { a: quadraticPathPoint(path, i / steps), b: quadraticPathPoint(path, (i + 1) / steps) })
+))
+function pathPointDistanceSquared(x, z, point) = (x - point.x) * (x - point.x) + (z - point.z) * (z - point.z)
+function pathSegmentFraction(x, z, segment) = maximum(0, minimum(1,
+  ((x - segment.a.x) * (segment.b.x - segment.a.x) + (z - segment.a.z) * (segment.b.z - segment.a.z)) /
+  maximum(0.000000000001, pathPointDistanceSquared(segment.b.x, segment.b.z, segment.a))
+))
+function pathSegmentDistanceSquared(x, z, segment) = pathPointDistanceSquared(x, z, {
+  x: segment.a.x + pathSegmentFraction(x, z, segment) * (segment.b.x - segment.a.x)
+  z: segment.a.z + pathSegmentFraction(x, z, segment) * (segment.b.z - segment.a.z)
+})
+// Requires a nonempty segment list. Start from a measured segment, with no world-distance sentinel.
+function pathDistanceSquared(x, z, segments) = reduce(segments, pathSegmentDistanceSquared(x, z, segments[0]),
+  (nearest, segment) => minimum(nearest, pathSegmentDistanceSquared(x, z, segment))
+)
+// A quadratic's maximum deviation from a chord over 1/steps is |a - 2b + c| / (4 steps^2).
+function quadraticPathChordError(path, steps = 40) = squareRoot(
+  (path.a[0] - 2 * path.b[0] + path.c[0]) * (path.a[0] - 2 * path.b[0] + path.c[0]) +
+  (path.a[1] - 2 * path.b[1] + path.c[1]) * (path.a[1] - 2 * path.b[1] + path.c[1])
+) / (4 * steps * steps)
+
+// Precomputed bounds reject distant corridors and segments before evaluating their distance.
+function quadraticPathCorridors(paths, steps = 16) = map(paths, path => {
+  minX: minimum(path.a[0], minimum(path.b[0], path.c[0]))
+  maxX: maximum(path.a[0], maximum(path.b[0], path.c[0]))
+  minZ: minimum(path.a[1], minimum(path.b[1], path.c[1]))
+  maxZ: maximum(path.a[1], maximum(path.b[1], path.c[1]))
+  error: quadraticPathChordError(path, steps)
+  segments: quadraticPathSegments([path], steps)
+})
+function pathBoundsClear(x, z, radius, bounds) = (
+  x < bounds.minX - radius or x > bounds.maxX + radius or
+  z < bounds.minZ - radius or z > bounds.maxZ + radius
+)
+function pathSegmentProjectionDistanceSquared(x, z, segment, fraction) = pathPointDistanceSquared(x, z, {
+  x: segment.a.x + fraction * (segment.b.x - segment.a.x)
+  z: segment.a.z + fraction * (segment.b.z - segment.a.z)
+})
+function pathSegmentClear(x, z, radius, segment) = (
+  x < minimum(segment.a.x, segment.b.x) - radius or
+  x > maximum(segment.a.x, segment.b.x) + radius or
+  z < minimum(segment.a.z, segment.b.z) - radius or
+  z > maximum(segment.a.z, segment.b.z) + radius or
+  pathSegmentProjectionDistanceSquared(x, z, segment, pathSegmentFraction(x, z, segment)) > radius * radius
+)
+function pathCorridorClear(x, z, radius, corridor) = (
+  pathBoundsClear(x, z, radius + corridor.error, corridor) or
+  reduce(corridor.segments, true, (clear, segment) => clear and pathSegmentClear(x, z, radius + corridor.error, segment))
+)
+function pathCorridorsClear(x, z, radius, corridors) = reduce(corridors, true,
+  (clear, corridor) => clear and pathCorridorClear(x, z, radius, corridor))

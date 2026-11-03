@@ -6,20 +6,9 @@
 // west of x -38, the camera course, the combat yard and the climate wing.
 import "../standard/foliage"
 import "meadow"
+export binding meadowWindSpeed, meadowFlutterSpeed, meadowWindPose
 
-// The floor's paths, quadratic Béziers in world X/Z: the spawn to the entrance, north of the studio to the meadow,
-// south past the studio, and west toward the stream.
-let lawnPaths = [
-  { a [-8, -24], b [-4, -6], c [4, -1] }
-  { a [4, -1], b [14, 2], c [16, 11.6] }
-  { a [4, -1], b [32, -12], c [60, -12] }
-  { a [60, -12], b [80, -12], c [84, -36] }
-  { a [84, -36], b [88, -54], c [103, -54.5] }
-  { a [-8, -24], b [-14, -52], c [2, -78] }
-  { a [2, -78], b [16, -100], c [60, -94] }
-  { a [-3, -9], b [-22, -6], c [-38, -12] }
-]
-let lawnPathWidth = 2.4
+import "paths"
 
 // What each kind of group places: its prototype variants (lawn-<kind>-<n>), its scale range and its contact.
 let lawnKinds = [
@@ -100,11 +89,7 @@ let lawnEdgeSamples = map(lawnEdgeSteps, e => {
   dx: (1 - e.t) * (e.p.b[0] - e.p.a[0]) + e.t * (e.p.c[0] - e.p.b[0])
   dz: (1 - e.t) * (e.p.b[1] - e.p.a[1]) + e.t * (e.p.c[1] - e.p.b[1])
 })
-// Points along every path, so an edge sample whose flower lands on a neighbouring path's paving is dropped.
-let lawnPathPoints = reduce(lawnPaths, [], (points, p) => concat(points, map(range(0, 41), k => {
-  x: (1 - k / 40) * (1 - k / 40) * p.a[0] + 2 * k / 40 * (1 - k / 40) * p.b[0] + k / 40 * k / 40 * p.c[0]
-  z: (1 - k / 40) * (1 - k / 40) * p.a[1] + 2 * k / 40 * (1 - k / 40) * p.b[1] + k / 40 * k / 40 * p.c[1]
-})))
+// The shared path mask drops a flower whose footprint reaches a neighbouring paving corridor.
 let lawnEdges = filter(map(lawnEdgeSamples, s => {
   i: s.i
   k: s.k
@@ -115,8 +100,7 @@ let lawnEdges = filter(map(lawnEdgeSamples, s => {
   tx: s.dx / squareRoot(s.dx * s.dx + s.dz * s.dz)
   tz: s.dz / squareRoot(s.dx * s.dx + s.dz * s.dz)
   d: s.d
-}), e => reduce(lawnPathPoints, 1000000, (m, q) => minimum(m, (e.x + e.d * e.nx - q.x) * (e.x + e.d * e.nx - q.x) +
-  (e.z + e.d * e.nz - q.z) * (e.z + e.d * e.nz - q.z))) > (lawnPathWidth / 2 + 0.6) * (lawnPathWidth / 2 + 0.6))
+}), e => lawnPathClear(e.x + e.d * e.nx, e.z + e.d * e.nz, 0.6))
 let lawnFlowers = map(lawnEdges, e => {
   prototype: $"lawn-flowers-{floor((e.k + e.i) % 3 / 2)}"
   position [e.x + e.d * e.nx, 0, e.z + e.d * e.nz]
