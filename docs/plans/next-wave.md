@@ -10,6 +10,19 @@ holds a draft brief for its lanes:
 from it, since the tree moves. Delete this page and its folder once the wave
 has consumed them.
 
+## Resuming on any machine
+
+The integration branch is `lead/fundamentals`, pushed and complete.
+1. Check it out in the main checkout, which tracks the integration branch.
+2. Work from a worktree off it.
+3. Pick up from the [agent tooling](open-items.md#agent-tooling-and-skills)
+   item's skill-eval program, then the steps below, before the owner's go.
+
+Eval results and traces stay under each skill's git-ignored
+`evals/results/` on the machine that ran them. Another machine re-runs both
+sides of any comparison it needs, the "before" runs included, with
+`puck evals run`.
+
 ## Lanes
 
 Parallel lanes, with no shared files except where an order is named:
