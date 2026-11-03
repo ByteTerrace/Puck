@@ -361,11 +361,18 @@ Stopped phases still showed temporal/lighting noise, so pixels alone prove no mo
 
 Costs remain high: root budget 9687 retained draws, 6502 dynamic slots and 7394
 static instances from 1888 placement rows; mesh region 2,284,836,732 bytes.
-With zero meshes loaded, the root bake reported 156.876 s, 8249 groups,
-40,043 dispatches and 1,574,632,455 samples, missing the one-minute bar.
-A settled forest-entry diagnostic window read 20.28 ms average / 28.52 ms p99
-over 120 iterations. This is not a quiet A/B speed comparison. Close-grass and
-collection windows are not comparable to the earlier baseline.
+Final source at 6d1ea279a was run windowed on both backends at high quality,
+native 1280 by 900, cadence off. Each final root bake loaded zero meshes.
+D3D12 reported 155.061 s, 40,118 dispatches and 1,575,141,913 samples;
+Vulkan reported 281.138 s, 40,137 dispatches and 1,575,261,001 samples.
+Both miss the one-minute bar. These are observed complete-world runs, not an
+isolated empty-store or backend-efficiency comparison.
+
+Settled 120-iteration diagnostic windows read 26.44 ms average / 37.45 ms p99
+at the D3D12 forest entrance and 26.03 / 40.80 ms inside the Vulkan forest.
+Both miss the frame bar. They use different camera positions and are not a quiet
+A/B speed comparison. Close-grass and collection windows are also not comparable
+to the earlier baseline.
 Post-collection working set reached 10,960 MiB, managed heap 2792 MiB; account
 owned about 2.30 GB with no reservations. These overlapping readings cannot be added.
 
@@ -376,7 +383,8 @@ cannot export this timing file. Nsight Graphics GPU Trace attach reported
 is claimed. NVIDIA telemetry showed RTX 4070, driver 617.42, P0 and 9863 MiB
 device memory used at one post-bake observation, including other host consumers.
 
-Release World and CLI builds passed with zero warnings/errors. Actual-built-code
+Release World and CLI builds passed. The final World rebuild reported two existing
+STALE001 warnings in the rule evaluator and no errors. Actual-built-code
 CPU witnesses covered memory lifecycle, scalar wake/continuation, instance ABA
 and selection-owner switches. Supplemental review found and fixed table-local
 token collisions across retained-recorder switches. Required cross-family review
@@ -385,3 +393,36 @@ lane and refused the Claude reviewer; it was not bypassed. Raw readbacks/capture
 are local artifacts in this chat's `landscape-implementation` directory.
 The full route/density sweep, physical memory, wind-canopy GI, and 2060/Deck
 qualification remain open. Backend live evidence is recorded in the implementation commit.
+
+Nsight Systems additionally captured and exported device-wide hardware counters
+without attaching to the process: 20,283 samples over roughly two seconds during
+the Vulkan bake, then 20,359 after settling. Mean SM activity was 10.25% during
+the bake and 41.95% after it; settled SM issue was 12.66%, DRAM read/write
+throughput 5.81%/3.30%, and sync-copy activity 3.68%. These include idle gaps and
+other device consumers; they are utilization observations, not per-kernel
+occupancy or exclusive Puck attribution. The settled root GPU span separately
+reported views 3.629 ms, resolve 3.758 ms, mesh 0.453 ms and three shadow spans
+totaling 2.012 ms. One root work snapshot counted 3656 draws, 20,103,684 vertices,
+55,485,045 pass-texels and 35 dispatches.
+
+The counters reconcile in the final D3D12 snapshot: posed + retained + rate-held
+equals visited; cache hits + misses + skips equals surface requests; gradient
+taps equal six times the successful gradients; packed record bytes equal record
+count times the record stride. A settled earlier window had 75,342 surface
+requests: 2598 hits, 72,744 skips and zero misses, so invalid queries no longer
+evict valid stationary targets. A 90-tick Vulkan walking script moved the grounded
+avatar from (44.32, -131.59) to (44.24, -145.88) in X/Z through the canopy,
+exercising new query work; the surrounding observation window added 923 marches,
+2320 samples and 172 gradients with no failed samples or gradients. It is a
+walking witness, not qualification of the full curved road route.
+
+The apparently repeated World build is backend-specific artifact selection:
+Vulkan enables SPIR-V in the hashed build arguments, D3D12 does not.
+The formatter also changed named-argument evaluation order in
+`SdfMeshPathBake.AvailablePhysicalBytes` without changing its result; that changed
+its IL/locals and invalidated the bake code key. The existing
+[bake proportional to change](open-items.md#bake-proportional-to-change) packet
+owns narrowing this overbroad input closure. The local evidence contains both
+Nsight reports/SQLite exports, PIX timing capture, presented bursts and raw
+readbacks. All three owned Worlds ended with exit 0 and released their leases.
+Computer Use inspection of PIX was stopped; no further UI actions were taken.
