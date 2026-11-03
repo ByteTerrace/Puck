@@ -425,4 +425,15 @@ its IL/locals and invalidated the bake code key. The existing
 owns narrowing this overbroad input closure. The local evidence contains both
 Nsight reports/SQLite exports, PIX timing capture, presented bursts and raw
 readbacks. All three owned Worlds ended with exit 0 and released their leases.
-Computer Use inspection of PIX was stopped; no further UI actions were taken.
+
+PIX GUI inspection confirmed a 3496.84 ms capture interval targeting the D3D12
+World during baking, with CPU samples and D3D API-object data but no PIX events
+or markers. Memory analysis over the displayed 3.5-second interval counted 7607
+API objects and 22,493.964 MB of aggregate allocated size. This includes resources
+and their heaps, overlapping allocations and lifetimes; it is not a measurement
+of physical live GPU memory. Large individual resources and heaps were visible
+at roughly 2.1–2.4 GB. Symbol reload and refresh completed, but many CLR/JIT
+frames remained unresolved, so this trace supplies no reliable new method-level
+CPU attribution. The next capture should enable the existing GPU-object naming
+through capture-tool or validation configuration (`WorldBootComposition` sets
+`GpuDeviceOptions.NameObjects`), and collect markers during a settled forest run.
