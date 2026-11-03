@@ -549,12 +549,10 @@ meant as these periods; the lead now schedules them by state, not the clock:
   Lanes may keep editing; their builds, tests and GPU legs queue.
 - **Hold:** `puck lease quiet --holder lead -- <recipe>` takes the build, GPU
   and heavy leases together and waits for `puck host load` to report idle.
-- **Thermals:** the lead machine's cooling was replaced, so readings taken
-  before then (the settle-2 sweep baseline) may include throttling, and the
-  next window takes a new baseline. Record CPU (Tctl) and GPU core and hot-spot
-  temperatures beside each reading. Libre Hardware Monitor writes them to its
-  rolling CSV log (`LibreHardwareMonitorLog-<date>-<n>.csv` in its install
-  folder; the sensor ids are in the header row).
+- **Thermals:** record CPU and GPU temperatures beside each reading, from
+  whatever hardware monitor the machine runs. A change to a machine's
+  hardware invalidates its earlier baselines, and its next window takes a new
+  one.
 - **Measure:** one fixed recipe so windows compare: `puck sweep --baseline
   <last>` (frames at the standard stops, both backends, the day cycle
   running), a cold bake per backend, and the measurement of the moment.

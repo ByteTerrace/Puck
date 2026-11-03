@@ -113,6 +113,5 @@ It measures:
 - GPU timing with poses moving and with poses held;
 - the cold bake against its bar.
 
-The settle-2 sweep baseline lives at
-`%LOCALAPPDATA%/Puck/sweep-baselines/settle-2/` on the lead machine only;
-another machine re-runs the sweep for its own.
+A sweep baseline is local to the machine that recorded it; each machine
+compares against its own.
