@@ -3066,8 +3066,18 @@ the Monitor hook check.
     - after: regression 1.00, capability 1.00 (d15 and d16 steadier, no
       regression).
 
-    The earlier weak cases were the skill not loading in the with arm, not
-    weak teaching. Real lanes preload it, so delegate does its job.
+    The earlier weak cases were the skill not loading in the with arm. With
+    the text pasted above a question about that very rule, though, both
+    sides sit at the ceiling. That shows no regression and that a loaded rule
+    is read; it does not measure whether the edits helped, or whether a lane
+    follows the rule while busy with something else.
+
+    Next for delegate: harder capability cases that start below the ceiling:
+    - the rule is incidental to the task, not its subject;
+    - multi-turn work;
+    - `context.history_file` cases cut from real lane transcripts at the
+      decision point, such as a dirty index mid-task or a stop message
+      mid-build.
   - **Opus before** (rev 2ad8ce0b46, preloaded) is done:
     `.claude/skills/delegate/evals/results/20261103-001924-2ad8ce0b46-opus-none-preload`.
   - **To run, in value order** (no Fable, the owner's instruction):
