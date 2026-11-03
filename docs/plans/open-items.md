@@ -3049,56 +3049,74 @@ the Monitor hook check.
 
 - [high] The skill-eval program
   ([evaluate an agent skill](../development/documentation.md#evaluate-an-agent-skill),
-  run with `puck evals`). The lead runs every suite; lanes write cases.
-  Results stay on disk under each skill's git-ignored `evals/results/`, with
-  traces.
-  - **Done and graders validated:**
-    - delegate: graders repaired, gaps fixed, AGENTS.md duplicates cut.
-    - orchestration: 42 graders rewritten and 13 deleted; the lead fixed four
-      contradictions in the skill.
-    - The six suites ran on Sonnet with the AGENTS.md fixture. Skill vs none:
-      maths-laws, maths-usage, content-search and dotnet-performance gain
-      strongly. boy-scout gains only +0.04 over AGENTS.md, so shrink it to
-      what only it adds. gaming-bricks needs a `--preload` run to separate
-      teaching from triggering.
-  - **delegate, preloaded, Sonnet with an Opus judge, 5 runs per case:**
-    - before (rev 2ad8ce0b46): regression 1.00, capability 0.98;
-    - after: regression 1.00, capability 1.00 (d15 and d16 steadier, no
-      regression).
+  run with `puck evals`). The lead runs every suite; lanes write cases and
+  validate graders. Results and traces stay on the machine that ran them,
+  under each skill's git-ignored `evals/results/`; another machine re-runs
+  both sides of any comparison it needs.
+  - **What the measurements say so far:**
+    - A preloaded skill sits at the ceiling on both tiers: delegate scores
+      about 1.00 preloaded on Sonnet and 0.99 on Opus, including the
+      incidental and resumed-transcript cases d17-d24 written to start lower.
+      Before and after an edit both read about 1.00, so a preloaded
+      before/after pair no longer separates edits; the skill against
+      AGENTS.md alone (a with-without run's without arm) still does.
+    - delegate over AGENTS.md alone, Sonnet: +0.31 regression and +0.37
+      capability on d01-d16, +0.10 on d17-d24; real on d09, d15, d16, d22
+      and d23. d05-d08, d11 and d13 pass at 1.00 without the skill: their
+      rules are AGENTS.md's, and those cases guard that teaching.
+    - orchestration, preloaded, Opus, on the cases its contradiction fixes
+      should move: about 0.97 before and after, no difference.
+    - First readings, skill over AGENTS.md: puck-dsl +0.68, puck-world
+      +0.35, rendering +0.72, rom-forge +0.78, sdf-authoring +0.45 and
+      verification +0.07 on Sonnet; symbol-analysis +0.11 and
+      content-search +0.29 on Haiku. Only content-search's graders are
+      validated; the rest have untagged cases and one-line llm graders, so
+      they aren't believed yet. verification, like boy-scout, may add little
+      over AGENTS.md. At Haiku the with arm only offers the skill, so the
+      scout's preloaded runs (step 4) are the measure for that tier.
+  - **To do, after the weekly usage reset, in value order:**
+    1. Validate graders, tag cases regression or capability, and add the
+       no-checkout line where traces hunt for the repository, for puck-dsl,
+       puck-world, rendering, rom-forge, sdf-authoring, verification,
+       review-passes and symbol-analysis (about 300 llm graders have no
+       PASS/FAIL pair). The lane that repaired the other eight suites
+       labelled each from its latest with-without result.
+    2. Re-run the suites whose graders were repaired (boy-scout,
+       content-search, dotnet-performance, gaming-bricks, maths-laws,
+       maths-usage), Sonnet with-without, since their earlier scores came
+       from the old rubrics. Then run the eight above again.
+    3. Shrink boy-scout to what only it adds once its re-run shows which
+       cases its text moves, and run its regression cases with the change.
+    4. Preloaded runs where an agent preloads the skill:
+       - content-search and symbol-analysis at Haiku (the scout), with
+         `--preload`, against a Haiku with-without's without arm;
+       - review-passes at Opus (the reviewer), with-without and `--preload`.
 
-    The earlier weak cases were the skill not loading in the with arm. With
-    the text pasted above a question about that very rule, though, both
-    sides sit at the ceiling. That shows no regression and that a loaded rule
-    is read; it does not measure whether the edits helped, or whether a lane
-    follows the rule while busy with something else.
+       No agent preloads gaming-bricks, so its with-without re-run (its
+       prompts no longer say "answer from what you know") replaces the
+       planned `--preload` run.
+    5. delegate with-without on Opus, for the Opus baseline.
+    6. orchestration with-without at HEAD on Opus, which measures the
+       description's new triggers (the skill never fired on branch cleanup,
+       settle windows and owner questions).
+    7. A review of the results by an Opus reviewer, plus a Codex
+       cross-check.
 
-    Next for delegate: harder capability cases that start below the ceiling:
-    - the rule is incidental to the task, not its subject;
-    - multi-turn work;
-    - `context.history_file` cases cut from real lane transcripts at the
-      decision point, such as a dirty index mid-task or a stop message
-      mid-build.
-  - **Opus before** (rev 2ad8ce0b46, preloaded) is done:
-    `.claude/skills/delegate/evals/results/20261103-001924-2ad8ce0b46-opus-none-preload`.
-  - **To run, in value order** (no Fable, the owner's instruction):
-    1. delegate after, Opus: `--preload --ablation none --runs 5`, Opus
-       judge;
-    2. (Sonnet before and after are done; see above.)
-    3. delegate with-without at HEAD, Sonnet and Opus;
-    4. orchestration with-without at HEAD, Opus;
-    5. orchestration before (rev 3349359b6d) and after, `--preload
-       --ablation none`, Opus;
-    6. gaming-bricks and review-passes with `--preload`.
-
-    Then: `puck evals compare`, and a review of the results by an Opus
-    reviewer plus a Codex cross-check.
-  - **Usage:** the week's subscription was at 96% when this was written. Runs
-    bill the same subscription, so gate each run on `claude -p "/usage"`.
+    No Fable (the owner's instruction). Gate each run on `claude -p
+    "/usage"`: runs bill the same subscription, and an Opus suite of
+    orchestration's size costs about a hundred dollars at list price.
   - **Harness limits on Windows (Claude Code 2.1.316):**
     - `case.yaml` `context.add_dirs` grants nothing;
-    - `append_system_prompt` travels on the command line and overflows it.
+    - `append_system_prompt` travels on the command line and overflows it;
+    - `--case` takes one glob without braces, so `puck evals run --cases`
+      selects the cases itself.
 
-    The AGENTS.md fixture therefore rides ahead of each prompt.
+    The fixture therefore goes ahead of each prompt, or ahead of a resumed
+    transcript's first user turn.
+  - Cases cut from real lane transcripts (`context.history_file`) need the
+    owner's go: committing session transcripts from a machine's
+    `~/.claude/projects` was refused as sensitive. d21-d24 resume
+    hand-written transcripts modelled on incidents the repository records.
 
 - [low] The hazard detectors' follow-ups ([hazards](../development/hazards.md)):
   turn STALE001 into an error once `RuleEvaluator.EvaluateOnce` and
