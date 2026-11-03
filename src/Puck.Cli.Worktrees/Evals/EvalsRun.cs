@@ -32,14 +32,14 @@ public static partial class EvalsRun {
     [GeneratedRegex(pattern: @"^[a-z0-9][a-z0-9-]*$")]
     private static partial Regex SkillName();
 
-    private sealed record Settings(string Skill, string? Cases, IReadOnlyList<string> Tags, string Revision, string Model, string Judge, int? Runs, string Ablation, double MaxCostUsd, int Concurrency, bool Fixture, bool Preload, bool DryRun, bool KeepTree, bool KeepSandboxes);
+    private sealed record Settings(string Skill, IReadOnlyList<string> Cases, IReadOnlyList<string> Tags, string Revision, string Model, string Judge, int? Runs, string Ablation, double MaxCostUsd, int Concurrency, bool Fixture, bool Preload, bool DryRun, bool KeepTree, bool KeepSandboxes);
 
     /// <summary>Creates the <c>evals run</c> command.</summary>
     /// <param name="clock">The CLI host's clock, which stamps the results directory.</param>
     /// <returns>The command.</returns>
     public static Command Create(TimeProvider clock) {
         var skillArgument = new Argument<string>(name: "skill") { Description = "The skill under .claude/skills/ whose evals/ suite runs." };
-        var casesOption = new Option<string?>(name: "--cases") { Description = "Run only the cases whose name matches this glob (claude plugin eval --case)." };
+        var casesOption = new Option<string[]>(name: "--cases") { AllowMultipleArgumentsPerToken = true, Description = "Run only the cases whose directory name matches any of these globs (* and ?), such as o09-* o17-*." };
         var tagOption = new Option<string[]>(name: "--tag") { AllowMultipleArgumentsPerToken = true, Description = "Run only cases carrying any of these tags, such as regression." };
         var revisionOption = new Option<string>(name: "--revision") { DefaultValueFactory = static _ => "HEAD", Description = "The revision whose skill runs; HEAD's evals/ replace that revision's, so both sides of an edit run identical cases." };
         var modelOption = new Option<string>(name: "--model") { DefaultValueFactory = static _ => DefaultModel, Description = "The full model ID under test, such as claude-sonnet-5-5; an alias is refused." };
@@ -59,7 +59,7 @@ public static partial class EvalsRun {
 
         ablationOption.AcceptOnlyFromAmong("with-without", "none");
         command.Detail(detail: """
-            Use: puck evals run <skill> [--cases <glob>] [--tag <tag>...] [--revision <rev>]
+            Use: puck evals run <skill> [--cases <glob>...] [--tag <tag>...] [--revision <rev>]
                    [--model <full id>] [--judge <full id>] [--runs n] [--ablation with-without|none]
                    [--max-cost-usd x] [-j n] [--no-fixture] [--preload] [--dry-run] [--keep-tree]
                    [--keep-sandboxes]
@@ -96,7 +96,7 @@ public static partial class EvalsRun {
             clock: clock,
             settings: new Settings(
                 Ablation: parseResult.GetRequiredValue(option: ablationOption),
-                Cases: parseResult.GetValue(option: casesOption),
+                Cases: (parseResult.GetValue(option: casesOption) ?? []),
                 Concurrency: parseResult.GetValue(option: concurrencyOption),
                 DryRun: parseResult.GetValue(option: dryRunOption),
                 Fixture: !parseResult.GetValue(option: noFixtureOption),
@@ -114,6 +114,12 @@ public static partial class EvalsRun {
         ).ConfigureAwait(continueOnCapturedContext: false));
         return command;
     }
+
+    /// <summary>Keeps the case directories whose name matches any glob (<c>*</c> and <c>?</c>, case-sensitive), or every
+    /// case when no glob is given.</summary>
+    private static IReadOnlyList<string> SelectCases(IReadOnlyList<string> caseDirectories, IReadOnlyList<string> globs) => ((globs.Count == 0)
+        ? caseDirectories
+        : [.. caseDirectories.Where(predicate: directory => globs.Any(predicate: glob => System.IO.Enumeration.FileSystemName.MatchesSimpleExpression(expression: glob, name: Path.GetFileName(path: directory), ignoreCase: false)))]);
 
     private static int Tier(string model) => ((FullModelId().Match(input: model) is { Success: true } match) ? System.Array.IndexOf(array: Tiers, value: match.Groups["tier"].Value) : -1);
     private static string Quote(string argument) => ((argument.Length != 0) && !argument.Any(predicate: static c => (char.IsWhiteSpace(c: c) || (c is '"' or '\'' or '*' or '?' or '[' or '$')))) ? argument : $"'{argument.Replace(oldValue: "'", newValue: "'\\''")}'";
@@ -193,7 +199,11 @@ public static partial class EvalsRun {
         ];
 
         if (settings.Runs is { } runs) { arguments.AddRange(collection: ["--runs", runs.ToString(provider: CultureInfo.InvariantCulture)]); }
-        if (settings.Cases is { } cases) { arguments.AddRange(collection: ["--case", cases]); }
+        // Case selection is this verb's, not the runner's: claude plugin eval --case takes one glob, without braces or
+        // lists, so the frozen tree keeps only the selected cases and the runner runs every case it finds there.
+        var selected = SelectCases(caseDirectories: CaseFiles.Enumerate(evals: Path.Combine(root, ".claude", "skills", settings.Skill, "evals")), globs: settings.Cases);
+
+        if (selected.Count == 0) { return CliExit.Refuse(verb: Verb, what: $"--cases {string.Join(separator: ' ', values: settings.Cases)}", why: $"matches no case under {evalsPath}/."); }
         // --tag takes a list, so it goes last, where nothing after it can be read as one of its values.
         if (settings.Tags.Count != 0) { arguments.AddRange(collection: ["--tag", .. settings.Tags]); }
 
@@ -204,6 +214,7 @@ public static partial class EvalsRun {
             : $"{Verb}: no fixture (--no-fixture): the cases run without the rules file"));
         Console.WriteLine(value: $"{Verb}: model {settings.Model}, judge {settings.Judge}, ablation {settings.Ablation}, ceiling ${settings.MaxCostUsd.ToString(provider: CultureInfo.InvariantCulture)}");
         Console.WriteLine(value: $"{Verb}: results {Display(path: results)}");
+        Console.WriteLine(value: $"{Verb}: {selected.Count} case(s): {string.Join(separator: ' ', values: selected.Select(selector: static directory => Path.GetFileName(path: directory)))}");
         Console.WriteLine(value: $"{Verb}: claude {string.Join(separator: ' ', values: arguments.Select(selector: Quote))}");
         if (settings.DryRun) {
             Console.WriteLine(value: $"{Verb}: dry run: nothing was created or started.");
@@ -221,7 +232,11 @@ public static partial class EvalsRun {
                     }
                 }
             }
-            var caseDirectories = CaseFiles.Enumerate(evals: Path.Combine(target, "evals"));
+            var found = CaseFiles.Enumerate(evals: Path.Combine(target, "evals"));
+            var caseDirectories = SelectCases(caseDirectories: found, globs: settings.Cases);
+
+            if (caseDirectories.Count == 0) { return CliExit.Refuse(verb: Verb, what: $"--cases {string.Join(separator: ' ', values: settings.Cases)}", why: $"matches no case in the frozen tree's {evalsPath}/."); }
+            foreach (var unselected in found.Except(second: caseDirectories, comparer: StringComparer.Ordinal)) { Directory.Delete(path: unselected, recursive: true); }
 
             if (settings.Fixture) {
                 var agents = await CliGit.CaptureAsync(arguments: ["show", $"{head}:AGENTS.md"], cancellationToken: cancellationToken, repository: root).ConfigureAwait(continueOnCapturedContext: false);

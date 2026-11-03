@@ -486,6 +486,11 @@ puck evals run <skill> --cases '<glob>' --runs 5
 puck evals compare <before>/aggregate-result.json <after>/aggregate-result.json
 ```
 
+`--cases` takes several globs (`--cases 'o09-*' 'o17-*'`), matched with `*`
+and `?` against case directory names; `run` keeps only those cases in the
+frozen tree, since `claude plugin eval --case` takes one glob without braces.
+A dry run lists the cases it selected.
+
 `compare` recomputes each run's score so the two sides are comparable:
 
 - Activation graders (`tool_used` on `Skill`, or `arm: with-only`) are left
@@ -629,6 +634,11 @@ context `run` adds.
   empty directory without loading the skill. Phrase it as the developer's
   question, naming the Puck files, verbs or symptoms involved, without stating
   the answer a grader checks.
+- Add or remove no worktree while a suite runs. The frozen tree sits beside
+  every other worktree, and a run whose sandbox vetting meets a worktree
+  removed underneath it ends on an error naming that worktree's `.git` as a
+  component that cannot be examined; `compare` leaves such runs out as
+  infrastructure, so the case goes unmeasured.
 - Say in the prompt that no checkout is reachable from the session. Without
   it the agent follows the skill's base directory toward the repository, is
   refused, and can spend every turn there; a run that reaches `max_turns` is

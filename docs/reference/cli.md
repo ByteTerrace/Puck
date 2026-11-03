@@ -2660,7 +2660,7 @@ reported against it.
 The family the [skill evaluation procedure](../development/documentation.md#evaluate-an-agent-skill)
 runs on. Each verb's `--help` holds its full contract.
 
-- `puck evals run <skill> [--cases <glob>] [--tag <tag>...] [--revision <rev>] [--model <id>] [--judge <id>] [--runs n] [--ablation with-without|none] [--max-cost-usd x] [-j n] [--no-fixture] [--preload] [--dry-run]`
+- `puck evals run <skill> [--cases <glob>...] [--tag <tag>...] [--revision <rev>] [--model <id>] [--judge <id>] [--runs n] [--ablation with-without|none] [--max-cost-usd x] [-j n] [--no-fixture] [--preload] [--dry-run]`
   checks `<rev>` (default HEAD) out as a detached worktree under the main
   checkout's `.claude/worktrees/`, copies HEAD's `evals/` into it when `<rev>`
   is older, puts the rules-file fixture (HEAD's `AGENTS.md` text, and the
