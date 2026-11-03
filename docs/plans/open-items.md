@@ -3061,12 +3061,19 @@ the Monitor hook check.
       strongly. boy-scout gains only +0.04 over AGENTS.md, so shrink it to
       what only it adds. gaming-bricks needs a `--preload` run to separate
       teaching from triggering.
-  - **Partly run:** delegate's before/after with `--preload`. Sonnet before
-    (rev 2ad8ce0b46) is done.
+  - **delegate, preloaded, Sonnet with an Opus judge, 5 runs per case:**
+    - before (rev 2ad8ce0b46): regression 1.00, capability 0.98;
+    - after: regression 1.00, capability 1.00 (d15 and d16 steadier, no
+      regression).
+
+    The earlier weak cases were the skill not loading in the with arm, not
+    weak teaching. Real lanes preload it, so delegate does its job.
+  - **Opus before** (rev 2ad8ce0b46, preloaded) is done:
+    `.claude/skills/delegate/evals/results/20261103-001924-2ad8ce0b46-opus-none-preload`.
   - **To run, in value order** (no Fable, the owner's instruction):
-    1. delegate after, Sonnet: `--preload --ablation none --runs 5`, Opus
+    1. delegate after, Opus: `--preload --ablation none --runs 5`, Opus
        judge;
-    2. delegate before and after, Opus;
+    2. (Sonnet before and after are done; see above.)
     3. delegate with-without at HEAD, Sonnet and Opus;
     4. orchestration with-without at HEAD, Opus;
     5. orchestration before (rev 3349359b6d) and after, `--preload
