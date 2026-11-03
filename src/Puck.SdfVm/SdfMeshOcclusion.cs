@@ -9,7 +9,8 @@ namespace Puck.SdfVm;
 /// One raster pass's GPU selection and counted indirect commands. All passes cull boxes and choose levels from the
 /// residency's retained mesh records. Opaque occlusion draws the previous visible set, builds a conservative depth
 /// pyramid, and draws newly visible records in a second phase. Cascades, glass and a non-occluding mesh pass use one
-/// phase. Level and mesh identity persist per draw, including across buffer growth; a capture ignores prior levels.
+/// phase. Level and surface generation persist per draw within one table owner, including across buffer growth;
+/// changing owners clears selection history, and a capture ignores prior levels.
 /// Each phase preserves staged draw order with empty commands for rejected records, so depth ties resolve alike.
 /// No host draw walk or readback is involved. KEEP IN SYNC with sdf-mesh-selection.hlsli and the occlusion kernel.
 /// </summary>
@@ -38,6 +39,7 @@ internal sealed class SdfMeshOcclusion : IDisposable {
     private IGpuBuffer? m_counts;
     private IGpuBuffer? m_depth;
     private bool m_visibleCleared;
+    private SdfWorldTables? m_historyOwner;
     private uint m_capacity;
     private uint m_count;
     private uint m_levels;
@@ -58,7 +60,7 @@ internal sealed class SdfMeshOcclusion : IDisposable {
     public uint CandidateCount => m_count;
 
     // Each pass uploads constant-sized controls. The residency already uploaded each changed draw once.
-    public void Stage(int slot, uint count, uint width, uint height, in SdfMeshCull cull, in SdfMeshDetail detail, bool held, bool glass, bool occlude, bool splitExit = false) {
+    public void Stage(SdfWorldTables tables, int slot, uint count, uint width, uint height, in SdfMeshCull cull, in SdfMeshDetail detail, bool held, bool glass, bool occlude, bool splitExit = false) {
         if (occlude && splitExit) { throw new ArgumentException("A selection cannot combine depth occlusion and exit partitioning."); }
         // The recording slot's fence has completed before Stage. Retire replacements only on its next reuse, after all
         // preceding submissions and this slot's history copy have completed.
@@ -78,6 +80,13 @@ internal sealed class SdfMeshOcclusion : IDisposable {
         detail.WriteGpu(rows: rows[1..4], held: held);
         cull.WriteGpu(rows: rows[4..]);
         EnsureBuffers(draws: count, depth: occlude);
+        // Generations are table-local. Follow can preserve this pass while changing its tables, whose first cells
+        // can carry the same tokens as the previous owner. Reset after growth so its seed cannot restore old history.
+        if (!ReferenceEquals(objA: m_historyOwner, objB: tables)) {
+            m_historyOwner = tables;
+            m_seedVisible = null;
+            m_visibleCleared = false;
+        }
         m_candidates[slot]!.Write(data: words);
     }
     // Writes the occlusion's members of the mesh interface into a mesh set: the frame slot's candidates, the visible set,
