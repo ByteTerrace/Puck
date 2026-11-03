@@ -3,8 +3,8 @@ type: llm
 weight: 1
 ---
 
-The response puts `[MethodImpl(MethodImplOptions.AggressiveOptimization)]` on the compute kernel that is entered directly, and leaves the cheap dispatcher above several kernels tiered so first use compiles only the path taken.
+The response puts `[MethodImpl(MethodImplOptions.AggressiveOptimization)]` on the compute kernel that is entered directly, and does not turn tiered compilation off for the process or mark every method.
 
-PASS example: "Mark the compute kernel a request enters directly with `AggressiveOptimization`; leave the dispatcher above the kernels tiered."
+PASS if it names `AggressiveOptimization` on the hot compute kernel (and may leave a cheap dispatcher above several kernels tiered). Example: "Mark the compute kernel a request enters directly with `AggressiveOptimization`; leave tiering on elsewhere."
 
-FAIL if it puts the attribute on the dispatcher or on every method, turns tiered compilation off for the process, or names the attribute without saying where it goes. Example: "Set `TieredCompilation=false` so everything compiles optimized on first call."
+FAIL if it sets `TieredCompilation=false` for the process, marks every method or only a dispatcher, or names the attribute without saying where it goes. Example: "Set `TieredCompilation=false` so everything compiles optimized on first call."
