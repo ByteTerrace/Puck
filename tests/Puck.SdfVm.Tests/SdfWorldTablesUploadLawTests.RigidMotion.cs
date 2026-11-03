@@ -24,7 +24,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         var bake = new SdfMeshPathBake { Library = library };
 
         SdfMeshDraw Draw(float x, int epoch = 0) {
-            var copy = new SdfMeshInstance(0, "body", new DynamicTransform(new Vector3(x, 0, 0), Quaternion.Identity), 1) { Mesh = (authoredMesh ? mesh : null), MotionIdentity = ("body", epoch) };
+            var copy = new SdfMeshInstance(0, "body", new DynamicTransform(new Vector3(x, 0, 0), Quaternion.Identity), 1, IsDynamic: true) { Mesh = (authoredMesh ? mesh : null), MotionIdentity = ("body", epoch) };
             var frame = new SdfFrame(Program: program, ProgramChanged: false, Time: x, Views: []) { DynamicTransforms = poses, MeshAssetSlots = [0], MeshInstances = [copy] };
 
             return bake.Dress(frame).MeshDraws[(authoredMesh ? 1 : 0)];

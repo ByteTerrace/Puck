@@ -7,7 +7,7 @@ namespace Puck.SdfVm;
 // the motion view owes it on until the hold ends (HoldsFrame). A row with no previous pose of its own
 // is seeded from this frame's after the ordinary copies, so it reads as still: every row on the first upload and after
 // a program geometry change or a frame owing every row, a range whose owner changed (SdfMovedTransforms.Reseat), and a mesh
-// draw whose identity at its index changed (SdfMeshDraw.Identity). The previous mesh table holds whole draw records at the
+// draw whose observed surface incarnation at its index changed (SdfMeshHistory.Observe). The previous mesh table holds whole draw records at the
 // mesh region's stride (SdfMeshRegion.DrawBytes), of which frame/sdf-reprojection.hlsli reads only the matrix, so a run of
 // draws copies as one range; it is a device-side copy, so GpuRegion's CPU-shadow contract holds and no second matrix crosses
 // the host bus.
@@ -31,10 +31,8 @@ public sealed partial class SdfWorldTables {
 
     private uint m_previousMeshDrawCount;
 
-    // The identity of each draw last staged, by index, which the next staged list is compared against.
-    private object?[] m_meshIdentities = [];
-
-    private int m_meshIdentityCount;
+    // One observation door supplies both matrix seed decisions and the GPU history generation.
+    private readonly SdfMeshHistory m_meshHistory = new();
 
     /// <summary>Gets the revision of the poses the current dynamic-transform and mesh-matrix tables hold as of the latest
     /// upload. It moves on every upload that changes a pose or seeds a previous row, and never otherwise.</summary>
@@ -195,42 +193,39 @@ public sealed partial class SdfWorldTables {
             sourceAccessMask: GpuAccess.CopyWrite, sourceStageMask: GpuStage.Transfer,
             destinationAccessMask: GpuAccess.ShaderRead, destinationStageMask: GpuStage.ComputeShader);
     }
-    // Compares a newly staged draw list with the one last staged: a draw whose identity at its index changed is seeded,
-    // and one that kept its identity and moved its matrix is copied from the preceding upload's table.
-    private void StageMeshMotion(ReadOnlySpan<uint> words, IReadOnlyList<SdfMeshDraw> draws) {
-        // Only the draw records are compared, so a region past what one span reaches is read at its front.
+    // Observes and packs one record through the same door for full and incremental staging.
+    private void StageMeshDraw(int index, in SdfMeshDraw draw, Span<uint> record, ReadOnlySpan<byte> old) {
+        var observation = m_meshHistory.Observe(index: index, draw: in draw);
+
+        SdfMeshRegion.WriteDraw(draw: in draw, placement: m_meshArena.Placements[draw.Mesh], generation: observation.Generation, record: record);
+        SdfMeshHistory.ProcessWork.Count(kind: SdfMeshHistory.RecordsPacked);
+        SdfMeshHistory.ProcessWork.Add(kind: SdfMeshHistory.RecordBytesPacked, amount: SdfMeshRegion.DrawBytes);
+        if (observation.Seed) {
+            m_seededMeshDraws.Add(length: 1, start: index);
+            return;
+        }
+        var offset = (index * SdfMeshRegion.DrawBytes);
+        var matrix = System.Runtime.InteropServices.MemoryMarshal.AsBytes(span: record[..16]);
+
+        if ((offset > (old.Length - MeshMatrixBytes)) || !matrix.SequenceEqual(other: old.Slice(length: MeshMatrixBytes, start: offset))) {
+            m_changedMeshMatrices.Add(length: 1, start: index);
+            SdfMeshHistory.ProcessWork.Count(kind: SdfMeshHistory.MatricesChanged);
+            SdfMeshHistory.ProcessWork.Add(kind: SdfMeshHistory.MatrixBytesChanged, amount: MeshMatrixBytes);
+        }
+    }
+    // Packs a complete newly staged list and retires vanished cells while retaining their generation lifetimes.
+    private void StageMeshMotion(Span<uint> words, IReadOnlyList<SdfMeshDraw> draws) {
         var old = m_meshRegion.ContentsAt(
-            length: ((int)Math.Min(
-                val1: m_meshRegion.ByteCount,
-                val2: (((long)draws.Count) * SdfMeshRegion.DrawBytes)
-            )),
+            length: ((int)Math.Min(val1: m_meshRegion.ByteCount, val2: (((long)draws.Count) * SdfMeshRegion.DrawBytes))),
             offset: 0
         );
 
-        for (var draw = 0; (draw < draws.Count); draw++) {
-            if ((draws[draw].MotionIdentity ?? draws[draw].Identity) is not { } identity) {
-                throw new ArgumentException(message: $"Mesh draw {draw} names no identity.", paramName: nameof(draws));
-            }
-            if ((draw >= m_meshIdentityCount) || !identity.Equals(obj: m_meshIdentities[draw])) {
-                m_seededMeshDraws.Add(length: 1, start: draw);
-                continue;
-            }
+        for (var index = 0; index < draws.Count; index++) {
+            var draw = draws[index];
 
-            var offset = (draw * SdfMeshRegion.DrawBytes);
-            var matrix = System.Runtime.InteropServices.MemoryMarshal.AsBytes(span: words.Slice(length: 16, start: (draw * SdfMeshRecord.DrawWords)));
-
-            if ((offset > (old.Length - MeshMatrixBytes)) || !matrix.SequenceEqual(other: old.Slice(length: MeshMatrixBytes, start: offset))) {
-                m_changedMeshMatrices.Add(length: 1, start: draw);
-            }
+            StageMeshDraw(index: index, draw: in draw, record: words.Slice(start: (index * SdfMeshRecord.DrawWords), length: SdfMeshRecord.DrawWords), old: old);
         }
-        if (m_meshIdentities.Length < draws.Count) {
-            Array.Resize(array: ref m_meshIdentities, newSize: draws.Count);
-        }
-        for (var draw = 0; (draw < draws.Count); draw++) {
-            m_meshIdentities[draw] = (draws[draw].MotionIdentity ?? draws[draw].Identity);
-        }
-        Array.Clear(array: m_meshIdentities, index: draws.Count, length: (m_meshIdentityCount - Math.Min(val1: m_meshIdentityCount, val2: draws.Count)));
-        m_meshIdentityCount = draws.Count;
+        m_meshHistory.RetireAfter(count: draws.Count);
 
         var bytes = (((ulong)Math.Max(val1: 1, val2: draws.Count)) * SdfMeshRegion.DrawBytes);
 

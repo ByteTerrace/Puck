@@ -114,7 +114,7 @@ public sealed class SdfReprojectionDeviceLawTests {
         var meshLayout = SdfMeshRegion.Plan(draws: draws, meshes: meshes);
         var meshWords = new uint[meshLayout.Words];
 
-        SdfMeshRegion.Write(draws: draws, meshes: meshes, layout: meshLayout, destination: meshWords);
+        SdfMeshRegion.Write(generations: [1u, 1u, 1u, 1u], draws: draws, meshes: meshes, layout: meshLayout, destination: meshWords);
         var recordWords = ((int)(SdfWorldPackage.VisibilityRecordByteLength / sizeof(uint)));
         var records = new uint[(cases.Length * recordWords)];
         var probes = new Vector4[(cases.Length * 7)];
@@ -141,7 +141,7 @@ public sealed class SdfReprojectionDeviceLawTests {
         ];
         var previousRecords = new uint[(previousDraws.Length * SdfMeshRecord.DrawWords)];
 
-        SdfMeshRegion.WriteDraws(destination: previousRecords, draws: previousDraws, meshes: meshes);
+        SdfMeshRegion.WriteDraws(generations: [1u, 1u, 1u, 1u], destination: previousRecords, draws: previousDraws, meshes: meshes);
         byte[][] contents = [
             MemoryMarshal.AsBytes(span: meshWords.AsSpan()).ToArray(),
             MemoryMarshal.AsBytes(span: new Vector4[3].AsSpan()).ToArray(),

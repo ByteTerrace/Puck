@@ -247,9 +247,9 @@ public readonly record struct SdfMeshMember(int SlotOffset, Vector3 Position, Qu
 /// <see cref="Puck.Abstractions.Cameras.ViewProjection"/>.</param>
 /// <param name="Material">The material-table index the triangles shade with, as an SDF hit's material does; a mesh
 /// with <see cref="SdfMesh.TriangleMaterials"/> adds each triangle's entry to it.</param>
-/// <param name="Identity">What the draw is across frames, compared with <see cref="object.Equals(object)"/>: the draw
-/// at an index whose identity differs from the one staged there before has no motion history, so the tables seed its
-/// previous object-to-world from this frame's rather than reading another draw's pose as motion.</param>
+/// <param name="Identity">The host's picking identity, also the fallback motion key when <see cref="MotionIdentity"/>
+/// is absent. <see cref="SdfMeshHistory"/> observes the stable key and mesh at each staged index to seed previous
+/// matrices and invalidate GPU visibility/detail history together.</param>
 public readonly record struct SdfMeshDraw(SdfMesh Mesh, Matrix4x4 ObjectToWorld, int Material, object Identity) {
     /// <summary>Gets a stable surface identity for motion history when the picking identity also carries changing pose metadata.</summary>
     public object? MotionIdentity { get; init; }
@@ -326,13 +326,6 @@ public readonly record struct SdfMeshDraw(SdfMesh Mesh, Matrix4x4 ObjectToWorld,
 /// </para>
 /// </summary>
 public static class SdfMeshRegion {
-    // Reference identity, as the former per-pass level history used, independent of arena relocation. Weak keys do not
-    // extend a geometry's lifetime; assignment order is presentation-only and never enters simulation or stored meshes.
-    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<SdfMesh, SelectionIdentity> SelectionIdentities = new();
-    private static int SelectionSequence;
-    private sealed class SelectionIdentity {
-        public readonly uint Value = unchecked((uint)Interlocked.Increment(ref SelectionSequence));
-    }
     /// <summary>The bytes of one draw's record (<see cref="SdfMeshRecord.DrawWords"/> words).</summary>
     public const int DrawBytes = (SdfMeshRecord.DrawWords * sizeof(uint));
     /// <summary>The most draws one region holds: the mesh pass pushes a draw's index in the bits below
@@ -494,16 +487,18 @@ public static class SdfMeshRegion {
     /// <param name="draws">The draws <see cref="Plan"/> planned.</param>
     /// <param name="meshes">The placements <see cref="Plan"/> wrote for the same draws.</param>
     /// <param name="layout">The layout <see cref="Plan"/> returned for the same draws.</param>
+    /// <param name="generations">Each staged index's explicit nonzero history generation.</param>
     /// <param name="destination">The region's words; at least <see cref="SdfMeshRegionLayout.Words"/> of them, and only
     /// those are written.</param>
     /// <exception cref="ArgumentNullException"><paramref name="draws"/> or <paramref name="meshes"/> is
     /// <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="destination"/> is shorter than the layout.</exception>
-    public static void Write(IReadOnlyList<SdfMeshDraw> draws, Dictionary<SdfMesh, SdfMeshRegionMesh> meshes, SdfMeshRegionLayout layout, Span<uint> destination) {
+    public static void Write(IReadOnlyList<SdfMeshDraw> draws, Dictionary<SdfMesh, SdfMeshRegionMesh> meshes, SdfMeshRegionLayout layout, ReadOnlySpan<uint> generations, Span<uint> destination) {
         RequireDestination(destination: destination, layout: layout);
         WriteDraws(
             destination: destination,
             draws: draws,
+            generations: generations,
             meshes: meshes
         );
         WriteMeshes(
@@ -517,14 +512,16 @@ public static class SdfMeshRegion {
     /// placements stand rewrites only these words.</summary>
     /// <param name="draws">The draws.</param>
     /// <param name="meshes">The placements of every mesh the draws name.</param>
+    /// <param name="generations">Each staged index's explicit nonzero history generation.</param>
     /// <param name="destination">The draw records' words; at least <see cref="SdfMeshRecord.DrawWords"/> a draw.</param>
     /// <exception cref="ArgumentNullException"><paramref name="draws"/> or <paramref name="meshes"/> is
     /// <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="destination"/> is shorter than the records.</exception>
     /// <exception cref="KeyNotFoundException">A draw names a mesh <paramref name="meshes"/> does not place.</exception>
-    public static void WriteDraws(IReadOnlyList<SdfMeshDraw> draws, Dictionary<SdfMesh, SdfMeshRegionMesh> meshes, Span<uint> destination) {
+    public static void WriteDraws(IReadOnlyList<SdfMeshDraw> draws, Dictionary<SdfMesh, SdfMeshRegionMesh> meshes, ReadOnlySpan<uint> generations, Span<uint> destination) {
         ArgumentNullException.ThrowIfNull(draws);
         ArgumentNullException.ThrowIfNull(meshes);
+        if (generations.Length != draws.Count) { throw new ArgumentException(message: "Every draw needs its explicitly observed generation.", paramName: nameof(generations)); }
         if (destination.Length < (draws.Count * SdfMeshRecord.DrawWords)) {
             throw new ArgumentException(message: $"{draws.Count} draw records need {(draws.Count * SdfMeshRecord.DrawWords)} words; the destination holds {destination.Length}.", paramName: nameof(destination));
         }
@@ -535,6 +532,7 @@ public static class SdfMeshRegion {
             WriteDraw(
                 draw: in item,
                 placement: meshes[item.Mesh],
+                generation: generations[draw],
                 record: destination.Slice(
                     length: SdfMeshRecord.DrawWords,
                     start: (draw * SdfMeshRecord.DrawWords)
@@ -545,11 +543,13 @@ public static class SdfMeshRegion {
     /// <summary>Writes one draw's record, as <see cref="WriteDraws"/> writes each.</summary>
     /// <param name="draw">The draw.</param>
     /// <param name="placement">Where the draw's mesh lies in the region.</param>
+    /// <param name="generation">The explicit nonzero generation observed for this staged index.</param>
     /// <param name="record">The record's words; at least <see cref="SdfMeshRecord.DrawWords"/>.</param>
     /// <exception cref="ArgumentException">The mesh's levels exceed the indirect identity's level field.</exception>
-    public static void WriteDraw(in SdfMeshDraw draw, SdfMeshRegionMesh placement, Span<uint> record) {
+    public static void WriteDraw(in SdfMeshDraw draw, SdfMeshRegionMesh placement, uint generation, Span<uint> record) {
         var (mesh, matrix, material, _) = draw;
 
+        if (generation == 0) { throw new ArgumentOutOfRangeException(paramName: nameof(generation), message: "A staged instance generation is nonzero."); }
         if (mesh.Levels.Count >= (1 << (32 - SdfKernelInterfaces.MeshLevelShift))) {
             throw new ArgumentException(message: "The mesh's levels exceed the indirect draw identity's level field.", paramName: nameof(draw));
         }
@@ -609,7 +609,7 @@ public static class SdfMeshRegion {
         WriteSelectionVector(words: selection[4..], value: box.HalfX);
         selection[7] = BitConverter.SingleToUInt32Bits(box.Stretch);
         WriteSelectionVector(words: selection[8..], value: box.HalfY);
-        selection[11] = SelectionIdentities.GetValue(key: mesh, createValueCallback: static _ => new SelectionIdentity()).Value;
+        selection[11] = generation;
         WriteSelectionVector(words: selection[12..], value: box.HalfZ);
         selection[15] = (uint)mesh.Levels.Count;
     }

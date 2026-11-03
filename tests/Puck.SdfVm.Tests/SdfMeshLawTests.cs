@@ -27,7 +27,7 @@ public sealed class SdfMeshLawTests {
         var layout = SdfMeshRegion.Plan(draws: draws, meshes: placements);
         var words = new uint[layout.Words];
 
-        SdfMeshRegion.Write(destination: words, draws: draws, layout: layout, meshes: placements);
+        SdfMeshRegion.Write(destination: words, generations: Enumerable.Repeat(1u, draws.Length).ToArray(), draws: draws, layout: layout, meshes: placements);
         var table = words[SdfMeshRecord.LevelTableWord];
         Assert.Equal(expected: table, actual: words[SdfMeshRecord.DrawWords + SdfMeshRecord.LevelTableWord]);
         Assert.Equal(expected: 3u, actual: words[SdfMeshRecord.LevelTableWord + 1]);
@@ -109,7 +109,7 @@ public sealed class SdfMeshLawTests {
         var layout = SdfMeshRegion.Plan(draws: draws, meshes: placements);
         var words = new uint[layout.Words];
 
-        SdfMeshRegion.Write(destination: words, draws: draws, layout: layout, meshes: placements);
+        SdfMeshRegion.Write(destination: words, generations: Enumerable.Repeat(1u, draws.Length).ToArray(), draws: draws, layout: layout, meshes: placements);
         Assert.Equal(expected: [0u, 1u, 2u, 0u, 2u, 1u, 2u, 1u, 0u, 1u, 0u, 2u], actual: words.AsSpan(length: 12, start: placements[mesh].IndexWord).ToArray());
         Assert.Equal(expected: [1u, 2u, 3u, 4u], actual: words.AsSpan(length: 4, start: placements[mesh].MaterialWord).ToArray());
         Assert.Equal(expected: layout.Words - SdfMeshRecord.DrawWords, actual: SdfMeshRegion.WordsOf(mesh: mesh));

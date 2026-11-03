@@ -138,6 +138,7 @@ public sealed partial class SdfWorldTables {
     private void StageMeshRegion(IReadOnlyList<SdfMeshDraw> draws, long revision) {
         if (!m_meshTrimListening) { Puck.Hosting.Jobs.MemoryAccount.Shared.TrimRequested += RequestMeshTrim; m_meshTrimListening = true; }
         ServiceMemoryTrim();
+        if (draws.Count == 0) { m_meshHistory.RetireAfter(count: 0); }
         if (ReferenceEquals(objA: draws, objB: m_meshSource) && (revision == m_meshSourceRevision)) { StageMeshRegionCore(draws: draws, revision: revision); return; }
         // The staged list's meshes hold live claims; the arena's placement claims keep every placed mesh's storage, the
         // ones the list stopped naming included, until the arena forgets them.
@@ -231,11 +232,6 @@ public sealed partial class SdfWorldTables {
 
         var records = m_meshDrawWords.AsSpan(length: drawWords, start: 0);
 
-        SdfMeshRegion.WriteDraws(
-            destination: records,
-            draws: staged,
-            meshes: m_meshArena.Placements
-        );
         StageMeshMotion(
             draws: staged,
             words: records
@@ -277,20 +273,9 @@ public sealed partial class SdfWorldTables {
 
         for (var index = 0; (index <= draws.Count); index++) {
             if ((index < draws.Count) && (draws[index] is var draw) && !SameDraw(left: in draw, right: in m_stagedDraws[index])) {
-                if ((draw.MotionIdentity ?? draw.Identity) is not { } identity) {
-                    throw new ArgumentException(message: $"Mesh draw {index} names no identity.", paramName: nameof(draws));
-                }
-
                 var record = records.Slice(length: SdfMeshRecord.DrawWords, start: (index * SdfMeshRecord.DrawWords));
-                var offset = (index * SdfMeshRegion.DrawBytes);
 
-                SdfMeshRegion.WriteDraw(draw: in draw, placement: m_meshArena.Placements[draw.Mesh], record: record);
-                if (!identity.Equals(obj: m_meshIdentities[index])) {
-                    m_seededMeshDraws.Add(length: 1, start: index);
-                } else if ((offset > (old.Length - MeshMatrixBytes)) || !MemoryMarshal.AsBytes(span: record[..16]).SequenceEqual(other: old.Slice(length: MeshMatrixBytes, start: offset))) {
-                    m_changedMeshMatrices.Add(length: 1, start: index);
-                }
-                m_meshIdentities[index] = identity;
+                StageMeshDraw(index: index, draw: in draw, record: record, old: old);
                 if (draw.Glass != m_stagedDraws[index].Glass) {
                     m_glassDrawCount = (draw.Glass ? (m_glassDrawCount + 1) : (m_glassDrawCount - 1));
                 }

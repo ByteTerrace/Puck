@@ -126,7 +126,7 @@ public sealed class WorldRigidAssets {
         }
         foreach (var retired in m_motion.Keys.Where(predicate: body => !ContainsBody(body: body)).ToArray()) { m_motion[retired].Reads.Release(); m_motion.Remove(key: retired); m_targets.Remove(key: retired); }
         // PrepareFrame reads this count before the first pack sizes the root table.
-        while (m_copies.Count < m_bodies.Count) { m_copies.Add(item: new SdfMeshInstance(0, new object(), new DynamicTransform(Position: Vector3.Zero, Orientation: Quaternion.Identity), 1)); }
+        while (m_copies.Count < m_bodies.Count) { m_copies.Add(item: new SdfMeshInstance(0, new object(), new DynamicTransform(Position: Vector3.Zero, Orientation: Quaternion.Identity), 1, IsDynamic: true)); }
         if (m_copies.Count > m_bodies.Count) { m_copies.RemoveRange(m_bodies.Count, (m_copies.Count - m_bodies.Count)); }
     }
     /// <summary>Emits each local template once. Body membership and styling do not affect this program.</summary>
@@ -261,8 +261,8 @@ public sealed class WorldRigidAssets {
             var material = ((asset < m_materials.Count) ? m_materials[asset] : 0);
             var clip = WorldPortalStraddle.Clip(doors: doors, center: position, radius: (m_reaches[asset] * body.Scale), firstSlot: 0, slotCount: 1);
 
-            if (!previous.SamePose(firstSlot, target, motionIdentity, transform, body.Scale, clip, mesh, material, otherSlots)) {
-                m_copies[index] = new SdfMeshInstance(firstSlot, target, transform, body.Scale) { Clip = clip, Material = material, Mesh = mesh, MotionIdentity = motionIdentity, OtherAssetSlots = otherSlots };
+            if (!previous.SamePose(firstSlot, target, motionIdentity, transform, body.Scale, true, clip, mesh, material, otherSlots)) {
+                m_copies[index] = new SdfMeshInstance(firstSlot, target, transform, body.Scale, IsDynamic: true) { Clip = clip, Material = material, Mesh = mesh, MotionIdentity = motionIdentity, OtherAssetSlots = otherSlots };
             }
             foreach (var volume in (body.Creation.EngineDocument.Volumes ?? [])) {
                 if (!volume.Enabled) { continue; }

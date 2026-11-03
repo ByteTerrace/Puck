@@ -76,6 +76,7 @@ uint sdfSelectionLevel(uint record, uint4 previous, bool unboxed) {
     float depth = ((dot(center - eye.xyz, forward) - abs(dot(asfloat(x.xyz), forward))) - abs(dot(asfloat(y.xyz), forward))) - abs(dot(asfloat(z.xyz), forward));
     if (!(depth > 0.0)) { return 0u; }
     scale = (detail.z * scale) / depth;
+    // The same staged generation validates visibility and this level history.
     chosen = (eye.w == 0.0 && previous.z == y.w) ? min(previous.y, count) : 0u;
     // Dynamic indices read device storage, never a dynamically indexed local array.
     [loop]

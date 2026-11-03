@@ -452,7 +452,7 @@ public sealed partial class SdfMeshPathBakeLawTests {
         var layout = SdfMeshRegion.Plan(draws: [draw], meshes: placements);
         var words = new uint[layout.Words];
 
-        SdfMeshRegion.Write(destination: words, draws: [draw], layout: layout, meshes: placements);
+        SdfMeshRegion.Write(destination: words, generations: [1u], draws: [draw], layout: layout, meshes: placements);
 
         var skin = ((int)words[32]);
 

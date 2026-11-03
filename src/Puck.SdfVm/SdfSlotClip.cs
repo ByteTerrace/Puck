@@ -58,6 +58,7 @@ public readonly record struct SdfSlotClip(int FirstSlot, int SlotCount, Vector4 
                     CarryTranslation = clip.CopyTranslation,
                     ClipPlane = clip.CopyPlane,
                     Identity = Copies.GetValue(key: draw.Identity, createValueCallback: static of => new Copy(Of: of)),
+                    MotionIdentity = Copies.GetValue(key: (draw.MotionIdentity ?? draw.Identity), createValueCallback: static of => new Copy(Of: of)),
                 }));
 
                 break;

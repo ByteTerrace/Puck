@@ -15,7 +15,7 @@ public static class SdfMeshRecord {
     /// <summary>The words of one draw's record.</summary>
     public const int DrawWords = 63;
     /// <summary>The first of four four-word rows used by GPU draw selection: center and flags; half X and stretch;
-    /// half Y and mesh identity; half Z and level count.</summary>
+    /// half Y and staged instance generation; half Z and level count.</summary>
     public const int SelectionWord = 47;
     /// <summary>The first of two words: the absolute word of the mesh's shared level table, then its coarser level count.
     /// Each level, zero included, stores its first triangle, vertex count and error as three words.</summary>

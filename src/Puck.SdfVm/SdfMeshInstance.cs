@@ -8,7 +8,8 @@ namespace Puck.SdfVm;
 /// <param name="Identity">The host's picking identity for this copy.</param>
 /// <param name="Transform">The copy's root pose.</param>
 /// <param name="Scale">The uniform size of the copy.</param>
-public sealed record SdfMeshInstance(int AssetSlot, object Identity, DynamicTransform Transform, float Scale) {
+/// <param name="IsDynamic">Whether the surface can move or deform; fixed copies may enter static irradiance geometry.</param>
+public sealed record SdfMeshInstance(int AssetSlot, object Identity, DynamicTransform Transform, float Scale, bool IsDynamic) {
     /// <summary>Gets the host's motion-history identity, stable through continuous motion and changed on a pose cut.
     /// Falls back to <see cref="Identity"/> when absent.</summary>
     public object? MotionIdentity { get; init; }
@@ -32,10 +33,10 @@ public sealed record SdfMeshInstance(int AssetSlot, object Identity, DynamicTran
     public Matrix4x4 Matrix => ((Matrix4x4.CreateScale(scale: Scale) * Matrix4x4.CreateFromQuaternion(quaternion: Transform.Orientation)) * Matrix4x4.CreateTranslation(position: Transform.Position));
 
     /// <summary>Compares the host pose independently of frame-assigned lookup metadata.</summary>
-    public bool SamePose(SdfMeshInstance other) => SamePose(other.AssetSlot, other.Identity, other.MotionIdentity, other.Transform, other.Scale, other.Clip, other.Mesh, other.Material, other.OtherAssetSlots);
+    public bool SamePose(SdfMeshInstance other) => SamePose(other.AssetSlot, other.Identity, other.MotionIdentity, other.Transform, other.Scale, other.IsDynamic, other.Clip, other.Mesh, other.Material, other.OtherAssetSlots);
     /// <summary>Compares a candidate pose before allocating its immutable frame record.</summary>
-    public bool SamePose(int assetSlot, object identity, object? motionIdentity, DynamicTransform transform, float scale, SdfSlotClip? clip, SdfMesh? mesh, int material, IReadOnlyList<int> otherAssetSlots) {
-        if ((AssetSlot != assetSlot) || !Equals(objA: Identity, objB: identity) || !Equals(objA: MotionIdentity, objB: motionIdentity) || (Transform != transform) || (Scale != scale) || (Clip != clip) || !ReferenceEquals(objA: Mesh, objB: mesh) || (Material != material) || (OtherAssetSlots.Count != otherAssetSlots.Count)) { return false; }
+    public bool SamePose(int assetSlot, object identity, object? motionIdentity, DynamicTransform transform, float scale, bool isDynamic, SdfSlotClip? clip, SdfMesh? mesh, int material, IReadOnlyList<int> otherAssetSlots) {
+        if ((AssetSlot != assetSlot) || !Equals(objA: Identity, objB: identity) || !Equals(objA: MotionIdentity, objB: motionIdentity) || (Transform != transform) || (Scale != scale) || (IsDynamic != isDynamic) || (Clip != clip) || !ReferenceEquals(objA: Mesh, objB: mesh) || (Material != material) || (OtherAssetSlots.Count != otherAssetSlots.Count)) { return false; }
         for (var index = 0; (index < OtherAssetSlots.Count); index++) {
             if (OtherAssetSlots[index] != otherAssetSlots[index]) { return false; }
         }
