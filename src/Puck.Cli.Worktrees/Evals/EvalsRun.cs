@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 
 namespace Puck.Cli.Evals;
@@ -285,7 +286,9 @@ public static partial class EvalsRun {
 
     /// <summary>Adds the rules-file fixture to every case directory: <see cref="FixturePrompt"/> as a
     /// <c>project-instructions</c> block ahead of the task in its <c>prompt.md</c> body, the same in both arms, as a
-    /// session delivers project instructions in the user turn. It is never <c>append_system_prompt</c>:
+    /// session delivers project instructions in the user turn. A case that resumes a transcript takes the block ahead of
+    /// the transcript's first user turn instead, since a real session holds its rules from the start, not only beside
+    /// the turn under test. It is never <c>append_system_prompt</c>:
     /// <c>claude plugin eval</c> passes that on the child's command line, which Windows caps far below the rules file's
     /// size. Every case is checked before any is written.</summary>
     /// <param name="caseDirectories">The case directories, in a tree the run owns.</param>
@@ -294,12 +297,43 @@ public static partial class EvalsRun {
     /// <returns><see langword="null"/> when every case took the fixture, or the first case that cannot, with why; a
     /// refusal writes nothing.</returns>
     public static (string Case, string Why)? AddFixture(IReadOnlyList<string> caseDirectories, string agents, IReadOnlyList<(string Name, string Text)> skills) {
+        Dictionary<string, (string[] Lines, int Index, JsonNode Turn)> histories = new(comparer: StringComparer.Ordinal);
+
         foreach (var caseDirectory in caseDirectories) {
             if (!File.Exists(path: Path.Combine(caseDirectory, CaseFiles.Prompt))) { return (caseDirectory, "it has no prompt.md body to carry the fixture; keep the prompt in prompt.md."); }
+            if (CaseFiles.HistoryFile(caseDirectory: caseDirectory) is not { } history) { continue; }
+            if (!File.Exists(path: history)) { return (caseDirectory, $"its case.yaml names a history_file, {Path.GetFileName(path: history)}, that does not exist."); }
+            var lines = File.ReadAllText(path: history).ReplaceLineEndings(replacementText: "\n").TrimEnd(trimChar: '\n').Split(separator: '\n');
+            var index = -1;
+            JsonNode? turn = null;
+
+            try {
+                for (var line = 0; (line < lines.Length) && (turn is null); line++) {
+                    if ((JsonNode.Parse(json: lines[line]) is { } node) && ((string?)node["type"] == "user")) { (index, turn) = (line, node); }
+                }
+            } catch (JsonException exception) {
+                return (caseDirectory, $"its history_file is not JSON Lines: {exception.Message}");
+            }
+            if ((turn is null) || (turn["message"]?["content"] is not (JsonValue or JsonArray))) {
+                return (caseDirectory, "its history_file has no user turn whose message content can carry the fixture.");
+            }
+            histories[caseDirectory] = (lines, index, turn);
         }
         var block = $"<project-instructions>\n{FixturePrompt(agents: agents, skills: skills)}\n</project-instructions>\n\n";
 
         foreach (var caseDirectory in caseDirectories) {
+            if (histories.TryGetValue(key: caseDirectory, value: out var history)) {
+                var message = history.Turn["message"]!;
+
+                if (message["content"] is JsonArray parts) {
+                    parts.Insert(index: 0, item: new JsonObject { ["type"] = "text", ["text"] = block });
+                } else {
+                    message["content"] = (block + (string?)message["content"]);
+                }
+                history.Lines[history.Index] = history.Turn.ToJsonString();
+                File.WriteAllText(contents: (string.Join(separator: '\n', value: history.Lines) + "\n"), path: CaseFiles.HistoryFile(caseDirectory: caseDirectory)!);
+                continue;
+            }
             var path = Path.Combine(caseDirectory, CaseFiles.Prompt);
             var lines = File.ReadAllText(path: path).ReplaceLineEndings(replacementText: "\n").Split(separator: '\n');
             var end = CaseFiles.FrontmatterEnd(lines: lines);

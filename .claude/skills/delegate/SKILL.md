@@ -76,15 +76,18 @@ orders, verifying a change by building and running it, and fixing a defect at it
 
 - Done is a state: every job you started has exited, its watcher is stopped, your Worlds are stopped,
   your leases are released and the output that must survive is preserved. A pending run is in
-  progress or blocked, never done. Keep one watcher per running job, ending on success, failure or
+  progress or blocked, never done. Every hand-back reaches this state, a blocked one and one a stop
+  order forces included: stopping means your own jobs, watchers and Worlds stop too, not that they
+  are left running for the lead. Keep one watcher per running job, ending on success, failure or
   exit; no `sleep` timers and no polling a job that reports its own exit
   ([your harness](../orchestration/references/lane-work.md#running-long-tasks)).
 - Once your finish line holds on the merged head, hand back. Start no review or hardening round of
   your own (a self-review, extra guards, fuzzing beyond the brief): the lead's cross-family review
   runs beside your next work, and what else you noticed goes under **Found**.
 - Before your final commit, run `puck docs links` from your CLI copy. Fix every failure your change
-  introduced: a renamed symbol, a moved file, a closed plan item. A failure older than your change goes
-  in your hand-back.
+  introduced (a renamed symbol, a moved file, a closed plan item), in whichever file it shows up,
+  including pages you never edited. Only a failure that was already there before your change goes in
+  your hand-back.
 - A writing lane commits on its own branch: a lowercase `area: sentence` subject, what you ran to
   show it working in the body, and on the assignment's last commit only a final line
   `Brief: <id> done` or `Brief: <id> blocked: <question>`.

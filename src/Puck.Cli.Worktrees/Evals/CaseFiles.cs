@@ -2,10 +2,9 @@ using System.Text.RegularExpressions;
 
 namespace Puck.Cli.Evals;
 
-/// <summary>Reads and edits the two files that define a <c>claude plugin eval</c> case: <c>prompt.md</c> (YAML
-/// frontmatter, then the prompt) and <c>case.yaml</c>. It reads only the few top-level keys Puck's tooling needs and
-/// edits by inserting lines, so it never rewrites what an author wrote; the runner's own loader stays the judge of the
-/// files' validity.</summary>
+/// <summary>Reads the two files that define a <c>claude plugin eval</c> case: <c>prompt.md</c> (YAML frontmatter, then
+/// the prompt) and <c>case.yaml</c>. It reads only the few keys Puck's tooling needs; the runner's own loader stays the
+/// judge of the files' validity.</summary>
 public static partial class CaseFiles {
     /// <summary>The prompt file's name.</summary>
     public const string Prompt = "prompt.md";
@@ -18,6 +17,8 @@ public static partial class CaseFiles {
     private static partial Regex BlockTags();
     [GeneratedRegex(pattern: @"^\s+-\s*(?<item>.+?)\s*$")]
     private static partial Regex BlockItem();
+    [GeneratedRegex(pattern: @"^\s+history_file:\s*[""']?(?<path>[^""'#]+?)[""']?\s*(#.*)?$")]
+    private static partial Regex HistoryKey();
 
     /// <summary>Indicates whether <paramref name="directory"/> is a case: it holds a <c>prompt.md</c> or a
     /// <c>case.yaml</c>.</summary>
@@ -100,65 +101,23 @@ public static partial class CaseFiles {
 
         return ((end > 0) && lines[1..end].Any(predicate: line => line.StartsWith(value: $"{key}:", comparisonType: StringComparison.Ordinal)));
     }
-    /// <summary>Reads whether a case's <c>case.yaml</c> sets <paramref name="key"/> at any depth.</summary>
+    /// <summary>Reads the transcript a case resumes: the <c>history_file</c> its <c>case.yaml</c> names under
+    /// <c>context</c>, resolved against the case directory.</summary>
     /// <param name="caseDirectory">The case directory.</param>
-    /// <param name="key">The key.</param>
-    /// <returns><see langword="true"/> when a line of the file opens with the key, after its indentation.</returns>
-    public static bool CaseSets(string caseDirectory, string key) {
+    /// <returns>The transcript's full path, or <see langword="null"/> when the case resumes none.</returns>
+    public static string? HistoryFile(string caseDirectory) {
         var file = Path.Combine(path1: caseDirectory, path2: Case);
 
-        return (File.Exists(path: file) && File.ReadAllLines(path: file).Any(predicate: line => line.TrimStart().StartsWith(value: $"{key}:", comparisonType: StringComparison.Ordinal)));
-    }
-    // One string entry at the given indentation: a double-quoted scalar for one line, or a literal block scalar for
-    // several. The block's explicit indentation indicator (2, relative to the key) lets its first line open with
-    // spaces, and its strip chomping (-) adds no trailing newline; an empty line stays empty, which a literal block
-    // reads as an empty line of the text.
-    private static IEnumerable<string> Entry(string indent, string key, string text) {
-        var normalized = text.ReplaceLineEndings(replacementText: "\n");
+        if (!File.Exists(path: file)) { return null; }
+        var inContext = false;
 
-        if (!normalized.Contains(value: '\n')) {
-            yield return $"{indent}{key}: \"{normalized.Replace(oldValue: "\\", newValue: "\\\\").Replace(oldValue: "\"", newValue: "\\\"")}\"";
-            yield break;
-        }
-        yield return $"{indent}{key}: |2-";
-        foreach (var line in normalized.Split(separator: '\n')) { yield return ((line.Length == 0) ? string.Empty : $"{indent}  {line}"); }
-    }
-    /// <summary>Sets the string <paramref name="text"/> as <paramref name="key"/> under the top-level mapping
-    /// <paramref name="section"/> of a case's <c>case.yaml</c>, creating the file (with <c>schema_version</c> and
-    /// <c>name</c>) or the section when absent and matching the indentation the section's children already use. One
-    /// line is written as a double-quoted scalar, several as a literal block scalar whose value is the text exactly.</summary>
-    /// <param name="caseDirectory">The case directory.</param>
-    /// <param name="section">The top-level key, such as <c>execution</c>.</param>
-    /// <param name="key">The child key, such as <c>append_system_prompt</c>.</param>
-    /// <param name="text">The string value; any line endings become <c>\n</c>.</param>
-    /// <exception cref="InvalidOperationException">The section already sets <paramref name="key"/>.</exception>
-    public static void SetCaseKey(string caseDirectory, string section, string key, string text) {
-        var file = Path.Combine(path1: caseDirectory, path2: Case);
-        var lines = (File.Exists(path: file)
-            ? File.ReadAllLines(path: file).ToList()
-            : ["schema_version: \"1.1\"", $"name: {Path.GetFileName(path: caseDirectory)}"]);
-        var header = lines.FindIndex(match: line => (line.TrimEnd() == $"{section}:"));
-
-        if (header < 0) {
-            lines.Add(item: $"{section}:");
-            lines.AddRange(collection: Entry(indent: "  ", key: key, text: text));
-        } else {
-            string? indent = null;
-
-            for (var index = (header + 1); (index < lines.Count); index++) {
-                var line = lines[index];
-
-                if (line.Trim().Length == 0) { continue; }
-                if (!char.IsWhiteSpace(c: line[0])) { break; }
-                var own = line[..(line.Length - line.TrimStart().Length)];
-
-                indent ??= own;
-                if ((own == indent) && line.TrimStart().StartsWith(value: $"{key}:", comparisonType: StringComparison.Ordinal)) {
-                    throw new InvalidOperationException(message: $"{file} already sets {section}.{key}.");
-                }
+        foreach (var line in File.ReadAllLines(path: file)) {
+            if (line.Trim().Length == 0) { continue; }
+            if (!char.IsWhiteSpace(c: line[0])) { inContext = (line.TrimEnd() == "context:"); continue; }
+            if (inContext && (HistoryKey().Match(input: line) is { Success: true } match)) {
+                return Path.GetFullPath(path: Path.Combine(path1: caseDirectory, path2: match.Groups["path"].Value));
             }
-            lines.InsertRange(index: (header + 1), collection: Entry(indent: (indent ?? "  "), key: key, text: text));
         }
-        File.WriteAllText(path: file, contents: (string.Join(separator: '\n', values: lines) + "\n"));
+        return null;
     }
 }
