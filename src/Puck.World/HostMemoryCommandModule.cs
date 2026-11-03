@@ -1,6 +1,9 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Runtime;
+using System.Text;
+using System.Text.Json;
+using Puck.Abstractions.Counting;
 using Puck.Commands;
 using Puck.Abstractions.Memory;
 using Puck.Hosting.Jobs;
@@ -16,7 +19,36 @@ namespace Puck.World;
 /// full blocking collection that compacts the large object heap, so the heap it reports is what is still reachable.
 /// Presentation-independent; it reads the process, never the simulation.
 /// </summary>
-internal sealed class HostMemoryCommandModule(IAllocator allocator) : ICommandModule {
+internal sealed class HostMemoryCommandModule(IAllocator allocator, IEnumerable<IWorkCounterSource> sources) : ICommandModule {
+    private readonly IWorkCounterSource[] m_memorySources = [.. sources.Where(static source => WorkCounterReport.Matches(name: source.Name, filter: "memory")).OrderBy(static source => source.Name, StringComparer.Ordinal)];
+
+    private string DescribeOwners(int limit) {
+        var snapshot = MemoryAccount.Shared.ReadOwners();
+        var account = snapshot.Account;
+        var owners = snapshot.Owners.OrderByDescending(static owner => owner.Owned)
+            .ThenByDescending(static owner => owner.Reserved).ThenBy(static owner => owner.Name, StringComparer.Ordinal).ToArray();
+        var shown = ((limit == 0) ? owners.Length : Math.Min(limit, owners.Length));
+        var text = new StringBuilder();
+
+        text.Append(CultureInfo.InvariantCulture, $"[host.memory: charged/reserved owners shown={shown} total={owners.Length} | account bytes owned={account.Owned} live={account.Live} cached={account.Cached} retirement={account.Retirement} metadata={account.Metadata} reserved={account.Reserved} budget={account.Budget} headroom={account.Headroom}\n");
+        for (var index = 0; index < shown; index++) {
+            var owner = owners[index];
+
+            text.Append(CultureInfo.InvariantCulture, $"owner {JsonSerializer.Serialize(owner.Name)} category={owner.Category} owned={owner.Owned} reserved={owner.Reserved} peak-owned={owner.PeakOwned} reservation-peak={owner.ReservationPeak} disposed={owner.Disposed.ToString().ToLowerInvariant()}\n");
+        }
+        long omittedOwned = 0;
+        long omittedReserved = 0;
+
+        for (var index = shown; index < owners.Length; index++) {
+            omittedOwned += owners[index].Owned;
+            omittedReserved += owners[index].Reserved;
+        }
+        text.Append(CultureInfo.InvariantCulture, $"omitted owners={owners.Length - shown} owned={omittedOwned} reserved={omittedReserved}\n");
+        foreach (var source in m_memorySources) { WorkCounterReport.AppendSection(builder: text, source: source); }
+        text.Append("Backend counters are separate observations; host-visible-device-local bytes are a subset of device-local bytes. Process, managed, allocator, account and backend readings overlap; unified physical total is unavailable.]");
+        return text.ToString();
+    }
+
     private static string Mebibytes(long bytes) =>
         (bytes / (1L << 20)).ToString(provider: CultureInfo.InvariantCulture);
     // One line: the process, then the managed heap as the last collection left it, in MiB.
@@ -48,8 +80,16 @@ internal sealed class HostMemoryCommandModule(IAllocator allocator) : ICommandMo
         yield return CommandDefinition.WithWireArgs(
             audience: CommandAudience.Operator,
             bindability: CommandBindability.Unbindable,
-            description: "Reads process working set/private bytes, uptime and managed heap generations in MiB, then the process account's live, reserved, cached, retirement and metadata bytes, budget/headroom, and allocator committed/reserved bytes, then the JIT's compiled-method count, IL bytes and compilation time so far. Reservations are future admission promises, not allocated bytes. host.memory collect trims cache claims, compacts the LOH and asks the native allocator to collect (under --debug-allocator, checking every quarantined block first); active consumers retain their storage, and deferred-trims counts cache trims still waiting for their owner thread (a residency services its own on its next frame), so a reading taken right after collect can still hold their storage. host.memory budget <bytes|auto> lowers the background admission budget or restores the machine-derived budget, and a lowered budget trims the caches; existing owners keep their allocations, and a bake group that does not fit waits while others of its bake are admitted, and is admitted alone once none is, so a bake always settles.",
+            description: "Reads process working set/private bytes, uptime and managed heap generations in MiB, then the process account's live, reserved, cached, retirement and metadata bytes, budget/headroom, and allocator committed/reserved bytes, then the JIT's compiled-method count, IL bytes and compilation time so far. Reservations are future admission promises, not allocated bytes. host.memory owners [limit] reads one atomic charged/reserved-owner census (default 20 largest rows, 0 all), including categories, actual peaks, future promises and disposed owners whose storage is still held; omitted totals reconcile the displayed rows. Registered memory.* backend counters follow as separate observations, with aperture bytes already included in device-local bytes; these overlapping views do not establish a unified physical total. host.memory collect trims cache claims, compacts the LOH and asks the native allocator to collect (under --debug-allocator, checking every quarantined block first); active consumers retain their storage, and deferred-trims counts cache trims still waiting for their owner thread (a residency services its own on its next frame), so a reading taken right after collect can still hold their storage. host.memory budget <bytes|auto> lowers the background admission budget or restores the machine-derived budget, and a lowered budget trims the caches; existing owners keep their allocations, and a bake group that does not fit waits while others of its bake are admitted, and is admitted alone once none is, so a bake always settles.",
             handler: (_, args) => {
+                if ((args.Count is 1 or 2) && args.Is(index: 0, value: "owners")) {
+                    var limit = 20;
+
+                    if ((args.Count == 2) && (!args.TryInt(index: 1, value: out limit) || (limit < 0))) {
+                        return CommandResult.Error(output: "[host.memory: owners expects an optional nonnegative row limit; 0 lists all charged/reserved owners]");
+                    }
+                    return new CommandResult(Output: DescribeOwners(limit: limit));
+                }
                 if ((args.Count == 2) && args.Is(index: 0, value: "budget")) {
                     if (args.Is(index: 1, value: "auto")) { MemoryAccount.Shared.SetBudget(bytes: null); return new CommandResult(Output: Describe()); }
                     if (long.TryParse(args[1], NumberStyles.None, CultureInfo.InvariantCulture, out var budget)) {
@@ -74,7 +114,7 @@ internal sealed class HostMemoryCommandModule(IAllocator allocator) : ICommandMo
                     return new CommandResult(Output: Describe());
                 }
 
-                return CommandResult.Error(output: "[host.memory: expects no argument, collect, or budget <bytes|auto>]");
+                return CommandResult.Error(output: "[host.memory: expects no argument, owners [limit], collect, or budget <bytes|auto>]");
             },
             name: "host.memory"
         );
