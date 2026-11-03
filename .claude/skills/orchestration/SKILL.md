@@ -894,7 +894,12 @@ and not a spiral:
 
   It never does the hard labor of implementing, measuring or bisecting, which
   goes to specialist or implementer. Anything else hard routes to specialist
-  (Opus), and the lead says so.
+  (Opus), and the lead says so. Fable is also not run as a model under test
+  in skill evals.
+
+  At present the owner has said "No Fable": no principal lane, and no Fable
+  tier or Fable judge in evals. Reviews go to specialist or reviewer (Opus)
+  and Codex, until the owner says otherwise.
 - Before putting a semantics question to the owner, look for the decision it
   follows from (`docs/decisions/`, the plan's requirements). A behaviour a
   recorded contract implies is derived, written down with its derivation, and
