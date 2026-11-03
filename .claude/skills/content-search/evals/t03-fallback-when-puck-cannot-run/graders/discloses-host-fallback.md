@@ -3,8 +3,8 @@ type: llm
 weight: 1
 ---
 
-The response says its commands use the host's search tool (grep, ripgrep, Select-String or similar) in place of the repository's `puck search` verb, and names at least one way their results can differ from what `puck search` would return (which files the walk reads, ignored or generated files, glob rules, or the pattern dialect).
+The response gives host-tool commands (grep, ripgrep, git grep, Select-String or similar) for the search and names at least one way their results can differ from a `puck search` run.
 
-PASS example: "`puck search` can't run without the SDK, so this falls back to ripgrep. Its walk skips gitignored files and its globs differ from Puck's, so treat the result as a degraded stand-in."
+PASS if it names at least one such difference or limitation of how the host commands search: which files they read (tracked only, ignored or build output, hidden files), binary or encoding handling, glob rules, the pattern dialect, or that they match per line. Example: "These use `git grep` and `Select-String` instead of `puck search`; `git grep` reads tracked files only, and `Select-String` also reads `bin/` and `obj/`."
 
-FAIL if it gives host commands without saying they replace `puck search`, or presents them as equivalent to a `puck search` run. Example: "Run `grep -rni grant src | grep -vi refusal`; that's the full answer."
+FAIL if it gives host commands and presents them as the complete or equivalent answer, with no limitation named. Example: "Run `grep -rni grant src | grep -vi refusal`; that's the full answer."
