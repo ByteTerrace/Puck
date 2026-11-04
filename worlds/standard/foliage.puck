@@ -21,13 +21,22 @@ let meadowBlades = map(range(0, 144), i => {
 
 // Surface colour belongs to shading, not silhouette relief. Static scenery has zero render lanes,
 // so floor: 1 explicitly activates these authored masks. Under thresholds stay below the mask strength.
+// A thresholded single octave aligned to the world axes reveals its lattice as squares, so the standard pattern
+// sums two octaves (the second at 2.03x the frequency and 0.534 the weight, normalised to keep one octave's spread) read
+// through a turn off every axis: a unit quaternion about the axis (1, -2, -2) / 3 by acos(0.28) = 73.7 degrees.
+let landscapeTurn = [0.2, -0.4, -0.4, 0.8]
 function landscapeSurface(base, under, deposit, seed, scale = 1.5, lines = 0, settle = 0.3,
-  edge = 0, reach = 0.35, threshold = 0.16, noise = 0, patternScale = [1, 1, 1], softness = 0) = base with {
+  edge = 0, reach = 0.35, threshold = 0.16, noise = 0, patternScale = [1, 1, 1], softness = 0,
+  octaves = 2, octaveRatio = 2.03, octaveGain = 0.534, turn = landscapeTurn) = base with {
   weathering {
     floor: 1
     noise: noise
     softness: softness
     patternScale: patternScale
+    octaves: octaves
+    octaveRatio: octaveRatio
+    octaveGain: octaveGain
+    turn: turn
     seed: seed
     scale: scale
     lines: lines

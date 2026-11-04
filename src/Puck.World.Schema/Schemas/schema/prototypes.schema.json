@@ -258,6 +258,21 @@
                     "softness": {
                       "type": "number",
                       "default": 0
+                    },
+                    "octaves": {
+                      "type": "integer",
+                      "default": 1
+                    },
+                    "octaveRatio": {
+                      "type": "number",
+                      "default": 2
+                    },
+                    "octaveGain": {
+                      "type": "number",
+                      "default": 0.5
+                    },
+                    "turn": {
+                      "default": null
                     }
                   },
                   "additionalProperties": false,

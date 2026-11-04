@@ -5,14 +5,16 @@ namespace Puck.SignedDistance;
 public sealed partial class SdfProgram {
     // MaterialVectorsPerEntry float4 rows. KEEP IN SYNC with sdfMaterialLoad in shade/sdf-material.hlsli.
     // 0..3 base shading; 4..7 inset frame/ramp controls; 8..11 radial stops;
-    // 12..13 weathering controls; 14..17 two reveal surfaces; 18..19 deposit;
+    // 12..13 weathering controls; 14..17 two reveal surfaces; 18..19 deposit; 26 the pattern lattice's turn;
     // 20 the paints and the emissive lane: (first paint's vector, paint count, emissive lane + 1 or 0 for a static
     // emissive, 0) as uint bits; 21 the glass: (absorption per world unit, index of refraction), zero for an opaque
     // material, so a positive index says glass; 22..25 the material's own cel style (SdfToon.WriteRows; KEEP IN SYNC with
     // sdfToonStyle in shade/sdf-toon.hlsli), all zero to inherit the world's default, a mode of -1 for a style that
     // keeps the material continuous.
     // Bleed occupies 2.w/7.zw, and indirect receive is 3.w. Weathering pattern XYZ uses
-    // 15.w/17.w/19.z; noise coverage is 19.w; reveal softness replaces the redundant stage count at 17.z.
+    // 15.w/17.w/19.z; noise coverage is 19.w; reveal softness is 17.z. The second octave's frequency ratio is 15.z and
+    // its gain 18.w (zero reads one octave); the turn is row 26 as a unit quaternion (x, y, z, w). A reveal stage is
+    // present when its threshold (14.w, 16.w) is positive, and a deposit when the settle share (12.z) is.
     private void PackMaterials(int materialOffsetVectors, int paintOffsetVectors, IReadOnlyList<SdfMaterial> materialTable, int materialCount) {
         var paintCursor = paintOffsetVectors;
         Span<Vector4> toonRows = stackalloc Vector4[4];
@@ -175,7 +177,7 @@ public sealed partial class SdfProgram {
                             value: new(
                                 stages[stage].Surface.Roughness,
                                 stages[stage].Surface.Metal,
-                                stages.Count,
+                                0,
                                 0
                             )
                         );
@@ -186,7 +188,7 @@ public sealed partial class SdfProgram {
                         row: 18,
                         value: new(
                             value: deposit.Color,
-                            w: 1
+                            w: 0
                         )
                     );
                     Row(
@@ -206,7 +208,14 @@ public sealed partial class SdfProgram {
                 m_words[materialBase + 19 * WordsPerVector + 2] = BitConverter.SingleToUInt32Bits(pattern.Z);
                 m_words[materialBase + 19 * WordsPerVector + 3] = BitConverter.SingleToUInt32Bits(w.Noise);
                 m_words[materialBase + 17 * WordsPerVector + 2] = BitConverter.SingleToUInt32Bits(w.Softness);
+                // A second octave exists when the gain word is positive; a single octave leaves both words zero.
+                if (w.Octaves >= 2) {
+                    m_words[materialBase + 15 * WordsPerVector + 2] = BitConverter.SingleToUInt32Bits(w.OctaveRatio);
+                    m_words[materialBase + 18 * WordsPerVector + 3] = BitConverter.SingleToUInt32Bits(w.OctaveGain);
+                }
+                var turn = Quaternion.Normalize(value: (w.Turn ?? Quaternion.Identity));
 
+                Row(row: 26, value: new(x: turn.X, y: turn.Y, z: turn.Z, w: turn.W));
             }
         }
     }
