@@ -22,6 +22,10 @@ namespace Puck.SignedDistance.Queries;
 //   the answer and its material bitwise: a union at or above it is not taken, a smooth union at least k + k·2⁻¹⁵ + 16
 //   raws past it rounds its blend weight to exactly one in either walk, a subtraction's negated candidate at or below it
 //   is not taken.
+// - Consecutive chains outside every cullable instance are grouped (m_segmentGroups, BuildSegmentGroups) so a point
+//   walk skips a whole run of them with one test of the certificate around them all.
+// - A relief inside a scope (NoiseDisplace) is charged to the scope's slack at its certified reach (ReliefLoweringRaws),
+//   so a relieved instance is cullable by the point walk; it carries no box certificate.
 // - When every compose outside a scope is a hard union (m_primeable), the answer is the least of the instances' own
 //   answers. A walk then evaluates its nearest cullable instance first, and skips every instance whose candidates
 //   exceed that instance's answer (a point walk) or reach its upper end (a box walk), wherever it falls in the stream.
@@ -200,6 +204,18 @@ public sealed partial class SdfFieldEvaluator {
                         steps.Add(item: new ScopeStep(Blend: ((SdfBlendOp)instruction.Blend), Op: SdfOp.ShapeBlend, Scale: 0.0, Shape: shape, Smooth: ((double)FixedQ4816.Max(x: instruction.Data1X, y: SmoothRadiusMin))));
                         continue;
                     }
+                case SdfOp.NoiseDisplace: {
+                        // A relief inside the scope lowers the scope's field by at most its certified reach, wherever it
+                        // stands among the scope's shapes, so it joins the slack every lowering member is charged at the
+                        // pop. Its box reach is not carried, so the box walk never skips the instance.
+                        if ((depth != 1) || (ReliefLoweringRaws(instruction: in instruction) is not { } reliefRaws)) {
+                            return false;
+                        }
+
+                        roundingRaws = checked((roundingRaws + reliefRaws));
+                        boxed = false;
+                        continue;
+                    }
                 default: {
                         return false;
                     }
@@ -207,6 +223,17 @@ public sealed partial class SdfFieldEvaluator {
         }
 
         return ((depth == 0) && (lowering.Count > 0));
+    }
+    // The most a relief (EditField's NoiseDisplace) can lower the field it edits, in raws: its scale, rounded as the point
+    // rule rounds it, times the octave sum enclosed over every lattice point (Pcg3dLatticeNoise.Fbm3Bounds over an
+    // unbounded box), in outward-rounded interval arithmetic; the point rule's addition is exact. None when the
+    // enclosure leaves the carrier.
+    private static long? ReliefLoweringRaws(in CompiledInstruction instruction) {
+        var relief = (FixedInterval.FromPoint(value: (instruction.Data0Y * instruction.Data1X)) * Pcg3dLatticeNoise.Fbm3Bounds(
+            gain: instruction.Data0Z, lacunarity: instruction.Data0W, octaves: ((int)instruction.Blend), seed: instruction.Shape,
+            x: FixedInterval.Entire, y: FixedInterval.Entire, z: FixedInterval.Entire));
+
+        return (relief.IsUnbounded ? null : Math.Max(val1: 0L, val2: -relief.Lower.Value));
     }
     // The mean of an instance's shapes' centres.
     private static (double X, double Y, double Z) MeanCentre(List<ScopeStep> steps) {
