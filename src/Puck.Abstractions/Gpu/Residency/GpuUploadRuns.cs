@@ -88,10 +88,14 @@ public sealed class GpuUploadRuns {
     }
     /// <summary>Records as owed each run of words in which <paramref name="current"/> differs from
     /// <paramref name="previous"/> at the same index, and every word of <paramref name="current"/> past
-    /// <paramref name="previous"/>'s end, in increasing order.</summary>
+    /// <paramref name="previous"/>'s end, in increasing order, offset by <paramref name="startWord"/>.</summary>
     /// <param name="previous">The words a table held.</param>
     /// <param name="current">The words it holds now.</param>
-    public void AddDifferences(ReadOnlySpan<uint> previous, ReadOnlySpan<uint> current) {
+    /// <param name="startWord">The destination word corresponding to the spans' index zero.</param>
+    /// <returns>The differing or newly present words before merging or coarsening owed runs.</returns>
+    public int AddDifferences(ReadOnlySpan<uint> previous, ReadOnlySpan<uint> current, int startWord = 0) {
+        ArgumentOutOfRangeException.ThrowIfNegative(value: startWord);
+        _ = checked((startWord + current.Length));
         var shared = Math.Min(
             val1: previous.Length,
             val2: current.Length
@@ -99,6 +103,7 @@ public sealed class GpuUploadRuns {
         var before = previous[..shared];
         var after = current[..shared];
         var index = 0;
+        var changed = 0;
 
         while (index < shared) {
             index += after[index..].CommonPrefixLength(other: before[index..]);
@@ -115,14 +120,16 @@ public sealed class GpuUploadRuns {
 
             Add(
                 length: (index - start),
-                start: start
+                start: (startWord + start)
             );
+            changed += (index - start);
         }
 
         Add(
             length: (current.Length - shared),
-            start: shared
+            start: (startWord + shared)
         );
+        return (changed + (current.Length - shared));
     }
     /// <summary>Forgets every run, as a table's owed ranges reach the GPU.</summary>
     public void Clear() => m_count = 0;

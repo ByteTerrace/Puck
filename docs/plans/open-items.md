@@ -202,9 +202,10 @@ Each waits on the owner: what the engine should do, how it looks and feels, and 
 ### Dense landscapes
 
 Owner: the lead, with performance, rendering and world-authoring owners per
-step · high · Next: [L0, L0m and L1](dense-landscapes.md#implementation-order),
-query/motion accounting, early memory attribution and the one geometry/instance
-contract, including wind-deformed canopy GI semantics. The owner
+step · high · Next: reduce shared pose/history traffic, finish GPU instance
+buckets and qualify the wider continuous forest under
+[L0, L0m and L1](dense-landscapes.md#implementation-order), including
+wind-deformed canopy GI semantics. The owner
 includes continuous forest in the first milestone, alongside roads, shrubs,
 grass and trees; scattered groves do not satisfy it. The
 [plan](dense-landscapes.md) owns the fresh measurements, connected woodland
@@ -212,11 +213,26 @@ proposal, counted-work metrics and implementation dependencies. Existing
 visibility, bake, memory, terrain and job-system packets own the mechanisms.
 Query/pose/driver counters, charged-memory snapshots, shared CPU/GPU surface
 history and a connected forest patch are implemented; wind stop/restore is
-witnessed. Next: local static-copy sharing and retained updates, GPU instance
-buckets, then the wider forest and density/route qualification. The measured cold
+  witnessed. Static-copy sharing and retained draw topology are implemented.
+  Next: finish measured query/staging improvements, GPU instance buckets, then
+  the wider forest and density/route qualification. The measured cold
 bake misses its bar; physical-memory and target-device qualification remain open.
 Cross-family review is owed: the session-launch hook refused the Claude reviewer
 from this Codex lead session; the supplemental review finding was fixed.
+  P2 · Owner: presentation-query owner · `WorldSessionSceneEmitter.TrySurface`
+  (`src/Puck.World.Client/WorldSessionSceneEmitter.cs:829`) rebuilds its static
+  field after avatar-only visual program changes; the root's general definition
+  and neighbour revisions are also broader than query geometry. Count emission
+  requests, canonical geometry changes and evaluator constructions separately,
+  then retain against the exact emitted inputs. Preserve the root/routed scopes'
+  different placement, screen and adjacency policies. Their frequency in the
+  forest workload remains unmeasured.
+  P2 · Owner: graphics/history owner · `SdfWorldTables.Motion.cs:71` coalesces
+  previous mesh updates across the first-to-last changed draw; `CopyMeshHistory`
+  copies whole draw records although reprojection reads only the matrix. Measure
+  compact/shared pose history and command count against the current range-copy
+  policy. Preserve previous presented poses, generation reseeds, portal carry and
+  the one settle copy after motion stops.
 
 ### Engine job system
 

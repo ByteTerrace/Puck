@@ -311,9 +311,10 @@ forest workload. No new art-style decision is needed to measure density.
 
 ## Next action
 
-Attribute the post-walk simulation hotspot with the query/motion/instance counters,
-then finish field-cache invalidation and GPU instance buckets against the shared
-connected forest. Keep fixed-root
+Reduce repeated pose packing and history traffic using the new record/word,
+query-power and upload measurements. Carry known changes through the shared
+instance processing, then finish field-cache invalidation and GPU instance buckets
+against the connected forest. Keep fixed-root
 semantics separate from wind-deformed canopy GI. Complete physical memory attribution and
 quiet, interleaved density/route measurements; owner snapshots alone do not close
 the Deck footprint. Resolve the recorded cross-family review before a main push.
@@ -532,3 +533,112 @@ STALE001 warnings. The actual-build CPU witnesses, inspected D3D12/Vulkan images
 wind reads and tree/body picks supply functional evidence. The GPU bucket work,
 physical memory qualification, full route/density sweep, wind-canopy GI and
 2060/Deck runs remain open, as does the recorded cross-family review.
+
+## Measured processing follow-up
+
+The next baseline used the same continuous-forest entrance, native 1280 by 900,
+high shadows/sky, AO and temporal enabled, indirect medium, cadence off and normal
+presentation. Standing averaged 24.11 ms over 180 iterations. A pinned 90-tick
+walk moved the grounded avatar about 14.2 m and produced a 34.61 ms window with
+multiple catch-up ticks; after recovery the window averaged 23.09 ms. The earlier
+40.92 ms observation is therefore not established as a lasting post-walk state.
+An active-walk sample, unlike one begun after recovery, attributes 1.50 of its
+12 sampled host seconds to collider sweeps and 1.25 to superellipsoid evaluation
+(inclusive, overlapping rows). Standing record staging still takes about 1.67
+sampled seconds. These are attribution samples, not exact cycle counts.
+
+Three changes follow that evidence:
+
+- Incremental mesh staging uses the existing `GpuUploadRuns.AddDifferences` with
+  a destination offset, collecting exact packed-word differences before one
+  `GpuRegion.WriteRuns`. Motion observation still reads the old complete shadow.
+  A bounded actual-build witness matched old/new native and device contents,
+  motion decisions and actual staging payload/header bytes, including fragmented
+  coarsening. Picking-only changes upload zero bytes. New instance counters
+  separate records compared, records changed and exact words changed; none is
+  labelled device transfer bytes.
+- `FixedQ4816.Pow` bypasses the exact unit magnitude, including signed integer
+  powers. Its Rust emitter and generated vectors share the change. A controlled
+  actual-DLL comparison passed 2,725,955 assertions, preserved point/gradient/ray
+  outputs and query counts, and allocated zero bytes in warmed loops. Interleaved
+  kernel rounds support the numeric gain; they do not qualify frame
+  time. Ordinary mixed powers can pay for the extra branch.
+- The fixed evaluator reuses exact bounded power results in one process-shared
+  512 KiB memo, independent of tree or evaluator count. Full keys and results
+  occupy one atomic cell; collisions recompute through the existing numeric
+  function. Complete bounded input sweeps for three compiled exponents (589,830
+  lookups), concurrent collisions,
+  dense-field points and interval bounds matched exactly. A moving 256-shape
+  query workload measured a 62.23% memo hit rate, zero warmed allocation and
+  median CPU time 351.623 to 307.424 ms over 8192 queries. Forced misses can
+  regress, so live hit/miss work is required. Current payload bytes and cumulative
+  allocation work are separate from physical memory and detached generations.
+
+The cache work also reproduced a generic code-reload race: an old derivation
+could publish after a shared table was cleared for new code. `CodeDerivedTable`
+now replaces a whole generation, keeping old publications in the detached table.
+The actual old assembly reproduced the race and the new assembly isolated it.
+Query-admission caching now includes resolved parent frames and distribution seed.
+An unchanged child under a parent moved beyond the evaluator's frame disagreed
+with fresh admission in three baseline cases and agreed in all candidate cases.
+Broader unnecessary root/routed query-field rebuilds remain in the dense-landscape
+work packet; their runtime frequency has not been established.
+
+The research refresh used [Godot's September 2026 CPU-rendering study](https://godotengine.org/article/rendering-cpu-optimizations/),
+[.NET 11's runtime/performance analysis](https://devblogs.microsoft.com/dotnet/performance-improvements-in-net-11/),
+[Intel's update-frequency guidance](https://www.intel.com/content/www/us/en/developer/articles/guide/arc-a-series-gaming-api-developer-optimization.html)
+and the [runtime's atomic volatile implementation](https://github.com/dotnet/runtime/blob/main/src/libraries/System.Private.CoreLib/src/System/Threading/Volatile.cs).
+Their shared lesson here is to preserve finished work and measure the replacement's
+memory and miss cost, rather than assuming a cache or partial upload always wins.
+Puck keeps the authored field and one fixed numeric implementation as the truth;
+the memo is a bounded derived acceleration, with no approximation or feature code.
+
+The live D3D12 candidate read 23.91 ms standing and 24.45 ms after recovery. Its
+90-tick moving interval read 52.63 ms over 62 host iterations, with 17.87 ms
+simulation and 34.27 ms production. The grounded route ended about 13.3 m from
+its start, slightly different from the baseline's 14.2 m: repeated camera-framed
+stick inputs do not pin identical command snapshots or camera trajectories.
+These are observations, not an interleaved whole-frame improvement or regression
+claim. Standing staging samples remained substantial (1.55 of 12 sampled host
+seconds versus 1.67 before), alongside creation posing. GPU view/resolve remain
+prominent; live timestamps and PIX replay durations are separate measurements.
+
+Across the pinned D3D12 work window the memo served 5,513,415 hits and 3,917,781
+misses (58.46% hits), with 3,144,948 zero/unity bypasses, no domain fallback and no
+new payload allocation. Query work counted 428 marches, 1854 samples and 67
+gradients, with no failures. Draw staging compared 612,318 records and repacked
+433,032 (109,124,064 CPU bytes), of which 12,635,831 words actually differed
+(50,543,324 bytes). Draw topology rebuilt zero times. These CPU word counts are
+not GPU transfers: two root residency-upload snapshots wrote 1,969,728 and
+3,309,844 host-visible bytes, including staging headers. The mesh region used
+1,647,960,456 bytes; this slice establishes no mesh-storage reduction.
+
+The next data-layout investigation follows an existing deliberate tradeoff:
+`SdfWorldTables.RecordPreviousTables` spans the first through last changed draw,
+and `CopyMeshHistory` copies whole draw records at `SdfMeshRegion.DrawBytes`
+although reprojection reads only their matrices. Compare compact/shared pose
+history with that range-copy policy using actual bytes, command count and CPU/GPU
+time, preserving generations, portal carries and the final settle copy. Do not
+exchange a lower byte count for thousands of unmeasured driver calls.
+
+The candidate Vulkan boot rendered the same forest at the recorded quality
+settings. Its 180-iteration standing window averaged 22.23 ms; the pinned moving
+interval averaged 49.95 ms over 64 host iterations, and recovery averaged
+24.69 ms. The pinned work window served 6,022,879 power hits and 4,051,354 misses
+(59.78%), with zero fallback or new payload allocation. It counted 448 marches,
+1840 samples and 82 gradients without failures; draw topology again rebuilt zero
+times. Two root upload snapshots wrote 3,976,528 and 1,959,908 host-visible bytes.
+Both backends resolved body and forest-tree picks and advanced gust/flutter phases.
+Presented images, exact-tick readbacks and sampled traces are preserved in the
+chat's `landscape-hotspots` evidence directory.
+
+This slice's three owned Worlds exited 0 and all leases were released. Direct
+SignedDistance and renderer builds passed without warnings/errors; Client/CLI
+dependency rebuilds also passed, reporting the two existing rule-evaluator
+STALE001 warnings. The Rust mirror's 42 tests and one doctest passed. Documentation
+links resolve. The D3D12 root bake still took about 118 seconds with zero loads;
+the Vulkan bake overlapped a CLI rebuild, so it is no quiet cold-bake comparison.
+There is no whole-frame speedup claim or target qualification: movement, remaining
+pose/record preparation, GPU shading, cold bake, physical-memory attribution and
+the wider forest/target-device work remain open. Required cross-family review
+remains outstanding under the recorded session-launch restriction.

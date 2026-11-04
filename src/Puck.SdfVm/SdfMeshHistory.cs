@@ -26,12 +26,18 @@ public sealed class SdfMeshHistory {
     public static WorkKind RecordsPacked { get; } = new(name: "sdf.instances.records.packed", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Counts packed record bytes, not device transfer bytes.</summary>
     public static WorkKind RecordBytesPacked { get; } = new(name: "sdf.instances.record-bytes.packed", unit: "bytes", workClass: WorkClass.Pacing);
+    /// <summary>Counts incremental draw comparisons, including records whose packed bytes stand unchanged.</summary>
+    public static WorkKind RecordsCompared { get; } = new(name: "sdf.instances.records.compared", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Counts incremental draws whose pose or host metadata changed and required packing.</summary>
+    public static WorkKind RecordsChanged { get; } = new(name: "sdf.instances.records.changed", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Counts incremental packed words that differ, before upload-run merging and coarsening.</summary>
+    public static WorkKind PackedWordsChanged { get; } = new(name: "sdf.instances.packed-words.changed", unit: "words", workClass: WorkClass.Pacing);
     /// <summary>Counts changes to the geometry/copy correspondence used to dress a frame.</summary>
     public static WorkKind DressTopologyBuilds { get; } = new(name: "sdf.instances.dress.topology-builds", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Counts retained dressed records rewritten by pose or metadata changes.</summary>
     public static WorkKind DressedRecordsUpdated { get; } = new(name: "sdf.instances.dress.records-updated", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Gets process-lifetime observations from every staged table. These counts never enter simulation state.</summary>
-    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.instances", kinds: [Observed, Seeded, Retired, MatricesChanged, MatrixBytesChanged, RecordsPacked, RecordBytesPacked, DressTopologyBuilds, DressedRecordsUpdated]);
+    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.instances", kinds: [Observed, Seeded, Retired, MatricesChanged, MatrixBytesChanged, RecordsPacked, RecordBytesPacked, RecordsCompared, RecordsChanged, PackedWordsChanged, DressTopologyBuilds, DressedRecordsUpdated]);
 
     private struct Cell {
         public object? Key;

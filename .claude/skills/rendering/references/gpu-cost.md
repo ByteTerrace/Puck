@@ -68,6 +68,19 @@ World frame separately. PIX analysis needs
 Windows developer mode, which the lead machine has on
 ([Direct3D 12 captures](../../../../docs/rendering/directx.md#gpu-captures)).
 
+Keep mesh settlement, lighting convergence and normal-motion timing distinct.
+Lockstep can wait synchronously for GI; a forest run with changing lighting
+repeatedly waited for 6–7-second relights instead of draining to a lasting idle
+state. Return to normal presentation for frame windows, inspect actual GI work,
+and sample the moving interval itself. A trace started after walking can miss a
+transient slowdown that has already recovered. Record the route's exact ticks
+and input beside query, contact, pose and transfer counts. Region staging uses a
+compute copy, so `gpu.copies.buffer-bytes` alone misses it: include
+`gpu.uploads.host-visible` on the residency upload node (`sdf:world` for the root)
+as well as its render node. That upload count includes staging headers, not only
+payload. Exact packed-word changes are a separate CPU-work metric; bounded run
+coarsening may upload unchanged words too.
+
 **PresentMon (frame pacing, both backends).** Frame pacing is what the display
 shows, which `host.frames` does not measure: present-to-present intervals and
 their percentiles. Install the console build with `winget install --id

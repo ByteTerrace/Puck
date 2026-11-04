@@ -80,6 +80,7 @@ public sealed partial class SdfWorldTables {
     // The draw records as the next write sends them, and one mesh's words as a flush stages them.
     private uint[] m_meshDrawWords = [];
     private uint[] m_meshWords = [];
+    private readonly GpuUploadRuns m_meshDrawDifferences = new(capacity: GpuRegion.MaxCopyRuns, mergeGap: GpuRegion.StagedMergeGapWords);
 
     // The region's source for its mesh section, and the placed meshes by their first word, sorted again after a plan
     // places or forgets one.
@@ -270,29 +271,35 @@ public sealed partial class SdfWorldTables {
             length: ((int)Math.Min(val1: m_meshRegion.ByteCount, val2: (((long)draws.Count) * SdfMeshRegion.DrawBytes))),
             offset: 0
         );
-        var run = -1;
+        m_meshDrawDifferences.Clear();
+        var changedRecords = 0;
+        var changedWords = 0L;
 
-        for (var index = 0; (index <= draws.Count); index++) {
-            if ((index < draws.Count) && (draws[index] is var draw) && !SameDraw(left: in draw, right: in m_stagedDraws[index])) {
+        for (var index = 0; (index < draws.Count); index++) {
+            var draw = draws[index];
+
+            if (!SameDraw(left: in draw, right: in m_stagedDraws[index])) {
                 var record = records.Slice(length: SdfMeshRecord.DrawWords, start: (index * SdfMeshRecord.DrawWords));
 
                 StageMeshDraw(draw: in draw, index: index, old: old, record: record);
+                changedWords += m_meshDrawDifferences.AddDifferences(
+                    previous: MemoryMarshal.Cast<byte, uint>(span: old.Slice(start: (index * SdfMeshRegion.DrawBytes), length: SdfMeshRegion.DrawBytes)),
+                    current: record,
+                    startWord: (index * SdfMeshRecord.DrawWords)
+                );
+                changedRecords++;
                 if (draw.Glass != m_stagedDraws[index].Glass) {
                     m_glassDrawCount = (draw.Glass ? (m_glassDrawCount + 1) : (m_glassDrawCount - 1));
                 }
                 m_stagedDraws[index] = draw;
-                if (run < 0) { run = index; }
-
-                continue;
-            }
-            if (run >= 0) {
-                _ = m_meshRegion.Write(
-                    bytes: MemoryMarshal.AsBytes(span: records.Slice(length: ((index - run) * SdfMeshRecord.DrawWords), start: (run * SdfMeshRecord.DrawWords))),
-                    offset: (((long)run) * SdfMeshRegion.DrawBytes)
-                );
-                run = -1;
             }
         }
+        // Every previous-matrix decision above reads the unmodified shadow. Only the exact packed-word delta is
+        // copied and owed now; bounded run coarsening may include unchanged words already valid in records.
+        if (m_meshDrawDifferences.Count > 0) { _ = m_meshRegion.WriteRuns(words: records, runs: m_meshDrawDifferences); }
+        SdfMeshHistory.ProcessWork.Add(kind: SdfMeshHistory.RecordsCompared, amount: draws.Count);
+        SdfMeshHistory.ProcessWork.Add(kind: SdfMeshHistory.RecordsChanged, amount: changedRecords);
+        SdfMeshHistory.ProcessWork.Add(kind: SdfMeshHistory.PackedWordsChanged, amount: changedWords);
     }
     // Whether two draws stage the same record, box and motion: the same mesh, identity, material and flags, and the same
     // bits in every float the record carries.
