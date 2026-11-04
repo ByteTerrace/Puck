@@ -7,7 +7,7 @@ namespace Puck.World;
 public sealed partial class WorldStateCommandModule {
     private static CommandResult DescribeHash(WorldServer server, WireArgs args) {
         if (args.Count > 1) {
-            return CommandResult.Error(output: "[world.state.hash: expected [capture|pose|world|authoritative]]");
+            return CommandResult.Usage(form: "[capture|pose|world|authoritative]", verb: "world.state.hash");
         }
         var token = args.Count == 0 ? "capture" : args[0].ToString();
         var scope = token switch {

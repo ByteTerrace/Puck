@@ -665,7 +665,7 @@ public sealed partial class WorldBindingCommandModule(PlayerRoster roster, World
             count--;
         }
         if (count is not (2 or 3)) {
-            return CommandResult.Error(output: "[player.signal: expected <source> <press|release|value> or <source> <x> <y>]");
+            return CommandResult.Usage(form: "<source> <press|release|value> or <source> <x> <y>", verb: "player.signal");
         }
 
         var source = args[0].ToString();

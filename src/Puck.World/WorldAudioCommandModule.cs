@@ -49,7 +49,7 @@ internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink li
             value: out var utteranceOrdinal
         )
         ) {
-            return CommandResult.Error(output: "[voice.babble: expected <identityId> <syllableCount> <utteranceOrdinal>]");
+            return CommandResult.Usage(form: "<identityId> <syllableCount> <utteranceOrdinal>", verb: "voice.babble");
         }
 
         var identityId = args[0].ToString();

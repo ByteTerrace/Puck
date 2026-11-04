@@ -111,7 +111,7 @@ public class ContainerSpellingTests {
             Body: "rule \"zoned\" {\n    when score[0] > 0\n    zones: [\"a\"]\n    score[0] += 1\n}\n",
             Code: PuckDiagnosticCodes.ColonBeforeContainer,
             Needle: "zones: ["
-        ) { Mentions = "'zones: [' - an array is written without the ':': use 'zones ['" },
+        ) { Mentions = "'zones: [' - a list is written without the ':': use 'zones ['" },
         ["a block in a decision body"] = new(
             Body: "rule \"chooser\" {\n    decision {\n        periodSeconds: 1s\n        tieBreak: { seed: 0 }\n        option \"o\" {\n            score: 1\n        }\n    }\n}\n",
             Code: PuckDiagnosticCodes.ColonBeforeContainer,

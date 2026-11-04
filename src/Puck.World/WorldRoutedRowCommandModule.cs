@@ -76,7 +76,7 @@ internal sealed class WorldRoutedRowCommandModule(PlayerRoster roster, WorldSeat
                     value: out var display
                 )
                 ) {
-                    return CommandResult.Error(output: "[player.row.set: expected <player> <path> <json>]");
+                    return CommandResult.Usage(form: "<player> <path> <json>", verb: "player.row.set");
                 }
 
                 var path = args[1].ToString();
@@ -118,7 +118,7 @@ internal sealed class WorldRoutedRowCommandModule(PlayerRoster roster, WorldSeat
                     value: out var display
                 )
                 ) {
-                    return CommandResult.Error(output: "[player.state.cell.set: expected <player> <row> <key> <value> [add]]");
+                    return CommandResult.Usage(form: "<player> <row> <key> <value> [add]", verb: "player.state.cell.set");
                 }
 
                 var kind = WorldDocumentWriteKind.Set;
@@ -157,7 +157,7 @@ internal sealed class WorldRoutedRowCommandModule(PlayerRoster roster, WorldSeat
             description: "Cycles ONE state cell through authored values for the ACTING seat, resolved AT THE DESTINATION: player.state.cell.toggle <row> <key> <a> <b> [<c>...] — the cell becomes the value after the one it currently reads (wrapping), else <a>; numeric rows compare parsed values, text rows compare text. The tokens travel unresolved (UpsertStateCell.CycleTokens) and the authority that owns the row decides, so a crossed seat flips the world it is in, never a stale local copy. BINDABLE with a text payload (a chord row, page entry, or wheel sector's \"text\": \"look behind 0 3.14159\"), which is how an authored press flips a cell the camera program, the binding bar, a HUD, or an action reads — look behind is a seat rig whose orbit yaw binds state.look.behind; a bar layout switch is a bar whose layoutCell binds state.bar.layout. Routes and stamps exactly as player.state.cell.set.",
             handler: (context, args) => {
                 if (args.Count < 4) {
-                    return CommandResult.Error(output: "[player.state.cell.toggle: expected <row> <key> <a> <b> [<c>...]]");
+                    return CommandResult.Usage(form: "<row> <key> <a> <b> [<c>...]", verb: "player.state.cell.toggle");
                 }
 
                 var row = args[0].ToString();

@@ -28,7 +28,7 @@ public sealed class WorldLockstepCommandModule(PresentPacingControl pacing) : IC
                 }
 
                 if ((args.Count != 1) || !(args.Is(index: 0, value: "on") || args.Is(index: 0, value: "off"))) {
-                    return CommandResult.Error(output: "[world.lockstep: expected world.lockstep [on|off]]");
+                    return CommandResult.Usage(form: "[on|off]", verb: "world.lockstep");
                 }
 
                 pacing.SetTickLocked(locked: args.Is(index: 0, value: "on"));
