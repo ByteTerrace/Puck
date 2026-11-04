@@ -33,8 +33,25 @@ void applyWeathering(float3 position, float3 normal, float upFacing, float curva
     float rate = footprint * max(frequency.x, max(frequency.y, frequency.z));
     float noise = 0.5;
     if (w.x + w.z + pattern.w > 0.0) {
-        float sample = 0.5 + 0.5 * sdfLatticeNoise3(p, seed);
-        noise = lerp(0.5, sample, 1.0 - smoothstep(0.35, 0.9, rate));
+        // The material authors the lattice's character: a turn off the pattern axes (a unit quaternion; identity
+        // leaves the lattice aligned) and an optional second octave. Each octave fades toward its mean by its own pixel
+        // support. A threshold through one aligned octave cuts along the lattice's axes; the second octave's weights are
+        // normalised (gain / sqrt(1 + gain^2)), so the sum keeps one octave's spread whatever the authored gain.
+        float3 turn = material.weatheringTurn.xyz;
+        float3 q = p;
+        if (any(turn != 0.0)) {
+            q += 2.0 * cross(turn, cross(turn, p) + material.weatheringTurn.w * p);
+        }
+        float coarse = sdfLatticeNoise3(q, seed) * (1.0 - smoothstep(0.35, 0.9, rate));
+        float gain = material.weatheringOctave.y;
+        if (gain > 0.0) {
+            float ratio = material.weatheringOctave.x;
+            float fine = sdfLatticeNoise3((q * ratio) + 17.0, seed ^ 0x9E3779B9u) * (1.0 - smoothstep(0.35, 0.9, ratio * rate));
+            float norm = rsqrt(1.0 + (gain * gain));
+            noise = 0.5 + 0.5 * clamp(norm * (coarse + (gain * fine)), -1.0, 1.0);
+        } else {
+            noise = 0.5 + 0.5 * coarse;
+        }
     }
     float edge = saturate(max(curvature, 0.0) * w.w) * noise;
     float lineMask = 0.0;
@@ -47,18 +64,18 @@ void applyWeathering(float3 position, float3 normal, float upFacing, float curva
             sdfLineCoverage(p.xy, seed + 2u, footprint * max(frequency.x, frequency.y))));
     }
     float coverage = saturate(amount * max(max(w.x * edge, w.y * lineMask), pattern.w * noise));
-    uint count = (uint)material.underResponse[0].z;
     // Unrolled to the stages' length and guarded, so every index is a constant: NVIDIA's Vulkan compiler keeps a
     // dynamically indexed local array in per-thread memory, and DXC's SPIR-V unroller keeps a loop with a break rolled.
+    // A stage is present when its threshold is positive (SdfMaterialLayers admits only positive thresholds).
     [unroll] for (uint i = 0u; i < 2u; i++) {
-        if (i < count) {
-            float4 stage = material.underColorThreshold[i];
+        float4 stage = material.underColorThreshold[i];
+        if (stage.w > 0.0) {
             float aa = max(material.underResponse[1].z, max(min(rate, 0.25), 0.001));
             float reveal = smoothstep(max(stage.w - aa, 0.0), stage.w, coverage);
             sdfRevealSurface(stage.rgb, material.underResponse[i].xy, reveal, material);
         }
     }
-    float settle = saturate(upFacing) * w.z * amount * noise * material.deposit.w;
-    sdfRevealSurface(material.deposit.rgb, material.depositResponse.xy, settle, material);
+    float settle = saturate(upFacing) * w.z * amount * noise;
+    sdfRevealSurface(material.deposit, material.depositResponse.xy, settle, material);
 }
 #endif

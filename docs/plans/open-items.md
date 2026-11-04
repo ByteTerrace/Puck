@@ -1038,6 +1038,21 @@ worlds in place is rewritten.
   and the combat yard's `arena.puck` district rules
   ([debug world content](#debug-world-content)).
 
+### Author shaders
+
+Owner: rendering (design first, `principal`) · ordinary · Next: a design memo.
+The owner's ruling (AGENTS.md, "Authors rule"): authors may bring their own
+shaders, so a look is never limited to what the engine's shading offers. The
+memo settles where an authored shader plugs in (a material's surface response,
+a weathering or pattern layer, a post or screen effect), the language and how
+it compiles on both backends (DXIL and SPIR-V, the shader cache, hot reload),
+how it is costed and bounded in `world.budget` like every authored program,
+what it may read and write (the interface stamp, no simulation state, no
+cross-world access), and how the engine's own layers become the first authored
+shaders rather than a second path. Search first: the material layers
+(`SdfMaterialLayers`, `PaletteLayersDocument`), the shader interface generator
+and the `Puck.Shaders` package graph may already hold most of the mechanism.
+
 ### Edit to running, hot reload and boot
 
 Owner: hot-reload follow-up (boot and build) · ordinary · Next: the boot's
@@ -1101,14 +1116,7 @@ and warm builds measured.
   a pipeline shows only after a reboot.
 - Time the windowed C# loop (`dotnet watch`) on an idle machine against the
   targets: a `Puck.World.Client` edit to ready under 20 s, boot to ready under
-  6 s. HLSL is already inside the 30 s ruling through
-  `world.shaders.reload`, except where the edit adds or changes a generated
-  constant: any change to `sdf-render.hlsli` (from `SdfIsaHlsl`) re-stamps the
-  instruction set, every kernel's pass block is renamed, and the running host
-  refuses the reload ("the reloaded kernels do not read this host's interface"),
-  so a one-constant lighting change needs a reboot. Stamp the instruction set
-  from what the host and the kernels must agree on (layouts, bindings, opcodes),
-  not from every generated `#define`, so a constant-only change reloads.
+  6 s. HLSL is inside the 30 s ruling through `world.shaders.reload`.
 - Measure on an idle machine, serially, the cold and the warm local build. What
   is left of a cold build is per-node startup (the first project a fresh node
   builds spends seconds in the SDK's own targets), and the project-reference

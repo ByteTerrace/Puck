@@ -159,17 +159,13 @@ public sealed class SdfKernelSetLawTests {
     // include names nothing the renderer's declares, and the renderer's builds on it.
     [Fact]
     public void ARendererConstantMovesNoBakeStamp() {
-        var field = SdfIsaHlsl.Generate();
-        var render = SdfRenderHlsl.Generate();
+        var field = SdfIsaHlsl.GenerateLayout();
+        var render = SdfRenderHlsl.GenerateLayout();
         var encoding = SdfEncodingProbe.Describe();
-        var withRenderConstant = render.Replace(
-            comparisonType: StringComparison.Ordinal,
-            newValue: "#define SDF_LIGHT_STAGE_PROBE 3u\n#endif // SDF_RENDER_HLSLI",
-            oldValue: "#endif // SDF_RENDER_HLSLI"
-        );
+        var withRenderConstant = (render + "#define SDF_LIGHT_STAGE_PROBE 3u\n");
 
         Assert.NotEqual(actual: withRenderConstant, expected: render);
-        Assert.Contains(actualString: render, expectedSubstring: $"#include \"{SdfIsaHlsl.FileName}\"");
+        Assert.Contains(actualString: SdfRenderHlsl.Generate(), expectedSubstring: $"#include \"{SdfIsaHlsl.FileName}\"");
         Assert.Equal(expected: SdfIsaFingerprint.Field, actual: SdfIsaHlsl.FingerprintOf(encoding: encoding, include: field));
         Assert.NotEqual(
             expected: SdfIsaHlsl.FingerprintOf(encoding: encoding, include: (field + render)),
@@ -177,10 +173,34 @@ public sealed class SdfKernelSetLawTests {
         );
 
         // The renderer's own vocabulary stays out of the field's include, which the bake compiles against.
-        foreach (var prefix in ((ReadOnlySpan<string>)["SDF_LIGHT_", "SDF_MESH_", "SDF_VISIBILITY_", "SDF_DEBUG_VIEW_", "SDF_REFERENCE_WHITE", "SDF_LOCAL_", "SDF_SKY_", "SDF_AIR_", "SDF_INDIRECT_SOURCES_"])) {
+        foreach (var prefix in ((ReadOnlySpan<string>)["SDF_LIGHT_", "SDF_MESH_", "SDF_VISIBILITY_", "SDF_DEBUG_VIEW_", "SDF_SKY_", "SDF_AIR_", "SDF_INDIRECT_SOURCES_"])) {
             Assert.DoesNotContain(actualString: field, expectedSubstring: ("#define " + prefix));
             Assert.Contains(actualString: render, expectedSubstring: ("#define " + prefix));
         }
+    }
+    // A value only the shader reads is in the generated include and in no stamp, so retuning one leaves the stamps as
+    // they are and a running host accepts the reloaded kernels; every layout and every scale the host packs or decodes
+    // data with stays in the stamp. The field's include declares no tuning value: the CPU evaluator mirrors all of it.
+    [Fact]
+    public void ATuningConstantIsInTheIncludeAndInNoStamp() {
+        var render = SdfRenderHlsl.Generate();
+        var layout = SdfRenderHlsl.GenerateLayout();
+
+        foreach (var tuning in ((ReadOnlySpan<string>)["SDF_MESH_IRRADIANCE_BEHIND_SHARE", "SDF_MESH_IRRADIANCE_NORMAL_BIAS", "SDF_REFERENCE_WHITE", "SDF_AIR_SERIES_LIMIT", "SDF_GLASS_SUM_SCALE"])) {
+            Assert.Contains(actualString: render, expectedSubstring: ("#define " + tuning));
+            Assert.DoesNotContain(actualString: layout, expectedSubstring: ("#define " + tuning));
+        }
+        foreach (var stamped in ((ReadOnlySpan<string>)["SDF_MESH_IRRADIANCE_DEPTH_WORD", "SDF_MESH_IRRADIANCE_DEPTH_NORMAL_SCALE", "SDF_VISIBILITY_NORMAL_SCALE", "SDF_MESH_DRAW_WORDS", "SDF_WINDOW_ADAPTATION", "SDF_DEBUG_VIEW_COUNT"])) {
+            Assert.Contains(actualString: layout, expectedSubstring: ("#define " + stamped));
+        }
+
+        // Every field define is stamped.
+        var field = SdfIsaHlsl.Generate();
+
+        Assert.All(
+            action: name => Assert.Contains(actualString: SdfIsaHlsl.GenerateLayout(), expectedSubstring: ("#define " + name + " ")),
+            collection: field.Split(separator: '\n').Where(predicate: static line => line.StartsWith(value: "#define ", comparisonType: StringComparison.Ordinal)).Select(selector: static line => line.Split(separator: ' ', options: StringSplitOptions.RemoveEmptyEntries)).Where(predicate: static words => (words.Length > 2)).Select(selector: static words => words[1])
+        );
     }
     // Kernels compiled against another instruction set carry another stamp, so no include beside them can make them pass
     // for this host's: an instruction set whose two opcodes, or whose two cell modes, trade values; one whose instruction
@@ -190,7 +210,7 @@ public sealed class SdfKernelSetLawTests {
     // rigid leaf's rotation X and Y, a path edge's two radii).
     [Fact]
     public void AnInstructionSetEncodedOtherwiseCarriesAnotherStamp() {
-        var include = SdfIsaHlsl.Generate();
+        var include = SdfIsaHlsl.GenerateLayout();
         var encoding = SdfEncodingProbe.Describe();
         var calls = SdfEncodingProbe.Calls();
 

@@ -1222,6 +1222,22 @@ mesh bake's interface (`sdf-mesh-bake`) carries the field's stamp instead
 encoding alone: the bake kernels' bytecode keys the stored meshes, so a renderer
 constant, which moves the whole stamp, leaves theirs as it was.
 
+A stamp covers what a host and its kernels must agree on, not every generated
+`#define`: it hashes the generated includes' layout (`SdfIsaHlsl.GenerateLayout`,
+`SdfRenderHlsl.GenerateLayout`: the `#define` lines without comments or alignment) and
+the model's encoding. Every enum member, count, mask, lane accessor, expression and
+signed value (strides, word offsets, flags, capacities) is layout, as is every real
+the host also shares: the field's own constants, which the CPU evaluator mirrors, and
+the scales the host quantizes or decodes data with (the visibility normal and probe
+depth normal scales, the surface transport scale, the sky environment's radiance
+ceiling, the window adaptation and near plane the host writes into the frame block, the
+probe surface fade and join gap the CPU builds the surface map with). A real only the
+shader reads, which a diagnostic mirror may repeat (a bias, a share, a threshold, a
+limit, the photometric and exposure targets), is declared `Tuning` in `SdfIsaHlsl`:
+it is in the generated text and in no stamp, so a retune keeps every pass block's name
+and `world.shaders.reload` accepts the recompiled kernels. A new real is layout unless
+nothing the host packs or decodes reads it.
+
 The spike interfaces three passes: film grain, a pixelate compute pass, and a
 compute pass reading structured buffers of a 4-byte and a 16-byte element, a
 raw buffer and a pushed index; the last two exist only as the spike's

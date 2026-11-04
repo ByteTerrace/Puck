@@ -184,7 +184,11 @@ public static class SdfEncodingProbe {
                         Scale: v[44],
                         Seed: ((uint)v[45]),
                         Settle: v[46],
-                        Under: [new SdfRevealStage(Surface: new SdfSurface(Color: new Vector3(x: v[47], y: v[48], z: v[49]), Metal: v[50], Roughness: v[51]), Threshold: v[52]), new SdfRevealStage(Surface: new SdfSurface(Color: new Vector3(x: v[53], y: v[54], z: v[55]), Metal: v[56], Roughness: v[57]), Threshold: v[58])]
+                        Under: [new SdfRevealStage(Surface: new SdfSurface(Color: new Vector3(x: v[47], y: v[48], z: v[49]), Metal: v[50], Roughness: v[51]), Threshold: v[52]), new SdfRevealStage(Surface: new SdfSurface(Color: new Vector3(x: v[53], y: v[54], z: v[55]), Metal: v[56], Roughness: v[57]), Threshold: v[58])],
+                        Octaves: 2,
+                        OctaveGain: v[98],
+                        OctaveRatio: v[97],
+                        Turn: new Quaternion(w: v[102], x: v[99], y: v[100], z: v[101])
                     ),
                     Wrap: v[59],
                     Paints: [
@@ -212,7 +216,7 @@ public static class SdfEncodingProbe {
                 0.71f, 0.72f, 0.73f, 0.3f, 0.4f, 0.5f, 0.02f, 0.77f, 0.78f, 0.79f,
                 0.81f, 0.82f, 0.83f, 0.5f, 0.6f, 0.7f, 0.03f, 0.87f, 0.88f, 0.89f,
                 2f, 0.004f, 1.5f, 0.41f, 0.12f, 0.31f, 0.42f, 0.53f, 1.25f, 10f, 0.6f, 0.11f,
-                0.21f, 0.32f, 0.03f, 0.75f, 0.7f,
+                0.21f, 0.32f, 0.03f, 0.75f, 0.7f, 2.03f, 0.4f, 0.1f, 0.2f, 0.3f, 0.9f,
             ],
             name: "material"
         );

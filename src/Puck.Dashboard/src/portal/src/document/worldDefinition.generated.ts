@@ -8280,6 +8280,10 @@ export type WorldPrototype = {
         noise?: number;
         patternScale?: unknown;
         softness?: number;
+        octaves?: number;
+        octaveRatio?: number;
+        octaveGain?: number;
+        turn?: unknown;
       } | null;
       /**
        * The wrap-lighting share in [0, 1] (null = 0 — the plain Lambert term) — see Wrap.

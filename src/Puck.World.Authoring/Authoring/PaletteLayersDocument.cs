@@ -138,10 +138,15 @@ public sealed record PalettePaintDocument(
         Stroke: ((Stroke ?? 0f) * scale)
     );
 }
-/// <summary>Generic weathering coverage and explicitly authored reveal/deposit surfaces.</summary>
+/// <summary>Generic weathering coverage and explicitly authored reveal/deposit surfaces. The pattern's character is
+/// authored here too: <c>octaves</c> (1 or 2) sets how many lattice octaves the mask sums, <c>octaveRatio</c> the
+/// second octave's frequency multiple, <c>octaveGain</c> its weight relative to the first (the sum is normalised, so
+/// the mask keeps one octave's spread), and <c>turn</c> a rotation of the lattice off the pattern axes. A weathering
+/// that says none of them reads one unturned octave.</summary>
 public sealed record PaletteWeatheringDocument(float Edge = 0f, float Lines = 0f, float Settle = 0f, float Reach = 1f,
     uint Seed = 0, float Scale = 1f, float Floor = 0f, int Lane = 0,
-    IReadOnlyList<PaletteRevealDocument>? Under = null, PaletteSurfaceDocument? Deposit = null, float Noise = 0f, DocumentVector3? PatternScale = null, float Softness = 0f) {
+    IReadOnlyList<PaletteRevealDocument>? Under = null, PaletteSurfaceDocument? Deposit = null, float Noise = 0f, DocumentVector3? PatternScale = null, float Softness = 0f,
+    int Octaves = 1, float OctaveRatio = 2f, float OctaveGain = 0.5f, DocumentQuaternion? Turn = null) {
     /// <summary>Resolves the generic engine response at a placement scale.</summary>
     /// <param name="resolve">The color resolver.</param>
     /// <param name="scale">The placement scale: the curvature reach, a length, multiplies by it, and the pattern
@@ -163,6 +168,10 @@ public sealed record PaletteWeatheringDocument(float Edge = 0f, float Lines = 0f
         Deposit?.ToSurface(resolve: resolve),
         Noise,
         PatternScale?.Value,
-        Softness
+        Softness,
+        Octaves,
+        OctaveRatio,
+        OctaveGain,
+        Turn?.Value
     );
 }
