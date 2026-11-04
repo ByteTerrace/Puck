@@ -19,7 +19,7 @@ namespace Puck.World.Tests;
 /// read the same probes with the same weights. A storeyed hall at the High tier is traced and published on the CPU; the
 /// shipped gather then runs on both hardware backends over the published table words and the pass-block parameters
 /// <see cref="SdfFrameBlock.WriteMeshIrradiance"/> packs, at receivers on floors, slab undersides, walls, an exhibit, an end
-/// wall just past the finest window and surfaces past every window. Each receiver must answer from the same eight slots
+/// wall just past the finest window, the inside of a sealed room no coarser probe sees and surfaces past every window. Each receiver must answer from the same eight slots
 /// (the level the CPU chose and its cells), each corner's weight within <see cref="WeightTolerance"/> of the CPU's, and as
 /// measured or not alike.</summary>
 [SupportedOSPlatform("windows10.0.15063")]
@@ -112,7 +112,11 @@ public sealed partial class SdfMeshIrradianceGatherDeviceLawTests {
         foreach (var normal in new[] { -Vector3.UnitX, Vector3.UnitX, Vector3.UnitY, Vector3.UnitZ }) {
             receivers.Add(item: new Receiver(Normal: normal, Point: (new Vector3(x: 10.5f, y: 1f, z: 0f) + (normal * 0.5f))));
         }
-        foreach (var x in new[] { 30f, 60f, 140f, 400f, 2000f }) {
+        for (var y = 0.2f; (y < 3f); y += 0.7f) {
+            receivers.Add(item: new Receiver(Normal: -Vector3.UnitX, Point: new Vector3(x: 63f, y: y, z: 1.65f)));
+            receivers.Add(item: new Receiver(Normal: Vector3.UnitX, Point: new Vector3(x: 60.3f, y: y, z: 1.1f)));
+        }
+        foreach (var x in new[] { 30f, 70f, 140f, 400f, 2000f }) {
             receivers.Add(item: new Receiver(Normal: Vector3.UnitY, Point: new Vector3(x: x, y: 0f, z: 0f)));
         }
         return receivers.ToArray();
@@ -132,7 +136,8 @@ public sealed partial class SdfMeshIrradianceGatherDeviceLawTests {
     }
     private static SdfMeshDraw Draw(Vector3 low, Vector3 high) => new(Identity: new object(), Material: 0, Mesh: Box(high: high, low: low), ObjectToWorld: Matrix4x4.Identity);
     // A two-storey hall 12 m wide, its storeys 4 m apart over 0.3 m slabs, from x = -10 to the end wall, with an exhibit
-    // block on its floor and a sunlit ground outside; the camera stands in it at the origin.
+    // block on its floor, a sunlit ground outside and a sealed room 3 m on a side 60 m out; the camera stands in the hall
+    // at the origin.
     private static SdfFrame Hall() {
         var builder = new SdfProgramBuilder();
         var material = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(value: 0.8f)));
@@ -171,6 +176,12 @@ public sealed partial class SdfMeshIrradianceGatherDeviceLawTests {
                 Draw(low: new Vector3(x: -10.3f, y: 0f, z: -6f), high: new Vector3(x: -10f, y: 8.3f, z: 6f)),
                 Draw(low: new Vector3(x: EndWall, y: 0f, z: -6f), high: new Vector3(x: (EndWall + 0.3f), y: 8.3f, z: 6f)),
                 Draw(low: new Vector3(x: 10f, y: 0f, z: -0.5f), high: new Vector3(x: 11f, y: 2f, z: 0.5f)),
+                Draw(low: new Vector3(x: 60f, y: -0.3f, z: 0f), high: new Vector3(x: 63.3f, y: 0f, z: 3.3f)),
+                Draw(low: new Vector3(x: 60f, y: 3f, z: 0f), high: new Vector3(x: 63.3f, y: 3.3f, z: 3.3f)),
+                Draw(low: new Vector3(x: 60f, y: 0f, z: 0f), high: new Vector3(x: 60.3f, y: 3f, z: 3.3f)),
+                Draw(low: new Vector3(x: 63f, y: 0f, z: 0f), high: new Vector3(x: 63.3f, y: 3f, z: 3.3f)),
+                Draw(low: new Vector3(x: 60.3f, y: 0f, z: 0f), high: new Vector3(x: 63f, y: 3f, z: 0.3f)),
+                Draw(low: new Vector3(x: 60.3f, y: 0f, z: 3f), high: new Vector3(x: 63f, y: 3f, z: 3.3f)),
             ],
         };
     }

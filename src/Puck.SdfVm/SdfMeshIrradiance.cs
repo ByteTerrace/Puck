@@ -2058,7 +2058,8 @@ public sealed class SdfMeshIrradiance : IDisposable {
     // wide there, so it would see through the thin wall a finer probe measured. When none of that level's measured probes
     // answer, the same probes answer past their measured reach, blocked only by the surfaces they measured, and Measured
     // is false: the receiver lies past what they measured, they are the best estimate of its light, reading none would
-    // draw a surface the camera sees black, and a surface they saw between them and it still hides it.
+    // draw a surface the camera sees black, and a surface they saw between them and it still hides it. Where those answer
+    // nothing either, the finest level's boundary probes answer the same way.
     private (int Level, bool Measured) Select(Vector3 point, Vector3 normal, Layout layout, ReadOnlySpan<(int X, int Y, int Z)> lows,
         Span<(int X, int Y, int Z)> cells, Span<float> cornerWeights, ref Corners cornerProbes, Span<SdfMeshProbeReport> reports = default) {
         var held = (m_levels.Length - 1);
@@ -2078,9 +2079,15 @@ public sealed class SdfMeshIrradiance : IDisposable {
         if (Answers(cells: cells, cornerProbes: ref cornerProbes, cornerWeights: cornerWeights, depth: true, layout: layout, level: held, low: lows[held], normal: normal, point: point, reports: reports)) {
             return (held, true);
         }
-        Gather(cells: cells, cornerProbes: ref cornerProbes, cornerWeights: cornerWeights, depth: false, layout: layout, level: held, low: lows[held],
+        if (Answers(cells: cells, cornerProbes: ref cornerProbes, cornerWeights: cornerWeights, depth: false, layout: layout, level: held, low: lows[held], normal: normal, point: point, reports: reports) ||
+            (held == 0)) {
+            return (held, false);
+        }
+        // A coarser level's probes stand in a room's slabs and beyond its walls, so all of them can miss its far wall;
+        // the finest level's boundary probes then answer it with the light of the room they measured.
+        Gather(cells: cells, cornerProbes: ref cornerProbes, cornerWeights: cornerWeights, depth: false, layout: layout, level: 0, low: lows[0],
             normal: normal, point: point, reports: reports);
-        return (held, false);
+        return (0, false);
     }
     // Gathers a level's probes about a receiver; true when any answers.
     private bool Answers(int level, Vector3 point, Vector3 normal, Layout layout, (int X, int Y, int Z) low, bool depth, Span<(int X, int Y, int Z)> cells,
@@ -2159,11 +2166,13 @@ public sealed class SdfMeshIrradiance : IDisposable {
             var probePoint = ((new Vector3(x: (cell.Item1 + 0.5f), y: (cell.Item2 + 0.5f), z: (cell.Item3 + 0.5f)) * spacing) + probe.Offset);
             var toward = (probePoint - point);
             // A distance fade turns down probes behind the receiver without the angular pole that a close, relocated
-            // probe's squared cosine stamped into flat floors; they keep BehindShare, so a receiver whose every visible
-            // probe lies behind its plane still reads them. Irradiance is already evaluated along the normal.
+            // probe's squared cosine stamped into flat floors; at the finest level they keep BehindShare, so a receiver
+            // whose every visible probe lies behind its plane still reads them. A coarser level's depth test cannot
+            // resolve the receiver's own wall, so a probe behind its plane there takes no part. Irradiance is already
+            // evaluated along the normal.
             var ahead = Math.Clamp((Vector3.Dot(vector1: toward, vector2: normal) / (0.5f * spacing)), 0f, 1f);
             var front = (ahead > 0f);
-            var facing = float.Lerp(amount: outside, value1: MathF.Max(x: ((ahead * ahead) * (3f - (2f * ahead))), y: SdfMeshIrradianceProbe.BehindShare), value2: 1f);
+            var facing = float.Lerp(amount: outside, value1: MathF.Max(x: ((ahead * ahead) * (3f - (2f * ahead))), y: ((level == 0) ? SdfMeshIrradianceProbe.BehindShare : 0f)), value2: 1f);
             var trilinear = ((weights.X * weights.Y) * weights.Z);
             var visibility = (probe.Invalid ? 0f : SdfMeshProbeDepth.Visibility(bounded: depth, surfaces: probe.Depth, toward: (pushed - probePoint)));
             var weight = ((trilinear * facing) * visibility);

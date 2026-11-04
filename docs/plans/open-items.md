@@ -1722,15 +1722,23 @@ the fixed poses and the approaches already rejected.
   Isolate geometry and the moving bake from probe interpolation before
   attributing it. The Vulkan sweep also flags the cumulative moving-bake cap
   counter rising; its cause is unisolated.
-- [medium] Far-field irradiance coverage: bounded local depth support exposes
-  unmeasured distant surfaces beyond the camera's probe window. Far walls read
-  black at `finding-teal-roof`, `gallery-entrance`, `devices`, `desktop`,
-  `rate-range`, `camera-course`, `stage`, `jump`, `flight` and `noclip`, and
-  through the `garden` return portal. A south-wall receiver at (69.5, 4, 12),
-  normal (0, 0, -1), answers with weight 0 although its boundary probes at x=31
-  are bright, being beyond the local support, while the near receiver
-  (18.5, 4, 12) answers. Supply coarse far-field coverage while retaining local
-  visibility.
+- [medium] Far interior walls past the finest probes' reach read the 8 m
+  level, whose metres-wide angular taps cannot resolve a room a few metres
+  tall. A wall no coarse probe answers now reads the finest level's boundary
+  probes, and coarse probes behind its plane take no part
+  ([mesh GI](../../.claude/skills/rendering/references/mesh-gi.md)), but coarse
+  probes in front still draw pale triangles and dark wedges from their angular
+  patches. Repro at the High tier: `world.indirect high`,
+  `body.pose 64 4.57 28.52 273`,
+  `view.override camera look 68 6.8 28.52 10 6.0 28.52`,
+  `world.debug-view indirect`. The far third of the hall shows them, and
+  `world.probe 10.6 6.5 28.5 1 0 0` reads `level=1`. Candidates: weight the
+  coarse answer by the share of its probes that see the receiver, blending
+  toward the finest level's extension; or a second level whose spacing
+  resolves storeys. Re-check the far-wall stops this item listed
+  (`finding-teal-roof`, `gallery-entrance`, `devices`, `desktop`, `rate-range`,
+  `camera-course`, `stage`, `jump`, `flight`, `noclip`, the `garden` return
+  portal).
 - The SPIN exhibit (`gallery.go motion-spin`): a dotted bright seam at the level
   3 ceiling and wall junction reproduces in beauty but not in `indirect`,
   `normals` or `shadow`; behind it at level 2 a dotted bright line runs along
