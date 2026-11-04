@@ -413,6 +413,24 @@ public sealed class WorldNestedScreensLawTests {
         ), glass: glass));
         Assert.Equal(expected: (1.0, 1.0), actual: WorldPortalVisibility.Coverage(camera: (camera with { Near = 6f }), glass: glass));
     }
+    [Fact]
+    public void GlassCoverageIncludesTheBackAndTheNearPlaneInsideTheSlab() {
+        var glass = Screen(source: new WorldScreenSource.None());
+        var camera = CameraSnapshot.LookAt(
+            fieldOfViewRadians: 1f,
+            position: new Vector3(x: 0f, y: 1f, z: -5f),
+            target: new Vector3(x: 0f, y: 1f, z: 0f),
+            viewportHeight: 64,
+            viewportWidth: 64
+        );
+        var coverage = WorldPortalVisibility.Coverage(camera: in camera, glass: glass);
+        var depth = (5.0 - (2.0 * glass.HalfDepth));
+
+        Assert.Equal(expected: (glass.HalfWidth / (depth * MathF.Tan(0.5f))), actual: coverage.Width, precision: 4);
+        Assert.Equal(expected: (glass.HalfHeight / (depth * MathF.Tan(0.5f))), actual: coverage.Height, precision: 4);
+        // Only the back, not the front face, intersects this near plane.
+        Assert.Equal(expected: (1.0, 1.0), actual: WorldPortalVisibility.Coverage(camera: (camera with { Near = 4.9f }), glass: glass));
+    }
     // THE LAW: an authority can keep a session while its screen changes projection, camera or resolution. Its view
     // must reopen with those settings even when the session provider still holds the same destination.
     [Fact]

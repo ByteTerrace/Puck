@@ -186,11 +186,11 @@ public sealed class SdfKernelSetLawTests {
         var render = SdfRenderHlsl.Generate();
         var layout = SdfRenderHlsl.GenerateLayout();
 
-        foreach (var tuning in ((ReadOnlySpan<string>)["SDF_MESH_IRRADIANCE_BEHIND_SHARE", "SDF_MESH_IRRADIANCE_NORMAL_BIAS", "SDF_REFERENCE_WHITE", "SDF_AIR_SERIES_LIMIT", "SDF_GLASS_SUM_SCALE"])) {
+        foreach (var tuning in ((ReadOnlySpan<string>)["SDF_MESH_IRRADIANCE_BEHIND_SHARE", "SDF_MESH_IRRADIANCE_NORMAL_BIAS", "SDF_REFERENCE_WHITE", "SDF_AIR_SERIES_LIMIT"])) {
             Assert.Contains(actualString: render, expectedSubstring: ("#define " + tuning));
             Assert.DoesNotContain(actualString: layout, expectedSubstring: ("#define " + tuning));
         }
-        foreach (var stamped in ((ReadOnlySpan<string>)["SDF_MESH_IRRADIANCE_DEPTH_WORD", "SDF_MESH_IRRADIANCE_DEPTH_NORMAL_SCALE", "SDF_VISIBILITY_NORMAL_SCALE", "SDF_MESH_DRAW_WORDS", "SDF_WINDOW_ADAPTATION", "SDF_DEBUG_VIEW_COUNT"])) {
+        foreach (var stamped in ((ReadOnlySpan<string>)["SDF_MESH_IRRADIANCE_DEPTH_WORD", "SDF_MESH_IRRADIANCE_DEPTH_NORMAL_SCALE", "SDF_VISIBILITY_NORMAL_SCALE", "SDF_MESH_DRAW_WORDS", "SDF_WINDOW_ADAPTATION", "SDF_DEBUG_VIEW_COUNT", "SDF_GLASS_SUM_SCALE"])) {
             Assert.Contains(actualString: layout, expectedSubstring: ("#define " + stamped));
         }
 

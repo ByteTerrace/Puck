@@ -21,6 +21,15 @@ public interface IWorldViewScenes {
     /// <param name="camera">The camera when this returns <see langword="true"/>.</param>
     /// <returns><see langword="true"/> when the view has rendered from a camera.</returns>
     bool TryCamera(string view, out CameraSnapshot camera);
+    /// <summary>Finds the camera a view will use in the frame being composed, before it renders. A last-rendered
+    /// camera is insufficient for culling after a hold; unknown cameras conservatively retain demand.</summary>
+    /// <param name="view">The view's instance name.</param>
+    /// <param name="camera">The current camera when known.</param>
+    /// <returns>Whether current camera data is available for visibility decisions.</returns>
+    bool TryVisibilityCamera(string view, out CameraSnapshot camera) {
+        camera = default;
+        return false;
+    }
     /// <summary>Finds the surface a ray meets in the world a view last rendered, in that world's space.</summary>
     /// <param name="view">The view's instance name.</param>
     /// <param name="ray">The ray, in the view's world.</param>
@@ -133,6 +142,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphHitScene {
     public void PublishPanes(uint displayWidth, uint displayHeight) {
         m_displayWidth = ((int)Math.Clamp(max: int.MaxValue, min: 1u, value: displayWidth));
         m_displayHeight = ((int)Math.Clamp(max: int.MaxValue, min: 1u, value: displayHeight));
+        CompleteFootprints();
         m_panes.Clear();
         m_display = null;
         ClearHover();

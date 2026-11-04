@@ -416,10 +416,14 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   visibility. The actual receiver is biased by `NormalBias` metres, never by
   spacing; clamping the lookup must not move the visibility-test receiver.
   The volume has three nested levels (8 m and 32 m cells past the tier's
-  window); a receiver reads the finest level holding it, and where none of that
-  level's probes measured it, the same probes answer past their reach, blocked
-  only by surfaces they measured, with no traced static light. Nothing a camera
-  sees reads an unmeasured surface as black.
+  window); a receiver reads the finest level whose probes measured it (a finer
+  level answers past its window as far as its surface maps reach), and where
+  none of that level's probes measured it, the same probes answer past their
+  reach, blocked only by surfaces they measured, with no traced static light,
+  then the finest level's boundary probes the same way. Only the finest level
+  keeps the behind-plane floor. Nothing a camera sees reads an unmeasured
+  surface as black. `SdfMeshIrradianceGatherDeviceLawTests` holds the GPU and
+  CPU gathers to the same slots and weights.
   Relocation (`SdfMeshIrradiance.Place`) keeps a probe clear of geometry within
   its own cell; every lookup uses its recorded offset. Placement takes the nearest clear exit; its short rejection rays
   stop at one spacing, with no openness score. Debug with `world.probe` after bakes and GI settle;
@@ -797,8 +801,12 @@ pacer's lateness ([Puck.Launcher](../../../src/Puck.Launcher/README.md)).
 - **One decision schedules a session view.** `WorldViewGraphHost.PortalSightOf` decides every
   session footprint and every root a filming camera gives a session it films (`RootFilmedViews`):
   the frustum test (`WorldPortalVisibility.Sees`, no facing test, since a slab's back and sides
-  sample its image) against the consumer's previous camera, then the views lever's hold of a glass
-  at or below `SdfUpdateRateTiers.ViewHeldPixels` of the consumer's image. A session rendering
+  sample its image) against the consumer's current composed camera, then the views lever's hold of a glass
+  whose width and height are both at or below `SdfUpdateRateTiers.ViewHeldPixels` of the consumer's image.
+  `PublishPanes` finishes demand after camera placement; display shares are measured before small-glass pruning.
+  A reappearing view releases its rate floor immediately. Visibility reads `IWorldViewScenes.TryVisibilityCamera`,
+  never the last-rendered camera retained for picking; an unknown current camera keeps demand conservatively.
+  A session rendering
   where nothing shows it is a demand that bypasses this decision: `world.budget`'s live frame line
   names each instance's demand (`root` for a filmed root), and `world.rates` lists held views as
   `@held`. A settled capture (`IRenderGraphInstances.SettledCapturePath`) turns the graph host's

@@ -58,7 +58,7 @@ public static class SdfUpdateRateTiers {
     public const float ViewHalfRatePixels = ((PerceptibleStepPixels * 30f) / ViewParallaxPerSecond);
     /// <summary>The pixels of display height at and below which a nested view renders at 15 Hz.</summary>
     public const float ViewQuarterRatePixels = ((PerceptibleStepPixels * 15f) / ViewParallaxPerSecond);
-    /// <summary>The pixels at and below which the glass a nested view shows on renders nothing and holds its latest image
+    /// <summary>The maximum width or height in pixels at and below which the glass a nested view shows on renders nothing and holds its latest image
     /// (<see cref="HeldHertz"/>): two <see cref="PerceptibleStepPixels"/> steps, so whatever the destination did while
     /// held, the held image differs from a fresh one within a patch no larger than the step pair, and the first fresh
     /// render as the glass grows past it changes no more than that. Measured in the pixels of the image that shows the

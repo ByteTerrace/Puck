@@ -53,8 +53,10 @@ float3 sdfDebugView(SdfPixel p, SdfSurfaceSample s, float3 color) {
     float3 viewColor = color;
 
     switch (p.viewMode) {
-        case 1: { // depth
-            float depth = saturate(s.t / p.farDistance);
+        case 1: { // depth, logarithmic from the near to the far distance: a linear ramp to a valley-wide far distance
+                  // draws every room in the first few levels of black
+            float near = max(passGroup.nearDistance, 1.0e-3);
+            float depth = saturate(log2(max(s.t, near) / near) / log2(max(p.farDistance / near, 2.0)));
             viewColor = float3(depth, depth, depth);
             break;
         }

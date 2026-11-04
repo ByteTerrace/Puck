@@ -758,6 +758,11 @@ public sealed class SdfMaterialLawTests {
         Assert.Equal(2.03f, Character(15, 2));
         Assert.Equal(0.534f, Character(18, 3));
         Assert.Equal(new Vector4(0.2f, -0.4f, -0.4f, 0.8f), new Vector4(Character(26, 0), Character(26, 1), Character(26, 2), Character(26, 3)));
+        var unnormalised = new SdfProgram([Shape()], [new(Vector3.One, Weathering: weathering with {
+            Turn = new Quaternion(0f, 0f, 3f, 4f),
+        })]);
+        Assert.Equal(0.6f, BitConverter.UInt32BitsToSingle(unnormalised.Words[offset + 26 * 4 + 2]), precision: 6);
+        Assert.Equal(0.8f, BitConverter.UInt32BitsToSingle(unnormalised.Words[offset + 26 * 4 + 3]), precision: 6);
         foreach (var bad in new[] {
             weathering with { Octaves = 0 }, weathering with { Octaves = 3 }, weathering with { OctaveRatio = 1f },
             weathering with { OctaveGain = 0f }, weathering with { OctaveGain = 1.5f },
@@ -770,6 +775,16 @@ public sealed class SdfMaterialLawTests {
         }
         Assert.False(SdfMaterialLayers.IsValid(null, weathering with { Noise = 1.1f }, null));
         Assert.False(SdfMaterialLayers.IsValid(null, weathering with { Softness = 1.1f }, null));
+    }
+
+    [Fact]
+    public void EveryActiveWeatheringOctaveRequiresFiniteFrequencyAtBothAdmissionDoors() {
+        var weathering = new SdfWeathering(Scale: float.MaxValue / 2f, PatternScale: Vector3.One, Octaves: 2, OctaveRatio: 4f);
+        var material = new SdfMaterial(Vector3.One, Weathering: weathering);
+        Assert.Throws<ArgumentOutOfRangeException>(() => NewBuilder().AddMaterial(material));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new SdfProgram([Shape()], [material]));
+        // An inactive second octave contributes no frequency or footprint to the shader.
+        Assert.True(SdfMaterialLayers.IsValid(null, weathering with { Octaves = 1 }, null));
     }
 
 }
