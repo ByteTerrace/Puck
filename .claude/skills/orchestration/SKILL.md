@@ -343,8 +343,12 @@ direction: concurrent whole-solution builds exhaust a machine's memory.
   build bounds and hand back a branch that builds and passes their focused
   checks.
   Several run at once (the owner's direction: don't over-serialize for
-  memory), within the WIP limit: about three building writers, one heavy
-  integration job and one GPU leg. A windowed debug World holds a large share of
+  memory). Concurrency is set by measured load, not a fixed count (the
+  owner's direction): the lead samples free memory, CPU and live compilers and
+  Worlds while lanes run, adds lanes while there is headroom (writers spend
+  most of their time reading, not building), and holds or sheds them when free
+  memory runs low. The hard limits are one heavy integration job and one GPU
+  leg at a time. A windowed debug World holds a large share of
   the machine's memory within a minute of boot (`host.memory` reads it), so
   only a couple of building lanes fit beside one. Keep windowed capture
   batches short (boot, capture, stop), and tune on a headless World. The
