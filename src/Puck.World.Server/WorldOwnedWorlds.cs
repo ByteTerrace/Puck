@@ -793,7 +793,7 @@ public sealed class WorldOwnedWorlds {
 
             documents[index] = new WorldOwnedDocumentCheckpoint(
                 Anchor: anchor,
-                DefinitionJson: WorldDefinitionSerialization.Serialize(definition: document),
+                DefinitionJson: WorldDefinitionSerialization.SerializeCompact(definition: document),
                 RelativeDirectory: relative
             );
         }

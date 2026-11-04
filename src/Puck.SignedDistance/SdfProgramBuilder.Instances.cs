@@ -290,12 +290,17 @@ public sealed partial class SdfProgramBuilder {
             Detail: m_openInstanceDetail
         ) { BakesSeparately = m_openInstanceBakesSeparately, BoundInSlotFrame = m_openInstanceBoundInSlotFrame, Box = m_openInstanceBox });
 
+        ResetOpenInstance();
+
+        return this;
+    }
+    // Closes the open instance's per-emission state: the instance's first instruction, its box and the flags only
+    // BeginInstanceDynamic sets. EndInstance and Clear both run it, so no emission inherits a previous one's.
+    private void ResetOpenInstance() {
         m_openInstanceFirst = -1;
         m_openInstanceBox = null;
         m_openInstanceBakesSeparately = false;
         m_openInstanceBoundInSlotFrame = false;
-
-        return this;
     }
     /// <summary>Declares a static per-object instance with balanced begin/end handling around <paramref name="emit"/>.
     /// If <paramref name="emit"/> throws, the builder is left with the instance open and partial state — discard it
