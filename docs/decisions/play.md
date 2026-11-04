@@ -57,7 +57,7 @@ The owner's rulings on the hub design's open calls:
   chord.
 
 A player save is the owned identity document
-([grounding](../plans/next-wave/ground-hub.md#1-player-persistence-today)).
+([worlds you own](../architecture/worlds.md#terms)).
 The design refines it rather than inventing another.
 
 **A surface is one description.** An island built from separate
