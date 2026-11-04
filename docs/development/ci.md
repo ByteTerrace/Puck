@@ -387,6 +387,28 @@ puck pull-request format <base-sha> <head-sha> --output artifacts/format
 
 It prepares the validated artifact and patch without committing or pushing.
 
+## Claude in issues and pull requests
+
+**Claude** (`claude.yml`) runs the Claude Code GitHub Action when a write-access
+user mentions `@claude` in an issue or pull request conversation comment, or in
+a newly opened issue. It is an agent trigger, not a CI job: it builds nothing,
+installs no candidate CLI, and gates nothing.
+
+It holds no Anthropic secret. The job's GitHub OIDC token is exchanged for a
+short-lived Claude API token through workload identity federation: the
+`puck-github` federation rule (on the GitHub Actions issuer, targeting the
+`puck-workload` service account in the `Puck` workspace with
+`workspace:developer` scope) accepts only the subject
+`repo:ByteTerrace@18753984/Puck@1271519029:ref:refs/heads/main` with
+`repository_owner` `ByteTerrace` and `ref` `refs/heads/main`. Comment and issue
+events run on the default branch and match it; `pull_request` and review events
+carry a `pull_request` subject, so the workflow does not listen for them, and
+fork pull requests cannot mint a token. The rule, issuer and service account IDs
+in the workflow are identifiers, not secrets. Replies need the Claude GitHub App
+installed on the repository, and the workflow runs only once it is on `main`.
+A refused exchange returns an opaque `401`; the Claude Console's workload
+identity authentication history names the reason, usually a subject mismatch.
+
 ## Shared repository tooling
 
 Repository tools, verification projects, and the Azure bootstrap file app share
