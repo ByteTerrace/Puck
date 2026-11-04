@@ -247,7 +247,7 @@ The far cascade stands between refreshes at least 30 times a second
 ([the shadow cascades](#the-shadow-cascades)); a footprint showing a nested
 portal or session view asks for it at least 30 times a second at or below 120
 display pixels high and 15 at or below 60, and holds it entirely while its glass
-covers no more than two such steps of the image showing it
+covers no more than two such steps on either axis of the image showing it
 (`SdfUpdateRateTiers.ViewHeldPixels`), which bounds the held image's error to
 the glass itself ([views](motion-and-views.md)); one showing a screen's source at
 least 30 times a second once the screen stands at or below its image's height

@@ -227,14 +227,19 @@ in the frame.
   Support ends at 1.5 times the spacing diagonal plus normal bias, while sky
   still traces to lighting reach. Subtexel geometry remains a sampling limit.
 - **Every surface reads a level.** A receiver reads the finest level whose
-  window holds it, and the coarsest past every window. A coarser level never
+  probes measured it: a finer level answers past its window as far as its
+  boundary probes' support reaches, then the level whose window holds the
+  receiver answers (the coarsest past every window). A coarser level never
   answers inside a finer window: at that distance its angular support is metres
   wide and would see through a thin wall a finer probe measured. Where none of
   the level's probes measured the receiver, the same probes answer past their
-  measured reach, blocked only by the surfaces they measured, so a surface the
+  measured reach, blocked only by the surfaces they measured, and where those
+  answer nothing either, the finest level's boundary probes do. A surface the
   camera sees never reads the absence of a measurement as black, while a wall a
   probe saw still hides what lies behind it. Such an extended read gives no
-  traced static light any visibility.
+  traced static light any visibility. Probes behind the receiver's plane keep a
+  small share at the finest level alone; a coarser level's depth test cannot
+  resolve the receiver's own wall.
   [Mesh GI](../../../../.claude/skills/rendering/references/mesh-gi.md) owns the
   exact CPU/HLSL rule and record. `world.probe` marks changing or pending
   publication reads unsettled, naming the GPU and live windows separately.
