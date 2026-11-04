@@ -98,6 +98,33 @@ rounded body stays painted and its tighter edges chip. `lines` tiles a scratch
 in every pattern cell; use a few parented paints for sparse, placed scuffs
 instead of increasing that all-over pattern.
 
+### Static landscape surfaces
+
+Static scenery supplies zero render lanes. A weathering pattern without a positive
+`floor` remains inactive, even when its `lines`, `edge` and reveal stages validate.
+The standard foliage library's `landscapeSurface` opts its authored masks in with
+`floor: 1`; callers supply the substrate/deposit colours rather than expecting a
+material name to generate them.
+
+Use the controls according to their actual masks:
+
+- `lines` is a seeded triplanar scratch pattern with a random direction in every
+  cell, not directional wood grain or leaf veins. Low-contrast colours and small
+  cells can read as painted grain; bright, coarse marks read as sprinkles.
+- `settle` multiplies upward facing by lattice noise and the authored deposit.
+  It gives crowns, moss and ground broad surface variation without displacing them.
+- `edge` uses curvature modulated by noise. A flat floor has no curvature to reveal.
+- Material weathering runs **after paints** (`sdf-light-stage.hlsli`), so a ground
+  palette's weathering also affects its painted roads. Choose colours accordingly.
+- Creation `noise` displaces the field, changing silhouette, contact and bake work.
+  Use it for actual relief, rather than spending geometry on a colour pattern.
+
+Compare a close view and a moving, ordinary-distance view at pinned exposure and
+local adaptation. Keep the seed and material frame stable. Static unparented layers
+use world coordinates; do not assume a parented paint will render on static copies.
+Surface-only marks need no additional triangles or texture images, but their
+procedural shading has a GPU cost. Do not call that work free.
+
 ## Inset
 
 `palette[].inset` puts a painted plane beneath a refracting surface. This is how

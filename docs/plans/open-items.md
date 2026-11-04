@@ -206,7 +206,8 @@ step · high · Next: reduce repeated CPU dependency work identified by the fres
 normal-paced trace and close readback/physical memory attribution, then GPU
 instance buckets and the terrain-following forest belt.
 The owner includes continuous forest in the first milestone alongside roads,
-shrubs, grass and trees; the current regular pressure patch does not satisfy it.
+shrubs, grass and trees; the new seeded woodland belt has visual captures but still needs
+terrain-following placement and target-budget qualification.
 The [plan](dense-landscapes.md) owns the current assessment, workload and order.
 Existing visibility, bake, memory, terrain and job-system packets own mechanisms.
 
@@ -218,7 +219,21 @@ Vulkan elapsed win established. Ordinary frame samples encounter presentation
 waits and do not qualify the frame bar. Exact power memo on/off remains open.
 Thousands of independent authored grass poses still warrant generic pose-program
 work; caching repeated slots alone does not remove them. Cold bake, physical
-memory, wider density, natural placement and target-device bars remain open.
+memory, density sweeps, terrain following and target-device bars remain open.
+
+  P2 · Owner: placement compiler · Enabling `surface` on the forest placements
+  refused `world.reload` with an unlocated null reference during document
+  validation. A policy targeting `floor` and the two static bank placements used
+  fromOffset [0,8,0], direction [0,-1,0], reach 14, offset -0.025 and minFacing
+  0.72. Removing the surface policies admitted the expanded belt. Diagnose with a
+  stack-bearing repro before restoring banks; no cause has been established.
+
+  P2 · Owner: landscape/rendering · The forest's native clearing captures show
+  sharply black crown undersides. Surface texture does not close that lighting
+  finding. Keep it alongside the existing GI evidence, and distinguish it from
+  the intended soft coloured shadows. The repeated-reload design session also
+  exceeded the Deck-tier private-memory budget; fresh-run attribution remains owed.
+
 Cross-family review is owed: the session-launch hook refused the Claude reviewer
 from this Codex lead session; the supplemental review finding was fixed.
   P2 · Owner: presentation-query owner · `WorldSessionSceneEmitter.TrySurface`

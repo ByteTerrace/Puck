@@ -327,6 +327,29 @@ the two apart—`CreationCanonicalizer` normalizes an absent `group` and an expl
 round-trip fidelity is the constraint here, not engine semantics.) It passes through both directions
 unconditionally, like `material` or `parent`.
 
+### Seeded placement candidates
+
+`scatterPoints(cellSize, width, depth, spacing, radius, seed, worldSeed)` evaluates
+through `CreationStampSampling.ResolveScatter`, the same fixed-point PCG sampler as
+an authored placement Scatter region. It returns local position arrays for ordinary
+`map`, `filter` and `for`, so eligibility, roads, species and variation remain authored
+content. The call does not create play-time work or a second sampling algorithm.
+The normal compilation budget bounds generated collections before allocation.
+
+```puck
+let candidates = scatterPoints(cellSize: 0.25, width: 160, depth: 160,
+  spacing: 16, radius: 1, seed: 317, worldSeed: 9)
+let admitted = filter(candidates, p => p[0] * p[0] + p[2] * p[2] < 300)
+placements {
+  for (point, i) in admitted {
+    placement $"scatter-{i}" {
+      prototype: "marker"
+      position: point
+    }
+  }
+}
+```
+
 ### State declarations
 
 `state.world` is authored either as today's array (`world [ {...}, {...} ]`) or as a declaration block

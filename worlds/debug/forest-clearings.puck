@@ -1,0 +1,43 @@
+import "forest-layout"
+
+let forestFlowers = filter(scatterPoints(cellSize: 0.5, width: 560, depth: 220, spacing: 9, radius: 4,
+  seed: 25103), p => forestInBelt(p[0], p[2] - 150, 4) and forestInGlade(p[0], p[2] - 150, 2) and not
+  forestInGlade(p[0], p[2] - 150, -2) and lawnPathClear(p[0], p[2] - 150, 0.35))
+let forestRocks = filter(scatterPoints(cellSize: 0.5, width: 560, depth: 220, spacing: 28, radius: 13,
+  seed: 1439), p => forestInBelt(p[0], p[2] - 150) and not forestInGlade(p[0], p[2] - 150, -2) and
+  lawnPathClear(p[0], p[2] - 150, 1.4) and forestThicket(p[0], p[2] - 150) > 0.15)
+
+// Hand-composed drifts frame the path's destination; their centres leave room to stand.
+let forestFlowerDrifts = [[58, -170], [69, -162], [72, -169], [62, -174], [-41, -158], [-30, -163], [6, -184]]
+
+placements {
+  for (p, i) in forestFlowers {
+    placement $"forest-flower-{i}" {
+      prototype: "forest-flower"
+      position [p[0], 0, p[2] - 150]
+      scale: 1.3 + 0.8 * forestVariation(i, 0.6)
+      yawDegrees: 360 * forestVariation(i, 0.1)
+    }
+  }
+  for (p, i) in forestRocks {
+    placement $"forest-rock-{i}" {
+      prototype: "forest-rock"
+      position [p[0], 0, p[2] - 150]
+      scale: 0.6 + 0.8 * forestVariation(i, 0.2)
+      yawDegrees: 360 * forestVariation(i, 0.3)
+      solid { margin: 0 }
+    }
+  }
+  for (drift, j) in forestFlowerDrifts {
+    for k in range(0, 7) {
+      placement $"forest-flower-drift-{j}-{k}" {
+        prototype: "forest-flower"
+        position [drift[0] + 1.25 * squareRoot((k + 0.5) / 7) * cosine(k * 2.39996323),
+          0, drift[1] + 0.85 * squareRoot((k + 0.5) / 7) * sine(k * 2.39996323)]
+        scale: 1.05 + 0.35 * forestVariation(k, 0.2)
+        yawDegrees: k * 137.5
+      }
+    }
+  }
+
+}

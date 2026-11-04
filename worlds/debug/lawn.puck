@@ -6,7 +6,11 @@
 // west of x -38, the camera course, the combat yard and the climate wing.
 import "../standard/foliage"
 import "meadow"
-export binding meadowWindSpeed, meadowFlutterSpeed, meadowWindPose
+// Shared valley species, also planted by the continuous woodland.
+exports {
+  bindings [meadowWindSpeed, meadowFlutterSpeed, meadowWindPose]
+  reads [floor, `lawn-oak-0`, `lawn-oak-1`, `lawn-oak-2`, `lawn-flat-1`, `lawn-column-0`]
+}
 
 import "paths"
 

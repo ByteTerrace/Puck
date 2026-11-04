@@ -37,6 +37,20 @@ setting. A 4070 at Deck resolution does not qualify the Deck.
 
 ## Current status
 
+The debug forest now authors a connected southern belt through `forest-layout`
+and its canopy, understory, floor and clearing layers. Seeded sampler positions,
+shared lawn tree variants, younger edges, three glades, ferns, shrubs, fallen wood,
+leaf litter and flower drifts replace the regular pressure patch. Native D3D12
+and Vulkan captures inspect the composition; the standard foliage surfaces use
+active procedural weathering. Terrain-following banks remain open: enabling the
+new surface-placement policy encountered a validation null reference, so this
+visual pass stays on the level valley floor. Inspection cameras are authored in
+`forest.puck`. Lighting defects and frame/memory qualification remain open.
+
+The measurements below describe the **earlier pressure-patch workload**, before
+the expanded belt. They do not qualify the larger forest. Re-record the route and
+collect fresh normal-paced counts, transfers, memory and timing for the belt.
+
 The controlled route now stays on the cleared road beneath the pressure patch's
 canopy. It records authority input once, then replays it in fresh Worlds, checking
 420 presentation samples (ticks 181–600), camera/program/pose inputs and consumed
@@ -103,7 +117,7 @@ cost. The exact power memo still needs a controlled on/off decision after prunin
 
 ## Implemented mechanisms
 
-Static trees, shrubs and tufts share three prototype assets, preserving ordinary
+In the earlier pressure patch, static trees, shrubs and tufts share three prototype assets, preserving ordinary
 per-shape bake partitions, static GI membership, picking, materials and contact.
 Forest tree/shrub fields use 26 prototype instances rather than 2,323 expanded
 ones. The complete native program contains 8,464 instances. This is geometry
@@ -145,7 +159,7 @@ wind and roads are authored Puck programs/data, not feature-specific C# paths.
 | L0m. Attribute memory before scaling | Compare matched settle, motion, cut, edit and cold-bake windows. Attribute managed/allocator/device live and peak owners, caches and retirement; separate physical pages from reservations and overlapping counters. Explain the expanded process footprint and meet the Deck budget. |
 | L1. Finish the shared instance/history contract | Root/member reseat provenance and durable journal/history laws are implemented, including unchanged-pose cuts and skipped frames. Finish native cut/filtered-landing qualification. Preserve current sharing, picking, clips, GI semantics and change-proportional staging. Measure a prototype edit's real derivation closure. |
 | L2. Compact the existing GPU path | Use visibility V1a/V1b stable identities, ordered survivors and geometry/detail buckets. Count candidates, survivors, nonempty buckets and initialized/executed commands in every raster pass. Validate cuts, materials, picks and portal straddles on both backends. |
-| L3. Author terrain-following continuous forest | Replace the regular patch with seeded sampling and authored masks/clustering. Existing Scatter produces X/Z offsets, but lacks candidate masks, terrain grounding and per-copy variation. Derive candidates through one shared sampler and resolve named-ground surface placement once into the canonical placement frame used by visuals and collision. Reuse fixed-point field queries and gradients; count no-hit/slope rejections and derivation costs, rather than projecting every frame. Expand the belt alongside L0/L1 as memory permits. Prove canopy continuity, relieved ground, understory and clear roads. |
+| L3. Author terrain-following continuous forest | The belt, seeded candidates, authored masks/clustering and per-copy variation are implemented and visually inspected. Restore terrain grounding after resolving its validation failure. Derive candidates through one shared sampler and resolve named-ground surface placement once into the canonical placement frame used by visuals and collision. Reuse fixed-point field queries and gradients; count no-hit/slope rejections and derivation costs, rather than projecting every frame. Expand the belt alongside L0/L1 as memory permits. Prove canopy continuity, relieved ground, understory and clear roads. |
 | L4. Scale authored motion and distance | Derive conservative animated bounds from authored programs, extend eligible placement rate reuse and design traced canopy representation/invalidation. Compile/batch authored poses or derive GPU instance records only where measured work warrants it and synchronous CPU consumers stay correct. Geometry/detail/shadow reductions preserve coverage and quality. |
 | L5. Qualify the composed landscape | Run the fixed route, wind, cuts, nested view, day changes, edit closure and cold store on both backends and target devices. Close frame, memory, bake and edit bars with current quality and counted-work evidence. |
 
@@ -171,12 +185,10 @@ and covered by durable repository laws. Native cuts and filtered landing still
 need their composed-workload check. The route and residency qualification defects
 are corrected; new measurements must keep those guarantees.
 
-The forest source is still an initial **32×36 m pressure patch**: 84 trees on a
-3.6 m grid with sinusoidal offsets and flat roots, plus shrubs and ground cover.
-It occupies about 7% of the proposed belt. It does not prove terrain-following
-placement, natural clustering or full density. Seeded scatter, terrain grounding,
-the wider belt and nested-view route remain milestone work, not polish deferred
-past completion.
+The current design pass uses the expanded belt and repeatable overview/clearing
+cameras. Keep taking presented captures at ordinary player height as well as the
+overview. The former pressure-patch measurements remain historical evidence;
+fresh belt qualification must include work, memory and transfers as well as time.
 
 ## Research that informs the plan
 

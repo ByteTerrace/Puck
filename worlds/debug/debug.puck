@@ -187,7 +187,7 @@ placements {
     authoringHeadroomScreens: 0
     candidateCap: 1
     candidateRadius: 1
-    maxPlacementScale: 1.45
+    maxPlacementScale: 2.5
     // The shedding table's racks stand the standard deck's cards at 0.06 (shedding.puck).
     minPlacementScale: 0.06
     previewDeadlineFrames: 1
