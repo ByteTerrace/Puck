@@ -4,7 +4,7 @@
 # no project environment, so the flag stays required on every build entry point until that reaches all three.
 
 $script:NodeReuseVerbs = @('build', 'msbuild', 'restore', 'pack', 'publish')
-$script:NodeReuseReason = 'dotnet build, msbuild, restore, pack and publish pass -nodeReuse:false (or -nr:false); reused MSBuild nodes retain memory on the shared machine. dotnet test takes no such flag: build first, then dotnet test --no-build.'
+$script:NodeReuseReason = 'dotnet build, msbuild, restore, pack and publish pass -nodeReuse:false (or -nr:false); reused MSBuild nodes retain memory on the shared machine. dotnet test takes no such flag: build first, then dotnet test --no-build. A file-based app (dotnet build <file>.cs) takes no MSBuild switch at all, so prefix it with MSBUILDDISABLENODEREUSE=1 instead.'
 
 function Test-NoNodeReusePolicy {
     param([hashtable] $Context, $Invocation)

@@ -1794,7 +1794,7 @@ public static partial class PuckParser {
     // The vocabulary and the bag ride the context so the expression grammar, which threads neither, can ask how a
     // call's argument is written.
     private sealed class PuckParseContext(Scanner scanner, IDocumentVocabulary? vocabulary, DiagnosticBag? diagnostics) : ParseContext(scanner) {
-        public DiagnosticBag? Diagnostics { get; } = diagnostics;
+        public DiagnosticBag? Bag { get; } = diagnostics;
         public IDocumentVocabulary? Vocabulary { get; } = vocabulary;
     }
 
@@ -1830,12 +1830,12 @@ public static partial class PuckParser {
             var operand = CreateOperand(column: column, form: form, length: span.Length, line: line, offset: start, text: text);
 
             if (form == DocumentValueForm.Expression) {
-                operand = ValidateOperand(operand, owned.Diagnostics);
+                operand = ValidateOperand(operand, owned.Bag);
             } else {
                 var respelled = ExpressionSpelling.ToSourceDialect(text: text);
 
                 if (!string.Equals(a: respelled, b: text, comparisonType: StringComparison.Ordinal)) {
-                    owned.Diagnostics?.ReportError(
+                    owned.Bag?.ReportError(
                         code: PuckDiagnosticCodes.OperandColonChannel,
                         message: $"'{text}' spells a reserved channel with colons; write '{respelled}'",
                         span: span

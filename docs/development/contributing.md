@@ -927,6 +927,12 @@ unverified when no device run exists.
   (`docker build --file src/<Project>/Dockerfile --tag puck/<image>:local .`
   from the root) and run `puck azure test-world-container --image
   puck/world-silo:local`.
+- `dotnet build <file>.cs` builds a file-based app (`src/Puck.Azure.Resources/bootstrap.cs`)
+  only while the command carries no MSBuild switch: with `-nodeReuse:false` or
+  any other the SDK loads the `.cs` file as a project and fails with `MSB4025`.
+  Disable node reuse through the environment instead
+  (`MSBUILDDISABLENODEREUSE=1 dotnet build <file>.cs -c Release`), which the
+  node-reuse hook accepts.
 - A build cut off by a power loss or a killed session can leave a truncated
   assembly under a project's `obj/` (seen as `obj/Release/<tfm>/ref/<Project>.dll`),
   and the next build fails reading it. Delete that project's `obj/` and build
@@ -1067,7 +1073,7 @@ unverified when no device run exists.
   pins it with `CliScratchDirectories.PinSdk`, which copies the checkout's
   `global.json` in, and runs the SDK command from that directory. An SDK
   command against a checkout project runs from the checkout.
-- The pinned .NET 11 JIT (`11.0.100-rc.2.26504.105`) can emit GC info that
+- The .NET 11 JIT (seen on `11.0.100-rc.2.26504.105`) can emit GC info that
   reports a GC pointer live in a callee-saved register (`rbx`, `rsi`, `rdi`,
   `r12` to `r15`) at the return address of an inline P/Invoke, which the
   runtime's rule forbids: a thread inside the call is walked from its
