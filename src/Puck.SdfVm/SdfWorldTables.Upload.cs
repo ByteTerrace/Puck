@@ -13,6 +13,9 @@ namespace Puck.SdfVm;
 public sealed partial class SdfWorldTables {
     // Device objects the tables replaced without waiting for the device, each with the upload after which it is disposed.
     private readonly List<(ulong Upload, IDisposable Replaced)> m_retired = [];
+    // One-based submitted uploads known complete through the existing previous-upload wait. A required geometry
+    // upload older than this prefix never consults a fence whose ring slot may since have been reused for poses/GI.
+    private ulong m_completedUploads;
 
     /// <summary>Gets the ring slot the latest upload wrote, whose region buffers the frame's passes bind, or -1 before the
     /// first upload.</summary>
@@ -36,13 +39,13 @@ public sealed partial class SdfWorldTables {
         // Waiting an upload completes it in the ledger before another upload reuses its ring slot.
         if (m_uploads > 0UL) {
             m_frameFences[((int)((m_uploads - 1UL) % FrameRingSize))].Wait();
+            m_completedUploads = m_uploads;
             DisposeRetired(completed: (m_uploads - 1UL));
         }
 
         var previousSlot = m_currentSlot;
 
         m_currentSlot = slot;
-        m_uploads++;
 
         var recorder = m_gpu.Recorder;
         var commandBuffer = m_commandPools[slot].CommandBufferHandle;
@@ -85,6 +88,9 @@ public sealed partial class SdfWorldTables {
             commandBufferHandles: [commandBuffer],
             fence: m_frameFences[slot]
         );
+        // Publish submission only after the fence has been armed by the queue. Before this point an initially
+        // signaled fence must not satisfy geometry staged for the next upload.
+        m_uploads = checked(m_uploads + 1UL);
     }
 
     // Hands a device object the tables replaced to the upload that follows: GPU work recorded before it may still read
@@ -113,6 +119,7 @@ public sealed partial class SdfWorldTables {
         foreach (var fence in m_frameFences) {
             fence.Wait();
         }
+        m_completedUploads = m_uploads;
     }
     // Moves the fillers from their first, undefined layout to the ones a pass binds them in, once, before any pass can
     // bind them: the sampled filler shader-readable and the storage filler General, both cleared, so a screen whose source

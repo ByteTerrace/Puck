@@ -44,6 +44,24 @@ public sealed partial class SdfWorldTables {
 
     // Whether the arena has written its meshes into the region.
     private bool m_meshSectionWritten;
+    // The one-based upload required by the current sourced geometry or buffer carry. Draw matrices and irradiance
+    // never move it. Zero means no geometry has needed an upload yet.
+    private ulong m_meshRequiredUpload;
+
+    /// <summary>Gets whether the current staged mesh geometry owes no mesh words and its required upload has
+    /// completed. Pose, draw-record and irradiance uploads do not delay it. Read on the frame thread; never waits.</summary>
+    public bool MeshesResident {
+        get {
+            if (m_disposed || (m_meshesOwed.Count != 0)) { return false; }
+            var required = m_meshRequiredUpload;
+            return ((required == 0UL) || ((required <= m_uploads) &&
+                ((required <= m_completedUploads) || m_frameFences[((int)((required - 1UL) % FrameRingSize))].IsSignaled)));
+        }
+    }
+
+    // Invalidate before staging words or replacing their buffer: until the next submission completes, the geometry
+    // currently bound by these tables is not resident, even if an earlier slot's fence is already signaled.
+    private void RequireMeshUpload() => m_meshRequiredUpload = checked(m_uploads + 1UL);
     // The draw list last planned and its revision, and whether its draws are all staged: a list whose meshes' words are
     // still owed stages again each frame as they land.
     private IReadOnlyList<SdfMeshDraw>? m_meshSource;
@@ -406,6 +424,7 @@ public sealed partial class SdfWorldTables {
     private void WriteMeshWords(SdfMesh mesh, SdfMeshRegionMesh placement) {
         var words = SdfMeshRegion.WordsOf(mesh: mesh);
 
+        RequireMeshUpload();
         m_meshWordsWritten += words;
         m_meshRegion.OweSourced(
             length: (((long)words) * sizeof(uint)),
@@ -567,6 +586,7 @@ public sealed partial class SdfWorldTables {
             return;
         }
 
+        RequireMeshUpload();
         Retire(replaced: m_meshRegion.Shrink(byteCount: ((long)fitted)));
         m_seedMeshHistory = true;
         m_bindingRevision++;
@@ -584,6 +604,7 @@ public sealed partial class SdfWorldTables {
 
         var grown = MeshRegionGrownBytes(needBytes: bytes);
 
+        RequireMeshUpload();
         Retire(replaced: m_meshRegion.Grow(byteCount: ((long)grown)));
         m_seedMeshHistory = true;
         m_bindingRevision++;

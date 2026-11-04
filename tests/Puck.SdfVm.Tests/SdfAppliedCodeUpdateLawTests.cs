@@ -83,6 +83,33 @@ public sealed class SdfAppliedCodeUpdateLawTests {
         Assert.False(condition: closure.Reads(type: typeof(SdfWorldResidency)));
     }
 
+    [Fact]
+    public void BakeInputStorageUpdatesKeepTheIdentityWhilePackingUpdatesInvalidateIt() {
+        var closure = SdfMeshBakeClosure.Of(directory: AppContext.BaseDirectory);
+        var kernels = new SdfKernelSet(bytecode: SdfKernelSet.Kernels.Select(selector: static kernel => new ReadOnlyMemory<byte>(array: [((byte)kernel)])).ToArray());
+        var built = SdfMeshBakeIdentity.Of(code: closure, kernels: kernels);
+
+        Assert.False(condition: closure.Reads(type: typeof(SdfMeshBakeInputTransport)));
+        Assert.True(condition: closure.Reads(type: typeof(SdfMeshBakeBatch)));
+        AppliedCodeUpdate.Apply(typeof(SdfMeshBakeInputTransport));
+        var reallocated = built.UnderRunningCode(code: closure);
+
+        // Compare with the current identity, including any earlier process update: test ordering must not require
+        // the real production closure to have an empty applied token.
+        Assert.Equal(expected: built.Value, actual: reallocated.Value);
+        Assert.Equal(expected: built.Code, actual: reallocated.Code);
+        Assert.Equal(expected: built.Applied, actual: reallocated.Applied);
+        Assert.Equal(expected: built.Value, actual: SdfMeshBakeIdentity.Of(code: closure, kernels: kernels).Value);
+
+        AppliedCodeUpdate.Apply(typeof(SdfMeshBakeBatch));
+        var repacked = reallocated.UnderRunningCode(code: closure);
+
+        Assert.NotEqual(expected: built.Value, actual: repacked.Value);
+        Assert.NotEqual(expected: built.Code, actual: repacked.Code);
+        Assert.EndsWith(expectedEndString: $".{CodeRevision.Current}", actualString: repacked.Applied);
+        Assert.Equal(expected: repacked.Value, actual: SdfMeshBakeIdentity.Of(code: closure, kernels: kernels).Value);
+    }
+
     private static SdfProgram Capture(SdfCompositionFrameSource source) => source.CaptureFrame(
         deltaSeconds: 0f,
         height: 8,

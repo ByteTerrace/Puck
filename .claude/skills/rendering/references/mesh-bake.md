@@ -137,6 +137,14 @@ the interpreter, contours the samples on the CPU, and stores the meshes.
 The dispatch's fixed `MeshBakeMaxSamples` budget counts sampled values, not
 the saved pose rows appended to its input point table. That table grows through
 its existing `GpuRegion`, retires the old buffers and refreshes World bindings.
+`SdfMeshBakeBatch.InputRows` is the highest input prefix actually read: explicit
+points retain their sample offsets; saved poses still begin after all samples.
+A grid-only batch without poses needs no input rows. Do not allocate or upload
+its sample-count holes. `SdfMeshBakeInputTransport` lazily owns the reusable CPU
+prefix; the device point region starts with one bound float4 and grows on demand.
+Neither side reserves `MeshBakeMaxSamples` rows merely because that is the sampled
+output budget. Interior holes before explicit points or poses remain part of the
+current kernel layout. Preserve their addresses when changing storage.
 Charging poses against the sample limit can strand the first pending lattice
 forever: a nearly cubic lattice plus a sparse pose span no longer fits, so the
 scheduler takes no work and every group behind it waits. Cold bakes expose this;
@@ -688,7 +696,8 @@ laws exercise that boundary.
   constructs counts its whole layout, since its synthesized equality and
   printing read every field. `SdfMeshBakeClosureLawTests` pins both ways. It
   stops at `SdfMeshLibrary` and `SdfMeshStore`,
-  which hold meshes, at `GpuRegion` and `GpuUploadRuns`, which carry the point
+  which hold meshes, at `SdfMeshBakeInputTransport`, whose allocation and lifetime
+  carry already prepared rows, and at `GpuRegion` and `GpuUploadRuns`, which carry the point
   table's words to the device rather than choose them, and at the runtime. An edit to `Puck.Maths` code the
   contour calls re-bakes. The standalone `SdfMeshDresser`, `SdfMeshHistory`, `SdfWorldPassRecorder`, `SdfWorldTables`,
   `SdfFrameBlock` and `SdfMeshRegion` are outside the CPU closure, including type-granular applied updates;

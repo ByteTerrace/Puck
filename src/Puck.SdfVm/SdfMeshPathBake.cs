@@ -68,16 +68,23 @@ public sealed record SdfMeshBakeBatch(SdfMeshBakeRequest[] Lattices, object[] Ti
     /// the dynamic-transform table lays a slot out, which the bake kernel reads in place of the frame's transforms; no
     /// rows for a group that reads no slot.</summary>
     public (int First, ReadOnlyMemory<Vector4> Rows)[] Poses { get; init; } = [];
-    /// <summary>Gets the point table entries the batch writes: its samples' points, then each lattice's poses.</summary>
-    public int TableEntries {
+    /// <summary>Gets the input prefix the batch reads: explicit points at their sample offsets, then saved poses after
+    /// all samples. Grid samples without poses need no input rows, including trailing grid samples.</summary>
+    public int InputRows {
         get {
-            var entries = Samples;
+            var first = 0;
+            var required = 0;
 
+            foreach (var lattice in Lattices) {
+                if (!lattice.Points.IsEmpty) { required = Math.Max(val1: required, val2: checked(first + lattice.Points.Length)); }
+                first = checked(first + lattice.Samples);
+            }
             foreach (var (_, rows) in Poses) {
-                entries += rows.Length;
+                first = checked(first + rows.Length);
+                if (!rows.IsEmpty) { required = Math.Max(val1: required, val2: first); }
             }
 
-            return entries;
+            return required;
         }
     }
     /// <summary>Gets the bake whose groups the batch's lattices answer, which its readback completes or abandons whatever
@@ -114,7 +121,7 @@ public sealed record SdfMeshBakeBatch(SdfMeshBakeRequest[] Lattices, object[] Ti
 
     /// <summary>Writes the batch's point table: each points lattice's points at its first sample's place in the
     /// dispatch, then each lattice's poses from <see cref="PoseBase"/>.</summary>
-    /// <param name="table">The table, at least <see cref="TableEntries"/> entries.</param>
+    /// <param name="table">The table, at least <see cref="InputRows"/> entries.</param>
     /// <returns>Whether the batch wrote an entry.</returns>
     public bool WritePoints(Span<Vector4> table) {
         var first = 0;
@@ -634,12 +641,7 @@ public sealed partial class SdfMeshPathBake {
     private int m_frameBudget = FrameTaps;
 
     private SdfMeshBakeBatch? m_frameBatch;
-    private OwnedBuffer<Vector4>? m_pointTableStorage;
-
-    // The frame thread's point table, which Stage writes each batch's points into before the upload.
-    private readonly MemoryAccount.Owner m_pointTableMemory = MemoryAccount.Shared.CreateOwner(name: "mesh-bake-points");
-
-    private OwnedBuffer<Vector4> PointTable => m_pointTableStorage ??= new(allocator: Library.Allocator, observer: m_pointTableMemory);
+    private SdfMeshBakeInputTransport? m_inputTransport;
 
     /// <summary>Takes the frame's batch (<see cref="TryTakeForFrame"/>) before the frame's upload and prepares its points
     /// and saved poses for the point-table upload, which the bake kernel reads.</summary>
@@ -654,8 +656,10 @@ public sealed partial class SdfMeshPathBake {
         }
 
         if (!TryTakeForFrame(batch: out var batch, frame: frame)) { return []; }
-        if (PointTable.Length < batch.TableEntries) { PointTable.Resize(Math.Max(val1: batch.TableEntries, val2: SdfWorldPackage.MeshBakeMaxSamples)); }
-        return (batch.WritePoints(table: PointTable.GetSpan()) ? PointTable.GetSpan()[..batch.TableEntries] : []);
+        var rows = batch.InputRows;
+        if (rows == 0) { return []; }
+        var input = (m_inputTransport ??= new(allocator: Library.Allocator)).Acquire(requiredRows: rows);
+        return (batch.WritePoints(table: input) ? input : []);
     }
     /// <summary>Returns a dispatched batch's lattices to their groups unanswered, as when its submission never completed;
     /// each group dispatches its lattice again.</summary>

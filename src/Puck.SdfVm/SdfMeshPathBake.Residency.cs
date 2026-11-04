@@ -286,8 +286,7 @@ public sealed partial class SdfMeshPathBake {
                 group.Retired = true;
                 group.InFlight = false;
             }
-            m_pointTableStorage?.Dispose(); m_pointTableStorage = null;
-            m_pointTableMemory.Dispose();
+            m_inputTransport?.Dispose(); m_inputTransport = null;
         }
         lock (WorkGate) { _ = WorkQueue.RemoveAll(match: item => { if (!item.Group.Retired) { return false; } item.Group.EndWork(); return true; }); }
     }

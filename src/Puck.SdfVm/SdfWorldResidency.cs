@@ -212,6 +212,9 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// <summary>Gets the residency's tables, or <see langword="null"/> before its pipeline set is built and its first
     /// frame captured, and after a device loss until they are rebuilt.</summary>
     public SdfWorldTables? Tables => m_tables;
+    /// <summary>Gets whether the current staged mesh geometry has landed and its upload completed; false before
+    /// tables exist. Pose and irradiance uploads do not delay it. Read on the frame thread; never waits.</summary>
+    public bool MeshesResident => (m_tables?.MeshesResident ?? false);
     /// <summary>Gets the latest captured frame, which every view of the residency renders, or <see langword="null"/>
     /// before the first.</summary>
     public SdfFrame? Frame => m_frame;

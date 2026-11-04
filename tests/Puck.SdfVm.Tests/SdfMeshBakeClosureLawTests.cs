@@ -45,6 +45,32 @@ public sealed class SdfMeshBakeClosureLawTests {
         Assert.Equal(expected: Of(type: "CopiedLean", suffix: " [layout]"), actual: Of(type: "CopiedWide", suffix: " [layout]"));
         Assert.NotEqual(expected: Of(type: "MadeLean", suffix: " [layout]"), actual: Of(type: "MadeWide", suffix: " [layout]"));
     }
+
+    [Fact]
+    public void BakeInputSemanticsRemainInTheClosureWhileTheirStorageDoesNot() {
+        var closure = SdfMeshBakeClosure.Of(directory: AppContext.BaseDirectory);
+        void Requires(Type type, string method) {
+            var prefix = $"{type.Assembly.GetName().Name}!{type.FullName}.{method}`";
+            Assert.Contains(collection: closure.Members.Keys, filter: member => member.StartsWith(value: prefix, comparisonType: StringComparison.Ordinal));
+        }
+
+        // Choosing a batch, addressing its points/poses and encoding the dispatch are product inputs, even when
+        // storage growth changes independently. These are current semantic entries, not a saved member/hash ledger.
+        Requires(typeof(SdfMeshPathBake), nameof(SdfMeshPathBake.Stage));
+        Requires(typeof(SdfMeshPathBake), nameof(SdfMeshPathBake.TryTakeForFrame));
+        Requires(typeof(SdfMeshBakeBatch), nameof(SdfMeshBakeBatch.WritePoints));
+        Requires(typeof(SdfMeshBakeBatch), "get_" + nameof(SdfMeshBakeBatch.InputRows));
+        Requires(typeof(SdfMeshBakeBatch), nameof(SdfMeshBakeBatch.PoseBase));
+        Requires(typeof(SdfMeshBakeBlock), nameof(SdfMeshBakeBlock.Write));
+        Assert.True(condition: closure.Reads(type: typeof(SdfMeshBakeBatch)));
+
+        // Neither methods nor layout of the allocation-only owner may enter derivation. Its call signature remains
+        // in Stage's IL; only changes behind that stable storage door are excluded.
+        var transport = typeof(SdfMeshBakeInputTransport);
+        var transportPrefix = $"{transport.Assembly.GetName().Name}!{transport.FullName}";
+        Assert.DoesNotContain(collection: closure.Members.Keys, filter: member => member.StartsWith(value: transportPrefix, comparisonType: StringComparison.Ordinal));
+        Assert.False(condition: closure.Reads(type: transport));
+    }
 }
 
 /// <summary>The fixture <see cref="SdfMeshBakeClosureLawTests"/> walks from: one method holding every shape of IL the

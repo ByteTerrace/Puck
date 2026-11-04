@@ -28,9 +28,9 @@ public sealed partial class SdfMeshPathBakeLawTests {
         TestLiveness.Until(reason: bake.Describe, step: () => {
             _ = dresser.Dress(frame: frame);
             if (bake.TryTakeForFrame(batch: out var batch, frame: index++)) {
-                if (batch.TableEntries > SdfWorldPackage.MeshBakeMaxSamples) {
-                    Assert.True(condition: (batch.TableEntries > batch.Samples));
-                    var points = new Vector4[batch.TableEntries];
+                if (batch.InputRows > SdfWorldPackage.MeshBakeMaxSamples) {
+                    Assert.True(condition: (batch.InputRows > batch.Samples));
+                    var points = new Vector4[batch.InputRows];
                     Assert.True(condition: batch.WritePoints(table: points));
                     full = true;
                 }

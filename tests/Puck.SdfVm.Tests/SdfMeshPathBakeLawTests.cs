@@ -415,7 +415,7 @@ public sealed partial class SdfMeshPathBakeLawTests : IClassFixture<SdfMeshPathB
         Assert.Equal(expected: hinge.X, actual: rows.Span[5].X, tolerance: 0.001f);
 
         // The poses follow the batch's points in the point table, where the lattice's fourth row names them.
-        var table = new Vector4[near.TableEntries];
+        var table = new Vector4[near.InputRows];
 
         Assert.True(condition: near.WritePoints(table: table));
         Assert.Equal(expected: rows.ToArray(), actual: table.AsSpan(start: near.PoseBase(lattice: 0)).ToArray());

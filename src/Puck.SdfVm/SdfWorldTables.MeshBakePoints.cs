@@ -1,31 +1,32 @@
 using System.Numerics;
 using System.Runtime.InteropServices;
 using Puck.Abstractions.Gpu;
-using Puck.Shaders;
 
 namespace Puck.SdfVm;
 
-// The mesh bake's point table: the surface points a bake dispatch samples the field's material at
-// (SdfMeshPathBake), one float4 a point, written by the residency before the frame's upload and read by the bake kernel
-// through the World set (sdfMeshBakePoints). It is staged, so it lives in device-local memory, and a frame that samples no
-// points writes nothing to it.
+// One float4 per point or saved-pose row, uploaded before the bake samples it. Keep one bound row until actual demand.
 public sealed partial class SdfWorldTables {
     private const int MeshBakePointRegionIndex = 11;
-    private const int MeshBakePointBytes = (SdfWorldPackage.MeshBakeMaxSamples * 16);
+    private const int MeshBakePointRowBytes = 16;
 
     private readonly GpuRegion m_meshBakePointRegion;
 
     /// <summary>Writes a bake dispatch's sample points followed by its saved poses. The input table grows independently
-    /// of the fixed sample readback budget, so a full lattice still has room for its poses; the upload sends what differs.</summary>
+    /// of the fixed sample readback budget; before first demand only one row is bound.</summary>
     /// <param name="points">The sample points and saved pose rows.</param>
     public void WriteMeshBakePoints(ReadOnlySpan<Vector4> points) {
         if (points.IsEmpty) { return; }
-        var bytes = (((long)points.Length) * 16);
+        // Validate the complete byte span before growing any allocation. AsBytes refuses a length above int.MaxValue.
+        var data = MemoryMarshal.AsBytes(span: points);
+        var bytes = (long)data.Length;
 
         if (bytes > m_meshBakePointRegion.ByteCount) {
-            Retire(replaced: m_meshBakePointRegion.Grow(byteCount: Math.Max(val1: bytes, val2: (2 * m_meshBakePointRegion.ByteCount))));
+            // This upload is one byte span. Both that representation and the shared region bound its capacity, in rows.
+            var maximum = ((Math.Min(val1: GpuRegion.MaxByteCount, val2: (long)int.MaxValue) / MeshBakePointRowBytes) * MeshBakePointRowBytes);
+            var capacity = Math.Max(val1: bytes, val2: Math.Min(val1: checked(2L * m_meshBakePointRegion.ByteCount), val2: maximum));
+            Retire(replaced: m_meshBakePointRegion.Grow(byteCount: capacity));
             m_bindingRevision++;
         }
-        _ = m_meshBakePointRegion.Write(bytes: MemoryMarshal.AsBytes(span: points), offset: 0);
+        _ = m_meshBakePointRegion.Write(bytes: data, offset: 0);
     }
 }
