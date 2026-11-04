@@ -46,7 +46,7 @@ binary search. This correction is what makes the narrow test exact.
 Trial division folds four balanced 16-bit digits onto one 32-bit value per
 prime and uses an inverse test. The AVX-512 and AVX2 paths test sixteen and
 eight primes per vector; narrower and scalar fallbacks remain. Against wide
-products, the folding measured 8–19% faster per call on AVX2 and no slower on
+products, the folding is measurably faster per call on AVX2 and no slower on
 AVX-512. The depth through 727 follows the round's cost: a vector of `k` primes
 is useful while `p < k·R/c`, where `R` is the round's cost and `c` the vector's.
 Factorization strips the first sixteen odd trial primes, through 59, with the
@@ -93,9 +93,9 @@ These conclusions still guide work on the retained kernels:
   one widening multiply, one truncated multiply and one high multiply;
   reintroducing the fourth multiply measured slower on primality.
 - The JIT can branch a ternary inside a loop. The exact Lucas ladder's final
-  subtraction uses a non-inlined conditional-select leaf; it measured 16%
-  faster in isolation. Fully unrolling that ladder moved 924 values through
-  the stack for only 3% improvement; a ternary in its loop lost 63%.
+  subtraction uses a non-inlined conditional-select leaf, which is faster in
+  isolation. Fully unrolling that ladder moves hundreds of values through the
+  stack for a marginal gain; a ternary in its loop is far slower.
 - A branching trace ladder, an `Int128` signed product whose low word crosses
   memory, and a borrowed base-two walk below 2^63 measured slower than the
   retained signed path. Revisit these only with new runtime evidence.

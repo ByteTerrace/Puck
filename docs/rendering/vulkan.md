@@ -513,7 +513,7 @@ The file lives under the host's state root, at
 `pipeline-cache/<backend>/<vendor>-<device>-<driver>/<kernel-set>.bin`. The
 device segment is the device identity's `CacheKey`, the same format on both
 backends: the PCI vendor and device IDs in four hexadecimal digits and the raw
-driver version in sixteen (`10de-2786-000000008d8d8000`). A driver version the
+driver version in sixteen (`<vendor>-<device>-<driver-version>`). A driver version the
 backend could not read is zero and still names a file. The host names the
 kernel set with a hash of the SDF kernels it ships
 (`SdfKernelSet.ContentKey`), so a driver update or a kernel change starts a
@@ -661,7 +661,7 @@ durations, or export it with `renderdoccmd convert -f <file>.rdc -o
 parameters and the objects' debug names, so a script counts submissions,
 barriers by stage and access, copies and query copies without opening the UI
 (`-c chrome.json` writes each call's CPU time instead). Delete the `.rdc` once
-read: a frame of the debug world is 70 to 110 MB.
+read: a frame of the debug world is tens to hundreds of MB.
 
 ## Debug names
 

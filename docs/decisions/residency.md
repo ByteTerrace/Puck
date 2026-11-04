@@ -8,8 +8,7 @@ choice combine, and where portals fit.
 The owner set the position: passive help from the engine everywhere and an
 explicit choice by authors (Metroid Prime style areas joined by doors) are
 complementary, and asked whether portals are the right abstraction for the
-explicit route. Claude, Codex and Antigravity each drafted an answer
-independently against the code; this record is the reconciliation.
+explicit route.
 
 ## Only presentation follows the observer
 
@@ -102,9 +101,9 @@ demand and priority rather than creating executors.
   where the coarser level's recorded error would project past about a pixel,
   with a hysteresis band, which is the rule a level of detail already switches
   by ([a raster pass draws only what it can show](rendering.md#a-raster-pass-draws-only-what-it-can-show)).
-  Antigravity proposed rings at fixed metre radii; Claude and Codex the
-  projected-size rule, adopted because it follows the existing ruling, holds at
-  any scale from a card to a mountain, and needs no tuning. The coarsest level
+  Rings at fixed metre radii are rejected in favour of the projected-size
+  rule, because it follows the existing ruling, holds at any scale from a card
+  to a mountain, and needs no tuning. The coarsest level
   stays resident within the far distance while the budget allows. A group that
   has not landed has no recorded error yet, so its planned box stands in: a box
   whose diagonal projects past a pixel is demanded, and the work that lands it
@@ -125,7 +124,7 @@ demand and priority rather than creating executors.
 - **One reservation** across every live residency, granted from the job
   system's physical byte-accounting owner and applied by selector policy.
   Eviction goes by priority, never wholesale and never refused on a miss
-  ([machine budgets are bytes](rendering.md)), which removes today's throw past
+  ([machine budgets are bytes](rendering.md)), so no allocation throws past
   `GpuRegion.MaxByteCount`.
 - **Residency is broader than visibility.** Shadow casters and GI blockers
   within their support regions stay resident though offscreen, and the
@@ -180,8 +179,8 @@ Each step is taken when the measured need appears:
 
 Document and program assembly become spatially incremental only if measurement
 shows them dominating after this. Area-scoped rule sleep, driven by authoritative
-body occupancy rather than views (Antigravity), is legal under rule 4 but is a
-simulation design and needs its own consensus. Card tables depend on none of this
+body occupancy rather than views, is legal under rule 4 but is a simulation
+design and needs its own decision. Card tables depend on none of this
 work; the board game room on level 2 against a spawn in the lobby makes them a
 test case for step 2.
 
@@ -194,5 +193,5 @@ test case for step 2.
   them below a pixel; a group that lands late fades in with a short dither.
 - Closing doors come after the floors: one door in the standard package, its
   opening time authored there, once the scheduler and areas have landed.
-- The RTX 4070 sets the resident-byte target now; the Steam Deck is a second
-  qualification on the same budget mechanism when Deck work starts.
+- The resident-byte target is set on the RTX 4070; the Steam Deck is a second
+  qualification on the same budget mechanism.

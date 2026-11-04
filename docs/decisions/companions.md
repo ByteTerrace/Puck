@@ -7,10 +7,8 @@ state has to survive the trip, and it has to come home as itself. This decision
 settles who drives it, what travels, and what happens when a world does not
 take it.
 
-The owner asked for a design reached by consensus across the agent families,
-weighing author and player concerns. Claude, Codex and Antigravity each drafted
-a position independently; this record is the reconciliation, and the owner
-answered the product questions.
+The design weighs author and player concerns, and the owner answered the
+product questions.
 
 ## The owner's rulings
 
@@ -41,7 +39,7 @@ and the companion behaves exactly as at home. If its author declares a different
 driver for the role, that one runs instead, by the author's choice. If it
 declares nothing for the role, it refuses the companion at reservation.
 
-All three drafts rejected the alternatives: migrating the driver's code puts
+The alternatives are rejected: migrating the driver's code puts
 code from another machine in a world that never chose it and needs a
 checkpoint format for add-on memory that ordinary checkpoints refuse; driving
 it from home makes it a Live traveller, which counts as a human under the cap
@@ -50,11 +48,9 @@ replay tape.
 
 ### A world may accept visiting drivers by policy
 
-Two of the three families, reviewing the open items after the first draft,
-argued that the driver should travel with the body: otherwise every world that
-wants companions duplicates a particular addon's pin, and a companion is inert
-or refused wherever an author did not. The lead settled the dissent (the owner
-deferred the design to the team) by keeping both halves: a world's role
+The driver could travel with the body: otherwise every world that wants
+companions duplicates a particular addon's pin, and a companion is inert or
+refused wherever an author did not. The design keeps both halves: a world's role
 declaration has a fourth choice, `accept`. A world that accepts runs the
 visitor's own pinned driver, resolved by its hash from the content store and
 verified, mounted in the world's own addon runtime under that world's fuel,
@@ -89,9 +85,7 @@ drive a companion name its placement or role group, never a body slot.
 ## A stranded companion waits in custody; only home recalls it
 
 A companion is stranded when it must go home and cannot: home is not running,
-its server is unreachable, or the link is down. The owner asked for consensus
-weighing the abstract; Claude, Codex and Antigravity each drafted an answer
-independently, and all three reached the same rule.
+its server is unreachable, or the link is down.
 
 An owned traveller has a *title* (that it exists and whose it is, held by its
 home), an *image* (its durable identity state and registers) and *custody*
@@ -154,8 +148,8 @@ a full world refuses at reservation.
 
 ## Building it
 
-The faerie's lasting state still moves into registers, and its driver grants
-become placement- or group-keyed rather than `body:42`. The
+The faerie's lasting state moves into registers, and its driver grants are
+placement- or group-keyed rather than `body:42`. The
 [companion protocol plan](../plans/companion-redesign.md#9-build-plan) owns the
 remaining custody transitions, lifetime handling, and debug-world trip; the
 [Transfers, federation and server packet](../plans/open-items.md#transfers-federation-and-server)

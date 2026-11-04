@@ -14,22 +14,21 @@ Their observable guarantees are preserved, not every current API shape.
 
 The frame does not evaluate SDF bytecode per pixel: every view rasterizes the
 meshes the residency bakes the program into, and the interpreter's frame
-passes, kernels and levers are deleted. The interpreter's ceiling was measured:
-even with the interpreter compiled away entirely (the upper bound of per-world
-specialization) the primary and shadow passes stayed several times over the
-RTX 2060's frame, and cutting march steps cut their time far less than in
+passes, kernels and levers are deleted. The interpreter has a ceiling no tuning
+reaches: even with the interpreter compiled away entirely (the upper bound of
+per-world specialization) the primary and shadow passes stay several times over
+the RTX 2060's frame, and cutting march steps cuts their time far less than in
 proportion, because the remaining cost is the fixed price of each program walk.
-No tuning of the walk reaches the frame-rate bar.
 
 Worlds are mostly static and sculpted in the editor, so evaluation belongs at
 edit time, as in the shipped SDF engines that hold 60 FPS on weaker hardware.
 SDF programs remain the authored representation, and the interpreter remains the
 evaluator for baking, CPU queries and the editor. The frame reads what a bake
 produced: baked meshes, rasterized with shadow maps. Two bake targets were
-built and measured on the debug world. The baked-mesh path drew it in about
-9 ms of GPU time with the geometry intact. A sparse distance volume marched by
-texture reads took about 10.6 ms, but lost the scene's materials and broke the
-avatar's composite. The frame-rate bar is read on a quiet machine
+built and compared on the debug world. The baked-mesh path draws it well inside
+the frame budget with the geometry intact. A sparse distance volume marched by
+texture reads costs about the same, but loses the scene's materials and breaks
+the avatar's composite. The frame-rate bar is read on a quiet machine
 ([below](#limits-price-the-mesh-pipeline-not-the-interpreter)). Interpreter
 tuning stops; the specialization plan is withdrawn.
 Curvature shading, the field's partial silhouette coverage and per-pixel
@@ -39,9 +38,8 @@ quad's winning material.
 
 ## Limits price the mesh pipeline, not the interpreter
 
-The scene ceilings sized for the per-pixel interpreter are retired. Two
-independent reviews (Codex and Antigravity) agreed on what replaces them, and
-the lead settled the points where they differed.
+The scene ceilings sized for the per-pixel interpreter are retired. Limits
+price what the mesh pipeline costs instead:
 
 - **A rigid creation is one shared geometry asset.** A creation with no
   timeline, drivers, effectors, part dynamics, field-changing lanes, cameras or
@@ -79,9 +77,6 @@ the lead settled the points where they differed.
   is never the fix for a missed bar.
 
 ## Bloom is a camera's scatter, applied once before tonemapping
-
-Codex and Antigravity proposed bloom independently and converged; the lead
-recorded the result.
 
 - **Where it runs.** Bloom is an optional generic camera effect on each optical
   endpoint (a seat's or a direct camera's output), after the view's HDR
@@ -152,10 +147,9 @@ owner ruled the second (a style per material, not one look per world).
   closed-receiver flag anyway and a fragment-discard pass, and the field's own
   interior distance does not exist for authored meshes. The exit layer costs a
   second raster of each cascade's draws and one more depth image per cascade.
-  Review of the exit layer found its reading of winding as facing rests on
-  closure, consistent orientation, a rigid transform and no clip, none of
-  which the raster path guarantees for an authored, clipped, mirrored or
-  deformed mesh; review of a depth-order replacement found that two depth
+  The exit layer's reading of winding as facing rests on closure, consistent
+  orientation, a rigid transform and no clip, none of which the raster path
+  guarantees for an authored, clipped, mirrored or deformed mesh; and two depth
   layers cannot say which body a surface belongs to. The
   [transmission plan](../plans/transmission.md) therefore replaces the exit
   layer with a body identity per cascade texel beside the depth, a peel keyed
@@ -273,7 +267,7 @@ the sums of its own triangles' distances, and a frame held for a settled capture
 chooses without the previous frame's level, so its still owes nothing to earlier
 frames.
 
-Large static unions now partition their contour triangles into spatial chunks before
+Large static unions partition their contour triangles into spatial chunks before
 the planar merge and collapse (`SdfMeshChunks`). A triangle stays whole in its
 centroid's bin; the chunk's box encloses the whole surface it draws. Every chunk
 keeps every vertex on its open boundary during merging and locks it during collapse,
@@ -436,8 +430,7 @@ so a lit room keeps its crisp edges and a dark room's edges stay as dark as its
 walls rather than drawing light lines across them. Exposure is presentation only: it reads presentation time and the
 volume, and nothing in simulation state depends on it.
 
-**A point or spot light ends at a range derived from its intensity (the lead's
-decision, delegated by the owner).** Its falloff is the windowed inverse square
+**A point or spot light ends at a range derived from its intensity.** Its falloff is the windowed inverse square
 `saturate(1 − (d/r)⁴)² / d²`, smooth and exactly zero at the range `r`, the
 distance at which a white surface facing the light shows 1/256 of display white
 at the darkest exposure the world adapts to. Past it the light darkens nothing a
@@ -505,7 +498,7 @@ is borrowed from the currently installed graph.
 
 **The frame-rate bar is the slowest frame at the highest quality.** Until
 initial development is done, every machine runs the highest quality settings,
-and lower qualities wait (the owner's ruling). Today those settings are the
+and lower qualities wait (the owner's ruling). Those settings are the
 `world.quality high` preset: high shadows from two shadowed lights, ambient
 occlusion, temporal reconstruction, high indirect lighting and native render
 scale. The bars, each the slowest frame and not the average:
@@ -590,13 +583,8 @@ A check that needs a particular device, driver state, operating system or
 display is not run package by package. Each is listed in
 [the programme's deferred checks](../plans/rendering.md#deferred-to-the-end),
 and they run together when the programme ends, on the code it finally ships.
-They are P1a's windowed boot on a machine with no GPU driver; P1b's
-qualification on the reference GPUs, the RTX 4070 and the AMD devices, and its
-driver-removal exercise; the recorded camera run of P12b-4; the recorded Windows
-editor click of P13b-4; P10's hardware observations at `high`; P15's Steam Deck
-run at the highest quality and its 45 FPS bar; and P16's checks on an HDR
-display. For the GPU checks each change runs, whether the two backends
-agree is judged in one final review pass rather than change by change.
+For the GPU checks each change runs, whether the two backends agree is judged
+in one final review pass rather than change by change.
 
 **Device-local memory is counted by role, not by memory type.** Images,
 device-local buffers and imports count on both backends; host-visible,
@@ -745,7 +733,7 @@ wherever their packing rules disagree, and none of that buys a pass anything,
 so every pipeline source is HLSL. Because declarations are generated, the engine assigns every group,
 binding, register, and offset itself, which is what a language-level parameter
 block would otherwise buy and is a stronger cross-backend guarantee than any
-allocator's. Slang is the better language and the wrong trade now: DXIL still
+allocator's. Slang is the better language and the wrong trade: DXIL still
 comes out of DXC, so a Slang pipeline pins two toolchains; it compiles several
 times slower on the largest include, which is already the slowest part of the
 build; and the features that would justify it, precompiled modules and link-time
@@ -891,13 +879,10 @@ along with the simulation. A capture carries it as its region tick, and
 `puck parity`'s tick verdict holds it to the armed tick, ordered before the
 pixel verdict, so a skewed capture fails as a skew. `puck parity` pins one
 reference tier, `high`, and its `bound` station's pixels depend on a bound row
-the world's own rules move. Deferred hardware observations also run at `high`
-and meet that machine's worst-frame bar.
+the world's own rules move. Hardware observations also run at `high` and meet
+that device's worst-frame bar.
 
 ## The frame graph and nesting
-
-These decisions shape packages P11 to P17. The inventory of today's code that
-they respond to is in the programme's implementation status.
 
 **The frame graph is the centre of rendering, and the SDF engine is one pass
 package in it.** The SDF engine began as the host. It composited panes in its
@@ -906,7 +891,7 @@ round-robin refresh budget, and post-processing and the overlay were nodes
 chained after it. That
 design grew from a prototype, and each capacity in it is a constant rather than
 a planned cost. The replacement has to be better at every job the SDF engine
-does now. So composition, nesting, sources, and output belong to the graph, and
+does. So composition, nesting, sources, and output belong to the graph, and
 the SDF passes become a package the graph schedules like any other. The move
 happens behind a capability matrix generated from the engine's code, so no
 feature is lost by accident.
@@ -1092,12 +1077,12 @@ owns its layout, costs and limits.
 GI proportional to change: newly landed geometry re-measures only probes
 whose measurements it can affect. This is the
 [job-system and GI scheduling work](../plans/open-items.md#engine-job-system),
-rather than a second executor. The current implementation in
+rather than a second executor.
 [`SdfMeshIrradiance`](../../src/Puck.SdfVm/SdfMeshIrradiance.cs) builds scenes
 and traces batches on the thread pool, reuses unchanged geometry hierarchies,
 and retains old probe data until replacements publish. A static-scene change
-currently invalidates the whole probe generation; selective retracing remains
-part of that work.
+invalidates the whole probe generation; selective retracing is part of that
+work.
 
 **Visibility is measured as local first-hit surfaces.** Each probe holds a
 12×12 octahedral surface map. One bounded closest-hit ray per texel stores an

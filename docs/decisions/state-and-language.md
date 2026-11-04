@@ -7,7 +7,7 @@ lives in the manual; a decision here is why the contract has the shape it has.
 ## The rebuild
 
 **D1 — One store.** The old substrate held state three ways: a document, a
-frame over it, and per-transform copies. A columnar `StateArena` is now the
+frame over it, and per-transform copies. A columnar `StateArena` is the
 runtime truth for every cell in the document lane and the per-participant
 lanes; the document's row list is its serialization, produced by export and
 consumed by import; a hypothetical is a journal scope on the same arena, and
@@ -22,8 +22,8 @@ world hash itself. Only `Lattice` and `Slot` shapes may be host-owned, because
 a host can serve those without an ordering contract; other shapes wait for a
 case.
 
-**D2 — One cell representation and one shape axis.** Four enumerations once
-described what a cell was. `CellValue` is a closed union with one case per
+**D2 — One cell representation and one shape axis.** One enumeration
+describes what a cell is, not four. `CellValue` is a closed union with one case per
 `CellKind`, written to the repository's `[Union]` pattern so "what is a union
 here" stays one grep, and the arena stores each kind in its own column set. A
 vector case carries opaque bytes, with the typed view owned by
@@ -33,8 +33,8 @@ enumeration; the participant role is a field on the descriptor. `StateEnum`
 joins the document model, so a symbolic value is validated on write and
 decompiles to its member name.
 
-**D3 — Capabilities are types.** A rule used to reach a host through booleans
-and self-reported lists. `IStateReader` now carries only what every host
+**D3 — Capabilities are types.** A rule reaches a host through typed facets,
+never booleans or self-reported lists. `IStateReader` carries only what every host
 answers (the arena, the catalog, the tick pair, the bound-key context, the
 per-evaluation scratch) and one question, whether the host advertises a facet.
 A document project declares its facets as interfaces; an operand or effect
@@ -292,13 +292,13 @@ in the budget; the refusal names the module instance that crossed the ceiling.
 system's bindings and chords, authored in the same sources, and `let` is the
 language's compile-time constant, so a `let` inside a rule would read as
 evaluated at compile time. The declaration is `local name : Kind = expression`,
-read by its bare name, ceiling `MaxLocalsPerRule`; the old spelling is
-rewritten once with no alias.
+read by its bare name, ceiling `MaxLocalsPerRule`, with no alias for an older
+spelling.
 
-**Go ships at 19×19.** The 9×9 answer rested on the 256-cell set the pattern
-algebra lowered to. C2 widened that carrier for reasons of its own. The debug
-world now has the [full physical table](../../worlds/debug/go.md), with all
-361 stones; Go no longer waits on that engine work.
+**Go ships at 19×19.** A 9×9 answer would rest on the 256-cell set the pattern
+algebra lowered to; C2 widened that carrier for reasons of its own. The debug
+world has the [full physical table](../../worlds/debug/go.md), with all 361
+stones, and Go does not wait on engine work.
 
 ## The language
 
@@ -317,7 +317,7 @@ source alone, like the compile-time layer, and prints back from nothing; a
 generated name it leaves in a document is refused by name. A rule scope's
 members are authored rules under a joined name and still print back. Nothing
 else about a surface is a contract: names, keywords, and shapes change freely,
-rewritten once across the sources with no alias.
+rewritten across the sources with no alias.
 
 **P2 — Two layers, reshaped differently.** The vocabulary layer (`rule`,
 `table`, `pattern`, `local`, a gate, an operand) is a projection of the
@@ -329,8 +329,9 @@ written, since a save edits only the changed nodes.
 
 **P3 — Formatting is printing.** The formatter parses a source and prints its
 tree, comments and blank lines included, so it cannot produce a source that
-means something else. It once split `next{12}` across lines, which stopped
-compiling, and unindented a wrapped `export` list, which silently emptied it.
+means something else. A formatter that splits `next{12}` across lines stops
+the source compiling, and one that unindents a wrapped `export` list silently
+empties it.
 
 **P4 — Operands are grammar.** The colon channels (`$reduce:count:…`,
 `$match:…:distance[…]`, `$history:row:age`, `$bind:`) were strings the state
@@ -358,9 +359,9 @@ shadows a row of the same name; an enumeration word is never shadowed, and
 one bare word that is a key is never a binding.
 
 **P5 — One door.** Every consumer that compiles a source calls the same entry
-point with the same options; three test harnesses once compiled a source
-differently from `puck compile`, unnoticed until a game used an `sql { }`
-block.
+point with the same options; a harness that compiles a source differently
+from `puck compile` hides the difference until a game uses the construct it
+touches.
 
 **The shape the other plans demand is a module language over a closed
 vocabulary.** Eight plans need composition, five need sources of hundreds to
@@ -437,11 +438,9 @@ cross-host and scenario gaps live in the [state plan's open items](../plans/stat
 
 ### The authoring consensus
 
-The owner asked the lead and its partners (Codex, Antigravity and Fable, two
-rounds of independent review) for consensus on genuinely improving the
-language, with big changes welcome, and deferred the result to the team: "Our
-main goal is for the language to truly grow and improve." The work and its
-order are [S9](../plans/state-and-language.md#s9--the-authoring-consensus).
+The owner asked for the language to genuinely improve, with big changes
+welcome: "Our main goal is for the language to truly grow and improve." The
+work and its order are [S9](../plans/state-and-language.md#s9--the-authoring-consensus).
 
 - **One expression language.** A gate is any expression; `and`, `or` and `not`
   are operators. The predicate grammar, the kind suffix and the
@@ -561,9 +560,7 @@ model visible in the source.
 
 ### The state review
 
-The owner asked every partner for a critical review of the state system as a
-whole. Codex (GPT-6 Astra), Antigravity (Gemini 4 Argon) and Fable reviewed it
-independently and answered the lead's synthesis in a second round, beside a
+The owner asked for a critical review of the state system as a whole, beside a
 usage audit of where the engine misuses or bypasses it. The work is
 [S10](../plans/state-and-language.md#s10--the-state-review). No determinism
 defect was found; the weaknesses are structural and economic.
