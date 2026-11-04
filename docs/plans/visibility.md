@@ -6,10 +6,9 @@ two-phase depth-occlusion test over counted indirect draws
 ([the raster decision](../decisions/rendering.md#a-raster-pass-draws-only-what-it-can-show),
 [frame rendering](../rendering/sdf/handbook/frame-rendering.md)). R2 moved that
 selection onto the GPU without reducing the work: the meadow still issues one
-command per blade part, 4,215 of them for 288 distinct geometries. The lead
-ran a research round across three families (GPU-driven pipeline architecture;
-instancing, foliage and density at scale; recent and SDF-specific work), each
-read the others and answered, and their consensus lists agree on the same
+command per blade part, thousands of them for a few hundred distinct geometries.
+A research round across GPU-driven pipeline architecture; instancing,
+foliage and density at scale; and recent and SDF-specific work agrees on one
 order. This plan turns that agreement into decisions, says how each serves an
 author's scene, names what the round found missing, records what was rejected
 and why, and orders the build as lanes checked on the running debug world.
@@ -46,9 +45,9 @@ in the tree.
   pixel band and per-draw level history on the GPU and removes CPU `Choose`.
 - **Every phase writes one command per candidate, empty or not**, and sets its
   count to every candidate (`Assets/Shaders/Sdf/passes/sdf-mesh-occlusion.comp.hlsl:184-192`;
-  the same on R2). On R2 the glass pass read 0.182 ms on the GPU for two real
-  draws among 7,578 candidates, against 0.012 to 0.017 ms on the CPU path:
-  about 22 ns per candidate for selection and the empty-command walk. The
+  the same on R2). On R2 the glass pass costs more on the GPU for a couple of real
+  draws among thousands of candidates than the CPU path did: tens of
+  nanoseconds per candidate for selection and the empty-command walk. The
   opaque pass pays it twice and each cascade once.
 - **The meadow** (`debug.go meadow`) holds 1,994 two-part blades: 4,004
   dynamic slots and 4,215 retained draws from 288 geometries, 14.6 draws per
@@ -96,16 +95,16 @@ in the tree.
   `views` shade from that record; no material code runs per fragment
   (`passes/sdf-mesh.frag.hlsl:20`; Burns and Hunt, "The Visibility Buffer",
   JCGT 2(2), 2013, <https://jcgt.org/published/0002/02/04/paper.pdf>).
-- **R2's own frame times rank nothing.** They were read on a loaded machine:
-  the lobby read 39 to 42 ms produce in R2's runs against 6.5 to 9.4 ms quiet
+- **Frame times read under load rank nothing.** Contention from other lanes'
+  builds and Worlds multiplies produce time several-fold
   ([packet](open-items.md#engine-job-system)). The quiet readings that rank the
-  steps are [the first settle window's](#what-the-first-settle-window-read).
+  steps are [M1 and M2's](#what-m1-and-m2-showed).
 
 ## Measure first
 
 Two measurements order the work. The lead runs both in a settle window
 ([orchestration](../../.claude/skills/orchestration/SKILL.md#schedule-machines)),
-on the lead machine with every other lane's builds, suites and Worlds drained.
+with every other lane's builds, suites and Worlds drained.
 
 **M1, where the meadow's frame goes.** `debug.go meadow`, Direct3D 12 and a
 windowed Vulkan leg, `world.cadence off`, `world.gpu-timing on`. Three legs
@@ -125,7 +124,7 @@ produce, neither helps much until V3 and V4. Holding the wind also changes
 which blades a box keeps, so the legs are read beside their draw counts.
 
 **M2, whether the meadow is geometry-bound off the 4070.** On the RTX 2060
-and at the Deck's resolution on the lead machine (the Deck itself when one is
+and at the Deck's resolution on a 4070 (the Deck itself when one is
 reachable), at the same view: GPU time of the mesh pass and each cascade
 beside `world.counters gpu pass sdf.world$mesh` (draws, vertices), and
 triangles per blade part at `world.detail 0`, `1` and `2`
@@ -133,63 +132,41 @@ triangles per blade part at `world.detail 0`, `1` and `2`
 Hundreds of triangles a part, or the mesh pass and cascades taking a large
 share of the Deck's 22.2 ms, put V3 and V4 ahead of V2 on that device.
 
-### What the first settle window read
+### What M1 and M2 showed
 
-On the quiet lead machine (RTX 4070, R2's GPU selection, `world.quality high`,
-1280×900, the day cycle running, `world.cadence off`, `world.gpu-timing on`,
-bakes settled; frames are `host.frames` over 10 s, GPU times the root node's
-32-sample means):
+M1 ran on a quiet RTX 4070 at the highest quality with the day cycle running,
+cadence off and GPU timing on, once the bakes had settled. Direct3D 12 and Vulkan
+agree closely.
 
-| M1 leg at `debug.go meadow` | Direct3D 12 frame avg / p99, ms | produce / simulate, ms | Vulkan frame avg / p99, ms | produce / simulate, ms | Root GPU, D3D12 / Vulkan, ms | Mesh-pass draws, D3D12 / Vulkan |
-|---|---:|---:|---:|---:|---:|---:|
-| 1. As authored | 66.9 / 82.0 | 47.9 / 18.7 | 69.1 / 104.2 | 49.0 / 19.9 | 21.7 / 21.1 | 3,908 / 3,832 |
-| 2. Poses held | 60.5 / 75.7 | 43.5 / 16.7 | 59.7 / 74.2 | 43.0 / 16.4 | 17.4 / 17.9 | 3,881 / 3,896 |
-| 3. Leg 1 under a thread-time trace | 70.0 / 84.5 | 49.8 / 19.9 | 72.0 / 102.8 | 50.7 / 21.2 | 22.3 / 21.9 | — |
+A thread-time trace finds the frame thread busy all the time. Within produce,
+the largest costs are CPU field queries: the creation effectors' surface probes
+(`WorldCreationInstances.ApplyEffectors` into `WorldEffectorSolver.Probe`) and
+the chase camera's clearance march (`WorldCameraClearance.Clear`), which together
+take roughly a third of the frame. The presenter's `Dress` label is mostly that
+clearance march, not draw work. Mesh dressing and changed-draw staging, residency
+preparation, table packing, command recording and GC polling are each a small
+share, and the tick is a large one.
 
-The trace (`dotnet-trace`, `dotnet-sampled-thread-time`, 15 s) finds the frame
-thread busy all the time, and both backends within a point of each other:
-produce 71 %, of which `WorldFramePresenter.CaptureFrame` is 50 %; inside it the
-creation effectors' surface probes (`WorldCreationInstances.ApplyEffectors` into
-`WorldEffectorSolver.Probe`, CPU `SdfFieldEvaluator` marches) take 27 % and the
-chase camera's clearance march (`WorldCameraClearance.Clear`) 18 %. The
-presenter's `WorldFramePresenter.Dress` (18.6 %) is that clearance march
-(`ResolveCamera` into `WorldSeatViewState.Clear`, 18.0 %), not draw work. The
-draw list's historical "SdfMeshPathBake.Dress" label is 4.4 % and
-`SdfWorldTables.StageChangedDraws` 4.4 %, both under the residency's capture;
-`SdfWorldResidency.PrepareOnce` 9.8 %;
-`SdfWorldTables.Pack` 6 %; command recording (`ShaderPipelineRenderNode.RenderFrame`)
-2.5 to 4.7 %; the tick 23 to 28 %; GC polling 7 to 8 %.
+**M1's verdict.** Holding the poses removes only a small part of the meadow's
+extra frame time over the hero studio, so per-slot motion is not most of the
+increase. The plan's rule would then send V1 first, but the trace refutes its
+premise that the rest is per-draw cost: recording, V1's CPU target, is a few
+milliseconds, while motion and record churn, V2's target, is somewhat more. The
+evidence supports **V2's first steps (V2a, V2b) ahead of V1a**, and both behind a
+cost no V-step names: CPU field queries on the frame thread, then the tick. The
+root queue's GPU time is well under produce, so V3 and V4 do not lead on the
+4070; its largest pass is `views`. Holding the sun saves little, so the day
+cycle's continuous relight is not the cause.
 
-**M1's verdict.** Leg 1 less leg 2 is 6.3 ms on Direct3D 12 and 9.4 ms on
-Vulkan, against the meadow's 42 ms over the hero studio (24.7 ms), so per-slot
-motion is not most of the increase. The plan's rule would then send V1 first,
-but the trace refutes its premise that the rest is per-draw cost: recording,
-V1's CPU target, is 2 to 3 ms, while motion and record churn, V2's target, is
-6 to 9 ms. The numbers support **V2's first steps (V2a, V2b) ahead of V1a**,
-and both behind a cost no V-step names: CPU field queries on the frame thread
-(effector probes and camera clearance, about 31 ms of the meadow's 70) and the
-tick (about 20 ms). The root queue's GPU time (21 ms) is under produce (48 ms),
-so V3 and V4 do not lead on the 4070; its largest pass is `views` (8.7 to 9.2 ms).
-Holding the sun at the meadow saves 3 ms (65.6 to 62.6 ms on Direct3D 12), so the
-day cycle's continuous relight is not the cause.
-
-**M2 on the lead machine.** No RTX 2060 or Steam Deck was reachable; the
-4070 at the Deck's resolution (1280×800), meadow, both backends:
-
-| `world.detail` | Mesh-pass vertices | Vertices a draw (÷ 3 = triangles) | Mesh GPU, D3D12 / Vulkan, ms | Three cascades, D3D12 / Vulkan, ms | Root GPU, D3D12 / Vulkan, ms |
-|---|---:|---:|---:|---:|---:|
-| auto | 5.14 M | 1,364 | 0.93 / 0.78 | 3.03 / 2.51 | 16.1 / 13.9 |
-| 0 | 11.8 M | 3,039 | 1.07 / 0.94 | 7.01 / 6.60 | 15.8 / 14.3 |
-| 1 | 2.37 M | 629 | 0.68 / 0.59 | 3.29 / 3.31 | 15.6 / 16.6 |
-| 2 | 1.54 M | 398 | 0.61 / 0.48 | 2.67 / 2.37 | 15.2 / 14.7 |
-
-At `auto` a meadow draw averages about 455 triangles (blade parts with the
-trees and rocks among them), so blade parts are in the hundreds, the
-threshold M2 names. On the 4070 the mesh pass and cascades take about 4 ms
-at the Deck's resolution; whether that is a large share of the Deck's 22.2 ms
-waits on the Deck or the 2060. `puck mesh audit --group stem-` (M2's
-per-part count) selects no group: the audit's rest scene labels a body's
-group by slot and does not name the meadow's placement blades.
+**M2.** No RTX 2060 or Steam Deck was reachable, so the 4070 ran at the Deck's
+resolution on both backends. A meadow draw averages a few hundred triangles at
+`world.detail auto`, so blade parts are in the hundreds, the threshold M2 names.
+Raising detail to 0 more than doubles the cascades' cost, and levels 1 and 2 cut
+the mesh pass's vertices by half or more. On the 4070 the mesh pass and cascades
+take a small share of the frame; whether that is a large share of the Deck's
+22.2 ms waits on the Deck or the 2060. `puck mesh audit --group stem-` (M2's
+per-part count) selects no group: the audit's rest scene labels a body's group by
+slot and does not name the meadow's placement blades.
 
 ## R2 is the foundation
 
@@ -251,7 +228,7 @@ table:
 | `SdfSlotClip` portal straddling | Copies a straddling body's draws into the list with each side's clip plane (`SdfMeshPathBake.cs:414-418`) | A straddle adds instances carrying the other clip plane; nothing renumbers |
 | The occlusion visible set | Keyed by draw index (R2's kernel) | Keyed by instance identity and generation |
 
-**Why:** all three families rank compaction and instanced buckets first. The
+**Why:** every line of research ranks compaction and instanced buckets first. The
 mechanism is borrowed and wins on its own. RedLynx's benchmark draws 250,000
 moving objects in "only two DrawInstancedIndirect calls", 2.3 ms of GPU and
 0.2 ms of one Jaguar core on Xbox One at 1080p, a benchmark rather than a
@@ -271,7 +248,7 @@ Kuth et al., "Real-Time Procedural Generation with GPU Work Graphs", HPG 2024
 (<https://gpuopen.com/download/Real-Time_Procedural_Generation_with_GPU_Work_Graphs-GPUOpen_preprint.pdf>,
 Figure 11), coalesce 79,710 single-instance draws into 965 and cut render time
 from 27.74 to 0.62 ms on an RX 7900 XTX. Two limits keep that from transferring:
-their baseline costs about 350 ns a draw against R2's 22 ns per empty
+their baseline costs about 350 ns a draw against R2's tens of nanoseconds per empty
 candidate, so the 45-fold ratio is theirs, not Puck's; and their coalescing is
 unordered ("the element order differs every frame"), which Puck's stable order
 forbids, hence a scan rather than unordered appends.
@@ -320,8 +297,7 @@ grass path in C#: it accelerates the authored program (AGENTS.md, "Puck code
 over engine code"), and its eligibility test is structural, read from the
 program, not a list of features.
 
-**Why:** both Claude and Codex rank it second, behind V1 only until M1 says
-otherwise. It removes per-slot CPU posing, the `Dress` rebuild and the record
+**Why:** it ranks second, behind V1 only until M1 says otherwise. It removes per-slot CPU posing, the `Dress` rebuild and the record
 re-staging together, and V1 alone leaves all three. Ghost of Tsushima animates
 its grass on the GPU per blade from parameters (Wohllaib, "Procedural Grass in
 Ghost of Tsushima", GDC 2021,
@@ -353,7 +329,7 @@ limit.
    lowering choice the program certifies, not a second mesher of fields.
 2. **A faster error-aware simplifier** in place of `SdfMeshCollapse`, held to
    Puck's measured per-material, crease and normal bounds, measured against
-   the collapse's 318 of 1,006 bake thread-seconds in the measured run
+   the collapse's share of bake thread-seconds
    ([packet](open-items.md#bake-proportional-to-change)) and its
    `puck mesh audit` scores.
 3. **Field-derived coarse levels** only as a bake experiment on solid meshes:
@@ -374,11 +350,10 @@ on a 16-thread Ryzen 7950X ("Billions of triangles in minutes",
 which shows a modern simplifier is far faster than Puck's collapse. It does not
 give Puck's saving: the article states no simplifier throughput, its
 clusterizer is most of the runtime, and Puck's bounds must be re-checked. The
-estimate is tens of thread-seconds for the collapse's work, not the hundredfold
-cut one report claimed. A coarse lattice still pays crossings, contour and
-answer per surface cell, roughly a third of the fine stages' cost, so by the
-round's estimate field-derived levels save about 130 thread-seconds at best,
-not 310.
+estimate is tens of thread-seconds for the collapse's work, not a hundredfold
+cut. A coarse lattice still pays crossings, contour and answer per surface cell,
+roughly a third of the fine stages' cost, so by the round's estimate
+field-derived levels save well under the collapse's whole share at best.
 
 ### V4. Raster: an early-depth variant and a packed visibility target
 
@@ -518,8 +493,8 @@ wins.
 
 ## The gaps the round named
 
-**A quiet baseline.** All three reports reasoned from loaded numbers; M1 and M2
-exist to replace them, and nothing below is ordered until they run.
+**A quiet baseline.** Numbers read under load order nothing; M1 and M2 supply
+the quiet readings that order the steps.
 
 **The identity consumers.** The table under V1 lists them. Each moves in V1's
 lane, not after it: an instance that a pick, a diagnostic or a reprojection
@@ -563,12 +538,12 @@ times are taken in the lead's settle windows, never by a lane under load.
 | M. Measure | the lead, in a settle window | M1 and M2 as above; the result orders V1 against V2 and V3/V4 against V2 | `host.frames` and `world.gpu-timing timeline` at `debug.go meadow`, three legs, both backends; mesh and cascade time with counts on the 2060 and at the Deck's resolution |
 | R2. GPU selection | rendering (the R2 lane) | Its Vulkan and validation legs | GPU-based validation clean on Direct3D 12 and the validation layer clean on Vulkan; stills at the lobby, the rim, the gallery and the meadow compared tolerantly with the CPU `Choose` build |
 | V2a. Rate holds on placements | rendering | Placement roots in the rate mechanism | `world.debug-view rates` tints far meadow blades by tier; `host.frames` at `debug.go meadow` against M1's leg 1; a presented burst of eight frames shows gusts continuous and roots planted |
-| V1a. Ordered compaction | rendering | Survivors compacted in staged order, the count the survivors, single-instance commands | Commands executed equal draws in `world.counters gpu pass sdf.world$mesh`; glass GPU time near the CPU path's 0.012 to 0.017 ms; stills compared tolerantly |
+| V1a. Ordered compaction | rendering | Survivors compacted in staged order, the count the survivors, single-instance commands | Commands executed equal draws in `world.counters gpu pass sdf.world$mesh`; glass GPU time near the CPU path's; stills compared tolerantly |
 | V1b. Buckets and stable identity | rendering, principal-grade review | The instance/geometry split, buckets, the vertex ABI on both backends, history by instance identity, every consumer in V1's table moved, the budget counters | At `debug.go meadow`: commands near the visible (geometry, level) count; `world.view.pick` on a blade names that blade; `world.debug-view motion` still on held blades; a presented burst shows no tie flicker in `world.debug-view material-id`; a body straddling the garden portal at `debug.go portals` clipped on both sides; `world.debug-view report colliders --json` still compares against the baked mesh (its `coverage.comparisons` counts mesh witnesses after bakes settle); a teleport and back shows no missing draws |
 | V2b. Retained instance updates | rendering | `Dress` without a rebuild; uploads by change | `dotnet-trace` of the frame thread at the meadow: no list rebuild and record staging proportional to moved slots; `world.reload` of one blade geometry rebakes one mesh and every instance follows |
 | V2c. Authored motion on the GPU | rendering, principal-grade review | The eligibility test, the compiled kernel, program-derived bounds, previous pose on the GPU, CPU evaluation for picks | At the meadow with wind on: blades move as before (a presented burst against V2b's); `world.debug-view motion` shows blade motion and none on still ground; a blade pick lands on the drawn blade; swept-box inflation reported; an author's non-foliage presentation program in a scratch world runs the same path |
 | V3a. Lossless lowering | rendering | Collinear runs on isolated meshes; exact lowering where the program proves it; the rendering skill's one-contouring rule rewritten to name the lowering choice | `puck mesh audit` clean on the blade groups; triangles per blade part against M2's; cold bake thread-seconds per stage; meadow stills compared tolerantly |
-| V3b. Faster simplifier | rendering | An error-aware simplifier under Puck's bounds beside `SdfMeshCollapse`, keeping the better | Land-stage thread-seconds against 318; `puck mesh audit` scores no worse; `world.detail 1` and `2` stills at the gallery compared tolerantly |
+| V3b. Faster simplifier | rendering | An error-aware simplifier under Puck's bounds beside `SdfMeshCollapse`, keeping the better | Land-stage thread-seconds against the collapse's; `puck mesh audit` scores no worse; `world.detail 1` and `2` stills at the gallery compared tolerantly |
 | V3c. Field-derived levels | rendering, bake experiment | Coarse levels contoured from the field for large static unions only | Bake thread-seconds and audit scores against V3b's on the hall's unions; kept only if both win |
 | V4a. Early-depth variant | rendering | The non-fading pipeline with `[earlydepthstencil]` | Mesh-pass GPU time and shaded fragments at the meadow on the 2060 and at the Deck's resolution; the faded avatar still reveals the room behind her at `debug.go stage` |
 | V4b. Packed visibility target | rendering | The `uint2` target and depth reconstruction | `surface` and `pyramid` GPU time against V4a's; AO and stills compared tolerantly at the gallery and meadow |
@@ -578,25 +553,6 @@ V2a, V3a and V4a share no files with V1 and run beside it once M1 and M2 are
 read. V1b waits on V1a; V2b on V1b, since retained updates write the instance
 table; V2c on V2b; V5 on V1b. If M1 shows motion dominating, V2a and V2b move
 ahead of V1a, and V2b then builds the instance table V1b consumes.
-
-## Corrections
-
-Errors the round found in Puck's own documents and in its reports:
-
-- No packet or document here calls the occlusion and AO pyramids duplicates;
-  two research reports did, and the consensus corrected them (above). The
-  rendering skill's kernels reference names the `pyramid` pass's output as
-  the ambient occlusion's pyramid and sets it apart from the draw-occlusion
-  pyramid, so the ambiguous "occlusion's depth pyramid" does not mislead
-  another reader.
-- One report's audit of Puck's code cited symbols and constants that do not
-  exist (`DrawIndexed`, an 8,192-draw limit, metre-based level thresholds,
-  material evaluation in the raster fragment). None of its savings estimates
-  is used here.
-- The Kuth et al. figures above are the paper's Figure 11, checked by two
-  readers. The paper emulates graphics leaf nodes through indirect execution,
-  so it holds no mesh-node comparison; one report's mesh-node figures and its
-  generation times are wrong and are not used.
 
 ---
 

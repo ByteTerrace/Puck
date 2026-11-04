@@ -1072,10 +1072,10 @@ figure, free memory, free disk on the working directory's drive and the
 number of MSBuild nodes left running for reuse:
 
 ```text
-GPU idle cpu=4% freeRAM=4.8GB freeDisk=50.3GB reuseNodes=0
-GPU busy (Puck.World 4242) cpu=61% freeRAM=3.1GB freeDisk=50.2GB reuseNodes=0
-PRESSURE freeRAM<2.0GB cpu=35% freeRAM=1.6GB freeDisk=50.2GB reuseNodes=2
-CAPACITY cpu=12% freeRAM=7.9GB freeDisk=50.3GB reuseNodes=0
+GPU idle cpu=<percent> freeRAM=<GB> freeDisk=<GB> reuseNodes=<count>
+GPU busy (<process> <pid>) cpu=<percent> freeRAM=<GB> freeDisk=<GB> reuseNodes=<count>
+PRESSURE <reason> cpu=<percent> freeRAM=<GB> freeDisk=<GB> reuseNodes=<count>
+CAPACITY cpu=<percent> freeRAM=<GB> freeDisk=<GB> reuseNodes=<count>
 ```
 
 - `GPU busy` or `GPU idle` appears at the first reading and on every change
@@ -1107,10 +1107,9 @@ gigabytes: capacity needs more than five sixteenths of it free, and pressure
 begins below one eighth. Capacity also needs idle logical processors for the
 work being admitted: three, but never fewer than 40% of them nor more than half.
 Free disk below 10GB is pressure on every machine, because a build writes the
-same outputs whatever the machine's size. A 16GB, six-thread machine therefore
-has capacity with CPU below 50% and more than 5GB free, and is under pressure
-below 2GB; a 32GB, 16-thread machine has capacity with CPU below 60% and more
-than 10GB free, and is under pressure below 4GB. Options override these
+same outputs whatever the machine's size. A hypothetical machine with 16GB and
+six logical processors therefore has capacity with CPU below 50% and more than
+5GB free, and is under pressure below 2GB. Options override these
 defaults, and `puck gate` and `puck affected` admit their heavy steps by the
 same machine thresholds. A machine that cannot report its installed memory is
 judged as a 16GB one. The [orchestration skill](../../.claude/skills/orchestration/SKILL.md)
@@ -1714,7 +1713,7 @@ singleton identity in child scopes and caller ownership of supplied singleton
 instances are preserved, because every scenario builds the native container.
 `--jobs` bounds concurrent workers. For 96 scenarios, `--reproduce --jobs 2`
 uses two workers, 96 native container boots and 96 authored scenario runs. The
-default of at most two concurrent workers leaves memory headroom on a 32 GB
+default of at most two concurrent workers leaves memory headroom on a
 development machine; use `--jobs 1` alongside other heavy work.
 
 A run of more than one world (a directory, or a source with several `test`
@@ -1875,9 +1874,8 @@ so the run judges nothing. `--seed`, `--lines` and `--actions` override the
 fixture's draws; `--keep` keeps the staged world, every world's transcripts and
 exports.
 
-The worlds themselves are quick: the probe's six run in about 10 seconds in
-one worker, most of it the first boot's one-time start-up, and each later
-world takes under half a second. The waits are the build lease and the heavy
+The worlds themselves are quick: most of a run is the first boot's one-time
+start-up, and each later world takes well under a second. The waits are the build lease and the heavy
 lease, each up to two hours, and the World build of the checkout's sources has
 its own thirty minutes once it starts ([waiting and
 building](#where-the-world-artifact-is-built)), so a long build queue is no
@@ -2345,9 +2343,9 @@ fails the run (exit 1). The table prints `PASS` or `FAIL` per still;
 `reproduced` verdicts alongside the measurements. A passing pose hash alone
 does not establish that the contact sheets repeat.
 
-The full Direct3D 12 comparison passes all 34 scenarios and 538 stills: both
-hashes agree throughout, 484 stills are pixel-identical, and the remaining 54
-differ on at most nine pixels by one level. Lockstep completes program and mesh
+The full Direct3D 12 comparison passes: both hashes agree throughout, most
+stills are pixel-identical, and the rest differ on a handful of pixels by one
+level. Lockstep completes program and mesh
 changes, irradiance and hosted machine steps before their frames are read;
 machine source publication numbers alone cannot establish equal video pixels.
 The small remaining residue stays an [open item](../plans/open-items.md#dual-stick-play-and-the-moths-motion).
@@ -2551,8 +2549,8 @@ versions, manifests (by pin), scenario lists or tick counts.
 Exit codes: `record` exits 0 when it has written the stream and 2 when the
 manifest or a scenario cannot be read or run, or a scenario moves a component it
 exercises nowhere. `compare` exits 0 with no
-divergence, 1 on a divergence and 2 on a refusal. The shipped manifest records
-13 scenarios, 1,480 ticks and about 24,000 hashes in under ten seconds. Every
+divergence, 1 on a divergence and 2 on a refusal. Recording the shipped manifest takes
+seconds and writes one hash per component per tick. Every
 per-tick component but the topologies is exercised by some scenario. The
 topologies are declaration that nothing at run time changes, so no scenario can
 move them; a law holds instead that a world declaring one folds it and that the
@@ -4240,8 +4238,8 @@ missing repository root.
 
 Regenerates every GENERATED Rust source registered in
 `Puck.Scripting.WasmStdlibSources.All`—the maintained set of generated sources
-that make up the WASM standard library, not a single one-off port. Today that
-registry holds three files under `wasm/puck-stdlib/src`. Two give the WASM addon
+that make up the WASM standard library, not a single one-off port. The
+registry holds files under `wasm/puck-stdlib/src`. Two give the WASM addon
 guest a self-contained, bit-exact copy of `FixedQ4816`'s seven algorithm-pinned
 functions (`atan2`, `sin`/`cos`, `exp2`, `log2`, `pow`, `smoothstep`): `fixed_generated.rs`
 (the ported functions plus their interval tables and polynomial coefficients)
@@ -4369,7 +4367,7 @@ with read-only calls and stats the git index, the changed files, the worktree's
 `.claude/scratch/` entries (top level only) and the lane's log.
 
 ```text
-active  controls  codex/controls  ahead 3 files 2 commit 14m "controls: ..." write 2m log 2m lease gpu:queued#5(2/3,ahead 4) brief controls done
+active  <name>  <branch>  ahead <n> files <n> commit <age> "<subject>" write <age> log <age> lease gpu:queued#<ticket>(<turn>/<lanes>,ahead <n>) brief <id> done
 ```
 
 - `ahead` counts commits on the branch that `--base` (default:
@@ -4440,7 +4438,7 @@ Run `puck lease gpu --holder <lane> [--lane <lane>] [--wait <seconds>] -- <execu
 
 The main checkout, found through Git's common directory, owns `.claude/leases/<name>/holder` for all its worktrees. The holder records the holder name, UTC acquisition time, process ID and process start ticks on four lines, and the lane on a fifth only when it is not the holder's first word. A persistent sibling `<name>.guard` file is held exclusively for the command's lifetime; it is not removed, because replacing the locked file would let competing processes lock different files. The holder directory is removed on exit, including child failure and Ctrl+C. A taken lease refuses immediately unless `--wait` supplies a nonnegative number of seconds. Waiting uses the CLI clock.
 
-Admission rotates between lanes and is first come, first served within a lane. A lane is the first word of `--holder` (`probe-depth-fix timing run` is lane `probe-depth-fix`), or the value of `--lane` when given; `puck_world_start` passes its `lane` argument the same way and names the checkout's directory when it gets neither `holder` nor `lane`. Every acquisition, even `--wait 0`, takes a ticket in the sibling `<name>.queue` directory: a file named by a zero-padded sequence (the highest present plus one, claimed with an exclusive create) holding the same metadata lines as a holder. Each time a lane takes the lease, the sibling `<name>.rotation` directory records it as the most recently served (one file per lane, holding a serial one above every other lane's). The guard goes to the oldest live ticket of the lane served least recently. A lane that has never held the lease takes the serial of the lane served most recently as it first queues (the same file, created whole and never over a serial a holder wrote), so a new lane ranks behind every lane served longer ago and behind a lane served at the same point whose ticket is older, never ahead of a lane that was already waiting. A lane with three queued runs gets one turn per round while other lanes wait. With lane A queued three times ahead of lanes B and C, once each, runs are admitted A1, B1, C1, A2, A3. A holder that exits and immediately acquires again queues behind every other lane already waiting, and a newcomer cannot overtake a lane that has waited, because a newcomer's lane is served after theirs. The wait message names the holder, how many tickets are ahead in this order, and the lane's turn among the queued lanes (`lane a is 2 of 3 in the round`). A ticket is removed when its waiter acquires, times out or is cancelled. A ticket whose process has exited (or whose PID was reused) is deleted by the next waiter that looks, and a ticket whose metadata never became readable is deleted once ten seconds old, so a power trip leaves nothing that blocks admission. The queue lives beside the lease, so a child lease under an ancestor holder queues in `child.queue` inside that holder's directory.
+Admission rotates between lanes and is first come, first served within a lane. A lane is the first word of `--holder` (`example-lane timing run` is lane `example-lane`), or the value of `--lane` when given; `puck_world_start` passes its `lane` argument the same way and names the checkout's directory when it gets neither `holder` nor `lane`. Every acquisition, even `--wait 0`, takes a ticket in the sibling `<name>.queue` directory: a file named by a zero-padded sequence (the highest present plus one, claimed with an exclusive create) holding the same metadata lines as a holder. Each time a lane takes the lease, the sibling `<name>.rotation` directory records it as the most recently served (one file per lane, holding a serial one above every other lane's). The guard goes to the oldest live ticket of the lane served least recently. A lane that has never held the lease takes the serial of the lane served most recently as it first queues (the same file, created whole and never over a serial a holder wrote), so a new lane ranks behind every lane served longer ago and behind a lane served at the same point whose ticket is older, never ahead of a lane that was already waiting. A lane with three queued runs gets one turn per round while other lanes wait. With lane A queued three times ahead of lanes B and C, once each, runs are admitted A1, B1, C1, A2, A3. A holder that exits and immediately acquires again queues behind every other lane already waiting, and a newcomer cannot overtake a lane that has waited, because a newcomer's lane is served after theirs. The wait message names the holder, how many tickets are ahead in this order, and the lane's turn among the queued lanes (`lane a is 2 of 3 in the round`). A ticket is removed when its waiter acquires, times out or is cancelled. A ticket whose process has exited (or whose PID was reused) is deleted by the next waiter that looks, and a ticket whose metadata never became readable is deleted once ten seconds old, so a power trip leaves nothing that blocks admission. The queue lives beside the lease, so a child lease under an ancestor holder queues in `child.queue` inside that holder's directory.
 
 Heavy suites in `gate` and `affected` use this same lease through admission
 and execution. When a live ancestor already holds it, verified process ancestry
@@ -4461,15 +4459,15 @@ Run `puck lease list` to read the shared lease directory without changing it. Fo
 
 ```text
 build: idle
-gpu: held by probe-depth-fix timing run (lane probe-depth-fix) for 3m 5s; 2 queued
-  1. meadow gpu (lane meadow) waiting 2m 40s; lane 1 of 2 in the round, 0 ahead
-  2. probe-depth-fix retime (lane probe-depth-fix) waiting 1m 2s; lane 2 of 2 in the round, 1 ahead
+gpu: held by <lane-a> timing run (lane <lane-a>) for <time>; 2 queued
+  1. <lane-b> gpu (lane <lane-b>) waiting <time>; lane 1 of 2 in the round, 0 ahead
+  2. <lane-a> retime (lane <lane-a>) waiting <time>; lane 2 of 2 in the round, 1 ahead
 heavy: idle
 ```
 
 ### `puck lease quiet`—a settle window
 
-Run `puck lease quiet --holder <lane> [--lane <lane>] [--wait <seconds>] [--settle <seconds>] -- <executable> <arguments...>` to hold a measurement window: no other lane builds, tests or uses the GPU while the command runs. The verb takes the `heavy`, `build` and `gpu` leases in that one order (the order a heavy suite, a World build and a World boot already nest in, so it cannot deadlock against them), then samples the machine with the same readings [`puck host load`](#puck-host-loadadmission-lines-for-the-machine) prints until it has been idle for `--settle` seconds (default 30; zero skips the wait). Idle means no GPU work, no heavy test run another process started, and CAPACITY by the host-load thresholds (the CPU mean and free memory). The wait prints to standard error what it is waiting on whenever that changes (`the GPU is held by dotnet 15532`, `a heavy test run is held by ...`, `the machine is loaded: cpu=...`). `--wait` bounds the three acquisitions in total and, added to `--settle`, the wait for an idle machine; a lease or a machine that does not come free in time is refused (exit 2) with every lease already taken released. Then the command runs, and the leases are released in reverse on every exit path. A command run under it that takes any of the three leases (`puck sweep`, `puck_world_start`, a World build, `puck lease gpu`) nests under the quiet holder instead of waiting on it; another process's lease waits in the queue until the window closes. Child failure preserves its exit code; cancellation exits 130 and kills the child tree before releasing the leases.
+Run `puck lease quiet --holder <lane> [--lane <lane>] [--wait <seconds>] [--settle <seconds>] -- <executable> <arguments...>` to hold a measurement window: no other lane builds, tests or uses the GPU while the command runs. The verb takes the `heavy`, `build` and `gpu` leases in that one order (the order a heavy suite, a World build and a World boot already nest in, so it cannot deadlock against them), then samples the machine with the same readings [`puck host load`](#puck-host-loadadmission-lines-for-the-machine) prints until it has been idle for `--settle` seconds (default 30; zero skips the wait). Idle means no GPU work, no heavy test run another process started, and CAPACITY by the host-load thresholds (the CPU mean and free memory). The wait prints to standard error what it is waiting on whenever that changes (`the GPU is held by <process> <pid>`, `a heavy test run is held by ...`, `the machine is loaded: cpu=...`). `--wait` bounds the three acquisitions in total and, added to `--settle`, the wait for an idle machine; a lease or a machine that does not come free in time is refused (exit 2) with every lease already taken released. Then the command runs, and the leases are released in reverse on every exit path. A command run under it that takes any of the three leases (`puck sweep`, `puck_world_start`, a World build, `puck lease gpu`) nests under the quiet holder instead of waiting on it; another process's lease waits in the queue until the window closes. Child failure preserves its exit code; cancellation exits 130 and kills the child tree before releasing the leases.
 
 The exclusive guard handle proves ownership; holder metadata is diagnostic. Once the admitted waiter owns the guard, it replaces leftover metadata, including missing or malformed data and an alive adapter PID left when a Windows reader delayed cleanup after a World exited. Disposal always releases the guard even when directory deletion is delayed. Metadata readers permit deletion, and an unreadable queue ticket counts as occupied until it can be read or disappears. A live guard never expires. Never unlink its file or remove an active holder manually. The sandbox must allow writes to the shared lease directory; a refusal to write is an infrastructure error, never permission to run without the lease.
 

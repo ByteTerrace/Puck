@@ -113,8 +113,8 @@ its light. A body under y −40 is stood on the floor 190 m out below the sector
 whose wedge it fell in (`fall-recovery`).
 
 Each sector bakes alone offline on the CPU (`puck mesh audit --cpu --group
-"(valley-<sector>)"`) in 24 to 43 s with no discarded work, at roughly 240 000
-to 320 000 triangles; the floor and the overlook are small. The eight sectors
+"(valley-<sector>)"`) in well under a minute with no discarded work, at hundreds of thousands of
+triangles; the floor and the overlook are small. The eight sectors
 add 2.16 M triangles to the world's 13.09 M. Every sector's field reads well
 under a distance (the anisotropic ellipsoid gauge and the noise scope's step
 clamp), which the bake measures against and the audit reports as "loose". The
@@ -142,7 +142,7 @@ by the same rule. What the terrain still lacks is the
 [terrain packet](open-items.md#the-valleys-terrain).
 
 **Heightfield source: not added.** Analytic terrain does not fail the edit bar
-(one sector rebakes alone, in 24 to 43 s on the CPU, and the GPU bake is the
+(one sector rebakes alone, in well under a minute on the CPU, and the GPU bake is the
 window's to time) or the contact bar. The frame bar is read in the window; a
 heightfield is added only if that reading fails.
 

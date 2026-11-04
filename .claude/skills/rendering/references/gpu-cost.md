@@ -61,8 +61,8 @@ submission order alone does not establish cross-queue completion.
 The SPIR-V and DXIL the build writes beside each `*.hlsl` carry no register
 count: the driver compiles them to the GPU's own instructions and allocates
 registers there ([KHR-PEP], [MS-DXIL]). `spirv-dis <kernel>.spv` and
-`dxc -dumpbin <kernel>.dxil` (both on the lead machine's `PATH` from the Vulkan
-SDK) show the intermediate code only. Read the driver's numbers one of these
+`dxc -dumpbin <kernel>.dxil` (both ship with the Vulkan SDK) show the
+intermediate code only. Read the driver's numbers one of these
 ways, as a GPU leg under `puck lease gpu`, windowed, after `world.wait bakes`
 and `[sdf.mesh-gi] done`.
 
@@ -71,7 +71,7 @@ supports both APIs ([NV-SHPROF]). Launch the World under the dotnet host, never
 `Puck.World.exe` ([kernels](kernels.md#captures-faults-and-validation)):
 
 ```text
-"C:/Program Files/NVIDIA Corporation/Nsight Graphics 2026.2.0/host/windows-desktop-nomad-x64/ngfx.exe"
+<Nsight install>/host/windows-desktop-nomad-x64/ngfx.exe
   --activity "GPU Trace Profiler" --platform "Windows (x86_64)"
   --exe "C:/Program Files/dotnet/dotnet.exe" --dir <worktree>
   --args "src/Puck.World/bin/Release/net11.0/Puck.World.dll --world worlds/debug --devices none --backend directx"
@@ -80,21 +80,20 @@ supports both APIs ([NV-SHPROF]). Launch the World under the dotnet host, never
   --auto-export --output-dir <worktree>/.claude/scratch/<lane>-gputrace
 ```
 
-Every flag above is in `ngfx --help-all` of the installed 2026.2 (the RTX 4070
-is `Ada`; its metric sets are `Async Compute Triage`, `Throughput Metrics` and
-`Top-Level Triage`; `--auto-export` exports the metrics data after the trace).
-Unverified here: which Ada metric set carries the real-time shader profiler
-(the UI marks compatible sets with a flame), whether the export holds the
-Shader Pipelines table, and whether the report writes without the UI open; open
-the capture in `ngfx-ui` when the table is missing. Press F11 once the bake and
-GI have settled. In the report:
+Every flag above is listed by `ngfx --help-all`; `--architecture` names the
+GPU's generation (`Ada` for an RTX 40-series card, with its metric sets listed
+there) and `--auto-export` exports the metrics data after the trace. Which
+metric set carries the real-time shader profiler (the UI marks compatible sets
+with a flame), whether the export holds the Shader Pipelines table, and whether
+the report writes without the UI open vary by Nsight version; open the capture
+in `ngfx-ui` when the table is missing. Press F11 once the bake and GI have
+settled. In the report:
 
 - **Shader Pipelines table:** `# Reg` is registers per thread and `# Warp` the
   maximum theoretical warp occupancy, its tooltip naming the limiting resource
   ([NV-SHPROF]).
 - **Timeline:** the `SM Warp Occupancy` row; the expert system's `Warp Launch
-  Stalled by CS Register Count` (or `PS`) names a register-limited pass (strings
-  read from the installed `WarpVizPlugin`).
+  Stalled by CS Register Count` (or `PS`) names a register-limited pass.
 - Lock clocks (`--set-gpu-clocks base`) and record them: a GPU under Remote
   Desktop holds idle clocks that differ by backend
   ([hazards](../../../../docs/development/contributing.md#hardware-and-toolchain-cautions)).
@@ -110,16 +109,15 @@ Large forest captures
 can exhaust PIX analysis memory when exporting every hardware counter. Export
 selected families instead: `--counters=*Duration* --counters=*Invocations` for timing
 and work, then narrow NVIDIA patterns such as `--counters=Compute*Register*`.
-Whitespace-free wildcard patterns also avoid this installed tool's argument parsing
+Whitespace-free wildcard patterns also avoid the tool's argument parsing
 failure on counter names containing spaces. A programmatic capture can contain
 valid API events and named objects without a gold screenshot; inspect a presented
-World frame separately. PIX analysis needs
-Windows developer mode, which the lead machine has on
+World frame separately. PIX analysis needs Windows developer mode
 ([Direct3D 12 captures](../../../../docs/rendering/directx.md#gpu-captures)).
 
 Keep mesh settlement, lighting convergence and normal-motion timing distinct.
-Lockstep can wait synchronously for GI; a forest run with changing lighting
-repeatedly waited for 6–7-second relights instead of draining to a lasting idle
+Lockstep can wait synchronously for GI; a run with changing lighting can wait
+repeatedly for multi-second relights instead of draining to a lasting idle
 state. Return to normal presentation for frame windows, inspect actual GI work,
 and sample the moving interval itself. Controlled route measurements pin the clock
 with startup `--lockstep` and retain ordinary asynchronous lighting using
@@ -142,11 +140,11 @@ Intel.PresentMon.Console --exact` (no elevation needed); it lands on the PATH
 as `presentmon`. Capture a running World with `presentmon --process_id <pid>
 --timed 20 --terminate_after_timed --output_file <csv> --no_console_stats
 --stop_existing_session --no_track_gpu --no_track_display`. The capture reads
-ETW. Without elevation (the lead machine's user is in Performance Log Users),
-GPU and display tracking fail silently and leave the CSV empty, so pass the
-two `--no_track_*` flags. The capture then gives present-to-present only. That
-is a weak proxy on Direct3D 12: it is bimodal (8 to 12 ms and 20 to 24 ms),
-because each present lands at the end of an iteration's work and alternates
+ETW. Without elevation (it needs administrator rights or Performance Log Users
+membership), GPU and display tracking fail silently and leave the CSV empty, so
+pass the two `--no_track_*` flags. The capture then gives present-to-present
+only. That is a weak proxy on Direct3D 12: it is bimodal, because each present
+lands at the end of an iteration's work and alternates
 with tick and non-tick frames. The time a frame reaches the display needs an
 elevated capture.
 
@@ -155,8 +153,8 @@ elevated capture.
 `--capture-tool renderdoc --backend vulkan`,
 `gpu.capture`, open the `.rdc` in `qrenderdoc`, and read the pipeline's
 executable statistics: registers and "Local Memory Size" (printed with bit 36
-set; the low 32 bits are the bytes). A capture read this way found views at 128
-registers and 176 bytes of local memory before the local-array fix.
+set; the low 32 bits are the bytes). This reading finds a kernel whose
+dynamically indexed arrays live in local memory (the local-array rule below).
 
 **Turn registers into occupancy.** An Ada SM holds 64K 32-bit registers and at
 most 48 warps of 32 threads ([NV-ADA], [NV-CCAP]). Registers are handed out per
@@ -184,9 +182,9 @@ warps ≤ min(48, 4 × ⌊16,384 ÷ roundUp(32 × registers, 256)⌋)
 Cutting registers helps only when the count crosses a row's lower edge: 140 and
 168 both leave 12 warps, and 108 and 128 both leave 16. A block size that does
 not divide the warps rounds them down further. The table is derived from the
-unit and the split, so confirm a kernel against GPU Trace's `# Warp`. Views at
-168 registers on Direct3D 12 allows 12 warps (25 %); GPU Trace's 24 % is the
-achieved `SM Warp Occupancy`, not the limit.
+unit and the split, so confirm a kernel against GPU Trace's `# Warp`. A kernel
+at 168 registers allows 12 warps (25 %); GPU Trace's `SM Warp Occupancy` row is
+the achieved occupancy, which falls at or under that limit.
 
 ## Registers set occupancy; occupancy is not speed
 
@@ -194,13 +192,13 @@ A kernel's peak live state sets its registers, and its registers cap how many
 waves an SM keeps resident to hide memory latency. More waves help only while
 the kernel waits on memory.
 
-- **Measured here.** Every pixel pass is register-limited on the RTX 4070.
-  Views fell from 168 to 128 registers and 0.79 to 0.68 ms on Direct3D 12, and
-  from 128 to 96 and 0.82 to 0.68 ms on Vulkan, once the paints drew on the
-  albedo before the rest of the material went live (`sdfMaterialPaints`). The resolve summing each tap as it
-  reads it (`PuckReconstructionSum`) took 128 to 96 registers and got faster on
-  Direct3D 12 but slower on Vulkan (410 to 437 µs), whose kernel then kept
-  fewer loads in flight ([rendering plan](../../../../docs/plans/rendering.md#gpu-submission-and-routed-worlds)).
+- **Measured here.** The pixel passes were register-limited.
+  Reducing live state in the views kernel (the paints draw on the albedo before
+  the rest of the material goes live, `sdfMaterialPaints`) cut its registers and
+  its time on both backends. The resolve summing each tap as it reads it
+  (`PuckReconstructionSum`) cut registers and got faster on Direct3D 12 but
+  slower on Vulkan, whose kernel then kept fewer loads in flight
+  ([rendering plan](../../../../docs/plans/rendering.md#gpu-submission-and-routed-worlds)).
 - **Shorten live ranges, not instruction counts.** Load a value where it is
   used, finish one stage's state before the next loads, and keep the one
   `mapCore` call site ([SKILL](../SKILL.md#editing-kernels)): each copy adds its
@@ -217,11 +215,11 @@ also thrash the caches ([AMD-OCC]).
 A dynamically indexed local array can live in per-thread local memory, which is
 device memory behind the caches, as register spills are ([NV-BP], [AMD-OCC]).
 The [SKILL](../SKILL.md#editing-kernels) owns the rule; read "Local Memory
-Size" to confirm it. On Vulkan, RenderDoc's executable statistics read views at
-176 bytes (the material's paint stops and weathering stages, the volume ramp)
-and the sky at 144 (its upper-run summaries and the star spectrum table) on the
-RTX 4070, until every such loop unrolled to a constant index, then 0. No
-Direct3D 12 reading of local memory is recorded.
+Size" to confirm it. On Vulkan, RenderDoc's executable statistics showed local
+memory in the views kernel (the material's paint stops and weathering stages,
+the volume ramp) and the sky kernel (its upper-run summaries and the star
+spectrum table) until every such loop unrolled to a constant index, then none.
+Read local memory on each backend separately.
 
 ## Keep a wave on one path
 
@@ -316,7 +314,7 @@ and no kernel declares a 16-bit arithmetic type.
 
 Sources: AMD documents double-rate packed FP16 and fewer VGPRs on its GPUs
 ([AMD-RDNA]); the HLSL 16-bit types are opt-in and replace min-precision
-([HLSL-16BIT]). Neither measures the RTX 4070, so read GPU Trace's registers
+([HLSL-16BIT]). Neither measures Puck's kernels, so read GPU Trace's registers
 and time before and after any 16-bit arithmetic change.
 
 ## Size dispatches inside the limits
@@ -324,16 +322,14 @@ and time before and after any 16-bit arithmetic change.
 A dispatch's group count is capped per dimension, and a group's thread count
 should fill whole waves.
 
-- **Measured here.** The region copy dispatched 65,535 × 107 groups to stage the
-  1.78 GB mesh region; GPU-based validation refused the total
-  (`7012245 exceeds 4194303`). It now caps rows at 64 and has each thread copy
-  several words (`GpuRegion.CopyGroups`,
+- **Measured here.** The region copy once dispatched more groups than the
+  device allows in total to stage the mesh region, and GPU-based validation
+  refused it. It now caps rows at 64 and has each thread copy several words (`GpuRegion.CopyGroups`,
   [`GpuRegion`](../../../../src/Puck.Abstractions/Gpu/Residency/GpuRegion.cs)).
 - The SDF compute kernels' groups are 64 threads (8×8 for the pixel passes,
   `SDF_VISIBILITY_GROUP_EDGE`), a whole number of waves on both vendors.
-- The bake spends a fixed share of each frame (`SdfMeshPathBake.FrameTaps`,
-  150,000 field evaluations a 60 Hz frame); a cold debug-world bake is 50,854
-  dispatches ([cold bake](../../../../docs/plans/open-items.md#bake-proportional-to-change)).
+- The bake spends a fixed share of each frame (`SdfMeshPathBake.FrameTaps`), so
+  a cold debug-world bake takes tens of thousands of dispatches ([cold bake](../../../../docs/plans/open-items.md#bake-proportional-to-change)).
 
 Sources: [MS-DISPATCH] (65,535 groups a dimension) and [VK-LIMITS]
 (`maxComputeWorkGroupCount`, per device); [AMD-RDNA] (group sizes a multiple of
@@ -358,17 +354,17 @@ large blocks.
   `UNORDERED_ACCESS` and transitions before every reader
   ([kernels](kernels.md#buffer-hazards)).
 - **Allocate in blocks.** Both backends bind resources at offsets of 64 MiB
-  blocks (`VulkanMemoryArena`, `DirectXHeapArena`), which took a debug-world
-  boot from 637 native allocations to 18 on Vulkan and 640 to 30 on Direct3D 12.
+  blocks (`VulkanMemoryArena`, `DirectXHeapArena`), which cut the native
+  allocations of a debug-world boot by an order of magnitude on both backends.
   While every Vulkan resource was its own allocation, a crossing's submissions
-  blocked up to 68 ms inside `vkQueueSubmit`; the rendering plan attributes that
-  to residency paid on first reference, and the crossing has not been re-read
-  since.
+  could block for tens of milliseconds inside `vkQueueSubmit`; the rendering
+  plan attributes that to residency paid on first reference.
 - **Write descriptors only when they change.** Skipping writes a set already
-  holds took the debug world from about 78 to 7 a frame on Vulkan.
+  holds cut the debug world's per-frame descriptor writes on Vulkan by an order
+  of magnitude.
 - **Record only what changed.** Session and window views whose residencies
-  move with the tick record on tick frames only (`RenderFrame` 2.8 ms there
-  against 0.9 ms between).
+  move with the tick record on tick frames only, so `RenderFrame` is several
+  times cheaper between ticks.
 - **Keep rated work off the step's frame.** A `world.rates` floor updates early
   on a frame that runs no simulation step when the next one runs a step
   (`PresentationRate.Holds`, `FrameContext.StepsNext`), so rated bodies, views,
@@ -389,9 +385,9 @@ batches into one submission ([AMD-RDNA]); Puck submits 5 to 9 a frame.
 
 ## Puck's open cases
 
-- **Register-limited pixel passes.** Views at 128 registers on Direct3D 12 and
-  96 on Vulkan; surface (56 to 64) and resolve (96) are unexamined ([rendering plan](../../../../docs/plans/rendering.md#gpu-submission-and-routed-worlds)).
-- **The main mesh pass shades about 2.8 fragments a pixel,** with no
+- **Register-limited pixel passes.** Views is the examined case; surface and
+  resolve are unexamined ([rendering plan](../../../../docs/plans/rendering.md#gpu-submission-and-routed-worlds)).
+- **The main mesh pass shades several fragments a pixel,** with no
   front-to-back order and no depth prepass ([rendering plan](../../../../docs/plans/rendering.md#gpu-submission-and-routed-worlds)).
 - **Each node submits alone** (5 to 9 submissions a frame) and growing the
   program region waits for the device to go idle

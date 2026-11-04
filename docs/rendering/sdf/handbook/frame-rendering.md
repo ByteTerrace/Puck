@@ -1014,9 +1014,7 @@ hole along the top of the Moth's shins where the shell thins against the knee. E
 contours whole. The gradients are then measured at the samples the contour reads
 one at: the corners of every crossed cell that contours whole, the coarse
 corners of every refined cell, whose unmeasured fine samples interpolate them,
-and the measured corners of every crossed fine cell. On the debug world about
-8,000 cells refine, and the bake makes about 700,000 triangles from about
-21 M field evaluations.
+and the measured corners of every crossed fine cell.
 
 A cell's vertex is the point its crossings' tangent planes meet at. Before
 measuring those planes, the bake brackets each zero along its sign-changing
@@ -1187,9 +1185,9 @@ where it meets a separately baked mesh a pixel at the junction may take the othe
 surface, as two coincident meshes' pixels do. The store keeps the merged mesh,
 every pass draws it and the irradiance trace reads it, boxing a long thin triangle
 in pieces so its hierarchy stays tight (`SdfMeshIrradianceScene`). On the debug
-world the merge takes the world residency's 57.3 M baked triangles to 35.4 M, the
-stored set's 1.74 GB to 1.02 GB and the mesh region's 1.81 GB to 1.11 GB, and a
-lobby frame's mesh pass from 11.5 M triangles to 4.9 M; the done line counts what
+world the merge keeps about three fifths of the world residency's baked
+triangles, of the stored set and of the mesh region, and a lobby frame's mesh
+pass draws about two fifths of its former triangles; the done line counts what
 it removed (`merged=`).
 
 The disk store packs positions against each group's bounds within one 1024th of its contour-cell
@@ -1296,7 +1294,7 @@ garden) takes its mesh rather than baking again, its triangle materials
 renumbered by place when the program numbers the group's materials otherwise.
 The World's library also keeps every mesh it stores between runs, in the
 `meshes` device cache (`SdfMeshStore`, `WorldCacheRoots.Meshes`, held to
-8 GiB, about eight of the debug world's sets, a set at a time: each bake identity's entries are one directory, removed whole,
+8 GiB, a set at a time: each bake identity's entries are one directory, removed whole,
 least recently used first, by the caches' one retention, `CacheRetention`), keyed by the group's
 geometry and the bake's identity (`SdfMeshBakeIdentity`): the bake kernels'
 bytecode and the code the bake runs, the IL of every method its own code reaches
@@ -1327,9 +1325,9 @@ build. Until a group's first mesh lands, the group draws nothing.
 The walk merges the world-segment list with the selected instances' ranges and
 has no second path: a program with no instance lists every segment as a world
 segment. A second walk beside it, a linear one over every segment chosen by a
-program-uniform flag, is a hazard: NVIDIA's Direct3D 12 driver on Turing (an
-RTX 2060) takes it for instanced programs too, while Vulkan on the same card
-does not, so every group samples the whole program. A group lying under a
+program-uniform flag, is a hazard: NVIDIA's Direct3D 12 driver on Turing takes
+it for instanced programs too, while Vulkan on the same hardware does not, so
+every group samples the whole program. A group lying under a
 larger neighbour (an axis line on the floor, a wall of the test room) then bakes
 empty, and quads take their neighbours' materials.
 
