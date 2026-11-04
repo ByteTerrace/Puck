@@ -46,7 +46,7 @@ internal sealed class ChatCommandModule(WorldOwnedWorlds worlds, PlayerRoster ro
 
     private CommandResult Allow(CommandContext context, WireArgs args) {
         if (args.Count is not (1 or 2)) {
-            return CommandResult.Error(output: "[chat.allow: expected <sender-id> [player]]");
+            return CommandResult.Usage(form: "<sender-id> [player]", verb: "chat.allow");
         }
         if (!SafeName.TryParse(
             candidate: args[0].ToString(),
@@ -109,7 +109,7 @@ internal sealed class ChatCommandModule(WorldOwnedWorlds worlds, PlayerRoster ro
     }
     private CommandResult Block(CommandContext context, WireArgs args) {
         if (args.Count is not (1 or 2)) {
-            return CommandResult.Error(output: "[chat.block: expected <sender-id> [player]]");
+            return CommandResult.Usage(form: "<sender-id> [player]", verb: "chat.block");
         }
         if (!SafeName.TryParse(
             candidate: args[0].ToString(),

@@ -31,7 +31,7 @@ public sealed class GpuCaptureCommandModule(GpuFrameCapture capture) : ICommandM
                 value: out frames
             ))
         ) {
-            return CommandResult.Error(output: "[gpu.capture: expected gpu.capture [<path> [<frames>]]]");
+            return CommandResult.Usage(form: "[<path> [<frames>]]", verb: "gpu.capture");
         }
 
         var path = Path.GetFullPath(path: args[0].ToString());

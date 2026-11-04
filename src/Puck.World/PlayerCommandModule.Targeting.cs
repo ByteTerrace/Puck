@@ -6,7 +6,7 @@ namespace Puck.World;
 internal sealed partial class PlayerCommandModule {
     private CommandResult DesignateHandler(CommandContext context, WireArgs args) {
         if (args.Count is not (2 or 3)) {
-            return CommandResult.Error(output: "[body.designate: expected <register> <body:n|nearest|at:x,y,z> [body]]");
+            return CommandResult.Usage(form: "<register> <body:n|nearest|at:x,y,z> [body]", verb: "body.designate");
         }
 
         var (player, index, error) = ResolveTarget(

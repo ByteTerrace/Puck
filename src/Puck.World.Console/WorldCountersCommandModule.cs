@@ -46,7 +46,7 @@ public sealed class WorldCountersCommandModule(IEnumerable<IWorkCounterSource> s
     private const string PassWord = "pass";
     private const string SummaryWord = "summary";
     private const string TransfersWord = "transfers";
-    private const string Usage = "[world.counters: expected world.counters [<source-or-prefix>] [node <name>] [pass <label>] [counter <prefix>] [summary | transfers] [--json]]";
+    private const string Form = "[<source-or-prefix>] [node <name>] [pass <label>] [counter <prefix>] [summary | transfers] [--json]";
     private const string Verb = "world.counters";
 
     private readonly IWorkCounterSource[] m_sources = [.. sources.OrderBy(
@@ -104,7 +104,7 @@ public sealed class WorldCountersCommandModule(IEnumerable<IWorkCounterSource> s
                     index: (index++),
                     value: ref node
                 )) {
-                    return CommandResult.Error(output: Usage);
+                    return CommandResult.Usage(form: Form, verb: "world.counters");
                 }
             } else if (args.Is(
                 index: index,
@@ -115,7 +115,7 @@ public sealed class WorldCountersCommandModule(IEnumerable<IWorkCounterSource> s
                     index: (index++),
                     value: ref pass
                 )) {
-                    return CommandResult.Error(output: Usage);
+                    return CommandResult.Usage(form: Form, verb: "world.counters");
                 }
             } else if (args.Is(
                 index: index,
@@ -126,12 +126,12 @@ public sealed class WorldCountersCommandModule(IEnumerable<IWorkCounterSource> s
                     index: (index++),
                     value: ref counter
                 )) {
-                    return CommandResult.Error(output: Usage);
+                    return CommandResult.Usage(form: Form, verb: "world.counters");
                 }
             } else if (filter is null) {
                 filter = args[index].ToString();
             } else {
-                return CommandResult.Error(output: Usage);
+                return CommandResult.Usage(form: Form, verb: "world.counters");
             }
         }
 

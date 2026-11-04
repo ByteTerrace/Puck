@@ -38,14 +38,19 @@ public sealed class WorldWaitCommandModule(IWorldConsoleAuthority authority, IWo
     // any scripted segment, and a loud ceiling on a fat-fingered wait that would otherwise wedge the pipe for hours.
     private const ulong MaxWaitTicks = 144_000UL;
 
-    // The keyword forms, once: the handler dispatches on them, a keyword missing its argument is refused naming its own
-    // form, and the arity refusal lists them, so the three cannot drift.
-    private static readonly (string Keyword, string Argument, string Takes)[] KeywordForms = [
-        ("until", "<tick>", "an absolute tick"),
-        ("ready", "<seconds>", "a deadline in seconds"),
-        ("bakes", "<seconds>", "a deadline in seconds"),
-        ("residency", "<seconds>", "a deadline in seconds"),
-        ("captures", "<seconds>", "a deadline in seconds"),
+    // One keyword form: its keyword, its argument's spelling and meaning for the refusals, and the handler that arms it.
+    private delegate CommandResult KeywordArm(WorldWaitCommandModule module, CommandContext context, WireArgs args);
+    private readonly record struct KeywordForm(string Keyword, string Argument, string Takes, KeywordArm Arm);
+
+    // The keyword forms, once, handler included: the dispatch walks this table, a keyword missing its argument is refused
+    // naming its own form, and the arity refusal lists them, so a keyword cannot be listed without a handler or handled
+    // without being listed (a new one never falls through to arming an until-tick).
+    private static readonly KeywordForm[] KeywordForms = [
+        new(Keyword: "until", Argument: "<tick>", Takes: "an absolute tick", Arm: static (module, context, args) => module.ArmUntilTick(args: args, context: context)),
+        new(Keyword: "ready", Argument: "<seconds>", Takes: "a deadline in seconds", Arm: static (module, context, args) => module.ArmReady(args: args, context: context)),
+        new(Keyword: "bakes", Argument: "<seconds>", Takes: "a deadline in seconds", Arm: static (module, context, args) => module.ArmBakes(args: args, context: context)),
+        new(Keyword: "residency", Argument: "<seconds>", Takes: "a deadline in seconds", Arm: static (module, context, args) => module.ArmBakes(args: args, context: context, resident: true)),
+        new(Keyword: "captures", Argument: "<seconds>", Takes: "a deadline in seconds", Arm: static (module, context, args) => module.ArmCaptures(args: args, context: context)),
     ];
     private static readonly string ArityRefusal = ("[world.wait: expected <ticks>, " + string.Join(
         separator: ", ",
@@ -70,13 +75,11 @@ public sealed class WorldWaitCommandModule(IWorldConsoleAuthority authority, IWo
                         return CommandResult.Error(output: $"[world.wait: {form.Keyword} takes {form.Takes}: world.wait {form.Keyword} {form.Argument}]");
                     }
 
-                    return form.Keyword switch {
-                        "residency" => ArmBakes(args: args, context: context, resident: true),
-                        "ready" => ArmReady(args: args, context: context),
-                        "bakes" => ArmBakes(args: args, context: context),
-                        "captures" => ArmCaptures(args: args, context: context),
-                        _ => ArmUntilTick(args: args, context: context),
-                    };
+                    return form.Arm(
+                        args: args,
+                        context: context,
+                        module: this
+                    );
                 }
 
                 if (args.Count != 1) {
