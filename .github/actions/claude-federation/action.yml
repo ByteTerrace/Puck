@@ -1,0 +1,64 @@
+description: Export the repository's Claude workload identity federation, and with cli prepare the Claude Code CLI to exchange this job's GitHub OIDC token itself.
+# The one home of the Claude federation identifiers (identifiers, not secrets): the `puck-github` rule on the GitHub
+# Actions issuer, the organization, and the `puck-workload` service account. A Claude Code GitHub Action step reads
+# them from this action's outputs and performs its own exchange. With `cli: "true"` the action also writes the job's
+# OIDC token to a file, refreshes it every minute in the background (a GitHub token lives about five minutes and is
+# accepted once), and selects a federation profile so every `claude` process in the job shares one exchanged token
+# from the profile's credential cache instead of each re-exchanging the same single-use token.
+inputs:
+  cli:
+    default: "false"
+    description: Also prepare the Claude Code CLI (token file, background refresh, federation profile) for direct use.
+name: Claude workload identity federation
+outputs:
+  organization:
+    description: The Anthropic organization ID.
+    value: ${{ steps.ids.outputs.organization }}
+  rule:
+    description: The federation rule ID (fdrl_...).
+    value: ${{ steps.ids.outputs.rule }}
+  service-account:
+    description: The service account ID (svac_...) the federated token acts as.
+    value: ${{ steps.ids.outputs.service-account }}
+runs:
+  steps:
+    - id: ids
+      name: Export the federation identifiers
+      run: |
+        set -euo pipefail
+        rule=fdrl_01M8pCdAS4d1P6fR2q6isxoS
+        organization=8b814199-d8dd-4d93-85f2-fdb62c23b66b
+        service_account=svac_015pvmZYWyxacC34chbJHYFg
+        {
+          echo "rule=$rule"
+          echo "organization=$organization"
+          echo "service-account=$service_account"
+        } >> "$GITHUB_OUTPUT"
+        {
+          echo "ANTHROPIC_FEDERATION_RULE_ID=$rule"
+          echo "ANTHROPIC_ORGANIZATION_ID=$organization"
+          echo "ANTHROPIC_SERVICE_ACCOUNT_ID=$service_account"
+        } >> "$GITHUB_ENV"
+      shell: bash
+    - if: inputs.cli == 'true'
+      name: Prepare the Claude Code CLI for the exchange
+      run: |
+        set -euo pipefail
+        if [[ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ]]; then echo "The job needs the id-token: write permission." >&2; exit 1; fi
+        if [[ -n "${ANTHROPIC_API_KEY:-}${ANTHROPIC_AUTH_TOKEN:-}" ]]; then echo "An API key or auth token would shadow federation; unset it." >&2; exit 1; fi
+        directory="$RUNNER_TEMP/claude-federation"
+        token="$directory/identity-token"
+        mkdir -p "$directory/config/configs"
+        chmod 700 "$directory"
+        fetch='umask 077; value=$(curl -fsS -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=https://api.anthropic.com" | jq -r .value) && [[ -n "$value" && "$value" != null ]] && printf %s "$value" > "$0.next" && mv "$0.next" "$0"'
+        bash -c "$fetch" "$token"
+        echo "::add-mask::$(cat "$token")"
+        printf '{"version":"1.0","authentication":{"type":"oidc_federation"}}' > "$directory/config/configs/default.json"
+        nohup bash -c "while sleep 60; do bash -c '$fetch' '$token' || true; done" > /dev/null 2>&1 &
+        {
+          echo "ANTHROPIC_CONFIG_DIR=$directory/config"
+          echo "ANTHROPIC_IDENTITY_TOKEN_FILE=$token"
+          echo "ANTHROPIC_PROFILE=default"
+        } >> "$GITHUB_ENV"
+      shell: bash
+  using: composite

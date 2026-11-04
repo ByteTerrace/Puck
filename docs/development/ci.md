@@ -13,9 +13,10 @@ the pins; a version tag by itself prevents the workflow from starting.
 The composite actions under `.github/actions/` are the only steps that run before
 a CLI exists: `setup-dotnet` installs the SDK, `setup-dxc` and `setup-quic` the
 pinned native dependencies, `setup-puck` the run's candidate CLI,
-`shader-cache` restores, looks up and saves the shader compiler cache, and
-`azure-login` signs in. The SDK pin, the NuGet cache inputs, the checksums, the
-shader cache keys and the OIDC federation therefore each live in one place. Mapping keys in
+`shader-cache` restores, looks up and saves the shader compiler cache,
+`azure-login` signs in to Azure, and `claude-federation` holds the Claude
+workload identity federation. The SDK pin, the NuGet cache inputs, the checksums, the
+shader cache keys and each OIDC federation therefore live in one place. Mapping keys in
 workflow and action files are alphabetized, as in the bicep, and steps carry no
 blank lines between them. Release logic runs as `puck` verbs; a workflow step
 holds a shell script only to glue a container or a step summary.
@@ -387,27 +388,43 @@ puck pull-request format <base-sha> <head-sha> --output artifacts/format
 
 It prepares the validated artifact and patch without committing or pushing.
 
-## Claude in issues and pull requests
+## Claude in CI
 
-**Claude** (`claude.yml`) runs the Claude Code GitHub Action when a write-access
-user mentions `@claude` in an issue or pull request conversation comment, or in
-a newly opened issue. It is an agent trigger, not a CI job: it builds nothing,
-installs no candidate CLI, and gates nothing.
+Three workflows run Claude Code with no Anthropic secret. Each exchanges its
+job's GitHub OIDC token for a short-lived Claude API token through workload
+identity federation, using the identifiers the `claude-federation` composite
+action holds: the `puck-github` federation rule on the GitHub Actions issuer,
+targeting the `puck-workload` service account in the `Puck` workspace with
+`workspace:developer` scope. They are identifiers, not secrets. The rule accepts
+only the subject `repo:ByteTerrace@18753984/Puck@1271519029:ref:refs/heads/main`
+with `repository_owner` `ByteTerrace` and `ref` `refs/heads/main`, so only jobs
+whose ref is `main` can authenticate: comment, issue, `workflow_run` and
+`schedule` events, and a dispatch from `main`. `pull_request` and review events
+carry a `pull_request` subject and are refused, which keeps fork pull requests
+from minting a token. A refused exchange returns an opaque `401`; the Claude
+Console's workload identity authentication history names the reason, usually a
+subject mismatch. The workflows run only once they are on `main`.
 
-It holds no Anthropic secret. The job's GitHub OIDC token is exchanged for a
-short-lived Claude API token through workload identity federation: the
-`puck-github` federation rule (on the GitHub Actions issuer, targeting the
-`puck-workload` service account in the `Puck` workspace with
-`workspace:developer` scope) accepts only the subject
-`repo:ByteTerrace@18753984/Puck@1271519029:ref:refs/heads/main` with
-`repository_owner` `ByteTerrace` and `ref` `refs/heads/main`. Comment and issue
-events run on the default branch and match it; `pull_request` and review events
-carry a `pull_request` subject, so the workflow does not listen for them, and
-fork pull requests cannot mint a token. The rule, issuer and service account IDs
-in the workflow are identifiers, not secrets. Replies need the Claude GitHub App
-installed on the repository, and the workflow runs only once it is on `main`.
-A refused exchange returns an opaque `401`; the Claude Console's workload
-identity authentication history names the reason, usually a subject mismatch.
+- **Claude** (`claude.yml`) answers a write-access user's `@claude` in an issue
+  or pull request conversation comment, or in a newly opened issue, through the
+  Claude Code GitHub Action. Replies need the Claude GitHub App installed on the
+  repository.
+- **Diagnose CI failures** (`claude-ci-failure.yml`) follows a failed run of
+  **Release Azure**, **Check source formatting** or **Release NuGet packages** on
+  any branch of this repository. Claude reads the failed jobs' logs and the
+  source at the failing commit, and reports the cause once: a new issue labelled
+  `ci-failure`, or a comment on the open one that already covers it. It edits,
+  pushes and reruns nothing, skips runs from forks and runs bots started, and
+  opens issues with the job's own token.
+- **Run skill evals** (`skill-evals.yml`) runs `puck evals run` for one skill,
+  dispatched from `main`, with `revision` selecting the commit whose skills are
+  measured. It installs the Claude Code CLI version the pinned action uses, and
+  `claude-federation` with `cli` writes the job's OIDC token to a file, refreshes
+  it every minute (a GitHub token lives about five minutes and is accepted once)
+  and selects a federation profile, so the suite's concurrent `claude` processes
+  share one cached exchanged token after a single warm-up call. Runs bill the
+  service account's API usage, capped by `max-cost-usd`; the results upload as
+  an artifact.
 
 ## Shared repository tooling
 

@@ -1,0 +1,102 @@
+name: Run skill evals
+run-name: Skill evals — ${{ inputs.skill }} on ${{ inputs.model }}
+
+# Runs `puck evals run` for one skill on a GitHub runner, billed to the `puck-workload` service account through
+# workload identity federation (claude-federation action) instead of an interactive Claude subscription. Dispatch it
+# from `main`: the federation rule admits only runs whose ref is main, and `revision` selects the commit whose skills are
+# measured (any commit this checkout fetched, such as an integration branch's tip). The Claude Code CLI is the version
+# the pinned Claude Code GitHub Action installs. The results directory uploads as an artifact. Each run spends API
+# tokens, so `max-cost-usd` caps it and nothing schedules it.
+
+on:
+  workflow_dispatch:
+    inputs:
+      ablation:
+        default: with-without
+        description: Ablation (with-without, or the verb's other values).
+        type: string
+      cases:
+        default: ""
+        description: Case globs, separated by spaces; empty runs every case.
+        type: string
+      concurrency:
+        default: "4"
+        description: Agent runs at once, 1 to 8.
+        type: string
+      max-cost-usd:
+        default: "20"
+        description: The run's spending cap in US dollars.
+        type: string
+      model:
+        default: claude-sonnet-5-5
+        description: The full model ID under test.
+        type: string
+      revision:
+        default: HEAD
+        description: The commit or ref whose skills are measured.
+        type: string
+      skill:
+        description: The skill under .claude/skills/ whose evals/ suite runs.
+        required: true
+        type: string
+
+concurrency:
+  cancel-in-progress: false
+  group: skill-evals
+
+permissions:
+  contents: read
+
+jobs:
+  evals:
+    name: Run the skill's eval suite
+    permissions:
+      contents: read
+      id-token: write
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install the pinned .NET SDK
+        uses: ./.github/actions/setup-dotnet
+        with:
+          cache: "true"
+      - name: Install the candidate CLI
+        uses: ./.github/actions/setup-puck
+      - name: Install the Claude Code CLI
+        run: npm install --global @anthropic-ai/claude-code@2.1.304
+      - name: Prepare the Claude federation for the CLI
+        uses: ./.github/actions/claude-federation
+        with:
+          cli: "true"
+      # One exchange before the suite's concurrent agent runs, so they start from the profile's cached token.
+      - name: Exchange the identity token once
+        run: claude --print "Reply with OK." --model claude-haiku-5-5 --max-turns 1
+        working-directory: ${{ runner.temp }}
+      - env:
+          ABLATION: ${{ inputs.ablation }}
+          CASES: ${{ inputs.cases }}
+          CONCURRENCY: ${{ inputs.concurrency }}
+          MAX_COST: ${{ inputs.max-cost-usd }}
+          MODEL: ${{ inputs.model }}
+          REVISION: ${{ inputs.revision }}
+          SKILL: ${{ inputs.skill }}
+        name: puck evals run
+        run: |
+          set -euo pipefail
+          read -ra globs <<< "$CASES"
+          cases=()
+          if (( ${#globs[@]} )); then cases=(--cases "${globs[@]}"); fi
+          puck evals run "$SKILL" "${cases[@]}" --revision "$REVISION" --model "$MODEL" --ablation "$ABLATION" --max-cost-usd "$MAX_COST" --concurrency "$CONCURRENCY"
+        shell: bash
+      - if: always()
+        name: Upload the eval results
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          if-no-files-found: warn
+          name: skill-evals-${{ inputs.skill }}-${{ github.run_id }}
+          path: .claude/skills/${{ inputs.skill }}/evals/results/
+    timeout-minutes: 180

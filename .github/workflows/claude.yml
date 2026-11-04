@@ -3,8 +3,8 @@ run-name: Claude — ${{ github.event_name }} by ${{ github.actor }}
 
 # Answers `@claude` in issue and pull request conversation comments, and in a newly opened issue, with the Claude Code
 # GitHub Action. It authenticates through workload identity federation: the job's GitHub OIDC token is exchanged for a
-# short-lived Claude API token under the `puck-github` federation rule, so the repository holds no Anthropic secret.
-# The identifiers below are not secrets. The rule matches only runs on `main` (subject
+# short-lived Claude API token under the `puck-github` federation rule (identifiers in the claude-federation action),
+# so the repository holds no Anthropic secret. The rule matches only runs on `main` (subject
 # `repo:ByteTerrace@18753984/Puck@1271519029:ref:refs/heads/main`); comment and issue events run on the default
 # branch and match it, while pull_request and review events carry a `pull_request` subject and are refused, which is
 # why this workflow does not listen for them. Replies need the Claude GitHub App installed on the repository.
@@ -34,10 +34,13 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 1
+      - id: federation
+        name: Read the Claude federation identifiers
+        uses: ./.github/actions/claude-federation
       - name: Run Claude Code
         uses: anthropics/claude-code-action@db77d4d3c98f3f6380e7cd45ffba2342a3dbde3c # v1.0.254
         with:
-          anthropic_federation_rule_id: fdrl_01M8pCdAS4d1P6fR2q6isxoS
-          anthropic_organization_id: 8b814199-d8dd-4d93-85f2-fdb62c23b66b
-          anthropic_service_account_id: svac_015pvmZYWyxacC34chbJHYFg
+          anthropic_federation_rule_id: ${{ steps.federation.outputs.rule }}
+          anthropic_organization_id: ${{ steps.federation.outputs.organization }}
+          anthropic_service_account_id: ${{ steps.federation.outputs.service-account }}
     timeout-minutes: 60
