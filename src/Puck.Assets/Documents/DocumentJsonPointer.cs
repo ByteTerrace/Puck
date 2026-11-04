@@ -1,11 +1,11 @@
 using System.Globalization;
 using System.Text.Json.Nodes;
 
-namespace Puck.World;
+namespace Puck.Assets.Documents;
 
 /// <summary>The one reading of an RFC 6901 JSON pointer into a document tree: the escaping of a member name, the node a
 /// pointer names, and the deepest node that exists on the way to one that does not.</summary>
-public static class WorldJsonPointer {
+public static class DocumentJsonPointer {
     /// <summary>Escapes a member name as one pointer segment.</summary>
     /// <param name="value">The member name.</param>
     /// <returns>The segment, with <c>~</c> as <c>~0</c> and <c>/</c> as <c>~1</c>.</returns>

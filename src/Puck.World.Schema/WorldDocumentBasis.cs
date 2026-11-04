@@ -962,7 +962,7 @@ public static class WorldDocumentBasis {
         foreach (var segment in pointer.Split(separator: '/')[1..]) {
             switch (composed) {
                 case JsonObject composedObject when (layer is JsonObject layerObject): {
-                        var member = segment.Replace(comparisonType: StringComparison.Ordinal, newValue: "/", oldValue: "~1").Replace(comparisonType: StringComparison.Ordinal, newValue: "~", oldValue: "~0");
+                        var member = Puck.Assets.Documents.DocumentJsonPointer.Unescape(value: segment);
 
                         if (!composedObject.TryGetPropertyValue(jsonNode: out composed, propertyName: member) || !layerObject.TryGetPropertyValue(jsonNode: out layer, propertyName: member)) {
                             return traced.ToString();

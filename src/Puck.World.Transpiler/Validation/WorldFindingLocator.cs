@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using Puck.Abstractions;
+using Puck.Assets.Documents;
 using Puck.Transpiler.Diagnostics;
 using Puck.World.Transpiler.Vocabulary;
 
@@ -133,7 +134,7 @@ internal sealed class WorldFindingLocator(JsonObject composed, JsonObject? sourc
         if ((layerPointer is { Length: > 1 }) && (sourceMap.OriginOf(jsonPointer: layerPointer) is { } own)) {
             return (diagnostic with { SourcePath = (IsRoot(path: own.SourcePath) ? null : own.SourcePath), Span = own.Span });
         }
-        if ((origins is null) || (composedPointer.Length <= 1) || (WorldJsonPointer.Nearest(pointer: composedPointer, root: composed) is not { } node) || !TryAuthor(documentPath: out var documentPath, documentPointer: out var documentPointer, node: node) || IsRoot(path: documentPath)) {
+        if ((origins is null) || (composedPointer.Length <= 1) || (DocumentJsonPointer.Nearest(pointer: composedPointer, root: composed) is not { } node) || !TryAuthor(documentPath: out var documentPath, documentPointer: out var documentPointer, node: node) || IsRoot(path: documentPath)) {
             return diagnostic;
         }
         if (Compile(path: documentPath) is not { } authored) {

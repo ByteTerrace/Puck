@@ -6,7 +6,7 @@ using Puck.Transpiler.Diagnostics;
 using Puck.Transpiler.Formatting;
 using Puck.Transpiler.Parsing;
 using Puck.World.Transpiler.Decompiler;
-using static Puck.World.WorldJsonPointer;
+using static Puck.Assets.Documents.DocumentJsonPointer;
 
 namespace Puck.World.Transpiler;
 

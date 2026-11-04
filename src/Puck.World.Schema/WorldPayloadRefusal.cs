@@ -126,8 +126,8 @@ public sealed record WorldPayloadRefusal(string Path, string Pointer, DocumentVa
         foreach (var step in steps) {
             type = ((type is null) ? null : Descend(node: node, step: step, type: type));
             node = (step.IsIndex
-                ? WorldJsonPointer.At(root: node, pointer: $"/{step.Text}")
-                : WorldJsonPointer.At(root: node, pointer: $"/{WorldJsonPointer.Escape(value: step.Text)}"));
+                ? DocumentJsonPointer.At(root: node, pointer: $"/{step.Text}")
+                : DocumentJsonPointer.At(root: node, pointer: $"/{DocumentJsonPointer.Escape(value: step.Text)}"));
             if (type is null) {
                 return null;
             }
@@ -169,7 +169,7 @@ public sealed record WorldPayloadRefusal(string Path, string Pointer, DocumentVa
         ArgumentNullException.ThrowIfNull(argument: type);
 
         var steps = ((exception is JsonException { Path: { Length: > 0 } path }) ? Steps(path: path) : []);
-        var pointer = string.Concat(values: steps.Select(selector: static step => ('/' + (step.IsIndex ? step.Text : WorldJsonPointer.Escape(value: step.Text)))));
+        var pointer = string.Concat(values: steps.Select(selector: static step => ('/' + (step.IsIndex ? step.Text : DocumentJsonPointer.Escape(value: step.Text)))));
         JsonNode? document = null;
         DocumentValueKind? expected = null;
 
@@ -185,7 +185,7 @@ public sealed record WorldPayloadRefusal(string Path, string Pointer, DocumentVa
         return new WorldPayloadRefusal(
             Detail: Said(exception: exception),
             Expected: expected,
-            Found: DocumentValueKinds.Of(node: WorldJsonPointer.At(root: document, pointer: pointer)),
+            Found: DocumentValueKinds.Of(node: DocumentJsonPointer.At(root: document, pointer: pointer)),
             Path: Spell(steps: steps),
             Payload: WorldJsonPayload.Elide(json: json),
             Pointer: pointer

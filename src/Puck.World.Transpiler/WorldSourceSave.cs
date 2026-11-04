@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json.Nodes;
 using Puck.Abstractions;
+using Puck.Assets.Documents;
 using Puck.Abstractions.Machines;
 using Puck.World.Transpiler.Composition;
 using Puck.World.Transpiler.Decompiler;
@@ -274,7 +275,7 @@ public static class WorldSourceSave {
             }
             if ((old is JsonObject left) && (now is JsonObject right)) {
                 foreach (var name in left.Select(selector: static member => member.Key).Union(second: right.Select(selector: static member => member.Key), comparer: StringComparer.Ordinal).ToArray()) {
-                    var child = ((pointer + "/") + WorldJsonPointer.Escape(value: name));
+                    var child = ((pointer + "/") + DocumentJsonPointer.Escape(value: name));
 
                     if (!right.ContainsKey(propertyName: name)) {
                         if (!TryRemove(node: left[name], pointer: child, reason: out reason)) { return false; }
@@ -389,7 +390,7 @@ public static class WorldSourceSave {
             }
 
             // The composed tree carries the list, so the saved source holds objects, or nothing, on the way to it.
-            var segments = pointer.Split(options: StringSplitOptions.RemoveEmptyEntries, separator: '/').Select(selector: WorldJsonPointer.Unescape).ToArray();
+            var segments = pointer.Split(options: StringSplitOptions.RemoveEmptyEntries, separator: '/').Select(selector: DocumentJsonPointer.Unescape).ToArray();
             JsonNode current = root.Document;
 
             for (var index = 0; (index < segments.Length); index++) {
@@ -409,13 +410,13 @@ public static class WorldSourceSave {
             JsonNode fragment = new JsonArray(bare.DeepClone());
 
             foreach (var segment in pointer.Split(options: StringSplitOptions.RemoveEmptyEntries, separator: '/').Reverse()) {
-                fragment = new JsonObject { [WorldJsonPointer.Unescape(value: segment)] = fragment };
+                fragment = new JsonObject { [DocumentJsonPointer.Unescape(value: segment)] = fragment };
             }
             fragment["schema"] = WorldDefinition.SchemaVersion;
             try {
                 var compiled = WorldCompiler.Compile(source: WorldDecompiler.Decompile(root: (JsonObject)fragment));
 
-                return ((compiled.Success && (WorldJsonPointer.At(pointer: (pointer + "/0"), root: compiled.Json) is { } lowered)) ? lowered.DeepClone() : bare);
+                return ((compiled.Success && (DocumentJsonPointer.At(pointer: (pointer + "/0"), root: compiled.Json) is { } lowered)) ? lowered.DeepClone() : bare);
             } catch (WorldDecompileRefusedException) {
                 return bare;
             }
@@ -454,7 +455,7 @@ public static class WorldSourceSave {
             if (!TrySource(path: document, reason: out reason, source: out source)) {
                 return false;
             }
-            at = ((place.Length == 0) ? source!.Document : WorldJsonPointer.At(pointer: place, root: source!.Document));
+            at = ((place.Length == 0) ? source!.Document : DocumentJsonPointer.At(pointer: place, root: source!.Document));
             return true;
         }
         private bool TrySource(string path, out Source? source, out string reason) {
@@ -474,7 +475,7 @@ public static class WorldSourceSave {
             if (node is JsonValue value) {
                 visit(arg1: value, arg2: suffix);
             } else if (node is JsonObject obj) {
-                foreach (var (name, child) in obj) { Walk(node: child, suffix: ((suffix + "/") + WorldJsonPointer.Escape(value: name)), visit: visit); }
+                foreach (var (name, child) in obj) { Walk(node: child, suffix: ((suffix + "/") + DocumentJsonPointer.Escape(value: name)), visit: visit); }
             } else if (node is JsonArray array) {
                 for (var index = 0; (index < array.Count); index++) { Walk(node: array[index], suffix: ((suffix + "/") + index.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)), visit: visit); }
             }

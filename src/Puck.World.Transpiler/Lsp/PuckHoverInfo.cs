@@ -17,7 +17,7 @@ internal static class PuckHoverInfo {
             "concat" => ("concat(values...)", "Concatenates arrays and scalar values into one array."),
             "map" => ("map(array, (item, index) => value)", "Transforms each element. The index parameter is optional."),
             "flatMap" => ("flatMap(array, (item, index) => value)", "Transforms each element and splices an array result into the output, so a flatten is one call. The index parameter is optional."),
-            "filter" =>("filter(array, (item, index) => condition)", "Keeps elements whose condition is truthy. The index parameter is optional."),
+            "filter" => ("filter(array, (item, index) => condition)", "Keeps elements whose condition is truthy. The index parameter is optional."),
             "reduce" => ("reduce(array, initial, (accumulator, item) => value)", "Folds elements into an accumulated value starting with initial."),
             "distinct" => ("distinct(array)", "Removes duplicate values, preserving the first occurrence."),
             "sort" => ("sort(array, item => key)", "Stably sorts an array. The key lambda is optional."),
