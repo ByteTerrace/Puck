@@ -214,7 +214,7 @@ bake numbers come from `puck mesh audit --cpu --group "(valley-"`.
 | 2. Aerial perspective | rendering B | 0 | `SdfAir` and the kernel agree as today. At `valley-draw-distance`, rock 700 m out shifts measurably toward the sky's hue and the rim keeps its silhouette. Changing `farDistance` changes no pixel nearer than it. |
 | 3. `TerrainRelief` op | field/maths C | [bake fundamental](open-items.md#bake-proportional-to-change), kernel edits batched | Fixed-point and kernel bakes of one sector match to the triangle (`--cpu` against a stored bake). The exact noise result is pinned by one Maths law. Sector CPU bake time at the same cell is within 1.5× of today's 24 to 43 s. |
 | 4. Relative caps, shape bound, tiles | authoring/bake D | 3 for relief; the bound fix none | A sector bakes at its declared spacing (cell under 1.6 m before tiles). With tiles, demanded triangles at any valley stop stay under today's 2.16 M plus 1.5 M, and the mesh region grows under 150 MB. Warm boot is unchanged; time to the demanded set after a sector edit is under today's sector bake. |
-| 5. Certified field contact | physics E | [certified field contact](open-items.md#certified-field-contact), with 3's relief | One certified solve for both contact paths closes R4 to R8; the valley witnesses report 0 red, feet stay within skin plus bake error on the 58° face, creep is 0, and replay agrees after deliberate corrections are re-recorded. No coarser contact cut is allowed. Landed: the one solve, R4 to R8 closed, replay agreeing, 0 red at the rim, the relief charged per box, and the rim walk grounded throughout; the 58° face, the rim's creep and clearance close to a slope remain (packet). |
+| 5. Certified field contact | physics E | [certified field contact](open-items.md#certified-field-contact), with 3's relief | One certified solve for both contact paths closes R4 to R8; the valley witnesses report 0 red, feet stay within skin plus bake error on the 58° face, creep is 0, and replay agrees after deliberate corrections are re-recorded. No coarser contact cut is allowed. Still open: the 58° face, the rim's creep and clearance close to a slope (packet). |
 | 6. Material layers, deposit migrated | rendering/shading F | none | Views pass GPU ms rises at most 10% at `valley-slope`. The register count on Direct3D 12 does not exceed today's. The weathering exhibits' stills are unchanged within the 2% threshold. |
 | 7. Far shadows | rendering A, after 1 | 0 | `valley-rim` shows ridge shadows on the far walls. The shadow passes cost at most 0.5 ms more with the sun still. |
 | 8. The sets and the valley | content G | 3, 4, 6 (2 for the haze presets) | Both sets compile and lint clean under `--strict`. Six stills demonstrate each set; the valley wears the painterly set under the owner's ruling. |
@@ -230,16 +230,16 @@ work until their stills.
 Risks:
 
 - **Bake identity churn.** Step 3 edits the field kernel, which rebakes every
-  mesh. The lead-machine cold readings are 132.0 s on Direct3D 12 and 226.9 s
-  on Vulkan for 2,090 groups, with other lanes building; these are loaded
-  readings, not quiet-machine qualification. Batch step 3 behind the
+  mesh, and a cold bake of about two thousand groups already takes over two
+  minutes on Direct3D 12 and nearly four on Vulkan, against the one-minute bar.
+  Batch step 3 behind the
   [bake fundamental](open-items.md#bake-proportional-to-change) and land kernel
   edits together. A relief edit afterwards rebakes its own tiles, nearest first.
-- **Field contact cost.** At the rim the certified solve reads the field about
-  60 times a tick at about 14 samples a read, each six octaves, and asks about
-  615 box bounds a tick, of which an identical-box cache walks about 100;
-  relief contact is about 7 % of a headless tick (15.7 % with the relief charged
-  its whole reach). The next cut is the job system's parallel contact work.
+- **Field contact cost.** At the rim the certified solve reads the field a
+  few dozen times a tick, each read about 14 samples of six octaves, and an
+  identical-box cache spares most of its box-bound queries; relief contact is
+  about 7 % of a headless tick (about 16 % with the relief charged its whole
+  reach). The next cut is the job system's parallel contact work.
   Contact keeps every geometric octave and its declared precision.
 - **Loose fields.** Warp and amplitude raise the step factor, slowing the bake
   and the sweep; the erosion mask and relative cap hold it.
