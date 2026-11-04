@@ -1134,9 +1134,10 @@ Facts a script needs:
   owned worlds live in, so `TryStart` refuses a name that is not one safe
   segment and independently refuses any name resolving its store outside the
   instances root. A non-boot instance now has its own local-seat table too
-  (`world.instance.seat.*`—enter/warp/face/run/stop/where/leave, applying
-  through that instance's own `ApplySession`/`ApplyCommand`, with
-  `world.instance.seats` the occupancy read-back and `ReapIfEmpty` retiring an
+  (`player.join`/`leave`/`fly`/`stop`/`where`/`pose` each take a trailing
+  `instance:<name>`, applying through that instance's own
+  `ApplySession`/`ApplyCommand`, with `world.instance.seats` the occupancy
+  read-back, per `WorldInstanceCommandModule`, and `ReapIfEmpty` retiring an
   instance whose last seat just left); only the CLIENT, the tape, and the
   socket door still address the boot instance exclusively—that remaining
   asymmetry is wiring, not kind, and `WorldInstanceHost`'s remarks carry what a

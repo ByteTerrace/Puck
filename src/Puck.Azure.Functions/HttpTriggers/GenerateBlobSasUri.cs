@@ -31,15 +31,20 @@ public sealed class GenerateBlobSasUri(
                 .ToString(format: "D");
         }
 
-        return new OkObjectResult(value: new {
-            SasUri = (await blobSasUriService
-                .GenerateAsync(
-            cancellationToken: cancellationToken,
-            request: request,
-            tokenCredential: userCredentialContext.UserContext
-        ))
-                .ToString(),
-        });
+        try {
+            return new OkObjectResult(value: new {
+                SasUri = (await blobSasUriService
+                    .GenerateAsync(
+                cancellationToken: cancellationToken,
+                request: request,
+                tokenCredential: userCredentialContext.UserContext
+            ))
+                    .ToString(),
+            });
+        } catch (ArgumentException e) {
+            // The service refuses a bad request field (endpoint, ipRange) with ArgumentException: client input, not a fault.
+            return new BadRequestObjectResult(error: e.Message);
+        }
     }
 }
 

@@ -183,7 +183,8 @@ A few invariants hold across every declaration form the world vocabulary lowers:
 
 Records and pools use `record Name { field: Kind ... }` and
 `pool name of Name capacity(n)`. Field bounds spell a range as
-`bounds(lo..hi)` with an optional `overflow: Refuse|Saturate`; Vector fields
+`bounds([lo]..[hi], overflow: Refuse|Saturate)`; an omitted end is open
+(`bounds(0..)`, `bounds(..10)`) and `overflow` is optional; Vector fields
 name their embedding space with `space(name)`. A rule can visit a stable
 snapshot of live handles with `rule name for each x in pool { ... }`, read its
 size with `count(pool)`, claim with `claim pool as x { ... }`, and release with
@@ -191,14 +192,17 @@ size with `count(pool)`, claim with `claim pool as x { ... }`, and release with
 Binding names must not collide with state row names, because `x[key]` would
 otherwise have two meanings.
 
-Record fields currently carry kind, bounds, default, overflow, and Vector
-space. Timed row traits such as `advance` and scheduling still belong to rows;
-pool migrations that need those traits remain open until the generated field
-row can inherit them without changing row semantics.
+A record field is `name: Kind` with an optional `= default` and the modifiers
+`bounds(...)` (with its `overflow`), `space(name)` and `advance(perSecond: n)`.
+A field typed with an enum's name (`element: Element = Air`) is an `Int` field
+carrying that enum. `WorldDocumentEmitter.LowerRecordDeclaration` lowers each of these into the
+field, and any other modifier on a field is refused by name.
 
 ### Vector spaces, `embeds(...)`, and vector literals
 
-The state section supports declared embedding spaces and vector rows:
+The state section supports declared embedding spaces and vector rows. Run `puck embed <path>` on a source like this
+one before compiling it: every text of a `space(...)` row or slot, of an `embeds(...)` table and inside `embed(...)`
+needs a locked vector, and a compile without them refuses each text with PUCK079.
 
 ```puck
 state {
@@ -367,11 +371,14 @@ or otherwise non-foldable addition to the shared table, not a currently reachabl
 
 ## Collection builtins and lambdas
 
-`range`, `length`, `concat`, `map`, `filter`, `reduce`, `distinct`, `sort` and `groupBy` are the document language's
+`range`, `length`, `concat`, `map`, `flatMap`, `filter`, `reduce`, `distinct`, `sort` and `groupBy` are the document language's
 OWN vocabulary—a rule has no arrays to fold, so these exist in one language only, and are evaluated WHILE
 LOWERING: a document carries the array they produced and never the call. A lambda is `item => expression` or
 `(item, index) => expression` (`reduce`'s is `(running, item) => expression`), and is an argument to one of these
 builtins and nothing else—there are no first-class functions.
+
+A cartridge's `arrays` section (`worlds/debug/cartridges/shared/tetromino.puck` is the working form; a world
+document has no `arrays` member) shows the builtins at work:
 
 ```puck
 arrays [
@@ -380,12 +387,22 @@ arrays [
 ]
 ```
 
+`flatMap` flattens in a world-valid place too. This is a row's `cells` listing two cells for each of three names:
+
+```puck
+cells: flatMap(["a", "b", "c"], (name, index) => [
+    { key: $"{index}-title", value: name }
+    { key: $"{index}-note", value: "" }
+])
+```
+
 | Builtin | Reads | Lambda |
 |---|---|---|
 | `range(start, count)` | two whole numbers |—|
 | `length(value)` | an array, object, or string |—|
 | `concat(a, b, ...)` | any number of arrays or values |—|
 | `map(array, lambda)` | an array | the item, or the item and its index |
+| `flatMap(array, lambda)` | an array | the item, or the item and its index; an array result is spliced in, anything else is one item, exactly `reduce(array, [], (all, item) => concat(all, result))` |
 | `filter(array, lambda)` | an array | the item, or the item and its index; kept when the result is truthy |
 | `reduce(array, seed, lambda)` | an array and a seed | the running value and the item |
 | `distinct(array)` | an array |—|

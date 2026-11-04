@@ -1,0 +1,16 @@
+// flatMap(rows, row => values) is reduce(rows, [], (all, row) => concat(all, values)): an array the lambda yields is
+// spliced in, anything else is one item, and the index form reads the same way.
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+prototypes {
+  prototype "p" {
+    document {
+      shape Box "b" {
+        position: flatMap([5, 6, 7], (x, i) => x + i)
+        scale: flatMap(range(0, 4), i => i == 1 ? [] : [0.5])
+        rotation: flatMap([[0, 0], [0, 1]], pair => pair)
+      }
+    }
+  }
+}

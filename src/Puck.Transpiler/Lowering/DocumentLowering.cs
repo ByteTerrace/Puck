@@ -685,7 +685,7 @@ public static partial class DocumentLowering {
             ) {
                 scope.Diagnostics.ReportError(
                     code: PuckDiagnosticCodes.ArgumentWrittenQuoted,
-                    message: $"{member} is text; write '{memberName}: \"{word.Name}\"'",
+                    message: $"no constant named '{word.Name}'; if it is text, write '{memberName}: \"{word.Name}\"'",
                     span: word.Span
                 );
             }

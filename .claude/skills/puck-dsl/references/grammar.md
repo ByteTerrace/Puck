@@ -268,6 +268,7 @@ else; a lambda anywhere else is **PUCK042**, an unevaluable call is **PUCK041**.
 | `length(value)` | array, object, or string | — |
 | `concat(a, b, ...)` | any number of arrays/values | — |
 | `map(array, lambda)` | an array | item, or item+index |
+| `flatMap(array, lambda)` | an array | item, or item+index; an array result is spliced in, anything else is one item (the `reduce(array, [], (all, x) => concat(all, …))` fold without recopying) |
 | `filter(array, lambda)` | an array | item, or item+index; kept when truthy |
 | `reduce(array, seed, lambda)` | an array and a seed | running value + item |
 | `distinct(array)` | an array | — |

@@ -135,10 +135,9 @@ public static partial class CompileCommand {
                     key: destination,
                     value: sourcePath
                 );
-                Console.WriteLine(value: $"Successfully compiled '{Path.GetFileName(path: sourcePath)}' -> '{CliPaths.ToDisplay(fullPath: destination)}'.");
             }
             // Each document's compiled world sits beside it, composed where its source sits, as a boot of the source
-            // composes it.
+            // composes it. A source is reported compiled only once its world step has not refused it.
             for (var index = 0; (index < destinations.Length); index++) {
                 var exitCode = WriteCompiledWorld(
                     besidePath: destinations[index],
@@ -154,6 +153,7 @@ public static partial class CompileCommand {
                 if (exitCode != 0) {
                     return exitCode;
                 }
+                Console.WriteLine(value: $"Successfully compiled '{Path.GetFileName(path: sourcePath)}' -> '{CliPaths.ToDisplay(fullPath: destinations[index])}'.");
             }
             return 0;
         } catch (IOException error) {

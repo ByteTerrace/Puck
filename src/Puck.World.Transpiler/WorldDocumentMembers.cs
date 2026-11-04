@@ -18,6 +18,17 @@ internal static class WorldDocumentMembers {
         typeof(float), typeof(DocumentVector2), typeof(DocumentVector3), typeof(DocumentQuaternion), typeof(Vector2), typeof(Vector3), typeof(Vector4), typeof(Quaternion),
     ];
 
+    // Reports an error at the authored place of the document node `jsonPointer` names, and attributes it to the source
+    // that authored the node (an import's row is reported against the import). A node the map does not know is placed
+    // at its nearest authored ancestor, and with no map, nowhere.
+    internal static void ReportAt(DiagnosticBag diagnostics, string code, string message, string jsonPointer, SourceMap? sourceMap) {
+        var start = diagnostics.Count;
+        var origin = new SourceOrigin(ModuleInstancePath: null, SourcePath: null, Span: SourceSpan.None);
+
+        _ = sourceMap?.TryGetOrigin(jsonPointer: jsonPointer, origin: out origin);
+        diagnostics.ReportError(code: code, message: message, span: origin.Span);
+        diagnostics.AttributeFrom(sourcePath: origin.SourcePath, startIndex: start);
+    }
     // Writes the canonical form of every value whose position the model types (a float's one spelling, a rotation's
     // one sign, a convex profile's one start vertex, a shape member whose zero is the member omitted), and, given
     // diagnostics, refuses a member no document member consumes.
@@ -96,12 +107,8 @@ internal static class WorldDocumentMembers {
                     ((pointer.Length > 0) && (key is "$replace" or "$drop")) ||
                     ((pointer.Length == 0) && (WorldConstructs.Table.RootArmWriting(documentKey: key) is WorldRootArm.Materials or WorldRootArm.Cartridge)) ||
                     ((shape.Members.Any(predicate: static member => ((member.Access & WorldModelAccess.ExtensionData) != 0))) && DocumentExtensionsPolicy.IsReservedKey(key: key)))) {
-                    var start = diagnostics.Count;
-
-                    sourceMap.TryGetOrigin(jsonPointer: child, origin: out var origin);
-                    diagnostics.ReportError(code: PuckDiagnosticCodes.SemanticValidation,
-                        message: $"Unknown member '{key}' at '{child}'; no document member consumes it.", span: origin.Span);
-                    diagnostics.AttributeFrom(sourcePath: origin.SourcePath, startIndex: start);
+                    ReportAt(code: PuckDiagnosticCodes.SemanticValidation, diagnostics: diagnostics, jsonPointer: child,
+                        message: $"Unknown member '{key}'; no document member consumes it.", sourceMap: sourceMap);
                 }
                 if ((memberType is not null) && (Visit(node: value, pointer: child, refuse: refuse, type: memberType) is var kept) && !ReferenceEquals(objA: kept, objB: value)) {
                     (replaced ??= []).Add(item: (key, kept));

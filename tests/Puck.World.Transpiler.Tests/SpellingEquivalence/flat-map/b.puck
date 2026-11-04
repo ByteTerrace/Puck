@@ -1,0 +1,14 @@
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+prototypes {
+  prototype "p" {
+    document {
+      shape Box "b" {
+        position: reduce(map([5, 6, 7], (x, i) => x + i), [], (all, x) => concat(all, x))
+        scale: reduce(range(0, 4), [], (all, i) => concat(all, i == 1 ? [] : [0.5]))
+        rotation: reduce([[0, 0], [0, 1]], [], (all, pair) => concat(all, pair))
+      }
+    }
+  }
+}

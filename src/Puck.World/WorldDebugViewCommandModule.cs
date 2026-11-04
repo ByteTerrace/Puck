@@ -9,9 +9,12 @@ namespace Puck.World;
 // Core registered: an audit is available with the view off and without a renderer.
 internal sealed class WorldDebugViewCommandModule(WorldDiagnostics diagnostics, IServerLink link,
     WorldRenderProbe? renderProbe = null, WorldRenderSettings? settings = null) : ICommandModule {
+    // The accepted mode forms, once: the verb's description and the unknown-mode refusal both print it.
+    private static readonly string ModeForm = $"[{string.Join('|', DebugViewModes.Names)}|next|toggle <mode>]";
+
     public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.WithWireArgs(name: "world.debug-view", bindability: CommandBindability.Bindable,
-                description: $"world.debug-view [{string.Join('|', DebugViewModes.Names)}|next|toggle <mode>] [focus|pins-only] [--amber] — colliders and contacts preserve the scene; default is exterior marks and pins. report [colliders|contacts|all] [--json] evaluates on demand, even off or headless; incomplete inputs are unknown. goto <finding-id> moves only the operator camera. world.view.pick <view-or-instance> finding <id> reads a retained causal record even while off; primary resolves to the first seat's rendered instance. Run report first to populate findings. Findings name snapshot, tick, revision, provenance, expected relation, measurements, budget, coverage and lifetime. Amber is off by default.",
+                description: $"world.debug-view {ModeForm} [focus|pins-only] [--amber] — colliders and contacts preserve the scene; default is exterior marks and pins. report [colliders|contacts|all] [--json] evaluates on demand, even off or headless; incomplete inputs are unknown. goto <finding-id> moves only the operator camera. world.view.pick <view-or-instance> finding <id> reads a retained causal record even while off; primary resolves to the first seat's rendered instance. Run report first to populate findings. Findings name snapshot, tick, revision, provenance, expected relation, measurements, budget, coverage and lifetime. Amber is off by default.",
                 handler: (context, args) => Execute(context, args), routing: CommandRouting.Immediate);
     }
 
@@ -22,7 +25,7 @@ internal sealed class WorldDebugViewCommandModule(WorldDiagnostics diagnostics, 
             for (var i = 1; i < args.Count; i++) {
                 if (args.Is(i, "--json")) { json = true; }
                 else if (args[i].ToString() is "colliders" or "contacts" or "all") { view = args[i].ToString(); }
-                else { return CommandResult.Usage("report [colliders|contacts|all] [--json]", "world.debug-view"); }
+                else { return CommandResult.Usage("world.debug-view", "report [colliders|contacts|all] [--json]"); }
             }
             var reports = (view == "all" ? new[] { "colliders", "contacts" } : [view]).Select(diagnostics.Report).ToArray();
             return new CommandResult(Output: json
@@ -46,11 +49,12 @@ internal sealed class WorldDebugViewCommandModule(WorldDiagnostics diagnostics, 
         if (name == "next") {
             _ = DebugViewModes.TryParse(diagnostics.Mode, out var previous);
             name = DebugViewModes.Name((previous + 1) % DebugViewModes.Count);
-        } else if (name == "toggle" && args.Count >= 2) {
+        } else if (name == "toggle") {
+            if (args.Count < 2) { return CommandResult.Error("[world.debug-view: toggle takes a mode: world.debug-view toggle <mode>]"); }
             name = diagnostics.Mode == args[1].ToString() ? "off" : args[1].ToString();
             index = 2;
         }
-        if (!DebugViewModes.TryParse(name, out var mode)) { return CommandResult.Error($"[world.debug-view: unknown mode '{name}']"); }
+        if (!DebugViewModes.TryParse(name, out var mode)) { return CommandResult.Error($"[world.debug-view: unknown mode '{name}'; expected {ModeForm}]"); }
         var presentation = "default";
         var amber = false;
         while (index < args.Count) {

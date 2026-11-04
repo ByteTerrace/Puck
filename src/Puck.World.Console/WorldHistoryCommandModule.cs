@@ -26,7 +26,17 @@ public sealed partial class WorldHistoryCommandModule(WorldHistory history, Worl
     /// <summary>The scrubber row's held pointer verb.</summary>
     public const string DragCommand = "world.history.drag";
 
-    private const string Usage = "[world.history: usage — world.history [on [<MiB>] | off | status | row | seek <tick> | step <±n> | scrub <0..1> | diff <a> <b> [--json] | resume | branch <name> | switch <name> | save <name> <tape> | replay-edit <n>]]";
+    // Each sub-form once: its own refusal prints it and the whole-verb refusal joins them, so they cannot drift.
+    private const string BranchForm = "branch <name>";
+    private const string DiffForm = "diff <a> <b> [--json]";
+    private const string OnForm = "on [<MiB>]";
+    private const string ReplayEditForm = "replay-edit <n>";
+    private const string SaveForm = "save <branch> <tape>";
+    private const string ScrubForm = "scrub <0..1>";
+    private const string SeekForm = "seek <tick>";
+    private const string StepForm = "step <±n>";
+    private const string SwitchForm = "switch <branch>";
+    private const string VerbForm = "[" + OnForm + " | off | status | row | " + SeekForm + " | " + StepForm + " | " + ScrubForm + " | " + DiffForm + " | resume | " + BranchForm + " | " + SwitchForm + " | " + SaveForm + " | " + ReplayEditForm + "]";
     // The most diff lines the console prints before naming how many more the machine form carries.
     private const int MaxDiffLines = 24;
 
@@ -42,7 +52,7 @@ public sealed partial class WorldHistoryCommandModule(WorldHistory history, Worl
     });
     private CommandResult Branch(WireArgs args) {
         if (args.Count != 2) {
-            return CommandResult.Error(output: "[world.history: usage — world.history branch <name>]");
+            return CommandResult.Usage(form: BranchForm, verb: Command);
         }
 
         var name = args[1].ToString();
@@ -73,7 +83,7 @@ public sealed partial class WorldHistoryCommandModule(WorldHistory history, Worl
             !args.TryUnsignedDigits(index: 1, value: out var from) ||
             !args.TryUnsignedDigits(index: 2, value: out var to)
         ) {
-            return CommandResult.Error(output: "[world.history: usage — world.history diff <a> <b> [--json]]");
+            return CommandResult.Usage(form: DiffForm, verb: Command);
         }
 
         if (!m_history.TryDiff(
@@ -122,7 +132,7 @@ public sealed partial class WorldHistoryCommandModule(WorldHistory history, Worl
 
             budget = ((((long)mebibytes) * 1024L) * 1024L);
         } else if (args.Count != 1) {
-            return CommandResult.Error(output: "[world.history: usage — world.history on [<MiB>]]");
+            return CommandResult.Usage(form: OnForm, verb: Command);
         }
 
         if (!m_history.TryOn(
@@ -139,7 +149,7 @@ public sealed partial class WorldHistoryCommandModule(WorldHistory history, Worl
             (args.Count != 2) ||
             !args.TryInt(index: 1, value: out var ticksBack)
         ) {
-            return CommandResult.Error(output: "[world.history: usage — world.history replay-edit <n>]");
+            return CommandResult.Usage(form: ReplayEditForm, verb: Command);
         }
 
         if (!m_history.TryReplayEdit(
@@ -276,7 +286,7 @@ public sealed partial class WorldHistoryCommandModule(WorldHistory history, Worl
             !args.TryLong(index: 1, value: out var delta) ||
             (delta == 0L)
         ) {
-            return CommandResult.Error(output: "[world.history: usage — world.history step <±n>, a nonzero tick count]");
+            return CommandResult.Usage(form: StepForm, verb: Command);
         }
 
         if (m_history.CursorTick is not { } cursor) {
@@ -327,7 +337,7 @@ public sealed partial class WorldHistoryCommandModule(WorldHistory history, Worl
         if (args.Is(index: 0, value: "seek")) {
             return (((args.Count == 2) && args.TryUnsignedDigits(index: 1, value: out var target))
                 ? Seek(target: target, verb: "seek")
-                : CommandResult.Error(output: "[world.history: usage — world.history seek <tick>]"));
+                : CommandResult.Usage(form: SeekForm, verb: Command));
         }
 
         if (args.Is(index: 0, value: "step")) {
@@ -362,7 +372,7 @@ public sealed partial class WorldHistoryCommandModule(WorldHistory history, Worl
             return ReplayEdit(args: args);
         }
 
-        return CommandResult.Error(output: Usage);
+        return CommandResult.Usage(form: VerbForm, verb: Command);
     }
 
     /// <inheritdoc/>
