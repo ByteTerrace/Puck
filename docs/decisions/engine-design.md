@@ -106,8 +106,7 @@ Until initial development is done, no adaptation lowers quality. Every machine
 runs the highest quality settings, and the adaptations above are how it reaches
 its frame-rate bar there (the owner's ruling).
 
-What "lowering quality" means (the owner confirmed a consensus of Claude, Codex
-and Antigravity):
+What "lowering quality" means (the owner confirmed it):
 - **Identical on every machine:** the simulation and document content, and every
   light, shadow, global illumination, ambient occlusion and glass pass. No
   machine drops a pass or an effect, and nothing pops in or out.
@@ -328,10 +327,6 @@ feature's vocabulary.
 
 ## Combat is world content on generic queries, fields and input
 
-Codex and Antigravity proposed the groundwork for action combat
-independently, cross-reviewed, and converged; the lead settled what they still
-held.
-
 - **The engine stays generic.** Spatial queries, named physical regions, input
   history and state projections are engine mechanisms. Elements, vitality,
   statuses, abilities, recipes, art and the faerie's reactions are world
@@ -367,8 +362,7 @@ held.
 
 ## Weather is a region's composition of generic pieces
 
-Codex and Antigravity proposed weather independently and converged over three
-rounds. Rain, snow, sand, ash and embers are world recipes; no weather or
+Rain, snow, sand, ash and embers are world recipes; no weather or
 element word enters an engine contract.
 
 - **Weather is regional.** It extends the combat decision's named physical
@@ -440,8 +434,7 @@ The chase camera clears against the drawn field, not the colliders, so an inset
 wall collider can't make the camera clip. A conservative approximation reports
 its computed bound. Within that bound it is a known approximation, not a red
 finding; beyond it, it is red. The fix for an approximation is an exact contact,
-such as an exact chamfered-box collider. The owner confirmed this as a
-consensus of Claude, Codex and Antigravity.
+such as an exact chamfered-box collider. The owner confirmed this.
 
 Why: the owner's ruling. Bodies floating at the round dais and at box corners
 were visible flaws.

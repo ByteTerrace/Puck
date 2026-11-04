@@ -262,44 +262,27 @@ turf masses. The floor is the standard's `paintedGround` with eight painted
 paths. Tree form follows the owner's answer: the families mix by area and the
 swap is a group's `kind` in `lawnGroups`.
 
-Measured on one build (the lane's merge of the integration tip), RTX 4070,
-the authored 1280×900 view, `--devices none`, an empty cache per leg and a GPU
-lease per leg, with other lanes' builds and GPU work queued beside them, so
-the frame readings are loaded-machine observations. Cold bake is the `world`
-residency's `[sdf.mesh-bake] done … seconds`; frames are `host.frames` over
-300 ticks standing and 180 walking (`body.fly 1 0 0 0 0 0 7`), at
-`debug.go stage` and `debug.go meadow`; counts are `world.counters gpu
-summary` (the primary `world` node) and `world.budget`; memory is
-`host.memory` once the bakes settle.
+C1's cost was read against the meadow's workload on D3D12 and Vulkan, with the
+authored 1280×900 view, an empty cache and a GPU lease per leg. Cold bake is the
+`world` residency's `[sdf.mesh-bake] done … seconds`; frames are `host.frames`
+standing and walking at `debug.go stage` and `debug.go meadow`; counts are
+`world.counters gpu summary` and `world.budget`; memory is `host.memory` once the
+bakes settle.
 
-| Reading | Before | After |
-|---|---:|---:|
-| Direct3D 12 cold bake | 157.95 s | 233.95 s |
-| Vulkan cold bake | not taken on this build | 287.26 s |
-| Groups, unique bakes | 6,183, 1,368 | 7,236, 1,671 |
-| Baked triangles | 45.06 M | 56.91 M |
-| Direct3D 12 stage standing, walking (avg / p99 ms) | 58.4 / 97.2, 82.4 / 128.3 | 107.0 / 113.7, 129.3 / 163.0 |
-| Direct3D 12 meadow standing, walking | 73.3 / 125.9, 64.9 / 129.8 | 131.0 / 174.3, 126.0 / 142.6 |
-| Vulkan stage standing, walking | | 108.8 / 175.0, 134.0 / 154.6 |
-| Vulkan meadow standing, walking | | 134.5 / 180.0, 142.5 / 196.8 |
-| Primary view draws (vertices) at the stage | 657 (3.09 M) | 3,360 (8.32 M) |
-| Primary view draws at the meadow | 2,773 | 2,652 |
-| Retained draws, instances, dynamic slots | 7,578, 7,403, 4,994 | 8,672, 10,218, 5,748 |
-| Mesh region | 1,589,088,616 B | 1,994,605,168 B |
-| Account live bytes, private | 1,607,732,922 B, 15,815 MiB | 2,022,625,748 B, 17,898 MiB |
-
-The 303 added unique bakes are the static rows, one each: a static copy bakes
-in world space, so copies never share
-([the bake packet](open-items.md#bake-proportional-to-change)); the 748 grass
-parts are dynamic and shared. The flower clump was then rebuilt as a mound
-with heads and no millimetre stems, which `puck mesh audit --cpu` puts at
-26,962 triangles a clump where the measured stems took 54,132. Produce and
-simulate rose even at the meadow, where the drawn work barely moved, so part
-of the frame rise is the machine's load between legs and wants a quiet
-back-to-back reading. Captures at the stage, the turn and the lawn walk read
-B's grouped trees, terracotta boulders and paths alike on both backends.
-`puck test --reproduce` passes on meadow-tests (with a new walk into a lawn
-boulder), hall-tests and noclip-tests.
+The lawn adds roughly a seventh more groups and about a quarter more baked
+triangles and mesh-region bytes, and raises cold bake by about half on D3D12 and
+more on Vulkan, so both stay far above the one-minute bar. The added unique bakes
+are the static rows, one each: a static copy bakes in world space, so copies never
+share ([the bake packet](open-items.md#bake-proportional-to-change)); the grass
+parts are dynamic and shared. The flower clump is a mound with heads and no
+millimetre stems, which `puck mesh audit --cpu` puts at about half the triangles
+the measured stems took. Produce and simulate rose even at the meadow, where the
+drawn work barely moved, because other lanes' builds loaded the machine between
+legs; the frame readings are not a quiet baseline and want a back-to-back reading
+in a settle window. Captures at the stage, the turn and the lawn walk read B's
+grouped trees, terracotta boulders and paths alike on both backends, and
+`puck test --reproduce` passes on meadow-tests (with a walk into a lawn boulder),
+hall-tests and noclip-tests.
 
 ## The owner's answers
 

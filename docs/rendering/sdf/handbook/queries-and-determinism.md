@@ -450,11 +450,12 @@ preserving conservative or Lipschitz properties. Those proxies do not satisfy
 this evaluator's exact point/material/gradient and interval contract merely by
 preserving a zero surface. Extend the existing certificate machinery against its
 actual rounded arithmetic before introducing another field representation.
-The October 2026 preprint
+The preprint
 [Witnessed Boolean Contracts](https://arxiv.org/abs/2610.39650)
 examines why sign/value closeness alone does not guarantee gradient-projected
 witness stability. It is a research lead, not a replacement for Puck's numerical
 proofs or an adopted query algorithm.
+
 ## What determinism means here
 
 Puck's determinism contract is a single sentence: **simulation state is a pure
