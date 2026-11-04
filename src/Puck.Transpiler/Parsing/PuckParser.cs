@@ -1,5 +1,6 @@
 using Parlot;
 using Parlot.Fluent;
+using Puck.Assets.Documents;
 using Puck.State;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Diagnostics;
@@ -976,7 +977,7 @@ public static partial class PuckParser {
     }
     // The one wording of PUCK040, shared by a statement's member and an object literal's key.
     private static string ColonBeforeContainerMessage(string identifier, char opener, char separator) {
-        var shape = ((opener == '{') ? "a block" : "an array");
+        var shape = ((opener == '{') ? DocumentValueKind.Block : DocumentValueKind.List).Words();
 
         return $"'{identifier}{separator} {opener}' - {shape} is written without the '{separator}': use '{identifier} {opener}'";
     }

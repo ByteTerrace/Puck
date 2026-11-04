@@ -45,7 +45,7 @@ public sealed class WorldDocumentOrigins {
             visit(value, pointer);
         } else if (node is JsonObject obj) {
             foreach (var (name, child) in obj) {
-                Walk(node: child, pointer: $"{pointer}/{name.Replace(comparisonType: StringComparison.Ordinal, newValue: "~0", oldValue: "~").Replace(comparisonType: StringComparison.Ordinal, newValue: "~1", oldValue: "/")}", visit: visit);
+                Walk(node: child, pointer: $"{pointer}/{Puck.Assets.Documents.DocumentJsonPointer.Escape(value: name)}", visit: visit);
             }
         } else if (node is JsonArray array) {
             for (var index = 0; (index < array.Count); index++) {

@@ -15,7 +15,7 @@ public sealed class WorldMachineCommandModule(IWorldConsoleAuthority authority) 
 
     private CommandResult Operation(CommandContext context, WireArgs args) {
         if (args.Count < 4) {
-            return CommandResult.Error(output: "[machine.operation: expected <instance> <generation> <operationId> <json>]");
+            return CommandResult.Usage(form: "<instance> <generation> <operationId> <json>", verb: "machine.operation");
         }
         if (!authority.TryResolveLink(
             context: context,
@@ -195,7 +195,7 @@ public sealed class WorldMachineCommandModule(IWorldConsoleAuthority authority) 
     }
     private CommandResult Default(CommandContext context, WireArgs args) {
         if (args.Count != 2) {
-            return CommandResult.Error(output: "[machine.default: expected <instance> <name>|none]");
+            return CommandResult.Usage(form: "<instance> <name>|none", verb: "machine.default");
         }
         if (context.Principal.Kind is not (PrincipalKind.Console or PrincipalKind.Seat)) {
             return CommandResult.Error(output: "[machine.default: writing a folder's settings requires a local console or seat]");
@@ -262,7 +262,7 @@ public sealed class WorldMachineCommandModule(IWorldConsoleAuthority authority) 
     }
     private CommandResult Content(CommandContext context, WireArgs args) {
         if (args.Count != 1) {
-            return CommandResult.Error(output: "[machine.content: expected <instance>]");
+            return CommandResult.Usage(form: "<instance>", verb: "machine.content");
         }
         if (!authority.TryResolveServer(
             context: context,
@@ -377,7 +377,7 @@ public sealed class WorldMachineCommandModule(IWorldConsoleAuthority authority) 
     }
     private CommandResult Swap(CommandContext context, WireArgs args) {
         if (args.Count != 2) {
-            return CommandResult.Error(output: "[machine.swap: expected <instance> <name>]");
+            return CommandResult.Usage(form: "<instance> <name>", verb: "machine.swap");
         }
         if (!authority.TryResolveServer(
             context: context,

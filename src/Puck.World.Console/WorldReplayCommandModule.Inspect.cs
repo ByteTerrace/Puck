@@ -6,11 +6,11 @@ namespace Puck.World;
 /// <summary>The <c>replay.inspect</c> half of the replay console surface — the tape's read-back (see
 /// <see cref="WorldReplayInspector"/>).</summary>
 public sealed partial class WorldReplayCommandModule {
-    private const string InspectUsage = "[replay.inspect: usage — replay.inspect <name> [<from>-<to>] [--all] [--poses]]";
+    private const string InspectForm = "<name> [<from>-<to>] [--all] [--poses]";
 
     private CommandResult Inspect(WireArgs args) {
         if (args.Count < 1) {
-            return CommandResult.Error(output: InspectUsage);
+            return CommandResult.Usage(form: InspectForm, verb: "replay.inspect");
         }
 
         var name = args[0].ToString();
@@ -42,7 +42,7 @@ public sealed partial class WorldReplayCommandModule {
             )) {
                 // A `<from>-<to>` range, both digits, from <= to.
             } else {
-                return CommandResult.Error(output: $"[replay.inspect: unrecognized argument '{args[index]}' — {InspectUsage[1..]}");
+                return CommandResult.Usage(form: InspectForm, verb: "replay.inspect");
             }
         }
 

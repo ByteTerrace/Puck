@@ -25,9 +25,9 @@ let meadowBlades = map(range(0, 144), i => {
 // sums two octaves (the second at 2.03x the frequency and 0.534 the weight, normalised to keep one octave's spread) read
 // through a turn off every axis: a unit quaternion about the axis (1, -2, -2) / 3 by acos(0.28) = 73.7 degrees.
 let landscapeTurn = [0.2, -0.4, -0.4, 0.8]
-function landscapeSurface(base, under, deposit, seed, scale = 1.5, lines = 0, settle = 0.3,
-  edge = 0, reach = 0.35, threshold = 0.16, noise = 0, patternScale = [1, 1, 1], softness = 0,
-  octaves = 2, octaveRatio = 2.03, octaveGain = 0.534, turn = landscapeTurn) = base with {
+function landscapeSurface(base, under, deposit, seed, scale = 1.5, lines = 0, settle = 0.3, edge = 0, reach = 0.35, threshold = 0.16, noise = 0, patternScale = [
+  1, 1, 1
+], softness = 0, octaves = 2, octaveRatio = 2.03, octaveGain = 0.534, turn = landscapeTurn) = base with {
   weathering {
     floor: 1
     noise: noise
@@ -51,7 +51,8 @@ function landscapeSurface(base, under, deposit, seed, scale = 1.5, lines = 0, se
 // Flat turf and relieved patches share one world-space material, including the noise phase at their seam.
 function groundSurface(color) = landscapeSurface({ color: color, roughness: 0.99, specular: 0.015 },
   under: "#6A6D42", deposit: "#91A459", seed: 4187, scale: 2.4,
-  noise: 0.7, threshold: 0.65, softness: 0.45, settle: 0.25)
+  noise: 0.7, threshold: 0.65, softness: 0.45, settle: 0.25
+)
 
 // Stone palettes for mossyRock: the stone, its shoulder and the moss cap.
 let limestoneRock = ["#888778", "#A7A28B", "#657044"]
@@ -64,7 +65,8 @@ template mossyRock(id, colors = limestoneRock) {
       name: "weathered-limestone"
       palette: map(colors, (color, i) => landscapeSurface(
         { color: color, roughness: 0.96, specular: 0.025 }, under: color,
-        deposit: i == 2 ? "#7F8B55" : "#B0A080", seed: 7341 + i, scale: 3, settle: 0.45))
+        deposit: i == 2 ? "#7F8B55" : "#B0A080", seed: 7341 + i, scale: 3, settle: 0.45
+      ))
       noise {
         frequency: 1.8
         amplitude: 0.04
@@ -104,7 +106,9 @@ template mossyRock(id, colors = limestoneRock) {
 // the trunk, branches and crowns, never the roots.
 // trunk { radius, center, half }; roots [{ position, r, yaw }]; branches [{ position, yaw, tilt, r, h }], each a
 // Capsule rising from its position; crowns [{ position, r }], material cycling through the leaves.
-template groupedTree(id, name, bark, branchBark, leaves, trunk, roots, branches, crowns, lean = 0, smooth = 0.25, barkUnder = ["#4E3D2B", "#735537"]) {
+template groupedTree(id, name, bark, branchBark, leaves, trunk, roots, branches, crowns, lean = 0, smooth = 0.25, barkUnder = [
+  "#4E3D2B", "#735537"
+]) {
   prototype $"{id}" {
     document {
       schema: "puck.creation.v1"
@@ -112,10 +116,12 @@ template groupedTree(id, name, bark, branchBark, leaves, trunk, roots, branches,
       palette: concat(
         map([bark, branchBark], (surface, i) => landscapeSurface(surface, under: barkUnder[i],
           deposit: "#657043", seed: 5123 + i, scale: 1, lines: 0, settle: 0.08, noise: 1,
-          patternScale: [16, 0.6, 16], threshold: 0.65, softness: 0.25)),
+          patternScale: [16, 0.6, 16], threshold: 0.65, softness: 0.25
+        )),
         map(leaves, (color, i) => landscapeSurface({ color: color, roughness: 0.97, specular: 0.012, wrap: 0.4 },
           under: i == 0 ? "#2F4C37" : leaves[i - 1], deposit: "#859653", seed: 1731 + i,
-          scale: 2.4, settle: 0.3, noise: 0.72, threshold: 0.6, softness: 0.4))
+          scale: 2.4, settle: 0.3, noise: 0.72, threshold: 0.6, softness: 0.4
+        ))
       )
       shape Cylinder "trunk" {
         position [-trunk.center * sine(lean), trunk.center * cosine(lean), 0]
@@ -330,7 +336,8 @@ template scrubClump(id, size = 1, crowns = 3, colors = ["#2D4A3B", "#3A5D47", "#
       schema: "puck.creation.v1"
       name: "scrub-clump"
       palette: map(colors, (color, i) => landscapeSurface({ color: color, roughness: 0.95, specular: 0.02, wrap: 0.3 },
-        under: color, deposit: "#71865A", seed: 2419 + i, scale: 2.2, settle: 0.55))
+        under: color, deposit: "#71865A", seed: 2419 + i, scale: 2.2, settle: 0.55
+      ))
       for (crown, i) in map(range(0, crowns), i => scrubCrowns[i]) {
         shape Superellipsoid $"crown-{i}" {
           exponent: landscapeExponent
@@ -647,17 +654,20 @@ template fernClump(id, size = 1, colors = ["#365C43", "#547647", "#779153"]) {
       schema: "puck.creation.v1"
       name: "woodland-fern"
       palette: map(colors, (color, i) => landscapeSurface({ color: color, roughness: 0.96, specular: 0.015, wrap: 0.3 },
-        under: color, deposit: "#7C9158", seed: 3851 + i, scale: 3, settle: 0.35))
+        under: color, deposit: "#7C9158", seed: 3851 + i, scale: 3, settle: 0.35
+      ))
       for i in range(0, 7) {
         shape Superellipsoid $"frond-{i}" {
           exponent: 2.2
           position [0.23 * size * cosine(i * 2.39996323), 0.27 * size,
-            0.23 * size * sine(i * 2.39996323)]
+            0.23 * size * sine(i * 2.39996323)
+          ]
           scale [0.11 * size, 0.43 * size, 0.065 * size]
           rotation [sine(i * 2.39996323 / 2) * sine(0.48),
             sine(i * 2.39996323 / 2) * cosine(0.48),
             cosine(i * 2.39996323 / 2) * sine(0.48),
-            cosine(i * 2.39996323 / 2) * cosine(0.48)]
+            cosine(i * 2.39996323 / 2) * cosine(0.48)
+          ]
           material: i % 3
         }
       }
@@ -673,7 +683,8 @@ template fallenLog(id, length = 3.8, radius = 0.25) {
       name: "fallen-mossy-log"
       palette [
         landscapeSurface({ color: "#594631", roughness: 0.98, specular: 0.015 }, under: "#53422F",
-          deposit: "#687447", seed: 7019, scale: 14, lines: 0.26, settle: 0.2, edge: 0.1)
+          deposit: "#687447", seed: 7019, scale: 14, lines: 0.26, settle: 0.2, edge: 0.1
+        )
         { color: "#AA8C58", roughness: 0.97, specular: 0.015 }
         { color: "#506B3B", roughness: 0.98, specular: 0.01 }
       ]
@@ -718,7 +729,8 @@ template leafLitter(id, colors = ["#796341", "#8D7749", "#5E6840"]) {
         shape Superellipsoid $"leaf-{i}" {
           exponent: 2.2
           position [1.7 * squareRoot((i + 0.5) / 16) * cosine(i * 2.39996323),
-            0.025 + i % 3 * 0.006, 1.15 * squareRoot((i + 0.5) / 16) * sine(i * 2.39996323)]
+            0.025 + i % 3 * 0.006, 1.15 * squareRoot((i + 0.5) / 16) * sine(i * 2.39996323)
+          ]
           scale [0.13 + i % 3 * 0.025, 0.035, 0.24 + i % 4 * 0.025]
           rotation [0, sine(i * 1.73 / 2), 0, cosine(i * 1.73 / 2)]
           material: i % 3

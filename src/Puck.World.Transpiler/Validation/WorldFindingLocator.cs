@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using Puck.Abstractions;
+using Puck.Assets.Documents;
 using Puck.Transpiler.Diagnostics;
 using Puck.World.Transpiler.Vocabulary;
 
@@ -33,43 +34,6 @@ internal sealed class WorldFindingLocator(JsonObject composed, JsonObject? sourc
         return ((colon > 0)
             ? message[..colon].Trim()
             : (message.Split(options: StringSplitOptions.RemoveEmptyEntries, separator: ' ').FirstOrDefault() ?? ""));
-    }
-    // The nearest node to `pointer` a source map registered, walking up the pointer, or null when none is.
-    private static SourceOrigin? Resolve(SourceMap map, string pointer) {
-        while (pointer.Length > 1) {
-            if (map.TryGetOrigin(jsonPointer: pointer, origin: out var origin)) {
-                return origin;
-            }
-
-            var last = pointer.LastIndexOf(value: '/');
-
-            if (last <= 0) {
-                break;
-            }
-            pointer = pointer[..last];
-        }
-
-        return null;
-    }
-    // The deepest node of `root` on the way to `pointer`.
-    private static JsonNode? NodeAt(JsonNode root, string pointer) {
-        var node = root;
-
-        foreach (var segment in pointer.Split(separator: '/').Skip(count: 1)) {
-            var member = segment.Replace(oldValue: "~1", newValue: "/", comparisonType: StringComparison.Ordinal).Replace(oldValue: "~0", newValue: "~", comparisonType: StringComparison.Ordinal);
-            var next = node switch {
-                JsonObject obj => (obj.TryGetPropertyValue(propertyName: member, jsonNode: out var child) ? child : null),
-                JsonArray list when (int.TryParse(s: member, provider: System.Globalization.CultureInfo.InvariantCulture, result: out var index) && (index >= 0) && (index < list.Count)) => list[index: index],
-                _ => null,
-            };
-
-            if (next is null) {
-                break;
-            }
-            node = next;
-        }
-
-        return node;
     }
     // The authored origin of `node`: its own when it is a value, or else the shallowest value under it with one, the
     // origin's pointer trimmed back up to `node`.
@@ -152,30 +116,32 @@ internal sealed class WorldFindingLocator(JsonObject composed, JsonObject? sourc
     /// <param name="code">The diagnostic code.</param>
     /// <param name="severity">The diagnostic severity.</param>
     /// <param name="message">The finding, its document path first.</param>
+    /// <param name="pointer">The JSON pointer the finding is about, when the finding's source names it already;
+    /// <see langword="null"/> reads it from the document path the message starts with.</param>
     /// <returns>The located diagnostic, or <see langword="null"/> when it is acknowledged.</returns>
-    public Diagnostic? Locate(string code, DiagnosticSeverity severity, string message) {
+    public Diagnostic? Locate(string code, DiagnosticSeverity severity, string message, string? pointer = null) {
         var diagnostic = new Diagnostic(Code: code, Message: message, Severity: severity, Span: SourceSpan.None);
 
         if (sourceMap is null) {
             return diagnostic;
         }
 
-        var composedPointer = WorldDocumentPointers.ToJsonPointer(path: PathToken(message: message), table: WorldConstructs.Table);
+        var composedPointer = (pointer ?? WorldDocumentPointers.ToJsonPointer(path: PathToken(message: message), table: WorldConstructs.Table));
         var layerPointer = (((source is null) || ReferenceEquals(objA: source, objB: composed))
             ? composedPointer
             : WorldDocumentBasis.TraceToLayer(composed: composed, layer: source, pointer: composedPointer));
 
-        if ((layerPointer is { Length: > 1 }) && (Resolve(map: sourceMap, pointer: layerPointer) is { } own)) {
+        if ((layerPointer is { Length: > 1 }) && (sourceMap.OriginOf(jsonPointer: layerPointer) is { } own)) {
             return (diagnostic with { SourcePath = (IsRoot(path: own.SourcePath) ? null : own.SourcePath), Span = own.Span });
         }
-        if ((origins is null) || (composedPointer.Length <= 1) || (NodeAt(pointer: composedPointer, root: composed) is not { } node) || !TryAuthor(documentPath: out var documentPath, documentPointer: out var documentPointer, node: node) || IsRoot(path: documentPath)) {
+        if ((origins is null) || (composedPointer.Length <= 1) || (DocumentJsonPointer.Nearest(pointer: composedPointer, root: composed) is not { } node) || !TryAuthor(documentPath: out var documentPath, documentPointer: out var documentPointer, node: node) || IsRoot(path: documentPath)) {
             return diagnostic;
         }
         if (Compile(path: documentPath) is not { } authored) {
             return (diagnostic with { SourcePath = documentPath });
         }
 
-        var located = Resolve(map: authored.Map, pointer: documentPointer);
+        var located = ((documentPointer.Length > 1) ? authored.Map.OriginOf(jsonPointer: documentPointer) : null);
         var placed = (diagnostic with { SourcePath = (located?.SourcePath ?? documentPath), Span = (located?.Span ?? SourceSpan.None) });
 
         return (authored.Acknowledgements.Acknowledges(diagnostic: placed, rootPath: documentPath) ? null : placed);

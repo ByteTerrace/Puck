@@ -1,12 +1,9 @@
 using System.Text;
-using System.Text.Json;
 using System.Text.Json.Nodes;
-using System.Text.RegularExpressions;
 using Puck.World.Transpiler.Composition;
 using Puck.Transpiler.Diagnostics;
 using Puck.Abstractions.Machines;
 using Puck.World.Authoring;
-using Puck.World.Transpiler.Vocabulary;
 
 namespace Puck.World.Transpiler.Validation;
 
@@ -152,17 +149,17 @@ public static class WorldSemanticValidator {
 
         var jsonString = loweredJson.ToJsonString();
 
-        if (!WorldDefinitionFileSource.TryParseDocument(
+        if (!WorldDefinitionFileSource.TryReadDocument(
             definition: out var definition,
             json: jsonString,
             reason: out var parseReason,
+            refusal: out var refusal,
             sourceName: "document"
         )) {
-            var (path, refusal) = AuthoredRefusal(document: loweredJson, reason: parseReason);
-
             Report(diagnostics: diagnostics, finding: new WorldFindingLocator(composed: loweredJson, origins: origins, source: source, sourceMap: sourceMap, sourcePath: sourcePath).Locate(
                 code: PuckDiagnosticCodes.SchemaRejected,
-                message: ((path is null) ? refusal : $"{path}: {refusal}"),
+                message: (refusal?.Authored ?? parseReason),
+                pointer: refusal?.Pointer,
                 severity: DiagnosticSeverity.Error
             ));
             return false;
@@ -216,51 +213,6 @@ public static class WorldSemanticValidator {
         }
 
         return (errors.Count == 0);
-    }
-    private static readonly Regex PathInReason = new(pattern: @"\s*Path: \$\.?(?<path>[^\s|]*)(?:\s*\|[^.]*\.)?", options: RegexOptions.CultureInvariant);
-    private static readonly Regex ConvertedTypeInReason = new(pattern: @"could not be converted to (?<type>\S+?)\.?$", options: RegexOptions.CultureInvariant);
-
-    // The deserializer's refusal in the author's words: the document path it names (`documentId`, `shapes[1].blend`),
-    // which the locator places on its authored line, and what the schema expected against what the document holds,
-    // with neither a CLR type name nor the payload dump the reason carries.
-    private static (string? Path, string Refusal) AuthoredRefusal(JsonObject document, string reason) {
-        var dump = reason.IndexOf(value: " (payload: ", comparisonType: StringComparison.Ordinal);
-        var message = ((dump < 0) ? reason : reason[..dump]);
-        var pathMatch = PathInReason.Match(input: message);
-
-        if (!pathMatch.Success) {
-            return (null, message);
-        }
-
-        var path = pathMatch.Groups["path"].Value;
-        var cause = message[..pathMatch.Index];
-        var typeMatch = ConvertedTypeInReason.Match(input: cause);
-
-        if (!typeMatch.Success) {
-            var lead = cause.IndexOf(value: "document: ", comparisonType: StringComparison.Ordinal);
-
-            return ((path.Length == 0) ? null : path, ((lead < 0) ? cause : cause[(lead + "document: ".Length)..]));
-        }
-
-        var expected = typeMatch.Groups["type"].Value switch {
-            "System.String" => "text",
-            "System.Boolean" => "true or false",
-            "System.Single" or "System.Double" or "System.Decimal" or "System.Half" => "a number",
-            "System.Byte" or "System.SByte" or "System.Int16" or "System.UInt16" or "System.Int32" or "System.UInt32" or "System.Int64" or "System.UInt64" => "a whole number",
-            var type when (type.Contains(value: "List`1", comparisonType: StringComparison.Ordinal) || type.EndsWith(value: "[]", comparisonType: StringComparison.Ordinal)) => "a list",
-            _ => "a different kind of value",
-        };
-        var pointer = WorldDocumentPointers.ToJsonPointer(path: path, table: WorldConstructs.Table);
-        var held = (((pointer.Length > 1) ? WorldSourceEdits.At(pointer: pointer, root: document) : null) switch {
-            JsonArray => "a list",
-            JsonObject => "a block",
-            JsonValue value when (value.GetValueKind() == JsonValueKind.String) => "text",
-            JsonValue value when (value.GetValueKind() is JsonValueKind.True or JsonValueKind.False) => "true or false",
-            JsonValue => "a number",
-            _ => null,
-        });
-
-        return ((path.Length == 0) ? null : path, ((held is null) ? $"expected {expected}" : $"expected {expected}, found {held}"));
     }
     private static void Report(DiagnosticBag diagnostics, Diagnostic? finding) {
         if (finding is not null) {

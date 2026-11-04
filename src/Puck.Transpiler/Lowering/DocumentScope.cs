@@ -287,13 +287,11 @@ public sealed partial class DocumentScope {
         )) {
             return false;
         }
-        if (!Diagnostics.Any(predicate: diagnostic => ((diagnostic.Code == refusal.Code) && (diagnostic.Span == span)))) {
-            Diagnostics.ReportError(
-                code: refusal.Code,
-                message: refusal.Message,
-                span: span
-            );
-        }
+        Diagnostics.ReportError(
+            code: refusal.Code,
+            message: refusal.Message,
+            span: span
+        );
 
         return true;
     }
@@ -349,11 +347,6 @@ public sealed partial class DocumentScope {
         }
         var key = (name, fieldKey);
 
-        if (HasRefused(name: name, expression: expression)) {
-            value = null;
-
-            return true;
-        }
         if (
             m_values.TryGetValue(
             key: key,
@@ -383,11 +376,8 @@ public sealed partial class DocumentScope {
                 : ForConstant()
             );
 
-            var start = Diagnostics.Count;
-
             value = EvaluateAtNoPosition(expression: expression, fieldKey: fieldKey, lexical: lexical);
             m_values[key] = (expression, value);
-            NoteRefusal(name: name, expression: expression, start: start);
             return true;
         } finally {
             m_evaluating.Remove(item: name);
@@ -410,11 +400,6 @@ public sealed partial class DocumentScope {
         // Lowered once per position, so a let read in many places refuses a misspelling once, against its own source.
         var key = (name, $"{fieldKey}\0{position}");
 
-        if (HasRefused(name: name, expression: expression)) {
-            value = null;
-
-            return true;
-        }
         if (m_values.TryGetValue(key: key, value: out var cached) && ReferenceEquals(objA: cached.Expression, objB: expression)) {
             value = cached.Value?.DeepClone();
             return true;
@@ -429,7 +414,6 @@ public sealed partial class DocumentScope {
 
             Diagnostics.AttributeFrom(sourcePath: DefinitionPathOf(value: expression), startIndex: start);
             m_values[key] = (expression, lowered);
-            NoteRefusal(name: name, expression: expression, start: start);
             value = lowered?.DeepClone();
             return true;
         } finally {
@@ -437,22 +421,6 @@ public sealed partial class DocumentScope {
         }
     }
 
-    // The cache key a binding's refusal is kept under, whatever field or position reads it: a refused let reports once,
-    // against its own source, however many members read it afterwards.
-    private const string RefusedField = "\0refused";
-
-    private bool HasRefused(string name, ExpressionNode expression) =>
-        (m_values.TryGetValue(key: (name, RefusedField), value: out var refused) && ReferenceEquals(objA: refused.Expression, objB: expression));
-    // Remembers that evaluating `expression` reported an error since diagnostic `start`.
-    private void NoteRefusal(string name, ExpressionNode expression, int start) {
-        for (var index = start; (index < Diagnostics.Count); index++) {
-            if (Diagnostics[index].Severity == DiagnosticSeverity.Error) {
-                m_values[(name, RefusedField)] = (expression, null);
-
-                return;
-            }
-        }
-    }
     // A binding's value is data until something uses it, and its result is cached across uses, so it is evaluated at
     // no position: what it holds is classified where it lands, never where it was first read. Its own method so the
     // closure is built only for a binding evaluated, never for one read from a local or the cache.

@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Numerics;
 using System.Text.Json.Nodes;
+using Puck.Assets.Documents;
 using Puck.Maths;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Diagnostics;
@@ -100,7 +101,7 @@ public static partial class WorldDocumentEmitter {
 
         scope.Diagnostics.ReportError(
             code: PuckDiagnosticCodes.StateDeclarationInvalidDefault,
-            message: $"{context} must be a whole number for an Int row",
+            message: $"{context} must be {DocumentValueKind.WholeNumber.Words()} for an Int row",
             span: expr.Span
         );
 

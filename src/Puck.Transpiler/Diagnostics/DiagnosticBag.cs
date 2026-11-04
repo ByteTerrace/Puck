@@ -5,8 +5,12 @@ using System.Text;
 namespace Puck.Transpiler.Diagnostics;
 
 /// <summary>Accumulates diagnostics across compilation stages and formats high-fidelity compiler output.</summary>
+/// <remarks>The bag holds each diagnostic once: one fault reported again, because lowering evaluated the source that
+/// authored it again (a <c>let</c> read under several fields, a template expanded twice), is the one report already
+/// held, under its code, message, severity, span and source alike.</remarks>
 public sealed class DiagnosticBag : IReadOnlyList<Diagnostic> {
     private readonly List<Diagnostic> m_diagnostics = [];
+    private readonly HashSet<Diagnostic> m_held = [];
 
     /// <summary>Gets the count of diagnostics in the bag.</summary>
     public int Count => m_diagnostics.Count;
@@ -24,17 +28,28 @@ public sealed class DiagnosticBag : IReadOnlyList<Diagnostic> {
     /// <summary>Adds a range of diagnostics to the bag.</summary>
     public void AddRange(IEnumerable<Diagnostic> diagnostics) {
         ArgumentNullException.ThrowIfNull(diagnostics);
-        m_diagnostics.AddRange(collection: diagnostics);
+        foreach (var diagnostic in diagnostics) {
+            Report(diagnostic: diagnostic);
+        }
     }
     /// <summary>Attributes diagnostics added at or after <paramref name="startIndex"/> to an imported source. One an
-    /// inner expansion already attributed (a library's declaration read inside another library's) keeps its source.</summary>
+    /// inner expansion already attributed (a library's declaration read inside another library's) keeps its source,
+    /// and one the attribution makes a report the bag already holds is dropped.</summary>
     /// <param name="startIndex">The first diagnostic the source authored.</param>
     /// <param name="sourcePath">The source, or <see langword="null"/> for the compiled source itself.</param>
     public void AttributeFrom(int startIndex, string? sourcePath) {
         if (sourcePath is null) { return; }
         for (var index = startIndex; (index < m_diagnostics.Count); index++) {
-            if (m_diagnostics[index].SourcePath is null) {
-                m_diagnostics[index] = m_diagnostics[index] with { SourcePath = sourcePath };
+            var diagnostic = m_diagnostics[index];
+
+            if (diagnostic.SourcePath is not null) { continue; }
+            var attributed = (diagnostic with { SourcePath = sourcePath });
+
+            m_held.Remove(item: diagnostic);
+            if (m_held.Add(item: attributed)) {
+                m_diagnostics[index] = attributed;
+            } else {
+                m_diagnostics.RemoveAt(index: index--);
             }
         }
     }
@@ -122,12 +137,16 @@ public sealed class DiagnosticBag : IReadOnlyList<Diagnostic> {
     public int RemoveAll(Predicate<Diagnostic> match) {
         ArgumentNullException.ThrowIfNull(match);
 
-        return m_diagnostics.RemoveAll(match: match);
+        return m_diagnostics.RemoveAll(match: diagnostic => (match(obj: diagnostic) && m_held.Remove(item: diagnostic)));
     }
-    /// <summary>Reports an existing diagnostic instance.</summary>
+    /// <summary>Reports an existing diagnostic instance, unless the bag already holds an equal one.</summary>
+    /// <param name="diagnostic">The diagnostic.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="diagnostic"/> is <see langword="null"/>.</exception>
     public void Report(Diagnostic diagnostic) {
         ArgumentNullException.ThrowIfNull(diagnostic);
-        m_diagnostics.Add(item: diagnostic);
+        if (m_held.Add(item: diagnostic)) {
+            m_diagnostics.Add(item: diagnostic);
+        }
     }
     /// <summary>Reports an error diagnostic.</summary>
     public void ReportError(string code, string message, SourceSpan span) =>

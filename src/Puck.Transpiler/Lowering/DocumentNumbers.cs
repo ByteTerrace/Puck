@@ -198,6 +198,32 @@ public static class DocumentNumbers {
         // Dividing by one written to the full scale drops the trailing zeros and keeps the value.
         return JsonValue.Create(value: (number / 1.0000000000000000000000000000m));
     }
+    /// <summary>Returns the node a lowered number is written as, so one value has one spelling in a document however
+    /// it was reached. A computed double writes its shortest round-trip digits, as a literal of those digits does,
+    /// except at the small and large magnitudes where it would take an exponent; there it is written as the decimal
+    /// those digits spell (<c>1 / 65536</c> and <c>0.0000152587890625</c> both write
+    /// <c>0.0000152587890625</c>).</summary>
+    /// <param name="node">The lowered node.</param>
+    /// <returns>A decimal node holding the same digits, or <paramref name="node"/> itself when it holds no computed
+    /// double, its double already writes without an exponent, or a <see cref="decimal"/> cannot hold every digit of
+    /// it.</returns>
+    /// <remarks>Only the written spelling changes; the value read back from it is the same double. A value parsed from
+    /// JSON is authored data and keeps its text.</remarks>
+    public static JsonNode? Canonical(JsonNode? node) {
+        if ((node is not JsonValue value) || value.TryGetValue<System.Text.Json.JsonElement>(value: out _) ||
+            !value.TryGetValue<double>(value: out var real) || !double.IsFinite(d: real)) {
+            return node;
+        }
+        var shortest = real.ToString(
+            format: "R",
+            provider: System.Globalization.CultureInfo.InvariantCulture
+        );
+
+        return ((shortest.Contains(value: 'E', comparisonType: StringComparison.Ordinal) && DecimalValues.TryParseEvery(number: out var spelled, text: shortest))
+            ? JsonValue.Create(value: spelled)
+            : node
+        );
+    }
     /// <summary>Reads a whole number without routing integer storage through floating point.</summary>
     /// <param name="node">The numeric value.</param>
     /// <param name="number">The signed 64-bit result.</param>

@@ -33,15 +33,14 @@ public readonly record struct ViewLayout(IReadOnlyList<ViewBinding> Bindings) {
 /// <see cref="ViewId"/> — a caller wanting a specific view to persist across the transition puts it at the
 /// same index in both layouts. The region always eases continuously (a plain lerp under the easing curve); the view
 /// occupying that region cuts hard at the eased midpoint (0.5) — the starting view before, the ending view at and
-/// after. This mirrors <c>ScreenLayoutDirector.AdvanceLayout</c>'s own "a departing rect collapses in place / an
-/// arriving rect grows from its target's center" reading: two different content sources cannot cross-fade
-/// pixel-for-pixel without alpha compositing this primitive does not attempt, so the collapse-then-grow cut is the
-/// honest generalization — continuous motion, discontinuous content.
+/// after. Two different content sources cannot cross-fade pixel-for-pixel without alpha compositing this primitive
+/// does not attempt, so a departing region collapses in place and an arriving region grows from its target's center —
+/// continuous motion, discontinuous content.
 /// </para>
 /// <para>
 /// A layout with fewer bindings than the other pads the short side by holding its own view at the other layout's
 /// region collapsed to its center point (zero-area) — a slot appearing or disappearing grows from or shrinks to
-/// nothing, the same convention <c>ScreenLayoutDirector</c> uses for a boot/reveal's arriving/departing panes.
+/// nothing.
 /// </para>
 /// </remarks>
 public sealed class ViewTransition {

@@ -169,7 +169,7 @@ public sealed class WorldTabletopCommandModule(IWorldConsoleAuthority authority)
             description: "Echoes every placement carrying a board facet — its anchored frame (origin, cellSize, width, depth), its occupancy row's live cells, and any bound turn/verdict/move/plan rows, as the caller's own disclosure shows them: world.tabletop [placementId]. With a placement id, echoes only that tabletop.",
             handler: (context, args) => {
                 if (args.Count > 1) {
-                    return CommandResult.Error(output: "[world.tabletop: expected [placementId]]");
+                    return CommandResult.Usage(form: "[placementId]", verb: "world.tabletop");
                 }
 
                 if (!authority.TryResolveReadView(

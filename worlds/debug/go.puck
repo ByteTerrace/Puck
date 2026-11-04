@@ -194,41 +194,37 @@ let goGridBoxes = [
   [80, 8]
 ]
 let goGridStars = [-48, 0, 0, 48]
-let goFaceSlots = reduce(
+let goFaceSlots = flatMap(
   range(0, 4),
-  [],
-  (slots, r) => concat(
-    slots,
-    map(range(0, 4), c => {
-      color: "#D9B26F"
-      roughness: 0.6
-      specular: 0.12
-      paints: concat(
-        map(range(3 * c, 3), j => {
-          type: Box
+  r => map(range(0, 4), c => {
+    color: "#D9B26F"
+    roughness: 0.6
+    specular: 0.12
+    paints: concat(
+      map(range(3 * c, 3), j => {
+        type: Box
+        color: "#1E1A16"
+        position [goTable[0] + goGridBoxes[j][0] / 100, goTable[1] + goSurface, goTable[2]]
+        scale [goGridBoxes[j][1] / 100, 1, 2]
+        stroke: 0.0007
+      }),
+      map(range(3 * r, 3), j => {
+        type: Box
+        color: "#1E1A16"
+        position [goTable[0], goTable[1] + goSurface, goTable[2] + goGridBoxes[j][0] / 100]
+        scale [2, 1, goGridBoxes[j][1] / 100]
+        stroke: 0.0007
+      }),
+      [
+        {
+          type: Sphere
           color: "#1E1A16"
-          position [goTable[0] + goGridBoxes[j][0] / 100, goTable[1] + goSurface, goTable[2]]
-          scale [goGridBoxes[j][1] / 100, 1, 2]
-          stroke: 0.0007
-        }),
-        map(range(3 * r, 3), j => {
-          type: Box
-          color: "#1E1A16"
-          position [goTable[0], goTable[1] + goSurface, goTable[2] + goGridBoxes[j][0] / 100]
-          scale [2, 1, goGridBoxes[j][1] / 100]
-          stroke: 0.0007
-        }),
-        [
-          {
-            type: Sphere
-            color: "#1E1A16"
-            position [goTable[0] + goGridStars[c] / 100, goTable[1] + goSurface, goTable[2] + goGridStars[r] / 100]
-            scale [0.004, 0.03, 0.004]
-          }
-        ]
-      )
-    })
-  )
+          position [goTable[0] + goGridStars[c] / 100, goTable[1] + goSurface, goTable[2] + goGridStars[r] / 100]
+          scale [0.004, 0.03, 0.004]
+        }
+      ]
+    )
+  })
 )
 let goWood = 0
 let goLine = 1

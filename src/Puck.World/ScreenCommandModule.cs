@@ -174,7 +174,7 @@ internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, Worl
     }
     private CommandResult InsertHandler(CommandContext context, WireArgs args) {
         if (args.Count != 2) {
-            return CommandResult.Error(output: "[screen.insert: expected <index> <contentPath>]");
+            return CommandResult.Usage(form: "<index> <contentPath>", verb: "screen.insert");
         }
 
         if (!args.TryInt(

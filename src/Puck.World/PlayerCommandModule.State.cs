@@ -44,7 +44,7 @@ internal sealed partial class PlayerCommandModule {
             (args.Count < 2) ||
             (args.Count > 3)
         ) {
-            return CommandResult.Error(output: "[body.state-load: expected <name> <counter-value|timer-seconds> [body]]");
+            return CommandResult.Usage(form: "<name> <counter-value|timer-seconds> [body]", verb: "body.state-load");
         }
         if (
             !args.TryFloat(
