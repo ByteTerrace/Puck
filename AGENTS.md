@@ -107,8 +107,7 @@ agent works in that mode by default, without asking:
   - Edit to running: under 30 seconds from changing a C# or HLSL file in the
     engine to seeing it in the running debug world.
   - Cold bake: the debug world's meshes bake from an empty store in one minute
-    at most per backend on the lead machine (384 s on Direct3D 12 when the
-    owner set it).
+    at most per backend on the lead machine.
   - Fundamentals first: the work is the engine's fundamental problems, those
     already known and those found along the way (frame time against the 60 FPS
     bar, build and bake times, duplicated systems), ahead of new features.
@@ -155,6 +154,14 @@ agent works in that mode by default, without asking:
     debt. Practices from established projects that exist for compatibility
     (no API or behaviour change, the smallest possible change) do not carry
     over; their evidence practices do.
+  - Hunt real problems with every instrument (the owner's ruling). Wall clock
+    is one measurement among many, and a timing sample alone never describes
+    a problem or the value of a change. The capture and profiling tools Puck
+    can reach (PIX, Nsight, RenderDoc, .NET traces, and Puck's own counters,
+    work, residency and memory reports) show where work, allocation, storage
+    and transfers go. Reading the code finds as much: repeated work, needless
+    copies and duplicated mechanisms are often visible on sight, and are fixed
+    when found.
   - Ergonomic is optimal (the owner's ruling). Cost depends on what a
     document means, never on how it is spelled: a `for`/`map`, a template, a
     fold or a `let` costs no more than the hand-unrolled, pasted or literal
@@ -335,8 +342,11 @@ settles a question, decide by that principle and say why.
    correction, a hazard or a decision into its owning home in the change that
    learns it: this file for rules every agent follows, the owning skill for an
    area's procedures and hazards, `docs/decisions/` for settled design,
-   [contributing](docs/development/contributing.md) for machine and toolchain
-   hazards, and `docs/plans/open-items.md` for open work. Never keep it in
+   [contributing](docs/development/contributing.md) for toolchain hazards any
+   machine can meet, and `docs/plans/open-items.md` for open work. A durable
+   home holds only what stays true on every machine: one machine's hardware,
+   paths, installed tools, OS settings, incidents and readings go in the
+   commit message of the change they informed. Never keep knowledge in
    agent-local memory, which this project turns off: the owner works across
    machines and accounts, and knowledge held on one of them is lost to the rest.
    Harness settings that a tool reads from the project are versioned:

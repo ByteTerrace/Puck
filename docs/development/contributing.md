@@ -949,35 +949,6 @@ unverified when no device run exists.
   (`docker build --file src/<Project>/Dockerfile --tag puck/<image>:local .`
   from the root) and run `puck azure test-world-container --image
   puck/world-silo:local`.
-- The owner's development machine (Ryzen 7 7800X3D, RTX 4070) powers off
-  without a bugcheck, a dump or a hardware-error record under sustained load, as
-  a thermal or power trip does, most often while a windowed World renders and
-  several lanes build and test beside it. Work runs on it at its normal load
-  (bounding the load would hide the trip the diagnosis needs to catch); a lane
-  whose session ends with the machine resumes from its worktree. LibreHardwareMonitor logs its sensors to a
-  CSV each second beside its executable (the winget package's folder under
-  `%LOCALAPPDATA%\Microsoft\WinGet\Packages`); after a trip, the last rows name
-  the sensor that ran away. It logs only once it runs elevated with Options →
-  Log Sensors, Run On Windows Startup and Start Minimized ticked (they persist
-  in `LibreHardwareMonitor.config` beside the executable; with no such file it
-  has never logged). System event 41 with `BugcheckCode=0`, no power-button
-  timestamp, no WHEA record and no minidump is the trip's signature.
-  One trip's last logged rows point at sustained CPU load at its thermal limit
-  rather than the GPU: five lanes were building, baking and measuring, with no
-  windowed World. CPU Total read 100 % then 83 %, `Core (Tctl/Tdie)` 90 then
-  88.75 °C (the 7800X3D's limit is 89 °C), Package power 77 W, and GPU board
-  power 19 to 47 W. A short Python `csv` reader prints those columns faster
-  than PowerShell string handling; LibreHardwareMonitor rotates its log into
-  small files, so the trip's file is the last one written before the reboot. A trip
-  zero-fills files whose data had not reached the disk: in one, `.git/config`,
-  `.git/index`, the integration branch's ref file and every file of an
-  in-progress merge read as NUL bytes. Recovery: find them
-  (`head -c 64 <file> | tr -d '\0' | wc -c` reads 0), restore the branch ref
-  from the last line of its reflog (`logs/refs/heads/...`, NULs stripped),
-  rebuild `.git/config` (core settings including `longpaths = true`, `origin`, branch tracking), move the
-  zeroed index aside and `git reset`, restore zeroed tracked files with
-  `git checkout -- <paths>`, move aside a half-created worktree's metadata, and
-  confirm with `git fsck --no-dangling`.
 - A build cut off by a power loss or a killed session can leave a truncated
   assembly under a project's `obj/` (seen as `obj/Release/<tfm>/ref/<Project>.dll`),
   and the next build fails reading it. Delete that project's `obj/` and build

@@ -18,7 +18,7 @@ data costs.
 | Does this body allocate? | `AllocationWindow.Least`, `.Measure`, `.Total` ([`AllocationWindow`](../../../../src/Puck.Abstractions/Counting/AllocationWindow.cs)) | Least bytes over up to 16 windows, naming the sampled types when every window allocated. |
 | Which stacks allocate in a running World? | `dotnet-trace collect -p <pid> --profile gc-verbose`, then `dotnet-trace convert --format speedscope` | Allocation ticks with stacks and the GC's own events; a commit names types and MiB per window from it. |
 | Which loop costs the frame? | `dotnet-trace collect -p <pid> --profile dotnet-sampled-thread-time` | Sampled frame-thread stacks; charge `Thread.PollGC` samples to the caller's loop ([review discipline](../SKILL.md#review-discipline)). |
-| Is it cache misses or stalls? | `AMDuProfPcm -m ipc,l1,l2,cache_miss -c core=<n> -C -- <program>` on an AMD CPU (`C:/Program Files/AMD/AMDuProf/bin`; metric names from its `-h`) | Per-core IPC and miss counts for a pinned harness; the exact-ladder change read IPC 2.27 to 2.56 this way on Zen 4. |
+| Is it cache misses or stalls? | `AMDuProfPcm -m ipc,l1,l2,cache_miss -c core=<n> -C -- <program>` on an AMD CPU (`C:/Program Files/AMD/AMDuProf/bin`; metric names from its `-h`) | Per-core IPC and miss counts for a pinned harness. |
 
 Take counts first and timings beside them on a quiet machine, as the
 [skill](../SKILL.md) says. A pause time on a loaded machine is an observation,
@@ -40,13 +40,10 @@ A frame or tick that runs every 16.7 or 33 ms allocates no managed memory once
 warm. A collection suspends every managed thread for its pause, and the World's
 frame and tick share one thread today.
 
-- **Measured here.** Walking the gallery allocated 1,005.6 MiB in 40 s of
-  presentation garbage, with 11 collections pausing 22 ms over three walks; after
-  the closures, rebuilt catalogs and per-call arrays went, 101.3 MiB in 30 s
-  and 2 collections. The server tick went from 1,672 B to 0 B median a tick
-  (`puck bench world`) once principal labels stopped being formatted on every
-  disclosure check, and a standing World then read zero collections over 600
-  ticks.
+- **In Puck.** Presentation garbage came from closures, rebuilt catalogs and
+  per-call arrays; server-tick garbage from labels formatted on every
+  disclosure check. `puck bench world` reads a tick's bytes, and a standing
+  World reads zero collections once they are gone.
 - **Shape of the fix.** Reuse scratch that the owner keeps
   (`WorldBody.StepScratch`, [source](../../../../src/Puck.World.Server/WorldBody.SweepRefusal.cs)):
   "a capture writes into the buffers the last one left"); key a cache by what
@@ -67,10 +64,10 @@ A gen0 marks from the roots and from every older object whose card says it
 holds a young reference, then copies the survivors. Its pause grows with
 survivors and with old-to-young references, not with the garbage.
 
-- **Measured here.** A gen0 pause on the lead machine is 10 to 12 ms with
-  4 MB promoted: 2.6 ms marking through cards and about 7.7 ms planning and
-  compacting. Server GC with four heaps collected rarely but paused 27 ms, so it
-  was not kept ([simulation tick packet](../../../../docs/plans/open-items.md#engine-job-system)).
+- **In Puck.** A gen0 pause costs a large fraction of a frame, most of it
+  marking through cards and compacting promoted survivors. Server GC collected
+  rarely but paused longer, so it was not kept
+  ([simulation tick packet](../../../../docs/plans/open-items.md#engine-job-system)).
 - **Write fewer young references into old containers.** A long-lived
   dictionary, list or row table that takes a new object every tick marks a card
   and promotes that object. The irradiance cache held a record class per probe
@@ -86,9 +83,8 @@ survivors and with old-to-young references, not with the garbage.
 - **Arrays of 85,000 bytes or more go to the LOH**, which only a gen2 collects.
   `WorldRenderEnvelope.TryFit` measured each responding placement a light
   switch flips (eight a `lights.all`) by building a whole `SdfProgram` from
-  empty, which churned a sampled 61.9 GB of LOH in 45 s over two Off/On pairs
-  (`SdfInstruction[]` 35.7 GB, packed `uint[]` 18.3 GB) until it measured by
-  emission into reused storage (3.3 GB). The World sets
+  empty, churning tens of gigabytes of LOH arrays, until it measured by emission
+  into reused storage. The World sets
   `System.GC.ConserveMemory` to 5 ([`Puck.World.csproj`](../../../../src/Puck.World/Puck.World.csproj))
   because it frees large arrays in bursts.
 
@@ -97,8 +93,8 @@ Sources: cards set by the write barrier and read by ephemeral collections
 them, and finalization resurrects and promotes ([MEMDOC]); the LOH threshold and
 its gen2 collection ([MS-GC], [MS-LOH]). Server GC gives each logical CPU a
 heap and a collecting thread and larger ephemeral budgets ([MS-WKS], [MS-GC]),
-so it collects less often; its measured 27 ms pause here is why the World stays
-on workstation GC.
+so it collects less often; its longer pauses are why the World stays on
+workstation GC.
 
 ## Lay hot data out for the loop that reads it
 
@@ -131,16 +127,15 @@ same array ([TOUB-FS]).
 A struct copy costs its size every time, and a large struct passed or returned
 by value, captured into a snapshot or copied out of a collection repeats it.
 
-- **Measured here.** The irradiance trace (`SdfMeshIrradiance`) once copied its
-  probe record once per neighbour bit (up to 26 a probe): 171 of 289 MiB
-  sampled on a cold walk until it filled its fields and built one record.
+- **In Puck.** The irradiance trace (`SdfMeshIrradiance`) fills a probe's
+  fields and builds one record, rather than copying the record once per
+  neighbour bit (up to 26 a probe), which dominated a cold walk's allocation.
 - **Fewer, larger commands is the same rule on the GPU's recorder.** The
   previous mesh table's history copy records a device-side `CopyBuffer` per
   changed range ([`SdfWorldTables.CopyMeshHistory`](../../../../src/Puck.SdfVm/SdfWorldTables.Motion.cs)),
   not a span copy on the CPU. It holds whole draw records at the mesh region's
   stride, so the changed draws record one command per run instead of one
-  64-byte command per moving draw (about 128 a frame): 657 ms to 13 ms per 20 s
-  of sampled produce. The GPU's own coalescing is a separate rule
+  64-byte command per moving draw. The GPU's own coalescing is a separate rule
   ([gpu-cost](../../rendering/references/gpu-cost.md#coalesce-memory-access)).
 - **Read in place.** Pass a large struct by `in` or `ref readonly`, keep it
   `readonly` so the compiler makes no defensive copy, and iterate with
@@ -191,11 +186,11 @@ A linear search inside a per-item or per-frame loop costs items × list. On a
 per-frame path, index it, latch its position, or keep a cursor that moves one
 way.
 
-- **Measured here.** `SdfMeshPathBake.Pending` touched all 2,596 groups on every
-  footprint call until it kept a done-through cursor
+- **In Puck.** `SdfMeshPathBake.Pending` keeps a done-through cursor rather than
+  touching every group on each footprint call
   ([`SdfMeshPathBake.Pending`](../../../../src/Puck.SdfVm/SdfMeshPathBake.cs));
-  `BindScreens` searched a list for each routed window until the window's index
-  became its latched order (sampled 439 to 134 ms per 20 s).
+  `BindScreens` uses the window's index as its latched order rather than
+  searching a list for each routed window.
 - **Hash once, compare once.** The tables' cadence signatures hashed each region
   byte-wise with FNV twice a frame; they now hash each region once with
   `XxHash3` ([`SdfWorldTables.UpdateTablesSignature`](../../../../src/Puck.SdfVm/SdfWorldTables.Cadence.cs)).
@@ -209,13 +204,12 @@ way.
 ## Touch the bytes once
 
 Memory bandwidth bounds a loop that streams more than the caches hold: the
-debug world's mesh region is 1.78 GB; its published bake payloads use native
+debug world's mesh region runs to gigabytes; its published bake payloads use native
 storage through the host's `IAllocator`.
 
-- **Measured here.** A layout that moved placed meshes when one landed rewrote
-  the whole million-triangle region at each landing (45 to 120 ms frames);
-  relocating every mesh to grow the draw reserve wrote and compared 1.78 GB in a
-  970 ms frame. The arena now leaves placed meshes standing and writes only
+- **In Puck.** A layout that moves placed meshes when one lands rewrites the
+  whole region at each landing, and relocating every mesh to grow the draw
+  reserve rewrites it in one frame. The arena leaves placed meshes standing and writes only
   what moved ([mesh bake](../../rendering/references/mesh-bake.md#the-mesh-region)).
 - **Write from the source, keep no shadow copy** of a large table: the mesh
   region's flush writes from the `SdfMesh` arrays
@@ -317,9 +311,9 @@ into a conditional move cannot mispredict. RyuJIT if-converts a select only outs
 loops ([jit-and-codegen](jit-and-codegen.md#11-codegen-facts-the-repository-relies-on-in-net-11)),
 so an in-loop `cmov` needs a `NoInlining` leaf.
 
-- **Measured here.** The exact Lucas ladder's final subtraction moved into a
-  `NoInlining` `cmp`/`cmovb` leaf: AMDuProfPcm read 2,472.5 to 2,427.9 cycles a
-  call and IPC 2.27 to 2.56 at 2^63; a ternary in the loop instead cost 63 %
+- **In Puck.** The exact Lucas ladder's final subtraction is a `NoInlining`
+  `cmp`/`cmovb` leaf, chosen by AMDuProfPcm cycle and IPC counts; a ternary in
+  the loop cost far more
   ([prime kernels](../../maths-usage/references/prime-kernels.md)).
 - Do not restructure branch order for layout; the JIT's block layout already
   does ([jit-and-codegen](jit-and-codegen.md#8-block-layout--pgo-plumbing)).
@@ -334,12 +328,12 @@ Each is a rule above that Puck breaks today; the packet holds the work.
 - **Young objects in old containers.** The server's `StateCell`,
   `WorldStateRow`, `UpsertStateRow` and their strings and the state journal set
   the gen0 pause ([simulation tick](../../../../docs/plans/open-items.md#engine-job-system)).
-- **A cold bake allocates.** 126 collections paused 572 ms over 600 frames of a
-  Direct3D 12 cold bake, and 95 paused 3.2 s on Vulkan
+- **A cold bake allocates.** Its collections pause the frame on both backends,
+  longer on Vulkan
   ([cold bake](../../../../docs/plans/open-items.md#bake-proportional-to-change),
   [parity](../../../../docs/plans/open-items.md#vulkan-regressions-and-gpu-robustness)).
-- **A glass resize allocates;** about 22 resizes on a painting approach end in a
-  12 ms gen2 ([simulation tick](../../../../docs/plans/open-items.md#engine-job-system)).
+- **A glass resize allocates;** the resizes on a painting approach end in a
+  gen2 ([simulation tick](../../../../docs/plans/open-items.md#engine-job-system)).
 - **Eager cold capture.** `WorldBody.CaptureMotion` zero-fills and fills the
   refusal snapshot on every rigid advance
   ([simulation tick](../../../../docs/plans/open-items.md#engine-job-system)).

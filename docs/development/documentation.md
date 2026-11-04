@@ -255,7 +255,8 @@ hold are held by a check; the rest are procedure.
   Evidence (timings, hashes, run outputs) goes into the commit message that
   lands the change, never into the plan.
 - **No one machine's details.** A skill, plan or doc holds no single
-  machine's paths, installed tools, hardware events or readings. Evidence
+  machine's paths, installed tools, OS settings, hardware events, incidents
+  or readings ([rule 9](../../AGENTS.md#core-rules)). Evidence
   goes in the commit message, and setup every machine needs goes in
   [machine setup](contributing.md#setting-up-a-machine).
 - **One fact, one home.** A second page links to the owner instead of restating

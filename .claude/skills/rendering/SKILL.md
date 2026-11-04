@@ -434,8 +434,7 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   (`SdfViewExposures.SecondsOf`); an ordinary settled still under lockstep
   converges over one fresh jitter period (`FrameCaptureRequest.ConvergeOver`),
   since without it a temporally resolved view's still depends on how many
-  frames the display rendered before the hold (five stills of one paused tick
-  differed by up to 141 levels on 12-17% of pixels). Together these make stills
+  frames the display rendered before the hold. Together these make stills
   of one tick repeat across Worlds to a 1-level per-render residue.
 - **A named-camera layout slot reconstructs; a screen's camera does not.**
   `world.temporal` reaches every view `WorldFramePresenter.ViewQuality()`
@@ -617,11 +616,10 @@ compares and fails naming the file that drifted, it writes nothing.
   a failed allocation preserves the old buffers, contents, capacity and bindings.
   `SdfWorldTables.EnsureDynamicTransformCapacity` prepares motion history before
   growing the region and publishes capacity only after both succeed. A device with
-  a large host-visible device-local heap (resizable BAR, as on the lead machine under
-  both backends) gives a small per-frame table a ring, while the CPU fake
+  a large host-visible device-local heap (resizable BAR) gives a small per-frame table a ring, while the CPU fake
   device's default profile stages every region, so a region path written or
-  tested for one policy alone passes the device-free suites and fails on the
-  lead machine. Test a region path under every policy, as
+  tested for one policy alone passes the device-free suites and fails on such
+  a device. Test a region path under every policy, as
   `GpuResidencyLawTests.ARegionGrowsUnderEveryPolicyAndEverySlotReadsItExact`
   does.
 - Large GPU buffers give their memory back. Both arenas (`DirectXHeapArena`,

@@ -56,10 +56,10 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   and skipped `sdf.world$mask`/`sdf.world$bake` work is not by itself a stall.
   Read the wait's bake description twice: its meshes, pending groups,
   dispatches and samples distinguish progress from a stopped scheduler.
-  The integration branch without the two `codex-gi2` fixes also failed to finish a cold Direct3D bake within nearly nine minutes. Its mesh
-  draw count kept rising. `host.frames` showed eight simulation catch-up steps
-  taking roughly 400 ms a frame; `world.rate pause` on the boot instance
-  reduced frame time to about 19 ms and accelerated baking. Pause only a
+  A cold bake whose draw count keeps rising without finishing can be starved
+  by simulation catch-up: `host.frames` shows several catch-up steps a frame,
+  and `world.rate pause` on the boot instance restores frame time and bake
+  progress. Pause only a
   diagnostic run, never the owner's play session, and disclose that change
   when comparing times. A nested world's `[sdf.mesh-gi] done` does not certify
   the gallery: check the main residency's counter and meter too.
@@ -337,10 +337,9 @@ time it, pose the teal corner (`world.lockstep on`, `body.pose 4.60 0.07 29.76
 152 0 0`, `view.override camera look 5.929 2.188 27.222 4.60 4.2 29.76`), warm
 once, then switch `world.indirect high`, `world.wait 5`, `world.indirect
 medium`, `world.wait 5` and read the two `[sdf.mesh-gi] done … seconds=` lines.
-On the lead machine, quiet (load under 15 %), three runs each: High 8.35 s and
-Medium 1.21 s on Direct3D 12, High 7.84 s and Medium 1.13 s on Vulkan, with
-about 90-98 s of World process CPU per High+Medium pair on both, and identical
-ray counts. A reading taken beside other CPU work is not a backend comparison.
+Repeat each reading on a quiet machine and compare ray counts first: they are
+identical across backends. A reading taken beside other CPU work is not a
+backend comparison.
 
 Read `world.exposure` in the hall. Double the outer-wall camera's distance,
 and move the hall camera and target 8 m along +X, to check that moving the

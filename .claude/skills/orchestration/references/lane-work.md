@@ -107,8 +107,7 @@ waiter in another tool, and a second watcher on a job is waste whichever
 tool runs it. Stop each Monitor once its job ends. A background `sleep N;
 echo t` is not a timer either: when a turn ends with work still running, the
 job's own exit notice resumes the lane. Before arming a watcher, stop any
-earlier one on the same job (a lane once held nine: four on a log that had
-ended without the awaited line, five identical re-arms of one wait), and give
+earlier one on the same job, and give
 each watcher an end condition that covers success, failure and the process
 exiting, so none outlives its job.
 Codex uses yielded exec sessions and `write_stdin` to collect progress and

@@ -188,11 +188,10 @@ cache and its invalidation, an oracle and what it records, a visibility or
 shadow term and the geometry it assumes, a concurrency primitive and its
 wakeups) gets a written design and a Codex design review before any code,
 and its brief names the invariant and what enforces it: the compiler, a
-single door, or a derived view, never "every caller remembers". Every first
-draft of such work this session came back with highs from review (the
-incremental hash's caches, the disclosure harness, the exit layer three times,
-the transmission design), each from an invariant kept by convention; a design
-review costs a quarter hour, a failed fix round a lane's afternoon.
+single door, or a derived view, never "every caller remembers". First drafts
+of such work keep coming back with high findings, each from an invariant kept
+by convention; a design review costs a quarter hour, a failed fix round a
+lane's afternoon.
 
 Before briefing a step that decides how a pipeline works (what the renderer
 draws and submits, how the tick schedules, a camera or physics model), ask
@@ -228,8 +227,7 @@ is merged, pushed to `origin` as `lane/<id>` while it waits, or deleted once a
 later design supersedes it, so no machine holds a branch whose fate only one
 session knew. Before deleting one, search `docs/` and `.claude/` for its name:
 a search of the code alone misses a plan that keeps a superseded branch as
-prior art for code no other branch holds. `open-items.md` kept companions v1
-for its role-driver code, and the lead deleted it anyway. A remote branch whose
+prior art for code no other branch holds. A remote branch whose
 work never landed is the owner's to delete (AGENTS.md), so the lead brings the
 search's result to the owner rather than deleting it. The repository's documents,
 `docs/plans/open-items.md` and the plans under `docs/plans` among them, belong
@@ -247,8 +245,7 @@ changes and what the lane ran to show them working before merging
 The main checkout tracks the integration branch (the owner's ruling). Claude
 Code loads `.claude/agents/`, hooks and unscoped skills from the project root,
 the main checkout, not from the lead's worktree, so a lane runs whatever agent
-definitions and skills the main checkout holds; one session's agent fixes did
-nothing for its lanes until this was found. After each push of the integration
+definitions and skills the main checkout holds. After each push of the integration
 branch the lead fast-forwards the main checkout's branch to it: leave the
 worktree with `ExitWorktree` (`keep`), confirm the main checkout is clean, run
 `git merge --ff-only <integration branch>` there, and return with
@@ -300,7 +297,7 @@ the previous sweep ([decision](../../../docs/decisions/engine-design.md#the-debu
 `puck sweep --tour --baseline <previous report.json>` runs it under the GPU lease
 (or `--attach` names a World `puck_world_start` started) and writes the report
 and contact sheets ([CLI reference](../../../docs/reference/cli.md#puck-sweepthe-debug-worlds-sweep)).
-The full debug-world replay (every test world, about 45 minutes) is the
+The full debug-world replay (every test world, the longest heavy job) is the
 integration lane's next heavy job after a batch lands, never beside another heavy
 job and never a condition of a landing (the owner's ruling: "The whole idea was
 to be EFFICIENT"); what it finds is ordinary work for the next lane. A red check
@@ -332,15 +329,15 @@ will do.
 ### Coding lanes and the integration lane
 
 Heavy verification runs in one place, one job at a time; this is the owner's
-direction, after concurrent whole-solution builds exhausted the machine's memory.
+direction: concurrent whole-solution builds exhaust a machine's memory.
 - **Coding lanes** keep to the [`delegate` skill's](../delegate/SKILL.md#build-and-run)
   build bounds and hand back a branch that builds and passes their focused
   checks.
   Several run at once (the owner's direction: don't over-serialize for
   memory), within the WIP limit: about three building writers, one heavy
-  integration job and one GPU leg. A windowed debug World holds about 10 GB of
-  working set (15 GB private) within a minute of boot. On a 32 GB machine, while
-  one runs, only a couple of building lanes fit beside it. Keep windowed capture
+  integration job and one GPU leg. A windowed debug World holds a large share of
+  the machine's memory within a minute of boot (`host.memory` reads it), so
+  only a couple of building lanes fit beside one. Keep windowed capture
   batches short (boot, capture, stop), and tune on a headless World. The
   delegate skill's `--jobs 1` serializes headless worker processes, including
   reproduce replicas, with one independent native host live at a time, where a
@@ -457,8 +454,7 @@ project's `puck` permission profile) or with `--sandbox workspace-write`. Under
 `--sandbox read-only` the same prompt that lists all eight `mcp__puck__*` tools
 in those two launches lists none of them, though the project registration is
 enabled (`codex mcp list`), the launcher runs (it installs the worktree's
-`.claude/mcp-install`) and other servers stay visible (probed with codex-cli
-0.164). A read-only review lane therefore reads sources and cannot drive a World.
+`.claude/mcp-install`) and other servers stay visible. A read-only review lane therefore reads sources and cannot drive a World.
 
 An Antigravity lane runs `agy -p "$(cat <brief>)" --output-format text` from
 its worktree, without `--mode`: headless flag validation rejects `--mode auto`
@@ -492,10 +488,9 @@ to pass the `world` argument on every call, and to wait for a start with
 The lead and Claude lanes drive Worlds through the `puck` MCP tools
 (`puck_world_start`, `puck_exec`, `puck_world_stop`) by default: they take the
 GPU lease for a windowed World, keep its lifetime with the session, and need
-no stdin script. A lead that ran every World through hand-written stdin
-scripts spent a session working around the isolation guard instead.
+no stdin script; hand-written stdin scripts run into the isolation guard.
 
-The lead machine's local agents can build on an unpushed lane head, so a lane
+The lead's local agents can build on an unpushed lane head, so a lane
 that depends on another starts there before it lands; merge the landed head into
 it afterwards.
 
@@ -543,8 +538,7 @@ meant as these periods; the lead now schedules them by state, not the clock:
 - **Trigger:** a wave of related lanes has landed, or a decision waits on a
   measurement (the culling order waits on M1). Never on a timer, and never
   by waiting for the machine to go quiet on its own: with a dozen lanes it
-  never does, and one session's first window slipped for that reason. The lead
-  drains deliberately.
+  never does. The lead drains deliberately.
 - **Drain:** launch no new lanes; let running ones reach a stopping point.
   Lanes may keep editing; their builds, tests and GPU legs queue.
 - **Hold:** `puck lease quiet --holder lead -- <recipe>` takes the build, GPU
@@ -593,17 +587,15 @@ watcher, `puck host load --watch` prints one line per transition (`CAPACITY`,
 `GPU idle`), so each change arrives once:
 
 - On capacity, admit the next job. A heavy job (a solution build plus a full
-  suite, about 7 GB at its peak) is one at a time per machine: a full
+  suite) is one at a time per machine: a full
   `Puck.World.Tests` or `Puck.World.Presentation.Tests` run never runs beside
   another. `puck gate` and `puck affected` acquire the existing heavy lease
   around each heavy suite, sample headroom while holding it, and release it on
   every exit. Nested runs under `puck lease heavy` serialize on child leases
   after validating the ancestor holder's process identity.
-- A lane never runs a full `puck test worlds/debug` sweep (112 worlds, 30 to 60
-  minutes, several GB per world process): the brief names the test files its
-  change can reach, and the lead runs one full sweep on the integrated head.
-  Two lanes' full sweeps once ran together, one outside the heavy lease, while
-  four GPU waiters and an hour-long heavy ticket queued behind them. A lane
+- A lane never runs a full `puck test worlds/debug` sweep (every test world, a
+  long heavy run): the brief names the test files its
+  change can reach, and the lead runs one full sweep on the integrated head. A lane
   waiting on a lease keeps working (code, docs, its hand-back) instead of
   idling on the ticket.
 - Lease admission is a queue that rotates between lanes, not a race:
@@ -758,8 +750,8 @@ Astra brief states its authority and finish line outright. The owner's own Codex
 open, so the lead never resumes it with `codex exec resume`; the lead and that
 thread talk through the owner, or through a file both read.
 
-Antigravity is the third family, running Gemini 4 Argon (Google's flagship,
-on the owner's Google AI Ultra plan; an Antigravity lane launches as above). It
+Antigravity is the third family, running Gemini 4 Argon (Google's flagship;
+an Antigravity lane launches as above). It
 is strong at repository issue fixing, app and UI generation, security
 remediation and large-context analysis, and weaker on long terminal-driven and
 long-horizon work. Route it accordingly:
@@ -850,13 +842,11 @@ and not a spiral:
 - Every poll has a deadline and a spacing that fits the work. A lane waits on a
   run of minutes by starting it in the background and checking every few
   minutes (or blocking on its exit), never by re-running a status script every
-  few seconds: each check is a model turn, and a boot-once run of 40 file legs
-  polled that way spent hours of tokens and wrote a 2 MB log saying "still
-  running". A brief with a long run says how to wait for it.
+  few seconds: each check is a model turn that spends tokens without progress. A brief with a long run says how to wait for it.
 - The lead starts each lane as its own background task, so each lane's end
   arrives as its own notification. Lanes launched together in one background
-  command report only when the last one ends: a lane that finished first sat
-  unseen for an hour and a half that way.
+  command report only when the last one ends, so a lane that finishes first
+  sits unseen.
 - A design memo's one review finishes before its first build lane is briefed:
   a running Codex lane takes no messages, so findings that land mid-build
   cost a stop and a relaunch (the simulation-thread memo's review found a

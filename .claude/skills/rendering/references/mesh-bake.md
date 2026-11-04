@@ -183,8 +183,8 @@ laws exercise that boundary.
   lattice answers (decoding a readback and narrowing a group) first, in arrival
   order, then the stages by group priority. A pool per residency oversubscribes
   the processors three times over on the debug world, and workers below normal
-  priority lose them to the irradiance trace and the machines (526 s against
-  215 s cold). The frame thread decodes a batch's readback into each group's
+  priority lose them to the irradiance trace and the machines, more than doubling a
+  cold bake. The frame thread decodes a batch's readback into each group's
   answer buffers, the one pass the copy of it took, and does nothing else with
   it. Only the groups the process memory account admits hold a final lattice
   (admitted at its first slab, whose answer allocates the lattice's values), by
@@ -224,10 +224,8 @@ laws exercise that boundary.
   `SdfMeshChunks.WholeTriangles` (a 500,000-triangle terrain held one worker for its whole collapse), is chunked;
   a smaller single shape stays whole, since locked seams tripled a terrain sector's first level. A mesh that would
   fill more than `SdfMeshChunks.MostChunks` 8 m bins takes bins of twice the side until it fills no more: the world
-  group's far ground cut at 8 m made 160,000 draws; the former CPU
-  per-pass selection culled and levelled each for every pass, and
-  the frame took 700 ms, starving the bake of dispatches. R2 now selects them
-  in `frame/sdf-mesh-selection.hlsli` through the existing counted indirect
+  group's far ground cut at 8 m makes 160,000 draws, too many to cull and
+  level on the CPU for every pass, so `frame/sdf-mesh-selection.hlsli` selects them through the existing counted indirect
   path; chunk sizing still controls retained geometry and candidate work.
   `SdfMeshChunks` partitions the finished contour's triangles by their
   centroid into 8 m bins before merging and collapse. It never clips a triangle: each chunk's box includes its whole
@@ -530,14 +528,12 @@ laws exercise that boundary.
   `StageMeshRegion` (`SdfWorldTables.MeshRegion.cs`) writes the draw records
   (`SdfMeshRegion.WriteDraws`) and only the meshes the arena newly placed. A
   layout that moves placed meshes when one lands (sections by attribute) made
-  every landing rewrite the whole million-triangle region, 45 to 120 ms frames
-  on the debug world. Newly placed meshes land within
+  every landing rewrite the whole region. Newly placed meshes land within
   `SdfWorldTables.MeshLandingWords` a frame, their draws waiting out of the
   staged records until they do, and a grown region takes the words it held. A
   list past the draw reserve doubles it and moves only the meshes the grown
   reserve takes (`SdfMeshRegionArena.Moved`), written that frame: relocating
-  every mesh for it wrote and compared the debug world's 1.78 GB region in one
-  970 ms frame the first time a body fell through a floor painting. The
+  every mesh for it rewrote and compared the whole region in one frame. The
   region's host copy holds the draw reserve alone: a placed mesh's words are
   owed and the flush writes them from the mesh's own arrays
   (`SdfWorldTables.WriteSourcedMeshWords`), zeros in words no placed mesh holds.
@@ -582,8 +578,7 @@ laws exercise that boundary.
   when the line comes back.
 - **The bake keeps the frame's budget.** `SdfMeshPathBake.FrameTaps` (a
   million) bounds the field evaluations a 60 Hz frame's bake dispatch makes (a
-  gradient sample counts five), about a millisecond of the lead machine's GPU,
-  and a longer frame takes a share for each whole 60 Hz frame it spans, up to
+  gradient sample counts five), sized to about a millisecond of GPU time, and a longer frame takes a share for each whole 60 Hz frame it spans, up to
   eight (`FrameBudget`); every lattice is chunked to fit one share (final
   lattices in slabs, material and gradient, fine and material points in
   chunks). One dispatch holds up to `SdfWorldPackage.MeshBakeBatch` lattices

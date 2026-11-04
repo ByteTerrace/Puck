@@ -54,8 +54,8 @@ so the integration lane's sweep reads them
    it will outlive the next rewrite; a test the change breaks is updated or
    deleted in the same change. Run the tests you added or touched.
 4. Frame time held, for a change that reaches the running World (simulation,
-   presentation, physics, rendering, addons, the debug world's documents): on
-   the lead machine the RTX 4070 holds 60 FPS at the highest settings, and that
+   presentation, physics, rendering, addons, the debug world's documents): the
+   bar devices hold the frame bar at the highest settings (AGENTS.md), and that
    is the owner's floor, not a goal. The integration lane's sweep reads it under
    a granted GPU leg: in a windowed World with its bakes settled, `host.frames`
    after standing still and again after the batch's workload (walk the area it
@@ -270,8 +270,7 @@ because it looks in the default `bin` and `obj` directories.
   Pass `-nodeReuse:false` (or `-nr:false`) to build, msbuild, restore, pack and publish: a reused MSBuild node
   outlives the build and holds memory (`puck host load` counts them as
   `reuseNodes`). Never pass it to `dotnet test`: Microsoft.Testing.Platform
-  has rejected it with `error: 1, total: 0` in the observed run; exact text
-  and exit status vary by version. Build with the flag,
+  rejects it (the exact text and exit status vary by version). Build with the flag,
   then run `dotnet test <project> --no-build`.
   `dotnet run` forwards `-nodeReuse:false` to the application, which can reject it.
   Build separately with that flag, then use `dotnet run --no-build`.
@@ -451,11 +450,11 @@ working set mixes warm-up, caches and garbage. The owner's method:
    regions released, but the process holds them for a while, so a single
    private reading can sit several GB above the floor. Compare the floor
    across samples, never one reading.
-7. Private bytes count the device's own heaps too. On the lead machine
-   (Direct3D 12, RTX 4070) every device-local heap is mapped into the process as
-   write-combined private pages with almost nothing resident: the debug
-   world's 1.9 GB mesh-region destination is one such allocation, and about
-   5 GB of a windowed World's private bytes are these. Read system memory as
+7. Private bytes count the device's own heaps too. A driver can map every
+   device-local heap into the process as write-combined private pages with
+   almost nothing resident: the debug world's mesh-region destination is one
+   such allocation, and gigabytes of a windowed World's private bytes can be
+   these. Read system memory as
    the working set, and separate a page probe's write-combined pages by their
    residency before charging them to a host buffer.
 8. Attribute managed holders by walking the heap, not by a sampled dump:
