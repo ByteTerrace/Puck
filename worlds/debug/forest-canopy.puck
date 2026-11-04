@@ -12,6 +12,7 @@ let forestSaplings = filter(scatterPoints(cellSize: 0.5, width: 560, depth: 220,
 placements {
   for (p, i) in forestTrees {
     placement $"forest-tree-{i}" {
+      surface: forestGround
       prototype: forestTreeKinds[floor(forestVariation(i, 0.21) * length(forestTreeKinds))]
       position [p[0], 0, p[2] - 150]
       scale: 0.86 + 0.38 * forestVariation(i, 0.47)
@@ -21,6 +22,7 @@ placements {
   }
   for (p, i) in forestSaplings {
     placement $"forest-sapling-{i}" {
+      surface: forestGround
       prototype: "forest-sapling"
       position [p[0], 0, p[2] - 150]
       scale: 0.8 + 0.55 * forestVariation(i, 0.71)

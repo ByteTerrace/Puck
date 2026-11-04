@@ -567,6 +567,7 @@ public sealed partial class WorldTick {
         Grip: template.Grip,
         Parent: template.Id,
         DealSlot: slot,
-        Spatial: template.Spatial
+        Spatial: template.Spatial,
+        Surface: template.Surface
     );
 }

@@ -1023,6 +1023,7 @@ public static partial class WorldNameRegistry {
         // Placements and prototypes, each its own namespace.
         new(typeof(WorldPlacement), nameof(WorldPlacement.Id), WorldNameKind.Placement, WorldNameRole.Declares),
         new(typeof(WorldPlacement), nameof(WorldPlacement.Parent), WorldNameKind.Placement, WorldNameRole.Names),
+        new(typeof(WorldPlacementSurface), nameof(WorldPlacementSurface.Targets), WorldNameKind.Placement, WorldNameRole.Names),
         new(typeof(WorldEffect.RemovePlacement), nameof(WorldEffect.RemovePlacement.Id), WorldNameKind.Placement, WorldNameRole.Names, WorldExportFacet.Action),
         new(typeof(WorldNavigationDomain), nameof(WorldNavigationDomain.Parent), WorldNameKind.Placement, WorldNameRole.Names),
         new(typeof(WorldPoolBodyBinding), nameof(WorldPoolBodyBinding.Placement), WorldNameKind.Placement, WorldNameRole.Names),

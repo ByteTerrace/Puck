@@ -42,11 +42,14 @@ and its canopy, understory, floor and clearing layers. Seeded sampler positions,
 shared lawn tree variants, younger edges, three glades, ferns, shrubs, fallen wood,
 leaf litter and flower drifts replace the regular pressure patch. Native D3D12
 and Vulkan captures inspect the composition; the standard foliage surfaces use
-active procedural weathering. A bounded solid noise-relief patch now proves geometric ground texture and
-walking contact in the eastern glade. Terrain-following banks remain open:
-enabling the new surface-placement policy encountered a validation null reference,
-so the wider planting remains on the level valley floor. Inspection cameras are authored in
-`forest.puck`. Lighting defects and frame/memory qualification remain open.
+active procedural weathering. A bounded solid noise-relief patch proves geometric ground texture and
+walking contact in the eastern glade. Two low woodland banks and the static planting
+use named-ground projection into one canonical fixed-point occurrence stream shared
+by drawing, collision, picking and the scene census. The validator failure is fixed;
+native reload succeeds, and motion retains the resolved roots without new grounding
+rays. Inspection cameras are authored in
+`forest.puck`. Bank contact remains query-heavy despite zero repeated grounding;
+lighting defects and frame/memory qualification remain open.
 
 The measurements below describe the **earlier pressure-patch workload**, before
 the expanded belt. They do not qualify the larger forest. Re-record the route and
@@ -77,7 +80,9 @@ The paired elapsed reductions are 7.0–17.5%. The candidate creates no point
 scratch, certificate or cull payload during the measured window. Plain process
 point-call totals vary slightly in the reference legs; the sampled semantic
 inputs match. Do not describe every process tap as invariant. GPU summary reads
-are endpoint submission snapshots, not cumulative transfers for the route.
+are endpoint submission snapshots. The route now separately reads cumulative
+transfer prefixes and rejects changed or missing ledger domains; historical
+comparisons lack that metric.
 A Vulkan pair also matches and reduces instructions from 146.46 to 45.27 million,
 but its instrumented time is 102.4 s before and 104.1 s after: no elapsed win
 is established there. Normal-paced timing remains a separate check.
@@ -160,7 +165,7 @@ wind and roads are authored Puck programs/data, not feature-specific C# paths.
 | L0m. Attribute memory before scaling | Compare matched settle, motion, cut, edit and cold-bake windows. Attribute managed/allocator/device live and peak owners, caches and retirement; separate physical pages from reservations and overlapping counters. Explain the expanded process footprint and meet the Deck budget. |
 | L1. Finish the shared instance/history contract | Root/member reseat provenance and durable journal/history laws are implemented, including unchanged-pose cuts and skipped frames. Finish native cut/filtered-landing qualification. Preserve current sharing, picking, clips, GI semantics and change-proportional staging. Measure a prototype edit's real derivation closure. |
 | L2. Compact the existing GPU path | Use visibility V1a/V1b stable identities, ordered survivors and geometry/detail buckets. Count candidates, survivors, nonempty buckets and initialized/executed commands in every raster pass. Validate cuts, materials, picks and portal straddles on both backends. |
-| L3. Author terrain-following continuous forest | The belt, seeded candidates, authored masks/clustering and per-copy variation are implemented and visually inspected. Restore terrain grounding after resolving its validation failure. Derive candidates through one shared sampler and resolve named-ground surface placement once into the canonical placement frame used by visuals and collision. Reuse fixed-point field queries and gradients; count no-hit/slope rejections and derivation costs, rather than projecting every frame. Expand the belt alongside L0/L1 as memory permits. Prove canopy continuity, relieved ground, understory and clear roads. |
+| L3. Author terrain-following continuous forest | The belt, seeded candidates, authored masks/clustering, per-copy variation, relieved banks and canonical surface-bound roots are implemented. Shared fixed-point queries resolve named-ground placement once for visuals and collision, with counted admission/rejection and payload. Native capture and contact checks inspect the composed woodland. Measure canopy continuity and route coverage alongside L0/L1 as memory permits. |
 | L4. Scale authored motion and distance | Derive conservative animated bounds from authored programs, extend eligible placement rate reuse and design traced canopy representation/invalidation. Compile/batch authored poses or derive GPU instance records only where measured work warrants it and synchronous CPU consumers stay correct. Geometry/detail/shadow reductions preserve coverage and quality. |
 | L5. Qualify the composed landscape | Run the fixed route, wind, cuts, nested view, day changes, edit closure and cold store on both backends and target devices. Close frame, memory, bake and edit bars with current quality and counted-work evidence. |
 

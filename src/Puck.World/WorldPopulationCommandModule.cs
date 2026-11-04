@@ -207,9 +207,8 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
             val2: (gravityStatistics.BodyCount - gravityCompiled.Attractors.Length)
         )}, exact {gravityStatistics.ExactSourceEvaluations}, approximate {gravityStatistics.ApproximatedNodeEvaluations}, m2l {gravityStatistics.MultipoleToLocalTranslations}, area targets {gravityAreaStatistics.TargetCount}, active {gravityAreaStatistics.ActiveAreaCount}, evaluations {gravityAreaStatistics.EvaluationCount}, matches {gravityAreaStatistics.MatchCount}";
         var placementInstances = WorldPlacementStamper.StaticStampInstances(
-            creations: server.Definition.Creations,
-            placements: server.Definition.Placements,
-            worldSeed: (server.Definition.Generation?.WorldSeed ?? 0UL)
+            definition: server.Definition,
+            placements: server.Definition.Placements
         );
         var dealtTemplates = 0;
         var dealtInstances = 0;

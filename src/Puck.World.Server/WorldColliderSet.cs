@@ -178,14 +178,7 @@ public sealed partial class WorldColliderSet : IContactField {
                 continue;
             }
 
-            var copies = CreationStampLattice.MaterializedCopyCount(
-                pattern: WorldPlacementStamp.PatternFor(placement: placement),
-                sampledCount: WorldPlacementStamp.SampledFixedOffsetsFor(
-                    placement: placement,
-                    worldSeed: worldSeed
-                )?.Count,
-                mirror: WorldPlacementStamp.MirrorFor(placement: placement)
-            );
+            var copies = WorldPlacementStamp.Resolve(definition, placement, worldSeed: worldSeed).Count;
 
             // A creation that collides as its composed field compiles one field collider per copy that keeps a contact shape.
             if (CollidesAsField(document: creation.EngineDocument)) {
@@ -461,9 +454,11 @@ public sealed partial class WorldColliderSet : IContactField {
                 placement: placement
             );
 
+            var stamp = WorldPlacementStamp.Resolve(definition, placement, worldSeed: worldSeed);
             if (
                 (previous is null) ||
                 !previous.m_placements.TryGetValue(key: placement, value: out var compiled) ||
+                !ReferenceEquals(compiled.Stamp, stamp) ||
                 !ReferenceEquals(objA: compiled.Creation, objB: creation) ||
                 (compiled.Frame != resolvedFrame) ||
                 (compiled.WorldSeed != worldSeed) ||
@@ -474,6 +469,7 @@ public sealed partial class WorldColliderSet : IContactField {
                     defaultGrip: worldDefaultGrip,
                     frame: resolvedFrame,
                     placement: placement,
+                    stamp: stamp,
                     worldSeed: worldSeed
                 );
 
@@ -529,6 +525,7 @@ public sealed partial class WorldColliderSet : IContactField {
     // were compiled from. A responding row also holds the colliders of every creation it can show, compiled with it at
     // the same frame (Shows, keyed by creation and holding this entry too), so a response change compiles nothing.
     private sealed record PlacementColliders(WorldPrototype Creation, CompiledPlacementFrame Frame, ulong WorldSeed, bool DefaultGrip,
+        CompiledPlacementStamp Stamp,
         FixedStaticCollider[] Colliders, WorldDiagnosticCollider[] Diagnostics, bool Holdable, bool HoldableIsOverride, int Spheres,
         int Boxes, int Cylinders, int Planes, IReadOnlyDictionary<WorldPrototype, PlacementColliders>? Shows = null, int Fields = 0);
 
@@ -555,6 +552,7 @@ public sealed partial class WorldColliderSet : IContactField {
                     defaultGrip: shown.DefaultGrip,
                     frame: shown.Frame,
                     placement: placement,
+                    stamp: shown.Stamp,
                     worldSeed: shown.WorldSeed
                 )
             );
@@ -583,6 +581,13 @@ public sealed partial class WorldColliderSet : IContactField {
     /// when a changed row's colliders differ (or it is attached), so the set must be built again, and nothing was
     /// changed.</returns>
     internal bool TryCarryAcrossHolding(WorldDefinition previous, WorldDefinition definition, IReadOnlyList<int> rows) {
+        // A changed contact source can move roots of rows whose own holding did not change.
+        foreach (var projected in definition.Placements) {
+            if (projected.Surface is not { } surface) { continue; }
+            foreach (var row in rows) {
+                if (surface.Targets.Contains(definition.Placements[row].Id, StringComparer.Ordinal)) { return false; }
+            }
+        }
         List<(WorldPlacement Before, WorldPlacement After, PlacementColliders Compiled)>? carried = null;
 
         foreach (var row in rows) {
@@ -608,6 +613,7 @@ public sealed partial class WorldColliderSet : IContactField {
                     defaultGrip: compiled.DefaultGrip,
                     frame: compiled.Frame,
                     placement: after,
+                    stamp: compiled.Stamp,
                     worldSeed: compiled.WorldSeed
                 ))
             );
@@ -651,7 +657,7 @@ public sealed partial class WorldColliderSet : IContactField {
         return true;
     }
 
-    private static PlacementColliders CompilePlacement(WorldPlacement placement, WorldPrototype creation, CompiledPlacementFrame frame, ulong worldSeed, bool defaultGrip) {
+    private static PlacementColliders CompilePlacement(WorldPlacement placement, WorldPrototype creation, CompiledPlacementFrame frame, ulong worldSeed, bool defaultGrip, CompiledPlacementStamp stamp) {
         var solid = placement.Solid!;
         var margin = FixedQ4816.FromDouble(value: solid.Margin);
         var colliders = new List<FixedStaticCollider>();
@@ -662,26 +668,8 @@ public sealed partial class WorldColliderSet : IContactField {
         var planes = 0;
         var fields = 0;
         var composed = CollidesAsField(document: creation.EngineDocument);
-        // The resolved yaw enters the contract through the SAME degrees-to-fixed-radians idiom every other
-        // fixed-point placement path already uses (WorldPopulation, WorldPlacementAttachment), and
-        // FixedQuaternion.FromAxisAngle is integer arithmetic — so no platform libm sine reaches a collider.
-        // The compiled colliders are re-derived from the document by every process, never baked once and shared,
-        // which is why a non-portable transcendental here would be a cross-machine divergence.
-        var rotation = FixedQuaternion.FromAxisAngle(
-            axis: FixedVector3.UnitY,
-            angle: FixedQ4816.FromDegrees(degrees: frame.YawDegrees)
-        );
-
-        CreationStampLattice.ForEachFixedInstance(
-            origin: FixedVector3.FromVector3(value: frame.Position),
-            rotation: rotation,
-            pattern: WorldPlacementStamp.PatternFor(placement: placement),
-            sampledOffsets: WorldPlacementStamp.SampledFixedOffsetsFor(
-                placement: placement,
-                worldSeed: worldSeed
-            ),
-            mirror: WorldPlacementStamp.MirrorFor(placement: placement),
-            visitor: instance => {
+        var rotation = stamp.FixedRotation;
+        stamp.ForEachFixed(instance => {
                 var transform = new FixedCreationStampTransform(
                     Origin: instance.Origin,
                     Rotation: rotation,
@@ -754,6 +742,7 @@ public sealed partial class WorldColliderSet : IContactField {
         return new PlacementColliders(
             Creation: creation,
             Frame: frame,
+            Stamp: stamp,
             WorldSeed: worldSeed,
             DefaultGrip: defaultGrip,
             Colliders: colliders.ToArray(),

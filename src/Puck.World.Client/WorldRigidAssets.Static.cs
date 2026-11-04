@@ -71,7 +71,8 @@ public sealed partial class WorldRigidAssets {
                 continue;
             }
             m_staticPlacements.Add(placement);
-            if (WorldPlacementStamper.InstanceCount(placement, seed) == 0) { continue; }
+            var stamp = WorldPlacementStamp.Resolve(definition, placement, worldSeed: seed);
+            if (stamp.Count == 0) { continue; }
             var key = creation.Id.Value;
             if (!variants.TryGetValue(key, out var asset)) {
                 if (!previous.TryGetValue(key, out asset) || !ReferenceEquals(asset.Creation, creation)) { asset = new StaticAsset(creation); }
@@ -79,19 +80,16 @@ public sealed partial class WorldRigidAssets {
                 m_staticAssets.Add(asset);
             }
             asset.MaxScale = MathF.Max(asset.MaxScale, placement.Scale);
-            var frame = WorldDefinitionRows.ResolvedFrame(definition, placement);
-            var visitor = new StaticCopyVisitor(m_staticCopies, asset, placement, frame.Rotation, scope);
-            CreationStampLattice.ForEachInstance(origin: frame.Position, rotation: frame.Rotation,
-                pattern: WorldPlacementStamp.PatternFor(placement), sampledOffsets: WorldPlacementStamp.SampledOffsetsFor(placement, seed),
-                mirror: null, visitor: ref visitor);
+            var visitor = new StaticCopyVisitor(m_staticCopies, asset, placement, stamp, scope);
+            stamp.ForEach(ref visitor);
         }
     }
-    private struct StaticCopyVisitor(List<StaticCopy> copies, StaticAsset asset, WorldPlacement placement, Quaternion rotation, string? scope) : ICreationStampVisitor {
+    private struct StaticCopyVisitor(List<StaticCopy> copies, StaticAsset asset, WorldPlacement placement, CompiledPlacementStamp stamp, string? scope) : ICreationStampVisitor {
         private int m_ordinal;
         public void Visit(CreationStampInstance instance) {
-            var ordinal = m_ordinal++;
+            var ordinal = stamp.OccurrenceAt(m_ordinal++);
             var target = new WorldPickTarget(placement.Id, null) { Prototype = asset.Creation.Id, Occurrence = ordinal };
-            copies.Add(new StaticCopy(asset, placement, target, (scope, placement.Id, ordinal), instance.Origin, rotation));
+            copies.Add(new StaticCopy(asset, placement, target, (scope, placement.Id, ordinal), instance.Origin, stamp.Rotation));
         }
     }
     // Only body assets need template transform slots. Static templates retain the ordinary instance partitions.

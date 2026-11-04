@@ -63,10 +63,7 @@ public sealed class GravityAuthoringLawTests {
 
         return new WorldGravityField(
             capacity: capacity,
-            compiled: FixedWorldGravity.Compile(
-                gravity: definition.Gravity,
-                placements: definition.Placements
-            )
+            compiled: FixedWorldGravity.Compile(definition: definition)
         );
     }
     private static WorldGravity PointGravity(
@@ -363,10 +360,7 @@ public sealed class GravityAuthoringLawTests {
                 PlacementId: "ball"
             )]));
 
-        var compiled = FixedWorldGravity.Compile(
-            gravity: definition.Gravity,
-            placements: definition.Placements
-        );
+        var compiled = FixedWorldGravity.Compile(definition: definition);
 
         var source = Assert.Single(collection: compiled.Attractors);
 
@@ -781,10 +775,7 @@ public sealed class GravityAuthoringLawTests {
             userMessage: reason
         );
 
-        var compiled = FixedWorldGravity.Compile(
-            gravity: definition.Gravity,
-            placements: definition.Placements
-        );
+        var compiled = FixedWorldGravity.Compile(definition: definition);
         var field = new WorldGravityField(
             capacity: 1,
             compiled: compiled
@@ -854,10 +845,7 @@ public sealed class GravityAuthoringLawTests {
             userMessage: uniformReason
         );
 
-        var compiled = FixedWorldGravity.Compile(
-            gravity: uniform.Gravity,
-            placements: uniform.Placements
-        );
+        var compiled = FixedWorldGravity.Compile(definition: uniform);
 
         Assert.Empty(collection: compiled.Attractors);
         Assert.Equal(

@@ -448,6 +448,7 @@ public sealed record WorldPlacementAttach(int BodyIndex, DocumentVector3 LocalOf
 /// creation eyes derive <see cref="WorldCamera"/> feeds and its declared faces derive screens (both at the delivery
 /// boundary, never written to the document).
 /// </summary>
+/// <param name="Surface">Optional one-time projection of each static occurrence onto explicitly named contact surfaces.</param>
 /// <param name="Id">The row's stable string id (its mutation address). It may not carry <c>:</c> or be exactly
 /// <c>$each</c> (<see cref="TryValidateId"/>).</param>
 /// <param name="PrototypeId">The referenced <see cref="WorldPrototype.Id"/> (must resolve; removal of a referenced
@@ -555,7 +556,8 @@ public sealed record WorldPlacement(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementDeal? Deal = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? DealSlot = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldPlacementSpatialVolume>? Spatial = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] int Holding = 0
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] int Holding = 0,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementSurface? Surface = null
 ) {
     /// <summary>The body-reference token a rule's <c>placement:$each</c> binds to its <c>forEach</c> key; no placement
     /// may be named it.</summary>
@@ -599,7 +601,7 @@ public sealed record WorldPlacement(
     }
 }
 /// <summary>Adapts placement document facets to the shared creation-stamp vocabulary.</summary>
-public static class WorldPlacementStamp {
+public static partial class WorldPlacementStamp {
     /// <summary>The worst-case, seed-independent materialized copy count a placement's distribution could ever
     /// produce — a Lattice's exact CountA x CountB, a Scatter's exact block count, a Noise grid's worst case
     /// (Width x Depth, since actual admission needs the world seed and is not paid for during validation), or 1 for
@@ -697,24 +699,4 @@ public static class WorldPlacementStamp {
     ),
         _ => null,
     };
-    /// <summary>The presentation-float widening of <see cref="SampledFixedOffsetsFor"/>, for the renderer's stamp
-    /// emission — never fed back into simulation state.</summary>
-    /// <param name="placement">The placement row.</param>
-    /// <param name="worldSeed">The world's reroll seed (<c>generation.worldSeed</c>).</param>
-    public static IReadOnlyList<Vector3>? SampledOffsetsFor(WorldPlacement placement, ulong worldSeed) {
-        if (SampledFixedOffsetsFor(
-            placement: placement,
-            worldSeed: worldSeed
-        ) is not { } fixedOffsets) {
-            return null;
-        }
-
-        var offsets = new Vector3[fixedOffsets.Count];
-
-        for (var index = 0; (index < offsets.Length); index++) {
-            offsets[index] = fixedOffsets[index].ToVector3();
-        }
-
-        return offsets;
-    }
 }

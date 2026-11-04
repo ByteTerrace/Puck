@@ -19,7 +19,7 @@ public sealed class WorldStaticPalettes {
 
     internal readonly Puck.Abstractions.CodeDerivedTable<WorldPlacement, PlacedEmission> Emissions = new();
 
-    internal readonly record struct EmissionKey(WorldPrototype Creation, PackedFontAtlasCatalog? Text, bool[]? Hidden, int Material, Vector3 Origin, Quaternion Rotation, ulong Seed, string? Scope, bool Meshes);
+    internal readonly record struct EmissionKey(WorldPrototype Creation, PackedFontAtlasCatalog? Text, bool[]? Hidden, int Material, Vector3 Origin, Quaternion Rotation, ulong Seed, string? Scope, bool Meshes, CompiledPlacementStamp Stamp);
     internal sealed record PlacedEmission(EmissionKey Key, SdfProgramBuilder.Emission Program, SdfVolume[] Volumes, SdfMeshDraw[] Draws);
 
     /// <summary>Starts an emission: every palette is registered again on its first use.</summary>

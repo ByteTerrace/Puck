@@ -13,7 +13,7 @@ public sealed class WorldSceneEnvelope {
     public WorldSceneCount Measure(WorldDefinition candidate) => Of(candidate, documentMaterials: (DocumentMaterials?.Invoke() ?? 0));
     public static WorldSceneCount Of(WorldDefinition candidate, bool adjacency = true, int documentMaterials = 0) => new(
         Screens: new((candidate.Screens.Count + WorldFaceCatalog.For(candidate).ClaimingFaceCount), 0),
-        Placements: new(WorldPlacementStamper.StaticStampInstances(candidate.Creations, candidate.Placements, (candidate.Generation?.WorldSeed ?? 0)), 0),
+        Placements: new(WorldPlacementStamper.StaticStampInstances(candidate, candidate.Placements), 0),
         Pool: default, Avatars: default, Adjacency: default, Document: new(0, documentMaterials));
     public string Describe() => $"[world.render] authored: {Boot.Screens.Instances} screens, {Boot.Placements.Instances} static field instances; buffers follow the live program and mesh assets";
 }

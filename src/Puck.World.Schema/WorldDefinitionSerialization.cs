@@ -119,6 +119,7 @@ namespace Puck.World;
 [JsonSerializable(typeof(WorldPrototype))]
 [JsonSerializable(typeof(WorldPrototypeMesh))]
 [JsonSerializable(typeof(WorldPlacement))]
+[JsonSerializable(typeof(WorldPlacementSurface))]
 [JsonSerializable(typeof(WorldPlacementSpatialVolume))]
 [JsonSerializable(typeof(WorldPlacementReflowRequest))]
 [JsonSerializable(typeof(WorldSpatialShape))]

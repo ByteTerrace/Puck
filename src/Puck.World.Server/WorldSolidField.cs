@@ -264,40 +264,9 @@ public sealed class WorldSolidField : IContactField {
     // The one directed march both grip and anchor queries read: the first surface along the ray, with the surface
     // orientation read from the field gradient one step back into open space (a march reports WHERE, never which
     // way -- RayHit.Normal is documented zero).
-    private bool TryCast(in FixedVector3 origin, in FixedVector3 direction, FixedQ4816 maxDistance, out FixedSurfaceAttachCandidate candidate) {
-        candidate = default;
-
-        if (!m_query.Raycast(
-            dir: direction,
-            hit: out var hit,
-            maxDist: maxDistance,
-            origin: FixedPosition.FromLocal(local: origin)
-        )) {
-            return false;
-        }
-
-        var point = hit.Point.Local;
-
-        if (!m_evaluator.TryFieldGradient(
-            gradient: out var gradient,
-            position: FixedPosition.FromLocal(local: (point - (direction.Normalize() * GradientBackoff)))
-        )) {
-            return false;
-        }
-        if (gradient == FixedVector3.Zero) {
-            return false;
-        }
-
-        candidate = new FixedSurfaceAttachCandidate(
-            Point: point,
-            Normal: gradient,
-            Distance: hit.Distance,
-            Source: FixedSurfaceColliderSource.Static,
-            ColliderIndex: hit.Material
-        );
-
-        return true;
-    }
+    private bool TryCast(in FixedVector3 origin, in FixedVector3 direction, FixedQ4816 maxDistance, out FixedSurfaceAttachCandidate candidate) =>
+        FixedSurfaceQuery.TryRaycast(m_query, m_evaluator, origin, direction, maxDistance, GradientBackoff,
+            out candidate, out _);
 
     /// <summary>Queries the wrapped deterministic SDF evaluator for an unobstructed segment.</summary>
     /// <param name="from">The segment start.</param>
@@ -428,28 +397,8 @@ public sealed class WorldSolidField : IContactField {
                 grantedByOverride: (placement.Grip is not null),
                 material: material
             );
-            var resolvedFrame = WorldDefinitionRows.ResolvedFrame(
-                definition: definition,
-                placement: placement
-            );
-            // The one transform conversion boundary: the program is encoded single-precision, but every placement
-            // transform reaching it is derived in fixed point first (yaw via integer SinCos, origins via the fixed
-            // lattice, reflected frames via fixed quaternion composition) and rounded exactly to float, so every
-            // machine encodes bit-identical constants — the evaluator itself stays fixed point throughout.
-            var fixedRotation = FixedQuaternion.FromAxisAngle(
-                axis: FixedVector3.UnitY,
-                angle: FixedQ4816.FromDegrees(degrees: resolvedFrame.YawDegrees)
-            );
-
-            // A creation whose parts carve each other is one candidate against the solid field, never a carve of it, and
-            // a relieved creation's relief displaces only its own union: either emits inside one scope, which a nonzero
-            // contact margin's per-shape scopes nest within. A margined solid that neither carves nor is relieved emits
-            // unscoped.
-            var relieved = WorldColliderSet.Relieves(document: creation.EngineDocument);
-            var scoped = (
-                (creation.Document.Shapes is { Count: > 0 }) &&
-                (relieved || ((solid.Margin == 0f) && CreationStampEmitter.ComposesInternally(document: creation.EngineDocument)))
-            );
+            var stamp = WorldPlacementStamp.Resolve(definition, placement, worldSeed: worldSeed);
+            var fixedRotation = stamp.FixedRotation;
 
             // Each placed copy is one program instance carrying a conservative world-space bound: the creation's
             // render reach at the placement's scale, plus the contact margin the shapes are dilated by. The
@@ -463,24 +412,11 @@ public sealed class WorldSolidField : IContactField {
                 ? solid.Margin
                 : 0f)) + InstanceBoundMargin);
 
-            CreationStampLattice.ForEachFixedInstance(
-                origin: FixedVector3.FromVector3(value: resolvedFrame.Position),
-                rotation: fixedRotation,
-                pattern: WorldPlacementStamp.PatternFor(placement: placement),
-                sampledOffsets: WorldPlacementStamp.SampledFixedOffsetsFor(
-                    placement: placement,
-                    worldSeed: worldSeed
-                ),
-                mirror: WorldPlacementStamp.MirrorFor(placement: placement),
-                visitor: instance => {
+            stamp.ForEachFixed(instance => {
                     _ = builder.BeginInstance(
                         boundCenter: instance.Origin.ToVector3(),
                         boundRadius: reach
                     );
-
-                    if (scoped) {
-                        _ = builder.PushField(compose: SdfBlendOp.Union);
-                    }
 
                     var transform = new FixedCreationStampTransform(
                         Origin: instance.Origin,
@@ -489,21 +425,7 @@ public sealed class WorldSolidField : IContactField {
                         ReflectionNormal: instance.ReflectionNormal
                     );
 
-                    CreationStampEmitter.EmitFixed(
-                        builder: builder,
-                        document: creation.EngineDocument,
-                        transform: transform,
-                        materialFor: _ => material,
-                        contactMargin: solid.Margin
-                    );
-
-                    if (scoped && relieved) {
-                        CreationStampEmitter.EmitNoise(builder: builder, noise: creation.EngineDocument.Noise!, transform: transform);
-                    }
-
-                    if (scoped) {
-                        _ = builder.PopField();
-                    }
+                    CreationStampEmitter.EmitContact(builder, creation.EngineDocument, transform, material, solid.Margin);
 
                     _ = builder.EndInstance();
                     placementShapeCount += (creation.Document.Shapes?.Count ?? 0);

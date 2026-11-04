@@ -29,12 +29,13 @@ public static class WorldPlacementStamper {
 
         foreach (var placement in placements) {
             var creation = WorldDefinitionRows.FindCreation(creations: definition.Creations, id: placement.ShownPrototypeId);
-            var frame = WorldDefinitionRows.ResolvedFrame(definition: definition, placement: placement);
+            var stamp = WorldPlacementStamp.Resolve(definition, placement, worldSeed: seed);
+            var frame = stamp.Frame;
 
             // Emission also reads the composed parent frame and seeded pattern. The child row can stay identical
             // while either changes, including moving a previously admitted instance outside the evaluator's frame.
             if (!QueryVerdicts.TryGetValue(key: placement, value: out var verdict) || !ReferenceEquals(objA: verdict.Creation, objB: creation) ||
-                (verdict.Frame != frame) || (verdict.Seed != seed)) {
+                (verdict.Frame != frame) || (verdict.Seed != seed) || !ReferenceEquals(verdict.Stamp, stamp)) {
                 string? refusal = null;
 
                 try {
@@ -60,6 +61,7 @@ public static class WorldPlacementStamper {
                 verdict = new QueryVerdict(
                     Creation: creation,
                     Frame: frame,
+                    Stamp: stamp,
                     Seed: seed,
                     Refusal: refusal
                 );
@@ -79,7 +81,7 @@ public static class WorldPlacementStamper {
     // Each placement row's evaluator verdict and the external inputs its emission read.
     private static readonly Puck.Abstractions.CodeDerivedTable<WorldPlacement, QueryVerdict> QueryVerdicts = new();
 
-    private sealed record QueryVerdict(WorldPrototype? Creation, CompiledPlacementFrame Frame, ulong Seed, string? Refusal);
+    private sealed record QueryVerdict(WorldPrototype? Creation, CompiledPlacementFrame Frame, CompiledPlacementStamp Stamp, ulong Seed, string? Refusal);
 
     // The instance-bound slack past a creation's own reach (a contract of the tile cull, not a policy: a too-tight
     // bound CLIPS real geometry at masked tile edges; a fat one only costs a rare extra evaluation).
@@ -480,10 +482,7 @@ public static class WorldPlacementStamper {
             return;
         }
 
-        var frame = (frameOverride ?? WorldDefinitionRows.ResolvedFrame(
-            definition: definition,
-            placement: placement
-        ));
+        var stamp = WorldPlacementStamp.Resolve(definition, placement, frameOverride, worldSeed);
         // A glass shape emits apart from the opaque shapes, in the glass instance after them: `hiddenOpaque` hides it
         // from the opaque emission, and `glassHidden` hides everything but the glass shapes from the glass one.
         var (hiddenOpaque, glassHidden) = GlassMasks(creation: creation, hidden: hidden);
@@ -523,7 +522,7 @@ public static class WorldPlacementStamper {
             // lattice a finite shape clips is as finite as that shape.
             composeBlends: scoped
         );
-        var rotation = frame.Rotation;
+        var rotation = stamp.Rotation;
         var perShape = (
             !scoped &&
             (creation.Shapes is { Count: > 0 })
@@ -552,17 +551,7 @@ public static class WorldPlacementStamper {
             volumes: volumes
         );
 
-        CreationStampLattice.ForEachInstance(
-            origin: frame.Position,
-            rotation: rotation,
-            pattern: WorldPlacementStamp.PatternFor(placement: placement),
-            sampledOffsets: WorldPlacementStamp.SampledOffsetsFor(
-                placement: placement,
-                worldSeed: worldSeed
-            ),
-            mirror: WorldPlacementStamp.MirrorFor(placement: placement),
-            visitor: ref visitor
-        );
+        stamp.ForEach(ref visitor);
     }
     // The masks a creation with glass shapes emits through: the opaque emission's hidden shapes (the isolation's and
     // every glass shape) and the glass emission's (everything but the isolation's visible glass shapes). Both null for a
@@ -1002,8 +991,9 @@ public static class WorldPlacementStamper {
             var firstInstance = builder.InstanceCount;
             var firstMesh = (meshDraws?.Count ?? 0);
             var hidden = isolation?.HiddenFor(document: creation.EngineDocument, prototype: creation.Id.Value);
-            var frame = WorldDefinitionRows.ResolvedFrame(definition: definition, placement: placement);
-            var key = new WorldStaticPalettes.EmissionKey(creation, textCatalog, hidden, paletteIds[0], frame.Position, frame.Rotation, worldSeed, meshScope, (meshDraws is not null));
+            var stamp = WorldPlacementStamp.Resolve(definition, placement, worldSeed: worldSeed);
+            var frame = stamp.Frame;
+            var key = new WorldStaticPalettes.EmissionKey(creation, textCatalog, hidden, paletteIds[0], frame.Position, stamp.Rotation, worldSeed, meshScope, (meshDraws is not null), stamp);
             var retain = ((palettes is not null) && (tint is null));
 
             if (retain && registered.Emissions.TryGetValue(key: placement, value: out var held) && (held.Key == key) && builder.CanAppendEmission(emission: held.Program)) {
@@ -1102,20 +1092,6 @@ public static class WorldPlacementStamper {
 
         return shows.Count;
     }
-    /// <summary>The emitted instance count of one placement, including pattern/sampled and reflected copies.</summary>
-    /// <param name="placement">The placement row.</param>
-    /// <param name="worldSeed">The world's reroll seed (<c>generation.worldSeed</c>) — resolves a Noise/Scatter
-    /// distribution's actual admitted count.</param>
-    public static int InstanceCount(WorldPlacement placement, ulong worldSeed) {
-        return CreationStampLattice.InstanceCount(
-            pattern: WorldPlacementStamp.PatternFor(placement: placement),
-            sampledCount: WorldPlacementStamp.SampledOffsetsFor(
-                placement: placement,
-                worldSeed: worldSeed
-            )?.Count,
-            mirror: WorldPlacementStamp.MirrorFor(placement: placement)
-        );
-    }
     /// <summary>Whether a creation row animates — the static/animated fork every consumer shares. A driver or an
     /// inverse-kinematics effector animates; a timeline frame animates only where one of its transforms differs from its
     /// shape's authored position or rotation (a state-bound value always differs from a literal). A creation whose frames
@@ -1136,15 +1112,12 @@ public static class WorldPlacementStamper {
         (!IsAnimated(creation: creation) && (placement.Inhabit is null) && (placement.Attach is null) && (placement.Deal is null));
     /// <summary>The total static stamp instances of a placement set (animated rows ride the constant replay pool and
     /// charge nothing here) — the apply-time measure's placement charge unit.</summary>
-    /// <param name="creations">The world's creation rows.</param>
+    /// <param name="definition">The world supplying canonical placement and surface dependencies.</param>
     /// <param name="placements">The placement rows.</param>
-    /// <param name="worldSeed">The world's reroll seed (<c>generation.worldSeed</c>) — resolves each row's
-    /// Noise/Scatter distribution to its actual admitted count.</param>
-    public static int StaticStampInstances(IReadOnlyList<WorldPrototype> creations, IReadOnlyList<WorldPlacement> placements, ulong worldSeed = 0UL) {
+    public static int StaticStampInstances(WorldDefinition definition, IReadOnlyList<WorldPlacement> placements) {
         var (scopedStamps, shapeInstances) = StaticStampReservation(
-            creations: creations,
-            placements: placements,
-            worldSeed: worldSeed
+            definition: definition,
+            placements: placements
         );
 
         return checked((scopedStamps + shapeInstances));
@@ -1152,18 +1125,17 @@ public static class WorldPlacementStamper {
     /// <summary>The static stamp reservation split by emission class: SCOPED stamps (one whole-creation instance per
     /// copy — a scoped or text-carrying creation) and per-SHAPE instances (every other copy materializes one instance
     /// per shape). KEEP IN SYNC with <c>EmitPlacement</c>'s split and <c>EmitProbe</c>'s two reservation forms.</summary>
-    /// <param name="creations">The world's creation rows.</param>
+    /// <param name="definition">The world supplying canonical placement and surface dependencies.</param>
     /// <param name="placements">The placement rows.</param>
-    /// <param name="worldSeed">The world's reroll seed — resolves each row's Noise/Scatter distribution.</param>
     /// <returns>The scoped-stamp count and the per-shape instance count.</returns>
-    public static (int ScopedStamps, int ShapeInstances) StaticStampReservation(IReadOnlyList<WorldPrototype> creations, IReadOnlyList<WorldPlacement> placements, ulong worldSeed = 0UL) {
+    public static (int ScopedStamps, int ShapeInstances) StaticStampReservation(WorldDefinition definition, IReadOnlyList<WorldPlacement> placements) {
         var scopedStamps = 0;
         var shapeInstances = 0;
 
         foreach (var placement in placements) {
             if (
                 (WorldDefinitionRows.FindCreation(
-                creations: creations,
+                creations: definition.Creations,
                 id: placement.ShownPrototypeId
             ) is not { } creation) ||
                 !IsStaticStamp(
@@ -1174,10 +1146,7 @@ public static class WorldPlacementStamper {
                 continue;
             }
 
-            var copies = InstanceCount(
-                placement: placement,
-                worldSeed: worldSeed
-            );
+            var copies = WorldPlacementStamp.Resolve(definition, placement).Count;
             var perCopy = CreationStampEmitter.PerCopyInstanceCount(document: creation.Document);
 
             if (perCopy == 1) {

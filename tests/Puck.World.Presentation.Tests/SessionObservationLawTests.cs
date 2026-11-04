@@ -743,7 +743,7 @@ public sealed partial class SessionObservationLawTests {
 
         var candidate = fixture.Server.Definition;
         var dealtAsSelected = WorldPlacementStamper.StaticStampInstances(
-            creations: candidate.Creations,
+            definition: candidate,
             placements: candidate.Placements
         );
 
@@ -756,7 +756,7 @@ public sealed partial class SessionObservationLawTests {
 
         var measured = observation!.Disclose(candidate: candidate)!;
         var measuredInstances = WorldPlacementStamper.StaticStampInstances(
-            creations: measured.Creations,
+            definition: measured,
             placements: measured.Placements
         );
 

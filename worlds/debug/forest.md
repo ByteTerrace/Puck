@@ -8,7 +8,7 @@ The composition has mature overlapping crowns, saplings along the irregular edge
 
 Use `body.pose spawn:forest 0`, `spawn:forest-inside`, `spawn:forest-glade` and `spawn:forest-west` for visual inspection. `spawn:forest-overview` is elevated; pause simulation when inspecting it. Capture presented frames at the entrance, beneath the canopy and across a glade after every composition pass.
 
-Most planting remains on the level valley floor. A bounded solid noise-relief patch in the eastern clearing proves geometric surface detail. Wider terrain banks and surface-bound planting are deferred while the new surface-placement validator's null-reference failure is resolved. The [landscape milestone](../../docs/plans/dense-landscapes.md) owns performance qualification; an attractive still does not establish the frame or memory budget.
+The west and east banks and the eastern clearing's shallow noise-relief patch provide actual ground geometry and contact. `forestGround` projects the static canopy, understory, floor cover and fallen wood onto those named surfaces and the valley floor. Drawing and collision consume the same cached fixed-point roots; movement does not repeat the grounding rays. The [landscape milestone](../../docs/plans/dense-landscapes.md) owns performance qualification; an attractive still does not establish the frame or memory budget.
 
 The standard's `landscapeSurface` applies active static weathering: vertically
 stretched bark grain, softened tonal dabs on matte foliage and broader ground variation.
@@ -33,6 +33,6 @@ relieved patch, keeping one material recipe and a common pattern phase.
 
 `forest-ground-relief` uses the existing `sceneryPatch` with a shallow mass and
 seeded two-octave displacement, sunk into the floor inside the tree-free glade.
-Its solid has zero margin. The surrounding roots and flower drifts stay outside
-this bounded proving patch. The native per-tick crossing followed the displaced
-surface and returned to the original floor; broader tree grounding is still open.
+Its solid has zero margin. Surrounding roots and flower drifts use the shared
+ground policy. The native per-tick crossing followed the displaced surface and
+returned to the original floor; the raised bank also supports grounded contact.

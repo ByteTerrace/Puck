@@ -343,7 +343,7 @@ public sealed partial record WorldDefinition(
     /// Compiled once per distinct <see cref="PlacementsRaw"/> instance and cached; every consumer of a placement's
     /// WORLD transform reads THIS, never the row's own Position/YawDegrees directly.</summary>
     [JsonIgnore]
-    public IReadOnlyDictionary<string, CompiledPlacementFrame> PlacementFrames => WorldPlacementFrameCompilation.Resolve(section: PlacementsRaw);
+    public IReadOnlyDictionary<string, CompiledPlacementFrame> PlacementFrames => WorldPlacementStamp.ResolveFrames(this);
     /// <summary>Gets or initializes the placement rows through the placements section (see <see cref="KitRowsRaw"/>).</summary>
     [JsonIgnore]
     public IReadOnlyList<WorldPlacement>? PlacementRowsRaw { get => PlacementsRaw?.Rows; init => PlacementsRaw = ((PlacementsRaw ?? new WorldPlacementsSection()) with { Rows = value }); }
@@ -763,6 +763,7 @@ public sealed partial record WorldDefinition(
         foreach (var (row, holding) in holdings) {
             ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: ((uint)row), other: ((uint)rows.Count), paramName: nameof(holdings));
             next[row] = (rows[row] with { Holding = holding });
+            WorldPlacementStamp.CarryAcrossHolding(rows[row], next[row]);
         }
 
         var placements = (section with { Rows = next });

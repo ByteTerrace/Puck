@@ -204,10 +204,10 @@ Each waits on the owner: what the engine should do, how it looks and feels, and 
 Owner: the lead, with performance, rendering and world-authoring owners per
 step · high · Next: reduce repeated CPU dependency work identified by the fresh
 normal-paced trace and close readback/physical memory attribution, then GPU
-instance buckets and the terrain-following forest belt.
+instance buckets and qualification of the terrain-following forest belt.
 The owner includes continuous forest in the first milestone alongside roads,
-shrubs, grass and trees; the new seeded woodland belt has visual captures but still needs
-terrain-following placement and target-budget qualification.
+shrubs, grass and trees; the seeded woodland belt now includes terrain-following
+placement and visual captures, with target-budget qualification still open.
 The [plan](dense-landscapes.md) owns the current assessment, workload and order.
 Existing visibility, bake, memory, terrain and job-system packets own mechanisms.
 
@@ -219,14 +219,7 @@ Vulkan elapsed win established. Ordinary frame samples encounter presentation
 waits and do not qualify the frame bar. Exact power memo on/off remains open.
 Thousands of independent authored grass poses still warrant generic pose-program
 work; caching repeated slots alone does not remove them. Cold bake, physical
-memory, density sweeps, terrain following and target-device bars remain open.
-
-  P2 · Owner: placement compiler · Enabling `surface` on the forest placements
-  refused `world.reload` with an unlocated null reference during document
-  validation. A policy targeting `floor` and the two static bank placements used
-  fromOffset [0,8,0], direction [0,-1,0], reach 14, offset -0.025 and minFacing
-  0.72. Removing the surface policies admitted the expanded belt. Diagnose with a
-  stack-bearing repro before restoring banks; no cause has been established.
+memory, density sweeps and target-device bars remain open.
 
   P2 · Owner: material/bake owner · The surface-pattern code edit forced a full
   native rebake (77.95 s, no stored groups loaded) despite no authored shape changes.

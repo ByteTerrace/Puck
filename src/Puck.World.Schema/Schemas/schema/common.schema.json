@@ -8079,6 +8079,60 @@
         "$ref": "#/$defs/WorldPlacementSpatialVolume"
       }
     },
+    "WorldPlacementSurface": {
+      "description": "One-time directed projection of static occurrence roots onto named static contact geometry. The occurrence keeps its authored rotation and scale; its resolved origin is shared by presentation and collision.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "targets": {
+          "description": "Placement IDs whose static contact fields may receive a root. Surface and parent dependencies must be acyclic.",
+          "type": "array",
+          "items": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "fromOffset": {
+          "$ref": "#/$defs/DocumentVector3",
+          "description": "World-space offset from each candidate root to the ray origin."
+        },
+        "direction": {
+          "$ref": "#/$defs/DocumentVector3",
+          "description": "World-space ray direction, normalized in fixed point."
+        },
+        "reach": {
+          "description": "Maximum ray length in world units.",
+          "type": "number"
+        },
+        "offset": {
+          "description": "Signed world-space displacement along the hit normal (negative embeds a root).",
+          "type": "number",
+          "default": 0
+        },
+        "minFacing": {
+          "description": "Minimum cosine of hit normal with the opposite cast direction, in [0,1].",
+          "type": "number",
+          "default": 0
+        },
+        "requireHit": {
+          "description": "Refuse derivation instead of dropping an occurrence when no proven eligible surface is found.",
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "required": [
+        "targets",
+        "fromOffset",
+        "direction",
+        "reach"
+      ],
+      "additionalProperties": false,
+      "title": "WorldPlacementSurface"
+    },
     "WorldPlacement": {
       "description": "One placement instance row \u2014 a creation asset stamped into the world by reference: transform \u002B facets as data, addressed by its stable Id. A placement whose creation carries timeline frames is animated: it replays client-side on the render clock through the reserved dynamic-transform pool (distribution/mirror facets are static-stamp-only and reject on an animated row). A placement carrying an Inhabit facet is a live population body rather than furniture (see WorldPlacementInhabit); its declared creation eyes derive WorldCamera feeds and its declared faces derive screens (both at the delivery boundary, never written to the document).",
       "type": "object",
@@ -8193,6 +8247,11 @@
           "description": "Which of Respond\u0027s entries held at the last response sweep, one bit per entry in authored order (bit i for entry i); 0 while none holds, and always 0 on a row without Respond. The response sweep writes it, and a booting document\u0027s state entries are settled into it before admission (SettleResponses); the row shows the lowest set bit\u0027s entry, else its own authored PrototypeId (ShownPrototypeId). Refused on a row without Respond and with a bit at or past its entry count. A reader whose disclosure withholds a cell an entry reads is handed the mask without that entry\u0027s bit (Disclosed). Omitted from the wire when 0.",
           "type": "integer",
           "default": 0
+        },
+        "surface": {
+          "$ref": "#/$defs/WorldPlacementSurface",
+          "description": "Optional one-time projection of each static occurrence onto explicitly named contact surfaces.",
+          "default": null
         }
       },
       "required": [

@@ -2203,8 +2203,11 @@ coordinate bounds alone do not prove visible continuous forest.
 
 Raw endpoint answers and both transcripts remain beside the report. The observer
 and per-tick authority replay verification run in both measured legs and are
-included in timing. GPU endpoint answers are completed-submission snapshots, not
-cumulative window transfer totals. This is controlled tick-throughput evidence;
+included in timing. GPU summary endpoint answers are completed-submission snapshots.
+The separate `gpu-transfers` parser subtracts cumulative prefixes from the same
+complete ledger domains and refuses changed, missing or decreasing domains.
+Submitted and known-completed work are distinct; host writes and buffer-copy
+payloads are not physical bus traffic. This is controlled tick-throughput evidence;
 ordinary paced frame time and highest-quality/device qualification remain separate.
 Memory readings include diagnostic machinery; normal-play physical budget
 qualification is separate. Before claiming an optimization, establish A/A

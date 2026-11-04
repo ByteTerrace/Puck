@@ -304,18 +304,20 @@ public readonly record struct FixedWorldGravity(
     }
 
     /// <summary>Compiles the authored section against the placements its attractors name.</summary>
-    /// <param name="gravity">The authored section.</param>
-    /// <param name="placements">The placement rows an attractor resolves its position from.</param>
+    /// <param name="definition">The authored world and its canonical placement frames. A distributed row names its
+    /// group frame, never one implicit attractor per occurrence.</param>
     /// <returns>The compiled field; <see cref="Inert"/> when no global or bounded local field is declared.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="gravity"/> is <see langword="null"/>.</exception>
-    public static FixedWorldGravity Compile(WorldGravity gravity, IReadOnlyList<WorldPlacement> placements) {
-        ArgumentNullException.ThrowIfNull(gravity);
+    /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
+    public static FixedWorldGravity Compile(WorldDefinition definition) {
+        ArgumentNullException.ThrowIfNull(definition);
+        var gravity = definition.Gravity;
+        var placements = definition.Placements;
 
         if (!gravity.IsActive) {
             return Inert;
         }
 
-        var frames = WorldPlacementFrameCompilation.Compile(placements: placements);
+        var frames = definition.PlacementFrames;
         var uniform = FixedVector3.FromVector3(value: gravity.UniformAcceleration);
         var areas = CompileAreas(
             areas: gravity.Areas,

@@ -101,6 +101,27 @@ public sealed class WorldBootWork : IWorkCounterSource {
     /// because no compiled world held it.</summary>
     public static WorkKind ChunkDerivations { get; } = new(name: "world.boot.chunk-derivations", unit: "count", workClass: WorkClass.Pacing);
 
+    /// <summary>Surface descriptors validated and indexed after immutable context inputs change.</summary>
+    public static WorkKind SurfaceDescriptors { get; } = new(name: "world.boot.surface.descriptors", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Candidate static surface occurrences considered.</summary>
+    public static WorkKind SurfaceCandidates { get; } = new(name: "world.boot.surface.candidates", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Directed surface projection rays actually queried.</summary>
+    public static WorkKind SurfaceRays { get; } = new(name: "world.boot.surface.rays", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Field gradients actually sampled for projected roots.</summary>
+    public static WorkKind SurfaceNormals { get; } = new(name: "world.boot.surface.normals", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Projection roots rejected by the authored normal-facing threshold.</summary>
+    public static WorkKind SurfaceSlopeRejected { get; } = new(name: "world.boot.surface.slope-rejected", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Projection rays without a proven surface and normal.</summary>
+    public static WorkKind SurfaceMissed { get; } = new(name: "world.boot.surface.missed", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Accepted projected static occurrences, including reflected copies.</summary>
+    public static WorkKind SurfaceAccepted { get; } = new(name: "world.boot.surface.accepted", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Projected occurrence plans derived after a cache miss.</summary>
+    public static WorkKind SurfacePlans { get; } = new(name: "world.boot.surface.plans", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Named contact-surface programs derived after a dependency change.</summary>
+    public static WorkKind SurfaceFields { get; } = new(name: "world.boot.surface.fields", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Canonical occurrence/identity array payload created; not live or process memory.</summary>
+    public static WorkKind StampPayloadBytes { get; } = new(name: "world.boot.stamp.payload-created", unit: "bytes", workClass: WorkClass.Pacing);
+
     /// <summary>Gets the ledger's kinds, in the order a report lists them.</summary>
     public static ReadOnlySpan<WorkKind> Kinds =>
         Order.Kinds;
@@ -218,6 +239,16 @@ public sealed class WorldBootWork : IWorkCounterSource {
             AssetLoads,
             CompiledHits,
             ChunkDerivations,
+            SurfaceDescriptors,
+            SurfaceCandidates,
+            SurfaceRays,
+            SurfaceNormals,
+            SurfaceSlopeRejected,
+            SurfaceMissed,
+            SurfaceAccepted,
+            SurfacePlans,
+            SurfaceFields,
+            StampPayloadBytes,
         ];
     }
 }

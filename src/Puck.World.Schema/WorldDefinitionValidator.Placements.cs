@@ -1526,6 +1526,9 @@ public static partial class WorldDefinitionValidator {
                 path: path,
                 placement: placement
             );
+            if (!WorldPlacementStamp.TryValidateSurface(definition, placement, out var surfaceReason)) {
+                errors.Add(surfaceReason);
+            }
 
             // A dealt child is the one row whose id may spell the child separator, and only in the exact shape the
             // sweep mints — <template>/<cellKey> under a parent carrying the deal facet.
