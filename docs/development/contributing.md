@@ -130,9 +130,9 @@ macOS, and nothing here is verified there.
 
 ### Antigravity user settings
 
-The owner approved recording this home settings file verbatim, and ruled that Antigravity and Codex have effectively the same rights as the lead: every command (`command(regex:.*)`, with git-safety still refusing lane pushes and shared-state git) and the `puck` MCP tools, which Antigravity names `puck_operator` (a plugin's server is `<plugin>_<server>`: the workspace plugin `puck` registers the server `operator`). The D:/Source
-paths name this machine's checkout; use the actual checkout paths on another
-machine. Login and trust state stays local; the workspace trust entry below
+The owner approved recording this home settings file, and ruled that Antigravity and Codex have effectively the same rights as the lead: every command (`command(regex:.*)`, with git-safety still refusing lane pushes and shared-state git) and the `puck` MCP tools, which Antigravity names `puck_operator` (a plugin's server is `<plugin>_<server>`: the workspace plugin `puck` registers the server `operator`). `<checkout>`
+stands for the checkout's absolute path, written with forward slashes in
+`write_file` and as a Windows path in `trustedWorkspaces`. Login and trust state stays local; the workspace trust entry below
 records the approved configuration, not portable login or trust state.
 
 ```json
@@ -148,8 +148,8 @@ records the approved configuration, not portable login or trust state.
       "command(node)",
       "read_url(*)",
       "mcp(puck_operator/*)",
-      "write_file(D:/Source/ByteTerrace/Puck)",
-      "write_file(D:/Source/ByteTerrace/Puck/.git)"
+      "write_file(<checkout>)",
+      "write_file(<checkout>/.git)"
     ],
     "ask": [
       "command(regex:git push.*\\b(main|refs/heads/main)\\b)",
@@ -167,7 +167,7 @@ records the approved configuration, not portable login or trust state.
     ]
   },
   "trustedWorkspaces": [
-    "D:\\Source\\ByteTerrace\\Puck"
+    "<checkout>"
   ]
 }
 ```
@@ -377,8 +377,8 @@ dotnet watch --project src/Puck.World --non-interactive run -c Release --no-rest
 `PuckHotReload` names the projects, comma-separated
 (`--property:PuckHotReload=Puck.World.Client,Puck.SdfVm`), that build without
 optimization; every other project stays optimized. Unoptimized code costs frame
-time (an unoptimized `Puck.World.Client` adds about 3 ms to each produced frame
-of the debug world, measured below), so list only the projects you are editing. Spell it `--property:`, not
+time (an unoptimized `Puck.World.Client` adds measurable time to each produced
+frame of the debug world), so list only the projects you are editing. Spell it `--property:`, not
 `-p:`, which `dotnet watch` reads as `--project`. Saving a file then does one of
 two things, and the watch output says which:
 
@@ -386,7 +386,7 @@ two things, and the watch output says which:
   applies to the running World: `dotnet watch : C# and Razor changes applied in
   45ms`, and the World prints `[world.hot-reload] applied revision N: <types>`.
   The first edit after the watch starts pays for loading the compiler
-  workspace (14 s under load); later ones take well under a second.
+  workspace; later ones take well under a second.
   `CodeRevision` (`src/Puck.Abstractions/CodeRevision.cs`, the process's
   `MetadataUpdateHandler`) is the one invalidation contract for products of
   code. A cache held in memory compares `CodeRevision.Current`, or holds its
@@ -408,7 +408,7 @@ two things, and the watch output says which:
   are untouched.
 - **A rude edit** (a new field or a changed layout in a struct) prints `Restart
   is needed to apply the changes.`, and the watch rebuilds and reboots the
-  World: 28 s from saving to `Application started` under heavy load. A build
+  World. A build
   error stops there with `Fix the error to continue` until the next save.
 - **An edit to a project not listed** is refused by the runtime (`The assembly
   can not be edited or changed. Further changes won't be applied to this
@@ -439,9 +439,8 @@ What the C# loop costs:
   nodes running for the next build (node reuse is on by default), which then
   starts with every node's tasks loaded, jitted and compiled. A cold build
   starts every node afresh and pays that in each: a cold no-op build of
-  `src/Puck.World` (60 projects, every `CoreCompile` skipped, no file copied)
-  took 14.3 s on the reference machine under load from other lanes, and a warm
-  one 8 to 9 s. Idle nodes exit after a while,
+  `src/Puck.World` (every `CoreCompile` skipped, no file copied)
+  takes markedly longer than a warm one. Idle nodes exit after a while,
   so the first build after a long pause is cold. The `-nodeReuse:false` every
   agent build and restore passes ([verification](../../.claude/skills/verification/SKILL.md))
   keeps shared agent machines free of lingering nodes and makes every agent
@@ -459,19 +458,18 @@ What the C# loop costs:
   `build/PuckBuildTasks.targets` compiles once per version of the source into
   `build/obj/build-tasks/` and every node loads. An inline
   (`RoslynCodeTaskFactory`) task would compile in every node of every build,
-  a cold compiler process each time: 16 compiles of about 2.6 s in a cold
-  no-op build of `src/Puck.World`, which took 34 s that way.
+  a cold compiler process each time, which multiplies a cold no-op build's
+  time.
 - **No commit in a compiled assembly.** The commit an executable is built at
   (`WorldSchema.SourceRevision`) rides its `runtimeconfig.json` as the
   AppContext value `Puck.SourceRevision` (`PuckStampSourceRevision` in
   `Directory.Build.targets`), so a commit rewrites that file and compiles
-  nothing. Compiled into `Puck.World.Schema`, it cost a 15 s compile of that
-  project after every commit, which every `Puck.World.*` project waits for.
-- **Boot JIT.** A headless boot of the debug world to `world.status`
-  JIT-compiles about 43,900 methods from the IL build and 24,200 from a
-  ReadyToRun publish ([the recipe](../../src/Puck.World/README.md)); 15,800 of
-  those left are `System.Text.Json` generic instantiations over the document
-  model, which no precompiler outside the framework reaches. Local builds stay
+  nothing. Compiled into `Puck.World.Schema`, it would recompile that project after
+  every commit, which every `Puck.World.*` project waits for.
+- **Boot JIT.** A ReadyToRun publish ([the recipe](../../src/Puck.World/README.md))
+  removes only about half of a headless boot's JIT, and most of what is left
+  is `System.Text.Json` generic instantiations over the document model, which
+  no precompiler outside the framework reaches. Local builds stay
   IL: ReadyToRun would add a precompile to every edited project's build and
   leaves the largest JIT cost in place.
 - **No rebake.** The World keeps its baked meshes between runs (`SdfMeshStore`,
@@ -507,43 +505,25 @@ The engine's build compiles no world: the debug world boots from its source
 package (`--world worlds/debug`), compiled in memory and cached per user, so a
 world edit is a `world.reload` and an engine edit rebuilds only the engine.
 
-Measured with other work holding the CPU at the stated load: the `Puck.SdfVm`
-rows on the reference machine (i5-8400, RTX 2060), the rest on the lead machine
-(16 threads, RTX 4070):
-
-| Loop | Phase | Time |
-|---|---|---|
-| C#, edit in `Puck.SdfVm` | `dotnet run` to `world.wait ready` | 22.6–24.7 s (31% load) |
-| | of which `dotnet build`, nothing else changed | 10.6–14.3 s (44–54% load) |
-| | of which the build after the edit | 12.7–15.3 s (12–65% load) |
-| | of which boot to `world.wait ready` | 10.2–12.2 s |
-| C#, body edit in `Puck.World.Client` | hot reload, save to applied | 45–54 ms; 14.3 s for the first edit after the watch starts (75–100% load) |
-| | `dotnet run` to `world.status`, headless | 30.5–42.4 s, about 22 s of it the build (100% load) |
-| C#, rude edit | save to the rebooted World's `Application started` | 28 s (heavy load) |
-| HLSL, a constant in `passes/sdf-light-stage.hlsli` | save to `[shaders.reload: request=1 applied … pipelines=1]` (`sdf-world-views` alone), windowed | 11.8 s (loaded) |
-| Frame cost of `PuckHotReload=Puck.World.Client` | windowed, standing, 600 iterations after bakes settle | produce 9.50–10.12 ms average against 6.49 ms optimized; produce+simulate p99 20.2–20.6 ms against 17.4 ms (loaded) |
-| Headless boot | process start to `world.status` | 4.6–4.8 s, CPU 4.6–4.9 s (7–79% load) |
+Time each loop by its phases (the build, the boot to `world.wait ready`, the
+save to `applied` or `installed`) and state the machine's load beside the
+reading; the 30-second edit-to-running ruling in AGENTS.md is the bar.
 
 The render-capacity probe is measured from its emission
 (`SdfProgramBuilder.MeasureCapacity`) and packs no program, so it allocates no
-worst-case stream (118 million words on the debug world) and runs none of the
+worst-case stream and runs none of the
 build's analysis.
 
 **Where a headless boot goes.** An EventPipe sample of a warm headless boot
 (`DOTNET_EnableEventPipe=1`,
 `DOTNET_EventPipeConfig=Microsoft-DotNETCore-SampleProfiler:0:5,Microsoft-Windows-DotNETRuntime:0x8:4`,
 converted with `dotnet-trace convert --format speedscope`) reads the main
-thread, since every other thread waits. Of 4.9 s sampled:
-
-| Phase | Share |
-|---|---|
-| Parsing the compiled world's drawn definition (`DEFN`): `System.Text.Json` configuring the `WorldDefinition` metadata, then the parse and its state references | 40% (22% the metadata, more than half of it JIT) |
-| Validating and admitting the drawn definition | 14% |
-| Post-build wiring: the portal destinations' screen sessions, their session sinks and destination loads | 18% |
-| Constructing the server: machine content (the cartridges compile again, 5%), rules, population | 15% |
-| Process start, extensions, host composition and start | 8% |
-
-JIT and type loading are 45% of the main thread. An unchanged `.puck` boot
+thread, since every other thread waits. The largest shares are parsing the
+compiled world's drawn definition (`DEFN`, led by `System.Text.Json`
+configuring the `WorldDefinition` metadata, much of it JIT), post-build wiring
+of the portal destinations' screen sessions, constructing the server (machine
+content compiles its cartridges again), and validating and admitting the
+definition. JIT and type loading are nearly half of the main thread. An unchanged `.puck` boot
 neither parses its authored document nor serializes it for the compiled
 world's header: the compiled world names its composed bytes
 ([compiled worlds](../architecture/worlds.md)).
@@ -675,7 +655,7 @@ world instance.
 
 For changes under `src/Puck.Maths`, also run the maths law suite. A plain
 `dotnet test` runs the Default tier, the everyday gate and the only tier whose
-line coverage CI counts (about half a minute on the reference machine);
+line coverage CI counts ;
 Deep and Exhaustive cases are explicit, so a run opts into them, and each tier
 is selected by its `tier` trait. Pass `-nodeReuse:false` to the build and the
 restore only ([verification](../../.claude/skills/verification/SKILL.md#build-before-you-test)
@@ -940,12 +920,10 @@ unverified when no device run exists.
 
 ## Hardware and toolchain cautions
 
-- Docker Desktop is installed on the lead machine, but its service starts
-  manually, so a stopped engine is not a missing one. When `docker version`
-  reports no server, start it with
-  `Start-Process "C:\Program Files\Docker\Docker\Docker Desktop.exe"` and wait
-  until `docker version --format '{{.Server.Version}}'` answers (under a
-  minute). Then the container legs run locally: build an image as CI does
+- Docker Desktop's service can be set to start manually, so a stopped engine
+  is not a missing one. When `docker version` reports no server, start Docker
+  Desktop and wait until `docker version --format '{{.Server.Version}}'`
+  answers. Then the container legs run locally: build an image as CI does
   (`docker build --file src/<Project>/Dockerfile --tag puck/<image>:local .`
   from the root) and run `puck azure test-world-container --image
   puck/world-silo:local`.
@@ -962,12 +940,12 @@ unverified when no device run exists.
   Otherwise `WaitForExit()` can complete with a null `ExitCode`, and a runner can
   mistake a successful build for a failure. Retain the worker's handle too when
   reading its final CPU time after a longer coordinator run.
-- A windowed frame-time reading needs the compositor composing. Once the lead
-  machine's user has been idle past the display timeout (15 minutes there),
-  Windows powers the monitor off and the compositor retires presents on a slow
-  fallback: a World without a display request then reads 7 to 8 FPS on
-  Direct3D 12 and about 4 on Vulkan at every stop, whatever the render scale,
-  detail or shadows, while `world.gpu-timing timeline` shows each frame's GPU
+- A windowed frame-time reading needs the compositor composing. Once the user
+  has been idle past the display timeout, Windows powers the monitor off and
+  the compositor retires presents on a slow fallback
+  ([host pacing](../reference/hosting.md#host-pacing)): a World without a
+  display request then reads a few frames a second at every stop, whatever the
+  render scale, detail or shadows, while `world.gpu-timing timeline` shows each frame's GPU
   work done in one contiguous span and the queue then idle, the GPU at P5 or
   P8 clocks. The signature is a `host.frames` reading whose `wait` or `begin`
   runs to about 100 ms, or whose `produce` sits in
@@ -984,10 +962,7 @@ unverified when no device run exists.
   take a timing on a console session. A capture's replay runs the GPU at its
   working clocks there, so RenderDoc's per-event GPU durations
   (`GPUCounter.EventGPUDuration`) compare one kernel across two builds or two
-  backends; on an RTX 4070 over Remote Desktop the debug world presented about
-  every 100 ms and the GPU held P8 at 210 MHz under Vulkan, P5 at 400 to 540 MHz
-  under Direct3D 12, which made Vulkan's passes read twice as slow live while
-  their replays ran faster than Direct3D 12's.
+  backends, where live readings can rank the backends the wrong way round.
 - Under Remote Desktop the client draws the cursor shape the session sets, so
   where the World hides the system cursor (`NativeWindowOptions.HideMouseCursor`)
   the client shows none at all: the World's drawn cursor is then the only
@@ -1009,7 +984,7 @@ unverified when no device run exists.
   `player.signal` locks the session's real mouse while it is foreground:
   minimize it first (a minimized window has no client area to lock to). The
   Remote Display Adapter reports its own signal
-  rate (32 Hz in one session, `Display pacing: signal 32 Hz` on the boot log),
+  rate (`Display pacing: signal <n> Hz` on the boot log, often far below 60),
   which the pacer presents at whatever `host.targetHertz` says.
 - In Git Bash on Windows, `python3` and `python` can resolve to the Microsoft
   Store alias, which waits on standard input until the command times out. Use
@@ -1020,8 +995,8 @@ unverified when no device run exists.
   `%LOCALAPPDATA%/Microsoft SDKs`, `%APPDATA%/NuGet` and `%LOCALAPPDATA%/NuGet`.
   MSBuild can then fail inside the sandbox with MSB4184 from
   `ToolLocationHelper.GetPlatformSDKLocation`, and NuGet with
-  "Failed to read NuGet.Config due to unauthorized access". The machine's
-  owner fixes the folder's permissions by re-enabling inheritance or granting
+  "Failed to read NuGet.Config due to unauthorized access". Fix the folder's
+  permissions by re-enabling inheritance or granting
   `CodexSandboxUsers` read and execute on that folder. A folder a sandboxed run
   created, such as the checkout's `.codex/`, can end up owned by a
   `CodexSandbox*` account (`(Get-Acl <path>).Owner`); every sandboxed job then
@@ -1055,8 +1030,8 @@ unverified when no device run exists.
 - A physical controller connected when `Puck.World` boots writes `[gamepad]`
   diagnostics to standard error. A canary or manual check that asserts on
   standard error must allow for them.
-- On the reference Windows/RTX 4070 system, enabling the Direct3D 12 debug
-  layer can make `D3D12CreateDevice` fail with `0x887A0007`; it is opt-in.
+- Enabling the Direct3D 12 debug layer can make `D3D12CreateDevice` fail
+  (`0x887A0007`); it is opt-in.
 - Vulkan import of a Direct3D 12 shared texture on NVIDIA uses handle type
   `D3D12_RESOURCE` (`0x40`).
 - Direct3D 12 compute descriptor slots are packed in binding order. Derive
@@ -1074,8 +1049,7 @@ unverified when no device run exists.
 - Full GPU removal can wedge the in-process NVIDIA Vulkan ICD. TDR recovery is
   supported; physical removal may require a new process.
 - On a variable-refresh display, a window's pacing depends on whether it is in
-  front: in front it runs variable refresh (up to 144 Hz on a 60 Hz desktop on
-  the RTX 2060's display), behind another window it is composed at the desktop
+  front: in front it runs variable refresh (above a 60 Hz desktop's rate), behind another window it is composed at the desktop
   signal. Record which one a `host.frames` reading is, and the GPU clocks beside
   it. NVIDIA's Vulkan driver engages variable refresh only for a swap chain
   created while the window is in front, so a Vulkan World launched behind

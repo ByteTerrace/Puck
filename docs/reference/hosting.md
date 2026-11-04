@@ -227,13 +227,11 @@ presenting thread and every call has a bound.
 Presents retire only as the desktop compositor composes, so a display Windows
 has powered off paces the window, not the frame. The compositor then retires
 presents on a slow fallback: the frame-latency wait runs to its 100 ms bound,
-or a queue submission waits behind the back buffer, and the debug world on the
-RTX 4070 read 7 to 8 FPS on Direct3D 12 and about 4 on Vulkan at every stop
-while its GPU work for a frame finished in about 40 ms at idle clocks. The
-Windows window therefore holds a `PowerRequestDisplayRequired` power request
-while it is open, as a game's window does (pad input does not reset the
-display's idle timer), and a World booted that way on the same idle machine
-read 60 FPS from its first reading.
+or a queue submission waits behind the back buffer, and a World reads a few
+frames a second at every stop while its GPU sits at idle clocks. The Windows
+window therefore holds a `PowerRequestDisplayRequired` power request while it
+is open, as a game's window does (pad input does not reset the display's idle
+timer).
 
 The rate follows the display. Automatic pacing (`host.targetHertz: 0`)
 presents on every refresh of whatever signal the display runs, and a signal
@@ -250,8 +248,7 @@ A display with a verified variable-refresh range (`VariableRefreshSupport.Suppor
 with an advertised range) needs both. While variable refresh is engaged (a
 window in front, on independent flip) the display shows each frame as it
 arrives, up to the fastest rate the range reaches, which can exceed the desktop
-signal (a 60 Hz desktop on a 48–165 Hz range refreshes at up to 144 Hz on one
-NVIDIA machine), so the swap chain's queue never waits for a 60 Hz refresh
+signal, so the swap chain's queue never waits for a 60 Hz refresh
 and only the timer can hold an explicit target. While the window is composed
 (behind another window) the display refreshes at its fixed signal and the swap
 chain waits on every refresh. The pacer therefore presents on every refresh
@@ -296,18 +293,11 @@ composes each frame at the last extent the window had, skips the presenter's
 `BeginFrame` and `Present`, and the timer paces the iteration. The render root
 keeps its own frames in flight, as it does on the offscreen host, so readiness,
 bakes and captures (settled, presented and scheduled) progress while minimized
-exactly as in front. On the RTX 4070 (Direct3D 12, a 60 Hz signal on a
-48–165 Hz range, warm mesh store), each state stepped 30 ticks a second: 322
-ticks in 10.1 s with the window never shown, 354 in 10.05 s at the bottom of
-the z-order under two maximized windows, and 314 to 332 in 10 s minimized,
-booted minimized or minimized mid-run. A World booted minimized reported
-`[engine: ready at tick 38]` and `[bakes: settled at tick 43]`, and served a
-settled capture and a burst of four presented frames while still minimized.
-One booted minimized with an empty mesh store baked the world's 1,275 groups
-in 269 s without ever being shown and settled its bakes at tick 19,310, 668 s
-after launch, boot included.
-`host.frames` read an average of 16.65 to 16.77 ms over 300 to 600
-iterations in each state, the minimized ones with a present phase of zero.
+exactly as in front: the simulation steps at its full rate in every state,
+a World booted minimized becomes ready, settles its bakes (a cold store
+included) and serves settled and presented captures without ever being
+shown, and `host.frames` reads the same frame time in each state, the
+minimized ones with a present phase of zero.
 
 The simulation's fixed tick is unchanged by this. The pump still hands
 `FixedStepPump.Advance` the wall interval each iteration sampled and runs

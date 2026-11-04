@@ -546,9 +546,9 @@ meant as these periods; the lead now schedules them by state, not the clock:
 - **Measure:** one fixed recipe so windows compare: `puck sweep --baseline
   <last>` (frames at the standard stops, both backends, the day cycle
   running), a cold bake per backend, and the measurement of the moment.
-- **Record and release:** the numbers replace the owning plan's current
-  reading, with no date in the text and the commit in the message. Earlier
-  readings live only in commits. Then the leases return.
+- **Record and release:** the numbers go in the commit message of the change
+  the window measured; the owning plan says only whether its bar is met and
+  what comes next, with no reading, date or SHA. Then the leases return.
 - **Sweep the corpus:** a wave's closing window also sweeps the documentation
   ([keep documents from rotting](../../../docs/development/documentation.md#keep-documents-from-rotting)).
   1. Run `puck docs links` over every hand-written page.

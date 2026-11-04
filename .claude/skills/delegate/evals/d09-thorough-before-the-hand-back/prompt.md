@@ -1,5 +1,5 @@
 ---
-description: "delegate 'Build and run' and orchestration: coding lanes never build Puck.slnx; concurrent whole-solution builds exhausted the machine's memory, two lanes' full worlds/debug sweeps once ran together while GPU waiters queued, and Claude Code reaps background jobs under memory pressure."
+description: "delegate 'Build and run' and orchestration: coding lanes never build Puck.slnx, since concurrent whole-solution builds exhaust a machine's memory; a lane never runs the full worlds/debug sweep; and Claude Code reaps background jobs under memory pressure."
 max_turns: 8
 allowed_tools: [Read, Glob, Grep, Skill]
 tags: [capability]

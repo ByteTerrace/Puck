@@ -1,5 +1,5 @@
 ---
-description: "orchestration 'Schedule machines', settle windows: the numbers replace the owning plan's current reading, with no date in the text and the commit in the message; earlier readings live only in commits. documentation.md: leave out dates and commit SHAs."
+description: "orchestration 'Schedule machines', settle windows: the numbers go in the commit message; the plan says only whether its bar is met and what comes next. documentation.md: evidence goes in the commit, no dates or SHAs in a plan."
 runs: 5
 max_turns: 8
 allowed_tools: [Read, Glob, Grep, Skill]

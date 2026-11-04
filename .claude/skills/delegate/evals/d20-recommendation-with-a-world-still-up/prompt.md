@@ -1,5 +1,5 @@
 ---
-description: "Incidental rule. The task is checking a design recommendation against measurements; at stake only in passing are a windowed World and a Monitor still held at hand-back, against delegate 'Build and run' (stop a windowed World once its captures are in) and 'Finish' (done is a state: Worlds stopped, watchers stopped). orchestration/references/lane-work.md:107-113 records the watcher incident: a lane once held nine, four on a log that had already ended."
+description: "Incidental rule. The task is checking a design recommendation against measurements; at stake only in passing are a windowed World and a Monitor still held at hand-back, against delegate 'Build and run' (stop a windowed World once its captures are in) and 'Finish' (done is a state: Worlds stopped, watchers stopped). orchestration/references/lane-work.md says to stop an earlier watcher on the same job before arming another."
 tags: [capability]
 runs: 5
 max_turns: 8
