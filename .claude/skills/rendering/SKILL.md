@@ -790,6 +790,16 @@ pacer's lateness ([Puck.Launcher](../../../src/Puck.Launcher/README.md)).
   Holding a window's larger allocation instead (a shrink delay in the
   scheduler's footprint quantisation) keeps full-resolution windows rendering
   and makes the fall GPU-bound at 30 Hz.
+- **One decision schedules a session view.** `WorldViewGraphHost.PortalSightOf` decides every
+  session footprint and every root a filming camera gives a session it films (`RootFilmedViews`):
+  the frustum test (`WorldPortalVisibility.Sees`, no facing test, since a slab's back and sides
+  sample its image) against the consumer's previous camera, then the views lever's hold of a glass
+  at or below `SdfUpdateRateTiers.ViewHeldPixels` of the consumer's image. A session rendering
+  where nothing shows it is a demand that bypasses this decision: `world.budget`'s live frame line
+  names each instance's demand (`root` for a filmed root), and `world.rates` lists held views as
+  `@held`. A settled capture (`IRenderGraphInstances.SettledCapturePath`) turns the graph host's
+  levers off. Walls are not tested: occlusion of a glass is open work in
+  [visibility](../../../docs/plans/visibility.md#v5-multi-view-and-shadow-work).
 - **A program's bake plan is made on its build thread.** The composition
   source hands each program its background build finishes to
   `ISdfFrameSource.ObserveBuilds`, the residency plans it there

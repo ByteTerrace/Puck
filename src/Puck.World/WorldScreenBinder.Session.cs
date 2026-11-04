@@ -324,9 +324,10 @@ public sealed partial class WorldScreenBinder {
     /// <param name="RenderWidth">The resolved offscreen render width, pixels — the true cost this session pays every
     /// time it produces a frame (see <see cref="WorldSessionWindowLeases"/> for a window's own accounting).</param>
     /// <param name="RenderHeight">The resolved offscreen render height, pixels.</param>
-    /// <param name="RendersEveryFrame">Whether this session renders on every produced frame — a window always does,
-    /// paying its full render cost each frame, where an ordinary camera projection refreshes at the views' divisor
-    /// (<c>world.view-refresh</c>).</param>
+    /// <param name="RendersEveryFrame">Whether this session renders on every produced frame that shows its glass — a
+    /// window does, paying its full render cost each such frame, where an ordinary camera projection refreshes at the
+    /// views' divisor (<c>world.view-refresh</c>). A glass out of every view's sight, or too small in it, renders on
+    /// no frame (<see cref="WorldViewGraphHost"/>).</param>
     public readonly record struct WorldSessionDescription(string Destination, string? RequestedCamera, string? EffectiveCamera, string InstanceName, ulong GenerationId, Principal Session, WorldDisclosureTier Tier, bool LeaseHeld, bool InstanceGone, WorldScreenProjection Projection, int RenderWidth, int RenderHeight, bool RendersEveryFrame);
 
     // One session-sourced screen's live state: which destination it observes, its resolved instance/generation, the

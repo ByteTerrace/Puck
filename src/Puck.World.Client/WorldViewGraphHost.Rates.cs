@@ -28,6 +28,12 @@ public sealed partial class WorldViewGraphHost {
     // The frame of the latest schedule the rated producers were measured against, so a frame the runtime did not
     // schedule is not read twice.
     private long m_ratedMeasured = -1;
+    // The session views a schedule has rendered at least once: one that never rendered is never held, as the scheduler
+    // never holds an instance's first render.
+    private readonly HashSet<string> m_portalsRendered = new(comparer: StringComparer.Ordinal);
+    // The session views this frame held as too small to render (HoldsGlass), each at the largest pixels its glass was
+    // shown at.
+    private readonly Dictionary<string, double> m_heldViews = new(comparer: StringComparer.Ordinal);
 
     private sealed class RatedProducer {
         // The lever its footprints rate it under.
@@ -53,13 +59,20 @@ public sealed partial class WorldViewGraphHost {
     /// each of them every frame.</summary>
     public WorldRenderSettings? RenderSettings { get; set; }
 
+    // The levers this frame's footprints rate by: the session's, none without settings, and none while the runtime holds
+    // a settled capture, so the still shows every view as of its own frame rather than an image held from an earlier
+    // one, as the presenter rates no work on a frame held for one (WorldFramePresenter.RatesOf).
+    private SdfUpdateRates FrameRates => (((RenderSettings is { } settings) && (m_runtime?.SettledCapturePath is null))
+        ? settings.UpdateRates
+        : SdfUpdateRates.None);
+
     // Measures each instance's share of the display's height from the footprints the previous frame demanded: a root's
     // share is its own, and a producer's is the largest over its consumers of the consumer's share times the footprint's.
     private void MeasureDisplayShares() {
         m_displayShares.Clear();
         m_sourceRefresh.Clear();
 
-        if ((RenderSettings is not { } settings) || ((settings.UpdateRates & (SdfUpdateRates.Bodies | SdfUpdateRates.Views | SdfUpdateRates.Screens)) == 0)) {
+        if ((FrameRates & (SdfUpdateRates.Bodies | SdfUpdateRates.Views | SdfUpdateRates.Screens)) == 0) {
             return;
         }
 
@@ -102,8 +115,8 @@ public sealed partial class WorldViewGraphHost {
     // few enough pixels of the display (SdfUpdateRateTiers.ViewHertz).
     private RenderGraphRefresh ViewRefresh(string consumer, string producer, double coverage, int glass) {
         if (
+            ((FrameRates & SdfUpdateRates.Views) == 0) ||
             (RenderSettings is not { } settings) ||
-            ((settings.UpdateRates & SdfUpdateRates.Views) == 0) ||
             !m_displayShares.TryGetValue(key: consumer, value: out var share)
         ) {
             return RenderGraphRefresh.EveryFrame;
@@ -117,6 +130,25 @@ public sealed partial class WorldViewGraphHost {
         }
 
         return refresh;
+    }
+    // Whether a session's glass, seen at the given pixels of the image that shows it, is too small to render this frame
+    // and holds its latest image: the views lever is on for the frame (FrameRates), the host is paced to a display, the
+    // view has rendered before, and the glass covers no more than SdfUpdateRateTiers.ViewHeldPixels. A held glass is
+    // counted (SdfUpdateRateCounts.ViewsHeld) and listed by world.rates.
+    private bool HoldsGlass(string producer, double pixels) {
+        if (
+            ((FrameRates & SdfUpdateRates.Views) == 0) ||
+            !m_presentationRate.IsPaced ||
+            !(pixels <= SdfUpdateRateTiers.ViewHeldPixels) ||
+            !m_portalsRendered.Contains(item: producer)
+        ) {
+            return false;
+        }
+
+        RenderSettings!.RateCounts.Count(kind: SdfUpdateRateCounts.ViewsHeld);
+        m_heldViews[producer] = Math.Max(val1: pixels, val2: m_heldViews.GetValueOrDefault(key: producer));
+
+        return true;
     }
     // The refresh a tier asks for, counting a footprint it rates and noting the tier its producer was asked at and the
     // size on screen it was asked by: a floor at the tier (RenderGraphRefresh.AtLeast), or every frame at the full tier or
@@ -154,6 +186,14 @@ public sealed partial class WorldViewGraphHost {
             m_ratedMeasured = latest.Frame;
 
             var intervals = RenderSettings?.RateIntervals;
+
+            foreach (var portal in m_portals) {
+                var rendered = runtime.Instances.IndexOf(name: portal);
+
+                if ((rendered >= 0) && (rendered < latest.Instances.Count) && (latest.Instances[rendered].Status == RenderGraphInstanceStatus.Rendered)) {
+                    _ = m_portalsRendered.Add(item: portal);
+                }
+            }
 
             foreach (var (name, rated) in m_ratedProducers) {
                 var index = runtime.Instances.IndexOf(name: name);
@@ -232,8 +272,8 @@ public sealed partial class WorldViewGraphHost {
     // The refresh a view's footprint of a source asks for by the screens it shows the source on.
     private RenderGraphRefresh ScreenSight(in RenderGraphFootprint footprint) {
         if (
+            ((FrameRates & SdfUpdateRates.Screens) == 0) ||
             (RenderSettings is not { } settings) ||
-            ((settings.UpdateRates & SdfUpdateRates.Screens) == 0) ||
             (Screens is not { } screens) ||
             (ViewScenes is not { } scenes) ||
             !m_displayShares.TryGetValue(key: footprint.Consumer, value: out var consumerShare)
@@ -291,6 +331,14 @@ public sealed partial class WorldViewGraphHost {
             foreach (var (name, rated) in m_ratedProducers) {
                 if ((rated.Lever == lever) && (rated.Asked != 0)) {
                     latest.Add(item: new SdfUpdateRateReadings.Reading(Hertz: rated.Asked, Name: name, Size: rated.Size));
+                }
+            }
+            // A view one glass holds and another asks for renders, and is listed at the tier it was asked at.
+            if (lever == SdfUpdateRates.Views) {
+                foreach (var (name, pixels) in m_heldViews) {
+                    if (!(m_ratedProducers.TryGetValue(key: name, value: out var rated) && (rated.Asked != 0))) {
+                        latest.Add(item: new SdfUpdateRateReadings.Reading(Hertz: SdfUpdateRateTiers.HeldHertz, Name: name, Size: pixels));
+                    }
                 }
             }
 

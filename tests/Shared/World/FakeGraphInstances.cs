@@ -24,6 +24,9 @@ internal sealed class FakeGraphInstances(Func<string, ShaderPipelineRenderNode> 
 
     /// <inheritdoc/>
     public string Root { get; private set; } = WorldViewGraphs.WorldInstance;
+    /// <inheritdoc/>
+    /// <remarks>A law sets it to stand for a capture the runtime holds.</remarks>
+    public string? SettledCapturePath { get; set; }
 
     /// <summary>Gets the instance set of the latest accepted reconfiguration, or <see langword="null"/> before one.</summary>
     public RenderGraphInstanceSet? Set { get; private set; }

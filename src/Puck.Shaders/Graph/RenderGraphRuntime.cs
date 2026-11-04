@@ -200,8 +200,8 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     /// frames.</remarks>
     public string? PendingCapturePath => (PresentedPath ?? SettledCapturePath);
 
-    // The settled capture armed here, or forwarded and not yet served, or null.
-    private string? SettledCapturePath {
+    /// <inheritdoc/>
+    public string? SettledCapturePath {
         get {
             if (m_capture.PendingPath is { } armed) {
                 return armed;

@@ -58,6 +58,13 @@ public static class SdfUpdateRateTiers {
     public const float ViewHalfRatePixels = ((PerceptibleStepPixels * 30f) / ViewParallaxPerSecond);
     /// <summary>The pixels of display height at and below which a nested view renders at 15 Hz.</summary>
     public const float ViewQuarterRatePixels = ((PerceptibleStepPixels * 15f) / ViewParallaxPerSecond);
+    /// <summary>The pixels at and below which the glass a nested view shows on renders nothing and holds its latest image
+    /// (<see cref="HeldHertz"/>): two <see cref="PerceptibleStepPixels"/> steps, so whatever the destination did while
+    /// held, the held image differs from a fresh one within a patch no larger than the step pair, and the first fresh
+    /// render as the glass grows past it changes no more than that. Measured in the pixels of the image that shows the
+    /// glass: the display's for a view the display reaches, a filming camera's own for one only that camera
+    /// films.</summary>
+    public const float ViewHeldPixels = (PerceptibleStepPixels * 2f);
     /// <summary>The share of its native height at and below which a screen's image uploads at 30 Hz: a game scrolling a
     /// texel a frame steps two texels at 30 Hz, which shown at its native size or smaller is
     /// <see cref="PerceptibleStepPixels"/> or less.</summary>
@@ -282,10 +289,13 @@ public static class SdfUpdateRateCounts {
     public static readonly WorkKind ShadowFarHeld = new(name: "sdf.rates.shadow-far.held", unit: "frames", workClass: WorkClass.Pacing);
     /// <summary>Counts each frame a nested view was shown at a reduced rate.</summary>
     public static readonly WorkKind ViewsRated = new(name: "sdf.rates.views.rated", unit: "footprints", workClass: WorkClass.Pacing);
+    /// <summary>Counts each frame a nested view's glass was shown too small to render (<see cref="SdfUpdateRateTiers.ViewHeldPixels"/>),
+    /// holding its latest image.</summary>
+    public static readonly WorkKind ViewsHeld = new(name: "sdf.rates.views.held", unit: "footprints", workClass: WorkClass.Pacing);
     /// <summary>Counts each frame a screen's source was shown at a reduced rate.</summary>
     public static readonly WorkKind ScreensRated = new(name: "sdf.rates.screens.rated", unit: "footprints", workClass: WorkClass.Pacing);
 
-    private static readonly WorkKind[] DeclaredKinds = [BodiesPosed, BodiesHeld, ShadowFarRendered, ShadowFarHeld, ViewsRated, ScreensRated];
+    private static readonly WorkKind[] DeclaredKinds = [BodiesPosed, BodiesHeld, ShadowFarRendered, ShadowFarHeld, ViewsRated, ViewsHeld, ScreensRated];
 
     /// <summary>Creates the counters a host's frames count into.</summary>
     /// <returns>A set over every kind this class declares, in report order, every count zero.</returns>
