@@ -911,6 +911,10 @@ public readonly partial record struct FixedQ4816(long Value)
     // The magnitude kernel: x is strictly positive, and negativeResult carries the sign the caller's base and exponent
     // parity decided. Keeping the sign OUT of the arithmetic is what lets every saturation answer carry it.
     private static FixedQ4816 PowMagnitude(FixedQ4816 x, FixedQ4816 y, bool whole, bool negativeResult) {
+        // A unit magnitude stays a unit at every exponent. Factored norms always supply at least one unit
+        // component; do not send that exact identity through the wide logarithm and exponential.
+        if (x == One) { return (negativeResult ? -One : One); }
+
         var exponent = (y.Value >> FractionBitCount);
 
         if (whole) {
