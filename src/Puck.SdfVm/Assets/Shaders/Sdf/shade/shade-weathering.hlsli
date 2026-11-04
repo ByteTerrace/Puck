@@ -33,8 +33,19 @@ void applyWeathering(float3 position, float3 normal, float upFacing, float curva
     float rate = footprint * max(frequency.x, max(frequency.y, frequency.z));
     float noise = 0.5;
     if (w.x + w.z + pattern.w > 0.0) {
-        float sample = 0.5 + 0.5 * sdfLatticeNoise3(p, seed);
-        noise = lerp(0.5, sample, 1.0 - smoothstep(0.35, 0.9, rate));
+        // A thresholded single octave of the integer lattice reveals its cells: the reveal ramp cuts the trilinear
+        // blend along lines parallel to the world axes, so ground deposits read as squares. The lattice is read
+        // rotated off every axis (a fixed orthonormal turn) and with a second octave at about twice the frequency, each
+        // octave fading by its own pixel support; the weights keep the single octave's spread, so a threshold reveals
+        // about as much as before.
+        static const float3x3 turn = float3x3(
+            0.36, 0.48, -0.80,
+            -0.80, 0.60, 0.00,
+            0.48, 0.64, 0.60);
+        float3 q = mul(turn, p);
+        float coarse = sdfLatticeNoise3(q, seed) * (1.0 - smoothstep(0.35, 0.9, rate));
+        float fine = sdfLatticeNoise3((q * 2.03) + 17.0, seed ^ 0x9E3779B9u) * (1.0 - smoothstep(0.35, 0.9, 2.03 * rate));
+        noise = 0.5 + 0.5 * clamp((0.88 * coarse) + (0.47 * fine), -1.0, 1.0);
     }
     float edge = saturate(max(curvature, 0.0) * w.w) * noise;
     float lineMask = 0.0;
