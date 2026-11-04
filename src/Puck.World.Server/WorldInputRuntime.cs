@@ -594,8 +594,9 @@ public sealed partial class WorldInputRuntime {
         return true;
     }
     private string Engagement(Principal principal, int body, IReadOnlyList<ControlApplication>? applications = null) {
-        foreach (var application in (applications ?? m_host.GrantTable.Applications(principal: principal))) {
-            var target = application.Target;
+        var selected = applications ?? m_host.GrantTable.Applications(principal: principal);
+        for (var index = 0; index < selected.Count; index++) {
+            var target = selected[index].Target;
 
             if (target.Kind == GrantSubjectKind.Placement) { return "tabletop"; }
             if (target.Kind == GrantSubjectKind.Screen) { return (m_host.Machines.HasMachine(index: target.Value) ? "machine" : "screen"); }

@@ -79,13 +79,20 @@ public static class RuleEvaluation {
     }
     // Folds the gate's postfix program, returning false the moment a conjunct raises a fault.
     private static bool Fold(IStateReader reader, GateToken[] gate, ArenaScratch scratch, List<string>? trace) {
+        // A token pushes at most one Boolean. Bound machine-stack use independently of authored
+        // program size; larger gates keep the arena's reusable storage. Both run the same fold.
+        if (gate.Length <= 128) {
+            Span<bool> stack = stackalloc bool[gate.Length];
+            return Fold(reader: reader, gate: gate, scratch: scratch, trace: trace, stack: stack);
+        }
         using var stackLease = scratch.Rent<bool>(length: gate.Length);
-
-        var stack = stackLease.Span;
+        return Fold(reader: reader, gate: gate, scratch: scratch, trace: trace, stack: stackLease.Span);
+    }
+    private static bool Fold(IStateReader reader, GateToken[] gate, ArenaScratch scratch, List<string>? trace, Span<bool> stack) {
         var top = 0;
 
         for (var index = 0; index < gate.Length; index++) {
-            var predicate = gate[index];
+            ref readonly var predicate = ref gate[index];
             if (predicate.Op == GateOp.ShortCircuit) {
                 var answer = stack[top - 1];
                 if (answer == predicate.SkipWhen) {
