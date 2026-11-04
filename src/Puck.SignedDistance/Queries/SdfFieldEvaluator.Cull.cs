@@ -342,11 +342,12 @@ public sealed partial class SdfFieldEvaluator {
     // subtraction. Its margin is the most any smooth union in it needs, k + k·2⁻¹⁵ + 16 raws, at which both walks round
     // the blend weight to exactly one, and a chain that carves also needs its candidates past the answer's negation. A
     // chain never crosses an instance boundary, so a walk still meets every instance it tests in First order.
-    private static (int[] Slots, SegmentBound[] Bounds) BuildSegments(SdfProgram program, CompiledInstruction[] compiled, ShapeReach?[] reaches) {
+    private static (int[] Slots, SegmentBound[] Bounds, List<ShapeReach> Enclosures) BuildSegments(SdfProgram program, CompiledInstruction[] compiled, ShapeReach?[] reaches) {
         var count = compiled.Length;
         var slots = new int[count];
         CountArrayPayload(rows: slots, work: PointWork, arrays: CullArraysCreated, bytes: CullPayloadCreated);
         var bounds = new List<SegmentBound>();
+        var enclosures = new List<ShapeReach>();
         var boundary = new bool[(count + 1)];
         var shapes = new List<ShapeReach>();
 
@@ -424,19 +425,105 @@ public sealed partial class SdfFieldEvaluator {
                 end++;
             }
 
-            if (!qualifies || (shapes.Count == 0) || !Reach.TryOf(reach: out var reach, shape: Enclose(members: shapes))) {
+            if (!qualifies || (shapes.Count == 0)) {
+                continue;
+            }
+
+            var enclosure = Enclose(members: shapes);
+
+            if (!Reach.TryOf(reach: out var reach, shape: enclosure)) {
                 continue;
             }
 
             slots[start] = bounds.Count;
             bounds.Add(item: new SegmentBound(Carves: carves, End: end, Margin: margin, Reach: reach));
+            enclosures.Add(item: enclosure);
         }
 
         var segmentRows = bounds.ToArray();
         CountArrayPayload(rows: segmentRows, work: PointWork, arrays: CullArraysCreated, bytes: CullPayloadCreated);
         PointWork.Count(kind: CullTableBuilds);
-        return (slots, segmentRows);
+        return (slots, segmentRows, enclosures);
     }
+    // The segment hierarchy over every run of chains that follow one another with nothing between (each chain's end the
+    // next one's ResetPoint) outside every cullable instance: nodes of up to SegmentGroupFanout consecutive chains, then
+    // of nodes, each with the certificate around its members' (Enclose's triangle inequality holds for certificates as
+    // for shapes), their widest margin and whether any carves. A node clearing the running answer by that margin proves
+    // every chain under it clears by its own: the node's bound is at most each member's, its threshold at least each
+    // member's, and a skipped chain leaves the answer bitwise, so each later member meets the same threshold. A walk at a
+    // chain's ResetPoint tests the largest node starting there first (Heads), then the next smaller (Next), then the chain.
+    // No node spans a cullable instance or a scope edge, so a skip passes no cull bound's First and no point read.
+    private static (int[] Heads, SegmentBound[] Groups, int[] Next) BuildSegmentGroups(CompiledInstruction[] compiled, int[] slots, SegmentBound[] bounds, List<ShapeReach> enclosures, CullBound[] cullBounds) {
+        var heads = new int[bounds.Length];
+        var groups = new List<SegmentBound>();
+        var next = new List<int>();
+        var culled = new bool[compiled.Length];
+        var starts = new int[bounds.Length];
+
+        Array.Fill(array: heads, value: -1);
+        foreach (var bound in cullBounds) {
+            Array.Fill(array: culled, value: true, startIndex: bound.First, count: (bound.End - bound.First));
+        }
+        for (var index = 0; (index < slots.Length); index++) {
+            if (slots[index] >= 0) { starts[slots[index]] = index; }
+        }
+
+        var level = new List<(int Slot, SegmentBound Bound, ShapeReach Enclosure)>();
+        var above = new List<(int Slot, SegmentBound Bound, ShapeReach Enclosure)>();
+        var members = new List<ShapeReach>();
+        var slot = 0;
+
+        while (slot < bounds.Length) {
+            level.Clear();
+            while ((slot < bounds.Length) && !culled[starts[slot]] && ((level.Count == 0) || (level[^1].Bound.End == starts[slot]))) {
+                level.Add(item: (slot, bounds[slot], enclosures[slot]));
+                slot++;
+            }
+            if (level.Count == 0) {
+                slot++;
+                continue;
+            }
+            while (level.Count > 1) {
+                above.Clear();
+                for (var first = 0; (first < level.Count); first += SegmentGroupFanout) {
+                    var last = Math.Min(val1: level.Count, val2: (first + SegmentGroupFanout));
+
+                    if ((last - first) < 2) {
+                        above.Add(item: level[first]);
+                        continue;
+                    }
+
+                    members.Clear();
+                    var margin = FixedQ4816.Zero;
+                    var carves = false;
+
+                    for (var member = first; (member < last); member++) {
+                        members.Add(item: level[member].Enclosure);
+                        margin = FixedQ4816.Max(x: margin, y: level[member].Bound.Margin);
+                        carves |= level[member].Bound.Carves;
+                    }
+
+                    var enclosure = Enclose(members: members);
+                    var certified = Reach.TryOf(reach: out var reach, shape: enclosure);
+                    var group = new SegmentBound(Carves: carves, End: level[(last - 1)].Bound.End, Margin: margin, Reach: reach);
+
+                    if (certified) {
+                        next.Add(item: heads[level[first].Slot]);
+                        heads[level[first].Slot] = groups.Count;
+                        groups.Add(item: group);
+                    }
+                    above.Add(item: (level[first].Slot, group, enclosure));
+                }
+                (level, above) = (above, level);
+            }
+        }
+
+        var groupRows = groups.ToArray();
+        CountArrayPayload(rows: groupRows, work: PointWork, arrays: CullArraysCreated, bytes: CullPayloadCreated);
+        return (heads, groupRows, next.ToArray());
+    }
+    // How many consecutive chains, or nodes, one node of the segment hierarchy holds.
+    private const int SegmentGroupFanout = 8;
     // Whether only scope edges stand between a chain's end and the next ResetPoint, instance boundary or the stream's
     // end: a skipped chain leaves the point where its ResetPoint put it, which no instruction after it may read.
     private static bool ClosesAtScopeEdge(CompiledInstruction[] compiled, bool[] boundary, int edge) {
