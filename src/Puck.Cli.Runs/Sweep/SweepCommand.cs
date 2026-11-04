@@ -34,12 +34,14 @@ public static partial class SweepCommand {
         var noScenariosOption = new Option<bool>(name: "--no-scenarios") { Description = "Skip the plan's scenario set for a focused tools or tour run." };
         var worldOption = new Option<string>(name: "--world") { Description = $"The world to boot; {DefaultWorld} when omitted." };
         var artifactOption = new Option<string>(name: "--world-artifact") { Description = "Run this Puck.World entry assembly instead of the build of the checkout's sources. Never builds." };
+        var backendOption = new Option<string>(name: "--backend") { Description = "The graphics backend for a new windowed World; its default when omitted. Requires --tour and cannot change an attached World." };
+        var captureToolOption = new Option<string>(name: "--capture-tool") { Description = "Load the World's existing GPU capture tool before device creation (pix or renderdoc), so a plan can invoke gpu.capture. Requires a new windowed World." };
         var cacheOption = new Option<string>(name: "--cache-dir") { Description = "The World's device-cache root, shared by fresh Worlds; its per-user default when omitted. Use a writable lane directory in a sandbox." };
         var timeoutOption = new Option<int>(name: "--timeout") { DefaultValueFactory = static _ => 40, Description = "The most minutes the whole run may take, a build excepted: every World call, boot, lease wait and scenario process is bounded by what remains." };
         var command = new Command(
             description: "Sweep the debug world: run its tools, read every signal, take the capture tour, and write a report a later sweep compares with.",
             name: Verb
-        ) { planOption, outputOption, baselineOption, tourOption, attachOption, noHeadlessOption, stopOption, scenariosOption, noScenariosOption, worldOption, artifactOption, cacheOption, timeoutOption };
+        ) { planOption, outputOption, baselineOption, tourOption, attachOption, noHeadlessOption, stopOption, scenariosOption, noScenariosOption, worldOption, artifactOption, backendOption, captureToolOption, cacheOption, timeoutOption };
 
         command.Detail(detail: $"""
             Runs the plan ({DefaultPlan}) against the debug world through its Operator attachment, so every line is an
@@ -77,6 +79,8 @@ public static partial class SweepCommand {
             artifact: parseResult.GetValue(option: artifactOption),
             attach: parseResult.GetValue(option: attachOption),
             baselinePath: parseResult.GetValue(option: baselineOption),
+            backend: parseResult.GetValue(option: backendOption),
+            captureTool: parseResult.GetValue(option: captureToolOption),
             cacheDirectory: parseResult.GetValue(option: cacheOption),
             cancellation: cancellationToken,
             noHeadless: parseResult.GetValue(option: noHeadlessOption),
@@ -93,7 +97,7 @@ public static partial class SweepCommand {
         return command;
     }
 
-    private static int Run(string? planPath, string? output, string? baselinePath, bool tour, string? attach, bool noHeadless, bool noScenarios, string[] stops, string[] scenarios, string? worldPath, string? artifact, string? cacheDirectory, int timeoutMinutes, CancellationToken cancellation) {
+    private static int Run(string? planPath, string? output, string? baselinePath, bool tour, string? attach, bool noHeadless, bool noScenarios, string[] stops, string[] scenarios, string? worldPath, string? artifact, string? cacheDirectory, string? backend, string? captureTool, int timeoutMinutes, CancellationToken cancellation) {
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
             return CliExit.Refused;
         }
@@ -120,6 +124,9 @@ public static partial class SweepCommand {
         }
 
         var windowed = (tour || (attach is not null));
+        if ((backend is not null || captureTool is not null) && (!windowed || attach is not null)) {
+            return CliExit.Refuse(verb: Verb, what: "--backend/--capture-tool", why: "require --tour with a newly booted windowed World; an attached device already exists");
+        }
 
         if (noScenarios && (scenarios.Length > 0)) {
             return CliExit.Refuse(verb: Verb, what: "--scenarios", why: "cannot be combined with --no-scenarios");
@@ -208,6 +215,8 @@ public static partial class SweepCommand {
                     logs = Path.Combine(path1: directory, path2: SweepLegs.Windowed);
 
                     var arguments = Arguments(cacheDirectory: cacheDirectory, deadline: deadline, extra: ["--headless", "false", "--paused"], state: Path.Combine(path1: logs, path2: "state"), world: world);
+                    if (backend is not null) { arguments.AddRange(collection: ["--backend", backend]); }
+                    if (captureTool is not null) { arguments.AddRange(collection: ["--capture-tool", captureTool]); }
                     CliLease? gpu = null;
 
                     try {

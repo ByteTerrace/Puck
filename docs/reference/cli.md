@@ -2372,6 +2372,7 @@ signal or a stop by editing it.
 ```text
 puck sweep [--tour | --attach <world>] [--baseline <report.json>] [--output <dir>] [--cache-dir <dir>]
            [--no-headless] [--stop <name>...] [--scenarios <file>... | --no-scenarios] [--plan <file>]
+           [--backend <backend>] [--capture-tool pix|renderdoc]
 ```
 
 - **The headless leg** boots the world headless and unpaced, with no device and
@@ -2392,10 +2393,10 @@ puck sweep [--tour | --attach <world>] [--baseline <report.json>] [--output <dir
 - **The windowed leg** (`--tour`) boots a windowed World under the GPU lease,
   or drives the running World `--attach` names (a process id, attachment id or
   attachment file; a World `puck_world_start` started, say). It boots paused
-  before its first tick (or pauses the attachment), enables lockstep, waits for
-  the renderer and bakes, advances a fixed warmup, and reads the signals (bake and mesh-GI
+  before its first tick (or pauses the attachment), waits for the renderer and
+  bakes, advances its warmup with ordinary display pacing and reads the signals (bake and mesh-GI
   counters, `world.indirect`, GPU counters, `host.frames` standing and walking,
-  memory), then takes the tour: each stop runs the tour's reset lines and its
+  memory), then enables lockstep for the tour: each stop runs the tour's reset lines and its
   own, waits for the bakes, arms its pinned steps a fixed lead after the tick
   they settled at (`world.at`), with `world.lockstep on` and camera framing plus
   `view.recenter 1` and `view.reseed 0` pinned to the start tick, and takes a settled capture pinned to a named
@@ -2412,6 +2413,11 @@ puck sweep [--tour | --attach <world>] [--baseline <report.json>] [--output <dir
 
 The plan refuses unknown JSON members at every level and refuses an empty
 workload. Selecting no leg or scenario is refused; a report with no measurements fails.
+
+`--backend` and `--capture-tool` forward to a newly booted windowed World only;
+they require `--tour` and refuse `--attach`. Loading PIX/RenderDoc before device
+creation lets a plan invoke the existing `gpu.capture` command with named objects.
+Native view names are not authored `pipeline.inspect` instance names.
 
 `--cache-dir` overrides the device-cache root for owned Worlds, as in `puck
 motion`; fresh Worlds can share one writable scratch cache. Omitted, it keeps

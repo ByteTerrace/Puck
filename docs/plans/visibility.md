@@ -79,11 +79,11 @@ in the tree.
   (`Assets/Shaders/Sdf/passes/sdf-mesh.frag.hlsl:13-18`,
   `frame/sdf-stamp-fade.hlsli:13`). The shadow fragment counts under
   `[earlydepthstencil]` (`passes/sdf-mesh-shadow.frag.hlsl:8-10`).
-- **The visible set is keyed by draw index.** R2's kernel reads and writes
-  `sdfMeshOcclusionVisibleRW[draw]`; its level history re-checks the mesh's
-  identity, its visible bit does not. When `Dress` renumbers draws, phase one
-  draws the wrong set for a frame. Phase two re-tests every kept box, so the
-  image stays correct and the cost is a spike; no run has exercised it.
+- **Visibility storage is indexed by draw, with generation validation.**
+  `sdf-mesh-occlusion.comp.hlsl` compares the retained generation before using
+  visibility history. A draw-index change alone is not evidence of accepting
+  another mesh's bit. Stable identities and history invalidation remain part of
+  the compaction contract; measure them under cuts and renumbering.
 - **The two depth pyramids are not duplicates.** The occlusion pyramid holds
   the farthest forward depth of each block and is built between the mesh
   pass's phases. The ambient-occlusion pyramid is built after phase two and

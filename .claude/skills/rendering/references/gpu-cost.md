@@ -9,6 +9,24 @@ hardware and how to read it. Each rule names the Puck kernel or host code and
 the measurement behind it; a general claim cites two public sources
 ([sources](#sources)).
 
+## Attribute memory by layer
+
+`GpuDeviceMemoryWork.IsCounted` defines which resource roles the backend counters
+include. `host.memory owners 0` appends those counters, but they do not include
+ordinary host-visible upload/readback storage, driver internals or swapchain
+images. Aperture storage is already inside the device-local count. Account,
+allocator, managed-heap, resource and process readings overlap; their sum is not a
+physical total. Read full GPU node counters when ownership matters: summary
+submission counters omit the node's owned-byte gauge.
+
+Keep driver residency/budget observations separate from resource allocations.
+[DXGI reports process usage and an OS budget](https://learn.microsoft.com/en-us/windows/win32/api/dxgi1_4/ns-dxgi1_4-dxgi_query_video_memory_info),
+while [Vulkan's memory-budget extension](https://docs.vulkan.org/refpages/latest/refpages/source/VK_EXT_memory_budget.html)
+reports estimated process heap usage and a changing budget. Neither is an owner
+census or a portable conversion from process-private bytes to physical pages.
+Correlate a held normal-play window with retained owners and these driver/host
+observations; a replay observer's memory does not qualify the player's budget.
+
 ## Read a kernel's registers and occupancy
 
 The SPIR-V and DXIL the build writes beside each `*.hlsl` carry no register
@@ -53,11 +71,13 @@ GI have settled. In the report:
   ([hazards](../../../../docs/development/contributing.md#hardware-and-toolchain-cautions)).
 
 **PIX (Direct3D 12).** Boot with `--capture-tool pix`, `gpu.capture <path>.wpix 1`,
-then `pixtool open-capture <path>.wpix save-event-list <csv> --counters=*`
-(`collect-occupancy` adds the occupancy data; commands from `pixtool --help`).
-PIX's NVIDIA counters gave the RTX 4070's registers a thread and achieved
-warps for every pixel pass; the exact counter names are unrecorded, so list
-them with `pixtool open-capture <path>.wpix list-counters`. Large forest captures
+then inspect the installed `pixtool --help save-event-list` and list available
+counters with `pixtool open-capture <path>.wpix list-counters`.
+`ComputeRegisterAllocation` is a percentage, not registers per thread. Register
+launch stalls and warp activity help select an investigation; they do not alone
+prove the pass is register-bound. Expanded indirect events are GPU commands, not
+CPU recording calls: Puck already issues one counted indirect call per phase.
+Large forest captures
 can exhaust PIX analysis memory when exporting every hardware counter. Export
 selected families instead: `--counters=*Duration* --counters=*Invocations` for timing
 and work, then narrow NVIDIA patterns such as `--counters=Compute*Register*`.
@@ -72,7 +92,12 @@ Keep mesh settlement, lighting convergence and normal-motion timing distinct.
 Lockstep can wait synchronously for GI; a forest run with changing lighting
 repeatedly waited for 6–7-second relights instead of draining to a lasting idle
 state. Return to normal presentation for frame windows, inspect actual GI work,
-and sample the moving interval itself. A trace started after walking can miss a
+and sample the moving interval itself. Controlled route measurements pin the clock
+with startup `--lockstep` and retain ordinary asynchronous lighting using
+`--budgeted-lighting`; `SdfFrame.ConvergesLighting` owns GI draining independently.
+That preserves quality settings and budgets, not identical per-tick lighting
+freshness or pixels. The observer must establish semantic input equivalence,
+and GPU/lighting work stays a measured result. A trace started after walking can miss a
 transient slowdown that has already recovered. Record the route's exact ticks
 and input beside query, contact, pose and transfer counts. Region staging uses a
 compute copy, so `gpu.copies.buffer-bytes` alone misses it: include

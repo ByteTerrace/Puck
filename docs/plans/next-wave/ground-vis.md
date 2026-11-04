@@ -28,7 +28,7 @@ Same-owner growth retains the old prefix. This closes the collision between two
 tables whose first occupants both use generation 1.
 
 The [renderer contract](../../../src/Puck.SdfVm/README.md) owns current semantics;
-[dense-landscape implementation](../dense-landscapes.md#first-implementation-slice)
+[dense-landscape implementation](../dense-landscapes.md#implementation-order)
 owns workload/readback evidence. The old duplicate identity comparisons and
 mesh-only token source are removed. CPU `sdf.instances` counts actual observations,
 seeds, retirements, changed matrices and packed records/bytes. These are not
