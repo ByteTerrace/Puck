@@ -25,13 +25,16 @@ public static class WorldPlacementStamper {
     /// <returns>The placements admitted by the same emission and evaluator used by the composed query field.</returns>
     public static IReadOnlyList<WorldPlacement> Queryable(WorldDefinition definition, IReadOnlyList<WorldPlacement> placements, Action<WorldPlacement, string>? excluded = null) {
         var usable = new List<WorldPlacement>();
+        var seed = (definition.Generation?.WorldSeed ?? 0UL);
 
         foreach (var placement in placements) {
             var creation = WorldDefinitionRows.FindCreation(creations: definition.Creations, id: placement.ShownPrototypeId);
+            var frame = WorldDefinitionRows.ResolvedFrame(definition: definition, placement: placement);
 
-            // Whether the evaluator reads a placement is a fact of its row and the creation it shows, so a row that
-            // came through a delivery unchanged keeps its verdict and only a moved row is emitted and evaluated again.
-            if (!QueryVerdicts.TryGetValue(key: placement, value: out var verdict) || !ReferenceEquals(objA: verdict.Creation, objB: creation)) {
+            // Emission also reads the composed parent frame and seeded pattern. The child row can stay identical
+            // while either changes, including moving a previously admitted instance outside the evaluator's frame.
+            if (!QueryVerdicts.TryGetValue(key: placement, value: out var verdict) || !ReferenceEquals(objA: verdict.Creation, objB: creation) ||
+                (verdict.Frame != frame) || (verdict.Seed != seed)) {
                 string? refusal = null;
 
                 try {
@@ -40,13 +43,13 @@ public static class WorldPlacementStamper {
                     EmitStatic(builder: builder, creations: definition.Creations, definition: definition, placements: [placement]);
 
                     var program = builder.Build();
-                    var frame = (double)new SdfFieldEvaluator(program: program).Frame;
+                    var queryFrame = (double)new SdfFieldEvaluator(program: program).Frame;
 
                     // The composed field answers only inside the least of its parts' frames, so a placement its own
                     // field cannot answer at would refuse every query in the world.
                     foreach (var instance in program.Instances) {
-                        if ((Math.Abs(value: instance.Center.X) > frame) || (Math.Abs(value: instance.Center.Y) > frame) || (Math.Abs(value: instance.Center.Z) > frame)) {
-                            refusal = $"its field answers only within {frame.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)} of the origin, short of the copy at {instance.Center.ToString(format: null, formatProvider: System.Globalization.CultureInfo.InvariantCulture)}";
+                        if ((Math.Abs(value: instance.Center.X) > queryFrame) || (Math.Abs(value: instance.Center.Y) > queryFrame) || (Math.Abs(value: instance.Center.Z) > queryFrame)) {
+                            refusal = $"its field answers only within {queryFrame.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)} of the origin, short of the copy at {instance.Center.ToString(format: null, formatProvider: System.Globalization.CultureInfo.InvariantCulture)}";
                             break;
                         }
                     }
@@ -56,6 +59,8 @@ public static class WorldPlacementStamper {
 
                 verdict = new QueryVerdict(
                     Creation: creation,
+                    Frame: frame,
+                    Seed: seed,
                     Refusal: refusal
                 );
                 QueryVerdicts.AddOrUpdate(key: placement, value: verdict);
@@ -71,10 +76,10 @@ public static class WorldPlacementStamper {
         return usable;
     }
 
-    // Each placement row's evaluator verdict, with the creation it showed when judged.
+    // Each placement row's evaluator verdict and the external inputs its emission read.
     private static readonly Puck.Abstractions.CodeDerivedTable<WorldPlacement, QueryVerdict> QueryVerdicts = new();
 
-    private sealed record QueryVerdict(WorldPrototype? Creation, string? Refusal);
+    private sealed record QueryVerdict(WorldPrototype? Creation, CompiledPlacementFrame Frame, ulong Seed, string? Refusal);
 
     // The instance-bound slack past a creation's own reach (a contract of the tile cull, not a policy: a too-tight
     // bound CLIPS real geometry at masked tile edges; a fat one only costs a rare extra evaluation).
