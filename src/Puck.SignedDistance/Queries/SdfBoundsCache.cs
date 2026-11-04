@@ -18,8 +18,14 @@ public sealed class SdfBoundsCache(SdfFieldEvaluator field) : IFieldBounds {
     public static WorkKind Instructions { get; } = new(name: "sdf.bounds.instructions", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting full interval rotation expansions on a cache miss.</summary>
     public static WorkKind Rotations { get; } = new(name: "sdf.bounds.rotation-expansions", unit: "count", workClass: WorkClass.Deterministic);
+    /// <summary>Gets cheap instance-bound ranks computed by actual culling box walks; frame discovery computes none.</summary>
+    public static WorkKind PrepassBounds { get; } = new(name: "sdf.bounds.prepass-bounds", unit: "count", workClass: WorkClass.Deterministic);
+    /// <summary>Gets box reach-scratch arrays created, including frame-discovery and zero-length requests.</summary>
+    public static WorkKind ScratchArraysCreated { get; } = new(name: "sdf.bounds.reach-scratch-arrays-created", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Gets cumulative box reach-scratch element payload created; excludes headers and is not live or physical memory.</summary>
+    public static WorkKind ScratchPayloadCreated { get; } = new(name: "sdf.bounds.reach-scratch-payload-created", unit: "bytes", workClass: WorkClass.Pacing);
     /// <summary>Gets the process-wide immutable bounds work, including every authority's field.</summary>
-    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.bounds", kinds: [Queries, Evaluations, Instructions, Rotations]);
+    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.bounds", kinds: [Queries, Evaluations, Instructions, Rotations, PrepassBounds, ScratchArraysCreated, ScratchPayloadCreated]);
 
     private const int Sets = 64;
     private const int Ways = 4;

@@ -176,7 +176,7 @@ public sealed partial class SdfFieldEvaluator {
         var cullBounds = m_cullBounds;
         var reaches = (((BoxReachScratch is { } scratch) && (scratch.Length >= cullBounds.Length))
             ? scratch
-            : (BoxReachScratch = new FixedQ4816[cullBounds.Length]));
+            : (BoxReachScratch = CreateReachScratch(length: cullBounds.Length, work: SdfBoundsCache.ProcessWork, arrays: SdfBoundsCache.ScratchArraysCreated, bytes: SdfBoundsCache.ScratchPayloadCreated)));
         var primer = BoxPrimer.None;
         var walked = 0;
         var query = new BoxQuery(box: world);
@@ -184,6 +184,7 @@ public sealed partial class SdfFieldEvaluator {
         rotationsExpanded = 0;
 
         if (cull) {
+            SdfBoundsCache.ProcessWork.Add(kind: SdfBoundsCache.PrepassBounds, amount: cullBounds.Length);
             for (var bound = 0; (bound < cullBounds.Length); bound++) {
                 ref readonly var reach = ref cullBounds[bound].Reach;
 

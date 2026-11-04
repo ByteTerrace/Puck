@@ -84,7 +84,11 @@ public sealed partial class SdfFieldEvaluator {
             ));
         }
 
-        return (bounds.ToArray(), members.ToArray());
+        var boundRows = bounds.ToArray();
+        CountArrayPayload(rows: boundRows, work: PointWork, arrays: CullArraysCreated, bytes: CullPayloadCreated);
+        var memberRows = members.ToArray();
+        CountArrayPayload(rows: memberRows, work: PointWork, arrays: CullArraysCreated, bytes: CullPayloadCreated);
+        return (boundRows, memberRows);
     }
     // Whether an instance joins the answer by hard union, every shape certified: outside a scope only point transforms
     // and union shapes; each scope one level deep, popping by union, holding union, smooth union, subtraction or
@@ -341,6 +345,7 @@ public sealed partial class SdfFieldEvaluator {
     private static (int[] Slots, SegmentBound[] Bounds) BuildSegments(SdfProgram program, CompiledInstruction[] compiled, ShapeReach?[] reaches) {
         var count = compiled.Length;
         var slots = new int[count];
+        CountArrayPayload(rows: slots, work: PointWork, arrays: CullArraysCreated, bytes: CullPayloadCreated);
         var bounds = new List<SegmentBound>();
         var boundary = new bool[(count + 1)];
         var shapes = new List<ShapeReach>();
@@ -427,7 +432,10 @@ public sealed partial class SdfFieldEvaluator {
             bounds.Add(item: new SegmentBound(Carves: carves, End: end, Margin: margin, Reach: reach));
         }
 
-        return (slots, bounds.ToArray());
+        var segmentRows = bounds.ToArray();
+        CountArrayPayload(rows: segmentRows, work: PointWork, arrays: CullArraysCreated, bytes: CullPayloadCreated);
+        PointWork.Count(kind: CullTableBuilds);
+        return (slots, segmentRows);
     }
     // Whether only scope edges stand between a chain's end and the next ResetPoint, instance boundary or the stream's
     // end: a skipped chain leaves the point where its ResetPoint put it, which no instruction after it may read.

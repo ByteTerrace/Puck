@@ -11,7 +11,7 @@ namespace Puck.SignedDistance.Tests;
 /// hold, a box whose loose interval a certified sweep reads, and random fields of rotated, scaled and blended shapes.
 /// Each law compares a program against a cull-off reference built from the same instructions with no instance declared
 /// and every chain opened by a zero elongation, an exact identity that leaves the chain no certificate.</summary>
-public sealed class SdfFieldEvaluatorCullBoundaryLawTests {
+public sealed partial class SdfFieldEvaluatorCullBoundaryLawTests {
     [InlineData(SdfBlendOp.Intersection)]
     [InlineData(SdfBlendOp.SmoothIntersection)]
     [Theory]

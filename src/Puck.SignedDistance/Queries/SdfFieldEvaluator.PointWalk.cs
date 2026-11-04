@@ -57,7 +57,7 @@ public sealed partial class SdfFieldEvaluator {
         var cullBounds = m_cullBounds;
         var reaches = (((PointReachScratch is { } scratch) && (scratch.Length >= cullBounds.Length))
             ? scratch
-            : (PointReachScratch = new FixedQ4816[cullBounds.Length]));
+            : (PointReachScratch = CreateReachScratch(length: cullBounds.Length, work: PointWork, arrays: PointScratchArraysCreated, bytes: PointScratchPayloadCreated)));
         var primer = PointPrimer.None;
         var walked = 0L;
         var powerWork = new PowerWork();
@@ -69,6 +69,8 @@ public sealed partial class SdfFieldEvaluator {
                 primer.Candidate = bound;
             }
         }
+
+        PointWork.Add(kind: PointPrepassBounds, amount: cullBounds.Length);
 
         var (resultDistance, resultMaterial) = WalkPoints(
             end: m_instructions.Length,
