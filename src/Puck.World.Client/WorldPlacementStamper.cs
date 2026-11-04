@@ -321,7 +321,7 @@ public static class WorldPlacementStamper {
         ));
     }
 
-    private readonly record struct StaticMeshIdentity(string? Scope, string Placement, int Ordinal);
+    internal readonly record struct StaticMeshIdentity(string? Scope, string Placement, int Ordinal);
 
     /// <summary>Poses a prototype's mesh as a draw: its engine-frame triangles under a uniform scale, an optional mirror (a
     /// plane through the origin in the local frame, as the shapes reflect), then the rotation and the origin, composed in

@@ -33,6 +33,20 @@ public static partial class SweepSignals {
 
                 break;
             case "counters":
+                // Typed control carries bare JSON; a scheduled console read narrates the same JSON in its echo.
+                var counterOutput = output.Trim();
+                const string CounterEcho = "[world.counters:";
+                if (counterOutput.StartsWith(CounterEcho, StringComparison.Ordinal) && counterOutput.EndsWith(']')) {
+                    counterOutput = counterOutput[CounterEcho.Length..^1].Trim();
+                }
+                if (counterOutput.StartsWith('{')) {
+                    using var document = JsonDocument.Parse(counterOutput);
+                    if (!document.RootElement.TryGetProperty("sources", out var sources)) { throw new JsonException("A counter JSON answer needs sources."); }
+                    foreach (var source in sources.EnumerateArray()) {
+                        foreach (var count in source.GetProperty("counts").EnumerateObject()) { metrics[count.Name] = count.Value.GetRawText(); }
+                    }
+                    break;
+                }
                 foreach (var line in output.Split(separator: '\n')) {
                     var match = CounterPattern().Match(input: line.Trim());
 

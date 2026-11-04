@@ -178,6 +178,8 @@ public sealed class WorldRoutedScene : ISdfFrameDresser, IDisposable {
             RateCounts = host.RateCounts,
             RateIntervals = host.RateIntervals,
             Time = host.Time,
+            TickLocked = host.TickLocked,
+            ConvergesLighting = host.ConvergesLighting,
             Views = m_frameViews,
         };
     }

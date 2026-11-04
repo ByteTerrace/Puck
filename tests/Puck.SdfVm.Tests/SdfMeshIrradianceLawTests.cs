@@ -43,7 +43,7 @@ public sealed partial class SdfMeshIrradianceLawTests {
     [Fact]
     public void AProbeInsideAThinSlabTakesTheNearestExit() {
         var frame = Frame() with {
-            TickLocked = true,
+            ConvergesLighting = true,
             IndirectBounces = 0,
             Lights = new SdfLights(),
             MeshDraws = [Draw(mesh: Box(new Vector3(x: -50f, y: 0.95f, z: -50f), new Vector3(x: 50f, y: 1.05f, z: 50f)))],
@@ -67,7 +67,7 @@ public sealed partial class SdfMeshIrradianceLawTests {
             Program = builder.Build(),
             IndirectGains = gains,
             IndirectSources = gains.Sources,
-            TickLocked = true,
+            ConvergesLighting = true,
             IndirectBounces = 0,
             Lights = new SdfLights(),
             MeshDraws = [Draw(mesh: Box(new Vector3(x: -10000f, y: 4f, z: -10000f), new Vector3(x: 10000f, y: 4.3f, z: 10000f)))],
@@ -137,7 +137,7 @@ public sealed partial class SdfMeshIrradianceLawTests {
     }
     [Fact]
     public void ASealedEnclosureWithALightBeyondItsWallStaysDark() {
-        var frame = Frame() with { TickLocked = true, IndirectBounces = 0 };
+        var frame = Frame() with { ConvergesLighting = true, IndirectBounces = 0 };
         // No lattice centre fits in this sealed 18-cm enclosure; the light is above its roof.
         frame = frame with {
             MeshDraws = [.. frame.MeshDraws,
@@ -182,7 +182,7 @@ public sealed partial class SdfMeshIrradianceLawTests {
     public void AProbeTracesOneHitBufferOfOneRayPerTexel() {
         var volume = new SdfMeshIrradiance();
 
-        var (parameters, _) = Trace(volume, Frame() with { TickLocked = true, IndirectBounces = 0, MeshDraws = [] }, SdfIndirectTier.Medium);
+        var (parameters, _) = Trace(volume, Frame() with { ConvergesLighting = true, IndirectBounces = 0, MeshDraws = [] }, SdfIndirectTier.Medium);
         var description = volume.Describe();
         var count = long.Parse(description.Split("traced-rays=")[1].Split(' ')[0], System.Globalization.CultureInfo.InvariantCulture);
 
@@ -195,7 +195,7 @@ public sealed partial class SdfMeshIrradianceLawTests {
     public void AProbesPublishedSkyIsItsOwnMeasuredVisibility() {
         var volume = new SdfMeshIrradiance();
 
-        var (parameters, words) = Trace(volume, Frame() with { TickLocked = true, IndirectBounces = 0 });
+        var (parameters, words) = Trace(volume, Frame() with { ConvergesLighting = true, IndirectBounces = 0 });
         var reports = new SdfMeshProbeReport[8];
         var cells = new (int X, int Y, int Z)[8];
         var weights = new float[8];
@@ -215,7 +215,7 @@ public sealed partial class SdfMeshIrradianceLawTests {
         var floor = Draw(mesh: Box(low: new Vector3(x: -10f, y: -0.3f, z: -10f), high: new Vector3(x: 10f, y: 0f, z: 10f)));
         // Between the old 26 directions: the receiver ray hits the finite block while +X and +X+Y miss it.
         var frame = Frame() with {
-            TickLocked = true,
+            ConvergesLighting = true,
             IndirectBounces = 0,
             MeshDraws = [floor, Draw(mesh: Box(low: new Vector3(x: 0.85f, y: 0.56f, z: 0.3f), high: new Vector3(x: 1f, y: 0.8f, z: 0.7f)))],
         };
@@ -247,7 +247,7 @@ public sealed partial class SdfMeshIrradianceLawTests {
     [Fact]
     public void ASphereBelowAHangingSignReadsContinuouslyAcrossItsProbeColumn() {
         var frame = Frame() with {
-            TickLocked = true,
+            ConvergesLighting = true,
             IndirectBounces = 0,
             MeshDraws = [
                 Draw(mesh: Box(new Vector3(x: -10f, y: -0.3f, z: -10f), new Vector3(x: 10f, y: 0f, z: 10f))),
@@ -310,7 +310,7 @@ public sealed partial class SdfMeshIrradianceLawTests {
     [Fact]
     public void AProbeReadMarksThePendingPublicationUnsettled() {
         var volume = new SdfMeshIrradiance();
-        var frame = Frame() with { TickLocked = true, IndirectBounces = 0 };
+        var frame = Frame() with { ConvergesLighting = true, IndirectBounces = 0 };
 
         _ = volume.Stage(bakePending: false, frame: frame, tier: SdfIndirectTier.Medium, write: _ => { });
         Assert.Contains("unsettled; published-window=", volume.DescribeProbes(Vector3.One, Vector3.UnitY)[0]);
@@ -320,7 +320,7 @@ public sealed partial class SdfMeshIrradianceLawTests {
     [Fact]
     public void RemovingTheLastStaticDrawReplacesItsSceneAndProbeMeasurements() {
         var volume = new SdfMeshIrradiance();
-        var frame = Frame() with { TickLocked = true, IndirectBounces = 0 };
+        var frame = Frame() with { ConvergesLighting = true, IndirectBounces = 0 };
         uint[] before = [];
         uint[] after = [];
 
@@ -622,12 +622,12 @@ public sealed partial class SdfMeshIrradianceLawTests {
 
         Assert.Equal(expected: (here.Low.X + 20), actual: back.Low.X);
     }
-    /// <summary>A lockstep frame waits for its scene and window's trace and relights the window from no bounce until it
+    /// <summary>A lighting-converged frame waits for its scene and window's trace and relights the window from no bounce until it
     /// converges, in one staging, including a cold scene and a replacement: its probes are a function of the scene,
     /// lighting and window alone, the same on a fresh volume as on one whose asynchronous frames left other bounce.</summary>
     [Fact]
-    public void ALockstepFrameRendersTheWindowTracedToTheEnd() {
-        var frame = (Frame() with { TickLocked = true });
+    public void AConvergedLightingFrameRendersTheWindowTracedToTheEnd() {
+        var frame = (Frame() with { ConvergesLighting = true });
         var fresh = new SdfMeshIrradiance();
         var landed = Array.Empty<uint>();
 
@@ -637,7 +637,7 @@ public sealed partial class SdfMeshIrradianceLawTests {
         var writes = 0;
         var words = Array.Empty<uint>();
 
-        _ = Trace(frame: (frame with { TickLocked = false }), volume: locked);
+        _ = Trace(frame: (frame with { ConvergesLighting = false }), volume: locked);
         _ = locked.Stage(bakePending: false, frame: frame, tier: SdfIndirectTier.High, write: memory => {
             writes++;
             words = memory.ToArray();
@@ -729,7 +729,7 @@ public sealed partial class SdfMeshIrradianceLawTests {
         frame = frame with {
             Lights = lights,
             IndirectBounces = 0,
-            TickLocked = true,
+            ConvergesLighting = true,
             Exposure = new SdfExposure(Adaptation: 0f, Compensation: 0f, Ev100: 15f, Local: 0.5f, Maximum: 20f, Minimum: 0f, Mode: SdfExposureMode.Auto),
             // An 18-cm gap contains the camera and light but no lattice centres (x = +/- 0.5), and is narrower than twice
             // the clearance, so no probe of the cells about it can move into it either.
@@ -822,7 +822,7 @@ public sealed partial class SdfMeshIrradianceLawTests {
     [Fact]
     public void ASurfacePastTheFinestWindowReadsACoarserLevelsMeasuredLight() {
         var volume = new SdfMeshIrradiance();
-        var (parameters, words) = Trace(frame: OpenFloor() with { TickLocked = true }, tier: SdfIndirectTier.Medium, volume: volume);
+        var (parameters, words) = Trace(frame: OpenFloor() with { ConvergesLighting = true }, tier: SdfIndirectTier.Medium, volume: volume);
 
         Assert.True(condition: parameters.Middle.Present && parameters.Far.Present);
         Assert.Equal(expected: 8f, actual: parameters.Middle.Spacing);
@@ -872,7 +872,7 @@ public sealed partial class SdfMeshIrradianceLawTests {
 
         var locked = new SdfMeshIrradiance();
 
-        _ = locked.Stage(bakePending: true, frame: (frame with { TickLocked = true }), tier: SdfIndirectTier.Medium, write: static _ => { });
+        _ = locked.Stage(bakePending: true, frame: (frame with { ConvergesLighting = true }), tier: SdfIndirectTier.Medium, write: static _ => { });
         Assert.Null(@object: locked.DiagnosticScene(frame: frame));
     }
     /// <summary>THE LAW: a camera cut snaps to the first reading after it. A cut the meter cannot read yet stays owed,
@@ -881,7 +881,7 @@ public sealed partial class SdfMeshIrradianceLawTests {
     public void ACutSnapsToTheFirstReadingAfterIt() {
         var frame = Frame() with {
             IndirectBounces = 0,
-            TickLocked = true,
+            ConvergesLighting = true,
             Exposure = new SdfExposure(Adaptation: 0.75f, Compensation: 0f, Ev100: 15f, Local: 0f, Maximum: 20f, Minimum: 0f, Mode: SdfExposureMode.Auto),
         };
         var volume = new SdfMeshIrradiance();

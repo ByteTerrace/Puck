@@ -2147,6 +2147,70 @@ obstruction normal) and the camera files. The composed four-up frame the World
 writes beside the slot files is `raw/t<offset>.png` and is kept. The World's
 transcripts are `stdout.log` and `stderr.log`.
 
+Sweep windowed warmup and signal reads use ordinary display-paced presentation.
+The capture tour enables lockstep before its prelude and pinned stills. Keep
+lighting convergence out of frame-budget windows: converging all irradiance work
+per frame can turn a short warmup into minutes and exhaust an attachment call.
+A plan that changes clock policy must report it with its frame measurements.
+
+### Controlled route measurements
+
+`puck motion --route worlds/debug/forest.route.json --backend directx --output <dir>`
+runs the debug world's authored forest route without screenshot holds. It records
+the existing authority replay stream once, then drives it in two fresh Worlds.
+`--against-world-artifact <Puck.World.dll>` selects the second build; without it the
+first check is A/A. Both builds must support the same measurement protocol. Keep
+the GPU lease for the entire run and exclude competing heavy work.
+
+The Worlds start paused at tick zero with a pinned presentation clock and ordinary
+budgeted lighting (`--paused --lockstep --budgeted-lighting`). Bakes and the renderer
+become ready before ticks advance. After warmup, authority pauses while
+`world.wait residency` waits for current baked geometry to land and its required
+GPU upload to complete. It does not converge lighting or wait for changing pose
+uploads to become idle. Opening metric reads run at the first measured tick's
+command drain, before its authored commands. Closing reads use the drain at
+lastTick+1. Only the
+measured tick range is observed. The hold is outside both the timer and counter
+endpoints. The report names the drain-phase counter interval separately from the
+presentation-sample timer; direct paused reads can include extra presentation work
+before resume.
+
+Authored setup, input and presentation commands choose the body, camera, warmup
+and measured interval; the runner embeds no avatar or forest behavior. Setup is
+for presentation controls; authority changes belong in recorded input steps.
+Recording starts before setup, and replay restores the boot image before
+reapplying setup. Local presentation controls repeat while the tape supplies
+resolved world-frame intent. Input masking covers commands and intents, not every
+composition or mutation submission: the route plus tape identify the workload.
+Simulation replay alone does not restore a camera or animation follower. Typed
+setup and settlement receipts, authored endpoint checks and every scheduled
+command's execution multiplicity must hold before a comparison qualifies.
+
+The report hashes runtime assemblies, shader binaries/sources and runtime manifests
+by relative path. Prepare Vulkan artifacts with `-p:PuckShaderSpirvEnabled=true`;
+a Windows single-project build normally omits SPIR-V. Preserve complete immutable
+packages between legs so a backend check names the code and shaders it ran.
+
+`route-report.json` compares exact measured tick coverage and diagnostic signatures
+of selected final composed program, camera and pose inputs, naming the first
+mismatch. Missing or different traces are an unmatched workload even when authority
+hashes agree. The replay verdict covers every consumed authority tick through the
+after endpoint; the tape's last tick is an unconsumed guard. Work counters, storage
+and transfers are results and may improve. The forest route selects the authored
+High preset and checks effective settings and its position bounds. Inspect its
+intermediate position receipts and separate untimed stills for canopy coverage;
+coordinate bounds alone do not prove visible continuous forest.
+
+Raw endpoint answers and both transcripts remain beside the report. The observer
+and per-tick authority replay verification run in both measured legs and are
+included in timing. GPU endpoint answers are completed-submission snapshots, not
+cumulative window transfer totals. This is controlled tick-throughput evidence;
+ordinary paced frame time and highest-quality/device qualification remain separate.
+Memory readings include diagnostic machinery; normal-play physical budget
+qualification is separate. Before claiming an optimization, establish A/A
+repeatability, then interleave several A/B pairs under the same quality, cache and
+readiness conditions.
+
 ### The studio
 
 The scenarios run in `worlds/debug/studio.puck`'s avatar studio, a 48 by 56 m

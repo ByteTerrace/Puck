@@ -36,7 +36,7 @@ namespace Puck.World;
 /// <c>world.view.state</c> function headless; <see cref="WorldCursorFeed"/> is presentation-only, so it is optional
 /// (default <see langword="null"/>) and <c>world.view.pointer</c> refuses by name when it is absent, as
 /// <c>world.view.panes</c> does without the GPU presentation's <see cref="WorldViewGraphHost"/>.</para></remarks>
-internal sealed partial class WorldViewCommandModule(IServerLink link, WorldViewComposer composer, WorldClient client, WorldCompositionState composition, WorldCreationInstances stamps, WorldCursorFeed? cursorFeed = null, WorldRenderProbe? renderProbe = null, WorldViewGraphHost? graphs = null, WorldSeatMotionTrace? motionTrace = null, WorldDiagnostics? diagnostics = null, WorldSeatViewports? viewports = null) : ICommandModule {
+internal sealed partial class WorldViewCommandModule(IServerLink link, WorldViewComposer composer, WorldClient client, WorldCompositionState composition, WorldCreationInstances stamps, WorldCursorFeed? cursorFeed = null, WorldRenderProbe? renderProbe = null, WorldViewGraphHost? graphs = null, WorldSeatMotionTrace? motionTrace = null, WorldDiagnostics? diagnostics = null, WorldSeatViewports? viewports = null, WorldPresentationProbe? presentationProbe = null) : ICommandModule {
     // The plan-wide clear-to-absent tokens for a live override: 'auto' (and '-') clear it back to the composer's own
     // selection; any other token is the forced name.
     private static string? ClearOrName(string token) =>
@@ -352,6 +352,14 @@ internal sealed partial class WorldViewCommandModule(IServerLink link, WorldView
             name: "view.isolate",
             description: "LIVE shape isolation, for inspecting part of a creation alone: view.isolate <prototype> <shape-name>... keeps the named shapes of that prototype and every shape parented beneath them, transitively, wherever the prototype renders in the boot world (its body stamps and its animated, attached and static placements), and hides every other shape of it from rendering: a hidden shape emits nothing into the frame's program, so it bakes into no mesh and casts no shadow, and the paints and volumes parented to it, the prototype's mesh and its text go with it. A hidden shape's transform still packs, so a hidden parent still poses and animates the shapes beneath it (swings, effectors, gait). A name ending in * keeps every shape whose name starts with what precedes it (thigh-*). view.isolate toggle <prototype> <shape-name>... turns isolation off when that exact selection is already live and sets it otherwise, so one bound key flips between the named shapes alone and the whole creation. view.isolate off restores every shape; view.isolate alone echoes the live isolation. Echoes [view.isolate: <prototype> kept=<n> hidden=<n> names=<names>] or [view.isolate: off]; refuses by name, changing nothing, a prototype the live document does not author and a name that matches none of its shapes. One isolation at a time, replacing the last. Session presentation only: no document field, no simulation effect, nothing a replay hashes; it rebuilds the program, and the changed groups bake (or load) their own meshes. Headless it records the isolation and echoes it, with nothing to draw.",
             handler: (context, args) => Isolate(args: args),
+            routing: CommandRouting.Immediate
+        );
+        yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Operator,
+            bindability: CommandBindability.Unbindable,
+            name: "world.view.trace",
+            description: "Observes final composed presentation inputs over a finite inclusive tick interval: world.view.trace begin <firstTick> <lastTick> [measureFirstTick], --json, write <path>, or end. The JSON reports exact tick coverage, duplicates and ordering, clock/interpolation bits, public camera/program/transform signatures, render extent and lighting policy. Timing excludes ticks before measureFirstTick. It compares presentation inputs, never pixels or private motion continuations; a headless World captures no frames. The observer is absent outside an armed interval.",
+            handler: (_, args) => Trace(args: args),
             routing: CommandRouting.Immediate
         );
         yield return CommandDefinition.WithWireArgs(

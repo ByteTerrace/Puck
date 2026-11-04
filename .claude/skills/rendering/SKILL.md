@@ -106,6 +106,13 @@ are picking metadata; `SdfMeshDraw.MotionIdentity` names the stable body/surface
 for both whole-list and changed-record uploads. Rigid copies include the entity
 address and pose-discontinuity epoch in that identity, so teleports and reseats
 seed the previous mesh matrix at the new pose, including authored meshes.
+Noncopy groups consume the same captured transform-reseat journal at mesh staging.
+A root or vertex-used skin-member cut advances the draw generation and seeds its
+compact previous matrix, even when packed pose bytes are unchanged. Keep this
+consumer cursor independent of dynamic-table and draw-change cursors; unknown
+history cuts transform-dependent draws conservatively. Ordinary continuous motion
+does not trigger a reseat roster scan. `SdfMovedTransforms.Commit` retains explicit
+equal-pose cuts during both incremental updates and repacks.
 Rigid root followers observe
 portal carry history, reseeding when it expires. Isolation also filters rigid
 templates, parented paints and volumes, text and authored meshes.
@@ -848,7 +855,7 @@ pacer's lateness ([Puck.Launcher](../../../src/Puck.Launcher/README.md)).
   `world.wait ready` alone does not establish that all meshes are present.
   A byte comparison sets `world.lockstep on` before the first tick in both legs,
   then waits for bake settlement before requesting the still. An ordinary settled screenshot converges temporal views
-  but does not set `SdfFrame.TickLocked`; it can capture before a background GI
+  but does not request `SdfFrame.ConvergesLighting`; it can capture before a background GI
   trace finishes. Pin the camera and tick in both legs and use lockstep's
   synchronous scene/refill/trace drain for the comparison.
   Keep each code build's completed private mesh store for warm comparison

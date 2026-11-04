@@ -163,7 +163,7 @@ public sealed class SweepRun(SweepPlan plan, SweepWorld world, string directory,
 
         _ = Directory.CreateDirectory(path: folder);
 
-        foreach (var line in new[] { "world.rate pause" }.Concat(second: (tour.Prelude ?? []))) {
+        foreach (var line in new[] { "world.rate pause", "world.lockstep on" }.Concat(second: (tour.Prelude ?? []))) {
             var answer = TourLine(line: line);
 
             if (!answer.Ok) {

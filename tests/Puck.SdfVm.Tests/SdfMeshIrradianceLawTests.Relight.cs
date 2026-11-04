@@ -36,16 +36,18 @@ public sealed partial class SdfMeshIrradianceLawTests {
     private static uint[] Locked(SdfFrame frame, SdfIndirectTier tier) {
         var words = Array.Empty<uint>();
 
-        _ = new SdfMeshIrradiance().Stage(bakePending: false, frame: (frame with { TickLocked = true }), tier: tier, write: memory => words = memory.ToArray());
+        _ = new SdfMeshIrradiance().Stage(bakePending: false, frame: (frame with { ConvergesLighting = true }), tier: tier, write: memory => words = memory.ToArray());
         return words;
     }
 
     /// <summary>A budget of one trace a frame, spent, leaves the worker waiting for the next grant rather than listing
-    /// the unfunded window again and again; a lockstep frame then takes over what it had left and renders the window a
-    /// fresh lockstep frame does.</summary>
-    [Fact]
-    public async Task ASpentTraceBudgetWaitsForTheNextGrantAndALockstepFrameTakesOverItsWork() {
-        var frame = Frame() with { IndirectBounces = 0, IndirectBudget = new SdfIndirectBudget(Relight: 0, Trace: 1, Age: 0f) };
+    /// the unfunded window again and again under either presentation clock; an explicit lighting-converged frame then
+    /// takes over what it had left and renders the window a fresh converged frame does.</summary>
+    [InlineData(false)]
+    [InlineData(true)]
+    [Theory]
+    public async Task ASpentTraceBudgetWaitsUnderEitherClockUntilLightingConverges(bool tickLocked) {
+        var frame = Frame() with { TickLocked = tickLocked, IndirectBounces = 0, IndirectBudget = new SdfIndirectBudget(Relight: 0, Trace: 1, Age: 0f) };
         var volume = new SdfMeshIrradiance();
 
         for (var stage = 0; (stage < 20); stage++) {
@@ -56,7 +58,7 @@ public sealed partial class SdfMeshIrradianceLawTests {
         Assert.InRange(actual: volume.Counters.Read(kind: SdfMeshIrradiance.Traced), low: 1L, high: 21L);
 
         var words = Array.Empty<uint>();
-        var locked = Task.Run(() => volume.Stage(bakePending: false, frame: (frame with { TickLocked = true }), tier: SdfIndirectTier.Medium, write: memory => words = memory.ToArray()), TestContext.Current.CancellationToken);
+        var locked = Task.Run(() => volume.Stage(bakePending: false, frame: (frame with { ConvergesLighting = true }), tier: SdfIndirectTier.Medium, write: memory => words = memory.ToArray()), TestContext.Current.CancellationToken);
 
         Assert.True(condition: (await Task.WhenAny(locked, Task.Delay(delay: TimeSpan.FromSeconds(value: 120d), cancellationToken: TestContext.Current.CancellationToken)) == locked), userMessage: "the lockstep frame waited on a worker that never yielded");
         Assert.Equal(expected: Locked(frame: frame, tier: SdfIndirectTier.Medium), actual: words);
@@ -139,7 +141,7 @@ public sealed partial class SdfMeshIrradianceLawTests {
         frame = frame with {
             Lights = lights,
             IndirectBounces = 0,
-            TickLocked = true,
+            ConvergesLighting = true,
             MeshDraws = [.. frame.MeshDraws,
                 Draw(mesh: Box(low: new Vector3(x: -10f, y: 0f, z: -10f), high: new Vector3(x: -0.09f, y: 4f, z: 10f))),
                 Draw(mesh: Box(low: new Vector3(x: 0.09f, y: 0f, z: -10f), high: new Vector3(x: 10f, y: 4f, z: 10f))),

@@ -20,6 +20,20 @@ reduces to building what a change touched and running what it changed. Suites,
 coverage, red legs and focused tests are optional tools, and a red one holds
 nothing back.
 
+For settled mesh comparisons, `world.wait bakes` finishes CPU bake/contour work;
+`world.wait ready` finishes renderer startup. Neither proves GPU mesh landing.
+After route warmup has produced its actual program, pause authority and use
+`world.wait residency` before the measured interval. Pin counter endpoints to command drains at the first measured tick and
+lastTick+1, with opening reads before authored commands; direct paused reads can
+include extra presentation work before resume. The wait finishes the required geometry
+upload's fence, without converging lighting or draining changing pose uploads.
+Arm the presentation observer only for measured ticks so paused settling frames
+do not create duplicate samples. Canopy coverage also needs actual position and
+image inspection; a matching replay can faithfully walk outside its intended load.
+A sweep warms and measures frame signals with ordinary display-paced presentation;
+its capture tour enables lockstep separately. Do not enable still-capture lighting
+convergence before a normal frame window. It can relight the complete probe set
+every frame and exhaust the call before any signal is read.
 ## The landing bar
 
 A queued World build can outlive a cancelled start. Do not change a checkout's

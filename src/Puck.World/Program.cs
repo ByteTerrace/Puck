@@ -133,6 +133,12 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
     var pausedOption = new Option<bool>(name: "--paused") {
         Description = "Pause the boot instance before the host starts, so no simulation tick precedes an operator attachment. Resume with world.rate resume.",
     };
+    var lockstepOption = new Option<bool>(name: "--lockstep") {
+        Description = "Pin presentation clocks and interpolation to completed simulation ticks before the host starts, as world.lockstep on does. Lighting converges unless --budgeted-lighting is also supplied.",
+    };
+    var budgetedLightingOption = new Option<bool>(name: "--budgeted-lighting") {
+        Description = "Keep the renderer's normal per-frame indirect-lighting budget when presentation is tick-locked, instead of synchronously converging its lighting each frame. Does not lower lighting quality.",
+    };
     var unpacedOption = new Option<bool>(name: "--unpaced") {
         DefaultValueFactory = static _ => false,
         Description = "Advance a headless world on its fixed simulation tick grid without wall-clock pacing. Intended for an armed authored schedule or another offline run; refused for presented hosts.",
@@ -222,6 +228,8 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
         unpacedOption,
         workersOption,
         pausedOption,
+        lockstepOption,
+        budgetedLightingOption,
         exitAfterSecondsOption,
         headlessOption,
         stateDirOption,
@@ -668,6 +676,9 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
         host.Dispose();
         return 1;
     }
+    var pacing = host.Services.GetRequiredService<PresentPacingControl>();
+    if (parseResult.GetValue(option: lockstepOption)) { pacing.SetTickLocked(locked: true); }
+    if (parseResult.GetValue(option: budgetedLightingOption)) { pacing.SetLightingConvergence(enabled: false); }
     if (parseResult.GetValue(option: pausedOption) && !host.Services.GetRequiredService<WorldInstanceHost>().TryPause(name: WorldInstanceHost.BootInstanceName, reason: out var pauseReason)) {
         Console.Error.WriteLine(value: $"--paused refused: {pauseReason}");
         host.Dispose();

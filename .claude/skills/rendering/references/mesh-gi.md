@@ -21,7 +21,7 @@ changing indirect light, probe visibility, the volume boundary or exposure.
 - Scene readiness is `SdfMeshPathBake.IrradiancePending`, not the whole bake's
   `Pending`: only opaque static groups enter the scene. An animated rebake,
   glass or a diagnostic slice must not postpone its first measurement or a
-  refresh. While opaque static groups are still pending, a non-lockstep frame
+  refresh. While opaque static groups are still pending, a frame without lighting convergence
   builds the scene from those landed (`ScenePendingDue`: no build running, the
   previous scene's trace finished, at least `PendingSceneInterval` since the
   last build began, and at least one static draw: an empty scene would measure
@@ -100,7 +100,7 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   `render.indirect.bounces` zero switches the bounce off; any other value
   switches it on.
 - The worker returns, never spins: when the budget leaves a probe's trace
-  unfunded it waits for the next grant, and a lockstep frame asks it to yield
+  unfunded it waits for the next grant, and a lighting-converged frame asks it to yield
   at its next batch and takes over its work (`m_yield`, the spent-budget law).
 - The cube is two parts. The local part (the traced point and spot lights'
   bounce under their shadow rays, and emission) is kept per probe with the
@@ -248,12 +248,12 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   fill). `world.probe` answers `unsettled` only while geometry is owed (a scene
   build, a trace, a refill, a traced probe not yet published); a relight in
   progress reads as `relighting=1` on its first line.
-- A lockstep frame (`Drain`) relights its whole window from no bounce, each
+- A frame requesting `SdfFrame.ConvergesLighting` (`Drain`) relights its whole window from no bounce, each
   later pass relighting every probe from the one before, until a whole pass
   moves nothing past the bound or `MaxSweeps` passes, whenever its geometry, lighting, windows or layout
   differ from the last drain or asynchronous work relit since. Its light is a
   function of those alone, never of bounce asynchronous frames left; the law
-  `ALockstepFrameRendersTheWindowTracedToTheEnd` compares a fresh volume's
+  `AConvergedLightingFrameRendersTheWindowTracedToTheEnd` compares a fresh volume's
   words with a warmed one's.
 - A record is 235 words (940 bytes): 19 header/cube/light/origin words, 144
   packed first-hit surface words and 72 packed normal-gradient words.

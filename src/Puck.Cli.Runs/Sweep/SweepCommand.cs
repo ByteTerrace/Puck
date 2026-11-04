@@ -252,7 +252,8 @@ public static partial class SweepCommand {
                     }
 
                     var run = new SweepRun(baseline: baseline, directory: directory, plan: plan, progress: Console.Error, world: shown);
-                    var held = shown.Run(script: "world.rate pause\nworld.lockstep on");
+                    // Warmup and frame signals measure ordinary presentation. Only the still tour converges its clock/lighting.
+                    var held = shown.Run(script: "world.rate pause\nworld.lockstep off");
 
                     if (!held.Ok) {
                         signals.Add(item: WindowedNotRun(reason: held.Output));

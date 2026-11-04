@@ -90,20 +90,8 @@ public sealed class SweepWorld : IDisposable {
                 workingDirectory: workingDirectory
             );
 
-            var line = process.WaitFor(
-                accept: static line => line.Text.StartsWith(comparisonType: StringComparison.Ordinal, value: AttachmentLine),
-                from: 0,
-                timeout: budget.Bound(wait: bootTimeout),
-                cancellation: budget.Token
-            );
-
-            if (line is null) {
-                error = (budget.Reason ?? $"the World never published its Operator attachment; its output is in {logDirectory}");
-
-                return false;
-            }
-
-            attached = TryConnect(budget: budget, error: out error, lease: lease, path: line.Text[AttachmentLine.Length..].TrimEnd(trimChar: ']'), process: process, session: out session);
+            attached = TryAttachPublished(process: process, ownedProcess: process, lease: lease,
+                bootTimeout: bootTimeout, budget: budget, session: out session, error: out error);
 
             return attached;
         } catch (OperationCanceledException) {
@@ -116,6 +104,33 @@ public sealed class SweepWorld : IDisposable {
             }
         }
     }
+    /// <summary>Waits for and attaches to an already-started process. The caller keeps ownership of the process;
+    /// disposing this attachment closes only its control session, on success or failure.</summary>
+    public static bool TryAttach(MotionWorldProcess process, TimeSpan bootTimeout, SweepBudget budget, out SweepWorld? session, out string error) {
+        ArgumentNullException.ThrowIfNull(process);
+        try {
+            return TryAttachPublished(process: process, ownedProcess: null, lease: null, bootTimeout: bootTimeout,
+                budget: budget, session: out session, error: out error);
+        } catch (OperationCanceledException) {
+            session = null;
+            error = budget.Reason ?? "the attachment was cancelled";
+            return false;
+        }
+    }
+    private static bool TryAttachPublished(MotionWorldProcess process, MotionWorldProcess? ownedProcess, IDisposable? lease,
+        TimeSpan bootTimeout, SweepBudget budget, out SweepWorld? session, out string error) {
+        session = null;
+        var line = process.WaitFor(
+            accept: static row => row.Text.StartsWith(comparisonType: StringComparison.Ordinal, value: AttachmentLine),
+            from: 0, timeout: budget.Bound(bootTimeout), cancellation: budget.Token);
+        if (line is null) {
+            error = budget.Reason ?? $"World pid {process.ProcessId} never published its Operator attachment; inspect its stdout.log.";
+            return false;
+        }
+        return TryConnect(budget: budget, error: out error, lease: lease,
+            path: line.Text[AttachmentLine.Length..].TrimEnd(']'), process: ownedProcess, session: out session);
+    }
+
     /// <summary>Runs a console line, or several separated by newlines.</summary>
     /// <param name="script">The line or lines.</param>
     /// <param name="timeoutSeconds">How long the whole call may take, at most 120 seconds and at most what the budget

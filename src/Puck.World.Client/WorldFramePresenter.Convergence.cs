@@ -103,6 +103,9 @@ public sealed partial class WorldFramePresenter {
             );
             PlaceComposedFrame();
 
+            PresentationProbe?.Observer?.Record(tick: m_client.Tick, frame: frame, deltaSeconds: deltaSeconds,
+                interpolationAlpha: interpolationAlpha, scope: m_client.Authority, documentId: m_client.Definition.DocumentId,
+                width: width, height: height);
             if (m_convergence is { Completion.IsCompleted: false }) {
                 m_convergedFrame = frame;
             }

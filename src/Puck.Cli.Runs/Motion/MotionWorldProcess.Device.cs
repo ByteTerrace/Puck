@@ -13,7 +13,7 @@ public sealed record MotionOutputLine(int Index, CliProcessOutputStream Stream, 
 /// arrival order, so a run can send a line, read what the World answered, and decide the next line from it. Both
 /// streams are also written to <c>stdout.log</c> and <c>stderr.log</c> in the run's directory.
 /// </summary>
-public sealed class MotionWorldProcess : IDisposable {
+public sealed partial class MotionWorldProcess : IDisposable {
     private static readonly UTF8Encoding Utf8 = new(encoderShouldEmitUTF8Identifier: false);
 
     private readonly object m_gate = new();

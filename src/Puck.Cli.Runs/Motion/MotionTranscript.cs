@@ -28,7 +28,7 @@ public static partial class MotionTranscript {
     private static partial Regex StillPattern();
     [GeneratedRegex(pattern: @"^\[still\] slot (?<camera>\S+) \d+x\d+ at \d+,\d+ -> (?<path>.+)$", options: RegexOptions.CultureInvariant)]
     private static partial Regex SlotPattern();
-    [GeneratedRegex(pattern: @"^\[world\.at\] tick (?<tick>\d+) (?<outcome>ran|refused): (?<text>.*?)(?: -> (?<answer>.*))?$", options: RegexOptions.CultureInvariant)]
+    [GeneratedRegex(pattern: @"^\[world\.at\] tick (?<tick>\d+) (?<outcome>ran|refused|faulted): (?<text>.*?)(?: -> (?<answer>.*))?$", options: RegexOptions.CultureInvariant)]
     private static partial Regex PinnedPattern();
     [GeneratedRegex(pattern: @"^\[world\.at: tick (?<tick>\d+) pending \d+ ran \d+\]", options: RegexOptions.CultureInvariant)]
     private static partial Regex ReadBackPattern();
@@ -93,7 +93,7 @@ public static partial class MotionTranscript {
         answer = new MotionPinnedAnswer(
             Answer: match.Groups["answer"].Value,
             Line: match.Groups["text"].Value,
-            Refused: (match.Groups["outcome"].Value == "refused"),
+            Refused: (match.Groups["outcome"].Value is "refused" or "faulted"),
             Tick: ulong.Parse(provider: CultureInfo.InvariantCulture, s: match.Groups["tick"].Value)
         );
 

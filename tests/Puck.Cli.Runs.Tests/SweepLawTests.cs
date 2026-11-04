@@ -54,6 +54,12 @@ public sealed class SweepLawTests {
 
         Assert.Equal(expected: "332017", actual: counters["state.arena.visits"]);
         Assert.Equal(expected: "21155", actual: counters["state.rules.firings"]);
+        var counterJson = SweepSignals.Read(extra: null, output: """{"sources":[{"name":"state","counts":{"state.arena.visits":332017,"state.rules.firings":21155}}]}""", parse: "counters");
+        Assert.Equal(expected: counters["state.arena.visits"], actual: counterJson["state.arena.visits"]);
+        Assert.Equal(expected: counters["state.rules.firings"], actual: counterJson["state.rules.firings"]);
+        var narratedCounters = SweepSignals.Read(extra: null, output: "[world.counters: " + counterJson["text"] + "]", parse: "counters");
+        Assert.Equal(expected: counterJson["state.arena.visits"], actual: narratedCounters["state.arena.visits"]);
+        Assert.Equal(expected: counterJson["state.rules.firings"], actual: narratedCounters["state.rules.firings"]);
 
         var frames = SweepSignals.Read(extra: null, output: "[host.frames: 4 iterations | avg=7.92 p50=5.47 p99=20.74 max=20.74 ms | over 16.7 ms: 1 | busiest]\n  simulate: avg=6.60 p50=5.45 p99=20.72 max=20.72 ms", parse: "frames");
 

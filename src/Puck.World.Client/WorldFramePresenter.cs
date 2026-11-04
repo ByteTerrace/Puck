@@ -1597,6 +1597,10 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     /// <summary>Gets the trace each framed seat's camera eye, presented body and interpolation fraction are recorded in,
     /// or <see langword="null"/> to record none (<c>world.view.motion</c>).</summary>
     public WorldSeatMotionTrace? MotionTrace { get; init; }
+    /// <summary>Gets the optional controller whose nullable observer records finite public frame-input traces.</summary>
+    public WorldPresentationProbe? PresentationProbe { get; init; }
+    /// <summary>Gets the explicit lighting-convergence intent, independent of tick-locked clocks and exposure.</summary>
+    public Func<bool>? LightingConvergence { get; set; }
     /// <summary>Gets or sets whether the render chain owes a settled capture, the one that holds presentation. Such a
     /// frame presents the completed simulation tick itself, including body poses, rather than interpolating from its
     /// predecessor; a presented capture reads frames as the display shows them and does not pin them.</summary>
@@ -2207,6 +2211,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             MeshDetail = m_settings.Detail,
             UpdateRates = RatesOf(rates: m_settings.UpdateRates, settles: SettlesCapture),
             TickLocked = TickLocked,
+            ConvergesLighting = LightingConvergence?.Invoke() ?? false,
             RateCounts = m_settings.RateCounts,
             RateIntervals = m_settings.RateIntervals,
             // A tier view's codes: the stamp pool's bodies as its pack this frame rated them, and the screens as the graph

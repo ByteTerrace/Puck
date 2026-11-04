@@ -2674,7 +2674,12 @@ match: `world.lockstep on` has the windowed host step at most once a frame,
 present the completed tick and advance presentation animation by the ticks
 completed since the last captured frame, as the offscreen host does
 (`PresentPacingControl.TickLocked`, `WorldFramePresenter.HistoryFree`), so gait
-and followers advance with the ticks rather than wall time. Hosted machines
+and followers advance with the ticks rather than wall time. Startup `--lockstep`
+applies that clock before the first frame; combine it with `--paused` to prepare
+a fresh World at tick zero. Its default lighting convergence gives repeatable
+stills. `--budgeted-lighting` instead keeps ordinary asynchronous lighting budgets
+at the same quality settings, independently of the clock. That mode supports
+controlled tick-throughput measurements, not identical per-tick lighting pixels. Hosted machines
 finish each tick synchronously before their video is read, keeping screen
 images and the light they emit independent of worker completion timing; a frame held for a
 settled capture also culls by box and rates no work; and `view.reseed <body>`
