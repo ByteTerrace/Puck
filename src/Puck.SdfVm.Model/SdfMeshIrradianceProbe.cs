@@ -34,6 +34,10 @@ public static class SdfMeshIrradianceProbe {
     public const uint InvalidFlag = (1u << 31);
     /// <summary>The receiver's normal bias in metres, smaller than the thinnest wall, independent of probe spacing.</summary>
     public const float NormalBias = 0.05f;
+    /// <summary>A probe's surface map reach in spacings, one and a half cell diagonals (1.5 √3): with
+    /// <see cref="NormalBias"/> added, the farthest receiver in metres a probe measured, its surface map past that a miss.
+    /// A level's probes answer receivers this far past its window's boundary probes before a coarser level does.</summary>
+    public const float SurfaceReach = (1.5f * 1.7320508f);
     /// <summary>The facing weight a probe behind the receiver's plane keeps: small beside a probe in front, so it barely
     /// shifts a receiver that front probes light, and the whole answer for a receiver no front probe can see, such as a
     /// downward rim at the ground whose front probes the ground hides, which would otherwise draw black.</summary>

@@ -244,13 +244,20 @@ float sdfMeshProbesGather(uint base, float spacing, int3 low, int3 dims, float3 
 
     return total;
 }
+// How far past a level's boundary probes the pushed receiver stands, in metres; zero within them.
+float sdfMeshIrradianceBeyond(float3 pushed, float spacing, int3 low, int3 dims) {
+    float3 unclamped = ((pushed / spacing) - 0.5);
+
+    return (length(unclamped - clamp(unclamped, (float3)low, (float3)(low + dims - 1))) * spacing);
+}
 // The probes a receiver reads. KEEP IN SYNC with SdfMeshIrradiance.Select: those of the finest published level whose
-// window holds it within its boundary probes, the coarsest published level past every window, extended as far as its
-// boundary probes' surface support admits. A coarser level never answers inside a finer window, where its metres-wide
-// angular support would see through a thin wall a finer probe measured. When none of the level's measured probes
-// answer, the same probes answer past their measured reach, blocked only by the surfaces they measured, `measured`
-// false: they are the best estimate of an unmeasured receiver's light, where none would draw it black, and a surface
-// they saw between them and it still hides it.
+// probes measured it. A finer level answers past its window's boundary probes as far as their surface maps reach, before
+// the level whose window holds the receiver (the finest such, the coarsest published past every window), which answers
+// next, extended as far as its boundary probes' surface support admits. A coarser level never answers inside a finer
+// window, where its metres-wide angular support would see through a thin wall a finer probe measured. When none of that
+// level's measured probes answer, the same probes answer past their measured reach, blocked only by the surfaces they
+// measured, `measured` false: they are the best estimate of an unmeasured receiver's light, where none would draw it
+// black, and a surface they saw between them and it still hides it.
 SdfMeshProbes sdfMeshProbesAt(float3 position, float3 normal) {
     SdfMeshProbes probes;
 
@@ -265,38 +272,42 @@ SdfMeshProbes sdfMeshProbesAt(float3 position, float3 normal) {
 
     float3 pushed = (position + (normal * SDF_MESH_IRRADIANCE_NORMAL_BIAS));
     uint chosen = SDF_MESH_IRRADIANCE_LEVELS;
-    uint chosenBase = 0u;
-    uint base = 0u;
     bool held = false;
 
     // The finest published level holding the receiver, else the coarsest published.
     [unroll] for (uint level = 0u; (level < SDF_MESH_IRRADIANCE_LEVELS); level++) {
         float levelSpacing = sdfMeshIrradianceSpacing(level);
         int3 levelDims = sdfMeshIrradianceDims(level);
-        int3 levelLow = passGroup.meshIrradianceLevels[level].xyz;
 
         if (!held && (levelSpacing > 0.0) && all(levelDims > 0)) {
-            float3 unclamped = ((pushed / levelSpacing) - 0.5);
-
             chosen = level;
-            chosenBase = base;
-            held = all(unclamped == clamp(unclamped, (float3)levelLow, (float3)(levelLow + levelDims - 1)));
+            held = (sdfMeshIrradianceBeyond(pushed, levelSpacing, passGroup.meshIrradianceLevels[level].xyz, levelDims) <= 0.0);
         }
-        base += (uint)(levelDims.x * levelDims.y * levelDims.z);
     }
     if (chosen == SDF_MESH_IRRADIANCE_LEVELS) {
         return probes;
     }
 
-    float spacing = sdfMeshIrradianceSpacing(chosen);
-    int3 low = passGroup.meshIrradianceLevels[chosen].xyz;
-    int3 dims = sdfMeshIrradianceDims(chosen);
+    // One rolled loop, so the gather and its surface test inline once: each finer published level whose probes' reach
+    // covers the receiver, the chosen level's measured read, then its extended one.
+    [loop] for (uint attempt = 0u; (attempt <= (chosen + 1u)); attempt++) {
+        uint level = min(attempt, chosen);
+        bool bounded = (attempt <= chosen);
+        float spacing = sdfMeshIrradianceSpacing(level);
+        int3 low = passGroup.meshIrradianceLevels[level].xyz;
+        int3 dims = sdfMeshIrradianceDims(level);
+        uint base = 0u;
 
-    // One rolled loop, so the gather and its surface test inline once: the measured read, then the extended one.
-    [loop] for (uint pass = 0u; (pass < 2u); pass++) {
-        bool bounded = (pass == 0u);
+        [unroll] for (uint finer = 0u; (finer < SDF_MESH_IRRADIANCE_LEVELS); finer++) {
+            int3 finerDims = sdfMeshIrradianceDims(finer);
 
-        if ((sdfMeshProbesGather(chosenBase, spacing, low, dims, position, normal, pushed, bounded, probes) > 0.0) || !bounded) {
+            base += ((finer < level) ? (uint)(finerDims.x * finerDims.y * finerDims.z) : 0u);
+        }
+        if ((attempt < chosen) && (!(spacing > 0.0) || any(dims <= 0) ||
+            (sdfMeshIrradianceBeyond(pushed, spacing, low, dims) > ((SDF_MESH_IRRADIANCE_SURFACE_REACH * spacing) + SDF_MESH_IRRADIANCE_NORMAL_BIAS)))) {
+            continue;
+        }
+        if ((sdfMeshProbesGather(base, spacing, low, dims, position, normal, pushed, bounded, probes) > 0.0) || !bounded) {
             probes.measured = bounded;
             break;
         }

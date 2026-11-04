@@ -1676,8 +1676,7 @@ public sealed class SdfMeshIrradiance : IDisposable {
 
             if (valid) {
                 // The farthest in-window receiver is a spacing diagonal plus relocation and the normal bias.
-                SdfMeshProbeDepth.Surfaces(hits: hits.Hits(index: index), reach: (((1.5f * MathF.Sqrt(x: 3f)) * spacing) + SdfMeshIrradianceProbe.NormalBias),
-                    surfaces: hits.Depth(index: index));
+                SdfMeshProbeDepth.Surfaces(hits: hits.Hits(index: index), reach: SurfaceReachOf(spacing: spacing), surfaces: hits.Depth(index: index));
             }
             probe = new ProbeData(Geometry: geometry, Hits: hits, HitIndex: index, Inside: inside, Invalid: !valid, Offset: offset);
         } else if (!cache.TryGetValue(key: candidate.Cell, value: out probe)) {
@@ -2049,34 +2048,60 @@ public sealed class SdfMeshIrradiance : IDisposable {
         }
     }
 
-    // KEEP IN SYNC with sdfMeshProbesAt. Chooses the probes a receiver reads: those of the finest level whose window
-    // holds it within its boundary probes, the coarsest past every window, extended as far as its boundary probes' surface
-    // support admits. A coarser level never answers inside a finer window: its angular support is metres wide there, so
-    // it would see through the thin wall a finer probe measured. When none of the level's measured probes answer, the
-    // same probes answer past their measured reach, blocked only by the surfaces they measured, and Measured is false:
-    // the receiver lies past what they measured, they are the best estimate of its light, reading none would draw a
-    // surface the camera sees black, and a surface they saw between them and it still hides it.
+    // KEEP IN SYNC with sdfMeshProbesAt. Chooses the probes a receiver reads: those of the finest level whose probes
+    // measured it. A finer level answers a receiver past its window's boundary probes as far as their surface maps reach
+    // (SurfaceReachOf), before the level whose window holds it: an 8 m level's probes sit in the slabs and on both sides of
+    // the walls of rooms a few metres tall, so a receiver just past the finest window that the coarser level answers reads
+    // black where every coarse probe is hidden and the light outdoors where one grazes through. The level whose window
+    // holds the receiver (the finest such, the coarsest past every window) answers next, extended as far as its boundary
+    // probes' surface support admits. A coarser level never answers inside a finer window: its angular support is metres
+    // wide there, so it would see through the thin wall a finer probe measured. When none of that level's measured probes
+    // answer, the same probes answer past their measured reach, blocked only by the surfaces they measured, and Measured
+    // is false: the receiver lies past what they measured, they are the best estimate of its light, reading none would
+    // draw a surface the camera sees black, and a surface they saw between them and it still hides it.
     private (int Level, bool Measured) Select(Vector3 point, Vector3 normal, Layout layout, ReadOnlySpan<(int X, int Y, int Z)> lows,
         Span<(int X, int Y, int Z)> cells, Span<float> cornerWeights, ref Corners cornerProbes, Span<SdfMeshProbeReport> reports = default) {
-        var level = 0;
+        var held = (m_levels.Length - 1);
 
-        while ((level < (m_levels.Length - 1)) && (Outside(layout: layout, level: level, low: lows[level], normal: normal, point: point) > 0f)) { level++; }
-        Gather(cells: cells, cornerProbes: ref cornerProbes, cornerWeights: cornerWeights, depth: true, layout: layout, level: level, low: lows[level],
+        for (var level = 0; (level < held); level++) {
+            var beyond = Beyond(layout: layout, level: level, low: lows[level], normal: normal, point: point);
+
+            if (beyond <= 0f) {
+                held = level;
+                break;
+            }
+            if ((beyond <= SurfaceReachOf(spacing: layout.SpacingOf(level: level))) &&
+                Answers(cells: cells, cornerProbes: ref cornerProbes, cornerWeights: cornerWeights, depth: true, layout: layout, level: level, low: lows[level], normal: normal, point: point, reports: reports)) {
+                return (level, true);
+            }
+        }
+        if (Answers(cells: cells, cornerProbes: ref cornerProbes, cornerWeights: cornerWeights, depth: true, layout: layout, level: held, low: lows[held], normal: normal, point: point, reports: reports)) {
+            return (held, true);
+        }
+        Gather(cells: cells, cornerProbes: ref cornerProbes, cornerWeights: cornerWeights, depth: false, layout: layout, level: held, low: lows[held],
             normal: normal, point: point, reports: reports);
+        return (held, false);
+    }
+    // Gathers a level's probes about a receiver; true when any answers.
+    private bool Answers(int level, Vector3 point, Vector3 normal, Layout layout, (int X, int Y, int Z) low, bool depth, Span<(int X, int Y, int Z)> cells,
+        Span<float> cornerWeights, ref Corners cornerProbes, Span<SdfMeshProbeReport> reports) {
+        Gather(cells: cells, cornerProbes: ref cornerProbes, cornerWeights: cornerWeights, depth: depth, layout: layout, level: level, low: low, normal: normal, point: point, reports: reports);
 
         var total = 0f;
 
         foreach (var weight in cornerWeights[..8]) { total += weight; }
-        if (total > 0f) { return (level, true); }
-        Gather(cells: cells, cornerProbes: ref cornerProbes, cornerWeights: cornerWeights, depth: false, layout: layout, level: level, low: lows[level],
-            normal: normal, point: point, reports: reports);
-        return (level, false);
+        return (total > 0f);
     }
-    // How far past a level's boundary probes a receiver stands, in cells, at most one; zero within them.
-    private static float Outside(Layout layout, int level, (int X, int Y, int Z) low, Vector3 normal, Vector3 point) {
+    /// <summary>Returns the farthest receiver from a probe its surface map measured, in metres: its reach
+    /// (<see cref="SdfMeshIrradianceProbe.SurfaceReach"/> spacings) plus the receiver's normal bias.</summary>
+    /// <param name="spacing">The probe spacing of the probe's level, in metres.</param>
+    /// <returns>The reach, in metres.</returns>
+    public static float SurfaceReachOf(float spacing) => ((SdfMeshIrradianceProbe.SurfaceReach * spacing) + SdfMeshIrradianceProbe.NormalBias);
+    // How far past a level's boundary probes a receiver pushed along its normal stands, in metres; zero within them.
+    private static float Beyond(Layout layout, int level, (int X, int Y, int Z) low, Vector3 normal, Vector3 point) {
         var (unclamped, sample) = Lattice(layout: layout, level: level, low: low, normal: normal, point: point);
 
-        return Math.Clamp(value: (unclamped - sample).Length(), min: 0f, max: 1f);
+        return ((unclamped - sample).Length() * layout.SpacingOf(level: level));
     }
     // A receiver's lattice coordinate in a level's window, pushed along its normal, unclamped and clamped to the window's
     // boundary probes.
