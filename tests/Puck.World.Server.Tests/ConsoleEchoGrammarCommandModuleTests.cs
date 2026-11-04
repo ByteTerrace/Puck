@@ -315,6 +315,49 @@ public sealed class ConsoleEchoGrammarCommandModuleTests {
         Assert.True(condition: registry.Submit(line: "world.wait 1").IsError);
     }
     [Theory]
+    [InlineData("ready", "[world.wait: ready takes a deadline in seconds: world.wait ready <seconds>]")]
+    [InlineData("READY", "[world.wait: ready takes a deadline in seconds: world.wait ready <seconds>]")]
+    [InlineData("until", "[world.wait: until takes an absolute tick: world.wait until <tick>]")]
+    [InlineData("captures 1 2", "[world.wait: captures takes a deadline in seconds: world.wait captures <seconds>]")]
+    public void WorldWait_KeywordWithoutItsArgument_IsRefusedNamingItsForm(string line, string expected) {
+        using var row = HostRow.Build(
+            name: "boot",
+            definition: Fixtures.BuildDocument()
+        );
+        var registry = new CommandRegistry(modules: [
+            new WorldWaitCommandModule(
+                authority: new FakeConsoleAuthority(instance: row.Instance),
+                gates: new FakeWaitGateResolver(gate: new WorldConsoleWaitGate())
+            ),
+        ]);
+        var result = registry.Submit(line: $"world.wait {line}");
+
+        Assert.True(condition: result.IsError);
+        Assert.Equal(
+            expected: expected,
+            actual: result.Output
+        );
+    }
+    [Fact]
+    public void WorldWait_KeywordsAreCaseInsensitive() {
+        using var row = HostRow.Build(
+            name: "boot",
+            definition: Fixtures.BuildDocument()
+        );
+        var registry = new CommandRegistry(modules: [
+            new WorldWaitCommandModule(
+                authority: new FakeConsoleAuthority(instance: row.Instance),
+                gates: new FakeWaitGateResolver(gate: new WorldConsoleWaitGate())
+            ),
+        ]);
+
+        Assert.Contains(
+            actualString: registry.Submit(line: "world.wait READY 5").Output,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "composes no renderer"
+        );
+    }
+    [Theory]
     [InlineData("1", true, 1UL)]
     [InlineData("+1", false, 0UL)]
     [InlineData("18446744073709551616", false, 0UL)] // one past ulong.MaxValue

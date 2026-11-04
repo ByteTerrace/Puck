@@ -101,7 +101,7 @@ public sealed partial class WorldHistoryCommandModule {
     }
     private CommandResult Save(WireArgs args) {
         if (args.Count != 3) {
-            return CommandResult.Error(output: "[world.history: usage — world.history save <branch> <tape>]");
+            return CommandResult.Usage(form: SaveForm, verb: Command);
         }
 
         var name = args[1].ToString();
@@ -127,7 +127,7 @@ public sealed partial class WorldHistoryCommandModule {
             (fraction < 0f) ||
             (fraction > 1f)
         ) {
-            return CommandResult.Error(output: "[world.history: usage — world.history scrub <fraction>, 0 (the oldest tick) to 1 (the head)]");
+            return CommandResult.Usage(form: ScrubForm, verb: Command);
         }
 
         // With no window there is no tick to name; the seek names why.
@@ -137,7 +137,7 @@ public sealed partial class WorldHistoryCommandModule {
     }
     private CommandResult Switch(WireArgs args) {
         if (args.Count != 2) {
-            return CommandResult.Error(output: "[world.history: usage — world.history switch <branch>]");
+            return CommandResult.Usage(form: SwitchForm, verb: Command);
         }
 
         var name = args[1].ToString();

@@ -230,7 +230,7 @@ public sealed class MachineContentFolderLawTests {
             // The verb takes a mountable file the folders hold, from a local console or seat only.
             Assert.True(condition: registry.Submit(line: "machine.default cabinet").IsError);
             Assert.Contains(expectedSubstring: "cannot be mounted", actualString: registry.Submit(line: "machine.default cabinet banked.rom").Output);
-            Assert.Contains(expectedSubstring: "no machine 'nobody'", actualString: registry.Submit(line: "machine.default nobody plain.rom").Output);
+            Assert.Contains(expectedSubstring: "no machine 'nobody' - machine.state lists them", actualString: registry.Submit(line: "machine.default nobody plain.rom").Output);
             Assert.Contains(
                 expectedSubstring: "requires a local console or seat",
                 actualString: registry.SubmitSession(line: "machine.default cabinet plain.rom", session: new TextCommandSource(registry: registry).CreateSession(principal: Principal.Peer(generation: 0, index: 0))).Output
