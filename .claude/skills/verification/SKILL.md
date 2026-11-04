@@ -96,9 +96,10 @@ so the integration lane's sweep reads them
    red. The coding lane names the area to patrol.
 
 Gates, parity, canaries, counters, baselines and `puck laws prove` are tools to
-use when they pay for themselves, never preconditions. An engine change's
-cross-family review is required and never blocks a landing
-([orchestration](../orchestration/SKILL.md#spend-verification-not-writing)). A
+use when they pay for themselves, never preconditions. Review follows
+[orchestration](../orchestration/SKILL.md#spend-verification-not-writing):
+area fix passes by default, an adversarial review only for a review-only
+silent-invariant class, and neither blocks a landing. A
 change to simulation state stays deterministic; `puck test --reproduce` shows
 recorded input reproduces every authority from its checkpoint in the same worker,
 including per-tick authoritative hashes, final machine cores and canonical exports. A differing trace names

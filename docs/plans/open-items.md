@@ -27,9 +27,9 @@ Ranked by payoff at the latest batch. Lanes in flight are named; the lead
 resolves their edits to this file at merge. Each item names and links its
 packet; the packet holds the citations.
 
-The owner's direction: fundamentals first, known or found along the way
-(AGENTS.md), with vigilance against duplication. The frame bar, the cold-bake
-bar and the highs that stand before `main` lead. Work whose correctness rests
+The owner's direction: fundamentals, known or found along the way and driven
+by features that stress them (AGENTS.md), with vigilance against duplication.
+The frame bar and the cold-bake bar lead. Work whose correctness rests
 on an invariant is designed and reviewed before code
 ([orchestration](../../.claude/skills/orchestration/SKILL.md)). The debug
 world is the proving ground, so every plan's checks run on it, and what the
@@ -225,7 +225,7 @@ memory, density sweeps and target-device bars remain open.
   one-minute bake bar and reinforces the appearance/field identity separation
   below. The bounded clearing relief also adds real mesh and query work: scale
   it only with measured detail/visibility handling. Pattern filtering uses a
-  conservative footprint approximation; adversarial cross-family review of the
+  conservative footprint approximation; an area fix pass over the
   reserved-component packing and filtering is owed. Owner: material/bake owner.
 - [medium] The forest's native clearing captures show sharply black crown
   undersides. Surface texture does not close that lighting finding. Keep it
@@ -249,7 +249,7 @@ memory, density sweeps and target-device bars remain open.
   and field/skin/material-cut changes invalidate it. Do not replace the
   remaining real dependency with a blacklist. Owner: graphics/bake owner.
 
-Cross-family review of this packet's work is owed.
+An area fix pass over this packet's code is owed.
 
 ### Engine job system
 
@@ -309,7 +309,7 @@ landed geometry).
   (`SdfDualContouring.cs:702`). Continue with owned storage, through
   `IAllocator` and `MimallocAllocator` where it goes native; a shared
   cross-thread pool belongs to the memo.
-- What remains of the allocation cuts' cross-family review:
+- Open from the allocation cuts:
   - [medium] The cold-bake pause comparison needs at least three alternating
     A/B runs on a quiet machine, with GC events read from the trace; loaded runs
     read pauses per collection that varied by a factor of four with no change

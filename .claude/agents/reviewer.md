@@ -1,6 +1,6 @@
 ---
 name: reviewer
-description: "Read-only Opus 5.5 lane for a findings-only review: a cross-family review of Codex or Antigravity code, a design or memo review, an area audit. It edits nothing and builds nothing. Not for review-and-fix (specialist) or a repro that needs a World."
+description: "Read-only Opus 5.5 lane for a findings-only review: an invariant review of a Codex or Antigravity change, a design or memo review, an area audit. It edits nothing and builds nothing. Not for review-and-fix (specialist) or a repro that needs a World."
 model: claude-opus-5-5
 effort: high
 disallowedTools: Edit, Write, NotebookEdit, Agent
