@@ -1038,6 +1038,25 @@ worlds in place is rewritten.
   and the combat yard's `arena.puck` district rules
   ([debug world content](#debug-world-content)).
 
+### Author shaders
+
+Owner: rendering (design first, `principal`) · ordinary · Next: a design memo.
+The owner's ruling (AGENTS.md, "Authors rule"): authors may bring their own
+shaders, so a look is never limited to what the engine's shading offers. The
+memo settles where an authored shader plugs in (a material's surface response,
+a weathering or pattern layer, a post or screen effect), the language and how
+it compiles on both backends (DXIL and SPIR-V, the shader cache, hot reload),
+how it is costed and bounded in `world.budget` like every authored program,
+what it may read and write (the interface stamp, no simulation state, no
+cross-world access), and how the engine's own layers become the first authored
+shaders rather than a second path. Search first: the material layers
+(`SdfMaterialLayers`, `PaletteLayersDocument`), the shader interface generator
+and the `Puck.Shaders` package graph may already hold most of the mechanism.
+- The weathering pattern's octaves, gain and orientation are authored
+  parameters on a material's `weathering` block, with the standard package's
+  `landscapeSurface` choosing them; until that lane lands, `applyWeathering`
+  hard-codes two rotated octaves.
+
 ### Edit to running, hot reload and boot
 
 Owner: hot-reload follow-up (boot and build) · ordinary · Next: the boot's
