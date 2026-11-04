@@ -226,8 +226,9 @@ non-finite or outside [0, 1] (`PaletteAdmissionLawTests`) — `SdfMaterial`'s
 own `RequireUnitRange` would otherwise throw at stamp emission. A document
 still spelling `shininess` is an unmapped member and is refused. A palette
 entry's `weathering` declares `edge`, `lines`, `settle`, `reach`,
-`seed`, `scale`, `floor`, `lane`, up to two ascending `under`
-threshold/surface entries, and an optional `deposit` surface.
+`seed`, `scale`, `floor`, `lane`, `noise`, `patternScale`, `softness`, the pattern's
+character (`octaves`, `octaveRatio`, `octaveGain`, `turn`), up to two ascending
+`under` threshold/surface entries, and an optional `deposit` surface.
 Each surface supplies `color`, `roughness`, and `metal`.
 `inset` declares `origin`, `rotation`, `depth`, `ior`, and
 `paint`: 1..4 ascending radial `{radius,color}` stops with `softness`,

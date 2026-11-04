@@ -1052,10 +1052,6 @@ cross-world access), and how the engine's own layers become the first authored
 shaders rather than a second path. Search first: the material layers
 (`SdfMaterialLayers`, `PaletteLayersDocument`), the shader interface generator
 and the `Puck.Shaders` package graph may already hold most of the mechanism.
-- The weathering pattern's octaves, gain and orientation are authored
-  parameters on a material's `weathering` block, with the standard package's
-  `landscapeSurface` choosing them; until that lane lands, `applyWeathering`
-  hard-codes two rotated octaves.
 
 ### Edit to running, hot reload and boot
 

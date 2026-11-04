@@ -732,7 +732,7 @@ public sealed class SdfMaterialLawTests {
         }
     }
     [Fact]
-    public void WeatheringPatternUsesReservedWordsWithoutGrowingTheMaterial() {
+    public void WeatheringPatternPacksItsCharacterIntoTheMaterial() {
         var weathering = new SdfWeathering(Noise: 0.8f, PatternScale: new Vector3(16f, 0.6f, 16f), Softness: 0.25f,
             Under: [new(0.5f, new(Vector3.One, 0.9f, 0f))]);
         var program = new SdfProgram([Shape()], [new(Vector3.One, Weathering: weathering)]);
@@ -745,7 +745,26 @@ public sealed class SdfMaterialLawTests {
         Assert.Equal(16f, At(19, 2));
         Assert.Equal(0.8f, At(19, 3));
         Assert.Equal(0.25f, At(17, 2));
+        // The default character is one unturned octave: no second-octave words, an identity turn.
+        Assert.Equal(0f, At(15, 2));
+        Assert.Equal(0f, At(18, 3));
+        Assert.Equal(new Vector4(0f, 0f, 0f, 1f), new Vector4(At(26, 0), At(26, 1), At(26, 2), At(26, 3)));
         Assert.True(SdfMaterialLayers.IsValid(null, weathering, null));
+
+        var character = new SdfProgram([Shape()], [new(Vector3.One, Weathering: weathering with {
+            Octaves = 2, OctaveRatio = 2.03f, OctaveGain = 0.534f, Turn = new Quaternion(0.2f, -0.4f, -0.4f, 0.8f),
+        })]);
+        float Character(int row, int component) => BitConverter.UInt32BitsToSingle(character.Words[offset + row * 4 + component]);
+        Assert.Equal(2.03f, Character(15, 2));
+        Assert.Equal(0.534f, Character(18, 3));
+        Assert.Equal(new Vector4(0.2f, -0.4f, -0.4f, 0.8f), new Vector4(Character(26, 0), Character(26, 1), Character(26, 2), Character(26, 3)));
+        foreach (var bad in new[] {
+            weathering with { Octaves = 0 }, weathering with { Octaves = 3 }, weathering with { OctaveRatio = 1f },
+            weathering with { OctaveGain = 0f }, weathering with { OctaveGain = 1.5f },
+            weathering with { Turn = new Quaternion(0f, 0f, 0f, 0f) },
+        }) {
+            Assert.False(SdfMaterialLayers.IsValid(null, bad, null));
+        }
         foreach (var scale in new[] { Vector3.Zero, new Vector3(-1, 1, 1), new Vector3(float.NaN, 1, 1) }) {
             Assert.False(SdfMaterialLayers.IsValid(null, weathering with { PatternScale = scale }, null));
         }

@@ -26,9 +26,11 @@ struct SdfMaterialData {
     float4 weathering; // edge, lines, settle, reach
     float4 weatheringControls; // seed bits, scale, floor, lane
     float4 underColorThreshold[2];
-    float4 underResponse[2]; // roughness, metal, stage count/softness, pattern X/Y
-    float4 deposit;
+    float4 underResponse[2]; // roughness, metal, octave ratio (stage 0) or reveal softness (stage 1), pattern X/Y
+    float3 deposit;
     float4 depositResponse; // roughness, metal, pattern Z, noise coverage
+    float2 weatheringOctave; // second octave's frequency ratio and gain; a zero gain reads a single octave
+    float4 weatheringTurn; // the pattern lattice's turn, a unit quaternion (x, y, z, w)
     uint paintFirst; // the vector of the material's first paint (SdfProgram.PackPaint)
     uint paintCount; // its paints, drawn in order
     uint emissiveLane; // the render lane scaling emissive, plus one; 0 keeps the static emissive
@@ -112,8 +114,10 @@ SdfMaterialData sdfMaterialLoad(int material) {
         data.underColorThreshold[j] = asfloat(sdfWords[materialBase + 14u + 2u * j]);
         data.underResponse[j] = asfloat(sdfWords[materialBase + 15u + 2u * j]);
     }
-    data.deposit = asfloat(sdfWords[materialBase + 18u]);
+    data.deposit = asfloat(sdfWords[materialBase + 18u]).rgb;
     data.depositResponse = asfloat(sdfWords[materialBase + 19u]);
+    data.weatheringOctave = float2(data.underResponse[0].z, asfloat(sdfWords[materialBase + 18u]).w);
+    data.weatheringTurn = asfloat(sdfWords[materialBase + 26u]);
     data.paintFirst = sdfWords[materialBase + 20u].x;
     data.paintCount = sdfWords[materialBase + 20u].y;
     data.emissiveLane = sdfWords[materialBase + 20u].z;

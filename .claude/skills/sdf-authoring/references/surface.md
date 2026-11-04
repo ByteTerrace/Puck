@@ -58,6 +58,10 @@ something to reflect — see the environment section below.
 | `noise` | [0, 1] | 0 | seeded lattice coverage independent of curvature |
 | `patternScale` | positive finite vector | [1, 1, 1] | per-axis pattern frequencies, multiplied by `scale` |
 | `softness` | [0, 1] | 0 | minimum reveal-ramp width in coverage units |
+| `octaves` | 1 or 2 | 1 | lattice octaves the noise mask sums |
+| `octaveRatio` | finite > 1 | 2 | the second octave's frequency multiple (used when `octaves` is 2); a non-integer ratio keeps its lattice off the first's |
+| `octaveGain` | (0, 1] | 0.5 | the second octave's weight relative to the first; the sum is normalised by `1 / sqrt(1 + gain²)`, so the mask keeps one octave's spread |
+| `turn` | quaternion `[x, y, z, w]`, nonzero | identity | rotates the lattice, after `patternScale`, off the pattern axes; identity leaves it aligned |
 | `settle` | [0, 1] | 0 | coverage on upward-facing surfaces |
 | `reach` | finite > 0 | 1 | curvature sensitivity of the edge mask |
 | `seed` | uint | 0 | |
@@ -119,6 +123,14 @@ Use the controls according to their actual masks:
   stretches that lattice: [16, 0.6, 16] gives long vertical variation rather than
   randomly oriented scratches. Set `softness` for tonal blending; zero preserves
   a hard reveal. Bark, foliage and soil recipes remain authored choices.
+- The lattice's character is authored too, and a bare weathering reads one octave
+  aligned to the pattern axes. A threshold cut through one aligned octave follows
+  the lattice's axes, so a ground deposit shows squares; `octaves: 2` with an
+  `octaveRatio` and `octaveGain`, and a `turn` off the axes, soften that. Each octave
+  fades toward its mean by its own pixel support. The standard `landscapeSurface`
+  sets `octaves: 2, octaveRatio: 2.03, octaveGain: 0.534` and a `turn` of
+  `[0.2, -0.4, -0.4, 0.8]` (73.7° about (1, -2, -2) / 3), and takes each as a
+  parameter.
 - `settle` multiplies upward facing by lattice noise and the authored deposit.
   It gives crowns, moss and ground broad surface variation without displacing them.
 - `edge` uses curvature modulated by noise. A flat floor has no curvature to reveal.

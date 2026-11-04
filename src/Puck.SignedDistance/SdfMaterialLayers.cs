@@ -20,10 +20,18 @@ public sealed record SdfInset(Vector3 Origin, Quaternion Rotation, float Depth, 
 /// Floor supplies minimum coverage. Under contains at most two ascending reveal thresholds. Deposit is required
 /// when Settle is active. Noise reveals a seeded lattice mask independently of curvature. PatternScale multiplies
 /// each pattern coordinate axis; all components must be positive. Softness widens the reveal ramp in coverage units.
-/// Pattern coordinates follow the material frame.</summary>
+/// Pattern coordinates follow the material frame. The pattern is one octave of the lattice read in pattern coordinates;
+/// Octaves = 2 adds a second octave at OctaveRatio times the frequency, weighted OctaveGain relative to the first and
+/// normalised so the sum keeps one octave's spread (each octave fades by its own pixel support). Turn rotates the lattice
+/// off the pattern axes before either octave reads it; null is no turn. The defaults are the plain single, unturned
+/// octave.</summary>
 public sealed record SdfWeathering(float Edge = 0f, float Lines = 0f, float Settle = 0f, float Reach = 1f,
     uint Seed = 0, float Scale = 1f, float Floor = 0f, int Lane = 0,
-    IReadOnlyList<SdfRevealStage>? Under = null, SdfSurface? Deposit = null, float Noise = 0f, Vector3? PatternScale = null, float Softness = 0f);
+    IReadOnlyList<SdfRevealStage>? Under = null, SdfSurface? Deposit = null, float Noise = 0f, Vector3? PatternScale = null, float Softness = 0f,
+    int Octaves = 1, float OctaveRatio = 2f, float OctaveGain = 0.5f, Quaternion? Turn = null) {
+    /// <summary>The most octaves of the pattern lattice a weathering reads.</summary>
+    public const int MaxOctaves = 2;
+}
 /// <summary>The shared admission rules for engine and document material layers.</summary>
 public static class SdfMaterialLayers {
     private static bool Color(Vector3 v) => (VectorFunctions.IsFinite(vector: v) && (v.X >= 0f) && (v.Y >= 0f) && (v.Z >= 0f));
@@ -73,6 +81,15 @@ public static class SdfMaterialLayers {
             var pattern = w.PatternScale ?? Vector3.One;
             if (!VectorFunctions.IsFinite(pattern) || pattern.X <= 0f || pattern.Y <= 0f || pattern.Z <= 0f ||
                 !VectorFunctions.IsFinite(pattern * w.Scale)) { return false; }
+            if (
+                (w.Octaves < 1) ||
+                (w.Octaves > SdfWeathering.MaxOctaves) ||
+                !float.IsFinite(w.OctaveRatio) ||
+                (w.OctaveRatio <= 1f) ||
+                !Positive(v: w.OctaveGain) ||
+                (w.OctaveGain > 1f) ||
+                ((w.Turn is { } turn) && (!float.IsFinite(turn.LengthSquared()) || (turn.LengthSquared() < 1e-12f)))
+            ) { return false; }
             if (
                 !Unit(v: w.Edge) ||
                 !Unit(v: w.Lines) ||
