@@ -486,6 +486,22 @@ while the step's start overlaps consumed continuum time. This makes a 60 Hz sour
 at 120 Hz. Exhausting the eight-face work ceiling clamps one raw fixed-point
 unit inside the last confirmed owner and removes only outward normal velocity.
 
+Portal furniture retains only active inside latches in `WorldPortalOccupancy`.
+An outside observation removes its row, so memory follows occupied regions rather
+than every scanned traveller/face pair. Its `Capture` sorts by ordinal placement,
+face and seat: set enumeration is not a deterministic continuation format after
+removal, restore and insertion. Keep that ordering at the single capture door.
+`WorldFaceRegion` and rounded-box contact share `FixedSegmentClip.Axis`; only
+crossed slab boundaries require a quotient. Same-side separation is tested before
+nearest fixed rounding, and wide endpoint differences use the existing Maths
+rounding primitive. One-sided firing remains separate from endpoint occupancy.
+
+The interval-clipping principle is corroborated by
+[PBRT's bounds derivation](https://www.pbr-book.org/4ed/Geometry_and_Transformations/Bounding_Boxes)
+and [Bullet's ray/AABB implementation](https://github.com/bulletphysics/bullet3/blob/master/src/LinearMath/btAabbUtil2.h).
+Those floating-point implementations do not define Puck's fixed rounding or
+one-sided ownership policy; exact laws and composed World runs establish those.
+
 ## Input and action continuity
 
 Movement and actions route to the seat's current authority. A transfer carries

@@ -1,4 +1,5 @@
 using Puck.Maths;
+using Puck.Physics;
 
 namespace Puck.World;
 
@@ -97,38 +98,10 @@ public readonly record struct WorldFaceCrossing(
 /// The swept region test behind every face-crossing decision, dispatched on the aperture arm.
 /// </summary>
 public static class WorldFaceRegion {
-    // Narrows the shared [enter, exit] parameter range to where the segment lies within [lower, upper] on one axis,
-    // and reports whether the range is still non-empty. A start == end axis cannot be clipped by division, so it is
-    // checked directly: inside the interval leaves the shared range untouched, outside collapses the test.
-    private static bool ClipSegmentAxis(FixedQ4816 start, FixedQ4816 end, FixedQ4816 lower, FixedQ4816 upper, ref FixedQ4816 enter, ref FixedQ4816 exit) {
-        if (start == end) {
-            if (
-                (start < lower) ||
-                (start > upper)
-            ) {
-                return false;
-            }
-        } else {
-            var first = ((lower - start) / (end - start));
-            var second = ((upper - start) / (end - start));
-
-            if (first > second) {
-                (first, second) = (second, first);
-            }
-            if (first > enter) {
-                enter = first;
-            }
-            if (second < exit) {
-                exit = second;
-            }
-        }
-
-        return (enter <= exit);
-    }
     // Slab test plus the Liang-Barsky segment clip: each axis narrows a shared [0,1] parameter interval, using only
     // Dot and division — no Sqrt, no Length, both of which round in the wrong direction for a conservative bound.
-    // A zero-length segment makes every axis's start and end equal, so the clip falls through to the parallel branch
-    // on all three axes and reduces exactly to the point test — a hard teleport is covered with no special case.
+    // The shared clipper rejects same-side endpoints and skips boundaries already containing both endpoints.
+    // A zero-length segment reduces exactly to the point test, with no division or separate teleport path.
     //
     // THE SWEPT CLIP ITSELF IS DIRECTION-BLIND: it asks only whether the segment's normal-axis component visits
     // [-Depth, 0] at some parameter, the same answer for either travel direction. That is correct for Right/Up (a
@@ -172,7 +145,7 @@ public static class WorldFaceRegion {
 
         var enter = FixedQ4816.Zero;
         var exit = FixedQ4816.One;
-        var sweptRegion = (ClipSegmentAxis(
+        var sweptRegion = (FixedSegmentClip.Axis(
             start: previousAlongNormal,
             end: alongNormal,
             lower: -box.Depth,
@@ -180,7 +153,7 @@ public static class WorldFaceRegion {
             enter: ref enter,
             exit: ref exit
         )
-            && ClipSegmentAxis(
+            && FixedSegmentClip.Axis(
             start: previousAlongRight,
             end: alongRight,
             lower: -frame.HalfWidth,
@@ -188,7 +161,7 @@ public static class WorldFaceRegion {
             enter: ref enter,
             exit: ref exit
         )
-            && ClipSegmentAxis(
+            && FixedSegmentClip.Axis(
             start: previousAlongUp,
             end: alongUp,
             lower: -frame.HalfHeight,

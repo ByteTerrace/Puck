@@ -13,6 +13,40 @@ namespace Puck.World.Schema.Tests;
 /// </summary>
 public sealed class WorldFaceRegionLawTests {
     private const double Depth = 0.5;
+    [Fact]
+    public void OutsideObservationsAllocateNoPerTravellerFaceRows() {
+        var occupancy = new WorldPortalOccupancy();
+        _ = occupancy.Observe("placement", "face", -1, inside: false, crossed: false);
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        for (var seat = 0; seat < 100000; seat++) {
+            _ = occupancy.Observe("placement", "face", seat, inside: false, crossed: false);
+        }
+        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        Assert.Equal(0, allocated);
+        Assert.Empty(occupancy.Capture());
+        occupancy.SeedInside("placement", "face", 1);
+        Assert.False(occupancy.Observe("placement", "face", 1, inside: false, crossed: true));
+        Assert.True(occupancy.Observe("placement", "face", 1, inside: false, crossed: true));
+        Assert.Empty(occupancy.Capture());
+    }
+
+    [Fact]
+    public void CaptureOrderSurvivesRestoreRemovalAndFurtherEntries() {
+        var original = new WorldPortalOccupancy();
+        original.SeedInside("a", "face", 0);
+        original.SeedInside("b", "face", 0);
+        original.SeedInside("c", "face", 0);
+        _ = original.Observe("b", "face", 0, inside: false, crossed: false);
+        var restored = new WorldPortalOccupancy();
+        restored.Restore(original.Capture());
+        original.SeedInside("d", "face", 0);
+        restored.SeedInside("d", "face", 0);
+        Assert.Equal(original.Capture(), restored.Capture());
+        // The source order is deliberately unrelated to the protocol order, including duplicate restored rows.
+        restored.Restore([("z", "face", 2), ("a", "z", 0), ("a", "a", 9), ("a", "a", 1), ("a", "a", 1)]);
+        Assert.Equal(new[] { ("a", "a", 1), ("a", "a", 9), ("a", "z", 0), ("z", "face", 2) }, restored.Capture());
+    }
+
     // ---- The edge latch ----
 
     private const string Face = "screen";

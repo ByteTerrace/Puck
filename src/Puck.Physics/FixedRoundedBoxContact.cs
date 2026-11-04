@@ -39,19 +39,9 @@ internal static class FixedRoundedBoxContact {
     private static bool SegmentIntersects(FixedVector3 first, FixedVector3 last, FixedVector3 half) {
         var low = FixedQ4816.Zero;
         var high = FixedQ4816.One;
-        var delta = (last - first);
-
-        return (Slab(first.X, delta.X, half.X, ref low, ref high) &&
-            Slab(first.Y, delta.Y, half.Y, ref low, ref high) && Slab(first.Z, delta.Z, half.Z, ref low, ref high));
-    }
-    private static bool Slab(FixedQ4816 start, FixedQ4816 delta, FixedQ4816 half, ref FixedQ4816 low, ref FixedQ4816 high) {
-        if (delta == FixedQ4816.Zero) { return (FixedQ4816.Abs(value: start) <= half); }
-        var a = ((-half - start) / delta);
-        var b = ((half - start) / delta);
-
-        low = FixedQ4816.Max(x: low, y: FixedQ4816.Min(x: a, y: b));
-        high = FixedQ4816.Min(x: high, y: FixedQ4816.Max(x: a, y: b));
-        return (low <= high);
+        return (FixedSegmentClip.Axis(first.X, last.X, -half.X, half.X, ref low, ref high) &&
+            FixedSegmentClip.Axis(first.Y, last.Y, -half.Y, half.Y, ref low, ref high) &&
+            FixedSegmentClip.Axis(first.Z, last.Z, -half.Z, half.Z, ref low, ref high));
     }
     // When the segment meets the inner box, its three face axes and three edge cross axes are the complete
     // separating set. Adding the spherical radius to the winning projection gives a valid separating push.
