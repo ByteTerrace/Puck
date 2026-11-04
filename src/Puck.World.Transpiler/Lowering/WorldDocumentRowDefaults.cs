@@ -179,7 +179,7 @@ public static class WorldDocumentRowDefaults {
         var written = scalar.ToJsonString();
 
         if (!float.TryParse(s: written, style: System.Globalization.NumberStyles.Float, provider: System.Globalization.CultureInfo.InvariantCulture, result: out var single) || !float.IsFinite(f: single) ||
-            !decimal.TryParse(s: single.ToString(format: "R", provider: System.Globalization.CultureInfo.InvariantCulture), style: System.Globalization.NumberStyles.Float, provider: System.Globalization.CultureInfo.InvariantCulture, result: out var shortest)) {
+            !Puck.Transpiler.Lowering.DecimalValues.TryParseEvery(text: single.ToString(format: "R", provider: System.Globalization.CultureInfo.InvariantCulture), number: out var shortest)) {
             return value;
         }
         var canonical = JsonValue.Create(value: shortest);
