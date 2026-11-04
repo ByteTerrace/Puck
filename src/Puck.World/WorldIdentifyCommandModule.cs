@@ -47,7 +47,7 @@ internal sealed class WorldIdentifyCommandModule(WorldScreenBinder binder, World
     }
     private CommandResult IdentifyHandler(CommandContext context, WireArgs args) {
         if (args.Count is < 1 or > 2) {
-            return CommandResult.Error(output: "[world.identify: expected <screenIndex> [ecLevel]]");
+            return CommandResult.Usage(form: "<screenIndex> [ecLevel]", verb: "world.identify");
         }
 
         if (!args.TryInt(

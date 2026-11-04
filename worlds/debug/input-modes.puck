@@ -38,7 +38,7 @@ inputModes {
       default: "walking"
       states [
         { name: "walking", ranges [{ minimum: 0, maximum: 0 }], channels [] }
-        { name: "flying", ranges [{ minimum: 0.0000152587890625, maximum: 1000 }], channels [] }
+        { name: "flying", ranges [{ minimum: 1 / 65536, maximum: 1000 }], channels [] }
       ]
       transitions [
         { from: "walking", to: "flying", keep: concat(movement, ["rise"]) }

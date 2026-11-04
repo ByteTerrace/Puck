@@ -1257,15 +1257,7 @@ public static partial class WorldSchema {
         JsonNode? cursor = root;
 
         foreach (var escaped in pointer[2..].Split(separator: '/')) {
-            var segment = escaped.Replace(
-                comparisonType: StringComparison.Ordinal,
-                newValue: "/",
-                oldValue: "~1"
-            ).Replace(
-                comparisonType: StringComparison.Ordinal,
-                newValue: "~",
-                oldValue: "~0"
-            );
+            var segment = Puck.Assets.Documents.DocumentJsonPointer.Unescape(value: escaped);
 
             cursor = cursor switch {
                 JsonObject obj => (obj.TryGetPropertyValue(

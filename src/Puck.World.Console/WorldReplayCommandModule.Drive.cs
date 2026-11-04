@@ -46,7 +46,7 @@ public sealed partial class WorldReplayCommandModule {
             value: "to"
         ))
         ) {
-            return CommandResult.Error(output: "[replay.drive: usage — replay.drive <name> [to <tick>]]");
+            return CommandResult.Usage(form: "<name> [to <tick>]", verb: "replay.drive");
         }
 
         if (!TryName(
@@ -84,7 +84,7 @@ public sealed partial class WorldReplayCommandModule {
     }
     private CommandResult Fork(WireArgs args) {
         if (args.Count != 3) {
-            return CommandResult.Error(output: "[replay.fork: usage — replay.fork <name> <tick> <new>]");
+            return CommandResult.Usage(form: "<name> <tick> <new>", verb: "replay.fork");
         }
 
         if (!TryName(

@@ -21,7 +21,7 @@ internal sealed class ProbeCommandModule(Func<WorldProbes> probes) : ICommandMod
 
     private CommandResult RecordHandler(CommandContext context, WireArgs args) {
         if (args.Count != 3) {
-            return CommandResult.Error(output: "[probe.record: expected <probe>[$<seat>] <path> <seconds>]");
+            return CommandResult.Usage(form: "<probe>[$<seat>] <path> <seconds>", verb: "probe.record");
         }
 
         if (!args.TryFloat(
@@ -47,7 +47,7 @@ internal sealed class ProbeCommandModule(Func<WorldProbes> probes) : ICommandMod
     }
     private CommandResult SetHandler(CommandContext context, WireArgs args) {
         if (args.Count != 3) {
-            return CommandResult.Error(output: "[probe.set: expected <probe>[$<seat>] <field> <value>]");
+            return CommandResult.Usage(form: "<probe>[$<seat>] <field> <value>", verb: "probe.set");
         }
 
         if (!args.TryFloat(

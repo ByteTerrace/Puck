@@ -99,15 +99,7 @@ public sealed class CartridgeDraft {
                 ) { throw Missing(pointer: pointer); }
             }
         }
-        return parts.Select(selector: static part => part.Replace(
-            comparisonType: StringComparison.Ordinal,
-            newValue: "/",
-            oldValue: "~1"
-        ).Replace(
-            comparisonType: StringComparison.Ordinal,
-            newValue: "~",
-            oldValue: "~0"
-        )).ToArray();
+        return parts.Select(selector: Puck.Assets.Documents.DocumentJsonPointer.Unescape).ToArray();
     }
     private static JsonNode? Resolve(JsonNode root, string[] parts) {
         var node = root;

@@ -344,15 +344,7 @@ internal sealed class PuckSchemaHover {
 
         if (parts.Length == 2) {
             foreach (var segment in parts[1].Split('/').Skip(count: 1)) {
-                var decoded = segment.Replace(
-                    comparisonType: StringComparison.Ordinal,
-                    newValue: "/",
-                    oldValue: "~1"
-                ).Replace(
-                    comparisonType: StringComparison.Ordinal,
-                    newValue: "~",
-                    oldValue: "~0"
-                );
+                var decoded = Puck.Assets.Documents.DocumentJsonPointer.Unescape(value: segment);
 
                 node = ((node is JsonObject obj)
                     ? obj[decoded]

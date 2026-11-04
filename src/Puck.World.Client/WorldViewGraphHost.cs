@@ -641,7 +641,9 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             views: views
         );
         if (m_runtime is { } runtime) {
-            foreach (var instance in runtime.Instances.Instances) {
+            var instances = runtime.Instances.Instances;
+            for (var index = 0; index < instances.Count; index++) {
+                var instance = instances[index];
                 if (runtime.NodeOf(instance: instance.Name) is { } node) {
                     m_entries.TryGetValue(instance.Name, out var entry);
                     ApplyPause(node, entry, ViewScenes?.IsAvailable(instance.Name) ?? true);
@@ -1597,22 +1599,30 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         MeasureDisplayShares();
         m_footprints.Clear();
         m_heldViews.Clear();
-        RootFilmedViews();
+        m_roots.Clear();
+        m_roots.AddRange(collection: m_viewRoots);
 
         if (m_synthesized is { } synthesized) {
             m_footprints.AddRange(collection: synthesized.Footprints);
         }
+    }
+
+    // Finish only after this frame's cameras and placements have been composed. First form the visible graph without
+    // rate holds, then measure its display shares before deciding which glass is small. Measuring last frame's pruned
+    // graph would delay wake-up when a consumer grows or a portal becomes visible again.
+    private void CompleteFootprints() {
+        RootFilmedViews();
+        var firstScreen = m_footprints.Count;
 
         foreach (var footprint in m_screenFootprints) {
             if (!m_portals.Contains(item: footprint.Producer)) {
-                m_footprints.Add(item: (footprint with { Refresh = ScreenRefresh(footprint: in footprint) }));
+                m_footprints.Add(item: footprint);
                 continue;
             }
 
-            switch (PortalSightOf(
+            switch (PortalCoverage(
                 consumer: footprint.Consumer,
                 coverage: out var coverage,
-                pixels: (m_displayShares.TryGetValue(key: footprint.Consumer, value: out var share) ? (share * m_displayHeight) : double.PositiveInfinity),
                 producer: footprint.Producer
             )) {
                 case PortalSight.Unknown:
@@ -1629,7 +1639,6 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
                     m_portalExtents[footprint.Producer] = held;
                     m_footprints.Add(item: (footprint with {
                         Height = held.Height,
-                        Refresh = ViewRefresh(consumer: footprint.Consumer, coverage: coverage.Height, producer: footprint.Producer, glass: m_portalGlass),
                         Width = held.Width,
                     }));
 
@@ -1651,8 +1660,43 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             }
         }
 
+        MeasureDisplayShares();
+        for (var index = (m_footprints.Count - 1); (index >= firstScreen); index--) {
+            var footprint = m_footprints[index];
+            if (!m_portals.Contains(item: footprint.Producer)) {
+                m_footprints[index] = footprint with { Refresh = ScreenRefresh(footprint: in footprint) };
+                continue;
+            }
+
+            var pixels = (m_displayShares.TryGetValue(key: footprint.Consumer, value: out var share)
+                ? (Width: share.Width * m_displayWidth, Height: share.Height * m_displayHeight)
+                : (Width: double.PositiveInfinity, Height: double.PositiveInfinity));
+            switch (PortalSightOf(consumer: footprint.Consumer, producer: footprint.Producer, pixels: pixels, coverage: out var coverage)) {
+                case PortalSight.Small when ViewScenes!.Bakes(view: footprint.Producer):
+                    m_footprints[index] = footprint with { Width = WorldPortalVisibility.BakingShare, Height = WorldPortalVisibility.BakingShare };
+                    break;
+                case PortalSight.Small:
+                    m_footprints.RemoveAt(index);
+                    break;
+                case PortalSight.Seen:
+                    m_footprints[index] = footprint with { Refresh = ViewRefresh(consumer: footprint.Consumer, coverage: coverage.Height, producer: footprint.Producer, glass: m_portalGlass) };
+                    break;
+            }
+        }
         RateEnvironmentReads();
         PublishRateReadings();
+        MeasureDisplayShares();
+        m_visiblePortals.Clear();
+        foreach (var footprint in m_footprints) {
+            if (m_portals.Contains(item: footprint.Producer) && m_displayShares.ContainsKey(key: footprint.Consumer)) {
+                _ = m_visiblePortals.Add(item: footprint.Producer);
+            }
+        }
+        foreach (var root in m_roots) {
+            if (m_portals.Contains(item: root.Instance)) {
+                _ = m_visiblePortals.Add(item: root.Instance);
+            }
+        }
     }
     // Roots the views the running set roots on their own demand, then each view a root camera among them films: a
     // session only while the camera's image shows its glass large enough to render (PortalSightOf, measured in the
@@ -1670,7 +1714,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
                 switch (PortalSightOf(
                     consumer: camera.Name,
                     coverage: out var coverage,
-                    pixels: (camera.Height * m_displayHeight),
+                    pixels: (camera.Width * m_displayWidth, camera.Height * m_displayHeight),
                     producer: filmed.Name
                 )) {
                     case PortalSight.Seen:
@@ -1688,25 +1732,28 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
                 }
             }
 
-            m_roots.Add(item: FilmedRoot(camera: in camera, filmed: in filmed, height: height, width: width));
+            var root = FilmedRoot(camera: in camera, filmed: in filmed, height: height, width: width);
+            m_roots.Add(item: ((m_portalsRendered.Contains(item: filmed.Name) && !m_visiblePortals.Contains(item: filmed.Name))
+                ? root with { Refresh = RenderGraphRefresh.EveryFrame }
+                : root));
         }
     }
     // The one decision whether a consumer's image shows a session's glass this frame (PortalCoverage), and whether that
     // glass is large enough to render: a glass seen at no more than SdfUpdateRateTiers.ViewHeldPixels of the consumer's
     // image is Small and holds its latest image (HoldsGlass). Every footprint and every filming camera's root of a session
     // takes its demand from here.
-    private PortalSight PortalSightOf(string consumer, string producer, double pixels, out (double Width, double Height) coverage) {
+    private PortalSight PortalSightOf(string consumer, string producer, (double Width, double Height) pixels, out (double Width, double Height) coverage) {
         var sight = PortalCoverage(
             consumer: consumer,
             coverage: out coverage,
             producer: producer
         );
 
-        return (((sight == PortalSight.Seen) && HoldsGlass(pixels: (pixels * coverage.Height), producer: producer))
+        return (((sight == PortalSight.Seen) && HoldsGlass(pixels: Math.Max(pixels.Width * coverage.Width, pixels.Height * coverage.Height), producer: producer))
             ? PortalSight.Small
             : sight);
     }
-    // Whether a consumer sees the glass a session it reads shows on, from the camera it last rendered with, and how much
+    // Whether a consumer sees the glass a session it reads shows on, from its current composed camera, and how much
     // of its image the glass spans: a consumer in another world than the glass's sees none of it, and one whose camera or
     // glass is not known yet is taken to see it at the session's declared extent.
     private PortalSight PortalCoverage(string consumer, string producer, out (double Width, double Height) coverage) {
@@ -1729,7 +1776,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
                     key: consumer,
                     value: out var camera
                 ) ||
-                scenes.TryCamera(
+                scenes.TryVisibilityCamera(
                     camera: out camera,
                     view: consumer
                 )

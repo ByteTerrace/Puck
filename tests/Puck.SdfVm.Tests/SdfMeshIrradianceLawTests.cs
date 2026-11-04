@@ -839,6 +839,51 @@ public sealed partial class SdfMeshIrradianceLawTests {
         Assert.Equal(expected: 0f, actual: volume.LightVisibility(lightIndex: 0, normal: Vector3.UnitY, point: new Vector3(x: 2000f, y: 0f, z: 0f)));
         Assert.True(condition: (words.Length == ((parameters.Window(level: 0).Count + parameters.Middle.Count + parameters.Far.Count) * SdfMeshIrradianceProbe.ProbeWords)));
     }
+    /// <summary>THE LAW: a finer level's probes answer a receiver past their window as far as their surface maps reach,
+    /// before a coarser level does. At the High tier the finest window about a camera at the origin ends half a metre
+    /// short of a room's end wall; the 8 m level's probes stand in the room's slabs and on both sides of its walls, so the
+    /// wall read from them was black or the outdoors' light. The wall reads the finest level's boundary probes, measured,
+    /// with weight; a floor far past the finest probes' reach still reads the coarser level. The inner wall of a sealed
+    /// room past that reach, which no coarser probe sees, reads the finest level's boundary probes unmeasured rather than
+    /// black.</summary>
+    [Fact]
+    public void AReceiverJustPastTheFinestWindowReadsTheFinestProbesThatMeasuredIt() {
+        const float EndWall = 24.3f;
+        var volume = new SdfMeshIrradiance();
+        var room = Frame() with {
+            ConvergesLighting = true,
+            MeshDraws = [
+                Draw(mesh: Box(low: new Vector3(x: -10f, y: -0.3f, z: -10f), high: new Vector3(x: (EndWall + 0.3f), y: 0f, z: 10f))),
+                Draw(mesh: Box(low: new Vector3(x: -10f, y: 4f, z: -10f), high: new Vector3(x: (EndWall + 0.3f), y: 4.3f, z: 10f))),
+                Draw(mesh: Box(low: new Vector3(x: EndWall, y: 0f, z: -10f), high: new Vector3(x: (EndWall + 0.3f), y: 4f, z: 10f))),
+                Draw(mesh: Box(low: new Vector3(x: -300f, y: -0.6f, z: -300f), high: new Vector3(x: 300f, y: -0.3f, z: 300f))),
+                // A sealed room 3 m on a side, 60 m out: a floor, a roof and four walls.
+                Draw(mesh: Box(low: new Vector3(x: 60f, y: -0.3f, z: 0f), high: new Vector3(x: 63.3f, y: 0f, z: 3.3f))),
+                Draw(mesh: Box(low: new Vector3(x: 60f, y: 3f, z: 0f), high: new Vector3(x: 63.3f, y: 3.3f, z: 3.3f))),
+                Draw(mesh: Box(low: new Vector3(x: 60f, y: 0f, z: 0f), high: new Vector3(x: 60.3f, y: 3f, z: 3.3f))),
+                Draw(mesh: Box(low: new Vector3(x: 63f, y: 0f, z: 0f), high: new Vector3(x: 63.3f, y: 3f, z: 3.3f))),
+                Draw(mesh: Box(low: new Vector3(x: 60.3f, y: 0f, z: 0f), high: new Vector3(x: 63f, y: 3f, z: 0.3f))),
+                Draw(mesh: Box(low: new Vector3(x: 60.3f, y: 0f, z: 3f), high: new Vector3(x: 63f, y: 3f, z: 3.3f))),
+            ],
+        };
+        var (parameters, _) = Trace(frame: room, tier: SdfIndirectTier.High, volume: volume);
+        var finest = parameters.Window(level: 0);
+        var point = new Vector3(x: EndWall, y: 2f, z: 0.5f);
+        var beyond = ((point.X - SdfMeshIrradianceProbe.NormalBias) - ((finest.Low.X + finest.Dims.X - 0.5f) * finest.Spacing));
+
+        Assert.InRange(actual: beyond, low: 0.01f, high: SdfMeshIrradiance.SurfaceReachOf(spacing: finest.Spacing));
+
+        var wall = volume.DescribeProbes(point: point, normal: -Vector3.UnitX)[0];
+
+        Assert.Contains(expectedSubstring: "level=0 measured=1", actualString: wall);
+        Assert.DoesNotContain(expectedSubstring: "weight=0]", actualString: wall);
+        Assert.Contains(expectedSubstring: "level=1 measured=1", actualString: volume.DescribeProbes(point: new Vector3(x: 100f, y: -0.3f, z: 0f), normal: Vector3.UnitY)[0]);
+
+        var sealedWall = volume.DescribeProbes(point: new Vector3(x: 63f, y: 1.5f, z: 1.65f), normal: -Vector3.UnitX)[0];
+
+        Assert.Contains(expectedSubstring: "level=0 measured=0", actualString: sealedWall);
+        Assert.DoesNotContain(expectedSubstring: "weight=0]", actualString: sealedWall);
+    }
     /// <summary>THE LAW: the meter answers while the bake still lands static meshes: a frame with the bake pending builds
     /// a scene from the meshes it has, the probes trace it, and the meter reads; a pending bake with no static mesh landed
     /// builds no scene, since an empty one would measure open sky where walls have yet to land; a lockstep frame builds

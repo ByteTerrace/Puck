@@ -14,7 +14,7 @@ namespace Puck.World;
 /// <param name="server">The authority whose live definition the read-back names.</param>
 /// <param name="theme">The presentation's theme resolver.</param>
 internal sealed class WorldThemeCommandModule(WorldServer server, WorldThemeResolve theme) : ICommandModule {
-    private const string Usage = "[world.theme: expected contrast high|normal|toggle]";
+    private const string Form = "contrast high|normal|toggle";
 
     private CommandResult Describe() => new(Output: $"[world.theme: source={((server.Definition.ThemeRaw is null)
         ? "engine-default"
@@ -40,7 +40,7 @@ internal sealed class WorldThemeCommandModule(WorldServer server, WorldThemeReso
                         value: "contrast"
                     )
                 ) {
-                    return CommandResult.Error(output: Usage);
+                    return CommandResult.Usage(form: Form, verb: "world.theme");
                 }
 
                 bool? high = (args.Is(
@@ -61,7 +61,7 @@ internal sealed class WorldThemeCommandModule(WorldServer server, WorldThemeReso
                             : null)));
 
                 if (high is not { } resolved) {
-                    return CommandResult.Error(output: Usage);
+                    return CommandResult.Usage(form: Form, verb: "world.theme");
                 }
 
                 theme.HighContrast = resolved;

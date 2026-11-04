@@ -118,6 +118,23 @@ public sealed class SourceMap {
         return false;
     }
 
+    /// <summary>Returns the origin of the nearest authored node at or above a JSON pointer.</summary>
+    /// <param name="jsonPointer">The pointer; a node the map does not know takes its nearest registered ancestor.</param>
+    /// <returns>The origin, or <see langword="null"/> when no node at or above the pointer is registered.</returns>
+    public SourceOrigin? OriginOf(string jsonPointer) => (TryGetOrigin(jsonPointer: jsonPointer, origin: out var origin) ? origin : null);
+    /// <summary>Places a finding about the node a JSON pointer names on the line that authored it, and attributes it to
+    /// the source that authored it, an import's row against the import.</summary>
+    /// <param name="diagnostic">The finding.</param>
+    /// <param name="jsonPointer">The pointer of the node the finding is about; a node the map does not know is placed at
+    /// its nearest authored ancestor.</param>
+    /// <returns>The finding with its span and source, or <paramref name="diagnostic"/> unchanged when no node at or above
+    /// the pointer is authored.</returns>
+    public Diagnostic Place(Diagnostic diagnostic, string jsonPointer) {
+        ArgumentNullException.ThrowIfNull(diagnostic);
+
+        return ((OriginOf(jsonPointer: jsonPointer) is { } origin) ? (diagnostic with { SourcePath = origin.SourcePath, Span = origin.Span }) : diagnostic);
+    }
+
     private sealed class OriginScope(SourceMap owner, string? sourcePath, string? moduleInstancePath) : IDisposable {
         private SourceMap? m_owner = owner;
 

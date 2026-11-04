@@ -1177,14 +1177,7 @@ public static partial class DocumentLowering {
             return whole.ToString(provider: CultureInfo.InvariantCulture);
         }
 
-        if (value.TryGetValue<double>(value: out var real)) {
-            return real.ToString(
-                format: "R",
-                provider: CultureInfo.InvariantCulture
-            );
-        }
-
-        return value.ToJsonString();
+        return DocumentNumbers.Canonical(node: value)!.ToJsonString();
     }
     private static JsonNode? LowerLiteral(LiteralExpressionNode lit, string? fieldKey, DocumentScope scope) {
         if (lit.Value is null) {
@@ -1358,12 +1351,14 @@ public static partial class DocumentLowering {
 
         target[key] = value;
     }
-    /// <summary>Canonicalizes a JSON node in place by sorting every object's properties ordinally.</summary>
+    /// <summary>Canonicalizes a JSON node in place by sorting every object's properties ordinally and writing every
+    /// number in its one spelling (<see cref="DocumentNumbers.Canonical"/>).</summary>
     /// <param name="node">The node to canonicalize; the caller owns it, and it is reordered where it stands.</param>
-    /// <returns><paramref name="node"/> itself, or <see langword="null"/> when the input was null.</returns>
+    /// <returns><paramref name="node"/> itself, its canonical number when it is a bare number, or
+    /// <see langword="null"/> when the input was null.</returns>
     /// <remarks>The document being canonicalized is the lowering's own output, so it is reordered rather than
     /// rebuilt: rebuilding it copied every node of a document that is discarded the moment the copy exists. An
-    /// object already in order is left untouched.</remarks>
+    /// object already in order is left untouched, and only a number whose spelling changes is replaced.</remarks>
     public static JsonNode? Canonicalize(JsonNode? node) {
         switch (node) {
             case JsonObject obj:
@@ -1383,20 +1378,28 @@ public static partial class DocumentLowering {
                     }
                 }
                 for (var index = 0; (index < obj.Count); index++) {
-                    _ = Canonicalize(node: obj.GetAt(index: index).Value);
+                    var member = obj.GetAt(index: index).Value;
+
+                    if (Canonicalize(node: member) is var canonical && !ReferenceEquals(objA: canonical, objB: member)) {
+                        obj.SetAt(index: index, value: canonical);
+                    }
                 }
 
                 return obj;
 
             case JsonArray arr:
                 for (var index = 0; (index < arr.Count); index++) {
-                    _ = Canonicalize(node: arr[index]);
+                    var element = arr[index];
+
+                    if (Canonicalize(node: element) is var canonical && !ReferenceEquals(objA: canonical, objB: element)) {
+                        arr[index] = canonical;
+                    }
                 }
 
                 return arr;
 
             default:
-                return node;
+                return DocumentNumbers.Canonical(node: node);
         }
 
         static bool IsOrdinallySorted(JsonObject obj) {
@@ -1798,8 +1801,8 @@ public static partial class DocumentLowering {
             (text.Length > 0)
         );
     }
-    /// <summary>Reads a lowered value as an object key: a string as itself, a number by its shortest round-trip
-    /// spelling, and anything else as nothing.</summary>
+    /// <summary>Reads a lowered value as an object key: a string as itself, a number by the spelling a document writes
+    /// it in (<see cref="DocumentNumbers.Canonical"/>), and anything else as nothing.</summary>
     /// <param name="node">The lowered node.</param>
     /// <returns>The key text, or <see langword="null"/> when the value cannot key an object.</returns>
     public static string? KeyText(JsonNode? node) {
@@ -1819,11 +1822,9 @@ public static partial class DocumentLowering {
         }
         return (TryReadNumber(
             node: node,
-            number: out var number
+            number: out _
         )
-            ? ((number == Math.Truncate(d: number))
-                ? ((long)number).ToString(provider: System.Globalization.CultureInfo.InvariantCulture)
-                : number.ToString(provider: System.Globalization.CultureInfo.InvariantCulture))
+            ? DocumentNumbers.Canonical(node: node)!.ToJsonString()
             : null
         );
     }

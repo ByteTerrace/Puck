@@ -1630,15 +1630,7 @@ public static partial class WorldSchema {
 
             segments.Add(item: ((parent is JsonArray array)
                 ? array.IndexOf(item: cursor).ToString(provider: System.Globalization.CultureInfo.InvariantCulture)
-                : cursor.GetPropertyName().Replace(
-                    comparisonType: StringComparison.Ordinal,
-                    newValue: "~0",
-                    oldValue: "~"
-                ).Replace(
-                    comparisonType: StringComparison.Ordinal,
-                    newValue: "~1",
-                    oldValue: "/"
-                )));
+                : Puck.Assets.Documents.DocumentJsonPointer.Escape(value: cursor.GetPropertyName())));
             cursor = parent;
         }
 

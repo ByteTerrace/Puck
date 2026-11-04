@@ -171,19 +171,15 @@ let galleryRows = [
 
 // A spawn point per exhibit, named after it, 2.8 m in front of the plinth facing it (yaw 180 faces +Z), so
 // `body.pose spawn:<exhibit>` and `gallery.go <exhibit>` walk to any exhibit by name.
-let gallerySpawns = reduce(
+let gallerySpawns = flatMap(
   galleryRows,
-  [],
-  (spawns, row) => concat(
-    spawns,
-    map(
-      row.names,
-      (name, index) => {
-        id: name
-        position [(galleryX + (gallerySpacing * index)), galleryFloor[row.level], (row.z - 2.8)]
-        yawDegrees: 180
-      }
-    )
+  row => map(
+    row.names,
+    (name, index) => {
+      id: name
+      position [(galleryX + (gallerySpacing * index)), galleryFloor[row.level], (row.z - 2.8)]
+      yawDegrees: 180
+    }
   )
 )
 

@@ -609,7 +609,7 @@ public sealed partial class CommandRegistry {
         }
 
         if (args.Count > 1) {
-            return CommandResult.Error(output: "[wire.ack: expected one of on | quiet]");
+            return CommandResult.Usage(form: "[on | quiet]", verb: "wire.ack");
         }
 
         // Case-insensitively, through WireArgs.Is — every module verb reads its mode words that way, and a built-in
@@ -632,7 +632,7 @@ public sealed partial class CommandRegistry {
             return new CommandResult(Output: "[wire.ack: quiet]");
         }
 
-        return CommandResult.Error(output: $"[wire.ack: unknown mode '{args[0]}' — expected on | quiet]");
+        return CommandResult.Usage(form: "[on | quiet]", verb: "wire.ack");
     }
     /// <summary>Reports (and optionally clears) the refused-submission count for the built-in <c>wire.errors</c> verb.
     /// The count is over the lines the CALLER submitted — see <see cref="Submit"/>'s remarks for what a macro verb's
@@ -642,7 +642,7 @@ public sealed partial class CommandRegistry {
     /// <returns>A result echoing the count, or an <see cref="CommandResult.IsError"/> result for a bad argument.</returns>
     private CommandResult ApplyWireErrors(in WireArgs args) {
         if (args.Count > 1) {
-            return CommandResult.Error(output: "[wire.errors: expected no argument or `reset`]");
+            return CommandResult.Usage(form: "[reset]", verb: "wire.errors");
         }
 
         var reset = args.Is(
@@ -654,7 +654,7 @@ public sealed partial class CommandRegistry {
             (args.Count == 1) &&
             !reset
         ) {
-            return CommandResult.Error(output: $"[wire.errors: unknown mode '{args[0]}' — expected `reset`]");
+            return CommandResult.Usage(form: "[reset]", verb: "wire.errors");
         }
 
         // Read the counts BEFORE `reset` zeroes them, and do not let this verb's own report count as a rejection.

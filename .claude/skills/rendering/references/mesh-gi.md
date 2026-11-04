@@ -37,18 +37,30 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   table, each described by a `meshIrradianceLevels` row (first cell, packed
   dims) and a spacing in `meshIrradianceVolume` (zero until the level first
   publishes). Each level publishes on its own once every slot of its window is
-  measured. A receiver reads the finest level whose window holds it within its
-  boundary probes (`Select`, `sdfMeshProbesAt`), the coarsest past every window.
-  Never let a coarser level answer inside a finer window: at 25 m a 32 m probe's
-  angular tap is metres wide, its patch test cannot resolve a thin wall the fine
-  probe measured, and the wall law reads visibility 1 through it. Where the
-  level's bounded gather is zero, the same probes answer unbounded
+  measured. A receiver reads the finest level whose probes measured it
+  (`Select`, `sdfMeshProbesAt`): a finer level answers past its window's
+  boundary probes as far as their surface maps reach
+  (`SdfMeshIrradiance.SurfaceReachOf`), then the level whose window holds the
+  receiver (the coarsest past every window) answers. An 8 m level cannot
+  resolve rooms a few metres tall: its probes stand in the slabs and on both
+  sides of the walls, so a wall it answers reads black where every coarse probe
+  is hidden and the outdoors where one grazes through. At the High tier the
+  finest window about the middle of the gallery hall ends just short of its
+  west wall (`body.pose 31.25 4.57 28.52 273`, `world.indirect high`). A black
+  or blown far wall is a level choice, which `world.probe` names (`level=`),
+  not a GPU/CPU disagreement. Never let a coarser level answer inside a finer window: at 25 m a
+  32 m probe's angular tap is metres wide, its patch test cannot resolve a thin
+  wall the fine probe measured, and the wall law reads visibility 1 through it.
+  Where the level's bounded gather is zero, the same probes answer unbounded
   (`SdfMeshProbeDepth.Visibility(bounded: false)`): a miss no longer rejects a
-  receiver past its reach, but a measured hit still blocks. That read reports
-  `measured=0` in `world.probe` and gives traced static lights zero visibility.
-  It replaces the earlier rule that a receiver with no answering probe reads
-  black: far gallery walls and outdoor shaded faces past the old 64 m window
-  drew pure black.
+  receiver past its reach, but a measured hit still blocks. Where those answer
+  nothing either, the finest level's boundary probes answer unbounded, so a far
+  room's wall reads the measured room's light. Those reads report `measured=0`
+  in `world.probe` and give traced static lights zero visibility. They replace
+  the earlier rule that a receiver with no answering probe reads black: far
+  gallery walls and outdoor shaded faces past the old 64 m window drew pure
+  black. `SdfMeshIrradianceGatherDeviceLawTests` runs both gathers on one
+  published volume and requires the same slots and weights on both backends.
 - Each level's window centres on the box of the cameras of every view the
   residency renders when it fits in the window's middle, and on the first view's
   camera alone when it does not (`WindowLow`).
@@ -152,7 +164,11 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   This continuous positive-hemisphere weight turns down probes behind a surface
   without switching the whole gather between front and back sets. It also
   prevents grazing depth uncertainty behind a thin wall from admitting a bright
-  exterior probe. The floor (`SdfMeshIrradianceProbe.BehindShare`) keeps a
+  exterior probe. The floor (`SdfMeshIrradianceProbe.BehindShare`) applies at
+  the finest level alone, whose depth test resolves the receiver's own surface;
+  a coarser probe behind the receiver's plane is as likely beyond the receiver's
+  own wall, and the gather's normalisation would let one such probe light the
+  whole receiver with the outdoors. The floor keeps a
   receiver whose every visible probe lies behind its plane from reading black:
   a downward rim at the ground (a root, a shrub's underside, a fern's base) has
   only the ground-hidden probes below in front of it, and without the floor both

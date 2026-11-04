@@ -125,7 +125,7 @@ public sealed class WorldTickScriptCommandModule(WorldTickScript script) : IComm
                 }
 
                 if ((args.Count < 2) || !TryTick(tick: out var tick, token: head)) {
-                    return CommandResult.Error(output: $"[world.at: expected {Usage}]");
+                    return CommandResult.Usage(form: Usage, verb: "world.at");
                 }
 
                 var line = WorldCommandArguments.RawAfter(

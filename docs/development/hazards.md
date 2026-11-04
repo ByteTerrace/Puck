@@ -192,6 +192,11 @@ or one adds a field the other forgets.
   (`SdfFieldEvaluator.SdfSuperellipsoid` against
   `mapCore`), and the box cull is written in C# and HLSL
   (`SdfMeshCull.Keeps`, `sdf-mesh-selection.hlsli`).
+- The irradiance probe gather is written in C# (`SdfMeshIrradiance.Select` and
+  `Gather`, `SdfMeshProbeDepth.Visibility`) and HLSL (`sdfMeshProbesAt`,
+  `shade/sdf-mesh-irradiance.hlsli`). `SdfMeshIrradianceGatherDeviceLawTests`
+  closes the pair: it runs both on one published volume and requires the same
+  slots and weights on both backends.
 
 **Closed by** one implementation every caller shares; for a C# and HLSL pair,
 one generated from the other or an agreement law that evaluates both on the same

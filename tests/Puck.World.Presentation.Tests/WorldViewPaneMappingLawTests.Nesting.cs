@@ -15,6 +15,50 @@ public sealed partial class WorldViewPaneMappingLawTests {
     private const string BootSession = "session$0";
     private const string RoutedSession = "routed$away$0";
 
+    [Fact]
+    public void ANestedPortalUsesItsParentsCurrentCameraWhenTheChainResumes() {
+        var screens = ShowTwoWorlds();
+        screens.ReconcileViews(views: WorldViewInstances.Of(views: [
+            new WorldView(Demand: WorldViewDemand.Screen, FilmsWorld: false, Height: 0.5, Name: BootSession, Refresh: RenderGraphRefresh.EveryFrame, Width: 0.5) { Reads = [RoutedSession] },
+            new WorldView(Demand: WorldViewDemand.Screen, FilmsWorld: false, Height: 0.5, Name: RoutedSession, Refresh: RenderGraphRefresh.EveryFrame, Width: 0.5) { Parent = BootSession },
+        ]));
+        m_host.ViewScenes = new NestedGlassScenes();
+        m_host.RenderSettings = new WorldRenderSettings(defaults: new WorldRenderDefaults()) { UpdateRates = SdfUpdateRates.Views };
+        m_rate = Paced60;
+        Frame(pane: null);
+        Assert.Equal(1, RendersOf(instance: RoutedSession));
+        for (var index = 0; index < m_views.Count; index++) {
+            m_views[index] = m_views[index] with { Camera = Camera(x: 100f) };
+        }
+        Frame(pane: null);
+        Assert.Equal(0, RendersOf(instance: RoutedSession));
+        for (var index = 0; index < m_views.Count; index++) {
+            m_views[index] = m_views[index] with { Camera = Camera(x: 0f) };
+        }
+        Frame(pane: null);
+        Assert.Equal(1, RendersOf(instance: BootSession));
+        Assert.Equal(1, RendersOf(instance: RoutedSession));
+    }
+
+    private sealed class NestedGlassScenes : IWorldViewScenes {
+        public bool Bakes(string view) => false;
+        public bool TryCamera(string view, out CameraSnapshot camera) {
+            camera = Camera(x: 100f);
+            return true;
+        }
+        public bool TryVisibilityCamera(string view, out CameraSnapshot camera) {
+            camera = Camera(x: 0f);
+            return true;
+        }
+        public bool TrySurface(string view, SourceRay ray, out FixedVector3 point) { point = default; return false; }
+        public bool TryPlacements(string view, out IReadOnlyList<SourceMapping> placements) { placements = []; return false; }
+        public WorldPortalGlass PortalGlass(string consumer, string producer, out WorldScreen? glass) {
+            var shown = ((producer == RoutedSession) ? (consumer == BootSession) : (consumer != BootSession && consumer != RoutedSession));
+            glass = shown ? FacingScreen(index: 0, source: new WorldScreenSource.Session(Destination: "beyond")) : null;
+            return shown ? WorldPortalGlass.Found : WorldPortalGlass.Elsewhere;
+        }
+    }
+
     // The boot world's one screen shows a session; a world a seat is presented in stands a screen at the same place
     // showing a session of its own. Both sessions are views a screen of a world the display shows directly shows.
     private WorldScreenMappingSet ShowTwoWorlds() {

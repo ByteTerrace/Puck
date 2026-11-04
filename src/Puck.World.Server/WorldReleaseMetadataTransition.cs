@@ -62,15 +62,7 @@ public static class WorldReleaseMetadataTransition {
                         key: key,
                         node: result
                     ),
-                    ((path + "/") + key.Replace(
-                        comparisonType: StringComparison.Ordinal,
-                        newValue: "~0",
-                        oldValue: "~"
-                    ).Replace(
-                        comparisonType: StringComparison.Ordinal,
-                        newValue: "~1",
-                        oldValue: "/"
-                    ))
+                    ((path + "/") + Puck.Assets.Documents.DocumentJsonPointer.Escape(value: key))
                 );
 
                 if (!value.Exists) { result.Remove(propertyName: key); } else { result[key] = value.Value; }

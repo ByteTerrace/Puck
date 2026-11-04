@@ -1,0 +1,20 @@
+// A folded number and the literal of its value are one number with one spelling, at small magnitudes too.
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+let step = 1 / 65536
+
+inputModes {
+  global []
+  families [
+    {
+      name: "fuel"
+      selector { kind: BodyState, name: "fuel" }
+      default: "empty"
+      states [
+        { name: "empty", ranges [{ minimum: 0, maximum: 0 }], channels [] }
+        { name: $"from-{step}", ranges [{ minimum: step, maximum: step * 3 }], channels [] }
+      ]
+    }
+  ]
+}

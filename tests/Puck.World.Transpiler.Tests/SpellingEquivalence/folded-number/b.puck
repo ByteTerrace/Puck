@@ -1,0 +1,21 @@
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+inputModes {
+  global []
+  families [
+    {
+      name: "fuel"
+      selector { kind: BodyState, name: "fuel" }
+      default: "empty"
+      states [
+        { name: "empty", ranges [{ minimum: 0, maximum: 0 }], channels [] }
+        {
+          name: "from-0.0000152587890625"
+          ranges [{ minimum: 0.0000152587890625, maximum: 0.0000457763671875 }]
+          channels []
+        }
+      ]
+    }
+  ]
+}

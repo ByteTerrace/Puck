@@ -80,7 +80,8 @@ public static class SdfMaterialLayers {
         if (weathering is { } w) {
             var pattern = w.PatternScale ?? Vector3.One;
             if (!VectorFunctions.IsFinite(pattern) || pattern.X <= 0f || pattern.Y <= 0f || pattern.Z <= 0f ||
-                !VectorFunctions.IsFinite(pattern * w.Scale)) { return false; }
+                !VectorFunctions.IsFinite(pattern * w.Scale) ||
+                ((w.Octaves == 2) && !VectorFunctions.IsFinite((pattern * w.Scale) * w.OctaveRatio))) { return false; }
             if (
                 (w.Octaves < 1) ||
                 (w.Octaves > SdfWeathering.MaxOctaves) ||
