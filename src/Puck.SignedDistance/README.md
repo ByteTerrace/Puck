@@ -22,6 +22,16 @@ slot for presentation-cache invalidation. It reuses finite instance certificates
 for unskippable chains and reports an infinite bound for an unsupported dynamic
 dependency; an unrelated static plane affects no dynamic slot.
 
+The fixed-point superellipsoid's factored powers use a process-shared, bounded
+exact-result memo (`SdfFieldEvaluator.PowerMemoRetainedBytes`). Each atomically
+published cell holds the complete input key and result; a collision or concurrent
+replacement causes a miss, which calls `FixedQ4816.Pow`. It changes no field
+answer, shape exponent, interval certificate or march policy. Code generations
+replace the memo, and it allocates no table per placement or evaluator. The
+`sdf.point` counters distinguish hits, misses, bypasses and fallback work from
+instructions visited and cumulative payload allocation; `world.budget` reports
+the current generation's shared managed payload separately from physical memory.
+
 ## Documentation
 
 - [SDF renderer and field reference](https://github.com/ByteTerrace/Puck/blob/main/docs/rendering/sdf/README.md) — program model, solid primitives, field evaluator, and Lipschitz analysis.

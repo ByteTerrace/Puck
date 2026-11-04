@@ -6,14 +6,20 @@ namespace Puck.Abstractions;
 /// <summary>
 /// A weak table of products of code, each held against the object it was derived from: an entry lives no longer than
 /// its key, and every entry is forgotten once <see cref="CodeRevision.Current"/> moves, so a hot-reloaded process never
-/// serves a value an earlier version of its code derived. Safe for concurrent use; a value derived by code the runtime
-/// replaces during the derivation is forgotten on the next read.
+/// serves a value an earlier version of its code derived. Safe for concurrent use; an operation begun before an
+/// update can finish in its detached generation, but cannot publish into the generation later operations read.
 /// </summary>
 /// <typeparam name="TKey">The type of the objects values are derived from.</typeparam>
 /// <typeparam name="TValue">The type of the derived values.</typeparam>
 public sealed class CodeDerivedTable<TKey, [DynamicallyAccessedMembers(memberTypes: DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] TValue> where TKey : class where TValue : class? {
-    private readonly ConditionalWeakTable<TKey, TValue> m_values = new();
-    private int m_revision;
+    private Generation m_generation = new(revision: CodeRevision.Current);
+
+    // An operation holds one generation from lookup through publication. A derivation spanning a code update may
+    // finish for its original caller, but cannot publish into the table the new code now reads.
+    private sealed class Generation(int revision) {
+        public int Revision { get; } = revision;
+        public ConditionalWeakTable<TKey, TValue> Values { get; } = new();
+    }
 
     /// <summary>Gets the value derived from <paramref name="key"/>, deriving and holding it when the table holds none
     /// under the running code.</summary>
@@ -27,16 +33,16 @@ public sealed class CodeDerivedTable<TKey, [DynamicallyAccessedMembers(memberTyp
         ArgumentNullException.ThrowIfNull(argument: key);
         ArgumentNullException.ThrowIfNull(argument: derive);
 
-        Refresh();
+        var values = CurrentGeneration().Values;
 
-        if (m_values.TryGetValue(key: key, value: out var held)) {
+        if (values.TryGetValue(key: key, value: out var held)) {
             return held;
         }
 
         var derived = derive(arg: key);
 
         // The first value held for a key wins a race, so every caller sees one value.
-        return (m_values.TryAdd(key: key, value: derived) || !m_values.TryGetValue(key: key, value: out held))
+        return (values.TryAdd(key: key, value: derived) || !values.TryGetValue(key: key, value: out held))
             ? derived
             : held;
     }
@@ -48,9 +54,9 @@ public sealed class CodeDerivedTable<TKey, [DynamicallyAccessedMembers(memberTyp
     public bool TryGetValue(TKey key, [MaybeNullWhen(returnValue: false)] out TValue value) {
         ArgumentNullException.ThrowIfNull(argument: key);
 
-        Refresh();
+        var values = CurrentGeneration().Values;
 
-        return m_values.TryGetValue(key: key, value: out value);
+        return values.TryGetValue(key: key, value: out value);
     }
     /// <summary>Holds <paramref name="value"/> for <paramref name="key"/>, replacing any value held.</summary>
     /// <param name="key">The object the value is derived from.</param>
@@ -59,16 +65,21 @@ public sealed class CodeDerivedTable<TKey, [DynamicallyAccessedMembers(memberTyp
     public void AddOrUpdate(TKey key, TValue value) {
         ArgumentNullException.ThrowIfNull(argument: key);
 
-        Refresh();
-        m_values.AddOrUpdate(key: key, value: value);
+        CurrentGeneration().Values.AddOrUpdate(key: key, value: value);
     }
 
-    private void Refresh() {
-        var revision = CodeRevision.Current;
+    private Generation CurrentGeneration() {
+        while (true) {
+            var held = Volatile.Read(location: ref m_generation);
+            var revision = CodeRevision.Current;
 
-        if (Volatile.Read(location: ref m_revision) != revision) {
-            m_values.Clear();
-            Volatile.Write(location: ref m_revision, value: revision);
+            if (held.Revision == revision) { return held; }
+
+            var next = new Generation(revision: revision);
+
+            if (ReferenceEquals(Interlocked.CompareExchange(location1: ref m_generation, value: next, comparand: held), held)) {
+                return next;
+            }
         }
     }
 }

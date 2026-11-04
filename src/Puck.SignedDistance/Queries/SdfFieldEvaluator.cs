@@ -677,7 +677,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
     // === The shape distance functions (KEEP IN SYNC with the matching sdf* functions in Assets/Shaders/Sdf/field/sdf-shapes.hlsli)
     // ======================================================================================================================
 
-    private static FixedQ4816 EvaluateShape(in CompiledInstruction instruction, FixedVector3 p) {
+    private static FixedQ4816 EvaluateShape(in CompiledInstruction instruction, FixedVector3 p, ref PowerWork powerWork) {
         return ((SdfShapeType)instruction.Shape) switch {
             SdfShapeType.Sphere => SdfSphere(
             p: p,
@@ -762,6 +762,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
             SdfShapeType.Superellipsoid => SdfSuperellipsoid(
             p: p,
             radii: Vector(instruction: instruction),
+            work: ref powerWork,
             exponent: instruction.Data0W
         ),
             SdfShapeType.ConvexPolygon => (SdfConvexPolygonSolid(
@@ -926,7 +927,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
     // radius has a Q16 raw of 65536 / r, so 1 / 514 carries seven bits and moves a 514 m surface by metres, and a q of
     // 2^-16 resolution steps the distance by min(r) / 65536. Each scaled ratio rounds twice, at the product and the
     // quotient, which SuperellipsoidScaledRatioBounds encloses.
-    private static FixedQ4816 SdfSuperellipsoid(FixedVector3 p, FixedVector3 radii, FixedQ4816 exponent) {
+    private static FixedQ4816 SdfSuperellipsoid(FixedVector3 p, FixedVector3 radii, FixedQ4816 exponent, ref PowerWork work) {
         var absP = FixedVector3.Abs(value: p);
         var minRadius = FixedQ4816.Min(
             x: radii.X,
@@ -956,23 +957,28 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
             return -minRadius;
         }
 
-        var ux = FixedQ4816.Pow(
+        var memo = CurrentPowerMemo();
+        var ux = memo.Pow(
             x: (q.X / m),
+            work: ref work,
             y: exponent
         );
-        var uy = FixedQ4816.Pow(
+        var uy = memo.Pow(
             x: (q.Y / m),
+            work: ref work,
             y: exponent
         );
-        var uz = FixedQ4816.Pow(
+        var uz = memo.Pow(
             x: (q.Z / m),
+            work: ref work,
             y: exponent
         );
         var sum = ((ux + uy) + uz);
         var inverseExponent = (FixedQ4816.One / exponent);
 
-        return ((m * FixedQ4816.Pow(
+        return ((m * memo.Pow(
             x: sum,
+            work: ref work,
             y: inverseExponent
         )) - minRadius);
     }

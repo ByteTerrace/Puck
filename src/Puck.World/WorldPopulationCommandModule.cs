@@ -169,7 +169,8 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
                 );
             }
         }
-        var stampPool = "geometry assets shared; transforms and draws allocated from the live scene";
+        var stampPool = string.Create(CultureInfo.InvariantCulture,
+            $"geometry assets shared; transforms and draws allocated from the live scene; CPU query power memo {Puck.SignedDistance.Queries.SdfFieldEvaluator.PowerMemoRetainedBytes} byte(s) current-generation process-shared managed payload");
         var farDistance = WorldRenderFarDistance.Resolve(defaults: server.Definition.Render);
         // A keyed fog is judged at its thinnest key, where the most of the far plane shows through.
         var atmosphere = server.Definition.Render.Atmosphere;
