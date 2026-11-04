@@ -323,22 +323,22 @@ state {
       origin: [0, 0, 0],
       cellSize: 0.05,
       cells: concat(
-        reduce(range(0, 14), [], (cells, z) => concat(cells, map(range(0, kCaps[z]), j => {
+        flatMap(range(0, 14), z => map(range(0, kCaps[z]), j => {
           id: $"z{z}-{j}",
           centre [
             cardTable[0] + kSlotX[z],
             cardTable[1] + cardSurface + 0.0018 + cardLayer * j,
             cardTable[2] + (kTopRow[z] == 1 ? cardTopRowZ : cardTableauZ - cardFan * j)
           ]
-        }))),
-        reduce(range(0, 16), [], (cells, z) => concat(cells, map(range(0, fCaps[z]), j => {
+        })),
+        flatMap(range(0, 16), z => map(range(0, fCaps[z]), j => {
           id: $"f{z}-{j}",
           centre [
             cardTable[0] + fSlotX[z],
             cardTable[1] + cardSurface + 0.0018 + cardLayer * j,
             cardTable[2] + (z < 8 ? cardTopRowZ : cardTableauZ - cardFan * j)
           ]
-        }))),
+        })),
         map(range(0, 24), j => {
           id: $"fd-{j}",
           centre [
@@ -367,8 +367,8 @@ state {
       cells: map(range(0, cardCells), i => {
         key: $"{i}",
         value: (cardAcross[i] < 3 or cardAcross[i] > 44) ? -1 :
-          (cardFarRow[i] <= 7 ? kTopRowZones[((cardAcross[i] - 3) - (cardAcross[i] - 3) % 6) / 6] :
-            2 + ((cardAcross[i] - 3) - (cardAcross[i] - 3) % 6) / 6)
+          (cardFarRow[i] <= 7 ? kTopRowZones[((cardAcross[i] - 3) - (cardAcross[i] - 3) % 6) / 6] : 2 +
+            ((cardAcross[i] - 3) - (cardAcross[i] - 3) % 6) / 6)
       })
     }
     row {

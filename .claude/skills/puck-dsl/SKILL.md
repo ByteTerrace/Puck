@@ -59,8 +59,8 @@ A document's `schema:` field selects its vocabulary, never the filename.
   `for i in range(0, n) { }` and `for (item, index) in [...] { }` expand at
   compile time, and the document carries the rows they produce. Inside one
   value, use the collection builtins: `range`, `length`, `concat`, `map`,
-  `filter`, `reduce`, `distinct`, `sort`, `groupBy`, each taking a lambda
-  (`i => 0`). An array of n zeros is `map(range(0, n), i => 0)`; it runs once
+  `flatMap`, `filter`, `reduce`, `distinct`, `sort`, `groupBy`, each taking a lambda
+  (`i => 0`); a flatten is `flatMap(rows, r => [..])`, never a `reduce` over `concat`. An array of n zeros is `map(range(0, n), i => 0)`; it runs once
   at compile time, the compiled JSON still holds every value, and play-time
   behavior is unchanged. A lambda anywhere else is **PUCK042**; an unevaluable
   call **PUCK041**; a `for` over something not known at compile time
@@ -192,7 +192,8 @@ commands [
 ```text
 puck format <file> --check
 puck lint <file> --strict
-puck compile <file> --validate        # writes <source>.world.json (and its .puckb) or <source>.cartridge.json
+puck compile <file>                   # writes <source>.world.json (and its .puckb) or <source>.cartridge.json beside the source
+puck compile <file> --validate        # checks only: writes nothing without --output
 puck test <path-or-dir>               # boots each test block headless, one verdict a line
 ```
 

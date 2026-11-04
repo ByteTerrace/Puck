@@ -308,30 +308,17 @@ let windowStarts = map(range(0, 10), i => 21 + (5 * i))
 let eastStarts = [14.5, 19.5, 24.5, 29.5, 34.5]
 let skylightStarts = [24, 36, 48]
 // Each opening, for its cassette: its level, its face, and its extent along the face (x, or z on the east face).
-let hallOpenings = reduce(
-  range(0, 4),
-  [],
-  (rows, k) => concat(
-    concat(
-      concat(
-        rows,
-        map(
-          concat(((k == 0) ? [] : [14]), windowStarts),
-          x => { level: k, face: "south", a0: x, a1: ((x == 14) ? 18 : (x + 3)) }
-        )
-      ),
-      map(windowStarts, x => { level: k, face: "north", a0: x, a1: (x + 3) })
-    ),
-    map(eastStarts, z => { level: k, face: "east", a0: z, a1: (z + 3) })
-  )
-)
-let hallCassetteRows = reduce(
-  range(0, 4),
-  [],
-  (rows, k) => concat(rows, map(["south", "north", "east"], face => { level: k, face: face }))
-)
+let hallOpenings = flatMap(range(0, 4), k => concat(
+  map(
+    concat(((k == 0) ? [] : [14]), windowStarts),
+    x => { level: k, face: "south", a0: x, a1: ((x == 14) ? 18 : (x + 3)) }
+  ),
+  map(windowStarts, x => { level: k, face: "north", a0: x, a1: (x + 3) }),
+  map(eastStarts, z => { level: k, face: "east", a0: z, a1: (z + 3) })
+))
+let hallCassetteRows = flatMap(range(0, 4), k => map(["south", "north", "east"], face => { level: k, face: face }))
 // Each blind board: its level, its name, and its world bounds.
-let hallBlindBoards = reduce(range(0, 4), [], (rows, k) => concat(concat(rows, [
+let hallBlindBoards = flatMap(range(0, 4), k => concat([
   {
     level: k
     name: "south"
@@ -362,7 +349,7 @@ let hallBlindBoards = reduce(range(0, 4), [], (rows, k) => concat(concat(rows, [
     z0: 14.47
     z1: 37.53
   }
-]), map(
+], map(
   ((k == 3) ? skylightStarts : []),
   x => { level: k, name: $"skylight-{x}", x0: (x - 0.03), x1: (x + 10.03), y0: 17.8, y1: 18.02, z0: 17.97, z1: 34.03 }
 )))
@@ -388,31 +375,16 @@ let hallCeilings = [4.25, 8.75, 13.25, 17.75]
 // (`boardroom-shell`), and the room's two columns stand over its tables (x 56.5 and 65), on level 2's switch.
 let hallDownlightColumns = [[27, 39, 49], [27, 39, 51, 63], [27, 39, 49, 56.5, 65], [27, 39, 51, 63]]
 let hallDownlightAisles = concat(hallLightAisles, [[15, 21, 26, 31, 37]])
-let hallDownlights = reduce(
-  range(0, 4),
-  [],
-  (rows, k) => concat(
-    concat(
-      rows,
-      reduce(
-        hallDownlightAisles[k],
-        [],
-        (aisle, z) => concat(aisle, map(hallDownlightColumns[k], x => { level: k, x: x, z: z }))
-      )
-    ),
-    map([[13.5, 18], [17, 18], [13.5, 26], [17, 26]], at => { level: k, x: at[0], z: at[1] })
-  )
-)
+let hallDownlights = flatMap(range(0, 4), k => concat(
+  flatMap(hallDownlightAisles[k], z => map(hallDownlightColumns[k], x => { level: k, x: x, z: z })),
+  map([[13.5, 18], [17, 18], [13.5, 26], [17, 26]], at => { level: k, x: at[0], z: at[1] })
+))
 // The painting wing's own fixtures (paintings.puck), lit whatever level 0's switch says, since the wing is a windowless
 // room whose paintings are its exhibits and its ceiling strips go dark with the lobby's: a grid of 8,000-lumen
 // downlights clear of the endless fall's ceiling canvas at (66, 22.6), and a track of washes 1.2 m off each wall a
 // painting hangs on, each a warm spot aimed down the wall at a canvas's height, so the canvases and the wall about
 // them carry a gallery's light (some 400 lux at a canvas).
-let wingDownlights = reduce(
-  [53.5, 60.35, 67.2],
-  [],
-  (rows, x) => concat(rows, map([16, 22.5, 29.5, 36], z => { x: x, z: z }))
-)
+let wingDownlights = flatMap([53.5, 60.35, 67.2], x => map([16, 22.5, 29.5, 36], z => { x: x, z: z }))
 let wingWashes = concat(
   map([54, 57, 60, 64, 67], x => { x: x, z: 38.2, aim [0, -2.65, 1.2] }),
   [{ x: 52.5, z: 34.5, aim [-1.2, -2.65, 0] }, { x: 68.2, z: 34.5, aim [1.2, -2.65, 0] }]
@@ -421,7 +393,7 @@ let wingWashes = concat(
 // The tour: every exhibit in walking order, level by level and row by row. `galleryStop` is the exhibit the tour last
 // stood a body at (-1 before the first step); gallery.next and gallery.prev write `galleryStep`, a rule moves the stop
 // and the stop's own rule stands body 0 at the exhibit's spawn point, facing it.
-let galleryOrder = reduce(galleryRows, [], (names, row) => concat(names, row.names))
+let galleryOrder = flatMap(galleryRows, row => row.names)
 let galleryLast = (length(galleryOrder) - 1)
 
 prototypes {
