@@ -33,6 +33,9 @@ let courtZ = -0.0215
 let courtRelief = 0.0035
 let courtStep = 0.0008
 
+// The scale some figure measures are written against: a measure is its unit-frame value times this.
+let courtFigureScale = 0.62
+
 // A figure layer's edge rounding: 0.9 of the layer's depth (courtRelief plus courtStep for each depth it stands in front
 // of the shapes behind), never past `cap`, the most the layer's own outline can round.
 function courtRound(depth, cap) = minimum(0.9 * (courtRelief + depth * courtStep), cap)
@@ -2138,7 +2141,7 @@ template courtQueen(suit) {
     rounding: courtRound(4, 0.12276)
   }
   shape Prism "upper-nose" {
-    position [0, 0.42779999999999996, courtZ]
+    position [0, 0.69 * courtFigureScale, courtZ]
     rotation [0, 1, 0, 0]
     scale [0.01984, 0.01984, courtRelief + 17 * courtStep]
     material: 5
@@ -2152,20 +2155,20 @@ template courtQueen(suit) {
   shape Prism "upper-hood" {
     position [0, 0.5084, courtZ]
     rotation [0, 1, 0, 0]
-    scale [0.2728, 0.26039999999999996, courtRelief + 6 * courtStep]
+    scale [0.2728, 0.42 * courtFigureScale, courtRelief + 6 * courtStep]
     material: 6
     blend: "Union"
     smooth: 0
     profile {
       kind: "RoundedRectangle"
-      cornerRadius: 0.35714285714285715
+      cornerRadius: 5 / 14
     }
     rounding: minimum(0.062, courtRelief + 6 * courtStep)
   }
   shape Prism "upper-chest" {
     position [0, 0.1488, courtZ]
     rotation [0, 1, 0, 0]
-    scale [0.22319999999999998, 0.124, courtRelief + 5 * courtStep]
+    scale [0.36 * courtFigureScale, 0.124, courtRelief + 5 * courtStep]
     material: 6
     blend: "Union"
     smooth: 0
@@ -2178,18 +2181,18 @@ template courtQueen(suit) {
   shape Prism "upper-shoulder-left" {
     position [0.3224, 0.124, courtZ]
     rotation [0, 1, 0, 0]
-    scale [0.124, 0.11159999999999999, courtRelief + 4 * courtStep]
+    scale [0.124, 0.18 * courtFigureScale, courtRelief + 4 * courtStep]
     material: 7
     blend: "Union"
     smooth: 0
     profile {
       kind: "RoundedRectangle"
-      cornerRadius: 0.35555555555555557
+      cornerRadius: 16 / 45
     }
     rounding: minimum(0.03968, courtRelief + 4 * courtStep)
   }
   shape Prism "upper-ear-left" {
-    position [0.2728, 0.48360000000000003, courtZ]
+    position [0.2728, 0.78 * courtFigureScale, courtZ]
     rotation [0, 1, 0, 0]
     scale [0.0372, 0.0868, courtRelief + 4 * courtStep]
     material: 7
@@ -2202,9 +2205,9 @@ template courtQueen(suit) {
     rounding: minimum(0.0186, courtRelief + 4 * courtStep)
   }
   shape Prism "upper-eye-left" {
-    position [0.0992, 0.46499999999999997, courtZ]
+    position [0.0992, 0.75 * courtFigureScale, courtZ]
     rotation [0.039989334187, 0.999200106661, 0, 0]
-    scale [0.047119999999999995, 0.03472, courtRelief + 13 * courtStep]
+    scale [0.076 * courtFigureScale, 0.03472, courtRelief + 13 * courtStep]
     material: 6
     blend: "Union"
     smooth: 0
@@ -2266,18 +2269,18 @@ template courtQueen(suit) {
   shape Prism "upper-shoulder-right" {
     position [-0.3224, 0.124, courtZ]
     rotation [0, 1, 0, 0]
-    scale [0.124, 0.11159999999999999, courtRelief + 4 * courtStep]
+    scale [0.124, 0.18 * courtFigureScale, courtRelief + 4 * courtStep]
     material: 7
     blend: "Union"
     smooth: 0
     profile {
       kind: "RoundedRectangle"
-      cornerRadius: 0.35555555555555557
+      cornerRadius: 16 / 45
     }
     rounding: minimum(0.03968, courtRelief + 4 * courtStep)
   }
   shape Prism "upper-ear-right" {
-    position [-0.2728, 0.48360000000000003, courtZ]
+    position [-0.2728, 0.78 * courtFigureScale, courtZ]
     rotation [0, 1, 0, 0]
     scale [0.0372, 0.0868, courtRelief + 4 * courtStep]
     material: 7
@@ -2290,9 +2293,9 @@ template courtQueen(suit) {
     rounding: minimum(0.0186, courtRelief + 4 * courtStep)
   }
   shape Prism "upper-eye-right" {
-    position [-0.0992, 0.46499999999999997, courtZ]
+    position [-0.0992, 0.75 * courtFigureScale, courtZ]
     rotation [-0.039989334187, 0.999200106661, 0, 0]
-    scale [0.047119999999999995, 0.03472, courtRelief + 13 * courtStep]
+    scale [0.076 * courtFigureScale, 0.03472, courtRelief + 13 * courtStep]
     material: 6
     blend: "Union"
     smooth: 0
@@ -2373,7 +2376,7 @@ template courtQueen(suit) {
     smooth: 0
     profile {
       kind: "RoundedRectangle"
-      cornerRadius: 0.4166666666666667
+      cornerRadius: 5 / 12
     }
     rounding: minimum(0.0062, courtRelief + 10 * courtStep)
   }
@@ -2557,7 +2560,7 @@ template courtQueen(suit) {
   shape Prism "upper-sceptre" {
     position [-0.3968, 0.2728, courtZ]
     rotation [0, 1, 0, 0]
-    scale [0.00992, 0.22319999999999998, courtRelief + 7 * courtStep]
+    scale [0.00992, 0.36 * courtFigureScale, courtRelief + 7 * courtStep]
     material: 1
     blend: "Union"
     smooth: 0
@@ -2605,7 +2608,7 @@ template courtQueen(suit) {
     rounding: courtRound(4, 0.12276)
   }
   shape Prism "lower-nose" {
-    position [0, -0.42779999999999996, courtZ]
+    position [0, -0.69 * courtFigureScale, courtZ]
     rotation [-1, 0, 0, 0]
     scale [0.01984, 0.01984, courtRelief + 17 * courtStep]
     material: 5
@@ -2619,20 +2622,20 @@ template courtQueen(suit) {
   shape Prism "lower-hood" {
     position [0, -0.5084, courtZ]
     rotation [-1, 0, 0, 0]
-    scale [0.2728, 0.26039999999999996, courtRelief + 6 * courtStep]
+    scale [0.2728, 0.42 * courtFigureScale, courtRelief + 6 * courtStep]
     material: 6
     blend: "Union"
     smooth: 0
     profile {
       kind: "RoundedRectangle"
-      cornerRadius: 0.35714285714285715
+      cornerRadius: 5 / 14
     }
     rounding: minimum(0.062, courtRelief + 6 * courtStep)
   }
   shape Prism "lower-chest" {
     position [0, -0.1488, courtZ]
     rotation [-1, 0, 0, 0]
-    scale [0.22319999999999998, 0.124, courtRelief + 5 * courtStep]
+    scale [0.36 * courtFigureScale, 0.124, courtRelief + 5 * courtStep]
     material: 6
     blend: "Union"
     smooth: 0
@@ -2645,18 +2648,18 @@ template courtQueen(suit) {
   shape Prism "lower-shoulder-left" {
     position [-0.3224, -0.124, courtZ]
     rotation [-1, 0, 0, 0]
-    scale [0.124, 0.11159999999999999, courtRelief + 4 * courtStep]
+    scale [0.124, 0.18 * courtFigureScale, courtRelief + 4 * courtStep]
     material: 7
     blend: "Union"
     smooth: 0
     profile {
       kind: "RoundedRectangle"
-      cornerRadius: 0.35555555555555557
+      cornerRadius: 16 / 45
     }
     rounding: minimum(0.03968, courtRelief + 4 * courtStep)
   }
   shape Prism "lower-ear-left" {
-    position [-0.2728, -0.48360000000000003, courtZ]
+    position [-0.2728, -0.78 * courtFigureScale, courtZ]
     rotation [-1, 0, 0, 0]
     scale [0.0372, 0.0868, courtRelief + 4 * courtStep]
     material: 7
@@ -2669,9 +2672,9 @@ template courtQueen(suit) {
     rounding: minimum(0.0186, courtRelief + 4 * courtStep)
   }
   shape Prism "lower-eye-left" {
-    position [-0.0992, -0.46499999999999997, courtZ]
+    position [-0.0992, -0.75 * courtFigureScale, courtZ]
     rotation [-0.999200106661, 0.039989334187, 0, 0]
-    scale [0.047119999999999995, 0.03472, courtRelief + 13 * courtStep]
+    scale [0.076 * courtFigureScale, 0.03472, courtRelief + 13 * courtStep]
     material: 6
     blend: "Union"
     smooth: 0
@@ -2733,18 +2736,18 @@ template courtQueen(suit) {
   shape Prism "lower-shoulder-right" {
     position [0.3224, -0.124, courtZ]
     rotation [-1, 0, 0, 0]
-    scale [0.124, 0.11159999999999999, courtRelief + 4 * courtStep]
+    scale [0.124, 0.18 * courtFigureScale, courtRelief + 4 * courtStep]
     material: 7
     blend: "Union"
     smooth: 0
     profile {
       kind: "RoundedRectangle"
-      cornerRadius: 0.35555555555555557
+      cornerRadius: 16 / 45
     }
     rounding: minimum(0.03968, courtRelief + 4 * courtStep)
   }
   shape Prism "lower-ear-right" {
-    position [0.2728, -0.48360000000000003, courtZ]
+    position [0.2728, -0.78 * courtFigureScale, courtZ]
     rotation [-1, 0, 0, 0]
     scale [0.0372, 0.0868, courtRelief + 4 * courtStep]
     material: 7
@@ -2757,9 +2760,9 @@ template courtQueen(suit) {
     rounding: minimum(0.0186, courtRelief + 4 * courtStep)
   }
   shape Prism "lower-eye-right" {
-    position [0.0992, -0.46499999999999997, courtZ]
+    position [0.0992, -0.75 * courtFigureScale, courtZ]
     rotation [-0.999200106661, -0.039989334187, 0, 0]
-    scale [0.047119999999999995, 0.03472, courtRelief + 13 * courtStep]
+    scale [0.076 * courtFigureScale, 0.03472, courtRelief + 13 * courtStep]
     material: 6
     blend: "Union"
     smooth: 0
@@ -2840,7 +2843,7 @@ template courtQueen(suit) {
     smooth: 0
     profile {
       kind: "RoundedRectangle"
-      cornerRadius: 0.4166666666666667
+      cornerRadius: 5 / 12
     }
     rounding: minimum(0.0062, courtRelief + 10 * courtStep)
   }
@@ -3024,7 +3027,7 @@ template courtQueen(suit) {
   shape Prism "lower-sceptre" {
     position [0.3968, -0.2728, courtZ]
     rotation [-1, 0, 0, 0]
-    scale [0.00992, 0.22319999999999998, courtRelief + 7 * courtStep]
+    scale [0.00992, 0.36 * courtFigureScale, courtRelief + 7 * courtStep]
     material: 1
     blend: "Union"
     smooth: 0
@@ -3056,7 +3059,7 @@ template courtQueen(suit) {
     smooth: 0
     profile {
       kind: "RoundedRectangle"
-      cornerRadius: 0.18181818181818182
+      cornerRadius: 2 / 11
     }
   }
   shape Prism "sash-edge-upper" {
@@ -3068,7 +3071,7 @@ template courtQueen(suit) {
     smooth: 0
     profile {
       kind: "RoundedRectangle"
-      cornerRadius: 0.46153846153846156
+      cornerRadius: 6 / 13
     }
   }
   shape Prism "sash-edge-lower" {
@@ -3080,7 +3083,7 @@ template courtQueen(suit) {
     smooth: 0
     profile {
       kind: "RoundedRectangle"
-      cornerRadius: 0.46153846153846156
+      cornerRadius: 6 / 13
     }
   }
   shape Prism "sash-medallion" {
