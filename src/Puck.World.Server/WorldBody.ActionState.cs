@@ -254,6 +254,11 @@ public sealed partial class WorldBody {
             ) {
                 var initial = InitialRaw(definition: in definition);
 
+                // A reset already at its value changes no selector. Avoid opening a speculative
+                // write and synchronizing every input owner for the same value on every tick.
+                if ((definition.Kind == ActionStateKind.Counter) && (StateCounter(slot: slot).Value == initial)) {
+                    continue;
+                }
                 if ((definition.Kind == ActionStateKind.Counter) && (m_stateLane?.Input is { } input) &&
                     !input.TryValidateReset(body: m_stateOrdinal, raw: initial, reason: out var reason, slot: slot)) {
                     m_actionStateRequested[slot] = initial;
