@@ -202,8 +202,9 @@ Each waits on the owner: what the engine should do, how it looks and feels, and 
 ### Dense landscapes
 
 Owner: the lead, with performance, rendering and world-authoring owners per
-step · high · Next: profile remaining normal-paced CPU work and close readback/physical
-memory attribution, then GPU instance buckets and the terrain-following forest belt.
+step · high · Next: reduce repeated CPU dependency work identified by the fresh
+normal-paced trace and close readback/physical memory attribution, then GPU
+instance buckets and the terrain-following forest belt.
 The owner includes continuous forest in the first milestone alongside roads,
 shrubs, grass and trees; the current regular pressure patch does not satisfy it.
 The [plan](dense-landscapes.md) owns the current assessment, workload and order.

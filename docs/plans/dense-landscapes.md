@@ -90,9 +90,12 @@ still retain full sample capacity on demand. Unsampled heap graphs identify thos
 arrays and substantial GI acceleration/probe work; local-variable roots alone do
 not establish permanent retention. A broader Vulkan portal composition still
 reaches 14.68 GB private after collection/retirement. It is not a matched forest
-comparison, but it keeps the memory budget open. Normal-play shared-buffer
-attribution, driver/physical residency, cold peaks and Deck qualification remain
-owed; process, managed, allocator, account and device readings must stay separate.
+comparison, but it keeps the memory budget open. An ordinary paced shared-buffer
+run reaches 10.17 GB private after collection, with a 22.8 ms average walking
+production phase. Presentation waits distort its
+frame duration; neither that run nor private bytes qualify the frame/Deck bars.
+Driver/physical residency and cold-peak qualification remain owed; process,
+managed, allocator, account and device readings must stay separate.
 
 The prior moving trace attributed about four of twelve sampled seconds to camera,
 effector and contact field queries. Certified pruning addresses that structural
@@ -149,10 +152,12 @@ wind and roads are authored Puck programs/data, not feature-specific C# paths.
 ## Next action
 
 The query route matches on D3D12 and Vulkan, and the shared bake destination is
-implemented and measured. Profile the remaining CPU production/query work in a
-normal-paced forest window; do not infer CPU submission counts from PIX's expanded
-indirect events. Attribute retained readback storage and physical memory before
-scaling. Keep query throughput, normal frame time and memory experiments distinct.
+implemented and measured. A fresh normal-paced CPU trace identifies remaining
+physics/rule execution,
+portal-boundary scans, transform packing, changed-draw staging and exposure work.
+Use the current stacks to reduce repeated dependency work; do not infer CPU
+submission counts from PIX's expanded indirect events. Attribute retained readback
+storage and physical memory before scaling. Keep query throughput, normal frame time and memory experiments distinct.
 
 PIX identifies the GPU view and resolve passes as costly, with high register
 allocation and register-launch stalls; these percentages do not establish register
