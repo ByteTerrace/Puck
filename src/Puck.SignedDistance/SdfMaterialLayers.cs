@@ -18,10 +18,12 @@ public sealed record SdfInset(Vector3 Origin, Quaternion Rotation, float Depth, 
 /// <summary>Generic coverage controls. Edge follows curvature, Lines a triplanar pattern, and Settle upward
 /// facing surfaces. Reach sets curvature sensitivity. Lane selects one of four anonymous instance channels;
 /// Floor supplies minimum coverage. Under contains at most two ascending reveal thresholds. Deposit is required
-/// when Settle is active. Pattern coordinates follow the winning dynamic transform.</summary>
+/// when Settle is active. Noise reveals a seeded lattice mask independently of curvature. PatternScale multiplies
+/// each pattern coordinate axis; all components must be positive. Softness widens the reveal ramp in coverage units.
+/// Pattern coordinates follow the material frame.</summary>
 public sealed record SdfWeathering(float Edge = 0f, float Lines = 0f, float Settle = 0f, float Reach = 1f,
     uint Seed = 0, float Scale = 1f, float Floor = 0f, int Lane = 0,
-    IReadOnlyList<SdfRevealStage>? Under = null, SdfSurface? Deposit = null);
+    IReadOnlyList<SdfRevealStage>? Under = null, SdfSurface? Deposit = null, float Noise = 0f, Vector3? PatternScale = null, float Softness = 0f);
 /// <summary>The shared admission rules for engine and document material layers.</summary>
 public static class SdfMaterialLayers {
     private static bool Color(Vector3 v) => (VectorFunctions.IsFinite(vector: v) && (v.X >= 0f) && (v.Y >= 0f) && (v.Z >= 0f));
@@ -68,16 +70,21 @@ public static class SdfMaterialLayers {
             }
         }
         if (weathering is { } w) {
+            var pattern = w.PatternScale ?? Vector3.One;
+            if (!VectorFunctions.IsFinite(pattern) || pattern.X <= 0f || pattern.Y <= 0f || pattern.Z <= 0f ||
+                !VectorFunctions.IsFinite(pattern * w.Scale)) { return false; }
             if (
                 !Unit(v: w.Edge) ||
                 !Unit(v: w.Lines) ||
+                !Unit(v: w.Noise) ||
+                !Unit(v: w.Softness) ||
                 !Unit(v: w.Settle) ||
                 !Positive(v: w.Reach) ||
                 !NonNegative(v: w.Scale) ||
                 !Unit(v: w.Floor) ||
                 (((uint)w.Lane) > 3u) ||
                 (w.Under is { Count: > 2 }) ||
-                (((w.Edge > 0f) || (w.Lines > 0f)) && (w.Under is not { Count: > 0 })) ||
+                (((w.Edge > 0f) || (w.Lines > 0f) || (w.Noise > 0f)) && (w.Under is not { Count: > 0 })) ||
                 ((w.Settle > 0f) && (w.Deposit is null))
             ) { return false; }
             var previous = 0f;

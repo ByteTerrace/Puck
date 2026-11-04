@@ -42,9 +42,10 @@ and its canopy, understory, floor and clearing layers. Seeded sampler positions,
 shared lawn tree variants, younger edges, three glades, ferns, shrubs, fallen wood,
 leaf litter and flower drifts replace the regular pressure patch. Native D3D12
 and Vulkan captures inspect the composition; the standard foliage surfaces use
-active procedural weathering. Terrain-following banks remain open: enabling the
-new surface-placement policy encountered a validation null reference, so this
-visual pass stays on the level valley floor. Inspection cameras are authored in
+active procedural weathering. A bounded solid noise-relief patch now proves geometric ground texture and
+walking contact in the eastern glade. Terrain-following banks remain open:
+enabling the new surface-placement policy encountered a validation null reference,
+so the wider planting remains on the level valley floor. Inspection cameras are authored in
 `forest.puck`. Lighting defects and frame/memory qualification remain open.
 
 The measurements below describe the **earlier pressure-patch workload**, before

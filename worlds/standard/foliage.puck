@@ -22,9 +22,12 @@ let meadowBlades = map(range(0, 144), i => {
 // Surface colour belongs to shading, not silhouette relief. Static scenery has zero render lanes,
 // so floor: 1 explicitly activates these authored masks. Under thresholds stay below the mask strength.
 function landscapeSurface(base, under, deposit, seed, scale = 1.5, lines = 0, settle = 0.3,
-  edge = 0, reach = 0.35, threshold = 0.16) = base with {
+  edge = 0, reach = 0.35, threshold = 0.16, noise = 0, patternScale = [1, 1, 1], softness = 0) = base with {
   weathering {
     floor: 1
+    noise: noise
+    softness: softness
+    patternScale: patternScale
     seed: seed
     scale: scale
     lines: lines
@@ -35,6 +38,11 @@ function landscapeSurface(base, under, deposit, seed, scale = 1.5, lines = 0, se
     deposit { color: deposit, roughness: 0.98, metal: 0 }
   }
 }
+
+// Flat turf and relieved patches share one world-space material, including the noise phase at their seam.
+function groundSurface(color) = landscapeSurface({ color: color, roughness: 0.99, specular: 0.015 },
+  under: "#6A6D42", deposit: "#91A459", seed: 4187, scale: 2.4,
+  noise: 0.7, threshold: 0.65, softness: 0.45, settle: 0.25)
 
 // Stone palettes for mossyRock: the stone, its shoulder and the moss cap.
 let limestoneRock = ["#888778", "#A7A28B", "#657044"]
@@ -87,16 +95,18 @@ template mossyRock(id, colors = limestoneRock) {
 // the trunk, branches and crowns, never the roots.
 // trunk { radius, center, half }; roots [{ position, r, yaw }]; branches [{ position, yaw, tilt, r, h }], each a
 // Capsule rising from its position; crowns [{ position, r }], material cycling through the leaves.
-template groupedTree(id, name, bark, branchBark, leaves, trunk, roots, branches, crowns, lean = 0, smooth = 0.25, barkUnder = ["#5A4431", "#775B3F"]) {
+template groupedTree(id, name, bark, branchBark, leaves, trunk, roots, branches, crowns, lean = 0, smooth = 0.25, barkUnder = ["#4E3D2B", "#735537"]) {
   prototype $"{id}" {
     document {
       schema: "puck.creation.v1"
       name: name
       palette: concat(
         map([bark, branchBark], (surface, i) => landscapeSurface(surface, under: barkUnder[i],
-          deposit: "#657043", seed: 5123 + i, scale: 14, lines: 0.26, settle: 0.1, edge: 0.1)),
-        map(leaves, (color, i) => landscapeSurface({ color: color, roughness: 0.93, specular: 0.03, wrap: 0.3 },
-          under: color, deposit: "#859653", seed: 1731 + i, scale: 2.4, settle: 0.6))
+          deposit: "#657043", seed: 5123 + i, scale: 1, lines: 0, settle: 0.08, noise: 1,
+          patternScale: [16, 0.6, 16], threshold: 0.65, softness: 0.25)),
+        map(leaves, (color, i) => landscapeSurface({ color: color, roughness: 0.97, specular: 0.012, wrap: 0.4 },
+          under: i == 0 ? "#2F4C37" : leaves[i - 1], deposit: "#859653", seed: 1731 + i,
+          scale: 2.4, settle: 0.3, noise: 0.72, threshold: 0.6, softness: 0.4))
       )
       shape Cylinder "trunk" {
         position [-trunk.center * sine(lean), trunk.center * cosine(lean), 0]
@@ -552,12 +562,12 @@ template windMeadowTile(id, tile, origin = [0, 0, 0], fringe = [5.5, 6.7, 3.9, 3
 }
 
 // A relieved near-elliptical mass, separately bounded and baked: a bank, sand cap or lawn patch.
-template sceneryPatch(id, radii, color, seed = 2461, amplitude = 0.01, frequency = 2.4) {
+template sceneryPatch(id, radii, color, seed = 2461, amplitude = 0.01, frequency = 2.4, surface = null) {
   prototype $"{id}" {
     document {
       schema: "puck.creation.v1"
       name: id
-      palette [{ color: color, roughness: 0.97, specular: 0.025 }]
+      palette [surface ?? { color: color, roughness: 0.97, specular: 0.025 }]
       noise {
         frequency: frequency
         amplitude: amplitude
@@ -598,17 +608,7 @@ template paintedGround(id, radius, turf, paving, paths = [], pathWidth = 2.4, de
       schema: "puck.creation.v1"
       name: id
       palette [
-        {
-          color: turf
-          roughness: 0.95
-          specular: 0.02
-          weathering {
-            floor: 1
-            settle: 0.4
-            scale: 0.85
-            seed: 4187
-            deposit { color: "#80934E", roughness: 0.98, metal: 0 }
-          }
+        groundSurface(turf) with {
           paints: map(paths, p => {
             type: "Sweep"
             color: paving

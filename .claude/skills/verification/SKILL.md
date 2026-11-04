@@ -23,7 +23,7 @@ nothing back.
 For settled mesh comparisons, `world.wait bakes` finishes CPU bake/contour work;
 `world.wait ready` finishes renderer startup. Neither proves GPU mesh landing.
 After route warmup has produced its actual program, pause authority and use
-`world.wait residency` before the measured interval. Pin counter endpoints to command drains at the first measured tick and
+`world.wait residency 20` before the measured interval (the deadline in seconds is required). Pin counter endpoints to command drains at the first measured tick and
 lastTick+1, with opening reads before authored commands; direct paused reads can
 include extra presentation work before resume. The wait finishes the required geometry
 upload's fence, without converging lighting or draining changing pose uploads.

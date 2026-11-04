@@ -228,6 +228,14 @@ memory, density sweeps, terrain following and target-device bars remain open.
   0.72. Removing the surface policies admitted the expanded belt. Diagnose with a
   stack-bearing repro before restoring banks; no cause has been established.
 
+  P2 · Owner: material/bake owner · The surface-pattern code edit forced a full
+  native rebake (77.95 s, no stored groups loaded) despite no authored shape changes.
+  It exceeds the one-minute bake bar and reinforces the existing appearance/field
+  identity separation work. The bounded clearing relief also adds real mesh and
+  query work: scale it only with measured detail/visibility handling. Pattern
+  filtering uses a conservative footprint approximation; adversarial cross-family
+  review of the new reserved-component packing/filtering remains owed.
+
   P2 · Owner: landscape/rendering · The forest's native clearing captures show
   sharply black crown undersides. Surface texture does not close that lighting
   finding. Keep it alongside the existing GI evidence, and distinguish it from

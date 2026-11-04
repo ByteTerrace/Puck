@@ -8239,6 +8239,9 @@ export type WorldPrototype = {
           roughness: number;
           metal: number;
         } | null;
+        noise?: number;
+        patternScale?: unknown;
+        softness?: number;
       } | null;
       /**
        * The wrap-lighting share in [0, 1] (null = 0 — the plain Lambert term) — see Wrap.

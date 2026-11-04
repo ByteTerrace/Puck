@@ -1,5 +1,6 @@
 // Continuous southern woodland. The layout library owns its masks; layers remain independently editable.
 import "forest-layout"
+import "forest-surface-views"
 import "../standard/camera"
 import "forest-canopy"
 import "forest-understory"
@@ -29,6 +30,9 @@ prototypes {
   mossyRock(id: "forest-rock", colors: ["#806951", "#A48D68", "#546F41"])
   flowerCluster(id: "forest-flower", head: "#E8DFAD", accent: "#C9A94D", stem: "#566D3B", count: 5)
   leafLitter(id: "forest-duff")
+  // A bounded test of actual field relief, below the tree-free clearing rather than the whole valley disc.
+  sceneryPatch(id: "forest-ground-relief", radii: [7, 0.34, 5], color: "#6C8A33",
+    seed: 7291, amplitude: 0.12, frequency: 1.6, surface: groundSurface("#6C8A33"))
   for (tile, i) in forestGrassTiles {
     windMeadowTile(id: $"forest-grass-{i}", tile: tile, origin: forestGrassOrigin,
       fringe: [5.5, 6.7, 0.67, 0.67], clearing: [0, 0, 0])
@@ -36,6 +40,12 @@ prototypes {
 }
 
 placements {
+  placement "forest-ground-relief" {
+    prototype: "forest-ground-relief"
+    position [65, -0.18, -169]
+    solid { margin: 0 }
+  }
+
   placement "forest-veteran" {
     prototype: "forest-veteran"
     position [43, 0, -144]
