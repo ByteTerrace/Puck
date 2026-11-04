@@ -17,31 +17,35 @@ overrides this skill and is written into it in that session.
 
 ## When a lane gets a review
 
-- An engine change gets an adversarial cross-family review, required and sized
-  to its risk; docs and world content get none or a scout's spot-check
-  ([orchestration](../orchestration/SKILL.md#spend-verification-not-writing)).
-  Codex reviews Claude-written code and a Claude agent (`reviewer`, or
-  `specialist` for review-and-fix) reviews Codex-written code; Argon takes
-  security, large-context and UI reviews.
-- The review runs while the author implements its next item and never blocks
-  the landing or pauses the author. The brief gives the reviewer the diff and the
-  author's claim, not the author's reasoning, and asks it to break the change.
-- Findings go into the open items'
-  [work packets](../../../docs/plans/open-items.md#work-packets), each with its
+- Two kinds of pass exist
+  ([orchestration](../orchestration/SKILL.md#spend-verification-not-writing)):
+  - **Area fix pass**, the default: a reader from another family takes an area
+    as it is now, not a lane's diff, and fixes what is local and clear. Codex
+    passes over Claude-written areas, a Claude `specialist` over Codex-written
+    ones, and Argon takes security, large-context and UI areas.
+  - **Adversarial review** of a change, required only when the change falls in
+    a review-only class of
+    [hazards](../../../docs/development/hazards.md#silent-invariants). The
+    brief gives the reviewer the diff and the author's claim, not the author's
+    reasoning, and asks it to break the change.
+- A pass runs beside the next work and never blocks a landing or pauses an
+  author. Docs and world content get none.
+- A pass fixes what it finds. Only a finding too large for the pass goes into
+  the open items'
+  [work packets](../../../docs/plans/open-items.md#work-packets), with its
   severity, one owner, its file and line and its failing case, in the packet
   that shares its cause or area or in a new one; a high finding goes to the top
-  of Next and so into the next integration batch. A review-and-fix pass's
-  fixes are a follow-up branch of their own in that batch, never edits to the
-  author's branch.
+  of Next. A pass's fixes are a follow-up branch of their own, never edits to
+  the author's branch.
 - The brief chooses one of two modes, and a pass never turns into the other:
   - **Findings-only** reads the named revisions and reports, changing no
     source, merging nothing and committing nothing: the `reviewer` agent, or a
     `codex exec` lane with `--sandbox read-only`. Use it for design and memo
-    reviews, audits and consensus rounds, and whenever the owner asks for a
+    reviews, invariant reviews of a change, and whenever the owner asks for a
     read-only review. Its highs go to the lane that wrote the code or to their
     packet's owner.
-  - **Review-and-fix** also fixes what is local and clear, in a worktree of
-    its own: the `specialist` agent, or Codex Astra (`gpt-6-astra`) or Sol
+  - **Review-and-fix**, the mode of every area fix pass, also fixes what is
+    local and clear, in a worktree of its own: the `specialist` agent, or Codex Astra (`gpt-6-astra`) or Sol
     (`gpt-6.1-sol`) with write access, both free to use. The installed Codex
     plugin's result-handling guidance not to auto-apply a review's fixes does
     not apply to this mode in this repository.

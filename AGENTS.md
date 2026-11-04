@@ -108,9 +108,15 @@ agent works in that mode by default, without asking:
     engine to seeing it in the running debug world.
   - Cold bake: the debug world's meshes bake from an empty store in one minute
     at most per backend on the lead machine.
-  - Fundamentals first: the work is the engine's fundamental problems, those
-    already known and those found along the way (frame time against the 60 FPS
-    bar, build and bake times, duplicated systems), ahead of new features.
+  - Fundamentals, driven by features (the owner's ruling): the engine's
+    fundamental problems, those already known and those found along the way
+    (frame time against the 60 FPS bar, build and bake times, duplicated
+    systems), are the core of the work, and implementing features is a primary
+    way to drive them. A feature built on the engine's systems in the debug
+    world loads them as real use does and shows where they must improve and
+    scale; the fundamental problems it surfaces are fixed at the cause as they
+    appear, so a feature is chosen as much for what it stresses as for what it
+    adds.
   - Vigilance against duplication: long-term engine code health matters. Every
     agent watches for duplicate code in whatever it reads or touches (a second
     implementation of a mechanism, copied logic, parallel helpers, two paths
@@ -151,7 +157,8 @@ agent works in that mode by default, without asking:
     but none is judged by its isolated delta alone: a small measured gain is
     kept when it simplifies, unifies or opens a design the next step builds
     on, because Puck's code and processes should pay dividends, not incur
-    debt. Practices from established projects that exist for compatibility
+    debt. A change justified only by preference is not a dividend. Practices
+    from established projects that exist for compatibility
     (no API or behaviour change, the smallest possible change) do not carry
     over; their evidence practices do.
   - Hunt real problems with every instrument (the owner's ruling). Wall clock
@@ -243,12 +250,17 @@ agent works in that mode by default, without asking:
     system it shows proves nothing.
 - The gates, ledgers and red-leg proofs described in this file and the skills
   were written by agents, not ordered by the owner. They are tools to use when
-  they pay for themselves, never preconditions for landing. An engine change's
-  adversarial cross-family review is the owner's direction: required, and never
-  a precondition for landing. Its findings go into the open items' work
-  packets ([open items](docs/plans/open-items.md#work-packets)), and the only
-  blocking review gate is before the owner pushes `main`: every high finding
-  from the milestone is resolved or explicitly deferred by the owner
+  they pay for themselves, never preconditions for landing. Review follows the
+  owner's stance (the owner's ruling): velocity comes from reading the code as
+  it is and improving it continually, anchored to running and measuring it,
+  not from reviewing diffs. Every lane improves the code it reads; fresh
+  readers from another family make area fix passes that fix what they find;
+  an adversarial review is required only for the silent-invariant classes
+  [hazards](docs/development/hazards.md#silent-invariants) marks review-only,
+  until a check covers them. A finding too large to fix in its pass goes into
+  the open items' work packets. Before the owner pushes `main`, the
+  milestone's riskiest areas have had a fresh fix pass and their invariant
+  checks ran
   ([orchestration](.claude/skills/orchestration/SKILL.md#spend-verification-not-writing)).
   A document records something as the owner's ruling only when the owner said
   it.

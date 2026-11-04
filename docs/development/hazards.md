@@ -35,6 +35,27 @@ finds the next instance, while a structure leaves it no representation.
 | [A cache that cannot help](#a-cache-that-cannot-help) | Heuristic | `puck scan --only exact-keys` |
 | [Unbounded retention](#unbounded-retention) | Review | None |
 
+## Silent invariants
+
+Running the debug world shows most defects. These classes break without a
+visible symptom, so a change in a class marked review-only gets an adversarial
+review ([orchestration](../../.claude/skills/orchestration/SKILL.md#spend-verification-not-writing));
+every other change is checked by running it and by the area fix passes. A class
+leaves the review column when a check or a structure covers it, which is the
+preferred outcome.
+
+| Class | What catches it | Review-only |
+|---|---|---|
+| Determinism: same document and input, bit-identical state | `puck test --reproduce`; fixed-point `Puck.Maths` types in simulation state | No |
+| The C# and HLSL shader interface: bindings, block layout, strides | One `ShaderInterface` generates both sides; `ShaderInterfaceLayout.Mismatch` refuses a module that disagrees | No |
+| The SDF ISA's C# encoder and HLSL decoder (`SdfProgram.IsaLayout`, the SdfVm README's contract pairs) | Convention | Yes |
+| [A reference read after its replacement](#a-reference-captured-across-a-replacement) | `STALE001`-`003` | No |
+| GPU fences and resource lifetimes: a buffer retired, reused or resized while a queue still reads it | Review | Yes |
+| Process environment reads and any-address listeners | `ENV001`, `NET001` | No |
+| Trust boundaries: grants, federation, admission, credentials, a cap on what a sender claims | Review | Yes |
+| Deleting, moving or rewriting files and persisted data outside the intended root or shape | Review | Yes |
+| [An invariant kept by convention](#an-invariant-kept-by-convention), [unbounded retention](#unbounded-retention), [one local fault poisoning a global query](#one-local-fault-poisoning-a-global-query) | Review | Yes |
+
 ## An invariant kept by convention
 
 A cache stays valid only if every writer remembers to bump its version; a

@@ -33,15 +33,14 @@ shared files, its own capacity to inspect and merge) and launches more only
 when that judgement says the machine and the lead can absorb them. The owner's
 direction:
 
-- **Review risky changes early, without gating them.** Code that deletes
-  files, crosses a trust boundary (grants, federation, admission, credentials)
-  or rewrites persisted data has its cross-family review started the moment it
-  hands back, ahead of other reviews, and the lead reads its diff for those
-  hazards before merging; like everything else, it lands on its evidence and is
-  never held for the review (AGENTS.md: review is never a landing
-  precondition). A pruning change that could delete outside its install root
-  and a cap that trusted the sender both had to be reverted or refixed after
-  landing.
+- **Check what running cannot show, early, without gating it.** A change in a
+  class [hazards](../../../docs/development/hazards.md#silent-invariants) marks
+  review-only (deleting files, a trust boundary, GPU lifetimes, the ISA pair,
+  rewriting persisted data) has its adversarial review started the moment it
+  hands back, and the lead reads its diff for that hazard before merging; it
+  still lands on its evidence and is never held for the review. A pruning
+  change that could delete outside its install root and a cap that trusted the
+  sender both had to be reverted or refixed after landing.
 - **The lead's verification window outranks lane legs.** Windowed checks owed by
   several lanes are one session the lead runs with GPU priority; it is never
   queued behind the lanes it verifies.
@@ -73,35 +72,45 @@ direction:
 - **Brief along the whole path a change travels**, not one system: the lane maps
   the systems its change reaches (`puck references`, the owning skills) and
   checks those partners before handing back.
-- **Review adversarially across families, concurrently.** An engine change's
-  cross-family review is required and never blocks landing. A Claude author's
-  change is reviewed by Codex, a Codex author's by Claude, and Argon takes
-  security, large-context and UI reviews. The reviewer gets the diff and the
-  author's claim, not the author's reasoning, and tries to break it with a repro,
-  a counterexample or a missed caller. It reads a change's benchmark, harness
-  and counters as code under review: a measurement that cannot fail, or that
-  runs another path, is a finding at the severity of the claim it supports.
-  Review depth follows risk: determinism,
-  maths and renderer changes get Astra or an Opus `reviewer` or `specialist`
-  (`principal` only as [Conserve Fable](#no-bad-loops) allows), ordinary engine
-  code Sol, `reviewer` or `specialist`, docs and world content none or a scout's
-  spot-check.
-  - The author starts its next item when it hands back and is never paused; the
-    change lands in its batch whether or not the review has finished.
-  - Findings go into the open items'
-    [work packets](../../../docs/plans/open-items.md#work-packets), each with its
-    severity, one owner, its file and line and its failing case. Filing a
-    finding places it: into the packet that shares its cause or area, or into a
-    new packet with an owner role and a next action, never a list of its own. A
-    high finding goes to the top of [Next](../../../docs/plans/open-items.md#next)
-    and so into the next integration batch.
-  - The brief picks the [review mode](../review-passes/SKILL.md#when-a-lane-gets-a-review),
-    findings-only or review-and-fix, which also decides who fixes what the
-    review finds; the author's branch is never edited by a reviewer.
-  - The integration lane may revert a landed change when leaving it in is worse
+- **Improve by reading, not by reviewing diffs (the owner's ruling).** Velocity
+  comes from reading the code as it is and improving it continually, anchored
+  to running and measuring it. A diff review checks the change and not the
+  system around it, splits finding from fixing across three contexts, and fills
+  a findings queue that goes stale as the code moves, so it is not a standing
+  step.
+  - Every lane reads around the code it touches and fixes what it finds there,
+    scoped by the [`boy-scout`](../boy-scout/SKILL.md) skill; a brief says so.
+  - Fresh eyes come as area fix passes: a reader from another family (Codex for
+    Claude-written areas, a Claude `specialist` for Codex-written ones, Argon for
+    security, large-context and UI areas) takes an area as it is now, not a
+    diff, fixes what is local and clear in its own worktree, and proves each fix
+    by running or measuring it. The lead schedules them by risk and churn: the
+    areas a milestone changed most and those a silent invariant guards.
+    Determinism, maths and renderer areas get Astra or an Opus `specialist`,
+    ordinary engine code Sol or `specialist`, docs and world content none.
+  - Adversarial review is required only for the review-only classes in
+    [hazards](../../../docs/development/hazards.md#silent-invariants). The
+    reviewer gets the diff and the author's claim, not the author's reasoning,
+    and tries to break it with a repro, a counterexample or a missed caller. A
+    class caught twice gets a check or a structure, which retires its review.
+  - The lead checks every claim before merging: it runs what a lane says it
+    proved, and reads a benchmark, harness or counter as code. A measurement
+    that cannot fail, or that runs another path, is a defect at the severity of
+    the claim it supports.
+  - A change justified only by preference is not an improvement (AGENTS.md,
+    "Changes pay dividends"): passes never trade one agent's taste for
+    another's.
+  - A finding too large to fix in its pass goes into the open items'
+    [work packets](../../../docs/plans/open-items.md#work-packets) with its
+    severity, one owner, its file and line and its failing case. A filed finding
+    is rechecked against the current code when its packet is next worked, and is
+    fixed, or deleted when the code has moved past it.
+  - Nothing waits on a pass: the author starts its next item when it hands back.
+    The integration lane may revert a landed change when leaving it in is worse
     than removing it.
-  - The only blocking review gate is before the owner pushes `main`: every high
-    finding from the milestone is resolved or explicitly deferred by the owner.
+  - Before the owner pushes `main`, the milestone's riskiest areas have had a
+    fresh fix pass and their invariant checks ran; a high finding from those
+    passes is fixed or explicitly deferred by the owner.
 - **One integration lane, fed in batches.** It is the only heavy job on the
   machine. It takes ready branches and batches unrelated changes together on
   purpose; it isolates a change only for a benchmark against a baseline, a
@@ -285,8 +294,8 @@ report. A finding read and left in the hand-back is lost: one about authors'
 worlds failing to boot on the standard sat unrouted until a side observer
 caught it.
 
-Keep a merged lane's worktree until its cross-family review is back. Most
-review highs go back to the lane that wrote the code, which keeps its context
+Keep a merged lane's worktree until its invariant review, if it has one, is
+back. Most review highs go back to the lane that wrote the code, which keeps its context
 and resumes in place (`SendMessage`); once its worktree is removed, a fresh
 lane must rebuild that context from the brief and the findings. Prune after
 the review's findings are routed, and delete the lane branch once its fix
@@ -780,7 +789,7 @@ Judge the family balance lane by lane. It is not a quota and not a reason to
 reassign work already under way. Owner steering adjusts judgement; do not harden
 a small direction into a quota or an always rule.
 
-Every finding goes into a
+A finding too large for its pass goes into a
 [work packet](../../../docs/plans/open-items.md#work-packets) in the open items
 with a severity and one owner: the packet that shares its cause or area, or a
 new one. The lead rules on what a review raises: a scoped fix, a recorded open
