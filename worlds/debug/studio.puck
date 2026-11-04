@@ -158,6 +158,20 @@ template studioPlacements() {
       margin: 0
     }
   }
+  // The world's axes meet at the grid lane's south-west corner (28.5, 0, -52): red runs +X along the lane's foot, blue
+  // runs +Z beside it, and the white pole stands 4 m at the corner, beside the metric grid and the height poles.
+  placement "axis-x" {
+    prototype: "axis-x"
+    position [36.5, 0.02, -52]
+  }
+  placement "axis-z" {
+    prototype: "axis-z"
+    position [28.5, 0.02, -44]
+  }
+  placement "axis-up" {
+    prototype: "axis-up"
+    position [28.5, 2, -52]
+  }
 }
 
 // The studio's motion aids. A creation's frame is the world turned a half turn about Y (creation +X is world -X, +Z is
@@ -314,6 +328,59 @@ template studioAidPrototypes() {
           scale [1.5, ((0.01 + (0.17 * (6 - j))) / 2), 0.15]
           material: 3
         }
+      }
+    }
+  }
+  prototype "axis-x" {
+    document {
+      name: "axis-x"
+      palette [
+        {
+          color: "#FF3B30"
+          roughness: 0.6
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "line" {
+        material: 0
+        position [0, 0, 0]
+        scale [8, 0.02, 0.05]
+      }
+    }
+  }
+
+  prototype "axis-z" {
+    document {
+      name: "axis-z"
+      palette [
+        {
+          color: "#2F6BFF"
+          roughness: 0.6
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "line" {
+        material: 0
+        position [0, 0, 0]
+        scale [0.05, 0.02, 8]
+      }
+    }
+  }
+
+  prototype "axis-up" {
+    document {
+      name: "axis-up"
+      palette [
+        {
+          color: "#F2F2F2"
+          roughness: 0.6
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "pole" {
+        material: 0
+        position [0, 0, 0]
+        scale [0.04, 2, 0.04]
       }
     }
   }

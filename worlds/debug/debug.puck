@@ -193,23 +193,6 @@ placements {
     previewDeadlineFrames: 1
   }
 
-  // The axis markers meet at (2, 0, 0), two metres to the spawn's +X side, so the up pole stands beside the avatar in
-  // every spawn and chase view rather than through it.
-  placement "axis-x" {
-    prototype: "axis-x"
-    position [10, 0.02, 0]
-  }
-
-  placement "axis-z" {
-    prototype: "axis-z"
-    position [2, 0.02, 8]
-  }
-
-  placement "axis-up" {
-    prototype: "axis-up"
-    position [2, 2, 0]
-  }
-
   placement "cube-1m" {
     prototype: "cube-1m"
     position [-4, 0.5, 6]
@@ -251,60 +234,6 @@ state {
 prototypes {
   galleryPrototypes()
   studioPrototypes()
-
-  prototype "axis-x" {
-    document {
-      name: "axis-x"
-      palette [
-        {
-          color: "#FF3B30"
-          roughness: 0.6
-        }
-      ]
-      schema: "puck.creation.v1"
-      shape Box "line" {
-        material: 0
-        position [0, 0, 0]
-        scale [8, 0.02, 0.05]
-      }
-    }
-  }
-
-  prototype "axis-z" {
-    document {
-      name: "axis-z"
-      palette [
-        {
-          color: "#2F6BFF"
-          roughness: 0.6
-        }
-      ]
-      schema: "puck.creation.v1"
-      shape Box "line" {
-        material: 0
-        position [0, 0, 0]
-        scale [0.05, 0.02, 8]
-      }
-    }
-  }
-
-  prototype "axis-up" {
-    document {
-      name: "axis-up"
-      palette [
-        {
-          color: "#F2F2F2"
-          roughness: 0.6
-        }
-      ]
-      schema: "puck.creation.v1"
-      shape Box "pole" {
-        material: 0
-        position [0, 0, 0]
-        scale [0.04, 2, 0.04]
-      }
-    }
-  }
 
   prototype "cube-1m" {
     document {
