@@ -33,6 +33,13 @@ let courtZ = -0.0215
 let courtRelief = 0.0035
 let courtStep = 0.0008
 
+// A figure layer's edge rounding: 0.9 of the layer's depth (courtRelief plus courtStep for each depth it stands in front
+// of the shapes behind), never past `cap`, the most the layer's own outline can round.
+function courtRound(depth, cap) = minimum(0.9 * (courtRelief + depth * courtStep), cap)
+
+// The corner radius shared by the court figures' hair and collar bars: three sevenths.
+let courtBarCornerRadius = 3 / 7
+
 // A variant's theme: the card ground and the court field behind its figure, the gold of the rim and the back, the suit
 // colours and the back's red.
 let lightTheme = {
@@ -55,6 +62,7 @@ let darkTheme = {
 }
 
 // Slots 0 to 4 and 10 to 11 follow the theme; 5 to 9 are the court figures' own colours.
+let backSlot = 11
 let cardVariants = map([{ name: "light", theme: lightTheme }, { name: "dark", theme: darkTheme }], variant => {
   name: variant["name"]
   palette [
@@ -785,6 +793,19 @@ template cardFaceOrnaments() {
   }
 }
 
+// The court field: the plate each court figure's layers stand on.
+template courtField() {
+  shape Prism "court-field" {
+    position [0, 0, -0.022]
+    scale [0.59, 0.925, 0.002]
+    material: 3
+    profile {
+      kind: "RoundedRectangle"
+      cornerRadius: 0.057
+    }
+  }
+}
+
 template courtFaceBorder() {
   frameRing(
     name: "court-outer-moulding",
@@ -1222,7 +1243,7 @@ template courtJack() {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 0 * courtStep), 0.207)
+    rounding: courtRound(0, 0.207)
   }
   shape Prism "upper-jaw" {
     position [0, 0.3472, courtZ]
@@ -1234,7 +1255,7 @@ template courtJack() {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 0 * courtStep), 0.1215)
+    rounding: courtRound(0, 0.1215)
   }
   shape Prism "upper-nose" {
     position [0, 0.4278, courtZ]
@@ -1246,7 +1267,7 @@ template courtJack() {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 21 * courtStep), 0.018)
+    rounding: courtRound(21, 0.018)
   }
   shape Prism "upper-lips" {
     position [0, 0.375, courtZ]
@@ -1335,7 +1356,7 @@ template courtJack() {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 6 * courtStep), 0.0585)
+    rounding: courtRound(6, 0.0585)
   }
   shape Prism "upper-hair-curl-right" {
     position [-0.22, 0.44, courtZ]
@@ -1347,7 +1368,7 @@ template courtJack() {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 6 * courtStep), 0.0585)
+    rounding: courtRound(6, 0.0585)
   }
   shape Prism "upper-eye-left" {
     position [0.0992, 0.465, courtZ]
@@ -1359,7 +1380,7 @@ template courtJack() {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 16 * courtStep), 0.0315)
+    rounding: courtRound(16, 0.0315)
   }
   shape Prism "upper-eye-right" {
     position [-0.0992, 0.465, courtZ]
@@ -1371,7 +1392,7 @@ template courtJack() {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 16 * courtStep), 0.0315)
+    rounding: courtRound(16, 0.0315)
   }
   shape Prism "upper-iris-left" {
     position [0.1016, 0.4636, courtZ]
@@ -1383,7 +1404,7 @@ template courtJack() {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 18 * courtStep), 0.0243)
+    rounding: courtRound(18, 0.0243)
   }
   shape Prism "upper-iris-right" {
     position [-0.1016, 0.4636, courtZ]
@@ -1395,7 +1416,7 @@ template courtJack() {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 18 * courtStep), 0.0243)
+    rounding: courtRound(18, 0.0243)
   }
   shape Prism "upper-pupil-left" {
     position [0.1016, 0.4636, courtZ]
@@ -1407,7 +1428,7 @@ template courtJack() {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 20 * courtStep), 0.01116)
+    rounding: courtRound(20, 0.01116)
   }
   shape Prism "upper-pupil-right" {
     position [-0.1016, 0.4636, courtZ]
@@ -1419,7 +1440,7 @@ template courtJack() {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 20 * courtStep), 0.01116)
+    rounding: courtRound(20, 0.01116)
   }
   shape Prism "upper-eyebrow-left" {
     position [0.105, 0.512, courtZ]
@@ -1509,7 +1530,7 @@ template courtJack() {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 15 * courtStep), 0.0198)
+    rounding: courtRound(15, 0.0198)
   }
   shape Prism "upper-cap-feather" {
     position [0.05, 0.725, courtZ]
@@ -1648,7 +1669,7 @@ template courtJack() {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 10 * courtStep), 0.0324)
+    rounding: courtRound(10, 0.0324)
   }
 
   shape Prism "lower-cranium" {
@@ -1661,7 +1682,7 @@ template courtJack() {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 0 * courtStep), 0.207)
+    rounding: courtRound(0, 0.207)
   }
   shape Prism "lower-jaw" {
     position [0, -0.3472, courtZ]
@@ -1673,7 +1694,7 @@ template courtJack() {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 0 * courtStep), 0.1215)
+    rounding: courtRound(0, 0.1215)
   }
   shape Prism "lower-nose" {
     position [0, -0.4278, courtZ]
@@ -1685,7 +1706,7 @@ template courtJack() {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 21 * courtStep), 0.018)
+    rounding: courtRound(21, 0.018)
   }
   shape Prism "lower-lips" {
     position [0, -0.375, courtZ]
@@ -1774,7 +1795,7 @@ template courtJack() {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 6 * courtStep), 0.0585)
+    rounding: courtRound(6, 0.0585)
   }
   shape Prism "lower-hair-curl-right" {
     position [-0.22, -0.44, courtZ]
@@ -1786,7 +1807,7 @@ template courtJack() {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 6 * courtStep), 0.0585)
+    rounding: courtRound(6, 0.0585)
   }
   shape Prism "lower-eye-left" {
     position [0.0992, -0.465, courtZ]
@@ -1798,7 +1819,7 @@ template courtJack() {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 16 * courtStep), 0.0315)
+    rounding: courtRound(16, 0.0315)
   }
   shape Prism "lower-eye-right" {
     position [-0.0992, -0.465, courtZ]
@@ -1810,7 +1831,7 @@ template courtJack() {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 16 * courtStep), 0.0315)
+    rounding: courtRound(16, 0.0315)
   }
   shape Prism "lower-iris-left" {
     position [0.1016, -0.4636, courtZ]
@@ -1822,7 +1843,7 @@ template courtJack() {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 18 * courtStep), 0.0243)
+    rounding: courtRound(18, 0.0243)
   }
   shape Prism "lower-iris-right" {
     position [-0.1016, -0.4636, courtZ]
@@ -1834,7 +1855,7 @@ template courtJack() {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 18 * courtStep), 0.0243)
+    rounding: courtRound(18, 0.0243)
   }
   shape Prism "lower-pupil-left" {
     position [0.1016, -0.4636, courtZ]
@@ -1846,7 +1867,7 @@ template courtJack() {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 20 * courtStep), 0.01116)
+    rounding: courtRound(20, 0.01116)
   }
   shape Prism "lower-pupil-right" {
     position [-0.1016, -0.4636, courtZ]
@@ -1858,7 +1879,7 @@ template courtJack() {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 20 * courtStep), 0.01116)
+    rounding: courtRound(20, 0.01116)
   }
   shape Prism "lower-eyebrow-left" {
     position [0.105, -0.512, courtZ]
@@ -1948,7 +1969,7 @@ template courtJack() {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 15 * courtStep), 0.0198)
+    rounding: courtRound(15, 0.0198)
   }
   shape Prism "lower-cap-feather" {
     position [0.05, -0.725, courtZ]
@@ -2087,7 +2108,7 @@ template courtJack() {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 10 * courtStep), 0.0324)
+    rounding: courtRound(10, 0.0324)
   }
 }
 
@@ -2102,7 +2123,7 @@ template courtQueen(suit) {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 4 * courtStep), 0.21204)
+    rounding: courtRound(4, 0.21204)
   }
   shape Prism "upper-jaw" {
     position [0, 0.3472, courtZ]
@@ -2114,7 +2135,7 @@ template courtQueen(suit) {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 4 * courtStep), 0.12276)
+    rounding: courtRound(4, 0.12276)
   }
   shape Prism "upper-nose" {
     position [0, 0.42779999999999996, courtZ]
@@ -2126,7 +2147,7 @@ template courtQueen(suit) {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 17 * courtStep), 0.01786)
+    rounding: courtRound(17, 0.01786)
   }
   shape Prism "upper-hood" {
     position [0, 0.5084, courtZ]
@@ -2190,7 +2211,7 @@ template courtQueen(suit) {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 13 * courtStep), 0.03125)
+    rounding: courtRound(13, 0.03125)
   }
   shape Prism "upper-iris-left" {
     position [0.10157336, 0.46356531999999995, courtZ]
@@ -2202,7 +2223,7 @@ template courtQueen(suit) {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 15 * courtStep), 0.02455)
+    rounding: courtRound(15, 0.02455)
   }
   shape Prism "upper-pupil-left" {
     position [0.10157336, 0.46356531999999995, courtZ]
@@ -2214,7 +2235,7 @@ template courtQueen(suit) {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 16 * courtStep), 0.01116)
+    rounding: courtRound(16, 0.01116)
   }
   shape Prism "upper-eyebrow-left" {
     position [0.10256907999999999, 0.50702484, courtZ]
@@ -2238,7 +2259,7 @@ template courtQueen(suit) {
     smooth: 0
     profile {
       kind: "RoundedRectangle"
-      cornerRadius: 0.42857142857142855
+      cornerRadius: courtBarCornerRadius
     }
     rounding: minimum(0.00744, courtRelief + 11 * courtStep)
   }
@@ -2278,7 +2299,7 @@ template courtQueen(suit) {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 13 * courtStep), 0.03125)
+    rounding: courtRound(13, 0.03125)
   }
   shape Prism "upper-iris-right" {
     position [-0.10157336, 0.46356531999999995, courtZ]
@@ -2290,7 +2311,7 @@ template courtQueen(suit) {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 15 * courtStep), 0.02455)
+    rounding: courtRound(15, 0.02455)
   }
   shape Prism "upper-pupil-right" {
     position [-0.10157336, 0.46356531999999995, courtZ]
@@ -2302,7 +2323,7 @@ template courtQueen(suit) {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 16 * courtStep), 0.01116)
+    rounding: courtRound(16, 0.01116)
   }
   shape Prism "upper-eyebrow-right" {
     position [-0.10256907999999999, 0.50702484, courtZ]
@@ -2326,7 +2347,7 @@ template courtQueen(suit) {
     smooth: 0
     profile {
       kind: "RoundedRectangle"
-      cornerRadius: 0.42857142857142855
+      cornerRadius: courtBarCornerRadius
     }
     rounding: minimum(0.00744, courtRelief + 11 * courtStep)
   }
@@ -2468,7 +2489,7 @@ template courtQueen(suit) {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 12 * courtStep), 0.01674)
+    rounding: courtRound(12, 0.01674)
   }
   shape Prism "upper-collar" {
     position [0, 0.248, courtZ]
@@ -2479,7 +2500,7 @@ template courtQueen(suit) {
     smooth: 0
     profile {
       kind: "RoundedRectangle"
-      cornerRadius: 0.42857142857142855
+      cornerRadius: courtBarCornerRadius
     }
     rounding: minimum(0.00744, courtRelief + 8 * courtStep)
   }
@@ -2531,7 +2552,7 @@ template courtQueen(suit) {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 9 * courtStep), 0.02902)
+    rounding: courtRound(9, 0.02902)
   }
   shape Prism "upper-sceptre" {
     position [-0.3968, 0.2728, courtZ]
@@ -2569,7 +2590,7 @@ template courtQueen(suit) {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 4 * courtStep), 0.21204)
+    rounding: courtRound(4, 0.21204)
   }
   shape Prism "lower-jaw" {
     position [0, -0.3472, courtZ]
@@ -2581,7 +2602,7 @@ template courtQueen(suit) {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 4 * courtStep), 0.12276)
+    rounding: courtRound(4, 0.12276)
   }
   shape Prism "lower-nose" {
     position [0, -0.42779999999999996, courtZ]
@@ -2593,7 +2614,7 @@ template courtQueen(suit) {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 17 * courtStep), 0.01786)
+    rounding: courtRound(17, 0.01786)
   }
   shape Prism "lower-hood" {
     position [0, -0.5084, courtZ]
@@ -2657,7 +2678,7 @@ template courtQueen(suit) {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 13 * courtStep), 0.03125)
+    rounding: courtRound(13, 0.03125)
   }
   shape Prism "lower-iris-left" {
     position [-0.10157336, -0.46356531999999995, courtZ]
@@ -2669,7 +2690,7 @@ template courtQueen(suit) {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 15 * courtStep), 0.02455)
+    rounding: courtRound(15, 0.02455)
   }
   shape Prism "lower-pupil-left" {
     position [-0.10157336, -0.46356531999999995, courtZ]
@@ -2681,7 +2702,7 @@ template courtQueen(suit) {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 16 * courtStep), 0.01116)
+    rounding: courtRound(16, 0.01116)
   }
   shape Prism "lower-eyebrow-left" {
     position [-0.10256907999999999, -0.50702484, courtZ]
@@ -2705,7 +2726,7 @@ template courtQueen(suit) {
     smooth: 0
     profile {
       kind: "RoundedRectangle"
-      cornerRadius: 0.42857142857142855
+      cornerRadius: courtBarCornerRadius
     }
     rounding: minimum(0.00744, courtRelief + 11 * courtStep)
   }
@@ -2745,7 +2766,7 @@ template courtQueen(suit) {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 13 * courtStep), 0.03125)
+    rounding: courtRound(13, 0.03125)
   }
   shape Prism "lower-iris-right" {
     position [0.10157336, -0.46356531999999995, courtZ]
@@ -2757,7 +2778,7 @@ template courtQueen(suit) {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 15 * courtStep), 0.02455)
+    rounding: courtRound(15, 0.02455)
   }
   shape Prism "lower-pupil-right" {
     position [0.10157336, -0.46356531999999995, courtZ]
@@ -2769,7 +2790,7 @@ template courtQueen(suit) {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 16 * courtStep), 0.01116)
+    rounding: courtRound(16, 0.01116)
   }
   shape Prism "lower-eyebrow-right" {
     position [0.10256907999999999, -0.50702484, courtZ]
@@ -2793,7 +2814,7 @@ template courtQueen(suit) {
     smooth: 0
     profile {
       kind: "RoundedRectangle"
-      cornerRadius: 0.42857142857142855
+      cornerRadius: courtBarCornerRadius
     }
     rounding: minimum(0.00744, courtRelief + 11 * courtStep)
   }
@@ -2935,7 +2956,7 @@ template courtQueen(suit) {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 12 * courtStep), 0.01674)
+    rounding: courtRound(12, 0.01674)
   }
   shape Prism "lower-collar" {
     position [0, -0.248, courtZ]
@@ -2946,7 +2967,7 @@ template courtQueen(suit) {
     smooth: 0
     profile {
       kind: "RoundedRectangle"
-      cornerRadius: 0.42857142857142855
+      cornerRadius: courtBarCornerRadius
     }
     rounding: minimum(0.00744, courtRelief + 8 * courtStep)
   }
@@ -2998,7 +3019,7 @@ template courtQueen(suit) {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 9 * courtStep), 0.02902)
+    rounding: courtRound(9, 0.02902)
   }
   shape Prism "lower-sceptre" {
     position [0.3968, -0.2728, courtZ]
@@ -3106,7 +3127,7 @@ template courtQueen(suit) {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 3 * courtStep), 0.0198)
+    rounding: courtRound(3, 0.0198)
   }
 }
 
@@ -3121,7 +3142,7 @@ template courtKing() {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 0 * courtStep), 0.21204)
+    rounding: courtRound(0, 0.21204)
   }
   shape Prism "upper-jaw" {
     position [0, 0.3472, courtZ]
@@ -3133,7 +3154,7 @@ template courtKing() {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 0 * courtStep), 0.126)
+    rounding: courtRound(0, 0.126)
   }
   shape Prism "upper-nose" {
     position [0, 0.4278, courtZ]
@@ -3145,7 +3166,7 @@ template courtKing() {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 17 * courtStep), 0.0198)
+    rounding: courtRound(17, 0.0198)
   }
   shape Prism "upper-beard" {
     position [0, 0.305, courtZ]
@@ -3274,7 +3295,7 @@ template courtKing() {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 13 * courtStep), 0.0315)
+    rounding: courtRound(13, 0.0315)
   }
   shape Prism "upper-eye-right" {
     position [-0.0992, 0.465, courtZ]
@@ -3286,7 +3307,7 @@ template courtKing() {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 13 * courtStep), 0.0315)
+    rounding: courtRound(13, 0.0315)
   }
   shape Prism "upper-iris-left" {
     position [0.1016, 0.4636, courtZ]
@@ -3298,7 +3319,7 @@ template courtKing() {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 15 * courtStep), 0.0243)
+    rounding: courtRound(15, 0.0243)
   }
   shape Prism "upper-iris-right" {
     position [-0.1016, 0.4636, courtZ]
@@ -3310,7 +3331,7 @@ template courtKing() {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 15 * courtStep), 0.0243)
+    rounding: courtRound(15, 0.0243)
   }
   shape Prism "upper-pupil-left" {
     position [0.1016, 0.4636, courtZ]
@@ -3322,7 +3343,7 @@ template courtKing() {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 16 * courtStep), 0.01116)
+    rounding: courtRound(16, 0.01116)
   }
   shape Prism "upper-pupil-right" {
     position [-0.1016, 0.4636, courtZ]
@@ -3334,7 +3355,7 @@ template courtKing() {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 16 * courtStep), 0.01116)
+    rounding: courtRound(16, 0.01116)
   }
   shape Prism "upper-eyebrow-left" {
     position [0.105, 0.512, courtZ]
@@ -3411,7 +3432,7 @@ template courtKing() {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 10 * courtStep), 0.0162)
+    rounding: courtRound(10, 0.0162)
   }
   shape Prism "upper-crown-peak-center" {
     position [0, 0.755, courtZ]
@@ -3449,7 +3470,7 @@ template courtKing() {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 11 * courtStep), 0.0198)
+    rounding: courtRound(11, 0.0198)
   }
   shape Prism "upper-crown-peak-left" {
     position [0.08, 0.735, courtZ]
@@ -3487,7 +3508,7 @@ template courtKing() {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 9 * courtStep), 0.0126)
+    rounding: courtRound(9, 0.0126)
   }
   shape Prism "upper-crown-peak-right" {
     position [-0.08, 0.735, courtZ]
@@ -3525,7 +3546,7 @@ template courtKing() {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 9 * courtStep), 0.0126)
+    rounding: courtRound(9, 0.0126)
   }
   shape Prism "upper-crown-peak-far-left" {
     position [0.145, 0.715, courtZ]
@@ -3628,7 +3649,7 @@ template courtKing() {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 7 * courtStep), 0.0315)
+    rounding: courtRound(7, 0.0315)
   }
   shape Prism "upper-sword-blade" {
     position [-0.39, 0.38, courtZ]
@@ -3689,7 +3710,7 @@ template courtKing() {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 3 * courtStep), 0.018)
+    rounding: courtRound(3, 0.018)
   }
   shape Prism "upper-sword-hand" {
     position [-0.37, 0.165, courtZ]
@@ -3701,7 +3722,7 @@ template courtKing() {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 6 * courtStep), 0.0324)
+    rounding: courtRound(6, 0.0324)
   }
 
   shape Prism "lower-cranium" {
@@ -3714,7 +3735,7 @@ template courtKing() {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 0 * courtStep), 0.21204)
+    rounding: courtRound(0, 0.21204)
   }
   shape Prism "lower-jaw" {
     position [0, -0.3472, courtZ]
@@ -3726,7 +3747,7 @@ template courtKing() {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 0 * courtStep), 0.126)
+    rounding: courtRound(0, 0.126)
   }
   shape Prism "lower-nose" {
     position [0, -0.4278, courtZ]
@@ -3738,7 +3759,7 @@ template courtKing() {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 17 * courtStep), 0.0198)
+    rounding: courtRound(17, 0.0198)
   }
   shape Prism "lower-beard" {
     position [0, -0.305, courtZ]
@@ -3867,7 +3888,7 @@ template courtKing() {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 13 * courtStep), 0.0315)
+    rounding: courtRound(13, 0.0315)
   }
   shape Prism "lower-eye-right" {
     position [-0.0992, -0.465, courtZ]
@@ -3879,7 +3900,7 @@ template courtKing() {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 13 * courtStep), 0.0315)
+    rounding: courtRound(13, 0.0315)
   }
   shape Prism "lower-iris-left" {
     position [0.1016, -0.4636, courtZ]
@@ -3891,7 +3912,7 @@ template courtKing() {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 15 * courtStep), 0.0243)
+    rounding: courtRound(15, 0.0243)
   }
   shape Prism "lower-iris-right" {
     position [-0.1016, -0.4636, courtZ]
@@ -3903,7 +3924,7 @@ template courtKing() {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 15 * courtStep), 0.0243)
+    rounding: courtRound(15, 0.0243)
   }
   shape Prism "lower-pupil-left" {
     position [0.1016, -0.4636, courtZ]
@@ -3915,7 +3936,7 @@ template courtKing() {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 16 * courtStep), 0.01116)
+    rounding: courtRound(16, 0.01116)
   }
   shape Prism "lower-pupil-right" {
     position [-0.1016, -0.4636, courtZ]
@@ -3927,7 +3948,7 @@ template courtKing() {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 16 * courtStep), 0.01116)
+    rounding: courtRound(16, 0.01116)
   }
   shape Prism "lower-eyebrow-left" {
     position [0.105, -0.512, courtZ]
@@ -4004,7 +4025,7 @@ template courtKing() {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 10 * courtStep), 0.0162)
+    rounding: courtRound(10, 0.0162)
   }
   shape Prism "lower-crown-peak-center" {
     position [0, -0.755, courtZ]
@@ -4042,7 +4063,7 @@ template courtKing() {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 11 * courtStep), 0.0198)
+    rounding: courtRound(11, 0.0198)
   }
   shape Prism "lower-crown-peak-left" {
     position [0.08, -0.735, courtZ]
@@ -4080,7 +4101,7 @@ template courtKing() {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 9 * courtStep), 0.0126)
+    rounding: courtRound(9, 0.0126)
   }
   shape Prism "lower-crown-peak-right" {
     position [-0.08, -0.735, courtZ]
@@ -4118,7 +4139,7 @@ template courtKing() {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 9 * courtStep), 0.0126)
+    rounding: courtRound(9, 0.0126)
   }
   shape Prism "lower-crown-peak-far-left" {
     position [0.145, -0.715, courtZ]
@@ -4221,7 +4242,7 @@ template courtKing() {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 7 * courtStep), 0.0315)
+    rounding: courtRound(7, 0.0315)
   }
   shape Prism "lower-sword-blade" {
     position [0.39, -0.38, courtZ]
@@ -4282,7 +4303,7 @@ template courtKing() {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 3 * courtStep), 0.018)
+    rounding: courtRound(3, 0.018)
   }
   shape Prism "lower-sword-hand" {
     position [0.37, -0.165, courtZ]
@@ -4294,7 +4315,7 @@ template courtKing() {
     profile {
       kind: "Ellipse"
     }
-    rounding: minimum(0.9 * (courtRelief + 6 * courtStep), 0.0324)
+    rounding: courtRound(6, 0.0324)
   }
 }
 
@@ -4334,15 +4355,7 @@ template makeJack(id, pal, backMat, suit) {
       palette: pal
       cardBase(backMat: backMat)
       cardIndices(rankPath: glyphJ, suit: suit)
-      shape Prism "court-field" {
-        position [0, 0, -0.022]
-        scale [0.59, 0.925, 0.002]
-        material: 3
-        profile {
-          kind: "RoundedRectangle"
-          cornerRadius: 0.057
-        }
-      }
+      courtField()
       courtFaceBorder()
       courtJack()
     }
@@ -4357,15 +4370,7 @@ template makeQueen(id, pal, backMat, suit) {
       palette: pal
       cardBase(backMat: backMat)
       cardIndices(rankPath: glyphQ, suit: suit)
-      shape Prism "court-field" {
-        position [0, 0, -0.022]
-        scale [0.59, 0.925, 0.002]
-        material: 3
-        profile {
-          kind: "RoundedRectangle"
-          cornerRadius: 0.057
-        }
-      }
+      courtField()
       courtFaceBorder()
       courtQueen(suit: suit)
     }
@@ -4380,15 +4385,7 @@ template makeKing(id, pal, backMat, suit) {
       palette: pal
       cardBase(backMat: backMat)
       cardIndices(rankPath: glyphK, suit: suit)
-      shape Prism "court-field" {
-        position [0, 0, -0.022]
-        scale [0.59, 0.925, 0.002]
-        material: 3
-        profile {
-          kind: "RoundedRectangle"
-          cornerRadius: 0.057
-        }
-      }
+      courtField()
       courtFaceBorder()
       courtKing()
     }
@@ -4411,21 +4408,21 @@ template makeBack(id, pal, backMat) {
 template cardDeckPrototypes(variant, prefix = "card") {
   for (deck, d) in filter(cardVariants, v => v["name"] == variant) {
     for (suit, s) in suits {
-      makeAce(id: $"""{prefix}-{suit["code"]}-a""", pal: deck["palette"], backMat: 11, suit: suit)
+      makeAce(id: $"""{prefix}-{suit["code"]}-a""", pal: deck["palette"], backMat: backSlot, suit: suit)
       for (rank, r) in pipRanks {
         makePipCard(
           id: $"""{prefix}-{suit["code"]}-{rank["code"]}""",
           pal: deck["palette"],
-          backMat: 11,
+          backMat: backSlot,
           rankGlyph: rank["glyph"],
           suit: suit,
           pips: rank["pips"]
         )
       }
-      makeJack(id: $"""{prefix}-{suit["code"]}-j""", pal: deck["palette"], backMat: 11, suit: suit)
-      makeQueen(id: $"""{prefix}-{suit["code"]}-q""", pal: deck["palette"], backMat: 11, suit: suit)
-      makeKing(id: $"""{prefix}-{suit["code"]}-k""", pal: deck["palette"], backMat: 11, suit: suit)
+      makeJack(id: $"""{prefix}-{suit["code"]}-j""", pal: deck["palette"], backMat: backSlot, suit: suit)
+      makeQueen(id: $"""{prefix}-{suit["code"]}-q""", pal: deck["palette"], backMat: backSlot, suit: suit)
+      makeKing(id: $"""{prefix}-{suit["code"]}-k""", pal: deck["palette"], backMat: backSlot, suit: suit)
     }
-    makeBack(id: $"{prefix}-back", pal: deck["palette"], backMat: 11)
+    makeBack(id: $"{prefix}-back", pal: deck["palette"], backMat: backSlot)
   }
 }
