@@ -107,9 +107,12 @@ public sealed partial class WorldReplaySnapshot {
             reader: ref reader,
             what: "machine digest"
         );
+        // A local tape carries the writer's complete definition, not one bounded network document packet.
+        // ReadBlock checks the declared length against the remaining tape before allocating/copying this block,
+        // just as for checkpoint and companion blocks. A rich admitted world can exceed the packet limit.
         var definitionJson = reader.ReadBlock(
             field: "definition",
-            maxBytes: WireLimits.MaxDocumentBytes
+            maxBytes: int.MaxValue
         );
         // 12 = the smallest possible receipt: two empty strings' 16-bit length prefixes and the u64 fuel.
         var mountedAddons = ReadTapeArray(

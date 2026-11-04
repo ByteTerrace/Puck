@@ -24,6 +24,13 @@ to the session state directory (`Replays/<name>.puckreplay`) so two isolated
 scheduled runs record the same verdict text. Live replay drive remains outside
 scheduled tests because restoring its timeline would also rewind the schedule.
 
+A local replay's definition block is bounded by the tape's available bytes and
+its signed length carrier, like checkpoint and companion blocks. It is not a
+network document packet: applying `WireLimits.MaxDocumentBytes` only at read time
+made the writer's own rich-world recordings unreadable. `WireReader.ReadBlock`
+checks remaining bytes before copying a declared block; keep that truncation
+refusal when changing the container.
+
 Checkpoint continuation includes the last sampled attached-solid transforms: carrier
 poses can move after collision sampling, and resampling during restore can wake a
 sleeping island a tick early. Restore scoped replay images after compiling their
