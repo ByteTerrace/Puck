@@ -24,7 +24,7 @@ public static class WorldJsonPayload {
     public const string NullPayload = "the JSON parsed to null";
 
     // Payloads ride a console line; a long one is trimmed so the rejection stays one readable line.
-    private static string Elide(string json) {
+    internal static string Elide(string json) {
         const int Limit = 120;
 
         var text = (json ?? string.Empty).ReplaceLineEndings(replacementText: " ").Trim();
@@ -83,10 +83,35 @@ public static class WorldJsonPayload {
     /// <see cref="WorldStateDocumentValues.TryResolve"/>.</param>
     /// <returns><see langword="true"/> when the payload parsed to a non-null row.</returns>
     public static bool TryParse<T>(string json, JsonTypeInfo<T> info, out T value, out string error, bool deferDrawSites = false) {
+        var parsed = TryRead(
+            deferDrawSites: deferDrawSites,
+            info: info,
+            json: json,
+            refusal: out var refusal,
+            value: out value
+        );
+
+        error = (parsed ? string.Empty : refusal!.Described);
+
+        return parsed;
+    }
+    /// <summary>Parses a required row from an inline-JSON argument through a source-generated contract, and refuses a
+    /// payload with a <see cref="WorldPayloadRefusal"/> that places the refusal in the document.</summary>
+    /// <typeparam name="T">The row type.</typeparam>
+    /// <param name="json">The payload text.</param>
+    /// <param name="info">The source-generated contract.</param>
+    /// <param name="value">The parsed row on success.</param>
+    /// <param name="refusal">The structured refusal, or <see langword="null"/> on success.</param>
+    /// <param name="deferDrawSites">For a <see cref="WorldDefinition"/> payload, whether a state reference into a draw
+    /// site that has not filled yet stays attached for the loader's post-draw pass rather than refusing — see
+    /// <see cref="WorldStateDocumentValues.TryResolve"/>.</param>
+    /// <returns><see langword="true"/> when the payload parsed to a non-null row.</returns>
+    public static bool TryRead<T>(string json, JsonTypeInfo<T> info, out T value, out WorldPayloadRefusal? refusal, bool deferDrawSites = false) {
         value = default!;
+        refusal = null;
 
         if (string.IsNullOrWhiteSpace(value: json)) {
-            error = EmptyPayload;
+            refusal = WorldPayloadRefusal.Whole(detail: EmptyPayload);
 
             return false;
         }
@@ -96,7 +121,7 @@ public static class WorldJsonPayload {
                 json: json,
                 jsonTypeInfo: info
             ) is not { } parsed) {
-                error = NullPayload;
+                refusal = WorldPayloadRefusal.Whole(detail: NullPayload);
 
                 return false;
             }
@@ -113,13 +138,13 @@ public static class WorldJsonPayload {
             }
 
             value = parsed;
-            error = string.Empty;
 
             return true;
         } catch (Exception exception) when (IsParseFailure(exception: exception)) {
-            error = Describe(
+            refusal = WorldPayloadRefusal.Of(
                 exception: exception,
-                json: json
+                json: json,
+                type: info.Type
             );
 
             return false;

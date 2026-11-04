@@ -845,25 +845,8 @@ public static partial class PuckLinter {
     // origin is the nearest enclosing node that carries one; a node lowered from an imported module reports against
     // that module's source.
     private static void Report(SourceMap? sourceMap, DiagnosticBag diagnostics, string pointer, string code, DiagnosticSeverity severity, string message) {
-        var origin = (((sourceMap is not null) && sourceMap.TryGetOrigin(jsonPointer: pointer, origin: out var found))
-            ? found
-            : null);
-        var span = (origin?.Span ?? SourceSpan.None);
-        var start = diagnostics.Count;
+        var finding = new Diagnostic(Code: code, Message: message, Severity: ((severity == DiagnosticSeverity.Warning) ? DiagnosticSeverity.Warning : DiagnosticSeverity.Information), Span: SourceSpan.None);
 
-        if (severity == DiagnosticSeverity.Warning) {
-            diagnostics.ReportWarning(
-                code: code,
-                message: message,
-                span: span
-            );
-        } else {
-            diagnostics.ReportInformation(
-                code: code,
-                message: message,
-                span: span
-            );
-        }
-        diagnostics.AttributeFrom(sourcePath: origin?.SourcePath, startIndex: start);
+        diagnostics.Report(diagnostic: (sourceMap?.Place(diagnostic: finding, jsonPointer: pointer) ?? finding));
     }
 }

@@ -1566,13 +1566,31 @@ public static partial class WorldDefinitionFileSource {
     /// <param name="definition">The parsed document; its full validity is still the caller's responsibility.</param>
     /// <param name="reason">The named parse or schema failure.</param>
     /// <returns>Whether parsing and schema checks succeeded. No adjacency or local-world validation runs here.</returns>
-    public static bool TryParseDocument(string json, string sourceName, out WorldDefinition? definition, out string reason) {
-        WorldBootWork.Count(kind: WorldBootWork.Parses);
-
-        return TryParseCompiledDocument(
+    public static bool TryParseDocument(string json, string sourceName, out WorldDefinition? definition, out string reason) =>
+        TryReadDocument(
             definition: out definition,
             json: json,
             reason: out reason,
+            refusal: out _,
+            sourceName: sourceName
+        );
+    /// <summary>Parses an already composed document exactly as the overload without a refusal does, and hands back the
+    /// structured refusal of a payload the schema refused, so a caller places it in its own terms.</summary>
+    /// <param name="json">The composed JSON text.</param>
+    /// <param name="sourceName">The source name echoed in failures.</param>
+    /// <param name="definition">The parsed document; its full validity is still the caller's responsibility.</param>
+    /// <param name="reason">The named parse or schema failure.</param>
+    /// <param name="refusal">The schema's refusal of the payload, or <see langword="null"/> on success and on a
+    /// failure that is not the payload's shape (the wrong schema name, a refused authored name).</param>
+    /// <returns>Whether parsing and schema checks succeeded. No adjacency or local-world validation runs here.</returns>
+    public static bool TryReadDocument(string json, string sourceName, out WorldDefinition? definition, out string reason, out WorldPayloadRefusal? refusal) {
+        WorldBootWork.Count(kind: WorldBootWork.Parses);
+
+        return TryReadCompiledDocument(
+            definition: out definition,
+            json: json,
+            reason: out reason,
+            refusal: out refusal,
             sourceName: sourceName
         );
     }
@@ -1585,19 +1603,37 @@ public static partial class WorldDefinitionFileSource {
     /// <param name="definition">The parsed document; its full validity is still the caller's responsibility.</param>
     /// <param name="reason">The named parse or schema failure.</param>
     /// <returns>Whether parsing and schema checks succeeded.</returns>
-    public static bool TryParseCompiledDocument(string json, string sourceName, out WorldDefinition? definition, out string reason) {
+    public static bool TryParseCompiledDocument(string json, string sourceName, out WorldDefinition? definition, out string reason) =>
+        TryReadCompiledDocument(
+            definition: out definition,
+            json: json,
+            reason: out reason,
+            refusal: out _,
+            sourceName: sourceName
+        );
+    /// <summary>Parses a compiled world's drawn definition exactly as the overload without a refusal does, and hands
+    /// back the structured refusal of a payload the schema refused.</summary>
+    /// <param name="json">The drawn definition's JSON text.</param>
+    /// <param name="sourceName">The source name echoed in failures.</param>
+    /// <param name="definition">The parsed document; its full validity is still the caller's responsibility.</param>
+    /// <param name="reason">The named parse or schema failure, in the author's words
+    /// (<see cref="WorldPayloadRefusal.Authored"/>).</param>
+    /// <param name="refusal">The schema's refusal of the payload, or <see langword="null"/> on success and on a
+    /// failure that is not the payload's shape (the wrong schema name, a refused authored name).</param>
+    /// <returns>Whether parsing and schema checks succeeded.</returns>
+    public static bool TryReadCompiledDocument(string json, string sourceName, out WorldDefinition? definition, out string reason, out WorldPayloadRefusal? refusal) {
         definition = null;
 
         // This is the loader's first parse: a reference into a draw site that has not filled yet stays attached and
         // resolves on the post-draw pass (WorldDefinitionLoader), the one door that runs the draw resolver.
-        if (!WorldJsonPayload.TryParse(
+        if (!WorldJsonPayload.TryRead(
             json: json,
             info: WorldJsonContext.Default.WorldDefinition,
             value: out var parsed,
-            error: out var parseError,
+            refusal: out refusal,
             deferDrawSites: true
         )) {
-            reason = $"{sourceName} is not a valid {WorldDefinition.SchemaVersion} document: {parseError}";
+            reason = $"{sourceName} is not a valid {WorldDefinition.SchemaVersion} document: {refusal!.Authored}";
 
             return false;
         }
