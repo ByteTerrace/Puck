@@ -200,7 +200,7 @@ laws exercise that boundary.
   pool drops its queued work, an answer arriving for it is dropped, and its
   workspace is freed when its running job ends; `Retire` never waits.
 - **Nothing array-sized runs under the bake's gate.** The frame thread takes
-  `m_gate` in `Dress`, `TryTakeForFrame` and `Stage`, so a worker fills a
+  `m_gate` in `PrepareFrame`, `TryTakeForFrame` and `Stage`, so a worker fills a
   group's lattice, points and answers on its own job, which only that group's
   one running job touches, and takes the gate only to publish the group's next
   request or stage. The done line's `frame-gate=[max,total,over-1ms]` reads the
@@ -349,7 +349,7 @@ laws exercise that boundary.
   `bake` parts, only while `SdfMeshPathBake.Pending`.
   `sdfMapOmitWorldSegments` (bake only) drops unowned segments, which bake as
   their own group. The bake's own pass block (`sdf-mesh-bake.interface.hlsli`)
-  and its lattice rows are a sync pair with `SdfFrameBlock.WriteMeshBake`.
+  and its lattice rows are a sync pair with `SdfMeshBakeBlock.Write`.
 - **A bake never reads the frame's transforms.** A dynamic group's box,
   lattices and points are slot-local, and `sdf-mesh-bake` reads every transform
   through the poses the group's geometry hashed (`SdfMeshGeometryBuilder.Poses`,
@@ -365,7 +365,7 @@ laws exercise that boundary.
   the group's slot in the group's units (`SdfMeshGeometryBuilder.RelativePose`,
   `UnitsOf`), as the settle watch does, so the key, the detail and the lattice
   are the full-size body's; the group's draw matrix takes the scale
-  (`SdfMeshPathBake.Dress`), and a member's vertex takes the draw's scale
+  (`SdfMeshDresser.Dress`), and a member's vertex takes the draw's scale
   (`sdfMeshDrawScale`, the current and previous positions). A body crossing a
   portal pair of two sizes (Wonderland) bakes nothing and draws its full-size
   mesh scaled. Its material layers stay in world units at its scale, since the
@@ -671,11 +671,12 @@ laws exercise that boundary.
   World table after `FieldTables` is outside it and leaves their bytecode byte
   for byte as it was on DXIL and SPIR-V; an edit to the field, its generated
   vocabulary, the encoding or the bake kernels moves it. The code part is read from
-  the build's assemblies: from the bake's roots (`SdfMeshPathBake`, the group,
-  geometry, mesh and material-cut types, `SdfFrameBlock.WriteMeshBake`, the
-  point table and program upload, the store's entry format) it follows every
-  call, delegate, override of a type the bake constructs and implementation of
-  an abstract member it calls across the `Puck` assemblies `Puck.SdfVm`
+  the build's assemblies: positive production entry methods in `SdfMeshBakeClosure.BakeRoots` include
+  the bake's constructor/defaults, `PrepareFrame`, planning, exact point-table preparation, the standalone
+  `SdfMeshBakeReadback.Poll` sample handoff, `SdfMeshBakeBlock.Write`, persisted-product normalization
+  (`SdfMesh.NativeCopy`) and the store codec. Their graph reaches group/geometry planning, lattice refinement,
+  contours, material cuts, skin and levels. It follows every call, delegate, override of a type the bake constructs
+  and implementation of an abstract member it calls across the `Puck` assemblies `Puck.SdfVm`
   references, and hashes each method's IL with its tokens written as the
   members they name, its locals, exception regions and loaded field data, and
   each named type's layout. A value type's layout counts whole (the bytes its
@@ -688,14 +689,29 @@ laws exercise that boundary.
   printing read every field. `SdfMeshBakeClosureLawTests` pins both ways. It
   stops at `SdfMeshLibrary` and `SdfMeshStore`,
   which hold meshes, at `GpuRegion` and `GpuUploadRuns`, which carry the point
-  table's words to the device rather than choose them, and at the runtime. So an edit to `Puck.Maths` code the
-  contour calls re-bakes, while an edit to the rest of the renderer, a new
-  public member of a referenced assembly, a comment or another checkout path
-  keeps every entry, and worktrees of one bake share one set. Code the bake
+  table's words to the device rather than choose them, and at the runtime. An edit to `Puck.Maths` code the
+  contour calls re-bakes. The standalone `SdfMeshDresser`, `SdfMeshHistory`, `SdfWorldPassRecorder`, `SdfWorldTables`,
+  `SdfFrameBlock` and `SdfMeshRegion` are outside the CPU closure, including type-granular applied updates;
+  `SdfMeshBakeBlock` and the shared `ShaderParameterWriter` remain inside. Comments and checkout paths do not
+  change the key, and worktrees of one bake share one set. This is a bounded guarantee: the current program packs
+  field and material appearance tables together, so its reached constructor still includes material packing;
+  diagnostic slice, frame/input types, admission and settle accounting also remain conservatively reached.
+  A new member matters if a positive entry or its callgraph reaches it. Code the bake
   reaches only through reflection or a runtime callback on a type it does not
   construct is outside the walk: add a root to `SdfMeshBakeClosure` for it.
   Finish formatting before measuring a new cold set: argument ordering can change IL and therefore
   the computed bake identity even when the source rewrite preserves semantics.
+- **Dressing is outside derivation.** Top-level `SdfMeshDresser` owns retained topology, posed draws, clipping,
+  pick maps and draw claims. Its constructor binds one bake; dispose it before retiring that bake or its library.
+  `SdfMeshPathBake.PrepareFrame` is the one locked door: restart/reconcile the frame, update the single copy-membership
+  index shared by demand and dressing, prioritize and settle, then return a stack-bound `FrameAccess`. Its consumer
+  claims the landed meshes and publishes draws/picking before acknowledging that access's captured product revision;
+  disposal releases the gate without acknowledgment. Every mesh replacement, including a same-count or empty result,
+  advances the revision. `Stage` chooses and slices the exact point/pose rows; its caller uploads the returned span
+  through the generic region transport. No bake entry calls the dresser. This is a type boundary as well as a call
+  boundary: applied code updates report types, including declaring types of nested helpers, so a partial/nested dresser
+  would still invalidate the bake. `SdfMeshBakeClosure.Reads` includes producing types and excludes the standalone dresser,
+  draw history, world tables, pass recorder and the view frame block; unknown applied-code updates remain conservative.
 - **A miss names its cause.** Each identity's parts and code members are
   recorded beside the entries (`<identity>.identity`, the 64 most recent kept),
   and a start that bakes groups logs one line: `[sdf.mesh-bake] miss … identity

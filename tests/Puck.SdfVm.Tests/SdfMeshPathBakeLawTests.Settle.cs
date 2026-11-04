@@ -18,13 +18,15 @@ public sealed partial class SdfMeshPathBakeLawTests {
 
     [Fact]
     public void ACubicLatticeDispatchesWhenItsPosesExceedTheSampleBudget() {
-        var bake = new SdfMeshPathBake { Library = new SdfMeshLibrary(), Residency = "posed-cube" };
+        using var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake { Library = new SdfMeshLibrary(), Residency = "posed-cube" });
+        var bake = bakeRun.Bake;
+        var dresser = bakeRun.Dresser;
         var frame = SettleFrame(groups: 1, memberGap: PosedGap, offset: 0f, program: SettleProgram(groups: 1, memberGap: PosedGap, scale: 4f), time: 0f);
         var index = 0L;
         var full = false;
 
         TestLiveness.Until(reason: bake.Describe, step: () => {
-            _ = bake.Dress(frame: frame);
+            _ = dresser.Dress(frame: frame);
             if (bake.TryTakeForFrame(batch: out var batch, frame: index++)) {
                 if (batch.TableEntries > SdfWorldPackage.MeshBakeMaxSamples) {
                     Assert.True(condition: (batch.TableEntries > batch.Samples));
@@ -38,7 +40,7 @@ public sealed partial class SdfMeshPathBakeLawTests {
             return !bake.Pending;
         });
         Assert.True(condition: full);
-        Assert.Single(collection: bake.Dress(frame: frame).MeshDraws);
+        Assert.Single(collection: dresser.Dress(frame: frame).MeshDraws);
     }
 
     // A group whose member slides away bakes again only once the slide stops: a member still moving, however far from
@@ -48,40 +50,42 @@ public sealed partial class SdfMeshPathBakeLawTests {
     [Fact]
     public void ASkinnedGroupBakesAgainOnlyOnceItsMemberSettlesAwayFromItsBakedPose() {
         var program = SettleProgram(groups: 1);
-        var library = new SdfMeshLibrary();
-        var bake = new SdfMeshPathBake { Library = library, Residency = "settle" };
+        using var library = new SdfMeshLibrary();
+        using var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake { Library = library, Residency = "settle" }, ownsLibrary: false);
+        var bake = bakeRun.Bake;
+        var dresser = bakeRun.Dresser;
         var index = 0L;
         var settles = library.Settles;
 
-        _ = bake.Dress(frame: SettleFrame(groups: 1, offset: 0.35f, program: program, time: 0f));
+        _ = dresser.Dress(frame: SettleFrame(groups: 1, offset: 0.35f, program: program, time: 0f));
         Assert.True(condition: bake.Pending);
         Assert.False(condition: bake.IrradiancePending);
-        DriveSettle(bake: bake, frame: SettleFrame(groups: 1, offset: 0.35f, program: program, time: 0f), index: ref index);
+        DriveSettle(bake: bake, dresser: dresser, frame: SettleFrame(groups: 1, offset: 0.35f, program: program, time: 0f), index: ref index);
 
-        var baked = Assert.Single(collection: bake.Dress(frame: SettleFrame(groups: 1, offset: 0.35f, program: program, time: 0f)).MeshDraws).Mesh;
+        var baked = Assert.Single(collection: dresser.Dress(frame: SettleFrame(groups: 1, offset: 0.35f, program: program, time: 0f)).MeshDraws).Mesh;
 
         // A member that keeps sliding never settles, however far it drifted.
         for (var time = 1f; (time < 2f); time += 0.05f) {
-            _ = bake.Dress(frame: SettleFrame(groups: 1, offset: (0.45f + (0.02f * MathF.Sin(x: (10f * time)))), program: program, time: time));
+            _ = dresser.Dress(frame: SettleFrame(groups: 1, offset: (0.45f + (0.02f * MathF.Sin(x: (10f * time)))), program: program, time: time));
             Assert.False(condition: bake.Pending);
         }
         Assert.Equal(expected: 0L, actual: settles.Read(kind: SdfMeshSettle.Queued));
         Assert.True(condition: (settles.Read(kind: SdfMeshSettle.Moving) >= 20L));
 
         // Held still, it waits out the settle window drawing the skinned mesh, then bakes again.
-        _ = bake.Dress(frame: SettleFrame(groups: 1, offset: 0.45f, program: program, time: 2f));
-        _ = bake.Dress(frame: SettleFrame(groups: 1, offset: 0.45f, program: program, time: 2.3f));
+        _ = dresser.Dress(frame: SettleFrame(groups: 1, offset: 0.45f, program: program, time: 2f));
+        _ = dresser.Dress(frame: SettleFrame(groups: 1, offset: 0.45f, program: program, time: 2.3f));
         Assert.False(condition: bake.Pending);
 
-        var waiting = Assert.Single(collection: bake.Dress(frame: SettleFrame(groups: 1, offset: 0.45f, program: program, time: 2.6f)).MeshDraws).Mesh;
+        var waiting = Assert.Single(collection: dresser.Dress(frame: SettleFrame(groups: 1, offset: 0.45f, program: program, time: 2.6f)).MeshDraws).Mesh;
 
         Assert.True(condition: bake.Pending);
         Assert.False(condition: bake.IrradiancePending);
         Assert.Same(actual: waiting, expected: baked);
         Assert.Equal(expected: 1L, actual: settles.Read(kind: SdfMeshSettle.Queued));
-        DriveSettle(bake: bake, frame: SettleFrame(groups: 1, offset: 0.45f, program: program, time: 2.6f), index: ref index);
+        DriveSettle(bake: bake, dresser: dresser, frame: SettleFrame(groups: 1, offset: 0.45f, program: program, time: 2.6f), index: ref index);
 
-        var settled = Assert.Single(collection: bake.Dress(frame: SettleFrame(groups: 1, offset: 0.45f, program: program, time: 2.7f)).MeshDraws).Mesh;
+        var settled = Assert.Single(collection: dresser.Dress(frame: SettleFrame(groups: 1, offset: 0.45f, program: program, time: 2.7f)).MeshDraws).Mesh;
         var member = Assert.Single(collection: settled.Members.ToArray());
 
         Assert.Equal(expected: 1L, actual: settles.Read(kind: SdfMeshSettle.Done));
@@ -90,14 +94,16 @@ public sealed partial class SdfMeshPathBakeLawTests {
         Assert.Contains(collection: settled.Positions.ToArray(), filter: static point => (MathF.Abs(x: (point.X - (0.1f + (58f / SdfMeshSettle.PositionSteps)))) < 0.01f));
 
         // A bake sharing the library takes the settled geometry's mesh for a member settling near the same pose.
-        var other = new SdfMeshPathBake { Library = library, Residency = "shared" };
+        using var otherRun = new MeshBakeTestRun(new SdfMeshPathBake { Library = library, Residency = "shared" }, ownsLibrary: false);
+        var other = otherRun.Bake;
+        var otherDresser = otherRun.Dresser;
 
-        _ = other.Dress(frame: SettleFrame(groups: 1, offset: 0.35f, program: program, time: 0f));
+        _ = otherDresser.Dress(frame: SettleFrame(groups: 1, offset: 0.35f, program: program, time: 0f));
         Assert.False(condition: other.Pending);
-        _ = other.Dress(frame: SettleFrame(groups: 1, offset: 0.452f, program: program, time: 1f));
-        _ = other.Dress(frame: SettleFrame(groups: 1, offset: 0.452f, program: program, time: 1.6f));
+        _ = otherDresser.Dress(frame: SettleFrame(groups: 1, offset: 0.452f, program: program, time: 1f));
+        _ = otherDresser.Dress(frame: SettleFrame(groups: 1, offset: 0.452f, program: program, time: 1.6f));
         Assert.False(condition: other.Pending);
-        _ = other.Dress(frame: SettleFrame(groups: 1, offset: 0.452f, program: program, time: 1.7f));
+        _ = otherDresser.Dress(frame: SettleFrame(groups: 1, offset: 0.452f, program: program, time: 1.7f));
         Assert.Equal(expected: 1L, actual: settles.Read(kind: SdfMeshSettle.Reused));
         Assert.Equal(expected: 2L, actual: settles.Read(kind: SdfMeshSettle.Done));
     }
@@ -108,42 +114,44 @@ public sealed partial class SdfMeshPathBakeLawTests {
     public void SettleRebakesKeepTheirCapsAndARefusedOneKeepsItsMesh() {
         const int Groups = 5;
         var program = SettleProgram(groups: Groups);
-        var library = new SdfMeshLibrary();
-        var bake = new SdfMeshPathBake { Library = library, Residency = "capped" };
+        using var library = new SdfMeshLibrary();
+        using var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake { Library = library, Residency = "capped" }, ownsLibrary: false);
+        var bake = bakeRun.Bake;
+        var dresser = bakeRun.Dresser;
         var index = 0L;
         var settles = library.Settles;
 
-        DriveSettle(bake: bake, frame: SettleFrame(groups: Groups, offset: 0.35f, program: program, time: 0f), index: ref index);
-        _ = bake.Dress(frame: SettleFrame(groups: Groups, offset: 0.45f, program: program, time: 1f));
-        _ = bake.Dress(frame: SettleFrame(groups: Groups, offset: 0.45f, program: program, time: 1.6f));
+        DriveSettle(bake: bake, dresser: dresser, frame: SettleFrame(groups: Groups, offset: 0.35f, program: program, time: 0f), index: ref index);
+        _ = dresser.Dress(frame: SettleFrame(groups: Groups, offset: 0.45f, program: program, time: 1f));
+        _ = dresser.Dress(frame: SettleFrame(groups: Groups, offset: 0.45f, program: program, time: 1.6f));
         Assert.Equal(expected: 2L, actual: settles.Read(kind: SdfMeshSettle.Queued));
         Assert.Equal(expected: 3L, actual: settles.Read(kind: SdfMeshSettle.Capped));
 
         // Within the second, four start and the fifth waits.
-        DriveSettle(bake: bake, frame: SettleFrame(groups: Groups, offset: 0.45f, program: program, time: 1.6f), index: ref index, until: () => (settles.Read(kind: SdfMeshSettle.Done) == 4L));
+        DriveSettle(bake: bake, dresser: dresser, frame: SettleFrame(groups: Groups, offset: 0.45f, program: program, time: 1.6f), index: ref index, until: () => (settles.Read(kind: SdfMeshSettle.Done) == 4L));
         Assert.Equal(expected: 4L, actual: settles.Read(kind: SdfMeshSettle.Queued));
-        DriveSettle(bake: bake, frame: SettleFrame(groups: Groups, offset: 0.45f, program: program, time: 2.7f), index: ref index, until: () => (settles.Read(kind: SdfMeshSettle.Done) == 5L));
+        DriveSettle(bake: bake, dresser: dresser, frame: SettleFrame(groups: Groups, offset: 0.45f, program: program, time: 2.7f), index: ref index, until: () => (settles.Read(kind: SdfMeshSettle.Done) == 5L));
         Assert.Equal(expected: 5L, actual: settles.Read(kind: SdfMeshSettle.Queued));
 
         // A clock that starts again forgets the starts; a settled pose meshing no surface keeps the mesh the group had.
-        var before = bake.Dress(frame: SettleFrame(groups: Groups, offset: 0.45f, program: program, time: 2.8f)).MeshDraws.Select(selector: static draw => draw.Mesh).ToArray();
+        var before = dresser.Dress(frame: SettleFrame(groups: Groups, offset: 0.45f, program: program, time: 2.8f)).MeshDraws.Select(selector: static draw => draw.Mesh).ToArray();
 
-        _ = bake.Dress(frame: SettleFrame(groups: Groups, offset: 0.55f, program: program, time: 0f));
-        _ = bake.Dress(frame: SettleFrame(groups: Groups, offset: 0.55f, program: program, time: 0.6f));
+        _ = dresser.Dress(frame: SettleFrame(groups: Groups, offset: 0.55f, program: program, time: 0f));
+        _ = dresser.Dress(frame: SettleFrame(groups: Groups, offset: 0.55f, program: program, time: 0.6f));
         Assert.Equal(expected: 7L, actual: settles.Read(kind: SdfMeshSettle.Queued));
-        DriveSettle(bake: bake, empty: true, frame: SettleFrame(groups: Groups, offset: 0.55f, program: program, time: 0.6f), index: ref index, until: () => (settles.Read(kind: SdfMeshSettle.Refused) == 2L));
+        DriveSettle(bake: bake, dresser: dresser, empty: true, frame: SettleFrame(groups: Groups, offset: 0.55f, program: program, time: 0.6f), index: ref index, until: () => (settles.Read(kind: SdfMeshSettle.Refused) == 2L));
 
-        var after = bake.Dress(frame: SettleFrame(groups: Groups, offset: 0.55f, program: program, time: 0.7f)).MeshDraws.Select(selector: static draw => draw.Mesh).ToArray();
+        var after = dresser.Dress(frame: SettleFrame(groups: Groups, offset: 0.55f, program: program, time: 0.7f)).MeshDraws.Select(selector: static draw => draw.Mesh).ToArray();
 
         Assert.Equal(expected: before.Take(count: 2), actual: after.Take(count: 2));
 
         // The other three start as the caps allow and mesh nothing too. Each of the five rebakes once toward the pose and
         // is handed back its mesh, and a refused group stands, starting nothing more, until its member moves.
-        DriveSettle(bake: bake, empty: true, frame: SettleFrame(groups: Groups, offset: 0.55f, program: program, time: 5f), index: ref index, until: () => (settles.Read(kind: SdfMeshSettle.Refused) == 5L));
-        _ = bake.Dress(frame: SettleFrame(groups: Groups, offset: 0.55f, program: program, time: 7f));
+        DriveSettle(bake: bake, dresser: dresser, empty: true, frame: SettleFrame(groups: Groups, offset: 0.55f, program: program, time: 5f), index: ref index, until: () => (settles.Read(kind: SdfMeshSettle.Refused) == 5L));
+        _ = dresser.Dress(frame: SettleFrame(groups: Groups, offset: 0.55f, program: program, time: 7f));
         Assert.Equal(expected: 5L, actual: settles.Read(kind: SdfMeshSettle.Refused));
         Assert.Equal(expected: 10L, actual: settles.Read(kind: SdfMeshSettle.Queued));
-        Assert.Equal(expected: before, actual: bake.Dress(frame: SettleFrame(groups: Groups, offset: 0.55f, program: program, time: 7.1f)).MeshDraws.Select(selector: static draw => draw.Mesh));
+        Assert.Equal(expected: before, actual: dresser.Dress(frame: SettleFrame(groups: Groups, offset: 0.55f, program: program, time: 7.1f)).MeshDraws.Select(selector: static draw => draw.Mesh));
     }
 
     // Groups of a box on slot 2g+1 and a smaller box memberGap slots later, smooth-free: each a dynamic instance on its own slot.
@@ -188,11 +196,11 @@ public sealed partial class SdfMeshPathBakeLawTests {
     }
     // Answers the bake's lattices frame by frame, at the frame's time, until it owes nothing or `until` holds; `empty`
     // answers every sample outside.
-    private static void DriveSettle(SdfMeshPathBake bake, SdfFrame frame, ref long index, Func<bool>? until = null, bool empty = false) {
+    private static void DriveSettle(SdfMeshPathBake bake, SdfMeshDresser dresser, SdfFrame frame, ref long index, Func<bool>? until = null, bool empty = false) {
         var next = index;
 
         TestLiveness.Until(reason: bake.Describe, step: () => {
-            _ = bake.Dress(frame: frame);
+            _ = dresser.Dress(frame: frame);
             if (bake.TryTakeForFrame(batch: out var batch, frame: next++)) {
                 bake.Record(batch: batch);
                 bake.Complete(batch: batch, samples: AnswerPosed(batch: batch, empty: empty));

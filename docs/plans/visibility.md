@@ -64,14 +64,14 @@ in the tree.
   their poses; the body-only rate hold is a separate decision. Driver continuation
   now prevents an active authored clock from settling merely because one output
   pose was equal.
-- **`SdfMeshPathBake.Dress` rebuilds the whole draw list** when any dynamic
-  slot moved (`SdfMeshPathBake.cs:384-425`), allocating a draw per copy and
-  scanning every mesh instance for each dynamic group (`:390-395`); the scan
-  alone cost 0.6 to 1.2 ms a frame at the lobby before the meadow existed
-  ([packet](open-items.md#engine-job-system)). A record is 47 words, 63 on R2
-  with its selection rows (`src/Puck.SdfVm.Model/SdfMeshRecord.cs:15`), written
-  once per changed draw; every moving blade is a changed draw, so the meadow
-  re-stages about 4,215 × 252 B, roughly 1 MB, a frame.
+- **Dressing retains topology and picking metadata.** `SdfMeshDresser.Dress`
+  reads the copy-membership index shared with bake demand instead of scanning
+  every copy per group. Changed poses still traverse retained bindings and
+  staging comparisons; shared pose derivation and dirty ranges remain open.
+  `SdfMeshRegion.WriteDrawIncremental` assigns only dependent fields, while
+  `GpuUploadRuns.AddDifferences` determines exact changed words before upload
+  coalescing. Read those work counts and actual upload bytes separately: the
+  full record size alone no longer describes CPU work or transfer volume.
 - **A draw whose mesh has members has no box** (`SdfMeshBox.cs:39-47`): it is
   never culled, never occlusion-tested and never coarsened.
 - **The opaque fragment loses forced early depth** to the stamp fade's `clip`
@@ -154,7 +154,7 @@ creation effectors' surface probes (`WorldCreationInstances.ApplyEffectors` into
 chase camera's clearance march (`WorldCameraClearance.Clear`) 18 %. The
 presenter's `WorldFramePresenter.Dress` (18.6 %) is that clearance march
 (`ResolveCamera` into `WorldSeatViewState.Clear`, 18.0 %), not draw work. The
-draw list's own `SdfMeshPathBake.Dress` is 4.4 % and
+draw list's historical "SdfMeshPathBake.Dress" label is 4.4 % and
 `SdfWorldTables.StageChangedDraws` 4.4 %, both under the residency's capture;
 `SdfWorldResidency.PrepareOnce` 9.8 %;
 `SdfWorldTables.Pack` 6 %; command recording (`ShaderPipelineRenderNode.RenderFrame`)

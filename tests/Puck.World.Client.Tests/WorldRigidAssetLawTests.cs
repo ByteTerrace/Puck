@@ -70,34 +70,38 @@ public sealed class WorldRigidAssetLawTests {
         var group = Assert.Single(SdfMeshBakeGroup.Plan(crowd.Program, crowd.DynamicTransforms, 40,
             static (slot, dynamic) => new SdfMeshBakeGroup(slot, dynamic)));
         var mesh = new SdfMesh(positions: new Vector3[] { Vector3.Zero, Vector3.UnitX, Vector3.UnitY }, indices: new uint[] { 0, 1, 2 });
-        var library = new SdfMeshLibrary();
+        using var library = new SdfMeshLibrary();
 
         library.Store(group.Sealed, mesh, group.MaterialOrder);
         var bake = new SdfMeshPathBake { Library = library };
-        var drawn = bake.Dress(crowd);
+        using var dresser = new SdfMeshDresser(bake);
 
-        Assert.False(bake.Pending);
-        Assert.Equal(600, drawn.MeshDraws.Count);
-        for (var index = 0; (index < drawn.MeshDraws.Count); index++) {
-            Assert.Same(mesh, drawn.MeshDraws[index].Mesh);
-            var copy = Assert.IsType<SdfMeshInstance>(drawn.MeshDraws[index].Identity);
+        try {
+            var drawn = dresser.Dress(crowd);
 
-            Assert.Equal(index, Assert.IsType<WorldPickTarget>(copy.Identity).BodyIndex);
-            Assert.Equal((index + 1), drawn.MeshDraws[index].FrameSlot);
-            Assert.Equal(index, drawn.MeshDraws[index].ObjectToWorld.M41);
-        }
+            Assert.False(bake.Pending);
+            Assert.Equal(600, drawn.MeshDraws.Count);
+            for (var index = 0; (index < drawn.MeshDraws.Count); index++) {
+                Assert.Same(mesh, drawn.MeshDraws[index].Mesh);
+                var picked = drawn.PickMap!.Resolve(SdfVisibility.IdentityOf(SdfVisibilityKind.Mesh, ((uint)index)));
 
-        emitter.Count = 1;
-        var departed = source.CaptureFrame(1280, 720, (1f / 60f), 0);
+                Assert.Equal(index, Assert.IsType<WorldPickTarget>(picked).BodyIndex);
+                Assert.Equal((index + 1), drawn.MeshDraws[index].FrameSlot);
+                Assert.Equal(index, drawn.MeshDraws[index].ObjectToWorld.M41);
+            }
 
-        Assert.Same(first.Program, departed.Program);
-        Assert.Single(bake.Dress(departed).MeshDraws);
-        Assert.Equal(1, source.ProgramBuilds);
-        emitter.Count = 0;
-        var empty = source.CaptureFrame(1280, 720, (1f / 60f), 0);
+            emitter.Count = 1;
+            var departed = source.CaptureFrame(1280, 720, (1f / 60f), 0);
 
-        Assert.Same(first.Program, empty.Program);
-        Assert.Empty(bake.Dress(empty).MeshDraws);
+            Assert.Same(first.Program, departed.Program);
+            Assert.Single(dresser.Dress(departed).MeshDraws);
+            Assert.Equal(1, source.ProgramBuilds);
+            emitter.Count = 0;
+            var empty = source.CaptureFrame(1280, 720, (1f / 60f), 0);
+
+            Assert.Same(first.Program, empty.Program);
+            Assert.Empty(dresser.Dress(empty).MeshDraws);
+        } finally { dresser.Dispose(); bake.Retire(); }
     }
 
     private sealed class RigidEmitter : ISdfSceneEmitter {

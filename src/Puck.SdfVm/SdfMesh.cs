@@ -210,6 +210,24 @@ public sealed partial record SdfMesh {
         }
     }
 
+    /// <summary>Returns a level's range among this mesh's triangles, the base mesh first and coarser levels after it.</summary>
+    /// <param name="level">Zero for the base mesh, one for its first coarser level; a level past the coarsest selects
+    /// the coarsest.</param>
+    /// <returns>The first triangle in the concatenated levels and the chosen level's triangle count.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="level"/> is negative.</exception>
+    public (int FirstTriangle, int TriangleCount) LevelOf(int level) {
+        ArgumentOutOfRangeException.ThrowIfNegative(value: level);
+        var levels = Levels;
+        var chosen = Math.Min(val1: level, val2: levels.Count);
+        var first = 0;
+        var count = TriangleCount;
+        for (var at = 0; at < chosen; at++) {
+            first += count;
+            count = levels[at].TriangleCount;
+        }
+        return (first, count);
+    }
+
     private readonly IReadOnlyList<SdfMeshLevel> m_levels = [];
 
     private static void RequireAttribute(int count, int expected, string name, string per) {
@@ -309,7 +327,7 @@ public readonly record struct SdfMeshDrawPacking(int PackedWords, bool NormalCom
 /// position and normal), its triangle materials (one word each, for a mesh that has them) and its
 /// indices (one word each), its own triangles' first and then each of its levels' (<see cref="SdfMesh.Levels"/>), so the
 /// triangles of every level are numbered together and a draw chooses its level by the level it pushes above its index
-/// (<see cref="SdfKernelInterfaces.MeshLevelShift"/>, <see cref="LevelOf"/>). <see cref="Plan"/> lays the meshes out section by section, all vertices, then all triangle
+/// (<see cref="SdfKernelInterfaces.MeshLevelShift"/>, <see cref="SdfMesh.LevelOf"/>). <see cref="Plan"/> lays the meshes out section by section, all vertices, then all triangle
 /// materials, then all indices, in the order their first draw names them; a residency's tables place each mesh whole
 /// past a reserve of draw records, where it stays until the arena packs again (<see cref="SdfMeshRegionArena"/>). A record names
 /// its mesh's words either way.
@@ -329,7 +347,7 @@ public readonly record struct SdfMeshDrawPacking(int PackedWords, bool NormalCom
 /// are the draw's carry (<see cref="SdfMeshDraw.CarryRotation"/> as x, y, z, w, then
 /// <see cref="SdfMeshDraw.CarryTranslation"/> and <see cref="SdfMeshDraw.CarryScale"/>), which every world position and
 /// normal the draw resolves goes through last, words 41 to 44 its clip plane (<see cref="SdfMeshDraw.ClipPlane"/>), and
-/// words 45 and 46 the first triangle of its mesh's first and second coarser levels (<see cref="LevelOf"/>), which a draw
+/// words 45 and 46 the first triangle of its mesh's first and second coarser levels (<see cref="SdfMesh.LevelOf"/>), which a draw
 /// of a level adds to the triangle its vertex id names. The record is whole words, so it has no padding a
 /// structured-buffer reader could disagree on.
 /// </para>
@@ -456,31 +474,6 @@ public static class SdfMeshRegion {
         ArgumentNullException.ThrowIfNull(mesh);
 
         return (mesh.TriangleMaterials.IsEmpty ? 0 : mesh.LevelledTriangleCount);
-    }
-    /// <summary>Returns where one level of a mesh lies among its triangles in the region.</summary>
-    /// <param name="mesh">The mesh.</param>
-    /// <param name="level">The level: zero for the mesh's own triangles, one for its first coarser level; a level past its
-    /// coarsest is its coarsest.</param>
-    /// <returns>The level's first triangle among the mesh's levelled triangles, which the draw's record holds
-    /// (<see cref="SdfMeshRecord.LevelTableWord"/>), and its triangle count; a draw of the level draws three vertices
-    /// a triangle, its vertex stage adding the first triangle.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="mesh"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="level"/> is negative.</exception>
-    public static (int FirstTriangle, int TriangleCount) LevelOf(SdfMesh mesh, int level) {
-        ArgumentNullException.ThrowIfNull(mesh);
-        ArgumentOutOfRangeException.ThrowIfNegative(value: level);
-
-        var levels = mesh.Levels;
-        var chosen = Math.Min(val1: level, val2: levels.Count);
-        var first = 0;
-        var count = mesh.TriangleCount;
-
-        for (var at = 0; (at < chosen); at++) {
-            first += count;
-            count = levels[at].TriangleCount;
-        }
-
-        return (first, count);
     }
     /// <summary>The words a mesh's members take: none for a mesh without them, otherwise their count, each member's
     /// <see cref="SdfMeshRecord.MemberWords"/> words and one word a vertex.</summary>

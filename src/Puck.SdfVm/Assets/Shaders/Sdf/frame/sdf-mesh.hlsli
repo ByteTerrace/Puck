@@ -82,7 +82,7 @@ float3 sdfMeshRow(uint record, uint row) {
 }
 // The uniform scale of a draw's matrix, its first row's length: a dynamic group's mesh is in its slot's own units
 // (DynamicTransform.Scale), and a vertex riding a member takes the draw's scale out of the member's frame as the rest of
-// the mesh takes it from the matrix (SdfMeshPathBake.Dress).
+// the mesh takes it from the matrix (SdfMeshDresser.Dress).
 float sdfMeshDrawScale(uint record) {
     return length(sdfMeshRow(record, 0u));
 }

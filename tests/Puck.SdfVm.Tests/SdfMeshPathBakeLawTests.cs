@@ -12,7 +12,10 @@ namespace Puck.SdfVm.Tests;
 /// the bake kernel would (<c>sdf-mesh-bake.comp.hlsl</c>), from a field of boxes it evaluates itself, one value, material
 /// and tetrahedral gradient a sample.
 /// </summary>
-public sealed partial class SdfMeshPathBakeLawTests {
+public sealed partial class SdfMeshPathBakeLawTests : IClassFixture<SdfMeshPathBakeLawTests.BakedFixture> {
+    private readonly BakedFixture m_baked;
+
+    public SdfMeshPathBakeLawTests(BakedFixture baked) { m_baked = baked; }
     // A static copy of two shapes turned 30 degrees about up: a wide plate and a small block standing on it, the block
     // baking with the plate (one run), then a lone block elsewhere.
     private static readonly Quaternion Turn = Quaternion.CreateFromAxisAngle(angle: (MathF.PI / 6f), axis: Vector3.UnitY);
@@ -23,27 +26,40 @@ public sealed partial class SdfMeshPathBakeLawTests {
     ];
     // The one bake both laws read, each its own group: a union's final lattice holds about a million samples, so the
     // bake, and not the laws, is the class's cost.
-    private static readonly Lazy<(SdfMeshPathBake Bake, SdfFrame Frame)> Baked = new(valueFactory: static () => {
+    public sealed class BakedFixture : IDisposable {
+        private readonly Lazy<(MeshBakeTestRun Run, SdfFrame Frame)> m_value = new(valueFactory: BakeShared);
+
+        internal (MeshBakeTestRun Run, SdfFrame Frame) Value => m_value.Value;
+
+        public void Dispose() { if (m_value.IsValueCreated) { m_value.Value.Run.Dispose(); } }
+    }
+
+    private static (MeshBakeTestRun Run, SdfFrame Frame) BakeShared() {
         var (program, materials) = Program(shapes: Shapes);
-        var bake = new SdfMeshPathBake { Residency = "copies" };
+        var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake { Residency = "copies" });
+        var bake = bakeRun.Bake;
+        var dresser = bakeRun.Dresser;
         var frame = new SdfFrame(Program: program, ProgramChanged: true, Time: 0f, Views: []) { FarDistance = 100f };
 
-        _ = bake.Dress(frame: frame);
-        Assert.True(condition: bake.IrradiancePending);
-        Drive(bake: bake, frame: frame, materials: materials, shapes: Shapes);
-        Assert.False(condition: bake.IrradiancePending);
-
-        return (bake, frame);
-    });
+        try {
+            _ = dresser.Dress(frame: frame);
+            Assert.True(condition: bake.IrradiancePending);
+            Drive(bake: bake, dresser: dresser, frame: frame, materials: materials, shapes: Shapes);
+            Assert.False(condition: bake.IrradiancePending);
+            return (bakeRun, frame);
+        } catch { bakeRun.Dispose(); throw; }
+    }
 
     [Fact]
     public void AStaticCopyBakesItsUnionKeepingItsSmallShapeAtItsOwnResolution() {
-        var (bake, frame) = Baked.Value;
+        var (run, frame) = m_baked.Value;
+        var bake = run.Bake;
+        var dresser = run.Dresser;
 
         // The run of two shapes is one group, the lone block another.
         Assert.Contains(expectedSubstring: "groups=2 meshes=2", actualString: bake.Describe());
 
-        var meshes = bake.Dress(frame: frame).MeshDraws.Select(selector: static draw => draw.Mesh).ToArray();
+        var meshes = dresser.Dress(frame: frame).MeshDraws.Select(selector: static draw => draw.Mesh).ToArray();
         var copies = meshes.Where(static mesh => mesh.Positions.ToArray().Any(static point => (MathF.Abs(point.X) < 1f))).ToArray();
 
         Assert.NotEmpty(copies);
@@ -72,12 +88,14 @@ public sealed partial class SdfMeshPathBakeLawTests {
         var plates = new[] { 13.6f, 19.6f, 25.6f, 31.6f }.Select(selector: static z => new Shape(Center: new Vector3(x: 45f, y: 4.215f, z: z), Half: new Vector3(x: 24f, y: 0.035f, z: 0.2f), Rotation: Quaternion.Identity, Material: 0)).ToArray();
 
         var (program, materials) = Program(oneCopy: true, shapes: plates);
-        var bake = new SdfMeshPathBake { Residency = "plates" };
+        using var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake { Residency = "plates" });
+        var bake = bakeRun.Bake;
+        var dresser = bakeRun.Dresser;
         var frame = new SdfFrame(Program: program, ProgramChanged: true, Time: 0f, Views: []) { FarDistance = 100f };
 
-        Drive(bake: bake, frame: frame, materials: materials, shapes: plates);
+        Drive(bake: bake, dresser: dresser, frame: frame, materials: materials, shapes: plates);
 
-        var positions = bake.Dress(frame: frame).MeshDraws.SelectMany(static draw => draw.Mesh.Positions.ToArray()).ToArray();
+        var positions = dresser.Dress(frame: frame).MeshDraws.SelectMany(static draw => draw.Mesh.Positions.ToArray()).ToArray();
 
         foreach (var plate in plates) {
             var own = positions.Count(predicate: point => (MathF.Abs(x: Field(shape: plate, point: point)) < 0.001f));
@@ -101,12 +119,14 @@ public sealed partial class SdfMeshPathBakeLawTests {
         ];
 
         var (program, materials) = Program(shapes: slabs);
-        var bake = new SdfMeshPathBake { Residency = "slabs" };
+        using var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake { Residency = "slabs" });
+        var bake = bakeRun.Bake;
+        var dresser = bakeRun.Dresser;
         var frame = new SdfFrame(Program: program, ProgramChanged: true, Time: 0f, Views: []) { FarDistance = 100f };
 
-        Drive(bake: bake, frame: frame, materials: materials, shapes: slabs);
+        Drive(bake: bake, dresser: dresser, frame: frame, materials: materials, shapes: slabs);
 
-        var mesh = Assert.Single(collection: bake.Dress(frame: frame).MeshDraws).Mesh;
+        var mesh = Assert.Single(collection: dresser.Dress(frame: frame).MeshDraws).Mesh;
         var positions = mesh.Positions.ToArray();
         var indices = mesh.Indices.ToArray();
         var triangleMaterials = mesh.TriangleMaterials.ToArray();
@@ -145,12 +165,14 @@ public sealed partial class SdfMeshPathBakeLawTests {
         ];
 
         var (program, materials) = Program(oneCopy: true, shapes: slabs);
-        var bake = new SdfMeshPathBake { Residency = "junction" };
+        using var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake { Residency = "junction" });
+        var bake = bakeRun.Bake;
+        var dresser = bakeRun.Dresser;
         var frame = new SdfFrame(Program: program, ProgramChanged: true, Time: 0f, Views: []) { FarDistance = 100f };
 
-        Drive(bake: bake, frame: frame, materials: materials, shapes: slabs);
+        Drive(bake: bake, dresser: dresser, frame: frame, materials: materials, shapes: slabs);
 
-        var mesh = Assert.Single(collection: bake.Dress(frame: frame).MeshDraws).Mesh;
+        var mesh = Assert.Single(collection: dresser.Dress(frame: frame).MeshDraws).Mesh;
         var positions = mesh.Positions.ToArray();
         var indices = mesh.Indices.ToArray();
         var triangleMaterials = mesh.TriangleMaterials.ToArray();
@@ -178,20 +200,24 @@ public sealed partial class SdfMeshPathBakeLawTests {
         Shape[] boxes = [new(Center: new Vector3(x: 0.003f, y: 0.2f, z: -0.004f), Half: new Vector3(value: 0.15f), Rotation: Turn, Material: 0, Round: 0.012f)];
 
         var (program, materials) = Program(shapes: boxes);
-        var bake = new SdfMeshPathBake { Residency = "rounded" };
+        using var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake { Residency = "rounded" });
+        var bake = bakeRun.Bake;
+        var dresser = bakeRun.Dresser;
         var frame = new SdfFrame(Program: program, ProgramChanged: true, Time: 0f, Views: []) { FarDistance = 100f };
 
-        Drive(bake: bake, frame: frame, materials: materials, shapes: boxes);
+        Drive(bake: bake, dresser: dresser, frame: frame, materials: materials, shapes: boxes);
 
-        var positions = Assert.Single(collection: bake.Dress(frame: frame).MeshDraws).Mesh.Positions.ToArray();
+        var positions = Assert.Single(collection: dresser.Dress(frame: frame).MeshDraws).Mesh.Positions.ToArray();
         var worst = positions.Max(selector: point => MathF.Abs(x: Field(shape: boxes[0], point: point)));
 
         Assert.True(condition: (worst < 0.00055f), userMessage: $"a vertex lies {worst} from the rounded box");
     }
     [Fact]
     public void ASharpEdgeShadesAsTheFacesMeetingAtIt() {
-        var (bake, frame) = Baked.Value;
-        var lone = bake.Dress(frame: frame).MeshDraws.Select(selector: static draw => draw.Mesh).Single(predicate: static mesh => (mesh.Positions.Span[0].X > 6f));
+        var (run, frame) = m_baked.Value;
+        var bake = run.Bake;
+        var dresser = run.Dresser;
+        var lone = dresser.Dress(frame: frame).MeshDraws.Select(selector: static draw => draw.Mesh).Single(predicate: static mesh => (mesh.Positions.Span[0].X > 6f));
         var positions = lone.Positions.ToArray();
         var normals = lone.Normals.ToArray();
 
@@ -229,21 +255,23 @@ public sealed partial class SdfMeshPathBakeLawTests {
     public void AnEditedGroupDrawsItsNewMeshOnceItLands() {
         Shape[] before = [new(Center: new Vector3(x: 8f, y: 0.5f, z: 0f), Half: new Vector3(value: 0.5f), Rotation: Quaternion.Identity, Material: 0)];
         Shape[] after = [(before[0] with { Half = new Vector3(value: 0.25f) })];
-        var bake = new SdfMeshPathBake { Residency = "edited" };
+        using var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake { Residency = "edited" });
+        var bake = bakeRun.Bake;
+        var dresser = bakeRun.Dresser;
 
-        float Reach(SdfFrame frame) => Assert.Single(collection: bake.Dress(frame: frame).MeshDraws).Mesh.Positions.ToArray().Max(selector: static point => point.X);
+        float Reach(SdfFrame frame) => Assert.Single(collection: dresser.Dress(frame: frame).MeshDraws).Mesh.Positions.ToArray().Max(selector: static point => point.X);
 
         var (first, firstMaterials) = Program(shapes: before);
         var firstFrame = new SdfFrame(Program: first, ProgramChanged: true, Time: 0f, Views: []) { FarDistance = 100f };
 
-        Drive(bake: bake, frame: firstFrame, materials: firstMaterials, shapes: before);
+        Drive(bake: bake, dresser: dresser, frame: firstFrame, materials: firstMaterials, shapes: before);
         Assert.Equal(expected: 8.5f, actual: Reach(frame: firstFrame), tolerance: 0.01f);
 
         var (second, secondMaterials) = Program(shapes: after);
         var secondFrame = new SdfFrame(Program: second, ProgramChanged: true, Time: 0f, Views: []) { FarDistance = 100f };
 
         Assert.Equal(expected: 8.5f, actual: Reach(frame: secondFrame), tolerance: 0.01f);
-        Drive(bake: bake, frame: secondFrame, materials: secondMaterials, shapes: after);
+        Drive(bake: bake, dresser: dresser, frame: secondFrame, materials: secondMaterials, shapes: after);
         Assert.Equal(expected: 8.25f, actual: Reach(frame: secondFrame), tolerance: 0.01f);
     }
     [Fact]
@@ -255,16 +283,20 @@ public sealed partial class SdfMeshPathBakeLawTests {
         var frame = new SdfFrame(Program: program, ProgramChanged: true, Time: 0f, Views: []) { FarDistance = 4.25f };
         var directory = scratch.PathOf(name: "meshes");
         // Each run is a process of its own: a library of its own over the one store.
-        SdfMeshPathBake Run(string name) {
-            var bake = new SdfMeshPathBake { Identity = new SdfMeshBakeIdentity(value: 5), Library = new SdfMeshLibrary(store: new SdfMeshStore(directory: directory)), Residency = name };
+        MeshBakeTestRun Run(string name) {
+            var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake { Identity = new SdfMeshBakeIdentity(value: 5), Library = new SdfMeshLibrary(store: new SdfMeshStore(directory: directory)), Residency = name });
+            try {
+                var bake = bakeRun.Bake;
+                var dresser = bakeRun.Dresser;
 
-            Drive(bake: bake, frame: frame, materials: materials, shapes: Shapes);
+                Drive(bake: bake, dresser: dresser, frame: frame, materials: materials, shapes: Shapes);
 
-            return bake;
+                return bakeRun;
+            } catch { bakeRun.Dispose(); throw; }
         }
-        void SameMeshes(SdfMeshPathBake expected, SdfMeshPathBake actual) {
-            var first = expected.Dress(frame: frame).MeshDraws;
-            var second = actual.Dress(frame: frame).MeshDraws;
+        void SameMeshes(MeshBakeTestRun expected, MeshBakeTestRun actual) {
+            var first = expected.Dresser.Dress(frame: frame).MeshDraws;
+            var second = actual.Dresser.Dress(frame: frame).MeshDraws;
 
             Assert.Equal(first.Count, second.Count);
             for (var draw = 0; (draw < first.Count); draw++) {
@@ -280,26 +312,26 @@ public sealed partial class SdfMeshPathBakeLawTests {
             }
         }
 
-        var baked = Run(name: "first");
+        using var baked = Run(name: "first");
         var entries = Directory.GetFiles(path: directory, searchOption: SearchOption.AllDirectories, searchPattern: "*.mesh").OrderBy(keySelector: static entry => new FileInfo(fileName: entry).Length).ToArray();
 
         Assert.Equal(expected: 2, actual: entries.Length);
-        Assert.Contains(expectedSubstring: "loaded=0", actualString: baked.Describe());
+        Assert.Contains(expectedSubstring: "loaded=0", actualString: baked.Bake.Describe());
 
         // An unchanged program bakes nothing: every group's mesh is the one the first run meshed.
-        var loaded = Run(name: "second");
+        using var loaded = Run(name: "second");
 
-        Assert.Contains(expectedSubstring: "dispatches=0 ", actualString: loaded.Describe());
-        Assert.Contains(expectedSubstring: "loaded=2", actualString: loaded.Describe());
+        Assert.Contains(expectedSubstring: "dispatches=0 ", actualString: loaded.Bake.Describe());
+        Assert.Contains(expectedSubstring: "loaded=2", actualString: loaded.Bake.Describe());
         SameMeshes(expected: baked, actual: loaded);
 
         // A damaged entry is refused and its group alone bakes, its mesh kept again.
         File.WriteAllBytes(bytes: [1, 2, 3], path: entries[0]);
 
-        var mended = Run(name: "third");
+        using var mended = Run(name: "third");
 
-        Assert.Contains(expectedSubstring: "loaded=1", actualString: mended.Describe());
-        Assert.DoesNotContain(expectedSubstring: "dispatches=0 ", actualString: mended.Describe());
+        Assert.Contains(expectedSubstring: "loaded=1", actualString: mended.Bake.Describe());
+        Assert.DoesNotContain(expectedSubstring: "dispatches=0 ", actualString: mended.Bake.Describe());
         Assert.True(condition: (new FileInfo(fileName: entries[0]).Length > 3));
         SameMeshes(expected: baked, actual: mended);
     }
@@ -346,23 +378,29 @@ public sealed partial class SdfMeshPathBakeLawTests {
         var offset = new Vector3(x: 0.3f, y: 0.05f, z: 0f);
         var hinge = Quaternion.CreateFromAxisAngle(angle: 0.4f, axis: Vector3.UnitX);
 
-        (SdfMeshBakeBatch Batch, SdfMeshPathBake Bake) Take(Vector3 position, Quaternion orientation) {
-            var bake = new SdfMeshPathBake { Residency = "pair" };
-            var frame = new SdfFrame(Program: program, ProgramChanged: true, Time: 0f, Views: []) {
-                DynamicTransforms = [default, new DynamicTransform(Orientation: orientation, Position: position), new DynamicTransform(Orientation: (orientation * hinge), Position: (position + Vector3.Transform(rotation: orientation, value: offset)))],
-                FarDistance = 100f,
-            };
+        (SdfMeshBakeBatch Batch, MeshBakeTestRun Run) Take(Vector3 position, Quaternion orientation) {
+            var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake { Residency = "pair" });
+            try {
+                var bake = bakeRun.Bake;
+                var dresser = bakeRun.Dresser;
+                var frame = new SdfFrame(Program: program, ProgramChanged: true, Time: 0f, Views: []) {
+                    DynamicTransforms = [default, new DynamicTransform(Orientation: orientation, Position: position), new DynamicTransform(Orientation: (orientation * hinge), Position: (position + Vector3.Transform(rotation: orientation, value: offset)))],
+                    FarDistance = 100f,
+                };
 
-            _ = bake.Dress(frame: frame);
-            Assert.True(condition: bake.TryTakeForFrame(batch: out var batch, frame: 0L));
+                _ = dresser.Dress(frame: frame);
+                Assert.True(condition: bake.TryTakeForFrame(batch: out var batch, frame: 0L));
 
-            return (batch, bake);
+                return (batch, bakeRun);
+            } catch { bakeRun.Dispose(); throw; }
         }
 
         var turn = Quaternion.CreateFromAxisAngle(angle: 2.1f, axis: Vector3.Normalize(value: new Vector3(x: 1f, y: 2f, z: 3f)));
 
-        var (near, _) = Take(orientation: Quaternion.Identity, position: Vector3.Zero);
-        var (far, _) = Take(orientation: turn, position: new Vector3(x: 41.7f, y: -3.2f, z: 9.9f));
+        var (near, nearRun) = Take(orientation: Quaternion.Identity, position: Vector3.Zero);
+        using var nearLifetime = nearRun;
+        var (far, farRun) = Take(orientation: turn, position: new Vector3(x: 41.7f, y: -3.2f, z: 9.9f));
+        using var farLifetime = farRun;
         var (first, rows) = Assert.Single(collection: near.Poses);
         var farRows = Assert.Single(collection: far.Poses).Rows;
 
@@ -411,31 +449,35 @@ public sealed partial class SdfMeshPathBakeLawTests {
         };
         var directory = scratch.PathOf(name: "meshes");
 
-        SdfMeshPathBake Run(string name) {
-            var bake = new SdfMeshPathBake { Identity = new SdfMeshBakeIdentity(value: 7), Library = new SdfMeshLibrary(store: new SdfMeshStore(directory: directory)), Residency = name };
-            var index = 0L;
+        MeshBakeTestRun Run(string name) {
+            var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake { Identity = new SdfMeshBakeIdentity(value: 7), Library = new SdfMeshLibrary(store: new SdfMeshStore(directory: directory)), Residency = name });
+            try {
+                var bake = bakeRun.Bake;
+                var dresser = bakeRun.Dresser;
+                var index = 0L;
 
-            TestLiveness.Until(reason: bake.Describe, step: () => {
-                _ = bake.Dress(frame: frame);
-                if (bake.TryTakeForFrame(batch: out var batch, frame: index++)) {
-                    bake.Record(batch: batch);
-                    bake.Complete(batch: batch, samples: AnswerSlots(batch: batch, shapes: pair));
-                }
+                TestLiveness.Until(reason: bake.Describe, step: () => {
+                    _ = dresser.Dress(frame: frame);
+                    if (bake.TryTakeForFrame(batch: out var batch, frame: index++)) {
+                        bake.Record(batch: batch);
+                        bake.Complete(batch: batch, samples: AnswerSlots(batch: batch, shapes: pair));
+                    }
 
-                return !bake.Pending;
-            });
+                    return !bake.Pending;
+                });
 
-            return bake;
+                return bakeRun;
+            } catch { bakeRun.Dispose(); throw; }
         }
 
-        var baked = Run(name: "first");
-        var draw = Assert.Single(collection: baked.Dress(frame: frame).MeshDraws);
+        using var baked = Run(name: "first");
+        var draw = Assert.Single(collection: baked.Dresser.Dress(frame: frame).MeshDraws);
         var mesh = draw.Mesh;
         var member = Assert.Single(collection: mesh.Members.ToArray());
         var positions = mesh.Positions.ToArray();
         var vertexMembers = mesh.VertexMembers.ToArray();
 
-        Assert.Contains(expectedSubstring: "skinned=1", actualString: baked.Describe());
+        Assert.Contains(expectedSubstring: "skinned=1", actualString: baked.Bake.Describe());
         Assert.Equal(expected: 1, actual: member.SlotOffset);
         Assert.Equal(expected: 0.35f, actual: member.Position.X, tolerance: 0.001f);
         Assert.Equal(expected: hinge.X, actual: member.Orientation.X, tolerance: 0.001f);
@@ -469,10 +511,10 @@ public sealed partial class SdfMeshPathBakeLawTests {
         }
 
         // Another run loads the group from the store with its members.
-        var loaded = Run(name: "second");
-        var reloaded = Assert.Single(collection: loaded.Dress(frame: frame).MeshDraws).Mesh;
+        using var loaded = Run(name: "second");
+        var reloaded = Assert.Single(collection: loaded.Dresser.Dress(frame: frame).MeshDraws).Mesh;
 
-        Assert.Contains(expectedSubstring: "loaded=1", actualString: loaded.Describe());
+        Assert.Contains(expectedSubstring: "loaded=1", actualString: loaded.Bake.Describe());
         Assert.Equal(expected: mesh.Members.ToArray(), actual: reloaded.Members.ToArray());
         Assert.Equal(expected: vertexMembers, actual: reloaded.VertexMembers.ToArray());
     }
@@ -498,29 +540,33 @@ public sealed partial class SdfMeshPathBakeLawTests {
                 .EndInstance()
                 .Build();
         }
-        (SdfMeshPathBake Bake, SdfMeshBakeGroup Group, int Triangles) Bake(SdfProgram program) {
-            var bake = new SdfMeshPathBake { Residency = "detailed" };
-            var frame = new SdfFrame(Program: program, ProgramChanged: true, Time: 0f, Views: []) {
-                DynamicTransforms = [default, new DynamicTransform(Orientation: Quaternion.Identity, Position: Vector3.Zero)],
-                FarDistance = 100f,
-            };
-            var index = 0L;
+        (MeshBakeTestRun Run, SdfMeshBakeGroup Group, int Triangles) Bake(SdfProgram program) {
+            var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake { Residency = "detailed" });
+            try {
+                var bake = bakeRun.Bake;
+                var dresser = bakeRun.Dresser;
+                var frame = new SdfFrame(Program: program, ProgramChanged: true, Time: 0f, Views: []) {
+                    DynamicTransforms = [default, new DynamicTransform(Orientation: Quaternion.Identity, Position: Vector3.Zero)],
+                    FarDistance = 100f,
+                };
+                var index = 0L;
 
-            TestLiveness.Until(reason: bake.Describe, step: () => {
-                _ = bake.Dress(frame: frame);
-                if (bake.TryTakeForFrame(batch: out var batch, frame: index++)) {
-                    bake.Record(batch: batch);
-                    bake.Complete(batch: batch, samples: AnswerSlots(batch: batch, shapes: pair));
-                }
+                TestLiveness.Until(reason: bake.Describe, step: () => {
+                    _ = dresser.Dress(frame: frame);
+                    if (bake.TryTakeForFrame(batch: out var batch, frame: index++)) {
+                        bake.Record(batch: batch);
+                        bake.Complete(batch: batch, samples: AnswerSlots(batch: batch, shapes: pair));
+                    }
 
-                return !bake.Pending;
-            });
+                    return !bake.Pending;
+                });
 
-            var group = Assert.Single(collection: SdfMeshBakeGroup.Plan(create: static (selector, dynamic) => new SdfMeshBakeGroup(dynamic: dynamic, selector: selector), farDistance: 100f, program: program, transforms: frame.DynamicTransforms));
+                var group = Assert.Single(collection: SdfMeshBakeGroup.Plan(create: static (selector, dynamic) => new SdfMeshBakeGroup(dynamic: dynamic, selector: selector), farDistance: 100f, program: program, transforms: frame.DynamicTransforms));
 
-            Assert.Same(expected: program, actual: bake.Program);
+                Assert.Same(expected: program, actual: bake.Program);
 
-            return (bake, group, Assert.Single(collection: bake.Dress(frame: frame).MeshDraws).Mesh.TriangleCount);
+                return (bakeRun, group, Assert.Single(collection: dresser.Dress(frame: frame).MeshDraws).Mesh.TriangleCount);
+            } catch { bakeRun.Dispose(); throw; }
         }
         static long Refined(SdfMeshPathBake bake) {
             var line = bake.Describe();
@@ -530,14 +576,16 @@ public sealed partial class SdfMeshPathBakeLawTests {
         }
 
         var (plain, plainGroup, plainTriangles) = Bake(program: Program(detail: 0f));
+        using var plainLifetime = plain;
         var (detailed, detailedGroup, detailedTriangles) = Bake(program: Program(detail: 0.004f));
+        using var detailedLifetime = detailed;
 
         Assert.Equal(expected: 0f, actual: plainGroup.Detail);
         Assert.Equal(expected: 0.004f, actual: detailedGroup.Detail);
         Assert.True(condition: (Vector3.Distance(value1: new Vector3(value: -0.4f), value2: detailedGroup.DetailLow) < 2e-3f), userMessage: $"{detailedGroup.DetailLow}");
         Assert.True(condition: (Vector3.Distance(value1: new Vector3(x: 0.5f, y: 0.4f, z: 0.4f), value2: detailedGroup.DetailHigh) < 2e-3f), userMessage: $"{detailedGroup.DetailHigh}");
         Assert.NotEqual(expected: plainGroup.Sealed, actual: detailedGroup.Sealed);
-        Assert.True(condition: (Refined(bake: detailed) > Refined(bake: plain)), userMessage: $"{detailed.Describe()} against {plain.Describe()}");
+        Assert.True(condition: (Refined(bake: detailed.Bake) > Refined(bake: plain.Bake)), userMessage: $"{detailed.Bake.Describe()} against {plain.Bake.Describe()}");
         Assert.True(condition: (detailedTriangles > plainTriangles), userMessage: $"{detailedTriangles} triangles against {plainTriangles}");
     }
 
@@ -561,11 +609,11 @@ public sealed partial class SdfMeshPathBakeLawTests {
         return (builder.Build(), materials);
     }
     // Answers the bake's lattices frame by frame until it has meshed every group.
-    private static void Drive(SdfMeshPathBake bake, SdfFrame frame, int[] materials, Shape[] shapes) {
+    private static void Drive(SdfMeshPathBake bake, SdfMeshDresser dresser, SdfFrame frame, int[] materials, Shape[] shapes) {
         var index = 0L;
 
         TestLiveness.Until(reason: bake.Describe, step: () => {
-            _ = bake.Dress(frame: frame);
+            _ = dresser.Dress(frame: frame);
             if (bake.TryTakeForFrame(batch: out var batch, frame: index++)) {
                 bake.Record(batch: batch);
                 bake.Complete(batch: batch, samples: Answer(batch: batch, materials: materials, shapes: shapes));

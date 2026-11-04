@@ -72,11 +72,11 @@ techniques and the defects review found are what transfer. Each technique cites 
 | Remove re-copies and rescans of finished work | #70139 | `SdfMeshPathBake.Pending`'s done-through cursor ([source](../../../../src/Puck.SdfVm/SdfMeshPathBake.cs)) |
 | Allocate rarely used state on first use | #70189 | `WorldEffectorSolver.TryProbeSurface` builds its answer ring on a thread's first probe ([source](../../../../src/Puck.World.Client/WorldEffectorSolver.cs)) |
 | A `static` lambda with a state argument, not a capturing closure | #70185 | `WorldSchema.ResolveDescriptionForMember` ([source](../../../../src/Puck.World.Schema/WorldSchema.cs)) |
-| Without PGO, loop over the concrete collection where an interface enumerator boxes | #70147 | `SdfMeshPathBake` indexes copy membership when topology changes; motion reads retained bindings instead of enumerating all copies per group |
+| Without PGO, loop over the concrete collection where an interface enumerator boxes | #70147 | `SdfMeshPathBake` indexes copy membership when topology changes; `SdfMeshDresser` reads retained bindings instead of enumerating all copies per group |
 | Format text only when it is emitted | #70178 | `GenlockPhaseAligner.LogPhase` checks `IsEnabled` first ([source](../../../../src/Puck.Launcher/GenlockPhaseAligner.cs)) |
 | Look up by span through an alternate lookup, and decode strictly | #70142 | `CellKeyTable.TryResolve` ([source](../../../../src/Puck.State/CellKey.cs)) |
 | Cache `SearchValues` statically; never rebuild one per call | #70224 | `IdentifierRules.ReservedCharacters` ([source](../../../../src/Puck.State/SafeName.cs)) |
-| A scan over a few fixed entries beats hashing; one over a list that grows with the world is the quadratic | #70209 | `SdfMeshPathBake.Dress` scans `MeshAssetSlots` once per group ([data and memory](data-and-memory.md#a-scan-per-item-is-a-quadratic)) |
+| A scan over a few fixed entries beats hashing; one over a list that grows with the world is the quadratic | #70209 | Bake demand and dressing share one copy-membership index, replacing the old per-group scan over all copies ([data and memory](data-and-memory.md#a-scan-per-item-is-a-quadratic)) |
 | Publish shared state as an immutable object in one reference write | #70176 | `CodeDerivedTable` swaps a whole generation: an old in-flight derivation publishes only into its detached weak table ([source](../../../../src/Puck.Abstractions/CodeDerivedTable.cs)) |
 | Scratch its owner keeps and reuses, over a shared pool | #70159 | `WorldBody.StepScratch` ([source](../../../../src/Puck.World.Server/WorldBody.SweepRefusal.cs)) |
 

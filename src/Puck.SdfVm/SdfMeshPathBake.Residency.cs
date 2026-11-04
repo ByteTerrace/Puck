@@ -113,7 +113,7 @@ public sealed partial class SdfMeshPathBake {
     private long m_flyingGroups;
     private long m_workingGroups;
 
-    // How long the frame thread waited to take the bake's gate (Dress, TryTakeForFrame and Stage) since the bake
+    // How long the frame thread waited to take the bake's gate (PrepareFrame, TryTakeForFrame and Stage) since the bake
     // started: the longest wait, their sum, and the waits past a millisecond. A worker that holds the gate through
     // array-sized work shows here as frame time.
     private long m_frameGateWaitMax;
@@ -286,7 +286,6 @@ public sealed partial class SdfMeshPathBake {
                 group.Retired = true;
                 group.InFlight = false;
             }
-            m_drawClaims?.Dispose(); m_drawClaims = null;
             m_pointTableStorage?.Dispose(); m_pointTableStorage = null;
             m_pointTableMemory.Dispose();
         }
@@ -394,7 +393,7 @@ public sealed partial class SdfMeshPathBake {
                 // A mesh is resident once the frame's draws name it and the region owes none of its words; one the
                 // current draws do not name (a template no copy draws) costs the region nothing and counts too.
                 if (group.Mesh is { } mesh) {
-                    var held = (m_drawnMeshes >= 0);
+                    var held = (m_dressedRevision == m_productRevision);
 
                     if (mesh.Chunks.Count == 0) {
                         held &= !tables.OwesMesh(mesh: mesh);

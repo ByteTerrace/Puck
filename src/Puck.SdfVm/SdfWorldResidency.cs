@@ -155,6 +155,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
         Name = name;
         m_ownedLibrary = ((meshLibrary is null) ? new SdfMeshLibrary() : null);
         MeshPathBake = new SdfMeshPathBake { Demand = MeshDemand, Identity = SdfMeshStore.IdentityOf(kernels: kernels), Library = (meshLibrary ?? m_ownedLibrary!), Residency = name };
+        m_meshDresser = new SdfMeshDresser(MeshPathBake);
         // A program built in the background plans its bake before the frame that adopts it, at the far distance of the
         // frames before it, which a restart at another plans again.
         frameSource.ObserveBuilds(built: (program, transforms) => {
@@ -360,6 +361,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
         m_tables = null;
         ResetReady();
         CancelShaderReload(reason: "the residency was released");
+        m_meshDresser.Dispose();
         MeshPathBake.Retire();
         m_ownedLibrary?.Dispose();
         m_pipelines.Release();
@@ -565,7 +567,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
 
         // The bake takes its batch before the upload, which carries the batch's surface points.
         FollowRunningCode();
-        MeshPathBake.Stage(frame: PackageFrame, frameSeconds: context.FrameDeltaSeconds, tables: tables);
+        tables.WriteMeshBakePoints(MeshPathBake.Stage(frame: PackageFrame, frameSeconds: context.FrameDeltaSeconds));
         MeshPathBake.ObserveResidency(tables: tables);
         MeshIrradianceParameters = MeshIrradiance.Stage(frame: m_frame!, tables: tables, tier: IndirectTier, bakePending: MeshPathBake.IrradiancePending);
         // A locked tick adapts once its complete geometry supplies the meter, not over partial mesh arrivals.
@@ -748,6 +750,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
 
     /// <summary>Gets the bake of the residency's program into the meshes its views draw.</summary>
     public SdfMeshPathBake MeshPathBake { get; }
+    private readonly SdfMeshDresser m_meshDresser;
 
     /// <summary>Gets the residency's indirect lighting, the irradiance volume its views read while its frame asks for
     /// indirect light.</summary>
@@ -837,7 +840,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
 
         // Every view draws the program's baked meshes, landed first where its views stand.
         MeshDemand.Observe(frame: frame, height: m_height);
-        frame = MeshPathBake.Dress(frame: frame);
+        frame = m_meshDresser.Dress(frame: frame);
 
         m_frame = frame;
         m_pendingFrame = null;

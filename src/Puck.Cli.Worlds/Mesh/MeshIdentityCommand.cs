@@ -11,7 +11,8 @@ namespace Puck.Cli.Mesh;
 /// with its parts: the code the bake runs (<see cref="SdfMeshBakeClosure"/>), counted by assembly, and the hashes of its
 /// bake kernels' bytecode. With <c>--against</c> it names what differs from another build's identity, member by member, so
 /// an edit can be checked to keep or move the stored meshes before any World boots; the value is also the key a cache of
-/// the store is restored and saved under. Reads assemblies and kernels only. Exit codes: 0 printed; 1 a build could not be
+/// the store is restored and saved under. Uses each target build's own identity code in an isolated, collectible
+/// context and copies its results before unloading; a build without the inspection API is refused. Exit codes: 0 printed; 1 a build could not be
 /// read; 2 a usage error.
 /// </summary>
 public static class MeshIdentityCommand {
@@ -70,7 +71,7 @@ public static class MeshIdentityCommand {
             }
         }
         if (why is not null) {
-            var reasons = SdfMeshBakeClosure.Of(directory: buildDirectory).Reasons;
+            var reasons = identity.Reasons;
 
             foreach (var member in reasons.Keys.Where(predicate: member => member.Contains(value: why, comparisonType: StringComparison.Ordinal))) {
                 output.Append(value: "  why ").Append(value: member).Append(value: '\n');
@@ -97,13 +98,13 @@ public static class MeshIdentityCommand {
 
         return 0;
     }
-    private static bool TryRead(string directory, string extension, out SdfMeshBakeIdentity identity) {
+    private static bool TryRead(string directory, string extension, out MeshBuildIdentity identity) {
         try {
-            identity = MeshCommand.BuildIdentity(buildDirectory: directory, extension: extension);
+            identity = MeshBuildIdentity.Read(buildDirectory: directory, extension: extension);
             return true;
         } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or BadImageFormatException or InvalidOperationException) {
             Console.Error.WriteLine(value: $"{Verb}: cannot read the bake identity of the build in '{directory}' — {exception.Message}");
-            identity = new SdfMeshBakeIdentity(value: UInt128.Zero);
+            identity = null!;
             return false;
         }
     }

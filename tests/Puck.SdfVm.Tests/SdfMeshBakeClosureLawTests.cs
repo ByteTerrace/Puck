@@ -27,6 +27,7 @@ public sealed class SdfMeshBakeClosureLawTests {
         // The same build walks to the same closure.
         Assert.Equal(expected: closure.Hash, actual: SdfMeshBakeClosure.Of(directory: AppContext.BaseDirectory, roots: FixtureRoot).Hash);
         _ = Assert.Throws<KeyNotFoundException>(testCode: static () => SdfMeshBakeClosure.Of(directory: AppContext.BaseDirectory, roots: [("Puck.SdfVm.Tests", "Puck.SdfVm.Tests.NoSuchType", null)]));
+        _ = Assert.Throws<KeyNotFoundException>(testCode: static () => SdfMeshBakeClosure.Of(directory: AppContext.BaseDirectory, roots: [("Puck.SdfVm.Tests", "Puck.SdfVm.Tests.SdfMeshBakeClosureFixture", "NoSuchMethod")]));
         _ = Assert.Throws<ArgumentNullException>(testCode: static () => SdfMeshBakeClosure.Of(directory: AppContext.BaseDirectory, roots: null!));
     }
 

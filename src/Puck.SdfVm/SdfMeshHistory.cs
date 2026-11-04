@@ -48,8 +48,12 @@ public sealed class SdfMeshHistory {
     public static WorkKind DressTopologyBuilds { get; } = new(name: "sdf.instances.dress.topology-builds", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Counts retained dressed records rewritten by pose or metadata changes.</summary>
     public static WorkKind DressedRecordsUpdated { get; } = new(name: "sdf.instances.dress.records-updated", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Counts retained bindings available to a dress call's optional motion scan, including skipped scans.</summary>
+    public static WorkKind DressPoseCandidates { get; } = new(name: "sdf.instances.dress.pose-candidates", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Counts pure binding motion checks actually performed before motion or topology requires reposing.</summary>
+    public static WorkKind DressPoseChecks { get; } = new(name: "sdf.instances.dress.pose-checks", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Gets process-lifetime observations from every staged table. These counts never enter simulation state.</summary>
-    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.instances", kinds: [Observed, Seeded, Retired, MatricesChanged, MatrixBytesChanged, HistoryRowsCopied, HistoryBytesCopied, HistoryRequestBytes, HistoryDispatches, RecordsPacked, RecordBytesPacked, NormalMatricesComputed, SelectionBoxesComputed, RecordsCompared, RecordsChanged, PackedWordsChanged, DressTopologyBuilds, DressedRecordsUpdated]);
+    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.instances", kinds: [Observed, Seeded, Retired, MatricesChanged, MatrixBytesChanged, HistoryRowsCopied, HistoryBytesCopied, HistoryRequestBytes, HistoryDispatches, RecordsPacked, RecordBytesPacked, NormalMatricesComputed, SelectionBoxesComputed, RecordsCompared, RecordsChanged, PackedWordsChanged, DressTopologyBuilds, DressedRecordsUpdated, DressPoseCandidates, DressPoseChecks]);
 
     private struct Cell {
         public object? Key;

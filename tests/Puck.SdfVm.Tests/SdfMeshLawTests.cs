@@ -101,7 +101,7 @@ public sealed class SdfMeshLawTests {
         };
 
         Assert.Equal(expected: (4, 21, 4), actual: (mesh.LevelledTriangleCount, SdfMeshRegion.IndexWordsOf(mesh: mesh), SdfMeshRegion.MaterialWordsOf(mesh: mesh)));
-        Assert.Equal(expected: [(0, 2), (2, 1), (3, 1), (3, 1)], actual: [SdfMeshRegion.LevelOf(level: 0, mesh: mesh), SdfMeshRegion.LevelOf(level: 1, mesh: mesh), SdfMeshRegion.LevelOf(level: 2, mesh: mesh), SdfMeshRegion.LevelOf(level: 5, mesh: mesh)]);
+        Assert.Equal(expected: [(0, 2), (2, 1), (3, 1), (3, 1)], actual: [mesh.LevelOf(level: 0), mesh.LevelOf(level: 1), mesh.LevelOf(level: 2), mesh.LevelOf(level: 5)]);
 
         var placements = new Dictionary<SdfMesh, SdfMeshRegionMesh>(comparer: ReferenceEqualityComparer.Instance);
         var draws = new[] { new SdfMeshDraw(Identity: 0, Material: 0, Mesh: mesh, ObjectToWorld: Matrix4x4.Identity) };

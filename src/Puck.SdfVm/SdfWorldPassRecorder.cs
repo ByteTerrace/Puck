@@ -8,7 +8,7 @@ namespace Puck.SdfVm;
 // One pass of an sdf.world instance (SdfWorldPasses): a part of the package's fragment, recorded into the instance's
 // command buffer for the pass. Every part writes its pass block (SdfFrameBlock): the view's camera, the frame's levers,
 // light count and curvature shading, the shadow cascades, the irradiance volume and the world values; the bake's mask and
-// sampler write their own (SdfFrameBlock.WriteMeshBake), which holds the batch they sample and nothing of the view. Every
+// sampler write their own (SdfMeshBakeBlock.Write), which holds the batch they sample and nothing of the view. Every
 // compute part binds the residency's World set of the ring slot the frame's upload wrote, which holds its tables (the
 // lights and the sky among them), and its interface's pass group (the bake's, SdfWorldInterfaces.MeshBakeLayout, or the
 // world interface's): the fragment storages its ports bind and, at every member its ports do not, a dummy of the
@@ -60,7 +60,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
 
     // The bake pass's readback: per frame slot a buffer, the lattice its latest recording dispatched and the fence that
     // completes it.
-    private readonly BakeSlot[] m_bakeSlots = [];
+    private readonly SdfMeshBakeReadback[] m_bakeSlots = [];
 
     private readonly bool m_resolved;
 
@@ -159,8 +159,8 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         }
 
         if (m_part == SdfWorldPackage.Parts.Bake) {
-            m_bakeSlots = new BakeSlot[slots];
-            for (var slot = 0; (slot < slots); slot++) { m_bakeSlots[slot] = new BakeSlot(); }
+            m_bakeSlots = new SdfMeshBakeReadback[slots];
+            for (var slot = 0; (slot < slots); slot++) { m_bakeSlots[slot] = new SdfMeshBakeReadback(); }
             owner.ReadBakes(reader: this, reads: true);
         }
         // The glass clear records one buffer clear and binds nothing.
@@ -457,7 +457,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             if (!ClaimsBake(batch: out var batch)) {
                 return RenderGraphPackageOutcome.Drew;
             }
-            SdfFrameBlock.WriteMeshBake(
+            SdfMeshBakeBlock.Write(
                 batch: batch,
                 block: recording.PassBlock,
                 instanceMaskWordCount: tables.PassValues.InstanceMaskWordCount,
@@ -1057,30 +1057,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
 
     // Reads every bake slot whose submission completed and answers the bake that dispatched its batch with its samples.
     internal void PollBake() {
-        foreach (var slot in m_bakeSlots) {
-            if ((slot.Fence is not { } fence) || !fence.IsSignaled) { continue; }
-            slot.Fence = null;
-
-            if (slot.Batch is not { } batch) { continue; }
-
-            var bytes = ((batch.Samples * SdfWorldPackage.MeshBakeSampleWords) * sizeof(uint));
-
-            if (slot.Bytes.Length < bytes) { slot.Bytes = new byte[bytes]; }
-            slot.Buffer!.Read(destination: slot.Bytes.AsSpan(length: bytes, start: 0));
-            slot.Batch = null;
-            batch.Bake?.Complete(batch: batch, samples: slot.Bytes.AsSpan(length: bytes, start: 0));
-        }
+        foreach (var slot in m_bakeSlots) { slot.Poll(); }
     }
 
-    // One frame slot's bake readback: the buffer the samples are copied into, the batch its latest recording dispatched,
-    // and the fence of the submission that copies them.
-    private sealed class BakeSlot {
-        public SdfMeshBakeBatch? Batch { get; set; }
-        public IGpuReadbackBuffer? Buffer { get; set; }
-        public byte[] Bytes { get; set; } = [];
-        public IGpuSubmissionFence? Fence { get; set; }
-        public bool Record { get; set; }
-        public bool Submit { get; set; }
-        public string? Version { get; set; }
-    }
 }

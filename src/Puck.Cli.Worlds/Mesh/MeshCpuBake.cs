@@ -39,32 +39,39 @@ public static class MeshCpuBake {
         ArgumentNullException.ThrowIfNull(argument: frame);
         ArgumentNullException.ThrowIfNull(argument: fields);
 
-        var bake = new SdfMeshPathBake { Residency = "cpu", Selection = fields.Keys.ToHashSet() };
-        var index = 0L;
+        using var library = new SdfMeshLibrary();
+        var bake = new SdfMeshPathBake { Library = library, Residency = "cpu", Selection = fields.Keys.ToHashSet() };
+        using var dresser = new SdfMeshDresser(bake);
+        try {
+            var index = 0L;
 
-        while (true) {
-            _ = bake.Dress(frame: frame);
-            if (bake.TryTakeForFrame(batch: out var batch, frame: index++)) {
-                bake.Record(batch: batch);
-                bake.Complete(batch: batch, samples: Answer(batch: batch, fields: fields));
-                continue;
+            while (true) {
+                _ = dresser.Dress(frame: frame);
+                if (bake.TryTakeForFrame(batch: out var batch, frame: index++)) {
+                    bake.Record(batch: batch);
+                    bake.Complete(batch: batch, samples: Answer(batch: batch, fields: fields));
+                    continue;
+                }
+                if (!bake.Pending) { break; }
+                // The contour runs on the thread pool; the next frame takes what it asks for next.
+                Thread.Sleep(millisecondsTimeout: 1);
             }
-            if (!bake.Pending) { break; }
-            // The contour runs on the thread pool; the next frame takes what it asks for next.
-            Thread.Sleep(millisecondsTimeout: 1);
-        }
 
-        var meshes = new Dictionary<int, SdfMesh>();
+            var meshes = new Dictionary<int, SdfMesh>();
 
-        // The landed mesh, not the frame's draws: a chunked group draws each chunk under the chunk's own identity, and
-        // its parent holds the whole surface the audit measures.
-        foreach (var selector in fields.Keys) {
-            if (bake.TryLandedMesh(mesh: out var mesh, selector: selector)) {
-                meshes[selector] = mesh;
+            // The landed mesh, not the frame's draws: a chunked group draws each chunk under the chunk's own identity, and
+            // its parent holds the whole surface the audit measures.
+            foreach (var selector in fields.Keys) {
+                if (bake.TryLandedMesh(mesh: out var mesh, selector: selector)) {
+                    meshes[selector] = mesh;
+                }
             }
-        }
 
-        return meshes;
+            return meshes;
+        } finally {
+            dresser.Dispose();
+            bake.Retire();
+        }
     }
 
     // The bake kernel's answer to a batch: each lattice's samples, x fastest, grid or points.

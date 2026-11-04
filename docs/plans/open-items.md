@@ -227,14 +227,15 @@ from this Codex lead session; the supplemental review finding was fixed.
   then retain against the exact emitted inputs. Preserve the root/routed scopes'
   different placement, screen and adjacency policies. Their frequency in the
   forest workload remains unmeasured.
-  P2 · Owner: graphics/bake owner · `SdfMeshBakeClosure.BakeRoots`
-  (`src/Puck.SdfVm/SdfMeshBakeClosure.cs:40`) includes every method of
-  `SdfMeshPathBake`, including presentation dressing. Adding presentation counters
-  changed nine CPU closure members and forced a zero-load forest rebake while
-  entry format, mask and bake kernels stayed identical. Separate the bake's
-  semantic execution roots from dressing and observational accounting; prove
-  renderer-only edits preserve identity and real bake changes invalidate it.
-  Do not freeze a key or add a counter-name exception list.
+  P2 · Owner: graphics/bake owner · `SdfProgram` still packs appearance before
+  field bounds, segments and instances (`src/Puck.SignedDistance/SdfProgram.cs:140`).
+  Material stride/extent therefore affect field offsets, and its constructor's
+  bake closure conservatively reaches appearance code. Separate canonical field
+  packing from appearance, preserving the exact field interpreter inputs and
+  material-boundary semantics; prove appearance-only edits keep bake identity and
+  field/skin/material-cut changes invalidate it. The bake/dresser, sampler-readback
+  and bake/view parameter boundaries are now implemented and witnessed; do not
+  replace the remaining real dependency with a blacklist.
 
 ### Engine job system
 
@@ -434,22 +435,6 @@ The custom no-GC runtime port stays later work, on the
   validation reads differed by an order of magnitude between Vulkan and
   Direct3D 12 at high/native settings, with its cause unconfirmed (a later leg
   did not reproduce it). Owner: the lead.
-- [medium] `SdfMeshPathBake.Dress` rebuilds every draw of every group whenever
-  one dynamic slot moved, and for each dynamic group scans `MeshAssetSlots`
-  (`Enumerable.Contains` over an `IReadOnlyList<int>`, `SdfMeshPathBake.cs:404`)
-  and every mesh instance (`:405-406`, again at `:424`). Each rebuild also
-  boxes a fresh `ValueTuple` motion identity per dynamic draw (`:408`, `:425`;
-  `SdfMesh.cs:255` types it `object?`), which the staging compares by virtual
-  `object.Equals` per draw (`SdfWorldTables.Motion.cs:214`,
-  `SdfWorldTables.MeshRegion.cs:286`), and copies the instance list
-  (`SdfMeshPathBake.cs:434`); every frame that misses the early return at
-  `:395` allocates a new `SdfFrame` record (`:458`). Index the frame's
-  instances by slot once, redress only the moved groups, and give motion
-  identity a typed, equatable key cached per copy and selector; this is the
-  first cut of the [visibility plan](visibility.md#the-build-order)'s V2b. In
-  the World process (no dynamic PGO, `Puck.World.csproj:20`) the `foreach` over
-  `IReadOnlyList<SdfMeshInstance>` may box its enumerator: read the
-  disassembly. (from: slow-frames, perf-guidance)
 - [medium] The portal crossing scan visits every population slot for every
   portal face each tick, with an occupancy dictionary `Observe` or `Forget` per
   pair (`WorldInstanceHost.Adjacency.cs:294-434`), a sixth of a standing tick.
@@ -553,29 +538,16 @@ source closure of `MeshBake` and `MeshBakeMask`; then cut the crossing stage's
 stages, toward the owner's bar: one minute at most per backend from an empty
 store (AGENTS.md), and work proportional to change.
 
-- [high] The bake's identity reaches past what the bake reads, and each backend
-  keeps its own store. `SdfMeshBakeClosure`
-  (`src/Puck.SdfVm/SdfMeshBakeClosure.cs:41, 49-59`) holds upload and draw-record
-  code: changing `GpuRegion.Grow`'s return type changed the IL of
-  `SdfWorldTables.WriteMeshBakePoints` (`SdfMeshPathBake.cs:620`) and missed every
-  stored mesh (`[sdf.mesh-bake] miss … the code, 1 member (Puck.SdfVm 1:
-  Puck.SdfVm.SdfWorldTables.WriteMeshBakePoints) changed`), and a fix that
-  changed only `SdfMeshInstance`'s motion identity (a draw record, not a bake
-  input) did the same. How the bake's points reach the GPU cannot change a baked
-  mesh: bound the closure to the code that decides mesh contents, and hash only
-  what the bake reads. `SdfMeshBakeIdentity` (`SdfMeshBakeIdentity.cs:82-84`)
-  hashes each backend's kernel bytes, so the two backends bake and store the same
-  meshes twice though a mesh is the same bytes on both when the kernels agree:
-  hash the HLSL source closure of `MeshBake` and `MeshBakeMask` instead and share
-  one store, which halves the cold cost of using both. (from: refactoring survey,
-  hot reload)
-- The landscape accounting slice reproduced the overbroad closure with a result-equivalent
-  named-argument reorder in `SdfMeshPathBake.AvailablePhysicalBytes`
-  (`src/Puck.SdfVm/SdfMeshPathBake.cs:656`). Its IL/locals moved and it alone
-  invalidated the final D3D12 bake key while entry format and kernels stayed
-  unchanged. Final zero-load root bakes measured 155.061 s on D3D12 and
-  281.138 s on Vulkan; the [landscape evidence](dense-landscapes.md#first-implementation-slice)
-  keeps work counts and measurement limits.
+- [high] Each backend still keeps its own store because `SdfMeshBakeIdentity`
+  hashes the actual mask/bake kernel bytes. The bake/dresser, view/bake parameter
+  and sample-input/transport boundaries now exclude the observed unrelated
+  renderer edits; remaining program-packing coupling belongs to
+  [dense landscapes](#dense-landscapes). Before replacing kernel-byte identity
+  with a source identity or sharing backend products, prove the intended output
+  equivalence, including compiler changes and skin/material/refinement behavior.
+  The latest native forest legs have different aggregate triangle counts, so
+  source equality alone is not proof of identical products or a halved cold cost.
+  (from: refactoring survey, hot reload, native landscape measurements)
 - The cold bake fails the one-minute bar on both backends by more than double
   on the quiet lead machine. Crossings (`CloseSheets`, `CrossingEdges`) and land
   (`SdfMeshCollapse`) are about three quarters of its thread seconds, and Vulkan

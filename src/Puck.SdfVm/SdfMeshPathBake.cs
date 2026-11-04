@@ -1,7 +1,6 @@
 using System.Buffers;
 using System.Buffers.Binary;
 using System.Diagnostics;
-using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using Puck.Shaders;
@@ -244,23 +243,15 @@ public sealed partial class SdfMeshPathBake {
     private readonly List<Group> m_groups = [];
     private readonly List<Group> m_retiredGroups = [];
 
-    private SdfMeshClaims? m_drawClaims;
     // How many of the first groups Pending found done; every write of a group lowers it to that group's index (Replace).
     private int m_doneThrough;
 
-    private readonly List<SdfMeshDraw> m_draws = [];
     private readonly Stopwatch m_clock = new();
 
     private SdfProgram? m_program;
-    private IReadOnlyList<SdfMeshDraw>? m_frameDraws;
 
-    private long m_frameDrawsRevision = -1;
-    private SdfMeshInstance[] m_drawnCopies = [];
-    private int[] m_drawnCopyFrames = [];
 
-    private long m_revision;
 
-    private int m_drawnMeshes = -1;
 
     private long m_dispatches;
     private long m_samples;
@@ -276,7 +267,7 @@ public sealed partial class SdfMeshPathBake {
     private bool m_reported;
     private long m_loaded;
 
-    /// <summary>Gets the program the bake meshes: the one the last frame <see cref="Dress"/> took carried, or
+    /// <summary>Gets the program the bake meshes: the one the last prepared frame carried, or
     /// <see langword="null"/> before the first.</summary>
     public SdfProgram? Program {
         get {
@@ -285,7 +276,7 @@ public sealed partial class SdfMeshPathBake {
     }
 
     /// <summary>Reads the mesh a group landed, whole: a chunked group's parent, whose surface concatenates the chunks
-    /// <see cref="Dress"/> draws one by one.</summary>
+    /// <see cref="SdfMeshDresser"/> draws one by one.</summary>
     /// <param name="selector">The group's <see cref="SdfMeshBakeGroup.Selector"/>.</param>
     /// <param name="mesh">The landed mesh, or <see langword="null"/>.</param>
     /// <returns><see langword="true"/> when the group is planned and has landed a mesh.</returns>
@@ -308,7 +299,7 @@ public sealed partial class SdfMeshPathBake {
     public bool Pending {
         get {
             lock (m_gate) {
-                if ((m_program is not null) && (m_drawnMeshes < 0)) { return true; }
+                if ((m_program is not null) && (m_dressedRevision != m_productRevision)) { return true; }
                 if (m_slice is not null) { return true; }
                 // A group's Done only turns on, so the groups before the cursor stay done until one is replaced.
                 while ((m_doneThrough < m_groups.Count) && m_groups[m_doneThrough].Done) { m_doneThrough++; }
@@ -322,7 +313,7 @@ public sealed partial class SdfMeshPathBake {
     public bool IrradiancePending {
         get {
             lock (m_gate) {
-                if ((m_program is not null) && (m_drawnMeshes < 0)) { return true; }
+                if ((m_program is not null) && (m_dressedRevision != m_productRevision)) { return true; }
                 foreach (var group in m_groups) {
                     if ((!group.Dynamic || m_fixedAssetSlots.Contains(group.Slot)) && !group.Glass && !group.Done) { return true; }
                 }
@@ -352,133 +343,63 @@ public sealed partial class SdfMeshPathBake {
 
     private sealed record SliceTicket(SdfFieldSlice Slice, int Lattice, int Generation);
 
-    /// <summary>Returns a frame that draws the bake's meshes beside its own mesh draws, restarting the bake when the frame
-    /// carries a new program. A dynamic group draws at its slot's transform in the frame.</summary>
-    /// <param name="frame">The captured frame.</param>
-    /// <returns>The frame with the baked draws appended.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="frame"/> is <see langword="null"/>.</exception>
-    public SdfFrame Dress(SdfFrame frame) {
-        ArgumentNullException.ThrowIfNull(argument: frame);
-
-        using (EnterFrameGate()) {
-            if (!ReferenceEquals(objA: frame.Program, objB: m_program)) {
-                Restart(frame: frame);
-            }
-            m_demandTransforms = frame.DynamicTransforms;
-            m_demandCopies = frame.MeshInstances;
-            var copyLayoutChanged = !SameCopyLayout(frame);
-            if (copyLayoutChanged) { IndexCopies(frame); }
-            Prioritize();
-            Settle(frame: frame);
-
-            var finished = 0;
-            var copiesChanged = (m_drawnCopies.Length != frame.MeshInstances.Count);
-            var topologyChanged = ((m_hostDrawCount != frame.MeshDraws.Count) || copyLayoutChanged);
-
-            if (!copiesChanged) {
-                for (var index = 0; index < m_drawnCopies.Length; index++) {
-                    if ((m_drawnCopies[index] != frame.MeshInstances[index]) || (m_drawnCopyFrames[index] != frame.MeshInstances[index].FrameSlot)) { copiesChanged = true; break; }
-                }
-            }
-            var moved = (copiesChanged || !ReferenceEquals(frame.MeshDraws, m_frameDraws) ||
-                (frame.MeshDrawsRevision != m_frameDrawsRevision) || !ReferenceEquals(frame.SlotClips, m_slotClips));
-
-            foreach (var group in m_groups) {
-                if (group.Mesh is not { } mesh) { continue; }
-                finished++;
-                topologyChanged |= (!m_dressedGroups.TryGetValue(group, out var heldMesh) || !ReferenceEquals(mesh, heldMesh));
-                if (group.Dynamic && (group.Slot < frame.DynamicTransforms.Count)) {
-                    var transform = frame.DynamicTransforms[group.Slot];
-                    var scale = SdfMeshGeometryBuilder.UnitsOf(transform: transform);
-
-                    if ((transform.Position != group.DrawnPosition) || (transform.Orientation != group.DrawnOrientation) || (scale != group.DrawnScale)) {
-                        group.DrawnPosition = transform.Position;
-                        group.DrawnOrientation = transform.Orientation;
-                        group.DrawnScale = scale;
-                        moved = true;
-                    }
-                }
-            }
-            topologyChanged |= (finished != m_drawnMeshes);
-
-            if (!moved && !topologyChanged && ReferenceEquals(frame, m_dressedSource) && (m_dressed is { } dressed)) {
-                return dressed;
-            }
-            if (moved || topologyChanged) {
-                if (topologyChanged) { BuildDrawTopology(frame); }
-                // Portal copies are derived from the same retained base records. Remove last frame's copies before
-                // posing and clipping the base again, without rebuilding its geometry/copy membership.
-                var baseCount = (m_hostDrawCount + m_drawBindings.Count);
-                if (m_draws.Count > baseCount) { m_draws.RemoveRange(baseCount, m_draws.Count - baseCount); }
-                var meshesChanged = topologyChanged;
-                for (var index = 0; index < m_hostDrawCount; index++) {
-                    var draw = frame.MeshDraws[index];
-                    meshesChanged |= !ReferenceEquals(m_draws[index].Mesh, draw.Mesh);
-                    m_draws[index] = draw;
-                }
-                for (var index = 0; index < m_drawBindings.Count; index++) {
-                    var destination = (m_hostDrawCount + index);
-                    var draw = m_drawBindings[index].Pose(frame);
-                    meshesChanged |= !ReferenceEquals(m_draws[destination].Mesh, draw.Mesh);
-                    if (m_draws[destination] != draw) {
-                        m_draws[destination] = draw;
-                        SdfMeshHistory.ProcessWork.Count(SdfMeshHistory.DressedRecordsUpdated);
-                    }
-                }
-                SdfSlotClip.Apply(clips: frame.SlotClips, draws: m_draws);
-                m_slotClips = frame.SlotClips;
-                if (meshesChanged) { (m_drawClaims ??= new SdfMeshClaims()).Update(draws: m_draws); }
-                if (m_drawnCopies.Length != frame.MeshInstances.Count) { m_drawnCopies = new SdfMeshInstance[frame.MeshInstances.Count]; m_drawnCopyFrames = new int[frame.MeshInstances.Count]; }
-                for (var index = 0; index < m_drawnCopies.Length; index++) { m_drawnCopies[index] = frame.MeshInstances[index]; m_drawnCopyFrames[index] = frame.MeshInstances[index].FrameSlot; }
-                m_frameDraws = frame.MeshDraws;
-                m_frameDrawsRevision = frame.MeshDrawsRevision;
-                m_drawnMeshes = finished;
-                m_revision++;
-            }
-
-            m_dressedSource = frame;
-            // The host's map indexes the host's draws alone; a pick names the dressed list.
-            if (frame.PickMap is { } hostMap) {
-                if (!Dresses(map: m_dressedMap, hostMap: hostMap, hostDraws: frame.MeshDraws.Count)) {
-                    // A body straddling a door adds and drops its carried copies tick by tick, so the map before this one
-                    // is kept and taken back when the list returns to it.
-                    var previous = m_dressedMap;
-
-                    m_dressedMap = (Dresses(map: m_spareMap, hostMap: hostMap, hostDraws: frame.MeshDraws.Count)
-                        ? m_spareMap
-                        : new SdfDressedPickMap(chunkOwners: m_chunkOwners, draws: m_draws, hostDraws: frame.MeshDraws.Count, inner: hostMap));
-                    m_spareMap = previous;
-                }
-            } else {
-                m_dressedMap = null;
-                m_spareMap = null;
-            }
-            m_dressed = (frame with { MeshDraws = m_draws, MeshDrawsRevision = m_revision, PickMap = m_dressedMap });
-
-            return m_dressed;
-        }
-    }
-
-    // Membership and geometry are retained independently of poses. Only this door constructs the correspondence
-    // between a base draw and its group/copy; ordinary motion cannot change draw order or geometry ownership.
-    private readonly List<DrawBinding> m_drawBindings = [];
+    // The bake owns the one copy-membership index used by both demand and dressing. Its snapshot contains no poses.
     private readonly HashSet<int> m_fixedAssetSlots = [];
     private readonly Dictionary<int, List<int>> m_slotCopies = [];
     private readonly Dictionary<int, List<int>> m_instanceCopies = [];
     private IReadOnlyList<SdfMeshInstance> m_demandCopies = [];
-    private readonly Dictionary<SdfMeshBakeGroup, SdfMesh> m_dressedGroups = [];
-    private int m_hostDrawCount;
-    private int[] m_drawnAssetSlots = [];
+    private CopyLayout[] m_copyLayout = [];
+    private int[] m_copyAssetSlots = [];
+    private long m_copyLayoutRevision;
+    private readonly record struct CopyLayout(int AssetSlot, SdfMeshTemplateRange? TemplateRange, bool IsDynamic, bool HasMesh, int[] OtherAssetSlots);
+
+    // A changed landed product is acknowledged only after the dresser has published its draws and ownership claims.
+    private long m_productRevision;
+    private long m_dressedRevision = -1;
+
+    // This is the only door from presentation to the bake's live groups. Preparation and reading share one gate;
+    // workers cannot replace/release a landed mesh before the dresser has claimed it. No bake entry calls presentation.
+    internal FrameAccess PrepareFrame(SdfFrame frame) {
+        ArgumentNullException.ThrowIfNull(frame);
+        var scope = EnterFrameGate();
+        try {
+            if (!ReferenceEquals(frame.Program, m_program)) { Restart(frame); }
+            m_demandTransforms = frame.DynamicTransforms;
+            m_demandCopies = frame.MeshInstances;
+            if (!SameCopyLayout(frame)) { IndexCopies(frame); }
+            Prioritize();
+            Settle(frame);
+            return new FrameAccess(this, scope);
+        } catch { scope.Dispose(); throw; }
+    }
+
+    internal ref struct FrameAccess {
+        private readonly SdfMeshPathBake m_owner;
+        private Lock.Scope m_scope;
+        internal FrameAccess(SdfMeshPathBake owner, Lock.Scope scope) {
+            m_owner = owner;
+            m_scope = scope;
+            Revision = owner.m_productRevision;
+            CopyLayoutRevision = owner.m_copyLayoutRevision;
+        }
+        internal long Revision { get; }
+        internal long CopyLayoutRevision { get; }
+        internal IReadOnlyList<SdfMeshBakeGroup> Groups => m_owner.m_groups;
+        internal SdfMesh? MeshOf(SdfMeshBakeGroup group) => ((Group)group).Mesh;
+        internal IReadOnlyList<int>? CopiesOf(SdfMeshBakeGroup group) => m_owner.CopiesOf(group);
+        internal void Acknowledge() => m_owner.m_dressedRevision = Revision;
+        public void Dispose() => m_scope.Dispose();
+    }
 
     private bool SameCopyLayout(SdfFrame frame) {
-        if ((m_drawnCopies.Length != frame.MeshInstances.Count) || (m_drawnAssetSlots.Length != frame.MeshAssetSlots.Count)) { return false; }
-        for (var index = 0; index < m_drawnAssetSlots.Length; index++) { if (m_drawnAssetSlots[index] != frame.MeshAssetSlots[index]) { return false; } }
-        for (var index = 0; index < m_drawnCopies.Length; index++) {
-            var old = m_drawnCopies[index];
+        if ((m_copyLayout.Length != frame.MeshInstances.Count) || (m_copyAssetSlots.Length != frame.MeshAssetSlots.Count)) { return false; }
+        for (var index = 0; index < m_copyAssetSlots.Length; index++) { if (m_copyAssetSlots[index] != frame.MeshAssetSlots[index]) { return false; } }
+        for (var index = 0; index < m_copyLayout.Length; index++) {
+            var old = m_copyLayout[index];
             var copy = frame.MeshInstances[index];
-            if ((old.AssetSlot != copy.AssetSlot) || (old.TemplateRange != copy.TemplateRange) || (old.IsDynamic != copy.IsDynamic) || ((old.Mesh is null) != (copy.Mesh is null)) ||
-                (old.OtherAssetSlots.Count != copy.OtherAssetSlots.Count)) { return false; }
-            for (var surface = 0; surface < old.OtherAssetSlots.Count; surface++) {
+            if ((old.AssetSlot != copy.AssetSlot) || (old.TemplateRange != copy.TemplateRange) || (old.IsDynamic != copy.IsDynamic) || (old.HasMesh != (copy.Mesh is not null)) ||
+                (old.OtherAssetSlots.Length != copy.OtherAssetSlots.Count)) { return false; }
+            for (var surface = 0; surface < old.OtherAssetSlots.Length; surface++) {
                 if (old.OtherAssetSlots[surface] != copy.OtherAssetSlots[surface]) { return false; }
             }
         }
@@ -491,7 +412,13 @@ public sealed partial class SdfMeshPathBake {
         m_slotCopies.Clear();
         m_instanceCopies.Clear();
         m_fixedAssetSlots.Clear();
-        m_drawnAssetSlots = frame.MeshAssetSlots.ToArray();
+        m_copyAssetSlots = frame.MeshAssetSlots.ToArray();
+        m_copyLayout = new CopyLayout[frame.MeshInstances.Count];
+        for (var index = 0; index < m_copyLayout.Length; index++) {
+            var copy = frame.MeshInstances[index];
+            m_copyLayout[index] = new(copy.AssetSlot, copy.TemplateRange, copy.IsDynamic, copy.Mesh is not null, copy.OtherAssetSlots.ToArray());
+        }
+        m_copyLayoutRevision++;
         for (var index = 0; index < frame.MeshInstances.Count; index++) {
             var copy = frame.MeshInstances[index];
             if (copy.TemplateRange is { } range) {
@@ -510,111 +437,11 @@ public sealed partial class SdfMeshPathBake {
         if (!table.TryGetValue(key, out var indices)) { table.Add(key, indices = []); }
         if ((indices.Count == 0) || (indices[^1] != copy)) { indices.Add(copy); }
     }
-    private IReadOnlyList<int>? CopiesOf(Group group) {
+    private IReadOnlyList<int>? CopiesOf(SdfMeshBakeGroup group) {
         if (!group.Dynamic) { return m_instanceCopies.GetValueOrDefault(group.FirstInstance); }
-        if (!m_drawnAssetSlots.Contains(group.Slot)) { return null; }
+        if (!m_copyAssetSlots.Contains(group.Slot)) { return null; }
         return (m_slotCopies.TryGetValue(group.Slot, out var copies) ? copies : Array.Empty<int>());
     }
-    private void BuildDrawTopology(SdfFrame frame) {
-        SdfMeshHistory.ProcessWork.Count(SdfMeshHistory.DressTopologyBuilds);
-        m_draws.Clear();
-        m_chunkOwners.Clear();
-        m_drawBindings.Clear();
-        m_dressedGroups.Clear();
-        m_hostDrawCount = frame.MeshDraws.Count;
-        m_draws.AddRange(frame.MeshDraws);
-        foreach (var group in m_groups) {
-            if (group.Mesh is not { } mesh) { continue; }
-            m_dressedGroups.Add(group, mesh);
-            if (CopiesOf(group) is { } copies) {
-                foreach (var copy in copies) {
-                    for (var piece = 0; piece < Math.Max(1, mesh.Chunks.Count); piece++) {
-                        Bind(new DrawBinding(((mesh.Chunks.Count == 0) ? mesh : mesh.Chunks[piece]), group, copy));
-                    }
-                }
-                continue;
-            }
-            for (var piece = 0; piece < Math.Max(1, mesh.Chunks.Count); piece++) {
-                var part = ((mesh.Chunks.Count == 0) ? mesh : mesh.Chunks[piece]);
-                Bind(new DrawBinding(part, group, -1));
-                if (mesh.Chunks.Count > 0) { m_chunkOwners[part] = group; }
-            }
-        }
-        for (var index = 0; index < frame.MeshInstances.Count; index++) {
-            if (frame.MeshInstances[index].Mesh is { } mesh) { Bind(new DrawBinding(mesh, null, index)); }
-        }
-        void Bind(DrawBinding binding) {
-            m_drawBindings.Add(binding);
-            m_draws.Add(binding.Pose(frame));
-        }
-    }
-
-    private sealed class DrawBinding(SdfMesh mesh, Group? group, int copyIndex) {
-        private object? m_motionSource;
-        private object? m_motionIdentity;
-        private SdfMeshInstance? m_copy;
-        private SdfMeshCopySurface? m_pickIdentity;
-        private SdfMeshDraw m_draw;
-        private bool m_posed;
-        private Vector3 m_position;
-        private Quaternion m_orientation;
-        private float m_scale;
-
-        public SdfMeshDraw Pose(SdfFrame frame) {
-            if (copyIndex >= 0) {
-                var copy = frame.MeshInstances[copyIndex];
-                var firstInstance = (group?.FirstInstance ?? -1);
-                if (ReferenceEquals(copy, m_copy) && (m_draw.FrameSlot == copy.FrameSlot) && (m_pickIdentity?.FirstInstance == firstInstance)) { return m_draw; }
-                m_copy = copy;
-                if ((m_pickIdentity is null) || !Equals(m_pickIdentity.Identity, copy.Identity) || (m_pickIdentity.FirstInstance != firstInstance)) {
-                    m_pickIdentity = new SdfMeshCopySurface(copy.Identity, firstInstance);
-                }
-                var source = (copy.MotionIdentity ?? copy.Identity);
-                if (!Equals(m_motionSource, source)) {
-                    m_motionSource = source;
-                    m_motionIdentity = ((source, (object?)group?.Selector ?? "mesh"));
-                }
-                return m_draw = new SdfMeshDraw(Identity: m_pickIdentity, Material: ((group is null) ? copy.Material : 0),
-                    Mesh: ((group is null) ? copy.Mesh! : mesh), ObjectToWorld: copy.Matrix) {
-                    FrameSlot = copy.FrameSlot, UsesRootMaterialFrame = copy.UsesRootMaterialFrame, Glass = (group?.Glass ?? false), IsDynamic = copy.IsDynamic,
-                    MotionIdentity = m_motionIdentity,
-                };
-            }
-            if (m_posed && (m_position == group!.DrawnPosition) && (m_orientation == group.DrawnOrientation) && (m_scale == group.DrawnScale) && (m_draw.FrameSlot == (group.Dynamic ? group.Slot : null)) && (m_draw.Glass == group.Glass)) { return m_draw; }
-            m_position = group!.DrawnPosition;
-            m_orientation = group.DrawnOrientation;
-            m_scale = group.DrawnScale;
-            m_posed = true;
-            var matrix = ((group.Dynamic)
-                ? ((Matrix4x4.CreateScale(group.DrawnScale) * Matrix4x4.CreateFromQuaternion(group.DrawnOrientation)) * Matrix4x4.CreateTranslation(group.DrawnPosition))
-                : Matrix4x4.Identity);
-            return m_draw = new SdfMeshDraw(Identity: ((group.Mesh!.Chunks.Count == 0) ? group : mesh), Material: 0, Mesh: mesh,
-                ObjectToWorld: matrix) { FrameSlot = (group.Dynamic ? group.Slot : null), Glass = group.Glass, IsDynamic = group.Dynamic };
-        }
-    }
-
-    // The straddling slot runs the dressed draws were last clipped by.
-    private IReadOnlyList<SdfSlotClip> m_slotClips = [];
-
-    // The frame Dress last dressed and what it returned, which a still frame source capturing the same frame takes again
-    // without a new frame.
-    private SdfFrame? m_dressedSource;
-    private SdfFrame? m_dressed;
-    private SdfDressedPickMap? m_dressedMap;
-
-    // The group each chunk of a chunked group's mesh is drawn for, as the last dressing listed them.
-    private readonly Dictionary<object, SdfMeshBakeGroup> m_chunkOwners = new(comparer: ReferenceEqualityComparer.Instance);
-
-    private SdfDressedPickMap? m_spareMap;
-
-    // Whether a pick map extends a host map over exactly the dressed draws.
-    private bool Dresses([NotNullWhen(returnValue: true)] SdfDressedPickMap? map, ISdfPickMap hostMap, int hostDraws) => (
-        (map is not null) &&
-        ReferenceEquals(objA: map.Inner, objB: hostMap) &&
-        (map.HostDraws == hostDraws) &&
-        map.Matches(draws: m_draws)
-    );
-
     // The frame's lattices and their groups while TryTakeForFrame chooses them, reused frame to frame.
     private readonly List<SdfMeshBakeRequest> m_takenLattices = [];
     private readonly List<object> m_takenTickets = [];
@@ -814,24 +641,21 @@ public sealed partial class SdfMeshPathBake {
 
     private OwnedBuffer<Vector4> PointTable => m_pointTableStorage ??= new(allocator: Library.Allocator, observer: m_pointTableMemory);
 
-    /// <summary>Takes the frame's batch (<see cref="TryTakeForFrame"/>) before the frame's upload and writes its points
-    /// into the tables' point table, which the bake kernel reads.</summary>
+    /// <summary>Takes the frame's batch (<see cref="TryTakeForFrame"/>) before the frame's upload and prepares its points
+    /// and saved poses for the point-table upload, which the bake kernel reads.</summary>
     /// <param name="frame">The package frame.</param>
     /// <param name="frameSeconds">The interval the frame's presentation spans, in seconds, which sizes its share
     /// (<see cref="FrameBudget"/>).</param>
-    /// <param name="tables">The residency's tables.</param>
-    public void Stage(long frame, double frameSeconds, SdfWorldTables tables) {
-        ArgumentNullException.ThrowIfNull(argument: tables);
+    /// <returns>The exact sample points and saved pose rows to upload, or an empty span for no point table.</returns>
+    public ReadOnlySpan<Vector4> Stage(long frame, double frameSeconds) {
 
         using (EnterFrameGate()) {
             if (m_frameTaken != frame) { m_frameBudget = FrameBudget(frameSeconds: frameSeconds); }
         }
 
-        if (!TryTakeForFrame(batch: out var batch, frame: frame)) { return; }
+        if (!TryTakeForFrame(batch: out var batch, frame: frame)) { return []; }
         if (PointTable.Length < batch.TableEntries) { PointTable.Resize(Math.Max(val1: batch.TableEntries, val2: SdfWorldPackage.MeshBakeMaxSamples)); }
-        if (batch.WritePoints(table: PointTable.GetSpan())) {
-            tables.WriteMeshBakePoints(points: PointTable.GetSpan()[..batch.TableEntries]);
-        }
+        return (batch.WritePoints(table: PointTable.GetSpan()) ? PointTable.GetSpan()[..batch.TableEntries] : []);
     }
     /// <summary>Returns a dispatched batch's lattices to their groups unanswered, as when its submission never completed;
     /// each group dispatches its lattice again.</summary>
@@ -1187,9 +1011,6 @@ public sealed partial class SdfMeshPathBake {
 
             if ((old is not null) && (old.Mesh is not null) && (old.Dynamic == group.Dynamic)) {
                 group.Mesh = old.Mesh.Acquire();
-                group.DrawnPosition = old.DrawnPosition;
-                group.DrawnOrientation = old.DrawnOrientation;
-                group.DrawnScale = old.DrawnScale;
             }
             if (leaders.TryGetValue(key: group.Sealed, value: out var leader)) {
                 group.Leader = leader;
@@ -1257,7 +1078,7 @@ public sealed partial class SdfMeshPathBake {
         // program change that keeps every group (a palette value) leaves the drawn meshes, and the mesh revision, alone.
         // A replacement taken wholly from cache lands no later bake callback to invalidate these draws.
         if (replaced) {
-            m_drawnMeshes = -1;
+            m_productRevision++;
         }
         m_restartMilliseconds = Stopwatch.GetElapsedTime(startingTimestamp: restarted).TotalMilliseconds;
     }
@@ -1451,13 +1272,13 @@ public sealed partial class SdfMeshPathBake {
         }
 
         // One plane along Z holds at most UnionPlaneSamples, and no axis more samples than a slab's first plane can name
-        // (SdfFrameBlock.MaxSlabPlanes).
+        // (SdfMeshBakeBlock.MaxSlabPlanes).
         var cell = MathF.Max(
             x: MathF.Max(
                 x: MathF.Min(x: (longest / (FinalSamples - 1)), y: MathF.Max(x: finest, y: MathF.Cbrt(x: (((extent.X * extent.Y) * extent.Z) / UnionSamples)))),
                 y: MathF.Sqrt(x: ((extent.X * extent.Y) / UnionPlaneSamples))
             ),
-            y: (longest / (SdfFrameBlock.MaxSlabPlanes - 2))
+            y: (longest / (SdfMeshBakeBlock.MaxSlabPlanes - 2))
         );
 
         int Samples(float length) => Math.Max(val1: FinalMinimum, val2: (((int)MathF.Ceiling(x: (length / cell))) + 1));
@@ -2073,12 +1894,12 @@ public sealed partial class SdfMeshPathBake {
         }
     }
     // Makes a group's new mesh the one it draws. A group rebaking after an edit keeps drawing its previous mesh until this
-    // one lands, so the count of drawn meshes alone does not move: the draws are marked stale so Dress lists the new one.
+    // one lands, so the count of drawn meshes alone does not move: the product revision changes so the dresser lists the new one.
     private void Draw(Group group, SdfMesh? mesh) {
         group.Mesh = mesh;
         group.ResidentAt = 0;
         m_allResident = false;
-        m_drawnMeshes = -1;
+        m_productRevision++;
         _ = m_retiredGroups.RemoveAll(match: static retired => retired.Released);
     }
     // Records the bake's wall time once its last group finishes, and reports it.
@@ -2103,8 +1924,8 @@ public sealed partial class SdfMeshPathBake {
         // coarsest where it has fewer).
         var pieces = m_groups.Where(predicate: static group => (group.Mesh is not null)).SelectMany(selector: static group => ((group.Mesh!.Chunks.Count == 0) ? (IReadOnlyList<SdfMesh>)[group.Mesh!] : group.Mesh.Chunks)).ToArray();
         var levelled = pieces.Count(predicate: static mesh => (mesh.Levels.Count > 0));
-        var first = pieces.Sum(selector: static mesh => ((long)SdfMeshRegion.LevelOf(level: 1, mesh: mesh).TriangleCount));
-        var second = pieces.Sum(selector: static mesh => ((long)SdfMeshRegion.LevelOf(level: 2, mesh: mesh).TriangleCount));
+        var first = pieces.Sum(selector: static mesh => ((long)mesh.LevelOf(level: 1).TriangleCount));
+        var second = pieces.Sum(selector: static mesh => ((long)mesh.LevelOf(level: 2).TriangleCount));
 
         // The groups that finished with no mesh, each with why: a group the bake drops renders nothing.
         var empty = string.Join(separator: "; ", values: m_groups.Where(predicate: static group => (group.Mesh is null)).Select(selector: static group => $"{group.Selector}: {group.Outcome}"));
@@ -2294,12 +2115,9 @@ public sealed partial class SdfMeshPathBake {
 
         private OwnedBuffer<int>? m_pointMaterials;
 
-        public Vector3 DrawnPosition { get; set; }
         public OwnedBuffer<int> PointMaterials => m_pointMaterials ??= new(allocator: Allocator, observer: Memory);
         public int PointsAnswered { get; set; }
 
-        public Quaternion DrawnOrientation { get; set; } = Quaternion.Identity;
-        public float DrawnScale { get; set; } = 1f;
 
         // The final lattice while its slabs and corner gradients are sampled.
         public FinalLattice? Final { get; set; }

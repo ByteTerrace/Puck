@@ -77,8 +77,9 @@ Parallel lanes, with no shared files except where an order is named:
    role and deduplicated by the mesh library, together with "grouping depends
    on spelling". The design note decides the slot numbering.
 7. **dress** (specialist, after or coordinated with static-copy and V2b, which
-   share `SdfMeshPathBake.Dress`). An unboxed motion identity, slot-indexed
-   instances, and no `ToArray` per rebuild.
+   share `SdfMeshDresser.Dress`). Topology, copy indexing and cached motion keys
+   are retained now; actual dirty ranges and shared pose derivation remain in the
+   [landscape work](dense-landscapes.md).
 8. **Antigravity coding trial**: the `HeapAllocator` dedupe (five copies) and
    the Superellipsoid's far field ([certified field contact](open-items.md#certified-field-contact))
    and small radius ([the valley's terrain](open-items.md#the-valleys-terrain));

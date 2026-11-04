@@ -2,7 +2,7 @@
 // writing lattice `lattice`'s mask words, which select the instances that lattice samples, so the bake pass's field walk
 // (sdf-mesh-bake.comp.hlsl) evaluates that group alone. A non-negative selector names a dynamic-transform slot, every
 // active instance riding it; a negative one names the run of instances from -(selector + 1) on, as many as the high half
-// of the lattice's mode word (SdfFrameBlock.WriteMeshBake). Each workgroup strides its words, then writes the summary
+// of the lattice's mode word (SdfMeshBakeBlock.Write). Each workgroup strides its words, then writes the summary
 // the walk skips empty words by.
 #define SDF_DYNAMIC_TRANSFORMS
 #include "sdf-bake-world.hlsli"

@@ -18,16 +18,18 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         var program = builder.Build();
         var poses = new[] { new DynamicTransform(Vector3.Zero, Quaternion.Identity) };
         var group = Assert.Single(SdfMeshBakeGroup.Plan(program, poses, 40, static (selector, dynamic) => new SdfMeshBakeGroup(selector, dynamic)));
-        var library = new SdfMeshLibrary();
+        using var library = new SdfMeshLibrary();
 
         library.Store(group.Sealed, mesh, group.MaterialOrder);
-        var bake = new SdfMeshPathBake { Library = library };
+        using var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake { Library = library }, ownsLibrary: false);
+        var bake = bakeRun.Bake;
+        var dresser = bakeRun.Dresser;
 
         SdfMeshDraw Draw(float x, int epoch = 0) {
             var copy = new SdfMeshInstance(0, "body", new DynamicTransform(new Vector3(x, 0, 0), Quaternion.Identity), 1, IsDynamic: true) { Mesh = (authoredMesh ? mesh : null), MotionIdentity = ("body", epoch) };
             var frame = new SdfFrame(Program: program, ProgramChanged: false, Time: x, Views: []) { DynamicTransforms = poses, MeshAssetSlots = [0], MeshInstances = [copy] };
 
-            return bake.Dress(frame).MeshDraws[(authoredMesh ? 1 : 0)];
+            return dresser.Dress(frame).MeshDraws[(authoredMesh ? 1 : 0)];
         }
         var first = Draw(1);
 
@@ -35,7 +37,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         var moved = Draw(2);
 
         Assert.Equal(first.MotionIdentity, moved.MotionIdentity);
-        Assert.NotEqual(first.Identity, moved.Identity);
+        Assert.Equal(first.Identity, moved.Identity);
         rig.Render(time: 0, meshDraws: [moved]);
         Assert.Equal(first.ObjectToWorld, System.Runtime.InteropServices.MemoryMarshal.Read<Matrix4x4>(rig.Gpu.DeviceLocal(part: "previous-mesh-transforms", sizeBytes: ((ulong)(SdfMeshRecord.MatrixWords * sizeof(uint))))));
         rig.Render(time: 0, meshDraws: [moved]);

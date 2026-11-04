@@ -56,7 +56,7 @@ From `visibility.md:136-140`, M1 leg 1 (as authored) against leg 2 (poses held):
 
 The frame-thread trace at the meadow (`docs/plans/engine-job-system.md:166-171`, Direct3D 12, as authored) attributes:
 
-- `SdfMeshPathBake.Dress` **3.2 ms**: self 1.7 %, `SdfMeshClaims.Update` 0.7 %, `Enumerable.Contains` 0.5 %.
+- Historical profiler label "SdfMeshPathBake.Dress": **3.2 ms**, self 1.7 %, `SdfMeshClaims.Update` 0.7 %, `Enumerable.Contains` 0.5 %.
 - `SdfWorldTables.StageChangedDraws` **3.4 ms**.
 - `PackTransforms` other than effectors **2.9 ms**.
 
@@ -146,7 +146,8 @@ redress only moved groups (`open-items.md:813-820`).
 
 **What it changes:**
 
-- `SdfMeshPathBake.Dress` (`SdfMeshPathBake.cs:358-457`) has four costs:
+- The historical dressing implementation (`SdfMeshPathBake.cs:358-457`) had four costs; retained topology and
+  copy indexing are now in `SdfMeshDresser`, leaving dirty ranges and shared pose derivation ahead:
   - Every frame, its moved scan compares every group's slot pose (`:378-391`).
   - On any move it clears and rebuilds `m_draws` (`:398-433`).
   - It scans `frame.MeshAssetSlots` with LINQ `Contains` (`:404`).
@@ -199,7 +200,7 @@ instance table V1b consumes".
 >
 > - Generalize `SdfMovedTransforms` into one moved set over any retained table's rows: owe, reseat, everything, and a
 >   64-frame history. Use it for the transform table and for a new retained draw table. Do not write a second class.
-> - `SdfMeshPathBake.Dress` reads `SdfFrame.MovedTransforms` to find moved slots through a `slot → draw runs` index,
+> - `SdfMeshDresser.Dress` reads `SdfFrame.MovedTransforms` to find moved slots through a `slot → draw runs` index,
 >   updates those draws' matrices through the draw table's one mutator, and rebuilds only on structural change:
 >   copies, host draws, slot clips, or finished groups.
 > - Index `MeshInstances` by slot once per rebuild. Replace the LINQ `MeshAssetSlots.Contains` with a set.
@@ -500,8 +501,8 @@ These are measurements in the lead's settle window. No lane writes code for item
 |---|---|---|---|
 | `draw-gen` (§1) | `SdfMesh.cs` (`SdfMeshRegion`), `SdfWorldTables.MeshRegion.cs`, `.Motion.cs`, occlusion and selection HLSL, `SdfMeshRecord.cs` doc, 2 tests | `v2b-retained` (same tables files) | now |
 | `v2a-rates` (§2) | `WorldCreationInstances.Pack.cs`, `.Rates.cs`, `SdfUpdateRates.cs` | none | now, beside `draw-gen` and `static-frame` |
-| `static-frame` (§3), design note first | stamper, `CreationStampEmitter`, `SdfProgramBuilder.Instances`, `SdfInstanceRange`, `SdfProgram*`, `SdfMeshBakeGroup`, `SdfMeshGeometry`, `SdfMeshPathBake.cs` (static Dress and chunk), `SdfCompositionFrameSource` | `v2b-retained` on `SdfMeshPathBake.Dress` and `SdfCompositionFrameSource`; Next item 0 (CPU field queries) on the evaluator's transform input | design now; code beside `draw-gen` and `v2a-rates` |
-| `v2b-retained` (§2) | `SdfMeshPathBake.cs` (Dress), `SdfMovedTransforms.cs`, `SdfFrame.cs`, `SdfWorldTables.*` | `draw-gen`, `static-frame` | after `draw-gen` lands, and after `static-frame`'s Dress change lands or is coordinated |
+| `static-frame` (§3), design note first | stamper, `CreationStampEmitter`, `SdfProgramBuilder.Instances`, `SdfInstanceRange`, `SdfProgram*`, `SdfMeshBakeGroup`, `SdfMeshGeometry`, `SdfMeshPathBake` (static bake) and `SdfMeshDresser` (copies and chunks), `SdfCompositionFrameSource` | `v2b-retained` on `SdfMeshDresser.Dress` and `SdfCompositionFrameSource`; Next item 0 (CPU field queries) on the evaluator's transform input | design now; code beside `draw-gen` and `v2a-rates` |
+| `v2b-retained` (§2) | `SdfMeshDresser.cs`, `SdfMovedTransforms.cs`, `SdfFrame.cs`, `SdfWorldTables.*` | `draw-gen`, `static-frame` | after `draw-gen` lands, and after `static-frame`'s dressing change lands or is coordinated |
 | §4 measurement | none | none | the lead's next settle window |
 
 `draw-gen`, `v2a-rates` and `static-frame` share no files and can run as three parallel lanes. `v2b-retained` goes

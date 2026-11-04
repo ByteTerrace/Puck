@@ -3341,16 +3341,22 @@ timed; 1 the world failed to load or no static group had a stored mesh; 2 a
 usage error.
 
 `puck mesh identity [--build <dir>] [--backend directx|vulkan] [--against
-<dir>] [--members]` prints the bake identity a build keys its stored meshes by
+<dir>] [--members] [--why <member-text>]` prints the bake identity a build keys its stored meshes by
 (`SdfMeshBakeIdentity`): its value, the store's entry format version
 (`SdfMeshStore.EntryVersion`), the code the bake runs
 (`SdfMeshBakeClosure`, its members counted by assembly) and the hashes of the
 mask and bake kernels' bytecode, read from the build's assemblies and kernels
-with no device. `--build` names the World build's directory (absent, this CLI's
-own); `--against <dir>` names another build and lists each code member that
+with no device. Each target's own closure policy, identity implementation and
+reason chains run in an isolated collectible load context; the CLI does not
+apply its current policy to an older build. The directory must contain the
+target's inspection API, managed dependencies and complete deployed kernel set;
+missing files are refused, without borrowing the CLI's application assemblies
+or loading native libraries. `--build` names the World build's directory (absent,
+this CLI's own); `--against <dir>` names another build and lists each code member that
 changed, was added or was removed between them, and whether the entry version or
 each kernel differs, so an edit can be checked to keep or move the stored meshes before a
-boot; `--members` prints every member with its hash. The value is the key a
+boot; `--members` prints every member with its hash, and `--why` prints matching
+members' dependency chains under that target's policy. The value is the key a
 saved copy of the store is restored under. Exit codes: 0 printed; 1 a build
 could not be read; 2 a usage error.
 

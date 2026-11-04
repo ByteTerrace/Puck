@@ -68,7 +68,7 @@ count still names the previous records.
 The frame rasterizes baked geometry. `SdfCompositionFrameSource` allocates the
 live transform table and reports an actual `[world.render] envelope`; it builds
 no worst-case probe. `WorldRigidAssets` emits local creation templates once and
-supplies `SdfMeshInstance` roots and identities. `SdfMeshPathBake.Dress` expands
+supplies `SdfMeshInstance` roots and identities. `SdfMeshDresser.Dress` expands
 the shared mesh into copies without program or palette duplication. Fixed placements
 reuse the ordinary static emitter in prototype-local ranges (`SdfMeshTemplateRange`),
 including its per-shape bounds, detail regions and separate groups. The largest
@@ -343,8 +343,8 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
 - **A seat's character fade is view-local.** `SdfViewSnapshot.StampFade` supplies
   a transform-slot range and opacity through `SdfFrameBlock`; the mesh and glass
   fragments call `frame/sdf-stamp-fade.hlsli` before writing depth or glass sums.
-  Cache new view-only offsets in `SdfFrameBlock.ViewOffsets`, outside the outer
-  type's initializer reached by `WriteMeshBake`, so they do not invalidate meshes.
+  Keep view-only offsets in `SdfFrameBlock`, separate from the bake-only
+  `SdfMeshBakeBlock` initializer, so view edits do not invalidate meshes.
   Keep the opaque fragment free of `earlydepthstencil`: discarded pixels must
   reveal the room. Shadow passes and independently filmed mirror/portal views
   receive no fade. Vulkan requires `shaderDemoteToHelperInvocation` at device

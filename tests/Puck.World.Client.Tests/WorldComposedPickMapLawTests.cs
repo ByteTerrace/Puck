@@ -36,21 +36,24 @@ public sealed class WorldComposedPickMapLawTests {
         var emitters = new NamedEmitter[] { new(name: "first") };
         var source = new SdfCompositionFrameSource(dresser: emitters[0], emitters: emitters);
         var bake = new SdfMeshPathBake { Residency = "pick" };
-        var captured = source.CaptureFrame(deltaSeconds: 0, height: 32, interpolationAlpha: 0, width: 32);
-        var dressed = bake.Dress(frame: captured);
-        var meshDraw = SdfVisibility.IdentityOf(kind: SdfVisibilityKind.Mesh, source: 0);
+        using var dresser = new SdfMeshDresser(bake);
+        try {
+            var captured = source.CaptureFrame(deltaSeconds: 0, height: 32, interpolationAlpha: 0, width: 32);
+            var dressed = dresser.Dress(frame: captured);
+            var meshDraw = SdfVisibility.IdentityOf(kind: SdfVisibilityKind.Mesh, source: 0);
 
-        Assert.NotSame(actual: dressed.PickMap, expected: captured.PickMap);
-        Assert.Equal(expected: "first", actual: Assert.IsType<WorldPickTarget>(@object: dressed.PickMap!.Resolve(identity: meshDraw)).Placement);
-        Assert.Same(expected: dressed.PickMap, actual: bake.Dress(frame: captured).PickMap);
+            Assert.NotSame(actual: dressed.PickMap, expected: captured.PickMap);
+            Assert.Equal(expected: "first", actual: Assert.IsType<WorldPickTarget>(@object: dressed.PickMap!.Resolve(identity: meshDraw)).Placement);
+            Assert.Same(expected: dressed.PickMap, actual: dresser.Dress(frame: captured).PickMap);
 
-        emitters[0].Replace(name: "replacement");
+            emitters[0].Replace(name: "replacement");
 
-        var replaced = bake.Dress(frame: source.CaptureFrame(deltaSeconds: 0, height: 32, interpolationAlpha: 0, width: 32));
+            var replaced = dresser.Dress(frame: source.CaptureFrame(deltaSeconds: 0, height: 32, interpolationAlpha: 0, width: 32));
 
-        Assert.NotSame(actual: replaced.PickMap, expected: dressed.PickMap);
-        Assert.Equal(expected: "replacement", actual: Assert.IsType<WorldPickTarget>(@object: replaced.PickMap!.Resolve(identity: meshDraw)).Placement);
-        Assert.Null(@object: bake.Dress(frame: new SdfFrame(Program: captured.Program, ProgramChanged: false, Time: 0, Views: [])).PickMap);
+            Assert.NotSame(actual: replaced.PickMap, expected: dressed.PickMap);
+            Assert.Equal(expected: "replacement", actual: Assert.IsType<WorldPickTarget>(@object: replaced.PickMap!.Resolve(identity: meshDraw)).Placement);
+            Assert.Null(@object: dresser.Dress(frame: new SdfFrame(Program: captured.Program, ProgramChanged: false, Time: 0, Views: [])).PickMap);
+        } finally { dresser.Dispose(); bake.Retire(); bake.Library.Dispose(); }
     }
 
     private sealed class NamedEmitter(string name) : ISdfSceneEmitter, ISdfFrameDresser {

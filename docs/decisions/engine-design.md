@@ -494,6 +494,24 @@ Why: the owner's ruling. Shipped bake products are acceptable so long as Puck
 never again becomes a slave to a recorded artifact, as it did with the deleted
 ledgers and the bake derivation fingerprint.
 
+Mesh derivation and drawing have separate owners. `SdfMeshPathBake` reconciles
+product inputs and derives meshes; `SdfMeshDresser` retains poses, draws and picks;
+`SdfMeshBakeReadback` interprets sampler answers, and `SdfMeshBakeBlock` owns the
+bake-only parameter offsets and writer. View parameters have their own initializer;
+both writers use the shared `ShaderParameterWriter` primitives. Positive production entry methods
+define the bake's code closure, and a missing named entry is an error. This boundary
+also matters in a running process: the host's metadata-update notification names
+types, so filtering methods on a type that still mixes baking and drawing would
+not keep drawing-only hot reloads out of the persisted identity. Unknown update
+types still invalidate conservatively. The ownership split follows the actual
+dependency and notification boundaries; it adds no frozen identity or exceptions
+for particular counter names. See the [bake procedure](../../.claude/skills/rendering/references/mesh-bake.md)
+for the input, product and invalidation witnesses.
+
+This boundary is specific, not a claim that every appearance edit is neutral:
+the program constructor still packs appearance and field data together. Real
+shared dependencies stay in the closure until their ownership is separated.
+
 The owner explicitly includes compiled cartridge JSON twins in this decision.
 Only their authored sources are committed; consumers compile those sources,
 and semantic compile/decompile round trips compare results produced in the run.

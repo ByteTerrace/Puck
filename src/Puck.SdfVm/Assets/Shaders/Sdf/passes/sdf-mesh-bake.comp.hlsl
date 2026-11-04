@@ -11,7 +11,7 @@
 // gradient from the tetrahedral taps in field units per world unit, whose magnitude the contour divides a value by to
 // read it as a distance (SdfSampledLattice.AnswerGradients); a points lattice without gradients writes the dynamic-
 // transform slot of the shape that won the sample in the first gradient word instead (a group's vertex rides it,
-// SdfMesh.Members), and zeros after it. KEEP IN SYNC with SdfMeshPathBake's reader and SdfFrameBlock.WriteMeshBake.
+// SdfMesh.Members), and zeros after it. KEEP IN SYNC with SdfMeshPathBake's reader and SdfMeshBakeBlock.Write.
 #define SDF_DYNAMIC_TRANSFORMS
 #define SDF_MESH_BAKE_POSES
 #define SDF_INSTANCE_MASKS
@@ -34,7 +34,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
 
     sdfProgramLayout = sdfLoadProgramLayout();
 
-    // The lattices' samples lie back to back from zero in dispatch order (SdfFrameBlock.WriteMeshBake, which refuses
+    // The lattices' samples lie back to back from zero in dispatch order (SdfMeshBakeBlock.Write, which refuses
     // more lattices than the pass block holds), so the last lattice starting at or before the sample is the one that can
     // hold it.
     if (count > 0u) {

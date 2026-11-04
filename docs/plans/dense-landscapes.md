@@ -218,10 +218,10 @@ Source citations describe the baseline head; reread them before implementation.
   ([sdf-mesh-occlusion](../../src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-mesh-occlusion.comp.hlsl),
   lines 93-97 and 191-198). Visibility V1 already specifies stable instances,
   ordered compaction and geometry/detail buckets.
-- A moved slot can clear/rebuild all dressed draws, scan every copy for each
-  dynamic group and copy the instance array
-  ([SdfMeshPathBake.Dress](../../src/Puck.SdfVm/SdfMeshPathBake.cs), lines 375-434).
-  Placed animations miss body rate holds
+- Dressing now retains geometry/copy topology and picking metadata, with one
+  membership index shared with bake demand
+  ([SdfMeshDresser.Dress](../../src/Puck.SdfVm/SdfMeshDresser.cs)). Shared pose
+  derivation and actual dirty ranges remain the next CPU step. Placed animations miss body rate holds
   ([WorldCreationInstances.Pack](../../src/Puck.World.Client/WorldCreationInstances.Pack.cs),
   lines 246-249).
 - Meshes with skin members have no culling box
@@ -739,3 +739,98 @@ requests are host-visible. [NVIDIA's barrier guidance](https://developer.nvidia.
 and [Microsoft's D3D12 resource-state documentation](https://learn.microsoft.com/en-us/windows/win32/direct3d12/using-resource-barriers-to-synchronize-resource-states-in-direct3d-12)
 support keeping ordering in the existing recorder and accounting for real readers
 and writers. Lower payload alone is not evidence of a faster frame.
+
+### Bake ownership and a real renderer-edit control
+
+The counter-triggered rebake above was a dependency-boundary defect. Baking and
+draw dressing now have separate owners (`SdfMeshPathBake` and `SdfMeshDresser`),
+with one shared copy-membership index. `SdfMeshBakeReadback` interprets sampler
+answers; `SdfMeshBakeBlock` owns bake parameter packing independently of the view
+block's initializer. Both use the shared shader parameter primitives. Positive
+production entry methods include staging, readback and native mesh normalization;
+a missing named root fails inspection instead of silently omitting work.
+
+This separation also follows the host's actual update granularity:
+[Microsoft's metadata-update contract](https://learn.microsoft.com/en-us/dotnet/api/system.reflection.metadata.metadataupdatehandlerattribute?view=net-10.0)
+names types, with an unknown type list requiring conservative invalidation. Method
+filtering inside a mixed bake/draw type alone was therefore insufficient. The
+dependency reasoning agrees with independent work on precise build dependencies
+([Build Systems à la Carte](https://www.microsoft.com/en-us/research/publication/build-systems-la-carte/),
+[Buck2's Modern DICE](https://buck2.build/docs/insights_and_knowledge/modern_dice/));
+these sources inform the boundary, while Puck's actual products and callbacks
+decide whether it works.
+
+Four production CPU-bake fixtures preserve every raw mesh attribute and complete
+fixed-key encoded entry against the preceding build, including thin refinement,
+material boundaries and skin members. Bake and view parameter blocks remain byte
+exact. Exercised compiled-image controls change lattice, refinement, contour,
+material-cut, skin, format and bake-parameter behavior and invalidate identity;
+changed picking, a presentation counter and view packing preserve it. Actual
+metadata-update handlers include bake owners and exclude the new dresser and view
+block; unknown updates still invalidate. Mask/bake bytecode controls invalidate;
+view-bytecode controls preserve identity. Mutated shader bytes were identity/store
+controls, not executed native shader variants.
+
+The closure shrank from 1,859 to 1,629 members and from 196 to 182 layout members.
+One warmed calling-thread identity-construction allocation sample fell from
+78,932,904 to 71,745,152 bytes. It still reads fourteen complete PE images, whose
+logical input grew from 6,112,768 to 6,117,376 bytes. These are metadata-work and
+allocation observations, not a whole-scene or physical-memory saving; the retained
+copy-layout snapshot adds CPU metadata. Program packing still couples appearance
+to field offsets and remains a real conservative dependency in the open packet.
+
+The CLI now inspects each target build using that build's own roots, hashing and
+kernel policy in a collectible load context. Sharing only the runtime framework
+prevents a new CLI from silently applying its own policy to an old build; a
+missing application dependency refuses inspection. A preserved old build reports
+its original identity, and the actual renderer edit below preserves every member
+and hash in the complete new closure, not just its final digest.
+
+For that real edit, the dresser now skips `HasMoved` scans when motion or topology
+already requires posing, and stops at the first changed binding otherwise. New
+potential/actual pose-check counters leave the full bake identity unchanged. The
+edited D3D12 process loaded the existing forest store and reached full residency
+in 3.195 seconds; the preceding new-boundary process cold-baked with zero loads in
+117.026 seconds. This proves reuse across the renderer edit, not a cold-bake
+speedup or the one-minute bar.
+
+Its moving forest interval performed 3,168 of 685,644 potential pose checks,
+skipping 99.54%, with zero draw-topology rebuilds. Standing and moving host windows
+averaged 22.01 and 49.06 ms (67 moving iterations). The camera-framed route is still
+not an exact trajectory/phase A/B comparison, and the frame bar remains unmet.
+The next processing work is change-proportional pose/record propagation and GPU
+instance buckets. This interval still packed 482,801 records and assigned
+71,727,784 field bytes, copied 466,330 history matrix rows (29,845,120 payload
+bytes) through 153 dispatches and 14,020 request bytes. A root upload sample
+counted 3,453,832 host-visible bytes and 279,360 native buffer-copy bytes across
+four compute dispatches. Compute history payload remains separately counted;
+these observations establish no host-transfer reduction from the scan change.
+
+The final windowed Vulkan forest reached all 7,468 groups landed and resident in
+185.462 seconds with zero store loads and no outstanding upload words. Standing,
+moving and recovered windows averaged 25.14, 55.50 and 25.05 ms; the moving
+window had 59 host iterations. Its interval performed 2,808 of 604,980 potential
+pose checks, rebuilt no draw topology, packed 426,003 records and assigned
+62,931,928 field bytes. History copied 411,460 rows (26,333,440 payload bytes),
+with 12,428 request bytes and 135 dispatches. The settled root upload sample
+counted 3,072,388 host-visible bytes, 278,640 native copy bytes and four compute
+dispatches; a later sample counted 4,229,784 and 279,360 bytes respectively.
+
+Vulkan's settled mesh region used 1,646,544,272 bytes of 1,677,721,600 held. The
+memory account owned 1,656,403,470 bytes, including 102,368 cached bytes, with no
+reservations or retirement; the later host reading observed 16,250,380,288 private
+process bytes, 3,852,800,000 managed committed bytes and 2,750,709,760 allocator
+committed bytes. Backend cumulative allocated/released and peak readings are
+retained separately. These layers overlap and do not establish a unified physical
+total or a memory improvement against a matched baseline.
+
+Presented images on both backends show the connected canopy, shrubs, tufts and
+path at the inside spawn. Vulkan resolves the Moth and `forest-tree-3-10` through
+the public picking path, and repeated rig readbacks advance both wind-driver
+phases. All owned Worlds exited zero and released their GPU leases. Release
+builds, nine focused behavioral cases, byte/product/callback witnesses and the
+documentation-link check passed. Two existing RuleEvaluator STALE001 warnings
+remain unrelated. Cross-family review remains owed under the recorded launch
+restriction. Neither the frame bar, cold-bake bar nor target-device qualification
+is satisfied; the native legs are operational measurements, not controlled speedup
+claims or a highest-quality qualification.

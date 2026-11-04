@@ -22,11 +22,13 @@ public sealed partial class SdfMeshPathBakeLawTests {
         var lone = -3;
 
         int First(IReadOnlyList<SdfViewSnapshot> views) {
-            var bake = new SdfMeshPathBake { Residency = "demand" };
+            using var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake { Residency = "demand" });
+            var bake = bakeRun.Bake;
+            var dresser = bakeRun.Dresser;
             var frame = new SdfFrame(Program: program, ProgramChanged: true, Time: 0f, Views: views) { FarDistance = 100f };
 
             bake.Demand.Observe(frame: frame, height: 1080);
-            _ = bake.Dress(frame: frame);
+            _ = dresser.Dress(frame: frame);
             Assert.True(condition: bake.TryTakeForFrame(batch: out var batch, frame: 0));
             Assert.Equal(expected: 2, actual: batch.Lattices.Length);
 
@@ -38,14 +40,18 @@ public sealed partial class SdfMeshPathBakeLawTests {
         Assert.Equal(expected: union, actual: First(views: [ViewAt(eye: new Vector3(x: -1f, y: 1.5f, z: 2f)), ViewAt(eye: new Vector3(x: 30f, y: 1.5f, z: 2f))]));
         Assert.Equal(expected: union, actual: First(views: [ViewAt(elsewhere: true, eye: new Vector3(x: 8f, y: 1.2f, z: 1f))]));
 
-        var near = new SdfMeshPathBake { Residency = "near" };
+        using var nearRun = new MeshBakeTestRun(new SdfMeshPathBake { Residency = "near" });
+
+        var near = nearRun.Bake;
+
+        var nearDresser = nearRun.Dresser;
         var frame = new SdfFrame(Program: program, ProgramChanged: true, Time: 0f, Views: [ViewAt(eye: new Vector3(x: 8f, y: 1.2f, z: 1f))]) { FarDistance = 100f };
 
         near.Demand.Observe(frame: frame, height: 1080);
-        Drive(bake: near, frame: frame, materials: materials, shapes: Shapes);
+        Drive(bake: near, dresser: nearDresser, frame: frame, materials: materials, shapes: Shapes);
 
-        var expected = Baked.Value.Bake.Dress(frame: Baked.Value.Frame).MeshDraws;
-        var actual = near.Dress(frame: frame).MeshDraws;
+        var expected = m_baked.Value.Run.Dresser.Dress(frame: m_baked.Value.Frame).MeshDraws;
+        var actual = nearDresser.Dress(frame: frame).MeshDraws;
 
         Assert.Equal(expected: expected.Count, actual: actual.Count);
         Assert.All(collection: expected, action: draw => Assert.Contains(collection: actual, filter: other => other.Mesh.Indices.Span.SequenceEqual(other: draw.Mesh.Indices.Span) && other.Mesh.Positions.Span.SequenceEqual(other: draw.Mesh.Positions.Span)));
