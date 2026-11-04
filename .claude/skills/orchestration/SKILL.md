@@ -375,6 +375,17 @@ direction: concurrent whole-solution builds exhaust a machine's memory.
   branch's deleted files (`git diff --diff-filter=D` against the integration tip)
   and compares them with what the brief allowed. A deletion the brief didn't name
   is reported to the lead before landing, never merged silently.
+- **A wave** fans many small fixes out as several writers and one integrator: a
+  scout pass inventories, the lead triages into file-disjoint batches (each
+  names its items, the files it may touch, and which batch alone owns the
+  shared generated files), the writers build only what they touched, and one
+  integration agent merges every writer branch and validates once. Write the
+  triage to a file under `.claude/scratch/` before launching writers: a
+  Workflow resumes only within its session, so a reboot or restart otherwise
+  loses the triage, and the restarted writers start from the file plus each
+  stopped writer's WIP branch. A scout that runs `puck` verbs uses a CLI built
+  from the head it inventories; a copy left from an older head reports stale
+  verbs and refusals as findings.
 - **Briefs** that allow deletion say what may be deleted. A finding capture names
   its settle state: bakes settled and irradiance settled, or marked partial. A
   capture taken before settling can't support a lighting finding.
