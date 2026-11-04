@@ -68,7 +68,7 @@ public sealed partial class WorldFlagCommandModule(IServerLink link, WorldClient
             return CommandResult.Error(output: "[world.flag: flagging requires the host console or a local seat]");
         }
         if (args.Count == 0) {
-            return CommandResult.Error(output: "[world.flag: expected world.flag <exhibit> [note…]]");
+            return CommandResult.Usage(form: "<exhibit> [note…]", verb: "world.flag");
         }
         if (!IsExhibitToken(token: args[0])) {
             return CommandResult.Error(output: $"[world.flag: exhibit '{args[0].ToString()}' is not a file-safe token (letters, digits, '-', '_', '.')]");

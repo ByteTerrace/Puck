@@ -62,7 +62,7 @@ public sealed partial class WorldReplayCommandModule(WorldReplayTape tape, World
     }
     private CommandResult Record(WireArgs args) {
         if (args.Count != 1) {
-            return CommandResult.Error(output: "[replay.record: usage — replay.record <name>]");
+            return CommandResult.Usage(form: "<name>", verb: "replay.record");
         }
 
         var name = args[0].ToString();
@@ -180,7 +180,7 @@ public sealed partial class WorldReplayCommandModule(WorldReplayTape tape, World
     }
     private CommandResult Verify(WireArgs args) {
         if (args.Count != 1) {
-            return CommandResult.Error(output: "[replay.verify: usage — replay.verify <name>]");
+            return CommandResult.Usage(form: "<name>", verb: "replay.verify");
         }
 
         var name = args[0].ToString();

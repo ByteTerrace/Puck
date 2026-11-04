@@ -17,7 +17,7 @@ internal sealed class WorldSdfCommandModule(WorldSdfDocumentEmitter documents, W
 
     private CommandResult DumpHandler(CommandContext context, WireArgs args) {
         if (args.Count != 1) {
-            return CommandResult.Error(output: "[world.sdf.dump: expected <path>]");
+            return CommandResult.Usage(form: "<path>", verb: "world.sdf.dump");
         }
 
         var words = m_renderProbe.Residency?.CopyLiveProgramWords();
@@ -43,7 +43,7 @@ internal sealed class WorldSdfCommandModule(WorldSdfDocumentEmitter documents, W
     }
     private CommandResult LoadHandler(CommandContext context, WireArgs args) {
         if (args.Count != 1) {
-            return CommandResult.Error(output: "[world.sdf.load: expected <path>]");
+            return CommandResult.Usage(form: "<path>", verb: "world.sdf.load");
         }
 
         var path = args[0].ToString();

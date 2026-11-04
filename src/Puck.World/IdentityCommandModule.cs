@@ -16,7 +16,7 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
 
     private CommandResult Create(CommandContext context, WireArgs args) {
         if (args.Count is not (1 or 2)) {
-            return CommandResult.Error(output: "[identity.create: expected <id> [#RRGGBB]]");
+            return CommandResult.Usage(form: "<id> [#RRGGBB]", verb: "identity.create");
         }
         var id = args[0].ToString();
         var color = ((args.Count == 2)
@@ -52,7 +52,7 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
     // StateCell.Value/.Text already carries.
     private CommandResult Deliver(CommandContext context, WireArgs args) {
         if (args.Count < 4) {
-            return CommandResult.Error(output: "[identity.deliver: expected <source-id> <owner-id> <row> <set|add> <text...>]");
+            return CommandResult.Usage(form: "<source-id> <owner-id> <row> <set|add> <text...>", verb: "identity.deliver");
         }
 
         var sourceId = args[0].ToString();
@@ -169,7 +169,7 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
     // needs one yet.
     private CommandResult DescribeIdentityState(WireArgs args) {
         if (args.Count != 2) {
-            return CommandResult.Error(output: "[identity.state: expected <id> <row>]");
+            return CommandResult.Usage(form: "<id> <row>", verb: "identity.state");
         }
 
         var id = args[0].ToString();
@@ -238,7 +238,7 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
     // tick through the identity's facts revision.
     private CommandResult SetFact(CommandContext context, WireArgs args) {
         if (args.Count is not (2 or 3)) {
-            return CommandResult.Error(output: "[identity.fact.set: expected <key> <value> [player]]");
+            return CommandResult.Usage(form: "<key> <value> [player]", verb: "identity.fact.set");
         }
         if (!TryPlayer(
             args: in args,
@@ -361,7 +361,7 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
             (args.Count < 2) ||
             (args.Count > 3)
         ) {
-            return CommandResult.Error(output: "[identity.motion: expected <speed|turn-speed> <value> [player]]");
+            return CommandResult.Usage(form: "<speed|turn-speed> <value> [player]", verb: "identity.motion");
         }
         if (!TryPlayer(
             args: in args,

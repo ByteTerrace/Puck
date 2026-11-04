@@ -52,7 +52,7 @@ internal sealed class WorldUiCommandModule(IServerLink link, WorldCaptureSchedul
             return CommandResult.Error(output: "[world.binding-bar: policy resolver is unavailable]");
         }
         if (args.Count > 2) {
-            return CommandResult.Error(output: "[world.binding-bar: expected [on|off|auto] [player], or [player]]");
+            return CommandResult.Usage(form: "[on|off|auto] [player], or [player]", verb: "world.binding-bar");
         }
 
         var player = 1;
@@ -180,7 +180,7 @@ internal sealed class WorldUiCommandModule(IServerLink link, WorldCaptureSchedul
                 (args.Count != (next + 5)) ||
                 !args.TryFloats(count: 4, start: (next + 1), values: out var edges)
             ) {
-                return CommandResult.Error(output: $"[world.screenshot: expected {Usage}]");
+                return CommandResult.Usage(form: Usage, verb: "world.screenshot");
             }
             if (FrameCaptureRegion.RefusalOf(height: edges[3], width: edges[2], x: edges[0], y: edges[1]) is { } refusal) {
                 return CommandResult.Error(output: $"[world.screenshot: {refusal}]");
@@ -274,7 +274,7 @@ internal sealed class WorldUiCommandModule(IServerLink link, WorldCaptureSchedul
                 );
 
                 if (((args.Count > 1) && !crossing && !slots) || (args.Count > 3) || (slots && (args.Count != 2))) {
-                    return CommandResult.Error(output: "[world.screenshot: expected world.screenshot <path.png> [slots | crossing [player]] or world.screenshot <path.png> presented [<frames>] [region <x> <y> <width> <height>]]");
+                    return CommandResult.Usage(form: "<path.png> [slots | crossing [player]] or world.screenshot <path.png> presented [<frames>] [region <x> <y> <width> <height>]", verb: "world.screenshot");
                 }
 
                 if (

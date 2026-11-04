@@ -21,7 +21,7 @@ namespace Puck.World;
 /// </summary>
 /// <param name="faults">The host's creation faults.</param>
 public sealed class GpuFaultsCommandModule(GpuCreationFaults faults) : ICommandModule {
-    private const string Usage = "[gpu.faults: expected gpu.faults arm <kind> [<n>] | lose [<n>] | remove [<n>] | disarm | list; kinds: pipeline, buffer, image, render-pass, framebuffer, shader-module, command-pool, bindings-pool, timestamp-pool]";
+    private const string Form = "arm <kind> [<n>] | lose [<n>] | remove [<n>] | disarm | list; kinds: pipeline, buffer, image, render-pass, framebuffer, shader-module, command-pool, bindings-pool, timestamp-pool";
     private const string Verb = "gpu.faults";
 
     private CommandResult Arm(WireArgs args) {
@@ -32,7 +32,7 @@ public sealed class GpuFaultsCommandModule(GpuCreationFaults faults) : ICommandM
                 name: args[1]
             )
         ) {
-            return CommandResult.Error(output: Usage);
+            return CommandResult.Usage(form: Form, verb: "gpu.faults");
         }
 
         var nth = 1;
@@ -44,7 +44,7 @@ public sealed class GpuFaultsCommandModule(GpuCreationFaults faults) : ICommandM
                 value: out nth
             ) || (nth < 1))
         ) {
-            return CommandResult.Error(output: Usage);
+            return CommandResult.Usage(form: Form, verb: "gpu.faults");
         }
 
         faults.Arm(
@@ -110,7 +110,7 @@ public sealed class GpuFaultsCommandModule(GpuCreationFaults faults) : ICommandM
                 value: out nth
             ) || (nth < 1)))
         ) {
-            return CommandResult.Error(output: Usage);
+            return CommandResult.Usage(form: Form, verb: "gpu.faults");
         }
 
         faults.ArmLoss(
@@ -149,7 +149,7 @@ public sealed class GpuFaultsCommandModule(GpuCreationFaults faults) : ICommandM
         }
 
         if (args.Count != 1) {
-            return CommandResult.Error(output: Usage);
+            return CommandResult.Usage(form: Form, verb: "gpu.faults");
         }
 
         if (args.Is(
@@ -166,7 +166,7 @@ public sealed class GpuFaultsCommandModule(GpuCreationFaults faults) : ICommandM
             value: "list"
         )
             ? Describe()
-            : CommandResult.Error(output: Usage)
+            : CommandResult.Usage(form: Form, verb: "gpu.faults")
         );
     }
 
