@@ -10,7 +10,7 @@ restated catalog drifts the moment a code is added or reworded.
 
 | Code | Severity | Fires on | Fix |
 |---|---|---|---|
-| PUCK040 | Error | A colon in front of a block or array (`host: {`, `variables: [`). | Drop the colon: `host {`, `variables [`. |
+| PUCK040 | Error | A colon in front of a block or a list (`host: {`, `variables: [`). | Drop the colon: `host {`, `variables [`. |
 | PUCK123 | Error | A section block holding only its rows (`kits { rows [ … ] }`). | Write the array of them: `kits [ … ]`; a section that also authors a policy member keeps its block. |
 | PUCK121 | Error | An import spelling a file (`import "skies.puck"`, `import "theme.world.json"`). | Name what the file carries: `import "skies"`. A library's declarations or a document's composition follows from the named file, never the spelling. |
 | PUCK002 | Error | Operand text an effect/`when`/`score` position handed to `Puck.State.ExpressionSpelling` failed to parse. | Fix the operand's own syntax — it is the rule language's expression grammar, not this document's. |
