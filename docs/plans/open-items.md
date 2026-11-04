@@ -36,8 +36,8 @@ world is the proving ground, so every plan's checks run on it, and what the
 experimental worlds have that it lacks is ported into it
 ([port](#port-the-experimental-worlds-missing-features)). The current focus is
 [dense landscapes](#dense-landscapes), including continuous forest in the first
-milestone. The owner requested its baseline and implementation plan; the
-[next-wave lanes](next-wave.md) supply its existing engineering work.
+milestone. The owner requested its baseline and implementation plan, which
+[the plan](dense-landscapes.md) holds.
 
 0. [Dense landscapes](#dense-landscapes) [high, the first landscape milestone]:
    continuous forest, roads, shrubs and grass at the performance target; lead
@@ -77,7 +77,7 @@ milestone. The owner requested its baseline and implementation plan; the
     standard](#author-leaks-to-the-standard): what lang-2 leaves of S11, the
     cost corpus, the overlay text advance.
 12. Antigravity's coding trial ([agent tooling](#agent-tooling-and-skills)),
-    after the settle window.
+    once the current batch has landed.
 13. [Delivery](#delivery-launcher-and-ci): the production deploy, CI's steady
     state, the shader cache and the GC-hole retirement.
 14. [Port the experimental worlds' missing features](#port-the-experimental-worlds-missing-features):
@@ -119,8 +119,7 @@ milestone. The owner requested its baseline and implementation plan; the
 
 Each waits on the owner: what the engine should do, how it looks and feels, and the owner-only actions. An engineering call is the lead's and sits in its packet as a "Decide" line, made when the packet is taken.
 
-- Deferred by the owner at the fundamentals landing on `main`, not resolved,
-  and first in Next: the disclosure leaks the harness shows
+- Deferred by the owner, not resolved, and first in Next: the disclosure leaks the harness shows
   ([disclosure](disclosure.md#the-build-order)); transmission's remaining
   exit-layer highs ([transmission](transmission.md)); the lockstep relight
   under a moving sun ([lighting](#lighting-and-gi)); the tour's and the cold
@@ -417,6 +416,23 @@ The custom no-GC runtime port stays later work, on the
   pattern to replace once ([refactoring](#refactoring-campaign)). The
   gradient's six taps are not the marched point and are shared with physics
   (bit-identical per point), so batching them is a design step.
+  The fix keeps an answer on its owner (the registration's per-effector arrays
+  beside `EffectorPlantTarget`, passed by `ref` through the one door) rather
+  than in a thread-static ring, which loses its hits once packing moves to
+  worker threads. The camera's cached answer records the radius it was cast at
+  (`r + m`) and is reused while `|Δtarget| + L·|Δdirection| ≤ m`, a
+  sphere-containment bound under which a reused room never exceeds the room at
+  the current inputs. First find whether the 0.1 mm target drift is the boom
+  follower's tail (`WorldFramePresenter.cs:776-805`) or a body that does not
+  settle at rest, and fix a settling defect at its cause; likewise the Moths
+  that probe every frame are not bit-still (`WorldTransformOwners.cs:55-74`
+  repacks only on change), so exact reuse may not hit until that is read.
+  `SdfFieldEvaluator.PointWork` (`sdf.point.evaluations`) is counted on every
+  walk but never registered for `world.counters` (`WorldBootComposition.cs:164-173`);
+  register it beside `SdfBoundsCache.ProcessWork` so the proof reads probes
+  asked, skipped, reused and marched. Count under `world.lockstep` at the meadow
+  with a fixed camera, where the rate tiers hold by ticks, so the counts do not
+  depend on load.
 - [high] The meadow (`debug.go meadow`) is a forcing workload in the real debug
   world: its two-part blades add thousands of dynamic slots and retained mesh
   draws, and its frame and cold bake are far past both bars. Animated
@@ -427,7 +443,12 @@ The custom no-GC runtime port stays later work, on the
   to placement roots, measure pose packing and draw recording, and preserve
   planted roots, continuous world-phased gusts and independent tip flutter (the
   [visibility plan](visibility.md#v2-instance-updates-proportional-to-change-and-authored-motion-on-the-gpu)'s
-  step V2a). Draw count is the other cost, one draw per blade part over a few
+  step V2a). A registration is a whole tile and takes the tier of its nearest
+  point, so with the camera inside the patch most tiles stay every-frame; read
+  `world.rates` at the stop before promising frame time. V2a pays on the lawn's
+  far tiles and wherever the camera stands off the patch, and a tile that is too
+  coarse is an authoring lever (`windMeadowTile`), never an engine special
+  case. Draw count is the other cost, one draw per blade part over a few
   hundred unique geometries; its cause fix is the visibility plan's V1. The
   meadow is also R1's forcing workload: measure produce's draw-recording share
   before and after.
@@ -439,7 +460,17 @@ The custom no-GC runtime port stays later work, on the
   `dotnet-trace` of the frame thread; it orders V1 against V2. M2: mesh-pass
   and cascade GPU time beside draws and vertices, and triangles per blade
   part at `world.detail 0`, `1` and `2`, on the RTX 2060 and at the Deck's
-  resolution; it decides whether V3 and V4 come ahead of V2 there. Frame
+  resolution; it decides whether V3 and V4 come ahead of V2 there. M2 also reads
+  one screen or portal session node and one nested-view node per pass
+  (`world.counters gpu node`, candidates, selection dispatches, pixel passes),
+  whether session nodes draw cascades under `ReducedQuality`, and which of the
+  sessions are residencies of their own: each session is a separate residency,
+  so V5's shared classification reaches only the nested views, while V1a's
+  compaction and the job system's burst spreading reach the sessions. Holding
+  poses dropped root GPU time at the meadow, but nothing names where (re-staged
+  records, motion-history copies, the far cascade's refresh and the clipped
+  temporal resolve are the candidates), so take `world.gpu-timing` per pass with
+  poses as authored and held before V2a or V2b claim a GPU saving. Frame
   numbers taken under load rank nothing. Include two unexplained readings in
   that quiet-machine trace: a Direct3D 12 lobby produce well above its
   CPU-selection controls, and a stripe difference beyond the pinned noise on the
@@ -1538,7 +1569,18 @@ the fixed poses and the approaches already rejected.
   the day cycle ([sweep](#sweep-and-visual-checks)). Fix at the cause: quantize
   the sun on a fixed grid under lockstep (never against the last capture, which
   would make the image depend on when a run started), so a lockstep frame
-  relights only what its own time moved.
+  relights only what its own time moved. One function snaps the directional
+  lights' direction and radiance, read by both `RefreshLighting`'s key
+  (`SdfMeshIrradiance.cs:1076`) and `Lighting.Capture` (`:1092`), so the drained
+  light stays a pure function of the frame; the windowed path can take the same
+  snapped key in place of its wall-clock `LightingInterval`, leaving one policy.
+  The sky-only tolerance (`SkyMatches`, `:1086,1097`) compares against the
+  previous capture too, so lockstep's sky bounce also depends on history; the
+  same quantization removes it. A drain relights the whole window (61,440
+  probes at High) from no bounce, up to 32 passes, and that from-no-bounce
+  invariant stays. Prove it by `sdf.mesh-gi.relit` per tick and drains per 100
+  ticks under lockstep with the day cycle running, and by two lockstep runs
+  started at different ticks capturing an identical still at one tick.
 - From step 1: stretching the far cascade to cover the valley costs too much,
   so the valley waits for the terrain pass's step 7 static cascade; indoors a
   cel style tints bounced light as its shadow band, so banded materials in the
@@ -1892,10 +1934,10 @@ and `world.residency [radius]` reads its measures.
 #### Memory on the Deck tier
 
 [high, the Deck] The debug world's process plus GPU memory stays at or under
-10 GB on the Deck tier (the lead's budget; the owner set no figure), measured in
-every settle window. A windowed World holds well past that, a tour roughly
-doubles it ([sweep](#sweep-and-visual-checks)) and the cold bake passes it by a
-wide margin ([bake](#bake-proportional-to-change)); headless is a fraction of a gigabyte,
+10 GB on the Deck tier, measured at every settled checkpoint. A windowed World
+holds well past that, a tour roughly doubles it
+([sweep](#sweep-and-visual-checks)) and the cold bake passes it by a wide margin
+([bake](#bake-proportional-to-change)); headless is a fraction of a gigabyte,
 so nearly all of it is presentation a player's build carries. Most of the
 process is unattributed, so physical attribution comes first. Current diagnostics
 separate process, managed, allocator, account and backend device layers; those
@@ -1931,6 +1973,43 @@ Grounded causes and leads:
   appropriate host wait; measure its frequency before attributing frame stalls.
 - A prewarmed mesh store may ship in a player's build (AGENTS.md), so a player
   need not bake cold.
+- Headless is about half a gigabyte and does not grow, and development-only
+  overhead is under about 100 MB, so a player's build of the debug world carries
+  essentially all of the windowed footprint. Roughly two thirds of a fresh
+  windowed World's private bytes are unattributed (other native memory and the
+  device's mapped heaps), the largest bucket and the first measurement. Puck
+  has no device-memory reading: no DXGI `QueryVideoMemoryInfo` or
+  `VK_EXT_memory_budget` anywhere in `src/` (cite at least two independent
+  sources per API). Add usage and budget as
+  fields of `host.memory`, and let `MemoryAccount` be the one budget authority
+  with `ShaderPipelineMemoryBudget` as a reservation from it, not a second
+  budget. The account's budget is three quarters of installed RAM and sees only
+  mesh payloads, bake group workspaces and worker scratch, never the managed
+  heap, `GpuRegion` host copies, device or staging heaps, so on a unified-memory
+  Deck it pays no regard to the GPU's share of the same memory.
+- The mesh library's fix is at its cause: a payload stays findable while any
+  claim on it lives, and its byte budget charges only cached-only payloads
+  (reuse `Payload.Classify` and `MemoryCategory.Cached`, no new counter). Read
+  the crossing's `[sdf.mesh-bake] start ... baking= loading= shared=` line first
+  to name why so many groups moved on a garden crossing (a palette shift,
+  selectors renumbered by the body leaving and returning, or distance); if the
+  cause is a static palette shift, extend renumber-sharing to static groups.
+- Managed transients the account does not see: a full GI scene build holds its
+  pieces and centroids beside the old scene (about a gigabyte in the debug
+  world, `SdfMeshIrradianceScene.cs:584-611,707-710`), the scene retains up to
+  8 M triangles of cached claims (`:60,270-281`), and a warm load decodes the
+  whole loaded set into managed arrays once before the native copy
+  (`SdfMeshStoreCodec.cs:177,214,321` then `SdfMesh.Storage.cs:77`). A player's
+  build also keeps the composed-document store (`WorldDefinitionFileSource.cs`,
+  `ForgetComposedDocuments` after boot) and may keep the authoring document tree
+  after compiling; confirm and release what a booted compiled world no longer
+  reads. `Puck.World.csproj:26-28` still says the LOH keeps baked meshes, though
+  payloads have been native for some time and the settled LOH is GI and caches.
+- Order of shrinkage once attributed: the unattributed bucket, the crossing's
+  spike and the tour's growth (the unbounded probe cache), GI's managed working
+  set, then the mesh copies (release normals and levels 1 and 2 after landing
+  where no CPU reader needs them, and drop the chunked parent's second index
+  copy).
 
 #### Steps
 
@@ -2006,16 +2085,16 @@ crossing frame and the pixel-pass gap at locked clocks.
   crossing frame costs tens of milliseconds of produce with slow frames around
   it. Warm crossings cost 21 to 143 ms, the view nodes' first submissions after
   a reconfiguration blocking in `vkQueueSubmit`. Steady Vulkan frames also
-  alternate about 18.6 and 14.7 ms around a 16.67 ms mean, the pacer waiting a
-  full period after a 1.7 ms produce.
+  alternate between long and short around the 16.67 ms mean, the pacer waiting a
+  full period after a produce of a couple of milliseconds.
 - [medium · owner: rendering] Vulkan's pixel passes run about a quarter slower
   than Direct3D 12's on the RTX 2060 at live clocks, and its compute passes 21
   to 40 % slower, with no clock state read. At locked base clocks on the RTX
   4070 (Nsight GPU Trace) the debug world shows no such gap, and at replay
   clocks Vulkan runs every compute pass faster. The compilers still differ:
-  Vulkan executes 3 % fewer instructions in surface, 10 % more in views and
-  21 % more in resolve, and views sits near 128 registers a thread on Vulkan
-  against 168 on Direct3D 12; every pixel pass is register-limited on both.
+  Vulkan executes slightly fewer instructions in surface but more in views and
+  resolve, and its views pass uses fewer registers a thread than Direct3D 12's;
+  every pixel pass is register-limited on both.
   Re-measure the RTX 2060 at locked clocks, with both backends at the same
   P-state or by replay, before treating its gap as real.
 - Settled parity in the lift shaft: a cold Vulkan shaft is near-black with no
@@ -2867,9 +2946,9 @@ Owner: specialist lane (puck-world, build and hot reload, input) · ordinary · 
 Owner: debug-world content lanes, each started by the owner's direction ·
 ordinary · Next: new content and art on the owner's call.
 
-- [high] Player-state defects found grounding the hub design
-  ([ground-hub.md](next-wave/ground-hub.md)). The design memo decides the
-  shape; these are defects whatever it decides:
+- [high] Player-state defects found grounding the hub design. The design memo
+  ([hub and saves](hub-and-saves.md)) decides the shape; these are defects
+  whatever it decides:
   - `WorldInstanceHost.DurableImages` is never assigned, so a persisted
     destination loses its state when the process quits;
   - `MachineCreationRequest.SavePath` is never set, so a cartridge's battery
@@ -2879,7 +2958,9 @@ ordinary · Next: new content and art on the owner's call.
   - `world.save` refuses on the debug world: it names the loop-generated
     `sheddingRack1` as a parent, which `shedding.puck` does not export. Note
     that `world.save` writes the world's source when it succeeds, so never run
-    it as a read against a working tree.
+    it as a read against a working tree;
+  - the `player.cycle` documentation calls it "the pad-Start gesture"
+    (`PlayerRoster.cs:1253`), but nothing under `worlds/` binds it.
 - [high] The trees read as inflatable toys (owner's walkthrough, the lawn).
   - Canopies are a few smooth, drooping blended lobes, with no branch
     structure, leaf clumps, gaps or silhouette breakup.
@@ -3177,7 +3258,7 @@ Monitor hook check remain supporting work alongside the landscape priority.
   capabilities says it is unprobed. Until it is, the main checkout tracks the
   integration branch.
 
-- After the first settle window: give Antigravity (Gemini Argon) a fair
+- Once the current batch has landed: give Antigravity (Gemini Argon) a fair
   coding trial before deciding its role (the owner's direction: it has so far
   done research and reading only, so its numbers are checked before use). Two
   bounded issue fixes from this file, each in its own worktree with a

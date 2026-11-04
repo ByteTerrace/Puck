@@ -2,8 +2,8 @@
 
 This memo designs the release's shape from the player's side: where a session
 starts, what a player keeps, how a character moves between worlds, and how
-Start reaches a menu. It answers the fourteen gaps the
-[grounding](next-wave/ground-hub.md#6-what-a-design-must-fill) found, under
+Start reaches a menu. It answers the [fourteen gaps](#the-fourteen-gaps) between what Puck persists
+today and what the release needs, under
 [the owner's rulings](../decisions/play.md#the-game): the release launches from
 a hub, the player menu opens on Start, a character claims and a world clamps,
 exit to menu goes to the hub world, and there are two menu layers. It is design
@@ -87,7 +87,7 @@ identity template, so every world that imports the standard inherits it, and a
 release that wants another template overrides it by id. `WorldOwnedWorlds.Seed`
 reads that template; `IdentityBase` (`WorldOwnedWorlds.cs:617`), which returns
 the booted world unchanged, is deleted. Today an identity created in the debug
-world is 30,293,880 bytes [measured in the grounding]; under the template its
+world is 30,293,880 bytes (measured on a headless debug World); under the template its
 size is what the template authors plus what is written to it.
 
 An identity's preferences (bindings, the seat look) name the standard's input
@@ -129,8 +129,8 @@ identity is an owned document, so every save door has somewhere to land. A
 world that authors `playerDefaults.identities` (a test cast) still seeds them.
 
 **Rejected.** Keeping the stand-in until the player creates someone keeps two
-kinds of seated identity, one of which every save door refuses (the grounding's
-`identity.fact.set` refusal). Holding the player out of the world until a
+kinds of seated identity, one of which every save door refuses (`identity.fact.set`
+answers that the stand-in "is not an owned world here"). Holding the player out of the world until a
 character exists is a shell before the hub, which the owner ruled out.
 
 **Engine and standard.** Engine: mint on an empty account, delete the stand-in.
@@ -677,4 +677,4 @@ Fable's review findings are answered here, one by one, when the review lands.
 
 ---
 
-[Plans](README.md) · [The next wave](next-wave.md) · [Play decisions](../decisions/play.md#the-game)
+[Plans](README.md) · [Play decisions](../decisions/play.md#the-game)

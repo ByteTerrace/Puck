@@ -44,7 +44,7 @@ The research round read the code, and the plan rests on these facts:
   version advances (`SdfMeshIrradiance.RefreshLighting`, which now hashes the
   sky too). Before it, any light change restarted the trace and discarded every
   batch that landed after it, so the volume never published while the day's sun
-  moved ([step 0](#step-0-what-the-run-showed)).
+  moved ([step 0](#step-0-open-checks)).
 - The two former ray sets (128 or 96 Fibonacci radiance rays and 144 bounded
   depth rays) are one set of 144 octahedral rays at full reach.
 - Only static opaque draws cast into the volume (`SdfMeshIrradianceScene`
@@ -431,7 +431,7 @@ the frame thread records, which J1 does not reorder.
 
 | Step | Lane | Lands | Check on `worlds/debug` |
 |---|---|---|---|
-| 0. The Deck leg ([step 0](#step-0-what-the-run-showed)) | rendering, with a Deck leg | Today's CPU trace and frame timed on the Deck at High | Deck: `[sdf.mesh-gi] done … seconds=` at High and `host.frames` at `debug.go overlook` |
+| 0. The Deck leg ([step 0](#step-0-open-checks)) | rendering, with a Deck leg | Today's CPU trace and frame timed on the Deck at High | Deck: `[sdf.mesh-gi] done … seconds=` at High and `host.frames` at `debug.go overlook` |
 | 1. Direct light correct (landed but for the scale-following lengths, the back-plate lines and the terrain cascade; see [step 1's status](#step-1-status)) | rendering | The wrapped-diffuse query; `band(cosine) × visibility` with the penumbra kept, and toon keeping rim, reflections and AO ([cel shading](#cel-shading), decisions 1 and 2: the style layer per material with the world default); scale-following shading lengths; cascade coverage printed in `world.budget`; the terrain cascade with the terrain pass's step 7 | Indoors under the 100 klx sun at `debug.go gallery` with the Moth's wrapped skin past the terminator: no sunlit patch under a roof (`world.debug-view shadow`); the quarter-size Moth's back-plate lines gone; under a cel style the Moth's terminator shows the cascades' penumbra in `shadow` and her rim in the lit view while the floor beside her stays continuous; `valley-rim` shows ridge shadows on the far walls; stills at the sweep's hall stops compared tolerantly; the frame bar at every stop with the sun moving |
 | 2. Hits and relight (landed on the CPU but for the GPU relight, the sky transfer, the per-probe rescale and the exposure's GPU read; see [step 2's status](#step-2-status)) | rendering, principal-grade review | The merged hit buffer written by today's CPU trace; the GPU relight under `render.indirect.budget`; per-probe rescale; the sky transfer with its cosine term; the budget surface in `world.budget`, the counters and `world.lights`; the lockstep drain on the GPU; the exposure path's GPU read; the cel style's shadow band reading the volume's bounce and sky tint ([cel shading](#cel-shading), decision 3) | The day cycle at `debug.go gallery` and `overlook`: indirect light follows the sun with the age counter under the authored target and no `[sdf.mesh-gi] behind` line; a lamp switched by `gallery.lights.all` relights without a trace (`traced` unchanged, `relit` rises); under a cel style the hall's shadow band warms when the lamps come on and the lawn's cools under the open sky; `world.exposure` continuous across the atrium's arch; the frame bar across the cycle on all three; a lockstep still of one tick repeats across two Worlds within the noise |
 | 3. GPU trace hits | rendering, GPU leg on both backends and the Deck | The trace-hits interface with both legs; rigid bodies cast; the CPU trace deleted once a leg holds on all three | A body posed under a lamp darkens the floor in `world.debug-view indirect`; a `world.reload` that removes a wall re-traces its closure (B1's check) in tens of milliseconds amortized (`[sdf.mesh-gi]` traced against the window); the cold boot's GI seconds against the CPU trace's; thin-wall stills (teal corner, stairwell flight B) compared tolerantly with step 2's; the Deck decides the leg |
@@ -448,15 +448,15 @@ scheduling, B1 narrowing what a scene change re-traces), the GI step keeps its
 unit and the job system supplies the policy, so neither waits on the other
 needlessly.
 
-## Step 0: what the run showed
+## Step 0: open checks
 
 The day cycle is standard data (`dayCycle` in `worlds/standard/skies.puck`,
 expanded by `worlds/debug/day.puck`); writing `day` moves the time and its
 advance holds the sun (`worlds/debug/debug.md`, "Time of day"). The hold is
 `world.row.set`, which no authored command may run; a bindable hold needs a
-rule effect that writes a row's advance. The run's three findings (a moving
-sun froze GI, the lighting key left out the sky, a light change re-traced
-depth) are what step 2 fixed. Still open from it:
+rule effect that writes a row's advance. Step 2 fixed the step's three
+findings (a moving sun froze GI, the lighting key left out the sky, a light
+change re-traced depth). Still open:
 
 - The resolve pass read far above the
   [GPU cost reference](../../.claude/skills/rendering/references/gpu-cost.md)'s
