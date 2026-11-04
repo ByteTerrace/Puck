@@ -344,10 +344,13 @@ direction: concurrent whole-solution builds exhaust a machine's memory.
   checks.
   Several run at once (the owner's direction: don't over-serialize for
   memory). Concurrency is set by measured load, not a fixed count (the
-  owner's direction): the lead samples free memory, CPU and live compilers and
-  Worlds while lanes run, adds lanes while there is headroom (writers spend
-  most of their time reading, not building), and holds or sheds them when free
-  memory runs low. The hard limits are one heavy integration job and one GPU
+  owner's direction): the lead samples available memory, commit charge, CPU
+  and live compilers and Worlds while lanes run, adds lanes while there is
+  headroom (writers spend most of their time reading, not building), and holds
+  or sheds them when memory runs low. Commit charge against the commit limit is
+  the line that matters: allocations fail at the limit while physical memory
+  can still look free. A windowed debug World grows past ten gigabytes, so a
+  GPU lane closes its World between capture batches. The hard limits are one heavy integration job and one GPU
   leg at a time. A windowed debug World holds a large share of
   the machine's memory within a minute of boot (`host.memory` reads it), so
   only a couple of building lanes fit beside one. Keep windowed capture
