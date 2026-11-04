@@ -106,7 +106,10 @@ public sealed class WorldMachineCommandModule(IWorldConsoleAuthority authority) 
 
                 foreach (var name in names) {
                     if (server.Machines.InstanceState(name: name) is not { } state) {
-                        return CommandResult.Error(output: $"[machine.state: no machine '{name}']");
+                        return NoMachine(
+                            instance: name,
+                            verb: "machine.state"
+                        );
                     }
                     found = true;
                     echo = echo.Head(head: name).Field(
@@ -420,6 +423,8 @@ public sealed class WorldMachineCommandModule(IWorldConsoleAuthority authority) 
             verb: "machine.swap"
         );
     }
+    // The one refusal for an instance name no live machine carries; machine.state with no name lists the valid ones.
+    private static CommandResult NoMachine(string verb, string instance) => CommandResult.Error(output: $"[{verb}: no machine '{instance}' - machine.state lists them]");
     // Lists a live machine's folders as they stand now: the host's current declaration, so a swap lists against the
     // content it runs, and the disk as it is, so a folder that appeared, emptied or vanished since the last listing
     // shows it.
@@ -436,7 +441,10 @@ public sealed class WorldMachineCommandModule(IWorldConsoleAuthority authority) 
             comparisonType: StringComparison.Ordinal
         )) is not { } live) {
             machine = null!;
-            failure = CommandResult.Error(output: $"[{verb}: no machine '{instance}']");
+            failure = NoMachine(
+                instance: instance,
+                verb: verb
+            );
             return false;
         }
         machine = live;
