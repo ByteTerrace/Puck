@@ -18,7 +18,7 @@ data costs.
 | Does this body allocate? | `AllocationWindow.Least`, `.Measure`, `.Total` ([`AllocationWindow`](../../../../src/Puck.Abstractions/Counting/AllocationWindow.cs)) | Least bytes over up to 16 windows, naming the sampled types when every window allocated. |
 | Which stacks allocate in a running World? | `dotnet-trace collect -p <pid> --profile gc-verbose`, then `dotnet-trace convert --format speedscope` | Allocation ticks with stacks and the GC's own events; a commit names types and MiB per window from it. |
 | Which loop costs the frame? | `dotnet-trace collect -p <pid> --profile dotnet-sampled-thread-time` | Sampled frame-thread stacks; charge `Thread.PollGC` samples to the caller's loop ([review discipline](../SKILL.md#review-discipline)). |
-| Is it cache misses or stalls? | `AMDuProfPcm -m ipc,l1,l2,cache_miss -c core=<n> -C -- <program>` on an AMD CPU (`C:/Program Files/AMD/AMDuProf/bin`; metric names from its `-h`) | Per-core IPC and miss counts for a pinned harness. |
+| Is it cache misses or stalls? | `AMDuProfPcm -m ipc,l1,l2,cache_miss -c core=<n> -C -- <program>` on an AMD CPU (`<AMDuProf install>/bin`; metric names from its `-h`) | Per-core IPC and miss counts for a pinned harness. |
 
 Take counts first and timings beside them on a quiet machine, as the
 [skill](../SKILL.md) says. A pause time on a loaded machine is an observation,

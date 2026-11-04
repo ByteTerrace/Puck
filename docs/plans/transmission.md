@@ -484,7 +484,7 @@ refresh in one frame.
 The exit layer's baseline, read at four standard stops on both backends with
 the day cycle running: on the RTX 4070 the three cascades together already
 reach or pass the RTX 2060's 1.5 ms budget below at every stop but the Vulkan
-rim, between about 0.9 and 3.4 ms, and the `surface` pass costs 0.4 to 0.9 ms.
+rim, and the `surface` pass costs under a millisecond.
 At the stage the far cascade draws five times the near cascade's casters for
 2.4 times its vertices; at the meadow every cascade draws the blades, about
 8,500 draws against the mesh pass's 3,846. Each cascade issues three indirect

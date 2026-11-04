@@ -6,10 +6,10 @@ two-phase depth-occlusion test over counted indirect draws
 ([the raster decision](../decisions/rendering.md#a-raster-pass-draws-only-what-it-can-show),
 [frame rendering](../rendering/sdf/handbook/frame-rendering.md)). R2 moved that
 selection onto the GPU without reducing the work: the meadow still issues one
-command per blade part, 4,215 of them for 288 distinct geometries. The lead
-ran a research round across GPU-driven pipeline architecture; instancing,
-foliage and density at scale; and recent and SDF-specific work, and the three
-lines of research agree on the same order. This plan turns that agreement into decisions, says how each serves an
+command per blade part, thousands of them for a few hundred distinct geometries.
+A research round across GPU-driven pipeline architecture; instancing,
+foliage and density at scale; and recent and SDF-specific work agrees on one
+order. This plan turns that agreement into decisions, says how each serves an
 author's scene, names what the round found missing, records what was rejected
 and why, and orders the build as lanes checked on the running debug world.
 
@@ -45,9 +45,9 @@ in the tree.
   pixel band and per-draw level history on the GPU and removes CPU `Choose`.
 - **Every phase writes one command per candidate, empty or not**, and sets its
   count to every candidate (`Assets/Shaders/Sdf/passes/sdf-mesh-occlusion.comp.hlsl:184-192`;
-  the same on R2). On R2 the glass pass read 0.182 ms on the GPU for two real
-  draws among 7,578 candidates, against 0.012 to 0.017 ms on the CPU path:
-  about 22 ns per candidate for selection and the empty-command walk. The
+  the same on R2). On R2 the glass pass costs more on the GPU for a couple of real
+  draws among thousands of candidates than the CPU path did: tens of
+  nanoseconds per candidate for selection and the empty-command walk. The
   opaque pass pays it twice and each cascade once.
 - **The meadow** (`debug.go meadow`) holds 1,994 two-part blades: 4,004
   dynamic slots and 4,215 retained draws from 288 geometries, 14.6 draws per
@@ -136,7 +136,7 @@ share of the Deck's 22.2 ms, put V3 and V4 ahead of V2 on that device.
 
 M1 ran on a quiet RTX 4070 at the highest quality with the day cycle running,
 cadence off and GPU timing on, once the bakes had settled. Direct3D 12 and Vulkan
-agree within a few percent.
+agree closely.
 
 A thread-time trace finds the frame thread busy all the time. Within produce,
 the largest costs are CPU field queries: the creation effectors' surface probes
@@ -248,7 +248,7 @@ Kuth et al., "Real-Time Procedural Generation with GPU Work Graphs", HPG 2024
 (<https://gpuopen.com/download/Real-Time_Procedural_Generation_with_GPU_Work_Graphs-GPUOpen_preprint.pdf>,
 Figure 11), coalesce 79,710 single-instance draws into 965 and cut render time
 from 27.74 to 0.62 ms on an RX 7900 XTX. Two limits keep that from transferring:
-their baseline costs about 350 ns a draw against R2's 22 ns per empty
+their baseline costs about 350 ns a draw against R2's tens of nanoseconds per empty
 candidate, so the 45-fold ratio is theirs, not Puck's; and their coalescing is
 unordered ("the element order differs every frame"), which Puck's stable order
 forbids, hence a scan rather than unordered appends.
@@ -329,7 +329,7 @@ limit.
    lowering choice the program certifies, not a second mesher of fields.
 2. **A faster error-aware simplifier** in place of `SdfMeshCollapse`, held to
    Puck's measured per-material, crease and normal bounds, measured against
-   the collapse's 318 of 1,006 bake thread-seconds in the measured run
+   the collapse's share of bake thread-seconds
    ([packet](open-items.md#bake-proportional-to-change)) and its
    `puck mesh audit` scores.
 3. **Field-derived coarse levels** only as a bake experiment on solid meshes:
@@ -353,7 +353,7 @@ clusterizer is most of the runtime, and Puck's bounds must be re-checked. The
 estimate is tens of thread-seconds for the collapse's work, not a hundredfold
 cut. A coarse lattice still pays crossings, contour and answer per surface cell,
 roughly a third of the fine stages' cost, so by the round's estimate
-field-derived levels save about 130 thread-seconds at best, not 310.
+field-derived levels save well under the collapse's whole share at best.
 
 ### V4. Raster: an early-depth variant and a packed visibility target
 
@@ -538,12 +538,12 @@ times are taken in the lead's settle windows, never by a lane under load.
 | M. Measure | the lead, in a settle window | M1 and M2 as above; the result orders V1 against V2 and V3/V4 against V2 | `host.frames` and `world.gpu-timing timeline` at `debug.go meadow`, three legs, both backends; mesh and cascade time with counts on the 2060 and at the Deck's resolution |
 | R2. GPU selection | rendering (the R2 lane) | Its Vulkan and validation legs | GPU-based validation clean on Direct3D 12 and the validation layer clean on Vulkan; stills at the lobby, the rim, the gallery and the meadow compared tolerantly with the CPU `Choose` build |
 | V2a. Rate holds on placements | rendering | Placement roots in the rate mechanism | `world.debug-view rates` tints far meadow blades by tier; `host.frames` at `debug.go meadow` against M1's leg 1; a presented burst of eight frames shows gusts continuous and roots planted |
-| V1a. Ordered compaction | rendering | Survivors compacted in staged order, the count the survivors, single-instance commands | Commands executed equal draws in `world.counters gpu pass sdf.world$mesh`; glass GPU time near the CPU path's 0.012 to 0.017 ms; stills compared tolerantly |
+| V1a. Ordered compaction | rendering | Survivors compacted in staged order, the count the survivors, single-instance commands | Commands executed equal draws in `world.counters gpu pass sdf.world$mesh`; glass GPU time near the CPU path's; stills compared tolerantly |
 | V1b. Buckets and stable identity | rendering, principal-grade review | The instance/geometry split, buckets, the vertex ABI on both backends, history by instance identity, every consumer in V1's table moved, the budget counters | At `debug.go meadow`: commands near the visible (geometry, level) count; `world.view.pick` on a blade names that blade; `world.debug-view motion` still on held blades; a presented burst shows no tie flicker in `world.debug-view material-id`; a body straddling the garden portal at `debug.go portals` clipped on both sides; `world.debug-view report colliders --json` still compares against the baked mesh (its `coverage.comparisons` counts mesh witnesses after bakes settle); a teleport and back shows no missing draws |
 | V2b. Retained instance updates | rendering | `Dress` without a rebuild; uploads by change | `dotnet-trace` of the frame thread at the meadow: no list rebuild and record staging proportional to moved slots; `world.reload` of one blade geometry rebakes one mesh and every instance follows |
 | V2c. Authored motion on the GPU | rendering, principal-grade review | The eligibility test, the compiled kernel, program-derived bounds, previous pose on the GPU, CPU evaluation for picks | At the meadow with wind on: blades move as before (a presented burst against V2b's); `world.debug-view motion` shows blade motion and none on still ground; a blade pick lands on the drawn blade; swept-box inflation reported; an author's non-foliage presentation program in a scratch world runs the same path |
 | V3a. Lossless lowering | rendering | Collinear runs on isolated meshes; exact lowering where the program proves it; the rendering skill's one-contouring rule rewritten to name the lowering choice | `puck mesh audit` clean on the blade groups; triangles per blade part against M2's; cold bake thread-seconds per stage; meadow stills compared tolerantly |
-| V3b. Faster simplifier | rendering | An error-aware simplifier under Puck's bounds beside `SdfMeshCollapse`, keeping the better | Land-stage thread-seconds against 318; `puck mesh audit` scores no worse; `world.detail 1` and `2` stills at the gallery compared tolerantly |
+| V3b. Faster simplifier | rendering | An error-aware simplifier under Puck's bounds beside `SdfMeshCollapse`, keeping the better | Land-stage thread-seconds against the collapse's; `puck mesh audit` scores no worse; `world.detail 1` and `2` stills at the gallery compared tolerantly |
 | V3c. Field-derived levels | rendering, bake experiment | Coarse levels contoured from the field for large static unions only | Bake thread-seconds and audit scores against V3b's on the hall's unions; kept only if both win |
 | V4a. Early-depth variant | rendering | The non-fading pipeline with `[earlydepthstencil]` | Mesh-pass GPU time and shaded fragments at the meadow on the 2060 and at the Deck's resolution; the faded avatar still reveals the room behind her at `debug.go stage` |
 | V4b. Packed visibility target | rendering | The `uint2` target and depth reconstruction | `surface` and `pyramid` GPU time against V4a's; AO and stills compared tolerantly at the gallery and meadow |

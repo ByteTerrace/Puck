@@ -2549,8 +2549,8 @@ versions, manifests (by pin), scenario lists or tick counts.
 Exit codes: `record` exits 0 when it has written the stream and 2 when the
 manifest or a scenario cannot be read or run, or a scenario moves a component it
 exercises nowhere. `compare` exits 0 with no
-divergence, 1 on a divergence and 2 on a refusal. The shipped manifest records
-in seconds, one hash per component per tick. Every
+divergence, 1 on a divergence and 2 on a refusal. Recording the shipped manifest takes
+seconds and writes one hash per component per tick. Every
 per-tick component but the topologies is exercised by some scenario. The
 topologies are declaration that nothing at run time changes, so no scenario can
 move them; a law holds instead that a world declaring one folds it and that the

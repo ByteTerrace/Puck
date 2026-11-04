@@ -230,16 +230,16 @@ work until their stills.
 Risks:
 
 - **Bake identity churn.** Step 3 edits the field kernel, which rebakes every
-  mesh, and a cold bake of about two thousand groups already takes over two
-  minutes on Direct3D 12 and nearly four on Vulkan, against the one-minute bar.
+  mesh, and a cold bake of about two thousand groups already takes several
+  times the one-minute bar on both backends.
   Batch step 3 behind the
   [bake fundamental](open-items.md#bake-proportional-to-change) and land kernel
   edits together. A relief edit afterwards rebakes its own tiles, nearest first.
 - **Field contact cost.** At the rim the certified solve reads the field a
-  few dozen times a tick, each read about 14 samples of six octaves, and an
-  identical-box cache spares most of its box-bound queries; relief contact is
-  about 7 % of a headless tick (about 16 % with the relief charged its whole
-  reach). The next cut is the job system's parallel contact work.
+  few dozen times a tick, each read a few samples of six octaves, and an
+  identical-box cache spares most of its box-bound queries; relief contact is a
+  small share of a headless tick. The next cut is the job system's parallel
+  contact work.
   Contact keeps every geometric octave and its declared precision.
 - **Loose fields.** Warp and amplitude raise the step factor, slowing the bake
   and the sweep; the erosion mask and relative cap hold it.

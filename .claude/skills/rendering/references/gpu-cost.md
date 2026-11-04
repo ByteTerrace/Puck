@@ -354,8 +354,8 @@ large blocks.
   `UNORDERED_ACCESS` and transitions before every reader
   ([kernels](kernels.md#buffer-hazards)).
 - **Allocate in blocks.** Both backends bind resources at offsets of 64 MiB
-  blocks (`VulkanMemoryArena`, `DirectXHeapArena`), which cut a debug-world
-  boot from hundreds of native allocations to a few dozen on both backends.
+  blocks (`VulkanMemoryArena`, `DirectXHeapArena`), which cut the native
+  allocations of a debug-world boot by an order of magnitude on both backends.
   While every Vulkan resource was its own allocation, a crossing's submissions
   could block for tens of milliseconds inside `vkQueueSubmit`; the rendering
   plan attributes that to residency paid on first reference.

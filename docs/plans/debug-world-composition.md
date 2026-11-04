@@ -232,7 +232,7 @@ no files and run beside each other.
 
 | Lane | Place or seam | Runs | Check on `worlds/debug` |
 |---|---|---|---|
-| C1 The floor's ground cover (done, [as built](#c1-as-built)) | The meadow's families spread west across the south lawn to the spawn and the approach; the lawn's painterly turf, paths, boulders, shrubs, flowers and trees from the standard | Now, beside J1 and the bake and memory work; it is R2's and R1's forcing load | `debug.go stage`, a full turn and a walk to the entrance: grouped trees, boulders and paths read in B's values on both backends; `world.budget` and `world.counters` draws and bake groups against the meadow's 7,578 draws and 6,183 groups; `host.frames` at the spawn before and after; `puck mesh audit --cpu` for the new families |
+| C1 The floor's ground cover (done, [as built](#c1-as-built)) | The meadow's families spread west across the south lawn to the spawn and the approach; the lawn's painterly turf, paths, boulders, shrubs, flowers and trees from the standard | Now, beside J1 and the bake and memory work; it is R2's and R1's forcing load | `debug.go stage`, a full turn and a walk to the entrance: grouped trees, boulders and paths read in B's values on both backends; `world.budget` and `world.counters` draws and bake groups against the meadow's; `host.frames` at the spawn before and after; `puck mesh audit --cpu` for the new families |
 | C1a Continuous forest | Connected southern woodland, road, overlapping canopy, shrubs and grass; reusable standard families, debug-owned layout | The dense-landscape plan, L0 to L5; grow the workload once sharing and stable identity support it | Under-canopy walk, road bend, relieved bank, overhead and nested views; area/density work counts, full frame and memory/bake targets on both backends |
 | C2 The hall in B's vocabulary | The shell as stepped cream and ochre modules on teal arches with the lift tower, shades and roof terraces; indoors the three stacked east wings and the atrium's arch; every function kept (four floors, stairs, lift, exhibits, portals, tables) | Parallel with C1; the blockout first, cladding after the terrain pass's step 6 lands its palette | `debug.go gallery`, `lift`, `stairs`, `boardroom`, `portals`: every `debug.go` spot and traversal goal still reached; the hall's tests pass; stills at the sweep's hall stops compared tolerantly with the build before |
 | C3 Water | The falls, the stream, the bridge and the pool, with the medium and the flow lattice; a swim hold the Moth refines in the standard | After C1 (the banks are its families); the field workload | `debug.go pool` (new) and a swim: depth rows change with depth, the body floats and surfaces; the flow lattice's source tops up and spills (`world.counters`); from the spawn the falls show on the north-west wall; the stream's phase is continuous across its creations |
@@ -262,27 +262,24 @@ turf masses. The floor is the standard's `paintedGround` with eight painted
 paths. Tree form follows the owner's answer: the families mix by area and the
 swap is a group's `kind` in `lawnGroups`.
 
-C1's cost was read against the meadow's workload on D3D12 and Vulkan, with the
-authored 1280×900 view, an empty cache and a GPU lease per leg. Cold bake is the
-`world` residency's `[sdf.mesh-bake] done … seconds`; frames are `host.frames`
-standing and walking at `debug.go stage` and `debug.go meadow`; counts are
-`world.counters gpu summary` and `world.budget`; memory is `host.memory` once the
-bakes settle.
+C1's cost is read against the meadow's workload on both backends, from an empty
+cache, with a GPU lease per leg. Cold bake is the `world` residency's
+`[sdf.mesh-bake] done ... seconds`; frames are `host.frames` standing and walking
+at `debug.go stage` and `debug.go meadow`; counts are `world.counters gpu summary`
+and `world.budget`; memory is `host.memory` once the bakes settle.
 
-The lawn adds roughly a seventh more groups and about a quarter more baked
-triangles and mesh-region bytes, and raises cold bake by about half on D3D12 and
-more on Vulkan, so both stay far above the one-minute bar. The added unique bakes
-are the static rows, one each: a static copy bakes in world space, so copies never
-share ([the bake packet](open-items.md#bake-proportional-to-change)); the grass
-parts are dynamic and shared. The flower clump is a mound with heads and no
-millimetre stems, which `puck mesh audit --cpu` puts at about half the triangles
-the measured stems took. Produce and simulate rose even at the meadow, where the
-drawn work barely moved, because other lanes' builds loaded the machine between
-legs; the frame readings are not a quiet baseline and want a back-to-back reading
-in a settle window. Captures at the stage, the turn and the lawn walk read B's
-grouped trees, terracotta boulders and paths alike on both backends, and
-`puck test --reproduce` passes on meadow-tests (with a walk into a lawn boulder),
-hall-tests and noclip-tests.
+The lawn adds a modest share of groups and a larger share of baked triangles and
+mesh-region bytes, and raises cold bake materially on both backends, so both stay
+far above the one-minute bar. The added unique bakes are the static rows, one
+each: a static copy bakes in world space, so copies never share
+([the bake packet](open-items.md#bake-proportional-to-change)); the grass parts
+are dynamic and shared. The flower clump is a mound with heads and no millimetre
+stems, which `puck mesh audit --cpu` shows costs far fewer triangles than the
+stems did. Frame readings taken while other lanes' builds load the machine are
+not a baseline: a quiet baseline wants a back-to-back reading in a settle window.
+Captures at the stage, the turn and the lawn walk read the grouped trees,
+terracotta boulders and paths alike on both backends, and `puck test --reproduce`
+passes on the meadow, hall and noclip scenarios.
 
 ## The owner's answers
 

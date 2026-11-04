@@ -67,9 +67,8 @@ off and GPU timestamps on; a reading records device resolution and every setting
 Point-only superellipsoid certificates, added to the existing pruning walk,
 change neither shape evaluation nor interval certificates. In interleaved
 comparisons against an A/A control on D3D12 they cut visited point instructions
-by about two thirds and exact power-memo misses by about seven times, and shortened
-instrumented elapsed time by roughly a tenth. A Vulkan pair shows the same
-instruction reduction but no elapsed win. The candidate creates no point scratch,
+and exact power-memo misses sharply and shortened instrumented elapsed time. A
+Vulkan pair shows the same instruction reduction but no elapsed win. The candidate creates no point scratch,
 certificate or cull payload during the measured window. Process point-call totals
 vary slightly between reference legs while the sampled semantic inputs match, so
 do not describe every process tap as invariant. GPU summary reads are endpoint
@@ -78,9 +77,9 @@ changed or missing ledger domains. Normal-paced timing remains a separate check.
 
 **Memory remains a budget problem.** The residency owns one shared bake-result
 destination, borrowed by its views with fence-safe ownership refresh. Against
-per-view destinations it cuts the backend's device-local bytes held by about
-two fifths, its device-local peak by more than half and process-private bytes by
-about a quarter, with the selected authority/presentation samples unchanged.
+per-view destinations it cuts the backend's device-local bytes held, its
+device-local peak and process-private bytes, with the selected
+authority/presentation samples unchanged.
 These layers overlap and are not additive. The semantic bake identity is
 unchanged, and focused repository laws cover backing refresh, exact readback
 bytes, publication/fence lifetimes and isolated residency ownership. A windowed
