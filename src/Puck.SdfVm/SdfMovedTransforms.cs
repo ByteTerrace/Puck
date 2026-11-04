@@ -63,33 +63,21 @@ public sealed class SdfMovedTransforms : IWorkCounterSource {
     // The packed size of one slot in the engine's table (three float4 rows), which is what a compare stands for.
     private const int PackedSlotBytes = (sizeof(float) * 12);
 
-    private readonly bool[] m_everything = new bool[History];
-    private readonly GpuUploadRuns[] m_frames = new GpuUploadRuns[History];
-    private readonly GpuUploadRuns[] m_reseats = new GpuUploadRuns[History];
-    private readonly long[] m_serials = new long[History];
+    private readonly GpuChangedRows m_changes = new(history: History, trackReseats: true);
 
     private WorkCount m_comparedBytes;
     private WorkCount m_owedRows;
     private WorkCount m_packedRows;
     private bool m_repacking;
-    private long m_serial;
-    private int m_slot;
-    private int m_tableRows;
-
-    /// <summary>Initializes a new instance of the <see cref="SdfMovedTransforms"/> class.</summary>
-    public SdfMovedTransforms() {
-        for (var index = 0; (index < History); index++) {
-            m_frames[index] = new GpuUploadRuns(capacity: GpuRegion.MaxCopyRuns);
-            m_reseats[index] = new GpuUploadRuns(capacity: GpuRegion.MaxCopyRuns);
-        }
-    }
 
     /// <summary>Gets a value indicating whether the current frame packs every slot: it owes every slot, or it repacks the
     /// whole table and owes only the rows that repack changed (<see cref="BeginRepack"/>). Either way the host has parked
     /// the table and every emitter packs every owner.</summary>
-    public bool Everything => (m_everything[m_slot] || m_repacking);
+    public bool Everything => (m_changes.Everything || m_repacking);
     /// <summary>Gets the current frame's serial, starting at 1 for the first frame; 0 before any frame began.</summary>
-    public long Serial => m_serial;
+    public long Serial => m_changes.Serial;
+    /// <summary>Gets the logical retained array payload of the row journal, excluding object and array headers.</summary>
+    public long StorageBytes => m_changes.StorageBytes;
     /// <inheritdoc/>
     public string Name => SourceName;
     /// <inheritdoc/>
@@ -102,15 +90,7 @@ public sealed class SdfMovedTransforms : IWorkCounterSource {
     /// <param name="everything">Whether the frame owes every slot of the table.</param>
     /// <param name="tableRows">The table's length in slots.</param>
     public void Begin(bool everything, int tableRows) {
-        ArgumentOutOfRangeException.ThrowIfNegative(value: tableRows);
-
-        m_serial++;
-        m_slot = ((int)(m_serial % History));
-        m_everything[m_slot] = everything;
-        m_frames[m_slot].Clear();
-        m_reseats[m_slot].Clear();
-        m_serials[m_slot] = m_serial;
-        m_tableRows = tableRows;
+        m_changes.Begin(everything: everything, rows: tableRows);
         m_repacking = false;
 
         if (everything) {
@@ -218,36 +198,25 @@ public sealed class SdfMovedTransforms : IWorkCounterSource {
     public void Owe(int start, int count) {
         if (
             (count <= 0) ||
-            m_everything[m_slot] ||
-            m_repacking
+            Everything
         ) {
             return;
         }
 
-        m_frames[m_slot].Add(
-            length: count,
-            start: start
-        );
+        m_changes.Owe(count: count, start: start);
         m_owedRows.Add(amount: count);
     }
     // Owes a range whose slots hold another owner's poses than they did, and reseats it.
     private void Reseat(int start, int count) {
         if (
             (count <= 0) ||
-            m_everything[m_slot] ||
-            m_repacking
+            Everything
         ) {
             return;
         }
 
-        Owe(
-            count: count,
-            start: start
-        );
-        m_reseats[m_slot].Add(
-            length: count,
-            start: start
-        );
+        m_changes.Owe(count: count, start: start, reseat: true);
+        m_owedRows.Add(amount: count);
     }
     /// <inheritdoc/>
     public bool TryRead(WorkKind kind, out long value) {
@@ -283,49 +252,7 @@ public sealed class SdfMovedTransforms : IWorkCounterSource {
         return false;
     }
 
-    // Unions every range the frames after `since` owed into `into`, and adds the ranges they reseated to `reseated`
-    // without clearing it. False when the consumer is owed everything: one of those frames owed everything, or `since`
-    // has fallen out of the history.
-    internal bool TryCollect(long since, GpuUploadRuns into, GpuUploadRuns reseated) {
-        into.Clear();
-
-        if (since >= m_serial) {
-            return true;
-        }
-
-        if (
-            (since <= 0L) ||
-            ((m_serial - since) >= History)
-        ) {
-            return false;
-        }
-
-        for (var serial = (since + 1L); (serial <= m_serial); serial++) {
-            var slot = ((int)(serial % History));
-
-            if (m_everything[slot]) {
-                return false;
-            }
-
-            var frame = m_frames[slot];
-
-            for (var run = 0; (run < frame.Count); run++) {
-                into.Add(
-                    length: frame.Length(index: run),
-                    start: frame.Start(index: run)
-                );
-            }
-
-            var seats = m_reseats[slot];
-
-            for (var run = 0; (run < seats.Count); run++) {
-                reseated.Add(
-                    length: seats.Length(index: run),
-                    start: seats.Start(index: run)
-                );
-            }
-        }
-
-        return true;
-    }
+    // Captured frames collect through their own serial, never through a later producer frame.
+    internal bool TryCollect(long since, long through, GpuUploadRuns into, GpuUploadRuns? reseated = null) =>
+        m_changes.TryCollect(since: since, through: through, into: into, reseated: reseated);
 }

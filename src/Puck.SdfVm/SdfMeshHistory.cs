@@ -48,12 +48,20 @@ public sealed class SdfMeshHistory {
     public static WorkKind DressTopologyBuilds { get; } = new(name: "sdf.instances.dress.topology-builds", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Counts retained dressed records rewritten by pose or metadata changes.</summary>
     public static WorkKind DressedRecordsUpdated { get; } = new(name: "sdf.instances.dress.records-updated", unit: "count", workClass: WorkClass.Pacing);
-    /// <summary>Counts retained bindings available to a dress call's optional motion scan, including skipped scans.</summary>
+    /// <summary>Counts retained bindings available to a dress call's pose update, including unchanged bindings.</summary>
     public static WorkKind DressPoseCandidates { get; } = new(name: "sdf.instances.dress.pose-candidates", unit: "count", workClass: WorkClass.Pacing);
-    /// <summary>Counts pure binding motion checks actually performed before motion or topology requires reposing.</summary>
-    public static WorkKind DressPoseChecks { get; } = new(name: "sdf.instances.dress.pose-checks", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Counts retained bindings actually visited to update their draw pose.</summary>
+    public static WorkKind DressBindingsVisited { get; } = new(name: "sdf.instances.dress.bindings-visited", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Counts object-to-world matrix constructions while dressing, before reuse by surfaces or chunks.</summary>
+    public static WorkKind DressMatricesComputed { get; } = new(name: "sdf.instances.dress.matrices-computed", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Counts draw rows walked to refresh the staging owner's mesh claims.</summary>
+    public static WorkKind StagingClaimRecords { get; } = new(name: "sdf.instances.staging.claim-records", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Counts draw rows submitted to the mesh placement planner.</summary>
+    public static WorkKind StagingPlanRecords { get; } = new(name: "sdf.instances.staging.plan-records", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Counts changed-run rows checked for mesh replacement before reusing the placement plan.</summary>
+    public static WorkKind StagingMeshChecks { get; } = new(name: "sdf.instances.staging.mesh-checks", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Gets process-lifetime observations from every staged table. These counts never enter simulation state.</summary>
-    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.instances", kinds: [Observed, Seeded, Retired, MatricesChanged, MatrixBytesChanged, HistoryRowsCopied, HistoryBytesCopied, HistoryRequestBytes, HistoryDispatches, RecordsPacked, RecordBytesPacked, NormalMatricesComputed, SelectionBoxesComputed, RecordsCompared, RecordsChanged, PackedWordsChanged, DressTopologyBuilds, DressedRecordsUpdated, DressPoseCandidates, DressPoseChecks]);
+    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.instances", kinds: [Observed, Seeded, Retired, MatricesChanged, MatrixBytesChanged, HistoryRowsCopied, HistoryBytesCopied, HistoryRequestBytes, HistoryDispatches, RecordsPacked, RecordBytesPacked, NormalMatricesComputed, SelectionBoxesComputed, RecordsCompared, RecordsChanged, PackedWordsChanged, DressTopologyBuilds, DressedRecordsUpdated, DressPoseCandidates, DressBindingsVisited, DressMatricesComputed, StagingClaimRecords, StagingPlanRecords, StagingMeshChecks]);
 
     private struct Cell {
         public object? Key;

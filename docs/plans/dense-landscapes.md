@@ -220,8 +220,9 @@ Source citations describe the baseline head; reread them before implementation.
   ordered compaction and geometry/detail buckets.
 - Dressing now retains geometry/copy topology and picking metadata, with one
   membership index shared with bake demand
-  ([SdfMeshDresser.Dress](../../src/Puck.SdfVm/SdfMeshDresser.cs)). Shared pose
-  derivation and actual dirty ranges remain the next CPU step. Placed animations miss body rate holds
+  ([SdfMeshDresser.Dress](../../src/Puck.SdfVm/SdfMeshDresser.cs)). Captured dirty
+  ranges now reach GPU staging; the census below shows mostly independent wind
+  poses, so shared matrix caching alone cannot remove that work. Placed animations miss body rate holds
   ([WorldCreationInstances.Pack](../../src/Puck.World.Client/WorldCreationInstances.Pack.cs),
   lines 246-249).
 - Meshes with skin members have no culling box
@@ -834,3 +835,126 @@ remain unrelated. Cross-family review remains owed under the recorded launch
 restriction. Neither the frame bar, cold-bake bar nor target-device qualification
 is satisfied; the native legs are operational measurements, not controlled speedup
 claims or a highest-quality qualification.
+
+### Change-proportional draw propagation
+
+The next source audit separated real motion from avoidable fan-out. A production
+placement-only capture moves 5,488 distinct authored grass slots every step:
+3,988 meadow, 750 lawn and 750 forest. Across eight steps, 5,511–5,514 changed
+loaded chunk bindings use 5,507–5,509 distinct group poses. A once-per-slot matrix
+cache would avoid only four or five compositions per moving frame. Fixed copies
+have substantial surface/chunk fan-out but no steady motion in this capture.
+Those are placement-census counts, not the native World's additional body
+population. The earlier zero-motion harness was rejected: it had not installed
+the state mirror's initial bindings and advanced both the scene and creation-pool
+clocks. The corrected capture uses those production entry points.
+
+The native pre-change moving interval likewise counted 446,943 actual changed
+matrices, 311 seeds and 447,254 changed records against 632,394 record comparisons,
+with no topology rebuild. Its standing/moving windows averaged 22.79/52.51 ms.
+A separate twelve-second wind-active standing trace sampled 1.62 seconds inside
+draw staging, 0.69 inside dressing and 0.18 inside mesh-claim updates (inclusive,
+overlapping samples). This supports reducing repeated dependency walks without
+claiming that independent wind poses are unchanged.
+
+`GpuChangedRows` now owns the bounded row-history mechanism used by both
+`SdfMovedTransforms` and the dresser's output. Each captured frame carries its
+endpoint and every consumer retains its own cursor. The dresser's flat slot/copy
+adjacency arrays visit dependent bindings; exact changed draw runs flow to GPU
+staging. A complete staged roster whose changed rows retain their meshes keeps
+its mesh claims and arena placements. Missing, expired or full history,
+landing-filtered rosters and changed meshes refresh conservatively. Active or
+removed portal clipping currently publishes full draw changes. The same exact
+`SdfMeshDraw.SameStagedContent` comparison serves both dressing and staging.
+
+This adapts the dependency principle independently described by the
+[Khronos scene-graph tutorial](https://github.khronos.org/Vulkan-Site/tutorial/latest/Advanced_glTF/Scene_Graph_Hierarchy/02_engine_expansion.html)
+and [Magnum's transformation caching contract](https://doc.magnum.graphics/magnum/classMagnum_1_1SceneGraph_1_1Object.html):
+derive changes from actual dependencies and retain clean results. Puck already
+evaluates authored parent/part motion into slots. Its per-producer journals and
+nested-world consumers need no new global scene graph or feature-specific wind
+implementation. Nor does this replace its existing GPU indirect selection with
+instance buckets; that remains separate work.
+
+The actual old/new production placement frames match all packed draw bytes and
+public picking metadata across ten frames, including missing, expired and restored
+transform history and a zero-delta hold. Independent journal oracles pass 26,631
+checks, including 350 old/new transform-history frames. Two actual GPU-table
+instances match complete used records, compact previous matrices, pose revisions
+and host transfers through journal and full-list fallback paths over 33
+publications and 19 consumed states. Their total comparisons are 2,344 versus
+8,400; one moving row among 600 takes one comparison, while an empty dirty set
+still sends the required 36-byte history-settle request and then zero bytes on
+the next still frame. Coarsened runs include unchanged rows without losing any
+changed one. These are CPU/model proofs, not hardware raster or timing claims.
+
+The actual new build also preserves all 1,629 bake-closure members and the full
+bake identity. Journal runs allocate lazily and reuse their ring storage; flat
+reverse indexes avoid an object/list per slot. `world.residency` exposes logical
+transform/draw history, dresser scratch and consumer run bytes. Those values
+exclude object/array headers and overlap broader managed/process readings; they
+are not a unified physical-memory total or a scene-memory improvement claim.
+
+The native forest legs retain the previously recorded 1280×900 settings. D3D12
+measured 20.65 ms standing after returning inside and 47.54 ms over 67 moving
+iterations. Vulkan measured 22.31 ms standing, 54.79 ms over 59 moving iterations
+and 23.75 ms after returning inside. Camera-framed input again does not pin an
+identical trajectory/driver phase; these are operational readings, not a
+controlled speedup or highest-quality qualification. GPU timestamping was off,
+so this slice adds no fresh GPU-time claim. The RTX 4070 read P0/2925 MHz.
+
+| Moving-window work | D3D12 | Vulkan |
+|---|---:|---:|
+| Available / visited bindings | 685,644 / 485,190 | 604,980 / 428,132 |
+| Compared / changed GPU records | 482,716 / 482,716 | 425,932 / 425,932 |
+| Claim / placement-plan record walks | 0 / 0 | 0 / 0 |
+| Assigned record-field bytes | 70,969,792 | 62,272,764 |
+| History matrix rows / payload bytes | 466,271 / 29,841,344 | 411,408 / 26,330,112 |
+| History request bytes / dispatches | 14,040 / 152 | 12,504 / 134 |
+| Draw topology rebuilds | 0 | 0 |
+
+A root upload sample counted 2,073,048 host-visible bytes and 278,640 native
+copy bytes on D3D12, and 3,472,796/279,360 on Vulkan, each with four compute
+dispatches. These phase-specific samples and the separate history payload do not
+establish a transfer reduction against an unmatched baseline. Mesh-region
+used/held bytes were 1,645,185,516/1,862,270,976 on D3D12 and
+1,664,056,652/1,879,048,192 on Vulkan. Logical transform/draw history plus
+indexes/run scratch totalled 660,352 and 659,128 bytes respectively, excluding
+headers. Account-owned bytes were 1,605,882,314 and 1,593,560,581; process private
+bytes were 13,375,381,504 and 13,473,992,704. Backend cumulative, released and peak
+readings remain separate. These overlapping layers cannot be summed or treated
+as matched physical-memory savings.
+
+Both backends reused the store under the unchanged bake identity. The initial
+full-residency observations were 3.311/31.537 seconds; later small dynamic settles
+moved those milestones to 23.081/68.664 seconds. None is a cold-bake qualification.
+Both presented images show the connected canopy and understory, both resolve the
+Moth and `forest-tree-3-10`, and repeated wind readbacks advance. All owned Worlds,
+profilers and witnesses exited and released their leases. Fifteen focused
+regression cases passed. The final zero-consumer overload cleanup built with zero
+warnings/errors and the journal witness reran on that exact assembly; Vulkan ran
+it too. The cleanup build's 17m49.35s latency is filed with the build-performance
+packet. Cross-family review remains owed under the recorded launch restriction.
+
+The fresh Vulkan walk also counted 3,480 effector-probe requests, of which 3,360
+were skipped, four hit the answer cache and 116 missed. Shared marches attempted
+2,761 exact samples, with 438 gradient taps; the broader point evaluator performed
+33,323 evaluations and visited 26,904,581 instructions. Exact power memoization
+counted 6,169,065 hits and 4,293,826 misses, with no new memo payload allocations.
+A twelve-second movement-and-recovery trace samples 3.97 seconds in exact point
+queries: camera clearance 1.57, effectors 1.37 and contact sweeps 1.03 seconds;
+bound-query time is excluded from that split. Draw staging samples 0.86 seconds
+and creation packing 1.98 seconds. These inclusive sampled durations overlap and
+the trace includes recovery, so they are hotspot attribution, not per-frame
+timings. No evaluator constructor appears in the sampled stacks, which does not
+prove no construction occurred.
+
+This evidence puts shared field-query work ahead of assuming GPU record
+derivation alone closes the moving-frame gap. Measure the camera/contact/effector
+dependency and primitive work, preserving certified bounds and deterministic
+simulation results; do not fix only the unmeasured emission-cache frequency.
+Compiled/batched authored poses and GPU-derived matrices/normals/selection remain
+researched followups, with synchronous CPU consumers and history kept explicit.
+The preexisting noncopy-root reseat gap is the immediate correctness followup.
+Frame, cold-bake, wider-density, physical-footprint and target-device bars remain
+open.

@@ -202,7 +202,8 @@ Each waits on the owner: what the engine should do, how it looks and feels, and 
 ### Dense landscapes
 
 Owner: the lead, with performance, rendering and world-authoring owners per
-step · high · Next: reduce shared pose/history traffic, finish GPU instance
+step · high · Next: fix noncopy root-reseat history, reduce shared field-query
+work and pose/history traffic, finish GPU instance
 buckets and qualify the wider continuous forest under
 [L0, L0m and L1](dense-landscapes.md#implementation-order), including
 wind-deformed canopy GI semantics. The owner
@@ -213,9 +214,14 @@ proposal, counted-work metrics and implementation dependencies. Existing
 visibility, bake, memory, terrain and job-system packets own the mechanisms.
 Query/pose/driver counters, charged-memory snapshots, shared CPU/GPU surface
 history and a connected forest patch are implemented; wind stop/restore is
-  witnessed. Static-copy sharing and retained draw topology are implemented.
-  Next: finish measured query/staging improvements, GPU instance buckets, then
-  the wider forest and density/route qualification. The measured cold
+  witnessed. Static-copy sharing, retained draw topology and captured dirty-row
+  propagation through dressing and GPU staging are implemented. The pose census
+  establishes thousands of independent authored grass poses, so shared-slot
+  caching alone cannot remove the steady motion work. Fresh movement/recovery
+  sampling puts shared camera/contact/effector exact field queries ahead of draw
+  staging. Next: root-reseat correctness, shared query primitive/dependency work,
+  measured pose-program execution and GPU instance buckets, then density/route
+  qualification. The measured cold
 bake misses its bar; physical-memory and target-device qualification remain open.
 Cross-family review is owed: the session-launch hook refused the Claude reviewer
 from this Codex lead session; the supplemental review finding was fixed.
@@ -236,6 +242,18 @@ from this Codex lead session; the supplemental review finding was fixed.
   field/skin/material-cut changes invalidate it. The bake/dresser, sampler-readback
   and bake/view parameter boundaries are now implemented and witnessed; do not
   replace the remaining real dependency with a blacklist.
+  P2 · Owner: graphics/history owner · [medium, source-established; rendered
+  symptom unexecuted] A retained noncopy dynamic group's root reseat leaves its
+  stable mesh-history identity unchanged. `SdfWorldTables.CompletePreviousTables`
+  reseats previous dynamic slots but seeds mesh matrices only through the mesh
+  history's seed set. Root-only meshes are unskinned, and a skin's own-slot
+  winners also use the root matrix (`SdfMeshPathBake.Skinned`);
+  `frame/sdf-reprojection.hlsli` reads that previous matrix for entry-zero vertices
+  and its scale for member vertices. Reproduce a same-program/group/mesh/slot
+  noncamera pose cut, then propagate the existing slot-reseat provenance to mesh
+  matrix seeding and generation invalidation. Include unchanged-matrix reseats
+  and root-scale cuts. The rigid-copy epoch law and slot-reseat law separately
+  miss this combination; the gap predates the row-journal change.
 
 ### Engine job system
 
@@ -3066,6 +3084,20 @@ ordinary · Next: new content and art on the owner's call.
 Owner: the lead · ordinary · Next: address skill-readiness issues affecting
 the selected landscape lanes. The broader skill-eval program below and the
 Monitor hook check remain supporting work alongside the landscape priority.
+
+- [high, edit-to-running] A fresh landscape World artifact spent roughly 580
+  seconds building before boot, against the owner's 30-second edit bar. The
+  preceding incremental CLI build took 12.27 seconds; these different targets
+  and cache states are observations, not a controlled build comparison. A live
+  World.Client compiler stack was inside ILLink's data-flow lattice copying and
+  fixpoint walk. A later shared-compiler trace also reaches that analysis and
+  `StaleCaptureAnalyzer.CompilationState.Collect`/`Record`. Profile per-project,
+  analyzer, restore and copy costs with compiler/analyzer timing and current
+  invalidation inputs before naming a cause; the artifact builder's separate
+  output directory is a lead, not proof of lost incremental reuse. Keep the
+  analysis contract and remove repeated work at its actual owner. This is a
+  build/performance-owner followup alongside the existing analyzer fast-path
+  finding below; no analyzer was disabled to pass the graphics change.
 
 - [high] The skill-eval program
   ([evaluate an agent skill](../development/documentation.md#evaluate-an-agent-skill),

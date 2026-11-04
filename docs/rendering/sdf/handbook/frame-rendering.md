@@ -1456,18 +1456,32 @@ after every view that bound the slot's set before.
 
 Dynamic transforms are never compared as a table: the residency packs only the
 rows the frame's moved set (`SdfFrame.MovedTransforms`) owes since the frame it
-last consumed, and the region owes the words of those rows that changed. The
+last consumed, through the serial captured when that frame received its moved
+set. The region owes the words of those rows that changed. The
 program is written only by a program upload, into a region sized to the live
 program and grown by half again when a larger one arrives. A program built on
 the thread pool carries the words it differs in from the one held before it
 (`SdfFrame.ProgramDelta`), which its build measured, so tables holding that
 program copy only those words (`GpuRegion.WriteRuns`) and compare nothing on the
-frame thread; any other upload compares the program with the live one. Mesh draws (`SdfFrame.MeshDraws`)
-are packed into the mesh region (`SdfMeshRegion`: one `SdfMeshRecord.DrawWords`-word record a draw,
-then each distinct mesh's positions and indices once) only when the frame hands
-a different draw list. Each scene emitter states its draws, a static placement's
-fixed at its rebuild and a stamp's posed at its root each frame, and returns the
-same list while none moved, so a still scene packs nothing. The region starts with one draw record when the tables are built
+frame thread; any other upload compares the program with the live one. Mesh draws
+(`SdfFrame.MeshDraws`) occupy the mesh region (`SdfMeshRegion`): one
+`SdfMeshRecord.DrawWords`-word record per draw, then each distinct mesh's geometry
+once. A new list or revision requires staging. `SdfMeshDresser` retains binding
+topology, indexes its dependencies by source slot or occurrence, and publishes
+changed draw rows through `SdfFrame.MeshDrawChanges` with a captured endpoint.
+The shared `GpuChangedRows` journal also backs `SdfMovedTransforms`: every consumer
+collects its own skipped-frame union, and missing, expired or full history requires
+a complete refresh. Runs can conservatively include unchanged gaps.
+
+A complete staged roster with unchanged mesh references keeps its placement plan
+and mesh claims; the tables compare and pack only its changed runs. Landing-filtered
+rosters, changed geometry and unknown provenance use ordinary planning. Producers
+without a draw journal still supply a different list or move its revision, and the
+tables compare that revised list. `SdfMeshDraw.SameStagedContent` supplies the one
+exact comparison for both dressing and staging, including float bits and motion
+interpretation. Active or removed portal clipping currently publishes full draw
+changes. An empty draw delta still allows the GPU's final motion-history settle.
+The region starts with one draw record when the tables are built
 and grows to the need plus an eighth when a list outgrows it. The mesh pass reads its triangles,
 and the surface pass reads the winning draw's material.
 

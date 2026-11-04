@@ -42,6 +42,9 @@ public sealed class GpuUploadRuns {
     /// <summary>Gets the number of runs held.</summary>
     public int Count => m_count;
 
+    /// <summary>Gets the logical bytes in the retained integer arrays, excluding object and array headers.</summary>
+    public long StorageBytes => (((long)m_ends.Length + m_gaps.Length + m_widths.Length + m_starts.Length) * sizeof(int));
+
     /// <summary>Records <c>[start, start + length)</c> as owed; an empty range records nothing.</summary>
     /// <param name="start">The first unit of the range.</param>
     /// <param name="length">The range's length in units.</param>

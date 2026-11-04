@@ -38,6 +38,13 @@ techniques and the defects review found are what transfer. Each technique cites 
   branch, #70146 measured the CNG encryptor on Windows instead of the managed
   one it changed, and #70174's and #70175's tests passed with the cache
   reverted.
+- **A motion harness must advance the production inputs.** A zero changed-pose
+  count is not evidence of static foliage until the state mirror has installed
+  the document's initial cells and the creation pool's clock has advanced.
+  `WorldSceneEmitter.Tick` and `WorldCreationInstances.Tick` are separate doors;
+  advancing only the former left a placement census motionless. The corrected
+  production capture moves thousands of independent authored grass slots. Label
+  a placement-only census separately from the native World's body population.
 - **Measure where `TieredPGO` matches the target.** The World process runs
   without dynamic PGO
   (the `TieredPGO` property in [`Puck.World.csproj`](../../../../src/Puck.World/Puck.World.csproj)), and

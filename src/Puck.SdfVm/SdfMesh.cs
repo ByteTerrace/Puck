@@ -305,6 +305,42 @@ public readonly record struct SdfMeshDraw(SdfMesh Mesh, Matrix4x4 ObjectToWorld,
     /// negative is not drawn, in any view or shadow. Zero, the default, draws everything; a body straddling a portal's
     /// glass is drawn clipped to the glass's front on each side.</summary>
     public Vector4 ClipPlane { get; init; }
+    /// <summary>Returns whether two draws stage the same GPU record, bounds, picking identity and motion interpretation,
+    /// including the exact bits of each floating-point field.</summary>
+    /// <param name="other">The draw to compare.</param>
+    /// <returns>Whether staging either draw gives the same content.</returns>
+    public bool SameStagedContent(in SdfMeshDraw other) {
+        if (
+            !ReferenceEquals(objA: this.Mesh, objB: other.Mesh) ||
+            (this.Material != other.Material) ||
+            (this.Glass != other.Glass) ||
+            (this.IsDynamic != other.IsDynamic) ||
+            (this.FrameSlot != other.FrameSlot) ||
+            (this.UsesRootMaterialFrame != other.UsesRootMaterialFrame) ||
+            !Equals(objA: this.MotionIdentity, objB: other.MotionIdentity) ||
+            (BitConverter.SingleToInt32Bits(value: this.CarryScale) != BitConverter.SingleToInt32Bits(value: other.CarryScale)) ||
+            !Equals(objA: this.Identity, objB: other.Identity)
+        ) {
+            return false;
+        }
+
+        var leftMatrix = this.ObjectToWorld;
+        var rightMatrix = other.ObjectToWorld;
+        var leftRotation = this.CarryRotation;
+        var rightRotation = other.CarryRotation;
+        var leftShift = this.CarryTranslation;
+        var rightShift = other.CarryTranslation;
+        var leftClip = this.ClipPlane;
+        var rightClip = other.ClipPlane;
+
+        return (
+            MemoryMarshal.AsBytes(span: new ReadOnlySpan<Matrix4x4>(reference: in leftMatrix)).SequenceEqual(other: MemoryMarshal.AsBytes(span: new ReadOnlySpan<Matrix4x4>(reference: in rightMatrix))) &&
+            MemoryMarshal.AsBytes(span: new ReadOnlySpan<Quaternion>(reference: in leftRotation)).SequenceEqual(other: MemoryMarshal.AsBytes(span: new ReadOnlySpan<Quaternion>(reference: in rightRotation))) &&
+            MemoryMarshal.AsBytes(span: new ReadOnlySpan<Vector3>(reference: in leftShift)).SequenceEqual(other: MemoryMarshal.AsBytes(span: new ReadOnlySpan<Vector3>(reference: in rightShift))) &&
+            MemoryMarshal.AsBytes(span: new ReadOnlySpan<Vector4>(reference: in leftClip)).SequenceEqual(other: MemoryMarshal.AsBytes(span: new ReadOnlySpan<Vector4>(reference: in rightClip)))
+        );
+    }
+
     /// <summary>Gets whether the draw's faces turned from a light are exactly where that light leaves a solid: its mesh
     /// encloses (<see cref="SdfMesh.Encloses"/>), no clip plane cuts it open, and its matrix keeps its winding. A shadow
     /// cascade's exit layer draws such a draw's faces turned from the light alone and every other draw whole, as a thin

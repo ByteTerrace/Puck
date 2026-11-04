@@ -78,6 +78,15 @@ bake spacing into explicit detail: both increase tessellation. `IsDynamic` selec
 static lighting membership; `UsesRootMaterialFrame` independently selects material
 coordinates while retaining the root slot for skinning and portals. Dressing retains
 group/copy topology and immutable per-surface picking metadata across pose changes.
+Its flat reverse binding indexes consume the frame's captured transform changes;
+the output draw journal and GPU tables retain independent consumer cursors. Keep
+the source identity, captured serial, roster and row count together. Never use a
+later producer serial for a borrowed frame, map landing-filtered indices back to
+the full roster, or skip the final GPU history settle because no draw changed.
+`GpuChangedRows` owns the bounded history for both transform and draw changes;
+missing/full/expired history and active portal clipping refresh conservatively.
+`world.residency` reports logical journal/scratch array bytes separately from
+mesh residency and the overlapping process/account/backend memory readings.
 Pending bake demand reads the same occurrence index and transformed copy boxes;
 prototype-origin boxes and a union of far-apart copies misprice both priority and
 near-residency diagnostics. Animated
