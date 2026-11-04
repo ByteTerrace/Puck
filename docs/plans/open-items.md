@@ -202,8 +202,9 @@ Each waits on the owner: what the engine should do, how it looks and feels, and 
 ### Dense landscapes
 
 Owner: the lead, with performance, rendering and world-authoring owners per
-step · high · Next: fix noncopy root-reseat history, reduce shared field-query
-work and pose/history traffic, finish GPU instance
+step · high · Next: establish a replayable
+forest benchmark and matched memory attribution, then reduce shared field-query
+work and finish GPU instance
 buckets and qualify the wider continuous forest under
 [L0, L0m and L1](dense-landscapes.md#implementation-order), including
 wind-deformed canopy GI semantics. The owner
@@ -219,8 +220,9 @@ history and a connected forest patch are implemented; wind stop/restore is
   establishes thousands of independent authored grass poses, so shared-slot
   caching alone cannot remove the steady motion work. Fresh movement/recovery
   sampling puts shared camera/contact/effector exact field queries ahead of draw
-  staging. Next: root-reseat correctness, shared query primitive/dependency work,
-  measured pose-program execution and GPU instance buckets, then density/route
+  staging. Next: reproducible input/presentation windows, matched memory readings
+  and shared query primitive/dependency work, then measured pose-program execution,
+  GPU instance buckets and density/route
   qualification. The measured cold
 bake misses its bar; physical-memory and target-device qualification remain open.
 Cross-family review is owed: the session-launch hook refused the Claude reviewer
@@ -242,18 +244,6 @@ from this Codex lead session; the supplemental review finding was fixed.
   field/skin/material-cut changes invalidate it. The bake/dresser, sampler-readback
   and bake/view parameter boundaries are now implemented and witnessed; do not
   replace the remaining real dependency with a blacklist.
-  P2 · Owner: graphics/history owner · [medium, source-established; rendered
-  symptom unexecuted] A retained noncopy dynamic group's root reseat leaves its
-  stable mesh-history identity unchanged. `SdfWorldTables.CompletePreviousTables`
-  reseats previous dynamic slots but seeds mesh matrices only through the mesh
-  history's seed set. Root-only meshes are unskinned, and a skin's own-slot
-  winners also use the root matrix (`SdfMeshPathBake.Skinned`);
-  `frame/sdf-reprojection.hlsli` reads that previous matrix for entry-zero vertices
-  and its scale for member vertices. Reproduce a same-program/group/mesh/slot
-  noncamera pose cut, then propagate the existing slot-reseat provenance to mesh
-  matrix seeding and generation invalidation. Include unchanged-matrix reseats
-  and root-scale cuts. The rigid-copy epoch law and slot-reseat law separately
-  miss this combination; the gap predates the row-journal change.
 
 ### Engine job system
 
@@ -1945,13 +1935,24 @@ every settle window. A windowed World holds well past that, a tour roughly
 doubles it ([sweep](#sweep-and-visual-checks)) and the cold bake passes 16 GB
 ([bake](#bake-proportional-to-change)); headless is a fraction of a gigabyte,
 so nearly all of it is presentation a player's build carries. Most of the
-process is unattributed, so attribution comes first: the memory account sees
-little of the process and Puck reads no device memory. Grounded causes:
+process is unattributed, so physical attribution comes first. Current diagnostics
+separate process, managed, allocator, account and backend device layers; those
+overlap and cannot be added. The landscape checkpoint at `59f7ee09a1` records
+13.38/13.47 GB process private bytes on D3D12/Vulkan and about 1.60/1.59 GB of
+account-owned storage. Earlier post-collection working set was 7,724 MiB and a
+later window reached 10,960 MiB. Treat the expanded process/managed footprint as
+a high-priority budget and regression investigation despite smaller mesh regions.
+Matched route/state, cache, collection and residency windows must establish its
+cause; Windows private bytes alone do not qualify Deck unified physical memory.
+Grounded causes and leads:
 
 - The mesh library budgets meshes residencies still hold and forgets them, so a
   re-plan reloads a second copy (`SdfMeshLibrary.cs:32`, `:285-304`).
 - The GI probe cache has no byte bound (`SdfMeshIrradiance.ProbeCache`,
   `SdfMeshIrradiance.cs:2266`).
+  Its reader also retries with `Thread.SpinWait` while a cache entry is being
+  published. Replace that custom busy wait with stable publication or an
+  appropriate host wait; measure its frequency before attributing frame stalls.
 - A prewarmed mesh store may ship in a player's build (AGENTS.md), so a player
   need not bake cold.
 

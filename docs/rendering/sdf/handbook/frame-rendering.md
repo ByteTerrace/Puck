@@ -1481,6 +1481,15 @@ tables compare that revised list. `SdfMeshDraw.SameStagedContent` supplies the o
 exact comparison for both dressing and staging, including float bits and motion
 interpretation. Active or removed portal clipping currently publishes full draw
 changes. An empty draw delta still allows the GPU's final motion-history settle.
+
+Transform ownership cuts also reach mesh history independently of draw content.
+A cut to a draw's root slot or a skin member actually named by a vertex starts a
+new surface generation and seeds its current compact previous matrix. Equal pose
+bytes do not suppress a cut. The mesh consumer collects only reseats through its
+own captured endpoint; ordinary movement adds no cut-driven roster walk. Missing
+history conservatively cuts dependent draws, and landing filters use the actual
+staged draw's dependencies rather than producer indices.
+
 The region starts with one draw record when the tables are built
 and grows to the need plus an eighth when a list outgrows it. The mesh pass reads its triangles,
 and the surface pass reads the winning draw's material.

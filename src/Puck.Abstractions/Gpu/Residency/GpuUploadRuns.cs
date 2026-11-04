@@ -145,6 +145,23 @@ public sealed class GpuUploadRuns {
     /// <returns>The run's start.</returns>
     public int Start(int index) => m_starts[index];
 
+    /// <summary>Returns whether a unit lies in the retained sorted runs. Coarsening includes the gaps it closed, so
+    /// membership describes the conservative represented ranges rather than only the originally added units.</summary>
+    /// <param name="value">The unit to find.</param>
+    /// <returns>Whether a run contains the unit, including its start and excluding its end.</returns>
+    public bool Contains(int value) {
+        var low = 0;
+        var high = m_count;
+
+        while (low < high) {
+            var middle = (low + ((high - low) >>> 1));
+            if (value < m_starts[middle]) { high = middle; }
+            else if (value >= m_ends[middle]) { low = (middle + 1); }
+            else { return true; }
+        }
+        return false;
+    }
+
     // Halves the run count by closing the smallest gaps: the runs are already ordered, and each gap no wider
     // than the one that leaves half the runs is closed, so the units re-sent are the narrowest gaps between runs and never
     // a span between runs far apart while nearer ones stay separate.

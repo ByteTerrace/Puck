@@ -14,6 +14,16 @@ public readonly record struct SdfMeshObservation(uint Generation, bool Seed);
 public sealed class SdfMeshHistory {
     /// <summary>Counts staging observations; unchanged incremental records need none.</summary>
     public static WorkKind Observed { get; } = new(name: "sdf.instances.observed", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Counts draw rows scanned only when transform cuts or unknown provenance may invalidate mesh history.</summary>
+    public static WorkKind ReseatDrawsScanned { get; } = new(name: "sdf.instances.reseat.draws-scanned", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Counts root/member slot dependency tests while resolving transform cuts.</summary>
+    public static WorkKind ReseatDependenciesChecked { get; } = new(name: "sdf.instances.reseat.dependencies-checked", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Counts vertex-member bytes submitted to membership searches for a potentially cut skin member.</summary>
+    public static WorkKind ReseatMemberBytesChecked { get; } = new(name: "sdf.instances.reseat.member-bytes-checked", unit: "bytes", workClass: WorkClass.Pacing);
+    /// <summary>Counts transform windows with unknown/full provenance, conservatively cutting dependent draws.</summary>
+    public static WorkKind ReseatFallbacks { get; } = new(name: "sdf.instances.reseat.fallbacks", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Counts staged observations forced to a new generation by a root or used member transform cut.</summary>
+    public static WorkKind Reseated { get; } = new(name: "sdf.instances.reseated", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Counts observations starting a new surface incarnation.</summary>
     public static WorkKind Seeded { get; } = new(name: "sdf.instances.seeded", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Counts live cells retired when their staged list shrinks.</summary>
@@ -40,7 +50,7 @@ public sealed class SdfMeshHistory {
     public static WorkKind SelectionBoxesComputed { get; } = new(name: "sdf.instances.selection-boxes.computed", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Counts incremental draw comparisons, including records whose packed bytes stand unchanged.</summary>
     public static WorkKind RecordsCompared { get; } = new(name: "sdf.instances.records.compared", unit: "count", workClass: WorkClass.Pacing);
-    /// <summary>Counts incremental draws whose pose or host metadata changed and required packing.</summary>
+    /// <summary>Counts incremental draws whose pose, host metadata or history cut required packing.</summary>
     public static WorkKind RecordsChanged { get; } = new(name: "sdf.instances.records.changed", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Counts incremental packed words that differ, before upload-run merging and coarsening.</summary>
     public static WorkKind PackedWordsChanged { get; } = new(name: "sdf.instances.packed-words.changed", unit: "words", workClass: WorkClass.Pacing);
@@ -61,7 +71,7 @@ public sealed class SdfMeshHistory {
     /// <summary>Counts changed-run rows checked for mesh replacement before reusing the placement plan.</summary>
     public static WorkKind StagingMeshChecks { get; } = new(name: "sdf.instances.staging.mesh-checks", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Gets process-lifetime observations from every staged table. These counts never enter simulation state.</summary>
-    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.instances", kinds: [Observed, Seeded, Retired, MatricesChanged, MatrixBytesChanged, HistoryRowsCopied, HistoryBytesCopied, HistoryRequestBytes, HistoryDispatches, RecordsPacked, RecordBytesPacked, NormalMatricesComputed, SelectionBoxesComputed, RecordsCompared, RecordsChanged, PackedWordsChanged, DressTopologyBuilds, DressedRecordsUpdated, DressPoseCandidates, DressBindingsVisited, DressMatricesComputed, StagingClaimRecords, StagingPlanRecords, StagingMeshChecks]);
+    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.instances", kinds: [Observed, Seeded, ReseatDrawsScanned, ReseatDependenciesChecked, ReseatMemberBytesChecked, ReseatFallbacks, Reseated, Retired, MatricesChanged, MatrixBytesChanged, HistoryRowsCopied, HistoryBytesCopied, HistoryRequestBytes, HistoryDispatches, RecordsPacked, RecordBytesPacked, NormalMatricesComputed, SelectionBoxesComputed, RecordsCompared, RecordsChanged, PackedWordsChanged, DressTopologyBuilds, DressedRecordsUpdated, DressPoseCandidates, DressBindingsVisited, DressMatricesComputed, StagingClaimRecords, StagingPlanRecords, StagingMeshChecks]);
 
     private struct Cell {
         public object? Key;
@@ -84,20 +94,23 @@ public sealed class SdfMeshHistory {
     public int ActiveCount => m_activeCount;
 
     /// <summary>Observes a surface at its staged index. Ordinary matrix motion retains its generation; changes to
-    /// stable motion key, mesh, slot interpretation, clipping/carry or semantic flags seed both CPU and GPU history.</summary>
+    /// stable motion key, mesh, slot interpretation, clipping/carry or semantic flags, and explicit transform cuts,
+    /// seed both CPU and GPU history.</summary>
     /// <param name="index">The staged draw index.</param>
     /// <param name="draw">The surface, with a stable motion key or a stable picking identity.</param>
+    /// <param name="reseat">Whether a root or used skin-member transform starts a new history interpretation, even
+    /// when the surface's packed pose and metadata are unchanged.</param>
     /// <returns>The generation to write into that exact record and its matrix seed decision.</returns>
     /// <exception cref="ArgumentOutOfRangeException">The index is outside the draw representation.</exception>
     /// <exception cref="ArgumentException">The draw names no identity.</exception>
     /// <exception cref="InvalidOperationException">This cell exhausted its uint generation lifetime.</exception>
-    public SdfMeshObservation Observe(int index, in SdfMeshDraw draw) {
+    public SdfMeshObservation Observe(int index, in SdfMeshDraw draw, bool reseat = false) {
         if ((index < 0) || (index >= SdfMeshRegion.MaxDraws)) { throw new ArgumentOutOfRangeException(paramName: nameof(index)); }
         var key = ((draw.MotionIdentity ?? draw.Identity) ?? throw new ArgumentException(message: "A mesh draw needs a stable surface identity.", paramName: nameof(draw)));
 
         if (index >= m_cells.Length) { Array.Resize(array: ref m_cells, newSize: Math.Max(val1: (index + 1), val2: Math.Max(val1: 4, val2: (2 * m_cells.Length)))); }
         ref var cell = ref m_cells[index];
-        var seed = (!Equals(objA: cell.Key, objB: key) || !ReferenceEquals(objA: cell.Mesh, objB: draw.Mesh) ||
+        var seed = (reseat || !Equals(objA: cell.Key, objB: key) || !ReferenceEquals(objA: cell.Mesh, objB: draw.Mesh) ||
             (cell.FrameSlot != draw.FrameSlot) || (cell.UsesRootMaterialFrame != draw.UsesRootMaterialFrame) || (cell.Dynamic != draw.IsDynamic) || (cell.Glass != draw.Glass) ||
             (cell.Clip != draw.ClipPlane) || (cell.CarryRotation != draw.CarryRotation) ||
             (cell.CarryTranslation != draw.CarryTranslation) || (cell.CarryScale != draw.CarryScale));
@@ -116,6 +129,7 @@ public sealed class SdfMeshHistory {
             cell.CarryTranslation = draw.CarryTranslation;
             cell.CarryScale = draw.CarryScale;
             ProcessWork.Count(kind: Seeded);
+            if (reseat) { ProcessWork.Count(kind: Reseated); }
         }
         m_activeCount = Math.Max(val1: m_activeCount, val2: (index + 1));
         ProcessWork.Count(kind: Observed);

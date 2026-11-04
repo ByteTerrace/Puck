@@ -54,8 +54,9 @@ public sealed partial class SdfWorldTables {
     private GpuChangedRows? m_drawChangesSource;
     private long m_drawChangesSerial;
     private readonly GpuUploadRuns m_owedDraws = new(capacity: GpuRegion.MaxCopyRuns);
-    /// <summary>Gets the logical array payload retained by this consumer's changed-draw run scratch.</summary>
-    public long DrawChangeScratchBytes => m_owedDraws.StorageBytes;
+    /// <summary>Gets the logical array payload retained by this consumer's changed-draw and transform-cut runs.</summary>
+    public long DrawChangeScratchBytes => (m_owedDraws.StorageBytes +
+        m_meshTransformReseats.StorageBytes + m_reseatedDraws.StorageBytes);
 
     // The placed meshes whose words the region still owes, and the draws of the planned list whose meshes are written.
     private readonly HashSet<SdfMesh> m_meshesOwed = new(comparer: ReferenceEqualityComparer.Instance);
@@ -149,7 +150,11 @@ public sealed partial class SdfWorldTables {
         if (!m_meshTrimListening) { Puck.Hosting.Jobs.MemoryAccount.Shared.TrimRequested += RequestMeshTrim; m_meshTrimListening = true; }
         ServiceMemoryTrim();
         if (draws.Count == 0) { m_meshHistory.RetireAfter(count: 0); }
-        if (TryStageDrawChanges(frame)) { return; }
+        PrepareMeshTransformCuts(frame);
+        if (TryStageDrawChanges(frame)) { CommitMeshTransformCuts(frame); return; }
+        // Equal-pose cuts need staging too. This also forces the ordinary landing-filter path to observe its actual
+        // staged roster, where producer draw indices cannot be used.
+        if (m_reseatedDraws.Count > 0) { m_meshStaged = false; }
         // The staged list's meshes hold live claims; the arena's placement claims keep every placed mesh's storage, the
         // ones the list stopped naming included, until the arena forgets them.
         if (!ReferenceEquals(draws, m_meshSource) || (revision != m_meshSourceRevision)) {
@@ -161,6 +166,7 @@ public sealed partial class SdfWorldTables {
         // interpreted as an index into the producer's list.
         m_drawChangesSource = (m_meshStaged && m_stagedWhole) ? frame.MeshDrawChanges : null;
         m_drawChangesSerial = frame.MeshDrawChangesSerial;
+        CommitMeshTransformCuts(frame);
     }
     private bool TryStageDrawChanges(SdfFrame frame) {
         var changes = frame.MeshDrawChanges;
@@ -170,6 +176,7 @@ public sealed partial class SdfWorldTables {
             ((frame.MeshDrawsRevision != m_meshSourceRevision) && (frame.MeshDrawChangesSerial <= m_drawChangesSerial)) ||
             !changes.TryCollect(since: m_drawChangesSerial, through: frame.MeshDrawChangesSerial, into: m_owedDraws)) { return false; }
 
+        CopyRuns(from: m_reseatedDraws, to: m_owedDraws);
         var checkedMeshes = 0;
         for (var run = 0; run < m_owedDraws.Count; run++) {
             var end = Math.Min(draws.Count, checked(m_owedDraws.Start(run) + m_owedDraws.Length(run)));
@@ -325,7 +332,8 @@ public sealed partial class SdfWorldTables {
                 var draw = draws[index];
                 comparedRecords++;
 
-                if (!draw.SameStagedContent(in m_stagedDraws[index])) {
+                if (!draw.SameStagedContent(in m_stagedDraws[index]) ||
+                    (m_reseatedDraws.Contains(index) && MeshTransformWasReseated(in draw))) {
                     var record = records.Slice(length: SdfMeshRecord.DrawWords, start: (index * SdfMeshRecord.DrawWords));
 
                     StageMeshDraw(draw: in draw, index: index, old: old, record: record, incremental: true);

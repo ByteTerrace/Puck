@@ -78,17 +78,16 @@ public sealed class GpuChangedRows {
         if (reseat) { (m_reseats![m_slot] ??= new GpuUploadRuns(capacity: m_capacity)).Add(start: start, length: count); }
     }
 
-    /// <summary>Collects the conservative union of rows changed in <c>(since, through]</c>. Clears the changed output,
-    /// appends reseats without clearing them, and changes neither consumer cursor. On failure the changed output is
+    /// <summary>Collects the conservative union of rows changed in <c>(since, through]</c>. Clears the supplied changed output,
+    /// appends reseats without clearing them, and changes neither consumer cursor. On failure the supplied changed output is
     /// empty and reseats are untouched: the consumer must refresh the complete table.</summary>
     /// <param name="since">The serial the consumer last consumed.</param>
     /// <param name="through">The serial captured with the table being consumed.</param>
-    /// <param name="into">The changed-row output, cleared on entry.</param>
+    /// <param name="into">The changed-row output, cleared on entry, or null when only reseats are needed.</param>
     /// <param name="reseated">Optional reseat output, appended on success.</param>
     /// <returns>Whether the entire requested window is retained and incremental.</returns>
-    public bool TryCollect(long since, long through, GpuUploadRuns into, GpuUploadRuns? reseated = null) {
-        ArgumentNullException.ThrowIfNull(argument: into);
-        into.Clear();
+    public bool TryCollect(long since, long through, GpuUploadRuns? into, GpuUploadRuns? reseated = null) {
+        into?.Clear();
         if ((since < 0L) || (through < since) || (through > Serial)) { return false; }
         if (Serial == 0L) { return ((since == 0L) && (through == 0L)); }
         if ((since <= 0L) || ((Serial - since) >= m_frames.Length)) { return false; }
@@ -103,7 +102,7 @@ public sealed class GpuChangedRows {
         for (var serial = since; (serial < through);) {
             serial++;
             var slot = ((int)(serial % m_frames.Length));
-            Append(m_frames[slot], into);
+            if (into is not null) { Append(m_frames[slot], into); }
             if (reseated is not null) { Append(m_reseats?[slot], reseated); }
         }
         return true;

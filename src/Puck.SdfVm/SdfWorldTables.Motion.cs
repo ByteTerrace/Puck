@@ -1,4 +1,5 @@
 using Puck.Abstractions.Gpu;
+using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
 
@@ -33,6 +34,71 @@ public sealed partial class SdfWorldTables {
 
     // One observation door supplies both matrix seed decisions and the GPU history generation.
     private readonly SdfMeshHistory m_meshHistory = new();
+
+    // Mesh history consumes the transform journal independently of the dynamic-table and draw-journal cursors.
+    // A successful stage commits this endpoint, while GPU seed runs remain pending until Upload consumes them.
+    private SdfMovedTransforms? m_meshTransformsSource;
+    private IReadOnlyList<DynamicTransform>? m_meshTransformsTable;
+    private long m_meshTransformsSerial;
+    private ulong m_meshTransformsGeometryRevision;
+    private int m_meshTransformsCount = -1;
+    private int m_meshCutTransformCount;
+    private bool m_meshTransformCutsAll;
+    private readonly GpuUploadRuns m_meshTransformReseats = new(capacity: GpuRegion.MaxCopyRuns);
+    private readonly GpuUploadRuns m_reseatedDraws = new(capacity: GpuRegion.MaxCopyRuns);
+
+    private void PrepareMeshTransformCuts(SdfFrame frame) {
+        m_meshTransformReseats.Clear();
+        m_reseatedDraws.Clear();
+        m_meshCutTransformCount = frame.DynamicTransforms.Count;
+        var moved = frame.MovedTransforms;
+        m_meshTransformCutsAll = ((m_meshTransformsCount != m_meshCutTransformCount) ||
+            (m_meshTransformsGeometryRevision != m_programGeometryRevision) ||
+            !ReferenceEquals(moved, m_meshTransformsSource) ||
+            ((moved is null)
+                ? !ReferenceEquals(frame.DynamicTransforms, m_meshTransformsTable)
+                : !moved.TryCollect(since: m_meshTransformsSerial, through: frame.MovedTransformsSerial,
+                    into: null, reseated: m_meshTransformReseats)));
+
+        if (m_meshTransformCutsAll) { SdfMeshHistory.ProcessWork.Count(SdfMeshHistory.ReseatFallbacks); }
+        if (!m_meshTransformCutsAll && (m_meshTransformReseats.Count == 0)) { return; }
+
+        // A roster walk is needed only on a cut, never for ordinary continuous movement. These indices are used only
+        // with the complete producer roster; the observation door rechecks actual draws after landing filters.
+        var draws = frame.MeshDraws;
+        SdfMeshHistory.ProcessWork.Add(SdfMeshHistory.ReseatDrawsScanned, draws.Count);
+        for (var index = 0; index < draws.Count; index++) {
+            var draw = draws[index];
+            if (MeshTransformWasReseated(in draw)) { m_reseatedDraws.Add(start: index, length: 1); }
+        }
+    }
+    private void CommitMeshTransformCuts(SdfFrame frame) {
+        m_meshTransformsSource = frame.MovedTransforms;
+        m_meshTransformsTable = frame.DynamicTransforms;
+        m_meshTransformsSerial = frame.MovedTransformsSerial;
+        m_meshTransformsCount = frame.DynamicTransforms.Count;
+        m_meshTransformsGeometryRevision = m_programGeometryRevision;
+    }
+    private bool MeshTransformWasReseated(in SdfMeshDraw draw) {
+        if (!m_meshTransformCutsAll && (m_meshTransformReseats.Count == 0)) { return false; }
+        // FrameSlot -1 is a sentinel, not a base from which a positive member offset can make a valid dependency.
+        if ((draw.FrameSlot is not { } root) || (root < 0) || (root >= m_meshCutTransformCount)) { return false; }
+        SdfMeshHistory.ProcessWork.Count(SdfMeshHistory.ReseatDependenciesChecked);
+        // Every member also uses the root matrix's scale, so the root is a dependency even for fully skinned meshes.
+        if (m_meshTransformCutsAll || m_meshTransformReseats.Contains(root)) { return true; }
+        if (draw.Mesh.VertexMembers.IsEmpty) { return false; }
+
+        var members = draw.Mesh.Members.Span;
+        for (var index = 0; index < members.Length; index++) {
+            var slot = (((long)root) + members[index].SlotOffset);
+            SdfMeshHistory.ProcessWork.Count(SdfMeshHistory.ReseatDependenciesChecked);
+            if ((slot < 0) || (slot >= m_meshCutTransformCount) || !m_meshTransformReseats.Contains((int)slot)) { continue; }
+            // Members may contain unused entries. Only a member named by a vertex can affect this draw's history.
+            SdfMeshHistory.ProcessWork.Add(SdfMeshHistory.ReseatMemberBytesChecked, draw.Mesh.VertexMembers.Length);
+            if (draw.Mesh.VertexMembers.Span.Contains((byte)index)) { return true; }
+        }
+        return false;
+    }
 
     /// <summary>Gets the revision of the poses the current dynamic-transform and mesh-matrix tables hold as of the latest
     /// upload. It moves on every upload that changes a pose or seeds a previous row, and never otherwise.</summary>
@@ -181,7 +247,7 @@ public sealed partial class SdfWorldTables {
     }
     // Observes and packs one record through the same door for full and incremental staging.
     private void StageMeshDraw(int index, in SdfMeshDraw draw, Span<uint> record, ReadOnlySpan<byte> old, bool incremental = false) {
-        var observation = m_meshHistory.Observe(draw: in draw, index: index);
+        var observation = m_meshHistory.Observe(draw: in draw, index: index, reseat: MeshTransformWasReseated(in draw));
         var packedWords = SdfMeshRecord.DrawWords;
         if (incremental) {
             var work = SdfMeshRegion.WriteDrawIncremental(draw: in draw, previous: in m_stagedDraws[index],

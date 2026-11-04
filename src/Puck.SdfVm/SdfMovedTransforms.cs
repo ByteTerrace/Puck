@@ -20,16 +20,16 @@ namespace Puck.SdfVm;
 /// </para>
 /// <para>
 /// Emitters pack an owner's slots (an avatar's leaf range, a stamp registration's root and shapes) only while it is
-/// restless, and hand <see cref="Commit"/> the slots' prior contents: an owner whose repack changed nothing has come
-/// to rest and owes nothing. A still frame therefore packs no rows, compares no bytes and owes nothing, and a frame
+/// restless, and hand <see cref="Commit"/> the slots' prior contents: an owner whose repack changed nothing and whose
+/// history holds has come to rest and owes nothing. A still frame packs no rows, compares no bytes and owes nothing; a frame
 /// moving k owners does work proportional to k. The source counts that work as <c>sdf.transforms.*</c>. These totals
 /// have <see cref="WorkClass.Pacing"/> because presentation may interpolate several produced frames per simulation
 /// tick, and each frame packs the pose it actually presents.
 /// </para>
 /// <para>
-/// A moved range whose slots changed owner is also reseated (<see cref="Commit"/>'s <c>reseat</c>): a consumer's
-/// previous transform table then takes that range's poses from the frame that reseated it, so a new owner never reads
-/// its predecessor's pose as motion. A consumer owed everything seeds every previous row.
+/// A range whose slots changed owner or cut their pose is reseated (<see cref="Commit"/>'s <c>reseat</c>), even if
+/// their new poses equal the old ones: a consumer seeds that range's previous transforms and dependent mesh history,
+/// so a new owner never reads its predecessor's pose as motion. A consumer owed everything seeds every previous row.
 /// </para>
 /// </summary>
 public sealed class SdfMovedTransforms : IWorkCounterSource {
@@ -148,13 +148,13 @@ public sealed class SdfMovedTransforms : IWorkCounterSource {
         Reseat(count: (current.Length - rows), start: rows);
     }
     /// <summary>Settles one owner's repacked slots: counts the rows packed and the bytes compared, and owes the range
-    /// when any slot differs from its prior contents.</summary>
+    /// when any slot differs or a history cut is requested, including cuts with unchanged poses.</summary>
     /// <param name="slots">The whole shared table, already holding the owner's repacked slots.</param>
     /// <param name="start">The owner's first slot.</param>
     /// <param name="previous">The owner's slots as they stood before the repack, one per repacked slot.</param>
     /// <param name="reseat">Whether the slots hold another owner than they held when last packed (a spawn into a vacated
-    /// range, a body index reused, a pose that jumped): a moved range is then also reseated, so each consumer seeds its
-    /// previous poses from this frame's rather than reading the departed pose as motion.</param>
+    /// range, a body index reused, a pose that jumped): the range is reseated even when its pose is unchanged, so each
+    /// consumer seeds its previous poses rather than reading the departed pose as motion.</param>
     /// <returns><see langword="true"/> when the repack moved any slot, so the owner stays restless.</returns>
     public bool Commit(ReadOnlySpan<DynamicTransform> slots, int start, ReadOnlySpan<DynamicTransform> previous, bool reseat) {
         var packed = slots.Slice(
@@ -175,18 +175,12 @@ public sealed class SdfMovedTransforms : IWorkCounterSource {
             }
         }
 
-        if (moved) {
-            if (reseat) {
-                Reseat(
-                    count: packed.Length,
-                    start: start
-                );
-            } else {
-                Owe(
-                    count: packed.Length,
-                    start: start
-                );
-            }
+        // A cut changes ownership/history even when the new owner has exactly the departed pose. Keep the return
+        // value about actual movement so an unchanged owner can settle without dropping that cut from the journal.
+        if (reseat) {
+            Reseat(count: packed.Length, start: start);
+        } else if (moved) {
+            Owe(count: packed.Length, start: start);
         }
 
         return moved;
@@ -206,11 +200,12 @@ public sealed class SdfMovedTransforms : IWorkCounterSource {
         m_changes.Owe(count: count, start: start);
         m_owedRows.Add(amount: count);
     }
-    // Owes a range whose slots hold another owner's poses than they did, and reseats it.
+    // A repack's byte diff cannot discover equal-pose ownership cuts, so explicit reseats remain in its journal.
+    // Only a genuinely full frame can omit them: its consumers already seed every row.
     private void Reseat(int start, int count) {
         if (
             (count <= 0) ||
-            Everything
+            m_changes.Everything
         ) {
             return;
         }
@@ -253,6 +248,6 @@ public sealed class SdfMovedTransforms : IWorkCounterSource {
     }
 
     // Captured frames collect through their own serial, never through a later producer frame.
-    internal bool TryCollect(long since, long through, GpuUploadRuns into, GpuUploadRuns? reseated = null) =>
+    internal bool TryCollect(long since, long through, GpuUploadRuns? into, GpuUploadRuns? reseated = null) =>
         m_changes.TryCollect(since: since, through: through, into: into, reseated: reseated);
 }
