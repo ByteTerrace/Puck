@@ -211,16 +211,19 @@ public sealed partial class WorldCreationInstances {
         // decisions count ahead of its held seconds until its next full pack, so the bodies that take a tier together
         // spread their packs over the period's frames (WorldCreationInstances.Rates).
         public int RatePhaseHertz = SdfUpdateRateTiers.EveryFrameHertz;
+
         public float RateLead;
+
         // The pack count when something outside the pack last read one of the body's parts (NotePoseRead), and the
         // farthest, in creation units, any full pack has posed one of its parts' geometry from its root.
-        public long PoseReadPack = long.MinValue / 2;
-        public float MotionReach;
+        public long PoseReadPack = (long.MinValue / 2);
 
+        public float MotionReach;
         // The per-driver animation state of this registration, advanced once per PackTransforms by
         // WorldGaitDrivers. A placement without a body reads its root pose and world state with no body facts;
         // time and ungated/state-driven swings work there too.
         public bool DriverSeeded;
+        public WorldGaitDrivers.Activity DriverActivity;
         public WorldEntityAddress DriverAddress;
         public Vector3 DriverPosition;
 
@@ -300,7 +303,7 @@ public sealed partial class WorldCreationInstances {
     public int RootSlotOffset(int index) {
         var offset = 0;
 
-        for (var entry = 0; (entry < index); entry++) { offset = checked((offset + SlotsAt(entry))); }
+        for (var entry = 0; (entry < index); entry++) { offset = checked((offset + SlotsAt(index: entry))); }
         return offset;
     }
 
@@ -378,7 +381,7 @@ public sealed partial class WorldCreationInstances {
                     ? Quaternion.Identity
                     : Quaternion.Normalize(value: shapeRotation)));
             } else {
-                chain = chain.TransformDynamic(slot: slot).Translate((shapePosition * placementScale)).Rotate(((shapeRotation == default) ? Quaternion.Identity : shapeRotation));
+                chain = chain.TransformDynamic(slot: slot).Translate(offset: (shapePosition * placementScale)).Rotate(rotation: ((shapeRotation == default) ? Quaternion.Identity : shapeRotation));
             }
 
             if (
@@ -628,11 +631,11 @@ public sealed partial class WorldCreationInstances {
             _ = builder.PopField();
             EmitTrims(
                 allShapes: allShapes,
-            motion: motion,
-            shapePosition: shapePosition,
-            shapeRotation: shapeRotation, builder: builder, chamfer: chamfer, exponent: exponent, lift: lift, material: material,
-                paletteIds: paletteIds, placementScale: placementScale, probeWorstCase: probeWorstCase, profile: profile, rootSlot: rootSlot,
-                rounding: rounding, scale: scale,
+            builder: builder,
+            chamfer: chamfer,
+            exponent: exponent, lift: lift, material: material, motion: motion, paletteIds: paletteIds, placementScale: placementScale,
+                probeWorstCase: probeWorstCase, profile: profile, rootSlot: rootSlot, rounding: rounding, scale: scale,
+                shapePosition: shapePosition, shapeRotation: shapeRotation,
                 slot: slot, taper: taper, trims: trims, type: type
             );
 
@@ -671,11 +674,11 @@ public sealed partial class WorldCreationInstances {
         if (!inGroupScope) {
             EmitTrims(
                 allShapes: allShapes,
-            motion: motion,
-            shapePosition: shapePosition,
-            shapeRotation: shapeRotation, builder: builder, chamfer: chamfer, exponent: exponent, lift: lift, material: material,
-                paletteIds: paletteIds, placementScale: placementScale, probeWorstCase: probeWorstCase, profile: profile, rootSlot: rootSlot,
-                rounding: rounding, scale: scale,
+            builder: builder,
+            chamfer: chamfer,
+            exponent: exponent, lift: lift, material: material, motion: motion, paletteIds: paletteIds, placementScale: placementScale,
+                probeWorstCase: probeWorstCase, profile: profile, rootSlot: rootSlot, rounding: rounding, scale: scale,
+                shapePosition: shapePosition, shapeRotation: shapeRotation,
                 slot: slot, taper: taper, trims: trims, type: type
             );
         }
@@ -780,10 +783,10 @@ public sealed partial class WorldCreationInstances {
         }
         var next = m_pool.Length;
 
-        Array.Resize(ref m_pool, (next + 1));
-        Array.Resize(ref m_packedRegistrations, (next + 1));
-        Array.Resize(ref m_meshDraws, (next + 1));
-        m_owners.EnsureCapacity((next + 1));
+        Array.Resize(array: ref m_pool, newSize: (next + 1));
+        Array.Resize(array: ref m_packedRegistrations, newSize: (next + 1));
+        Array.Resize(array: ref m_meshDraws, newSize: (next + 1));
+        m_owners.EnsureCapacity(capacity: (next + 1));
         return next;
     }
     private static bool GroupNeedsScope(IReadOnlyList<ShapeDocument> shapes, int groupId, int fromIndex) {
@@ -817,7 +820,7 @@ public sealed partial class WorldCreationInstances {
         return ids;
     }
     private static Registration RegisterBody(BodyStamp stamp) {
-        var registration = new Registration(stamp.Creation.EngineDocument) {
+        var registration = new Registration(document: stamp.Creation.EngineDocument) {
             BodyIndex = stamp.BodyIndex,
             Creation = stamp.Creation,
             Parts = CreationPartCompiler.Compile(document: stamp.Creation.Document),
@@ -838,7 +841,7 @@ public sealed partial class WorldCreationInstances {
     private static void LatchLook(Registration live, BodyStamp stamp) {
         var motion = stamp.Look.Motion;
 
-        live.Motion = new CreationMotionPlan(live.Creation.EngineDocument, motion.PartDynamics);
+        live.Motion = new CreationMotionPlan(document: live.Creation.EngineDocument, partDynamics: motion.PartDynamics);
         var frames = (stamp.Creation.Document.Frames ?? []);
 
         live.Look = stamp.Look;
@@ -1020,7 +1023,7 @@ public sealed partial class WorldCreationInstances {
             seed: ((uint)(live.BodyIndex ?? 0))
         ));
     }
-    private static Registration RegisterRow(WorldPlacement row, WorldPrototype creation) => new(creation.EngineDocument) {
+    private static Registration RegisterRow(WorldPlacement row, WorldPrototype creation) => new(document: creation.EngineDocument) {
         Row = row,
         Creation = creation,
         Parts = CreationPartCompiler.Compile(document: creation.Document),
@@ -1151,7 +1154,7 @@ public sealed partial class WorldCreationInstances {
     }
     /// <summary>Whether a live body-rooted creation look owns the entity's part namespace.</summary>
     /// <param name="bodyIndex">The population entity index.</param>
-    public bool HasBodyRegistration(int bodyIndex) => (Rigid.ContainsBody(bodyIndex) || (FindBody(bodyIndex: bodyIndex) is not null));
+    public bool HasBodyRegistration(int bodyIndex) => (Rigid.ContainsBody(body: bodyIndex) || (FindBody(bodyIndex: bodyIndex) is not null));
 
     /// <summary>Gets the bounded volumes the pool's live registrations author, as packed by the latest
     /// <see cref="PackTransforms"/> — each riding its registration's root slot or its parent shape's slot.</summary>
@@ -1159,8 +1162,8 @@ public sealed partial class WorldCreationInstances {
 
     public IReadOnlyList<SdfVolume> Volumes {
         get {
-            m_allVolumes.Clear(); m_allVolumes.AddRange(m_volumes); m_allVolumes.AddRange(Rigid.Volumes);
-            if (m_allVolumes.Count > SdfProgramBuilder.MaxVolumes) { throw new InvalidOperationException($"The world's creations need {m_allVolumes.Count} bounded volumes; the renderer holds {SdfProgramBuilder.MaxVolumes}."); }
+            m_allVolumes.Clear(); m_allVolumes.AddRange(collection: m_volumes); m_allVolumes.AddRange(collection: Rigid.Volumes);
+            if (m_allVolumes.Count > SdfProgramBuilder.MaxVolumes) { throw new InvalidOperationException(message: $"The world's creations need {m_allVolumes.Count} bounded volumes; the renderer holds {SdfProgramBuilder.MaxVolumes}."); }
             return m_allVolumes;
         }
     }
@@ -1181,7 +1184,7 @@ public sealed partial class WorldCreationInstances {
                 continue;
             }
             if (m_volumes.Count >= SdfProgramBuilder.MaxVolumes) {
-                throw new InvalidOperationException($"Creation '{document.Name}' exceeds the {SdfProgramBuilder.MaxVolumes} bounded-volume frame capacity.");
+                throw new InvalidOperationException(message: $"Creation '{document.Name}' exceeds the {SdfProgramBuilder.MaxVolumes} bounded-volume frame capacity.");
             }
 
             var slot = rootSlot;
@@ -1264,8 +1267,8 @@ public sealed partial class WorldCreationInstances {
     /// <param name="bodyStamps">The resolved body-rooted stamps (inhabitants + crowd creation-looks) this frame.</param>
     /// <param name="looks">The world's declared looks, whose rigid assets are compiled independently of body membership.</param>
     public void Reconcile(IReadOnlyList<WorldPlacement> placements, IReadOnlyList<WorldPrototype> creations, IReadOnlyList<DynamicsRow> dynamics, IReadOnlyList<BodyStamp> bodyStamps, IReadOnlyList<WorldLook>? looks = null) {
-        Rigid.Reconcile(creations, bodyStamps, looks, placements);
-        bodyStamps = bodyStamps.Where(stamp => !WorldRigidAssets.IsRigid(stamp.Creation, stamp.Look)).ToArray();
+        Rigid.Reconcile(bodies: bodyStamps, creations: creations, looks: looks, placements: placements);
+        bodyStamps = bodyStamps.Where(predicate: stamp => !WorldRigidAssets.IsRigid(creation: stamp.Creation, look: stamp.Look)).ToArray();
         m_bodySlotsStale = true;
         ReconcileSlots(bodyStamps: bodyStamps, creations: creations, dynamics: dynamics, placements: placements);
         IndexBodySlots();
@@ -1500,7 +1503,7 @@ public sealed partial class WorldCreationInstances {
     /// and the rendered geometry answer with the same pose (<see cref="TryShapePosition"/> reads the same latch). A
     /// shape with no animation has an identity delta, so its anchor is its authored pose.</remarks>
     public bool TryBodyPartAuthoredPose(int bodyIndex, string partId, IWorldStampSource client, out SdfAnchor pose) {
-        if (Rigid.ContainsBody(bodyIndex)) { return Rigid.TryPartPose(bodyIndex, partId, client, out pose); }
+        if (Rigid.ContainsBody(body: bodyIndex)) { return Rigid.TryPartPose(body: bodyIndex, partId: partId, pose: out pose, source: client); }
         if (
             !TryFindBody(
             bodyIndex: bodyIndex,
@@ -1581,16 +1584,16 @@ public sealed partial class WorldCreationInstances {
 
     /// <summary>Reads a packed shape's world pose by authored index, independently of the shared transform layout.</summary>
     public DynamicTransform BodyShapePose(int bodyIndex, int shapeIndex) {
-        var live = FindBody(bodyIndex);
+        var live = FindBody(bodyIndex: bodyIndex);
 
-        if ((live is null) || (((uint)shapeIndex) >= ((uint)live.ShapeTransforms.Length))) { throw new ArgumentOutOfRangeException(nameof(shapeIndex)); }
+        if ((live is null) || (((uint)shapeIndex) >= ((uint)live.ShapeTransforms.Length))) { throw new ArgumentOutOfRangeException(paramName: nameof(shapeIndex)); }
         NotePoseRead(live: live);
         var pose = live.ShapeTransforms[shapeIndex];
         var shape = live.Creation.EngineDocument.Shapes![shapeIndex];
 
         return ((shape.Domain is { Count: > 0 }) ? new DynamicTransform(
             Position: (pose.Position + Vector3.Transform((shape.Position.Value * live.Scale), pose.Orientation)),
-            Orientation: Quaternion.Normalize((pose.Orientation * shape.Rotation.Value)), Lanes: pose.Lanes) : pose);
+            Orientation: Quaternion.Normalize(value: (pose.Orientation * shape.Rotation.Value)), Lanes: pose.Lanes) : pose);
     }
     /// <summary>Resolves a body-rooted creation look's authored part pose from the current packed transforms.</summary>
     /// <param name="bodyIndex">The population entity index.</param>
@@ -1603,7 +1606,7 @@ public sealed partial class WorldCreationInstances {
     /// the same answer <see cref="TryBodyPartAuthoredPose"/> gives for it, read from the packed buffer instead of
     /// the latch.</remarks>
     public bool TryBodyPartPose(int bodyIndex, string partId, ReadOnlySpan<DynamicTransform> transforms, out SdfAnchor pose) {
-        if (Rigid.ContainsBody(bodyIndex)) { return Rigid.TryPartPose(bodyIndex, partId, null, out pose); }
+        if (Rigid.ContainsBody(body: bodyIndex)) { return Rigid.TryPartPose(body: bodyIndex, partId: partId, pose: out pose, source: null); }
         if (
             (m_packedSlotBase < 0) ||
             !TryFindBody(
@@ -1635,7 +1638,7 @@ public sealed partial class WorldCreationInstances {
         var shape = live.Creation.EngineDocument.Shapes![shapeSlot];
 
         pose = new SdfAnchor(Position: (transform.Position + Vector3.Transform((shape.Position.Value * live.Scale), transform.Orientation)),
-            Orientation: Quaternion.Normalize((transform.Orientation * shape.Rotation.Value)));
+            Orientation: Quaternion.Normalize(value: (transform.Orientation * shape.Rotation.Value)));
 
         return true;
     }
@@ -1649,7 +1652,7 @@ public sealed partial class WorldCreationInstances {
     /// unresolved.</param>
     /// <returns><see langword="true"/> when the body's stamp is live and its pool range has packed.</returns>
     public bool TryBodyTransformSlot(int bodyIndex, out int transformSlot, out int slotCount) {
-        if (Rigid.TryRootSlot(bodyIndex, out transformSlot)) { slotCount = 1; return true; }
+        if (Rigid.TryRootSlot(body: bodyIndex, slot: out transformSlot)) { slotCount = 1; return true; }
         if ((m_packedSlotBase < 0) || !TryFindBody(bodyIndex: bodyIndex, live: out _, poolIndex: out var poolIndex)) {
             transformSlot = -1;
             slotCount = 0;
@@ -1665,7 +1668,7 @@ public sealed partial class WorldCreationInstances {
     /// <param name="transformSlot">The absolute composed-buffer slot, or -1 when unresolved.</param>
     /// <returns><see langword="true"/> when the live creation look publishes the part and its pool range has packed.</returns>
     public bool TryBodyPartTransformSlot(int bodyIndex, string partId, out int transformSlot) {
-        if (Rigid.ContainsBody(bodyIndex)) { return Rigid.TryPartSlot(bodyIndex, partId, out transformSlot); }
+        if (Rigid.ContainsBody(body: bodyIndex)) { return Rigid.TryPartSlot(body: bodyIndex, partId: partId, slot: out transformSlot); }
         if (
             (m_packedSlotBase < 0) ||
             !TryFindBody(
@@ -1702,7 +1705,7 @@ public sealed partial class WorldCreationInstances {
     /// <param name="client">The client whose interpolated body poses root the body-rooted stamps.</param>
     /// <param name="position">The resolved world position.</param>
     public bool TryShapePosition(string placementId, int? shapeId, IWorldStampSource client, out Vector3 position) {
-        if (client.TryInhabitantBody(placementId, out var rigidBody) && Rigid.ContainsBody(rigidBody) && Rigid.TryShapePose(rigidBody, shapeId, client, out var rigidPose)) { position = rigidPose.Position; return true; }
+        if (client.TryInhabitantBody(index: out var rigidBody, placementId: placementId) && Rigid.ContainsBody(body: rigidBody) && Rigid.TryShapePose(body: rigidBody, pose: out var rigidPose, shapeId: shapeId, source: client)) { position = rigidPose.Position; return true; }
         var live = FindRow(id: placementId);
 
         // An inhabited placement (a body-rooted stamp) resolves through the client's body pose, keyed by placement id.
@@ -1770,7 +1773,7 @@ public sealed partial class WorldCreationInstances {
     /// <param name="client">The client whose inhabitant lookup resolves a body-rooted placement.</param>
     /// <param name="transformSlot">The absolute packed dynamic-transform slot, or -1 when unresolved.</param>
     public bool TryShapeTransformSlot(string placementId, int? shapeId, IWorldStampSource client, out int transformSlot) {
-        if (client.TryInhabitantBody(placementId, out var rigidBody) && Rigid.TryRootSlot(rigidBody, out transformSlot)) { return true; }
+        if (client.TryInhabitantBody(index: out var rigidBody, placementId: placementId) && Rigid.TryRootSlot(body: rigidBody, slot: out transformSlot)) { return true; }
         transformSlot = -1;
 
         if (m_packedSlotBase < 0) {

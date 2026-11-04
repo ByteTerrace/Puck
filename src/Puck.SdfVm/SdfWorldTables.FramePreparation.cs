@@ -65,7 +65,8 @@ public sealed partial class SdfWorldTables {
                 : !moved.TryCollect(
                     into: m_owedTransforms,
                     reseated: m_reseatedTransforms,
-                    since: m_movedTransformsSerial
+                    since: m_movedTransformsSerial,
+                    through: frame.MovedTransformsSerial
                 ))
         );
 
@@ -74,7 +75,7 @@ public sealed partial class SdfWorldTables {
         }
 
         m_movedTransformsSource = moved;
-        m_movedTransformsSerial = (moved?.Serial ?? 0L);
+        m_movedTransformsSerial = frame.MovedTransformsSerial;
         m_movedTransformsTable = transforms;
 
         Span<float> floats = stackalloc float[DynamicTransformWordCount];
@@ -308,9 +309,6 @@ public sealed partial class SdfWorldTables {
             bytes: m_volumeScratch,
             offset: 0
         );
-        StageMeshRegion(
-            draws: frame.MeshDraws,
-            revision: frame.MeshDrawsRevision
-        );
+        StageMeshRegion(frame);
     }
 }

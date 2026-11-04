@@ -47,6 +47,7 @@ public sealed class SdfReprojectionDeviceLawTests {
         var still = Vector3.Transform(matrix: StillMesh, position: point);
         var behind = Vector3.Transform(matrix: BehindMesh, position: point);
         var sliver = Vector3.Transform(matrix: StillMesh, position: new Vector3(32f, (1f / 16384f), 0f));
+
         uint Draw(int draw) => (SdfVisibility.IdentityOf(kind: SdfVisibilityKind.Mesh, source: ((uint)draw)));
 
         return [
@@ -114,7 +115,7 @@ public sealed class SdfReprojectionDeviceLawTests {
         var meshLayout = SdfMeshRegion.Plan(draws: draws, meshes: meshes);
         var meshWords = new uint[meshLayout.Words];
 
-        SdfMeshRegion.Write(draws: draws, meshes: meshes, layout: meshLayout, destination: meshWords);
+        SdfMeshRegion.Write(generations: [1u, 1u, 1u, 1u], draws: draws, meshes: meshes, layout: meshLayout, destination: meshWords);
         var recordWords = ((int)(SdfWorldPackage.VisibilityRecordByteLength / sizeof(uint)));
         var records = new uint[(cases.Length * recordWords)];
         var probes = new Vector4[(cases.Length * 7)];
@@ -141,7 +142,7 @@ public sealed class SdfReprojectionDeviceLawTests {
         ];
         var previousRecords = new uint[(previousDraws.Length * SdfMeshRecord.DrawWords)];
 
-        SdfMeshRegion.WriteDraws(destination: previousRecords, draws: previousDraws, meshes: meshes);
+        SdfMeshRegion.WriteDraws(generations: [1u, 1u, 1u, 1u], destination: previousRecords, draws: previousDraws, meshes: meshes);
         byte[][] contents = [
             MemoryMarshal.AsBytes(span: meshWords.AsSpan()).ToArray(),
             MemoryMarshal.AsBytes(span: new Vector4[3].AsSpan()).ToArray(),
@@ -181,7 +182,7 @@ public sealed class SdfReprojectionDeviceLawTests {
             var previousTransforms = services.BufferFactory.CreateHostVisible(sizeBytes: (3 * 16), usage: GpuBufferUsage.Storage, name: default);
 
             buffers.Add(item: previousTransforms);
-            previousTransforms.Write<byte>(data: new byte[3 * 16]);
+            previousTransforms.Write<byte>(data: new byte[(3 * 16)]);
             services.Bindings.WriteBuffer(binding: 6, bufferHandle: previousTransforms.BufferHandle, bufferSize: previousTransforms.SizeBytes,
                 descriptorSetHandle: set, elementStride: 16u, kind: GpuBindingKind.ReadOnlyBuffer);
             var recorder = services.Recorder;

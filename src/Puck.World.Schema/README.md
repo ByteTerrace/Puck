@@ -650,6 +650,25 @@ world state without a body. These placements use the same registration limits
 and static-facet restrictions as timeline animation: no distribution, mirror,
 creation noise, portal surfaces or response-driven prototype swaps.
 
+**Static surface placement.** `WorldPlacement.Surface` derives each occurrence root from
+explicitly named static contact geometry. `WorldPlacementStamp.Resolve` is the one
+canonical fixed-point occurrence stream for rendering, collision, query fields,
+picking and the scene census; an undistributed, unmirrored accepted root also
+supplies its resolved placement frame. Distributions keep their group frame,
+including gravity sources: filtering to one survivor never selects a new group root. Projection keeps
+the authored orientation, and does not imply normal alignment. See
+`WorldPlacementSurface` for the authored ray, normal-facing admission and miss
+policy, and `WorldPlacementStamp.TryValidateSurface` for source restrictions.
+
+Selected contact documents, their canonical frames/distributions/scales and margins,
+the candidate row and world seed are derivation inputs. A changed selected source
+replaces dependent plans and retained contact/emission identities; camera motion and
+unrelated state roots do no projection. `CodeDerivedTable` retires cached generations
+after code updates. `world.boot` exposes actual projection rays, normal samples,
+admission/rejection, field/plan derivations and created occurrence payload; these are
+work/storage observations, not additional simulation state or a process-memory total.
+A rejected candidate does not renumber surviving shared-instance identities.
+
 **Placement facets.** A `WorldPlacement` row (the `placements` section) is a
 creation stamp plus optional facets—`Solid`, `Emission`, `Inhabit`,
 `FaceSources`, `Region` (`WorldPlacementRegion`): a NAMED VOLUME, a

@@ -20,7 +20,7 @@ namespace Puck.SdfVm;
 /// <para>The bake's roots (<see cref="BakeRoots"/>) are its planning, sampling, contouring and meshing types, the
 /// frame-block rows its kernel reads, the program's packing of the words the kernel walks, and the store's entry format.
 /// The walk stops at the library and the store, which hold meshes rather than make them; at the GPU region and its owed
-/// runs, which carry a table's words to the device rather than choose them, as the driver does; at the kernels' interfaces and
+/// runs and bake-input transport, which allocate and carry a table's words rather than choose them, as the driver does; at the kernels' interfaces and
 /// the render graph's package, whose declarations reach the bake through the kernels' bytecode; and at assemblies outside
 /// <c>Puck</c>: the runtime is the platform the bake runs on, as the driver is for its kernels. A type a parameter, a
 /// local or a field merely carries joins the closure only where code makes, converts or calls into it, and a record's
@@ -31,17 +31,24 @@ public sealed partial class SdfMeshBakeClosure {
     /// <summary>The roots of the bake's closure: each an assembly, a type's full name, and one method of it by name (every
     /// overload), or <see langword="null"/> for every method of the type and of the types nested in it.</summary>
     public static readonly IReadOnlyList<(string Assembly, string Type, string? Method)> BakeRoots = [
-        ("Puck.SdfVm", "Puck.SdfVm.SdfMesh", null),
-        ("Puck.SdfVm", "Puck.SdfVm.SdfMeshBakeBatch", null),
-        ("Puck.SdfVm", "Puck.SdfVm.SdfMeshBakeGroup", null),
-        ("Puck.SdfVm", "Puck.SdfVm.SdfMeshBakeRequest", null),
-        ("Puck.SdfVm", "Puck.SdfVm.SdfMeshGeometry", null),
-        ("Puck.SdfVm", "Puck.SdfVm.SdfMeshGeometryBuilder", null),
-        ("Puck.SdfVm", "Puck.SdfVm.SdfMeshMaterialCut", null),
-        ("Puck.SdfVm", "Puck.SdfVm.SdfMeshPathBake", null),
-        ("Puck.SdfVm", "Puck.SdfVm.SdfFrameBlock", "WriteMeshBake"),
+        // Positive production entries, including defaults, frame reconciliation and external GPU readback. The call
+        // graph reaches planning, geometry, contours, material cuts, skin and levels; drawing is a separate type.
+        ("Puck.SdfVm", "Puck.SdfVm.SdfMeshPathBake", ".ctor"),
+        ("Puck.SdfVm", "Puck.SdfVm.SdfMeshPathBake", "PrepareFrame"),
+        ("Puck.SdfVm", "Puck.SdfVm.SdfMeshPathBake", "PlanAhead"),
+        ("Puck.SdfVm", "Puck.SdfVm.SdfMeshPathBake", "Stage"),
+        ("Puck.SdfVm", "Puck.SdfVm.SdfMeshPathBake", "TryTakeForFrame"),
+        // Input values and addresses are semantic; allocation and upload transport are not.
+        ("Puck.SdfVm", "Puck.SdfVm.SdfMeshBakeBatch", "WritePoints"),
+        ("Puck.SdfVm", "Puck.SdfVm.SdfMeshBakeBatch", "get_InputRows"),
+        ("Puck.SdfVm", "Puck.SdfVm.SdfMeshBakeBatch", "PoseBase"),
+        ("Puck.SdfVm", "Puck.SdfVm.SdfMeshPathBake", "Complete"),
+        ("Puck.SdfVm", "Puck.SdfVm.SdfMeshBakeReadback", ".ctor"),
+        ("Puck.SdfVm", "Puck.SdfVm.SdfMeshBakeReadback", "Poll"),
+        ("Puck.SdfVm", "Puck.SdfVm.SdfMeshBakeBlock", "Write"),
+        // The library is a cache boundary, but normalization runs before it persists the product.
+        ("Puck.SdfVm", "Puck.SdfVm.SdfMesh", "NativeCopy"),
         ("Puck.SdfVm", "Puck.SdfVm.SdfMeshStore", "Encode"),
-
         ("Puck.SdfVm", "Puck.SdfVm.SdfMeshStore", "TryDecode"),
         // The program packs the words the bake kernel walks; a group's geometry hashes its instructions, not their packing.
         ("Puck.SignedDistance", "Puck.SignedDistance.SdfProgram", ".ctor"),
@@ -52,6 +59,7 @@ public sealed partial class SdfMeshBakeClosure {
         "Puck.SdfVm.SdfKernelInterfaces",
         "Puck.SdfVm.SdfMeshBakeClosure",
         "Puck.SdfVm.SdfMeshBakeIdentity",
+        "Puck.SdfVm.SdfMeshBakeInputTransport",
         "Puck.SdfVm.SdfMeshLibrary",
         "Puck.SdfVm.SdfMeshStore",
         "Puck.SdfVm.SdfWorldInterfaces",
@@ -127,7 +135,7 @@ public sealed partial class SdfMeshBakeClosure {
     /// space.</exception>
     /// <exception cref="ArgumentNullException"><paramref name="roots"/> is <see langword="null"/>.</exception>
     /// <exception cref="FileNotFoundException">The directory holds no root's assembly.</exception>
-    /// <exception cref="KeyNotFoundException">A root names a type its assembly does not define.</exception>
+    /// <exception cref="KeyNotFoundException">A root names a type or method its assembly does not define.</exception>
     /// <exception cref="BadImageFormatException">An assembly carries no readable metadata.</exception>
     public static SdfMeshBakeClosure Of(string directory, IReadOnlyList<(string Assembly, string Type, string? Method)> roots) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: directory);
@@ -267,8 +275,15 @@ public sealed partial class SdfMeshBakeClosure {
         private void Root(Module module, TypeDefinitionHandle type, string? method) {
             var definition = module.Metadata.GetTypeDefinition(handle: type);
 
+            var found = false;
             foreach (var handle in definition.GetMethods()) {
-                if ((method is null) || module.Metadata.StringComparer.Equals(handle: module.Metadata.GetMethodDefinition(handle: handle).Name, value: method)) { Enqueue(method: handle, module: module, root: true); }
+                if ((method is null) || module.Metadata.StringComparer.Equals(handle: module.Metadata.GetMethodDefinition(handle: handle).Name, value: method)) {
+                    found = true;
+                    Enqueue(method: handle, module: module, root: true);
+                }
+            }
+            if ((method is not null) && !found) {
+                throw new KeyNotFoundException($"Root method {module.Name}!{module.FullName(type)}.{method} is absent.");
             }
             foreach (var nested in ((method is null) ? definition.GetNestedTypes() : [])) {
                 Root(method: null, module: module, type: nested);

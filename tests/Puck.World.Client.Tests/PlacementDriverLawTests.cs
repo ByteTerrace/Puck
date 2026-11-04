@@ -128,7 +128,7 @@ public sealed class PlacementDriverLawTests {
         Assert.Equal(
             0,
             WorldPlacementStamper.StaticStampInstances(
-                [creation],
+                new WorldDefinition(CreationsRaw: [creation]) { PlacementRowsRaw = [placement] },
                 [placement]
             )
         );

@@ -28,6 +28,105 @@ namespace Puck.World.Tests;
 /// (<c>WorldScreenBinder.Device.*</c>), which the device laws cover.
 /// </summary>
 public sealed class WorldScreenBinderLawTests {
+    [InlineData(WorldDisclosureTier.Presentation)]
+    [InlineData(WorldDisclosureTier.Replica)]
+    [Theory]
+    public void AWithheldObservationAllocatesNoPrivateResidencyAndItsNestedCamerasHoldWithIt(WorldDisclosureTier tier) {
+        using var scene = new BinderScene(new BinderOptions(GardenDisclosure: tier));
+        scene.ConfigureViews();
+        var binder = scene.Binder;
+        using var world = scene.Residency("world");
+        binder.ViewHost = world;
+        var context = scene.Frame(new FakeGpuDevice());
+        binder.Publish(in context);
+        var hosted = scene.Host.ScreenSession(WorldInstanceHost.BootInstanceName, BinderScene.Session)!;
+        var observation = hosted.Observation!;
+        Assert.True(scene.Host.TryGet(hosted.InstanceName!, out var destination));
+        var grant = Assert.Single(destination!.Server.GrantRows(observation.Session), row => row.Capability == WorldCapability.Observe && row.Subject == GrantSubject.All);
+        var session = WorldViewNames.Session(BinderScene.Session);
+        var camera = WorldViewNames.NestedCamera(view: session, camera: "cam");
+        var child = WorldViewNames.Nested(view: session, screen: BinderScene.GardenSession);
+        var childObservation = scene.Host.ScreenSession(hosted.InstanceName!, BinderScene.GardenSession)!.Observation!;
+        var ordinalBound = destination.Server.GrantTable.SessionOrdinalBound;
+        var nodes = new List<GpuWorkNode>();
+        scene.RenderProbe.CopyNodes(nodes);
+        Assert.Empty(nodes);
+
+        destination.Server.Revoke(grant, Principal.Console);
+        Assert.False(binder.IsAvailable(session));
+        Assert.False(binder.IsAvailable(camera));
+        Assert.True(childObservation.CanObserve);
+        Assert.False(binder.IsAvailable(child));
+        Assert.False(binder.TryResolveView(session, out _));
+        Assert.False(binder.TryResolveView(camera, out _));
+        Assert.Null(binder.ResolveInstanceView(session, world));
+        Assert.Null(binder.ResolveInstanceView(camera, world));
+        Assert.Null(binder.ResolveInstanceView(child, world));
+        scene.RenderProbe.CopyNodes(nodes);
+        Assert.Empty(nodes);
+
+        destination.Server.Grant(grant, Principal.Console);
+        Assert.True(binder.IsAvailable(session));
+        Assert.True(binder.IsAvailable(camera));
+        Assert.True(binder.TryResolveView(session, out var own));
+        Assert.NotSame(world, own.Residency);
+        Assert.True(binder.TryResolveView(camera, out var filmed));
+        Assert.Same(own.Residency, filmed.Residency);
+        scene.RenderProbe.CopyNodes(nodes);
+        var created = nodes.Count;
+        Assert.NotEqual(0, created);
+
+        destination.Server.Revoke(grant, Principal.Console);
+        Assert.False(binder.IsAvailable(session));
+        Assert.True(binder.TryResolveView(session, out var held));
+        Assert.Same(own.Residency, held.Residency);
+        Assert.True(binder.TryResolveView(camera, out var heldCamera));
+        Assert.Same(filmed.Residency, heldCamera.Residency);
+        nodes.Clear();
+        scene.RenderProbe.CopyNodes(nodes);
+        Assert.Equal(created, nodes.Count);
+        destination.Server.Grant(grant, Principal.Console);
+        Assert.True(binder.TryResolveView(session, out var resumed));
+        Assert.Same(own.Residency, resumed.Residency);
+        Assert.Same(observation, hosted.Observation);
+        Assert.False(observation.Ended);
+        Assert.Equal(ordinalBound, destination.Server.GrantTable.SessionOrdinalBound);
+    }
+    [Fact]
+    public void AFramesOnlyObservationNeverCreatesPrivateGeometryOrFallsBackToTheRoot() {
+        using var scene = new BinderScene(new BinderOptions(GardenDisclosure: WorldDisclosureTier.Frames));
+        scene.ConfigureViews();
+        using var world = scene.Residency("world");
+        scene.Binder.ViewHost = world;
+        var name = WorldViewNames.Session(BinderScene.Session);
+        Assert.False(scene.Binder.IsAvailable(name));
+        Assert.False(scene.Binder.TryResolveView(name, out _));
+        Assert.Null(scene.Binder.ResolveInstanceView(name, world));
+        var nodes = new List<GpuWorkNode>();
+        scene.RenderProbe.CopyNodes(nodes);
+        Assert.Empty(nodes);
+    }
+    [Fact]
+    public void RetiredGeneratedObservationNamesNeverResolveAsUnnamedRootViews() {
+        using var scene = new BinderScene();
+        scene.ConfigureViews();
+        using var world = scene.Residency("world");
+        scene.Binder.ViewHost = world;
+        var removed = WorldViewNames.Session(BinderScene.Session);
+        scene.Binder.ReconcileScreens([], []);
+        foreach (var name in new[] { removed, WorldViewNames.Nested(removed, BinderScene.GardenSession), WorldViewNames.NestedCamera(removed, "cam"),
+            WorldViewNames.Nested(WorldViewNames.Routed("absent"), 4), WorldViewNames.Sky("absent") }) {
+            Assert.False(scene.Binder.IsAvailable(name));
+            Assert.False(scene.Binder.TryResolveView(name, out _));
+            Assert.Null(scene.Binder.ResolveInstanceView(name, world));
+        }
+        // The residency's buffer and a plain unnamed host view are not generated observation images.
+        Assert.True(scene.Binder.IsAvailable(WorldViewNames.Environment(removed)));
+        Assert.Same(world, scene.Binder.ResolveInstanceView("nothing", world)!.Value.Residency);
+        var nodes = new List<GpuWorkNode>();
+        scene.RenderProbe.CopyNodes(nodes);
+        Assert.Empty(nodes);
+    }
     [Fact]
     public void EachScreenBindsItsRowOrNamesWhyItCannot() {
         using var scene = new BinderScene();
@@ -357,7 +456,7 @@ public sealed class WorldScreenBinderLawTests {
         binder.ViewHost = world;
         Assert.True(condition: binder.TryResolveView(name: registration, view: out var filmed));
         Assert.Same(actual: filmed.Residency, expected: world);
-        Assert.Same(actual: binder.ResolveInstanceView(name: registration, world: world).Residency, expected: world);
+        Assert.Same(actual: binder.ResolveInstanceView(name: registration, world: world)!.Value.Residency, expected: world);
         Assert.True(condition: binder.TryResolveView(name: session, view: out var own));
         Assert.True(condition: binder.TryResolveView(name: session, view: out var again));
         Assert.Same(actual: again.Residency, expected: own.Residency);
@@ -365,7 +464,7 @@ public sealed class WorldScreenBinderLawTests {
         Assert.False(condition: binder.Bakes(view: session));
         Assert.False(condition: binder.Bakes(view: "nothing"));
         Assert.False(condition: binder.TryResolveView(name: "nothing", view: out _));
-        Assert.Same(actual: binder.ResolveInstanceView(name: "nothing", world: world).Residency, expected: world);
+        Assert.Same(actual: binder.ResolveInstanceView(name: "nothing", world: world)!.Value.Residency, expected: world);
         Assert.True(condition: binder.TryPlacements(placements: out _, view: session));
         Assert.False(condition: binder.TryPlacements(placements: out _, view: "nothing"));
         Assert.Equal(
@@ -637,6 +736,7 @@ public sealed class WorldScreenBinderLawTests {
         int? NestingDepth = null,
         bool Window = false,
         bool Cabinet = false,
+        WorldDisclosureTier GardenDisclosure = WorldDisclosureTier.Replica,
         IReadOnlyList<WorldCamera>? Cameras = null,
         IReadOnlyList<IWorldImageProducer>? Producers = null
     );
@@ -694,7 +794,7 @@ public sealed class WorldScreenBinderLawTests {
 
             Write(definition: Admitting(definition: (Fixtures.BuildDocument() with { ScreensRaw = [] })), name: "cellar");
             Write(definition: Fixtures.BuildDocument(), name: "closed");
-            Write(definition: Observing(definition: (Admitting(definition: Fixtures.BuildDocument()) with {
+            Write(definition: Observing(definition: (Admitting(definition: Fixtures.BuildDocument(), tier: options.GardenDisclosure) with {
                 CamerasRaw = [Camera],
                 ScreensRaw = [Template, SessionRow(destination: "cellar", index: GardenSession), (Template with { Index = GardenCamera, Source = new WorldScreenSource.View(CameraName: "cam") })],
             }), destinations: ["cellar"]), name: "garden");
@@ -804,6 +904,7 @@ public sealed class WorldScreenBinderLawTests {
                 machines: Machines,
                 perception: new WorldPerceptionAnchor(),
                 probeKernels: new NullProbeKernelHostService(),
+                renderProbe: RenderProbe,
                 producers: options.Producers,
                 screenMaterials: boot.ScreenMaterials,
                 roster: Roster,
@@ -815,6 +916,7 @@ public sealed class WorldScreenBinderLawTests {
         }
 
         public WorldScreenBinder Binder { get; }
+        public WorldRenderProbe RenderProbe { get; } = new();
         public WorldInstance Boot { get; }
         public WorldCamera Camera { get; }
         public WorldInstanceHost Host { get; }
@@ -867,15 +969,15 @@ public sealed class WorldScreenBinderLawTests {
         );
 
         // The fixture world, admitting a viewer's session with its whole-world view.
-        private static WorldDefinition Admitting(WorldDefinition definition) => (definition with {
+        private static WorldDefinition Admitting(WorldDefinition definition, WorldDisclosureTier tier = WorldDisclosureTier.Replica) => (definition with {
             Admission = [new WorldAdmissionEntry(
-                Disclosure: WorldDisclosureTier.Replica,
+                Disclosure: tier,
                 Domain: WorldAdmissionEntry.AnyAuthority,
-                Grants: [new WorldAdmissionGrant(
+                Grants: ((tier == WorldDisclosureTier.Frames) ? [] : [new WorldAdmissionGrant(
                     Budget: 64,
                     Capability: WorldCapability.Observe,
                     Subject: GrantSubject.All
-                )],
+                )]),
                 Mode: WorldAdmissionTrustMode.FederatedAuthority
             )],
         });

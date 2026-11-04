@@ -7408,6 +7408,10 @@ export type WorldPlacement = {
    * Which of Respond's entries held at the last response sweep, one bit per entry in authored order (bit i for entry i); 0 while none holds, and always 0 on a row without Respond. The response sweep writes it, and a booting document's state entries are settled into it before admission (SettleResponses); the row shows the lowest set bit's entry, else its own authored PrototypeId (ShownPrototypeId). Refused on a row without Respond and with a bit at or past its entry count. A reader whose disclosure withholds a cell an entry reads is handed the mask without that entry's bit (Disclosed). Omitted from the wire when 0.
    */
   holding?: number;
+  /**
+   * Optional one-time projection of each static occurrence onto explicitly named contact surfaces.
+   */
+  surface?: WorldPlacementSurface | null;
 };
 
 /**
@@ -7866,6 +7870,40 @@ export type WorldPlacementSpatialVolume = {
 
 export type WorldPlacementSpatialVolumeList = (WorldPlacementSpatialVolume | null)[];
 
+/**
+ * One-time directed projection of static occurrence roots onto named static contact geometry. The occurrence keeps its authored rotation and scale; its resolved origin is shared by presentation and collision.
+ */
+export type WorldPlacementSurface = {
+  /**
+   * Placement IDs whose static contact fields may receive a root. Surface and parent dependencies must be acyclic.
+   */
+  targets: (string | null)[];
+  /**
+   * World-space offset from each candidate root to the ray origin.
+   */
+  fromOffset: DocumentVector3;
+  /**
+   * World-space ray direction, normalized in fixed point.
+   */
+  direction: DocumentVector3;
+  /**
+   * Maximum ray length in world units.
+   */
+  reach: number;
+  /**
+   * Signed world-space displacement along the hit normal (negative embeds a root).
+   */
+  offset?: number;
+  /**
+   * Minimum cosine of hit normal with the opposite cast direction, in [0,1].
+   */
+  minFacing?: number;
+  /**
+   * Refuse derivation instead of dropping an occurrence when no proven eligible surface is found.
+   */
+  requireHit?: boolean;
+};
+
 export type WorldPlacementsSection = {
   /**
    * The placements, in order.
@@ -8239,6 +8277,9 @@ export type WorldPrototype = {
           roughness: number;
           metal: number;
         } | null;
+        noise?: number;
+        patternScale?: unknown;
+        softness?: number;
       } | null;
       /**
        * The wrap-lighting share in [0, 1] (null = 0 — the plain Lambert term) — see Wrap.

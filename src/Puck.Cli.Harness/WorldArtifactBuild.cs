@@ -76,7 +76,8 @@ public static class WorldArtifactBuild {
     /// <param name="timeout">How long the checkout's build itself may run; waiting for other runs is not counted.</param>
     /// <param name="path">The entry assembly every leg launches, or <see langword="null"/> on failure.</param>
     /// <param name="lease">The leased checkout build, which the caller disposes once its last World process has
-    /// exited; <see langword="null"/> for a named artifact or on failure.</param>
+    /// exited; also retained for a named managed-store artifact, and <see langword="null"/> for an external package
+    /// or on failure.</param>
     /// <param name="error">Why no artifact is available, or empty on success.</param>
     /// <param name="wait">How long the run may wait for other runs' builds and the machine's build lease, or
     /// <see langword="null"/> for <see cref="CliLease.DefaultWait"/>.</param>
@@ -94,6 +95,28 @@ public static class WorldArtifactBuild {
                 return false;
             }
 
+            // Named artifacts in the managed store need the same pruning lease as a source-resolved build. An
+            // external package remains caller-owned; no store manages or prunes its directory.
+            var entry = new DirectoryInfo(Path.GetDirectoryName(path)!);
+            var parent = entry.Parent;
+            static string ResolvedDirectory(DirectoryInfo directory) => Path.TrimEndingDirectorySeparator(
+                (directory.ResolveLinkTarget(returnFinalTarget: true) ?? directory).FullName);
+            var managedRoot = new DirectoryInfo(WorldArtifactStore.DefaultRoot);
+            if (managedRoot.Exists && parent is not null && Puck.Abstractions.PuckPaths.Comparer.Equals(ResolvedDirectory(parent), ResolvedDirectory(managedRoot))) {
+                if ((entry.Attributes & FileAttributes.ReparsePoint) != 0 || (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0) {
+                    error = "A named managed-store artifact must be a published entry, not a symbolic-link alias.";
+                    path = null;
+                    return false;
+                }
+                lease = new WorldArtifactStore(parent.FullName).TryTake(key: entry.Name, artifactName: Path.GetFileName(path),
+                    reused: true, clock: Stopwatch.StartNew(), budget: timeout);
+                if (lease is null) {
+                    error = "The named managed-store artifact could not be retained against pruning.";
+                    path = null;
+                    return false;
+                }
+                path = lease.Path;
+            }
             error = string.Empty;
 
             return true;

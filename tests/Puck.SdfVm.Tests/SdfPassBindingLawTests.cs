@@ -82,7 +82,7 @@ public sealed class SdfPassBindingLawTests {
         var bakeBlockBytes = PassBlockBytes(values: SdfWorldPackage.BakeValues);
 
         Assert.Equal(expected: bakeBlockBytes, actual: pass.BlockSizeBytes);
-        Assert.Equal(expected: ((int)bakeBlockBytes), actual: SdfFrameBlock.BakeSizeBytes);
+        Assert.Equal(expected: ((int)bakeBlockBytes), actual: SdfMeshBakeBlock.SizeBytes);
         Assert.Equal(
             actual: pass.BlockMembers.Select(selector: static member => member.Name),
             expected: [ShaderFrameInterface.Extent, SdfWorldPackage.InstanceMaskWordCount, SdfWorldPackage.MeshBakeCount, SdfWorldPackage.MeshBakeLattices, ShaderWorkCounters.Row, ShaderWorkCounters.DetailRow]

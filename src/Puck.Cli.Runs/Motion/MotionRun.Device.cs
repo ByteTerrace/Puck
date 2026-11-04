@@ -73,17 +73,13 @@ public static class MotionRun {
         // run. Each line runs after the one before it, so the tick read follows the locked bake wait.
         var mark = process.LineCount;
 
-        _ = process.Send(line: "world.lockstep on");
-        _ = process.Send(line: $"world.wait bakes {((int)BakeDeadline.TotalSeconds).ToString(provider: CultureInfo.InvariantCulture)}");
-        _ = process.Send(line: "world.at");
-
-        var readBack = process.WaitFor(accept: static line => ((line.Stream == CliProcessOutputStream.Stdout) && MotionTranscript.TryParseReadBack(line: line.Text, tick: out _)), from: mark, timeout: (BakeDeadline + TimeSpan.FromSeconds(value: 60)));
-
-        if (readBack is null) {
-            return Abort(clock: clock, error: $"the World never answered world.at after its bake wait; its output is in {request.Directory}/stdout.log and stderr.log{Tail(process: process)}", notes: notes, process: process, request: request);
+        ulong bootTick;
+        try {
+            bootTick = process.RunScript(["world.lockstep on", $"world.wait bakes {((int)BakeDeadline.TotalSeconds).ToString(provider: CultureInfo.InvariantCulture)}"],
+                BakeDeadline + TimeSpan.FromSeconds(60)).Tick;
+        } catch (Exception exception) when (exception is IOException or TimeoutException) {
+            return Abort(clock: clock, error: $"the World never answered after its bake wait: {exception.Message}{Tail(process: process)}", notes: notes, process: process, request: request);
         }
-
-        _ = MotionTranscript.TryParseReadBack(line: readBack.Text, tick: out var bootTick);
 
         if (process.LinesFrom(from: mark).FirstOrDefault(predicate: static line => line.Text.StartsWith(comparisonType: StringComparison.Ordinal, value: "[bakes: not settled")) is { } unsettled) {
             notes.Add(item: unsettled.Text);
@@ -126,15 +122,12 @@ public static class MotionRun {
             }
         }
 
-        mark = process.LineCount;
-        _ = process.Send(line: $"world.wait until {(plan.LastTick + 1UL).ToString(provider: CultureInfo.InvariantCulture)}");
-        _ = process.Send(line: "world.at");
-
         var remaining = (request.Deadline - clock.Elapsed);
-        var done = process.WaitFor(accept: static line => ((line.Stream == CliProcessOutputStream.Stdout) && MotionTranscript.TryParseReadBack(line: line.Text, tick: out _)), from: mark, timeout: ((remaining > TimeSpan.Zero) ? remaining : TimeSpan.FromSeconds(value: 1)));
-
-        if (done is null) {
-            return Abort(clock: clock, error: $"the run did not reach tick {plan.LastTick.ToString(provider: CultureInfo.InvariantCulture)} within {request.Deadline.TotalMinutes:0} minutes (a hung capture, or a World that stopped stepping){Tail(process: process)}", notes: notes, process: process, request: request);
+        try {
+            _ = process.RunScript([$"world.wait until {(plan.LastTick + 1UL).ToString(provider: CultureInfo.InvariantCulture)}"],
+                remaining > TimeSpan.Zero ? remaining : TimeSpan.FromSeconds(1));
+        } catch (Exception exception) when (exception is IOException or TimeoutException) {
+            return Abort(clock: clock, error: $"the run did not reach tick {plan.LastTick.ToString(provider: CultureInfo.InvariantCulture)}: {exception.Message}{Tail(process: process)}", notes: notes, process: process, request: request);
         }
 
         _ = process.Send(line: "quit");

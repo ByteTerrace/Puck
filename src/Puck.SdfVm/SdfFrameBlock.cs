@@ -1,8 +1,8 @@
-using System.Buffers.Binary;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using Puck.Abstractions.Cameras;
 using Puck.Shaders;
+using static Puck.Shaders.ShaderParameterWriter;
 using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
@@ -68,6 +68,7 @@ public static partial class SdfFrameBlock {
     private static readonly int MeshDraws = Offset(member: SdfWorldPackage.MeshDraws);
     private static readonly int NearDistance = Offset(member: SdfWorldPackage.NearDistance);
     private static readonly int ScreenCount = Offset(member: SdfWorldPackage.ScreenCount);
+    private static readonly int StampFade = Offset(member: SdfWorldPackage.StampFade);
     private static readonly int ShadowSlots = Offset(member: SdfWorldPackage.ShadowSlots);
     private static readonly int ShadowSlotCount = Offset(member: SdfWorldPackage.ShadowSlotCount);
     private static readonly int ShadowFadeCount = Offset(member: SdfWorldPackage.ShadowFadeCount);
@@ -239,14 +240,9 @@ public static partial class SdfFrameBlock {
         WriteFlag(block: block, offset: DisableScreenLights, value: frame.DisableScreenLights);
         WriteFlag(block: block, offset: GeometryOnly, value: quality.GeometryOnly);
         WriteSingle(block: block, offset: ScreenFidelity, value: Math.Clamp(max: 1f, min: 0f, value: snapshot.ScreenFidelity));
-        WriteVector3(block: block, offset: ViewOffsets.StampFade, value: new System.Numerics.Vector3(x: snapshot.StampFade.FirstSlot, y: snapshot.StampFade.SlotCount, z: snapshot.StampFade.Opacity));
+        WriteVector3(block: block, offset: StampFade, value: new System.Numerics.Vector3(x: snapshot.StampFade.FirstSlot, y: snapshot.StampFade.SlotCount, z: snapshot.StampFade.Opacity));
     }
 
-    // View-only additions belong here rather than in the outer type's initializer: WriteMeshBake reaches that
-    // initializer, so changing it would invalidate the mesh cache for a value the bake never reads.
-    private static class ViewOffsets {
-        public static readonly int StampFade = Offset(member: SdfWorldPackage.StampFade);
-    }
 
     // The offset a pass-block member lies at.
     private static int Offset(string member) =>
@@ -257,23 +253,4 @@ public static partial class SdfFrameBlock {
             offset: offset,
             value: (value ? 1u : 0u)
         );
-    private static void WriteSingle(Span<byte> block, int offset, float value) =>
-        BinaryPrimitives.WriteSingleLittleEndian(
-            destination: block[offset..],
-            value: value
-        );
-    private static void WriteUInt32(Span<byte> block, int offset, uint value) =>
-        BinaryPrimitives.WriteUInt32LittleEndian(
-            destination: block[offset..],
-            value: value
-        );
-    private static void WriteVector3(Span<byte> block, int offset, Vector3 value) {
-        WriteSingle(block: block, offset: offset, value: value.X);
-        WriteSingle(block: block, offset: (offset + sizeof(float)), value: value.Y);
-        WriteSingle(block: block, offset: (offset + (2 * sizeof(float))), value: value.Z);
-    }
-    private static void WriteVector4(Span<byte> block, int offset, Vector4 value) {
-        WriteVector3(block: block, offset: offset, value: new Vector3(x: value.X, y: value.Y, z: value.Z));
-        WriteSingle(block: block, offset: (offset + (3 * sizeof(float))), value: value.W);
-    }
 }

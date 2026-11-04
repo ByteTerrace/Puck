@@ -24,4 +24,14 @@ public interface IWorldBakeReadiness {
     /// <param name="mark">The value of <see cref="Frames"/> when the wait armed.</param>
     /// <returns>The reason, naming the residencies still baking, or <see langword="null"/>.</returns>
     string? PendingReasonSince(long mark);
+    /// <summary>Returns whether the same baked content is also landed in each rendered residency and its required
+    /// geometry upload has completed on the GPU. Does not require lighting convergence or idle dynamic uploads.</summary>
+    /// <param name="mark">The frame mark at which the wait armed.</param>
+    /// <returns>Whether current geometry is ready to draw.</returns>
+    bool IsResidentSince(long mark);
+
+    /// <summary>Returns the pending bake or geometry-upload reason, or null when current geometry is resident.</summary>
+    /// <param name="mark">The frame mark at which the wait armed.</param>
+    /// <returns>The pending reason.</returns>
+    string? PendingResidencyReasonSince(long mark);
 }

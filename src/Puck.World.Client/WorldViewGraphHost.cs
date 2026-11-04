@@ -192,7 +192,8 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         public double AdvanceClock(double presentedSeconds) {
             var previous = m_clockSeconds;
 
-            Node.Paused = (m_clockPaused || (m_clockScale == 0));
+            var available = (Owner?.ViewScenes?.IsAvailable(view: Name) ?? true);
+            ApplyPause(node: Node, entry: this, available: available);
             if (
                 !m_clockAnchored ||
                 (presentedSeconds < m_clockAnchor)
@@ -201,7 +202,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
                 m_clockBase = m_clockSeconds;
                 m_clockAnchored = true;
             }
-            if (!Node.IsReady) {
+            if (!Node.IsReady || !available) {
                 m_clockAnchor = presentedSeconds;
             } else if (PendingSteps > 0) {
                 PendingSteps--;
@@ -632,12 +633,22 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             tonemap: tonemap,
             views: views
         );
+        if (m_runtime is { } runtime) {
+            foreach (var instance in runtime.Instances.Instances) {
+                if (runtime.NodeOf(instance: instance.Name) is { } node) {
+                    m_entries.TryGetValue(instance.Name, out var entry);
+                    ApplyPause(node, entry, ViewScenes?.IsAvailable(instance.Name) ?? true);
+                }
+            }
+        }
         PumpWatches();
         ResetFootprints();
         m_placements.Clear();
         m_framing.Clear();
         m_cameras.Clear();
     }
+    private static void ApplyPause(ShaderPipelineRenderNode node, Entry? entry, bool available) =>
+        node.Paused = (!available || (entry is not null && (entry.ClockPaused || entry.ClockScale == 0f)));
     /// <summary>Places a pane this frame: the synthesized root shows the instance inside a normalized rect of the display,
     /// renders it at its allocation envelope, and reconstructs it at the given sharpness. An instance the root does not place
     /// is ignored, and so is a refused one (<see cref="Entry.Refusal"/>): the root draws the world beneath its slot, and

@@ -55,6 +55,9 @@ something to reflect — see the environment section below.
 |---|---|---|
 | `edge` | [0, 1] | 0 | curvature-driven coverage |
 | `lines` | [0, 1] | 0 | triplanar line-pattern coverage |
+| `noise` | [0, 1] | 0 | seeded lattice coverage independent of curvature |
+| `patternScale` | positive finite vector | [1, 1, 1] | per-axis pattern frequencies, multiplied by `scale` |
+| `softness` | [0, 1] | 0 | minimum reveal-ramp width in coverage units |
 | `settle` | [0, 1] | 0 | coverage on upward-facing surfaces |
 | `reach` | finite > 0 | 1 | curvature sensitivity of the edge mask |
 | `seed` | uint | 0 | |
@@ -67,16 +70,17 @@ something to reflect — see the environment section below.
 A stage is `{ threshold, surface }` with thresholds strictly ascending in (0, 1];
 a surface is `{ color, roughness, metal }`, all three required.
 
-A threshold is compared against **coverage**, not against the lane, and coverage
-is `saturate(amount × max(edge × edgeMask, lines × lineMask))` — so it can never
-exceed `max(edge, lines)`. A stage above that ceiling never reveals: the document
-validates, `creation stats` exits 0, and the frame is pixel-identical. With
-`lines: 0.45` and no edge, a stage at 0.55 is dead. Keep thresholds inside the
-reachable band, not merely inside [0, 1].
+Coverage is `saturate(amount × max(edge × edgeMask, lines × lineMask, noise × noiseMask))`,
+so it is bounded by `max(edge, lines, noise)`. A reveal finishes at its threshold
+and starts at `max(threshold - max(softness, pixelFootprintWidth), 0)`. A soft ramp
+can therefore reveal partly below its threshold. With zero softness and a resolved
+pattern, a stage above the mask's ceiling stays inactive: `lines: 0.45` cannot
+fully reveal a stage at 0.55. Choose the mask strength, ramp start and threshold
+together rather than treating the threshold as the render-lane value.
 
 Two cross-rules the validator enforces together:
 
-- `edge > 0` or `lines > 0` **requires** a non-empty `under` — there must be
+- `edge > 0`, `lines > 0` or `noise > 0` **requires** a non-empty `under` — there must be
   something to reveal.
 - `settle > 0` **requires** `deposit`.
 
@@ -97,6 +101,49 @@ For lightly worn armor, keep `reach` below the broad plate's radius so the
 rounded body stays painted and its tighter edges chip. `lines` tiles a scratch
 in every pattern cell; use a few parented paints for sparse, placed scuffs
 instead of increasing that all-over pattern.
+
+### Static landscape surfaces
+
+Static scenery supplies zero render lanes. A weathering pattern without a positive
+`floor` remains inactive, even when its `lines`, `edge` and reveal stages validate.
+The standard foliage library's `landscapeSurface` opts its authored masks in with
+`floor: 1`; callers supply the substrate/deposit colours rather than expecting a
+material name to generate them.
+
+Use the controls according to their actual masks:
+
+- `lines` is a seeded triplanar scratch pattern with a random direction in every
+  cell, not directional wood grain or leaf veins. Low-contrast colours and small
+  cells can read as painted grain; bright, coarse marks read as sprinkles.
+- `noise` reveals a supplied substrate through a seeded lattice mask. `patternScale`
+  stretches that lattice: [16, 0.6, 16] gives long vertical variation rather than
+  randomly oriented scratches. Set `softness` for tonal blending; zero preserves
+  a hard reveal. Bark, foliage and soil recipes remain authored choices.
+- `settle` multiplies upward facing by lattice noise and the authored deposit.
+  It gives crowns, moss and ground broad surface variation without displacing them.
+- `edge` uses curvature modulated by noise. A flat floor has no curvature to reveal.
+- Material weathering runs **after paints** (`sdf-light-stage.hlsli`), so a ground
+  palette's weathering also affects its painted roads. Choose colours accordingly.
+- Creation `noise` displaces the field, changing silhouette, contact and bake work.
+  Use it for actual relief, rather than spending geometry on a colour pattern.
+
+Compare a close view and a moving, ordinary-distance view at pinned exposure and
+local adaptation. Keep the seed and material frame stable. Static unparented layers
+use world coordinates; do not assume a parented paint will render on static copies.
+Unresolved lattice variation fades toward its mean using the conservative pixel
+footprint in pattern space. This is an approximation rather than an exact integral
+of the thresholded mask. Check moving captures as well as stills; anisotropy can
+make the conservative bound soften detail earlier on one axis.
+
+For geometric ground texture, the existing `sceneryPatch` template has real SDF
+noise relief. Supply `solid { margin: 0 }` on its placement to use the displaced
+field for collision as well as drawing. Sink its lower part into the floor; start
+with a bounded patch and count mesh work before spreading relief over a valley.
+The optional `surface` parameter lets it share the flat ground's material, including
+the world-space phase at their seam. Do not confuse this with a normal-only effect.
+
+Surface-only marks need no additional triangles or texture images, but their
+procedural shading has a GPU cost. Do not call that work free.
 
 ## Inset
 
@@ -306,3 +353,8 @@ few facts from it:
 - `world.lighting` echoes the whole lighting, sky, environment and tonemap
   state in one line each; an unauthored field reads `default`, the engine's
   pinned value for that kind, not zero.
+
+Procedural filtering references: [PBRT texture sampling and antialiasing](https://www.pbr-book.org/4ed/Textures_and_Materials/Texture_Sampling_and_Antialiasing)
+relates texture coordinates to pixel support; [NVIDIA's procedural-noise chapter](https://developer.nvidia.com/gpugems/gpugems2/part-iii-high-quality-rendering/chapter-26-implementing-improved-perlin-noise)
+discusses GPU procedural evaluation. Puck reuses its own lattice noise and packed
+material path rather than importing another noise implementation.

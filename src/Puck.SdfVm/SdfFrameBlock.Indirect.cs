@@ -1,4 +1,5 @@
 using Puck.Shaders;
+using static Puck.Shaders.ShaderParameterWriter;
 using Puck.SignedDistance;
 
 namespace Puck.SdfVm;

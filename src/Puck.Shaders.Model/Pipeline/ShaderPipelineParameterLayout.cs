@@ -3,6 +3,7 @@ using System.Collections.ObjectModel;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Puck.Maths;
+using static Puck.Shaders.ShaderParameterWriter;
 
 namespace Puck.Shaders;
 
@@ -189,16 +190,6 @@ public sealed class ShaderPipelineParameterLayout {
             : null),
             },
             StringComparer.Ordinal
-        );
-    private static void WriteUInt32(Span<byte> block, uint offset, uint value) =>
-        BinaryPrimitives.WriteUInt32LittleEndian(
-            destination: block[((int)offset)..],
-            value: value
-        );
-    private static void WriteSingle(Span<byte> block, uint offset, float value) =>
-        BinaryPrimitives.WriteSingleLittleEndian(
-            destination: block[((int)offset)..],
-            value: value
         );
 
     /// <summary>Returns this frame data with its interface carrying a stamp (<see cref="ShaderInterface.Stamped"/>): the

@@ -21,13 +21,15 @@ public sealed partial class SdfMeshPathBakeLawTests {
         var second = ProgramOn(1);
         var group = Assert.Single(SdfMeshBakeGroup.Plan(first, poses, 40, static (selector, dynamic) => new SdfMeshBakeGroup(selector, dynamic)));
         var mesh = new SdfMesh(positions: new Vector3[] { Vector3.Zero, Vector3.UnitX, Vector3.UnitY }, indices: new uint[] { 0, 1, 2 });
-        var library = new SdfMeshLibrary();
+        using var library = new SdfMeshLibrary();
 
         library.Store(group.Sealed, mesh, group.MaterialOrder);
-        var bake = new SdfMeshPathBake { Library = library };
+        using var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake { Library = library }, ownsLibrary: false);
+        var bake = bakeRun.Bake;
+        var dresser = bakeRun.Dresser;
 
-        bake.Dress(new SdfFrame(Program: first, ProgramChanged: true, Time: 0, Views: []) { DynamicTransforms = poses });
-        var draw = Assert.Single(bake.Dress(new SdfFrame(Program: second, ProgramChanged: true, Time: 1, Views: []) { DynamicTransforms = poses }).MeshDraws);
+        dresser.Dress(new SdfFrame(Program: first, ProgramChanged: true, Time: 0, Views: []) { DynamicTransforms = poses });
+        var draw = Assert.Single(dresser.Dress(new SdfFrame(Program: second, ProgramChanged: true, Time: 1, Views: []) { DynamicTransforms = poses }).MeshDraws);
 
         Assert.Same(mesh, draw.Mesh);
         Assert.Equal(1, draw.FrameSlot);

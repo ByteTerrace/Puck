@@ -39,8 +39,12 @@ in words a world author builds from:
   in value and hue; the far wall fades toward the sky's hue.
 - **The floor** is an open yellow-green lawn crossed by winding terracotta paths
   and dotted with low terracotta boulders, grouped trees and dark rounded
-  shrubs, with brighter flowers near the camera. The lawn stays spacious; props
-  cluster along paths and banks and leave the middle clear.
+  shrubs, with brighter flowers near the camera. The central lawn stays
+  spacious; props cluster along paths and banks and leave the middle clear.
+  The owner's first [dense-landscape milestone](dense-landscapes.md) also
+  includes continuous forest: a connected woodland belt with overlapping
+  crowns, understory and a road through it, proposed around the southern foot.
+  Its exact footprint is checked against this map before authoring.
 - **Vegetation** is grouped shapes: a tree crown is a handful of overlapping
   rounded masses in two or three flat values, a shrub two to four at ground
   level, and grass a tile of blades with a flat colour ramp. There is no leaf
@@ -137,6 +141,11 @@ systems the place exercises when it is complete, and the breadth it covers.
 
 ### The floor's vegetation, from the meadow
 
+The [dense-landscape plan](dense-landscapes.md) extends this domain to a
+continuous forest in the first milestone. Its connected-canopy route and
+independent area/density sweeps are additional proving work; C1's existing
+sparse lawn is the baseline, not the completed forest.
+
 The meadow is the owner's example, so its domain is specified here. Every
 family is a template in `worlds/standard/foliage.puck`; the debug world owns
 only its position tables, which are computed in `.puck` from seeded sequences
@@ -224,6 +233,7 @@ no files and run beside each other.
 | Lane | Place or seam | Runs | Check on `worlds/debug` |
 |---|---|---|---|
 | C1 The floor's ground cover (done, [as built](#c1-as-built)) | The meadow's families spread west across the south lawn to the spawn and the approach; the lawn's painterly turf, paths, boulders, shrubs, flowers and trees from the standard | Now, beside J1 and the bake and memory work; it is R2's and R1's forcing load | `debug.go stage`, a full turn and a walk to the entrance: grouped trees, boulders and paths read in B's values on both backends; `world.budget` and `world.counters` draws and bake groups against the meadow's 7,578 draws and 6,183 groups; `host.frames` at the spawn before and after; `puck mesh audit --cpu` for the new families |
+| C1a Continuous forest | Connected southern woodland, road, overlapping canopy, shrubs and grass; reusable standard families, debug-owned layout | The dense-landscape plan, L0 to L5; grow the workload once sharing and stable identity support it | Under-canopy walk, road bend, relieved bank, overhead and nested views; area/density work counts, full frame and memory/bake targets on both backends |
 | C2 The hall in B's vocabulary | The shell as stepped cream and ochre modules on teal arches with the lift tower, shades and roof terraces; indoors the three stacked east wings and the atrium's arch; every function kept (four floors, stairs, lift, exhibits, portals, tables) | Parallel with C1; the blockout first, cladding after the terrain pass's step 6 lands its palette | `debug.go gallery`, `lift`, `stairs`, `boardroom`, `portals`: every `debug.go` spot and traversal goal still reached; the hall's tests pass; stills at the sweep's hall stops compared tolerantly with the build before |
 | C3 Water | The falls, the stream, the bridge and the pool, with the medium and the flow lattice; a swim hold the Moth refines in the standard | After C1 (the banks are its families); the field workload | `debug.go pool` (new) and a swim: depth rows change with depth, the body floats and surfaces; the flow lattice's source tops up and spills (`world.counters`); from the spawn the falls show on the north-west wall; the stream's phase is continuous across its creations |
 | C4 The creature garden | The garden's pond plot: pack, swarm, school, stalker, crawling, rumor | Now, ahead of T2; its 128 bodies are the parallel tick's forcing case | 128 bodies through the garden painting; `puck bench world` on the garden; `puck test --workers 1,2,0` once T0 exists, bit-identical across counts; the rate tiers hold the unseen bodies |

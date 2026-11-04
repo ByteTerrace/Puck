@@ -9,7 +9,7 @@ namespace Puck.Abstractions.Tests;
 /// the test signals by hand, so no GPU is involved. A sample is published only once its submission is known
 /// complete, never older than the one already published, and always under the labels it was recorded with.
 /// </summary>
-public sealed class GpuWorkLedgerLawTests {
+public sealed partial class GpuWorkLedgerLawTests {
     private const int DispatchColumn = 0;
     private const int MemoryBarrierColumn = 6;
 

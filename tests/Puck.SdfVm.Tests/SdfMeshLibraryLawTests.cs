@@ -29,9 +29,11 @@ public sealed class SdfMeshLibraryLawTests {
         Assert.True((groups[0].High.X < groups[1].Low.X));
         Assert.Equal(new Vector3(9, -1, -1), groups[1].Low);
         Assert.Equal(new Vector3(11, 1, 1), groups[1].High);
-        var bake = new SdfMeshPathBake();
+        using var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake());
+        var bake = bakeRun.Bake;
+        var dresser = bakeRun.Dresser;
 
-        bake.Dress(new SdfFrame(Program: program, ProgramChanged: true, Time: 0, Views: []) { DynamicTransforms = transforms });
+        dresser.Dress(new SdfFrame(Program: program, ProgramChanged: true, Time: 0, Views: []) { DynamicTransforms = transforms });
         Assert.True(bake.TryTakeForFrame(0, out var batch));
         Assert.All(batch!.Lattices, lattice => Assert.Equal(3, lattice.FrameSlot));
     }
@@ -84,7 +86,7 @@ public sealed class SdfMeshLibraryLawTests {
     [Fact]
     public void ByteBudgetEvictsOnlyTheOldestGeometryAndKeepsAMissDerivable() {
         var mesh = new SdfMesh(positions: new Vector3[] { Vector3.Zero, Vector3.UnitX, Vector3.UnitY }, indices: new uint[] { 0, 1, 2 });
-        var library = new SdfMeshLibrary(byteBudget: (2 * mesh.StorageBytes));
+        using var library = new SdfMeshLibrary(byteBudget: (2 * mesh.StorageBytes));
 
         static SdfMeshGeometry Key(float x) {
             var builder = new SdfMeshGeometryBuilder(dynamic: false);
@@ -134,7 +136,7 @@ public sealed class SdfMeshLibraryLawTests {
     }
     [Fact]
     public void ABakeTakesAGroupAnotherBakeOfItsLibraryMeshedRatherThanBakingIt() {
-        var library = new SdfMeshLibrary();
+        using var library = new SdfMeshLibrary();
         var crowded = Body(crowd: true, slot: 3, offset: Vector3.Zero);
         var alone = Body(crowd: false, slot: 7, offset: Vector3.Zero);
 
@@ -142,8 +144,12 @@ public sealed class SdfMeshLibraryLawTests {
 
         library.Store(geometry: geometry, materials: [.. materials], mesh: Mesh(materials: [1u, 2u, 2u]));
 
-        var bake = new SdfMeshPathBake { Library = library, Residency = "alone" };
-        var dressed = bake.Dress(frame: new SdfFrame(Program: alone, ProgramChanged: true, Time: 0f, Views: []) {
+        using var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake { Library = library, Residency = "alone" }, ownsLibrary: false);
+
+        var bake = bakeRun.Bake;
+
+        var dresser = bakeRun.Dresser;
+        var dressed = dresser.Dress(frame: new SdfFrame(Program: alone, ProgramChanged: true, Time: 0f, Views: []) {
             DynamicTransforms = [.. Enumerable.Repeat(element: new DynamicTransform(Position: Vector3.Zero, Orientation: Quaternion.Identity), count: 8)],
         });
 
@@ -178,7 +184,7 @@ public sealed class SdfMeshLibraryLawTests {
     }
     [Fact]
     public void ABakeTakesAPooledGroupOnlyWhileItsShapesStandWhereTheStoredMeshHadThem() {
-        var library = new SdfMeshLibrary();
+        using var library = new SdfMeshLibrary();
 
         var (geometry, materials) = PlateGeometry(plate: Plate.Rest);
 
@@ -208,14 +214,16 @@ public sealed class SdfMeshLibraryLawTests {
         // The world group bakes over a box the frame's reach wide, which its geometry holds.
         builder.AppendReach(reach: SdfFrame.DefaultFarDistance);
 
-        var library = new SdfMeshLibrary();
+        using var library = new SdfMeshLibrary();
 
         library.Store(geometry: builder.Geometry, materials: [], mesh: Mesh(materials: [0u, 0u, 0u]));
 
         bool Bakes(SdfProgram ball) {
-            var bake = new SdfMeshPathBake { Library = library, Residency = "ball" };
+            using var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake { Library = library, Residency = "ball" }, ownsLibrary: false);
+            var bake = bakeRun.Bake;
+            var dresser = bakeRun.Dresser;
 
-            _ = bake.Dress(frame: new SdfFrame(Program: ball, ProgramChanged: true, Time: 0f, Views: []));
+            _ = dresser.Dress(frame: new SdfFrame(Program: ball, ProgramChanged: true, Time: 0f, Views: []));
 
             return bake.Pending;
         }
@@ -283,9 +291,11 @@ public sealed class SdfMeshLibraryLawTests {
     }
     // Whether a bake of the plate holding the library still owes a lattice: it bakes the plate rather than taking a mesh.
     private static bool Baking(SdfMeshLibrary library, Plate plate) {
-        var bake = new SdfMeshPathBake { Library = library, Residency = "plate" };
+        using var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake { Library = library, Residency = "plate" }, ownsLibrary: false);
+        var bake = bakeRun.Bake;
+        var dresser = bakeRun.Dresser;
 
-        _ = bake.Dress(frame: new SdfFrame(Program: plate.Program(), ProgramChanged: true, Time: 0f, Views: []) { DynamicTransforms = plate.Transforms() });
+        _ = dresser.Dress(frame: new SdfFrame(Program: plate.Program(), ProgramChanged: true, Time: 0f, Views: []) { DynamicTransforms = plate.Transforms() });
 
         return bake.Pending;
     }

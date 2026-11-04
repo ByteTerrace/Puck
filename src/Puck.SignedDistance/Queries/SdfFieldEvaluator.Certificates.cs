@@ -24,8 +24,8 @@ namespace Puck.SignedDistance.Queries;
 //   the chain.
 // - A Scale with one magnitude on every axis (a sign is exact) divides with rounding to nearest, and multiplies every
 //   later candidate by the rounded running scale; any other Scale, and every fold, leaves the chain uncertified.
-// - A shape's own field lies within a few raws of the exact signed distance to its compiled geometry (Trapezoid more:
-//   its slant projection and its rounded squares), which in turn lies within the radius of a local sphere about it.
+// - A local certificate supplies v >= PointGain*|p-C| - Radius - PointSlack. Distance-like shapes use unit gain;
+//   a superellipsoid uses its compiled radii and the scaled-ratio rounding bound, never a Euclidean sphere claim.
 //
 // The bounds hold for every point the walk can answer: inside the frame no step leaves the carrier. They are evaluated
 // once here in double from exact raw inputs, and every quantity is padded past the double's own rounding before it is
@@ -60,13 +60,12 @@ public sealed partial class SdfFieldEvaluator {
             }
             : this with { BoxRadius = (BoxRadius + slack), Radius = (Radius + slack) });
     }
-    // A shape's local geometry as the certificates read it: the local sphere its compiled geometry lies inside and how
-    // far its point field falls below the exact signed distance to it; for the box walk, the radius its interval's lower
-    // end keeps from the least distance to the centre, and how many local box half-diagonals that end may lose besides.
-    private readonly record struct ShapeSphere(
+    // The local point field satisfies v >= PointGain*|p-C| - Radius - PointSlack. Existing distance-like fields
+    // use unit gain. BoxRadius and BoxLoss describe a separate interval bound only when Boxed.
+    private readonly record struct LocalCertificate(
         double CenterX, double CenterY, double CenterZ,
         double Radius, double PointSlack,
-        bool Boxed, double BoxRadius, double BoxLoss
+        bool Boxed, double BoxRadius, double BoxLoss, double PointGain = 1.0
     );
     // The chain state the analysis follows: the forward map world = Origin + Frame·(Scale·local), the bounds on how far
     // the walks' local point (or box) can stray from that exact map's image, and the running distance scale's range.
@@ -219,7 +218,7 @@ public sealed partial class SdfFieldEvaluator {
         // times the world gap, less |c − z| and those. Through |z| ≤ d/Scale + |c_l| (plus ω/Scale for the gap) each term
         // becomes a multiple of d, of ω, or a constant, and the running distance scale's range turns local into world.
         public readonly ShapeReach? Certify(in CompiledInstruction instruction) {
-            if (!Known || (TryShapeSphere(instruction: in instruction) is not { } sphere)) {
+            if (!Known || (TryLocalCertificate(instruction: in instruction) is not { } sphere)) {
                 return null;
             }
 
@@ -232,7 +231,7 @@ public sealed partial class SdfFieldEvaluator {
             // The rate at which the box's drift from the exact image grows with |z|.
             var drift = (BoxB + ((Sqrt3 * loss) * BoxDB));
 
-            if ((PointB >= 0.5) || (drift >= 0.5)) {
+            if ((PointB >= 0.5) || (sphere.Boxed && (drift >= 0.5))) {
                 return null;
             }
 
@@ -248,8 +247,8 @@ public sealed partial class SdfFieldEvaluator {
                 CenterX: (OriginX + (((M00 * cx) + (M01 * cy)) + (M02 * cz))),
                 CenterY: (OriginY + (((M10 * cx) + (M11 * cy)) + (M12 * cz))),
                 CenterZ: (OriginZ + (((M20 * cx) + (M21 * cy)) + (M22 * cz))),
-                Gain: (((1.0 - PointB) * reach) * PointScaleLow),
-                Radius: (((((PointA + (PointB * localCentre)) + sphere.Radius) + sphere.PointSlack) * PointScaleHigh) + (0.5 * RawUnit))
+                Gain: (((sphere.PointGain * (1.0 - PointB)) * reach) * PointScaleLow),
+                Radius: (((((sphere.PointGain * (PointA + (PointB * localCentre))) + sphere.Radius) + sphere.PointSlack) * PointScaleHigh) + (0.5 * RawUnit))
             );
         }
 
@@ -270,6 +269,7 @@ public sealed partial class SdfFieldEvaluator {
     // program refuses a segment that reads a point moved before it (SdfProgram.RequireSegmentsStartAtTheWorldPoint).
     private static ShapeReach?[] BuildShapeReaches(SdfProgram program, CompiledInstruction[] compiled) {
         var reaches = new ShapeReach?[compiled.Length];
+        CountArrayPayload(rows: reaches, work: PointWork, arrays: CertificateArraysCreated, bytes: CertificatePayloadCreated);
         var boundary = new bool[(compiled.Length + 1)];
         var chain = ChainCertificate.Identity;
 
@@ -325,11 +325,11 @@ public sealed partial class SdfFieldEvaluator {
 
         return reaches;
     }
-    // A shape's local geometry (see ShapeSphere), or none for a shape the certificates do not cover. The exact signed
-    // distance to a set inside a sphere is at least the distance to its centre less its radius. The box rules of
+    // A local field certificate, or none for a primitive not covered. Distance-like fields use the distance to a
+    // containing sphere; the superellipsoid supplies its own field gain and rounding slack. The box rules of
     // Sphere, Box, Cylinder and Torus read each coordinate's range once, so each endpoint of their interval is the exact
     // field at a point of the box, rounded outward by a floor or ceiling root.
-    private static ShapeSphere? TryShapeSphere(in CompiledInstruction instruction) {
+    private static LocalCertificate? TryLocalCertificate(in CompiledInstruction instruction) {
         const double Slack = (4.0 * RawUnit);
 
         switch ((SdfShapeType)instruction.Shape) {
@@ -366,7 +366,7 @@ public sealed partial class SdfFieldEvaluator {
 
                     // The rounded parameter is clamped into [0, 1], so the point it picks lies on the segment and the
                     // length to it is at least the distance to the segment; the interval rule reads h's range, so no box.
-                    return new ShapeSphere(
+                    return new LocalCertificate(
                         BoxLoss: 0.0,
                         BoxRadius: 0.0,
                         Boxed: false,
@@ -377,15 +377,18 @@ public sealed partial class SdfFieldEvaluator {
                         Radius: ((0.5 * Length(x: x, y: y, z: z)) + Math.Abs(value: ((double)instruction.Data0W)))
                     );
                 }
+            case SdfShapeType.Superellipsoid: {
+                    return TrySuperellipsoidCertificate(instruction: in instruction);
+                }
             case SdfShapeType.Trapezoid: {
-                    return TryTrapezoidSphere(instruction: in instruction);
+                    return TryTrapezoidCertificate(instruction: in instruction);
                 }
             default: {
                     return null;
                 }
         }
 
-        static ShapeSphere Separable(double radius) => new(
+        static LocalCertificate Separable(double radius) => new(
             BoxLoss: 0.0,
             BoxRadius: (radius + Slack),
             Boxed: true,
@@ -394,6 +397,41 @@ public sealed partial class SdfFieldEvaluator {
             CenterZ: 0.0,
             PointSlack: Slack,
             Radius: radius
+        );
+    }
+    // Point-only: with s=min(r), each rounded q_i differs from |p_i|*s/r_i by at most E raws. The factored
+    // power has a unit component and a root >= One, so v >= max(q)-s, also for e=2's full-width norm.
+    // Thus v >= (s/max(r))/sqrt(3)*|p| - s - E. The frame's uncullable interval walk proves intermediate
+    // operations fit; outside that frame this certificate grants nothing. The numeric sign/range proof and the
+    // two ratio-rounding envelopes live in docs/rendering/sdf/handbook/queries-and-determinism.md.
+    private static LocalCertificate? TrySuperellipsoidCertificate(in CompiledInstruction instruction) {
+        var (rx, ry, rz) = (instruction.Data0X.Value, instruction.Data0Y.Value, instruction.Data0Z.Value);
+        var exponent = instruction.Data0W;
+
+        if ((rx <= 0L) || (ry <= 0L) || (rz <= 0L) ||
+            (exponent < FixedQ4816.FromDouble(value: SdfProgramBuilder.MinSuperellipsoidExponent)) ||
+            (exponent > FixedQ4816.FromDouble(value: SdfProgramBuilder.MaxSuperellipsoidExponent))) {
+            return null;
+        }
+
+        const long F = (1L << FixedQ4816.FractionBitCount);
+        var minimum = Math.Min(val1: rx, val2: Math.Min(val1: ry, val2: rz));
+        var maximum = Math.Max(val1: rx, val2: Math.Max(val1: ry, val2: rz));
+        // RN(RN(p*F/r)*s/F) loses at most s/(2F)+1/2 raw. Product-first loses F/(2r)+1/2,
+        // greatest at the smallest radius. Integer ceilings keep tiny-radius amplification outward.
+        var error = ((((Int128)minimum) + F).CeilingDivide(divisor: (((Int128)2) * F)));
+
+        if (minimum < SuperellipsoidScaledRadiusLimit) {
+            var productFirst = ((((Int128)F) + minimum).CeilingDivide(divisor: (((Int128)2) * minimum)));
+            error = Int128.Max(x: error, y: productFirst);
+        }
+
+        return new LocalCertificate(
+            BoxLoss: 0.0, BoxRadius: 0.0, Boxed: false,
+            CenterX: 0.0, CenterY: 0.0, CenterZ: 0.0,
+            PointGain: ((((double)minimum) / maximum) / Sqrt3),
+            PointSlack: (((double)error) * RawUnit),
+            Radius: (minimum * RawUnit)
         );
     }
     // SdfTrapezoidSolid's geometry, its profile T in the (x, y) plane of half-widths r1 below and r2 above and half-height
@@ -412,7 +450,7 @@ public sealed partial class SdfFieldEvaluator {
     // otherwise its lower end is the negated upper root, at least −(far(Q, 0) + h) ≥ −(ρ0 + 2ω₂ + h). So the lower end is
     // at least gap(Q, 0) − r − 2ρ0 − h − 2ω₂. The revolution reads gap(Q, 0) ≥ gap(B, 0) − |lift|, the extrusion's plain
     // join gap(B, 0) − |(r + 2ρ0 + h + 2ω₂, lift)|, and the chamfer's maximum only raises it.
-    private static ShapeSphere? TryTrapezoidSphere(in CompiledInstruction instruction) {
+    private static LocalCertificate? TryTrapezoidCertificate(in CompiledInstruction instruction) {
         var (r1, r2, h) = (((double)instruction.Data0X), ((double)instruction.Data0Y), ((double)instruction.Data0Z));
         var (kx, ky) = ((r2 - r1), (2.0 * h));
         var slantSquared = ((kx * kx) + (ky * ky));
@@ -434,7 +472,7 @@ public sealed partial class SdfFieldEvaluator {
         var extruded = (instruction.Data1Y > Half);
         var margin = (((2.0 * inner) + h) + (16.0 * RawUnit));
 
-        return new ShapeSphere(
+        return new LocalCertificate(
             BoxLoss: 2.0,
             BoxRadius: ((extruded ? Length(x: (profile + margin), y: lift, z: 0.0) : ((profile + margin) + lift)) + rounding),
             Boxed: true,
@@ -477,7 +515,7 @@ public sealed partial class SdfFieldEvaluator {
             Spread = ((long)((half + ((ulong)((((UInt128)half) * 3144134279UL) >> 32))) + 1UL));
         }
     }
-    // A certificate in raws, the form both walks test: v ≥ Gain·D − Radius with Gain = Q32/InverseGain at most one, and
+    // A certificate in raws, the form both walks test: v ≥ (Gain/Q32)·D − Radius. Gain rounds down and its inverse up;
     // for a box lower ≥ BoxGain·d − BoxRadius − BoxSpread·ω, each Q32 factor rounded the way that weakens the bound.
     private readonly record struct Reach(
         long CenterX, long CenterY, long CenterZ,
@@ -501,11 +539,11 @@ public sealed partial class SdfFieldEvaluator {
                 }
             }
 
-            if (!(shape.Gain > 0.0) || (shape.Gain > 2.0)) {
+            if (!RepresentableGain(gain: shape.Gain)) {
                 return false;
             }
 
-            var boxed = (shape.Boxed && (shape.BoxGain > 0.0) && (shape.BoxGain <= 2.0) && (Math.Abs(value: shape.BoxRadius) < Limit) && (shape.BoxSpread < 1024.0));
+            var boxed = (shape.Boxed && RepresentableGain(gain: shape.BoxGain) && (Math.Abs(value: shape.BoxRadius) < Limit) && (shape.BoxSpread < 1024.0));
 
             reach = Of(shape: (shape with { Boxed = boxed }));
 
@@ -584,6 +622,12 @@ public sealed partial class SdfFieldEvaluator {
                 return 0L;
             }
 
+            // TryOf admits gain <= 2, hence its upward inverse >= 2^31. This is already past the clamp.
+            // Below it required < 2^61 and inverse < 2^64, so the product plus rounding fits signed Int128.
+            if (required >= (((Int128)LeastLimit) * 2)) {
+                return LeastLimit;
+            }
+
             var least = ((((required * inverseGain) + (((Int128)1) << 32)) - 1) >> 32);
 
             return ((least >= LeastLimit) ? LeastLimit : ((long)least));
@@ -611,6 +655,11 @@ public sealed partial class SdfFieldEvaluator {
         private static ulong ScaledUp(ulong magnitude, ulong factor) => ((ulong)(((((UInt128)magnitude) * factor) + uint.MaxValue) >> 32));
         private static long SpreadRaws(ulong factor, long omega) => ((long)Math.Min(val1: ScaledUp(factor: factor, magnitude: ((ulong)omega)), val2: ((ulong)(long.MaxValue / 4L))));
         private static long Clamp(Int128 value) => ((long)Int128.Clamp(max: (long.MaxValue / 2L), min: (long.MinValue / 2L), value: value));
+        // Certificate representation only: valid fields remain readable when the gain has no safe raw form.
+        private static bool RepresentableGain(double gain) =>
+            ((gain > 0.0) && (gain <= 2.0) &&
+             (Math.Floor(d: ((gain * (1.0 - DoublePadding)) * Q32)) >= 1.0) &&
+             (Math.Ceiling(a: (((1.0 + DoublePadding) / gain) * Q32)) < ((double)ulong.MaxValue)));
         private static ulong GainBits(double gain) => ((ulong)Math.Floor(d: ((gain * (1.0 - DoublePadding)) * Q32)));
         private static ulong InverseGainBits(double gain) => (((ulong)Math.Ceiling(a: (((1.0 + DoublePadding) / gain) * Q32))) + 1UL);
         private static ulong FactorUp(double factor) => (((ulong)Math.Ceiling(a: ((factor * (1.0 + DoublePadding)) * Q32))) + 1UL);

@@ -206,6 +206,8 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         uint4 d = sdfSelectionRow(record, 3u);
         bool unboxed = (a.w & 1u) != 0u;
         uint4 state = sdfMeshOcclusionVisibleRW[draw];
+        // Visibility and detail belong to this observed surface incarnation, including a rejected occupant.
+        if (state.z != c.w) { state = uint4(0u, 0u, c.w, 0u); }
         bool occlude = (header.z & 1u) != 0u;
         bool kept = state.w != 0u;
         // A culled draw can retain another mesh's level in history; its current table may have fewer levels.
@@ -215,7 +217,6 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
             if (kept) {
                 level = sdfSelectionLevel(record, state, unboxed);
                 state.y = level;
-                state.z = c.w;
             }
             state.w = kept ? 1u : 0u;
         }

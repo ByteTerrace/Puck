@@ -42,6 +42,9 @@ public sealed class GpuUploadRuns {
     /// <summary>Gets the number of runs held.</summary>
     public int Count => m_count;
 
+    /// <summary>Gets the logical bytes in the retained integer arrays, excluding object and array headers.</summary>
+    public long StorageBytes => (((long)m_ends.Length + m_gaps.Length + m_widths.Length + m_starts.Length) * sizeof(int));
+
     /// <summary>Records <c>[start, start + length)</c> as owed; an empty range records nothing.</summary>
     /// <param name="start">The first unit of the range.</param>
     /// <param name="length">The range's length in units.</param>
@@ -88,10 +91,14 @@ public sealed class GpuUploadRuns {
     }
     /// <summary>Records as owed each run of words in which <paramref name="current"/> differs from
     /// <paramref name="previous"/> at the same index, and every word of <paramref name="current"/> past
-    /// <paramref name="previous"/>'s end, in increasing order.</summary>
+    /// <paramref name="previous"/>'s end, in increasing order, offset by <paramref name="startWord"/>.</summary>
     /// <param name="previous">The words a table held.</param>
     /// <param name="current">The words it holds now.</param>
-    public void AddDifferences(ReadOnlySpan<uint> previous, ReadOnlySpan<uint> current) {
+    /// <param name="startWord">The destination word corresponding to the spans' index zero.</param>
+    /// <returns>The differing or newly present words before merging or coarsening owed runs.</returns>
+    public int AddDifferences(ReadOnlySpan<uint> previous, ReadOnlySpan<uint> current, int startWord = 0) {
+        ArgumentOutOfRangeException.ThrowIfNegative(value: startWord);
+        _ = checked((startWord + current.Length));
         var shared = Math.Min(
             val1: previous.Length,
             val2: current.Length
@@ -99,6 +106,7 @@ public sealed class GpuUploadRuns {
         var before = previous[..shared];
         var after = current[..shared];
         var index = 0;
+        var changed = 0;
 
         while (index < shared) {
             index += after[index..].CommonPrefixLength(other: before[index..]);
@@ -115,14 +123,16 @@ public sealed class GpuUploadRuns {
 
             Add(
                 length: (index - start),
-                start: start
+                start: (startWord + start)
             );
+            changed += (index - start);
         }
 
         Add(
             length: (current.Length - shared),
-            start: shared
+            start: (startWord + shared)
         );
+        return (changed + (current.Length - shared));
     }
     /// <summary>Forgets every run, as a table's owed ranges reach the GPU.</summary>
     public void Clear() => m_count = 0;
@@ -134,6 +144,23 @@ public sealed class GpuUploadRuns {
     /// <param name="index">The run, below <see cref="Count"/>.</param>
     /// <returns>The run's start.</returns>
     public int Start(int index) => m_starts[index];
+
+    /// <summary>Returns whether a unit lies in the retained sorted runs. Coarsening includes the gaps it closed, so
+    /// membership describes the conservative represented ranges rather than only the originally added units.</summary>
+    /// <param name="value">The unit to find.</param>
+    /// <returns>Whether a run contains the unit, including its start and excluding its end.</returns>
+    public bool Contains(int value) {
+        var low = 0;
+        var high = m_count;
+
+        while (low < high) {
+            var middle = (low + ((high - low) >>> 1));
+            if (value < m_starts[middle]) { high = middle; }
+            else if (value >= m_ends[middle]) { low = (middle + 1); }
+            else { return true; }
+        }
+        return false;
+    }
 
     // Halves the run count by closing the smallest gaps: the runs are already ordered, and each gap no wider
     // than the one that leaves half the runs is closed, so the units re-sent are the narrowest gaps between runs and never

@@ -1,0 +1,29 @@
+import "forest-layout"
+
+let forestTufts = filter(scatterPoints(cellSize: 0.5, width: 560, depth: 220, spacing: 7, radius: 3,
+  seed: 8132), p => forestInBelt(p[0], p[2] - 150, 4) and lawnPathClear(p[0], p[2] - 150, 0.15) and
+  (forestInGlade(p[0], p[2] - 150, 2) or forestThicket(p[0], p[2] - 150) < -0.2))
+let forestDuff = filter(scatterPoints(cellSize: 0.5, width: 560, depth: 220, spacing: 11, radius: 5,
+  seed: 51893), p => forestInBelt(p[0], p[2] - 150) and not forestInGlade(p[0], p[2] - 150) and
+  lawnPathClear(p[0], p[2] - 150, 2.8))
+
+placements {
+  for (p, i) in forestTufts {
+    placement $"forest-tuft-{i}" {
+      surface: forestGround
+      prototype: "forest-tuft"
+      position [p[0], 0, p[2] - 150]
+      scale: 1.1 + 1.3 * forestVariation(i, 0.3)
+      yawDegrees: 360 * forestVariation(i, 0.1)
+    }
+  }
+  for (p, i) in forestDuff {
+    placement $"forest-duff-{i}" {
+      surface: forestGround
+      prototype: "forest-duff"
+      position [p[0], 0.005, p[2] - 150]
+      scale: 0.75 + 0.55 * forestVariation(i, 0.4)
+      yawDegrees: 360 * forestVariation(i, 0.7)
+    }
+  }
+}

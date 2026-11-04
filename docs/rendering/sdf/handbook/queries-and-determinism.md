@@ -258,14 +258,73 @@ reset the way the walks evaluate it:
 - A uniform scale divides with rounding and scales every later candidate; a
   fold, a non-uniform scale or any other point op leaves the chain without a
   certificate.
-- Sphere, Box, ScreenSlab, Cylinder, Torus, Capsule and Trapezoid have one; any
-  other shape leaves its chain and instance always walked.
+- Sphere, Box, ScreenSlab, Cylinder, Torus, Capsule and Trapezoid have local
+  distance-like certificates. Superellipsoid has a point-only field-gain
+  certificate; an uncovered shape leaves its chain and instance always walked.
 
 A point certificate bounds the candidate below by its gain times the distance
 to its centre, less a radius. A box certificate bounds the candidate
 interval's lower end the same way, less a multiple of the box's half-diagonal
 for each rotation that turned the box (the interval rotation encloses the
 turned box in an axis-aligned one), and bounds the interval's width.
+
+The superellipsoid has a **point-only field certificate**. It is not a
+Euclidean distance-to-enclosing-sphere bound. Let F be raw One, s the smallest
+positive compiled radius raw and rmax the largest. Each scaled-ratio coordinate
+q differs from its ideal raw value by at most E:
+
+- Product-first nearest rounding loses at most F/(2r)+1/2 raw. Its greatest
+  outward integer bound is `ceil((F+s)/(2s))`, attained at the smallest radius.
+- Divide-first loses at most s/(2F)+1/2 raw, bounded by `ceil((s+F)/(2F))`.
+
+The certificate takes the greater bound when either branch can occur, and only
+the divide-first bound when s forces that branch. The ceilings use Int128.
+No arbitrary dimension ceiling is imposed; nonpositive compiled radii or an
+unrepresentable certificate simply leave the primitive walked.
+
+For the admitted exponent interval, the maximum q/m is exactly One and its
+power is exactly One. Component powers stay in [0,One]; their sum is in
+[One,3One], whose positive root stays at least One in the actual numeric
+kernel. These are sign/range facts about `FixedQ4816.PowMagnitude`,
+`Log2Wide`, `PowExponentQ56` and `Exp2Q56`, not an assumption of approximate
+power monotonicity: the wide logarithm is nonnegative at these root bases;
+balanced negative fractions retain their positive integer-part margin; the
+exponential has positive coefficients/table and a mantissa below its signed
+carrier limit. A numeric-kernel change must preserve those facts or update the
+certificate proof. At exponent two, the full-width nearest-rounded,
+saturating vector norm is also at least its largest integral component.
+The centre arm gives -s. Thus the computed primitive is at least max(q)-s,
+giving the local bound, with p and v in metres:
+
+```text
+g = (s/rmax)/sqrt(3)
+v >= g*|p| - (s+E)/F
+```
+
+This also bounds the zero-level body's extents, but it does not replace the
+primitive's exact value with geometric distance. The theorem applies only
+inside the evaluator's frame, whose uncullable interval walk proves every
+ratio and final product fits the carrier. The new certificate has `Boxed=false`;
+no interval skip is granted by this point proof.
+
+`LocalCertificate.PointGain` defaults to one for distance-like fields. Through
+a transform chain, local gain g scales both the final gain and the point's
+transform-error allowance:
+
+```text
+Gain = g*(1-PointB)/Scale * PointScaleLow
+Radius = (g*(PointA+PointB*|localCentre|)+localRadius+PointSlack)
+         * PointScaleHigh + 0.5/F
+```
+
+The existing outward conversion then rounds the gain down and radius/inverse
+gain up. `Reach.TryOf` requires a nonzero representable gain and inverse before
+converting; that is a certificate representation restriction, not field
+admission. `Reach.Least` clamps before multiplying when required >= twice its
+limit: gain<=2 implies inverse>=2^31, and below that threshold the product is
+under2^125. Large smooth margins therefore cannot wrap into a false clearance.
+The existing strict union and scope/segment rules retain distance/material
+ties and instruction order.
 
 The walks skip:
 - An **instance** that joins the answer by hard union: its shapes compose by
@@ -302,7 +361,15 @@ A box near one
 object of many walks a fraction of the program; the overloads taking
 `instructionsWalked` report the instructions each walk visited, and
 `SdfFieldEvaluator.PointWork` and `SdfBoundsCache.ProcessWork` count them
-process-wide. A rotation reads each coordinate once per axis:
+process-wide. Their prepass-bound counters separately count every cheap instance
+rank, including point-only ranks in the box walk, so fewer visited instructions
+does not hide added ranking work. Construction counters report cumulative logical
+payload created for nullable shape-reach analysis and retained instance/member/
+segment/index arrays; scratch counters report reach-array creations and element
+payload at their actual allocation doors. These exclude array headers, list
+capacity and other analysis/rotation buffers. They are neither live ownership
+nor physical/process memory and do not introduce a second memory account.
+A rotation reads each coordinate once per axis:
 the exact rotation is linear in the point, so its enclosure is that matrix over
 the box, widened by the four raws the point code's two rounded stages can miss
 it by, and met with the step-by-step enclosure. The matrix assumes neither
@@ -374,6 +441,20 @@ random fields of turned, scaled and mirrored shapes.
 positions reach the carrier's ends, and holds every point answer inside its
 bounds or both refusing.
 
+Pruning research has different preservation contracts.
+[Barbier et al., Lipschitz Pruning (2025)](https://wbrbr.org/publications/LipschitzPruning/)
+construct region-local reductions of primitive CSG trees.
+[Hubert-Brierre et al., Accelerating Signed Distance Functions (2025)](https://perso.liris.cnrs.fr/eric.galin/Articles/2025-lod.pdf)
+also consider proxy nodes that change field values away from the surface while
+preserving conservative or Lipschitz properties. Those proxies do not satisfy
+this evaluator's exact point/material/gradient and interval contract merely by
+preserving a zero surface. Extend the existing certificate machinery against its
+actual rounded arithmetic before introducing another field representation.
+The October 2026 preprint
+[Witnessed Boolean Contracts](https://arxiv.org/abs/2610.39650)
+examines why sign/value closeness alone does not guarantee gradient-projected
+witness stability. It is a research lead, not a replacement for Puck's numerical
+proofs or an adopted query algorithm.
 ## What determinism means here
 
 Puck's determinism contract is a single sentence: **simulation state is a pure

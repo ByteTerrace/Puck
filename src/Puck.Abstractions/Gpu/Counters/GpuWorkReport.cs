@@ -30,7 +30,7 @@ namespace Puck.Abstractions.Gpu;
 /// full name.
 /// </para>
 /// </summary>
-public static class GpuWorkReport {
+public static partial class GpuWorkReport {
     /// <summary>The name of the section a readout prints its render nodes' work under.</summary>
     public const string Section = "gpu";
 

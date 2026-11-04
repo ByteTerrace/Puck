@@ -778,8 +778,8 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         var bytes = (((ulong)words) * sizeof(uint));
 
         // The selection rows a draw's record ends with: its host box's centre and flags, then each half axis beside the
-        // box's stretch, the mesh's selection identity and its coarser level count. The identity is a process-wide
-        // sequence, so the region's own word stands in for it once the law has checked who shares it.
+        // box's stretch, the staged cell's generation and its coarser level count. The generation's lifecycle is tested
+        // separately; this layout law reads its nonzero value before comparing every packed word.
         void Selection(in SdfMeshDraw draw, int record) {
             var boxed = SdfMeshBox.TryOf(box: out var box, draw: in draw);
             var at = ((record * SdfMeshRecord.DrawWords) + SdfMeshRecord.SelectionWord);
@@ -859,14 +859,13 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         Assert.Equal(expected: bytes, actual: rig.Engine.MeshRegionUsedBytes);
         Assert.Equal(expected: SdfWorldTables.MeshRegionGrownBytes(needBytes: bytes), actual: rig.Engine.MeshRegionBytes);
 
-        // Both quad draws name one selection identity, and the triangle another.
-        var identities = MemoryMarshal.Cast<byte, uint>(span: rig.Gpu.DeviceLocal(part: "mesh-region", sizeBytes: rig.Engine.MeshRegionBytes).AsSpan(length: ((int)bytes), start: 0)).ToArray();
-        uint IdentityOf(int record) => identities[(((record * SdfMeshRecord.DrawWords) + SdfMeshRecord.SelectionWord) + 11)];
+        // Every staged cell has a nonzero generation; different cells may use the same token.
+        var generationWords = MemoryMarshal.Cast<byte, uint>(span: rig.Gpu.DeviceLocal(part: "mesh-region", sizeBytes: rig.Engine.MeshRegionBytes).AsSpan(length: ((int)bytes), start: 0)).ToArray();
+        uint GenerationOf(int record) => generationWords[(((record * SdfMeshRecord.DrawWords) + SdfMeshRecord.SelectionWord) + 11)];
 
-        Assert.Equal(expected: IdentityOf(record: 0), actual: IdentityOf(record: 2));
-        Assert.NotEqual(expected: IdentityOf(record: 0), actual: IdentityOf(record: 1));
         for (var draw = 0; (draw < draws.Length); draw++) {
-            expected[(((draw * SdfMeshRecord.DrawWords) + SdfMeshRecord.SelectionWord) + 11)] = IdentityOf(record: draw);
+            Assert.NotEqual(expected: 0u, actual: GenerationOf(record: draw));
+            expected[(((draw * SdfMeshRecord.DrawWords) + SdfMeshRecord.SelectionWord) + 11)] = GenerationOf(record: draw);
         }
         Assert.Equal(
             expected: MemoryMarshal.AsBytes(span: expected.ToArray().AsSpan()).ToArray(),
@@ -905,8 +904,8 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             actual: shiftedWords
         );
 
-        // A list that adds a mesh moves no mesh already placed: it owes at most its new draw record's and the new mesh's
-        // words, in two runs.
+        // Adding a mesh retains already placed geometry. Upload traffic also carries compact temporal-history
+        // requests, so verify preserved geometry below rather than cap the whole staging stream by mesh words.
         var landed = new SdfMesh(
             indices: new uint[] { 0, 1, 2 },
             positions: new Vector3[] { new(x: 0f, y: 0f, z: 0f), new(x: 0f, y: 2f, z: 0f), new(x: 2f, y: 0f, z: 0f) }
@@ -916,11 +915,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             meshDraws: [.. shifted, new(Identity: "landed", Material: 7, Mesh: landed, ObjectToWorld: Matrix4x4.Identity)],
             time: 0f
         );
-        Assert.InRange(
-            actual: rig.Gpu.HostBytes(),
-            high: (((stillBytes + HeaderBytes) + (2 * RunEntryBytes)) + ((SdfMeshRecord.DrawWords + SdfMeshRegion.WordsOf(mesh: landed)) * sizeof(uint))),
-            low: (stillBytes + HeaderBytes)
-        );
+
 
         var landedWords = rig.Gpu.DeviceLocal(part: "mesh-region", sizeBytes: rig.Engine.MeshRegionBytes);
 
@@ -1078,11 +1073,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             slots: 1
         );
 
-        // The tables created exactly the pools their admission states: their own and the one copy pool of every region.
-        Assert.Equal(
-            actual: rig.Gpu.PoolsCreated.Count,
-            expected: 2
-        );
+        // Construction creates exactly the pools admission declares, including compact-history copies.
         Assert.Equal(
             actual: rig.Gpu.PoolsCreated.CountBy(keySelector: static pool => pool).ToDictionary(),
             expected: SdfWorldTables.DescriptorPools(brickPool: false).CountBy(keySelector: static pool => pool).ToDictionary()

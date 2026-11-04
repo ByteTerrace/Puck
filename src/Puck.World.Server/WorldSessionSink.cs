@@ -35,10 +35,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
     /// <summary>Gets what the observer threw, once it has.</summary>
     public Exception? Fault { get; private set; }
 
-    private bool CanObserve => (
-        (Tier != WorldDisclosureTier.Frames) &&
-        server.ObservesAsSession(session: observation.Session)
-    );
+    private bool CanObserve => observation.CanObserve;
     private WorldDisclosureTier Tier => observation.Tier;
 
     // Queries are read doors into the same disclosed view as deliveries. Only state observations have their own

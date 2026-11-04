@@ -1,0 +1,62 @@
+// Fixed views for surface scale, direction and ordinary-distance comparisons.
+import "../standard/camera"
+
+cameras [
+  {
+    name: "forest-bark"
+    renderWidth: 1280
+    renderHeight: 900
+    rig {
+      name: "forest-bark"
+      version: "puck.camera.program.v1"
+      operations [
+        anchor(opcode: "anchor", subject: worldPoint(point: [45, 1.6, -140]))
+        lookAt(focusDistance: 5, opcode: "lookAt", subject: worldPoint(point: [43, 1.6, -144]), worldAxes: false)
+        fieldOfView(fieldOfViewRadians: 1.05, opcode: "fov")
+      ]
+    }
+  }
+  {
+    name: "forest-foliage"
+    renderWidth: 1280
+    renderHeight: 900
+    rig {
+      name: "forest-foliage"
+      version: "puck.camera.program.v1"
+      operations [
+        anchor(opcode: "anchor", subject: worldPoint(point: [45, 11, -138]))
+        lookAt(focusDistance: 8, opcode: "lookAt", subject: worldPoint(point: [43, 7.2, -144]), worldAxes: false)
+        fieldOfView(fieldOfViewRadians: 1.05, opcode: "fov")
+      ]
+    }
+  }
+  {
+    name: "forest-ground"
+    renderWidth: 1280
+    renderHeight: 900
+    rig {
+      name: "forest-ground"
+      version: "puck.camera.program.v1"
+      operations [
+        anchor(opcode: "anchor", subject: worldPoint(point: [64, 2.3, -165]))
+        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [65, 0, -170]), worldAxes: false)
+        fieldOfView(fieldOfViewRadians: 1.05, opcode: "fov")
+      ]
+    }
+  }
+  {
+    name: "forest-ground-low"
+    renderWidth: 1280
+    renderHeight: 900
+    rig {
+      name: "forest-ground-low"
+      version: "puck.camera.program.v1"
+      operations [
+        anchor(opcode: "anchor", subject: worldPoint(point: [64, 0.55, -164]))
+        lookAt(focusDistance: 7, opcode: "lookAt", subject: worldPoint(point: [65, 0.12, -171]), worldAxes: false)
+        fieldOfView(fieldOfViewRadians: 1.05, opcode: "fov")
+      ]
+    }
+  }
+
+]

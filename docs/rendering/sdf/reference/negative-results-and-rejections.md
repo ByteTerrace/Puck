@@ -20,19 +20,23 @@ that cannot be represented or cached as bounded regions.
 
 **Current decision:** Not applicable to the frame.
 
-The frame marches no ray: every view rasterizes baked meshes, and the bake
-selects a group's instances with a mask. A hierarchy over analytic instances
-would serve only a renderer that traces the field per pixel.
+Every view rasterizes baked meshes, so a hardware field-ray hierarchy is not a
+replacement for that frame path. CPU surface queries and mesh baking still
+evaluate analytic fields. Certified range pruning or a hierarchy can serve
+those consumers; assess it against `SdfFieldEvaluator`'s existing reach
+certificates before adding another index.
 
 **Reconsider when:** A view needs per-pixel field rays again.
 
 ## Per-tile instruction pruning and march scheduling
 
-**Current decision:** Not applicable.
+**Current decision:** Not a GPU frame-rendering path.
 
-Tile-pruned instruction tapes and wavefront or persistent-thread march
-schedulers reduce the cost of per-pixel field marches, which no view takes.
-The bake's cost is bounded per frame by `SdfMeshPathBake.FrameTaps` instead.
+No view performs per-pixel field marching. That does not reject region-local
+pruning for CPU surface queries or baking: those still pay to evaluate the
+field. Their pruning must preserve exact fixed-point answers and certified
+bounds. `SdfMeshPathBake.FrameTaps` budgets bake work; it does not make each
+field evaluation cheap.
 
 ## Coverage rasterizers as geometry
 

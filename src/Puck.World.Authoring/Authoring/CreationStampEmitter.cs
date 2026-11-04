@@ -63,7 +63,7 @@ public readonly record struct FixedCreationStampPrimitiveCopy(ShapeDocument Shap
 /// <summary>
 /// Emits and expands <c>puck.creation.v1</c> shape geometry under one materialized stamp transform.
 /// </summary>
-public static class CreationStampEmitter {
+public static partial class CreationStampEmitter {
     // The degeneracy floor on a scale axis, SdfSolidGeometry.MinimumScale in the fixed domain. Q48.16 resolves 1/65536,
     // so the floor lands on the nearest representable value above it rather than exactly — this is a guard against a
     // zero-scale axis collapsing the frame, never a value a result is read off, so the quantization is immaterial. A

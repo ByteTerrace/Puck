@@ -552,20 +552,26 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
                     );
 
                     resource.Buffers = new IGpuBuffer[resource.Count];
-                    IGpuBuffer? borrowed = null;
+                    RenderGraphBorrowedBuffer? borrowed = null;
 
                     foreach (var pass in built.Passes) {
                         if ((pass?.PackageContext is { } context) && context.Outputs.Any(predicate: output => planned.Versions.Contains(value: output.Name))) {
-                            borrowed = pass.PackageFactory!.BorrowedBuffer(built: pass.PackageBuilt, context: context, resource: declaration);
-                            if (borrowed is not null) { break; }
+                            borrowed = pass.PackageFactory!.BorrowedBuffer(built: pass.PackageBuilt, context: context, resource: declaration, previous: null);
+                            if (borrowed is not null) {
+                                resource.BorrowedFactory = pass.PackageFactory;
+                                resource.BorrowedContext = context;
+                                break;
+                            }
                         }
                     }
-                    if (borrowed is not null) {
-                        if (borrowed.SizeBytes < sizeBytes) {
-                            throw new InvalidDataException(message: $"Borrowed buffer '{declaration.Name}' holds {borrowed.SizeBytes} bytes, requires {sizeBytes}.");
+                    if (borrowed is { } acquisition) {
+                        resource.BorrowedOwnership = acquisition.Ownership;
+                        if (acquisition.Buffer.SizeBytes < sizeBytes) {
+                            throw new InvalidDataException(message: $"Borrowed buffer '{declaration.Name}' holds {acquisition.Buffer.SizeBytes} bytes, requires {sizeBytes}.");
                         }
                         resource.Borrowed = true;
-                        Array.Fill(array: resource.Buffers, value: borrowed);
+                        resource.BorrowedRequiredBytes = sizeBytes;
+                        Array.Fill(array: resource.Buffers, value: acquisition.Buffer);
                         continue;
                     }
                     if (m_packages.OwnsBuffer(plan: plan, storage: planned)) {
@@ -754,6 +760,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
     // Begins the slot's one command list, which every pass, the preview, the export copy and the presentation record
     // into; only the region copies, which the passes' recordings owe, record in a list of their own, submitted first.
     private nint BeginFrameCommands(int slot) {
+        RefreshBorrowedBuffers();
         var command = m_slots[slot].Commands!.CommandBufferHandle;
 
         m_gpu.Recorder.BeginCommandBuffer(commandBufferHandle: command);

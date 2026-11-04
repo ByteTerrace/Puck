@@ -27,6 +27,12 @@ weighs a Puck-native combination beside the borrowed technique and says which
 wins. Every published number below keeps its original hardware and workload;
 none is a prediction for Puck.
 
+The current [dense-landscape milestone](dense-landscapes.md) includes continuous
+forest, roads, shrubs and grass. Its fresh baseline and L0/L1 sequencing focus
+this plan's V1/V2 work together with static-copy sharing and CPU field queries.
+This page continues to own the visibility/instance design; the landscape page
+owns the composed workload and its measurements.
+
 ## Where visibility stands
 
 The round read the code, and the plan rests on these facts. Paths are under
@@ -54,15 +60,18 @@ in the tree.
   driven by state cells (`worlds/standard/foliage.puck:409-554`). Animated
   placements bypass the pose-rate holds
   (`src/Puck.World.Client/WorldCreationInstances.Pack.cs:246-249`,
-  `WorldCreationInstances.Rates.cs:192-195`), so every slot poses every frame.
-- **`SdfMeshPathBake.Dress` rebuilds the whole draw list** when any dynamic
-  slot moved (`SdfMeshPathBake.cs:384-425`), allocating a draw per copy and
-  scanning every mesh instance for each dynamic group (`:390-395`); the scan
-  alone cost 0.6 to 1.2 ms a frame at the lobby before the meadow existed
-  ([packet](open-items.md#engine-job-system)). A record is 47 words, 63 on R2
-  with its selection rows (`src/Puck.SdfVm.Model/SdfMeshRecord.cs:15`), written
-  once per changed draw; every moving blade is a changed draw, so the meadow
-  re-stages about 4,215 × 252 B, roughly 1 MB, a frame.
+  `WorldCreationInstances.Rates.cs:192-195`). The outer owner wake guard can retain
+  their poses; the body-only rate hold is a separate decision. Driver continuation
+  now prevents an active authored clock from settling merely because one output
+  pose was equal.
+- **Dressing retains topology and picking metadata.** `SdfMeshDresser.Dress`
+  reads the copy-membership index shared with bake demand instead of scanning
+  every copy per group. Changed poses still traverse retained bindings and
+  staging comparisons; shared pose derivation and dirty ranges remain open.
+  `SdfMeshRegion.WriteDrawIncremental` assigns only dependent fields, while
+  `GpuUploadRuns.AddDifferences` determines exact changed words before upload
+  coalescing. Read those work counts and actual upload bytes separately: the
+  full record size alone no longer describes CPU work or transfer volume.
 - **A draw whose mesh has members has no box** (`SdfMeshBox.cs:39-47`): it is
   never culled, never occlusion-tested and never coarsened.
 - **The opaque fragment loses forced early depth** to the stamp fade's `clip`
@@ -70,11 +79,11 @@ in the tree.
   (`Assets/Shaders/Sdf/passes/sdf-mesh.frag.hlsl:13-18`,
   `frame/sdf-stamp-fade.hlsli:13`). The shadow fragment counts under
   `[earlydepthstencil]` (`passes/sdf-mesh-shadow.frag.hlsl:8-10`).
-- **The visible set is keyed by draw index.** R2's kernel reads and writes
-  `sdfMeshOcclusionVisibleRW[draw]`; its level history re-checks the mesh's
-  identity, its visible bit does not. When `Dress` renumbers draws, phase one
-  draws the wrong set for a frame. Phase two re-tests every kept box, so the
-  image stays correct and the cost is a spike; no run has exercised it.
+- **Visibility storage is indexed by draw, with generation validation.**
+  `sdf-mesh-occlusion.comp.hlsl` compares the retained generation before using
+  visibility history. A draw-index change alone is not evidence of accepting
+  another mesh's bit. Stable identities and history invalidation remain part of
+  the compaction contract; measure them under cuts and renumbering.
 - **The two depth pyramids are not duplicates.** The occlusion pyramid holds
   the farthest forward depth of each block and is built between the mesh
   pass's phases. The ambient-occlusion pyramid is built after phase two and
@@ -145,7 +154,7 @@ creation effectors' surface probes (`WorldCreationInstances.ApplyEffectors` into
 chase camera's clearance march (`WorldCameraClearance.Clear`) 18 %. The
 presenter's `WorldFramePresenter.Dress` (18.6 %) is that clearance march
 (`ResolveCamera` into `WorldSeatViewState.Clear`, 18.0 %), not draw work. The
-draw list's own `SdfMeshPathBake.Dress` is 4.4 % and
+draw list's historical "SdfMeshPathBake.Dress" label is 4.4 % and
 `SdfWorldTables.StageChangedDraws` 4.4 %, both under the residency's capture;
 `SdfWorldResidency.PrepareOnce` 9.8 %;
 `SdfWorldTables.Pack` 6 %; command recording (`ShaderPipelineRenderNode.RenderFrame`)

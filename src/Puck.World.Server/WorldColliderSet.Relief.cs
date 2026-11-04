@@ -20,7 +20,7 @@ public sealed partial class WorldColliderSet {
     /// <summary>Returns whether a creation carries relief: a noise facet of nonzero amplitude.</summary>
     /// <param name="document">The creation.</param>
     /// <returns><see langword="true"/> when the creation has a noise facet of nonzero amplitude.</returns>
-    internal static bool Relieves(CreationDocument document) => (document.Noise is { } noise) && (noise.Amplitude != 0f);
+    internal static bool Relieves(CreationDocument document) => CreationStampEmitter.HasRelief(document);
     /// <summary>Returns whether a creation's solid collides as its composed field rather than as its primitives: it
     /// carries relief, or a shape contact keeps joins the others by any blend but a hard union, whose surface the
     /// independent primitives do not draw.</summary>
@@ -141,13 +141,7 @@ public sealed partial class WorldColliderSet {
         var builder = new SdfProgramBuilder();
         var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
 
-        _ = builder.PushField(compose: SdfBlendOp.Union);
-        CreationStampEmitter.EmitFixed(builder: builder, document: document, transform: transform, materialFor: _ => material,
-            contactMargin: margin);
-        if (relieved) {
-            CreationStampEmitter.EmitNoise(builder: builder, noise: document.Noise!, transform: transform);
-        }
-        _ = builder.PopField();
+        CreationStampEmitter.EmitContact(builder, document, transform, material, margin, applyRelief: relieved);
         WorldBootWork.Count(kind: WorldBootWork.ShapeBuilds);
         return builder.Build();
     }

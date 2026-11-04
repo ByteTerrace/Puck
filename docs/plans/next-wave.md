@@ -1,5 +1,12 @@
 # The next wave
 
+The owner's current focus is [dense landscapes](dense-landscapes.md), including
+continuous forest in the first milestone. Its current-source baseline and
+implementation plan are requested now. The lanes below are inputs to that
+plan; its L0/L1 order leads the next engineering batch. Ground cover no longer
+waits in the owner-review ideas list. Broad skill evaluation is supporting work,
+with readiness issues for the selected lanes addressed as they are found.
+
 The lane plan for [Next](open-items.md#next) items 0 to 3, ready to launch. It
 starts only on the owner's explicit word (the owner's ruling). Three read-only
 grounding passes checked every premise against the code at the main landing; each
@@ -15,8 +22,10 @@ has consumed them.
 The integration branch is `lead/fundamentals`, pushed and complete.
 1. Check it out in the main checkout, which tracks the integration branch.
 2. Work from a worktree off it.
-3. Pick up from the [agent tooling](open-items.md#agent-tooling-and-skills)
-   item's skill-eval program, then the steps below, before the owner's go.
+3. Read the [landscape baseline and next action](dense-landscapes.md#next-action)
+   and recheck its cited sources. Keep the remaining
+   [agent-tooling work](open-items.md#agent-tooling-and-skills) alongside the
+   selected lanes rather than restarting the whole eval program first.
 
 Eval results and traces stay under each skill's git-ignored
 `evals/results/` on the machine that ran them. Another machine re-runs both
@@ -58,9 +67,9 @@ Parallel lanes, with no shared files except where an order is named:
      `ShaderPipelineMemoryBudget` and `MemoryAccount`.
 
    Budget: 10 GB on the Deck tier. Proof: a GPU leg and one budgeted cold bake.
-4. **draw-identity, then V2b** (specialist). One per-index generation
-   (`SelectionWord+11`) and one Observe method, honoured by the occlusion
-   kernel; this folds the two identity comparisons.
+4. **V2b** (specialist). The shared draw-history contract is implemented;
+   retained instance updates now build on `SdfMeshHistory.Observe` and its
+   table-owner-scoped GPU selection history.
 5. **v2a** (implementer or specialist). Rate holds per registration; it pays
    on the lawn's far tiles. Pre-read `world.rates` first.
 6. **static-copy** (a principal design note, then specialist). Static copies
@@ -68,8 +77,9 @@ Parallel lanes, with no shared files except where an order is named:
    role and deduplicated by the mesh library, together with "grouping depends
    on spelling". The design note decides the slot numbering.
 7. **dress** (specialist, after or coordinated with static-copy and V2b, which
-   share `SdfMeshPathBake.Dress`). An unboxed motion identity, slot-indexed
-   instances, and no `ToArray` per rebuild.
+   share `SdfMeshDresser.Dress`). Topology, copy indexing and cached motion keys
+   are retained now; actual dirty ranges and shared pose derivation remain in the
+   [landscape work](dense-landscapes.md).
 8. **Antigravity coding trial**: the `HeapAllocator` dedupe (five copies) and
    the Superellipsoid's far field ([certified field contact](open-items.md#certified-field-contact))
    and small radius ([the valley's terrain](open-items.md#the-valleys-terrain));
@@ -91,9 +101,9 @@ Later, with their designs done: the [rule-faults](rule-faults.md) steps, the
 ## Before the owner's go
 
 - The lift waits on the owner's go.
-- The skill-eval program finishes first, so the lanes start on proven
-  `delegate` and orchestration skills
-  ([agent tooling](open-items.md#agent-tooling-and-skills)).
+- Address demonstrated skill-readiness issues for the selected lanes; the
+  remaining broad [skill-eval program](open-items.md#agent-tooling-and-skills)
+  runs alongside the landscape work.
 - Design the player menu, player saves and the hub to worlds shape before any
   code ([the owner's rulings](../decisions/play.md#the-game)).
   1. A read-only grounding pass finds what already exists: identity and

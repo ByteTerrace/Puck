@@ -113,7 +113,7 @@ public sealed partial class SdfMeshPathBake {
     private long m_flyingGroups;
     private long m_workingGroups;
 
-    // How long the frame thread waited to take the bake's gate (Dress, TryTakeForFrame and Stage) since the bake
+    // How long the frame thread waited to take the bake's gate (PrepareFrame, TryTakeForFrame and Stage) since the bake
     // started: the longest wait, their sum, and the waits past a millisecond. A worker that holds the gate through
     // array-sized work shows here as frame time.
     private long m_frameGateWaitMax;
@@ -170,9 +170,7 @@ public sealed partial class SdfMeshPathBake {
         foreach (var group in m_groups) {
             if (group.Done || !group.HasDemandBox) { continue; }
 
-            var (center, half) = WorldBox(group: group);
-
-            group.Priority = Demand.Priority(center: center, half: half);
+            group.Priority = MeasureDemand(group, priority: true);
         }
         // A group baking geometry other groups wait on ranks as the most wanted of them.
         foreach (var group in m_groups) {
@@ -288,9 +286,7 @@ public sealed partial class SdfMeshPathBake {
                 group.Retired = true;
                 group.InFlight = false;
             }
-            m_drawClaims?.Dispose(); m_drawClaims = null;
-            m_pointTableStorage?.Dispose(); m_pointTableStorage = null;
-            m_pointTableMemory.Dispose();
+            m_inputTransport?.Dispose(); m_inputTransport = null;
         }
         lock (WorkGate) { _ = WorkQueue.RemoveAll(match: item => { if (!item.Group.Retired) { return false; } item.Group.EndWork(); return true; }); }
     }
@@ -343,21 +339,33 @@ public sealed partial class SdfMeshPathBake {
     // the world-axis box about the turned one.
     private (Vector3 Center, Vector3 Half) WorldBox(Group group) {
         if (!group.Dynamic || (group.Slot >= m_demandTransforms.Count)) { return (group.DemandCenter, group.DemandHalf); }
-
         var transform = m_demandTransforms[group.Slot];
         var units = SdfMeshGeometryBuilder.UnitsOf(transform: transform);
         var orientation = ((transform.Orientation == default) ? Quaternion.Identity : transform.Orientation);
-        var turn = Matrix4x4.CreateFromQuaternion(quaternion: orientation);
-        var half = (group.DemandHalf * MathF.Abs(x: units));
-
-        return (
-            (transform.Position + Vector3.Transform(rotation: orientation, value: (group.DemandCenter * units))),
-            new Vector3(
-                x: (((MathF.Abs(x: turn.M11) * half.X) + (MathF.Abs(x: turn.M21) * half.Y)) + (MathF.Abs(x: turn.M31) * half.Z)),
-                y: (((MathF.Abs(x: turn.M12) * half.X) + (MathF.Abs(x: turn.M22) * half.Y)) + (MathF.Abs(x: turn.M32) * half.Z)),
-                z: (((MathF.Abs(x: turn.M13) * half.X) + (MathF.Abs(x: turn.M23) * half.Y)) + (MathF.Abs(x: turn.M33) * half.Z))
-            )
-        );
+        var matrix = ((Matrix4x4.CreateScale(units) * Matrix4x4.CreateFromQuaternion(orientation)) * Matrix4x4.CreateTranslation(transform.Position));
+        return TransformDemandBox(group, matrix);
+    }
+    private static (Vector3 Center, Vector3 Half) TransformDemandBox(Group group, Matrix4x4 matrix) {
+        var half = group.DemandHalf;
+        return (Vector3.Transform(group.DemandCenter, matrix), new Vector3(
+            ((MathF.Abs(matrix.M11) * half.X) + (MathF.Abs(matrix.M21) * half.Y) + (MathF.Abs(matrix.M31) * half.Z)),
+            ((MathF.Abs(matrix.M12) * half.X) + (MathF.Abs(matrix.M22) * half.Y) + (MathF.Abs(matrix.M32) * half.Z)),
+            ((MathF.Abs(matrix.M13) * half.X) + (MathF.Abs(matrix.M23) * half.Y) + (MathF.Abs(matrix.M33) * half.Z))));
+    }
+    // A shared geometry is wanted where its actual occurrences stand. Never union distant occurrence boxes:
+    // the empty space between them is neither visible demand nor a nearby surface.
+    private float MeasureDemand(Group group, bool priority) {
+        if (CopiesOf(group) is not { } copies) {
+            var (center, half) = WorldBox(group);
+            return (priority ? Demand.Priority(center, half) : Demand.DistanceFrom(index: 0, center: center, half: half));
+        }
+        var result = (priority ? 0f : float.PositiveInfinity);
+        foreach (var index in copies) {
+            var (center, half) = TransformDemandBox(group, m_demandCopies[index].Matrix);
+            var value = (priority ? Demand.Priority(center, half) : Demand.DistanceFrom(index: 0, center: center, half: half));
+            result = (priority ? MathF.Max(result, value) : MathF.Min(result, value));
+        }
+        return result;
     }
 
     /// <summary>Stamps, on the frame's thread after the frame's mesh region is staged, each group the bake has finished and
@@ -384,7 +392,7 @@ public sealed partial class SdfMeshPathBake {
                 // A mesh is resident once the frame's draws name it and the region owes none of its words; one the
                 // current draws do not name (a template no copy draws) costs the region nothing and counts too.
                 if (group.Mesh is { } mesh) {
-                    var held = (m_drawnMeshes >= 0);
+                    var held = (m_dressedRevision == m_productRevision);
 
                     if (mesh.Chunks.Count == 0) {
                         held &= !tables.OwesMesh(mesh: mesh);
@@ -421,8 +429,7 @@ public sealed partial class SdfMeshPathBake {
             Group? lastNear = null;
 
             foreach (var group in m_groups) {
-                var (center, half) = WorldBox(group: group);
-                var isNear = (group.HasDemandBox && (Demand.Count > 0) && (Demand.DistanceFrom(center: center, half: half, index: 0) <= radius));
+                var isNear = (group.HasDemandBox && (Demand.Count > 0) && (MeasureDemand(group, priority: false) <= radius));
 
                 near += (isNear ? 1 : 0);
                 if (group.LandedAt != 0) {

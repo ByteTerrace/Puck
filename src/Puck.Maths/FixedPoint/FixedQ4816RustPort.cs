@@ -48,6 +48,7 @@ public static class FixedQ4816RustPort {
         {
             (0L, 0L), (0L, one), (0L, -one), (0L, (2L * one)), (0L, (-2L * one)),
             (one, 0L), (one, one), (one, -one), ((2L * one), one), ((2L * one), -one),
+            (one, (one / 2L)), (one, (one + 1L)), (one, long.MinValue), (one, long.MaxValue),
             (-one, 0L), (-one, one), (-one, -one), (-one, (2L * one)), (-one, (3L * one)),
             (-one, (32L * one)), (-one, (33L * one)), (-one, (-32L * one)), (-one, (-33L * one)),
             (-(2L * one), (32L * one)), (-(2L * one), (33L * one)),
@@ -1277,6 +1278,10 @@ fn pow_whole(magnitude: u64, exponent: i64, negative_result: bool) -> i64 {
 // The magnitude kernel — ported from FixedQ4816.PowMagnitude. `x` is strictly positive; `negative_result`
 // carries the sign the caller's base/exponent parity already decided.
 fn pow_magnitude(x: i64, y: i64, whole: bool, negative_result: bool) -> i64 {
+    if x == ONE {
+        return if negative_result { -ONE } else { ONE };
+    }
+
     let exponent = y >> FRACTION_BITS;
 
     if whole {

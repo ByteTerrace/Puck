@@ -119,6 +119,7 @@ public sealed class MeshSurfaceDeviceLawTests {
         var words = new uint[layout.Words];
 
         SdfMeshRegion.Write(
+            generations: Enumerable.Repeat(1u, Draws.Length).ToArray(),
             destination: words,
             draws: Draws,
             layout: layout,

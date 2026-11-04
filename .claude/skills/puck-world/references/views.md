@@ -598,7 +598,7 @@ Free Cam do not alter the logical movement basis.
   `kind`, `source`, `material`, and the hit's `placement`, `body` and `slot`,
   each `none` when absent) or `pending`. It refuses an instance that is not a
   rendered SDF view. A mesh pixel's source indexes the dressed draw list
-  (`SdfMeshPathBake.Dress`: the host's draws, one draw per baked group, then the
+  (`SdfMeshDresser.Dress`: the host's draws, one draw per baked group, then the
   portal-straddle copies), which `SdfDressedPickMap` resolves: a baked group's draw
   names its first instance's placement or body, a copy names what it was copied from.
 - `world.patrol <x0> <z0> <x1> <z1> <step> [yawDegrees|-] [settleTicks] [y|-]` — walks body 0

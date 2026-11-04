@@ -133,6 +133,18 @@ The direct walk retains internal cuts, blend order, the material winner and the
 scope's distance correction; unsupported parts use the generic interpreter.
 The shader implementation is in `Assets/Shaders/Sdf/field/sdf-parts.hlsli`.
 
+Mesh cache identity follows the positive production entries in `SdfMeshBakeClosure.BakeRoots`, including constructor
+defaults, exact point/pose preparation, the `SdfMeshBakeReadback` sample handoff, contour/material/skin/level work and
+store normalization/encoding and `SdfMeshBakeBlock.Write`, together with the two bake kernels. `SdfMeshDresser` owns presentation separately:
+retained topology, poses, clipping, picking and mesh claims. It reads live landed products through the bake's locked
+`PrepareFrame` access and acknowledges the captured product revision only after publishing the dressed frame.
+The one copy-membership index serves both bake demand and dressing. Dresser disposal releases its claims before
+bake retirement. This separation also keeps type-granular hot reload of `SdfMeshDresser`, `SdfMeshHistory`, `SdfWorldPassRecorder`, `SdfWorldTables`,
+`SdfFrameBlock` and `SdfMeshRegion` outside the bake identity. The shared `ShaderParameterWriter` writes both view and
+bake blocks, while each block type owns only its own offsets. Field and material appearance packing still share the
+program constructor and remain conservatively included; this separation does not promise every appearance edit is
+cache-neutral.
+
 The tables' construction options (`SdfWorldTablesOptions`) set an
 initial program-word and instance reserve and a fixed dynamic-transform
 capacity. `UploadProgram` grows the program-word and instance buffers when a
@@ -186,6 +198,19 @@ history; after motion stops, one last copy settles its changed rows, and later
 still frames copy nothing. These copies add device-local bytes and counted
 buffer copies, with no second host upload. Mesh history is a table of its own so
 the host-written mesh region's CPU shadow stays exact.
+
+`SdfMeshHistory.Observe` supplies one per-index surface generation and CPU matrix
+seed decision. Changing the stable motion key, mesh or surface interpretation
+seeds a new incarnation; continuous matrix changes retain it. Retirement releases
+references while preserving token lifetimes through regrowth. Selection history
+belongs to the actual `SdfWorldTables` owner and that generation:
+`SdfMeshOcclusion.Stage` clears it when a retained recorder changes tables.
+Visibility and detail validate the token before reading prior state.
+`SdfMeshInstance.IsDynamic` is required semantic information, independent of having
+a transform slot; both dressing paths preserve it. Fixed local copies can enter
+static irradiance geometry; wind-deformed canopies still need a traced-surface and
+invalidation design. `sdf.instances` counts observed/seeded/retired cells, changed
+matrices and packed records/bytes; packed bytes are not GPU transfer bytes.
 
 Previous-transform transfers contribute their range lengths to `gpu.copies.buffer-bytes`
 in the existing upload pass. A dynamic row contributes 48 bytes and a mesh draw

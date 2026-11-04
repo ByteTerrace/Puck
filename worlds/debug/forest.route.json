@@ -1,0 +1,244 @@
+{
+  "schema": "puck.motion.route.v1",
+  "name": "continuous-forest",
+  "warmupTicks": 180,
+  "lastTick": 600,
+  "setup": [
+    "world.quality high",
+    "world.cadence off",
+    "view.override layout play",
+    "view.override camera auto",
+    "world.debug-view off",
+    "world.gpu-timing on"
+  ],
+  "inputSteps": [
+    {
+      "at": 1,
+      "run": "body.stop 0"
+    },
+    {
+      "at": 1,
+      "run": "body.pose spawn:forest 0"
+    }
+  ],
+  "presentationSteps": [
+    {
+      "at": 3,
+      "run": "view.recenter 1"
+    },
+    {
+      "at": 4,
+      "run": "view.reseed 0"
+    },
+    {
+      "at": 181,
+      "through": 420,
+      "run": "player.move 0.14 0.26"
+    },
+    {
+      "at": 421,
+      "through": 540,
+      "run": "player.move 0.13 0.27"
+    },
+    { "at": 210, "run": "body.where 0" },
+    { "at": 240, "run": "body.where 0" },
+    { "at": 270, "run": "body.where 0" },
+    { "at": 300, "run": "body.where 0" },
+    { "at": 330, "run": "body.where 0" },
+    { "at": 360, "run": "body.where 0" },
+    { "at": 390, "run": "body.where 0" },
+    { "at": 420, "run": "body.where 0" },
+    { "at": 450, "run": "body.where 0" },
+    { "at": 480, "run": "body.where 0" },
+    { "at": 510, "run": "body.where 0" },
+    { "at": 540, "run": "body.where 0" },
+    {
+      "at": 541,
+      "run": "player.move 0 0"
+    }
+  ],
+  "metrics": [
+    {
+      "name": "instances",
+      "run": "world.counters sdf.instances --json",
+      "parse": "counters"
+    },
+    {
+      "name": "creations",
+      "run": "world.counters sdf.creations --json",
+      "parse": "counters"
+    },
+    {
+      "name": "transforms",
+      "run": "world.counters sdf.transforms --json",
+      "parse": "counters"
+    },
+    {
+      "name": "gpu",
+      "run": "world.counters gpu summary --json",
+      "parse": "text"
+    },
+    {
+      "name": "gpu-transfers",
+      "run": "world.counters gpu transfers --json",
+      "parse": "gpu-transfers"
+    },
+    {
+      "name": "residency",
+      "run": "world.residency",
+      "parse": "pairs"
+    },
+    {
+      "name": "memory",
+      "run": "host.memory",
+      "parse": "pairs"
+    },
+    {
+      "name": "account-owners",
+      "run": "host.memory owners 0",
+      "parse": "text"
+    },
+    {
+      "name": "frames",
+      "run": "host.frames 300",
+      "parse": "frames"
+    },
+    {
+      "name": "quality",
+      "run": "world.quality",
+      "parse": "text"
+    },
+    {
+      "name": "rates",
+      "run": "world.rates",
+      "parse": "text"
+    },
+    {
+      "name": "indirect",
+      "run": "world.indirect",
+      "parse": "text"
+    },
+    {
+      "name": "position",
+      "run": "body.where 0",
+      "parse": "text"
+    },
+    {
+      "name": "render-scale",
+      "run": "world.render-scale",
+      "parse": "text"
+    },
+    {
+      "name": "bloom",
+      "run": "world.bloom",
+      "parse": "text"
+    },
+    {
+      "name": "point-queries",
+      "run": "world.counters sdf.point --json",
+      "parse": "counters"
+    },
+    {
+      "name": "surface-queries",
+      "run": "world.counters sdf.queries --json",
+      "parse": "counters"
+    },
+    {
+      "name": "interval-queries",
+      "run": "world.counters sdf.bounds --json",
+      "parse": "counters"
+    }
+  ],
+  "checks": [
+    {
+      "name": "cadence-off",
+      "line": "world.cadence",
+      "parse": "text",
+      "red": [
+        "text != [world.cadence: off]"
+      ]
+    },
+    {
+      "name": "play-camera-auto",
+      "line": "world.view.state",
+      "parse": "text",
+      "metrics": {
+        "layout": "active=(\\S+)",
+        "selection": "selection=(\\S+)"
+      },
+      "red": [
+        "layout != play",
+        "selection != override",
+        "text ~ camera="
+      ]
+    },
+    {
+      "name": "debug-off",
+      "line": "world.debug-view",
+      "parse": "text",
+      "red": [
+        "text != [world.debug-view: off default]"
+      ]
+    },
+    {
+      "name": "gpu-timing-on",
+      "line": "world.gpu-timing",
+      "parse": "text",
+      "metrics": {
+        "enabled": "^\\[world\\.gpu-timing: (on|off)"
+      },
+      "red": [
+        "enabled != on"
+      ]
+    },
+    {
+      "name": "quality-high",
+      "line": "world.quality",
+      "parse": "text",
+      "metrics": {
+        "shadows": "shadows=([^\\s\\]]+)",
+        "ao": "ao=([^\\s\\]]+)",
+        "temporal": "temporal=([^\\s\\]]+)",
+        "dynamic-resolution": "dynamic-resolution=([^\\s\\]]+)",
+        "render-scale": "render-scale=([^\\s\\]]+)",
+        "sky": "sky=([^\\s\\]]+)",
+        "sky-field-scale": "sky-field-scale=([^\\s\\]]+)",
+        "indirect": "indirect=([^\\s\\]]+)"
+      },
+      "red": [
+        "shadows != high",
+        "ao != on",
+        "temporal != on",
+        "dynamic-resolution != off",
+        "render-scale != native",
+        "sky != high",
+        "sky-field-scale != 1",
+        "indirect != high"
+      ]
+    },
+    {
+      "name": "forest-route-bounds",
+      "line": "body.where 0",
+      "parse": "text",
+      "metrics": {
+        "x": "pos=\\(([-0-9.]+),",
+        "z": "pos=\\([-0-9.]+, [-0-9.]+, ([-0-9.]+)\\)"
+      },
+      "red": [
+        "x < 42",
+        "x > 60",
+        "z < -155",
+        "z > -128"
+      ]
+    },
+    {
+      "name": "point-query-accounting",
+      "line": "world.counters sdf.point --json",
+      "parse": "counters",
+      "red": [
+        "sdf.point.evaluations <= 0",
+        "sdf.point.instructions <= 0"
+      ]
+    }
+  ]
+}

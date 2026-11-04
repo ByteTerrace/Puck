@@ -9,6 +9,9 @@ namespace Puck.World.Client;
 public sealed record WorldPickTarget(string? Placement, int? BodyIndex) {
     /// <summary>Gets the prototype id captured by this emission, or null when the host has no prototype.</summary>
     public string? Prototype { get; init; }
+    /// <summary>Gets a static placement's deterministic lattice occurrence ordinal, or null when the identity names
+    /// the row or body as a whole.</summary>
+    public int? Occurrence { get; init; }
     /// <summary>Gets the transform slots reserved by this live stamp registration, or zero for a static placement.</summary>
     public int CreationSlots { get; init; }
 }

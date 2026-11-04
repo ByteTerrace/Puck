@@ -57,9 +57,10 @@ public sealed partial class SdfFieldEvaluator {
         var cullBounds = m_cullBounds;
         var reaches = (((PointReachScratch is { } scratch) && (scratch.Length >= cullBounds.Length))
             ? scratch
-            : (PointReachScratch = new FixedQ4816[cullBounds.Length]));
+            : (PointReachScratch = CreateReachScratch(length: cullBounds.Length, work: PointWork, arrays: PointScratchArraysCreated, bytes: PointScratchPayloadCreated)));
         var primer = PointPrimer.None;
         var walked = 0L;
+        var powerWork = new PowerWork();
 
         for (var bound = 0; (bound < cullBounds.Length); bound++) {
             reaches[bound] = FixedQ4816.FromRawBits(value: cullBounds[bound].Reach.CheapPointReach(point: worldPosition));
@@ -69,10 +70,13 @@ public sealed partial class SdfFieldEvaluator {
             }
         }
 
+        PointWork.Add(kind: PointPrepassBounds, amount: cullBounds.Length);
+
         var (resultDistance, resultMaterial) = WalkPoints(
             end: m_instructions.Length,
             first: 0,
             primer: ref primer,
+            powerWork: ref powerWork,
             reaches: reaches.AsSpan(start: 0, length: cullBounds.Length),
             walked: ref walked,
             worldPosition: worldPosition
@@ -83,6 +87,7 @@ public sealed partial class SdfFieldEvaluator {
         instructionsWalked = ((int)walked);
         PointWork.Count(kind: PointEvaluations);
         PointWork.Add(amount: walked, kind: PointInstructions);
+        powerWork.Publish();
 
         return true;
     }
@@ -92,7 +97,7 @@ public sealed partial class SdfFieldEvaluator {
     // answer, is skipped. The first instance the running answer cannot skip first walks the nearest instance on its own,
     // the primer, whose answer then joins where that instance stands in the stream. Without reaches it walks every
     // instance in the range, as the primer's own walk does.
-    private (FixedQ4816 Distance, int Material) WalkPoints(int first, int end, FixedVector3 worldPosition, ReadOnlySpan<FixedQ4816> reaches, ref PointPrimer primer, ref long walked) {
+    private (FixedQ4816 Distance, int Material) WalkPoints(int first, int end, FixedVector3 worldPosition, ReadOnlySpan<FixedQ4816> reaches, ref PointPrimer primer, ref long walked, ref PowerWork powerWork) {
         var resultDistance = FarDistance;
         var resultMaterial = 0;
         var visited = 0L;
@@ -146,6 +151,7 @@ public sealed partial class SdfFieldEvaluator {
                         end: cullBounds[primer.Bound].End,
                         first: cullBounds[primer.Bound].First,
                         primer: ref none,
+                        powerWork: ref powerWork,
                         reaches: [],
                         walked: ref visited,
                         worldPosition: worldPosition
@@ -292,6 +298,7 @@ public sealed partial class SdfFieldEvaluator {
 
                         var candidateDistance = ((EvaluateShape(
                             instruction: instruction,
+                            powerWork: ref powerWork,
                             p: localPosition
                         ) * distanceScale) + erosion);
                         // A fold's stride recolours the shape below the screen sentinels, as mapCore applies it.

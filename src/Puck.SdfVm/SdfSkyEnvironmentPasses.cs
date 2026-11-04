@@ -97,11 +97,11 @@ public sealed class SdfSkyEnvironmentPasses(SdfWorldPasses views) : IRenderGraph
         } catch { residency.Release(); throw; }
     }
     /// <inheritdoc/>
-    public IGpuBuffer? BorrowedBuffer(RenderGraphPackageRecorderContext context, IDisposable? built, ShaderPipelineResource resource) => context.Part switch {
+    public RenderGraphBorrowedBuffer? BorrowedBuffer(RenderGraphPackageRecorderContext context, IDisposable? built, ShaderPipelineResource resource, IGpuBuffer? previous) => new(previous ?? (context.Part switch {
         SdfSkyEnvironmentGraph.Map => ((Built)built!).Tables.SkyEnvironmentMap,
         SdfSkyEnvironmentGraph.Screens => ((Built)built!).Tables.ScreenEmission,
         _ => ((Built)built!).Tables.SkyEnvironmentCoefficients,
-    };
+    }));
     /// <inheritdoc/>
     public IRenderGraphPackageRecorder Create(RenderGraphPackageRecorderContext context, IDisposable? built, RenderGraphPackageGroups groups) {
         try { return new SdfSkyEnvironmentRecorder(built: ((Built)built!), context: context, groups: groups, views: views); } catch { built?.Dispose(); throw; }

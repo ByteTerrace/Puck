@@ -247,6 +247,17 @@
                       ],
                       "additionalProperties": false,
                       "default": null
+                    },
+                    "noise": {
+                      "type": "number",
+                      "default": 0
+                    },
+                    "patternScale": {
+                      "default": null
+                    },
+                    "softness": {
+                      "type": "number",
+                      "default": 0
                     }
                   },
                   "additionalProperties": false,

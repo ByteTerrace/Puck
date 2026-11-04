@@ -1,5 +1,6 @@
 using Puck.Abstractions.Cameras;
 using Puck.Abstractions.Counting;
+using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 using Puck.SignedDistance;
@@ -187,7 +188,16 @@ public sealed record SdfFrame(
     /// and every row when it has none of this producer's history. <see langword="null"/>, the default, declares the
     /// table static: an engine stages it whole the first time it sees that table instance and never again, so a
     /// producer whose transforms move must supply its moved set.</summary>
-    public SdfMovedTransforms? MovedTransforms { get; init; }
+    public SdfMovedTransforms? MovedTransforms {
+        get => m_movedTransforms;
+        init {
+            m_movedTransforms = value;
+            MovedTransformsSerial = value?.Serial ?? 0;
+        }
+    }
+    private SdfMovedTransforms? m_movedTransforms;
+    /// <summary>Gets the moved-set endpoint captured with this frame's borrowed transform table.</summary>
+    public long MovedTransformsSerial { get; private init; }
 
     /// <summary>The frame's bounded flow and cloud volumes, at most
     /// <see cref="SdfWorldTables.MaxVolumes"/>; submission refuses a list beyond that capacity.
@@ -208,6 +218,12 @@ public sealed record SdfFrame(
     /// <summary>The revision of <see cref="MeshDraws"/>' content, which a producer that rewrites one list in place moves
     /// whenever it does; 0 for a producer that supplies a new list instead.</summary>
     public long MeshDrawsRevision { get; init; }
+    /// <summary>Gets the producer's bounded draw-row changes, or null when a consumer must compare the revised list.
+    /// The list and journal are borrowed together until their producer next rewrites them.</summary>
+    public GpuChangedRows? MeshDrawChanges { get; init; }
+    /// <summary>Gets the journal endpoint captured with <see cref="MeshDraws"/>. Consumers collect only through this
+    /// serial and retain their own staged records when a later producer frame rewrites the borrowed list.</summary>
+    public long MeshDrawChangesSerial { get; init; }
     /// <summary>The lit path's lights table, its shadow slots and its curvature shading. The default is the pinned sun
     /// an unauthored world renders.</summary>
     public SdfLights Lights {
@@ -292,12 +308,14 @@ public sealed record SdfFrame(
     /// <summary>The indirect-light tier the frame asks for, which sizes the irradiance volume
     /// (<see cref="SdfMeshIrradiance"/>). Off reads no volume.</summary>
     public SdfIndirectTier IndirectTier { get; init; }
-    /// <summary>Whether the frame belongs to lockstep presentation (<c>world.lockstep</c>), whose frames must render the
-    /// same image for the same tick on every run: the residency finishes tracing the irradiance volume's window before it
-    /// renders the frame, rather than taking whatever probes an asynchronous trace has landed by then, and adapts each
-    /// view's exposure by the frame's own presentation time (<see cref="Time"/>) since the last frame it staged rather
-    /// than by the host frame's interval. Default <see langword="false"/>.</summary>
+    /// <summary>Whether presentation uses completed simulation ticks and the frame's own time for exposure adaptation,
+    /// rather than the host interval. Lighting convergence is an independent request through
+    /// <see cref="ConvergesLighting"/>. Default <see langword="false"/>.</summary>
     public bool TickLocked { get; init; }
+    /// <summary>Whether the renderer finishes this frame's scene, irradiance-window trace and lighting feedback before
+    /// rendering it. False retains ordinary budgeted asynchronous lighting at the same quality settings. Independent of clock
+    /// pinning: a tick-locked throughput run need not synchronously drain indirect light after every tick.</summary>
+    public bool ConvergesLighting { get; init; }
 
     /// <summary>The independent origins the irradiance volume admits; the default admits all five categories.</summary>
     public SdfIndirectSources IndirectSources { get; init; } = SdfIndirectSources.All;

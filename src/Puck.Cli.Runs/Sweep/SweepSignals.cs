@@ -7,7 +7,7 @@ namespace Puck.Cli.Sweep;
 /// <summary>Turns a read's answer into named metrics, by the parser a signal names.</summary>
 public static partial class SweepSignals {
     /// <summary>The parser names a signal may give.</summary>
-    public static readonly IReadOnlyList<string> Parsers = ["cells", "counters", "frames", "pairs", "report", "text", "words"];
+    public static readonly IReadOnlyList<string> Parsers = ["cells", "counters", "frames", "gpu-transfers", "pairs", "report", "text", "words"];
 
     /// <summary>The name of the regular-expression group a metric pattern uses to read the total of a group over every match.</summary>
     public const string SumGroup = "sum";
@@ -33,6 +33,20 @@ public static partial class SweepSignals {
 
                 break;
             case "counters":
+                // Typed control carries bare JSON; a scheduled console read narrates the same JSON in its echo.
+                var counterOutput = output.Trim();
+                const string CounterEcho = "[world.counters:";
+                if (counterOutput.StartsWith(CounterEcho, StringComparison.Ordinal) && counterOutput.EndsWith(']')) {
+                    counterOutput = counterOutput[CounterEcho.Length..^1].Trim();
+                }
+                if (counterOutput.StartsWith('{')) {
+                    using var document = JsonDocument.Parse(counterOutput);
+                    if (!document.RootElement.TryGetProperty("sources", out var sources)) { throw new JsonException("A counter JSON answer needs sources."); }
+                    foreach (var source in sources.EnumerateArray()) {
+                        foreach (var count in source.GetProperty("counts").EnumerateObject()) { metrics[count.Name] = count.Value.GetRawText(); }
+                    }
+                    break;
+                }
                 foreach (var line in output.Split(separator: '\n')) {
                     var match = CounterPattern().Match(input: line.Trim());
 
@@ -41,6 +55,9 @@ public static partial class SweepSignals {
                     }
                 }
 
+                break;
+            case "gpu-transfers":
+                ReadGpuTransfers(output, metrics);
                 break;
             case "frames":
                 ReadFrames(metrics: metrics, output: output);

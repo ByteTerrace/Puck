@@ -8,8 +8,8 @@ using Puck.World.Protocol;
 
 namespace Puck.World.Client;
 
-/// <summary>Local creation geometry shared by rigid bodies. Copies own a root pose and identity, never field instructions.</summary>
-public sealed class WorldRigidAssets {
+/// <summary>Local creation geometry shared by rigid bodies and admitted static placements. Copies own a root pose and identity, never field instructions.</summary>
+public sealed partial class WorldRigidAssets {
     private sealed record AssetMetadata(bool Rigid, float Reach, int Slots);
 
     private static readonly Puck.Abstractions.CodeDerivedTable<WorldPrototype, AssetMetadata> MetadataCache = new();
@@ -30,6 +30,7 @@ public sealed class WorldRigidAssets {
         public bool[]? Hidden;
         public int Slot;
         public int Surfaces;
+        public float BakeScale;
 
         public readonly WorldPickTarget Target;
 
@@ -39,6 +40,7 @@ public sealed class WorldRigidAssets {
     }
 
     private int m_slotCount;
+    private int m_bodySlotCount;
 
     private readonly List<SdfVolume> m_volumes = [];
     private readonly List<(int Copy, SdfVolume Volume)> m_rootVolumes = [];
@@ -72,6 +74,7 @@ public sealed class WorldRigidAssets {
     public IReadOnlyList<SdfVolume> Volumes {
         get {
             m_volumes.Clear();
+            m_volumes.AddRange(collection: m_staticVolumes);
             foreach (var entry in m_rootVolumes) { m_volumes.Add(item: entry.Volume with { DynamicSlot = m_copies[entry.Copy].FrameSlot }); }
             return m_volumes;
         }
@@ -126,8 +129,10 @@ public sealed class WorldRigidAssets {
         }
         foreach (var retired in m_motion.Keys.Where(predicate: body => !ContainsBody(body: body)).ToArray()) { m_motion[retired].Reads.Release(); m_motion.Remove(key: retired); m_targets.Remove(key: retired); }
         // PrepareFrame reads this count before the first pack sizes the root table.
-        while (m_copies.Count < m_bodies.Count) { m_copies.Add(item: new SdfMeshInstance(0, new object(), new DynamicTransform(Position: Vector3.Zero, Orientation: Quaternion.Identity), 1)); }
-        if (m_copies.Count > m_bodies.Count) { m_copies.RemoveRange(m_bodies.Count, (m_copies.Count - m_bodies.Count)); }
+        m_bodySlotCount = m_slotCount;
+        var copyCount = (m_bodies.Count + m_staticCopies.Count);
+        while (m_copies.Count < copyCount) { m_copies.Add(item: new SdfMeshInstance(0, new object(), new DynamicTransform(Position: Vector3.Zero, Orientation: Quaternion.Identity), 1, IsDynamic: true)); }
+        if (m_copies.Count > copyCount) { m_copies.RemoveRange(copyCount, (m_copies.Count - copyCount)); }
     }
     /// <summary>Emits each local template once. Body membership and styling do not affect this program.</summary>
     public void Emit(SdfProgramBuilder builder, WorldBakedColors colors, int slotBase, PackedFontAtlasCatalog? text, WorldPickMapBuilder picks, WorldShapeIsolation? isolation = null) {
@@ -160,6 +165,7 @@ public sealed class WorldRigidAssets {
             }
             picks.Instances(first, builder.InstanceCount, scratch.Target);
         }
+        EmitStaticAssets(builder: builder, colors: colors, picks: picks, isolation: isolation);
     }
 
     // Keep the closure-bearing rebuild out of the retained-template path.
@@ -214,7 +220,7 @@ public sealed class WorldRigidAssets {
         var doors = WorldPortalStraddle.Doors(definition: source.Definition);
 
         m_rootVolumes.Clear();
-        for (var index = 0; (index < m_slotCount); index++) { transforms[(slotBase + index)] = new DynamicTransform(Position: Vector3.Zero, Orientation: Quaternion.Identity); }
+        PackTemplates(transforms: transforms, slotBase: slotBase);
         for (var index = 0; (index < m_bodies.Count); index++) {
             var body = m_bodies[index];
 
@@ -248,7 +254,7 @@ public sealed class WorldRigidAssets {
             var asset = m_indices[body.Creation.Id];
             var hidden = m_isolation?.HiddenFor(body.Creation.Id, body.Creation.EngineDocument);
             var firstSlot = (slotBase + m_offsets[asset]);
-            var endSlot = (slotBase + (((asset + 1) < m_offsets.Count) ? m_offsets[(asset + 1)] : m_slotCount));
+            var endSlot = (slotBase + (((asset + 1) < m_offsets.Count) ? m_offsets[(asset + 1)] : m_bodySlotCount));
             var previous = m_copies[index];
             var addressKey = source.EntityAddress(index: body.BodyIndex);
             var epochKey = source.PoseEpoch(index: body.BodyIndex);
@@ -261,8 +267,8 @@ public sealed class WorldRigidAssets {
             var material = ((asset < m_materials.Count) ? m_materials[asset] : 0);
             var clip = WorldPortalStraddle.Clip(doors: doors, center: position, radius: (m_reaches[asset] * body.Scale), firstSlot: 0, slotCount: 1);
 
-            if (!previous.SamePose(firstSlot, target, motionIdentity, transform, body.Scale, clip, mesh, material, otherSlots)) {
-                m_copies[index] = new SdfMeshInstance(firstSlot, target, transform, body.Scale) { Clip = clip, Material = material, Mesh = mesh, MotionIdentity = motionIdentity, OtherAssetSlots = otherSlots };
+            if (!previous.SamePose(firstSlot, target, motionIdentity, transform, body.Scale, true, clip, mesh, material, otherSlots)) {
+                m_copies[index] = new SdfMeshInstance(firstSlot, target, transform, body.Scale, IsDynamic: true) { Clip = clip, Material = material, Mesh = mesh, MotionIdentity = motionIdentity, OtherAssetSlots = otherSlots };
             }
             foreach (var volume in (body.Creation.EngineDocument.Volumes ?? [])) {
                 if (!volume.Enabled) { continue; }

@@ -64,7 +64,7 @@ public readonly record struct SdfMeshIrradianceParameters(bool Enabled, float Sp
 /// hit, so bounce accumulates over successive relights; a probe is relit until it has taken one relight a sweep under
 /// the current lighting, and a lighting that changes every frame (a day's sun) keeps the relight cycling over the
 /// window at the rate the frame's budget grants (<see cref="SdfFrame.IndirectBudget"/>). Overload lengthens the
-/// lighting's age, never the frame, and is reported as an <c>[sdf.mesh-gi] behind</c> line. A lockstep frame relights its
+/// lighting's age, never the frame, and is reported as an <c>[sdf.mesh-gi] behind</c> line. A lighting-converged frame relights its
 /// window from no bounce through every sweep before it renders, so its light depends on its scene, lighting and window
 /// alone. The dynamic draws (moving bodies) receive the volume's light and do not cast into it; an anchored light, which
 /// moves, is neither traced nor occluded.</para>
@@ -175,7 +175,7 @@ public sealed class SdfMeshIrradiance : IDisposable {
     // The probes one batch takes before it looks again at the camera, the lighting and the budget.
     private const int BatchProbes = 384;
 
-    // The trace's workers: a lockstep frame waits for its window traced to the end, so it traces on all but two of the
+    // The trace's workers: a lighting-converged frame waits for its window traced to the end, so it traces on all but two of the
     // machine's processors; a trace behind rendered frames takes a quarter of them, so the frame thread keeps a core of
     // its own and the memory bandwidth it packs and uploads with.
     private static readonly int DrainWorkers = Math.Max(val1: 1, val2: (Environment.ProcessorCount - 2));
@@ -358,7 +358,7 @@ public sealed class SdfMeshIrradiance : IDisposable {
     private int m_sweepsSince;
     private bool m_yield;
     private bool m_unconvergedReported;
-    // The state the cache's light was drained for, cleared once asynchronous work relights any of it: a lockstep frame
+    // The state the cache's light was drained for, cleared once asynchronous work relights any of it: a lighting-converged frame
     // whose state differs drains, so its light never carries the bounce asynchronous frames left.
     private (int Geometry, int Lighting, int Windows, Layout Layout) m_drained;
 
@@ -424,7 +424,7 @@ public sealed class SdfMeshIrradiance : IDisposable {
     /// <param name="frame">The frame, its baked draws dressed in.</param>
     /// <param name="tables">The residency's tables.</param>
     /// <param name="tier">The indirect tier the views asked for; Off reads no volume.</param>
-    /// <param name="bakePending">Whether the mesh bake still owes opaque static meshes: a lockstep frame then builds no
+    /// <param name="bakePending">Whether the mesh bake still owes opaque static meshes: a lighting-converged frame then builds no
     /// scene, and any other frame builds one from the meshes landed so far at most every few seconds.</param>
     /// <returns>The parameters the views pass reads.</returns>
     public SdfMeshIrradianceParameters Stage(SdfFrame frame, SdfWorldTables tables, SdfIndirectTier tier, bool bakePending) {
@@ -473,10 +473,10 @@ public sealed class SdfMeshIrradiance : IDisposable {
 
         if ((tier == SdfIndirectTier.Off) || (frame.Views.Count == 0)) { return default; }
 
-        // A lockstep frame must trace its own scene, not whichever asynchronous build happened to land first.
+        // A lighting-converged frame must trace its own scene, not whichever asynchronous build happened to land first.
         // Wait outside the gate: the builder takes it to publish. A build already in flight may belong to an older
         // frame, so resolve again after it lands until this frame's static draws are the installed scene.
-        if (frame.TickLocked && !bakePending) {
+        if (frame.ConvergesLighting && !bakePending) {
             while (true) {
                 Task? build;
 
@@ -533,18 +533,18 @@ public sealed class SdfMeshIrradiance : IDisposable {
                 m_windowValid = true;
                 Owe();
                 m_traceOwed = true;
-                OweRefill(pooled: !frame.TickLocked);
+                OweRefill(pooled: !frame.ConvergesLighting);
             }
-            drain = (frame.TickLocked && (m_scene is not null) && (m_lighting is not null) && (m_owed || (m_drained != DrainKey())));
+            drain = (frame.ConvergesLighting && (m_scene is not null) && (m_lighting is not null) && (m_owed || (m_drained != DrainKey())));
         }
 
-        // A lockstep frame refills its window before it renders, waiting for a refill in flight, which takes the gate.
-        if (frame.TickLocked) {
+        // A lighting-converged frame refills its window before it renders, waiting for a refill in flight, which takes the gate.
+        if (frame.ConvergesLighting) {
             m_refill?.Wait();
             Refill();
         }
 
-        // A lockstep frame renders the window traced and relit to the end, so its indirect light and its views' exposure
+        // A lighting-converged frame renders the window traced and relit to the end, so its indirect light and its views' exposure
         // meters never depend on how far asynchronous work had got by the time the frame was asked for, nor on the
         // bounce earlier frames left in the cache. The drain takes the gate itself, so it runs outside it, after the
         // worker in flight, which may hold it, has finished.
@@ -980,12 +980,12 @@ public sealed class SdfMeshIrradiance : IDisposable {
         }
     }
 
-    // Whether a frame whose bake still lands opaque static meshes builds a scene from what has landed: never a lockstep
+    // Whether a frame whose bake still lands opaque static meshes builds a scene from what has landed: never a lighting-converged
     // frame, which renders the whole bake; otherwise once no build runs, the installed scene's trace has finished (or no
     // scene is installed), and PendingSceneInterval has passed since the last build began. The finished trace paces the
     // rebuilds, so the probes always finish measuring one landed set before the next replaces it.
     private bool ScenePendingDue(SdfFrame frame) =>
-        (!frame.TickLocked && (m_build is null or { IsCompleted: true }) && ((m_scene is null) || !m_traceOwed) &&
+        (!frame.ConvergesLighting && (m_build is null or { IsCompleted: true }) && ((m_scene is null) || !m_traceOwed) &&
         (!m_sceneClock.IsRunning || (m_sceneClock.Elapsed >= PendingSceneInterval)));
     // Rebuilds the scene on the thread pool when the static draws changed, from the scene it replaces so only geometry new
     // to it builds; the old scene traces until the new one lands. While the bake still owes opaque static meshes, a frame
@@ -1081,7 +1081,7 @@ public sealed class SdfMeshIrradiance : IDisposable {
             foreach (var layer in m_skyLayers) { skyKey = HashCode.Combine(value1: skyKey, value2: layer); }
         }
         if ((key == m_lightingKey) && (skyKey == m_skyKey) && (m_lighting is not null)) { return; }
-        if (!frame.TickLocked && (m_lighting is not null) && (Stopwatch.GetElapsedTime(startingTimestamp: m_lightingCheckedAt) < LightingInterval)) { return; }
+        if (!frame.ConvergesLighting && (m_lighting is not null) && (Stopwatch.GetElapsedTime(startingTimestamp: m_lightingCheckedAt) < LightingInterval)) { return; }
 
         var skyOnly = ((key == m_lightingKey) && (m_lighting is not null));
         if ((localKey != m_localKey) || (m_lighting is null)) {
@@ -1154,7 +1154,7 @@ public sealed class SdfMeshIrradiance : IDisposable {
         return lows;
     }
     // Owes the refill of the windows the volume just moved: no level publishes until it lands, and it runs on the thread
-    // pool (Refill), or in a lockstep frame on the frame's thread, since a window that jumps far re-stores every slot.
+    // pool (Refill), or in a lighting-converged frame on the frame's thread, since a window that jumps far re-stores every slot.
     private void OweRefill(bool pooled) {
         m_windowVersion++;
         m_refillOwed = true;
@@ -1321,7 +1321,7 @@ public sealed class SdfMeshIrradiance : IDisposable {
     // what a probe reads wakes it through the next sweep, and the iteration stops only when a whole sweep under
     // unchanged inputs moved nothing (or after MaxSweeps). The worker works through its list a batch at a time while the
     // frames' budget grants it, taking the latest lighting for each batch; it returns once the budget is spent (a probe
-    // whose trace the budget cannot fund waits for the next grant), when a lockstep frame asks it to yield, or once
+    // whose trace the budget cannot fund waits for the next grant), when a lighting-converged frame asks it to yield, or once
     // nothing is left to do.
     private void Work() {
         var parallel = new ParallelOptions { MaxDegreeOfParallelism = BackgroundWorkers };
@@ -1418,7 +1418,7 @@ public sealed class SdfMeshIrradiance : IDisposable {
             if (starved) { return; }
         }
     }
-    // A lockstep frame's work: every probe of the windows traced against the current geometry where it is not already,
+    // A lighting-converged frame's work: every probe of the windows traced against the current geometry where it is not already,
     // then the whole window relit from no bounce, each later pass relighting every probe from the bounce the one before
     // left, until a whole pass moves no probe past the convergence bound (or MaxSweeps passes), so the light it renders
     // is a function of its scene, lighting and windows alone and never of the bounce earlier frames left in the cache.

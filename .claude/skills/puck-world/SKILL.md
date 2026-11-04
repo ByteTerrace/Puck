@@ -173,13 +173,20 @@ only when the task allows it, and restore what you changed.
 
 To run your own edits, start a World with `puck_world_start` (`checkout`: your
 worktree's absolute path; `windowed: true` only for a granted GPU leg). The
-call returns `pending` and a `startId` promptly. Poll `puck_world_start_wait`
-with that id. `timeoutSeconds` bounds only the World's boot (until it accepts an
-attachment). The build and the GPU queue have limits of their own: the build
-lease and the GPU lease each wait up to two hours (`CliLease.DefaultWait`) in
-the fair queue, so a contended run needs no raised deadline, and the wait never
-shortens the boot. This does not extend the lane's twenty-minute running-World
-batch. Each wait defaults to 20 seconds; `timeoutMs` allows up to 120000 in one
+call returns `pending` and a `startId` promptly. Inspect the connected tool's
+schema before using optional arguments: the checkout's current implementation can
+accept capabilities absent from an older connected adapter. Where advertised,
+`captureTool: "pix"` forwards `--capture-tool pix` before device creation (windowed
+Direct3D 12); `"renderdoc"` selects RenderDoc. Both enable existing GPU object names.
+Otherwise use `puck sweep --tour --backend directx --capture-tool pix` with a plan
+that invokes `gpu.capture` after settlement. A capture retains labels that an
+attached timing trace without the capture runtime may lack.
+Poll `puck_world_start_wait` with the admitted id. In `OperatorWorlds.StartAsync`,
+`timeoutSeconds` bounds the entire admitted start, including build and GPU-lease
+waits, not only boot. Queue limits do not extend that deadline. Select a deadline
+that covers cold compilation and contention; a 120-second start has expired during
+building on this machine. This does not extend the lane's twenty-minute
+running-World batch. Each wait defaults to 20 seconds; `timeoutMs` allows up to 120000 in one
 call, so a cold build needs few polls. Never repeat the start while pending. A pending
 answer names its `stage` (`building` the World from the checkout's sources, `gpu-lease`,
 or `booting`, with the World's last stderr line in `output`) and the seconds `elapsedSeconds`

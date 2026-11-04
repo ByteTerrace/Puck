@@ -30,6 +30,7 @@ public sealed class MemoryAccount {
 
     private readonly Lock m_gate = new();
     private readonly long[] m_bytes = new long[4];
+    private readonly HashSet<Owner> m_owners = [];
 
     private long m_reserved;
     private long? m_budget;
@@ -46,6 +47,7 @@ public sealed class MemoryAccount {
 
     /// <summary>Gets the trims a cache owner deferred to its own thread that have not run yet.</summary>
     public int DeferredTrims => Volatile.Read(location: ref m_deferredTrims);
+
     /// <summary>Records a trim request a cache owner will service on its own thread; it calls
     /// <see cref="CompleteDeferredTrim"/> once it has.</summary>
     public void DeferTrim() => _ = Interlocked.Increment(location: ref m_deferredTrims);
@@ -82,6 +84,18 @@ public sealed class MemoryAccount {
     public MemoryReading Read() {
         lock (m_gate) { return new(m_bytes[0], m_reserved, m_bytes[1], m_bytes[2], m_bytes[3], (m_budget ?? DefaultBudget), Headroom); }
     }
+    /// <summary>Reads the account and every owner holding charged bytes or a reservation under the same lock.
+    /// Empty idle owners are absent; disposed owners remain until their storage releases its last byte.</summary>
+    /// <returns>A detached snapshot whose rows reconcile to its account categories and reservations.</returns>
+    public MemoryOwnerSnapshot ReadOwners() {
+        lock (m_gate) {
+            var owners = new MemoryOwnerReading[m_owners.Count];
+            var index = 0;
+
+            foreach (var owner in m_owners) { owners[index++] = owner.Read(); }
+            return new(Account: Read(), Owners: owners);
+        }
+    }
     /// <summary>Creates an explicit owner. It must outlive every allocation that reports to it.</summary>
     /// <param name="name">The owner's name, for diagnostics.</param>
     /// <param name="category">The category its charges count in until it is reclassified.</param>
@@ -94,8 +108,10 @@ public sealed class MemoryAccount {
 
         private MemoryCategory m_category;
         private long m_bytes;
-        private long m_peak;
+        private long m_reservationPeak;
+        private long m_ownedPeak;
         private bool m_closed;
+        private bool m_tracked;
 
         /// <summary>Gets the owner for diagnostics.</summary>
         public string Name { get; }
@@ -108,7 +124,23 @@ public sealed class MemoryAccount {
 
         internal Owner(MemoryAccount account, string name, MemoryCategory category) { m_account = account; Name = name; m_category = category; }
 
-        private long Promise => Math.Max(val1: 0, val2: (m_peak - m_bytes));
+        private long Promise => Math.Max(val1: 0, val2: (m_reservationPeak - m_bytes));
+
+        // Called only by the existing owner mutation doors, under the account lock. Empty owners need no account
+        // reference; a disposed-but-charged owner stays visible until the storage's actual release reaches Change.
+        private void Track() {
+            var charged = ((m_bytes != 0) || (Promise != 0));
+
+            if (charged == m_tracked) { return; }
+            if (charged) { _ = m_account.m_owners.Add(item: this); } else { _ = m_account.m_owners.Remove(item: this); }
+            m_tracked = charged;
+        }
+
+        internal MemoryOwnerReading Read() {
+            lock (m_account.m_gate) {
+                return new(Name, m_category, m_bytes, Promise, m_ownedPeak, m_reservationPeak, m_closed);
+            }
+        }
 
         /// <summary>Reserves the owner's simultaneous peak before its work starts, or lowers a reservation already held;
         /// false means defer without holding partial resources.</summary>
@@ -129,7 +161,8 @@ public sealed class MemoryAccount {
                 if (available is { } free) { spare = Math.Min(val1: spare, val2: Math.Max(val1: 0, val2: ((free - m_account.Headroom) - m_account.m_reserved))); }
                 if ((extra > 0) && (extra > spare)) { return false; }
                 m_account.m_reserved += extra;
-                m_peak = peak;
+                m_reservationPeak = peak;
+                Track();
                 return true;
             }
         }
@@ -143,12 +176,13 @@ public sealed class MemoryAccount {
             lock (m_account.m_gate) {
                 ObjectDisposedException.ThrowIf(condition: m_closed, instance: this);
                 m_account.m_reserved += (Math.Max(val1: 0, val2: (peak - m_bytes)) - Promise);
-                m_peak = peak;
+                m_reservationPeak = peak;
+                Track();
             }
         }
         /// <summary>Releases the future promise after work ends; any still-owned storage remains accounted.</summary>
         public void ReleaseReservation() {
-            lock (m_account.m_gate) { m_account.m_reserved -= Promise; m_peak = 0; }
+            lock (m_account.m_gate) { m_account.m_reserved -= Promise; m_reservationPeak = 0; Track(); }
         }
         /// <inheritdoc/>
         public void Change(long bytes) {
@@ -159,8 +193,10 @@ public sealed class MemoryAccount {
                 if (next < 0) { throw new InvalidOperationException(message: $"Memory owner {Name} released more bytes than it owns."); }
                 m_account.m_reserved -= Promise;
                 m_bytes = next;
+                m_ownedPeak = Math.Max(val1: m_ownedPeak, val2: next);
                 m_account.m_bytes[((int)m_category)] += bytes;
                 m_account.m_reserved += Promise;
+                Track();
             }
         }
         /// <summary>Moves the existing charge between categories without charging aliases.</summary>

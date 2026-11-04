@@ -68,8 +68,28 @@ count still names the previous records.
 The frame rasterizes baked geometry. `SdfCompositionFrameSource` allocates the
 live transform table and reports an actual `[world.render] envelope`; it builds
 no worst-case probe. `WorldRigidAssets` emits local creation templates once and
-supplies `SdfMeshInstance` roots and identities. `SdfMeshPathBake.Dress` expands
-the shared mesh into copies without program or palette duplication. Animated
+supplies `SdfMeshInstance` roots and identities. `SdfMeshDresser.Dress` expands
+the shared mesh into copies without program or palette duplication. Fixed placements
+reuse the ordinary static emitter in prototype-local ranges (`SdfMeshTemplateRange`),
+including its per-shape bounds, detail regions and separate groups. The largest
+occurrence bakes at ordinary authored scale; copies use relative matrices. Do not
+replace that partition with one dynamic whole-object range or promote the default
+bake spacing into explicit detail: both increase tessellation. `IsDynamic` selects
+static lighting membership; `UsesRootMaterialFrame` independently selects material
+coordinates while retaining the root slot for skinning and portals. Dressing retains
+group/copy topology and immutable per-surface picking metadata across pose changes.
+Its flat reverse binding indexes consume the frame's captured transform changes;
+the output draw journal and GPU tables retain independent consumer cursors. Keep
+the source identity, captured serial, roster and row count together. Never use a
+later producer serial for a borrowed frame, map landing-filtered indices back to
+the full roster, or skip the final GPU history settle because no draw changed.
+`GpuChangedRows` owns the bounded history for both transform and draw changes;
+missing/full/expired history and active portal clipping refresh conservatively.
+`world.residency` reports logical journal/scratch array bytes separately from
+mesh residency and the overlapping process/account/backend memory readings.
+Pending bake demand reads the same occurrence index and transformed copy boxes;
+prototype-origin boxes and a union of far-apart copies misprice both priority and
+near-residency diagnostics. Animated
 creation fields use root and motion-owner deltas; CPU pose scratch remains per
 actual shape. Bake groups keep separate bounds and detail even when they share
 a motion slot; the lattice frame and instance selector are independent. Use
@@ -86,6 +106,13 @@ are picking metadata; `SdfMeshDraw.MotionIdentity` names the stable body/surface
 for both whole-list and changed-record uploads. Rigid copies include the entity
 address and pose-discontinuity epoch in that identity, so teleports and reseats
 seed the previous mesh matrix at the new pose, including authored meshes.
+Noncopy groups consume the same captured transform-reseat journal at mesh staging.
+A root or vertex-used skin-member cut advances the draw generation and seeds its
+compact previous matrix, even when packed pose bytes are unchanged. Keep this
+consumer cursor independent of dynamic-table and draw-change cursors; unknown
+history cuts transform-dependent draws conservatively. Ordinary continuous motion
+does not trigger a reseat roster scan. `SdfMovedTransforms.Commit` retains explicit
+equal-pose cuts during both incremental updates and repacks.
 Rigid root followers observe
 portal carry history, reseeding when it expires. Isolation also filters rigid
 templates, parented paints and volumes, text and authored meshes.
@@ -332,8 +359,8 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
 - **A seat's character fade is view-local.** `SdfViewSnapshot.StampFade` supplies
   a transform-slot range and opacity through `SdfFrameBlock`; the mesh and glass
   fragments call `frame/sdf-stamp-fade.hlsli` before writing depth or glass sums.
-  Cache new view-only offsets in `SdfFrameBlock.ViewOffsets`, outside the outer
-  type's initializer reached by `WriteMeshBake`, so they do not invalidate meshes.
+  Keep view-only offsets in `SdfFrameBlock`, separate from the bake-only
+  `SdfMeshBakeBlock` initializer, so view edits do not invalidate meshes.
   Keep the opaque fragment free of `earlydepthstencil`: discarded pixels must
   reveal the room. Shadow passes and independently filmed mirror/portal views
   receive no fade. Vulkan requires `shaderDemoteToHelperInvocation` at device
@@ -826,7 +853,7 @@ pacer's lateness ([Puck.Launcher](../../../src/Puck.Launcher/README.md)).
   `world.wait ready` alone does not establish that all meshes are present.
   A byte comparison sets `world.lockstep on` before the first tick in both legs,
   then waits for bake settlement before requesting the still. An ordinary settled screenshot converges temporal views
-  but does not set `SdfFrame.TickLocked`; it can capture before a background GI
+  but does not request `SdfFrame.ConvergesLighting`; it can capture before a background GI
   trace finishes. Pin the camera and tick in both legs and use lockstep's
   synchronous scene/refill/trace drain for the comparison.
   Keep each code build's completed private mesh store for warm comparison

@@ -1,0 +1,127 @@
+// Continuous southern woodland. The layout library owns its masks; layers remain independently editable.
+import "forest-layout"
+import "forest-surface-views"
+import "../standard/camera"
+import "forest-canopy"
+import "forest-understory"
+import "forest-floor"
+import "forest-clearings"
+
+let forestLogs = [
+  [38, -140, 32], [66, -175, -18], [77, -158, 64], [21, -162, 18], [-27, -166, 35],
+  [-40, -146, -42], [-66, -154, 17], [8, -186, 54], [90, -147, 27], [107, -146, -14],
+  [-89, -139, 67], [36, -177, -29]
+]
+let forestGrassOrigin = [38, 0, -147]
+let forestGrassTiles = [[5.05, 6.25], [5.95, 6.25], [5.05, 7.15], [5.95, 7.15]]
+let forestEntry = quadraticPathPoint(lawnPaths[6], 0.66)
+let forestInside = quadraticPathPoint(lawnPaths[6], 0.82)
+
+prototypes {
+  broadleafTree(id: "forest-veteran", height: 1.65, spread: 1.45, lean: 0.055,
+    leaves: ["#304F39", "#4B6C43", "#788B4F"])
+  broadleafTree(id: "forest-sapling", height: 0.56, spread: 0.52,
+    leaves: ["#496839", "#698345", "#8A9C57"])
+  scrubClump(id: "forest-scrub", size: 0.9, crowns: 3, colors: ["#304F40", "#46694C", "#66834F"])
+  scrubClump(id: "forest-bramble", size: 0.62, crowns: 4, colors: ["#4C603A", "#667647", "#829250"])
+  fernClump(id: "forest-fern")
+  grassTuft(id: "forest-tuft")
+  fallenLog(id: "forest-log")
+  mossyRock(id: "forest-rock", colors: ["#806951", "#A48D68", "#546F41"])
+  flowerCluster(id: "forest-flower", head: "#E8DFAD", accent: "#C9A94D", stem: "#566D3B", count: 5)
+  leafLitter(id: "forest-duff")
+  // A bounded test of actual field relief, below the tree-free clearing rather than the whole valley disc.
+  sceneryPatch(id: "forest-ground-relief", radii: [7, 0.34, 5], color: "#6C8A33",
+    seed: 7291, amplitude: 0.12, frequency: 1.6, surface: groundSurface("#6C8A33"))
+  sceneryPatch(id: "forest-west-bank", radii: [20, 4.5, 13], color: "#6C8A33",
+    seed: 4821, amplitude: 0.035, frequency: 0.7, surface: groundSurface("#6C8A33"))
+  sceneryPatch(id: "forest-east-bank", radii: [15, 3.8, 12], color: "#6C8A33",
+    seed: 9182, amplitude: 0.035, frequency: 0.8, surface: groundSurface("#6C8A33"))
+  for (tile, i) in forestGrassTiles {
+    windMeadowTile(id: $"forest-grass-{i}", tile: tile, origin: forestGrassOrigin,
+      fringe: [5.5, 6.7, 0.67, 0.67], clearing: [0, 0, 0])
+  }
+}
+
+placements {
+  placement "forest-west-bank" {
+    prototype: "forest-west-bank"
+    position [-55, -2.2, -154]
+    solid { margin: 0 }
+  }
+  placement "forest-east-bank" {
+    prototype: "forest-east-bank"
+    position [93, -2.1, -163]
+    solid { margin: 0 }
+  }
+  placement "forest-ground-relief" {
+    prototype: "forest-ground-relief"
+    position [65, -0.18, -169]
+    solid { margin: 0 }
+  }
+
+  placement "forest-veteran" {
+    prototype: "forest-veteran"
+    position [43, 0, -144]
+    surface: forestGround
+    yawDegrees: 24
+    solid { margin: 0 }
+  }
+
+  for (p, i) in forestLogs {
+    placement $"forest-log-{i}" {
+      prototype: "forest-log"
+      surface: forestGround
+      position [p[0], 0, p[1]]
+      scale: 0.8 + 0.35 * forestVariation(i, 0.3)
+      yawDegrees: p[2]
+      solid { margin: 0 }
+    }
+  }
+  for (tile, i) in forestGrassTiles {
+    placement $"forest-grass-{i}" {
+      prototype: $"forest-grass-{i}"
+      position [forestGrassOrigin[0] + tile[0], 0.09, forestGrassOrigin[2] + tile[1]]
+    }
+  }
+}
+
+spawnPoints [
+  { id: "forest", position [forestEntry.x, 0.05, forestEntry.z], yawDegrees: -29 }
+  { id: "forest-inside", position [forestInside.x, 0.05, forestInside.z], yawDegrees: -25 }
+  { id: "forest-glade", position [61, 0.05, -164], yawDegrees: -20 }
+  { id: "forest-west", position [-34, 0.05, -157], yawDegrees: 15 }
+  { id: "forest-overview", position [0, 42, -88], yawDegrees: 0 }
+]
+
+// Repeatable composition views, alongside the player's ordinary chase camera.
+cameras [
+  {
+    name: "forest-overview"
+    renderWidth: 1280
+    renderHeight: 900
+    rig {
+      name: "forest-overview"
+      version: "puck.camera.program.v1"
+      operations [
+        anchor(opcode: "anchor", subject: worldPoint(point: [0, 135, -30]))
+        lookAt(focusDistance: 185, opcode: "lookAt", subject: worldPoint(point: [0, 0, -155]), worldAxes: false)
+        fieldOfView(fieldOfViewRadians: 1.05, opcode: "fov")
+      ]
+    }
+  }
+  {
+    name: "forest-clearing"
+    renderWidth: 1280
+    renderHeight: 900
+    rig {
+      name: "forest-clearing"
+      version: "puck.camera.program.v1"
+      operations [
+        anchor(opcode: "anchor", subject: worldPoint(point: [60, 2.2, -165]))
+        lookAt(focusDistance: 12, opcode: "lookAt", subject: worldPoint(point: [66, 0.8, -175]), worldAxes: false)
+        fieldOfView(fieldOfViewRadians: 1.05, opcode: "fov")
+      ]
+    }
+  }
+]

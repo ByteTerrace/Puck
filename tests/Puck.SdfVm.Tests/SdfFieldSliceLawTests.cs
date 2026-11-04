@@ -71,12 +71,12 @@ public sealed class SdfFieldSliceLawTests {
         return new SdfFrame(Program: builder.Build(), ProgramChanged: true, Time: 0f, Views: []) { FarDistance = 100f };
     }
     // Answers the slice's lattices frame by frame until its completion runs, and returns how many frames that took.
-    private static int Drive(SdfMeshPathBake bake, Func<Vector3, float> instances, Func<Vector3, float> world, Func<bool> done, SdfFrame? frame = null) {
+    private static int Drive(SdfMeshPathBake bake, SdfMeshDresser dresser, Func<Vector3, float> instances, Func<Vector3, float> world, Func<bool> done, SdfFrame? frame = null) {
         var frames = 0;
 
         while (!done()) {
             Assert.True(condition: (frames < 64), userMessage: "the slice never completed");
-            if (frame is not null) { _ = bake.Dress(frame: frame); }
+            if (frame is not null) { _ = dresser.Dress(frame: frame); }
             if (bake.TryTakeForFrame(batch: out var batch, frame: frames)) {
                 bake.Record(batch: batch);
                 bake.Complete(batch: batch, samples: Answer(batch: batch, instances: instances, world: world));
@@ -93,7 +93,9 @@ public sealed class SdfFieldSliceLawTests {
 
     [Fact]
     public void AnExactFieldReadsAGradientOfOneAndDrawsWhite() {
-        var bake = new SdfMeshPathBake { Residency = "slice-exact" };
+        using var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake { Residency = "slice-exact" });
+        var bake = bakeRun.Bake;
+        var dresser = bakeRun.Dresser;
         var completions = 0;
         // The plane passes 0.4 m from the sphere's centre, where the stencil's error is far under a thousandth, cutting a
         // circle of radius √(0.6² - 0.4²).
@@ -104,7 +106,7 @@ public sealed class SdfFieldSliceLawTests {
         Assert.False(condition: bake.Probe(slice: new SdfFieldSlice(axis: SdfAxis.X, bands: 0.1f, centre: Vector2.Zero, half: 1f, offset: 0f, resolution: 16)));
 
         // No program: every lattice samples the unowned segments alone, here the sphere.
-        _ = Drive(bake: bake, done: () => (completions > 0), instances: Far, world: Sphere);
+        _ = Drive(bake: bake, dresser: dresser, done: () => (completions > 0), instances: Far, world: Sphere);
 
         Assert.Equal(expected: 1, actual: completions);
         Assert.True(condition: slice.Done);
@@ -136,14 +138,16 @@ public sealed class SdfFieldSliceLawTests {
     }
     [Fact]
     public void AGaugeReadsBelowOneAndDrawsBlueWhileTheSliceGoesBeforeAPendingGroup() {
-        var bake = new SdfMeshPathBake { Residency = "slice-gauge" };
+        using var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake { Residency = "slice-gauge" });
+        var bake = bakeRun.Bake;
+        var dresser = bakeRun.Dresser;
         var frame = Frame(half: new Vector3(value: 0.25f));
         var completions = 0;
         // Past one reference frame's share of evaluations: a chunk's lattice with gradients is a whole share
         // (SdfMeshPathBake.FrameTaps), so the slice's two chunks sample over several frames.
         var slice = new SdfFieldSlice(axis: SdfAxis.Y, bands: 0.05f, centre: Vector2.Zero, completed: _ => completions++, half: 1.2f, offset: 0.1f, resolution: 512);
 
-        _ = bake.Dress(frame: frame);
+        _ = dresser.Dress(frame: frame);
         Assert.True(condition: bake.Probe(slice: slice));
         Assert.True(condition: bake.TryTakeForFrame(batch: out var first, frame: 0));
         // The slice's lattice first, every instance in its mask; the box's group waits.
@@ -158,7 +162,7 @@ public sealed class SdfFieldSliceLawTests {
         Assert.True(condition: bake.TryTakeForFrame(batch: out var again, frame: 1));
         Assert.Equal(expected: lattice.Points, actual: again.Lattices[0].Points);
 
-        var frames = Drive(bake: bake, done: () => (completions > 0), frame: frame, instances: Gauge, world: Far);
+        var frames = Drive(bake: bake, dresser: dresser, done: () => (completions > 0), frame: frame, instances: Gauge, world: Far);
 
         Assert.True(condition: (frames >= ((2 * slice.Chunks) - 1)), userMessage: $"{frames} frames for {slice.Chunks} chunks");
         Assert.Equal(expected: 1, actual: completions);
@@ -179,23 +183,25 @@ public sealed class SdfFieldSliceLawTests {
     }
     [Fact]
     public void ANewProgramRestartsTheSliceAndItsStaleAnswersAreDropped() {
-        var bake = new SdfMeshPathBake { Residency = "slice-restart" };
+        using var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake { Residency = "slice-restart" });
+        var bake = bakeRun.Bake;
+        var dresser = bakeRun.Dresser;
         var completions = 0;
         var slice = new SdfFieldSlice(axis: SdfAxis.X, bands: 0.1f, centre: Vector2.Zero, completed: _ => completions++, half: 1f, offset: 0f, resolution: 32);
 
-        _ = bake.Dress(frame: Frame(half: new Vector3(value: 0.25f)));
+        _ = dresser.Dress(frame: Frame(half: new Vector3(value: 0.25f)));
         Assert.True(condition: bake.Probe(slice: slice));
         Assert.True(condition: bake.TryTakeForFrame(batch: out var stale, frame: 0));
         bake.Record(batch: stale);
         // The program changes while the lattice is in flight: its answer lands on nothing, and the slice samples anew.
         var next = Frame(half: new Vector3(value: 0.3f));
 
-        _ = bake.Dress(frame: next);
+        _ = dresser.Dress(frame: next);
         bake.Complete(batch: stale, samples: Answer(batch: stale, instances: Sphere, world: Far));
         Assert.Equal(expected: 0, actual: completions);
         Assert.False(condition: slice.Done);
 
-        _ = Drive(bake: bake, done: () => (completions > 0), frame: next, instances: Sphere, world: Far);
+        _ = Drive(bake: bake, dresser: dresser, done: () => (completions > 0), frame: next, instances: Sphere, world: Far);
         Assert.Equal(expected: 1, actual: completions);
         Assert.Contains(expectedSubstring: "off=0%", actualString: slice.Describe(), comparisonType: StringComparison.Ordinal);
     }
@@ -205,10 +211,12 @@ public sealed class SdfFieldSliceLawTests {
     public void AnOverestimateDrawsRedAndAFieldWithNoSurfaceNearHasNoNearSurfaceReading() {
         var completions = 0;
         var doubled = new SdfFieldSlice(axis: SdfAxis.Z, bands: 0.1f, centre: new Vector2(x: SphereCentre.X, y: SphereCentre.Y), completed: _ => completions++, half: 1f, offset: (SphereCentre.Z + 0.4f), resolution: 32);
-        var bake = new SdfMeshPathBake { Residency = "slice-doubled" };
+        using var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake { Residency = "slice-doubled" });
+        var bake = bakeRun.Bake;
+        var dresser = bakeRun.Dresser;
 
         Assert.True(condition: bake.Probe(slice: doubled));
-        _ = Drive(bake: bake, done: () => (completions > 0), instances: Far, world: static point => (2f * Sphere(point: point)));
+        _ = Drive(bake: bake, dresser: dresser, done: () => (completions > 0), instances: Far, world: static point => (2f * Sphere(point: point)));
         Assert.Matches(expectedRegexPattern: @"\|grad d\| min=(1\.99\d|2) mean=2 max=(2\.00\d|2) off=100%", actualString: doubled.Describe());
 
         var red = Pixel(column: (32 + 0), rgba: doubled.Render(), row: 0, width: 64);
@@ -218,7 +226,7 @@ public sealed class SdfFieldSliceLawTests {
         var distant = new SdfFieldSlice(axis: SdfAxis.Z, bands: 0.1f, centre: Vector2.Zero, completed: _ => completions++, half: 1f, offset: 0f, resolution: 16);
 
         Assert.True(condition: bake.Probe(slice: distant));
-        _ = Drive(bake: bake, done: () => (completions > 1), instances: Far, world: static _ => 5f);
+        _ = Drive(bake: bake, dresser: dresser, done: () => (completions > 1), instances: Far, world: static _ => 5f);
         // A field that never rises reads wholly clipped, and has nothing left to describe.
         Assert.EndsWith(expectedEndString: "clipped=100% from d=5 world=100% |grad d| none near-surface(|d|<=0.375) none", actualString: distant.Describe(), comparisonType: StringComparison.Ordinal);
     }
@@ -234,14 +242,18 @@ public sealed class SdfFieldSliceLawTests {
             return ((distance <= Ceiling) ? distance : (Ceiling + (0.02f * (distance - Ceiling))));
         }
 
-        var bake = new SdfMeshPathBake { Residency = "slice-clipped" };
+        using var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake { Residency = "slice-clipped" });
+
+        var bake = bakeRun.Bake;
+
+        var dresser = bakeRun.Dresser;
         var frame = Frame(half: new Vector3(value: 0.25f));
         var completions = 0;
         var slice = new SdfFieldSlice(axis: SdfAxis.Z, bands: 0.2f, centre: new Vector2(x: SphereCentre.X, y: SphereCentre.Y), completed: _ => completions++, half: 2f, offset: (SphereCentre.Z + 0.4f), resolution: 128);
 
-        _ = bake.Dress(frame: frame);
+        _ = dresser.Dress(frame: frame);
         Assert.True(condition: bake.Probe(slice: slice));
-        _ = Drive(bake: bake, done: () => (completions > 0), frame: frame, instances: Clipped, world: Far);
+        _ = Drive(bake: bake, dresser: dresser, done: () => (completions > 0), frame: frame, instances: Clipped, world: Far);
 
         var described = slice.Describe();
 
@@ -262,12 +274,14 @@ public sealed class SdfFieldSliceLawTests {
     }
     [Fact]
     public void ASliceNoShapeAnswersSaysSoAndDrawsGrey() {
-        var bake = new SdfMeshPathBake { Residency = "slice-empty" };
+        using var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake { Residency = "slice-empty" });
+        var bake = bakeRun.Bake;
+        var dresser = bakeRun.Dresser;
         var completions = 0;
         var slice = new SdfFieldSlice(axis: SdfAxis.Z, bands: 0.1f, centre: Vector2.Zero, completed: _ => completions++, half: 1f, offset: 0f, resolution: 16);
 
         Assert.True(condition: bake.Probe(slice: slice));
-        _ = Drive(bake: bake, done: () => (completions > 0), instances: Far, world: Far);
+        _ = Drive(bake: bake, dresser: dresser, done: () => (completions > 0), instances: Far, world: Far);
 
         Assert.EndsWith(expectedEndString: "16x16 bands=0.1 no shape answered", actualString: slice.Describe(), comparisonType: StringComparison.Ordinal);
         Assert.Equal(expected: new Vector3(value: 128f), actual: Pixel(column: 3, rgba: slice.Render(), row: 5, width: 32));

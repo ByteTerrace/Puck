@@ -169,7 +169,8 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
                 );
             }
         }
-        var stampPool = "geometry assets shared; transforms and draws allocated from the live scene";
+        var stampPool = string.Create(CultureInfo.InvariantCulture,
+            $"geometry assets shared; transforms and draws allocated from the live scene; CPU query power memo {Puck.SignedDistance.Queries.SdfFieldEvaluator.PowerMemoRetainedBytes} byte(s) current-generation process-shared managed payload");
         var farDistance = WorldRenderFarDistance.Resolve(defaults: server.Definition.Render);
         // A keyed fog is judged at its thinnest key, where the most of the far plane shows through.
         var atmosphere = server.Definition.Render.Atmosphere;
@@ -206,9 +207,8 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
             val2: (gravityStatistics.BodyCount - gravityCompiled.Attractors.Length)
         )}, exact {gravityStatistics.ExactSourceEvaluations}, approximate {gravityStatistics.ApproximatedNodeEvaluations}, m2l {gravityStatistics.MultipoleToLocalTranslations}, area targets {gravityAreaStatistics.TargetCount}, active {gravityAreaStatistics.ActiveAreaCount}, evaluations {gravityAreaStatistics.EvaluationCount}, matches {gravityAreaStatistics.MatchCount}";
         var placementInstances = WorldPlacementStamper.StaticStampInstances(
-            creations: server.Definition.Creations,
-            placements: server.Definition.Placements,
-            worldSeed: (server.Definition.Generation?.WorldSeed ?? 0UL)
+            definition: server.Definition,
+            placements: server.Definition.Placements
         );
         var dealtTemplates = 0;
         var dealtInstances = 0;

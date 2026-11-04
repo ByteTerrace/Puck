@@ -35,6 +35,9 @@ public sealed partial class WorldWaitReadyLawTests {
     private sealed class FlagBakes : IWorldBakeReadiness {
         public long Frames { get; set; }
         public bool IsSettled { get; set; }
+        public bool IsResident { get; set; }
+        public bool IsResidentSince(long mark) => (IsSettledSince(mark) && IsResident);
+        public string? PendingResidencyReasonSince(long mark) => (IsResidentSince(mark) ? null : "geometry upload pending");
         public bool IsSettledSince(long mark) => (IsSettled && (Frames > mark));
         public string? PendingReasonSince(long mark) => (IsSettledSince(mark: mark) ? null : "still baking: world");
     }

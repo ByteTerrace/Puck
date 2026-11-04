@@ -1,4 +1,5 @@
 using Puck.Abstractions.Gpu;
+using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
 
@@ -7,16 +8,17 @@ namespace Puck.SdfVm;
 // the motion view owes it on until the hold ends (HoldsFrame). A row with no previous pose of its own
 // is seeded from this frame's after the ordinary copies, so it reads as still: every row on the first upload and after
 // a program geometry change or a frame owing every row, a range whose owner changed (SdfMovedTransforms.Reseat), and a mesh
-// draw whose identity at its index changed (SdfMeshDraw.Identity). The previous mesh table holds whole draw records at the
-// mesh region's stride (SdfMeshRegion.DrawBytes), of which frame/sdf-reprojection.hlsli reads only the matrix, so a run of
-// draws copies as one range; it is a device-side copy, so GpuRegion's CPU-shadow contract holds and no second matrix crosses
-// the host bus.
+// draw whose observed surface incarnation at its index changed (SdfMeshHistory.Observe). The previous mesh table holds
+// only each draw's matrix. The shared region-copy kernel gathers changed rows from the mesh region in one dispatch,
+// so GpuRegion's CPU-shadow contract holds and only copy requests, never a second matrix, cross the host bus.
 public sealed partial class SdfWorldTables {
-    private const int MeshMatrixBytes = (16 * sizeof(float));
+    private const int MeshMatrixBytes = (SdfMeshRecord.MatrixWords * sizeof(float));
     private const GpuStage TableReaders = GpuStage.ComputeShader | GpuStage.VertexShader | GpuStage.FragmentShader;
 
     private IGpuBuffer m_previousDynamicTransforms;
     private IGpuBuffer m_previousMeshTransforms;
+    // Separate requests for the pre-upload advance and post-upload seeds, per retired upload slot.
+    private readonly GpuBufferStridedCopy m_meshHistoryCopies;
 
     private readonly GpuUploadRuns m_changedTransforms = new(capacity: GpuRegion.MaxCopyRuns);
     private readonly GpuUploadRuns m_previousTransformCopies = new(capacity: GpuRegion.MaxCopyRuns);
@@ -24,17 +26,79 @@ public sealed partial class SdfWorldTables {
     private readonly GpuUploadRuns m_changedMeshMatrices = new(capacity: GpuRegion.MaxCopyRuns);
     private readonly GpuUploadRuns m_previousMeshCopies = new(capacity: GpuRegion.MaxCopyRuns);
     private readonly GpuUploadRuns m_seededMeshDraws = new(capacity: GpuRegion.MaxCopyRuns);
-
     // Whether the next upload seeds a whole previous table from the current one.
     private bool m_seedDynamicHistory = true;
     private bool m_seedMeshHistory = true;
 
     private uint m_previousMeshDrawCount;
 
-    // The identity of each draw last staged, by index, which the next staged list is compared against.
-    private object?[] m_meshIdentities = [];
+    // One observation door supplies both matrix seed decisions and the GPU history generation.
+    private readonly SdfMeshHistory m_meshHistory = new();
 
-    private int m_meshIdentityCount;
+    // Mesh history consumes the transform journal independently of the dynamic-table and draw-journal cursors.
+    // A successful stage commits this endpoint, while GPU seed runs remain pending until Upload consumes them.
+    private SdfMovedTransforms? m_meshTransformsSource;
+    private IReadOnlyList<DynamicTransform>? m_meshTransformsTable;
+    private long m_meshTransformsSerial;
+    private ulong m_meshTransformsGeometryRevision;
+    private int m_meshTransformsCount = -1;
+    private int m_meshCutTransformCount;
+    private bool m_meshTransformCutsAll;
+    private readonly GpuUploadRuns m_meshTransformReseats = new(capacity: GpuRegion.MaxCopyRuns);
+    private readonly GpuUploadRuns m_reseatedDraws = new(capacity: GpuRegion.MaxCopyRuns);
+
+    private void PrepareMeshTransformCuts(SdfFrame frame) {
+        m_meshTransformReseats.Clear();
+        m_reseatedDraws.Clear();
+        m_meshCutTransformCount = frame.DynamicTransforms.Count;
+        var moved = frame.MovedTransforms;
+        m_meshTransformCutsAll = ((m_meshTransformsCount != m_meshCutTransformCount) ||
+            (m_meshTransformsGeometryRevision != m_programGeometryRevision) ||
+            !ReferenceEquals(moved, m_meshTransformsSource) ||
+            ((moved is null)
+                ? !ReferenceEquals(frame.DynamicTransforms, m_meshTransformsTable)
+                : !moved.TryCollect(since: m_meshTransformsSerial, through: frame.MovedTransformsSerial,
+                    into: null, reseated: m_meshTransformReseats)));
+
+        if (m_meshTransformCutsAll) { SdfMeshHistory.ProcessWork.Count(SdfMeshHistory.ReseatFallbacks); }
+        if (!m_meshTransformCutsAll && (m_meshTransformReseats.Count == 0)) { return; }
+
+        // A roster walk is needed only on a cut, never for ordinary continuous movement. These indices are used only
+        // with the complete producer roster; the observation door rechecks actual draws after landing filters.
+        var draws = frame.MeshDraws;
+        SdfMeshHistory.ProcessWork.Add(SdfMeshHistory.ReseatDrawsScanned, draws.Count);
+        for (var index = 0; index < draws.Count; index++) {
+            var draw = draws[index];
+            if (MeshTransformWasReseated(in draw)) { m_reseatedDraws.Add(start: index, length: 1); }
+        }
+    }
+    private void CommitMeshTransformCuts(SdfFrame frame) {
+        m_meshTransformsSource = frame.MovedTransforms;
+        m_meshTransformsTable = frame.DynamicTransforms;
+        m_meshTransformsSerial = frame.MovedTransformsSerial;
+        m_meshTransformsCount = frame.DynamicTransforms.Count;
+        m_meshTransformsGeometryRevision = m_programGeometryRevision;
+    }
+    private bool MeshTransformWasReseated(in SdfMeshDraw draw) {
+        if (!m_meshTransformCutsAll && (m_meshTransformReseats.Count == 0)) { return false; }
+        // FrameSlot -1 is a sentinel, not a base from which a positive member offset can make a valid dependency.
+        if ((draw.FrameSlot is not { } root) || (root < 0) || (root >= m_meshCutTransformCount)) { return false; }
+        SdfMeshHistory.ProcessWork.Count(SdfMeshHistory.ReseatDependenciesChecked);
+        // Every member also uses the root matrix's scale, so the root is a dependency even for fully skinned meshes.
+        if (m_meshTransformCutsAll || m_meshTransformReseats.Contains(root)) { return true; }
+        if (draw.Mesh.VertexMembers.IsEmpty) { return false; }
+
+        var members = draw.Mesh.Members.Span;
+        for (var index = 0; index < members.Length; index++) {
+            var slot = (((long)root) + members[index].SlotOffset);
+            SdfMeshHistory.ProcessWork.Count(SdfMeshHistory.ReseatDependenciesChecked);
+            if ((slot < 0) || (slot >= m_meshCutTransformCount) || !m_meshTransformReseats.Contains((int)slot)) { continue; }
+            // Members may contain unused entries. Only a member named by a vertex can affect this draw's history.
+            SdfMeshHistory.ProcessWork.Add(SdfMeshHistory.ReseatMemberBytesChecked, draw.Mesh.VertexMembers.Length);
+            if (draw.Mesh.VertexMembers.Span.Contains((byte)index)) { return true; }
+        }
+        return false;
+    }
 
     /// <summary>Gets the revision of the poses the current dynamic-transform and mesh-matrix tables hold as of the latest
     /// upload. It moves on every upload that changes a pose or seeds a previous row, and never otherwise.</summary>
@@ -69,20 +133,8 @@ public sealed partial class SdfWorldTables {
             CopyTransformHistory(commandBuffer: commandBuffer, copies: m_previousTransformCopies, slot: previousSlot);
         }
         if (!m_seedMeshHistory && (m_previousMeshCopies.Count > 0)) {
-            // One range over every changed draw: a draw between them that did not change already holds the preceding
-            // frame's record in the previous table, so copying it again from that frame's slot writes what it holds.
-            var first = int.MaxValue;
-            var end = 0;
-
-            for (var run = 0; (run < m_previousMeshCopies.Count); run++) {
-                first = Math.Min(val1: first, val2: m_previousMeshCopies.Start(index: run));
-                end = Math.Max(val1: end, val2: (m_previousMeshCopies.Start(index: run) + m_previousMeshCopies.Length(index: run)));
-            }
-
-            m_previousMeshCopies.Clear();
-            m_previousMeshCopies.Add(length: (end - first), start: first);
             CopyMeshHistory(commandBuffer: commandBuffer, slot: previousSlot, copies: m_previousMeshCopies,
-                limit: Math.Min(val1: m_previousMeshDrawCount, val2: m_meshDrawCount));
+                limit: Math.Min(val1: m_previousMeshDrawCount, val2: m_meshDrawCount), recording: 0);
         }
     }
     private void CompletePreviousTables(nint commandBuffer) {
@@ -116,7 +168,7 @@ public sealed partial class SdfWorldTables {
             m_seededMeshDraws.Clear();
             m_seededMeshDraws.Add(length: ((int)m_meshDrawCount), start: 0);
         }
-        CopyMeshHistory(commandBuffer: commandBuffer, copies: m_seededMeshDraws, limit: m_meshDrawCount, slot: m_currentSlot);
+        CopyMeshHistory(commandBuffer: commandBuffer, copies: m_seededMeshDraws, limit: m_meshDrawCount, slot: m_currentSlot, recording: 1);
         m_seededMeshDraws.Clear();
         m_previousMeshCopies.Clear();
         if (!seedMesh) {
@@ -149,90 +201,95 @@ public sealed partial class SdfWorldTables {
         }
         FinishHistoryCopy(commandBuffer: commandBuffer, destination: m_previousDynamicTransforms, source: source);
     }
-    private void CopyMeshHistory(nint commandBuffer, int slot, GpuUploadRuns copies, uint limit) {
+    private void CopyMeshHistory(nint commandBuffer, int slot, GpuUploadRuns copies, uint limit, int recording) {
         if ((copies.Count == 0) || (limit == 0)) {
             return;
         }
         var source = m_meshRegion.Buffer(slot: slot);
 
-        BeginHistoryCopy(commandBuffer: commandBuffer, destination: m_previousMeshTransforms, source: source);
-        for (var run = 0; (run < copies.Count); run++) {
-            var start = copies.Start(index: run);
-            var end = Math.Min(val1: (start + copies.Length(index: run)), val2: ((int)limit));
-
-            if (end > start) {
-                var offset = (((ulong)start) * SdfMeshRegion.DrawBytes);
-
-                CopyHistoryRange(bytes: (((ulong)(end - start)) * SdfMeshRegion.DrawBytes), commandBuffer: commandBuffer, destination: m_previousMeshTransforms,
-                    destinationOffset: offset, source: source, sourceOffset: offset);
-            }
-        }
-        FinishHistoryCopy(commandBuffer: commandBuffer, destination: m_previousMeshTransforms, source: source);
+        m_gpu.Recorder.BeginDebugGroup(commandBufferHandle: commandBuffer, label: ((recording == 0) ? "mesh history advance" : "mesh history seed"));
+        BeginHistoryCopy(commandBuffer: commandBuffer, destination: m_previousMeshTransforms, source: source, compute: true);
+        var work = m_meshHistoryCopies.Record(commandBuffer: commandBuffer, slot: m_currentSlot, recording: recording,
+            source: source, destination: m_previousMeshTransforms, rows: copies, rowLimit: limit,
+            rowWords: SdfMeshRecord.MatrixWords, sourceStrideWords: SdfMeshRecord.DrawWords, destinationStrideWords: SdfMeshRecord.MatrixWords);
+        SdfMeshHistory.ProcessWork.Add(kind: SdfMeshHistory.HistoryRowsCopied, amount: work.Rows);
+        SdfMeshHistory.ProcessWork.Add(kind: SdfMeshHistory.HistoryBytesCopied, amount: ((long)work.Words * sizeof(uint)));
+        SdfMeshHistory.ProcessWork.Add(kind: SdfMeshHistory.HistoryRequestBytes, amount: work.RequestBytes);
+        if (work.Words > 0) { SdfMeshHistory.ProcessWork.Count(kind: SdfMeshHistory.HistoryDispatches); }
+        FinishHistoryCopy(commandBuffer: commandBuffer, destination: m_previousMeshTransforms, source: source, compute: true);
+        m_gpu.Recorder.EndDebugGroup(commandBufferHandle: commandBuffer);
     }
     private void CopyHistoryRange(nint commandBuffer, IGpuBuffer source, IGpuBuffer destination, ulong sourceOffset, ulong destinationOffset, ulong bytes) =>
         m_gpu.Recorder.CopyBuffer(commandBufferHandle: commandBuffer, sourceBufferHandle: source.BufferHandle,
             destinationBufferHandle: destination.BufferHandle, sizeBytes: bytes, sourceOffsetBytes: sourceOffset, destinationOffsetBytes: destinationOffset);
-    private void BeginHistoryCopy(nint commandBuffer, IGpuBuffer source, IGpuBuffer destination) {
+    private void BeginHistoryCopy(nint commandBuffer, IGpuBuffer source, IGpuBuffer destination, bool compute = false) {
         // An unread routed world can copy history again without an intervening shader reader. Order earlier copies
         // as well as readers and region-upload shader writes. First use in a new Direct3D 12 recording is COMMON;
         // its tracker supplies any state established earlier in this recording instead.
         m_gpu.Recorder.MemoryBarrier(commandBufferHandle: commandBuffer,
-            sourceAccessMask: GpuAccess.ShaderRead | GpuAccess.ShaderWrite | GpuAccess.CopyWrite,
-            sourceStageMask: TableReaders | GpuStage.Transfer,
-            destinationAccessMask: GpuAccess.TransferRead | GpuAccess.CopyWrite, destinationStageMask: GpuStage.Transfer);
+            destinationAccessMask: (compute ? (GpuAccess.ShaderRead | GpuAccess.ShaderWrite) : (GpuAccess.TransferRead | GpuAccess.CopyWrite)),
+            destinationStageMask: (compute ? GpuStage.ComputeShader : GpuStage.Transfer),
+            sourceAccessMask: GpuAccess.ShaderRead | GpuAccess.ShaderWrite | GpuAccess.CopyWrite, sourceStageMask: TableReaders | GpuStage.Transfer);
         m_gpu.Recorder.TransitionBuffer(bufferHandle: source.BufferHandle, commandBufferHandle: commandBuffer,
             sourceAccessMask: GpuAccess.None, sourceStageMask: GpuStage.TopOfPipe,
-            destinationAccessMask: GpuAccess.TransferRead, destinationStageMask: GpuStage.Transfer);
+            destinationAccessMask: (compute ? GpuAccess.ShaderRead : GpuAccess.TransferRead), destinationStageMask: (compute ? GpuStage.ComputeShader : GpuStage.Transfer));
         m_gpu.Recorder.TransitionBuffer(bufferHandle: destination.BufferHandle, commandBufferHandle: commandBuffer,
             sourceAccessMask: GpuAccess.None, sourceStageMask: GpuStage.TopOfPipe,
-            destinationAccessMask: GpuAccess.CopyWrite, destinationStageMask: GpuStage.Transfer);
+            destinationAccessMask: (compute ? GpuAccess.ShaderWrite : GpuAccess.CopyWrite), destinationStageMask: (compute ? GpuStage.ComputeShader : GpuStage.Transfer));
     }
-    private void FinishHistoryCopy(nint commandBuffer, IGpuBuffer source, IGpuBuffer destination) {
+    private void FinishHistoryCopy(nint commandBuffer, IGpuBuffer source, IGpuBuffer destination, bool compute = false) {
         m_gpu.Recorder.TransitionBuffer(bufferHandle: source.BufferHandle, commandBufferHandle: commandBuffer,
-            sourceAccessMask: GpuAccess.TransferRead, sourceStageMask: GpuStage.Transfer,
+            sourceAccessMask: (compute ? GpuAccess.ShaderRead : GpuAccess.TransferRead), sourceStageMask: (compute ? GpuStage.ComputeShader : GpuStage.Transfer),
             destinationAccessMask: GpuAccess.ShaderRead, destinationStageMask: TableReaders);
         m_gpu.Recorder.TransitionBuffer(bufferHandle: destination.BufferHandle, commandBufferHandle: commandBuffer,
-            sourceAccessMask: GpuAccess.CopyWrite, sourceStageMask: GpuStage.Transfer,
+            sourceAccessMask: (compute ? GpuAccess.ShaderWrite : GpuAccess.CopyWrite), sourceStageMask: (compute ? GpuStage.ComputeShader : GpuStage.Transfer),
             destinationAccessMask: GpuAccess.ShaderRead, destinationStageMask: GpuStage.ComputeShader);
     }
-    // Compares a newly staged draw list with the one last staged: a draw whose identity at its index changed is seeded,
-    // and one that kept its identity and moved its matrix is copied from the preceding upload's table.
-    private void StageMeshMotion(ReadOnlySpan<uint> words, IReadOnlyList<SdfMeshDraw> draws) {
-        // Only the draw records are compared, so a region past what one span reaches is read at its front.
+    // Observes and packs one record through the same door for full and incremental staging.
+    private void StageMeshDraw(int index, in SdfMeshDraw draw, Span<uint> record, ReadOnlySpan<byte> old, bool incremental = false) {
+        var observation = m_meshHistory.Observe(draw: in draw, index: index, reseat: MeshTransformWasReseated(in draw));
+        var packedWords = SdfMeshRecord.DrawWords;
+        if (incremental) {
+            var work = SdfMeshRegion.WriteDrawIncremental(draw: in draw, previous: in m_stagedDraws[index],
+                placement: m_meshArena.Placements[draw.Mesh], generation: observation.Generation, record: record);
+            packedWords = work.PackedWords;
+            if (work.NormalComputed) { SdfMeshHistory.ProcessWork.Count(kind: SdfMeshHistory.NormalMatricesComputed); }
+            if (work.SelectionComputed) { SdfMeshHistory.ProcessWork.Count(kind: SdfMeshHistory.SelectionBoxesComputed); }
+        } else {
+            SdfMeshRegion.WriteDraw(draw: in draw, placement: m_meshArena.Placements[draw.Mesh], generation: observation.Generation, record: record);
+            SdfMeshHistory.ProcessWork.Count(kind: SdfMeshHistory.NormalMatricesComputed);
+            SdfMeshHistory.ProcessWork.Count(kind: SdfMeshHistory.SelectionBoxesComputed);
+        }
+        SdfMeshHistory.ProcessWork.Count(kind: SdfMeshHistory.RecordsPacked);
+        SdfMeshHistory.ProcessWork.Add(kind: SdfMeshHistory.RecordBytesPacked, amount: (packedWords * sizeof(uint)));
+        if (observation.Seed) {
+            m_seededMeshDraws.Add(length: 1, start: index);
+            return;
+        }
+        var offset = (index * SdfMeshRegion.DrawBytes);
+        var matrix = System.Runtime.InteropServices.MemoryMarshal.AsBytes(span: record[..SdfMeshRecord.MatrixWords]);
+
+        if ((offset > (old.Length - MeshMatrixBytes)) || !matrix.SequenceEqual(other: old.Slice(length: MeshMatrixBytes, start: offset))) {
+            m_changedMeshMatrices.Add(length: 1, start: index);
+            SdfMeshHistory.ProcessWork.Count(kind: SdfMeshHistory.MatricesChanged);
+            SdfMeshHistory.ProcessWork.Add(kind: SdfMeshHistory.MatrixBytesChanged, amount: MeshMatrixBytes);
+        }
+    }
+    // Packs a complete newly staged list and retires vanished cells while retaining their generation lifetimes.
+    private void StageMeshMotion(Span<uint> words, IReadOnlyList<SdfMeshDraw> draws) {
         var old = m_meshRegion.ContentsAt(
-            length: ((int)Math.Min(
-                val1: m_meshRegion.ByteCount,
-                val2: (((long)draws.Count) * SdfMeshRegion.DrawBytes)
-            )),
+            length: ((int)Math.Min(val1: m_meshRegion.ByteCount, val2: (((long)draws.Count) * SdfMeshRegion.DrawBytes))),
             offset: 0
         );
 
-        for (var draw = 0; (draw < draws.Count); draw++) {
-            if ((draws[draw].MotionIdentity ?? draws[draw].Identity) is not { } identity) {
-                throw new ArgumentException(message: $"Mesh draw {draw} names no identity.", paramName: nameof(draws));
-            }
-            if ((draw >= m_meshIdentityCount) || !identity.Equals(obj: m_meshIdentities[draw])) {
-                m_seededMeshDraws.Add(length: 1, start: draw);
-                continue;
-            }
+        for (var index = 0; (index < draws.Count); index++) {
+            var draw = draws[index];
 
-            var offset = (draw * SdfMeshRegion.DrawBytes);
-            var matrix = System.Runtime.InteropServices.MemoryMarshal.AsBytes(span: words.Slice(length: 16, start: (draw * SdfMeshRecord.DrawWords)));
+            StageMeshDraw(index: index, draw: in draw, record: words.Slice(length: SdfMeshRecord.DrawWords, start: (index * SdfMeshRecord.DrawWords)), old: old);
+        }
+        m_meshHistory.RetireAfter(count: draws.Count);
 
-            if ((offset > (old.Length - MeshMatrixBytes)) || !matrix.SequenceEqual(other: old.Slice(length: MeshMatrixBytes, start: offset))) {
-                m_changedMeshMatrices.Add(length: 1, start: draw);
-            }
-        }
-        if (m_meshIdentities.Length < draws.Count) {
-            Array.Resize(array: ref m_meshIdentities, newSize: draws.Count);
-        }
-        for (var draw = 0; (draw < draws.Count); draw++) {
-            m_meshIdentities[draw] = (draws[draw].MotionIdentity ?? draws[draw].Identity);
-        }
-        Array.Clear(array: m_meshIdentities, index: draws.Count, length: (m_meshIdentityCount - Math.Min(val1: m_meshIdentityCount, val2: draws.Count)));
-        m_meshIdentityCount = draws.Count;
-
-        var bytes = (((ulong)Math.Max(val1: 1, val2: draws.Count)) * SdfMeshRegion.DrawBytes);
+        var bytes = (((ulong)Math.Max(val1: 1, val2: draws.Count)) * MeshMatrixBytes);
 
         if (bytes <= m_previousMeshTransforms.SizeBytes) {
             return;

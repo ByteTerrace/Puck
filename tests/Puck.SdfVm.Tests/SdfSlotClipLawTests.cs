@@ -81,7 +81,7 @@ public sealed class SdfSlotClipLawTests {
         var layout = SdfMeshRegion.Plan(draws: first, meshes: placements);
         var words = new uint[layout.Words];
 
-        SdfMeshRegion.Write(destination: words, draws: first, layout: layout, meshes: placements);
+        SdfMeshRegion.Write(destination: words, generations: Enumerable.Repeat(1u, first.Count).ToArray(), draws: first, layout: layout, meshes: placements);
 
         var original = words.AsSpan(length: SdfMeshRecord.DrawWords, start: SdfMeshRecord.DrawWords);
         var copy = words.AsSpan(length: SdfMeshRecord.DrawWords, start: (2 * SdfMeshRecord.DrawWords));
@@ -101,7 +101,7 @@ public sealed class SdfSlotClipLawTests {
         var layout = SdfMeshRegion.Plan(draws: [draw], meshes: placements);
         var words = new uint[layout.Words];
 
-        SdfMeshRegion.Write(destination: words, draws: [draw], layout: layout, meshes: placements);
+        SdfMeshRegion.Write(destination: words, generations: [1u], draws: [draw], layout: layout, meshes: placements);
 
         float Word(int index) => BitConverter.UInt32BitsToSingle(value: words[index]);
 

@@ -171,6 +171,12 @@ public interface IRenderGraphPackageRecorder : IDisposable {
     /// <returns>The output's package-input identity, or null to force execution.</returns>
     ulong? Signature(in FrameContext context, RenderGraphExternalReads? reads) => null;
 }
+/// <summary>A package output allocation and the optional hold on its exact owner. Acquiring a replacement transfers
+/// the hold to the graph; the graph retires the hold, never the borrowed allocation itself.</summary>
+/// <param name="Buffer">The package-owned allocation.</param>
+/// <param name="Ownership">A newly acquired hold, or null when the previous hold or the recorder keeps it alive.</param>
+public readonly record struct RenderGraphBorrowedBuffer(IGpuBuffer Buffer, IDisposable? Ownership = null);
+
 /// <summary>Makes the recorders of one package id. A candidate graph's package passes build with its shader passes:
 /// <see cref="BuildAsync"/> creates a pass's shader modules, pipelines and render passes on the thread pool before the
 /// graph installs, and <see cref="Create"/> takes those objects on the frame thread when it installs.</summary>
@@ -180,15 +186,17 @@ public interface IRenderGraphPackageFactory {
     /// <param name="part">The fragment part, or null for a package without a fragment.</param>
     /// <returns>Whether the part supplies its buffer outputs.</returns>
     bool OwnsBuffer(string? part) => false;
-    /// <summary>Returns a residency-owned buffer for a package output, or null when the graph allocates it. Called on
-    /// the frame thread after the package builds. The package build and recorder keep its owner alive until retirement;
-    /// the graph tracks barriers and publication but never disposes the borrowed buffer. Current-frame consumers may
+    /// <summary>Acquires a package-owned output after build and before each recording. Stable acquisitions return the
+    /// previous buffer without another ownership hold. A changed allocation transfers its ownership hold to the graph,
+    /// which retires it after submissions and publication readers finish; without a hold, the build and recorder must
+    /// keep that exact allocation alive. The graph never disposes the buffer itself. Current-frame consumers may
     /// declare ComputeReadWrite input ports; the owner reacquires their accesses before its next recording.</summary>
     /// <param name="context">The package pass that writes the storage.</param>
-    /// <param name="built">The successful package build.</param>
+    /// <param name="built">The successful package build at installation; null during later acquisitions.</param>
     /// <param name="resource">The output storage declaration.</param>
+    /// <param name="previous">The currently acquired buffer, or null at installation.</param>
     /// <returns>The borrowed allocation, or null.</returns>
-    IGpuBuffer? BorrowedBuffer(RenderGraphPackageRecorderContext context, IDisposable? built, ShaderPipelineResource resource) => null;
+    RenderGraphBorrowedBuffer? BorrowedBuffer(RenderGraphPackageRecorderContext context, IDisposable? built, ShaderPipelineResource resource, IGpuBuffer? previous) => null;
     /// <summary>Returns the instance edges bound to a selected implicit fragment's external input versions.</summary>
     /// <param name="instance">The package instance.</param>
     /// <returns>The external bindings.</returns>

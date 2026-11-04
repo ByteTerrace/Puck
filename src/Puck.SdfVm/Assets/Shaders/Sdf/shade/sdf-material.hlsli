@@ -26,9 +26,9 @@ struct SdfMaterialData {
     float4 weathering; // edge, lines, settle, reach
     float4 weatheringControls; // seed bits, scale, floor, lane
     float4 underColorThreshold[2];
-    float4 underResponse[2]; // roughness, metal, stage count, reserved
+    float4 underResponse[2]; // roughness, metal, stage count/softness, pattern X/Y
     float4 deposit;
-    float4 depositResponse;
+    float4 depositResponse; // roughness, metal, pattern Z, noise coverage
     uint paintFirst; // the vector of the material's first paint (SdfProgram.PackPaint)
     uint paintCount; // its paints, drawn in order
     uint emissiveLane; // the render lane scaling emissive, plus one; 0 keeps the static emissive

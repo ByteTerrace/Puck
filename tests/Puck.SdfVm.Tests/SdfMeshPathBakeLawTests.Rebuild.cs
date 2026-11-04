@@ -7,7 +7,7 @@ namespace Puck.SdfVm.Tests;
 public sealed partial class SdfMeshPathBakeLawTests {
     [Fact]
     public void ACachedReplacementDrawsItsOwnMeshWithoutWaitingForAnotherInvalidation() {
-        var library = new SdfMeshLibrary();
+        using var library = new SdfMeshLibrary();
 
         SdfProgram Cached(float x, out SdfMesh mesh) {
             var builder = new SdfProgramBuilder();
@@ -23,13 +23,15 @@ public sealed partial class SdfMeshPathBakeLawTests {
         }
         var first = Cached(mesh: out var firstMesh, x: 0);
         var second = Cached(mesh: out var secondMesh, x: 5);
-        var bake = new SdfMeshPathBake { Library = library };
+        using var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake { Library = library }, ownsLibrary: false);
+        var bake = bakeRun.Bake;
+        var dresser = bakeRun.Dresser;
         var frame = new SdfFrame(Program: first, ProgramChanged: true, Time: 0, Views: []) { FarDistance = 100 };
-        var firstDraw = bake.Dress(frame: frame);
+        var firstDraw = dresser.Dress(frame: frame);
         var revision = firstDraw.MeshDrawsRevision;
 
         Assert.Same(expected: firstMesh, actual: Assert.Single(collection: firstDraw.MeshDraws).Mesh);
-        var replacement = bake.Dress(frame: frame with { Program = second });
+        var replacement = dresser.Dress(frame: frame with { Program = second });
 
         Assert.Same(expected: secondMesh, actual: Assert.Single(collection: replacement.MeshDraws).Mesh);
         Assert.True(condition: (replacement.MeshDrawsRevision > revision));
@@ -40,7 +42,7 @@ public sealed partial class SdfMeshPathBakeLawTests {
     // holds under that identity: each group bakes again under the identity standing, drawing its earlier mesh meanwhile.
     [Fact]
     public void AMovedIdentityKeepsAndTakesNothingAnEarlierIdentityMeshed() {
-        var library = new SdfMeshLibrary();
+        using var library = new SdfMeshLibrary();
 
         static SdfProgram Sphere() {
             var builder = new SdfProgramBuilder();
@@ -59,40 +61,50 @@ public sealed partial class SdfMeshPathBakeLawTests {
             library.Store(geometry: group.Sealed, identity: built.Value, materials: group.MaterialOrder, mesh: mesh);
         }
 
-        var bake = new SdfMeshPathBake { Identity = built, Library = library, Residency = "built" };
+        using var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake { Identity = built, Library = library, Residency = "built" }, ownsLibrary: false);
+
+        var bake = bakeRun.Bake;
+
+        var dresser = bakeRun.Dresser;
         var frame = new SdfFrame(Program: first, ProgramChanged: true, Time: 0, Views: []) { FarDistance = 100 };
 
-        Assert.Same(expected: mesh, actual: Assert.Single(collection: bake.Dress(frame: frame).MeshDraws).Mesh);
+        Assert.Same(expected: mesh, actual: Assert.Single(collection: dresser.Dress(frame: frame).MeshDraws).Mesh);
         Assert.False(condition: bake.Pending);
 
         // The same identity keeps the group through a rebuilt program, the control for what follows.
-        Assert.Same(expected: mesh, actual: Assert.Single(collection: bake.Dress(frame: (frame with { Program = Sphere() })).MeshDraws).Mesh);
+        Assert.Same(expected: mesh, actual: Assert.Single(collection: dresser.Dress(frame: (frame with { Program = Sphere() })).MeshDraws).Mesh);
         Assert.False(condition: bake.Pending);
 
         bake.Identity = moved;
 
-        var rebuilt = bake.Dress(frame: (frame with { Program = Sphere() }));
+        var rebuilt = dresser.Dress(frame: (frame with { Program = Sphere() }));
 
         Assert.True(condition: bake.Pending);
         Assert.Same(expected: mesh, actual: Assert.Single(collection: rebuilt.MeshDraws).Mesh);
 
-        var arriving = new SdfMeshPathBake { Identity = moved, Library = library, Residency = "arriving" };
+        using var arrivingRun = new MeshBakeTestRun(new SdfMeshPathBake { Identity = moved, Library = library, Residency = "arriving" }, ownsLibrary: false);
 
-        _ = arriving.Dress(frame: frame);
+        var arriving = arrivingRun.Bake;
+
+        var arrivingDresser = arrivingRun.Dresser;
+
+        _ = arrivingDresser.Dress(frame: frame);
         Assert.True(condition: arriving.Pending);
     }
     // A skinned group's mesh is the bake identity's too: a moved identity neither keeps the group nor renumbers it.
     [Fact]
     public void AMovedIdentityRebakesASkinnedGroupItWouldOtherwiseKeep() {
-        var bake = new SdfMeshPathBake { Library = new SdfMeshLibrary(), Residency = "skinned" };
+        using var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake { Library = new SdfMeshLibrary(), Residency = "skinned" });
+        var bake = bakeRun.Bake;
+        var dresser = bakeRun.Dresser;
         var index = 0L;
 
-        DriveSettle(bake: bake, frame: SettleFrame(groups: 1, offset: 0.35f, program: SettleProgram(groups: 1, leadingMaterials: 1), time: 0f), index: ref index);
-        _ = bake.Dress(frame: SettleFrame(groups: 1, offset: 0.35f, program: bake.Program!, time: 0.1f));
+        DriveSettle(bake: bake, dresser: dresser, frame: SettleFrame(groups: 1, offset: 0.35f, program: SettleProgram(groups: 1, leadingMaterials: 1), time: 0f), index: ref index);
+        _ = dresser.Dress(frame: SettleFrame(groups: 1, offset: 0.35f, program: bake.Program!, time: 0.1f));
         Assert.False(condition: bake.Pending);
 
         bake.Identity = new SdfMeshBakeIdentity(value: 7);
-        _ = bake.Dress(frame: SettleFrame(groups: 1, offset: 0.353f, program: SettleProgram(groups: 1), time: 0.2f));
+        _ = dresser.Dress(frame: SettleFrame(groups: 1, offset: 0.353f, program: SettleProgram(groups: 1), time: 0.2f));
 
         Assert.True(condition: bake.Pending);
     }
@@ -101,14 +113,16 @@ public sealed partial class SdfMeshPathBakeLawTests {
     // group afresh at the member's new pose would key another geometry and bake it.
     [Fact]
     public void ARebuiltProgramKeepsASkinnedGroupWhoseMemberStandsElsewhere() {
-        var bake = new SdfMeshPathBake { Library = new SdfMeshLibrary(), Residency = "rebuild" };
+        using var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake { Library = new SdfMeshLibrary(), Residency = "rebuild" });
+        var bake = bakeRun.Bake;
+        var dresser = bakeRun.Dresser;
         var index = 0L;
 
-        DriveSettle(bake: bake, frame: SettleFrame(groups: 1, offset: 0.35f, program: SettleProgram(groups: 1), time: 0f), index: ref index);
-        var baked = Assert.Single(collection: bake.Dress(frame: SettleFrame(groups: 1, offset: 0.35f, program: bake.Program!, time: 0.1f)).MeshDraws).Mesh;
+        DriveSettle(bake: bake, dresser: dresser, frame: SettleFrame(groups: 1, offset: 0.35f, program: SettleProgram(groups: 1), time: 0f), index: ref index);
+        var baked = Assert.Single(collection: dresser.Dress(frame: SettleFrame(groups: 1, offset: 0.35f, program: bake.Program!, time: 0.1f)).MeshDraws).Mesh;
 
-        _ = bake.Dress(frame: SettleFrame(groups: 1, offset: 0.353f, program: bake.Program!, time: 0.2f));
-        var draws = bake.Dress(frame: SettleFrame(groups: 1, offset: 0.353f, program: SettleProgram(groups: 1), time: 0.3f)).MeshDraws;
+        _ = dresser.Dress(frame: SettleFrame(groups: 1, offset: 0.353f, program: bake.Program!, time: 0.2f));
+        var draws = dresser.Dress(frame: SettleFrame(groups: 1, offset: 0.353f, program: SettleProgram(groups: 1), time: 0.3f)).MeshDraws;
 
         Assert.Same(expected: baked, actual: Assert.Single(collection: draws).Mesh);
         Assert.False(condition: bake.Pending);
@@ -118,11 +132,13 @@ public sealed partial class SdfMeshPathBakeLawTests {
     // as when the frame plans the program itself.
     [Fact]
     public void AProgramPlannedAheadRestartsFromItsPlanAndKeepsTheGroup() {
-        var bake = new SdfMeshPathBake { Library = new SdfMeshLibrary(), Residency = "ahead" };
+        using var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake { Library = new SdfMeshLibrary(), Residency = "ahead" });
+        var bake = bakeRun.Bake;
+        var dresser = bakeRun.Dresser;
         var index = 0L;
 
-        DriveSettle(bake: bake, frame: SettleFrame(groups: 1, offset: 0.35f, program: SettleProgram(groups: 1), time: 0f), index: ref index);
-        var baked = Assert.Single(collection: bake.Dress(frame: SettleFrame(groups: 1, offset: 0.35f, program: bake.Program!, time: 0.1f)).MeshDraws).Mesh;
+        DriveSettle(bake: bake, dresser: dresser, frame: SettleFrame(groups: 1, offset: 0.35f, program: SettleProgram(groups: 1), time: 0f), index: ref index);
+        var baked = Assert.Single(collection: dresser.Dress(frame: SettleFrame(groups: 1, offset: 0.35f, program: bake.Program!, time: 0.1f)).MeshDraws).Mesh;
         var program = SettleProgram(groups: 1);
         var drawn = SettleFrame(groups: 1, offset: 0.353f, program: program, time: 0.2f);
 
@@ -131,7 +147,7 @@ public sealed partial class SdfMeshPathBakeLawTests {
             program: program,
             transforms: SettleFrame(groups: 1, offset: 0.35f, program: program, time: 0.15f).DynamicTransforms
         );
-        var draws = bake.Dress(frame: drawn).MeshDraws;
+        var draws = dresser.Dress(frame: drawn).MeshDraws;
 
         Assert.Same(expected: baked, actual: Assert.Single(collection: draws).Mesh);
         Assert.False(condition: bake.Pending);
@@ -141,12 +157,14 @@ public sealed partial class SdfMeshPathBakeLawTests {
     // for place, and nothing bakes, where planning it afresh would key another geometry and bake it.
     [Fact]
     public void ARebuiltProgramWhoseEarlierPaletteLeftKeepsASkinnedGroupRenumbered() {
-        var bake = new SdfMeshPathBake { Library = new SdfMeshLibrary(), Residency = "renumber" };
+        using var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake { Library = new SdfMeshLibrary(), Residency = "renumber" });
+        var bake = bakeRun.Bake;
+        var dresser = bakeRun.Dresser;
         var index = 0L;
 
-        DriveSettle(bake: bake, frame: SettleFrame(groups: 1, offset: 0.35f, program: SettleProgram(groups: 1, leadingMaterials: 1), time: 0f), index: ref index);
-        var baked = Assert.Single(collection: bake.Dress(frame: SettleFrame(groups: 1, offset: 0.35f, program: bake.Program!, time: 0.1f)).MeshDraws).Mesh;
-        var draws = bake.Dress(frame: SettleFrame(groups: 1, offset: 0.353f, program: SettleProgram(groups: 1), time: 0.2f)).MeshDraws;
+        DriveSettle(bake: bake, dresser: dresser, frame: SettleFrame(groups: 1, offset: 0.35f, program: SettleProgram(groups: 1, leadingMaterials: 1), time: 0f), index: ref index);
+        var baked = Assert.Single(collection: dresser.Dress(frame: SettleFrame(groups: 1, offset: 0.35f, program: bake.Program!, time: 0.1f)).MeshDraws).Mesh;
+        var draws = dresser.Dress(frame: SettleFrame(groups: 1, offset: 0.353f, program: SettleProgram(groups: 1), time: 0.2f)).MeshDraws;
         var renumbered = Assert.Single(collection: draws).Mesh;
 
         Assert.NotSame(actual: renumbered, expected: baked);
@@ -159,23 +177,27 @@ public sealed partial class SdfMeshPathBakeLawTests {
     // the group still settles once its member holds still away from the pose that mesh was baked at.
     [Fact]
     public void ASkinnedGroupArrivingAtAnUnbakedPoseTakesItsFormsMeshAndSettlesLater() {
-        var library = new SdfMeshLibrary();
-        var home = new SdfMeshPathBake { Library = library, Residency = "home" };
+        using var library = new SdfMeshLibrary();
+        using var homeRun = new MeshBakeTestRun(new SdfMeshPathBake { Library = library, Residency = "home" }, ownsLibrary: false);
+        var home = homeRun.Bake;
+        var homeDresser = homeRun.Dresser;
         var index = 0L;
 
-        DriveSettle(bake: home, frame: SettleFrame(groups: 1, offset: 0.35f, program: SettleProgram(groups: 1), time: 0f), index: ref index);
-        var baked = Assert.Single(collection: home.Dress(frame: SettleFrame(groups: 1, offset: 0.35f, program: home.Program!, time: 0.1f)).MeshDraws).Mesh;
-        var away = new SdfMeshPathBake { Library = library, Residency = "away" };
+        DriveSettle(bake: home, dresser: homeDresser, frame: SettleFrame(groups: 1, offset: 0.35f, program: SettleProgram(groups: 1), time: 0f), index: ref index);
+        var baked = Assert.Single(collection: homeDresser.Dress(frame: SettleFrame(groups: 1, offset: 0.35f, program: home.Program!, time: 0.1f)).MeshDraws).Mesh;
+        using var awayRun = new MeshBakeTestRun(new SdfMeshPathBake { Library = library, Residency = "away" }, ownsLibrary: false);
+        var away = awayRun.Bake;
+        var awayDresser = awayRun.Dresser;
         var program = SettleProgram(groups: 1);
-        var arrived = away.Dress(frame: SettleFrame(groups: 1, offset: 0.36f, program: program, time: 0f)).MeshDraws;
+        var arrived = awayDresser.Dress(frame: SettleFrame(groups: 1, offset: 0.36f, program: program, time: 0f)).MeshDraws;
 
         Assert.Same(expected: baked, actual: Assert.Single(collection: arrived).Mesh);
         Assert.False(condition: away.Pending);
 
         var settled = SettleFrame(groups: 1, offset: 0.5f, program: program, time: 1f);
 
-        _ = away.Dress(frame: settled);
-        _ = away.Dress(frame: (settled with { Time = (1f + (2f * SdfMeshSettle.SettleSeconds)) }));
+        _ = awayDresser.Dress(frame: settled);
+        _ = awayDresser.Dress(frame: (settled with { Time = (1f + (2f * SdfMeshSettle.SettleSeconds)) }));
         Assert.True(condition: away.Pending);
     }
 }

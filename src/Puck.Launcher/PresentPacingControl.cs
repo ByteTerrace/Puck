@@ -13,6 +13,7 @@ namespace Puck.Launcher;
 public sealed class PresentPacingControl {
     private double m_targetHertz;
     private uint m_version;
+    private bool m_convergesLighting = true;
 
     /// <summary>Initializes the control with the boot target rate.</summary>
     /// <param name="initialTargetHertz">The seed target rate in Hz, or <see langword="null"/> for automatic display pacing.</param>
@@ -42,12 +43,18 @@ public sealed class PresentPacingControl {
     /// presentation interval is exactly the simulation time it advanced (a step, or nothing) with no interpolation
     /// between ticks, as the offscreen host runs. The World's frame source also presents
     /// the completed tick, advances its animation by the ticks completed and marks its frames
-    /// (<c>SdfFrame.TickLocked</c>) so the renderer traces indirect light and adapts exposure by them too, while it holds
-    /// (<c>WorldFramePresenter.HistoryFree</c>), so a capture of a tick shows the same image whatever the display's rate
-    /// or the machine's load. A frame that cannot keep up with
+    /// (<c>SdfFrame.TickLocked</c>) so the renderer adapts exposure by them too. Lighting waits are selected separately by
+    /// <see cref="ConvergesLighting"/>. With convergence enabled, a capture of the same tick is independent of
+    /// the display's rate or the machine's load. A frame that cannot keep up with
     /// the simulation rate slows the simulation rather than skipping ticks; the simulation's own state never depends on
     /// it.</summary>
     public bool TickLocked => HostPacing.StepsOneTickPerFrame;
+    /// <summary>Gets whether tick-locked frames synchronously converge indirect lighting. Clock pinning alone can
+    /// retain normal budgeted lighting; ordinary display-paced frames never request convergence here.</summary>
+    public bool ConvergesLighting => (TickLocked && Volatile.Read(ref m_convergesLighting));
+    /// <summary>Selects whether tick-locked frames converge lighting; the default is true for settled stills.</summary>
+    /// <param name="enabled">Whether to finish lighting before each tick-locked frame.</param>
+    public void SetLightingConvergence(bool enabled) => Volatile.Write(ref m_convergesLighting, enabled);
     /// <summary>The live policy shared by the window loop and authority replay stepping.</summary>
     public Puck.Hosting.HostPacing HostPacing { get; } = new();
 

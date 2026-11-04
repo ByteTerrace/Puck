@@ -102,6 +102,12 @@ public sealed class HostLoopControlLawTests {
         Assert.False(condition: pacing.StepsOneTickPerFrame);
         presentation.SetTickLocked(locked: true);
         Assert.True(condition: pacing.StepsOneTickPerFrame);
+        Assert.True(condition: presentation.ConvergesLighting);
+        presentation.SetLightingConvergence(enabled: false);
+        Assert.True(condition: pacing.StepsOneTickPerFrame);
+        Assert.False(condition: presentation.ConvergesLighting);
+        presentation.SetLightingConvergence(enabled: true);
+        Assert.True(condition: presentation.ConvergesLighting);
         presentation.SetTickLocked(locked: false);
         Assert.False(condition: pacing.StepsOneTickPerFrame);
     }

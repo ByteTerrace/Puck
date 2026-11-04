@@ -8,6 +8,7 @@ namespace Puck.Abstractions.Gpu;
 internal sealed class GpuWorkCountingFence(IGpuSubmissionFence inner, GpuWorkLedger ledger) : IGpuSubmissionFence {
     /// <summary>Gets the submission this fence is armed with, or zero when none is outstanding.</summary>
     internal long ArmedSubmission { get; set; }
+    internal GpuTransferCounts ArmedTransfers { get; set; }
     /// <summary>Gets the backend's fence.</summary>
     internal IGpuSubmissionFence Inner =>
         inner;
@@ -30,11 +31,13 @@ internal sealed class GpuWorkCountingFence(IGpuSubmissionFence inner, GpuWorkLed
         inner.Wait();
 
         var submission = ArmedSubmission;
+        var transfers = ArmedTransfers;
 
         ArmedSubmission = 0L;
+        ArmedTransfers = default;
 
         if (submission != 0L) {
-            ledger.Complete(submission: submission);
+            ledger.Complete(submission: submission, transferPrefix: transfers);
         }
     }
 }

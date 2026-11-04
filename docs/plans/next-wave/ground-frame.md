@@ -353,7 +353,13 @@ still at the same tick. A **GPU leg**.
 
 ---
 
-## P4. `SdfMeshPathBake.Dress` and the motion staging
+## P4. `SdfMeshDresser.Dress` and the motion staging
+
+The source inspection below records the earlier implementation and its line
+positions. Retained topology, shared copy indexing, cached identities and one
+history observation door are implemented; dressing now has its own owner. The
+remaining step is actual dirty ranges through dressing and staging, tracked in
+the [landscape plan](../dense-landscapes.md).
 
 ### What is actually there
 
@@ -392,7 +398,7 @@ still at the same tick. A **GPU leg**.
 
 ### Every caller
 
-- `SdfMeshPathBake.Dress`: `SdfWorldResidency.cs:840`, once a frame, per residency.
+- `SdfMeshDresser.Dress`: called by `SdfWorldResidency.Capture`, once a frame, per residency.
 - `StageMeshRegion`: `SdfWorldTables.FramePreparation.cs:311`.
 - `StageChangedDraws` and `StageMeshMotion`: `MeshRegion.cs:219,239`.
 - Producers of `MeshAssetSlots` and `MeshInstances`: `WorldSceneEmitter.cs:453-454` and
@@ -438,8 +444,6 @@ A **GPU leg**. A motion-vector check (the `motion` debug view, one still) shows 
 
 > **dress-proportional.** Make the dressing and the mesh table's staging proportional to what changed.
 >
-> - In `SdfMeshPathBake.Dress` (`:358-462`), index copies by asset slot once per copy-set change instead of scanning
->   every copy per group (`:404-409`, `SdfMeshInstance.UsesSlot`).
 > - Patch moved groups' draws in place at stable indices, and hand `StageMeshRegion` a structural revision plus
 >   changed-index runs, so a value-only frame skips `Plan`, the claims updates and the full `SameDraw` scan
 >   (`SdfWorldTables.MeshRegion.cs:138-310`).

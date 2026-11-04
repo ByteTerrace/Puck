@@ -1,5 +1,9 @@
 namespace Puck.SdfVm;
 
+// A copy surface's immutable picking metadata. A pose is not a pick identity, and each surface keeps its own
+// program instance even when the same prototype has several separately baked groups.
+internal sealed record SdfMeshCopySurface(object Identity, int FirstInstance);
+
 /// <summary>
 /// A host's pick map (<see cref="SdfFrame.PickMap"/>) extended over the draw list a dressed frame renders: the host's own
 /// mesh draws come first, then one draw per baked group, then the carried copies of every draw a portal straddle clips.
@@ -52,7 +56,7 @@ public sealed class SdfDressedPickMap : ISdfPickMap {
             if (source < m_identities.Length) {
                 var named = (SdfSlotClip.CopiedFrom(m_identities[source]) ?? m_identities[source]);
 
-                if (named is SdfMeshInstance copy) { return copy.Identity; }
+                if (named is SdfMeshCopySurface copy) { return copy.Identity; }
             }
         }
         return m_inner.Resolve(identity: Translate(identity: identity));
@@ -74,7 +78,7 @@ public sealed class SdfDressedPickMap : ISdfPickMap {
         var named = (m_owners[source] ?? m_identities[source]);
 
         if (SdfSlotClip.CopiedFrom(identity: named) is { } copied) { named = copied; }
-        if (named is SdfMeshInstance copy) {
+        if (named is SdfMeshCopySurface copy) {
             return ((copy.FirstInstance < 0) ? 0 : SdfVisibility.IdentityOf(SdfVisibilityKind.Sdf, ((uint)(copy.FirstInstance + 1))));
         }
         if (named is SdfMeshBakeGroup group) {

@@ -718,7 +718,7 @@ public sealed class SdfMaterialLawTests {
     }
     [Fact]
     public void WeatheringRequiresItsAuthoredSurfacesAtBothAdmissionDoors() {
-        foreach (var weathering in new SdfWeathering[] { new(Edge: 1f), new(Lines: 1f), new(Settle: 1f), new(Lane: 4), new(Reach: 0f) }) {
+        foreach (var weathering in new SdfWeathering[] { new(Edge: 1f), new(Lines: 1f), new(Noise: 1f), new(Settle: 1f), new(Lane: 4), new(Reach: 0f) }) {
             var material = new SdfMaterial(
                 Vector3.One,
                 Weathering: weathering
@@ -731,4 +731,26 @@ public sealed class SdfMaterialLawTests {
             ));
         }
     }
+    [Fact]
+    public void WeatheringPatternUsesReservedWordsWithoutGrowingTheMaterial() {
+        var weathering = new SdfWeathering(Noise: 0.8f, PatternScale: new Vector3(16f, 0.6f, 16f), Softness: 0.25f,
+            Under: [new(0.5f, new(Vector3.One, 0.9f, 0f))]);
+        var program = new SdfProgram([Shape()], [new(Vector3.One, Weathering: weathering)]);
+        var plain = new SdfProgram([Shape()], [new(Vector3.One)]);
+        Assert.Equal(plain.Words.Length, program.Words.Length);
+        var offset = (int)program.Words[3] * 4;
+        float At(int row, int component) => BitConverter.UInt32BitsToSingle(program.Words[offset + row * 4 + component]);
+        Assert.Equal(16f, At(15, 3));
+        Assert.Equal(0.6f, At(17, 3));
+        Assert.Equal(16f, At(19, 2));
+        Assert.Equal(0.8f, At(19, 3));
+        Assert.Equal(0.25f, At(17, 2));
+        Assert.True(SdfMaterialLayers.IsValid(null, weathering, null));
+        foreach (var scale in new[] { Vector3.Zero, new Vector3(-1, 1, 1), new Vector3(float.NaN, 1, 1) }) {
+            Assert.False(SdfMaterialLayers.IsValid(null, weathering with { PatternScale = scale }, null));
+        }
+        Assert.False(SdfMaterialLayers.IsValid(null, weathering with { Noise = 1.1f }, null));
+        Assert.False(SdfMaterialLayers.IsValid(null, weathering with { Softness = 1.1f }, null));
+    }
+
 }

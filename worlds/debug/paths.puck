@@ -1,0 +1,19 @@
+// Shared authored routes: the lawn and woodland read the same paving and exclusion corridors.
+import "../standard/paths"
+
+// The floor's paths, quadratic Béziers in world X/Z: the spawn to the entrance, north of the studio to the meadow,
+// south past the studio, and west toward the stream.
+let lawnPaths = [
+  { a [-8, -24], b [-4, -6], c [4, -1] }
+  { a [4, -1], b [14, 2], c [16, 11.6] }
+  { a [4, -1], b [32, -12], c [60, -12] }
+  { a [60, -12], b [80, -12], c [84, -36] }
+  { a [84, -36], b [88, -54], c [103, -54.5] }
+  { a [-8, -24], b [-14, -52], c [2, -78] }
+  { a [2, -78], b [40, -112], c [60, -166] }
+  { a [-3, -9], b [-22, -6], c [-38, -12] }
+]
+let lawnPathWidth = 2.4
+
+let lawnPathCorridors = quadraticPathCorridors(lawnPaths)
+function lawnPathClear(x, z, radius) = pathCorridorsClear(x, z, lawnPathWidth / 2 + radius, lawnPathCorridors)

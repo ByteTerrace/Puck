@@ -11,7 +11,8 @@ public sealed partial class SdfProgram {
     // material, so a positive index says glass; 22..25 the material's own cel style (SdfToon.WriteRows; KEEP IN SYNC with
     // sdfToonStyle in shade/sdf-toon.hlsli), all zero to inherit the world's default, a mode of -1 for a style that
     // keeps the material continuous.
-    // Bleed occupies 2.w/7.zw, and indirect receive is 3.w.
+    // Bleed occupies 2.w/7.zw, and indirect receive is 3.w. Weathering pattern XYZ uses
+    // 15.w/17.w/19.z; noise coverage is 19.w; reveal softness replaces the redundant stage count at 17.z.
     private void PackMaterials(int materialOffsetVectors, int paintOffsetVectors, IReadOnlyList<SdfMaterial> materialTable, int materialCount) {
         var paintCursor = paintOffsetVectors;
         Span<Vector4> toonRows = stackalloc Vector4[4];
@@ -198,6 +199,14 @@ public sealed partial class SdfProgram {
                         )
                     );
                 }
+                // Pattern XYZ and noise coverage use existing reserved components; material stride stays fixed.
+                var pattern = w.PatternScale ?? Vector3.One;
+                m_words[materialBase + 15 * WordsPerVector + 3] = BitConverter.SingleToUInt32Bits(pattern.X);
+                m_words[materialBase + 17 * WordsPerVector + 3] = BitConverter.SingleToUInt32Bits(pattern.Y);
+                m_words[materialBase + 19 * WordsPerVector + 2] = BitConverter.SingleToUInt32Bits(pattern.Z);
+                m_words[materialBase + 19 * WordsPerVector + 3] = BitConverter.SingleToUInt32Bits(w.Noise);
+                m_words[materialBase + 17 * WordsPerVector + 2] = BitConverter.SingleToUInt32Bits(w.Softness);
+
             }
         }
     }

@@ -83,6 +83,8 @@ public static partial class MotionCommand {
     /// <summary>Creates the <c>motion</c> verb.</summary>
     /// <returns>The command.</returns>
     public static Command Create() {
+        var routeOption = new Option<string>(name: "--route") { Description = "Run a generic authored no-capture route twice through its canonical authority tape, checking per-tick presentation equivalence before reporting controlled tick throughput. This is not the normal realtime frame bar." };
+        var againstOption = new Option<string>(name: "--against-world-artifact") { Description = "The second route replay's World entry assembly; the first artifact again (A/A) when omitted. Both must implement the same route protocol." };
         var scenariosOption = new Option<string>(name: "--scenarios") { Description = $"The scenario file; {DefaultScenarios} when omitted." };
         var scenarioOption = new Option<string[]>(name: "--scenario") { AllowMultipleArgumentsPerToken = true, Description = "Run only the named scenario (repeat or list several); every scenario of the file when omitted." };
         var listOption = new Option<bool>(name: "--list") { Description = "Print each scenario's name, form, stills and note, and boot nothing." };
@@ -98,7 +100,7 @@ public static partial class MotionCommand {
         var command = new Command(
             description: "Judge how the Moth moves: run tick-pinned scenarios in the real debug World and write stills, contact sheets and a manifest.",
             name: Verb
-        ) { scenariosOption, scenarioOption, listOption, reproduceOption, outputOption, worldOption, artifactOption, backendOption, cacheOption, columnsOption, cellWidthOption, timeoutOption };
+        ) { routeOption, againstOption, scenariosOption, scenarioOption, listOption, reproduceOption, outputOption, worldOption, artifactOption, backendOption, cacheOption, columnsOption, cellWidthOption, timeoutOption };
 
         command.Detail(detail: $"""
             Boots the real Puck.World on {DefaultWorld} (windowed, always with no physical device, with its own
@@ -131,7 +133,18 @@ public static partial class MotionCommand {
             Exit codes: 0 every scenario ran clean, 1 a refused line, a missing still, a blocked camera, a body in the
             wrong form or a failed reproduction, 2 a refusal (a scenario file, a build or a World that did not complete).
             """);
-        command.SetAction(action: parseResult => Run(
+        command.SetAction(action: parseResult => {
+            if (parseResult.GetValue(routeOption) is { } route) {
+                if (parseResult.GetValue(listOption) || parseResult.GetValue(reproduceOption) ||
+                    parseResult.GetValue(scenariosOption) is not null || (parseResult.GetValue(scenarioOption)?.Length ?? 0) != 0) {
+                    return CliExit.Refuse(Verb, "the route selection", "--route is separate from still scenarios, --list and --reproduce; it always checks two fresh replay legs.");
+                }
+                return RunRoute(route, parseResult.GetValue(outputOption), parseResult.GetValue(worldOption),
+                    parseResult.GetValue(artifactOption), parseResult.GetValue(againstOption), parseResult.GetValue(backendOption),
+                    parseResult.GetValue(cacheOption), parseResult.GetValue(timeoutOption));
+            }
+            if (parseResult.GetValue(againstOption) is not null) { return CliExit.Refuse(Verb, "--against-world-artifact", "requires --route."); }
+            return Run(
             backend: parseResult.GetValue(option: backendOption),
             cacheDirectory: parseResult.GetValue(option: cacheOption),
             cellWidth: parseResult.GetValue(option: cellWidthOption),
@@ -144,7 +157,8 @@ public static partial class MotionCommand {
             timeoutMinutes: parseResult.GetValue(option: timeoutOption),
             worldArtifact: parseResult.GetValue(option: artifactOption),
             worldPath: parseResult.GetValue(option: worldOption)
-        ));
+            );
+        });
 
         return command;
     }

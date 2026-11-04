@@ -32,6 +32,20 @@ field name, an enum member list, or a numeric default with no accompanying
 reason, treat it as a drift hazard and read the schema instead. This file's job is what the schema cannot say: why a
 shape is what it is, an ordering rule, a refusal condition, a worked trap.
 
+**Canonical static occurrences.** `WorldPlacementStamp.Resolve` compiles the fixed-point
+occurrences every static geometry consumer reads, including a placement's optional
+`Surface` projection. Do not add terrain offsets to a renderer or collider separately.
+`CompiledPlacementStamp.OccurrenceAt` retains candidate identity after rejected roots;
+a compact array index is not that identity. Source restrictions and miss policy belong
+to `WorldPlacementStamp.TryValidateSurface`/`WorldPlacementSurface`, not world-specific
+C# code. `scatterPoints` in the world vocabulary exposes the existing PCG sampler before
+authored `map`/`filter`; projection against named contact geometry follows once at
+admission. Read `world.boot` surface work and created payload beside query instructions
+and normal-play memory. An unchanged moving world must issue no new grounding rays.
+The surface descriptor checks cache both valid and refused parent chains. Keep the
+cache-miss `out` value separate from the empty success reason: `TryGetValue` assigns
+null on a miss, including an ordinary unparented root's first validation.
+
 **`.puck` is the authoring surface; JSON is the compiled wire form.** Every
 JSON block in this reference and its split files is what a `.puck` source
 compiles to, not the recommended way to type it; every live world under

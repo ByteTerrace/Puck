@@ -20,16 +20,16 @@ namespace Puck.SdfVm;
 /// </para>
 /// <para>
 /// Emitters pack an owner's slots (an avatar's leaf range, a stamp registration's root and shapes) only while it is
-/// restless, and hand <see cref="Commit"/> the slots' prior contents: an owner whose repack changed nothing has come
-/// to rest and owes nothing. A still frame therefore packs no rows, compares no bytes and owes nothing, and a frame
+/// restless, and hand <see cref="Commit"/> the slots' prior contents: an owner whose repack changed nothing and whose
+/// history holds has come to rest and owes nothing. A still frame packs no rows, compares no bytes and owes nothing; a frame
 /// moving k owners does work proportional to k. The source counts that work as <c>sdf.transforms.*</c>. These totals
 /// have <see cref="WorkClass.Pacing"/> because presentation may interpolate several produced frames per simulation
 /// tick, and each frame packs the pose it actually presents.
 /// </para>
 /// <para>
-/// A moved range whose slots changed owner is also reseated (<see cref="Commit"/>'s <c>reseat</c>): a consumer's
-/// previous transform table then takes that range's poses from the frame that reseated it, so a new owner never reads
-/// its predecessor's pose as motion. A consumer owed everything seeds every previous row.
+/// A range whose slots changed owner or cut their pose is reseated (<see cref="Commit"/>'s <c>reseat</c>), even if
+/// their new poses equal the old ones: a consumer seeds that range's previous transforms and dependent mesh history,
+/// so a new owner never reads its predecessor's pose as motion. A consumer owed everything seeds every previous row.
 /// </para>
 /// </summary>
 public sealed class SdfMovedTransforms : IWorkCounterSource {
@@ -63,33 +63,21 @@ public sealed class SdfMovedTransforms : IWorkCounterSource {
     // The packed size of one slot in the engine's table (three float4 rows), which is what a compare stands for.
     private const int PackedSlotBytes = (sizeof(float) * 12);
 
-    private readonly bool[] m_everything = new bool[History];
-    private readonly GpuUploadRuns[] m_frames = new GpuUploadRuns[History];
-    private readonly GpuUploadRuns[] m_reseats = new GpuUploadRuns[History];
-    private readonly long[] m_serials = new long[History];
+    private readonly GpuChangedRows m_changes = new(history: History, trackReseats: true);
 
     private WorkCount m_comparedBytes;
     private WorkCount m_owedRows;
     private WorkCount m_packedRows;
     private bool m_repacking;
-    private long m_serial;
-    private int m_slot;
-    private int m_tableRows;
-
-    /// <summary>Initializes a new instance of the <see cref="SdfMovedTransforms"/> class.</summary>
-    public SdfMovedTransforms() {
-        for (var index = 0; (index < History); index++) {
-            m_frames[index] = new GpuUploadRuns(capacity: GpuRegion.MaxCopyRuns);
-            m_reseats[index] = new GpuUploadRuns(capacity: GpuRegion.MaxCopyRuns);
-        }
-    }
 
     /// <summary>Gets a value indicating whether the current frame packs every slot: it owes every slot, or it repacks the
     /// whole table and owes only the rows that repack changed (<see cref="BeginRepack"/>). Either way the host has parked
     /// the table and every emitter packs every owner.</summary>
-    public bool Everything => (m_everything[m_slot] || m_repacking);
+    public bool Everything => (m_changes.Everything || m_repacking);
     /// <summary>Gets the current frame's serial, starting at 1 for the first frame; 0 before any frame began.</summary>
-    public long Serial => m_serial;
+    public long Serial => m_changes.Serial;
+    /// <summary>Gets the logical retained array payload of the row journal, excluding object and array headers.</summary>
+    public long StorageBytes => m_changes.StorageBytes;
     /// <inheritdoc/>
     public string Name => SourceName;
     /// <inheritdoc/>
@@ -102,15 +90,7 @@ public sealed class SdfMovedTransforms : IWorkCounterSource {
     /// <param name="everything">Whether the frame owes every slot of the table.</param>
     /// <param name="tableRows">The table's length in slots.</param>
     public void Begin(bool everything, int tableRows) {
-        ArgumentOutOfRangeException.ThrowIfNegative(value: tableRows);
-
-        m_serial++;
-        m_slot = ((int)(m_serial % History));
-        m_everything[m_slot] = everything;
-        m_frames[m_slot].Clear();
-        m_reseats[m_slot].Clear();
-        m_serials[m_slot] = m_serial;
-        m_tableRows = tableRows;
+        m_changes.Begin(everything: everything, rows: tableRows);
         m_repacking = false;
 
         if (everything) {
@@ -168,13 +148,13 @@ public sealed class SdfMovedTransforms : IWorkCounterSource {
         Reseat(count: (current.Length - rows), start: rows);
     }
     /// <summary>Settles one owner's repacked slots: counts the rows packed and the bytes compared, and owes the range
-    /// when any slot differs from its prior contents.</summary>
+    /// when any slot differs or a history cut is requested, including cuts with unchanged poses.</summary>
     /// <param name="slots">The whole shared table, already holding the owner's repacked slots.</param>
     /// <param name="start">The owner's first slot.</param>
     /// <param name="previous">The owner's slots as they stood before the repack, one per repacked slot.</param>
     /// <param name="reseat">Whether the slots hold another owner than they held when last packed (a spawn into a vacated
-    /// range, a body index reused, a pose that jumped): a moved range is then also reseated, so each consumer seeds its
-    /// previous poses from this frame's rather than reading the departed pose as motion.</param>
+    /// range, a body index reused, a pose that jumped): the range is reseated even when its pose is unchanged, so each
+    /// consumer seeds its previous poses rather than reading the departed pose as motion.</param>
     /// <returns><see langword="true"/> when the repack moved any slot, so the owner stays restless.</returns>
     public bool Commit(ReadOnlySpan<DynamicTransform> slots, int start, ReadOnlySpan<DynamicTransform> previous, bool reseat) {
         var packed = slots.Slice(
@@ -195,18 +175,12 @@ public sealed class SdfMovedTransforms : IWorkCounterSource {
             }
         }
 
-        if (moved) {
-            if (reseat) {
-                Reseat(
-                    count: packed.Length,
-                    start: start
-                );
-            } else {
-                Owe(
-                    count: packed.Length,
-                    start: start
-                );
-            }
+        // A cut changes ownership/history even when the new owner has exactly the departed pose. Keep the return
+        // value about actual movement so an unchanged owner can settle without dropping that cut from the journal.
+        if (reseat) {
+            Reseat(count: packed.Length, start: start);
+        } else if (moved) {
+            Owe(count: packed.Length, start: start);
         }
 
         return moved;
@@ -218,36 +192,26 @@ public sealed class SdfMovedTransforms : IWorkCounterSource {
     public void Owe(int start, int count) {
         if (
             (count <= 0) ||
-            m_everything[m_slot] ||
-            m_repacking
+            Everything
         ) {
             return;
         }
 
-        m_frames[m_slot].Add(
-            length: count,
-            start: start
-        );
+        m_changes.Owe(count: count, start: start);
         m_owedRows.Add(amount: count);
     }
-    // Owes a range whose slots hold another owner's poses than they did, and reseats it.
+    // A repack's byte diff cannot discover equal-pose ownership cuts, so explicit reseats remain in its journal.
+    // Only a genuinely full frame can omit them: its consumers already seed every row.
     private void Reseat(int start, int count) {
         if (
             (count <= 0) ||
-            m_everything[m_slot] ||
-            m_repacking
+            m_changes.Everything
         ) {
             return;
         }
 
-        Owe(
-            count: count,
-            start: start
-        );
-        m_reseats[m_slot].Add(
-            length: count,
-            start: start
-        );
+        m_changes.Owe(count: count, start: start, reseat: true);
+        m_owedRows.Add(amount: count);
     }
     /// <inheritdoc/>
     public bool TryRead(WorkKind kind, out long value) {
@@ -283,49 +247,7 @@ public sealed class SdfMovedTransforms : IWorkCounterSource {
         return false;
     }
 
-    // Unions every range the frames after `since` owed into `into`, and adds the ranges they reseated to `reseated`
-    // without clearing it. False when the consumer is owed everything: one of those frames owed everything, or `since`
-    // has fallen out of the history.
-    internal bool TryCollect(long since, GpuUploadRuns into, GpuUploadRuns reseated) {
-        into.Clear();
-
-        if (since >= m_serial) {
-            return true;
-        }
-
-        if (
-            (since <= 0L) ||
-            ((m_serial - since) >= History)
-        ) {
-            return false;
-        }
-
-        for (var serial = (since + 1L); (serial <= m_serial); serial++) {
-            var slot = ((int)(serial % History));
-
-            if (m_everything[slot]) {
-                return false;
-            }
-
-            var frame = m_frames[slot];
-
-            for (var run = 0; (run < frame.Count); run++) {
-                into.Add(
-                    length: frame.Length(index: run),
-                    start: frame.Start(index: run)
-                );
-            }
-
-            var seats = m_reseats[slot];
-
-            for (var run = 0; (run < seats.Count); run++) {
-                reseated.Add(
-                    length: seats.Length(index: run),
-                    start: seats.Start(index: run)
-                );
-            }
-        }
-
-        return true;
-    }
+    // Captured frames collect through their own serial, never through a later producer frame.
+    internal bool TryCollect(long since, long through, GpuUploadRuns? into, GpuUploadRuns? reseated = null) =>
+        m_changes.TryCollect(since: since, through: through, into: into, reseated: reseated);
 }

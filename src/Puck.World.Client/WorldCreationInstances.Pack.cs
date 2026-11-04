@@ -191,6 +191,7 @@ public sealed partial class WorldCreationInstances {
                 continue;
             }
 
+            WorldCreationWork.ProcessWork.Count(kind: WorldCreationWork.Visited);
             var (rootPosition, rootRotation, placementScale) = RootPose(
                 client: client,
                 live: live
@@ -198,8 +199,8 @@ public sealed partial class WorldCreationInstances {
             var document = live.Creation.EngineDocument;
             var shapeCount = (document.Shapes?.Count ?? 0);
 
-            if (m_partSpheres.Length < shapeCount) { Array.Resize(ref m_partSpheres, shapeCount); }
-            if (m_previousSlots.Length < live.Slots) { Array.Resize(ref m_previousSlots, live.Slots); }
+            if (m_partSpheres.Length < shapeCount) { Array.Resize(array: ref m_partSpheres, newSize: shapeCount); }
+            if (m_previousSlots.Length < live.Slots) { Array.Resize(array: ref m_previousSlots, newSize: live.Slots); }
             // The root, the shapes, and the slot text baked apart rides (TextApart).
             var packedSlots = live.Slots;
 
@@ -269,6 +270,8 @@ public sealed partial class WorldCreationInstances {
                     live.RateSeconds += deltaSeconds;
                     live.RateOwed = true;
                     m_rateCounts?.Count(kind: SdfUpdateRateCounts.BodiesHeld);
+                    WorldCreationWork.ProcessWork.Count(kind: WorldCreationWork.RateHeld);
+                    WorldCreationWork.ProcessWork.Add(amount: packedSlots, kind: WorldCreationWork.SlotsRetained);
                 } else {
                     // A pose held while nothing could show it resumes as a continuity cut: its followers, plants and
                     // drivers relatch where the body is now, as after a teleport, rather than advancing over every
@@ -279,6 +282,9 @@ public sealed partial class WorldCreationInstances {
                         live.RootEpoch = -1;
                     }
 
+                    WorldCreationWork.ProcessWork.Count(kind: WorldCreationWork.Posed);
+                    WorldCreationWork.ProcessWork.Add(amount: packedSlots, kind: WorldCreationWork.SlotsPosed);
+                    if (live.BodyIndex is null) { WorldCreationWork.ProcessWork.Count(kind: WorldCreationWork.PlacementsPosed); }
                     PackRegistration(
                         client: client,
                         deltaSeconds: (unseen ? deltaSeconds : (live.RateSeconds + deltaSeconds)),
@@ -311,13 +317,16 @@ public sealed partial class WorldCreationInstances {
                 ),
                     owner: index
                 );
+            } else {
+                WorldCreationWork.ProcessWork.Count(kind: WorldCreationWork.Retained);
+                WorldCreationWork.ProcessWork.Add(amount: packedSlots, kind: WorldCreationWork.SlotsRetained);
             }
 
             NoteRate(center: rootPosition, live: live, packedSlots: packedSlots, posed: posed, radius: RateReach(live: live, placementScale: placementScale), rootSlot: rootSlot);
             AppendVolumes(
-                live: live,
                 document: document,
                 hidden: live.Hidden,
+                live: live,
                 placementScale: placementScale,
                 rootSlot: rootSlot,
                 shapeCount: shapeCount
@@ -446,7 +455,7 @@ public sealed partial class WorldCreationInstances {
             second: live.Look
         );
 
-        return m_owners.Wake(
+        var wake = m_owners.Wake(
             deltaSeconds: deltaSeconds,
             discontinuity: discontinuity,
             moved: moved,
@@ -459,6 +468,9 @@ public sealed partial class WorldCreationInstances {
             value3: live.Reads.Changed
         )
         );
+
+        // Owner output equality cannot cancel an authored clock or a follower's remaining motion.
+        return (wake || ((deltaSeconds > 0f) && live.DriverActivity.Continues));
     }
     // Carries everything a body-rooted registration latched in world space through an in-place crossing's rigid
     // motion: the root and part followers, the drivers' last pose and eased world velocity, and every effector's
@@ -599,7 +611,7 @@ public sealed partial class WorldCreationInstances {
         );
 
         if (!cut) {
-            WorldGaitDrivers.Advance(
+            live.DriverActivity = WorldGaitDrivers.Advance(
                 address: ((live.BodyIndex is { } drivenBody) ? client.EntityAddress(index: drivenBody) : new WorldEntityAddress(Authority: string.Empty, Generation: 0, Index: -1)),
                 deltaSeconds: deltaSeconds,
                 drivers: drivers,
@@ -617,6 +629,13 @@ public sealed partial class WorldCreationInstances {
                 kinematics: live.Kinematics,
                 definition: client.Definition
             );
+            var activity = live.DriverActivity;
+
+            if (activity.Initialized) { WorldCreationWork.ProcessWork.Count(kind: WorldCreationWork.DriverInitializations); }
+            WorldCreationWork.ProcessWork.Add(kind: WorldCreationWork.DriverEvaluations, amount: activity.Evaluations);
+            WorldCreationWork.ProcessWork.Add(kind: WorldCreationWork.DriverIntegrations, amount: activity.Integrations);
+            WorldCreationWork.ProcessWork.Add(kind: WorldCreationWork.DriverPhaseChanges, amount: activity.PhaseChanges);
+            if (activity.Continues) { WorldCreationWork.ProcessWork.Count(kind: WorldCreationWork.DriverContinuations); }
         }
 
         var shapes = (document.Shapes ?? []);
@@ -738,7 +757,7 @@ public sealed partial class WorldCreationInstances {
             var posed = live.ShapeTransforms[shapeIndex];
 
             if (shape.Domain is { Count: > 0 }) { transforms[((rootSlot + owner) + 1)] = posed; continue; }
-            var turn = Quaternion.Normalize((posed.Orientation * Quaternion.Inverse(shape.Rotation.Value)));
+            var turn = Quaternion.Normalize(value: (posed.Orientation * Quaternion.Inverse(value: shape.Rotation.Value)));
 
             transforms[((rootSlot + owner) + 1)] = new DynamicTransform(
                 Position: (posed.Position - Vector3.Transform((shape.Position.Value * placementScale), turn)),

@@ -12,10 +12,12 @@ namespace Puck.SdfVm;
 /// draws everything), the shared level table's address and count, and the draw's bounds and selection metadata.
 /// </summary>
 public static class SdfMeshRecord {
+    /// <summary>The leading object-to-world matrix words, also the compact previous-pose stride.</summary>
+    public const int MatrixWords = 16;
     /// <summary>The words of one draw's record.</summary>
     public const int DrawWords = 63;
     /// <summary>The first of four four-word rows used by GPU draw selection: center and flags; half X and stretch;
-    /// half Y and mesh identity; half Z and level count.</summary>
+    /// half Y and staged instance generation; half Z and level count.</summary>
     public const int SelectionWord = 47;
     /// <summary>The first of two words: the absolute word of the mesh's shared level table, then its coarser level count.
     /// Each level, zero included, stores its first triangle, vertex count and error as three words.</summary>
@@ -57,4 +59,6 @@ public static class SdfMeshRecord {
     public const uint MaterialsFlag = 2u;
     /// <summary>The flag a record carries when its mesh has a member a vertex.</summary>
     public const uint SkinFlag = 4u;
+    /// <summary>The flag selecting world-space material coordinates independently of the geometry root slot.</summary>
+    public const uint WorldMaterialFlag = 8u;
 }

@@ -160,6 +160,28 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         }
     }
     /// <inheritdoc/>
+    public bool OwnsBuffer(string? part) => (part == SdfWorldPackage.Parts.Bake);
+
+    /// <inheritdoc/>
+    public RenderGraphBorrowedBuffer? BorrowedBuffer(RenderGraphPackageRecorderContext context, IDisposable? built,
+        ShaderPipelineResource resource, IGpuBuffer? previous) {
+        if (context.Part != SdfWorldPackage.Parts.Bake) { return null; }
+        // BeginFrame already resolved every installed entry after capturing its host. Acquiring storage must not
+        // resolve or prepare the world again, and must use the same selected view the recorders will follow.
+        var selected = ((previous is null) ? ((Built)built!).View : m_entries.GetValueOrDefault(key: context.Instance)?.View);
+        if (selected is not { } view) { return new(previous!); }
+        var residency = view.Residency;
+        var buffer = residency.Tables!.MeshBakeSamples;
+        if (ReferenceEquals(buffer, previous)) { return new(buffer); }
+        residency.Retain();
+        return new(buffer, new BorrowedResidency(residency));
+    }
+
+    // Independent of a recorder's current followed view: the graph retires this hold after the final buffer reader.
+    private sealed class BorrowedResidency(SdfWorldResidency residency) : IDisposable {
+        public void Dispose() => residency.Release();
+    }
+    /// <inheritdoc/>
     public IShaderPipelineStorageCounter? CounterOf(string instance) => Refresh(instance: instance);
     /// <summary>Gets the presentation-only picker of one view instance. Requests and results belong to the presentation thread.</summary>
     /// <param name="instance">The view instance name.</param>
@@ -566,6 +588,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
     private sealed record ResolveSource(GpuPassPipelineCache Cache, IGpuDeviceContext Device);
     // What a pass's build hands its recorder: the view, whose residency the build holds until the recorder takes it.
     private sealed class Built(SdfWorldView view) : IDisposable {
+        public SdfWorldView View => view;
         private bool m_taken;
 
         public void Dispose() {

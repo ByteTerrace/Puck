@@ -77,6 +77,10 @@ public sealed class WorldDocumentVocabulary(WorldConstructTable? constructs = nu
     );
     /// <inheritdoc />
     public bool TryLowerValue(ExpressionNode expression, DocumentScope scope, string? fieldKey, out System.Text.Json.Nodes.JsonNode? value) {
+        if (expression is CallExpressionNode { Name: "scatterPoints" } sampled) {
+            value = WorldDocumentSampling.Scatter(sampled, scope);
+            return true;
+        }
         if (fieldKey == "hash") {
             if (expression is IdentifierExpressionNode { Name: "auto" } or OperandExpressionNode { Text: "auto" }) {
                 value = System.Text.Json.Nodes.JsonValue.Create(value: "auto");

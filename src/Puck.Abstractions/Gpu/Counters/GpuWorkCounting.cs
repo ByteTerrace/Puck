@@ -118,14 +118,11 @@ public static class GpuWorkCounting {
     /// <returns>The counting submitter.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="submitter"/> or <paramref name="ledger"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="submitter"/> is already counting.</exception>
-    public static IGpuQueueSubmitter Wrap(IGpuQueueSubmitter submitter, GpuWorkLedger ledger) =>
-        new CountingQueueSubmitter(
-            inner: Guard(
-                instance: submitter,
-                ledger: ledger
-            ),
-            ledger: ledger
-        );
+    public static IGpuQueueSubmitter Wrap(IGpuQueueSubmitter submitter, GpuWorkLedger ledger) {
+        var inner = Guard(instance: submitter, ledger: ledger);
+        ledger.BindTransferQueue(inner);
+        return new CountingQueueSubmitter(inner: inner, ledger: ledger);
+    }
     /// <summary>Wraps a shader-module factory. Counts the modules created; the modules themselves are the backend's,
     /// unwrapped.</summary>
     /// <param name="factory">The factory to forward to.</param>
@@ -537,9 +534,7 @@ file sealed class CountingQueueSubmitter(IGpuQueueSubmitter inner, GpuWorkLedger
             objA: counting?.Ledger,
             objB: Ledger
         ) ? counting : null);
-        var submission = Ledger.Seal(fence: owned);
-
-        owned?.ArmedSubmission = submission;
+        _ = Ledger.Seal(fence: owned);
     }
     public void SubmitAndWait(ReadOnlySpan<nint> commandBufferHandles) {
         inner.SubmitAndWait(commandBufferHandles: commandBufferHandles);

@@ -228,6 +228,7 @@ public static class WorldRenderRoot {
         // Lockstep presentation renders every frame free of frame history too, so a still of a tick repeats.
         if (sp.GetService<PresentPacingControl>() is { } pacing) {
             frameSource.HistoryFree = () => pacing.TickLocked;
+            frameSource.LightingConvergence = () => pacing.ConvergesLighting;
         }
         // A view the root places shows once its instance has completed an image, so a capture is never served over a
         // stand-in.

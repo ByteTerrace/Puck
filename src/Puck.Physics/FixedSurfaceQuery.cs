@@ -72,6 +72,34 @@ public readonly record struct FixedSurfaceAttachCandidate(
 /// by-value running best; nothing here allocates, boxes, or retains a reference into either span.</para>
 /// </remarks>
 public static class FixedSurfaceQuery {
+    /// <summary>Casts to the first field surface and samples its outward normal in open space just before the hit.
+    /// A consumer that places persistent geometry requires an exact surface proof; an obstruction consumer may
+    /// retain the query's conservative non-convergence result.</summary>
+    /// <param name="query">The directed surface provider.</param>
+    /// <param name="field">The same geometry's gradient provider.</param>
+    /// <param name="origin">Ray origin in world units.</param>
+    /// <param name="direction">Ray direction.</param>
+    /// <param name="reach">Maximum ray length.</param>
+    /// <param name="normalBackoff">Distance back along the ray for the normal sample.</param>
+    /// <param name="candidate">The surface and source identity.</param>
+    /// <param name="sampledNormal">Whether this call queried the field gradient.</param>
+    /// <param name="requireExact">Reject an unproven conservative obstruction.</param>
+    /// <returns>Whether the query and nonzero normal both succeeded.</returns>
+    public static bool TryRaycast(IWorldQuery query, IFieldEvaluator field, in FixedVector3 origin,
+        in FixedVector3 direction, FixedQ4816 reach, FixedQ4816 normalBackoff,
+        out FixedSurfaceAttachCandidate candidate, out bool sampledNormal, bool requireExact = false) {
+        candidate = default;
+        sampledNormal = false;
+        if (!query.Raycast(FixedPosition.FromLocal(origin), direction, reach, out var hit) ||
+            (requireExact && hit.Confidence != WorldQueryConfidence.Exact)) { return false; }
+        sampledNormal = true;
+        if (!field.TryFieldGradient(FixedPosition.FromLocal(hit.Point.Local - direction.Normalize() * normalBackoff),
+            out var normal) || normal == FixedVector3.Zero) { return false; }
+        candidate = new FixedSurfaceAttachCandidate(hit.Point.Local, normal, hit.Distance,
+            FixedSurfaceColliderSource.Static, hit.Material);
+        return true;
+    }
+
     private static void ConsiderSpan(
         ReadOnlySpan<FixedStaticCollider> colliders,
         FixedSurfaceColliderSource source,

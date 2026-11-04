@@ -35,6 +35,9 @@ adapter with `--attach <file>`, naming the file the World prints on stderr
 (`[world.control: operator attachment <file>]`); without it, the adapter keeps
 whichever World it attached to first.
 
+The southern [forest pressure patch](forest.md) is reached with `debug.go forest`
+or `debug.go forest-inside`; both stand on the shared lawn road under connected canopy.
+
 ## Tight-space camera comparison
 
 The chase camera defaults to `fade`, keeping the room ahead visible as the boom

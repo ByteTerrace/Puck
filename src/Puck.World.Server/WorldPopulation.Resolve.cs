@@ -100,10 +100,7 @@ public sealed partial class WorldPopulation {
         // serves a fresh activation and a live body alike.
         m_gravityField = new WorldGravityField(
             capacity: Capacity,
-            compiled: FixedWorldGravity.Compile(
-                gravity: definition.Gravity,
-                placements: definition.Placements
-            )
+            compiled: FixedWorldGravity.Compile(definition: definition)
         );
 
         // Field state exists independently of the selected contact/target provider. A world may use its lattice only

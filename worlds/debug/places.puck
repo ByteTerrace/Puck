@@ -30,7 +30,7 @@ spawnPoints [
 commands [
   {
     name: "debug.go"
-    help: "Poses a body at one of the debug world's places (stage, devices, boardroom, chess, go, reversi, alchemy, granaries, cards, auction, shedding, deduction, skirmish, desktop, portals, portal-garden, portal-night, portal-link, portal-fall, gallery, wonderland, the camera tests lift, stairs, camera-course, camera-tunnel, camera-colonnade and camera-bays, the valley's overlook and valley-<sector> floor spots, or any spawn point) and returns the view to the play layout's chase camera."
+    help: "Poses a body at one of the debug world's places (stage, devices, boardroom, chess, go, reversi, alchemy, granaries, cards, auction, shedding, deduction, skirmish, desktop, portals, portal-garden, portal-night, portal-link, portal-fall, gallery, wonderland, the camera tests lift, stairs, camera-course, camera-tunnel, camera-colonnade and camera-bays, the valley's overlook and valley-<sector> floor spots, forest and forest-inside, or any spawn point) and returns the view to the play layout's chase camera."
     parameters [
       { name: "place", kind: Spawn, default: "stage" }
       { name: "body", kind: Body, default: "0" }

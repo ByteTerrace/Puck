@@ -237,13 +237,21 @@ public static class WorldEffectorSolver {
     /// <remarks>The march starts <see cref="ProbeBackoff"/> behind the origin, so a tip already resting on the surface
     /// it probes answers the same way one reaching toward it does.</remarks>
     public static bool TryProbeSurface(SdfFieldEvaluator? field, Vector3 origin, Vector3 towards, Quaternion rootRotation, float reach, float standoff, out Vector3 target, out Vector3 normal) {
+        WorldCreationWork.ProcessWork.Count(kind: WorldCreationWork.Probes);
+        if ((field is null) || (reach <= 0f) || (towards.LengthSquared() <= 0f)) {
+            WorldCreationWork.ProcessWork.Count(kind: WorldCreationWork.ProbeSkipped);
+            target = origin;
+            normal = Vector3.UnitY;
+            return false;
+        }
         // A planted foot asks the same question every frame: the answer to bit-identical inputs over the same field is the
         // one it had, so it is reused rather than marched again.
-        var query = new SurfaceQuery(Field: field, Origin: origin, Towards: towards, Rotation: rootRotation, Reach: reach, Standoff: standoff);
+        var query = new SurfaceQuery(Field: field, Origin: origin, Reach: reach, Rotation: rootRotation, Standoff: standoff, Towards: towards);
         var answers = (AnswerScratch ??= new SurfaceAnswer[SurfaceAnswers]);
 
         foreach (ref readonly var answer in answers.AsSpan()) {
             if (answer.Query.Matches(other: in query)) {
+                WorldCreationWork.ProcessWork.Count(kind: WorldCreationWork.ProbeHits);
                 target = answer.Target;
                 normal = answer.Normal;
 
@@ -251,16 +259,19 @@ public static class WorldEffectorSolver {
             }
         }
 
+        WorldCreationWork.ProcessWork.Count(kind: WorldCreationWork.ProbeMisses);
         var hit = Probe(field: field, normal: out normal, origin: origin, reach: reach, rootRotation: rootRotation, standoff: standoff, target: out target, towards: towards);
 
-        answers[NextAnswer] = new SurfaceAnswer(Query: query, Hit: hit, Target: target, Normal: normal);
+        answers[NextAnswer] = new SurfaceAnswer(Hit: hit, Normal: normal, Query: query, Target: target);
         NextAnswer = ((NextAnswer + 1) % SurfaceAnswers);
 
         return hit;
     }
+
     // The surface probes a thread asked last, kept for TryProbeSurface to answer again: enough for every foot of the bodies
     // a frame poses near the camera.
     private const int SurfaceAnswers = 64;
+
     [ThreadStatic] private static SurfaceAnswer[]? AnswerScratch;
     [ThreadStatic] private static int NextAnswer;
 
@@ -276,19 +287,13 @@ public static class WorldEffectorSolver {
             Bits(value: Rotation.Z, other: other.Rotation.Z) && Bits(value: Rotation.W, other: other.Rotation.W) &&
             Bits(value: Reach, other: other.Reach) && Bits(value: Standoff, other: other.Standoff)
         );
+
         private static bool Bits(float value, float other) => (BitConverter.SingleToInt32Bits(value: value) == BitConverter.SingleToInt32Bits(value: other));
     }
-    private static bool Probe(SdfFieldEvaluator? field, Vector3 origin, Vector3 towards, Quaternion rootRotation, float reach, float standoff, out Vector3 target, out Vector3 normal) {
+
+    private static bool Probe(SdfFieldEvaluator field, Vector3 origin, Vector3 towards, Quaternion rootRotation, float reach, float standoff, out Vector3 target, out Vector3 normal) {
         target = origin;
         normal = Vector3.UnitY;
-
-        if (
-            (field is null) ||
-            (reach <= 0f) ||
-            (towards.LengthSquared() <= 0f)
-        ) {
-            return false;
-        }
 
         var direction = Vector3.Normalize(value: Vector3.Transform(
             rotation: rootRotation,

@@ -34,14 +34,17 @@ on an invariant is designed and reviewed before code
 ([orchestration](../../.claude/skills/orchestration/SKILL.md)). The debug
 world is the proving ground, so every plan's checks run on it, and what the
 experimental worlds have that it lacks is ported into it
-([port](#port-the-experimental-worlds-missing-features)). Items 0 to 3 are
-planned as lanes in [the next wave](next-wave.md), which starts on the owner's
-word.
+([port](#port-the-experimental-worlds-missing-features)). The current focus is
+[dense landscapes](#dense-landscapes), including continuous forest in the first
+milestone. The owner requested its baseline and implementation plan; the
+[next-wave lanes](next-wave.md) supply its existing engineering work.
 
-0. [The frame thread's CPU field queries](#other-frame-time-findings) [high,
-   the frame bar]: every standard stop fails 60 FPS on both backends, bound by
-   the frame thread, and at the meadow half of it is creation-effector surface
-   probes and the chase camera's clearance march.
+0. [Dense landscapes](#dense-landscapes) [high, the first landscape milestone]:
+   continuous forest, roads, shrubs and grass at the performance target; lead
+   with counted query/motion work and the shared instance contract. The fresh
+   [baseline and implementation order](dense-landscapes.md) keep CPU field
+   queries first and connect static-copy sharing, retained updates, GPU
+   instancing, geometry/shadow work and memory to one proving landscape.
 1. [Memory](#memory-on-the-deck-tier) [high, the Deck]: the debug world's
    process plus GPU memory at or under 10 GB on the Deck tier, attribution
    first.
@@ -195,6 +198,62 @@ Each waits on the owner: what the engine should do, how it looks and feels, and 
 - The ideas [awaiting review](#awaiting-the-owners-review).
 
 ## Work packets
+
+### Dense landscapes
+
+Owner: the lead, with performance, rendering and world-authoring owners per
+step · high · Next: reduce repeated CPU dependency work identified by the fresh
+normal-paced trace and close readback/physical memory attribution, then GPU
+instance buckets and qualification of the terrain-following forest belt.
+The owner includes continuous forest in the first milestone alongside roads,
+shrubs, grass and trees; the seeded woodland belt now includes terrain-following
+placement and visual captures, with target-budget qualification still open.
+The [plan](dense-landscapes.md) owns the current assessment, workload and order.
+Existing visibility, bake, memory, terrain and job-system packets own mechanisms.
+
+Static-copy sharing, change-proportional draw/history staging and root/member
+cut provenance have durable repository laws. The authored forest-road route now
+replays authority and selected final presentation inputs with settled geometry;
+interleaved D3D12 and Vulkan comparisons qualify query-work reduction, with no
+Vulkan elapsed win established. Ordinary frame samples encounter presentation
+waits and do not qualify the frame bar. Exact power memo on/off remains open.
+Thousands of independent authored grass poses still warrant generic pose-program
+work; caching repeated slots alone does not remove them. Cold bake, physical
+memory, density sweeps and target-device bars remain open.
+
+  P2 · Owner: material/bake owner · The surface-pattern code edit forced a full
+  native rebake (77.95 s, no stored groups loaded) despite no authored shape changes.
+  It exceeds the one-minute bake bar and reinforces the existing appearance/field
+  identity separation work. The bounded clearing relief also adds real mesh and
+  query work: scale it only with measured detail/visibility handling. Pattern
+  filtering uses a conservative footprint approximation; adversarial cross-family
+  review of the new reserved-component packing/filtering remains owed.
+
+  P2 · Owner: landscape/rendering · The forest's native clearing captures show
+  sharply black crown undersides. Surface texture does not close that lighting
+  finding. Keep it alongside the existing GI evidence, and distinguish it from
+  the intended soft coloured shadows. The repeated-reload design session also
+  exceeded the Deck-tier private-memory budget; fresh-run attribution remains owed.
+
+Cross-family review is owed: the session-launch hook refused the Claude reviewer
+from this Codex lead session; the supplemental review finding was fixed.
+  P2 · Owner: presentation-query owner · `WorldSessionSceneEmitter.TrySurface`
+  (`src/Puck.World.Client/WorldSessionSceneEmitter.cs:829`) rebuilds its static
+  field after avatar-only visual program changes; the root's general definition
+  and neighbour revisions are also broader than query geometry. Count emission
+  requests, canonical geometry changes and evaluator constructions separately,
+  then retain against the exact emitted inputs. Preserve the root/routed scopes'
+  different placement, screen and adjacency policies. Their frequency in the
+  forest workload remains unmeasured.
+  P2 · Owner: graphics/bake owner · `SdfProgram` still packs appearance before
+  field bounds, segments and instances (`src/Puck.SignedDistance/SdfProgram.cs:140`).
+  Material stride/extent therefore affect field offsets, and its constructor's
+  bake closure conservatively reaches appearance code. Separate canonical field
+  packing from appearance, preserving the exact field interpreter inputs and
+  material-boundary semantics; prove appearance-only edits keep bake identity and
+  field/skin/material-cut changes invalidate it. The bake/dresser, sampler-readback
+  and bake/view parameter boundaries are now implemented and witnessed; do not
+  replace the remaining real dependency with a blacklist.
 
 ### Engine job system
 
@@ -394,22 +453,6 @@ The custom no-GC runtime port stays later work, on the
   validation reads differed by an order of magnitude between Vulkan and
   Direct3D 12 at high/native settings, with its cause unconfirmed (a later leg
   did not reproduce it). Owner: the lead.
-- [medium] `SdfMeshPathBake.Dress` rebuilds every draw of every group whenever
-  one dynamic slot moved, and for each dynamic group scans `MeshAssetSlots`
-  (`Enumerable.Contains` over an `IReadOnlyList<int>`, `SdfMeshPathBake.cs:404`)
-  and every mesh instance (`:405-406`, again at `:424`). Each rebuild also
-  boxes a fresh `ValueTuple` motion identity per dynamic draw (`:408`, `:425`;
-  `SdfMesh.cs:255` types it `object?`), which the staging compares by virtual
-  `object.Equals` per draw (`SdfWorldTables.Motion.cs:214`,
-  `SdfWorldTables.MeshRegion.cs:286`), and copies the instance list
-  (`SdfMeshPathBake.cs:434`); every frame that misses the early return at
-  `:395` allocates a new `SdfFrame` record (`:458`). Index the frame's
-  instances by slot once, redress only the moved groups, and give motion
-  identity a typed, equatable key cached per copy and selector; this is the
-  first cut of the [visibility plan](visibility.md#the-build-order)'s V2b. In
-  the World process (no dynamic PGO, `Puck.World.csproj:20`) the `foreach` over
-  `IReadOnlyList<SdfMeshInstance>` may box its enumerator: read the
-  disassembly. (from: slow-frames, perf-guidance)
 - [medium] The portal crossing scan visits every population slot for every
   portal face each tick, with an occupancy dictionary `Observe` or `Forget` per
   pair (`WorldInstanceHost.Adjacency.cs:294-434`), a sixth of a standing tick.
@@ -513,22 +556,16 @@ source closure of `MeshBake` and `MeshBakeMask`; then cut the crossing stage's
 stages, toward the owner's bar: one minute at most per backend from an empty
 store (AGENTS.md), and work proportional to change.
 
-- [high] The bake's identity reaches past what the bake reads, and each backend
-  keeps its own store. `SdfMeshBakeClosure`
-  (`src/Puck.SdfVm/SdfMeshBakeClosure.cs:41, 49-59`) holds upload and draw-record
-  code: changing `GpuRegion.Grow`'s return type changed the IL of
-  `SdfWorldTables.WriteMeshBakePoints` (`SdfMeshPathBake.cs:620`) and missed every
-  stored mesh (`[sdf.mesh-bake] miss … the code, 1 member (Puck.SdfVm 1:
-  Puck.SdfVm.SdfWorldTables.WriteMeshBakePoints) changed`), and a fix that
-  changed only `SdfMeshInstance`'s motion identity (a draw record, not a bake
-  input) did the same. How the bake's points reach the GPU cannot change a baked
-  mesh: bound the closure to the code that decides mesh contents, and hash only
-  what the bake reads. `SdfMeshBakeIdentity` (`SdfMeshBakeIdentity.cs:82-84`)
-  hashes each backend's kernel bytes, so the two backends bake and store the same
-  meshes twice though a mesh is the same bytes on both when the kernels agree:
-  hash the HLSL source closure of `MeshBake` and `MeshBakeMask` instead and share
-  one store, which halves the cold cost of using both. (from: refactoring survey,
-  hot reload)
+- [high] Each backend still keeps its own store because `SdfMeshBakeIdentity`
+  hashes the actual mask/bake kernel bytes. The bake/dresser, view/bake parameter
+  and sample-input/transport boundaries now exclude the observed unrelated
+  renderer edits; remaining program-packing coupling belongs to
+  [dense landscapes](#dense-landscapes). Before replacing kernel-byte identity
+  with a source identity or sharing backend products, prove the intended output
+  equivalence, including compiler changes and skin/material/refinement behavior.
+  The latest native forest legs have different aggregate triangle counts, so
+  source equality alone is not proof of identical products or a halved cold cost.
+  (from: refactoring survey, hot reload, native landscape measurements)
 - The cold bake fails the one-minute bar on both backends by more than double
   on the quiet lead machine. Crossings (`CloseSheets`, `CrossingEdges`) and land
   (`SdfMeshCollapse`) are about three quarters of its thread seconds, and Vulkan
@@ -1879,12 +1916,7 @@ the static round-section term's cost with `puck mesh audit --cpu`.
   for static instances and merges every member's detail into one
   `DetailLow`/`DetailHigh` box, where per-member regions would let a thin
   member declare its own detail.
-- Each residency's first upload copies the whole bake point table, 32 MiB of
-  host-visible staging (`SdfWorldTables.MeshBakePoints.cs:14`, sized by
-  `SdfWorldPackage.MeshBakeMaxSamples` at 2^21), though a frame writes only its
-  batch's points; `SdfWorldTablesWorkLawTests` counts 34.4 MB of host-visible
-  writes on a first upload, 33.5 MB of them that table. Owe only the entries a batch
-  writes, and size the staging to that. (from: sdfvm-signal)
+
 
 ### Residency and streaming
 
@@ -1908,13 +1940,38 @@ every settle window. A windowed World holds well past that, a tour roughly
 doubles it ([sweep](#sweep-and-visual-checks)) and the cold bake passes 16 GB
 ([bake](#bake-proportional-to-change)); headless is a fraction of a gigabyte,
 so nearly all of it is presentation a player's build carries. Most of the
-process is unattributed, so attribution comes first: the memory account sees
-little of the process and Puck reads no device memory. Grounded causes:
+process is unattributed, so physical attribution comes first. Current diagnostics
+separate process, managed, allocator, account and backend device layers; those
+overlap and cannot be added. The process and managed footprint expanded while
+mesh regions shrank. Treat that as a high-priority budget investigation; the
+[current landscape assessment](dense-landscapes.md#current-status) owns paired
+results. Matched route/state, collection and residency windows must establish
+causes. Diagnostic replay readings and Windows private bytes do not qualify
+normal-play Deck unified physical memory. Take a retained managed heap census
+with no observer or authority replay before inferring ownership from Gen1 heap
+snapshots.
 
+`GpuDeviceMemoryWork.IsCounted` excludes ordinary host-visible staging/upload/
+readback bytes. Their allocation count alone cannot attribute the private-memory
+gap. Owner: rendering/accounting; extend the existing role ledger with disjoint
+host-visible byte observations, preserving the aperture's device-local subset,
+then correlate them with driver budget/residency and process regions. No second
+allocation tracker or sum of overlapping layers.
+
+Grounded causes and leads:
+
+- Owner: rendering/bake. Per-recorder readback slots reserve full sample capacity
+  when first used; captured cold-run heap paths reach 40 MiB byte arrays through
+  `SdfMeshBakeReadback`. The result destination is now shared per residency.
+  Measure readback demand and consumer lifetimes before sharing/reducing their
+  storage; preserve exact batch identity, CPU consumers and fence-safe reuse.
 - The mesh library budgets meshes residencies still hold and forgets them, so a
   re-plan reloads a second copy (`SdfMeshLibrary.cs:32`, `:285-304`).
 - The GI probe cache has no byte bound (`SdfMeshIrradiance.ProbeCache`,
   `SdfMeshIrradiance.cs:2266`).
+  Its reader also retries with `Thread.SpinWait` while a cache entry is being
+  published. Replace that custom busy wait with stable publication or an
+  appropriate host wait; measure its frequency before attributing frame stalls.
 - A prewarmed mesh store may ship in a player's build (AGENTS.md), so a player
   need not bake cold.
 
@@ -3044,8 +3101,23 @@ ordinary · Next: new content and art on the owner's call.
 
 ### Agent tooling and skills
 
-Owner: the lead · ordinary · Next: finish the skill-eval program below, then
-the Monitor hook check.
+Owner: the lead · ordinary · Next: address skill-readiness issues affecting
+the selected landscape lanes. The broader skill-eval program below and the
+Monitor hook check remain supporting work alongside the landscape priority.
+
+- [high, edit-to-running] A fresh landscape World artifact spent roughly 580
+  seconds building before boot, against the owner's 30-second edit bar. The
+  preceding incremental CLI build took 12.27 seconds; these different targets
+  and cache states are observations, not a controlled build comparison. A live
+  World.Client compiler stack was inside ILLink's data-flow lattice copying and
+  fixpoint walk. A later shared-compiler trace also reaches that analysis and
+  `StaleCaptureAnalyzer.CompilationState.Collect`/`Record`. Profile per-project,
+  analyzer, restore and copy costs with compiler/analyzer timing and current
+  invalidation inputs before naming a cause; the artifact builder's separate
+  output directory is a lead, not proof of lost incremental reuse. Keep the
+  analysis contract and remove repeated work at its actual owner. This is a
+  build/performance-owner followup alongside the existing analyzer fast-path
+  finding below; no analyzer was disabled to pass the graphics change.
 
 - [high] The skill-eval program
   ([evaluate an agent skill](../development/documentation.md#evaluate-an-agent-skill),
@@ -3308,13 +3380,6 @@ runs until the owner calls for qualification; then each is a packet.
 Ideas discussed with the owner and not yet queued. None starts until the owner
 reviews it and says so (the owner's ruling).
 
-- **Ground cover and vegetation.** Forests are authorable today (a tree creation
-  with a `Noise` or `Scatter` placement distribution under the one-pixel rule),
-  but dense ground cover is a gap: presentation-only GPU instancing of grass and
-  low plants placed by density masks from terrain material, slope and height and
-  fading into the ground material; wind motion by vertex displacement; billboard
-  or impostor tiers for distant forest; bending and trampling through the weather
-  decision's track layer; terrain material blending by slope and height.
 - **Tonemapping.** One curve exists (`render.tonemap` `Filmic`: Uchimura's Gran
   Turismo fit, per RGB channel, SDR peak 1.0, in `place.comp.hlsl`), and the
   debug world authors none, so its sky, sun and emissives clip at white.

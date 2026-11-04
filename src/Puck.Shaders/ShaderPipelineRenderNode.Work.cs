@@ -49,6 +49,8 @@ public sealed partial class ShaderPipelineRenderNode : IGpuWorkSource, IWorkCoun
     /// sample until a later submission completes.</remarks>
     public bool TryReadCompleted(GpuWorkSample sample) =>
         m_work.TryReadCompleted(sample: sample);
+    /// <inheritdoc/>
+    public bool TryReadTransfers(out GpuTransferTotals totals) => m_work.TryReadTransfers(out totals);
     /// <summary>Reads completed work counters and timestamps without rendering or waiting, and folds the renders found
     /// complete into the summary <see cref="TakeCompletions"/> reads. The render runtime calls this on its frame thread
     /// for an instance whose latest image stands while it <see cref="OwesReadbacks"/>, so its last submission is read

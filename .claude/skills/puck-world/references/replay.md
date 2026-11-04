@@ -24,6 +24,13 @@ to the session state directory (`Replays/<name>.puckreplay`) so two isolated
 scheduled runs record the same verdict text. Live replay drive remains outside
 scheduled tests because restoring its timeline would also rewind the schedule.
 
+A local replay's definition block is bounded by the tape's available bytes and
+its signed length carrier, like checkpoint and companion blocks. It is not a
+network document packet: applying `WireLimits.MaxDocumentBytes` only at read time
+made the writer's own rich-world recordings unreadable. `WireReader.ReadBlock`
+checks remaining bytes before copying a declared block; keep that truncation
+refusal when changing the container.
+
 Checkpoint continuation includes the last sampled attached-solid transforms: carrier
 poses can move after collision sampling, and resampling during restore can wake a
 sleeping island a tick early. Restore scoped replay images after compiling their
@@ -34,6 +41,14 @@ A replay-start restore (`WorldPersistence.RestoreReplayStart`) replaces session 
 with their captured timeline; live checkpoint loads retain retired session epochs
 so an ended principal cannot be minted again.
 
+Replay start can temporarily withhold a pre-existing screen observation's grant
+until the recorded bootstrap prefix restores it. `WorldSessionObservation.CanObserve`
+is the shared scene-availability door. An unavailable observation pauses its graph
+node and holds its last published image; it must neither create a private
+whole-world residency nor fall back to the undisclosed root. Re-admitting it to
+avoid the gap would change the recorded session stream. The revoked/regrant,
+Frames-only and nested-view laws live in `SessionObservationLawTests` and
+`WorldScreenBinderLawTests`.
 `WorldReplayProbe` consumes the tape's existing input capture independently of
 operator recording. Scenario workers freeze all probes synchronously at export,
 before the host finishes its post-step work, then restore and replay each authority

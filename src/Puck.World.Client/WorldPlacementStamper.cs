@@ -25,13 +25,17 @@ public static class WorldPlacementStamper {
     /// <returns>The placements admitted by the same emission and evaluator used by the composed query field.</returns>
     public static IReadOnlyList<WorldPlacement> Queryable(WorldDefinition definition, IReadOnlyList<WorldPlacement> placements, Action<WorldPlacement, string>? excluded = null) {
         var usable = new List<WorldPlacement>();
+        var seed = (definition.Generation?.WorldSeed ?? 0UL);
 
         foreach (var placement in placements) {
             var creation = WorldDefinitionRows.FindCreation(creations: definition.Creations, id: placement.ShownPrototypeId);
+            var stamp = WorldPlacementStamp.Resolve(definition, placement, worldSeed: seed);
+            var frame = stamp.Frame;
 
-            // Whether the evaluator reads a placement is a fact of its row and the creation it shows, so a row that
-            // came through a delivery unchanged keeps its verdict and only a moved row is emitted and evaluated again.
-            if (!QueryVerdicts.TryGetValue(key: placement, value: out var verdict) || !ReferenceEquals(objA: verdict.Creation, objB: creation)) {
+            // Emission also reads the composed parent frame and seeded pattern. The child row can stay identical
+            // while either changes, including moving a previously admitted instance outside the evaluator's frame.
+            if (!QueryVerdicts.TryGetValue(key: placement, value: out var verdict) || !ReferenceEquals(objA: verdict.Creation, objB: creation) ||
+                (verdict.Frame != frame) || (verdict.Seed != seed) || !ReferenceEquals(verdict.Stamp, stamp)) {
                 string? refusal = null;
 
                 try {
@@ -40,13 +44,13 @@ public static class WorldPlacementStamper {
                     EmitStatic(builder: builder, creations: definition.Creations, definition: definition, placements: [placement]);
 
                     var program = builder.Build();
-                    var frame = (double)new SdfFieldEvaluator(program: program).Frame;
+                    var queryFrame = (double)new SdfFieldEvaluator(program: program).Frame;
 
                     // The composed field answers only inside the least of its parts' frames, so a placement its own
                     // field cannot answer at would refuse every query in the world.
                     foreach (var instance in program.Instances) {
-                        if ((Math.Abs(value: instance.Center.X) > frame) || (Math.Abs(value: instance.Center.Y) > frame) || (Math.Abs(value: instance.Center.Z) > frame)) {
-                            refusal = $"its field answers only within {frame.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)} of the origin, short of the copy at {instance.Center.ToString(format: null, formatProvider: System.Globalization.CultureInfo.InvariantCulture)}";
+                        if ((Math.Abs(value: instance.Center.X) > queryFrame) || (Math.Abs(value: instance.Center.Y) > queryFrame) || (Math.Abs(value: instance.Center.Z) > queryFrame)) {
+                            refusal = $"its field answers only within {queryFrame.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)} of the origin, short of the copy at {instance.Center.ToString(format: null, formatProvider: System.Globalization.CultureInfo.InvariantCulture)}";
                             break;
                         }
                     }
@@ -56,6 +60,9 @@ public static class WorldPlacementStamper {
 
                 verdict = new QueryVerdict(
                     Creation: creation,
+                    Frame: frame,
+                    Stamp: stamp,
+                    Seed: seed,
                     Refusal: refusal
                 );
                 QueryVerdicts.AddOrUpdate(key: placement, value: verdict);
@@ -71,10 +78,10 @@ public static class WorldPlacementStamper {
         return usable;
     }
 
-    // Each placement row's evaluator verdict, with the creation it showed when judged.
+    // Each placement row's evaluator verdict and the external inputs its emission read.
     private static readonly Puck.Abstractions.CodeDerivedTable<WorldPlacement, QueryVerdict> QueryVerdicts = new();
 
-    private sealed record QueryVerdict(WorldPrototype? Creation, string? Refusal);
+    private sealed record QueryVerdict(WorldPrototype? Creation, CompiledPlacementFrame Frame, CompiledPlacementStamp Stamp, ulong Seed, string? Refusal);
 
     // The instance-bound slack past a creation's own reach (a contract of the tile cull, not a policy: a too-tight
     // bound CLIPS real geometry at masked tile edges; a fat one only costs a rare extra evaluation).
@@ -242,7 +249,7 @@ public static class WorldPlacementStamper {
     // A static instance bakes the placement frame (and, for a parented volume, the parent shape's rest pose) into
     // the volume itself: no slot moves it. A mirrored copy keeps the unmirrored frame — a flow column is
     // symmetric about its own axis, so only its offset would differ, and the mirror plane is not applied here.
-    private static void AppendStaticVolumes(CreationDocument creation, Vector3 origin, Quaternion rotation, float scale, ICollection<SdfVolume>? volumes, bool[]? hidden) {
+    internal static void AppendStaticVolumes(CreationDocument creation, Vector3 origin, Quaternion rotation, float scale, ICollection<SdfVolume>? volumes, bool[]? hidden) {
         if (
             (volumes is null) ||
             (creation.Volumes is not { Count: > 0 } authored)
@@ -316,7 +323,7 @@ public static class WorldPlacementStamper {
         ));
     }
 
-    private readonly record struct StaticMeshIdentity(string? Scope, string Placement, int Ordinal);
+    internal readonly record struct StaticMeshIdentity(string? Scope, string Placement, int Ordinal);
 
     /// <summary>Poses a prototype's mesh as a draw: its engine-frame triangles under a uniform scale, an optional mirror (a
     /// plane through the origin in the local frame, as the shapes reflect), then the rotation and the origin, composed in
@@ -465,7 +472,7 @@ public static class WorldPlacementStamper {
             )]
         );
     }
-    private static void EmitPlacement(SdfProgramBuilder builder, CreationDocument creation, WorldDefinition definition, int[] paletteIds, WorldPlacement placement, PackedFontAtlasCatalog? textCatalog, ulong worldSeed, ICollection<SdfVolume>? volumes, SdfMesh? mesh, int meshMaterial, ICollection<SdfMeshDraw>? meshDraws, string? meshScope, int firstMesh, bool[]? hidden) {
+    internal static void EmitPlacement(SdfProgramBuilder builder, CreationDocument creation, WorldDefinition definition, int[] paletteIds, WorldPlacement placement, PackedFontAtlasCatalog? textCatalog, ulong worldSeed, ICollection<SdfVolume>? volumes, SdfMesh? mesh, int meshMaterial, ICollection<SdfMeshDraw>? meshDraws, string? meshScope, int firstMesh, bool[]? hidden, CompiledPlacementFrame? frameOverride = null) {
         // An isolation that hides every shape leaves the placement nothing to draw.
         if ((hidden is not null) && (Array.IndexOf(array: hidden, value: false) < 0)) {
             return;
@@ -475,10 +482,7 @@ public static class WorldPlacementStamper {
             return;
         }
 
-        var frame = WorldDefinitionRows.ResolvedFrame(
-            definition: definition,
-            placement: placement
-        );
+        var stamp = WorldPlacementStamp.Resolve(definition, placement, frameOverride, worldSeed);
         // A glass shape emits apart from the opaque shapes, in the glass instance after them: `hiddenOpaque` hides it
         // from the opaque emission, and `glassHidden` hides everything but the glass shapes from the glass one.
         var (hiddenOpaque, glassHidden) = GlassMasks(creation: creation, hidden: hidden);
@@ -518,7 +522,7 @@ public static class WorldPlacementStamper {
             // lattice a finite shape clips is as finite as that shape.
             composeBlends: scoped
         );
-        var rotation = frame.Rotation;
+        var rotation = stamp.Rotation;
         var perShape = (
             !scoped &&
             (creation.Shapes is { Count: > 0 })
@@ -547,17 +551,7 @@ public static class WorldPlacementStamper {
             volumes: volumes
         );
 
-        CreationStampLattice.ForEachInstance(
-            origin: frame.Position,
-            rotation: rotation,
-            pattern: WorldPlacementStamp.PatternFor(placement: placement),
-            sampledOffsets: WorldPlacementStamp.SampledOffsetsFor(
-                placement: placement,
-                worldSeed: worldSeed
-            ),
-            mirror: WorldPlacementStamp.MirrorFor(placement: placement),
-            visitor: ref visitor
-        );
+        stamp.ForEach(ref visitor);
     }
     // The masks a creation with glass shapes emits through: the opaque emission's hidden shapes (the isolation's and
     // every glass shape) and the glass emission's (everything but the isolation's visible glass shapes). Both null for a
@@ -595,6 +589,10 @@ public static class WorldPlacementStamper {
 
         return (float.IsFinite(f: detail) ? (detail * scale) : 0f);
     }
+
+    // A warped field stays separate from its neighbours under the existing static bake partition.
+    internal static bool BakesAlone(ShapeDocument shape) => ((shape.Flare is not null) || (shape.Shear is not null) ||
+        (shape.Bumps is { Count: > 0 }) || (shape.Erode is not null) || (shape.Cells is not null) || (shape.Warp is not null) || (shape.Displace is not null));
 
     // One static placement's instances: its volumes and mesh draws, then either one tight instance per shape or one
     // instance holding the whole creation. A struct the lattice walk calls, so a placement allocates no closure.
@@ -794,7 +792,7 @@ public static class WorldPlacementStamper {
                     // alone, and so does the shape after it: its scope divides its field by its warp's bound, so beside an
                     // exact neighbour the union's field sags below a distance, and the bake reads the sag as a sheet it
                     // closes into slabs across the neighbour.
-                    var warped = ((shape.Flare is not null) || (shape.Shear is not null) || (shape.Bumps is { Count: > 0 }) || (shape.Erode is not null) || (shape.Cells is not null) || (shape.Warp is not null) || (shape.Displace is not null));
+                    var warped = BakesAlone(shape);
                     var box = CreationStampEmitter.ShapeStampBox(document: creation, shapeIndex: shapeIndex, transform: stampTransform);
                     var margin = new Vector3(value: PlacementBoundMargin);
 
@@ -937,7 +935,9 @@ public static class WorldPlacementStamper {
     /// <see cref="SdfMeshDraw.Identity"/>.</param>
     /// <param name="isolation">The operator's shape isolation, whose hidden shapes, with the volumes parented to them,
     /// the prototype's mesh and its text, emit nothing; <see langword="null"/> emits every shape.</param>
-    public static void EmitStatic(SdfProgramBuilder builder, WorldDefinition definition, IReadOnlyList<WorldPrototype> creations, IReadOnlyList<WorldPlacement> placements, PackedFontAtlasCatalog? textCatalog = null, Func<string, (Vector3 Color, float Blend)?>? tintFor = null, ICollection<SdfVolume>? volumes = null, ICollection<SdfMeshDraw>? meshDraws = null, WorldBakedColors? colors = null, WorldStaticPalettes? palettes = null, WorldPickMapBuilder? picks = null, string? meshScope = null, WorldShapeIsolation? isolation = null) {
+    /// <param name="sharedAssets">The visual scene's admitted local copies; null keeps ordinary world-space field
+    /// emission, including query fields.</param>
+    public static void EmitStatic(SdfProgramBuilder builder, WorldDefinition definition, IReadOnlyList<WorldPrototype> creations, IReadOnlyList<WorldPlacement> placements, PackedFontAtlasCatalog? textCatalog = null, Func<string, (Vector3 Color, float Blend)?>? tintFor = null, ICollection<SdfVolume>? volumes = null, ICollection<SdfMeshDraw>? meshDraws = null, WorldBakedColors? colors = null, WorldStaticPalettes? palettes = null, WorldPickMapBuilder? picks = null, string? meshScope = null, WorldShapeIsolation? isolation = null, WorldRigidAssets? sharedAssets = null) {
         var worldSeed = (definition.Generation?.WorldSeed ?? 0UL);
         var baked = (colors ?? WorldBakedColors.Of(definition: definition));
         var registered = (palettes ?? new WorldStaticPalettes());
@@ -962,6 +962,8 @@ public static class WorldPlacementStamper {
             ) {
                 continue;
             }
+
+            if (sharedAssets?.ContainsPlacement(placement: placement) ?? false) { continue; }
 
             var tint = tintFor?.Invoke(arg: placement.Id);
 
@@ -989,8 +991,9 @@ public static class WorldPlacementStamper {
             var firstInstance = builder.InstanceCount;
             var firstMesh = (meshDraws?.Count ?? 0);
             var hidden = isolation?.HiddenFor(document: creation.EngineDocument, prototype: creation.Id.Value);
-            var frame = WorldDefinitionRows.ResolvedFrame(definition: definition, placement: placement);
-            var key = new WorldStaticPalettes.EmissionKey(creation, textCatalog, hidden, paletteIds[0], frame.Position, frame.Rotation, worldSeed, meshScope, (meshDraws is not null));
+            var stamp = WorldPlacementStamp.Resolve(definition, placement, worldSeed: worldSeed);
+            var frame = stamp.Frame;
+            var key = new WorldStaticPalettes.EmissionKey(creation, textCatalog, hidden, paletteIds[0], frame.Position, stamp.Rotation, worldSeed, meshScope, (meshDraws is not null), stamp);
             var retain = ((palettes is not null) && (tint is null));
 
             if (retain && registered.Emissions.TryGetValue(key: placement, value: out var held) && (held.Key == key) && builder.CanAppendEmission(emission: held.Program)) {
@@ -1089,20 +1092,6 @@ public static class WorldPlacementStamper {
 
         return shows.Count;
     }
-    /// <summary>The emitted instance count of one placement, including pattern/sampled and reflected copies.</summary>
-    /// <param name="placement">The placement row.</param>
-    /// <param name="worldSeed">The world's reroll seed (<c>generation.worldSeed</c>) — resolves a Noise/Scatter
-    /// distribution's actual admitted count.</param>
-    public static int InstanceCount(WorldPlacement placement, ulong worldSeed) {
-        return CreationStampLattice.InstanceCount(
-            pattern: WorldPlacementStamp.PatternFor(placement: placement),
-            sampledCount: WorldPlacementStamp.SampledOffsetsFor(
-                placement: placement,
-                worldSeed: worldSeed
-            )?.Count,
-            mirror: WorldPlacementStamp.MirrorFor(placement: placement)
-        );
-    }
     /// <summary>Whether a creation row animates — the static/animated fork every consumer shares. A driver or an
     /// inverse-kinematics effector animates; a timeline frame animates only where one of its transforms differs from its
     /// shape's authored position or rotation (a state-bound value always differs from a literal). A creation whose frames
@@ -1123,15 +1112,12 @@ public static class WorldPlacementStamper {
         (!IsAnimated(creation: creation) && (placement.Inhabit is null) && (placement.Attach is null) && (placement.Deal is null));
     /// <summary>The total static stamp instances of a placement set (animated rows ride the constant replay pool and
     /// charge nothing here) — the apply-time measure's placement charge unit.</summary>
-    /// <param name="creations">The world's creation rows.</param>
+    /// <param name="definition">The world supplying canonical placement and surface dependencies.</param>
     /// <param name="placements">The placement rows.</param>
-    /// <param name="worldSeed">The world's reroll seed (<c>generation.worldSeed</c>) — resolves each row's
-    /// Noise/Scatter distribution to its actual admitted count.</param>
-    public static int StaticStampInstances(IReadOnlyList<WorldPrototype> creations, IReadOnlyList<WorldPlacement> placements, ulong worldSeed = 0UL) {
+    public static int StaticStampInstances(WorldDefinition definition, IReadOnlyList<WorldPlacement> placements) {
         var (scopedStamps, shapeInstances) = StaticStampReservation(
-            creations: creations,
-            placements: placements,
-            worldSeed: worldSeed
+            definition: definition,
+            placements: placements
         );
 
         return checked((scopedStamps + shapeInstances));
@@ -1139,18 +1125,17 @@ public static class WorldPlacementStamper {
     /// <summary>The static stamp reservation split by emission class: SCOPED stamps (one whole-creation instance per
     /// copy — a scoped or text-carrying creation) and per-SHAPE instances (every other copy materializes one instance
     /// per shape). KEEP IN SYNC with <c>EmitPlacement</c>'s split and <c>EmitProbe</c>'s two reservation forms.</summary>
-    /// <param name="creations">The world's creation rows.</param>
+    /// <param name="definition">The world supplying canonical placement and surface dependencies.</param>
     /// <param name="placements">The placement rows.</param>
-    /// <param name="worldSeed">The world's reroll seed — resolves each row's Noise/Scatter distribution.</param>
     /// <returns>The scoped-stamp count and the per-shape instance count.</returns>
-    public static (int ScopedStamps, int ShapeInstances) StaticStampReservation(IReadOnlyList<WorldPrototype> creations, IReadOnlyList<WorldPlacement> placements, ulong worldSeed = 0UL) {
+    public static (int ScopedStamps, int ShapeInstances) StaticStampReservation(WorldDefinition definition, IReadOnlyList<WorldPlacement> placements) {
         var scopedStamps = 0;
         var shapeInstances = 0;
 
         foreach (var placement in placements) {
             if (
                 (WorldDefinitionRows.FindCreation(
-                creations: creations,
+                creations: definition.Creations,
                 id: placement.ShownPrototypeId
             ) is not { } creation) ||
                 !IsStaticStamp(
@@ -1161,10 +1146,7 @@ public static class WorldPlacementStamper {
                 continue;
             }
 
-            var copies = InstanceCount(
-                placement: placement,
-                worldSeed: worldSeed
-            );
+            var copies = WorldPlacementStamp.Resolve(definition, placement).Count;
             var perCopy = CreationStampEmitter.PerCopyInstanceCount(document: creation.Document);
 
             if (perCopy == 1) {

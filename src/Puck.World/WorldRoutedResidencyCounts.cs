@@ -35,8 +35,9 @@ public sealed class WorldRoutedResidencyCounts(IWorkCounterSource lifetime, Func
     public static WorkKind HostVisibleAllocated { get; } = new(name: "world.routed.tables.host-visible.allocated", unit: "bytes", workClass: WorkClass.PerBackendDeterministic);
     /// <summary>Gets the kind counting table bytes the residency gave back from host-visible memory.</summary>
     public static WorkKind HostVisibleReleased { get; } = new(name: "world.routed.tables.host-visible.released", unit: "bytes", workClass: WorkClass.PerBackendDeterministic);
+    private static readonly WorkKind[] TableKinds = [DeviceLocalAllocated, DeviceLocalReleased, HostVisibleAllocated, HostVisibleReleased];
     /// <summary>Gets the kinds this type adds to a residency's own, in report order.</summary>
-    public static IReadOnlyList<WorkKind> Kinds { get; } = [ResidenciesCreated, ResidenciesReleased, DeviceLocalAllocated, DeviceLocalReleased, HostVisibleAllocated, HostVisibleReleased];
+    public static IReadOnlyList<WorkKind> Kinds { get; } = [ResidenciesCreated, ResidenciesReleased, .. TableKinds];
 
     /// <inheritdoc/>
     public string Name => lifetime.Name;
@@ -58,7 +59,7 @@ public sealed class WorldRoutedResidencyCounts(IWorkCounterSource lifetime, Func
             return true;
         }
 
-        var index = Array.IndexOf(array: [DeviceLocalAllocated, DeviceLocalReleased, HostVisibleAllocated, HostVisibleReleased], value: kind);
+        var index = Array.IndexOf(array: TableKinds, value: kind);
 
         if (index < 0) {
             return lifetime.TryRead(

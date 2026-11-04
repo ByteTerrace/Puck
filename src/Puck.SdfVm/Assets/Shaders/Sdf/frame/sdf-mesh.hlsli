@@ -82,7 +82,7 @@ float3 sdfMeshRow(uint record, uint row) {
 }
 // The uniform scale of a draw's matrix, its first row's length: a dynamic group's mesh is in its slot's own units
 // (DynamicTransform.Scale), and a vertex riding a member takes the draw's scale out of the member's frame as the rest of
-// the mesh takes it from the matrix (SdfMeshPathBake.Dress).
+// the mesh takes it from the matrix (SdfMeshDresser.Dress).
 float sdfMeshDrawScale(uint record) {
     return length(sdfMeshRow(record, 0u));
 }
@@ -256,6 +256,10 @@ float3 sdfMeshSurfaceNormal(uint draw, uint triangleIndex, float3 surfacePoint, 
         uint entry = sdfMeshMemberEntry(record, sdfMeshIndexAt(record, nearest));
 
         frameSlot = ((entry != 0u) ? (int)sdfMeshMemberSlot(record, entry) : frameSlot);
+    }
+
+    if ((sdfMeshRegion[record + SDF_MESH_FLAGS_WORD] & SDF_MESH_WORLD_MATERIAL_FLAG) != 0u) {
+        frameSlot = SDF_TRANSFORM_SLOT_NONE;
     }
 
     faceNormal = (face * rsqrt(max(dot(face, face), 1.0e-30)));
