@@ -65,7 +65,9 @@ public sealed class SdfMeshDresser(SdfMeshPathBake bake) : IDisposable {
             var programChanged = !ReferenceEquals(frame.Program, m_bindingProgram);
             var portalPath = (m_hadClips || (frame.SlotClips.Count > 0));
             var finished = 0;
-            foreach (var group in access.Groups) {
+            var groups = access.Groups;
+            for (var groupIndex = 0; groupIndex < groups.Count; groupIndex++) {
+                var group = groups[groupIndex];
                 if (access.MeshOf(group) is not { } mesh) { continue; }
                 finished++;
                 topologyChanged |= (!m_dressedGroups.TryGetValue(group, out var heldMesh) || !ReferenceEquals(mesh, heldMesh));

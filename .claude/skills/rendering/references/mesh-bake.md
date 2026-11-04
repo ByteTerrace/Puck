@@ -621,6 +621,16 @@ laws exercise that boundary.
   and `SdfWorldPasses.BeginFrame` polls every bake pass's readbacks each frame,
   so a view that leaves the frame or follows another residency never strands a
   bake.
+  `SdfWorldTables.MeshBakeSamples` owns one result destination per residency;
+  views borrow it through the graph's existing mask → bake → surface/readback
+  ports. The batch claim selects one view's dispatch. Its submission copies the
+  result into that recorder's existing readback slot before another queued
+  submission can overwrite it. Readbacks and their fences remain view-local.
+  Package borrowing acquires the exact backing owner before recording; when a
+  view follows another residency, graph ports and readbacks switch together and
+  the old hold retires through the graph's submission/publication retirement.
+  Destination bytes belong once to Tables, never each borrowing node's owned
+  gauge; recorder readback bytes still belong to their actual recorder.
 - **Groups are keyed by geometry** (`SdfMeshGeometryBuilder`: instructions with
   side-table values for offsets, materials by place, a dynamic bound's radius
   alone, other slots by their rounded pose in the group's frame, lane-erosion

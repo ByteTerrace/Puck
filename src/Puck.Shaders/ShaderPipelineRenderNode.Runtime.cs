@@ -37,6 +37,10 @@ public sealed partial class ShaderPipelineRenderNode {
 
         public IGpuBuffer[]? Buffers;
         public bool Borrowed;
+        public IRenderGraphPackageFactory? BorrowedFactory;
+        public RenderGraphPackageRecorderContext? BorrowedContext;
+        public IDisposable? BorrowedOwnership;
+        public ulong BorrowedRequiredBytes;
         public IGpuImage[]? Images;
         // The image an export copies this storage into, the export that created it, and whether a copy has written it.
         public IGpuExportableImage? Export;
@@ -84,6 +88,8 @@ public sealed partial class ShaderPipelineRenderNode {
             OverridePlanned[instance] = false;
         }
         public void Dispose(Action<IDisposable?> later) {
+            later(obj: BorrowedOwnership);
+            BorrowedOwnership = null;
             if (Images is not null) {
                 foreach (var image in Images) {
                     image?.Dispose();

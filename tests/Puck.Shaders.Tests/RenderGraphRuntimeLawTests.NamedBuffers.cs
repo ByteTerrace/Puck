@@ -401,8 +401,8 @@ public sealed partial class RenderGraphRuntimeLawTests {
         public ulong? Signature { get; init; }
 
         public bool OwnsBuffer(string? part) => (BuildOwnsBuffers || (Buffers is not null) || (SharedBuffers is not null));
-        public IGpuBuffer? BorrowedBuffer(RenderGraphPackageRecorderContext context, IDisposable? built, ShaderPipelineResource resource) =>
-            ((built is BorrowedBuild owner) ? owner.Buffer : Buffers?[context.Part!]);
+        public RenderGraphBorrowedBuffer? BorrowedBuffer(RenderGraphPackageRecorderContext context, IDisposable? built, ShaderPipelineResource resource, IGpuBuffer? previous) =>
+            ((previous ?? ((built is BorrowedBuild owner) ? owner.Buffer : Buffers?[context.Part!])) is { } buffer ? new(buffer) : null);
         public RenderGraphPackageFragment? FragmentOf(string instance) => Fragment;
         public ValueTask<IDisposable?> BuildAsync(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) {
             if (SharedBuffers is not null) { return ValueTask.FromResult<IDisposable?>(result: SharedBuffers[context.Part!].Retain()); }

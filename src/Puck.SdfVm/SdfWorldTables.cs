@@ -334,6 +334,11 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
             sizeBytes: DummyBufferBytes,
             usage: GpuBufferUsage.Storage
         ));
+        m_meshBakeSamples = scope.Own(created: gpu.BufferFactory.CreateDeviceLocal(
+            name: NameOf(part: "mesh-bake-samples"),
+            sizeBytes: MeshBakeSampleBytes,
+            usage: GpuBufferUsage.Storage
+        ));
 
         // The program region holds the live program, not the options' reserve: a probed worst case can run to hundreds
         // of megabytes, which a ring holds once per slot. A larger program grows the region by half again.
@@ -608,6 +613,7 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
         m_bindings.DestroyPool(poolHandle: m_pool);
 
         m_dummyBuffer.Dispose();
+        m_meshBakeSamples.Dispose();
         m_storageFiller.Dispose();
         m_sampledFiller.Dispose();
         m_glyphAtlasUpload?.Dispose();
