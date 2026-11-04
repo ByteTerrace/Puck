@@ -61,13 +61,12 @@ public static class PuckDiagnosticCodes {
     /// <summary>PUCK043: an index read that cannot be resolved at compile time — a non-array, a fractional or
     /// unknown ordinal, or one outside the array.</summary>
     public const string IndexRefused = "PUCK043";
-    /// <summary>A compile-time value is cyclic, invalid or outside its numeric representation.</summary>
+    /// <summary>A compile-time value is cyclic, invalid or outside its numeric representation. A name declared twice
+    /// in one scope is <see cref="DuplicateName"/>.</summary>
     public const string InvalidValue = "PUCK048";
     /// <summary>PUCK042: a lambda written where no builtin takes one. A lambda is an argument to an array builtin
     /// and nothing else.</summary>
     public const string LambdaOutsideBuiltin = "PUCK042";
-    /// <summary>A duplicate key in one block.</summary>
-    public const string LintDuplicateKey = "PUCK_LINT_002";
     /// <summary>A shadowed declaration.</summary>
     public const string LintShadowedDeclaration = "PUCK_LINT_003";
     /// <summary>A reserved-channel prefix matching no known channel.</summary>
@@ -317,6 +316,9 @@ public static class PuckDiagnosticCodes {
     /// <summary>PUCK124: an <c>allow</c> line that cannot acknowledge anything: it names a code no constant here
     /// declares, gives no reason, or stands where no statement follows it to cover.</summary>
     public const string AllowRefused = "PUCK124";
+    /// <summary>PUCK125: a constant, a template or a template parameter declared twice in one scope. The second
+    /// declaration is the one refused; the first stands.</summary>
+    public const string DuplicateName = "PUCK125";
 
     private static readonly FrozenSet<string> DeclaredCodes = typeof(PuckDiagnosticCodes)
         .GetFields(bindingAttr: (System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static))
