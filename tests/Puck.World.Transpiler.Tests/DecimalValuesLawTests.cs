@@ -178,6 +178,29 @@ public sealed class DecimalValuesLawTests {
             actual: sum,
             expected: 0.3m
         );
+        // A quotient stays decimal only when its exact value is a finite decimal a decimal holds every digit of.
+        Assert.True(condition: DocumentNumbers.TryExactArithmetic(
+            left: 1m,
+            operation: ExpressionOp.Divide,
+            result: out var quotient,
+            right: 65536m
+        ));
+        Assert.Equal(
+            actual: quotient,
+            expected: 0.0000152587890625m
+        );
+        Assert.False(condition: DocumentNumbers.TryExactArithmetic(
+            left: 1m,
+            operation: ExpressionOp.Divide,
+            result: out _,
+            right: 3m
+        ));
+        Assert.False(condition: DocumentNumbers.TryExactArithmetic(
+            left: 1m,
+            operation: ExpressionOp.Divide,
+            result: out _,
+            right: 0m
+        ));
         Assert.Equal(
             actual: LoweredOrigin(
                 x: "0.0000000000000000000000000001 * 0.1",

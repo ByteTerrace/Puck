@@ -967,11 +967,12 @@ public static partial class DocumentLowering {
             return JsonValue.Create(value: whole);
         }
 
-        // A sum, a difference and a product of exact operands stay decimal when a decimal holds the result exactly.
-        // One it would overflow on or round, a product too small for its scale included, is computed in double
-        // below, which keeps the magnitude a rounded decimal would lose.
+        // A sum, a difference, a product and a quotient of exact operands stay decimal when a decimal holds the result
+        // exactly, so `x * (1 / 65536)` folds as `x * 0.0000152587890625` does. One a decimal would overflow on or
+        // round (a product too small for its scale, a quotient with no finite decimal such as `pi / 12`) is computed
+        // in double below, which keeps the magnitude a rounded decimal would lose.
         if (
-            (row.Operation is ExpressionOp.Add or ExpressionOp.Subtract or ExpressionOp.Multiply) &&
+            (row.Operation is ExpressionOp.Add or ExpressionOp.Subtract or ExpressionOp.Multiply or ExpressionOp.Divide) &&
             DocumentNumbers.TryExact(
                 node: leftNode,
                 number: out var exactLeft

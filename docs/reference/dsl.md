@@ -343,14 +343,17 @@ The two evaluators fold a name differently, on purpose:
   for no gain: the folded number is document DATA, baked into JSON at compile time, and never simulation state. The
   double fold already agrees with the fixed-point one exactly on whole numbers.
 - A fractional literal lowers as the decimal its text spells, to the 28 significant digits a `decimal` holds, and
-  stays exact through arithmetic that is closed over finite decimals: a sign, `+`, `-`, `*`, and a unit whose scale
-  is a power of ten (`ms`, `cm`, `mm`, `%`) or a whole multiple (`min`, `h`). A result a `decimal` would overflow on or round, a product or a
-  conversion too small for its scale included, is computed in `double` instead, which keeps its magnitude. A
-  fractional quotient or remainder, a folded function and degrees into radians are always computed in `double`; a
+  stays exact through arithmetic that is closed over finite decimals: a sign, `+`, `-`, `*`, a `/` whose exact
+  quotient is a finite decimal (`1 / 4`, `1 / 65536`, `0.3 / 2`), and a unit whose scale is a power of ten (`ms`,
+  `cm`, `mm`, `%`) or a whole multiple (`min`, `h`). So `x * (1 / 65536)` and `x * 0.0000152587890625` fold to one
+  value, as `0.1 + 0.2` and `0.3` do. A result a `decimal` would overflow on or round, a product or a conversion too
+  small for its scale included, is computed in `double` instead, which keeps its magnitude. A quotient with no finite
+  decimal (`1 / 3`, `pi / 12`), a fractional remainder, a folded function and degrees into radians are always
+  computed in `double`, so a pasted literal of such a quotient's digits is a different number from the quotient; a
   decimal field reads such a result at its 15 significant digits, the same on every runtime. One value has one
   spelling: `1.50` lowers as `1.5`, `2.0` and `1.5e3` lower as the integers they are, and a computed double is
-  written as the plain decimal of its shortest round-trip digits, so `1 / 65536` writes `0.0000152587890625`, as
-  that literal does, in a document and in an interpolated string alike.
+  written as the plain decimal of its shortest round-trip digits, never with an exponent, so `1 / 3 / 100000` writes
+  the digits a literal of the same value writes, in a document and in an interpolated string alike.
 - A comparison, and the ordering and equality `sort` and `distinct` use, is decided on the
   exact value of each number, whether it is held as an integer, a decimal or a double. `1.0000000000000001 > 1`
   is true, and the double nearest `0.1` is not equal to the decimal `0.1`.
