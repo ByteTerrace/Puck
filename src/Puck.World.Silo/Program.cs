@@ -4,4 +4,7 @@ if (!Puck.Confinement.InstallRegistration.TryRegisterProcess(refusal: out var re
     Console.Error.WriteLine(value: refusal);
     return 2;
 }
+// The world document's serializer metadata configures beside the silo's composition rather than ahead of the first
+// activation's parse.
+_ = Puck.World.WorldJsonContext.StartPreparing();
 return await Puck.World.Silo.WorldSiloApplication.RunAsync(args);

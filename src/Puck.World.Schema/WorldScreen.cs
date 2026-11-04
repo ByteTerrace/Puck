@@ -136,9 +136,9 @@ public abstract record WorldScreenSource {
     /// <param name="Fallback">The colour the face shows, as <c>#RRGGBB</c>, when the screen is as many screens deep as
     /// the presentation nests (<c>views.nestingDepth</c>), so two portals facing each other end on it; or
     /// <see langword="null"/> for black. Omitted from the wire when null.</param>
-    /// <param name="Ripple">Whether the opening ripples like an event horizon: its image is refracted by slow
-    /// interfering waves all the time, with a faint highlight riding them, and a body that touches or passes through
-    /// sends rings across the whole glass that fade within about a second. Presentation only (the shading reads the
+    /// <param name="Ripple">Whether the opening ripples: its image is refracted by slow interfering waves all the
+    /// time, with a faint highlight riding them, and a body that touches or passes through sends rings across the
+    /// whole glass that fade within about a second. Presentation only (the shading reads the
     /// contact and the clock; nothing in the simulation depends on it). Requires <see cref="WorldScreenProjection.Window"/>.
     /// Omitted from the wire when false.</param>
     public sealed record Session(

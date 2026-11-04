@@ -14,7 +14,7 @@ public sealed partial class WorldInstanceHost {
             pending.Landed
         ),
         TargetDefinitionJson: (((pending.TargetAuthority?.Remote?.Definition ?? pending.RecoveryDefinition) is { } remoteDefinition)
-        ? WorldDefinitionSerialization.Serialize(definition: remoteDefinition)
+        ? WorldDefinitionSerialization.SerializeCompact(definition: remoteDefinition)
         : null),
         CommitMembers: [.. pending.CommitMembers],
         Landed: [.. pending.Landed.Select(selector: static member => new WorldLandedMemberCheckpoint(
@@ -56,7 +56,7 @@ public sealed partial class WorldInstanceHost {
             SourceAuthority: destination.SourceAuthority,
             DestinationEndpoint: destination.Endpoint,
             DestinationDefinitionJson: ((destination.Definition is { } definition)
-            ? WorldDefinitionSerialization.Serialize(definition: definition)
+            ? WorldDefinitionSerialization.SerializeCompact(definition: definition)
             : null)
         );
     }
