@@ -175,7 +175,7 @@ public sealed partial class SdfProgramBuilder {
         m_reservedPathWords = 0;
         m_materialRecolor = null;
         m_positionalFold = null;
-        m_openInstanceFirst = -1;
+        ResetOpenInstance();
         m_shapeCount = 0;
     }
 
