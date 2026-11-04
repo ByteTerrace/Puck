@@ -80,7 +80,7 @@ public class CartridgeRoundTripTests {
         );
 
         Assert.Contains(
-            "'tags: [' - a array is written without the ':': use 'tags ['",
+            "'tags: [' - an array is written without the ':': use 'tags ['",
             refusal.Message,
             StringComparison.Ordinal
         );
