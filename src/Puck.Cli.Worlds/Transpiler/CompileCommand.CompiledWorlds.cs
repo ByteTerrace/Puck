@@ -2,6 +2,9 @@ using Puck.Abstractions;
 using Puck.World;
 using Puck.World.Machines;
 using Puck.World.Transpiler.Composition;
+using Puck.World.Transpiler.Validation;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace Puck.Cli.Transpiler;
 
@@ -36,8 +39,8 @@ public static partial class CompileCommand {
         );
     }
     // Writes the compiled world of `document`, composed as the file `composeAt` (where its basis and imports resolve),
-    // beside `besidePath`. A document that does not draw as a world on its own, such as a module fragment, has no
-    // compiled world; that is reported and is not a failure.
+    // beside `besidePath`. A module fragment, which declares no world, has no compiled world; that is reported and is
+    // not a failure. A document that declares a world and does not draw is refused.
     /// <summary>The line a document with no compiled world is reported by. The refusal comes from the world loader and
     /// names the source it composed, which crosses the output boundary as its display path; a fragment's refusal can
     /// quote the whole payload it could not parse, so only its head is kept.</summary>
@@ -54,6 +57,16 @@ public static partial class CompileCommand {
         return $"No compiled world for '{CliPaths.ToDisplay(fullPath: besidePath)}': {((cause.Length > MaximumReasonLength) ? (cause[..MaximumReasonLength] + "...") : cause)}";
     }
 
+    // A document declares a world when it names its schema, a basis or its documentId: a module fragment declares none,
+    // so it alone is allowed to have no compiled world.
+    private static bool DeclaresWorld(byte[] document) {
+        try {
+            return (JsonNode.Parse(utf8Json: document) is JsonObject root) &&
+                (WorldSemanticValidator.IsRootDocument(loweredJson: root) || (root["documentId"] is not null));
+        } catch (JsonException) {
+            return false;
+        }
+    }
     private static int WriteCompiledWorld(string composeAt, byte[] document, string besidePath, IDictionary<string, string>? written, WorldCompiledSource? sourceCompilation = null) {
         var (catalog, fingerprint) = CompiledWorldMachines.Value;
         var destination = CompiledWorld.Beside(documentPath: besidePath);
@@ -67,7 +80,15 @@ public static partial class CompileCommand {
             path: composeAt,
             reason: out var reason
         )) {
-            Console.WriteLine(value: NoCompiledWorld(besidePath: besidePath, composeAt: composeAt, reason: reason));
+            var line = NoCompiledWorld(besidePath: besidePath, composeAt: composeAt, reason: reason);
+
+            // A document that declares a world is refused, as `puck world` would refuse to boot it. Only a fragment,
+            // which declares none, is allowed to have no compiled world.
+            if (DeclaresWorld(document: document)) {
+                Console.Error.WriteLine(value: $"error: {line}");
+                return 1;
+            }
+            Console.WriteLine(value: line);
             return 0;
         }
 

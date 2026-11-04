@@ -516,7 +516,7 @@ public sealed partial class DocumentScope {
                     value: let.Value
                 )) {
                     Diagnostics.ReportError(
-                        code: PuckDiagnosticCodes.InvalidValue,
+                        code: PuckDiagnosticCodes.DuplicateName,
                         message: $"Duplicate constant '{let.Name}'.",
                         span: let.Span
                     );
@@ -533,14 +533,14 @@ public sealed partial class DocumentScope {
                     value: template
                 )) {
                     Diagnostics.ReportError(
-                        code: PuckDiagnosticCodes.InvalidValue,
+                        code: PuckDiagnosticCodes.DuplicateName,
                         message: $"Duplicate template '{template.Name}'.",
                         span: template.Span
                     );
                 } else { m_templateScopes[template.Name] = ForConstant(); }
                 if (template.Parameters.Select(selector: parameter => parameter.Name).Distinct(comparer: StringComparer.Ordinal).Count() != template.Parameters.Count) {
                     Diagnostics.ReportError(
-                        code: PuckDiagnosticCodes.InvalidValue,
+                        code: PuckDiagnosticCodes.DuplicateName,
                         message: $"Template '{template.Name}' repeats a parameter name.",
                         span: template.Span
                     );
