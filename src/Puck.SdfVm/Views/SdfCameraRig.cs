@@ -39,9 +39,7 @@ public sealed class OrbitRig : ISdfCameraRig {
 
     /// <summary>When set, the resolved eye locks head-on (<c>+Z</c> at zero pitch, ignoring <see cref="Yaw"/>/
     /// <see cref="Pitch"/> for this resolve while leaving them stored for when this flips back off) — the "sprite
-    /// intent" framing <c>ScreenLayoutDirector</c>'s creator-workpiece/scenario-shot code locks to so the authored
-    /// silhouette is exactly what a bake rasterizes. Equivalent to (and replaces the need for) a separate boolean
-    /// parameter threaded through every orbit consumer.</summary>
+    /// intent" framing, so the authored silhouette is exactly what a bake rasterizes.</summary>
     public bool HeadOn { get; set; }
     /// <summary>The orbit tilt, radians (positive looks up). The caller owns any envelope clamp (this type applies
     /// none).</summary>

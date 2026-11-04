@@ -28,8 +28,8 @@ public sealed class WorldViewComposer {
 
     private const string BuiltinName = "builtin";
     private const float BuiltinTransitionRenderScale = 0.5f;
-    // The built-in ladder's own transition envelope (ScreenLayoutDirector's compiled 0.6 s / 0.5 scale), used only when
-    // easing into or out of the built-in composition — an authored layout brings its own.
+    // The built-in ladder's own transition envelope (with BuiltinTransitionRenderScale), used only when easing into or out
+    // of the built-in composition — an authored layout brings its own.
     private const float BuiltinTransitionSeconds = 0.6f;
 
     private ViewTransition? m_transition;

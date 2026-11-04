@@ -855,28 +855,24 @@ template pond() {
             ]
           }
         ]
-        effectors: reduce(
+        effectors: flatMap(
           spiderSides,
-          [],
-          (feet, side) => concat(
-            feet,
-            map(range(0, 4), i => {
-              chain [$"coxa{side.name}{i + 1}", $"femur{side.name}{i + 1}"]
-              name: $"foot{side.name}{i + 1}"
-              plant {
-                driver: "stride"
-                window: stridePhases[(i + side.shift) % 2]
-              }
-              target {
-                direction [0, -1, 0]
-                kind: "surface"
-                reach: 0.45
-                standoff: 0.02
-              }
-              tip: $"femur{side.name}{i + 1}"
-              when ["always"]
-            })
-          )
+          side => map(range(0, 4), i => {
+            chain [$"coxa{side.name}{i + 1}", $"femur{side.name}{i + 1}"]
+            name: $"foot{side.name}{i + 1}"
+            plant {
+              driver: "stride"
+              window: stridePhases[(i + side.shift) % 2]
+            }
+            target {
+              direction [0, -1, 0]
+              kind: "surface"
+              reach: 0.45
+              standoff: 0.02
+            }
+            tip: $"femur{side.name}{i + 1}"
+            when ["always"]
+          })
         )
         name: "spider"
         palette [
@@ -1065,28 +1061,24 @@ template pond() {
             ]
           }
         ]
-        effectors: reduce(
+        effectors: flatMap(
           spiderSides,
-          [],
-          (paws, side) => concat(
-            paws,
-            map(range(0, 2), end => {
-              chain [$"upper{houndEnds[end].name}{side.name}", $"lower{houndEnds[end].name}{side.name}"]
-              name: $"paw{houndEnds[end].name}{side.name}"
-              plant {
-                driver: "stride"
-                window: stridePhases[(end + side.shift) % 2]
-              }
-              target {
-                direction [0, -1, 0]
-                kind: "surface"
-                reach: 0.4
-                standoff: 0.03
-              }
-              tip: $"paw{houndEnds[end].name}{side.name}"
-              when ["Grounded"]
-            })
-          )
+          side => map(range(0, 2), end => {
+            chain [$"upper{houndEnds[end].name}{side.name}", $"lower{houndEnds[end].name}{side.name}"]
+            name: $"paw{houndEnds[end].name}{side.name}"
+            plant {
+              driver: "stride"
+              window: stridePhases[(end + side.shift) % 2]
+            }
+            target {
+              direction [0, -1, 0]
+              kind: "surface"
+              reach: 0.4
+              standoff: 0.03
+            }
+            tip: $"paw{houndEnds[end].name}{side.name}"
+            when ["Grounded"]
+          })
         )
         name: "hound"
         palette [
