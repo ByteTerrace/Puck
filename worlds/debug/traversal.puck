@@ -49,11 +49,11 @@ state {
     row {
       name: "traversalRoute"
       kind: "Fixed"
-      cells: reduce(range(0, length(traversalGoals)), [], (cells, i) => concat(cells, [
+      cells: flatMap(range(0, length(traversalGoals)), i => [
         { key: $"{i}x", value: $"{traversalGoals[i].x}" }
         { key: $"{i}y", value: $"{traversalGoals[i].y}" }
         { key: $"{i}z", value: $"{traversalGoals[i].z}" }
-      ]))
+      ])
     }
     table traversalFailures {
       "0" = 0

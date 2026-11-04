@@ -31,9 +31,18 @@ let denAt = [-21, 0, -27]
 // The spiders' and hounds' limbs mirror across x. A side is its name in the shape names, the sign its x takes and a shift
 // into the stride: its legs plant on the half of the stride that the opposite side's matching leg swings through.
 let spiderSides = [{ name: "Left", sign: 1, shift: 0 }, { name: "Right", sign: -1, shift: 1 }]
-let stridePhases = [[0, 3.141592653589793], [3.141592653589793, 6.28]]
+let strideHalf = 3.141592653589793
+let stridePhases = [[0, strideHalf], [strideHalf, 6.28]]
 let strideSway = [0, 3.14159]
 let strideLift = [1.5708, 4.71239]
+
+// A spider leg's lift axis (x and z): `degrees` from the x axis with z pointing back, and x negated when `sign` is -1
+// (the two legs behind the first pair's mirror).
+let legRadiansPerDegree = 3.141592653589793 / 180
+function legLiftAxis(degrees, sign) = [
+  sign * cosine(degrees * legRadiansPerDegree),
+  0 - sine(degrees * legRadiansPerDegree)
+]
 
 // The spider's four legs on the left, front to back: where the coxa roots on the thorax and how it turns (the x and z
 // of its rotation), the z of the pivot it swings about, the axis it lifts about (x and z), and the femur's tip and turn.
@@ -42,7 +51,7 @@ let spiderLegs = [
     root [0.2532, 0.2886]
     turn [-0.5594, 0.6666]
     pivotZ: 0.16
-    axis [0.6427876096865393, -0.766044443118978]
+    axis: legLiftAxis(50, 1)
     tip [0.3758, 0.3914]
     tipTurn [-0.1402, 0.1671]
   }
@@ -50,7 +59,7 @@ let spiderLegs = [
     root [0.2932, 0.1218]
     turn [-0.2252, 0.8405]
     pivotZ: 0.07
-    axis [0.25881904510252074, -0.9659258262890683]
+    axis: legLiftAxis(75, 1)
     tip [0.4477, 0.1632]
     tipTurn [-0.0565, 0.2107]
   }
@@ -58,7 +67,7 @@ let spiderLegs = [
     root [0.2932, -0.0718]
     turn [0.2252, 0.8405]
     pivotZ: -0.02
-    axis [-0.25881904510252074, -0.9659258262890683]
+    axis: legLiftAxis(75, -1)
     tip [0.4477, -0.1132]
     tipTurn [0.0565, 0.2107]
   }
@@ -66,7 +75,7 @@ let spiderLegs = [
     root [0.2532, -0.2386]
     turn [0.5594, 0.6666]
     pivotZ: -0.11
-    axis [-0.6427876096865393, -0.766044443118978]
+    axis: legLiftAxis(50, -1)
     tip [0.3758, -0.3414]
     tipTurn [0.1402, 0.1671]
   }

@@ -11,22 +11,15 @@ exports {
 
 // Every exhibit in walking order, with the centre of the region in front of it: 1.7 m out from the plinth on the
 // label's side, on the level's floor. Regions 2.6 m apart with a 1.29 m radius never overlap.
-let guideExhibits = reduce(
-  galleryRows,
-  [],
-  (all, row) => concat(
-    all,
-    map(
-      row.names,
-      (name, index) => {
-        name: name
-        x: (galleryX + (gallerySpacing * index))
-        y: galleryFloor[row.level]
-        z: (row.z - 1.7)
-      }
-    )
-  )
-)
+let guideExhibits = flatMap(galleryRows, row => map(
+  row.names,
+  (name, index) => {
+    name: name
+    x: (galleryX + (gallerySpacing * index))
+    y: galleryFloor[row.level]
+    z: (row.z - 1.7)
+  }
+))
 // Titles and notes are authored here by exhibit name; the guest contains no exhibit copy. A region reads the copy of
 // the exhibit it stands before, whatever place its row has in walking order.
 let guideCopy = {
@@ -206,10 +199,10 @@ state {
       name: "guideExhibits"
       kind: Text
       capacity: (length(guideExhibits) * 2)
-      cells: reduce(range(0, length(guideExhibits)), [], (cells, index) => concat(cells, [
+      cells: flatMap(range(0, length(guideExhibits)), index => [
         { key: $"{index}-title", value: guideCopy[guideExhibits[index].name].title }
         { key: $"{index}-note", value: guideCopy[guideExhibits[index].name].note }
-      ]))
+      ])
     }
     table guide {
       title = ""
