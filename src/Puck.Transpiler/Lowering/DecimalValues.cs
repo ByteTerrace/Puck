@@ -67,21 +67,25 @@ public static class DecimalValues {
     public static bool TryAuthored(LiteralExpressionNode literal, out decimal authored) {
         ArgumentNullException.ThrowIfNull(argument: literal);
 
-        return (
-            decimal.TryParse(
-                provider: CultureInfo.InvariantCulture,
-                result: out authored,
-                s: literal.RawText,
-                style: NumberStyles.Float
-            ) &&
-            (
-                (authored != 0m) ||
-                (literal.Value is not double real) ||
-                (real == 0.0)
-            ) &&
-            (SignificantDigits(text: literal.RawText) == SignificantDigits(text: authored.ToString(provider: CultureInfo.InvariantCulture)))
+        return TryParseEvery(
+            number: out authored,
+            text: literal.RawText
         );
     }
+    /// <summary>Reads the decimal a number's text spells, when a <see cref="decimal"/> holds every digit of it.</summary>
+    /// <param name="text">The number's text: a literal as written, or a double's or a float's round-trip spelling.</param>
+    /// <param name="number">The decimal, on success.</param>
+    /// <returns><see langword="false"/> for text that is no number, a magnitude above the type's range, and one whose
+    /// digits a <see cref="decimal"/> would round away, a magnitude so small it would read as zero included.</returns>
+    public static bool TryParseEvery(string? text, out decimal number) => (
+        decimal.TryParse(
+            provider: CultureInfo.InvariantCulture,
+            result: out number,
+            s: text,
+            style: NumberStyles.Float
+        ) &&
+        (SignificantDigits(text: text!) == SignificantDigits(text: number.ToString(provider: CultureInfo.InvariantCulture)))
+    );
     // The digits a number spells, without its sign, point, exponent, or the zeros that only place them.
     private static string SignificantDigits(string text) {
         var exponent = text.AsSpan().IndexOfAny(value0: 'e', value1: 'E');
