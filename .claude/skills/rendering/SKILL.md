@@ -525,7 +525,11 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   you edited). A host ABI, buffer-layout or C# ISA change needs a rebuild: the
   reload keeps the previous kernels when a tree's kernels do not match the
   host's interface, so a kernel reading a field the C# side just gained keeps
-  running its previous build. Change the C# layout and the HLSL layout together
+  running its previous build. The instruction-set stamp covers layout, so a value only
+  the shader reads is declared `Tuning` in `SdfIsaHlsl.DeclareRender` and changing it
+  reloads; a real the host packs, decodes or shares with the CPU evaluator stays an
+  ordinary `Real` ([classification](../../../docs/reference/shaders.md#pass-interfaces)).
+  Change the C# layout and the HLSL layout together
   ([sync pairs](references/sync-pairs.md)).
   Mesh raster and cascade vertex/fragment stages are composition-owned (`SdfMeshRasterPass`), so
   edits to them need a rebuilt boot too. A shared `frame/sdf-mesh.hlsli` edit can reload its compute

@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-mesh-bake' (sha256/e2e9dd5afb1a15697a03ddaa131a51ada5d2ff0321c7db06ae836e326b4fc94e). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-mesh-bake' (sha256/548cd4b4874a37bf9b0a98ecba7f1b2c1b06387573cbca692bf0eb2b2394a1f0). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_MESH_BAKE
 #define PUCK_SHADER_INTERFACE_SDF_MESH_BAKE
 
@@ -132,8 +132,8 @@ struct SdfMeshBakePass {
     [[vk::offset(15376)]] uint workCounterRow;
     [[vk::offset(15380)]] uint workCounterRowDetail;
 };
-[[vk::binding(0, 3)]] ConstantBuffer<SdfMeshBakePass> passGroupIsa7E9B2F49 : register(b0, space3);
-#define passGroup passGroupIsa7E9B2F49
+[[vk::binding(0, 3)]] ConstantBuffer<SdfMeshBakePass> passGroupIsaD600D248 : register(b0, space3);
+#define passGroup passGroupIsaD600D248
 [[vk::binding(1, 3)]] StructuredBuffer<uint> sdfInstanceMasks : register(t1, space3);
 [[vk::binding(2, 3)]] RWStructuredBuffer<uint> sdfInstanceMasksRW : register(u2, space3);
 [[vk::binding(3, 3)]] RWStructuredBuffer<uint> meshBakeSamplesRW : register(u3, space3);
