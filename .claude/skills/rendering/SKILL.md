@@ -797,8 +797,12 @@ pacer's lateness ([Puck.Launcher](../../../src/Puck.Launcher/README.md)).
 - **One decision schedules a session view.** `WorldViewGraphHost.PortalSightOf` decides every
   session footprint and every root a filming camera gives a session it films (`RootFilmedViews`):
   the frustum test (`WorldPortalVisibility.Sees`, no facing test, since a slab's back and sides
-  sample its image) against the consumer's previous camera, then the views lever's hold of a glass
-  at or below `SdfUpdateRateTiers.ViewHeldPixels` of the consumer's image. A session rendering
+  sample its image) against the consumer's current composed camera, then the views lever's hold of a glass
+  whose width and height are both at or below `SdfUpdateRateTiers.ViewHeldPixels` of the consumer's image.
+  `PublishPanes` finishes demand after camera placement; display shares are measured before small-glass pruning.
+  A reappearing view releases its rate floor immediately. Visibility reads `IWorldViewScenes.TryVisibilityCamera`,
+  never the last-rendered camera retained for picking; an unknown current camera keeps demand conservatively.
+  A session rendering
   where nothing shows it is a demand that bypasses this decision: `world.budget`'s live frame line
   names each instance's demand (`root` for a filmed root), and `world.rates` lists held views as
   `@held`. A settled capture (`IRenderGraphInstances.SettledCapturePath`) turns the graph host's

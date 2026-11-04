@@ -370,7 +370,9 @@ public static class SdfIsaHlsl {
         declarations.Tuning(name: "SDF_HISTORY_FEATURE_WEIGHT_CAP", value: (SdfWorldPackage.TemporalPeriod * SdfTemporalSamples.FeaturePeriods));
         declarations.Section(title: "The glass sums the glass raster pass accumulates and the glass shading pass reads.");
         declarations.Count(name: "SDF_GLASS_SUM_WORDS", value: SdfWorldPackage.GlassSumWords);
-        declarations.Tuning(name: "SDF_GLASS_SUM_SCALE", value: SdfWorldPackage.GlassSumScale);
+        // Raster encodes these integers and compute decodes them. Raster pipelines are composition-owned and do not
+        // hot reload with the compute kernels, so their shared encoding scale must remain in the interface stamp.
+        declarations.Real(name: "SDF_GLASS_SUM_SCALE", value: SdfWorldPackage.GlassSumScale);
         declarations.Section(title: "The sky's environment map (SdfSkyEnvironment) and the volume table's capacity (SdfProgramBuilder.MaxVolumes).");
         declarations.Signed(name: "SDF_SKY_ENVIRONMENT_SIZE", value: SdfSkyEnvironment.Size);
         declarations.Count(name: "SDF_SKY_ENVIRONMENT_COEFFICIENTS", value: SdfSkyEnvironment.CoefficientCount);

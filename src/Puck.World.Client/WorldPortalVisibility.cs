@@ -24,15 +24,7 @@ public static class WorldPortalVisibility {
     public static bool Sees(in CameraSnapshot camera, WorldScreen glass) {
         ArgumentNullException.ThrowIfNull(argument: glass);
 
-        var right = (Vector3.Normalize(value: glass.Right) * glass.HalfWidth);
-        var up = (Vector3.Normalize(value: glass.Up) * glass.HalfHeight);
-        var normal = Vector3.Normalize(value: Vector3.Cross(
-            vector1: right,
-            vector2: up
-        ));
-        var thickness = (normal * glass.HalfDepth);
-        // WorldScreenStamper seats the slab behind Origin. Its back and sides sample the image too.
-        var origin = (((Vector3)glass.Origin) - thickness);
+        var (origin, right, up, thickness) = Slab(glass);
 
         return camera.MaySee(
             center: origin,
@@ -47,7 +39,7 @@ public static class WorldPortalVisibility {
     /// views.</summary>
     public const double BakingShare = 0.0625;
     /// <summary>Returns the fraction of a camera's image a screen's glass spans on each axis: the extent of its face's
-    /// projected bounds, unclipped by the image's edges, so a session rendered at that fraction of the camera's extent
+    /// projected slab bounds, unclipped by the image's edges, so a session rendered at that fraction of the camera's extent
     /// draws one texel for each pixel the glass covers wherever it lies. A face reaching to or behind the camera's near
     /// plane spans the whole image.</summary>
     /// <param name="camera">The camera, in the screen's world.</param>
@@ -57,18 +49,16 @@ public static class WorldPortalVisibility {
     public static (double Width, double Height) Coverage(in CameraSnapshot camera, WorldScreen glass) {
         ArgumentNullException.ThrowIfNull(argument: glass);
 
-        var right = (Vector3.Normalize(value: glass.Right) * glass.HalfWidth);
-        var up = (Vector3.Normalize(value: glass.Up) * glass.HalfHeight);
-        var origin = ((Vector3)glass.Origin);
+        var (origin, right, up, thickness) = Slab(glass);
         var low = new Vector2(value: float.PositiveInfinity);
         var high = new Vector2(value: float.NegativeInfinity);
 
-        for (var corner = 0; (corner < 4); corner++) {
+        for (var corner = 0; (corner < 8); corner++) {
             if (
                 !camera.TryProject(
                     depth: out var depth,
                     ndc: out var projected,
-                    world: ((origin + (((corner & 1) == 0) ? -right : right)) + (((corner & 2) == 0) ? -up : up))
+                    world: (origin + (((corner & 1) == 0) ? -right : right) + (((corner & 2) == 0) ? -up : up) + (((corner & 4) == 0) ? -thickness : thickness))
                 ) ||
                 (depth <= camera.Near)
             ) {
@@ -84,5 +74,15 @@ public static class WorldPortalVisibility {
             Width: Math.Clamp(value: (0.5 * (high.X - low.X)), min: 0.0, max: 1.0),
             Height: Math.Clamp(value: (0.5 * (high.Y - low.Y)), min: 0.0, max: 1.0)
         );
+    }
+
+    // Visibility and coverage bound the same sampled solid. WorldScreenStamper seats its front at Origin and its
+    // back one full depth behind; the back and sides sample the image as well as the front.
+    private static (Vector3 Origin, Vector3 Right, Vector3 Up, Vector3 Thickness) Slab(WorldScreen glass) {
+        var right = (Vector3.Normalize(value: glass.Right) * glass.HalfWidth);
+        var up = (Vector3.Normalize(value: glass.Up) * glass.HalfHeight);
+        var thickness = (Vector3.Normalize(value: Vector3.Cross(vector1: right, vector2: up)) * glass.HalfDepth);
+
+        return (((Vector3)glass.Origin) - thickness, right, up, thickness);
     }
 }

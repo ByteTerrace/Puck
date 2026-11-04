@@ -266,20 +266,21 @@ another world as a view instance (`WorldViewInstances`).
 **The scheduler decides what renders.** A view renders only while something
 shows it: a screen, through the footprint of its declared extent inside the
 world's view, or a HUD frame or a probe export, which the display shows
-directly. A session's footprint holds only while its consumer's last camera
+directly. A session's footprint holds only while its consumer's current camera
 sees the slab it shows on (`WorldPortalVisibility`). The test covers the slab's
 front, back and sides, which all sample the screen image, so it has no facing
 test; a slab wholly outside the frustum renders nothing beneath it. A root
 camera that films the world (a probe's camera, a HUD frame's) roots each session
 it films by the same decision against its own camera and image, so a probe
 camera facing away from a portal keeps nothing beneath it rendering. While the
-views lever is on (`world.rates views`), a glass seen at no more than
+views lever is on (`world.rates views`), a glass whose width and height are both no more than
 `SdfUpdateRateTiers.ViewHeldPixels` of the image that shows it renders nothing
 and holds its latest image, once it has rendered at all
 (`WorldViewGraphHost.PortalSightOf` makes the one decision for every footprint
-and filmed root). Both use the camera of the frame before, so the frustum's
-margin and the small glass's threshold are what keep a glass coming into view
-rendered on the frame it shows; a settled capture rates nothing and renders
+and filmed root). Demand is completed after this frame's camera composition and placement;
+unknown current cameras retain demand conservatively. A reappearing view releases its
+rate floor on that frame, including after a short hold. Picking still uses the camera of the
+image last rendered. A settled capture rates nothing and renders
 every view it reaches. A view renders at most once a frame however many screens show it, at the
 extent its footprint asks, and at the refresh `world.view-refresh` sets (a
 window session on every frame). A window's footprint is the share of its

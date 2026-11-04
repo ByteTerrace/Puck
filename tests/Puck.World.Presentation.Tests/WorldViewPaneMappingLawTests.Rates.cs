@@ -1,5 +1,6 @@
 using System.Numerics;
 using Puck.Abstractions.Cameras;
+using Puck.Abstractions.Presentation;
 using Puck.Commands;
 using Puck.Assets.Documents;
 using Puck.Hosting;
@@ -13,6 +14,61 @@ namespace Puck.World.Presentation.Tests;
 // The world.rates views lever (SdfUpdateRates.Views): a session whose glass covers few pixels of the display renders at a
 // reduced rate through its footprint's refresh, and every frame its consumer renders while the lever is off.
 public sealed partial class WorldViewPaneMappingLawTests {
+    [Fact]
+    public void APortalResumesOnTheFrameTheCameraTurnsBackEvenBeforeItsRatePeriod() {
+        _ = ShowTwoWorlds();
+        m_host.ViewScenes = new GlassScenes(Bakes: false, Glass: FacingScreen(index: 0, source: new WorldScreenSource.Session(Destination: "beyond")));
+        m_host.RenderSettings = new WorldRenderSettings(defaults: new WorldRenderDefaults()) { UpdateRates = SdfUpdateRates.Views };
+        m_rate = Paced60;
+        Frame(pane: null);
+        Assert.Equal(expected: 1, actual: RendersOf(instance: BootSession));
+
+        for (var index = 0; index < m_views.Count; index++) {
+            m_views[index] = m_views[index] with { Camera = Camera(x: 100f) };
+        }
+        Frame(pane: null);
+        Assert.Equal(expected: 0, actual: RendersOf(instance: BootSession));
+
+        for (var index = 0; index < m_views.Count; index++) {
+            m_views[index] = m_views[index] with { Camera = Camera(x: 0f) };
+        }
+        Frame(pane: null);
+        Assert.Equal(expected: 1, actual: RendersOf(instance: BootSession));
+    }
+
+    [Fact]
+    public void AShortButWideGlassIsNotHeldAsAFourPixelPatch() {
+        _ = ShowTwoWorlds();
+        m_host.ViewScenes = new GlassScenes(Bakes: false, Glass: FacingScreen(index: 0, source: new WorldScreenSource.Session(Destination: "beyond")) with { HalfHeight = 0.01f });
+        m_host.RenderSettings = new WorldRenderSettings(defaults: new WorldRenderDefaults()) { UpdateRates = SdfUpdateRates.Views };
+        m_rate = Paced60;
+        var renders = 0;
+        for (var frame = 0; frame < 12; frame++) {
+            Frame(pane: null);
+            renders += RendersOf(instance: BootSession);
+        }
+        Assert.True(renders > 1);
+        Assert.DoesNotContain(m_host.RenderSettings.RateReadings.Latest(SdfUpdateRates.Views), reading => reading.Hertz == SdfUpdateRateTiers.HeldHertz);
+    }
+
+    [Fact]
+    public void AHeldPortalResumesWhenItsConsumerGrowsInTheSameFrame() {
+        _ = ShowTwoWorlds();
+        m_host.ViewScenes = new GlassScenes(Bakes: false, Glass: FacingScreen(index: 0, source: new WorldScreenSource.Session(Destination: "beyond")));
+        m_host.RenderSettings = new WorldRenderSettings(defaults: new WorldRenderDefaults()) { UpdateRates = SdfUpdateRates.Views };
+        m_rate = Paced60;
+        for (var index = 0; index < m_views.Count; index++) {
+            m_views[index] = m_views[index] with { Region = new NormalizedRect(X: 0f, Y: 0f, Width: 0.01f, Height: 0.01f) };
+        }
+        Frame(pane: null);
+        Frame(pane: null);
+        Assert.Equal(expected: 0, actual: RendersOf(instance: BootSession));
+        m_views[0] = m_views[0] with { Region = Left };
+        m_views[1] = m_views[1] with { Region = Right };
+        Frame(pane: null);
+        Assert.Equal(expected: 1, actual: RendersOf(instance: BootSession));
+    }
+
     [InlineData(true)]
     [InlineData(false)]
     [Theory]
@@ -158,6 +214,7 @@ public sealed partial class WorldViewPaneMappingLawTests {
     // boot world.
     private sealed record FilmedGlassScenes(CameraSnapshot Camera, WorldScreen Glass) : IWorldViewScenes {
         public bool Bakes(string view) => false;
+        public bool TryVisibilityCamera(string view, out CameraSnapshot camera) => TryCamera(view, out camera);
         public bool TryCamera(string view, out CameraSnapshot camera) {
             camera = Camera;
 

@@ -42,11 +42,12 @@ and each lease retires exactly once.
 `ShaderPipelineRenderNodeLawTests` (retirement and disposal counts),
 `RenderGraphRuntimeLawTests.Reconfigure`.
 
-**Where the code is weaker.** A node's own image is protected by a count of its
-producer's submissions, not by a lease per reader: another instance that reads
-it holds no lease of its own, so correctness rests on the lag outliving every
-reader's submission. `GpuImageLease.Retire` invokes its callback with no guard
-against a second call; only the list's discipline makes it once.
+**Where the code is weaker.** The runtime wraps owned images in `GpuImageLeases` and
+leases each consumer, capture and display read (`RenderGraphRuntime.Leases.cs`). An
+owner's retirement lag therefore does not replace reader lifetime protection. A node
+used outside that runtime still needs its host to supply equivalent reader ownership.
+`GpuImageLease.Retire` invokes its callback directly; table-issued leases use a generation
+to reject repeated retirement, while other callbacks still depend on their holder's discipline.
 
 **Violations to hunt.** An image disposed or overwritten while a submission
 that reads it is pending: a paused or slow reader, a capture, the display after

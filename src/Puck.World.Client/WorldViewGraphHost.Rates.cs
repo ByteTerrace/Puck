@@ -9,11 +9,12 @@ namespace Puck.World.Client;
 // view or a screen's source asks for it less often as the pixels it covers on the display shrink, so the scheduler
 // renders the view or uploads the source at least 30 or 15 times a second of presentation time
 // (RenderGraphRefresh.AtLeast on RenderGraphFootprint.Refresh). The pixels are the footprint's share of its consumer
-// times the consumer's share of the display, which the previous frame's footprints measure. Each rated producer's
+// times the consumer's share of the display, measured before this frame prunes small glass. Each rated producer's
 // achieved intervals are read back from the schedule its footprints were scheduled in (MeasureRatedRenders).
 public sealed partial class WorldViewGraphHost {
-    // Each instance's height as a share of the display's, measured from the previous frame's footprints.
-    private readonly Dictionary<string, double> m_displayShares = new(comparer: StringComparer.Ordinal);
+    // Each instance's extent as a share of the display's. BeginFrame measures the previous frame for pose rates;
+    // CompleteFootprints measures current placements for view and screen demand.
+    private readonly Dictionary<string, (double Width, double Height)> m_displayShares = new(comparer: StringComparer.Ordinal);
     // The frame's presentation rate; an unpaced rate rates nothing.
     private PresentationRate m_presentationRate;
     // The most frequent refresh this frame's views asked for each source they show on screens.
@@ -34,6 +35,9 @@ public sealed partial class WorldViewGraphHost {
     // The session views this frame held as too small to render (HoldsGlass), each at the largest pixels its glass was
     // shown at.
     private readonly Dictionary<string, double> m_heldViews = new(comparer: StringComparer.Ordinal);
+    // Visible demand from the preceding frame. Reappearance releases a rate floor immediately, even after a hold
+    // shorter than that floor's period.
+    private readonly HashSet<string> m_visiblePortals = new(comparer: StringComparer.Ordinal);
 
     private sealed class RatedProducer {
         // The lever its footprints rate it under.
@@ -66,7 +70,7 @@ public sealed partial class WorldViewGraphHost {
         ? settings.UpdateRates
         : SdfUpdateRates.None);
 
-    // Measures each instance's share of the display's height from the footprints the previous frame demanded: a root's
+    // Measures each instance's shares of the display's extent from the current footprint list: a root's
     // share is its own, and a producer's is the largest over its consumers of the consumer's share times the footprint's.
     private void MeasureDisplayShares() {
         m_displayShares.Clear();
@@ -76,9 +80,10 @@ public sealed partial class WorldViewGraphHost {
             return;
         }
 
-        m_displayShares[WorldViewGraphs.MainInstance] = 1d;
+        m_displayShares[WorldViewGraphs.MainInstance] = (1d, 1d);
         foreach (var root in m_roots) {
-            m_displayShares[root.Instance] = Math.Max(val1: root.Height, val2: m_displayShares.GetValueOrDefault(key: root.Instance));
+            var previous = m_displayShares.GetValueOrDefault(key: root.Instance);
+            m_displayShares[root.Instance] = (Math.Max(root.Width, previous.Width), Math.Max(root.Height, previous.Height));
         }
 
         // The footprints form a graph without cycles, so each pass settles at least one more level of nesting.
@@ -90,10 +95,11 @@ public sealed partial class WorldViewGraphHost {
                     continue;
                 }
 
-                var share = (consumer * footprint.Height);
+                var share = (Width: consumer.Width * footprint.Width, Height: consumer.Height * footprint.Height);
+                var previous = m_displayShares.GetValueOrDefault(key: footprint.Producer);
 
-                if (share > m_displayShares.GetValueOrDefault(key: footprint.Producer)) {
-                    m_displayShares[footprint.Producer] = share;
+                if ((share.Width > previous.Width) || (share.Height > previous.Height)) {
+                    m_displayShares[footprint.Producer] = (Math.Max(share.Width, previous.Width), Math.Max(share.Height, previous.Height));
                     changed = true;
                 }
             }
@@ -103,14 +109,14 @@ public sealed partial class WorldViewGraphHost {
             }
         }
     }
-    /// <summary>Returns the share of the display's height an instance reached through the previous frame's footprints: a
+    /// <summary>Returns the latest measured share of the display's height an instance reaches through footprints: a
     /// root's its own, and a producer's its largest consumer's share times the footprint's.</summary>
     /// <param name="instance">The instance's name.</param>
     /// <returns>The share, zero for an instance no footprint showed, or <see langword="null"/> while no lever measures
     /// the shares.</returns>
     public double? DisplayShareOf(string instance) => ((m_displayShares.Count == 0)
         ? null
-        : m_displayShares.GetValueOrDefault(key: instance));
+        : m_displayShares.GetValueOrDefault(key: instance).Height);
     // The refresh a footprint showing a nested view asks for: every frame unless the views lever is on and the view covers
     // few enough pixels of the display (SdfUpdateRateTiers.ViewHertz).
     private RenderGraphRefresh ViewRefresh(string consumer, string producer, double coverage, int glass) {
@@ -122,14 +128,14 @@ public sealed partial class WorldViewGraphHost {
             return RenderGraphRefresh.EveryFrame;
         }
 
-        var pixels = ((share * coverage) * m_displayHeight);
+        var pixels = ((share.Height * coverage) * m_displayHeight);
         var refresh = Rated(counts: settings.RateCounts, hertz: SdfUpdateRateTiers.ViewHertz(pixels: pixels), kind: SdfUpdateRateCounts.ViewsRated, lever: SdfUpdateRates.Views, producer: producer, size: pixels);
 
         if ((glass >= 0) && m_ratedProducers.TryGetValue(key: producer, value: out var rated)) {
             rated.Glass = glass;
         }
 
-        return refresh;
+        return (m_visiblePortals.Contains(item: producer) ? refresh : RenderGraphRefresh.EveryFrame);
     }
     // Whether a session's glass, seen at the given pixels of the image that shows it, is too small to render this frame
     // and holds its latest image: the views lever is on for the frame (FrameRates), the host is paced to a display, the
@@ -283,7 +289,7 @@ public sealed partial class WorldViewGraphHost {
 
         // A consumer rendering another world, a session through a window, shows the source no larger than its own image.
         var elsewhere = scenes.TryPlacements(placements: out _, view: footprint.Consumer);
-        var known = (m_cameras.TryGetValue(key: footprint.Consumer, value: out var camera) || scenes.TryCamera(camera: out camera, view: footprint.Consumer));
+        var known = (m_cameras.TryGetValue(key: footprint.Consumer, value: out var camera) || scenes.TryVisibilityCamera(camera: out camera, view: footprint.Consumer));
 
         if (!elsewhere && !known) {
             return RenderGraphRefresh.EveryFrame;
@@ -312,7 +318,7 @@ public sealed partial class WorldViewGraphHost {
 
             var coverage = (elsewhere ? 1d : WorldPortalVisibility.Coverage(camera: in camera, glass: screen).Height);
 
-            largest = Math.Max(val1: largest, val2: (((coverage * consumerShare) * m_displayHeight) / Math.Max(val1: 1, val2: mapping.Crop.Height)));
+            largest = Math.Max(val1: largest, val2: (((coverage * consumerShare.Height) * m_displayHeight) / Math.Max(val1: 1, val2: mapping.Crop.Height)));
         }
 
         return Rated(counts: settings.RateCounts, hertz: (shown ? SdfUpdateRateTiers.ScreenHertz(share: largest) : SdfUpdateRateTiers.EveryFrameHertz), kind: SdfUpdateRateCounts.ScreensRated, lever: SdfUpdateRates.Screens, producer: footprint.Producer, size: largest);

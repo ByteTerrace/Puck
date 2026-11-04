@@ -457,10 +457,19 @@ public sealed partial class WorldScreenBinder : IWorldViewScenes {
         return (Ok: true, Message: $"screen {index} showing camera '{camera.Name}'");
     }
     /// <inheritdoc/>
-    /// <remarks>A camera view's camera is the one it last filmed from, a camera of another world's in that world's space;
-    /// a session's, the one its last frame rendered from
-    /// in the destination's space (<see cref="WorldSessionSceneEmitter.TryCamera"/>), so a hit on a portal's window
-    /// continues into the destination along the ray the window rendered.</remarks>
+    /// <remarks>Session cameras resolve through the same current fit used by nested windows, even while their image
+    /// is held. Picking uses <see cref="TryCamera(string, out CameraSnapshot)"/> instead, which retains the displayed image's camera.</remarks>
+    public bool TryVisibilityCamera(string view, out CameraSnapshot camera) {
+        if (SessionFeedOf(name: view) is { } feed) {
+            camera = CameraOf(feed: feed);
+            return true;
+        }
+        // Boot-world cameras are filmed during the host's current dress. Other worlds' filmed cameras may still
+        // describe a held frame; until their current pose is known, retain their reads conservatively.
+        return m_viewCameras.TryGetValue(key: view, value: out camera);
+    }
+
+    /// <inheritdoc/>
     public bool TryCamera(string view, out CameraSnapshot camera) => (
         m_viewCameras.TryGetValue(
             key: view,

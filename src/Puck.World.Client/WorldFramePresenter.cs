@@ -1554,6 +1554,9 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             displayHeight: height,
             displayWidth: width
         );
+        if (m_frameScreenRateCodes is { } codes) {
+            graphs.WriteScreenRateCodes(codes: codes);
+        }
         FrameComposed?.Invoke();
     }
     // The frame values every graph instance presents this frame, at the frame's interpolation fraction, or one for an
@@ -1674,11 +1677,12 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
 
         return m_rateShadows;
     }
-    // Each screen's tier code as the graph host's footprints asked for it this frame, or none without a host.
+    // The dressed frame owns this array. Placement fills it after the current cameras have decided screen demand,
+    // before the runtime schedules or uploads the frame.
+    private byte[]? m_frameScreenRateCodes;
     private byte[] ScreenRateCodes() {
         var codes = new byte[SdfProgramBuilder.MaxScreenSurfaces];
-
-        m_graphs?.WriteScreenRateCodes(codes: codes);
+        m_frameScreenRateCodes = codes;
 
         return codes;
     }
@@ -2194,6 +2198,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             m_diagnosticSource = m_diagnosticVersion;
         }
 
+        m_frameScreenRateCodes = null;
         m_dressedFrame = new SdfFrame(
             Program: program,
             ProgramChanged: programChanged,

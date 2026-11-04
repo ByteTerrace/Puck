@@ -46,6 +46,9 @@ stale generated file. The instruction set's fingerprint
 but not a `Tuning` real, a value no host packing or decoding reads, so retuning
 one keeps the stamp and a reload accepts the kernels;
 [classification](../../../../docs/reference/shaders.md#pass-interfaces)). The
+glass sum scale is stamped too: the composition-owned raster pipeline encodes it and the
+reloadable compute kernel decodes it, so a compute-only reload cannot change that encoding.
+The
 irradiance tuning reals (`BehindShare`, `NormalBias`, the depth coverage pair) are
 also read by `SdfMeshIrradiance`'s CPU gather, which feeds the bounce trace as
 well as `world.probe`: a shader-only retune of one lights pixels and bounces by
