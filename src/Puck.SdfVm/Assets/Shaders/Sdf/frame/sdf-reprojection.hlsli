@@ -27,10 +27,10 @@ bool sdfHistoryReceiverMatches(uint identity, uint previousIdentity, float previ
         (abs(historyT - previousT) <= (SdfHistoryDepthTolerance * previousT)));
 }
 
-// One row of a draw's matrix in the preceding consumed frame: the previous table holds whole draw records, at the mesh
-// region's stride, so a record's word reads there as in the region (sdfMeshRow).
+// One row of a draw's matrix in the preceding consumed frame. The previous table holds compact matrices rather than
+// geometry/selection records; callers still pass the current mesh record's address.
 float3 sdfMeshPreviousRow(uint record, uint row) {
-    uint word = (record + (4u * row));
+    uint word = (((record / SDF_MESH_DRAW_WORDS) * SDF_MESH_MATRIX_WORDS) + (4u * row));
 
     return asfloat(uint3(sdfPreviousMeshTransforms[word], sdfPreviousMeshTransforms[(word + 1u)], sdfPreviousMeshTransforms[(word + 2u)]));
 }

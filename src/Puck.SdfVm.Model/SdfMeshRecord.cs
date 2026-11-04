@@ -12,6 +12,8 @@ namespace Puck.SdfVm;
 /// draws everything), the shared level table's address and count, and the draw's bounds and selection metadata.
 /// </summary>
 public static class SdfMeshRecord {
+    /// <summary>The leading object-to-world matrix words, also the compact previous-pose stride.</summary>
+    public const int MatrixWords = 16;
     /// <summary>The words of one draw's record.</summary>
     public const int DrawWords = 63;
     /// <summary>The first of four four-word rows used by GPU draw selection: center and flags; half X and stretch;

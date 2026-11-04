@@ -40,10 +40,10 @@ namespace Puck.Abstractions.Gpu;
 /// region of baked meshes holds no second copy of them on the host.
 /// </para>
 /// <para>
-/// The copy kernel reads the staging buffer as uints at <see cref="CopySourceBinding"/> and writes the destination at
+/// The copy kernel reads requests at <see cref="CopyRequestBinding"/>, data at <see cref="CopySourceBinding"/>, and writes the destination at
 /// <see cref="CopyDestinationBinding"/>, <see cref="CopyWorkgroupSize"/> threads per group, and takes no push constants:
 /// the staging buffer states its copy. Its first <see cref="CopyHeaderWords"/> uints are <c>(count, runCount,
-/// blockBase, destinationBase)</c>, then come <c>runCount</c> <c>(region word, first thread)</c> pairs, and the block
+/// blockBase, destinationBase, rowWords, sourceStride, destinationStride)</c>, then come <c>runCount</c> <c>(region word, first thread)</c> pairs, and the block
 /// starts at <c>blockBase</c>, holding the owed runs packed one after another. Thread <c>t</c> (its dispatch row times
 /// <see cref="CopyRowThreads"/> plus its column, <see cref="CopyGroups"/> sizing the dispatch) copies every block word
 /// <c>i</c> below <c>count</c> from <c>t</c> in steps of the dispatch's threads (<see cref="CopyThreads"/>): it finds the
@@ -68,11 +68,12 @@ public sealed unsafe class GpuRegion : IDisposable {
 
     /// <summary>The copy kernel's binding for the destination buffer it writes.</summary>
     public const uint CopyDestinationBinding = 1U;
-    /// <summary>The uints of the header a staging buffer leads with: the copy's thread count, its run count, where the
-    /// block starts and the destination word the block's word 0 lands at.</summary>
-    public const int CopyHeaderWords = 4;
-    /// <summary>The copy kernel's binding for the staging buffer it reads.</summary>
-    public const uint CopySourceBinding = 0U;
+    /// <summary>The uints of the shared packed/strided copy request header.</summary>
+    public const int CopyHeaderWords = 7;
+    /// <summary>The copy kernel's binding for the request header and run table.</summary>
+    public const uint CopyRequestBinding = 0U;
+    /// <summary>The copy kernel's binding for source data, which packed regions bind to their request buffer too.</summary>
+    public const uint CopySourceBinding = 2U;
     /// <summary>The copy kernel's threads per group.</summary>
     public const uint CopyWorkgroupSize = 64U;
     /// <summary>The most groups one dispatch dimension carries on both backends (Vulkan's guaranteed
@@ -427,16 +428,19 @@ public sealed unsafe class GpuRegion : IDisposable {
         }
     }
 
-    /// <summary>Gets the copy kernel's descriptor set: the staging buffer it reads at <see cref="CopySourceBinding"/> and
-    /// the destination it writes at <see cref="CopyDestinationBinding"/>.</summary>
+    /// <summary>Gets the copy kernel's request, destination and source-data descriptor bindings.</summary>
     public static IReadOnlyList<GpuComputeBinding> CopyBindings { get; } = [
         new GpuComputeBinding(
-            Binding: CopySourceBinding,
+            Binding: CopyRequestBinding,
             Kind: GpuBindingKind.ReadOnlyBuffer
         ),
         new GpuComputeBinding(
             Binding: CopyDestinationBinding,
             Kind: GpuBindingKind.ReadWriteBuffer
+        ),
+        new GpuComputeBinding(
+            Binding: CopySourceBinding,
+            Kind: GpuBindingKind.ReadOnlyBuffer
         ),
     ];
     /// <summary>Gets the copy kernel's pipeline description: <see cref="CopyBindings"/>, no push constants, and each
@@ -1126,30 +1130,35 @@ public sealed unsafe class GpuRegion : IDisposable {
             WriteCopySet(slot: slot);
         }
 
+        RecordCopyDispatch(recorder: m_recorder, commandBuffer: commandBuffer, pipeline: m_copyPipeline!,
+            set: m_copySets.SetOf(slot: slot), words: m_header[0], pipelineBound: pipelineBound);
+        owed.Clear();
+        m_stagedSlot = -1;
+    }
+    // The one dispatch door for packed-region uploads and generic strided buffer copies.
+    internal static void RecordCopyDispatch(IGpuRecorder recorder, nint commandBuffer, IGpuComputePipeline pipeline, nint set, uint words, bool pipelineBound = false) {
         if (!pipelineBound) {
-            m_recorder.BindPipeline(
+            recorder.BindPipeline(
                 bindPoint: GpuBindPoint.Compute,
                 commandBufferHandle: commandBuffer,
-                pipelineHandle: m_copyPipeline!.Handle
+                pipelineHandle: pipeline.Handle
             );
         }
-        m_recorder.BindDescriptorSet(
+        recorder.BindDescriptorSet(
             bindPoint: GpuBindPoint.Compute,
             commandBufferHandle: commandBuffer,
-            descriptorSetHandle: m_copySets.SetOf(slot: slot),
+            descriptorSetHandle: set,
             group: 0,
-            pipelineLayoutHandle: m_copyPipeline!.LayoutHandle
+            pipelineLayoutHandle: pipeline.LayoutHandle
         );
-        var (groupsX, groupsY) = CopyGroups(count: m_header[0]);
+        var (groupsX, groupsY) = CopyGroups(count: words);
 
-        m_recorder.Dispatch(
+        recorder.Dispatch(
             commandBufferHandle: commandBuffer,
             groupCountX: groupsX,
             groupCountY: groupsY,
             groupCountZ: 1
         );
-        owed.Clear();
-        m_stagedSlot = -1;
     }
     /// <summary>Moves a staged region whose owner reserved its copy sets to another share, one the owner reserved since,
     /// such as the pool of a graph that replaced the one the region was created with. The region writes a slot's set of
@@ -1359,6 +1368,14 @@ public sealed unsafe class GpuRegion : IDisposable {
         var set = m_copySets!.SetOf(slot: slot);
 
         m_bindings.WriteBuffer(
+            binding: CopyRequestBinding,
+            bufferHandle: m_hostBuffers[slot].BufferHandle,
+            bufferSize: m_hostBuffers[slot].SizeBytes,
+            descriptorSetHandle: set,
+            elementStride: sizeof(uint),
+            kind: GpuBindingKind.ReadOnlyBuffer
+        );
+        m_bindings.WriteBuffer(
             binding: CopySourceBinding,
             bufferHandle: m_hostBuffers[slot].BufferHandle,
             bufferSize: m_hostBuffers[slot].SizeBytes,
@@ -1549,6 +1566,9 @@ public sealed unsafe class GpuRegion : IDisposable {
         m_header[1] = ((uint)owed.Count);
         m_header[2] = CopyBlockBase;
         m_header[3] = ((uint)m_destinationWord);
+        m_header[4] = 0;
+        m_header[5] = 0;
+        m_header[6] = 0;
         buffer.Write<uint>(data: m_header.AsSpan(
             length: (CopyHeaderWords + (owed.Count * 2)),
             start: 0

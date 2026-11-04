@@ -9,10 +9,11 @@ namespace Puck.Testing;
 /// <c>region-copy.comp</c>, which every staged <see cref="GpuRegion"/> records. Every buffer is backed by bytes and
 /// carries its own handle; host writes land in those bytes and are tallied per buffer; descriptor sets remember which
 /// buffer each binding names; and a dispatch recorded while the pipeline built from <see cref="RegionCopyBytecode"/> is
-/// bound runs that kernel's copy at record time, from the set's binding 0 into its binding 1: the source leads with
-/// <c>(count, runCount, blockBase, destinationBase)</c> and <c>(region word, first thread)</c> per run, and thread
-/// <c>i</c> below the count copies <c>destination[destinationBase + word] = source[blockBase + i]</c>, where
-/// <c>word</c> is found in that run table (a linear search here; the kernel's binary search finds the same run). The
+/// bound runs that kernel's copy at record time: binding 0 holds requests, binding 2 source data, and binding 1 the
+/// destination. The seven-word header states count, runs, source/destination bases, row width and source/destination
+/// strides. The run table maps thread ordinal to logical word (a linear search here; the kernel uses binary search).
+/// A zero row width reads packed source data by ordinal; a nonzero width maps the logical row and column through each
+/// buffer's stride. Both modes copy uints bit-exactly; packed regions alias their request and source-data bindings. The
 /// dispatch must carry exactly the groups the count needs, and nothing pushes constants to the copy. The copy runs when it
 /// is recorded, which is its execution order only when the command buffers are submitted in the order they were recorded,
 /// so the model also replays each submission's buffer transitions in submission order as Direct3D 12 tracks them
@@ -352,10 +353,11 @@ internal sealed class UploadModelGpu :
             throw new InvalidOperationException(message: "A region copy was recorded with no barrier ordering the earlier compute reads of its destination before it.");
         }
 
-        var source = MemoryMarshal.Cast<byte, uint>(span: m_buffers[m_bindings[(m_boundSet, 0u)]].Memory.AsSpan());
+        var request = MemoryMarshal.Cast<byte, uint>(span: m_buffers[m_bindings[(m_boundSet, GpuRegion.CopyRequestBinding)]].Memory.AsSpan());
+        var source = MemoryMarshal.Cast<byte, uint>(span: m_buffers[m_bindings[(m_boundSet, GpuRegion.CopySourceBinding)]].Memory.AsSpan());
         var destination = MemoryMarshal.Cast<byte, uint>(span: m_buffers[m_bindings[(m_boundSet, 1u)]].Memory.AsSpan());
 
-        var (count, runCount, blockBase, destinationBase) = (source[0], source[1], source[2], source[3]);
+        var (count, runCount, blockBase, destinationBase) = (request[0], request[1], request[2], request[3]);
         const uint Header = GpuRegion.CopyHeaderWords;
 
         if ((groupCountX, groupCountY) != GpuRegion.CopyGroups(count: count)) {
@@ -367,13 +369,21 @@ internal sealed class UploadModelGpu :
         for (var thread = 0u; (thread < count); thread++) {
             var run = (runCount - 1u);
 
-            while (source[((int)((Header + (run * 2u)) + 1u))] > thread) {
+            while (request[((int)((Header + (run * 2u)) + 1u))] > thread) {
                 run--;
             }
 
-            var word = (source[((int)(Header + (run * 2u)))] + (thread - source[((int)((Header + (run * 2u)) + 1u))]));
+            var word = (request[((int)(Header + (run * 2u)))] + (thread - request[((int)((Header + (run * 2u)) + 1u))]));
+            var sourceWord = (blockBase + thread);
+            var destinationWord = (destinationBase + word);
+            if (request[4] != 0) {
+                var row = (word / request[4]);
+                var column = (word % request[4]);
+                sourceWord = (blockBase + (row * request[5]) + column);
+                destinationWord = (destinationBase + (row * request[6]) + column);
+            }
 
-            destination[((int)(destinationBase + word))] = source[((int)(blockBase + thread))];
+            destination[((int)destinationWord)] = source[((int)sourceWord)];
         }
 
         UploadCopies++;

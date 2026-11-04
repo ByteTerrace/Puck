@@ -613,13 +613,9 @@ not GPU transfers: two root residency-upload snapshots wrote 1,969,728 and
 3,309,844 host-visible bytes, including staging headers. The mesh region used
 1,647,960,456 bytes; this slice establishes no mesh-storage reduction.
 
-The next data-layout investigation follows an existing deliberate tradeoff:
-`SdfWorldTables.RecordPreviousTables` spans the first through last changed draw,
-and `CopyMeshHistory` copies whole draw records at `SdfMeshRegion.DrawBytes`
-although reprojection reads only their matrices. Compare compact/shared pose
-history with that range-copy policy using actual bytes, command count and CPU/GPU
-time, preserving generations, portal carries and the final settle copy. Do not
-exchange a lower byte count for thousands of unmeasured driver calls.
+The subsequent history change replaces that first-to-last whole-record copy with
+compact matrix history through the existing shared copy pipeline; its evidence
+and remaining work follow below.
 
 The candidate Vulkan boot rendered the same forest at the recorded quality
 settings. Its 180-iteration standing window averaged 22.23 ms; the pinned moving
@@ -642,3 +638,104 @@ There is no whole-frame speedup claim or target qualification: movement, remaini
 pose/record preparation, GPU shading, cold bake, physical-memory attribution and
 the wider forest/target-device work remain open. Required cross-family review
 remains outstanding under the recorded session-launch restriction.
+
+### Compact history and dependency-aware packing
+
+`SdfMeshRecord.MatrixWords` now owns the previous mesh-pose stride. The shared
+region-copy kernel accepts a request separate from its source data and supports
+both existing packed uploads and strided row copies. `GpuBufferStridedCopy`
+reserves independent requests and sets for each upload slot's advance and seed;
+`CopyMeshHistory` gathers bounded changed runs in one dispatch per phase. No
+second matrix payload crosses the host bus. Generation reseeds, portal carries,
+held motion, unread routed uploads and the final settle copy retain their existing
+meaning. PIX groups name the advance and seed separately. The helper's requests
+and descriptor pool enter the existing memory and admission accounting.
+
+This stores and copies 64 rather than 252 bytes per history draw (74.60% less
+payload for the same rows), plus request metadata. Each tables owner reserves four
+sets with twelve storage descriptors and 8,304 host-visible request-buffer bytes;
+it also retains 2,076 bytes of managed request-word payload, excluding object and
+array headers. This overhead matters for small routed worlds. These are logical buffer bytes,
+not allocator granularity or a unified physical-memory saving. Native copy-byte
+counters alone no longer describe mesh history: its compute payload, rows,
+requests and dispatches have separate `sdf.instances.history` counters.
+
+Full and incremental `SdfMeshRegion` writers share their field implementation.
+Exact dependencies retain the normal matrix across translation and selection
+bounds across metadata-only changes. A focused actual-DLL witness matched every
+word against the preceding full writer and across 1,800 incremental transitions,
+including signed zero, NaN payloads, singular/nonuniform/projective matrices,
+skinning, carries and changed placements. The actual-table model passed 18,652
+assertions covering seed, advance, settle, motion holds, replacement, growth,
+shrink/reuse, unread uploads and multiple packs before submission, without a
+modeled state conflict. The existing packed-upload witness also matches exact
+device contents and staging bytes; its header now costs twelve additional bytes
+per nonempty copy.
+
+Six interleaved full-versus-incremental kernel rounds of 4,194,304 records allocated
+zero warmed bytes. Median translation packing fell 456.929 to 402.050 ms, stable
+picking-only packing 456.526 to 226.967 ms, material changes 458.134 to 227.562 ms,
+and an equal mixture 455.721 to 333.231 ms. Rotation rose 461.358 to 470.593 ms
+(2.00%): when both expensive derived fields change, dependency comparisons cost
+more than the avoided stores save. These are kernel comparisons, not whole-frame
+speedups or old/new executable comparisons.
+
+The D3D12 forest's pinned moving window packed 461,387 records and assigned
+68,203,536 bytes of fields, versus 116,269,524 bytes for full packing of those same
+records (41.34% fewer assignments). It derived 408,831 normal matrices and 461,072
+selection boxes, with zero topology rebuilds. History copied 445,559 matrix rows
+(28,515,776 payload bytes) through 144 dispatches and 13,496 host-request bytes.
+The field-assignment counts and logical GPU payload are distinct from transfers
+and actual cache/memory transactions. One root upload sample counted 278,736 native
+copy bytes, four compute dispatches and 3,372,904 host-visible bytes including all
+region staging and requests. Host traffic has no demonstrated reduction.
+
+At the previously recorded native 1280×900 quality settings, D3D12 standing,
+moving and recovered frame windows averaged 23.47, 51.00 and 23.36 ms. The baseline
+standing sample was 21.99 ms (another window was 23.98 ms), and moving 49.41 ms.
+Camera-framed stick commands again ended at different poses, so these are
+operational readings, not a controlled whole-frame A/B result. The RTX 4070 was
+observed at P0/2925 MHz. Body and forest-tree picking resolved; a presented image
+at the inside spawn shows the connected canopy, shrubs, tufts and path. The route
+finishes at the patch's edge, so an after-walk image alone does not prove canopy
+density. The latest sampled host trace still spends 1.69 of 12.02 seconds inside
+draw staging and 1.33 seconds inside creation-transform packing (inclusive,
+overlapping samples), leaving shared-pose/dirty-range work and GPU instance
+buckets ahead.
+
+The candidate cold-baked the root forest with zero store loads in about 114 seconds,
+still beyond the one-minute target. An identity audit found a cause of avoidable
+rebakes: the field fingerprint, mask/bake bytecode and entry format stood unchanged,
+but nine CPU closure members changed solely through presentation counters reached
+from the all-method `SdfMeshPathBake` root's `Dress`. The open packet now calls for
+a semantic bake/dressing boundary, with real identity-preservation and invalidation
+witnesses, rather than a frozen key or exceptions for particular counter names.
+
+The final by-reference draw-staging build also ran the windowed D3D12 forest:
+22.22 ms standing and 47.19 ms over 67 moving host iterations, with body/tree picks
+resolved. It loaded cached meshes and reached full residency in 22.79 seconds;
+that is a warm-store read/landing observation, not cold-bake qualification. The
+windowed Vulkan leg measured 22.55 ms standing, 53.22 ms over 60 moving iterations
+and 23.51 ms after movement. Its pinned interval assigned 63,811,524 field bytes
+for 433,103 processed records, copied 26,787,840 mesh-history payload bytes with
+12,632 request bytes and 138 dispatches, and rebuilt no draw topology. Its
+zero-load root bake/landing took 190.94 seconds. Both backend images at the inside
+spawn show the authored forest and both resolve body/tree picks. All four owned
+Worlds exited zero and their GPU leases were released. Builds and focused
+witnesses passed; these measurements establish neither the frame target nor a
+controlled whole-frame speedup. Cross-family review remains owed under the
+recorded launch restriction.
+
+The implementation follows independently checked guidance, not a vendor-only
+path. [AMD's performance guide](https://gpuopen.com/learn/rdna-performance-guide/)
+emphasizes memory chosen for use and avoiding redundant synchronization;
+[NVIDIA's Vulkan guide, updated January 2025](https://developer.nvidia.com/blog/vulkan-dos-donts/)
+emphasizes batching, suballocation and monitoring memory budgets. Their advice
+does not make every upload device-local: AMD's
+[SAM discussion](https://gpuopen.com/learn/get-the-most-out-of-smart-access-memory/)
+also identifies cases where immediately consumed data can remain in upload memory.
+Here the retained, repeatedly read history remains on-device and only small copy
+requests are host-visible. [NVIDIA's barrier guidance](https://developer.nvidia.com/blog/advanced-api-performance-barriers/)
+and [Microsoft's D3D12 resource-state documentation](https://learn.microsoft.com/en-us/windows/win32/direct3d12/using-resource-barriers-to-synchronize-resource-states-in-direct3d-12)
+support keeping ordering in the existing recorder and accounting for real readers
+and writers. Lower payload alone is not evidence of a faster frame.

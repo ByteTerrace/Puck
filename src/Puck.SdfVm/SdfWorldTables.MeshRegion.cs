@@ -281,7 +281,7 @@ public sealed partial class SdfWorldTables {
             if (!SameDraw(left: in draw, right: in m_stagedDraws[index])) {
                 var record = records.Slice(length: SdfMeshRecord.DrawWords, start: (index * SdfMeshRecord.DrawWords));
 
-                StageMeshDraw(draw: in draw, index: index, old: old, record: record);
+                StageMeshDraw(draw: in draw, index: index, old: old, record: record, incremental: true);
                 changedWords += m_meshDrawDifferences.AddDifferences(
                     previous: MemoryMarshal.Cast<byte, uint>(span: old.Slice(start: (index * SdfMeshRegion.DrawBytes), length: SdfMeshRegion.DrawBytes)),
                     current: record,

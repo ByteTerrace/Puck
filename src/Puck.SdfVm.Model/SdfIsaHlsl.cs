@@ -303,6 +303,7 @@ public static class SdfIsaHlsl {
         declarations.Bits(name: "SDF_VISIBILITY_ZERO_NORMAL", value: SdfVisibility.ZeroNormal);
         declarations.Section(title: "The mesh region's draw record (SdfMeshRecord) and the level shift a mesh draw's pushed index carries (SdfKernelInterfaces.MeshLevelShift).");
         declarations.Count(name: "SDF_MESH_DRAW_WORDS", value: SdfMeshRecord.DrawWords);
+        declarations.Count(name: "SDF_MESH_MATRIX_WORDS", value: SdfMeshRecord.MatrixWords);
         declarations.Count(name: "SDF_MESH_MATERIAL_WORD", value: SdfMeshRecord.MaterialWord);
         declarations.Count(name: "SDF_MESH_INDEX_WORD", value: SdfMeshRecord.IndexWord);
         declarations.Count(name: "SDF_MESH_INDEX_COUNT_WORD", value: SdfMeshRecord.IndexCountWord);

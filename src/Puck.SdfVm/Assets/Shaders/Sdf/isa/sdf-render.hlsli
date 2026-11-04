@@ -67,6 +67,7 @@
 
 // The mesh region's draw record (SdfMeshRecord) and the level shift a mesh draw's pushed index carries (SdfKernelInterfaces.MeshLevelShift).
 #define SDF_MESH_DRAW_WORDS               63u
+#define SDF_MESH_MATRIX_WORDS             16u
 #define SDF_MESH_MATERIAL_WORD            16u
 #define SDF_MESH_INDEX_WORD               17u
 #define SDF_MESH_INDEX_COUNT_WORD         18u

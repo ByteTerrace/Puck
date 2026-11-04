@@ -388,7 +388,10 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
         m_previousDynamicTransforms = scope.Own(created: gpu.BufferFactory.CreateDeviceLocal(
             name: NameOf(part: "previous-dynamic-transforms"), sizeBytes: ((ulong)m_dynamicTransformRegion.ByteCount), usage: GpuBufferUsage.Storage));
         m_previousMeshTransforms = scope.Own(created: gpu.BufferFactory.CreateDeviceLocal(
-            name: NameOf(part: "previous-mesh-transforms"), sizeBytes: SdfMeshRegion.DrawBytes, usage: GpuBufferUsage.Storage));
+            name: NameOf(part: "previous-mesh-transforms"), sizeBytes: MeshMatrixBytes, usage: GpuBufferUsage.Storage));
+        m_meshHistoryCopies = scope.Own(created: new GpuBufferStridedCopy(buffers: gpu.BufferFactory, bindings: gpu.Bindings,
+            recorder: gpu.Recorder, pipeline: m_regionCopyPipeline, frameSlotCount: FrameRingSize, recordingCount: 2,
+            name: NameOf(part: "mesh-history-copy")));
 
         // The carve-bake brick pool: one persistent DEVICE-LOCAL f32 buffer — device-local so the bake kernel can write it
         // as a UAV (an upload heap forbids UAVs on Direct3D 12) and the mesh bake samples it as an SRV. Frozen at the
@@ -586,6 +589,7 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
         DisposeRegions();
         m_previousDynamicTransforms.Dispose();
         m_previousMeshTransforms.Dispose();
+        m_meshHistoryCopies.Dispose();
         m_brickBakeFrameBlock?.Dispose();
         m_brickBakeBlock?.Dispose();
 

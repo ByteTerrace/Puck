@@ -37,19 +37,19 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         Assert.Equal(first.MotionIdentity, moved.MotionIdentity);
         Assert.NotEqual(first.Identity, moved.Identity);
         rig.Render(time: 0, meshDraws: [moved]);
-        Assert.Equal(first.ObjectToWorld, System.Runtime.InteropServices.MemoryMarshal.Read<Matrix4x4>(rig.Gpu.DeviceLocal(part: "previous-mesh-transforms", sizeBytes: ((ulong)SdfMeshRegion.DrawBytes))));
+        Assert.Equal(first.ObjectToWorld, System.Runtime.InteropServices.MemoryMarshal.Read<Matrix4x4>(rig.Gpu.DeviceLocal(part: "previous-mesh-transforms", sizeBytes: ((ulong)(SdfMeshRecord.MatrixWords * sizeof(uint))))));
         rig.Render(time: 0, meshDraws: [moved]);
-        Assert.Equal(moved.ObjectToWorld, System.Runtime.InteropServices.MemoryMarshal.Read<Matrix4x4>(rig.Gpu.DeviceLocal(part: "previous-mesh-transforms", sizeBytes: ((ulong)SdfMeshRegion.DrawBytes))));
+        Assert.Equal(moved.ObjectToWorld, System.Runtime.InteropServices.MemoryMarshal.Read<Matrix4x4>(rig.Gpu.DeviceLocal(part: "previous-mesh-transforms", sizeBytes: ((ulong)(SdfMeshRecord.MatrixWords * sizeof(uint))))));
 
         var teleported = Draw(50, epoch: 1);
 
         Assert.NotEqual(moved.MotionIdentity, teleported.MotionIdentity);
         rig.Render(time: 0, meshDraws: [teleported]);
-        Assert.Equal(teleported.ObjectToWorld, System.Runtime.InteropServices.MemoryMarshal.Read<Matrix4x4>(rig.Gpu.DeviceLocal(part: "previous-mesh-transforms", sizeBytes: ((ulong)SdfMeshRegion.DrawBytes))));
+        Assert.Equal(teleported.ObjectToWorld, System.Runtime.InteropServices.MemoryMarshal.Read<Matrix4x4>(rig.Gpu.DeviceLocal(part: "previous-mesh-transforms", sizeBytes: ((ulong)(SdfMeshRecord.MatrixWords * sizeof(uint))))));
         var continued = Draw(51, epoch: 1);
 
         rig.Render(time: 0, meshDraws: [continued]);
-        Assert.Equal(teleported.ObjectToWorld, System.Runtime.InteropServices.MemoryMarshal.Read<Matrix4x4>(rig.Gpu.DeviceLocal(part: "previous-mesh-transforms", sizeBytes: ((ulong)SdfMeshRegion.DrawBytes))));
+        Assert.Equal(teleported.ObjectToWorld, System.Runtime.InteropServices.MemoryMarshal.Read<Matrix4x4>(rig.Gpu.DeviceLocal(part: "previous-mesh-transforms", sizeBytes: ((ulong)(SdfMeshRecord.MatrixWords * sizeof(uint))))));
 
         // Growing the list takes the whole-list staging path rather than changed-record staging.
         var reseated = Draw(100, epoch: 2);

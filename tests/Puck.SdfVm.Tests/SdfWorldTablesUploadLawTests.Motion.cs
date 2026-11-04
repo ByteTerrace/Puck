@@ -1,5 +1,6 @@
 using System.Numerics;
 using System.Runtime.InteropServices;
+using Puck.Abstractions.Gpu;
 using Xunit;
 
 namespace Puck.SdfVm.Tests;
@@ -106,14 +107,15 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         Assert.Equal(expected: new[] { first, second }, actual: PreviousMatrices(rig: rig, draws: 2));
         var movedSecond = (second * Matrix4x4.CreateTranslation(xPosition: 4f, yPosition: 5f, zPosition: 6f));
 
-        // The previous table holds whole draw records, so a moved draw copies its record.
+        // The shared copy kernel gathers only the moved matrix into compact history, without a buffer-copy command.
         rig.Render(time: 0f, meshDraws: Draws(a: movedFirst, b: movedSecond));
         Assert.Equal(expected: new[] { movedFirst, second }, actual: PreviousMatrices(rig: rig, draws: 2));
-        Assert.Equal(expected: ((ulong)SdfMeshRegion.DrawBytes), actual: rig.Gpu.BufferCopyBytes);
+        Assert.Equal(expected: 0UL, actual: rig.Gpu.BufferCopyBytes);
         rig.Render(time: 0f, meshDraws: Draws(a: movedFirst, b: movedSecond));
         Assert.Equal(expected: new[] { movedFirst, movedSecond }, actual: PreviousMatrices(rig: rig, draws: 2));
-        Assert.Equal(expected: ((ulong)SdfMeshRegion.DrawBytes), actual: rig.Gpu.BufferCopyBytes);
-        Assert.Equal(expected: 0L, actual: rig.Gpu.HostBytes());
+        Assert.Equal(expected: 0UL, actual: rig.Gpu.BufferCopyBytes);
+        // A matrix gather uploads its fixed header and one run entry, never a second matrix.
+        Assert.Equal(expected: ((long)((GpuRegion.CopyHeaderWords + 2) * sizeof(uint))), actual: rig.Gpu.HostBytes());
         rig.Render(time: 0f, meshDraws: Draws(a: movedFirst, b: movedSecond));
         Assert.Equal(expected: 0UL, actual: rig.Gpu.BufferCopyBytes);
         Assert.Empty(collection: rig.Gpu.StateConflicts);
@@ -184,12 +186,11 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         Assert.Equal(expected: new[] { second, third }, actual: PreviousMatrices(rig: rig, draws: 2));
         Assert.Empty(collection: rig.Gpu.StateConflicts);
     }
-    // The matrices of the first draws the previous mesh table holds: whole draw records at the mesh region's stride, each
-    // opening with its matrix. The table is twice the draws' records, as the tables size it.
+    // The previous mesh table holds matrices at a compact 16-word stride. Growth reserves twice the needed matrices.
     private static Matrix4x4[] PreviousMatrices(Rig rig, int draws) {
-        var records = rig.Gpu.DeviceLocal(part: "previous-mesh-transforms", sizeBytes: ((ulong)(2 * draws * SdfMeshRegion.DrawBytes)));
+        var records = rig.Gpu.DeviceLocal(part: "previous-mesh-transforms", sizeBytes: ((ulong)(2 * draws * SdfMeshRecord.MatrixWords * sizeof(uint))));
 
         return [.. Enumerable.Range(count: draws, start: 0).Select(selector: draw =>
-            MemoryMarshal.Read<Matrix4x4>(source: records.AsSpan(length: 64, start: (draw * SdfMeshRegion.DrawBytes))))];
+            MemoryMarshal.Read<Matrix4x4>(source: records.AsSpan(length: 64, start: (draw * SdfMeshRecord.MatrixWords * sizeof(uint)))))];
     }
 }

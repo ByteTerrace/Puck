@@ -227,12 +227,14 @@ from this Codex lead session; the supplemental review finding was fixed.
   then retain against the exact emitted inputs. Preserve the root/routed scopes'
   different placement, screen and adjacency policies. Their frequency in the
   forest workload remains unmeasured.
-  P2 · Owner: graphics/history owner · `SdfWorldTables.Motion.cs:71` coalesces
-  previous mesh updates across the first-to-last changed draw; `CopyMeshHistory`
-  copies whole draw records although reprojection reads only the matrix. Measure
-  compact/shared pose history and command count against the current range-copy
-  policy. Preserve previous presented poses, generation reseeds, portal carry and
-  the one settle copy after motion stops.
+  P2 · Owner: graphics/bake owner · `SdfMeshBakeClosure.BakeRoots`
+  (`src/Puck.SdfVm/SdfMeshBakeClosure.cs:40`) includes every method of
+  `SdfMeshPathBake`, including presentation dressing. Adding presentation counters
+  changed nine CPU closure members and forced a zero-load forest rebake while
+  entry format, mask and bake kernels stayed identical. Separate the bake's
+  semantic execution roots from dressing and observational accounting; prove
+  renderer-only edits preserve identity and real bake changes invalidate it.
+  Do not freeze a key or add a counter-name exception list.
 
 ### Engine job system
 

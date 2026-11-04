@@ -22,10 +22,22 @@ public sealed class SdfMeshHistory {
     public static WorkKind MatricesChanged { get; } = new(name: "sdf.instances.matrices.changed", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Counts matrix bytes changed by continuous motion, excluding newly seeded history.</summary>
     public static WorkKind MatrixBytesChanged { get; } = new(name: "sdf.instances.matrix-bytes.changed", unit: "bytes", workClass: WorkClass.Pacing);
+    /// <summary>Counts mesh matrix rows copied on the GPU, including bounded run coarsening and seeds.</summary>
+    public static WorkKind HistoryRowsCopied { get; } = new(name: "sdf.instances.history.rows-copied", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Counts mesh-history payload bytes read and written on the GPU, once per copied byte, excluding requests.</summary>
+    public static WorkKind HistoryBytesCopied { get; } = new(name: "sdf.instances.history.bytes-copied", unit: "bytes", workClass: WorkClass.Pacing);
+    /// <summary>Counts copy-request bytes written by the host; no matrix payload is uploaded for history.</summary>
+    public static WorkKind HistoryRequestBytes { get; } = new(name: "sdf.instances.history.request-bytes", unit: "bytes", workClass: WorkClass.Pacing);
+    /// <summary>Counts batched mesh-history copy dispatches.</summary>
+    public static WorkKind HistoryDispatches { get; } = new(name: "sdf.instances.history.dispatches", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Counts records packed by full or incremental staging, independently of GPU transfer coalescing.</summary>
     public static WorkKind RecordsPacked { get; } = new(name: "sdf.instances.records.packed", unit: "count", workClass: WorkClass.Pacing);
-    /// <summary>Counts packed record bytes, not device transfer bytes.</summary>
+    /// <summary>Counts bytes assigned by full or dependency-aware record packing, not device transfer bytes.</summary>
     public static WorkKind RecordBytesPacked { get; } = new(name: "sdf.instances.record-bytes.packed", unit: "bytes", workClass: WorkClass.Pacing);
+    /// <summary>Counts normal-matrix derivations, skipped when the exact upper 3 by 3 matrix stands unchanged.</summary>
+    public static WorkKind NormalMatricesComputed { get; } = new(name: "sdf.instances.normal-matrices.computed", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Counts mesh selection-box derivations, skipped when their geometry, matrix and carry stand unchanged.</summary>
+    public static WorkKind SelectionBoxesComputed { get; } = new(name: "sdf.instances.selection-boxes.computed", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Counts incremental draw comparisons, including records whose packed bytes stand unchanged.</summary>
     public static WorkKind RecordsCompared { get; } = new(name: "sdf.instances.records.compared", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Counts incremental draws whose pose or host metadata changed and required packing.</summary>
@@ -37,7 +49,7 @@ public sealed class SdfMeshHistory {
     /// <summary>Counts retained dressed records rewritten by pose or metadata changes.</summary>
     public static WorkKind DressedRecordsUpdated { get; } = new(name: "sdf.instances.dress.records-updated", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Gets process-lifetime observations from every staged table. These counts never enter simulation state.</summary>
-    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.instances", kinds: [Observed, Seeded, Retired, MatricesChanged, MatrixBytesChanged, RecordsPacked, RecordBytesPacked, RecordsCompared, RecordsChanged, PackedWordsChanged, DressTopologyBuilds, DressedRecordsUpdated]);
+    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.instances", kinds: [Observed, Seeded, Retired, MatricesChanged, MatrixBytesChanged, HistoryRowsCopied, HistoryBytesCopied, HistoryRequestBytes, HistoryDispatches, RecordsPacked, RecordBytesPacked, NormalMatricesComputed, SelectionBoxesComputed, RecordsCompared, RecordsChanged, PackedWordsChanged, DressTopologyBuilds, DressedRecordsUpdated]);
 
     private struct Cell {
         public object? Key;

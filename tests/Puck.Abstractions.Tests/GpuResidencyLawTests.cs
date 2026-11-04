@@ -569,15 +569,15 @@ public sealed class GpuResidencyLawTests {
 
         _ = region.Write(bytes: [1, 2, 3, 4], offset: 8);
         Copy(gpu: gpu, region: region, slot: 0);
-        Assert.Equal(expected: 2, actual: gpu.BufferDescriptorWrites);
+        Assert.Equal(expected: 3, actual: gpu.BufferDescriptorWrites);
 
         _ = region.Write(bytes: [5, 6, 7, 8], offset: 12);
         Copy(gpu: gpu, region: region, slot: 0);
-        Assert.Equal(expected: 2, actual: gpu.BufferDescriptorWrites);
+        Assert.Equal(expected: 3, actual: gpu.BufferDescriptorWrites);
 
         _ = region.Write(bytes: [9, 10, 11, 12], offset: 16);
         Copy(gpu: gpu, region: region, slot: 1);
-        Assert.Equal(expected: 4, actual: gpu.BufferDescriptorWrites);
+        Assert.Equal(expected: 6, actual: gpu.BufferDescriptorWrites);
         Assert.Equal(expected: region.Contents.ToArray(), actual: gpu.Memory(bufferHandle: region.Buffer(slot: 1).BufferHandle));
     }
     /// <summary>A region under the ring or in-place policy writes no copy set at all, though it is handed the copy
@@ -665,9 +665,9 @@ public sealed class GpuResidencyLawTests {
             _ = kept.Write(bytes: [((byte)(1 + slot)), 2, 3, 4, 5, 6, 7, 8], offset: 12);
             _ = beside.Write(bytes: [((byte)(9 + slot)), 10, 11, 12], offset: 4);
             Copy(gpu: gpu, region: kept, slot: slot);
-            Assert.Equal(expected: 2, actual: gpu.BufferDescriptorWrites);
+            Assert.Equal(expected: 3, actual: gpu.BufferDescriptorWrites);
             Copy(gpu: gpu, region: beside, slot: slot);
-            Assert.Equal(expected: 2, actual: gpu.BufferDescriptorWrites);
+            Assert.Equal(expected: 3, actual: gpu.BufferDescriptorWrites);
             Assert.Equal(expected: kept.Contents.ToArray(), actual: gpu.Memory(bufferHandle: kept.Buffer(slot: slot).BufferHandle));
             Assert.Equal(expected: beside.Contents.ToArray(), actual: gpu.Memory(bufferHandle: beside.Buffer(slot: slot).BufferHandle));
             Assert.Equal(expected: abandonedContents, actual: gpu.Memory(bufferHandle: abandoned.Buffer(slot: slot).BufferHandle));
