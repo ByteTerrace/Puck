@@ -7,8 +7,8 @@ ownership; and background work proportional to change. The build table tracks
 the remaining work. Every decision names the code it rests on, so a reviewer can
 check it against the source before anything is built; a builder re-reads each
 citation first. The [memory page](memory-pooling.md) is an input, and the last
-sections say what the job system leaves to ordinary work and how the one
-adversarial review changed the design ([dispositions](#review-dispositions)).
+sections say what the job system leaves to ordinary work and what the code
+could not settle.
 
 The owner's direction frames every choice: performance with quality, so no
 latency is added and no lighting or contact quality is traded; determinism as a
@@ -22,9 +22,6 @@ so and keeps it serial: a smaller correct parallel tick beats a larger unsound
 one.
 
 ## What the measurements say
-
-The readings behind these conclusions were taken on the lead machine (RTX 4070)
-and are in the commits that landed them; a settle window re-reads them.
 
 - A slow frame was a 30 Hz tick meeting the 15 Hz rated presentation burst on
   one frame. Scheduling removes that before any parallelism, and the scheduler
@@ -90,8 +87,7 @@ Decision: one engine-wide pool, `Puck.Hosting.Jobs`, of `max(2,
 Environment.ProcessorCount - 2)` worker threads: every logical processor less
 the frame thread and the audio render thread
 (`WorldAudioRenderService.cs:179`), which are the two threads that must never
-wait on a worker. The Steam Deck (4 cores, 8 threads) runs 6 workers; the lead
-machine (16 logical) runs 14. Nothing else in the engine starts a CPU worker:
+wait on a worker. The Steam Deck (4 cores, 8 threads) runs 6 workers. Nothing else in the engine starts a CPU worker:
 the bake's static pool (`SdfMeshPathBake.Residency.cs:36-43`), the irradiance
 worker counts, `Parallel.For` in the engine's runtime paths
 (`SdfMeshIrradiance.cs:1527`, `SdfMeshIrradianceScene.cs:103,579,756`,
@@ -176,7 +172,7 @@ slabs: planes per frame (`SdfMeshPathBake.cs:1359`), points per frame (`:1515`,
 `:1646`), all sized from `FrameTaps` (`:174`); the irradiance trace's unit is one
 probe (`Process`, tracing its hits or relighting them, inside the `Parallel.For`
 at `SdfMeshIrradiance.cs:1527`).
-The unit bound is 2 ms of work on the lead machine, measured when the pool
+The unit bound is 2 ms of work, a design parameter measured when the pool
 lands (open question 3). Which queued bake actions exceed it is unknown from
 the code: the dispatcher at `SdfMeshPathBake.Residency.cs:299-341` runs whatever
 action was queued, so J1 measures each action kind's duration and splits those
@@ -491,9 +487,8 @@ parallel without changing a value:
   and arrays its step, commands, contacts and tethers write directly (the
   review found four such writes to sleeping bodies: `SetIntentSource`,
   `PressChannel`, `MergeLaneTimer` and the late tether solve). That chokepoint
-  is a `WorldBody` redesign; measured on go-tests, the rest-epoch cache it
-  would make sound saved 21 s of a 310 s recording (7 %), so the cache was
-  deleted and the redesign filed in the
+  is a `WorldBody` redesign; the rest-epoch cache it would make sound saved
+  about 7 % of a recording, so the cache was deleted and the redesign filed in the
   [refactoring packet](open-items.md#refactoring-campaign). The four writes now
   wake a resting body (`WorldBody.WakeIfResting`), since each hands it input
   or a pose it must run to carry.
@@ -517,16 +512,11 @@ A headless host also stops delivering snapshots to its screen-session mirrors
 (`WorldSessionMirror(unread: true)`), which only a presentation reads; the
 destination still runs and discloses.
 
-Measured on go-tests at `--jobs 1` under the heavy lease, authored seconds
-summed from each leg's `timing.json` (15 worlds, 18,204 ticks, about 368 rows
-each). Against the build before the incremental hash: plain 256.7 s against
-180.4 s (the mirrors), recorded 441.4 s against 247.1 s with the body cache,
-so the recording's own cost fell from 184.7 s to 66.7 s. A tick refolds 1.6
-rows. The body cache's share, measured back to back on a busier machine: 288.8 s
-recorded with it, 309.8 s without. The always-on sample took 52.8 ms over a
-whole recorded run (186.1 s authored), 2.9 µs a tick. What the recording still costs is the
-components that fold whole every tick (body continuations, poses, body action
-state, navigation, flock and input), unprofiled.
+The incremental hash cut a recording's own cost by about two thirds and a
+tick refolds under two rows; the always-on sample costs microseconds a tick.
+What the recording still costs is the components that fold whole every tick
+(body continuations, poses, body action state, navigation, flock and input),
+unprofiled.
 
 ### Rule evaluation stays serial
 
@@ -566,9 +556,8 @@ frame thread waits on while taking partitions itself, and the ordered merge
 above. No per-item queueing, no async continuation, no channel on the tick's
 path. The join's wait is the only place the frame thread blocks on a worker, and
 it is bounded by one partition's work, since every worker that holds a partition
-finishes it, unless the host preempts that worker while it holds one: T1
-measured fork means of 180 to 840 µs against a 125 µs median on a shared
-machine. J1's cap and the class order keep the pool from oversubscribing the
+finishes it, unless the host preempts that worker while it holds one, which stretches a
+fork well past its median when other programs share the machine. J1's cap and the class order keep the pool from oversubscribing the
 machine itself, which is the case Puck controls.
 
 ### Proof by reproduce and by recorded oracle
@@ -864,7 +853,7 @@ as `puck mesh audit` for bake defects.
 | Step | Lands | Check on `worlds/debug` that catches its failure |
 |---|---|---|
 | **S1's remainder** | The rated views' and screens' phase spread. | `host.frames` standing at `debug.go desktop` and `debug.go overlook`: no iteration over 16.7 ms of work from a tick meeting the burst. |
-| **J1 The pool and the channels** | `Puck.Hosting.Jobs`: classes with their comparers, bounded units, the dependency rules, the cap with hysteresis, per-owner channels drained at each owner's install point, parking, shutdown settlement; every site in section 1's table moved; the bake's static pool, the irradiance worker counts and the engine's `Parallel.For` deleted; `JobWorkers`' `0` reconciled with the pool's `max(2, ProcessorCount - 2)` workers plus the frame thread. A worker preempted while it holds a partition holds the join (T1's fork mean ran past serial on a loaded machine), so the cap against oversubscription is measured on a quiet machine before smaller partitions are tried. | A cold bake with `host.frames` sampled through it, and the process's thread count at `workers + 2` plus the dedicated threads. A lockstep `world.at` still after a `world.reload` traces its own scene (`[sdf.mesh-gi]` reports the frame's draw count). A channel forced full by a scratch world with more groups than its capacity lands every group (`[sdf.mesh-bake] done` counts match). A headless boot with a reflow verb answers it. `quit` during a cold bake exits cleanly with no device-after-dispose message in stderr on both backends. The first visible group bakes before any unseen one (`[sdf.mesh-bake]` order against `world.view.pick`). |
+| **J1 The pool and the channels** | `Puck.Hosting.Jobs`: classes with their comparers, bounded units, the dependency rules, the cap with hysteresis, per-owner channels drained at each owner's install point, parking, shutdown settlement; every site in section 1's table moved; the bake's static pool, the irradiance worker counts and the engine's `Parallel.For` deleted; `JobWorkers`' `0` reconciled with the pool's `max(2, ProcessorCount - 2)` workers plus the frame thread. A worker preempted while it holds a partition holds the join, so the cap against oversubscription is measured with other programs running before smaller partitions are tried. | A cold bake with `host.frames` sampled through it, and the process's thread count at `workers + 2` plus the dedicated threads. A lockstep `world.at` still after a `world.reload` traces its own scene (`[sdf.mesh-gi]` reports the frame's draw count). A channel forced full by a scratch world with more groups than its capacity lands every group (`[sdf.mesh-bake] done` counts match). A headless boot with a reflow verb answers it. `quit` during a cold bake exits cleanly with no device-after-dispose message in stderr on both backends. The first visible group bakes before any unseen one (`[sdf.mesh-bake]` order against `world.view.pick`). |
 | **T3 Crossing scan partitions** | E3 by seat partition with occupancy deltas. | T0 on a fixture of 40 seats where two seats enter one party-travel door on one tick and seats straddle the 32-seat boundary; the crossing log (transfer tick, cohort) identical across counts and against the recording. |
 | **T2 Rigid advance partitions** | E1 for rigid bodies with partition scratch; the rigid share measured first; the one pose-read change re-recorded. | T0 on a fixture of 200 rigid bodies (a rack and a domino line) beside kit bodies whose producers target a rigid body; hashes identical across counts; `puck bench world` at 0 B median a tick; a standing `host.frames` simulate read. |
 | **R1 Parallel recording in waves** | Waves, prepare-before-fork with the fence first, residency upload and extent in preparation, in-order submission; the pose pack fork. Direct3D 12 and a windowed Vulkan boot. | `host.frames` produce avg at the lobby; a `world.at` script that moves a portal view and changes a screen's source every frame for 120 frames, with stills at three ticks compared as above with the serial build's on both backends (a one-frame-late read or a descriptor overwritten under a slot in flight shows as a localized difference beyond the noise); GPU-based validation clean on Direct3D 12 and the validation layer clean on Vulkan. |
@@ -872,8 +861,8 @@ as `puck mesh audit` for bake defects.
 | **M2b Probe block ownership** | Blocks owned by the cache with live-slice counts, native. | A walk into an untraced area for 60 s with `host.memory collect` every 10 s: managed heap flat, native blocks freed as sweeps converge (block count printed by `[sdf.mesh-gi]`); stills before and after compared as above. |
 | **M3 Native movers 4 and 5** | Unmanaged scratch leases, the split journal, numeric columns; the tick's deliveries. | T0 at every count; `puck bench world` unchanged; a scratch world whose rules overwrite text cells and rewind (`world.undo`) reads the restored text. |
 
-R2 left two readings unexplained, which the lead's quiet settle window reads
-before anything is attributed to R2 or to machine load (the
+R2 left two readings unexplained, to be read on a machine with no other load
+before anything is attributed to R2 or to that load (the
 [packet](open-items.md#other-frame-time-findings) holds them): a Direct3D 12
 lobby produce well above its CPU-selection controls, and a stripe difference on
 the lobby's static striped monitor face beyond the pinned noise. The meadow's
@@ -936,37 +925,6 @@ step that meets it.
    body, and so move hash under T2; the step re-records them.
 6. How wide B1's closure must be for the probe tables to match a full retrace;
    B1 widens it until they do.
-
-## Review dispositions
-
-The one adversarial review (Codex Astra, 22 findings) against the first
-revision; each was checked against the code before its disposition. There is
-no second review pass; the lead spot-checks these when each step is built.
-
-| Finding | Disposition | Where |
-|---|---|---|
-| F01 gates read host facts a row version cannot prove | Accepted; speculative gates withdrawn, rules serial; `RuleSchedule` named as the only future dependency mechanism | Rule evaluation stays serial |
-| F02 shared evaluation state and lazy arena caches | Accepted; rules serial; `PrepareReads` before every partitioned phase | Contract rule 2 |
-| F03 pool iteration phantom membership | Accepted; rules serial | Rule evaluation stays serial |
-| F04 the kit transaction is not isolable by an overlay | Accepted; kit bodies and seats stay serial; E1 is rigid bodies only; the larger change named and filed | E1's scope |
-| F05 ascending index is not today's order | Accepted; commit key is (loop, entity index) | Contract rule 4 |
-| F06 shared navigation and flock state, no always-present image | Accepted; kit bodies serial, no frozen image introduced | E1's scope |
-| F07 one occupancy dictionary | Accepted; per-partition deltas applied in seat order | E3's occupancy |
-| F08 no dependency-progress contract | Accepted; helping forks, run-after edges, runnable-only queues, parking | Dependencies |
-| F09 cap oscillation | Accepted; hysteresis, separate tick and non-tick records, wake headroom | The cap |
-| F10 bake comparer reversed | Accepted; descending demand, live read, leader inheritance | Classes |
-| F11 one drain point adds latency and breaks lockstep | Accepted; per-owner channels drained at each owner's install point; synchronous joins as `Frame` forks | The one handoff |
-| F12 no completion without produce, no teardown | Accepted; server-owned reflow channel, shutdown settlement, discard routing, per-owner identity | The one handoff |
-| F13 waves not prepared for dependencies | Accepted; dependency waves with publication between | What changes (section 3) |
-| F14 descriptors before the fence | Accepted; fence and retirement first in preparation | What changes (section 3) |
-| F15 shared upload path during recording | Accepted; upload, extent and screen binding moved to residency preparation | What changes (section 3) |
-| F16 probe blocks reused under the cache | Accepted; cache-owned blocks with live-slice counts | Native-storage list 3; M2b |
-| F17 B1's region misses dependencies | Accepted; change-set closure over old and new bounds, reach, lights, shadows, neighbour rings; checked against a full retrace | GI as jobs |
-| F18 a second indirect path | Accepted; extend `SdfMeshOcclusion`'s counted indirect draws | The cause fix |
-| F19 snapshot is compacted | Accepted; per-partition counts and a prefix sum | E4's offsets |
-| F20 journal references not reference-free | Accepted; split journal, managed roots | Native-storage list 4 |
-| F21 checks cannot catch failures; J1 before its owner; T0 missing | Accepted; M1 and M2a first, T0 added, every check names the failure it catches | Build order |
-| F22 citations off | Accepted; `:1736`, `:979`, the dispatcher's role corrected | Throughout |
 
 ---
 

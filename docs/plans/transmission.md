@@ -471,58 +471,26 @@ None of these is a leak of a blocker at a distance.
 
 ## Cost: a measurement plan
 
-What is known from the illum1-fix measurement at the stage on Direct3D 12
-(`world.counters gpu pass sdf.world$shadow-near`): 460 draws and 2.62 M
-vertices over the cascade's two render passes, both of which drew the same
-kept set, so each pass submitted about 1.31 M vertices (the selection kernel
-now issues both as indirect draws, which changes the recording and not the
+What is known at the stage on Direct3D 12 (`world.counters gpu pass
+sdf.world$shadow-near`): the cascade's two render passes both draw the same
+kept set, so the cascade's vertices are twice each pass's (the selection
+kernel issues both as indirect draws, which changes the recording and not the
 work); front-face culling discards after the vertex stage and saves
 fragments, not vertices. The term's second pass costs the
 same vertex work and the depth pass's fragments, each running two loads and a
 compare, and the first pass gains a colour write. Up to three cascades can
 refresh in one frame.
 
-The exit layer's quiet baseline, from the lead's settle window (RTX 4070,
-1280×900, `world.quality high` (`shadows=high`), the day cycle running,
-`world.gpu-timing` 32-sample means on the root node; `world.cadence` and
-`world.rates` as authored):
-
-| Stop | Backend | `shadow-near`, ms | `shadow-far`, ms | `shadow-second`, ms | Three together, ms | `surface`, ms |
-|---|---|---:|---:|---:|---:|---:|
-| `debug.go stage` | Direct3D 12 | 0.665 | 1.109 | 0.724 | 2.50 | 0.371 |
-| `debug.go stage` | Vulkan | 0.614 | 1.259 | 0.686 | 2.56 | 0.405 |
-| `valley-rim` | Direct3D 12 | 0.515 | 0.494 | 0.492 | 1.50 | 0.523 |
-| `valley-rim` | Vulkan | 0.276 | 0.290 | 0.315 | 0.88 | 0.487 |
-| `debug.go meadow` | Direct3D 12 | 1.071 | 1.279 | 1.036 | 3.39 | 0.854 |
-| `debug.go meadow` | Vulkan | 0.930 | 1.174 | 0.962 | 3.07 | 0.870 |
-| `debug.go portals` | Direct3D 12 | 0.884 | 0.986 | 0.995 | 2.87 | 0.403 |
-| `debug.go portals` | Vulkan | 0.625 | 0.842 | 0.804 | 2.27 | 0.373 |
-
-On the 4070 the three cascades already reach or pass the 2060's 1.5 ms budget
-below at every stop but the Vulkan rim.
-
-Each cascade's counted work, from `world.counters gpu pass
-sdf.world$shadow-near` (and `-far`, `-second`) on the root node, read twice
-ten ticks apart with the second kept; both render passes of a cascade are in
-the counts, and each cascade issues three indirect draws:
-
-| Stop | Cascade | D3D12 draws / vertices / texels written | D3D12 GPU, ms | Vulkan draws / vertices / texels written | Vulkan GPU, ms |
-|---|---|---|---:|---|---:|
-| `stage` | near | 2,056 / 4,158,558 / 12,110,462 | 0.676 | 2,056 / 4,151,172 / 12,107,721 | 0.552 |
-| `stage` | far | 10,918 / 10,153,830 / 14,572,937 | 1.121 | 10,918 / 10,173,534 / 14,576,201 | 1.031 |
-| `stage` | second | 2,204 / 4,184,412 / 10,090,411 | 0.734 | 2,204 / 4,187,682 / 10,084,751 | 0.587 |
-| `valley-rim` | near | 392 / 863,154 / 4,138,005 | 0.510 | 392 / 863,778 / 3,939,147 | 0.270 |
-| `valley-rim` | far | 414 / 1,133,064 / 2,675,647 | 0.511 | 410 / 1,065,564 / 2,381,170 | 0.259 |
-| `valley-rim` | second | 410 / 1,062,978 / 8,453,797 | 0.523 | 416 / 1,065,372 / 11,687,751 | 0.363 |
-| `meadow` | near | 8,496 / 4,224,756 / 16,156,499 | 1.018 | 8,520 / 4,689,438 / 12,709,921 | 0.938 |
-| `meadow` | far | 8,640 / 5,401,740 / 16,331,097 | 1.258 | 8,650 / 5,565,312 / 16,561,625 | 1.198 |
-| `meadow` | second | 8,594 / 4,706,232 / 11,758,364 | 1.045 | 8,600 / 4,632,084 / 11,341,447 | 0.959 |
-
+The exit layer's baseline, read at four standard stops on both backends with
+the day cycle running: on the RTX 4070 the three cascades together already
+reach or pass the RTX 2060's 1.5 ms budget below at every stop but the Vulkan
+rim, between about 0.9 and 3.4 ms, and the `surface` pass costs 0.4 to 0.9 ms.
 At the stage the far cascade draws five times the near cascade's casters for
 2.4 times its vertices; at the meadow every cascade draws the blades, about
-8,500 draws against the mesh pass's 3,846. These are the before readings; the
-redesign's after readings follow the plan below, with the 2060 and the Deck.
-The plan:
+8,500 draws against the mesh pass's 3,846. Each cascade issues three indirect
+draws, and the two render passes of a cascade are in its counts. The redesign
+is read against that baseline, re-taken at the start of the work, with the 2060
+and the Deck. The plan:
 
 - **Devices and tiers.** The bar is the highest quality on every bar device
   ([the register](../decisions/rendering.md#the-pipeline-foundation)), so the

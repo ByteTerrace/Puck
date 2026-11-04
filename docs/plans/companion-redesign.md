@@ -1,11 +1,10 @@
 # Companion custody protocol
 
 This is the specification the build of the [companion decision](../decisions/companions.md)
-follows, and the model that checks it. Two builds of the decision failed review on the
-same three classes (authority from a sender's claim, away bookkeeping outside the
-authority record, a boot-random custody key), and prose redesigns failed further reviews
-one interleaving at a time. The protocol is therefore stated as per-authority state,
-typed messages and durable records, with every transition's precondition, record and
+follows, and the model that checks it. Prose redesigns miss one interleaving at a
+time, and three classes of defect recur (authority from a sender's claim, away
+bookkeeping outside the authority record, a boot-random custody key). The protocol is
+therefore stated as per-authority state, typed messages and durable records, with every transition's precondition, record and
 acknowledgement, and it is checked by an executable small-scope model
 (`tests/Puck.World.Protocol.Tests/CompanionCustodyModel.cs`,
 `CompanionCustodyModelLawTests.cs`) that explores it under faults and asserts the
@@ -495,7 +494,7 @@ the fault budget with the visited set held as 128-bit digests of that text (two 
 64-bit folds), reports states, quiescent states converged, depth, wall time and peak
 managed memory per scope, and caps each scope (1.5 million states by default, and 4 to 6 million for the
 combined scopes: the two-companion four-fault scope reaches about 4.4 million and the
-onward log-and-crash scope about 2.8 million; the measured cost is about 100 MB of managed
+onward log-and-crash scope about 2.8 million; the cost is about 100 MB of managed
 memory per million states).
 
 The traces and the small scopes (under about 100,000 states) run with the ordinary suite.
@@ -508,7 +507,7 @@ dotnet test tests/Puck.World.Protocol.Tests/Puck.World.Protocol.Tests.csproj -c 
 
 The build lane uses the model check to explore each protocol transition and
 its failure schedules. A protocol change is expressed in the model first; the
-check supplies evidence for that lane and is not a landing gate. It takes seven to seventeen minutes on the lead machine, by load, and a few hundred megabytes; the ordinary suite stays
+check supplies evidence for that lane and is not a landing gate. It takes several minutes and a few hundred megabytes; the ordinary suite stays
 under a minute. Scopes combine fault classes
 (two companions with admission failure, partial landing, crash and loss in one scope; log
 failures with crashes on the onward route; repeated deadlines so a shed image fails more
@@ -541,50 +540,6 @@ remote-player crossing. It also does not cover two concurrent federation questio
 or sustained transient refusals through the engine's retry ceiling. The deferred
 moves and these exclusions are limits of the refinement claim, not successful
 checks of those behaviours. Incoming federation actors still cannot claim `World`.
-| Finding (spec review) | Trace |
-|---|---|
-| Destinations never verify home's hop authorization | `ADestinationVerifiesHomesHopAuthorization`, `AForgedReturnToHomeIsStale…` |
-| Crashes hidden between durable records; refused and uncertain appends unspecified | `ACrashBetweenTheHopRecordAndTheDeparture…`, `ACrashBetweenTheRecallAndItsNotice…`, `ARefusedAppendIsATransientRefusal…`, `AnUncertainArrivalIsResolvedOnlyByTheDestinationsRecovery` |
-| Transfer keys not allocated durably | `KeysAreAllocatedDurablyBeforeUse` |
-| Custody epochs do not match the engine | `Epochs_EveryLandingAdvancesByOneIncludingTheReturn` |
-| Home cannot perform the status resolution | `HomeResolvesAPendingHopByAnAuthorizedCustodyQuery` (including the `Unauthorized` answer) |
-| Arrival outcomes discarded on acknowledgement | the custody query answers from the arrival record; same trace |
-| Settlement not keyed per member; partial success | `TwoCompanionsSettlePerMemberAndPartialLandingRestoresTheOther` |
-| Hop settlement identity for several companions | same trace: two titles settle differently under one key |
-| Scheduler reductions | `AnUnansweredReturnStillShedsAfterTheGraceWindow`; retries no longer wait for an empty network |
-| Invariants assumed, not checked | the shadow fold, `TheCensusNeverTakesAHeldSlot…`, `AStrangerFillsTheCap…`, `WritesAbroadComeHome…` |
-| Ordinary-traveller lease-once and `Missing` finality | the escrow-once lane; the model carries both rules |
-| Round 3: verification accepts a cancelled authorization | `ACancelledAuthorizationDoesNotVerifyAForgedHop` |
-| Round 3: an acknowledged settlement overtakes its authorization | `ASettlementNoticeThatOvertakesItsAuthorizationIsRemembered` |
-| Round 3: shed retries reuse a key | `ShedAttemptsNeverReuseAKey` |
-| Round 3: append boundaries and suspension | `TwoReleasedCompanionsRetireInSeparateSteps`, `AnUncertainHopRecordIsNotServedBeforeRecovery`, and the append-boundary check on every explored transition |
-| Round 3: home's held slot allocatable before rollback finishes | `HomeHoldsTheSlotOfItsOwnDepartureInDoubt` |
-| Round 4: a delayed verification answer authorizes a revoked hop | `ADelayedVerificationAnswerCannotAuthorizeARevokedHop`, `ACommitLandsOnlyUnderTheGrantAsItStandsAtTheCommit` |
-| Round 4: install precedence on partial success | `InstallDuringAPartialLandingRetiresTheUnlandedCompanion` |
-| Round 4: canonical text discards lane order | `CanonicalTextKeepsTheOrderWithinALane` |
-| Round 4: status cannot pass a delayed commit without a crash | `AStatusQueryMayPassADelayedCommitAfterAReconnect` |
-| Round 4: recall checked against later issuance | `ALaterHopDoesNotContradictAnEarlierRecall` |
-| Round 4: no followed-generation witness | `ABindingNamesTheFollowedGeneration` |
-| Round 4: destination capacity unproved | `AFullCustodianRefusesTheSecondCompanion` |
-| Round 4: shed keys outside the allocator | `ShedKeysComeFromTheCommonAllocator` |
-| Round 5: a duplicated reservation answer satisfies the commit recheck after a release | `ADuplicatedReservationAnswerCannotSatisfyTheCommitRecheckAfterARelease`, `AReleaseDuringAPendingHopWaitsForTheHopToResolve` |
-| Round 5: the home binding inherits the visiting binding's generation | `AReconnectAtHomeKeepsThePlacementBinding` |
-| Round 5: recall notices per incarnation | `EveryRecallIsNoticedOnItsOwn` |
-| Round 5: stranding and grace survive into a later visit | `AStrandingDoesNotCarryIntoALaterVisit` |
-| Round 5: a reconnect never resends a delayed reservation | `AReconnectResendsADelayedReservation` |
-| Round 5: failed landings have no generation effect | `AFailedLandingStillAdvancesTheSlotGeneration` |
-| Round 5: the onward route never combines a log fault with a crash | the `AB` `Log \| Crash` scope's budget of two |
-| Round 5: recall of a pending title contradicts the fence | `APendingTitleWaitsForItsHopBeforeARecall` |
-| Step-1 review: verification fenced only by the uncertain record's key | `AnUncertainRecordFencesEveryVerificationAtHome` |
-
-Writing and running the model changed the protocol before any reviewer could, in round two
-(`Pending` must be waited on; a dangling lease blocks returns until it expires; a stale
-attempt must not depart a moved body; a key is leased once; `Missing` is final only with a
-tombstone) and again in round three: the settlement notice must be derived from the
-settlement record, not from the view before it (the live path otherwise never notified
-home); a latched destination answers `Uncertain` about the record it cannot yet call
-durable even when that record landed; a destination refuses a companion it already
-embodies before it verifies the hop.
 
 Model simplifications the build must not read as protocol: the player's own transfer
 beyond the cap and one free slot is not modelled; `Uncertain` is modelled at the record

@@ -4,9 +4,9 @@ Puck lights a frame with cascaded shadow maps for the key light, a per-view
 light loop, and a CPU-traced three-level probe volume for indirect light
 ([the lighting handbook](../rendering/sdf/handbook/lighting-and-shading.md)).
 The owner asked for a research round on global and local illumination before
-any further graphical work, and three families researched it independently:
-global illumination, shadows and direct light, and the latest research and
-stylized lighting. Their three consensus lists agree on the same five items.
+any further graphical work, and three independent reports covered it: global
+illumination, shadows and direct light, and the latest research and stylized
+lighting. Their consensus lists agree on the same five items.
 This plan turns that agreement into decisions, says how each decision serves
 an author building a scene nobody here imagined, settles the gaps the round
 found, records what was rejected and why, and orders the build as lanes
@@ -50,9 +50,9 @@ The research round read the code, and the plan rests on these facts:
 - Only static opaque draws cast into the volume (`SdfMeshIrradianceScene`
   admits `!IsDynamic && !Glass`). A moving body receives light and casts none;
   a lane-driven emissive reads zero in the trace.
-- A full High window takes 8.35 s of wall time and about 90 to 98 s of
-  process CPU per High-and-Medium pair on the lead machine. Nobody has
-  measured the trace on the Deck's four-core CPU.
+- A full High window takes several seconds of wall time on a many-core
+  desktop and about a minute and a half of process CPU per High-and-Medium
+  pair. Nobody has measured the trace on the Deck's four-core CPU.
 - The views pass loops over every light the view's frustum selected
   (`passes/sdf-light-stage.hlsli`; `sdfLightAt` applies `worldLightSelected`
   and `sdfLightResponse` exits at zero reach). A bound screen lights a surface
@@ -108,7 +108,7 @@ vector per ambient-cube axis, or the SH product followed by the cosine
 convolution) so that the live sky SH9 (`SdfSkyEnvironment` already projects
 nine coefficients) relights it correctly for every receiver normal. A single
 visibility vector dotted with the sky radiance omits the cosine term and is
-not enough; the Codex consensus caught this. The idea is precomputed radiance
+not enough. The idea is precomputed radiance
 transfer: Sloan, Kautz and Snyder, "Precomputed Radiance Transfer for
 Real-Time Rendering in Dynamic, Low-Frequency Lighting Environments",
 SIGGRAPH 2002, <https://www.cs.jhu.edu/~misha/ReadingSeminar/Papers/Sloan02.pdf>;
@@ -136,8 +136,7 @@ shading lengths that follow a body's scale (cascade bias, AO and shadow tap
 radii, `NormalBias`).
 
 **Why:** these are demonstrated defects fixed with no new machinery, and they
-come first because every later measurement reads through them. Codex ranked
-them first and Antigravity second; the Claude consensus agreed. The PCSS
+come first because every later measurement reads through them. The PCSS
 contract Puck implements is the nearest in-cone blocker, a deliberate sizing
 heuristic over the textbook mean-blocker search (Myers, Fernando and Bavoil,
 "Integrating Realistic Soft Shadows into Your Game Engine", NVIDIA 2008,
@@ -166,7 +165,7 @@ bricks: static unions refine sparsely and CSG seams hold interior distances,
 so the software leg needs a conservative traversal and its own derived
 product, kept as a cache under the
 [derived-product decision](../decisions/engine-design.md#a-derived-product-is-a-cache-never-the-truth).
-Either leg lets a moving rigid body cast into the volume, removes the 8.35 s
+Either leg lets a moving rigid body cast into the volume, removes the
 CPU trace, and makes the job system's change-set closure
 ([B1](engine-job-system.md#gi-as-jobs-and-only-the-probes-whose-light-can-change))
 cheap to apply.
@@ -294,8 +293,7 @@ level 3 STYLES row shows them beside continuous materials. Before step 1 it was
 one per-world setting that banded `saturate(cosine) × saturate(visibility)` in
 one `smoothstep`, collapsing the penumbra into the band's edge, and dropped rim
 light, the environment reflection and point-light ambient occlusion; the
-research round's shadows report (Codex, item 1) and stylized-lighting report
-(Antigravity, item 2) both flagged it. Four decisions place cel shading in
+research round's shadows and stylized-lighting reports both flagged it. Four decisions place cel shading in
 this plan:
 
 1. **Banding preserves visibility.** The band shapes the lighting response
@@ -379,8 +377,8 @@ the budget does not apply to it. Captures stay history-independent at the cost
 of the capture's own frame, which is the cost lockstep already pays for bakes.
 
 **The Deck's measurements.** No one has timed the CPU trace, the cascades or
-the views pass on the Deck, and the Codex consensus found that one report
-budgeted a Medium window there, which the bar forbids. Decision: step 0
+the views pass on the Deck, and a Medium window there is not a budget the bar
+allows. Decision: step 0
 measures today's CPU trace and frame on the Deck at High, every later step has
 a Deck leg at High, and no Deck figure in this plan or its lanes is scaled
 from another GPU.
@@ -436,7 +434,7 @@ the frame thread records, which J1 does not reorder.
 | 0. The Deck leg ([step 0](#step-0-what-the-run-showed)) | rendering, with a Deck leg | Today's CPU trace and frame timed on the Deck at High | Deck: `[sdf.mesh-gi] done … seconds=` at High and `host.frames` at `debug.go overlook` |
 | 1. Direct light correct (landed but for the scale-following lengths, the back-plate lines and the terrain cascade; see [step 1's status](#step-1-status)) | rendering | The wrapped-diffuse query; `band(cosine) × visibility` with the penumbra kept, and toon keeping rim, reflections and AO ([cel shading](#cel-shading), decisions 1 and 2: the style layer per material with the world default); scale-following shading lengths; cascade coverage printed in `world.budget`; the terrain cascade with the terrain pass's step 7 | Indoors under the 100 klx sun at `debug.go gallery` with the Moth's wrapped skin past the terminator: no sunlit patch under a roof (`world.debug-view shadow`); the quarter-size Moth's back-plate lines gone; under a cel style the Moth's terminator shows the cascades' penumbra in `shadow` and her rim in the lit view while the floor beside her stays continuous; `valley-rim` shows ridge shadows on the far walls; stills at the sweep's hall stops compared tolerantly; the frame bar at every stop with the sun moving |
 | 2. Hits and relight (landed on the CPU but for the GPU relight, the sky transfer, the per-probe rescale and the exposure's GPU read; see [step 2's status](#step-2-status)) | rendering, principal-grade review | The merged hit buffer written by today's CPU trace; the GPU relight under `render.indirect.budget`; per-probe rescale; the sky transfer with its cosine term; the budget surface in `world.budget`, the counters and `world.lights`; the lockstep drain on the GPU; the exposure path's GPU read; the cel style's shadow band reading the volume's bounce and sky tint ([cel shading](#cel-shading), decision 3) | The day cycle at `debug.go gallery` and `overlook`: indirect light follows the sun with the age counter under the authored target and no `[sdf.mesh-gi] behind` line; a lamp switched by `gallery.lights.all` relights without a trace (`traced` unchanged, `relit` rises); under a cel style the hall's shadow band warms when the lamps come on and the lawn's cools under the open sky; `world.exposure` continuous across the atrium's arch; the frame bar across the cycle on all three; a lockstep still of one tick repeats across two Worlds within the noise |
-| 3. GPU trace hits | rendering, GPU leg on both backends and the Deck | The trace-hits interface with both legs; rigid bodies cast; the CPU trace deleted once a leg holds on all three | A body posed under a lamp darkens the floor in `world.debug-view indirect`; a `world.reload` that removes a wall re-traces its closure (B1's check) in tens of milliseconds amortized (`[sdf.mesh-gi]` traced against the window); the cold boot's GI seconds against today's 8.35; thin-wall stills (teal corner, stairwell flight B) compared tolerantly with step 2's; the Deck decides the leg |
+| 3. GPU trace hits | rendering, GPU leg on both backends and the Deck | The trace-hits interface with both legs; rigid bodies cast; the CPU trace deleted once a leg holds on all three | A body posed under a lamp darkens the floor in `world.debug-view indirect`; a `world.reload` that removes a wall re-traces its closure (B1's check) in tens of milliseconds amortized (`[sdf.mesh-gi]` traced against the window); the cold boot's GI seconds against the CPU trace's; thin-wall stills (teal corner, stairwell flight B) compared tolerantly with step 2's; the Deck decides the leg |
 | 4. Bitmask AO and bent normal | rendering | The bitmask march over the depth pyramid; the bent normal in the visibility record and in the gather; the cel outline's check ([cel shading](#cel-shading), decision 4) | `meadow.puck` blades without dark halos and thin crevices closed in `world.debug-view ao`; under a cel style with outlines on, a presented burst of eight frames at `debug.go meadow` shows no ink shimmer between frames beyond the blades' own motion, and at `debug.go portals` no ink on the paintings' pictures; `world.gpu-timing` of `surface` against today's on all three; stills at the gather stops compared tolerantly |
 | 5. Lights | rendering | The list measurement; LTC for screens, portal openings and authored rectangles; the local shadow residency with overload named | The device row with every screen on: specular on the floor in front of each screen; `world.counters gpu` views texels at 68 fixtures and at a scratch world with 680; a scratch world past the shadow residency names the deferred lights and shows no flicker; the frame bar at `debug.go devices` |
 | 6. Openings and residencies | rendering | Screens, portals and windows as emitters in the relight; one `Lighting` budget across residencies by pixel share | The garden portal's light on the hall floor in `indirect` follows the garden's day; a nested world's screen reports its own age; the main world's age unchanged when a nested world falls behind |
@@ -462,11 +460,10 @@ depth) are what step 2 fixed. Still open from it:
 
 - The resolve pass read far above the
   [GPU cost reference](../../.claude/skills/rendering/references/gpu-cost.md)'s
-  figure on a loaded machine; a quiet-machine repeat is owed before anything is
-  attributed to the pass.
-- The Deck leg: no Deck or other remote target is reachable from this
-  repository, so the CPU trace and frame on the Deck at High remain unmeasured,
-  and no Deck figure is inferred from the lead machine's.
+  figure on a machine under load; a repeat with no other load is owed before
+  anything is attributed to the pass.
+- The Deck leg: the CPU trace and frame on the Deck at High remain unmeasured,
+  and no Deck figure is inferred from another machine's.
 
 ## Step 1 status
 
