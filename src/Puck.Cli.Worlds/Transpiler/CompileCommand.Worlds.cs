@@ -1,6 +1,7 @@
 using Puck.Abstractions;
 using Puck.Abstractions.Documents;
 using Puck.Assets.Documents;
+using Puck.Transpiler.Diagnostics;
 using Puck.World.Transpiler;
 using Puck.World.Transpiler.Composition;
 using Puck.World.Transpiler.Validation;
@@ -28,6 +29,7 @@ public static partial class CompileCommand {
                 }
             }
         }
+        SourceAcknowledgements.Acknowledge(diagnostics: diagnostics, document: compilation.Document, sourcePath: sourcePath);
         PrintDiagnostics(diagnostics: diagnostics, filePath: sourcePath, sourceText: source);
         if (diagnostics.HasErrors || (strict && diagnostics.HasWarnings) || !compilation.Success) { return 1; }
 
