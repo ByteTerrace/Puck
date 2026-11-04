@@ -22,4 +22,8 @@ public static class SdfRenderHlsl {
     /// <exception cref="InvalidOperationException">Two declarations, here or in the field's include, would share one HLSL
     /// name.</exception>
     public static string Generate() => SdfIsaHlsl.DeclareRender();
+    /// <summary>Generates the include's layout: its stamped defines alone (<see cref="SdfIsaHlsl.GenerateLayout"/>), so a
+    /// tuning value only the shader reads is in <see cref="Generate"/> and in no fingerprint.</summary>
+    /// <returns>The HLSL text.</returns>
+    public static string GenerateLayout() => SdfIsaHlsl.DeclareRenderLayout();
 }
