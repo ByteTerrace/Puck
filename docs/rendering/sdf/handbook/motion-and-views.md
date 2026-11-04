@@ -268,8 +268,19 @@ shows it: a screen, through the footprint of its declared extent inside the
 world's view, or a HUD frame or a probe export, which the display shows
 directly. A session's footprint holds only while its consumer's last camera
 sees the slab it shows on (`WorldPortalVisibility`). The test covers the slab's
-front, back and sides, which all sample the screen image; a slab wholly outside
-the frustum renders nothing beneath it. It renders at most once a frame however many screens show it, at the
+front, back and sides, which all sample the screen image, so it has no facing
+test; a slab wholly outside the frustum renders nothing beneath it. A root
+camera that films the world (a probe's camera, a HUD frame's) roots each session
+it films by the same decision against its own camera and image, so a probe
+camera facing away from a portal keeps nothing beneath it rendering. While the
+views lever is on (`world.rates views`), a glass seen at no more than
+`SdfUpdateRateTiers.ViewHeldPixels` of the image that shows it renders nothing
+and holds its latest image, once it has rendered at all
+(`WorldViewGraphHost.PortalSightOf` makes the one decision for every footprint
+and filmed root). Both use the camera of the frame before, so the frustum's
+margin and the small glass's threshold are what keep a glass coming into view
+rendered on the frame it shows; a settled capture rates nothing and renders
+every view it reaches. A view renders at most once a frame however many screens show it, at the
 extent its footprint asks, and at the refresh `world.view-refresh` sets (a
 window session on every frame). A window's footprint is the share of its
 consumer's image its glass spans (`WorldPortalVisibility.Coverage`), quantized

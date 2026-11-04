@@ -14,6 +14,11 @@ public interface IRenderGraphInstances {
     RenderGraphSchedule? Latest { get; }
     /// <summary>Gets the name of the instance the display shows and captures read.</summary>
     string Root { get; }
+    /// <summary>Gets the path of the settled capture the runtime holds, armed here or forwarded to an instance and not yet
+    /// served, or <see langword="null"/> while it holds none. A presented burst is not one: it reads frames as the display
+    /// shows them. A host that holds rated work back renders it while one is pending, so the still shows its own frame
+    /// rather than an image held from an earlier one.</summary>
+    string? SettledCapturePath { get; }
 
     /// <summary>Returns the node a graph instance renders through, or <see langword="null"/> when the set has no graph
     /// instance of that name.</summary>

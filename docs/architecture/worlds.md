@@ -981,7 +981,9 @@ holds no descendant sessions open, and its retained document grants no live view
 therefore follows the documents and the sessions already open, never what a frame draws. The
 presentation renders a level only while something sees it: each view that reads a session tests the
 glass it shows on against the camera it last rendered with (`WorldPortalVisibility`), and a glass
-behind that camera or outside its frustum schedules nothing beneath it. `world.nesting` echoes every
+behind that camera or outside its frustum schedules nothing beneath it, nor does one too small in
+that view's image to show anything (`WorldViewGraphHost.PortalSightOf`); a camera that films the
+world roots the sessions it films by the same test against its own camera. `world.nesting` echoes every
 level: its depth, its destination, the residency it renders through, what each of its world's
 screens shows (a session or camera view, a source instance with the fault that leaves it dark,
 `text`, or `none`), and why that world's text does not draw when its fonts do not resolve.

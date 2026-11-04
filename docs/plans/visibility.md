@@ -396,6 +396,22 @@ same `SdfMeshOcclusion` or RedLynx's camera-depth receiver mask; and static
 cascade caching only where a measurement shows static redraw dominating with
 unchanged projections.
 
+Session views take part too. Their schedule decides by frustum and size alone
+(`WorldViewGraphHost.PortalSightOf`): a glass behind walls but inside the
+consumer's frustum still renders. From the debug world's forest pose (47.80,
+0.02, -116.84) facing the hall, all six hall portals (screens 20 to 25, 1.4 to
+14.6 degrees off axis, 140 to 150 m away) pass the frustum and are about 26
+display pixels tall at 1440 lines, far above the size hold; only an occlusion
+test of the glass against the consumer's depth (the same two-phase pyramid) would
+skip them, at about 1 ms of GPU each. A boot world's own session view is also
+filmed into the World's frame every frame whether or not its instance renders
+(`WorldScreenBinder.FilmHomeViews`), paying that view's CPU frame building; skipping
+it needs per-view residency state keyed by the view rather than its index
+(`SdfViewExposures`, the occlusion's previous visible set), or a skipped view
+shifts every later view's state. Done when: from the forest facing the hall,
+`world.budget`'s live frame line shows no hall session rendered, and turning
+toward a painting in the hall shows it fresh on its first visible frame.
+
 R2 left two shapes V5 replaces: each pass classifies the whole draw list
 behind its own global barrier and allocates three argument phases
 (`SdfMeshOcclusion.cs:110-116`, `:276`), and phase and count slot 1 mean

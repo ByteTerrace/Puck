@@ -280,7 +280,11 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     private WorldSourceInstances? m_lastSources;
     private WorldViewInstances? m_lastRendered;
 
+    // The frame's roots: the views the running set roots on their own demand (m_viewRoots), then each view a root camera
+    // among them films (m_filmedViews) while that camera's image shows it (RootFilmedViews).
     private readonly List<RenderGraphRoot> m_roots = [];
+    private readonly List<RenderGraphRoot> m_viewRoots = [];
+    private readonly List<(WorldView Camera, WorldView Filmed)> m_filmedViews = [];
     private List<RenderGraphFootprint> m_screenFootprints = [];
     // The session views of the running set, whose footprints follow what their consumers see (ResetFootprints), and the
     // power-of-two fraction each one's glass last held on each axis (WorldPortalVisibility.Octave).
@@ -456,9 +460,8 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         }));
     // A camera the display shows directly that films the world reads every view the world's screens show at its previous
     // frame, and a previous-frame read demands nothing of its producer. So while the camera is a root, each view it films
-    // is rooted too, at the fraction the camera's footprint of it would have demanded: the camera's root extent times the
-    // view's declared extent, and at the camera's refresh, so a filmed view renders no more often than the camera can
-    // consume it. The rooting ends with the camera's root.
+    // is rooted too, as the camera's footprint of it would have demanded it (RootFilmedViews) and at the camera's refresh,
+    // so a filmed view renders no more often than the camera can consume it. The rooting ends with the camera's root.
     private void AddFilmedRoots(in WorldView camera, WorldViewInstances rendered) {
         if (!camera.FilmsWorld) {
             return;
@@ -468,16 +471,18 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
                 WorldViewInstances.IsShownDirectly(view: in filmed) &&
                 !string.Equals(a: filmed.Name, b: camera.Name, comparisonType: StringComparison.Ordinal)
             ) {
-                m_roots.Add(item: new RenderGraphRoot(
-                    Height: (camera.Height * filmed.Height),
-                    Instance: filmed.Name,
-                    Width: (camera.Width * filmed.Width)
-                ) {
-                    Refresh = camera.Refresh,
-                });
+                m_filmedViews.Add(item: (camera, filmed));
             }
         }
     }
+    // The root a filming camera roots a view it films at, the given fractions of the camera's own extent.
+    private static RenderGraphRoot FilmedRoot(in WorldView camera, in WorldView filmed, double width, double height) => new(
+        Height: (camera.Height * height),
+        Instance: filmed.Name,
+        Width: (camera.Width * width)
+    ) {
+        Refresh = camera.Refresh,
+    };
     // The footprints a screen-rendering instance, or a view whose screens show something, shows its reads through: a
     // source renders at its producer's negotiated extent, so any fraction demands it without sizing it, and a view a
     // screen shows at the fraction of the display its declared extent covers.
@@ -565,6 +570,8 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         // The first Reconcile composes the set again and derives the screens' footprints and the views' roots from it; until
         // then the display's own reads over the scene hold.
         m_screenFootprints = DisplayFootprints(scene: scene);
+        m_viewRoots.Clear();
+        m_filmedViews.Clear();
         m_roots.Clear();
         ResetFootprints();
     }
@@ -1392,17 +1399,27 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             }
         }
 
-        m_roots.Clear();
+        m_viewRoots.Clear();
+        m_filmedViews.Clear();
+        m_portalsRendered.IntersectWith(other: m_portals);
 
         foreach (var view in rendered.Views) {
             if (view.Demand.HasFlag(flag: WorldViewDemand.Root)) {
-                m_roots.Add(item: new RenderGraphRoot(
+                m_viewRoots.Add(item: new RenderGraphRoot(
                     Height: view.Height,
                     Instance: view.Name,
                     Width: view.Width
                 ));
                 AddFilmedRoots(camera: in view, rendered: rendered);
             }
+        }
+
+        // Until the next frame decides what each filming camera sees, every view it films is rooted at its declared
+        // extent, so the roots never name an instance the new set dropped.
+        m_roots.Clear();
+        m_roots.AddRange(collection: m_viewRoots);
+        foreach (var (camera, filmed) in m_filmedViews) {
+            m_roots.Add(item: FilmedRoot(camera: in camera, filmed: in filmed, width: filmed.Width, height: filmed.Height));
         }
 
         for (var index = 0; (index < graphs.Count); index++) {
@@ -1570,14 +1587,17 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
 
         return footprints;
     }
-    // The frame's footprints: the synthesized root's, then every screen's. A session's holds only while its consumer sees
-    // the glass it shows on, so a portal face out of view schedules no level beneath it, and spans the fraction of its
-    // consumer's image that holds the glass (WorldPortalVisibility.Coverage), quantized against the extent it held by
-    // the render graph's one footprint rule (RenderGraphExtent.Quantize), so a window renders at the extent it is seen
-    // at and reallocates only when its need leaves the held step's shrink band.
+    // The frame's footprints and roots: the synthesized root's footprints, then every screen's, and the roots
+    // (RootFilmedViews). A session's footprint holds only while its consumer sees the glass it shows on large enough to
+    // render (PortalSightOf), so a portal face out of view or too small schedules no level beneath it, and spans the
+    // fraction of its consumer's image that holds the glass (WorldPortalVisibility.Coverage), quantized against the
+    // extent it held by the render graph's one footprint rule (RenderGraphExtent.Quantize), so a window renders at the
+    // extent it is seen at and reallocates only when its need leaves the held step's shrink band.
     private void ResetFootprints() {
         MeasureDisplayShares();
         m_footprints.Clear();
+        m_heldViews.Clear();
+        RootFilmedViews();
 
         if (m_synthesized is { } synthesized) {
             m_footprints.AddRange(collection: synthesized.Footprints);
@@ -1589,9 +1609,10 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
                 continue;
             }
 
-            switch (PortalCoverage(
+            switch (PortalSightOf(
                 consumer: footprint.Consumer,
                 coverage: out var coverage,
+                pixels: (m_displayShares.TryGetValue(key: footprint.Consumer, value: out var share) ? (share * m_displayHeight) : double.PositiveInfinity),
                 producer: footprint.Producer
             )) {
                 case PortalSight.Unknown:
@@ -1613,9 +1634,10 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
                     }));
 
                     break;
-                // A window out of its consumer's sight whose world still bakes renders at the least share, since a world
-                // bakes only in frames that render one of its views: its world then bakes before the glass comes into view.
-                case PortalSight.Unseen when ViewScenes!.Bakes(view: footprint.Producer):
+                // A window out of its consumer's sight, or too small in it, whose world still bakes renders at the least
+                // share, since a world bakes only in frames that render one of its views: its world then bakes before the
+                // glass comes into view.
+                case PortalSight.Unseen or PortalSight.Small when ViewScenes!.Bakes(view: footprint.Producer):
                     m_footprints.Add(item: (footprint with {
                         Height = WorldPortalVisibility.BakingShare,
                         Width = WorldPortalVisibility.BakingShare,
@@ -1623,6 +1645,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
 
                     break;
                 case PortalSight.Unseen:
+                case PortalSight.Small:
                 case PortalSight.Hidden:
                     break;
             }
@@ -1630,6 +1653,58 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
 
         RateEnvironmentReads();
         PublishRateReadings();
+    }
+    // Roots the views the running set roots on their own demand, then each view a root camera among them films: a
+    // session only while the camera's image shows its glass large enough to render (PortalSightOf, measured in the
+    // camera's own pixels), at the share of that image the glass spans, so a probe camera facing away from a portal roots
+    // nothing beneath it; any other filmed view, or a session whose glass the camera's world cannot place, at the
+    // camera's extent times the view's declared one.
+    private void RootFilmedViews() {
+        m_roots.Clear();
+        m_roots.AddRange(collection: m_viewRoots);
+
+        foreach (var (camera, filmed) in m_filmedViews) {
+            var (width, height) = (filmed.Width, filmed.Height);
+
+            if (m_portals.Contains(item: filmed.Name)) {
+                switch (PortalSightOf(
+                    consumer: camera.Name,
+                    coverage: out var coverage,
+                    pixels: (camera.Height * m_displayHeight),
+                    producer: filmed.Name
+                )) {
+                    case PortalSight.Seen:
+                        (width, height) = coverage;
+
+                        break;
+                    case PortalSight.Unseen or PortalSight.Small when ViewScenes!.Bakes(view: filmed.Name):
+                        (width, height) = (WorldPortalVisibility.BakingShare, WorldPortalVisibility.BakingShare);
+
+                        break;
+                    case PortalSight.Unseen:
+                    case PortalSight.Small:
+                    case PortalSight.Hidden:
+                        continue;
+                }
+            }
+
+            m_roots.Add(item: FilmedRoot(camera: in camera, filmed: in filmed, height: height, width: width));
+        }
+    }
+    // The one decision whether a consumer's image shows a session's glass this frame (PortalCoverage), and whether that
+    // glass is large enough to render: a glass seen at no more than SdfUpdateRateTiers.ViewHeldPixels of the consumer's
+    // image is Small and holds its latest image (HoldsGlass). Every footprint and every filming camera's root of a session
+    // takes its demand from here.
+    private PortalSight PortalSightOf(string consumer, string producer, double pixels, out (double Width, double Height) coverage) {
+        var sight = PortalCoverage(
+            consumer: consumer,
+            coverage: out coverage,
+            producer: producer
+        );
+
+        return (((sight == PortalSight.Seen) && HoldsGlass(pixels: (pixels * coverage.Height), producer: producer))
+            ? PortalSight.Small
+            : sight);
     }
     // Whether a consumer sees the glass a session it reads shows on, from the camera it last rendered with, and how much
     // of its image the glass spans: a consumer in another world than the glass's sees none of it, and one whose camera or
@@ -1686,5 +1761,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         Seen = 2,
         // The consumer's world shows the glass, out of its camera's sight.
         Unseen = 3,
+        // The consumer's camera sees the glass, too small in its image to render (PortalSightOf).
+        Small = 4,
     }
 }
