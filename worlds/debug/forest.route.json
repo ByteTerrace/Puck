@@ -79,6 +79,11 @@
       "parse": "text"
     },
     {
+      "name": "gpu-transfers",
+      "run": "world.counters gpu transfers --json",
+      "parse": "gpu-transfers"
+    },
+    {
       "name": "residency",
       "run": "world.residency",
       "parse": "pairs"

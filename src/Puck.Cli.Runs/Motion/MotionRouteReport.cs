@@ -115,6 +115,11 @@ public static class MotionRouteReport {
             if (!leg.Before.ContainsKey(metric.Name) || !leg.After.ContainsKey(metric.Name)) {
                 problems.Add($"{leg.Directory}: missing tick-pinned endpoint reading '{metric.Name}'.");
             }
+            if (metric.Parse == "gpu-transfers") {
+                var before = SweepSignals.Read(metric.Parse, leg.Before.GetValueOrDefault(metric.Name, string.Empty), null);
+                var after = SweepSignals.Read(metric.Parse, leg.After.GetValueOrDefault(metric.Name, string.Empty), null);
+                if (SweepSignals.TransferWindowProblem(before, after) is { } reason) { problems.Add($"{leg.Directory}: {reason}"); }
+            }
         }
         foreach (var check in plan.Checks) {
             if (!boundary.Any(receipt => receipt.Stage == "before-check" && receipt.Script == check.Line &&
@@ -129,6 +134,8 @@ public static class MotionRouteReport {
         var after = Sweep.SweepSignals.Read(metric.Parse, leg.After.GetValueOrDefault(metric.Name, string.Empty), null);
         var delta = new SortedDictionary<string, double>(StringComparer.Ordinal);
         foreach (var (key, value) in after) {
+            if (metric.Parse == "gpu-transfers" && SweepSignals.TransferWindowProblem(before, after) is not null) { break; }
+            if (key == "gpu.transfers.domains") { continue; }
             if (before.TryGetValue(key, out var previous) && double.TryParse(previous, CultureInfo.InvariantCulture, out var x) &&
                 double.TryParse(value, CultureInfo.InvariantCulture, out var y)) { delta[key] = y - x; }
         }
@@ -149,7 +156,7 @@ public static class MotionRouteReport {
             settlement = "Authority pauses after warmup while the current geometry becomes resident and its upload completes. Typed setup checks follow settlement; presentation observation covers only the measured ticks.",
             metricWindow = new { beforeTick = plan.WarmupTicks + 1, afterTick = plan.LastTick + 1,
                 phase = "Both endpoints run in the tick-command drain. Opening metrics precede all authored input/presentation commands at the first measured tick; paused settlement work is excluded." },
-            metricScope = "Numeric deltas are differences of tick-pinned endpoint readings: monotonic counters describe interval work; gauge deltas describe endpoint changes. The presentation timer spans the first through last measured sample, ending one tick before the closing metric drain. GPU answers are individual completed-submission snapshots, not cumulative transfers.",
+            metricScope = "Numeric deltas are differences of tick-pinned endpoint readings: monotonic counters describe interval work; gauge deltas describe endpoint changes. The presentation timer spans the first through last measured sample, ending one tick before the closing metric drain. GPU summary answers are individual completed-submission snapshots. gpu-transfers metrics instead subtract same-domain cumulative prefixes: submitted work was accepted between endpoints; completed work became known complete between endpoints and may include earlier in-flight work. Host writes are CPU bytes, buffer copies include readback/carry traffic, image bytes and physical bus traffic are not inferred.",
             memoryScope = "Process and memory readings include the diagnostic observer and authority replay machinery. Normal-play physical budget qualification is a separate workload.",
             equivalent = problems.Count == 0, unmatched = problems,
             equivalenceEvidence = "Canonical per-tick authority replay verdicts and 64-bit semantic content signatures; diagnostic equivalence evidence, not a formal collision-free byte proof.",

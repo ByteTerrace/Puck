@@ -14,4 +14,10 @@ public interface IGpuWorkSource {
     /// no newer completion return the same <see cref="GpuWorkSample.Submission"/>.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="sample"/> is <see langword="null"/>.</exception>
     bool TryReadCompleted(GpuWorkSample sample);
+
+    /// <summary>Reads coherent cumulative transfer work for this source's ordered queue domain, independent of
+    /// the newest completed sample. Unsupported sources return false; they are not zero-transfer sources.</summary>
+    /// <param name="totals">The counts and their process-local domain, or default when unavailable.</param>
+    /// <returns>Whether this source exposes cumulative transfer accounting.</returns>
+    bool TryReadTransfers(out GpuTransferTotals totals) { totals = default; return false; }
 }

@@ -45,7 +45,8 @@ public sealed class WorldCountersCommandModule(IEnumerable<IWorkCounterSource> s
     private const string NodeWord = "node";
     private const string PassWord = "pass";
     private const string SummaryWord = "summary";
-    private const string Usage = "[world.counters: expected world.counters [<source-or-prefix>] [node <name>] [pass <label>] [counter <prefix>] [summary] [--json]]";
+    private const string TransfersWord = "transfers";
+    private const string Usage = "[world.counters: expected world.counters [<source-or-prefix>] [node <name>] [pass <label>] [counter <prefix>] [summary | transfers] [--json]]";
     private const string Verb = "world.counters";
 
     private readonly IWorkCounterSource[] m_sources = [.. sources.OrderBy(
@@ -60,9 +61,9 @@ public sealed class WorldCountersCommandModule(IEnumerable<IWorkCounterSource> s
 
     // What the gpu section of one readout selects: the nodes by name, the passes by label, the counts by name prefix,
     // and whether it prints one summary line per node.
-    private readonly record struct GpuQuery(string? Counter, string? Node, string? Pass, bool Summary) {
+    private readonly record struct GpuQuery(string? Counter, string? Node, string? Pass, bool Summary, bool Transfers) {
         public bool Narrows =>
-            ((Counter is not null) || (Node is not null) || (Pass is not null) || Summary);
+            ((Counter is not null) || (Node is not null) || (Pass is not null) || Summary || Transfers);
         public GpuWorkSelection Selection => ((Pass is null)
             ? new GpuWorkSelection(counter: Counter)
             : GpuWorkSelection.ForPass(
@@ -79,6 +80,7 @@ public sealed class WorldCountersCommandModule(IEnumerable<IWorkCounterSource> s
         string? pass = null;
         var json = false;
         var summary = false;
+        var transfers = false;
 
         for (var index = 0; (index < args.Count); index++) {
             if (args.Is(
@@ -86,6 +88,8 @@ public sealed class WorldCountersCommandModule(IEnumerable<IWorkCounterSource> s
                 value: JsonFlag
             )) {
                 json = true;
+            } else if (args.Is(index: index, value: TransfersWord)) {
+                transfers = true;
             } else if (args.Is(
                 index: index,
                 value: SummaryWord
@@ -135,10 +139,11 @@ public sealed class WorldCountersCommandModule(IEnumerable<IWorkCounterSource> s
             Counter: counter,
             Node: node,
             Pass: pass,
-            Summary: summary
+            Summary: summary,
+            Transfers: transfers
         );
 
-        if ((node is not null) || (pass is not null) || (counter is not null)) {
+        if ((node is not null) || (pass is not null) || (counter is not null) || transfers) {
             if ((filter is not null) && !Selects(
                 filter: filter,
                 name: GpuSection
@@ -149,6 +154,9 @@ public sealed class WorldCountersCommandModule(IEnumerable<IWorkCounterSource> s
             filter = GpuSection;
         }
 
+        if (transfers && (summary || pass is not null || counter is not null)) {
+            return CommandResult.Error(output: $"[{Verb}: transfers reports whole-ledger cumulative work; it takes node but not pass, counter or summary]");
+        }
         if (summary && (counter is not null)) {
             return CommandResult.Error(output: $"[{Verb}: summary counts draws, vertices, texels and dispatches, so it takes node and pass but not counter]");
         }
@@ -314,6 +322,7 @@ public sealed class WorldCountersCommandModule(IEnumerable<IWorkCounterSource> s
 
         foreach (var node in m_readNodes) {
             _ = node.Work.TryReadCompleted(sample: m_readSample);
+            _ = node.Work.TryReadTransfers(out _);
 
             if (node.Lifetime is { } lifetime) {
                 ReadKinds(source: lifetime);
@@ -361,6 +370,7 @@ public sealed class WorldCountersCommandModule(IEnumerable<IWorkCounterSource> s
                 var sample = new GpuWorkSample();
 
                 writer.WriteStartObject(propertyName: GpuSection);
+                if (query.Transfers) { writer.WriteString("transfer-scope", GpuWorkReport.TransferScope); }
                 writer.WritePropertyName(propertyName: "device");
 
                 if (gpu?.DeviceIdentity is { } identity) {
@@ -378,8 +388,9 @@ public sealed class WorldCountersCommandModule(IEnumerable<IWorkCounterSource> s
                 }
 
                 writer.WriteStartArray(propertyName: "nodes");
-
+                var transfers = (query.Transfers ? GpuWorkReport.ReadTransfers(shown) : null);
                 foreach (var node in shown) {
+                    if (transfers is not null) { GpuWorkReport.WriteTransfers(writer, node.Name, transfers[node.Work]); continue; }
                     _ = (query.Summary
                         ? GpuWorkReport.TryWriteSummary(
                             node: node,
@@ -453,7 +464,7 @@ public sealed class WorldCountersCommandModule(IEnumerable<IWorkCounterSource> s
             Write(kinds: source.WorkKinds);
         }
 
-        if (includeGpu && !query.Summary) {
+        if (includeGpu && !query.Summary && !query.Transfers) {
             Write(
                 kinds: GpuWork.SubmissionKinds,
                 submission: true
@@ -537,6 +548,12 @@ public sealed class WorldCountersCommandModule(IEnumerable<IWorkCounterSource> s
             query: query
         );
         var header = builder.Length;
+        if (query.Transfers) {
+            builder.Append("transfer-scope=").Append(GpuWorkReport.TransferScope).Append('\n');
+            var transfers = GpuWorkReport.ReadTransfers(shown);
+            foreach (var node in shown) { GpuWorkReport.AppendTransfers(builder, node.Name, transfers[node.Work]); }
+            return builder.ToString();
+        }
 
         if (!query.Summary) {
             foreach (var node in shown) {
@@ -581,7 +598,7 @@ public sealed class WorldCountersCommandModule(IEnumerable<IWorkCounterSource> s
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
-            description: $"Echoes every registered work counter: world.counters [<source-or-prefix>] [node <name>] [pass <label>] [counter <prefix>] [summary] [--json]. One section per counter source, sorted by name — the source's dotted name, then a `<kind> <value>` line per kind it counts (counts only go up; a reader diffs two reads). The `{GpuSection}` section's header names the device (backend, adapter, vendor and device ids, driver version, API version), then a `capabilities` line names what it can bind (descriptor sets or root-signature words, push-constant bytes, per-stage descriptor limits, and on Direct3D 12 the binding tier, root signature version, shader model and heap sizes), then it holds each render node's GPU work for its newest completed submission: per node (world first, then its hosted pipelines, overlay, view:<name>) a `node <name> work submission=S revision=R` line, one `work <pass> executed|skipped|not-reached` line per pass with its counts, `work outside` for work between passes, and `work lifetime` for created objects; `work unavailable` until a submission completes. A full `{GpuSection}` answer runs to hundreds of kilobytes in a large world, so narrow it: `node <name>` keeps one node (and the nodes under it, `session$26` keeps `session$26$24`), `pass <label>` keeps one pass (`sdf.world$mesh`, or `sdf.world` for every pass under it) in every node that has it and drops the lifetime, owned-bytes and outside lines, `counter <prefix>` keeps the counts whose name starts with the prefix (`draws` keeps draws and draws.indirect; `vertices`, `texels`), and `summary` prints one `node <name> draws=N vertices=N texels=N dispatches=N` line per node (dispatches are direct and indirect together; with `pass`, only that pass). The options combine; node, pass and counter select the `{GpuSection}` section by themselves. Bare summary keeps every available source and summarizes GPU nodes when present, including on a headless host. A text `{GpuSection}` section that would pass {GpuTextBudget} characters prints the summary form under a note saying so. The `{AllocationSection}` section names the GC mode and the fewest managed bytes one read of every count allocated ({ReadWindow}, the least of up to {AllocationWindow.MaximumWindows} reads; only zero or not zero means anything). A filter selects the sections named by it or under it by whole dotted segments (world.counters {GpuSection}, world.counters state). --json prints one line of JSON: {{\"sources\":[{{\"name\":…,\"counts\":{{\"<kind>\":<value>}}}}],\"{GpuSection}\":{{\"device\":{{…}},\"capabilities\":{{…}},\"nodes\":[…]}},\"{AllocationSection}\":{{\"gcMode\":…,\"windows\":{{\"{ReadWindow}\":<bytes>}}}},\"kinds\":{{\"<kind>\":{{\"unit\":…,\"class\":\"deterministic|per-backend-deterministic|pacing\"}}}}}}; the options narrow its nodes the same way and `summary` writes each node as {{\"name\":…,\"summary\":{{\"draws\":…,\"vertices\":…,\"texels\":…,\"dispatches\":…}}}}, and the JSON is never replaced by a summary. Counts run always.",
+            description: $"Echoes every registered work counter: world.counters [<source-or-prefix>] [node <name>] [pass <label>] [counter <prefix>] [summary | transfers] [--json]. One section per counter source, sorted by name — the source's dotted name, then a `<kind> <value>` line per kind it counts (counts only go up; a reader diffs two reads). The `{GpuSection}` section's header names the device (backend, adapter, vendor and device ids, driver version, API version), then a `capabilities` line names what it can bind (descriptor sets or root-signature words, push-constant bytes, per-stage descriptor limits, and on Direct3D 12 the binding tier, root signature version, shader model and heap sizes), then it holds each render node's GPU work for its newest completed submission: per node (world first, then its hosted pipelines, overlay, view:<name>) a `node <name> work submission=S revision=R` line, one `work <pass> executed|skipped|not-reached` line per pass with its counts, `work outside` for work between passes, and `work lifetime` for created objects; `work unavailable` until a submission completes. A full `{GpuSection}` answer runs to hundreds of kilobytes in a large world, so narrow it: `node <name>` keeps one node (and the nodes under it, `session$26` keeps `session$26$24`), `pass <label>` keeps one pass (`sdf.world$mesh`, or `sdf.world` for every pass under it) in every node that has it and drops the lifetime, owned-bytes and outside lines, `counter <prefix>` keeps the counts whose name starts with the prefix (`draws` keeps draws and draws.indirect; `vertices`, `texels`), and `summary` prints one `node <name> draws=N vertices=N texels=N dispatches=N` line per node (dispatches are direct and indirect together; with `pass`, only that pass). `transfers` reports cumulative host-write/copy work at submission/discard checkpoints, accepted submissions and known completion by ordered ledger domain. Open records are excluded; image-copy bytes and physical bus traffic are not inferred. Coverage is limited to reported render-device ledger domains, excluding external-source threads/devices. It takes node but not pass/counter/summary. The other options combine; node, pass and counter select the `{GpuSection}` section by themselves. Bare summary keeps every available source and summarizes GPU nodes when present, including on a headless host. A text `{GpuSection}` section that would pass {GpuTextBudget} characters prints the summary form under a note saying so. The `{AllocationSection}` section names the GC mode and the fewest managed bytes one read of every count allocated ({ReadWindow}, the least of up to {AllocationWindow.MaximumWindows} reads; only zero or not zero means anything). A filter selects the sections named by it or under it by whole dotted segments (world.counters {GpuSection}, world.counters state). --json prints one line of JSON: {{\"sources\":[{{\"name\":…,\"counts\":{{\"<kind>\":<value>}}}}],\"{GpuSection}\":{{\"device\":{{…}},\"capabilities\":{{…}},\"nodes\":[…]}},\"{AllocationSection}\":{{\"gcMode\":…,\"windows\":{{\"{ReadWindow}\":<bytes>}}}},\"kinds\":{{\"<kind>\":{{\"unit\":…,\"class\":\"deterministic|per-backend-deterministic|pacing\"}}}}}}; the options narrow its nodes the same way and `summary` writes each node as {{\"name\":…,\"summary\":{{\"draws\":…,\"vertices\":…,\"texels\":…,\"dispatches\":…}}}}, and the JSON is never replaced by a summary. Counts run always.",
             handler: (_, args) => Describe(args: args),
             name: Verb
         );

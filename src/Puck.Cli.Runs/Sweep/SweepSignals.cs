@@ -7,7 +7,7 @@ namespace Puck.Cli.Sweep;
 /// <summary>Turns a read's answer into named metrics, by the parser a signal names.</summary>
 public static partial class SweepSignals {
     /// <summary>The parser names a signal may give.</summary>
-    public static readonly IReadOnlyList<string> Parsers = ["cells", "counters", "frames", "pairs", "report", "text", "words"];
+    public static readonly IReadOnlyList<string> Parsers = ["cells", "counters", "frames", "gpu-transfers", "pairs", "report", "text", "words"];
 
     /// <summary>The name of the regular-expression group a metric pattern uses to read the total of a group over every match.</summary>
     public const string SumGroup = "sum";
@@ -55,6 +55,9 @@ public static partial class SweepSignals {
                     }
                 }
 
+                break;
+            case "gpu-transfers":
+                ReadGpuTransfers(output, metrics);
                 break;
             case "frames":
                 ReadFrames(metrics: metrics, output: output);

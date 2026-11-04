@@ -167,6 +167,7 @@ public sealed partial class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
             throw new InvalidOperationException(message: $"Pass {m_currentPass} is still running; leave it before discarding the work being recorded.");
         }
 
+        DiscardTransfers(record: m_open);
         m_open?.Free();
         m_open = null;
     }
@@ -197,6 +198,7 @@ public sealed partial class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
     /// <summary>Withdraws the published sample and drops every submission not yet published, for a reset, a resize,
     /// or a release of the node's GPU resources. The next sample is a submission sealed after this call.</summary>
     public void Invalidate() {
+        DiscardTransfers(record: m_open);
         foreach (var record in m_records) {
             record.Free();
         }
@@ -313,7 +315,7 @@ public sealed partial class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
         }
     }
 
-    internal void Complete(long submission) {
+    internal void Complete(long submission, GpuTransferCounts? transferPrefix = null) {
         Record? completed = null;
 
         foreach (var record in m_records) {
@@ -322,9 +324,10 @@ public sealed partial class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
             }
         }
 
-        if (completed is null) {
-            return;
-        }
+        // A fence owns its exact prefix even when the bounded sample record has wrapped or was invalidated.
+        if (transferPrefix is { } prefix) { CompleteTransfers(submission, prefix); }
+        else if (completed is not null) { CompleteTransfers(submission, completed.TransferPrefix); }
+        if (completed is null) { return; }
 
         if (submission > m_published) {
             completed.Readback?.AddTo(
@@ -360,6 +363,7 @@ public sealed partial class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
         var record = OpenRecord();
 
         record.Counts[(((m_currentPass + 1) * Columns) + column)] += amount;
+        CountTransfer(record, column, amount);
     }
     internal void CountCreated(int lifetimeIndex) =>
         m_lifetime[lifetimeIndex].IncrementShared();
@@ -379,6 +383,7 @@ public sealed partial class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
         record.Fence = fence;
         record.State = RecordState.Sealed;
         record.Submission = ++m_lastSealed;
+        SealTransfers(record);
         m_currentPass = -1;
         m_open = null;
 
@@ -468,6 +473,8 @@ public sealed partial class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
         public GpuPassState[] States = [];
 
         public long Submission;
+        public GpuTransferCounts Transfers;
+        public GpuTransferCounts TransferPrefix;
 
         public void Free() {
             Fence = null;
@@ -489,6 +496,8 @@ public sealed partial class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
             Readback = null;
             State = RecordState.Open;
             Submission = 0L;
+            Transfers = default;
+            TransferPrefix = default;
         }
         // Keeps the outside row, which does not depend on the passes; clears every pass row and state.
         public void Rebind(string[] labels, WorkClass[] classes, long revision) {

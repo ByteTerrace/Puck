@@ -27,6 +27,35 @@ census or a portable conversion from process-private bytes to physical pages.
 Correlate a held normal-play window with retained owners and these driver/host
 observations; a replay observer's memory does not qualify the player's budget.
 
+## Measure transfer windows
+
+`world.counters gpu transfers --json` reads `GpuTransferTotals` from the existing
+work ledgers. Unlike `summary`, these are monotonic counts at submission/discard
+checkpoints, not one completed submission. The currently open record is excluded
+until its checkpoint. Host writes count CPU payload bytes; buffer-copy bytes
+include upload, readback and device-local carry copies once each. Image copies
+have operations but no inferred bytes. None is an allocation or physical bus count.
+
+Use submitted and completed deltas separately: accepted work between endpoints is
+not necessarily the work whose completion became known there. Completion prefixes
+belong to one concrete ordered queue; another node's fence proves nothing about
+this ledger. `GpuWorkCounting.Wrap` binds that queue. The prefix survives bounded
+sample reuse and invalidation through the counting fence's exact captured prefix.
+
+A report reads each source once and reuses the first observation for ledger aliases.
+The `gpu-transfers` signal parser deduplicates domains; a pinned route refuses
+unsupported sources, changing domains or decreasing counts instead of subtracting
+retired/new owners as zero. This covers stable ledger populations; churn requires
+retaining terminal owner observations before claiming a complete transfer window.
+External image producers on another device remain outside the render ledger's
+scope. The native World registry excludes those producers rather than inventing
+zero transfer counts. JSON labels the scope `registered-render-device-ledgers`:
+complete coverage means those reported domains only, not every GPU operation the
+host performs. Win32 capture-feed conversion/readback work is outside this scope.
+The ordering premise agrees with [Direct3D queue completion timelines](https://learn.microsoft.com/en-us/windows/win32/direct3d12/user-mode-heap-synchronization)
+and [Vulkan fence signal scope](https://docs.vulkan.org/spec/latest/chapters/synchronization.html#synchronization-fences-signaling);
+submission order alone does not establish cross-queue completion.
+
 ## Read a kernel's registers and occupancy
 
 The SPIR-V and DXIL the build writes beside each `*.hlsl` carry no register
