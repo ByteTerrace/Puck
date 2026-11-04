@@ -37,6 +37,14 @@ agent works in that mode by default, without asking:
   author imports, overrides by id, or replaces. Debug-world-only content (its
   places, tours, exhibits) stays in `worlds/debug/`. Building a design into
   engine code, or only into the debug world, builds it twice.
+- Authors rule (the owner's ruling). Styles and gameplay are the author's, never
+  choices the engine backs in: a look (a material's pattern, a noise's
+  character, a shading treatment) or a rule of play is an authored parameter or
+  program with a neutral engine default, and the standard package chooses the
+  values it wants. Engine code keeps only mechanisms and correctness (a surface
+  drawn black by a lighting defect is a defect, not a style). Authors bringing
+  their own shaders is in scope
+  ([open items](docs/plans/open-items.md#author-shaders)).
 - Puck code over engine code (the owner's ruling). Behaviour is written as
   Puck programs that authors build and own: camera programs, physics and
   motion programs, the state system's rules, board games, emulated machines

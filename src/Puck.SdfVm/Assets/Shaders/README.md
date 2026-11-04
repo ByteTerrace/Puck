@@ -73,7 +73,10 @@ refuses a kernel whose stamp or bindings are not this host's. The two bake kerne
 the exception that keys the stored meshes: their interface (`sdf-mesh-bake`) holds
 only what the bake reads and carries the field's stamp alone, the fingerprint of
 `sdf-isa.hlsli` and the encoding, so a light, exposure, pass-block or table change
-leaves their bytecode, and every stored mesh, as it was. No automated gate covers the rendered image
+leaves their bytecode, and every stored mesh, as it was. A stamp hashes layout, not
+every generated `#define`: a value only the shader reads (`Tuning` in `SdfIsaHlsl`)
+keeps every stamp, and a reload of the retuned kernels applies
+([classification](../../../../docs/reference/shaders.md#pass-interfaces)). No automated gate covers the rendered image
 beyond `puck parity`, so a kernel change is judged by running
 `Puck.World` and looking at the pixels on both backends.
 

@@ -41,8 +41,17 @@ agrees with the instruction set it was built with because the build refuses
 bytecode stale against its sources and every include (the generated
 `sdf-isa.hlsli` among them), and `puck shaders generate --check` refuses a
 stale generated file. The instruction set's fingerprint
-(`SdfIsaHlsl.DescribeFingerprint`) hashes the include and the model's
-described encoding (`SdfEncodingProbe.Describe`: one builder call per
+(`SdfIsaHlsl.DescribeFingerprint`) hashes the includes' layout (their stamped
+`#define` lines: every integer declaration and every real the host also shares,
+but not a `Tuning` real, a value no host packing or decoding reads, so retuning
+one keeps the stamp and a reload accepts the kernels;
+[classification](../../../../docs/reference/shaders.md#pass-interfaces)). The
+irradiance tuning reals (`BehindShare`, `NormalBias`, the depth coverage pair) are
+also read by `SdfMeshIrradiance`'s CPU gather, which feeds the bounce trace as
+well as `world.probe`: a shader-only retune of one lights pixels and bounces by
+different values until the host is rebuilt, a lighting mismatch, never a layout
+fault)
+and the model's described encoding (`SdfEncodingProbe.Describe`: one builder call per
 operation, shape, blend, lift and lane-enum member, and calls packing every
 side table and flag, described by each packed program's integer words and,
 for each input raised alone, the bits of every integer word that moves and

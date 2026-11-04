@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Text.RegularExpressions;
 using Puck.Abstractions.Cameras;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
@@ -158,6 +159,51 @@ public sealed class SdfWorldResidencyShaderReloadLawTests {
 
         Assert.Equal(expected: ("failed", 2L), actual: (broken.State, broken.Generation));
         Assert.Contains(actualString: broken.Error, expectedSubstring: $"{Path.GetFileName(path: mask)}:5:");
+        Assert.True(condition: node.Produce(context: in context));
+    }
+
+    // A tuning constant retuned in the renderer's generated include moves no stamp, so the views kernel compiled from the
+    // retuned source reads this host's interface: the reload applies it and the pipeline's bytecode is the retuned one.
+    [Fact]
+    public void AReloadOfKernelsRetunedByATuningConstantApplies() {
+        using var scratch = new TemporaryDirectory(prefix: "puck-test-");
+        var source = RepositoryPaths.Resolve(relativePath: SdfKernelInterfaces.KernelDirectory);
+        var tree = Path.Combine(path1: scratch.RootPath, path2: "Sdf");
+        var views = $"{SdfKernelSet.StemOf(kernel: SdfKernel.Views)}.comp.hlsl";
+
+        foreach (var file in Directory.EnumerateFiles(path: source, searchPattern: "*.hls*", searchOption: SearchOption.AllDirectories)) {
+            var relative = Path.GetRelativePath(relativeTo: source, path: file);
+
+            if (relative.StartsWith(value: "passes", comparisonType: StringComparison.Ordinal) && relative.EndsWith(value: ".comp.hlsl", comparisonType: StringComparison.Ordinal) && (Path.GetFileName(path: relative) != views)) {
+                continue;
+            }
+
+            _ = Directory.CreateDirectory(path: Path.GetDirectoryName(path: Path.Combine(path1: tree, path2: relative))!);
+            File.Copy(destFileName: Path.Combine(path1: tree, path2: relative), overwrite: true, sourceFileName: file);
+        }
+
+        var render = Path.Combine(path1: tree, path2: "isa", path3: SdfRenderHlsl.FileName);
+        var retuned = Regex.Replace(
+            input: SdfRenderHlsl.Generate(),
+            pattern: @"(SDF_MESH_IRRADIANCE_BEHIND_SHARE\s+)\S+",
+            replacement: "${1}0.0625"
+        );
+
+        Assert.NotEqual(actual: retuned, expected: SdfRenderHlsl.Generate());
+        File.WriteAllText(contents: retuned, path: render);
+
+        var context = Context(gpu: new FakeGpuDevice());
+        using var node = Node();
+
+        node.ProduceFirstFrame(context: in context);
+
+        var applied = Reload(
+            context: in context,
+            node: node,
+            root: tree
+        );
+
+        Assert.Equal(expected: ("applied", 1L, 1), actual: (applied.State, applied.Generation, applied.ChangedPipelines));
         Assert.True(condition: node.Produce(context: in context));
     }
 
