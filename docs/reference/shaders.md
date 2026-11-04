@@ -1236,7 +1236,9 @@ shader reads, which a diagnostic mirror may repeat (a bias, a share, a threshold
 limit, the photometric and exposure targets), is declared `Tuning` in `SdfIsaHlsl`:
 it is in the generated text and in no stamp, so a retune keeps every pass block's name
 and `world.shaders.reload` accepts the recompiled kernels. A new real is layout unless
-nothing the host packs or decodes reads it.
+nothing the host packs or decodes reads it and every kernel sharing its encoding reloads together.
+The glass sum scale stays stamped: its composition-owned raster encoder does not hot reload
+with its compute decoder, so changing only the latter would reinterpret the retained encoding.
 
 The spike interfaces three passes: film grain, a pixelate compute pass, and a
 compute pass reading structured buffers of a 4-byte and a 16-byte element, a
