@@ -1779,10 +1779,12 @@ the fixed poses and the approaches already rejected.
   `body.pose 64 4.57 28.52 273`,
   `view.override camera look 68 6.8 28.52 10 6.0 28.52`,
   `world.debug-view indirect`. The far third of the hall shows them, and
-  `world.probe 10.6 6.5 28.5 1 0 0` reads `level=1`. Candidates: weight the
-  coarse answer by the share of its probes that see the receiver, blending
-  toward the finest level's extension; or a second level whose spacing
-  resolves storeys. Re-check the far-wall stops this item listed
+  `world.probe 10.6 6.5 28.5 1 0 0` reads `level=1`. The
+  [far-field memo](far-field-irradiance.md) measured the cause (storeys with
+  no coarse probe plane read nothing but single leaking corners normalized to
+  the whole) and holds the recommendation and its implementation brief:
+  conservative coverage past the finest level, share-blended level selection,
+  and a storey-resolving coarse level. Re-check the far-wall stops this item listed
   (`finding-teal-roof`, `gallery-entrance`, `devices`, `desktop`, `rate-range`,
   `camera-course`, `stage`, `jump`, `flight`, `noclip`, the `garden` return
   portal).
