@@ -6,6 +6,7 @@ using Puck.Transpiler.Diagnostics;
 using Puck.Transpiler.Formatting;
 using Puck.Transpiler.Parsing;
 using Puck.World.Transpiler.Decompiler;
+using static Puck.World.WorldJsonPointer;
 
 namespace Puck.World.Transpiler;
 
@@ -383,10 +384,6 @@ public static class WorldSourceEdits {
             }
         } else { yield return pointer; }
     }
-    internal static string Escape(string value) => value.Replace(comparisonType: StringComparison.Ordinal, newValue: "~0", oldValue: "~")
-        .Replace(comparisonType: StringComparison.Ordinal, newValue: "~1", oldValue: "/");
-    internal static string Unescape(string value) => value.Replace(comparisonType: StringComparison.Ordinal, newValue: "/", oldValue: "~1")
-        .Replace(comparisonType: StringComparison.Ordinal, newValue: "~", oldValue: "~0");
     private static bool TryReplacement(JsonObject target, string pointer, out string text, out string reason) {
         var parts = pointer.Split(options: StringSplitOptions.RemoveEmptyEntries, separator: '/').Select(selector: Unescape).ToArray();
         JsonNode? value = target;
@@ -433,16 +430,6 @@ public static class WorldSourceEdits {
             reason = $"{exception.Message}; rename the generated row before saving source, or save a JSON delta with this source as its basis";
             return false;
         }
-    }
-    internal static JsonNode? At(JsonNode? root, string pointer) {
-        foreach (var part in pointer.Split(options: StringSplitOptions.RemoveEmptyEntries, separator: '/')) {
-            root = root switch {
-                JsonObject obj => obj[Unescape(value: part)],
-                JsonArray array when (int.TryParse(s: part, provider: CultureInfo.InvariantCulture, result: out var index) && (index >= 0) && (index < array.Count)) => array[index],
-                _ => null,
-            };
-        }
-        return root;
     }
     private static bool Exists(JsonObject root, string pointer) {
         if (pointer.Length == 0) { return true; }

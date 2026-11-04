@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Puck.Assets.Documents;
 using Puck.State;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Diagnostics;
@@ -1255,7 +1256,7 @@ public static partial class WorldDocumentEmitter {
 
         scope.Diagnostics.ReportError(
             code: PuckDiagnosticCodes.StateDeclarationInvalidDefault,
-            message: $"{context} must be {((kind == "Bool") ? "'true' or 'false'" : "a whole number")} for a {kind} grid",
+            message: $"{context} must be {((kind == "Bool") ? DocumentValueKind.Boolean : DocumentValueKind.WholeNumber).Words()} for a {kind} grid",
             span: expr.Span
         );
 
