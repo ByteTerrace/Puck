@@ -1185,6 +1185,69 @@ lowers it to the same JSON as before, except where the look changes on purpose.
     `hazards.md` keep the CPU/GPU small-radius disagreement open. One of them
     is wrong.
 
+Engine defaults that carry a look or a rule of play, which the authors rule
+wants authored with a neutral engine default (each one sits in C# or HLSL,
+and none has an authored field yet):
+
+- [medium] An unauthored world renders a baked atmosphere. `WriteAtmosphere`
+  falls back to `SdfAtmosphere.Default` for a world with no
+  `render.atmosphere` (`src/Puck.World.Client/WorldEnvironmentResolve.cs:711`),
+  which is a fog of `SdfSky.DefaultFogDensity`
+  (`src/Puck.SignedDistance/SdfAtmosphere.cs:74`, `SdfSky.cs:98`), and every
+  authored sky layer, fog and medium without a luminance reads
+  `SdfSky.DefaultLuminance` (`SdfSky.cs:115`;
+  `WorldEnvironmentResolve.cs:724,739,762`). Make the unauthored default
+  neutral (no fog), author the atmosphere in each debug-world place that leans
+  on it (and `worlds/standard` where a package should carry one), then look at
+  the places on windowed Direct3D 12 and Vulkan before and after; do it after
+  the debug world's own edits land.
+- [medium] The opening ripple's feel and look are engine constants, not one
+  authored ripple record. Reach, body centre, margin and the touch and cross
+  strengths are C# constants
+  (`src/Puck.World.Client/WorldOpeningRipples.cs:15-27`); the lifetime and
+  clock period are mirrored in C# and HLSL (`SdfScreenRipple.cs:16-23`); the
+  amplitudes, front speed, ring length, edge fade, glow and its colour, and the
+  idle waves' directions, lengths and cycles are HLSL literals
+  (`src/Puck.SdfVm/Assets/Shaders/Sdf/shade/sdf-environment.hlsli:26-37`).
+  Design one `ripple` material that carries feel and look together (the
+  screen's `ripple` flag selects it, the session frame source's `Ripple` parameter in `WorldScreen.cs`), put the
+  values in `worlds/standard` as the default, and carry the look through the
+  ripple record's rows, which changes the GPU data layout and needs windowed
+  boots on both backends.
+- [low] The gait drivers' `moving` gate is a fixed rendered speed
+  (`WorldGaitDrivers.MovingSpeed = 0.05`,
+  `src/Puck.World.Client/WorldGaitDrivers.cs:41`; read at `:114` and
+  `WorldCreationInstances.Effectors.cs:41`), and mirrored avatars advance gait
+  phase by a fixed distance cadence and per-frame travel clamp
+  (`WorldMirroredAvatarBand.GaitCadence = 8` and `MaxGaitTravelPerFrame =
+  0.25`, `src/Puck.World.Client/WorldMirroredAvatarBand.cs:13,16`; used at
+  `WorldSceneEmitter.cs:574`). The first looks like a noise threshold, the
+  second a look. One design pass on creation-driver authoring decides whether
+  each is a driver or rig field (`CreationDriverDocument`,
+  `src/Puck.World.Authoring/Authoring/CreationAnimation.cs`), which touches the
+  generated schema and TypeScript model.
+- [low] The built-in view ladder's transition envelope is baked into the
+  composer (`BuiltinTransitionSeconds` and `BuiltinTransitionRenderScale`,
+  `src/Puck.World.Client/WorldViewComposer.cs:29-33`, returned at `:311`). Its
+  comment says it copies `ScreenLayoutDirector`'s compiled 0.6 s and 0.5
+  scale, but no such class remains in `src`; the same name survives in comments
+  at `src/Puck.SdfVm/Views/ViewTransition.cs:36,44` and
+  `SdfCameraRig.cs`. Check that a built-in ladder has authored source in
+  `worlds/standard` to carry the envelope, move the values there, and delete
+  the stale mentions.
+- [low] The tabletop framing clamps an authored engage pitch to
+  `MaximumPitchRadians` (`0.4972 pi`,
+  `src/Puck.World.Client/WorldTabletopFraming.cs:19`, applied at `:90-92`),
+  which reads as a guard against a straight-down view. Confirm that the
+  validator's `WorldTabletopEngage.Pitch` range stops below it and report a
+  pitch above it by name; low value until an author engages near 90 degrees.
+- [medium] The procedural avatar catalog owns a fixed look
+  (`src/Puck.World.Client/WorldRigCatalog.cs`: the humanoid's part table at
+  `:27`, leaf counts and bound radius at `:14-17`, and per-role anchors from
+  `HumanoidAnchor` at `:201`). Design how a catalog rig is authored (a rig
+  document the standard package supplies, with this humanoid as its default
+  data) before moving any of it; this is larger than one lane.
+
 Code that grew a second implementation (AGENTS.md rule 7) or costs velocity:
 
 - [medium] A body's simulation continuation has no single write door, so
