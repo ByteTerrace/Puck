@@ -376,10 +376,9 @@ recovery.
 Every device records device removed extended data (DRED,
 `DirectXDeviceContext.RecordRemoval`, on by default): before it is created the
 context forces on DRED's auto-breadcrumbs, their breadcrumb contexts (the PIX
-event label each pass records) and page-fault reporting. Always on costs nothing
-measurable on the debug world: on the RTX 2060 the steady frame's GPU passes sum
-to 6.72 and 6.79 ms with it and 6.75 and 6.78 ms without, and the CPU's frame
-production stays near 2 ms either way.
+event label each pass records) and page-fault reporting. Always on costs
+nothing measurable on the debug world: the steady frame's GPU passes and the
+CPU's frame production are the same with it and without it.
 
 When a removed device is recreated (`Recreate`) or released (`Dispose`), the
 context writes its record once, as `[d3d12-dred]` lines
@@ -487,9 +486,9 @@ created; the layer is process-wide and cannot be turned off once on.
   layer uses this level.
 - `full`: `basic`, plus `ID3D12Debug1` GPU-based validation, with its resource
   state tracking left on, and synchronized command-queue validation. The layer
-  patches every pipeline with validation code, so the debug world's bake takes
-  about two minutes on the RTX 2060 instead of six seconds, and every frame is
-  slower. It is a hunting level that no verb or gate uses.
+  patches every pipeline with validation code, so the debug world's bake and
+  every frame run an order of magnitude slower. It is a hunting level that no
+  verb or gate uses.
 
 A device asked for either level writes `[d3d12] debug layer live: … (basic)` or
 `… (full: …)` once its info queue exists, or that the layer did not load. The
@@ -517,8 +516,8 @@ previous frame and ends it after the frame presents, so the capture holds
 exactly the armed frames. PIX writes one `.wpix` through
 `BeginProgrammaticGpuCapture` and `EndProgrammaticGpuCapture`, asking again on
 the next frame while the end answers `E_PENDING`; RenderDoc writes one `.rdc` a
-frame. A frame of the debug world is about 140 MB as a `.wpix` and 110 MB as an
-`.rdc`; delete each once read.
+frame. A frame of the debug world is hundreds of MB; delete each capture once
+read.
 
 PIX analyses a capture (`pixtool open-capture <file>.wpix save-event-list`,
 `collect-occupancy`, `save-high-frequency-counters`, or the application's

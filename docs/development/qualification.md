@@ -122,8 +122,8 @@ The `debug` workload boots the debug world, the one live world. A workload may
 also churn a pipeline (`pipeline`: reloads, resizes, loads and unloads of a
 `views.graphs` row, each settled over counted submissions); the quarantined
 `ink-pipeline` workload did, and the debug world has none. The
-[forcing world](../plans/state-and-language.md#the-forcing-world) is not
-authored yet, so no workload boots it. Every length is ticks of the world's
+[forcing world](../plans/state-and-language.md#the-forcing-world) is a
+planned world, and no workload boots it. Every length is ticks of the world's
 simulation clock or frames the pipeline submits, never time. A workload's `timeoutSeconds` is only the
 ceiling a hung World is killed at.
 
@@ -175,18 +175,12 @@ Each cell sets a peak device-local bytes threshold, the most device-local memory
 the World process may hold at once: the largest `gpu.memory.device-local.peak`
 any of the cell's `world.counters --json` readings reports. Every cell's report
 records that peak whether or not its cell sets a threshold, which is how a
-threshold is set. Each is the published package's reading on the RTX 4070 with
+threshold is set. Each is the published package's reading on a bar device with
 a tenth added and rounded up to a whole MiB, since the peak is a pacing count
-(when the bake's staging overlaps its meshes moves it), not a deterministic one:
-
-| Cell | Reading | Threshold |
-|---|---|---|
-| Vulkan, 1280×800 | 1,006,632,960 | 1,107,296,256 |
-| Vulkan, 1920×1080 | 1,645,248,512 | 1,809,842,176 |
-| Direct3D 12, 1280×800 | 1,031,751,680 | 1,135,607,808 |
-| Direct3D 12, 1920×1080 | 1,660,241,920 | 1,826,619,392 |
-
-The AMD devices have no reading yet. A pipeline workload also sets peak owned
+(when the bake's staging overlaps its meshes moves it), not a deterministic one.
+The values live in `tests/Puck.Qualification/release.profile.json` and are not
+retyped here; a cell whose device has no recorded reading sets none. A pipeline
+workload also sets peak owned
 pipeline bytes, a planned count that is the same on every device: the
 quarantined `ink-pipeline` workload's was the `ink` graph's planned replacement
 peak, 96 bytes a pixel. The `debug` workload churns no pipeline, so its cells

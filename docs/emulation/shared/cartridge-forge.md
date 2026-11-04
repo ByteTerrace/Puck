@@ -341,7 +341,7 @@ exclusive guard's safety.
 eleventh of a `set` step writing a literal to a variable—and compares the
 total against a per-frame reservation. The weights are measured, not estimated:
 [`puck cartridge-cost`](../../reference/cli.md#puck-cartridge-costcartridge-cost-measurement)
-boots `CartridgeCostMeasurement`'s probe documents on both real machines and reports the
+boots `CartridgeCostMeasurement`'s probe documents on the emulated Color and Advanced machines and reports the
 largest per-frame iteration count each sustains at full frame rate, and cost per
 iteration is inversely proportional to that. Each target has its own weights and reservation;
 changing `/target` can change the estimate and observed cadence. Cross-target unit totals are not comparable.

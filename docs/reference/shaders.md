@@ -103,8 +103,7 @@ those same inputs, options and toolchain. Editing one `.hlsli` invalidates only 
 includes it; a matching entry already in the cache needs no compiler run.
 
 The toolchain identity hashes file contents rather than installation paths or
-timestamps. A compiler hashes them once (about 23 MB with the Vulkan SDK's
-`dxc`), not once per output; every later key re-reads only each file's path,
+timestamps. A compiler hashes them once, not once per output; every later key re-reads only each file's path,
 length and times, and hashes again when one moves, so a toolchain replaced
 during a build still refuses that build's publications. A replacement that
 keeps all of them is read by the next process's compiler. Its library search covers ordinary DXC layouts, but does not yet
@@ -183,9 +182,10 @@ every project node of a parallel build shares, so two shader projects divide the
 machine rather than each starting its own set of compilers. The longest outputs
 start first: the cache records how long each output last took, and an output
 never measured is estimated from its closure's size. Memory bounds them too: the
-largest kernels' DXIL compiles peak near 2 GB each, so a compile starts beside
-running ones only while the machine has 2 GB of physical memory free for it and
-for each compile started in the last 30 seconds (`HostMemory`). Each project's
+largest kernels' DXIL compiles peak at gigabytes each, so a compile starts
+beside running ones only while the machine has `CompileMemoryReserve` of
+physical memory free for it and for each compile started within `YoungCompile`
+(`HostMemory` reads the available memory). Each project's
 first compile can start even below that reserve, so low free memory cannot
 stop all progress. Windows reports available physical memory and Linux reads
 `MemAvailable` from `/proc/meminfo`; an unavailable reading leaves admission

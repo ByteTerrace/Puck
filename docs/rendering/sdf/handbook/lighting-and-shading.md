@@ -294,9 +294,9 @@ in the frame.
   `puck mesh scene --world <file>` times the
   scene over a world's stored static meshes on the CPU: a full build, one
   sweep of a High window, and the update for one draw's new geometry, a move
-  and a return. On the debug world's 250 stored static groups (16.9 million
-  triangles) a full build takes about 1.2 s on the Ryzen 7 7800X3D and a
-  one-draw change about 0.05 s. A change of a static point or spot light (a
+  and a return. On the debug world a full build takes
+  seconds and a one-draw change a small fraction of that, so the scene is
+  updated incrementally rather than rebuilt. A change of a static point or spot light (a
   switch's power) relights the probes, since their bounce and visibility bits
   carry it; an anchored light's move relights nothing.
 - **Limits.** Moving bodies receive the volume's light and cast none into it.

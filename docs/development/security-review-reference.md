@@ -124,14 +124,11 @@ someone else's private key are different threat models.
 | Parenthesized vector subject named the operand instead of its row | An authored transform reported `(secretVec[a])` as its read subject, obscuring the actual row from consumers. | Balanced enclosing parentheses are stripped before subject extraction. `ParenthesizedVectorCellOperandListsUnderlyingRowAsReadSubject` failed without stripping and passes with it; the witness does not establish a complete remote authorization bypass. |
 | Decision transforms omitted remaining local controls | Decision-only effects did not inherit every local evaluation dependency. An authored hidden local can fault before effects; the restriction is conservative compiler policy. | World compilation collects compiled local reads for decision transforms. `DecisionDisclosureTests.LocalEvaluationCannotControlATransformOutsideItsAudience` fails for the public destination without the fix and passes with it; the confined control passes both. Direct local-score reads were already protected. |
 
-The `codex-security` follow-up withdrew the unverified WIP before reintroducing
-individually proven changes. Its original prose about pruning and untrimmed stub
-pointer parsing did not match the patch and was removed. The stub whitespace
-change remains withdrawn; the open-items entry records why. Decision-local checks
-have their own schema regression. Full launcher, state-rules, state and world-schema
-suites passed on the merged integration head after fresh Release builds on Windows.
-No World was booted and no GPU or deployment check was performed. Remaining review
-candidates are tracked separately and are not established by these runs.
+Each row above is an individually proven change; an unproven candidate is not
+listed. The stub whitespace change is withdrawn; the open-items entry records
+why. Decision-local checks have their own schema regression. No row involved
+booting a World, a GPU check or a deployment check. Remaining review candidates
+are tracked separately and are not established by these cases.
 
 The SAS trigger uses the authenticated caller's on-behalf-of storage credential.
 Accepting a container, blob and permission selection is not by itself evidence
@@ -259,7 +256,6 @@ require that runtime's `dotnet` on PATH. WSL results cover those fixtures and
 Linux temporary filesystem operations, not every production Linux distribution,
 filesystem, native package or deployment policy.
 
-The preflight's source searches use ordinary text search after the repository
-search/semantic tools failed in the session. Text matches are navigation aids,
-not proof that all semantic callers have been found. Exact commands and results
-belong in the accompanying commits; untested areas remain explicit above.
+Text matches are navigation aids, not proof that all semantic callers have been
+found; prefer the repository's symbol tools. Exact commands and results belong
+in the accompanying commits; untested areas remain explicit above.

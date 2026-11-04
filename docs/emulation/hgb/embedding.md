@@ -74,7 +74,7 @@ returns a private copy. Its generation and native presentation are owned by the
 
 Add `fast` to engine options, or pass `bootMode: MachineBootMode.Fast`, to begin
 at the seeded handoff. The selected firmware still participates in snapshot
-identity. `cgb fast bios=C:/Firmware Files/boot.bin` uses an external image;
+identity. `cgb fast bios=<path>/boot.bin` uses an external image;
 the final `bios=` path consumes the remaining text. Ordinary cartridges and
 Puck-authored cartridges use the same bundled firmware: header branding is not
 an admission policy.

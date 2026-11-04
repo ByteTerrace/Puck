@@ -1,9 +1,8 @@
 # UI decisions
 
-The owner asked the lead and its partners (Codex, Antigravity and Fable, two
-rounds of independent review) to reconsider Puck's UI from the ground up,
-allowing a complete overhaul, and to keep one feature's look from leaking into
-the design language. The work is [the UI plan](../plans/ui.md). The owner's
+The owner asked for Puck's UI to be reconsidered from the ground up, allowing a
+complete overhaul, and for one feature's look to stay out of the design
+language. The work is [the UI plan](../plans/ui.md). The owner's
 ruling that the engine is generic is in [AGENTS.md](../../AGENTS.md).
 
 ## One tree, as presentation
@@ -84,8 +83,8 @@ ruling that the engine is generic is in [AGENTS.md](../../AGENTS.md).
   semantic alternatives and explicit interactive regions. A mod gets no shader,
   GPU handle or render-graph access.
 - **The renderer draws bounded, clipped geometry with cached paint** instead of
-  walking every element per pixel, measured on the RTX 4070 and the Steam Deck
-  from its first step. A surface redraws when its tree, a binding, a source
+  walking every element per pixel, measured on the bar devices from its first
+  step. A surface redraws when its tree, a binding, a source
   publication or an animation deadline changes.
 - **A diegetic screen renders the same tree** into the target its screen
   samples; pointer input maps through the screen's inverse source mapping, and

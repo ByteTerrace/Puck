@@ -56,7 +56,7 @@ The owner's rulings on the hub design's open calls:
   escape, with no chord. On a keyboard it is the existing Ctrl+Alt+Escape
   chord.
 
-A player save is, today, the owned identity document
+A player save is the owned identity document
 ([grounding](../plans/next-wave/ground-hub.md#1-player-persistence-today)).
 The design refines it rather than inventing another.
 
@@ -304,7 +304,7 @@ dithering are supplementary, not general: authored volumes cannot cover
 arbitrary authored geometry, and dithering handles thin occluders between eye
 and avatar, not a boom longer than the room.
 
-The owner confirmed the consensus of three independent reviews. Confidence is
+The owner confirmed this choice. Confidence is
 moderate to low that `fade` is also the most delightful, because no source
 compares player preference between fade and cut-away; the owner's side-by-side
 playtest in the lift and the stairwell settles it. The three-up `camera-compare`
