@@ -57,7 +57,14 @@ then `pixtool open-capture <path>.wpix save-event-list <csv> --counters=*`
 (`collect-occupancy` adds the occupancy data; commands from `pixtool --help`).
 PIX's NVIDIA counters gave the RTX 4070's registers a thread and achieved
 warps for every pixel pass; the exact counter names are unrecorded, so list
-them with `pixtool open-capture <path>.wpix list-counters`. PIX analysis needs
+them with `pixtool open-capture <path>.wpix list-counters`. Large forest captures
+can exhaust PIX analysis memory when exporting every hardware counter. Export
+selected families instead: `--counters=*Duration* --counters=*Invocations` for timing
+and work, then narrow NVIDIA patterns such as `--counters=Compute*Register*`.
+Whitespace-free wildcard patterns also avoid this installed tool's argument parsing
+failure on counter names containing spaces. A programmatic capture can contain
+valid API events and named objects without a gold screenshot; inspect a presented
+World frame separately. PIX analysis needs
 Windows developer mode, which the lead machine has on
 ([Direct3D 12 captures](../../../../docs/rendering/directx.md#gpu-captures)).
 

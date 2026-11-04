@@ -167,7 +167,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         m_staticVolumes.Clear();
         WorldPlacementStamper.EmitStatic(builder: builder, definition: client.Definition, creations: creations,
             placements: placements, textCatalog: m_text.Catalog, tintFor: null, volumes: m_staticVolumes,
-            meshDraws: meshDraws, colors: m_bakedColors, palettes: m_palettes, picks: m_picks, isolation: m_animator.Isolation);
+            meshDraws: meshDraws, colors: m_bakedColors, palettes: m_palettes, picks: m_picks, isolation: m_animator.Isolation, sharedAssets: m_animator.Rigid);
         m_meshDraws.Static = meshDraws;
 
         m_animator.Emit(
@@ -440,6 +440,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         var articulated = m_presentedStamps.Where(predicate: stamp => !WorldRigidAssets.IsRigid(creation: stamp.Creation, look: stamp.Look)).Select(selector: stamp => (stamp.BodyIndex, stamp.Creation.Hash, stamp.Scale, stamp.Look)).ToArray();
 
         if (!m_articulated.AsSpan().SequenceEqual(other: articulated)) { m_articulated = articulated; m_articulatedRevision++; }
+        m_animator.Rigid.ReconcileStatic(definition, definition.Placements);
         m_animator.Reconcile(
             looks: definition.Looks,
             placements: definition.Placements,
@@ -796,6 +797,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         var articulated = m_presentedStamps.Where(predicate: stamp => !WorldRigidAssets.IsRigid(creation: stamp.Creation, look: stamp.Look)).Select(selector: stamp => (stamp.BodyIndex, stamp.Creation.Hash, stamp.Scale, stamp.Look)).ToArray();
 
         if (!m_articulated.AsSpan().SequenceEqual(other: articulated)) { m_articulated = articulated; m_articulatedRevision++; }
+        m_animator.Rigid.ReconcileStatic(definition, definition.Placements);
         m_animator.Reconcile(
             looks: definition.Looks,
             placements: definition.Placements,

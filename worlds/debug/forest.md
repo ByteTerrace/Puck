@@ -10,8 +10,11 @@ The standard's [path masks](../standard/paths.puck) use control/segment bounds,
 segment distance and a quadratic chord-error allowance, without sampled-point gaps.
 
 The source varies area, spacing and candidate populations with fixed prototype
-families. The wider belt, density sweep, shared static copies, GPU instance
-buckets, nested-view route and target-device qualification remain in the milestone.
+families. The static trees, shrubs and tufts now use three shared prototype assets for 257
+occurrences, preserving ordinary per-shape bake bounds/detail and each authored
+scale. Wind patches keep their authored animated path. The wider belt, density
+sweep, GPU instance buckets, nested-view route and target-device qualification
+remain in the milestone.
 
 `world.sdf.rig` lists registration indices; `world.sdf.rig <index> [shape]` reads
 driver phases, weights and continuation. Pause both exported meadow cadence cells

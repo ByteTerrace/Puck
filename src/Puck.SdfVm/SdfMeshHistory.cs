@@ -26,8 +26,12 @@ public sealed class SdfMeshHistory {
     public static WorkKind RecordsPacked { get; } = new(name: "sdf.instances.records.packed", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Counts packed record bytes, not device transfer bytes.</summary>
     public static WorkKind RecordBytesPacked { get; } = new(name: "sdf.instances.record-bytes.packed", unit: "bytes", workClass: WorkClass.Pacing);
+    /// <summary>Counts changes to the geometry/copy correspondence used to dress a frame.</summary>
+    public static WorkKind DressTopologyBuilds { get; } = new(name: "sdf.instances.dress.topology-builds", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Counts retained dressed records rewritten by pose or metadata changes.</summary>
+    public static WorkKind DressedRecordsUpdated { get; } = new(name: "sdf.instances.dress.records-updated", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Gets process-lifetime observations from every staged table. These counts never enter simulation state.</summary>
-    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.instances", kinds: [Observed, Seeded, Retired, MatricesChanged, MatrixBytesChanged, RecordsPacked, RecordBytesPacked]);
+    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.instances", kinds: [Observed, Seeded, Retired, MatricesChanged, MatrixBytesChanged, RecordsPacked, RecordBytesPacked, DressTopologyBuilds, DressedRecordsUpdated]);
 
     private struct Cell {
         public object? Key;
@@ -36,6 +40,7 @@ public sealed class SdfMeshHistory {
         public int? FrameSlot;
         public bool Dynamic;
         public bool Glass;
+        public bool UsesRootMaterialFrame;
         public Vector4 Clip;
         public Quaternion CarryRotation;
         public Vector3 CarryTranslation;
@@ -63,7 +68,7 @@ public sealed class SdfMeshHistory {
         if (index >= m_cells.Length) { Array.Resize(array: ref m_cells, newSize: Math.Max(val1: (index + 1), val2: Math.Max(val1: 4, val2: (2 * m_cells.Length)))); }
         ref var cell = ref m_cells[index];
         var seed = (!Equals(objA: cell.Key, objB: key) || !ReferenceEquals(objA: cell.Mesh, objB: draw.Mesh) ||
-            (cell.FrameSlot != draw.FrameSlot) || (cell.Dynamic != draw.IsDynamic) || (cell.Glass != draw.Glass) ||
+            (cell.FrameSlot != draw.FrameSlot) || (cell.UsesRootMaterialFrame != draw.UsesRootMaterialFrame) || (cell.Dynamic != draw.IsDynamic) || (cell.Glass != draw.Glass) ||
             (cell.Clip != draw.ClipPlane) || (cell.CarryRotation != draw.CarryRotation) ||
             (cell.CarryTranslation != draw.CarryTranslation) || (cell.CarryScale != draw.CarryScale));
 
@@ -73,6 +78,7 @@ public sealed class SdfMeshHistory {
             cell.Key = key;
             cell.Mesh = draw.Mesh;
             cell.FrameSlot = draw.FrameSlot;
+            cell.UsesRootMaterialFrame = draw.UsesRootMaterialFrame;
             cell.Dynamic = draw.IsDynamic;
             cell.Glass = draw.Glass;
             cell.Clip = draw.ClipPlane;

@@ -69,7 +69,18 @@ The frame rasterizes baked geometry. `SdfCompositionFrameSource` allocates the
 live transform table and reports an actual `[world.render] envelope`; it builds
 no worst-case probe. `WorldRigidAssets` emits local creation templates once and
 supplies `SdfMeshInstance` roots and identities. `SdfMeshPathBake.Dress` expands
-the shared mesh into copies without program or palette duplication. Animated
+the shared mesh into copies without program or palette duplication. Fixed placements
+reuse the ordinary static emitter in prototype-local ranges (`SdfMeshTemplateRange`),
+including its per-shape bounds, detail regions and separate groups. The largest
+occurrence bakes at ordinary authored scale; copies use relative matrices. Do not
+replace that partition with one dynamic whole-object range or promote the default
+bake spacing into explicit detail: both increase tessellation. `IsDynamic` selects
+static lighting membership; `UsesRootMaterialFrame` independently selects material
+coordinates while retaining the root slot for skinning and portals. Dressing retains
+group/copy topology and immutable per-surface picking metadata across pose changes.
+Pending bake demand reads the same occurrence index and transformed copy boxes;
+prototype-origin boxes and a union of far-apart copies misprice both priority and
+near-residency diagnostics. Animated
 creation fields use root and motion-owner deltas; CPU pose scratch remains per
 actual shape. Bake groups keep separate bounds and detail even when they share
 a motion slot; the lattice frame and instance selector are independent. Use

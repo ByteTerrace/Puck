@@ -618,7 +618,8 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             placements: definition.Placements,
             palettes: m_palettes,
             meshDraws: meshDraws,
-            picks: m_picks
+            picks: m_picks,
+            sharedAssets: m_pool.Rigid
         );
         m_meshDraws.Static = meshDraws;
 
@@ -914,6 +915,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         var articulated = ((m_onlyPrototypes is null) ? m_census.Stamps : []).Where(stamp => !WorldRigidAssets.IsRigid(stamp.Creation, stamp.Look)).Select(stamp => (stamp.BodyIndex, stamp.Creation.Hash, stamp.Scale, stamp.Look)).ToArray();
 
         if (!m_articulated.AsSpan().SequenceEqual(articulated)) { m_articulated = articulated; m_articulatedRevision++; }
+        m_pool.Rigid.ReconcileStatic(definition, definition.Placements);
         m_pool.Reconcile(definition.Placements, definition.Creations, definition.Dynamics, ((m_onlyPrototypes is null) ? m_census.Stamps : []), definition.Looks);
         PrepareCatalog();
     }

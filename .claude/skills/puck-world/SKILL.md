@@ -173,7 +173,11 @@ only when the task allows it, and restore what you changed.
 
 To run your own edits, start a World with `puck_world_start` (`checkout`: your
 worktree's absolute path; `windowed: true` only for a granted GPU leg). The
-call returns `pending` and a `startId` promptly. Poll `puck_world_start_wait`
+call returns `pending` and a `startId` promptly. `captureTool: "pix"` forwards
+`--capture-tool pix` before device creation (windowed Direct3D 12); `"renderdoc"`
+selects RenderDoc. Both enable existing GPU object names. Use `gpu.capture` after
+mesh settlement; a PIX GPU capture retains pass labels that an attached timing
+trace without the capture runtime may lack. Poll `puck_world_start_wait`
 with that id. `timeoutSeconds` bounds only the World's boot (until it accepts an
 attachment). The build and the GPU queue have limits of their own: the build
 lease and the GPU lease each wait up to two hours (`CliLease.DefaultWait`) in

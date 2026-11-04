@@ -258,6 +258,10 @@ float3 sdfMeshSurfaceNormal(uint draw, uint triangleIndex, float3 surfacePoint, 
         frameSlot = ((entry != 0u) ? (int)sdfMeshMemberSlot(record, entry) : frameSlot);
     }
 
+    if ((sdfMeshRegion[record + SDF_MESH_FLAGS_WORD] & SDF_MESH_WORLD_MATERIAL_FLAG) != 0u) {
+        frameSlot = SDF_TRANSFORM_SLOT_NONE;
+    }
+
     faceNormal = (face * rsqrt(max(dot(face, face), 1.0e-30)));
     faceNormal = ((dot(faceNormal, rayDirection) > 0.0) ? -faceNormal : faceNormal);
 

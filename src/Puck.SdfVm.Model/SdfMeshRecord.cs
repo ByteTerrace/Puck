@@ -57,4 +57,6 @@ public static class SdfMeshRecord {
     public const uint MaterialsFlag = 2u;
     /// <summary>The flag a record carries when its mesh has a member a vertex.</summary>
     public const uint SkinFlag = 4u;
+    /// <summary>The flag selecting world-space material coordinates independently of the geometry root slot.</summary>
+    public const uint WorldMaterialFlag = 8u;
 }

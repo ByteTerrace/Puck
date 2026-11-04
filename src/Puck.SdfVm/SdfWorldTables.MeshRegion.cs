@@ -303,6 +303,7 @@ public sealed partial class SdfWorldTables {
             (left.Glass != right.Glass) ||
             (left.IsDynamic != right.IsDynamic) ||
             (left.FrameSlot != right.FrameSlot) ||
+            (left.UsesRootMaterialFrame != right.UsesRootMaterialFrame) ||
             !Equals(objA: left.MotionIdentity, objB: right.MotionIdentity) ||
             (BitConverter.SingleToInt32Bits(value: left.CarryScale) != BitConverter.SingleToInt32Bits(value: right.CarryScale)) ||
             !Equals(objA: left.Identity, objB: right.Identity)

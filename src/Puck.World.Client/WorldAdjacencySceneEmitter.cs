@@ -37,7 +37,7 @@ namespace Puck.World.Client;
 /// reservation class. A band is reserved for every direct edge PLUS every derivable corner pair
 /// (<c>WorldAdjacencyBands.ProjectionCapacity</c>), so the reservation grows quadratically in authored edges.</para>
 /// </remarks>
-public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
+public sealed partial class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
     // The moving half of the same per-band reservation. KEEP IN SYNC: the probe branch reserves exactly this many
     // worst-case rigs per band and EmitEntities selects at most this many delivered bodies, so a live band can never
     // outgrow the envelope SdfWorldTables.UploadProgram freezes.
@@ -158,9 +158,13 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
                 m_liveSlotCount += WorldRigCatalog.TransformSlotsPerBody;
             }
         }
+        PrepareStaticProjections(visuals);
     }
 
     public int DynamicSlotCount => m_liveSlotCount;
+    public IReadOnlyList<SdfMeshInstance> MeshInstances {
+        get { PublishStaticCopies(); return m_staticInstances; }
+    }
     /// <inheritdoc/>
     public bool OwnsMaterialScope => false;
     /// <inheritdoc/>
@@ -320,8 +324,9 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
     // frames (never a crossing's swept seam — this maps arbitrary geometry, not one traveler's own crossing point).
     // Fixed point throughout except the two float<->fixed boundary conversions (the one sanctioned rendering seam),
     // so the strip a body sees is placed by the IDENTICAL math the strip it stands on already uses.
-    private static WorldPlacement MapIntoSource(WorldPlacement placement, IReadOnlyList<WorldAdjacencyFramePair> path) {
-        var mapped = placement;
+    private static WorldPlacement MapIntoSource(WorldPlacement placement, IReadOnlyList<WorldAdjacencyFramePair> path, WorldDefinition definition) {
+        var frame = WorldDefinitionRows.ResolvedFrame(definition, placement);
+        var mapped = placement with { Position = frame.Position, YawDegrees = frame.YawDegrees, Parent = null };
 
         foreach (var stage in path) {
             var yaw = FixedQ4816.FromDegrees(degrees: mapped.YawDegrees);
@@ -500,11 +505,17 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
             for (var index = 0; (index < mappedCount); index++) {
                 m_mappedPlacements[index] = MapIntoSource(
                     placement: placements[index],
-                    path: projection.Path
+                    path: projection.Path,
+                    definition: image
                 );
             }
 
             if (mappedCount > 0) {
+                var prepared = ((!queryOnly && includeEntities) ? m_staticProjections.GetValueOrDefault(projection.Name) : null);
+                var mappedRows = (prepared?.Rows ?? m_mappedPlacements.AsSpan(0, mappedCount).ToArray());
+                // The mapped rows are standalone source-space frames. Looking their ids up in the neighbour's
+                // original placement table would discard the mapped positions.
+                var mappedImage = (prepared?.Image ?? (image with { PlacementRowsRaw = mappedRows }));
                 var colors = ColorsOf(
                     definition: image,
                     projection: projection
@@ -517,21 +528,21 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
                 WorldPlacementStamper.EmitStatic(
                     builder: builder,
                     colors: colors,
-                    definition: image,
+                    definition: mappedImage,
                     creations: image.Creations,
                     placements: (queryOnly ? WorldPlacementStamper.Queryable(
-                        definition: image,
-                        placements: new ArraySegment<WorldPlacement>(array: m_mappedPlacements, count: mappedCount, offset: 0),
+                        definition: mappedImage,
+                        placements: mappedRows,
                         excluded: (placement, reason) => Console.Error.WriteLine(value: $"[world.presentation-field: excluded adjacency '{projection.Name}' placement '{placement.Id}': {reason}]")
-                    ) : new ArraySegment<WorldPlacement>(
-                        array: m_mappedPlacements,
-                        count: mappedCount,
-                        offset: 0
-                    )),
+                    ) : mappedRows),
                     palettes: m_palettes,
                     meshDraws: meshDraws,
-                    meshScope: projection.Name
+                    meshScope: projection.Name,
+                    sharedAssets: prepared?.Assets
                 );
+                if (prepared is not null) {
+                    prepared.Assets.Emit(builder, colors, 0, null, prepared.Picks);
+                }
             }
 
             if (includeEntities) {
@@ -631,6 +642,7 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
             }
             bandIndex++;
         }
+        PublishStaticCopies();
     }
 
     /// <summary>Gets the revision of the neighbours' geometry as the last <see cref="WriteRevision"/> polled it: it moves

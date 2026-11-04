@@ -323,6 +323,7 @@ public static class SdfIsaHlsl {
         declarations.Bits(name: "SDF_MESH_NORMALS_FLAG", value: SdfMeshRecord.NormalsFlag);
         declarations.Bits(name: "SDF_MESH_MATERIALS_FLAG", value: SdfMeshRecord.MaterialsFlag);
         declarations.Bits(name: "SDF_MESH_SKIN_FLAG", value: SdfMeshRecord.SkinFlag);
+        declarations.Bits(name: "SDF_MESH_WORLD_MATERIAL_FLAG", value: SdfMeshRecord.WorldMaterialFlag);
         declarations.Count(name: "SDF_MESH_LEVEL_SHIFT", value: SdfKernelInterfaces.MeshLevelShift);
         declarations.Count(name: "SDF_MESH_SELECTION_GROUP_SIZE", value: SdfKernelInterfaces.MeshSelectionGroupSize);
         declarations.Count(name: "SDF_MESH_SELECTION_GROUPS_PER_ROW", value: SdfKernelInterfaces.MeshSelectionGroupsPerRow);

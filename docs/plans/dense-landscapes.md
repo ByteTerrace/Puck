@@ -311,10 +311,10 @@ forest workload. No new art-style decision is needed to measure density.
 
 ## Next action
 
-Use the new query/motion/instance counters to design field-cache invalidation
-and local static-copy sharing against the connected forest. Join that sharing to
-retained instance updates before GPU buckets, keeping fixed-root semantics
-separate from wind-deformed canopy GI. Complete physical memory attribution and
+Attribute the post-walk simulation hotspot with the query/motion/instance counters,
+then finish field-cache invalidation and GPU instance buckets against the shared
+connected forest. Keep fixed-root
+semantics separate from wind-deformed canopy GI. Complete physical memory attribution and
 quiet, interleaved density/route measurements; owner snapshots alone do not close
 the Deck footprint. Resolve the recorded cross-family review before a main push.
 
@@ -346,7 +346,7 @@ including retirement/regrowth. A retained recorder clears selection history on
 actual table-owner switches, including switches during growth. Portal copies
 have distinct stable motion keys, and local copies carry required fixed/moving
 semantics through both dressing paths. Packed bytes count packing, not transfers.
-Static-copy sharing, retained updates and GPU instance buckets remain next work.
+The next slice below implements static-copy sharing and retained updates; GPU instance buckets remain open.
 
 The [forest patch](../../worlds/debug/forest.md) compiles to 84 trees, 58 shrubs,
 115 tufts and four wind patches with 750 shape parts (375 two-part blades), in a
@@ -437,3 +437,98 @@ frames remained unresolved, so this trace supplies no reliable new method-level
 CPU attribution. The next capture should enable the existing GPU-object naming
 through capture-tool or validation configuration (`WorldBootComposition` sets
 `GpuDeviceOptions.NameObjects`), and collect markers during a settled forest run.
+
+
+## Shared static ranges and named captures
+
+The next instance-processing slice reuses the ordinary static emitter through
+[WorldRigidAssets](../../src/Puck.World.Client/WorldRigidAssets.Static.cs) and
+[SdfMeshTemplateRange](../../src/Puck.SdfVm/SdfMeshInstance.cs). The forest's
+257 trees, shrubs and tufts share three assets and three bake groups: 26 local
+field instances replace 2323, and 182 instructions replace 16,261. The full debug
+static census admits 926 copies into 144 assets. Reflections, text, glass,
+state-dependent geometry and other ineligible content keep their existing paths.
+Queries still emit the original world-space fields.
+
+Each prototype bakes at its largest authored occurrence scale through the original
+static visitor. Its tight per-shape boxes, member regions, detail and warped splits
+survive; smaller occurrences use relative matrices. An intermediate whole-object
+dynamic-template experiment inflated submitted vertices to 36.3 million by losing
+those regions and forcing default spacing into explicit detail. It was replaced,
+not retained as a quality policy. The corrected snapshot submitted 14.5 million
+vertices (the initial named-capture snapshot submitted 13.6 million; different
+motion frames, not an exact count comparison).
+
+[Draw dressing](../../src/Puck.SdfVm/SdfMeshPathBake.cs) retains correspondence
+between groups, chunks and copies, indexing copy membership once per topology.
+Motion patches records and keeps immutable per-surface picking metadata. The same
+membership index now ranks pending bake demand and near-residency measurements
+at each occurrence's transformed bounds, taking maximum priority and minimum
+distance without treating the empty gap between distant copies as geometry. The
+material-coordinate flag is separate from the root slot used by skinning and
+portal membership. Fixed occurrences also participate in GI bake readiness even
+when their geometry uses a local transform slot. A bounded actual-build witness
+passed 123 assertions, including multi-group/chunk range copies, mutable-slot
+invalidation, material mapping, portal copies and fixed/moving readiness.
+
+The MCP launcher now forwards the existing capture-tool option before device
+creation. PIX GUI inspection confirmed named resources such as
+`sdf.world/previous-dynamic-transforms`; CSV export confirmed named pass scopes.
+The mesh-settled baseline GPU capture contains 175,365 API events. A 12-second
+symbolized .NET thread trace attributes about 28% of sampled host-thread time to
+dressing and changed-draw staging together. These are sample estimates, not exact
+CPU cycles. The baseline's root GI was still updating; that trace is not a fully
+converged lighting qualification.
+
+Targeted PIX/NVIDIA replay counters show views/resolve register allocation of
+95%/92%, active compute warps of 24%/30% and register-related warp-launch stalls
+of 16%/24%. VRAM throughput is 1%/20%. These identify shader execution targets;
+register allocation percentage is not registers per thread or an occupancy proof.
+Exporting every counter exhausted PIX analysis memory; selected timing/work and
+hardware families exported successfully. The programmatic capture has no gold
+screenshot, so its image extraction failed; presented World images supply visual
+inspection independently.
+
+The corrected D3D12 root bake completed with zero loaded meshes in 115.045 seconds,
+22,971 dispatches and 1,088,453,450 samples. It still misses the one-minute bar.
+The root mesh region uses 1,646,967,100 bytes versus 2,282,837,700 in the named
+baseline. Program words fell from 4,713,436 to 3,931,512 and instances from 13,243
+to 8464. Account-owned storage read about 1.65 GB versus 2.22 GB; process peaks and
+private bytes differ between cold and warm runs, so this establishes no unified
+physical-footprint reduction. Normal-update 180-iteration windows read 20.55 and
+21.64 ms average; the frame bar remains unmet and no interleaved speed claim is made.
+A 300-tick window patched 3,435,865 dressed records with zero topology rebuilds.
+
+Both backends rendered the continuous canopy and authored ground cover at native
+1280 by 900, high quality, cadence off. Lockstep drained GI before the final
+captures, then normal motion resumed. The final PIX GPU capture and event export
+contain 582,494 API events with named scopes; replay EOP durations put root views
+at 6.666 ms and resolve at 4.569 ms. These replay spans are not additive CPU frame
+times or an A/B speed claim. Selected exports and raw readbacks are in the chat's
+`landscape-implementation` evidence directory.
+
+The matched 12-second managed sample puts dressing at 0.906 seconds of 11.675
+sampled host-thread seconds, versus 1.660 of 11.833 before. Pick-map construction
+appears in the earlier sample (0.165 seconds), while the later sample retains the
+map and observes its identity check (0.015 seconds). Changed-record staging still
+accounts for 1.853 sampled seconds and creation transform packing for 1.326: these
+remain major foreground processing costs, alongside shader shading/resolve.
+
+The post-drain D3D12 window averaged 20.60 ms (p99 29.51); Vulkan averaged
+23.83 ms (p99 34.70). Vulkan's zero-loaded full-world bake took 210.191 seconds,
+22,990 dispatches and 1,088,584,871 samples, with a 1,647,150,988-byte mesh region.
+These are single-machine observations, not backend parity or target qualification.
+A 90-tick Vulkan walk moved the grounded avatar 12.6 m through the canopy, adding
+447 marches, 1855 samples and 70 gradients without failed samples/gradients.
+Live picks resolved both body 0 and `forest-tree-4-7` with the oak palette. Gust and
+flutter phases advanced through a 120-tick read pair and reported continuation.
+The later post-walk window averaged 40.92 ms, including 23.24 ms simulation;
+that new CPU hotspot remains to be attributed before any route-performance claim.
+
+All five Worlds owned by this slice ended with exit 0 and released their leases.
+Renderer and Client builds passed; the last direct builds had no warnings/errors,
+while broader dependency rebuilds reported the two existing rule-evaluator
+STALE001 warnings. The actual-build CPU witnesses, inspected D3D12/Vulkan images,
+wind reads and tree/body picks supply functional evidence. The GPU bucket work,
+physical memory qualification, full route/density sweep, wind-canopy GI and
+2060/Deck runs remain open, as does the recorded cross-family review.

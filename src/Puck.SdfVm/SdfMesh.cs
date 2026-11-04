@@ -264,6 +264,9 @@ public readonly record struct SdfMeshDraw(SdfMesh Mesh, Matrix4x4 ObjectToWorld,
     /// mesh in no slot's frame: the shading places a material's layers in that frame and reads its lanes, as it does for
     /// a field hit of a shape riding the slot.</summary>
     public int? FrameSlot { get; init; }
+    /// <summary>Gets whether materials use the root/member frame. False keeps material coordinates in world space,
+    /// independently of the root slot used by skinning and portal membership.</summary>
+    public bool UsesRootMaterialFrame { get; init; } = true;
 
     /// <summary>Gets the rotation of the carry every world position and normal the draw resolves goes through last,
     /// after its matrix or its members' slots: identity for a draw drawn where it stands, a portal pair's turn for the
@@ -573,7 +576,7 @@ public static class SdfMeshRegion {
         record[SdfMeshRecord.IndexWord] = ((uint)placement.IndexWord);
         record[SdfMeshRecord.IndexCountWord] = ((uint)placement.IndexCount);
         record[SdfMeshRecord.VertexWord] = ((uint)placement.VertexWord);
-        record[SdfMeshRecord.FlagsWord] = (mesh.Normals.IsEmpty ? 0u : SdfMeshRecord.NormalsFlag) | (mesh.TriangleMaterials.IsEmpty ? 0u : SdfMeshRecord.MaterialsFlag) | (mesh.VertexMembers.IsEmpty ? 0u : SdfMeshRecord.SkinFlag);
+        record[SdfMeshRecord.FlagsWord] = (mesh.Normals.IsEmpty ? 0u : SdfMeshRecord.NormalsFlag) | (mesh.TriangleMaterials.IsEmpty ? 0u : SdfMeshRecord.MaterialsFlag) | (mesh.VertexMembers.IsEmpty ? 0u : SdfMeshRecord.SkinFlag) | (draw.UsesRootMaterialFrame ? 0u : SdfMeshRecord.WorldMaterialFlag);
         record[SdfMeshRecord.TriangleMaterialWord] = ((uint)placement.MaterialWord);
         WriteNormalMatrix(
             matrix: matrix,

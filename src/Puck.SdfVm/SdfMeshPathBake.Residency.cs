@@ -170,9 +170,7 @@ public sealed partial class SdfMeshPathBake {
         foreach (var group in m_groups) {
             if (group.Done || !group.HasDemandBox) { continue; }
 
-            var (center, half) = WorldBox(group: group);
-
-            group.Priority = Demand.Priority(center: center, half: half);
+            group.Priority = MeasureDemand(group, priority: true);
         }
         // A group baking geometry other groups wait on ranks as the most wanted of them.
         foreach (var group in m_groups) {
@@ -343,21 +341,33 @@ public sealed partial class SdfMeshPathBake {
     // the world-axis box about the turned one.
     private (Vector3 Center, Vector3 Half) WorldBox(Group group) {
         if (!group.Dynamic || (group.Slot >= m_demandTransforms.Count)) { return (group.DemandCenter, group.DemandHalf); }
-
         var transform = m_demandTransforms[group.Slot];
         var units = SdfMeshGeometryBuilder.UnitsOf(transform: transform);
         var orientation = ((transform.Orientation == default) ? Quaternion.Identity : transform.Orientation);
-        var turn = Matrix4x4.CreateFromQuaternion(quaternion: orientation);
-        var half = (group.DemandHalf * MathF.Abs(x: units));
-
-        return (
-            (transform.Position + Vector3.Transform(rotation: orientation, value: (group.DemandCenter * units))),
-            new Vector3(
-                x: (((MathF.Abs(x: turn.M11) * half.X) + (MathF.Abs(x: turn.M21) * half.Y)) + (MathF.Abs(x: turn.M31) * half.Z)),
-                y: (((MathF.Abs(x: turn.M12) * half.X) + (MathF.Abs(x: turn.M22) * half.Y)) + (MathF.Abs(x: turn.M32) * half.Z)),
-                z: (((MathF.Abs(x: turn.M13) * half.X) + (MathF.Abs(x: turn.M23) * half.Y)) + (MathF.Abs(x: turn.M33) * half.Z))
-            )
-        );
+        var matrix = ((Matrix4x4.CreateScale(units) * Matrix4x4.CreateFromQuaternion(orientation)) * Matrix4x4.CreateTranslation(transform.Position));
+        return TransformDemandBox(group, matrix);
+    }
+    private static (Vector3 Center, Vector3 Half) TransformDemandBox(Group group, Matrix4x4 matrix) {
+        var half = group.DemandHalf;
+        return (Vector3.Transform(group.DemandCenter, matrix), new Vector3(
+            ((MathF.Abs(matrix.M11) * half.X) + (MathF.Abs(matrix.M21) * half.Y) + (MathF.Abs(matrix.M31) * half.Z)),
+            ((MathF.Abs(matrix.M12) * half.X) + (MathF.Abs(matrix.M22) * half.Y) + (MathF.Abs(matrix.M32) * half.Z)),
+            ((MathF.Abs(matrix.M13) * half.X) + (MathF.Abs(matrix.M23) * half.Y) + (MathF.Abs(matrix.M33) * half.Z))));
+    }
+    // A shared geometry is wanted where its actual occurrences stand. Never union distant occurrence boxes:
+    // the empty space between them is neither visible demand nor a nearby surface.
+    private float MeasureDemand(Group group, bool priority) {
+        if (CopiesOf(group) is not { } copies) {
+            var (center, half) = WorldBox(group);
+            return (priority ? Demand.Priority(center, half) : Demand.DistanceFrom(index: 0, center: center, half: half));
+        }
+        var result = (priority ? 0f : float.PositiveInfinity);
+        foreach (var index in copies) {
+            var (center, half) = TransformDemandBox(group, m_demandCopies[index].Matrix);
+            var value = (priority ? Demand.Priority(center, half) : Demand.DistanceFrom(index: 0, center: center, half: half));
+            result = (priority ? MathF.Max(result, value) : MathF.Min(result, value));
+        }
+        return result;
     }
 
     /// <summary>Stamps, on the frame's thread after the frame's mesh region is staged, each group the bake has finished and
@@ -421,8 +431,7 @@ public sealed partial class SdfMeshPathBake {
             Group? lastNear = null;
 
             foreach (var group in m_groups) {
-                var (center, half) = WorldBox(group: group);
-                var isNear = (group.HasDemandBox && (Demand.Count > 0) && (Demand.DistanceFrom(center: center, half: half, index: 0) <= radius));
+                var isNear = (group.HasDemandBox && (Demand.Count > 0) && (MeasureDemand(group, priority: false) <= radius));
 
                 near += (isNear ? 1 : 0);
                 if (group.LandedAt != 0) {

@@ -242,7 +242,7 @@ public static class WorldPlacementStamper {
     // A static instance bakes the placement frame (and, for a parented volume, the parent shape's rest pose) into
     // the volume itself: no slot moves it. A mirrored copy keeps the unmirrored frame — a flow column is
     // symmetric about its own axis, so only its offset would differ, and the mirror plane is not applied here.
-    private static void AppendStaticVolumes(CreationDocument creation, Vector3 origin, Quaternion rotation, float scale, ICollection<SdfVolume>? volumes, bool[]? hidden) {
+    internal static void AppendStaticVolumes(CreationDocument creation, Vector3 origin, Quaternion rotation, float scale, ICollection<SdfVolume>? volumes, bool[]? hidden) {
         if (
             (volumes is null) ||
             (creation.Volumes is not { Count: > 0 } authored)
@@ -465,7 +465,7 @@ public static class WorldPlacementStamper {
             )]
         );
     }
-    private static void EmitPlacement(SdfProgramBuilder builder, CreationDocument creation, WorldDefinition definition, int[] paletteIds, WorldPlacement placement, PackedFontAtlasCatalog? textCatalog, ulong worldSeed, ICollection<SdfVolume>? volumes, SdfMesh? mesh, int meshMaterial, ICollection<SdfMeshDraw>? meshDraws, string? meshScope, int firstMesh, bool[]? hidden) {
+    internal static void EmitPlacement(SdfProgramBuilder builder, CreationDocument creation, WorldDefinition definition, int[] paletteIds, WorldPlacement placement, PackedFontAtlasCatalog? textCatalog, ulong worldSeed, ICollection<SdfVolume>? volumes, SdfMesh? mesh, int meshMaterial, ICollection<SdfMeshDraw>? meshDraws, string? meshScope, int firstMesh, bool[]? hidden, CompiledPlacementFrame? frameOverride = null) {
         // An isolation that hides every shape leaves the placement nothing to draw.
         if ((hidden is not null) && (Array.IndexOf(array: hidden, value: false) < 0)) {
             return;
@@ -475,10 +475,10 @@ public static class WorldPlacementStamper {
             return;
         }
 
-        var frame = WorldDefinitionRows.ResolvedFrame(
+        var frame = (frameOverride ?? WorldDefinitionRows.ResolvedFrame(
             definition: definition,
             placement: placement
-        );
+        ));
         // A glass shape emits apart from the opaque shapes, in the glass instance after them: `hiddenOpaque` hides it
         // from the opaque emission, and `glassHidden` hides everything but the glass shapes from the glass one.
         var (hiddenOpaque, glassHidden) = GlassMasks(creation: creation, hidden: hidden);
@@ -595,6 +595,10 @@ public static class WorldPlacementStamper {
 
         return (float.IsFinite(f: detail) ? (detail * scale) : 0f);
     }
+
+    // A warped field stays separate from its neighbours under the existing static bake partition.
+    internal static bool BakesAlone(ShapeDocument shape) => ((shape.Flare is not null) || (shape.Shear is not null) ||
+        (shape.Bumps is { Count: > 0 }) || (shape.Erode is not null) || (shape.Cells is not null) || (shape.Warp is not null) || (shape.Displace is not null));
 
     // One static placement's instances: its volumes and mesh draws, then either one tight instance per shape or one
     // instance holding the whole creation. A struct the lattice walk calls, so a placement allocates no closure.
@@ -794,7 +798,7 @@ public static class WorldPlacementStamper {
                     // alone, and so does the shape after it: its scope divides its field by its warp's bound, so beside an
                     // exact neighbour the union's field sags below a distance, and the bake reads the sag as a sheet it
                     // closes into slabs across the neighbour.
-                    var warped = ((shape.Flare is not null) || (shape.Shear is not null) || (shape.Bumps is { Count: > 0 }) || (shape.Erode is not null) || (shape.Cells is not null) || (shape.Warp is not null) || (shape.Displace is not null));
+                    var warped = BakesAlone(shape);
                     var box = CreationStampEmitter.ShapeStampBox(document: creation, shapeIndex: shapeIndex, transform: stampTransform);
                     var margin = new Vector3(value: PlacementBoundMargin);
 
@@ -937,7 +941,9 @@ public static class WorldPlacementStamper {
     /// <see cref="SdfMeshDraw.Identity"/>.</param>
     /// <param name="isolation">The operator's shape isolation, whose hidden shapes, with the volumes parented to them,
     /// the prototype's mesh and its text, emit nothing; <see langword="null"/> emits every shape.</param>
-    public static void EmitStatic(SdfProgramBuilder builder, WorldDefinition definition, IReadOnlyList<WorldPrototype> creations, IReadOnlyList<WorldPlacement> placements, PackedFontAtlasCatalog? textCatalog = null, Func<string, (Vector3 Color, float Blend)?>? tintFor = null, ICollection<SdfVolume>? volumes = null, ICollection<SdfMeshDraw>? meshDraws = null, WorldBakedColors? colors = null, WorldStaticPalettes? palettes = null, WorldPickMapBuilder? picks = null, string? meshScope = null, WorldShapeIsolation? isolation = null) {
+    /// <param name="sharedAssets">The visual scene's admitted local copies; null keeps ordinary world-space field
+    /// emission, including query fields.</param>
+    public static void EmitStatic(SdfProgramBuilder builder, WorldDefinition definition, IReadOnlyList<WorldPrototype> creations, IReadOnlyList<WorldPlacement> placements, PackedFontAtlasCatalog? textCatalog = null, Func<string, (Vector3 Color, float Blend)?>? tintFor = null, ICollection<SdfVolume>? volumes = null, ICollection<SdfMeshDraw>? meshDraws = null, WorldBakedColors? colors = null, WorldStaticPalettes? palettes = null, WorldPickMapBuilder? picks = null, string? meshScope = null, WorldShapeIsolation? isolation = null, WorldRigidAssets? sharedAssets = null) {
         var worldSeed = (definition.Generation?.WorldSeed ?? 0UL);
         var baked = (colors ?? WorldBakedColors.Of(definition: definition));
         var registered = (palettes ?? new WorldStaticPalettes());
@@ -962,6 +968,8 @@ public static class WorldPlacementStamper {
             ) {
                 continue;
             }
+
+            if (sharedAssets?.ContainsPlacement(placement: placement) ?? false) { continue; }
 
             var tint = tintFor?.Invoke(arg: placement.Id);
 

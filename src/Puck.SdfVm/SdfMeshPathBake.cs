@@ -210,6 +210,7 @@ public sealed partial class SdfMeshPathBake {
     // The spacing, in metres, a final lattice's refined cells aim for, and the most fine cells a coarse cell splits into
     // along each axis (SdfSampledLattice.Refine).
     private const float FineCell = 0.005f;
+
     private const int MaxRefinement = 4;
     // The most fine cells a coarse cell splits into along each axis when a member declares its own detail
     // (SdfInstanceRange.Detail), which the lattice's spacing does not reach at MaxRefinement.
@@ -255,6 +256,7 @@ public sealed partial class SdfMeshPathBake {
 
     private long m_frameDrawsRevision = -1;
     private SdfMeshInstance[] m_drawnCopies = [];
+    private int[] m_drawnCopyFrames = [];
 
     private long m_revision;
 
@@ -322,7 +324,7 @@ public sealed partial class SdfMeshPathBake {
             lock (m_gate) {
                 if ((m_program is not null) && (m_drawnMeshes < 0)) { return true; }
                 foreach (var group in m_groups) {
-                    if (!group.Dynamic && !group.Glass && !group.Done) { return true; }
+                    if ((!group.Dynamic || m_fixedAssetSlots.Contains(group.Slot)) && !group.Glass && !group.Done) { return true; }
                 }
                 return false;
             }
@@ -363,22 +365,28 @@ public sealed partial class SdfMeshPathBake {
                 Restart(frame: frame);
             }
             m_demandTransforms = frame.DynamicTransforms;
+            m_demandCopies = frame.MeshInstances;
+            var copyLayoutChanged = !SameCopyLayout(frame);
+            if (copyLayoutChanged) { IndexCopies(frame); }
             Prioritize();
             Settle(frame: frame);
 
             var finished = 0;
             var copiesChanged = (m_drawnCopies.Length != frame.MeshInstances.Count);
+            var topologyChanged = ((m_hostDrawCount != frame.MeshDraws.Count) || copyLayoutChanged);
 
             if (!copiesChanged) {
-                for (var index = 0; (index < m_drawnCopies.Length); index++) {
-                    if (m_drawnCopies[index] != frame.MeshInstances[index]) { copiesChanged = true; break; }
+                for (var index = 0; index < m_drawnCopies.Length; index++) {
+                    if ((m_drawnCopies[index] != frame.MeshInstances[index]) || (m_drawnCopyFrames[index] != frame.MeshInstances[index].FrameSlot)) { copiesChanged = true; break; }
                 }
             }
-            var moved = (copiesChanged || !ReferenceEquals(objA: frame.MeshDraws, objB: m_frameDraws) || (frame.MeshDrawsRevision != m_frameDrawsRevision) || !ReferenceEquals(objA: frame.SlotClips, objB: m_slotClips));
+            var moved = (copiesChanged || !ReferenceEquals(frame.MeshDraws, m_frameDraws) ||
+                (frame.MeshDrawsRevision != m_frameDrawsRevision) || !ReferenceEquals(frame.SlotClips, m_slotClips));
 
             foreach (var group in m_groups) {
-                if (group.Mesh is null) { continue; }
+                if (group.Mesh is not { } mesh) { continue; }
                 finished++;
+                topologyChanged |= (!m_dressedGroups.TryGetValue(group, out var heldMesh) || !ReferenceEquals(mesh, heldMesh));
                 if (group.Dynamic && (group.Slot < frame.DynamicTransforms.Count)) {
                     var transform = frame.DynamicTransforms[group.Slot];
                     var scale = SdfMeshGeometryBuilder.UnitsOf(transform: transform);
@@ -391,47 +399,37 @@ public sealed partial class SdfMeshPathBake {
                     }
                 }
             }
+            topologyChanged |= (finished != m_drawnMeshes);
 
-            if (!moved && (finished == m_drawnMeshes) && ReferenceEquals(objA: frame, objB: m_dressedSource) && (m_dressed is { } dressed)) {
+            if (!moved && !topologyChanged && ReferenceEquals(frame, m_dressedSource) && (m_dressed is { } dressed)) {
                 return dressed;
             }
-            if (moved || (finished != m_drawnMeshes)) {
-                m_draws.Clear();
-                m_chunkOwners.Clear();
-                m_draws.AddRange(collection: frame.MeshDraws);
-                foreach (var group in m_groups) {
-                    if (group.Mesh is not { } mesh) { continue; }
-                    if (group.Dynamic && frame.MeshAssetSlots.Contains(value: group.Slot)) {
-                        foreach (var copy in frame.MeshInstances) {
-                            if (!copy.UsesSlot(slot: group.Slot)) { continue; }
-                            copy.FirstInstance = group.FirstInstance;
-                            m_draws.Add(item: new SdfMeshDraw(Identity: copy, Material: 0, Mesh: mesh, ObjectToWorld: copy.Matrix) { FrameSlot = copy.FrameSlot, Glass = group.Glass, IsDynamic = copy.IsDynamic, MotionIdentity = ((copy.MotionIdentity ?? copy.Identity), group.Selector) });
-                        }
-                        continue;
-                    }
-                    // A dynamic group's mesh is in its slot's own units (DynamicTransform.Scale), which its draw scales.
-                    var matrix = (group.Dynamic
-                        ? ((Matrix4x4.CreateScale(scale: group.DrawnScale) * Matrix4x4.CreateFromQuaternion(quaternion: group.DrawnOrientation)) * Matrix4x4.CreateTranslation(position: group.DrawnPosition))
-                        : Matrix4x4.Identity);
-
-                    for (var piece = 0; (piece < Math.Max(val1: 1, val2: mesh.Chunks.Count)); piece++) {
-                        var part = ((mesh.Chunks.Count == 0) ? mesh : mesh.Chunks[piece]);
-
-                        m_draws.Add(item: new SdfMeshDraw(Identity: ((mesh.Chunks.Count == 0) ? group : part), Material: 0, Mesh: part, ObjectToWorld: matrix) { FrameSlot = (group.Dynamic ? group.Slot : null), Glass = group.Glass, IsDynamic = group.Dynamic });
-                        if (mesh.Chunks.Count > 0) { m_chunkOwners[part] = group; }
+            if (moved || topologyChanged) {
+                if (topologyChanged) { BuildDrawTopology(frame); }
+                // Portal copies are derived from the same retained base records. Remove last frame's copies before
+                // posing and clipping the base again, without rebuilding its geometry/copy membership.
+                var baseCount = (m_hostDrawCount + m_drawBindings.Count);
+                if (m_draws.Count > baseCount) { m_draws.RemoveRange(baseCount, m_draws.Count - baseCount); }
+                var meshesChanged = topologyChanged;
+                for (var index = 0; index < m_hostDrawCount; index++) {
+                    var draw = frame.MeshDraws[index];
+                    meshesChanged |= !ReferenceEquals(m_draws[index].Mesh, draw.Mesh);
+                    m_draws[index] = draw;
+                }
+                for (var index = 0; index < m_drawBindings.Count; index++) {
+                    var destination = (m_hostDrawCount + index);
+                    var draw = m_drawBindings[index].Pose(frame);
+                    meshesChanged |= !ReferenceEquals(m_draws[destination].Mesh, draw.Mesh);
+                    if (m_draws[destination] != draw) {
+                        m_draws[destination] = draw;
+                        SdfMeshHistory.ProcessWork.Count(SdfMeshHistory.DressedRecordsUpdated);
                     }
                 }
-                foreach (var copy in frame.MeshInstances) {
-                    if (copy.Mesh is { } mesh) { m_draws.Add(item: new SdfMeshDraw(Identity: copy, Mesh: mesh, ObjectToWorld: copy.Matrix, Material: copy.Material) { FrameSlot = copy.FrameSlot, IsDynamic = copy.IsDynamic, MotionIdentity = ((copy.MotionIdentity ?? copy.Identity), "mesh") }); }
-                }
-                // A body straddling a portal is drawn on both sides of it, each side clipped by its own glass.
-                SdfSlotClip.Apply(
-                    clips: frame.SlotClips,
-                    draws: m_draws
-                );
+                SdfSlotClip.Apply(clips: frame.SlotClips, draws: m_draws);
                 m_slotClips = frame.SlotClips;
-                (m_drawClaims ??= new SdfMeshClaims()).Update(draws: m_draws);
-                m_drawnCopies = frame.MeshInstances.ToArray();
+                if (meshesChanged) { (m_drawClaims ??= new SdfMeshClaims()).Update(draws: m_draws); }
+                if (m_drawnCopies.Length != frame.MeshInstances.Count) { m_drawnCopies = new SdfMeshInstance[frame.MeshInstances.Count]; m_drawnCopyFrames = new int[frame.MeshInstances.Count]; }
+                for (var index = 0; index < m_drawnCopies.Length; index++) { m_drawnCopies[index] = frame.MeshInstances[index]; m_drawnCopyFrames[index] = frame.MeshInstances[index].FrameSlot; }
                 m_frameDraws = frame.MeshDraws;
                 m_frameDrawsRevision = frame.MeshDrawsRevision;
                 m_drawnMeshes = finished;
@@ -458,6 +456,140 @@ public sealed partial class SdfMeshPathBake {
             m_dressed = (frame with { MeshDraws = m_draws, MeshDrawsRevision = m_revision, PickMap = m_dressedMap });
 
             return m_dressed;
+        }
+    }
+
+    // Membership and geometry are retained independently of poses. Only this door constructs the correspondence
+    // between a base draw and its group/copy; ordinary motion cannot change draw order or geometry ownership.
+    private readonly List<DrawBinding> m_drawBindings = [];
+    private readonly HashSet<int> m_fixedAssetSlots = [];
+    private readonly Dictionary<int, List<int>> m_slotCopies = [];
+    private readonly Dictionary<int, List<int>> m_instanceCopies = [];
+    private IReadOnlyList<SdfMeshInstance> m_demandCopies = [];
+    private readonly Dictionary<SdfMeshBakeGroup, SdfMesh> m_dressedGroups = [];
+    private int m_hostDrawCount;
+    private int[] m_drawnAssetSlots = [];
+
+    private bool SameCopyLayout(SdfFrame frame) {
+        if ((m_drawnCopies.Length != frame.MeshInstances.Count) || (m_drawnAssetSlots.Length != frame.MeshAssetSlots.Count)) { return false; }
+        for (var index = 0; index < m_drawnAssetSlots.Length; index++) { if (m_drawnAssetSlots[index] != frame.MeshAssetSlots[index]) { return false; } }
+        for (var index = 0; index < m_drawnCopies.Length; index++) {
+            var old = m_drawnCopies[index];
+            var copy = frame.MeshInstances[index];
+            if ((old.AssetSlot != copy.AssetSlot) || (old.TemplateRange != copy.TemplateRange) || (old.IsDynamic != copy.IsDynamic) || ((old.Mesh is null) != (copy.Mesh is null)) ||
+                (old.OtherAssetSlots.Count != copy.OtherAssetSlots.Count)) { return false; }
+            for (var surface = 0; surface < old.OtherAssetSlots.Count; surface++) {
+                if (old.OtherAssetSlots[surface] != copy.OtherAssetSlots[surface]) { return false; }
+            }
+        }
+        return true;
+    }
+
+    // The one membership index serves both pending-bake demand and landed draw dressing. It contains no poses:
+    // a moving occurrence keeps its membership and supplies its current matrix through m_demandCopies.
+    private void IndexCopies(SdfFrame frame) {
+        m_slotCopies.Clear();
+        m_instanceCopies.Clear();
+        m_fixedAssetSlots.Clear();
+        m_drawnAssetSlots = frame.MeshAssetSlots.ToArray();
+        for (var index = 0; index < frame.MeshInstances.Count; index++) {
+            var copy = frame.MeshInstances[index];
+            if (copy.TemplateRange is { } range) {
+                for (var instance = 0; instance < range.InstanceCount; instance++) { AddCopyIndex(m_instanceCopies, range.FirstInstance + instance, index); }
+                continue;
+            }
+            AddCopyIndex(m_slotCopies, copy.AssetSlot, index);
+            if (!copy.IsDynamic) { m_fixedAssetSlots.Add(copy.AssetSlot); }
+            foreach (var slot in copy.OtherAssetSlots) {
+                if (slot != copy.AssetSlot) { AddCopyIndex(m_slotCopies, slot, index); }
+                if (!copy.IsDynamic) { m_fixedAssetSlots.Add(slot); }
+            }
+        }
+    }
+    private static void AddCopyIndex(Dictionary<int, List<int>> table, int key, int copy) {
+        if (!table.TryGetValue(key, out var indices)) { table.Add(key, indices = []); }
+        if ((indices.Count == 0) || (indices[^1] != copy)) { indices.Add(copy); }
+    }
+    private IReadOnlyList<int>? CopiesOf(Group group) {
+        if (!group.Dynamic) { return m_instanceCopies.GetValueOrDefault(group.FirstInstance); }
+        if (!m_drawnAssetSlots.Contains(group.Slot)) { return null; }
+        return (m_slotCopies.TryGetValue(group.Slot, out var copies) ? copies : Array.Empty<int>());
+    }
+    private void BuildDrawTopology(SdfFrame frame) {
+        SdfMeshHistory.ProcessWork.Count(SdfMeshHistory.DressTopologyBuilds);
+        m_draws.Clear();
+        m_chunkOwners.Clear();
+        m_drawBindings.Clear();
+        m_dressedGroups.Clear();
+        m_hostDrawCount = frame.MeshDraws.Count;
+        m_draws.AddRange(frame.MeshDraws);
+        foreach (var group in m_groups) {
+            if (group.Mesh is not { } mesh) { continue; }
+            m_dressedGroups.Add(group, mesh);
+            if (CopiesOf(group) is { } copies) {
+                foreach (var copy in copies) {
+                    for (var piece = 0; piece < Math.Max(1, mesh.Chunks.Count); piece++) {
+                        Bind(new DrawBinding(((mesh.Chunks.Count == 0) ? mesh : mesh.Chunks[piece]), group, copy));
+                    }
+                }
+                continue;
+            }
+            for (var piece = 0; piece < Math.Max(1, mesh.Chunks.Count); piece++) {
+                var part = ((mesh.Chunks.Count == 0) ? mesh : mesh.Chunks[piece]);
+                Bind(new DrawBinding(part, group, -1));
+                if (mesh.Chunks.Count > 0) { m_chunkOwners[part] = group; }
+            }
+        }
+        for (var index = 0; index < frame.MeshInstances.Count; index++) {
+            if (frame.MeshInstances[index].Mesh is { } mesh) { Bind(new DrawBinding(mesh, null, index)); }
+        }
+        void Bind(DrawBinding binding) {
+            m_drawBindings.Add(binding);
+            m_draws.Add(binding.Pose(frame));
+        }
+    }
+
+    private sealed class DrawBinding(SdfMesh mesh, Group? group, int copyIndex) {
+        private object? m_motionSource;
+        private object? m_motionIdentity;
+        private SdfMeshInstance? m_copy;
+        private SdfMeshCopySurface? m_pickIdentity;
+        private SdfMeshDraw m_draw;
+        private bool m_posed;
+        private Vector3 m_position;
+        private Quaternion m_orientation;
+        private float m_scale;
+
+        public SdfMeshDraw Pose(SdfFrame frame) {
+            if (copyIndex >= 0) {
+                var copy = frame.MeshInstances[copyIndex];
+                var firstInstance = (group?.FirstInstance ?? -1);
+                if (ReferenceEquals(copy, m_copy) && (m_draw.FrameSlot == copy.FrameSlot) && (m_pickIdentity?.FirstInstance == firstInstance)) { return m_draw; }
+                m_copy = copy;
+                if ((m_pickIdentity is null) || !Equals(m_pickIdentity.Identity, copy.Identity) || (m_pickIdentity.FirstInstance != firstInstance)) {
+                    m_pickIdentity = new SdfMeshCopySurface(copy.Identity, firstInstance);
+                }
+                var source = (copy.MotionIdentity ?? copy.Identity);
+                if (!Equals(m_motionSource, source)) {
+                    m_motionSource = source;
+                    m_motionIdentity = ((source, (object?)group?.Selector ?? "mesh"));
+                }
+                return m_draw = new SdfMeshDraw(Identity: m_pickIdentity, Material: ((group is null) ? copy.Material : 0),
+                    Mesh: ((group is null) ? copy.Mesh! : mesh), ObjectToWorld: copy.Matrix) {
+                    FrameSlot = copy.FrameSlot, UsesRootMaterialFrame = copy.UsesRootMaterialFrame, Glass = (group?.Glass ?? false), IsDynamic = copy.IsDynamic,
+                    MotionIdentity = m_motionIdentity,
+                };
+            }
+            if (m_posed && (m_position == group!.DrawnPosition) && (m_orientation == group.DrawnOrientation) && (m_scale == group.DrawnScale) && (m_draw.FrameSlot == (group.Dynamic ? group.Slot : null)) && (m_draw.Glass == group.Glass)) { return m_draw; }
+            m_position = group!.DrawnPosition;
+            m_orientation = group.DrawnOrientation;
+            m_scale = group.DrawnScale;
+            m_posed = true;
+            var matrix = ((group.Dynamic)
+                ? ((Matrix4x4.CreateScale(group.DrawnScale) * Matrix4x4.CreateFromQuaternion(group.DrawnOrientation)) * Matrix4x4.CreateTranslation(group.DrawnPosition))
+                : Matrix4x4.Identity);
+            return m_draw = new SdfMeshDraw(Identity: ((group.Mesh!.Chunks.Count == 0) ? group : mesh), Material: 0, Mesh: mesh,
+                ObjectToWorld: matrix) { FrameSlot = (group.Dynamic ? group.Slot : null), Glass = group.Glass, IsDynamic = group.Dynamic };
         }
     }
 

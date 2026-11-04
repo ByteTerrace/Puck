@@ -36,6 +36,10 @@ public static class WorldCreationWork {
     public static WorkKind DriverPhaseChanges { get; } = new(name: "sdf.creations.drivers.phase-changes", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Evaluated registrations with ongoing authored driver work.</summary>
     public static WorkKind DriverContinuations { get; } = new(name: "sdf.creations.drivers.continuations", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Local static geometry variants emitted or replayed during a visual program build.</summary>
+    public static WorkKind StaticTemplates { get; } = new(name: "sdf.creations.static.templates", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Retained static occurrences published during a visual program build.</summary>
+    public static WorkKind StaticCopies { get; } = new(name: "sdf.creations.static.copies", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Process totals; read twice to measure a window. Posed, retained and rate-held partition visited registrations.</summary>
-    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.creations", kinds: [Visited, Posed, Retained, RateHeld, PlacementsPosed, SlotsPosed, SlotsRetained, Probes, ProbeHits, ProbeMisses, ProbeSkipped, DriverInitializations, DriverEvaluations, DriverIntegrations, DriverPhaseChanges, DriverContinuations]);
+    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.creations", kinds: [Visited, Posed, Retained, RateHeld, PlacementsPosed, SlotsPosed, SlotsRetained, Probes, ProbeHits, ProbeMisses, ProbeSkipped, DriverInitializations, DriverEvaluations, DriverIntegrations, DriverPhaseChanges, DriverContinuations, StaticTemplates, StaticCopies]);
 }
