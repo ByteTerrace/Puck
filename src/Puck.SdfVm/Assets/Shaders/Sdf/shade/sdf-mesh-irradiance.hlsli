@@ -185,7 +185,8 @@ int3 sdfMeshIrradianceDims(uint level) {
     return int3((packed & 1023u), ((packed >> 10) & 1023u), ((packed >> 20) & 1023u));
 }
 // One level's eight probes about the pushed receiver, its lookup clamped to the level's boundary probes: each corner's
-// weight is its trilinear share times the facing fade times the angular surface visibility of the pushed receiver,
+// weight is its trilinear share times the facing fade (at least SDF_MESH_IRRADIANCE_BEHIND_SHARE, so a receiver whose
+// every visible probe lies behind its plane still reads them) times the angular surface visibility of the pushed receiver,
 // `bounded` by each probe's measured reach or, unbounded, blocked only by the surfaces it measured. Returns the total
 // weight. KEEP IN SYNC with SdfMeshIrradiance.Gather.
 float sdfMeshProbesGather(uint base, float spacing, int3 low, int3 dims, float3 position, float3 normal, float3 pushed, bool bounded, inout SdfMeshProbes probes) {
@@ -227,7 +228,7 @@ float sdfMeshProbesGather(uint base, float spacing, int3 low, int3 dims, float3 
         // The trilinear share is the cell's; the direction, the distance and the depth test are the probe's own position.
         float3 probePoint = ((((float3)cell + 0.5) * spacing) + sdfMeshProbeOffset(address));
         float3 toward = (probePoint - position);
-        float facing = lerp(smoothstep(0.0, 0.5 * spacing, dot(toward, normal)), 1.0, outside);
+        float facing = lerp(max(smoothstep(0.0, 0.5 * spacing, dot(toward, normal)), SDF_MESH_IRRADIANCE_BEHIND_SHARE), 1.0, outside);
         float weight = ((axes.x * axes.y * axes.z) * facing);
 
         if (weight > 0.0) {

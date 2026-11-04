@@ -34,6 +34,10 @@ public static class SdfMeshIrradianceProbe {
     public const uint InvalidFlag = (1u << 31);
     /// <summary>The receiver's normal bias in metres, smaller than the thinnest wall, independent of probe spacing.</summary>
     public const float NormalBias = 0.05f;
+    /// <summary>The facing weight a probe behind the receiver's plane keeps: small beside a probe in front, so it barely
+    /// shifts a receiver that front probes light, and the whole answer for a receiver no front probe can see, such as a
+    /// downward rim at the ground whose front probes the ground hides, which would otherwise draw black.</summary>
+    public const float BehindShare = 0.05f;
     /// <summary>The hit footprint share below which an edge tap cannot extend a finite block.</summary>
     public const float DepthCoverageStart = 0.5f;
     /// <summary>Scales the footprint's closing ramp to complete at three-quarter coverage.</summary>

@@ -1102,7 +1102,13 @@ and warm builds measured.
 - Time the windowed C# loop (`dotnet watch`) on an idle machine against the
   targets: a `Puck.World.Client` edit to ready under 20 s, boot to ready under
   6 s. HLSL is already inside the 30 s ruling through
-  `world.shaders.reload`.
+  `world.shaders.reload`, except where the edit adds or changes a generated
+  constant: any change to `sdf-render.hlsli` (from `SdfIsaHlsl`) re-stamps the
+  instruction set, every kernel's pass block is renamed, and the running host
+  refuses the reload ("the reloaded kernels do not read this host's interface"),
+  so a one-constant lighting change needs a reboot. Stamp the instruction set
+  from what the host and the kernels must agree on (layouts, bindings, opcodes),
+  not from every generated `#define`, so a constant-only change reloads.
 - Measure on an idle machine, serially, the cold and the warm local build. What
   is left of a cold build is per-node startup (the first project a fresh node
   builds spends seconds in the SDK's own targets), and the project-reference

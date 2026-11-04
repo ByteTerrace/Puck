@@ -148,10 +148,16 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   seam reflection, patch compatibility, gaps and coverage. Projection/addressing
   reuse `SdfOctahedral` / `field/sdf-octahedral.hlsli`.
 - Gather weight is the cell's trilinear share times
-  `smoothstep(0, spacing / 2, dot(normal, probe - receiver))` times depth visibility. This continuous
-  positive-hemisphere weight excludes probes behind a surface without switching
-  the whole gather between front and back sets. It also prevents grazing depth
-  uncertainty behind a thin wall from admitting a bright exterior probe.
+  `max(smoothstep(0, spacing / 2, dot(normal, probe - receiver)), BehindShare)` times depth visibility.
+  This continuous positive-hemisphere weight turns down probes behind a surface
+  without switching the whole gather between front and back sets. It also
+  prevents grazing depth uncertainty behind a thin wall from admitting a bright
+  exterior probe. The floor (`SdfMeshIrradianceProbe.BehindShare`) keeps a
+  receiver whose every visible probe lies behind its plane from reading black:
+  a downward rim at the ground (a root, a shrub's underside, a fern's base) has
+  only the ground-hidden probes below in front of it, and without the floor both
+  gather passes summed to zero. `world.probe x y z 0 -1 0` just above the ground
+  reads `answering=0` when that regresses.
   Squared angular cosines gave probes relocated close to a floor a strong pole
   directly above each lattice centre; the distance fade removes those repeated
   floor spots without changing the stored lighting. Past the boundary, blend

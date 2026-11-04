@@ -2133,15 +2133,15 @@ public sealed class SdfMeshIrradiance : IDisposable {
             // KEEP IN SYNC with sdfMeshProbesAt: continuous positive-hemisphere weight, then depth visibility.
             var probePoint = ((new Vector3(x: (cell.Item1 + 0.5f), y: (cell.Item2 + 0.5f), z: (cell.Item3 + 0.5f)) * spacing) + probe.Offset);
             var toward = (probePoint - point);
-            // A distance fade rejects probes behind the receiver without the angular pole that a close, relocated
-            // probe's squared cosine stamped into flat floors. Irradiance is already evaluated along the normal.
-            var facing = Math.Clamp((Vector3.Dot(vector1: toward, vector2: normal) / (0.5f * spacing)), 0f, 1f);
-
-            facing = float.Lerp(amount: outside, value1: ((facing * facing) * (3f - (2f * facing))), value2: 1f);
+            // A distance fade turns down probes behind the receiver without the angular pole that a close, relocated
+            // probe's squared cosine stamped into flat floors; they keep BehindShare, so a receiver whose every visible
+            // probe lies behind its plane still reads them. Irradiance is already evaluated along the normal.
+            var ahead = Math.Clamp((Vector3.Dot(vector1: toward, vector2: normal) / (0.5f * spacing)), 0f, 1f);
+            var front = (ahead > 0f);
+            var facing = float.Lerp(amount: outside, value1: MathF.Max(x: ((ahead * ahead) * (3f - (2f * ahead))), y: SdfMeshIrradianceProbe.BehindShare), value2: 1f);
             var trilinear = ((weights.X * weights.Y) * weights.Z);
             var visibility = (probe.Invalid ? 0f : SdfMeshProbeDepth.Visibility(bounded: depth, surfaces: probe.Depth, toward: (pushed - probePoint)));
             var weight = ((trilinear * facing) * visibility);
-            var front = (facing > 0f);
 
             if (!reports.IsEmpty) {
                 var sky = 0f;
