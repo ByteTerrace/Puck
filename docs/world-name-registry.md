@@ -594,6 +594,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.deal.variants.row` | State | Names | Read | `WorldPlacementDealVariants.Row` |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.deal.variants.map` | Prototype | Names | Read | `WorldPlacementDealVariants.Map` |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.deal.reflow.costRow` | State | Names | Action | `WorldPlacementReflow.CostRow` |
+| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.surface.targets` | Placement | Names | Read | `WorldPlacementSurface.Targets` |
 | `kits.rows[].actions{*}.onPress.effects[][removePlacement].id` | Placement | Names | Action | `WorldEffect.RemovePlacement.Id` |
 | `kits.rows[].actions{*}.onPress.effects[][poseCell].key` | State | Key | Read | `WorldEffect.PoseCell.Key` |
 | `kits.rows[].actions{*}.onPress.effects[][poseCell].topology` | Topology | Names | Read | `WorldEffect.PoseCell.Topology` |
@@ -902,6 +903,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.deal.variants.row` | State | Names | Read | `WorldPlacementDealVariants.Row` |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.deal.variants.map` | Prototype | Names | Read | `WorldPlacementDealVariants.Map` |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.deal.reflow.costRow` | State | Names | Action | `WorldPlacementReflow.CostRow` |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.surface.targets` | Placement | Names | Read | `WorldPlacementSurface.Targets` |
 | `kits.rows[].actions{*}.onRelease.effects[][removePlacement].id` | Placement | Names | Action | `WorldEffect.RemovePlacement.Id` |
 | `kits.rows[].actions{*}.onRelease.effects[][poseCell].key` | State | Key | Read | `WorldEffect.PoseCell.Key` |
 | `kits.rows[].actions{*}.onRelease.effects[][poseCell].topology` | Topology | Names | Read | `WorldEffect.PoseCell.Topology` |
@@ -1210,6 +1212,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.deal.variants.row` | State | Names | Read | `WorldPlacementDealVariants.Row` |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.deal.variants.map` | Prototype | Names | Read | `WorldPlacementDealVariants.Map` |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.deal.reflow.costRow` | State | Names | Action | `WorldPlacementReflow.CostRow` |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.surface.targets` | Placement | Names | Read | `WorldPlacementSurface.Targets` |
 | `kits.rows[].actions{*}.onFact[].effects[][removePlacement].id` | Placement | Names | Action | `WorldEffect.RemovePlacement.Id` |
 | `kits.rows[].actions{*}.onFact[].effects[][poseCell].key` | State | Key | Read | `WorldEffect.PoseCell.Key` |
 | `kits.rows[].actions{*}.onFact[].effects[][poseCell].topology` | Topology | Names | Read | `WorldEffect.PoseCell.Topology` |
@@ -1346,6 +1349,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `placements.rows[].deal.variants.row` | State | Names | Read | `WorldPlacementDealVariants.Row` |
 | `placements.rows[].deal.variants.map` | Prototype | Names | Read | `WorldPlacementDealVariants.Map` |
 | `placements.rows[].deal.reflow.costRow` | State | Names | Action | `WorldPlacementReflow.CostRow` |
+| `placements.rows[].surface.targets` | Placement | Names | Read | `WorldPlacementSurface.Targets` |
 | `speakers[].feed.source[machine].instance` | Machine | Names | Read | `WorldSpeakerSource.Machine.Instance` |
 | `speakers[].feed.gain` | State | Binding | Binding | `WorldSpeakerFeed.Gain` |
 | `speakers[][fixed].feed.source[machine].instance` | Machine | Names | Read | `WorldSpeakerSource.Machine.Instance` |
@@ -1766,6 +1770,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].effects[][upsertPlacement].placement.deal.variants.row` | State | Names | Read | `WorldPlacementDealVariants.Row` |
 | `rules[].effects[][upsertPlacement].placement.deal.variants.map` | Prototype | Names | Read | `WorldPlacementDealVariants.Map` |
 | `rules[].effects[][upsertPlacement].placement.deal.reflow.costRow` | State | Names | Action | `WorldPlacementReflow.CostRow` |
+| `rules[].effects[][upsertPlacement].placement.surface.targets` | Placement | Names | Read | `WorldPlacementSurface.Targets` |
 | `rules[].effects[][removePlacement].id` | Placement | Names | Action | `WorldEffect.RemovePlacement.Id` |
 | `rules[].effects[][poseCell].key` | State | Key | Read | `WorldEffect.PoseCell.Key` |
 | `rules[].effects[][poseCell].topology` | Topology | Names | Read | `WorldEffect.PoseCell.Topology` |
@@ -2092,6 +2097,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.options[].effects[][upsertPlacement].placement.deal.variants.row` | State | Names | Read | `WorldPlacementDealVariants.Row` |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.deal.variants.map` | Prototype | Names | Read | `WorldPlacementDealVariants.Map` |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.deal.reflow.costRow` | State | Names | Action | `WorldPlacementReflow.CostRow` |
+| `rules[].decision.options[].effects[][upsertPlacement].placement.surface.targets` | Placement | Names | Read | `WorldPlacementSurface.Targets` |
 | `rules[].decision.options[].effects[][removePlacement].id` | Placement | Names | Action | `WorldEffect.RemovePlacement.Id` |
 | `rules[].decision.options[].effects[][poseCell].key` | State | Key | Read | `WorldEffect.PoseCell.Key` |
 | `rules[].decision.options[].effects[][poseCell].topology` | Topology | Names | Read | `WorldEffect.PoseCell.Topology` |
@@ -2441,6 +2447,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.deal.variants.row` | State | Names | Read | `WorldPlacementDealVariants.Row` |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.deal.variants.map` | Prototype | Names | Read | `WorldPlacementDealVariants.Map` |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.deal.reflow.costRow` | State | Names | Action | `WorldPlacementReflow.CostRow` |
+| `rules[].decision.onNoChoice[][upsertPlacement].placement.surface.targets` | Placement | Names | Read | `WorldPlacementSurface.Targets` |
 | `rules[].decision.onNoChoice[][removePlacement].id` | Placement | Names | Action | `WorldEffect.RemovePlacement.Id` |
 | `rules[].decision.onNoChoice[][poseCell].key` | State | Key | Read | `WorldEffect.PoseCell.Key` |
 | `rules[].decision.onNoChoice[][poseCell].topology` | Topology | Names | Read | `WorldEffect.PoseCell.Topology` |
@@ -2732,6 +2739,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `interactions.interactions[].effects[][upsertPlacement].placement.deal.variants.row` | State | Names | Read | `WorldPlacementDealVariants.Row` |
 | `interactions.interactions[].effects[][upsertPlacement].placement.deal.variants.map` | Prototype | Names | Read | `WorldPlacementDealVariants.Map` |
 | `interactions.interactions[].effects[][upsertPlacement].placement.deal.reflow.costRow` | State | Names | Action | `WorldPlacementReflow.CostRow` |
+| `interactions.interactions[].effects[][upsertPlacement].placement.surface.targets` | Placement | Names | Read | `WorldPlacementSurface.Targets` |
 | `interactions.interactions[].effects[][removePlacement].id` | Placement | Names | Action | `WorldEffect.RemovePlacement.Id` |
 | `interactions.interactions[].effects[][poseCell].key` | State | Key | Read | `WorldEffect.PoseCell.Key` |
 | `interactions.interactions[].effects[][poseCell].topology` | Topology | Names | Read | `WorldEffect.PoseCell.Topology` |

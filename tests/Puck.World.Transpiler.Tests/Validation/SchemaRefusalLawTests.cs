@@ -33,14 +33,34 @@ public sealed class SchemaRefusalLawTests {
         Assert.Equal(expected: authored, actual: refusal.Authored);
         Assert.DoesNotContain(actualString: refusal.Authored, expectedSubstring: "System.");
     }
-    [Fact]
-    public void ARefusalThatIsNotAWrongKindKeepsTheSerializersWordsAtItsPointer() {
-        var refusal = Refuse(json: """{ "placements": { "rows": [ { "id": "a" } ] } }""");
+    [InlineData("""{ "placements": { "rows": [ { "id": "a", "prototypeId": "p", "position": [0, 0, 0], "yawDegrees": 0 } ] } }""", "placements.rows[0]: missing required member 'scale'")]
+    [InlineData("""{ "placements": { "rows": [ { "id": "a" } ] } }""", "placements.rows[0]: missing required members 'prototypeId', 'position', 'yawDegrees', 'scale'")]
+    [Theory]
+    public void ARequiredMemberTheDocumentLeavesOutIsNamedAtTheObjectThatLacksIt(string json, string authored) {
+        var refusal = Refuse(json: json);
 
         Assert.False(condition: refusal.IsWrongKind);
         Assert.Equal(expected: "/placements/rows/0", actual: refusal.Pointer);
-        Assert.StartsWith(actualString: refusal.Authored, expectedStartString: "placements.rows[0]: ");
-        Assert.DoesNotContain(actualString: refusal.Authored, expectedSubstring: "LineNumber");
+        Assert.Equal(expected: authored, actual: refusal.Authored);
+        Assert.DoesNotContain(actualString: refusal.Authored, expectedSubstring: "WorldPlacement");
+    }
+    [Fact]
+    public void AnUnmappedMemberKeepsTheSerializersWordsWhenRequiredMembersAreAlsoMissing() {
+        var refusal = Refuse(json: """{ "placements": { "rows": [ { "id": "a", "bogus": 1 } ] } }""");
+
+        Assert.Equal(expected: "/placements/rows/0/bogus", actual: refusal.Pointer);
+        Assert.DoesNotContain(actualString: refusal.Authored, expectedSubstring: "missing required");
+    }
+    [InlineData("""{ "render": { "toon": { "band": "nonsense" } } }""", "'nonsense'")]
+    [InlineData("""{ "render": { "toon": { "band": 3 } } }""", "a number")]
+    [Theory]
+    public void AnEnumMemberNamesTheSpellingsItReadsAgainstWhatTheDocumentHolds(string json, string found) {
+        var refusal = Refuse(json: json);
+
+        Assert.Equal(expected: "/render/toon/band", actual: refusal.Pointer);
+        Assert.StartsWith(actualString: refusal.Authored, expectedStartString: "render.toon.band: expected one of '");
+        Assert.EndsWith(actualString: refusal.Authored, expectedEndString: $", found {found}");
+        Assert.DoesNotContain(actualString: refusal.Authored, expectedSubstring: "SdfToonBand");
     }
     [Fact]
     public void AnAbsentPayloadIsRefusedWholeWithNothingToPlace() {
