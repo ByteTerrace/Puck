@@ -17,7 +17,7 @@ namespace Puck.Transpiler.Lowering;
 public static class DocumentBuiltins {
     /// <summary>The collection builtins — the document language's own, with no rule-language counterpart.</summary>
     public static IReadOnlySet<string> Collections { get; } = new HashSet<string>(comparer: StringComparer.Ordinal) {
-        "concat", "distinct", "filter", "groupBy", "length", "map", "range", "reduce", "sort",
+        "concat", "distinct", "filter", "flatMap", "groupBy", "length", "map", "range", "reduce", "sort",
     };
     /// <summary>Every name reserved in value position: the collection builtins, plus every named function of the
     /// shared expression vocabulary.</summary>
@@ -77,38 +77,88 @@ public static class DocumentBuiltins {
             fieldKey: fieldKey
         );
     }
+    // Appends `lowered` to `arr`: an array splices its items in, anything else is one item. The one rule concat and
+    // flatMap share, so the two spellings of a flatten cannot drift.
+    private static void AppendSpliced(JsonArray arr, JsonNode? lowered, DocumentScope scope, SourceSpan span) {
+        scope.Budget.Collection(
+            count: (arr.Count + ((lowered is JsonArray list)
+            ? list.Count
+            : 1)),
+            span: span
+        );
+
+        if (lowered is JsonArray nested) {
+            foreach (var item in nested.ToList()) {
+                arr.AppendNode(item: scope.Budget.Copy(
+                    item,
+                    span
+                ));
+            }
+
+            return;
+        }
+
+        arr.AppendNode(item: scope.Budget.Copy(
+            lowered,
+            span
+        ));
+    }
     private static JsonNode Concat(IReadOnlyList<ArgumentNode> args, DocumentScope scope, string? fieldKey) {
         var arr = new JsonArray();
 
         foreach (var arg in args) {
-            var lowered = DocumentLowering.EvaluateValue(
-                expr: arg.Value,
+            AppendSpliced(
+                arr: arr,
+                lowered: DocumentLowering.EvaluateValue(
+                    expr: arg.Value,
+                    scope: scope,
+                    fieldKey: fieldKey
+                ),
                 scope: scope,
-                fieldKey: fieldKey
-            );
-
-            scope.Budget.Collection(
-                count: (arr.Count + ((lowered is JsonArray list)
-                ? list.Count
-                : 1)),
                 span: arg.Span
             );
+        }
 
-            if (lowered is JsonArray nested) {
-                foreach (var item in nested.ToList()) {
-                    arr.AppendNode(item: scope.Budget.Copy(
-                        item,
-                        arg.Span
-                    ));
-                }
+        return arr;
+    }
+    // `flatMap(array, lambda)` is `reduce(array, [], (all, item) => concat(all, lambda(item)))` without recopying the
+    // running array each step: an array the lambda yields is spliced in, anything else is one item.
+    private static JsonNode? FlatMap(CallExpressionNode call, IReadOnlyList<ArgumentNode> args, DocumentScope scope, string? fieldKey) {
+        if (!TryReadSource(
+            args: args,
+            call: call,
+            expected: 2,
+            fieldKey: fieldKey,
+            lambda: out var lambda,
+            scope: scope,
+            source: out var source
+        )) {
+            return null;
+        }
 
-                continue;
-            }
+        if (lambda!.Parameters.Count is < 1 or > 2) {
+            return Refuse(
+                call: call,
+                message: "flatMap's lambda takes the item, or the item and its index",
+                scope: scope
+            );
+        }
 
-            arr.AppendNode(item: scope.Budget.Copy(
-                lowered,
-                arg.Span
-            ));
+        var arr = new JsonArray();
+
+        for (var index = 0; (index < source!.Count); ++index) {
+            AppendSpliced(
+                arr: arr,
+                lowered: Apply(
+                    lambda: lambda,
+                    scope: scope,
+                    fieldKey: fieldKey,
+                    first: source[index],
+                    second: JsonValue.Create(value: ((long)index))
+                ),
+                scope: scope,
+                span: call.Span
+            );
         }
 
         return arr;
@@ -642,6 +692,16 @@ public static class DocumentBuiltins {
 
             case "map":
                 result = Map(
+                    args: args,
+                    call: call,
+                    fieldKey: fieldKey,
+                    scope: scope
+                );
+
+                break;
+
+            case "flatMap":
+                result = FlatMap(
                     args: args,
                     call: call,
                     fieldKey: fieldKey,
