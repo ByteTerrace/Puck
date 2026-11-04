@@ -67,8 +67,6 @@ public static class PuckDiagnosticCodes {
     /// <summary>PUCK042: a lambda written where no builtin takes one. A lambda is an argument to an array builtin
     /// and nothing else.</summary>
     public const string LambdaOutsideBuiltin = "PUCK042";
-    /// <summary>A duplicate key in one block.</summary>
-    public const string LintDuplicateKey = "PUCK_LINT_002";
     /// <summary>A shadowed declaration.</summary>
     public const string LintShadowedDeclaration = "PUCK_LINT_003";
     /// <summary>A reserved-channel prefix matching no known channel.</summary>
