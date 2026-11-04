@@ -22,10 +22,10 @@
 template clearDay(cloudiness = 0.25, sunLight = 0, cloudTier = low) {
   layers [
     gradient(name: "air", stops: [
-      { elevation: -1, color: "#5E6A72" }
-      { elevation: 0, color: "#CFDCE6" }
-      { elevation: 0.4, color: "#7FAED4" }
-      { elevation: 1, color: "#2F5C8C" }
+      { elevation: -1, color: dayStops[0] }
+      { elevation: 0, color: dayStops[1] }
+      { elevation: 0.4, color: dayStops[2] }
+      { elevation: 1, color: dayStops[3] }
     ])
     sunDisc(name: "sun", light: sunLight, radius: 0.53deg, intensity: 12, color: "#FFF1D6")
     clouds(name: "cumulus", coverage: cloudiness, scale: 2, softness: 0.3, drift: [0.02, 0.005], tier: cloudTier)
@@ -115,6 +115,27 @@ let daySkyHours = [
   { hour: 19.5, stops: nightStops, luminance: 0, night: 1, stars: 1 }
 ]
 
+// One degree in radians, pi / 180. Written out because `pi / 180` folds to a value that differs in the last place and
+// moves the lighting keys.
+let sunRadiansPerDegree = 0.017453292519943295
+// Fifteen degrees in radians, one hour of the sun's turn (pi / 12), written out for the same reason.
+let sunRadiansPerHour = 0.2617993877991494
+
+// The sun's hour angle at clock hour `h`: zero at noon, a quarter turn at six.
+function sunHourAngle(h) = (h - 12) * sunRadiansPerHour
+
+// The direction the sun's light travels at clock hour `h`: due east of `heading` degrees at six, `noonElevation` degrees
+// up at noon.
+function sunDirection(h, heading, noonElevation) = [
+  (((0 - sine(sunHourAngle(h))) * cosine(heading * sunRadiansPerDegree)) + (cosine(sunHourAngle(h)) * cosine(
+    noonElevation * sunRadiansPerDegree
+  ) * sine(heading * sunRadiansPerDegree))),
+  (cosine(sunHourAngle(h)) * sine(noonElevation * sunRadiansPerDegree)),
+  (((0 - sine(sunHourAngle(h))) * sine(heading * sunRadiansPerDegree)) - (cosine(sunHourAngle(h)) * cosine(
+    noonElevation * sunRadiansPerDegree
+  ) * cosine(heading * sunRadiansPerDegree)))
+]
+
 // The time of day as one clock: the sun's direction, colour and illuminance on the light named `key`, and the sky about
 // it (`clearDay`'s gradient, disc and clouds, and stars that come out at night), all keyed on a state clock whose row of
 // the same name holds the day's phase, advancing one day every `daySeconds`. Expand it in a document fragment of its own
@@ -153,30 +174,14 @@ template dayCycle(clock = "day", daySeconds = 1440, start = 10, noonElevation = 
         at: h * 3600
         lights {
           key: directional(
-            direction: [
-              (((0 - sine((h - 12) * 0.2617993877991494)) * cosine(heading * 0.017453292519943295)) + (cosine(
-                (h - 12) * 0.2617993877991494
-              ) * cosine(noonElevation * 0.017453292519943295) * sine(heading * 0.017453292519943295))),
-              (cosine((h - 12) * 0.2617993877991494) * sine(noonElevation * 0.017453292519943295)),
-              (((0 - sine((h - 12) * 0.2617993877991494)) * sine(heading * 0.017453292519943295)) - (cosine(
-                (h - 12) * 0.2617993877991494
-              ) * cosine(noonElevation * 0.017453292519943295) * cosine(heading * 0.017453292519943295)))
-            ],
+            direction: sunDirection(h, heading, noonElevation),
             color: ((h <= 7) or (h >= 17)) ? horizonColor : noonColor,
-            illuminance: peak * maximum(0, cosine((h - 12) * 0.2617993877991494))
+            illuminance: peak * maximum(0, cosine(sunHourAngle(h)))
           )
           moon: directional(
-            direction: [
-              (((0 - sine((h - 12) * 0.2617993877991494)) * cosine(heading * 0.017453292519943295)) + (cosine(
-                (h - 12) * 0.2617993877991494
-              ) * cosine(noonElevation * 0.017453292519943295) * sine(heading * 0.017453292519943295))) * (0 - 1),
-              (cosine((h - 12) * 0.2617993877991494) * sine(noonElevation * 0.017453292519943295)) * (0 - 1),
-              (((0 - sine((h - 12) * 0.2617993877991494)) * sine(heading * 0.017453292519943295)) - (cosine(
-                (h - 12) * 0.2617993877991494
-              ) * cosine(noonElevation * 0.017453292519943295) * cosine(heading * 0.017453292519943295))) * (0 - 1)
-            ],
+            direction: map(sunDirection(h, heading, noonElevation), component => component * (0 - 1)),
             color: moonColor,
-            illuminance: moonPeak * maximum(0, 0 - cosine((h - 12) * 0.2617993877991494))
+            illuminance: moonPeak * maximum(0, 0 - cosine(sunHourAngle(h)))
           )
         }
       })
