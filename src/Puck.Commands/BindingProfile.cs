@@ -132,11 +132,7 @@ public static class BindingProfile {
         var seenEntryIds = new HashSet<string>(comparer: StringComparer.Ordinal);
 
         for (var entryIndex = 0; (entryIndex < entries.Count); entryIndex++) {
-            var entry = (entries[entryIndex]
-                ?? throw new ArgumentException(
-                message: $"Page \"{page.Id}\" entry {entryIndex} is null.",
-                paramName: nameof(page)
-            ));
+            var entry = entries[entryIndex];
 
             if (
                 (entry.Id is { } entryId) &&
@@ -1151,6 +1147,17 @@ public static class BindingProfile {
                         message: $"Chord row {rowIndex} (group \"{rowGroup}\") carries a page with an empty id.",
                         paramName: nameof(document)
                     );
+                }
+
+                // The one null-entry gate: every later walk over a page's entries (EffectiveRowsByGroup, BuildTable,
+                // BuildView) reads them as non-null, so a null entry is refused here, by name, before any of them runs.
+                for (var entryIndex = 0; (entryIndex < (page.Entries?.Count ?? 0)); entryIndex++) {
+                    if (page.Entries![entryIndex] is null) {
+                        throw new ArgumentException(
+                            message: $"Page \"{page.Id}\" entry {entryIndex} is null.",
+                            paramName: nameof(document)
+                        );
+                    }
                 }
 
                 if (!pageRowsById.TryAdd(
