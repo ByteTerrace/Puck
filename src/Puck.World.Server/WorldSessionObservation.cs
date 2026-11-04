@@ -31,6 +31,11 @@ public sealed class WorldSessionObservation : IDisposable {
     /// <summary>Gets the authority the viewer observes from, which the world's admission rows are asked about.</summary>
     public string SourceAuthority { get; }
 
+    /// <summary>Gets whether this observation may receive scene data now: it has not ended, its tier carries a
+    /// document, and its current live session still holds observe all. Withholding data does not end the observation;
+    /// the same recorded session can resume it when its grant returns.</summary>
+    public bool CanObserve => (!m_ended && (Tier != WorldDisclosureTier.Frames) && m_server.ObservesAsSession(session: Session));
+
     /// <summary>Returns whether this observation observes a world: the one server it was admitted by.</summary>
     /// <param name="server">The server.</param>
     /// <returns><see langword="true"/> when the observation was admitted by <paramref name="server"/>.</returns>
@@ -45,9 +50,8 @@ public sealed class WorldSessionObservation : IDisposable {
     /// in its place (a portal window joining its destination's endpoint scene), since that replica shows it nothing its
     /// own delivery would not. Read on the thread that steps the observed world.</summary>
     public bool DisclosesEverything => (
-        !m_ended &&
+        CanObserve &&
         (Tier == WorldDisclosureTier.Replica) &&
-        m_server.ObservesAsSession(session: Session) &&
         new WorldSinkDisclosure(
             ObserverBodyIndex: -1,
             Policy: m_server.Definition.Population.ObserverDisclosure

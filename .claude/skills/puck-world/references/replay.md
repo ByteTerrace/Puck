@@ -41,6 +41,14 @@ A replay-start restore (`WorldPersistence.RestoreReplayStart`) replaces session 
 with their captured timeline; live checkpoint loads retain retired session epochs
 so an ended principal cannot be minted again.
 
+Replay start can temporarily withhold a pre-existing screen observation's grant
+until the recorded bootstrap prefix restores it. `WorldSessionObservation.CanObserve`
+is the shared scene-availability door. An unavailable observation pauses its graph
+node and holds its last published image; it must neither create a private
+whole-world residency nor fall back to the undisclosed root. Re-admitting it to
+avoid the gap would change the recorded session stream. The revoked/regrant,
+Frames-only and nested-view laws live in `SessionObservationLawTests` and
+`WorldScreenBinderLawTests`.
 `WorldReplayProbe` consumes the tape's existing input capture independently of
 operator recording. Scenario workers freeze all probes synchronously at export,
 before the host finishes its post-step work, then restore and replay each authority

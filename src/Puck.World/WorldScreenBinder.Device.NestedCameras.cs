@@ -137,7 +137,8 @@ public sealed partial class WorldScreenBinder {
                 );
             } else if (feed.Registered) {
                 target = feed;
-                residency = SessionResidencyOf(feed: feed);
+                if (SessionResidencyOf(feed: feed) is not { } own) { return false; }
+                residency = own;
             } else {
                 return false;
             }

@@ -208,6 +208,7 @@ public sealed partial class SessionObservationLawTests {
             collection: fixture.Server.GrantRows(principal: observation!.Session),
             predicate: static row => ((row.Capability == WorldCapability.Observe) && (row.Subject == GrantSubject.All))
         );
+        Assert.True(observation.CanObserve);
 
         Laws.RefusalWithControl(
             lawId: "session.observation-follows-observe-all",
@@ -216,6 +217,8 @@ public sealed partial class SessionObservationLawTests {
                     actor: Principal.Console,
                     grant: view
                 );
+                Assert.False(observation.CanObserve);
+                Assert.False(observation.Ended);
 
                 return StepReaches(
                     fixture: fixture,
@@ -227,6 +230,7 @@ public sealed partial class SessionObservationLawTests {
                     actor: Principal.Console,
                     grant: view
                 );
+                Assert.True(observation.CanObserve);
 
                 return StepReaches(
                     fixture: fixture,
@@ -234,6 +238,40 @@ public sealed partial class SessionObservationLawTests {
                 );
             }
         );
+    }
+    [InlineData(WorldDisclosureTier.Frames)]
+    [InlineData(WorldDisclosureTier.Presentation)]
+    [InlineData(WorldDisclosureTier.Replica)]
+    [Theory]
+    public void SceneAvailabilityIsIndependentOfFullReplicaDisclosure(WorldDisclosureTier tier) {
+        using var fixture = Fixtures.FreshServer(definition: Document(tier));
+        var (observation, _, refusal) = Observe(fixture);
+        Assert.NotNull(observation);
+        Assert.Empty(refusal);
+        using var release = observation;
+        Assert.Equal(tier != WorldDisclosureTier.Frames, observation.CanObserve);
+        Assert.Equal(tier == WorldDisclosureTier.Replica, observation.DisclosesEverything);
+        observation.Dispose();
+        Assert.False(observation.CanObserve);
+        Assert.False(observation.DisclosesEverything);
+    }
+    [Fact]
+    public void AReplayStartWithholdsTheExistingObserverUntilItsSamePrincipalReturns() {
+        using var fixture = Fixtures.FreshServer(definition: Document(WorldDisclosureTier.Replica));
+        Assert.True(fixture.Server.TryCaptureCheckpoint(WorldAuthorityHostRowCheckpoint.Empty, out var checkpoint, out var reason), reason);
+        var (observation, _, refusal) = Observe(fixture);
+        Assert.NotNull(observation);
+        Assert.Empty(refusal);
+        using var release = observation;
+        Assert.True(observation.DisclosesEverything);
+        fixture.Server.Persistence.RestoreReplayStart(checkpoint!);
+        Assert.False(observation.Ended);
+        Assert.False(observation.CanObserve);
+        Assert.False(observation.DisclosesEverything);
+        Assert.True(fixture.Server.TryAdmitSession(Viewer, out var restored, out _, out reason), reason);
+        Assert.Equal(observation.Session, restored);
+        Assert.True(observation.CanObserve);
+        Assert.True(observation.DisclosesEverything);
     }
     [Fact]
     public void AWorldThatAdmitsNoViewer_RefusesTheObservationByName_OneThatDoesAdmitsIt() {

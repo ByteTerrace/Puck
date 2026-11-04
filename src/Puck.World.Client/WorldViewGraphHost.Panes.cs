@@ -11,6 +11,11 @@ namespace Puck.World.Client;
 /// each last rendered from, which the hit continues through (a camera view's, and a session's in its destination's
 /// space), and the surface a ray meets in the world a view renders.</summary>
 public interface IWorldViewScenes {
+    /// <summary>Returns whether a view's current content is available to render. Unavailable content keeps its last
+    /// published image; it does not render a different world or initialize a private geometry residency.</summary>
+    /// <param name="view">The view's instance name.</param>
+    /// <returns>Whether the view can render current content. Ordinary non-session views are available.</returns>
+    bool IsAvailable(string view) => true;
     /// <summary>Finds the camera a view last rendered from.</summary>
     /// <param name="view">The view's instance name.</param>
     /// <param name="camera">The camera when this returns <see langword="true"/>.</param>
