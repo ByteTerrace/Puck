@@ -179,7 +179,7 @@ internal sealed partial class WorldViewCommandModule(IServerLink link, WorldView
                 !float.IsFinite(f: x) ||
                 !float.IsFinite(f: y)
             ) {
-                return CommandResult.Error(output: "[world.view.panes: expected a display point as two finite numbers, in display pixels from the top-left corner]");
+                return CommandResult.Usage(form: "[<x> <y>] (finite display pixels from the top-left corner)", verb: "world.view.panes");
             }
 
             var picked = (host.Picker.TryPick(

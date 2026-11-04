@@ -85,7 +85,7 @@ internal sealed partial class PlayerCommandModule {
         }
 
         if (instanceTarget.EffectiveCount is not (7 or 8)) {
-            return CommandResult.Error(output: "[body.fly: expected 7 values — <forward> <strafe> <up> <yaw> <pitch> <roll> <seconds> — plus an optional body index]");
+            return CommandResult.Usage(form: FlyForm, verb: "body.fly");
         }
 
         if (!TryParseFlySegment(
@@ -435,7 +435,7 @@ internal sealed partial class PlayerCommandModule {
         }
 
         if (instanceTarget.EffectiveCount is not (6 or 7)) {
-            return CommandResult.Error(output: "[body.pose: expected 6 values — <x> <y> <z> <yawDeg> <pitchDeg> <rollDeg>, any of which may be - to hold its current value — plus an optional body index]");
+            return CommandResult.Usage(form: PoseForm, verb: "body.pose");
         }
 
         // Follow the identical live route body.where/body.fly already use before falling back to the boot
@@ -564,7 +564,7 @@ internal sealed partial class PlayerCommandModule {
     // always echoes.
     private CommandResult ReconcileHandler(CommandContext context, WireArgs args) {
         if (args.Count is not (3 or 4 or 5)) {
-            return CommandResult.Error(output: "[body.reconcile: expected 3 values — <x> <z> <yawDegrees> — plus an optional smoothing time and body index]");
+            return CommandResult.Usage(form: ReconcileForm, verb: "body.reconcile");
         }
 
         // Layout: <x> <z> <yawDegrees> [seconds] [body]. The trailing body index is the LAST token (as with every
@@ -795,7 +795,7 @@ internal sealed partial class PlayerCommandModule {
         }
 
         if (instanceTarget.EffectiveCount > 1) {
-            return CommandResult.Error(output: "[body.stop: expected at most 1 value — an optional body index]");
+            return CommandResult.Usage(form: StopForm, verb: "body.stop");
         }
 
         if (!WorldArgs.TryParseIndex(
@@ -1081,7 +1081,7 @@ internal sealed partial class PlayerCommandModule {
         }
 
         if (instanceTarget.EffectiveCount > 1) {
-            return CommandResult.Error(output: "[body.where: expected at most 1 value — an optional body index]");
+            return CommandResult.Usage(form: WhereForm, verb: "body.where");
         }
 
         if (

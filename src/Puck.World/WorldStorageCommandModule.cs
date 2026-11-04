@@ -146,7 +146,7 @@ internal sealed class WorldStorageCommandModule(WorldOwnedWorlds profiles, IPlay
             name: "storage.push",
             description: "Pushes one owned world (storage.push <world-id>) or the whole catalog (no argument) to the per-user cloud container. First contact is create-only; a tracked world pushes with its token, and a moved cloud copy refuses with the remedy. A world whose id cannot address a blob of its own refuses by name instead of pushing (Immediate, up to 15s per blob — a basis chain multiplies this).",
             handler: (_, args) => ((args.Count > 1)
-            ? CommandResult.Error(output: "[storage.push: expected at most one argument (a world id)]")
+            ? CommandResult.Usage(form: "[<world-id>]", got: args[1].ToString(), verb: "storage.push")
             : Run(
                     id: ((args.Count == 1)
                 ? args[0].ToString()
@@ -160,7 +160,7 @@ internal sealed class WorldStorageCommandModule(WorldOwnedWorlds profiles, IPlay
             name: "storage.pull",
             description: "Pulls one owned world (storage.pull <world-id>) or every local/tracked/cloud-discovered one (no argument) from the per-user cloud container, validating each through the boot loader's gate before adopting it. A whole-catalog pull also lists the cloud puck/worlds/ namespace and adopts any id it does not already know; a cloud object whose name no owned-world id can address refuses by name instead of being silently skipped. A pulled copy replaces the owned identity in place, so every seat bound to it follows; while a tape records, every adoption refuses by name (PullWhileRecording), because a tape never carries an owned document (Immediate, up to 15s per blob — a basis chain multiplies this).",
             handler: (_, args) => ((args.Count > 1)
-            ? CommandResult.Error(output: "[storage.pull: expected at most one argument (a world id)]")
+            ? CommandResult.Usage(form: "[<world-id>]", got: args[1].ToString(), verb: "storage.pull")
             : Run(
                     id: ((args.Count == 1)
                 ? args[0].ToString()

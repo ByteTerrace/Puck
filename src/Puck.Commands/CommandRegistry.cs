@@ -65,6 +65,9 @@ public sealed partial class CommandRegistry {
     private const int MaxWireTokens = 64;
     private const string WireAckCommandName = "wire.ack";
     private const string WireErrorsCommandName = "wire.errors";
+    private const string WireAckForm = "[on|quiet]";
+    private const string WireErrorsForm = "[reset]";
+    private const string HelpForm = "[--full|--names] [<prefix>]";
 
     // The span-keyed alternate view over m_byName, so RoutesToSimulation classifies a line's verb token without
     // materializing it. Built once at construction, after registration completes.
@@ -609,7 +612,7 @@ public sealed partial class CommandRegistry {
         }
 
         if (args.Count > 1) {
-            return CommandResult.Usage(form: "[on | quiet]", verb: "wire.ack");
+            return CommandResult.Usage(form: WireAckForm, got: args[1].ToString(), verb: WireAckCommandName);
         }
 
         // Case-insensitively, through WireArgs.Is — every module verb reads its mode words that way, and a built-in
@@ -632,7 +635,7 @@ public sealed partial class CommandRegistry {
             return new CommandResult(Output: "[wire.ack: quiet]");
         }
 
-        return CommandResult.Usage(form: "[on | quiet]", verb: "wire.ack");
+        return CommandResult.Usage(form: WireAckForm, got: args[0].ToString(), verb: WireAckCommandName);
     }
     /// <summary>Reports (and optionally clears) the refused-submission count for the built-in <c>wire.errors</c> verb.
     /// The count is over the lines the CALLER submitted — see <see cref="Submit"/>'s remarks for what a macro verb's
@@ -642,7 +645,7 @@ public sealed partial class CommandRegistry {
     /// <returns>A result echoing the count, or an <see cref="CommandResult.IsError"/> result for a bad argument.</returns>
     private CommandResult ApplyWireErrors(in WireArgs args) {
         if (args.Count > 1) {
-            return CommandResult.Usage(form: "[reset]", verb: "wire.errors");
+            return CommandResult.Usage(form: WireErrorsForm, got: args[1].ToString(), verb: WireErrorsCommandName);
         }
 
         var reset = args.Is(
@@ -654,7 +657,7 @@ public sealed partial class CommandRegistry {
             (args.Count == 1) &&
             !reset
         ) {
-            return CommandResult.Usage(form: "[reset]", verb: "wire.errors");
+            return CommandResult.Usage(form: WireErrorsForm, got: args[0].ToString(), verb: WireErrorsCommandName);
         }
 
         // Read the counts BEFORE `reset` zeroes them, and do not let this verb's own report count as a rejection.
@@ -685,19 +688,19 @@ public sealed partial class CommandRegistry {
     private IEnumerable<CommandDefinition> BuiltInCommands() {
         yield return CommandDefinition.WithWireArgs(
             name: HelpCommandName,
-            description: "Lists the available commands: help [--full|--names] [<prefix>] — bare `help` prints the registered verb names, one per line, this registry's own built-ins included, ordinal-ordered by name; generated commands marked prefix-only appear only with a prefix; `<prefix>` keeps the verbs whose names equal it or start with it, ignoring case (help world.state, help player.), as `name - synopsis` lines (the first sentence, at most 200 characters, ending in ` ...` when words were left out) unless `--names` is given; `--full` prints the whole `name - description` for every verb (or for `<prefix>`).",
+            description: "Lists the available commands: help " + HelpForm + " — bare `help` prints the registered verb names, one per line, this registry's own built-ins included, ordinal-ordered by name; generated commands marked prefix-only appear only with a prefix; `<prefix>` keeps the verbs whose names equal it or start with it, ignoring case (help world.state, help player.), as `name - synopsis` lines (the first sentence, at most 200 characters, ending in ` ...` when words were left out) unless `--names` is given; `--full` prints the whole `name - description` for every verb (or for `<prefix>`).",
             handler: (context, args) => Help(args: in args, caller: context.Principal, slot: context.Slot),
             bindability: CommandBindability.Unbindable
         );
         yield return CommandDefinition.WithWireArgs(
             name: WireAckCommandName,
-            description: "Sets or reports the acknowledgement mode for accepted commands: wire.ack [on|quiet] — `on` (default) echoes every accepted command; `quiet` drops the bare success acknowledgements of side-effecting verbs, while failures and any verb that answers with data still echo; no argument reports the current mode.",
+            description: "Sets or reports the acknowledgement mode for accepted commands: wire.ack " + WireAckForm + " — `on` (default) echoes every accepted command; `quiet` drops the bare success acknowledgements of side-effecting verbs, while failures and any verb that answers with data still echo; no argument reports the current mode.",
             handler: (_, args) => ApplyWireAck(args: in args),
             bindability: CommandBindability.Unbindable
         );
         yield return CommandDefinition.WithWireArgs(
             name: WireErrorsCommandName,
-            description: "Reports the number of submitted lines this session REFUSED — an unknown verb, a parse error, a handler's failure result, or a refusal raised after the line was accepted: wire.errors [reset] — no argument reports the running count; `reset` reports it and zeroes the counter. It is the one number that says whether any submitted line silently no-opped. It counts the lines YOU submitted: a verb that submits lines of its own contributes one refusal when it reports the failure back, and none when it swallows it. A command observer that threw while being told about a dispatch is a broken reporting surface rather than a refused line, so it is reported as a separate trailing `| <n> observer faults` segment, and only when there have been some.",
+            description: "Reports the number of submitted lines this session REFUSED — an unknown verb, a parse error, a handler's failure result, or a refusal raised after the line was accepted: wire.errors " + WireErrorsForm + " — no argument reports the running count; `reset` reports it and zeroes the counter. It is the one number that says whether any submitted line silently no-opped. It counts the lines YOU submitted: a verb that submits lines of its own contributes one refusal when it reports the failure back, and none when it swallows it. A command observer that threw while being told about a dispatch is a broken reporting surface rather than a refused line, so it is reported as a separate trailing `| <n> observer faults` segment, and only when there have been some.",
             handler: (_, args) => ApplyWireErrors(args: in args),
             bindability: CommandBindability.Unbindable
         );
@@ -1690,7 +1693,8 @@ public sealed partial class CommandRegistry {
                 prefix = args[index].ToString();
             } else {
                 return CommandResult.Usage(
-                    form: "help [--full|--names] [<prefix>]",
+                    form: HelpForm,
+                    got: args[index].ToString(),
                     verb: HelpCommandName
                 );
             }
