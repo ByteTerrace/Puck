@@ -54,7 +54,7 @@ tiles [
 map: concat(
   map(range(0, 30), i => 1),
   [0, 0, 4],
-  reduce(range(0, 17), [], (rows, r) => concat(rows, map(range(0, 28), i => 0), [2, 0, 0, 4])),
+  flatMap(range(0, 17), r => concat(map(range(0, 28), i => 0), [2, 0, 0, 4])),
   map(range(0, 28), i => 0),
   [2, 0, 0],
   map(range(0, 30), i => 3),

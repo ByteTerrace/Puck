@@ -316,9 +316,6 @@ landed geometry).
     between them. Retained large arrays compacted by `ConserveMemory=5`
     (`Puck.World.csproj:30`) remain the likelier cause of long suspensions; the
     settled LOH still reads about 1.5 GB after `host.memory collect`.
-  - [low] `SdfProgramBuilder.Clear` (`SdfProgramBuilder.cs:164-180`) leaves
-    `m_openInstanceBakesSeparately` and `m_openInstanceBoundInSlotFrame` set
-    after a thrown emission.
   - [low] The reused frame builder (`SdfCompositionFrameSource.cs:230`) keeps
     the last emission's objects alive into gen2.
   - [low] A cached rigid template (`WorldRigidAssets.cs:155`) matches only on
@@ -524,10 +521,6 @@ The custom no-GC runtime port stays later work, on the
   a frame per residency after the bake settles (`SdfMeshPathBake.cs:306`,
   called from `SdfWorldResidency.cs:570`); give it the done-through cursor
   `Pending` uses, over the opaque static groups.
-- [low] The sky environment reduction reads `sdfSkyReduce[row][added]` with 28
-  lanes on rows 64 words apart
-  (`sdf-sky-environment-reduce.comp.hlsl:13,49`), a 28-way groupshared bank
-  conflict on each of 64 reads; pad the row to 65 words.
 - [low · unmeasured] The views filter tile is 11 words wide, so an 8x4-lane
   warp reading `sdfViewsFilterShadows` and `sdfViewsFilterNormals` at
   `(lane.y + y) * 11 + lane.x + x` puts rows 0 and 3 on the same banks 1 to 7
@@ -886,12 +879,6 @@ retirement.
   the hashes in the server section; restore reads them through the same store.
   The compact form keeps the debug world near 31 MB against the codec's 128 MiB
   body bound until then.
-- [low] Embedded documents outside the server section still use the indented
-  form: owned-world documents (`src/Puck.World.Server/WorldOwnedWorlds.cs:796`),
-  escrow destinations (`src/Puck.World.Server/WorldTransferEscrow.cs:373`, compared
-  by hash at `:465`), and crossing targets
-  (`src/Puck.World.Server/WorldInstanceHost.CrossingLog.cs:16`). Move each to the
-  compact form with its comparison in one change.
 - [low] Extend addon checkpoints to table/reference and segment-drop state.
   Mounting currently refuses these resources by name
   (`src/Puck.Assets/WasmModuleDeclarations.Checkpoint.cs:15`,
@@ -1104,9 +1091,6 @@ and warm builds measured.
   Local builds stay IL for the edit loop. Measure before and after: JIT count to
   `world.status`, the first crossing's frame, boot wall time, publish size and
   publish time.
-- [low] The silo activates worlds without calling
-  `WorldJsonContext.StartPreparing()`, which takes the document metadata's
-  configuration off the activation path as `Puck.World`'s `Program.cs` does.
 - An edit to a project outside `PuckHotReload` is refused ("can not be edited")
   and `dotnet watch` stops applying changes without rebooting; it should reboot
   as a rude edit does. This reboot is the mechanism [in-world editing](#in-world-editing)
@@ -1200,6 +1184,69 @@ lowers it to the same JSON as before, except where the look changes on purpose.
     claims exact 1-Lipschitz for every radius, while the Valley packet and
     `hazards.md` keep the CPU/GPU small-radius disagreement open. One of them
     is wrong.
+
+Engine defaults that carry a look or a rule of play, which the authors rule
+wants authored with a neutral engine default (each one sits in C# or HLSL,
+and none has an authored field yet):
+
+- [medium] An unauthored world renders a baked atmosphere. `WriteAtmosphere`
+  falls back to `SdfAtmosphere.Default` for a world with no
+  `render.atmosphere` (`src/Puck.World.Client/WorldEnvironmentResolve.cs:711`),
+  which is a fog of `SdfSky.DefaultFogDensity`
+  (`src/Puck.SignedDistance/SdfAtmosphere.cs:74`, `SdfSky.cs:98`), and every
+  authored sky layer, fog and medium without a luminance reads
+  `SdfSky.DefaultLuminance` (`SdfSky.cs:115`;
+  `WorldEnvironmentResolve.cs:724,739,762`). Make the unauthored default
+  neutral (no fog), author the atmosphere in each debug-world place that leans
+  on it (and `worlds/standard` where a package should carry one), then look at
+  the places on windowed Direct3D 12 and Vulkan before and after; do it after
+  the debug world's own edits land.
+- [medium] The opening ripple's feel and look are engine constants, not one
+  authored ripple record. Reach, body centre, margin and the touch and cross
+  strengths are C# constants
+  (`src/Puck.World.Client/WorldOpeningRipples.cs:15-27`); the lifetime and
+  clock period are mirrored in C# and HLSL (`SdfScreenRipple.cs:16-23`); the
+  amplitudes, front speed, ring length, edge fade, glow and its colour, and the
+  idle waves' directions, lengths and cycles are HLSL literals
+  (`src/Puck.SdfVm/Assets/Shaders/Sdf/shade/sdf-environment.hlsli:26-37`).
+  Design one `ripple` material that carries feel and look together (the
+  screen's `ripple` flag selects it, the session frame source's `Ripple` parameter in `WorldScreen.cs`), put the
+  values in `worlds/standard` as the default, and carry the look through the
+  ripple record's rows, which changes the GPU data layout and needs windowed
+  boots on both backends.
+- [low] The gait drivers' `moving` gate is a fixed rendered speed
+  (`WorldGaitDrivers.MovingSpeed = 0.05`,
+  `src/Puck.World.Client/WorldGaitDrivers.cs:41`; read at `:114` and
+  `WorldCreationInstances.Effectors.cs:41`), and mirrored avatars advance gait
+  phase by a fixed distance cadence and per-frame travel clamp
+  (`WorldMirroredAvatarBand.GaitCadence = 8` and `MaxGaitTravelPerFrame =
+  0.25`, `src/Puck.World.Client/WorldMirroredAvatarBand.cs:13,16`; used at
+  `WorldSceneEmitter.cs:574`). The first looks like a noise threshold, the
+  second a look. One design pass on creation-driver authoring decides whether
+  each is a driver or rig field (`CreationDriverDocument`,
+  `src/Puck.World.Authoring/Authoring/CreationAnimation.cs`), which touches the
+  generated schema and TypeScript model.
+- [low] The built-in view ladder's transition envelope is baked into the
+  composer (`BuiltinTransitionSeconds` and `BuiltinTransitionRenderScale`,
+  `src/Puck.World.Client/WorldViewComposer.cs:29-33`, returned at `:311`). Its
+  comment says it copies `ScreenLayoutDirector`'s compiled 0.6 s and 0.5
+  scale, but no such class remains in `src`; the same name survives in comments
+  at `src/Puck.SdfVm/Views/ViewTransition.cs:36,44` and
+  `SdfCameraRig.cs`. Check that a built-in ladder has authored source in
+  `worlds/standard` to carry the envelope, move the values there, and delete
+  the stale mentions.
+- [low] The tabletop framing clamps an authored engage pitch to
+  `MaximumPitchRadians` (`0.4972 pi`,
+  `src/Puck.World.Client/WorldTabletopFraming.cs:19`, applied at `:90-92`),
+  which reads as a guard against a straight-down view. Confirm that the
+  validator's `WorldTabletopEngage.Pitch` range stops below it and report a
+  pitch above it by name; low value until an author engages near 90 degrees.
+- [medium] The procedural avatar catalog owns a fixed look
+  (`src/Puck.World.Client/WorldRigCatalog.cs`: the humanoid's part table at
+  `:27`, leaf counts and bound radius at `:14-17`, and per-role anchors from
+  `HumanoidAnchor` at `:201`). Design how a catalog rig is authored (a rig
+  document the standard package supplies, with this humanoid as its default
+  data) before moving any of it; this is larger than one lane.
 
 Code that grew a second implementation (AGENTS.md rule 7) or costs velocity:
 
@@ -1910,8 +1957,9 @@ reproduce worker for what remains.
   directory (`src/Puck.Cli.Worlds/WorldsRoot.cs:49`), and `TestCommandLawTests`
   and CI runs, which pass no `--cache-dir`, write the real per-user
   compiled-world, compile and mesh caches. Make `--cache-dir` cover the compile
-  cache too, or narrow the wording in `.claude/skills/verification/SKILL.md:124-125`,
-  `TestCommand.Leg.cs:515` and `docs/reference/cli.md`.
+  cache too, or narrow the wording of `--cache-dir` in `TestCommand.Leg.cs:515`
+  and `docs/reference/cli.md` the way the verification skill's worker-cache
+  paragraph already is.
 - `replay.record` mid-session re-grants document grants revoked at runtime
   (the host's addon `Finish` after the checkpoint captures grants), and refuses
   `StartNotCheckpointable` after every pumped addon was removed

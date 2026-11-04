@@ -100,23 +100,6 @@ let fallHalf = 1.12
 let railGap = 0.15
 let railTop = 5.5
 
-// Four bars lying flat round a square canvas of half-extent `ix`, `w` wide, from height `y0` to `y1`.
-template flatRing(label, ix, w, y0, y1, slot) {
-  localBox(label: $"{label}-north", x0: (0 - (ix + w)), x1: (ix + w), y0: y0, y1: y1, z0: ix, z1: (ix + w), slot: slot)
-  localBox(
-    label: $"{label}-south",
-    x0: (0 - (ix + w)),
-    x1: (ix + w),
-    y0: y0,
-    y1: y1,
-    z0: (0 - (ix + w)),
-    z1: (0 - ix),
-    slot: slot
-  )
-  localBox(label: $"{label}-east", x0: ix, x1: (ix + w), y0: y0, y1: y1, z0: (0 - ix), z1: ix, slot: slot)
-  localBox(label: $"{label}-west", x0: (0 - (ix + w)), x1: (0 - ix), y0: y0, y1: y1, z0: (0 - ix), z1: ix, slot: slot)
-}
-
 // A wall painting: face 0, the rim, names the glass, which stands `canvasProud` out from the wall; the frame is the
 // rings round it and the plaque stands on the wall to its right.
 template wallPainting(label, frame, title, note) {

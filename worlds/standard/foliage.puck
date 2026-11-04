@@ -391,7 +391,7 @@ template grassTuft(id) {
   prototype $"{id}" {
     document {
       schema: "puck.creation.v1"
-      name: "meadow-tuft"
+      name: id
       palette [
         {
           color: "#526F35",

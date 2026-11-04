@@ -136,8 +136,11 @@ refuses the replay as a duplicate. Session epochs reset only in this replay-star
 path; a live load preserves retired epochs.
 The default bounds concurrent workers at two (one on fewer than four logical
 CPUs); a lane beside heavy work still passes `--jobs 1`.
-Workers share the per-user device caches. Use `puck test --cache-dir <scratch-root>`
-when a lane must keep writes isolated; reuse that root across its paired runs.
+Workers share the per-user device caches. `puck test --cache-dir <scratch-root>`
+redirects only those worker caches (reuse that root across a lane's paired runs):
+the `puck test` process itself still persists compiles to the per-user
+`compilations` directory (`WorldsRoot.Start`), so the compile, compiled-world and
+mesh caches stay per-user until [that open item](../../../docs/plans/open-items.md#refactoring-campaign) lands.
 An ordinary scheduled boot has no replay probe or `reproduction.json`; a fresh-process
 hash comparison runs `puck test --reproduce` in a separate worker so its proof actually
 compares the recorded ticks.

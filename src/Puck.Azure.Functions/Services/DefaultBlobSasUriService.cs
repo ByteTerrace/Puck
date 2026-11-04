@@ -147,7 +147,7 @@ public sealed class DefaultBlobSasUriService(
                 ))
             ))
         ) {
-            throw new ArgumentException(message: "Bad request."); // TODO: Refine this, a lot.
+            throw new ArgumentException(message: "containerName must be set and endpoint must be an absolute https URI on an allowed host.");
         }
 
         var blobSasBuilder = new BlobSasBuilder(
@@ -176,7 +176,15 @@ public sealed class DefaultBlobSasUriService(
         }
 
         if (!string.IsNullOrWhiteSpace(value: ipRange)) {
-            blobSasBuilder.IPRange = SasIPRange.Parse(s: ipRange); // TODO: Handle potential exception with bad request response.
+            // SasIPRange.Parse throws FormatException on a malformed range; a client typo is bad input, not a fault.
+            try {
+                blobSasBuilder.IPRange = SasIPRange.Parse(s: ipRange);
+            } catch (FormatException e) {
+                throw new ArgumentException(
+                    innerException: e,
+                    message: "ipRange must be an IP address or an ip-ip range."
+                );
+            }
         }
 
         if (!string.IsNullOrWhiteSpace(value: preauthorizedAgentObjectId)) {

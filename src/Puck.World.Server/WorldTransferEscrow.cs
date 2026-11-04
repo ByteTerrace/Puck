@@ -370,7 +370,7 @@ public sealed partial class WorldTransferEscrow {
                 Request: CopyOwnedReservation(request: lease.Request),
                 DeadlineTick: lease.DeadlineTick,
                 Slots: [.. lease.Slots],
-                DestinationDefinitionJson: WorldDefinitionSerialization.Serialize(definition: lease.DestinationDefinition),
+                DestinationDefinitionJson: WorldDefinitionSerialization.SerializeCompact(definition: lease.DestinationDefinition),
                 Arrival: lease.Arrival
             ));
         }
@@ -462,7 +462,7 @@ public sealed partial class WorldTransferEscrow {
         // copy, so the guard still recognizes "this is the reservation's own destination" across a checkpoint
         // round-trip; a lease captured against a document the server has since moved past correctly deserializes its
         // own (now provably stale) snapshot instead, so the guard still refuses a commit against a moved document.
-        var currentDefinitionHash = WorldDefinitionFileSource.ComputeContentHash(content: WorldDefinitionSerialization.Serialize(definition: m_server.Definition));
+        var currentDefinitionHash = WorldDefinitionFileSource.ComputeContentHash(content: WorldDefinitionSerialization.SerializeCompact(definition: m_server.Definition));
 
         foreach (var lease in checkpoint.Leases) {
             var destinationDefinition = (string.Equals(

@@ -329,7 +329,7 @@ template klondikeDeal(step, pile) {
   }
 }
 
-for (pile, step) in reduce(range(0, 7), [], (piles, row) => concat(piles, range(row + 2, 7 - row))) {
+for (pile, step) in flatMap(range(0, 7), row => range(row + 2, 7 - row)) {
   klondikeDeal(step: step, pile: $"solitaireKlondikePile{pile}")
 }
 

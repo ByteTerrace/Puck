@@ -343,8 +343,12 @@ direction: concurrent whole-solution builds exhaust a machine's memory.
   build bounds and hand back a branch that builds and passes their focused
   checks.
   Several run at once (the owner's direction: don't over-serialize for
-  memory), within the WIP limit: about three building writers, one heavy
-  integration job and one GPU leg. A windowed debug World holds a large share of
+  memory). Concurrency is set by measured load, not a fixed count (the
+  owner's direction): the lead samples free memory, CPU and live compilers and
+  Worlds while lanes run, adds lanes while there is headroom (writers spend
+  most of their time reading, not building), and holds or sheds them when free
+  memory runs low. The hard limits are one heavy integration job and one GPU
+  leg at a time. A windowed debug World holds a large share of
   the machine's memory within a minute of boot (`host.memory` reads it), so
   only a couple of building lanes fit beside one. Keep windowed capture
   batches short (boot, capture, stop), and tune on a headless World. The
@@ -375,6 +379,17 @@ direction: concurrent whole-solution builds exhaust a machine's memory.
   branch's deleted files (`git diff --diff-filter=D` against the integration tip)
   and compares them with what the brief allowed. A deletion the brief didn't name
   is reported to the lead before landing, never merged silently.
+- **A wave** fans many small fixes out as several writers and one integrator: a
+  scout pass inventories, the lead triages into file-disjoint batches (each
+  names its items, the files it may touch, and which batch alone owns the
+  shared generated files), the writers build only what they touched, and one
+  integration agent merges every writer branch and validates once. Write the
+  triage to a file under `.claude/scratch/` before launching writers: a
+  Workflow resumes only within its session, so a reboot or restart otherwise
+  loses the triage, and the restarted writers start from the file plus each
+  stopped writer's WIP branch. A scout that runs `puck` verbs uses a CLI built
+  from the head it inventories; a copy left from an older head reports stale
+  verbs and refusals as findings.
 - **Briefs** that allow deletion say what may be deleted. A finding capture names
   its settle state: bakes settled and irradiance settled, or marked partial. A
   capture taken before settling can't support a lighting finding.

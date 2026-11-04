@@ -113,7 +113,7 @@ public static partial class PuckParser {
 
         diagnostics ??= new DiagnosticBag();
         try { SourceLexemes.Validate(source: source); } catch (PuckParseException error) {
-            diagnostics.ReportError(code: error.Code, message: error.Message, span: new SourceSpan(error.Offset, 1, error.Line, error.Column));
+            diagnostics.ReportError(code: error.Code, message: error.Reason, span: new SourceSpan(error.Offset, 1, error.Line, error.Column));
             return new CompilationResult<DocumentNode>(Diagnostics: diagnostics, Value: null);
         }
         var context = CreateContext(diagnostics: diagnostics, source: source, vocabulary: vocabulary);
@@ -274,7 +274,7 @@ public static partial class PuckParser {
             if (diagnostics is null) {
                 throw;
             }
-            diagnostics.ReportError(code: ex.Code, message: ex.Message, span: new SourceSpan(ex.Offset, Math.Max(val1: 1, val2: (cursor.Offset - ex.Offset)), ex.Line, ex.Column));
+            diagnostics.ReportError(code: ex.Code, message: ex.Reason, span: new SourceSpan(ex.Offset, Math.Max(val1: 1, val2: (cursor.Offset - ex.Offset)), ex.Line, ex.Column));
             SynchronizeToStatementBoundary(context: context);
             var len = Math.Max(val1: 1, val2: (cursor.Offset - startOffset));
 
@@ -348,7 +348,7 @@ public static partial class PuckParser {
                 : (PuckDiagnosticCodes.Syntax, startOffset, line, col)
             );
 
-            diagnostics.ReportError(code: code, message: ex.Message, span: new SourceSpan(offset, Math.Max(val1: 1, val2: (cursor.Offset - offset)), faultLine, faultCol));
+            diagnostics.ReportError(code: code, message: ((ex as PuckParseException)?.Reason ?? ex.Message), span: new SourceSpan(offset, Math.Max(val1: 1, val2: (cursor.Offset - offset)), faultLine, faultCol));
             SynchronizeToStatementBoundary(context: context);
 
             return new ErrorStatementNode(ex.Message, startOffset, Math.Max(val1: 1, val2: (cursor.Offset - startOffset)), line, col);
@@ -968,14 +968,17 @@ public static partial class PuckParser {
             return;
         }
 
-        var opener = cursor.Current;
-        var shape = ((opener == '{') ? "block" : "array");
-
         diagnostics?.ReportError(
             code: PuckDiagnosticCodes.ColonBeforeContainer,
-            message: $"'{identifier}{separator} {opener}' - a {shape} is written without the '{separator}': use '{identifier} {opener}'",
+            message: ColonBeforeContainerMessage(identifier: identifier, opener: cursor.Current, separator: separator),
             span: new SourceSpan(startOffset, (cursor.Offset - startOffset), line, col)
         );
+    }
+    // The one wording of PUCK040, shared by a statement's member and an object literal's key.
+    private static string ColonBeforeContainerMessage(string identifier, char opener, char separator) {
+        var shape = ((opener == '{') ? "a block" : "an array");
+
+        return $"'{identifier}{separator} {opener}' - {shape} is written without the '{separator}': use '{identifier} {opener}'";
     }
     // `for item in sequence { … }` and `for (item, index) in sequence { … }`.
     // `body` parses one statement of the loop's body where the loop stands somewhere other than a document block,
@@ -1534,11 +1537,9 @@ public static partial class PuckParser {
                 // The same one-spelling rule a statement follows: a container is written without the separator.
                 // Object literals already admit `key { }` and `key [ ]`, so this closes the second spelling here too.
                 if (cursor.Current is '{' or '[') {
-                    var shape = ((cursor.Current == '{') ? "block" : "array");
-
                     var (eLine, eCol) = GetLineAndColumn(buffer: context.Scanner.Buffer, offset: cursor.Offset);
 
-                    throw new PuckParseException($"'{propKey}{separator} {cursor.Current}' - a {shape} is written without the '{separator}': use '{propKey} {cursor.Current}'", cursor.Offset, eLine, eCol) {
+                    throw new PuckParseException(ColonBeforeContainerMessage(identifier: propKey, opener: cursor.Current, separator: separator), cursor.Offset, eLine, eCol) {
                         Code = PuckDiagnosticCodes.ColonBeforeContainer,
                     };
                 }

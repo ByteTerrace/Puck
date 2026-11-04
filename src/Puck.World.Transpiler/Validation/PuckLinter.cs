@@ -24,35 +24,19 @@ public static partial class PuckLinter {
         var declaredTemplates = new Dictionary<string, TemplateNode>(comparer: StringComparer.Ordinal);
         var referencedIdentifiers = new HashSet<string>(comparer: StringComparer.Ordinal);
 
-        // 1. Pass 1: Collect declarations & detect shadowing
+        // 1. Pass 1: Collect declarations. A name declared twice in one scope is the compiler's duplicate error
+        // (PuckDiagnosticCodes.DuplicateName), reported once there; the linter adds neither a shadow warning, where
+        // nothing is shadowed, nor an unused note on the declaration the error leaves standing.
+        var duplicated = new HashSet<string>(comparer: StringComparer.Ordinal);
+
         foreach (var statement in document.Statements) {
             if (statement is LetNode letNode) {
-                if (declaredLets.TryGetValue(
-                    key: letNode.Name,
-                    value: out var existing
-                )) {
-                    if (letNode.DefinitionPath is not null) { continue; }
-                    diagnostics.ReportWarning(
-                        code: PuckDiagnosticCodes.LintDuplicateKey,
-                        message: $"Constant '{letNode.Name}' shadows a previous declaration on line {existing.Line}",
-                        span: letNode.Span
-                    );
-                } else {
-                    declaredLets[letNode.Name] = letNode;
+                if (!declaredLets.TryAdd(key: letNode.Name, value: letNode)) {
+                    duplicated.Add(item: letNode.Name);
                 }
             } else if (statement is TemplateNode templateNode) {
-                if (declaredTemplates.TryGetValue(
-                    key: templateNode.Name,
-                    value: out var existing
-                )) {
-                    if (templateNode.DefinitionPath is not null) { continue; }
-                    diagnostics.ReportWarning(
-                        code: PuckDiagnosticCodes.LintDuplicateKey,
-                        message: $"Template '{templateNode.Name}' shadows a previous declaration on line {existing.Line}",
-                        span: templateNode.Span
-                    );
-                } else {
-                    declaredTemplates[templateNode.Name] = templateNode;
+                if (!declaredTemplates.TryAdd(key: templateNode.Name, value: templateNode)) {
+                    duplicated.Add(item: templateNode.Name);
                 }
             }
         }
@@ -77,7 +61,7 @@ public static partial class PuckLinter {
         }
 
         foreach (var (name, node) in declaredLets) {
-            if ((node.DefinitionPath is null) && !referencedIdentifiers.Contains(item: name)) {
+            if ((node.DefinitionPath is null) && !duplicated.Contains(item: name) && !referencedIdentifiers.Contains(item: name)) {
                 diagnostics.ReportInformation(
                     code: PuckDiagnosticCodes.LintUnusedLet,
                     message: $"Constant '{name}' is declared but its value is never used",
@@ -87,7 +71,7 @@ public static partial class PuckLinter {
         }
 
         foreach (var (name, node) in declaredTemplates) {
-            if ((node.DefinitionPath is null) && !referencedIdentifiers.Contains(item: name)) {
+            if ((node.DefinitionPath is null) && !duplicated.Contains(item: name) && !referencedIdentifiers.Contains(item: name)) {
                 diagnostics.ReportInformation(
                     code: PuckDiagnosticCodes.LintUnusedLet,
                     message: $"Template '{name}' is declared but never instantiated",

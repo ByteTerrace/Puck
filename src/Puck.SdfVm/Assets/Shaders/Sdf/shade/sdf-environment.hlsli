@@ -18,7 +18,7 @@ float sdfScreenPatternGain(float footprintTexels) {
 // third. Spelled as literals rather than SDF_TAU/3: the divide would round differently by an ULP.
 static const float3 SdfScreenStripePhase = float3(0.0, 2.0943951023931953, 4.1887902047863905);
 
-// === OPENING RIPPLE: an event horizon ===============================================================================
+// === OPENING RIPPLE: travelling waves and contact rings =============================================================
 // An opening that opts in (ScreenRippleData.state.x) refracts the image it shows: slow travelling waves that interfere
 // all the time, a faint caustic highlight riding them, and rings that spread from each contact across the whole glass and
 // fade within RippleLifetime. Distances are metres on the glass, so the rings are round on a tall canvas. Presentation

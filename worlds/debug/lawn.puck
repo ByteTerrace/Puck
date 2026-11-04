@@ -64,7 +64,7 @@ let lawnGroups = [
 ]
 
 // Each group's members on a golden-angle spiral, with a seeded scale, yaw and variant.
-let lawnMembers = reduce(lawnGroups, [], (rows, g) => concat(rows, reduce(filter(lawnKinds, k => k.kind == g.kind), [],
+let lawnMembers = flatMap(lawnGroups, g => reduce(filter(lawnKinds, k => k.kind == g.kind), [],
   (none, k) => map(range(0, g.count), j => {
     prototype: $"lawn-{g.kind}-{(j + g.seed) % k.variants}"
     position [
@@ -75,13 +75,14 @@ let lawnMembers = reduce(lawnGroups, [], (rows, g) => concat(rows, reduce(filter
     scale: k.scale[0] + k.scale[1] * (j * 0.618034 + g.seed * 0.137 - floor(j * 0.618034 + g.seed * 0.137))
     yaw: 360 * (j * 0.754878 + g.seed * 0.56984 - floor(j * 0.754878 + g.seed * 0.56984))
   })
-)))
+))
 
 // Samples along each path's edge between a tenth and nine tenths of its length, alternating sides: its point,
 // tangent and distance beyond the paving.
 let lawnEdgeCounts = [10, 10, 7, 5, 5, 7, 6, 10]
-let lawnEdgeSteps = reduce(map(lawnPaths, (p, i) => { p: p, i: i }), [], (rows, e) => concat(rows,
-  map(range(0, lawnEdgeCounts[e.i]), k => { p: e.p, i: e.i, k: k, t: 0.1 + 0.8 * (k + 0.5) / lawnEdgeCounts[e.i] })
+let lawnEdgeSteps = flatMap(lawnPaths, (p, i) => map(
+  range(0, lawnEdgeCounts[i]),
+  k => { p: p, i: i, k: k, t: 0.1 + 0.8 * (k + 0.5) / lawnEdgeCounts[i] }
 ))
 let lawnEdgeSamples = map(lawnEdgeSteps, e => {
   i: e.i
@@ -111,7 +112,7 @@ let lawnFlowers = map(lawnEdges, e => {
   scale: 0.9 + 0.12 * (e.k % 3)
   yaw: e.k * 67 + e.i * 23
 })
-let lawnTufts = reduce(lawnEdges, [], (rows, e) => concat(rows, map(range(0, 3), j => {
+let lawnTufts = flatMap(lawnEdges, e => map(range(0, 3), j => {
   position [
     e.x + (e.d + 0.35 + 0.25 * j) * e.nx + (0.45 * j - 0.45) * e.tx,
     0.025,
@@ -119,7 +120,7 @@ let lawnTufts = reduce(lawnEdges, [], (rows, e) => concat(rows, map(range(0, 3),
   ]
   scale: 0.75 + 0.2 * ((e.k + j) % 3)
   yaw: j * 67 + e.k * 19 + e.i * 41
-})))
+}))
 
 // A small wind-grass patch beside the spawn, on the meadow's blades: four tiles of an ellipse 0.8 m across its
 // half-axes, the gust phase continuous with the meadow's through the placed world X/Z.

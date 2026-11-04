@@ -4,8 +4,9 @@ function quadraticPathPoint(path, t) = {
   x: (1 - t) * (1 - t) * path.a[0] + 2 * t * (1 - t) * path.b[0] + t * t * path.c[0]
   z: (1 - t) * (1 - t) * path.a[1] + 2 * t * (1 - t) * path.b[1] + t * t * path.c[1]
 }
-function quadraticPathSegments(paths, steps = 40) = reduce(paths, [], (segments, path) => concat(segments,
-  map(range(0, steps), i => { a: quadraticPathPoint(path, i / steps), b: quadraticPathPoint(path, (i + 1) / steps) })
+function quadraticPathSegments(paths, steps = 40) = flatMap(paths, path => map(
+  range(0, steps),
+  i => { a: quadraticPathPoint(path, i / steps), b: quadraticPathPoint(path, (i + 1) / steps) }
 ))
 function pathPointDistanceSquared(x, z, point) = (x - point.x) * (x - point.x) + (z - point.z) * (z - point.z)
 function pathSegmentFraction(x, z, segment) = maximum(0, minimum(1,

@@ -8,9 +8,10 @@
 #include "../frame/sdf-work.hlsli"
 #include "../shade/sdf-sky-environment.hlsli"
 
-// Each row's sums: the nine coefficients' three channels, then the weights.
+// Each row's sums: the nine coefficients' three channels, then the weights. The inner dimension is one wider than the
+// map's rows, so the second stage's invocations, each reading its own sum down every row, land in distinct banks.
 #define SDF_SKY_REDUCE_SUMS 28
-groupshared float sdfSkyReduce[SDF_SKY_REDUCE_SUMS][SDF_SKY_ENVIRONMENT_SIZE];
+groupshared float sdfSkyReduce[SDF_SKY_REDUCE_SUMS][SDF_SKY_ENVIRONMENT_SIZE + 1];
 // Each sum's total over the rows.
 groupshared float sdfSkyReduced[SDF_SKY_REDUCE_SUMS];
 
