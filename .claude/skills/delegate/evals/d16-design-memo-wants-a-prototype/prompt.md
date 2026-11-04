@@ -1,5 +1,5 @@
 ---
-description: "Moved from the principal agent body into delegate 'Evidence': what a design states, and that a design lane builds, prototypes and measures nothing (Conserve Fable, orchestration 'No bad loops'). The job-system memo's R2, 'move level selection to the GPU', moved the work without reducing it (orchestration 'Write and track assignments')."
+description: "Moved from the principal agent body into delegate 'Evidence': what a design states, and that a design lane settles a question a bounded prototype or measurement can settle, recording it in the memo, and hands larger ones to another lane as steps. The job-system memo's R2, 'move level selection to the GPU', moved the work without reducing it (orchestration 'Write and track assignments')."
 max_turns: 8
 allowed_tools: [Read, Glob, Grep, Skill]
 tags: [capability]

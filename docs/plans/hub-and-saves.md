@@ -648,8 +648,8 @@ H11. H7 precedes H8. H10 precedes H11. H13 waits for the UI plan's steps 3 and
 
 ## Questions for other lanes
 
-A design lane builds and measures nothing, so these go to other lanes before
-the steps that need them:
+These need more than a bounded prototype or measurement, so they go to other
+lanes before the steps that need them:
 - **M1** (above): how large and slow a debug-world checkpoint is, which decides
   whether images drop the derived definition before H7.
 - **P1**, before H11: a prototype of the reach-box register, the input-mode

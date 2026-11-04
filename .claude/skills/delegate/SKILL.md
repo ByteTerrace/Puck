@@ -64,13 +64,13 @@ orders, verifying a change by building and running it, and fixing a defect at it
   unguarded path unreachable (narrow its visibility, or hand callers a type only the guarded path
   produces) instead of copying the guard or adding a helper every caller must remember to call. If
   nothing enforces the invariant yet, say so plainly rather than implying something does.
-- A design lane (a memo, an architecture, a design review) delivers a document, never code or
-  numbers. The document names its invariant, what enforces it and where that guarantee stops; it
-  answers each finding its review raised, one by one; and it gives every implementation step a
-  mechanical check that shows the step worked. Each question the design cannot settle without a
-  measurement or a prototype becomes a step for another lane, named with what it would show and what
-  it decides. The design lane builds, prototypes and measures nothing itself, however quick the
-  measurement looks.
+- A design lane (a memo, an architecture, a design review) delivers a document. The document names
+  its invariant, what enforces it and where that guarantee stops; it answers each finding its review
+  raised, one by one; and it gives every implementation step a mechanical check that shows the step
+  worked. A question a bounded prototype or measurement settles, the design lane settles itself and
+  records in the memo (what ran, where, what it showed and what it decided); a question that needs
+  more than that, or a GPU leg the lane has no grant for, becomes a step for another lane, named with
+  what it would show and what it decides. The memo never leaves an open question unowned.
 
 ## Finish
 

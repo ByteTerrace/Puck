@@ -691,18 +691,19 @@ holds only what they leave out:
 | `specialist` | Opus 5.5 | high | own | `delegate` |
 | `principal` | Fable 5.1 | high | own | `delegate` |
 
-Route each brief to the cheapest role that fits it (the owner's ruling): a
-brief with a known cause or a specified result goes to `implementer` even when
-it is large. When a lane on a cheaper role stalls, escalate that lane; never
-start on the expensive role because a brief is long. `principal` is conserved
-(the owner's ruling, [Conserve Fable](#no-bad-loops)): an unknown cause stays
-with `specialist` or Astra, at a higher effort or in the other family when a
-lane stalls, and `principal` enters only as a design review when repeated
-rounds point at a fundamental flaw in the approach, never to run the
-diagnosis. Codex is part of the same lineup: Sol is a peer of `implementer` and
-takes the same briefs, and Astra, the frontier model, takes demanding
-implementation, diagnosis and review, the work of `specialist`; Fable's
-design-only limit does not apply to it. Spread implementer briefs across
+Route each brief to the role that fits it, and say why in the brief: a brief
+with a known cause or a specified result goes to `implementer` even when it is
+large, since length alone is no reason for a stronger role. Escalate when
+quality or progress calls for it (AGENTS.md: a stronger model is used wherever
+it pays for itself): a stalled lane moves to a stronger role or the other
+family, never to a third attempt on the same footing. `principal` (Fable, the
+most capable model) takes the work where its judgement changes the outcome:
+designs, architectures and design reviews; breaking a spiral
+([no bad loops](#no-bad-loops)); and a hard diagnosis or an invariant-heavy
+implementation whose brief says why Fable fits. Codex is part of the same
+lineup: Sol is a peer of `implementer` and takes the same briefs, and Astra,
+the frontier model, takes demanding implementation, diagnosis and review, the
+work of `specialist`. Spread implementer briefs across
 `implementer` and Sol, so both families' slots stay busy. Concept art and
 other image generation go to Codex as the primary artist and judge (the
 owner's ruling): its built-in `image_generation` tool makes the images and its
@@ -885,20 +886,19 @@ and not a spiral:
   in a decision (pruning's three rounds were all hostile same-user
   interleavings, outside the install root's model) or have a design memo
   written and reviewed before any more code (the companion custody rework).
-- "Conserve Fable" (the owner's standing rule): a principal (Fable) lane
-  designs or reviews, sparingly:
-  - a design memo, an architecture, or a review of a design;
-  - above all, a review when repeated rounds point at a fundamental flaw
-    rather than a list of fixes, as a way to climb a steep hill.
-
-  It never does the hard labor of implementing, measuring or bisecting, which
-  goes to specialist or implementer. Anything else hard routes to specialist
-  (Opus), and the lead says so. Fable is also not run as a model under test
-  in skill evals.
-
-  At present the owner has said "No Fable": no principal lane, and no Fable
-  tier or Fable judge in evals. Reviews go to specialist or reviewer (Opus)
-  and Codex, until the owner says otherwise.
+- Break a spiral early (AGENTS.md, "No spirals and no tunnel vision"). A lane
+  or an area is in a spiral when two attempts, or about two hours of the lead's
+  attention, have produced no measurable progress: no cause named, no check
+  turned green, no counter moved. The lead stops it and changes something
+  real: the approach (a `principal` lane steps back over the design and the
+  record of what failed, and implements the new approach when its brief says
+  so), the model (a stronger role or the other family), or the work (park it
+  in its packet with the record and take other work). More effort on the same
+  approach is not a change.
+- No tunnel vision. The engine is large, so other meaningful work is always
+  ready: the lead keeps several tracks moving and never lets one hard problem
+  hold the machine or the lead's attention. A parked problem is picked up again
+  with fresh eyes, often after other work has changed what it rests on.
 - Before putting a semantics question to the owner, look for the decision it
   follows from (`docs/decisions/`, the plan's requirements). A behaviour a
   recorded contract implies is derived, written down with its derivation, and

@@ -3173,7 +3173,7 @@ Monitor hook check remain supporting work alongside the landscape priority.
     7. A review of the results by an Opus reviewer, plus a Codex
        cross-check.
 
-    No Fable (the owner's instruction). Run suites through **Run skill
+    Run suites through **Run skill
     evals** (`skill-evals.yml`, dispatched from `main`), which bills the
     `puck-workload` service account's API usage under `max-cost-usd`; a local
     run bills the interactive subscription, so gate one on `claude -p

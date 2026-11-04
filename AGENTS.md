@@ -208,6 +208,13 @@ agent works in that mode by default, without asking:
     other lanes work, and findings are fixed in batches. How much review a
     change gets is decided per change, by what it risks; no rule fits every
     change ([orchestration](.claude/skills/orchestration/SKILL.md#spend-verification-not-writing)).
+  - No spirals and no tunnel vision (the owner's ruling). The goal is velocity
+    and steady process improvement; a day spent without meaningful progress is
+    a process failure, not a matter of effort. When a lane or an area stops
+    converging, the lead changes something real (the approach, the model, or
+    the work) instead of repeating it, and the engine is large enough that
+    other meaningful work is always ready
+    ([orchestration](.claude/skills/orchestration/SKILL.md#no-bad-loops)).
   - Self-modification is explicitly approved: agents edit AGENTS.md, the
     skills and their evals as part of ordinary work. Continual
     self-improvement is expected: when a session learns that a process wastes

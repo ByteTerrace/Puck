@@ -1,5 +1,5 @@
 ---
-description: "orchestration 'The Claude roster' and 'No bad loops' (Conserve Fable): route each lane to the cheapest role that fits; `principal` only reviews a design and never runs the diagnosis; the lead stays with the owner."
+description: "orchestration 'The Claude roster' and 'No bad loops': route each lane to the role that fits; two failed lanes on the hash are a spiral, so the approach changes (a `principal` step back) rather than a third attempt on the same footing; the lead stays with the owner."
 max_turns: 8
 allowed_tools: [Read, Glob, Grep, Skill]
 tags: [regression]
