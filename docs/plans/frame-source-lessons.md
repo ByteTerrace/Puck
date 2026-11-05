@@ -268,9 +268,12 @@ serial record sum was 10 to 14 ms a frame over 15 to 17 jobs, and the longest
 single recording, the critical path concurrency could not shorten, was 7 to 11
 ms of it; at the forest pose the sum was 1.4 to 5 ms with a 0.6 to 4 ms critical
 path. One node's recording dominates, with periodic produce spikes of 300 to 450
-ms inside it. So the next lever is that node's own host work (the SDF
-residency's frame staging, upload and pump run inside its first pass's
-recording), moved into the coordinator's preparation and measured, not workers.
+ms inside it. So the next lever is that node's own host work, moved into the
+coordinator's preparation and measured, not workers. Which node it is has not
+been read: `render.record` is process-wide, and each node's
+`ShaderPipelineRenderNode.LastRecordTicks` is not yet reported per instance. The
+candidate is a world node's SDF pass, whose first recording runs the residency's
+frame staging, upload and background pump.
 Concurrency also needs, before it is safe: package recorders that keep no host
 state shared across nodes (the residency's once-a-frame `Submit`), a
 thread-safe pipeline cache lookup and counting recorder, and per-worker command
