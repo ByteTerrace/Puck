@@ -52,8 +52,8 @@ their commits hold the raw output. None is new in this round.
   for `HostStartKind.WindowedWorld`); no reading attributes those bytes yet. The volume's record table is 66 MiB at High, five payload copies
   330 MiB; the CPU cache read 329 MB after a tour.
 
-**What G1 has built** (branch `lane/codex-g1`, read only; its line numbers
-move as the branch does, so recheck them before acting on one). The
+**What G1 built** (landed on the integration branch; recheck line numbers
+against the current source before acting on one). The
 existing CPU hierarchy is exported without a second builder
 (`SdfMeshIrradianceScene.Gpu.cs:20-108`, `ExportGpu`, staged from the scene's
 own arrays) and traced by a compute kernel, one thread per ray, 144 rays of a
