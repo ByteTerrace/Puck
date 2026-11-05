@@ -195,6 +195,10 @@ than writing a boot line:
   to the World as `--backend`; `vulkan` also builds with SPIR-V, a separate
   build in the store, since the default build carries Direct3D 12 bytecode
   alone.
+  `paused: true` forwards World's `--paused`: the boot instance is paused before
+  the host starts, so no simulation tick precedes attachment. Use it with a fresh
+  `cacheDir` for repeated cold bakes of the same initial state; `world.rate resume`
+  starts simulation again. Presentation and mesh baking continue while paused.
   The checkout is the adapter's own (the default) or a worktree of its
   repository, named by absolute path, so a lane boots its own build; the
   document must lie under that checkout's `worlds/`. Anything else is refused
