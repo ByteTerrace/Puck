@@ -761,7 +761,11 @@ Remaining:
   `FixedFieldColliderContact.TryMeasure`) answers nothing at 36 of 105 points of a
   1 m grid around a lawn flat-crown tree (x 6 to 20, y 0.5 to 6.5, z -27.3 in
   the debug world), and beside a crown it can read the floor 6 m below instead
-  of the crown 0.3 m away. Contact resolution does not read it; the measure's
+  of the crown 0.3 m away. Inside a solid it reports the exit along the
+  gradient, which at a crease of touching solids (a log on the floor) or in
+  overlapping crowns runs through other solids, reading metres deep at a point
+  on a log's end face. Contact resolution and the scene diagnostics do not read it (the
+  diagnostics read `FixedFieldColliderContact.TryRead`); the measure's
   projection and bracketing need a look against the Superellipsoid's
   lower-bound field.
 - [medium] The Superellipsoid's field (`SdfFieldEvaluator`, `mapCore`) is a
@@ -1307,6 +1311,18 @@ lowers it to the same JSON as before, except where the look changes on purpose.
   (`WorldBody.TryDeferSleepingAdvance`, `src/Puck.World.Server/WorldBody.Sleep.cs`):
   only parked rigid islands take the local wake. No live world enables non-rigid
   sleep yet; the first one that does wants the same box test.
+- [medium] Rigid contact has two implementations. The World solves rigid
+  bodies with `WorldBody.AdvanceRigid` (a full static `ResolveSweep` every
+  substep, `src/Puck.World.Server/WorldBody.Rigid.cs:763`) and
+  `WorldPopulation.ResolveRigidPairContact` (one impulse and a positional split
+  per pair per pass, `src/Puck.World.Server/WorldPopulation.Rigid.cs:65`),
+  while `FixedRigidSolver` and `FixedRigidWorld` (`src/Puck.Physics/`) hold a
+  fixed-point Soft Step solver with warm starting and persistent manifolds that
+  no tick calls. The island graph is also rebuilt every tick, allocating a
+  `SortedSet` per relinked body (`WorldPopulation.Sleep.cs:90-113`). Merge to
+  the one solver as [brief B](physics-and-kernels-lessons.md#brief-b-one-rigid-solver-soft-step)
+  of the physics lessons plan says; done when the old path is deleted and the
+  rigid scenarios reproduce.
 
 Engine defaults that carry a look or a rule of play, which the authors rule
 wants authored with a neutral engine default (each one sits in C# or HLSL,

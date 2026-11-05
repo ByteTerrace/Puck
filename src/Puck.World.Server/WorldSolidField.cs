@@ -290,6 +290,21 @@ public sealed class WorldSolidField : IContactField {
             material: out material,
             position: in position
         );
+    /// <summary>Reads the compiled field at a point without a surface solve (<see cref="FixedFieldContactSolver.Read"/>):
+    /// the reading the scene diagnostics judge the authored solid by.</summary>
+    /// <param name="position">The world-space point to read.</param>
+    /// <param name="distance">The signed reading, negative inside: exact in sign, a lower bound on the distance to the
+    /// authored surface in magnitude, when the field answered.</param>
+    /// <param name="material">The material id read there, when the field answered.</param>
+    /// <param name="gradient">The unit-length outward direction, or zero where none exists.</param>
+    /// <returns><see langword="true"/> when the field answered.</returns>
+    public bool Read(in FixedVector3 position, out FixedQ4816 distance, out int material, out FixedVector3 gradient) =>
+        m_solver.Read(
+            distance: out distance,
+            gradient: out gradient,
+            material: out material,
+            position: in position
+        );
     /// <inheritdoc/>
     public ContactResolution Resolve(ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up) =>
         m_solver.Resolve(
