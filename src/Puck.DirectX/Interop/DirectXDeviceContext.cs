@@ -32,6 +32,8 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
     private readonly GpuPipelineCacheStore? m_pipelineCacheStore;
     private readonly GpuPipelineCacheWork? m_pipelineCacheWork;
     private readonly DirectXGpuBindings m_bindings;
+    // Owns the deferred submissions every other queue operation must follow (CommandQueueHandle).
+    private readonly DirectXGpuQueueSubmitter m_submitter;
     private readonly Lock m_dispatchSignatureLock = new();
 
     private nint m_commandQueue;
@@ -78,6 +80,7 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
         m_pipelineCacheWork = pipelineCacheWork;
         FeatureLevel = minimumFeatureLevel;
         m_bindings = new DirectXGpuBindings(deviceContext: this);
+        m_submitter = new DirectXGpuQueueSubmitter(deviceContext: this);
         Services = CreateServices(creationFaults: creationFaults);
     }
     /// <summary>Initializes a new instance whose adapter LUID is resolved lazily on first use.</summary>
@@ -102,6 +105,7 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
         m_pipelineCacheWork = pipelineCacheWork;
         FeatureLevel = minimumFeatureLevel;
         m_bindings = new DirectXGpuBindings(deviceContext: this);
+        m_submitter = new DirectXGpuQueueSubmitter(deviceContext: this);
         Services = CreateServices(creationFaults: creationFaults);
     }
 
@@ -160,7 +164,25 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
     /// reading it never creates the device.</remarks>
     public GpuMemoryProfile MemoryProfile => m_memoryProfile;
     /// <inheritdoc />
+    /// <remarks>Reading it first hands the open batch's deferred submissions to the queue
+    /// (<see cref="DirectXGpuQueueSubmitter.Split"/>), so an execute, signal or drain a caller puts on the returned queue
+    /// follows every submission made before it. A removed device is not reported here: the caller's own queue
+    /// operation reports it, and a release's drain treats it as drained (<see cref="DirectXCommandCalls.Drain"/>).</remarks>
     public nint CommandQueueHandle {
+        get {
+            EnsureCreated();
+            try {
+                m_submitter.Split();
+            } catch (DeviceLostException) {
+                // A removed device executes nothing further; the lists are spent either way.
+            }
+
+            return m_commandQueue;
+        }
+    }
+    /// <summary>Gets the native queue without handing the batch's deferred submissions to it, for the submitter's own
+    /// executes and signals, which are those submissions.</summary>
+    internal nint SubmissionQueueHandle {
         get {
             EnsureCreated();
 
@@ -228,7 +250,7 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
             CommandPoolFactory = new DirectXGpuCommandPoolFactory(deviceContext: this),
             ImageFactory = new DirectXGpuImageFactory(deviceContext: this),
             PipelineFactory = new DirectXGpuPipelineFactory(deviceContext: this),
-            QueueSubmitter = new DirectXGpuQueueSubmitter(deviceContext: this),
+            QueueSubmitter = m_submitter,
             Recorder = new DirectXGpuRecorder(deviceContext: this),
             RenderPassFactory = new DirectXGpuRenderPassFactory(deviceContext: this),
             ShaderModuleFactory = new DirectXGpuShaderModuleFactory(),
@@ -531,13 +553,12 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
             return;
         }
 
-        Services.QueueSubmitter.FlushBatch();
         DirectXCommandCalls.SignalAndWait(
             calls: new DirectXDeviceCommandCalls(device: ((ID3D12Device*)m_device.Handle)),
             fence: ((ID3D12Fence*)m_idleFence),
             fenceEvent: m_idleFenceEvent,
             fenceValue: ref m_idleFenceValue,
-            queue: ((ID3D12CommandQueue*)m_commandQueue)
+            queue: ((ID3D12CommandQueue*)CommandQueueHandle)
         );
         DrainDebugMessages();
     }
