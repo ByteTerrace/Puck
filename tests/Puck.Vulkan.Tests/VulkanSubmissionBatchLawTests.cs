@@ -9,10 +9,11 @@ using Xunit;
 namespace Puck.Vulkan.Tests;
 
 /// <summary>
-/// Laws over a device's submission batch (<see cref="VulkanSubmissionBatch"/>) on a CPU recording driver: an open batch
+/// Laws over a device's submission batch (<c>VulkanSubmissionBatch</c>) on a CPU recording driver: an open batch
 /// defers submissions and flushes them in one <c>vkQueueSubmit</c>, a submit info each, its last fenced submission's fence
-/// signaling them all; a wait on a deferred fence, any other submission to the queue and the device's wait for idle flush
-/// it first.
+/// signaling them all; a wait on a deferred fence, any other operation on the queue (read through
+/// <see cref="VulkanLogicalDevice.GraphicsQueue"/>) and the device's wait for idle hand it to the queue first and keep it
+/// open.
 /// </summary>
 public sealed unsafe class VulkanSubmissionBatchLawTests {
     // The fences the law creates take these handles, in creation order: first, last, third.
@@ -71,28 +72,45 @@ public sealed unsafe class VulkanSubmissionBatchLawTests {
         third.Wait();
         Assert.Empty(collection: Calls);
 
-        // A wait on a deferred fence flushes the batch first.
+        // A wait on a deferred fence hands the batch to the queue first and keeps it open.
         queue.BeginBatch();
         queue.Submit(commandBufferHandles: [8], fence: first);
         sync.Signal(handle: First);
         first.Wait();
         Assert.Equal(expected: [$"submit fence={First} infos=1:8", $"wait {First}", $"reset {First}"], actual: Calls);
+        queue.Submit(commandBufferHandles: [15]);
+        Assert.Equal(expected: 3, actual: Calls.Count);
+        queue.FlushBatch();
+        Assert.Equal(expected: "submit fence=0 infos=1:15", actual: Calls[^1]);
 
-        // Any other submission to the queue, and the device's wait for idle, reach the queue behind the deferred work.
+        // Any other operation on the queue, and the device's wait for idle, reach the queue behind the deferred work, and
+        // the batch stays open for the submissions after them.
         Calls.Clear();
         queue.BeginBatch();
         queue.Submit(commandBufferHandles: [9]);
         low.Submit(commandBufferHandles: [10], device: device, graphicsQueue: logical.GraphicsQueue);
-        queue.BeginBatch();
         queue.Submit(commandBufferHandles: [11]);
+        Assert.Equal(expected: 2, actual: Calls.Count);
         queue.SubmitAndWait(commandBufferHandles: [12]);
-        queue.BeginBatch();
         queue.Submit(commandBufferHandles: [13]);
         logical.WaitIdle();
-        queue.BeginBatch();
         queue.Submit(commandBufferHandles: [14]);
         low.Signal(commandBufferHandles: [], device: device, graphicsQueue: logical.GraphicsQueue, semaphore: 55, value: 1UL);
+        queue.FlushBatch();
         Assert.Equal(expected: ["submit fence=0 infos=1:9", "submit fence=0 infos=1:10", "submit fence=0 infos=1:11", "submit fence=0 infos=1:12", "queue idle", "submit fence=0 infos=1:13", "device idle", "submit fence=0 infos=1:14", "submit fence=0 infos=0:0"], actual: Calls);
+
+        // A queue family read hands nothing over; an empty fenced submission splits the batch and still arms its fence.
+        Calls.Clear();
+        queue.BeginBatch();
+        queue.Submit(commandBufferHandles: [16]);
+        _ = logical.GraphicsQueueFamilyIndex;
+        Assert.Empty(collection: Calls);
+        queue.Submit(commandBufferHandles: [], fence: first);
+        Assert.Equal(expected: ["submit fence=0 infos=1:16", $"submit fence={First} infos=0:0"], actual: Calls);
+        Assert.False(condition: first.IsSignaled);
+        sync.Signal(handle: First);
+        first.Wait();
+        queue.FlushBatch();
     }
 
     private static VulkanProcResolver Procedures() => new(getDeviceProcAddr: &Resolve, getInstanceProcAddr: &Resolve);

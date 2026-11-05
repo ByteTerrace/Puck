@@ -10,10 +10,28 @@ namespace Puck.Vulkan.Interop;
 public sealed class VulkanLogicalDevice : IDisposable {
     private readonly IVulkanLogicalDeviceApi m_logicalDeviceApi;
 
+    private readonly VkQueue m_graphicsQueue;
+    private readonly VkQueue m_presentQueue;
+
     private bool m_disposed;
 
-    /// <summary>Gets the graphics queue of the device.</summary>
-    public VkQueue GraphicsQueue { get; }
+    /// <summary>Gets the graphics queue of the device, first handing the open batch's deferred submissions to it
+    /// (<see cref="GpuSubmissionBatch.Split"/>), so a submit, signal, present or wait a caller puts on the returned
+    /// queue follows every submission made before it. This read is the queue's one door; a queue family alone is read
+    /// from <see cref="GraphicsQueueFamilyIndex"/>, which hands nothing over.</summary>
+    public VkQueue GraphicsQueue {
+        get {
+            Batch.Split();
+
+            return m_graphicsQueue;
+        }
+    }
+    /// <summary>Gets the queue family index of <see cref="GraphicsQueue"/>, without handing the batch over.</summary>
+    public uint GraphicsQueueFamilyIndex => m_graphicsQueue.FamilyIndex;
+    /// <summary>Gets the submissions the device defers while a batch is open, which every read of
+    /// <see cref="GraphicsQueue"/> or <see cref="PresentQueue"/> and the device's wait for idle hand to the queue
+    /// first.</summary>
+    internal VulkanSubmissionBatch Batch { get; }
     /// <summary>Gets what the device is, as its physical device reported it when the device was created; recorded
     /// for diagnostics and naming the device's pipeline-cache file, never branched on. <see langword="null"/> for a
     /// device created without one.</summary>
@@ -32,8 +50,15 @@ public sealed class VulkanLogicalDevice : IDisposable {
     public bool IsDisposed => m_disposed;
     /// <summary>Gets the physical device this logical device was created from.</summary>
     public VkPhysicalDevice PhysicalDevice { get; }
-    /// <summary>Gets the present queue of the device. May be the same queue as <see cref="GraphicsQueue"/>.</summary>
-    public VkQueue PresentQueue { get; }
+    /// <summary>Gets the present queue of the device, which may be the same queue as <see cref="GraphicsQueue"/>, first
+    /// handing the open batch's deferred submissions to the graphics queue, so a present follows them.</summary>
+    public VkQueue PresentQueue {
+        get {
+            Batch.Split();
+
+            return m_presentQueue;
+        }
+    }
     /// <summary>Gets the device's persistent pipeline cache, which every compute and graphics pipeline creation on the
     /// device passes to the driver; <see langword="null"/> for a device created without one. The device owns it: it is
     /// written to disk and destroyed just before the device.</summary>
@@ -61,8 +86,9 @@ public sealed class VulkanLogicalDevice : IDisposable {
 
         Commands = device;
         PhysicalDevice = physicalDevice;
-        GraphicsQueue = graphicsQueue;
-        PresentQueue = presentQueue;
+        m_graphicsQueue = graphicsQueue;
+        m_presentQueue = presentQueue;
+        Batch = new VulkanSubmissionBatch(device: device, queue: graphicsQueue);
         m_logicalDeviceApi = logicalDeviceApi;
         device.Checkpoints.Watch(queue: graphicsQueue.Handle);
     }
@@ -107,8 +133,8 @@ public sealed class VulkanLogicalDevice : IDisposable {
             instance: this
         );
 
-        // Work deferred to an open batch reaches the queue before the wait drains it.
-        Commands.Batch.Flush(device: Commands);
+        // Work deferred to an open batch reaches the queue before the wait drains it; the batch stays open.
+        Batch.Split();
 
         var result = m_logicalDeviceApi.WaitIdle(device: Commands);
 

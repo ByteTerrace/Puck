@@ -206,7 +206,7 @@ public sealed class VulkanImportedWritableImage : IGpuExportableImage {
                     commandBufferHandle: commandBufferHandle,
                     device: device.Commands,
                     imageHandle: imageHandle,
-                    queueFamily: device.GraphicsQueue.FamilyIndex,
+                    queueFamily: device.GraphicsQueueFamilyIndex,
                     recording: recording,
                     release: (index == ReleaseBuffer)
                 );
