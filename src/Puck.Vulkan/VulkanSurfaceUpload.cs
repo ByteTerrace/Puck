@@ -216,10 +216,10 @@ public sealed class VulkanSurfaceUpload : IDisposable {
             return;
         }
 
-        var waitResult = m_frameSynchronizationApi!.WaitForFence(
+        var waitResult = VulkanFenceWait.Wait(
+            api: m_frameSynchronizationApi!,
             device: m_device.Commands,
-            fenceHandle: m_fence,
-            timeout: ulong.MaxValue
+            fenceHandle: m_fence
         );
 
         m_uploadPending = false;
@@ -230,7 +230,7 @@ public sealed class VulkanSurfaceUpload : IDisposable {
         }
 
         waitResult.ThrowIfFailed(device: m_device.Commands, operation: "vkWaitForFences");
-        m_frameSynchronizationApi.ResetFence(
+        m_frameSynchronizationApi!.ResetFence(
             device: m_device.Commands,
             fenceHandle: m_fence
         ).ThrowIfFailed(device: m_device.Commands, operation: "vkResetFences");

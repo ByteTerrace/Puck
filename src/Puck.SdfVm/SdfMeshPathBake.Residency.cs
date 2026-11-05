@@ -39,6 +39,11 @@ public sealed partial class SdfMeshPathBake {
     // order they arrived; and the workers taking them, at most Workers at once. One pool serves every residency's bake,
     // so residencies baking together share the processors rather than each taking all of them.
     private static readonly Lock WorkGate = new();
+    // Every change a bake's groups see happens inside a pool work item (a stage, a contour or an answer), so the pool's
+    // completions are the producer signal an offline caller waits on (WaitForProgress). A System.Threading.Lock has no
+    // Monitor.Wait, so the count has its own monitor.
+    private static readonly object ProgressGate = new();
+    private static long ProgressCount;
     private static readonly List<(Group Group, Action<SdfSampledLattice.RefinementScratch> Work)> WorkQueue = [];
     private static readonly Queue<Action<SdfSampledLattice.RefinementScratch>> AnswerQueue = new();
 
@@ -297,6 +302,28 @@ public sealed partial class SdfMeshPathBake {
         }
     }
 
+    /// <summary>Gets a count that advances each time a pool worker finishes a work item of any bake. Read it before
+    /// asking the bake what it owes, then pass it to <see cref="WaitForProgress"/>, so a completion between the read and
+    /// the wait is never missed.</summary>
+    public static long Progress {
+        get {
+            lock (ProgressGate) { return ProgressCount; }
+        }
+    }
+    /// <summary>Sleeps until a pool worker has finished a work item since <paramref name="since"/>, or the timeout
+    /// elapses.</summary>
+    /// <param name="since">The <see cref="Progress"/> the caller read before it last looked at the bake.</param>
+    /// <param name="timeout">The longest time to wait.</param>
+    /// <returns><see langword="true"/> when work finished since <paramref name="since"/>; <see langword="false"/> on
+    /// timeout.</returns>
+    public static bool WaitForProgress(long since, TimeSpan timeout) {
+        lock (ProgressGate) {
+            if (ProgressCount != since) { return true; }
+
+            return (Monitor.Wait(obj: ProgressGate, timeout: timeout) && (ProgressCount != since));
+        }
+    }
+
     /// <summary>Retires every group of the bake, for a residency released, without waiting for any of them: their queued
     /// work is dropped before it runs, a stage running for one queues no further stage, an answer arriving for one is
     /// dropped, and each group frees its workspace when its last running job ends.</summary>
@@ -322,6 +349,10 @@ public sealed partial class SdfMeshPathBake {
                 } finally {
                     slot.Scratch.TrimForWorkers(workers: WorkerSlots.Length);
                     slot.Report();
+                    lock (ProgressGate) {
+                        ProgressCount++;
+                        Monitor.PulseAll(obj: ProgressGate);
+                    }
                 }
             }
         } finally {
