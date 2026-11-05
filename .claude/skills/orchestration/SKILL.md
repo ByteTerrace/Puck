@@ -379,7 +379,17 @@ direction: concurrent whole-solution builds exhaust a machine's memory.
   endanger lanes but voids timings: a lane whose evidence is a time (a tick, a
   frame, a bake) attributes cost by samples and counts while the machine is
   busy and takes its before/after times in a quiet window the lead clears; a
-  paired timing taken at full CPU swung both ways by 30%. The hard limits are one heavy integration job and one GPU
+  paired timing taken at full CPU swung both ways by 30%. Busy timings also
+  hide regressions and inflate gains: a feature lane that added a 20x
+  simulation-tick regression (5.8 to 120 ms) reported "no measurable
+  difference" from runs on a loaded machine, and the produce lanes' busy
+  readings (43 to 11 ms) became 15.5 to 14.4 ms quiet. So every landing that
+  touches the World compares load-independent per-tick counters (body
+  advances, contact queries, rules evaluations, draw records changed) on a
+  headless boot against the integration tip, and a jump stops the landing
+  until it is explained. An output-identity gate (a whole mesh store by hash)
+  first runs the baseline twice: the mesh bake is not byte-reproducible run to
+  run, so only a difference outside the baseline's own variation counts. The hard limits are one heavy integration job and one GPU
   leg at a time. A windowed debug World holds a large share of
   the machine's memory within a minute of boot (`host.memory` reads it), so
   only a couple of building lanes fit beside one. Keep windowed capture
