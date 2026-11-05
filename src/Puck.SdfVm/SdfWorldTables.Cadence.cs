@@ -22,6 +22,8 @@ namespace Puck.SdfVm;
 //                          render extent, which the scheduler renders a view again for when it moves.
 //   - m_lightRegion, m_skyRegion, m_skyLayerRegion : the lights, sky gains, layer stack and its clock bakes.
 //   - shadow owner names : exact names invalidate shadow history even when replacement lights pack identical values.
+//   - the flow clock     : a lighting value of the pass block, moved by the presented tick only for a program with a
+//                          flow layer, so the shading passes render again as the flow moves while the geometry stands.
 //   - m_volumeRegion     : the bounded media, whose advection and pulse are baked from the presented tick, so a view
 //                          showing one renders again exactly when the presented tick moves it.
 //   - m_dynamicTransformRevision : bumped when packed transform contents or the active row count changes, so the table
@@ -56,7 +58,7 @@ public sealed partial class SdfWorldTables {
     private static readonly (int Offset, int Length)[] CompositeValues = Members(members: [SdfWorldPackage.GeometryOnly]);
     private static readonly (int Offset, int Length)[] LightingValues = Members(members: [
         SdfWorldPackage.ToonBands, SdfWorldPackage.ToonShadow, SdfWorldPackage.ToonOutline, SdfWorldPackage.ToonInk,
-        SdfWorldPackage.LightCount, SdfWorldPackage.LightMask, SdfWorldPackage.Exposure, SdfWorldPackage.ExposeShare, SdfWorldPackage.AirLight, SdfWorldPackage.MeterLuminance, SdfWorldPackage.LocalAdaptation, SdfWorldPackage.SkyPeakLuminance, SdfWorldPackage.DisableScreenLights, SdfWorldPackage.IndirectSources,
+        SdfWorldPackage.LightCount, SdfWorldPackage.LightMask, SdfWorldPackage.Exposure, SdfWorldPackage.ExposeShare, SdfWorldPackage.AirLight, SdfWorldPackage.MeterLuminance, SdfWorldPackage.LocalAdaptation, SdfWorldPackage.SkyPeakLuminance, SdfWorldPackage.FlowClock, SdfWorldPackage.DisableScreenLights, SdfWorldPackage.IndirectSources,
         SdfWorldPackage.IndirectSourceGains, SdfWorldPackage.IndirectApply, SdfWorldPackage.IndirectContact,
         SdfWorldPackage.GridFlags, SdfWorldPackage.GridLineWidth, SdfWorldPackage.GridPlaneY,
         SdfWorldPackage.GridWorldPitch, SdfWorldPackage.GridWorldOrigin, SdfWorldPackage.GridWorldFrame,

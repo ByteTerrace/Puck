@@ -32499,6 +32499,140 @@
                       "additionalProperties": false,
                       "default": null,
                       "title": "PaletteToonSelectDocument"
+                    },
+                    "flow": {
+                      "description": "The slot\u0027s flow layer (PaletteFlowDocument): shading that moves along an authored flow over still geometry; null moves nothing.",
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "velocity": {
+                          "description": "The flow, in units per second.",
+                          "title": "DocumentVector3",
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "number"
+                              },
+                              "minItems": 3,
+                              "maxItems": 3
+                            },
+                            {
+                              "type": "string",
+                              "minLength": 1,
+                              "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                            }
+                          ]
+                        },
+                        "scale": {
+                          "description": "The pattern\u0027s frequency, in cells per unit; positive (null = 1).",
+                          "type": [
+                            "number",
+                            "null"
+                          ],
+                          "default": null
+                        },
+                        "stretch": {
+                          "description": "How many times longer a pattern feature is along the flow than across; at least 1 (null = 1).",
+                          "type": [
+                            "number",
+                            "null"
+                          ],
+                          "default": null
+                        },
+                        "cycle": {
+                          "description": "The seconds a layer advects before it restarts, in [0.25, 4096] (null = 1).",
+                          "type": [
+                            "number",
+                            "null"
+                          ],
+                          "default": null
+                        },
+                        "tilt": {
+                          "description": "The normal tilt per unit slope of the pattern; non-negative (null = 0).",
+                          "type": [
+                            "number",
+                            "null"
+                          ],
+                          "default": null
+                        },
+                        "coverage": {
+                          "description": "The share of the slot the pattern reveals Surface over, in [0, 1] (null = 0).",
+                          "type": [
+                            "number",
+                            "null"
+                          ],
+                          "default": null
+                        },
+                        "softness": {
+                          "description": "The coverage edge\u0027s width, in [0, 1] (null = 0.1).",
+                          "type": [
+                            "number",
+                            "null"
+                          ],
+                          "default": null
+                        },
+                        "surface": {
+                          "description": "The surface the coverage reveals; required when Coverage is positive.",
+                          "type": [
+                            "object",
+                            "null"
+                          ],
+                          "properties": {
+                            "color": {
+                              "type": "string"
+                            },
+                            "roughness": {
+                              "type": "number"
+                            },
+                            "metal": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "color",
+                            "roughness",
+                            "metal"
+                          ],
+                          "additionalProperties": false,
+                          "default": null,
+                          "title": "PaletteSurfaceDocument"
+                        },
+                        "seed": {
+                          "description": "The pattern\u0027s seed (null = 0).",
+                          "type": [
+                            "integer",
+                            "null"
+                          ],
+                          "default": null
+                        },
+                        "lane": {
+                          "description": "The render lane in [0, 3] whose value scales the velocity, read from an inhabited body\u0027s look lanes; a placement without lanes reads zero and stands still. Null keeps the velocity constant.",
+                          "type": [
+                            "integer",
+                            "null"
+                          ],
+                          "default": null
+                        },
+                        "frame": {
+                          "description": "The frame the velocity is authored in (null = Object).",
+                          "enum": [
+                            "Object",
+                            "World",
+                            null
+                          ],
+                          "default": null,
+                          "title": "SdfFlowFrame"
+                        }
+                      },
+                      "required": [
+                        "velocity"
+                      ],
+                      "additionalProperties": false,
+                      "default": null,
+                      "title": "PaletteFlowDocument"
                     }
                   },
                   "required": [

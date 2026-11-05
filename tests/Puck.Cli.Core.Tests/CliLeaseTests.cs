@@ -278,20 +278,25 @@ public sealed class CliLeaseTests : IDisposable {
 
         Assert.Equal(expected: 0, actual: await CliRoot.InvokeAsync(args: ["lease", "heavy", "--holder", "agents-slim", "--wait", "60", "--", .. args], root: command));
         Assert.Equal(expected: 0, actual: await CliRoot.InvokeAsync(args: ["lease", "gpu", "--holder", "agents-slim", "--", .. args], root: command));
+        Assert.Equal(expected: 0, actual: await CliRoot.InvokeAsync(args: ["lease", "gpu", "--holder", "agents-slim", "--kind", "Step", "--", .. args], root: command));
         Assert.Equal(expected: 0, actual: await CliRoot.InvokeAsync(args: ["lease", "build", "--holder", "agents-slim", "--", .. args], root: command));
-        Assert.Equal(expected: 2, actual: asked.Count);
+        Assert.Equal(expected: 3, actual: asked.Count);
         Assert.Equal(expected: ("lease heavy agents-slim", false, true, true), actual: (asked[0].Step, asked[0].Device, asked[0].Heavy, asked[0].Held));
-        Assert.Equal(expected: [HostStartKind.HeavySuite, HostStartKind.WindowedWorld], actual: [asked[0].Kind, asked[1].Kind]);
+        Assert.Equal(expected: [HostStartKind.HeavySuite, HostStartKind.WindowedWorld, HostStartKind.Step], actual: [asked[0].Kind, asked[1].Kind, asked[2].Kind]);
         Assert.InRange(actual: asked[0].Bound!.Value, low: TimeSpan.FromSeconds(seconds: 50), high: TimeSpan.FromSeconds(seconds: 60));
         Assert.Equal(expected: ("lease gpu agents-slim", true, false, true, TimeSpan.Zero), actual: (asked[1].Step, asked[1].Device, asked[1].Heavy, asked[1].Held, asked[1].Bound!.Value));
+        Assert.Equal(expected: (true, false, true), actual: (asked[2].Device, asked[2].Heavy, asked[2].Held));
 
         refuse = true;
         var marker = Path.Combine(path1: m_root, path2: "ran");
         var touch = (OperatingSystem.IsWindows() ? new[] { "cmd.exe", "/c", "mkdir", marker } : new[] { "/bin/mkdir", marker });
 
-        Assert.Equal(expected: 2, actual: await CliRoot.InvokeAsync(args: ["lease", "gpu", "--holder", "agents-slim", "--", .. touch], root: command));
+        Assert.Equal(expected: 2, actual: await CliRoot.InvokeAsync(args: ["lease", "gpu", "--holder", "agents-slim", "--kind", "Step", "--", .. touch], root: command));
         Assert.False(condition: Directory.Exists(path: marker));
         Assert.False(condition: Directory.Exists(path: Path.Combine(path1: m_root, path2: "gpu")));
+        var admissions = asked.Count;
+        Assert.Equal(expected: 2, actual: await CliRoot.InvokeAsync(args: ["lease", "gpu", "--holder", "agents-slim", "--kind", "99", "--", .. touch], root: command));
+        Assert.Equal(expected: admissions, actual: asked.Count);
     }
     [Fact]
     public async Task CancellingTheCommandKillsItsChildBeforeReleasingTheLease() {

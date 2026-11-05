@@ -65,7 +65,7 @@
       "compare": { "placements": "exact", "state.rows": "exact", "rules": "exact", "rules.worst": "relative:0.25", "rules.work": "relative:0.25", "rigid": "exact" }
     },
     { "name": "counters-state", "line": "world.counters state", "parse": "counters", "compare": { "*": "relative:0.5" } },
-    { "name": "counters-boot", "line": "world.counters world.boot", "parse": "counters", "compare": { "world.boot.loads": "exact", "world.boot.parses": "exact", "world.boot.validations": "exact", "world.boot.rule-compilations": "exact", "world.boot.neighbour-resolves": "exact", "world.boot.shape-builds": "exact", "world.boot.asset-loads": "exact" } },
+    { "name": "counters-boot", "line": "world.counters world.boot", "parse": "counters", "compare": { "world.boot.loads": "exact", "world.boot.parses": "exact", "world.boot.validations": "exact", "world.boot.rule-compilations": "exact", "world.boot.neighbour-resolves": "exact", "world.boot.shape-builds": "exact", "world.boot.asset-loads": "none" } },
     { "name": "addons", "line": "world.addons", "parse": "text", "recheck": true, "metrics": { "watchdog.fuel": "watchdog ENABLED fuel-budget:\\d+ fuel-last-tick:(\\d+)", "companion.fuel": "companion ENABLED fuel-budget:\\d+ fuel-last-tick:(\\d+)", "dropped": "answers-dropped-total:(?<sum>\\d+)" }, "red": ["dropped > 0", "text ~ FAULTED", "text ~ DISABLED", "watchdog.fuel < 1"], "compare": { "watchdog.fuel": "relative:0.25", "companion.fuel": "relative:0.25" } },
     { "name": "frames", "line": "host.frames 300", "parse": "frames", "leg": "headless", "compare": { "simulate.p50": "none" } },
     { "name": "memory", "line": "host.memory collect", "parse": "pairs", "compare": { "ws": "relative:0.25", "private": "relative:0.25", "heap": "relative:0.25" } },

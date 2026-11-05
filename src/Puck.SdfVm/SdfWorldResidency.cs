@@ -574,8 +574,11 @@ public sealed partial class SdfWorldResidency : IDisposable {
         FollowRunningCode();
         MeshPathBake.ObserveResidency(tables: tables);
         MeshIrradianceParameters = MeshIrradiance.Stage(frame: m_frame!, tables: tables, tier: IndirectTier, bakePending: MeshPathBake.IrradiancePending);
+        // Latch readiness for this whole frame. A worker finishing after preparation cannot make an image whose
+        // exposure was held stand for converged lighting. The next preparation publishes and meters that result.
+        LightingPending = m_frame!.ConvergesLighting && IndirectTier != SdfIndirectTier.Off && MeshIrradiance.Settling;
         // A locked tick adapts once its complete geometry supplies the meter, not over partial mesh arrivals.
-        if (!m_frame!.TickLocked || !MeshPathBake.Pending) {
+        if ((!m_frame.TickLocked || !MeshPathBake.Pending) && !LightingPending) {
             Exposures.Stage(frame: m_frame, irradiance: MeshIrradiance, seconds: ExposureSeconds(context: in context, frame: m_frame));
         } else {
             Exposures.Hold();
@@ -776,6 +779,10 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// off.</summary>
     public SdfMeshIrradianceParameters MeshIrradianceParameters { get; private set; }
 
+    /// <summary>Gets whether this prepared frame still awaits its requested lighting and exposure convergence.
+    /// Background GPU work continues while the graph marks this frame's image as waiting.</summary>
+    public bool LightingPending { get; private set; }
+
     // The frame the tables last packed, which a frame that films nothing leaves standing, and whether a frame captured
     // since the tables last uploaded a program carries another one.
     private SdfFrame? m_packedFrame;
@@ -914,6 +921,9 @@ public sealed partial class SdfWorldResidency : IDisposable {
 
         // The bake samples through the tables' background GPU work, which owns its jobs' slots and the tables' lifetime.
         tables.GpuWork.Add(client: new SdfMeshBakeGpuWork(bake: MeshPathBake, tables: tables));
+        var probeWork = new SdfMeshProbeGpuWork(tables, MeshIrradiance);
+        tables.GpuWork.Add(probeWork);
+        MeshIrradiance.GpuTrace = probeWork;
         MeshPathBake.DispatchReport = tables.GpuWork.Describe;
         // The construction uploaded the frame's program; the frame is packed afresh.
         NoteProgram(program: frame.Program);

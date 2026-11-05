@@ -11,6 +11,9 @@ namespace Puck.SdfVm;
 /// on the device's recording thread, the frame thread.
 /// </summary>
 public interface ISdfGpuWorkClient : IDisposable {
+    /// <summary>Stops admission and wakes pending submitters before the service drains fences and waits for retained
+    /// readbacks. Releases no device resources; a client with no dependent submissions needs no action.</summary>
+    void Stop() { }
     /// <summary>Takes the client's next job, or none: a job taken is recorded, submitted and answered, or abandoned.</summary>
     /// <param name="tables">The tables whose World set the job binds, holding the latest submitted upload.</param>
     /// <param name="job">The job, handed back to <see cref="Record"/> and then to <see cref="Complete"/> or
@@ -48,16 +51,19 @@ public sealed class SdfGpuWorkReadback {
     private IGpuReadbackBuffer? m_buffer;
 
     // A new token for each job, never reset or handed out again. An old holder cannot release a later job.
-    internal SdfGpuWorkReadback(int slot, IGpuReadbackBuffer? buffer, int length) {
+    internal SdfGpuWorkReadback(int slot, IGpuReadbackBuffer? buffer, int length, double? gpuSeconds) {
         Slot = slot;
         m_buffer = buffer;
         Length = length;
+        GpuSeconds = gpuSeconds;
     }
 
     /// <summary>Gets the slot the job ran in, from zero to <see cref="SdfGpuWork.SlotCount"/>.</summary>
     public int Slot { get; }
     /// <summary>Gets the bytes the job copied back.</summary>
     public int Length { get; }
+    /// <summary>The submission's GPU timestamp duration in seconds, or null on a queue without timestamps.</summary>
+    public double? GpuSeconds { get; }
     internal bool Released { get { lock (m_gate) { return m_released; } } }
 
     /// <summary>Copies the bytes the job copied back into <paramref name="destination"/>; valid until
@@ -264,6 +270,9 @@ public sealed class SdfGpuWork : IDisposable {
     public void Dispose() {
         if (m_disposed) { return; }
         m_disposed = true;
+        // A client can retain one completed output until a dependent copy finishes. Wake a coordinator waiting to
+        // submit that copy before waiting for its retained token; device resources stay alive until the drain below.
+        foreach (var client in m_clients) { client.Stop(); }
         // A submit can execute commands and then fail to arm its fence. That fence proves nothing; drain the device
         // before freeing the recorded resources, including on a backend that armed a fence but never submitted it.
         if (m_submissionFailed) { m_device.TryWaitIdle(); }
@@ -298,8 +307,8 @@ public sealed class SdfGpuWork : IDisposable {
 
             var client = slot.Client!;
 
-            Settle(slot: slot);
-            var readback = new SdfGpuWorkReadback(slot: index, buffer: slot.Readback, length: (int)slot.ReadbackBytes);
+            var seconds = Settle(slot: slot);
+            var readback = new SdfGpuWorkReadback(slot: index, buffer: slot.Readback, length: (int)slot.ReadbackBytes, gpuSeconds: m_timestamps is null ? null : seconds);
             slot.Lease = readback;
             slot.Job = null;
             slot.Client = null;
@@ -315,7 +324,7 @@ public sealed class SdfGpuWork : IDisposable {
         }
     }
     // Replaces a job's estimated charge with its measured GPU time, when the queue writes timestamps.
-    private void Settle(Slot slot) {
+    private double Settle(Slot slot) {
         var seconds = slot.Estimate;
 
         if (m_timestamps is { } timestamps) {
@@ -330,6 +339,7 @@ public sealed class SdfGpuWork : IDisposable {
             m_credit += (slot.Estimate - seconds);
         }
         m_gpuSeconds += seconds;
+        return seconds;
     }
     // Banks the GPU time the share allows since the last pump, up to MostCreditSeconds.
     private void Accrue() {

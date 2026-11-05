@@ -106,10 +106,11 @@ public static partial class CreationCanonicalizer {
             if (!SdfMaterialLayers.IsValid(
                 inset: entry.Inset?.ToInset(resolve: Resolve),
                 weathering: entry.Weathering?.ToWeathering(resolve: Resolve),
-                paints: resolved
+                paints: resolved,
+                flow: entry.Flow?.ToFlow(resolve: Resolve)
             )) {
                 errors.Add(item: new(
-                    Message: "Invalid inset, weathering or paint: check frames, ordered stops, surfaces, ranges, lane [0, 3], a nonzero paint rotation, a positive paint scale and a non-negative stroke.",
+                    Message: "Invalid inset, weathering, paint or flow: check frames, ordered stops, surfaces, ranges, lane [0, 3], a nonzero paint rotation, a positive paint scale, a non-negative stroke, and a flow's positive scale, stretch of at least 1, cycle in [0.25, 4096], non-negative tilt and the surface its coverage reveals.",
                     Path: $"palette[{index}]"
                 ));
             }

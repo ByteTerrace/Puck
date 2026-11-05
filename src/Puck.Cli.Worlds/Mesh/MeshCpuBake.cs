@@ -44,14 +44,18 @@ public static class MeshCpuBake {
         using var dresser = new SdfMeshDresser(bake);
         try {
             while (true) {
+                // Read before the bake is asked what it owes, so a pool completion after this read ends the wait below.
+                var seen = SdfMeshPathBake.Progress;
+
                 _ = dresser.Dress(frame: frame);
                 if (bake.TryTake(batch: out var batch, field: bake.Program)) {
                     bake.Complete(batch: batch, samples: Answer(batch: batch, fields: fields));
                     continue;
                 }
                 if (!bake.Pending) { break; }
-                // The contour runs on the thread pool; the next take takes what it asks for next.
-                Thread.Sleep(millisecondsTimeout: 1);
+                // The contour runs on the pool; its completion is what changes what the next take asks for. The timeout
+                // only bounds a state no completion explains.
+                _ = SdfMeshPathBake.WaitForProgress(since: seen, timeout: TimeSpan.FromMilliseconds(250));
             }
 
             var meshes = new Dictionary<int, SdfMesh>();

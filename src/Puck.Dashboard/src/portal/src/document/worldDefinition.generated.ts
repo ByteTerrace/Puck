@@ -1855,6 +1855,57 @@ export type PaletteEntryDocument = {
    * The slot's styles chosen live by a state cell (PaletteToonSelectDocument), whose case replaces Toon while the cell names one; null keeps Toon.
    */
   toonSelect?: PaletteToonSelectDocument | null;
+  /**
+   * The slot's flow layer (PaletteFlowDocument): shading that moves along an authored flow over still geometry; null moves nothing.
+   */
+  flow?: PaletteFlowDocument | null;
+};
+
+export type PaletteFlowDocument = {
+  /**
+   * The flow, in units per second.
+   */
+  velocity: DocumentVector3;
+  /**
+   * The pattern's frequency, in cells per unit; positive (null = 1).
+   */
+  scale?: number | null;
+  /**
+   * How many times longer a pattern feature is along the flow than across; at least 1 (null = 1).
+   */
+  stretch?: number | null;
+  /**
+   * The seconds a layer advects before it restarts, in [0.25, 4096] (null = 1).
+   */
+  cycle?: number | null;
+  /**
+   * The normal tilt per unit slope of the pattern; non-negative (null = 0).
+   */
+  tilt?: number | null;
+  /**
+   * The share of the slot the pattern reveals Surface over, in [0, 1] (null = 0).
+   */
+  coverage?: number | null;
+  /**
+   * The coverage edge's width, in [0, 1] (null = 0.1).
+   */
+  softness?: number | null;
+  /**
+   * The surface the coverage reveals; required when Coverage is positive.
+   */
+  surface?: PaletteSurfaceDocument | null;
+  /**
+   * The pattern's seed (null = 0).
+   */
+  seed?: number | null;
+  /**
+   * The render lane in [0, 3] whose value scales the velocity, read from an inhabited body's look lanes; a placement without lanes reads zero and stands still. Null keeps the velocity constant.
+   */
+  lane?: number | null;
+  /**
+   * The frame the velocity is authored in (null = Object).
+   */
+  frame?: SdfFlowFrame | null;
 };
 
 export type PaletteGlassDocument = {
@@ -1953,6 +2004,9 @@ export type PaletteRevealDocument = {
   surface: PaletteSurfaceDocument;
 };
 
+/**
+ * An authored surface tint and reflectance.
+ */
 export type PaletteSurfaceDocument = {
   color: string;
   roughness: number;
@@ -2235,6 +2289,8 @@ export type RulePoolIteration = {
 export type SafeName = string;
 
 export type SdfExposureMode = "Manual" | "Auto";
+
+export type SdfFlowFrame = "Object" | "World";
 
 export type SdfIndirectTier = "Off" | "Medium" | "High";
 
@@ -8929,6 +8985,59 @@ export type WorldPrototype = {
            */
           band?: "Visibility" | "Combined";
         } | null)[];
+      } | null;
+      /**
+       * The slot's flow layer (PaletteFlowDocument): shading that moves along an authored flow over still geometry; null moves nothing.
+       */
+      flow?: {
+        /**
+         * The flow, in units per second.
+         */
+        velocity: unknown;
+        /**
+         * The pattern's frequency, in cells per unit; positive (null = 1).
+         */
+        scale?: number | null;
+        /**
+         * How many times longer a pattern feature is along the flow than across; at least 1 (null = 1).
+         */
+        stretch?: number | null;
+        /**
+         * The seconds a layer advects before it restarts, in [0.25, 4096] (null = 1).
+         */
+        cycle?: number | null;
+        /**
+         * The normal tilt per unit slope of the pattern; non-negative (null = 0).
+         */
+        tilt?: number | null;
+        /**
+         * The share of the slot the pattern reveals Surface over, in [0, 1] (null = 0).
+         */
+        coverage?: number | null;
+        /**
+         * The coverage edge's width, in [0, 1] (null = 0.1).
+         */
+        softness?: number | null;
+        /**
+         * The surface the coverage reveals; required when Coverage is positive.
+         */
+        surface?: {
+          color: string;
+          roughness: number;
+          metal: number;
+        } | null;
+        /**
+         * The pattern's seed (null = 0).
+         */
+        seed?: number | null;
+        /**
+         * The render lane in [0, 3] whose value scales the velocity, read from an inhabited body's look lanes; a placement without lanes reads zero and stands still. Null keeps the velocity constant.
+         */
+        lane?: number | null;
+        /**
+         * The frame the velocity is authored in (null = Object).
+         */
+        frame?: "Object" | "World" | null;
       } | null;
     } | null)[] | null;
     /**

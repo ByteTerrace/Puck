@@ -10,6 +10,8 @@ internal sealed class TerminalCommandModule(
     ITerminalControl terminal,
     IConsoleSessions? consoles = null
 ) : ICommandModule {
+    // ConsoleForms' second form, the administrative console's.
+    private const int AdministrativeForm = 1;
     private static readonly CommandForms ConsoleForms = CommandForms.Of(TerminalCommandNames.Console, "[on|off]", "[on|off] <player>");
 
     public IEnumerable<CommandDefinition> GetCommands() {
@@ -37,24 +39,19 @@ internal sealed class TerminalCommandModule(
                     slot = context.Slot;
                     stateArguments = args.Count;
                 } else if (context.Principal.Kind == PrincipalKind.Console) {
+                    // The administrative console always names the player, so the seat's form is never the one it missed.
                     if (
                         (args.Count < 1) ||
-                        (args.Count > 2)
+                        (args.Count > 2) ||
+                        ((args.Count == 1) && (args.Is(
+                            index: 0,
+                            value: "on"
+                        ) || args.Is(
+                            index: 0,
+                            value: "off"
+                        )))
                     ) {
-                        return ConsoleForms.Refuse(args: in args);
-                    }
-
-                    if (
-                        (args.Count == 1) &&
-                        (args.Is(
-                        index: 0,
-                        value: "on"
-                    ) || args.Is(
-                        index: 0,
-                        value: "off"
-                    ))
-                    ) {
-                        return ConsoleForms.Refuse(args: in args);
+                        return ConsoleForms.RefuseForm(index: AdministrativeForm);
                     }
 
                     var playerArgument = (args.Count - 1);
