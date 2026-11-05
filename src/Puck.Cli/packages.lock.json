@@ -1782,7 +1782,6 @@
           "ByteTerrace.Puck.Embeddings": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.HumbleGamingBrick.Forge": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.HumbleGamingDeck.Forge": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Scripting": "[0.1.0-alpha, )",
           "Puck.Cli.Core": "[1.0.0, )",
           "Puck.Cli.Format": "[1.0.0, )",
           "Puck.Cli.Harness": "[1.0.0, )",

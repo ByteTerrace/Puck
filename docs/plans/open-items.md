@@ -1250,7 +1250,8 @@ certified-contact packet and step 8 closes. The measured state is in the
   Rust verification fixtures still exercise this limit. Owner: addon runtime.
   Next: model table and segment continuation state in generic checkpoints, or
   mechanically prove which module resources are immutable, then mount and
-  restore a standard-library guest in the headless debug world. Keep the
+  restore a standard-library guest in the headless debug world, then author
+  channelwalk's capability-boundary scenarios there. Keep the
   current named refusal until that state can be reproduced.
 
 Owner: the next session's lead · Next: take the GPU region
