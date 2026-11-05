@@ -1048,13 +1048,21 @@ Next: what the water as a forcing workload showed
 ([C3 as built](debug-world-composition.md#c3-as-built)); each item is a system
 the water strained, measured, and not yet fixed.
 
-- [medium] A lattice row's look is one albedo (`WorldFieldEmitter.cs:363`,
-  `SdfMaterial(Albedo: …)`): the pool reads as a flat cyan fill, with none of the
-  roughness, reflection, depth colour or transparent shallows
-  [the art pack](../game/art/caldera-water-pack/README.md) asks for. The fix is an
-  authored material on the row's `field` trait (the palette vocabulary: roughness,
-  specular, coat, glass), through `WorldStateFieldTrait`, `WorldFieldRow`, the
-  validator and `puck schema`; the water then owns no look in C#.
+- [medium] Route to the mesh lane: `WorldFieldEmitter.AdvanceBricks` increments its
+  program revision only for a field's first ready brick, not later uploads
+  (`src/Puck.World.Client/WorldFieldEmitter.cs:231`). `SdfMeshGeometryBuilder.Append`
+  hashes instruction words and selected side tables, not sampled brick contents
+  (`src/Puck.SdfVm/SdfMeshGeometry.cs:293`). A changing opaque field therefore
+  appears able to retain stale baked geometry; reproduce that visible effect and
+  make sampled content part of derived identity. The glass pool samples its live
+  brick through the glass path. This is a source finding, not a measured visual failure.
+- [low] `FieldLattice.StepFlow` sends boundary spill through
+  `IFieldLatticeHost.AddScalar`, whose contract clamps at the scalar row's envelope
+  and cannot return unaccepted supply (`src/Puck.Physics/Fields/FieldLattice.cs:32`).
+  A full spill accumulator can discard quantity. The closed hydrology chain has
+  no spill row; extend the exact-transfer seam to bounded scalar stores before
+  using spill as conserved storage.
+
 - [medium] The water's creations add 172 bake groups, 6.4 million level-0
   triangles and 1.0 GB of the mesh region in use to the debug world (a World
   without the water documents: 7,478 groups, 47.6 M triangles, 1.67 GB used; with
@@ -1070,28 +1078,11 @@ the water strained, measured, and not yet fixed.
   glacier, lake and bridge creations, not in the eight stream segments, the
   hydrology rules or the lattices, so it grows with a creation's extent or kind
   rather than its shape count; the validate stage that holds it is not yet found.
-- [medium] A lattice height column is solid under the field contact provider
-  (`FieldLattice.cs:1161` `ColumnHeight` unions every height row, a medium
-  included, through `WorldSolidField.cs:118`), so a medium world on that
-  provider would stand on its water; the analytic provider the debug world uses
-  ignores lattice columns. A medium row should be excluded from the solid.
-- [low] A lattice transform's row-referenced term is read, not consumed
-  (`FieldLattice.cs:1000`): the hydrology's melt hands water through a slot
-  (`hydroMeltStep`), so a rule firing that is refused (a gauge outside its
-  envelope did it) leaves the last value to be added every step, and the water
-  is no longer conserved. A transform that moves a store into a cell (`take`)
-  would make the hand-off exact; the hydrology's gauges are clamped meanwhile.
-- [low] A keyed list an imported fragment extends appends after the basis's rows
-  (`documents-composition.md` merge rules), so a hold that must lead the Moth's
-  list (the swim) is authored in her own document, where a fragment cannot
-  reach it. A `before` position on a keyed row would let a fragment order itself.
-- [low] `world.counters` has no lattice source: the chain's work shows only in
-  `world.budget`'s per-region cell visits, and the conserved quantity only in
-  `world.fields`' `total`.
-- [low] `world.reload` keeps a lattice's cell values while it resets state rows
-  (the melt clock restarts over a half-filled aquifer), and a `world.reset`
-  call dropped the operator attachment in one run; a reset that restores the
-  lattice from its paint is the lever a fast-forward needs.
+- [low] Investigate the reported operator attachment loss on `world.reset`.
+  `WorldGrants.EndSessionsForRebuild` ends observation sessions, while
+  `WorldControlCommandModule` owns a separate local console endpoint; do not
+  conflate those lifetimes when reproducing the report. Reset and reload now
+  reseed lattice stores alongside scalar state.
 - [low] The glacier's lumps hinge into the wall but leave their crowns above the
   crest at zero (`worlds/debug/water-scenery.puck`, `glacierLumps`), the falls
   are one slab ribbon with no spray, and the lake outlet is not a modelled notch:

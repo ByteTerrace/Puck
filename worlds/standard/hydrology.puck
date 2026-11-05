@@ -11,13 +11,10 @@
 // design starts with plus the glacier, and the steady level is that total shared across the river and aquifer cells,
 // above the river's bed. A capacity is the number of cells a stage has and the elevation of its bed.
 //
-// The glacier is a melt clock, `hydroClock`, counting simulation ticks of melt from zero to `meltSeconds` times `rateHz`:
-// `glacier` reads one at full and zero when gone. Each tick the clock advances by `hydroSpeed` (one is the world's own pace)
-// and the ticks it advanced go to a bucket that the source cells receive at each lattice step, `meltTick` of water per
-// tick and cell, so the meltwater is exactly the clock's whole ticks and the glacier holds `waterPerCell` (rounded down
-// to a whole raw unit of `meltTick`) in each source cell. The clock is persisted and settable: `world.state.cell.set
-// hydroClock $value <ticks>` puts the glacier at any stage, and `hydroSpeed` runs the melt and the flow that many times
-// faster, the flow through the row-referenced `rate` its reaction reads each step.
+// The glacier is a finite hydroIce store in each source cell. A transform transfers hydroMeltRate per lattice step,
+// debiting exactly what the water cell receives. Ice plus water is conserved even if a rule firing is refused or a
+// destination fills. hydroClock and glacier are gauges derived from remaining ice, never deposit commands.
+// hydroSpeed scales the requested melt and flow rates; 1 is the authored pace.
 //
 // The gauges are state rows the world's visuals bind to: `lakeLevel` (the lake's last cell's water), `fallsFlow` (the falls'
 // top cell's water, the discharge), `riverDepth` (the river's last cell's water) and `aquiferFill` (the aquifer's last
@@ -72,10 +69,10 @@ template hydrology(stages = hydrologyStages, origin = [0, -90, 0], cell = 1, mel
         reactions: [
           transform(
             when: [
-              { field: hydroSource, comparison: GreaterOrEqual, value: 1 }
+              { field: hydroIce, comparison: Greater, value: 0 }
             ],
             then: [
-              { field: hydroWater, op: Add, value { row: "hydroMeltStep" } }
+              { field: hydroWater, op: Add, takeFrom: hydroIce, value { row: "hydroMeltRate" } }
             ]
           )
           flow(field: hydroWater, rate: { row: "hydroRate" }, over: [hydroBed])
@@ -124,29 +121,29 @@ template hydrology(stages = hydrologyStages, origin = [0, -90, 0], cell = 1, mel
         }
       }
       row {
-        name: "hydroSource"
+        name: "hydroIce"
         kind: "Fixed"
         domain: cellsOf(topology: hydro)
         field {
           initial: 0
           min: 0
-          max: 1
+          max: waterPerCell
           paint: map(range(0, length(cells)), i => {
             $type: "rect"
             minX: origin[0] + cell * (i + 0.25)
             minZ: origin[2] + cell * 0.25
             maxX: origin[0] + cell * (i + 0.75)
             maxZ: origin[2] + cell * 0.75
-            value: cells[i].kind == "source" ? 1 : 0
+            value: cells[i].kind == "source" ? meltTicks * meltTick : 0
           })
         }
       }
-      // The melt clock, the speed it and the flow run at, and what the bucket carries between lattice steps.
+      // The speed, persistent transfer rate, and gauges derived from the conserved stores.
       slot hydroClock = 0.0 bounds(0.0..1000000.0)
       slot hydroSpeed = 1.0 bounds(0.0..1000.0)
       slot hydroRate = rate bounds(0.0..1.0)
-      slot hydroMeltStep = 0.0 bounds(0.0..1000.0)
-      slot hydroBucket = 0.0 bounds(0.0..1000000.0)
+      slot hydroMeltRate = meltTick * stepEveryTicks bounds(0.0..1000.0)
+      slot hydroRemaining = sourceCount * meltTicks * meltTick bounds(0.0..1000000.0)
       slot glacier = 1.0 bounds(0.0..1.0)
       slot lakeLevel = 0.0 bounds(0.0..4.0)
       slot fallsFlow = 0.0 bounds(0.0..4.0)
@@ -156,27 +153,24 @@ template hydrology(stages = hydrologyStages, origin = [0, -90, 0], cell = 1, mel
     }
   }
 
-  // One rule carries the melt so the clock and the bucket change together: the ticks the clock advances join the bucket,
-  // and each lattice step's tick hands the bucket to the source cells as water.
+  // A persistent rate requests transfer from finite ice stores. A refused rule retains a rate, never an unconsumed
+  // one-shot deposit; the lattice debits exactly what each water cell can receive.
   rule "hydro-melt" {
-    local advance = maximum(0, minimum(hydroSpeed, meltTicks - hydroClock))
-    local carried = hydroBucket + advance
     when $tick >= 0
     mode: Level
-    hydroClock += advance
-    if ($tick % stepEveryTicks) == 0 {
-      hydroMeltStep = carried * meltTick
-      hydroBucket = 0
-    } else {
-      hydroBucket = carried
-    }
+    hydroMeltRate = minimum(1000, hydroSpeed * meltTick * stepEveryTicks)
+    hydroRate = minimum(1, rate * hydroSpeed)
   }
 
   rule "hydro-gauges" {
     when $tick >= 0
     mode: Level
-    hydroRate = minimum(1, rate * hydroSpeed)
-    glacier = maximum(0, minimum(1, 1 - hydroClock / meltTicks))
+    hydroRemaining = 0.0
+    for i in range(0, length(cells)) {
+      hydroRemaining += hydroIce[i]
+    }
+    glacier = maximum(0, minimum(1, hydroRemaining / (sourceCount * meltTicks * meltTick)))
+    hydroClock = maximum(0, minimum(meltTicks, (sourceCount * meltTicks * meltTick - hydroRemaining) / (sourceCount * meltTick)))
     lakeLevel = minimum(4, hydroWater[lakeCell])
     fallsFlow = minimum(4, hydroWater[fallsCell])
     riverDepth = minimum(4, hydroWater[riverCell])

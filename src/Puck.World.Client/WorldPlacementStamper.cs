@@ -132,7 +132,6 @@ public static class WorldPlacementStamper {
         );
     // Registers a creation's palette into ids, which holds PaletteLength(document) entries.
     internal static void FillPalette(SdfProgramBuilder builder, WorldBakedColors colors, CreationDocument document, (Vector3 Color, float Blend)? tint, Span<int> ids, (int RootSlot, float Scale)? pool = null, bool[]? hidden = null, CreationMotionPlan? motion = null) {
-        var resolveLayerColor = colors.LayerColor;
         var palette = (document.Palette ?? []);
         var count = Math.Min(
             val1: palette.Count,
@@ -157,28 +156,12 @@ public static class WorldPlacementStamper {
                 );
             }
 
-            ids[index] = builder.AddMaterial(material: new SdfMaterial(
-                Albedo: albedo,
-                Emissive: (entry?.Emissive ?? 0f),
-                Roughness: (entry?.Roughness ?? SdfMaterial.DefaultRoughness),
-                Sheen: (entry?.Sheen ?? 0f),
-                Specular: (entry?.Specular ?? 0f),
-                Metal: (entry?.Metal ?? 0f),
-                Coat: (entry?.Coat ?? 0f),
-                Weathering: entry?.Weathering?.ToWeathering(resolve: resolveLayerColor, scale: (pool?.Scale ?? 1f)),
-                Wrap: (entry?.Wrap ?? 0f),
-                Soften: (entry?.Soften ?? 0f),
-                Fill: colors.Resolve(
-                    fallback: Vector3.Zero,
-                    value: entry?.Fill
-                ),
-                Inset: entry?.Inset?.ToInset(resolve: resolveLayerColor, scale: (pool?.Scale ?? 1f)),
-                Bleed: colors.Resolve(fallback: Vector3.One, value: entry?.Bleed),
-                Receive: (entry?.Receive ?? 1f),
-                Paints: Paints(colors: colors, document: document, entry: entry, hidden: hidden, pool: pool, motion: motion),
-                EmissiveLane: entry?.EmissiveLane,
-                Glass: entry?.Glass?.ToGlass(scale: (pool?.Scale ?? 1f)),
-                Toon: (((entry?.ToonSelect is { } select) ? select.CaseOf(value: colors.ResolveWhole(token: select.State)) : null) ?? entry?.Toon)?.ToToon()
+            ids[index] = builder.AddMaterial(material: WorldSurfaceMaterials.Resolve(
+                entry: entry,
+                albedo: albedo,
+                colors: colors,
+                scale: (pool?.Scale ?? 1f),
+                paints: Paints(colors: colors, document: document, entry: entry, hidden: hidden, pool: pool, motion: motion)
             ));
         }
     }

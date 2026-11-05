@@ -634,6 +634,15 @@ an edge means the same thing on either side. `IFieldLatticeHost` is the body-pos
 state-row seam a step reaches through, so the kernel never allocates a
 per-call delegate.
 
+A transform Add may name `takeFrom`: the same raw fixed-point quantity is
+debited from that cell's donor field and credited to the destination, bounded
+by both envelopes. A retained rate cannot create supply after the donor is
+empty. Flow rounds directional shares down and limits each pair by available
+supply and destination capacity. `FieldLattice.ProcessWork` reports executed
+steps and kernel cell/body visits through `world.counters`, outside state hashes.
+Whole-document reload/reset calls `Reseed` alongside ordinary state reset;
+live program edits and checkpoint restoration retain their separate semantics.
+
 `TryBodyCellOf` resolves the column a body couples to for `Emit`/`Expose`
 and for the `MediumSurface` a medium hold floats against—Y is admitted up
 to a DERIVED coupling ceiling (the volume's own top plus the tallest surface

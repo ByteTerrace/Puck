@@ -93,7 +93,7 @@ internal static class WorldDocumentMembers {
                 } else if (members.FirstOrDefault(predicate: member => ((member.Name == key) && ((member.Access & (WorldModelAccess.Read | WorldModelAccess.ExtensionData | WorldModelAccess.Ignored)) == WorldModelAccess.Read))) is { } member) {
                     memberType = member.Type;
                 } else if (refuse && (diagnostics is not null) && !((polymorphic && (key == "$type")) ||
-                    ((pointer.Length > 0) && (key is "$replace" or "$drop")) ||
+                    ((pointer.Length > 0) && (key is "$replace" or "$drop" or "$before")) ||
                     ((pointer.Length == 0) && (WorldConstructs.Table.RootArmWriting(documentKey: key) is WorldRootArm.Materials or WorldRootArm.Cartridge)) ||
                     ((shape.Members.Any(predicate: static member => ((member.Access & WorldModelAccess.ExtensionData) != 0))) && DocumentExtensionsPolicy.IsReservedKey(key: key)))) {
                     var finding = Diagnostic.Error(code: PuckDiagnosticCodes.SemanticValidation, message: $"Unknown member '{key}'; no document member consumes it.", span: SourceSpan.None);

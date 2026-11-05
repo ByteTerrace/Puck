@@ -5,6 +5,7 @@
 // depth, so the pool's surface sinks and rises with the river. Three steps in the basin's east end, beside the path, let a
 // swimmer climb out. `debug.go pool` stands a body on the path's end facing the water.
 import "water-site"
+import "../standard/water"
 
 // The pool's cells: half a metre square, so the surface a swimmer reads steps by no more than the cell.
 let poolCell = 0.5
@@ -116,7 +117,7 @@ state {
         min: 0
         max: poolDepthMax
         heightScale: 1
-        color: "#3FB8C4"
+        material: waterMaterial
         medium {}
       }
     }

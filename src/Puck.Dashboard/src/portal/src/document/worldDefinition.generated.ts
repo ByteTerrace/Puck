@@ -1778,6 +1778,218 @@ export type OwnershipSubject = {
 
 export type OwnershipSubjectKind = "Group";
 
+export type PaletteEntryDocument = {
+  /**
+   * The base color as #RRGGBB (see HexColor).
+   */
+  color: string;
+  /**
+   * The emissive luminance, in nits, the colour tints (null = 0 — optional members are nullable and normalized at load).
+   */
+  emissive: number | null;
+  /**
+   * The specular strength (null = the material default).
+   */
+  specular: number | null;
+  /**
+   * The GGX roughness in [0, 1] (null = DefaultRoughness) — see SdfMaterial for the roughness-floor formula. A document still spelling shininess is an unmapped member and is refused.
+   */
+  roughness: number | null;
+  /**
+   * The fresnel edge-lift strength in [0, 1] (null = 0 — no lift) — see SdfMaterial.
+   */
+  sheen?: number | null;
+  /**
+   * The metalness in [0, 1] (null = 0 — dielectric) — see SdfMaterial.
+   */
+  metal?: number | null;
+  /**
+   * The clearcoat strength in [0, 1] (null = 0 — no coat) — see SdfMaterial.
+   */
+  coat?: number | null;
+  /**
+   * Optional generic coverage and reveal surfaces.
+   */
+  weathering?: PaletteWeatheringDocument | null;
+  /**
+   * The wrap-lighting share in [0, 1] (null = 0 — the plain Lambert term) — see Wrap.
+   */
+  wrap?: number | null;
+  /**
+   * The shading-normal broadening in [0, 1] (null = 0 — no broadening) — see Soften.
+   */
+  soften?: number | null;
+  /**
+   * The fill tint as #RRGGBB or a state binding (null = black — no fill) — see Fill.
+   */
+  fill?: string | null;
+  /**
+   * Optional refractive paint layer.
+   */
+  inset?: PaletteInsetDocument | null;
+  /**
+   * The color multiplying outgoing indirect reflectance and emission, as #RRGGBB or a state binding; null means white.
+   */
+  bleed?: string | null;
+  /**
+   * The finite nonnegative gain on received indirect light; null means one.
+   */
+  receive?: number | null;
+  /**
+   * Up to MaxPalettePaints paints, each drawn over the one before; null or empty paints none.
+   */
+  paints?: PalettePaintDocument[] | null;
+  /**
+   * The render lane in [0, 3] whose saturated value scales Emissive at shading time, read from each inhabited body's own look lanes; a placement without lanes reads zero, and null keeps the emissive static.
+   */
+  emissiveLane?: number | null;
+  /**
+   * The slot's glass (PaletteGlassDocument), whose tint is Color and whose frost is Roughness; null keeps the slot opaque.
+   */
+  glass?: PaletteGlassDocument | null;
+  /**
+   * The slot's own cel style (ToonStyleDocument, on unless it says enabled: false, which keeps the slot continuous); null shades the slot with the world's default style (render.toon).
+   */
+  toon?: ToonStyleDocument | null;
+  /**
+   * The slot's styles chosen live by a state cell (PaletteToonSelectDocument), whose case replaces Toon while the cell names one; null keeps Toon.
+   */
+  toonSelect?: PaletteToonSelectDocument | null;
+};
+
+export type PaletteGlassDocument = {
+  /**
+   * The thickness, in creation units, over which light takes on the tint; finite and positive. A part twice this thick reads twice as deep.
+   */
+  depth: number;
+  /**
+   * The index of refraction, in [1, 4]: 1 bends and reflects nothing, 1.5 is window glass, 1.49 acrylic (null = 1.5).
+   */
+  ior?: number | null;
+};
+
+export type PaletteInsetDocument = {
+  origin: DocumentVector3;
+  rotation: DocumentQuaternion;
+  depth: number;
+  ior: number;
+  paint: PaletteRadialPaintDocument;
+};
+
+export type PalettePaintDocument = {
+  /**
+   * The primitive, read as a shape's type: every primitive but a path profile.
+   */
+  type: SdfSolidPrimitive;
+  /**
+   * The paint's color, #RRGGBB or a state binding.
+   */
+  color: string;
+  /**
+   * The primitive's position (null = the frame's origin).
+   */
+  position?: DocumentVector3;
+  /**
+   * The primitive's rotation (null = identity).
+   */
+  rotation?: DocumentQuaternion;
+  /**
+   * The primitive's size, as a shape's scale (null = one).
+   */
+  scale?: DocumentVector3;
+  /**
+   * The half-width of the band painted about the primitive's surface, in the frame's units; null or zero fills the primitive.
+   */
+  stroke?: number | null;
+  /**
+   * The shape whose frame carries the paint, in that shape's local frame as a shape-riding volume is; null paints in the frame of the slot that owns the hit, or world space on a static placement. A static placement draws no parented paint.
+   */
+  parent?: string | null;
+  /**
+   * Prism only: the top-to-bottom width ratio.
+   */
+  taper?: number | null;
+  /**
+   * Prism only: the cross-section; a path profile is refused.
+   */
+  profile?: SdfPrismProfile | null;
+  /**
+   * Prism only: extrude or revolve.
+   */
+  lift?: SdfLift | null;
+  /**
+   * The edge-rounding radius, as a shape's.
+   */
+  rounding?: number | null;
+  /**
+   * The cap chamfer radius, as a shape's.
+   */
+  chamfer?: number | null;
+  /**
+   * Superellipsoid only: the exponent.
+   */
+  exponent?: number | null;
+  /**
+   * Sweep only: the curve, in the frame's units.
+   */
+  curve?: ShapeCurveDocument | null;
+};
+
+export type PaletteRadialPaintDocument = {
+  stops: PaletteRadialStopDocument[];
+  softness?: number;
+  modulationAmplitude?: number;
+  modulationFrequency?: number;
+  seed?: number;
+};
+
+export type PaletteRadialStopDocument = {
+  radius: number;
+  color: string;
+};
+
+export type PaletteRevealDocument = {
+  threshold: number;
+  surface: PaletteSurfaceDocument;
+};
+
+export type PaletteSurfaceDocument = {
+  color: string;
+  roughness: number;
+  metal: number;
+};
+
+export type PaletteToonSelectDocument = {
+  /**
+   * The state.<row>[.<key>] binding naming the cell.
+   */
+  state: string;
+  /**
+   * The styles, the first for the value zero; each is a whole style (ToonStyleDocument), enabled: false keeping the slot continuous.
+   */
+  cases: ToonStyleDocument[];
+};
+
+export type PaletteWeatheringDocument = {
+  edge?: number;
+  lines?: number;
+  settle?: number;
+  reach?: number;
+  seed?: number;
+  scale?: number;
+  floor?: number;
+  lane?: number;
+  under?: PaletteRevealDocument[] | null;
+  deposit?: PaletteSurfaceDocument | null;
+  noise?: number;
+  patternScale?: DocumentVector3;
+  softness?: number;
+  octaves?: number;
+  octaveRatio?: number;
+  octaveGain?: number;
+  turn?: DocumentQuaternion;
+};
+
 /**
  * The closed pattern vocabulary over a row's cell values, matched against the whole word. Complement and intersection are first-class, so "no two adjacent kings" and "holds a 2 and a 5" are single patterns rather than rule arithmetic.
  */
@@ -2026,6 +2238,74 @@ export type SdfExposureMode = "Manual" | "Auto";
 
 export type SdfIndirectTier = "Off" | "Medium" | "High";
 
+export type SdfLift = "Revolve" | "Extrude";
+
+export type SdfPathContour = {
+  start: [number, number];
+  segments: SdfPathSegment[];
+  closed?: boolean;
+};
+
+export type SdfPathProfile = {
+  contours: SdfPathContour[];
+  tolerance?: number;
+  stroke?: SdfPathStroke | null;
+  shear?: SdfPathShear | null;
+};
+
+export type SdfPathSegment = {
+  end: [number, number];
+  control?: [number, number];
+  control2?: [number, number];
+  arcCenter?: [number, number];
+  clockwise?: boolean;
+};
+
+export type SdfPathShear = {
+  linear: number;
+  quadratic?: number;
+  cubic?: number;
+  offset?: number;
+  from?: number;
+  to?: number;
+  target?: number;
+};
+
+export type SdfPathStroke = {
+  radiusStart: number;
+  radiusEnd: number;
+  smooth?: boolean;
+  from?: number;
+  to?: number;
+};
+
+export type SdfPrismProfile = {
+  /**
+   * The profile family.
+   */
+  kind: SdfPrismProfileKind;
+  /**
+   * A fraction in [0, 1]: the profile's smaller half-extent for RoundedRectangle's corner radius or ChamferedRectangle's chamfer radius; the scaled polygon's conservative inradius (ConvexPolygonInradius) for Convex's uniform corner rounding, also clamped to the extrusion half-depth when extruded.
+   */
+  cornerRadius?: number;
+  /**
+   * Polygon side count, from 3 through 32.
+   */
+  sides?: number;
+  /**
+   * Convex only: 3 to MaxConvexVertices local XY points, clockwise (X right, Y up — each turn's 2D cross product of consecutive edges strictly negative), no coincident or collinear vertices, and convex. Ignored by every other kind.
+   */
+  vertices?: [number, number][] | null;
+  /**
+   * Required only for Path; its points are normalized profile coordinates.
+   */
+  path?: SdfPathProfile | null;
+};
+
+export type SdfPrismProfileKind = "Trapezoid" | "RoundedRectangle" | "Polygon" | "Ellipse" | "ChamferedRectangle" | "Convex" | "Path";
+
+export type SdfSolidPrimitive = "Sphere" | "Box" | "Torus" | "Cylinder" | "Capsule" | "Ellipsoid" | "RoundCone" | "Plane" | "Cone" | "Prism" | "Superellipsoid" | "Sweep";
+
 export type SdfToonBand = "Visibility" | "Combined";
 
 export type SearchMethod = "Negamax" | "MonteCarlo";
@@ -2038,6 +2318,45 @@ export type Shape = {
   at: number;
   value: [number, number, number];
   ease?: "Linear" | "Smooth" | "Step";
+};
+
+export type ShapeCurveDocument = {
+  /**
+   * The curve's first control point, in the shape's local (workbench) frame — creation units, or a state.<row>[.<key>] reference.
+   */
+  a: DocumentVector3;
+  /**
+   * The curve's middle control point.
+   */
+  b: DocumentVector3;
+  /**
+   * The curve's last control point.
+   */
+  c: DocumentVector3;
+  /**
+   * The sweep radius at t = 0; finite and strictly positive.
+   */
+  radiusStart: number;
+  /**
+   * The sweep radius at t = 1; finite and strictly positive.
+   */
+  radiusEnd: number;
+  /**
+   * The mid-span radius bulge amplitude (null = 0), added by bulge·sin(π·t)^0.65; refused past MaxSweepBulgeRatio times max(RadiusStart, RadiusEnd).
+   */
+  bulge?: number | null;
+  /**
+   * The helical strand count (null = 1), in [MinSweepStrands, MaxSweepStrands]. A count above 1 is render-only — refused for deterministic field contact by name, matching Sweep's own status.
+   */
+  strands?: number | null;
+  /**
+   * The strand orbit rate, in turns along the curve (null = 0); finite.
+   */
+  twist?: number | null;
+  /**
+   * The strand orbit radius, in creation units (null = 0); non-negative, finite, refused past MaxSweepStrandOffsetRatio times max(RadiusStart, RadiusEnd).
+   */
+  strandOffset?: number | null;
 };
 
 export type ShapeNonNullable = {
@@ -3086,6 +3405,9 @@ export type TextFontDefinition = {
 
 export type TilingFamily = "Triangular" | "Kagome" | "TruncatedSquare" | "Rhombitrihexagonal" | "TruncatedHexagonal" | "ElongatedTriangular" | "TruncatedTrihexagonal" | "Penrose";
 
+/**
+ * A cel style on the wire (SdfToon): the world's default style (render.toon, which the live world.toon lever overrides) and a palette row's own (Toon) are this one shape, so a style authored once (the standard's styles.puck) serves both. The engine holds no look of its own: a style that bands authors every value, and one that says enabled: false needs none. Presentation only; no field enters simulation state or the bake.
+ */
 export type ToonStyleDocument = {
   /**
    * Whether the style bands; absent is on. False on a palette row keeps that material continuous whatever the world's default is; false on render.toon boots the world's default off until the lever turns it on, which a style with every value then bands with.
@@ -5418,6 +5740,10 @@ export type WorldFieldWrite = {
    * The constant written or added; the result clamps to the field's range.
    */
   value: WorldLatticeScalar | null;
+  /**
+   * For Add, a distinct donor field at the same cell. Transfers at most Value, donor availability above its minimum, and destination capacity; debits exactly what is deposited.
+   */
+  takeFrom?: string | null;
 };
 
 export type WorldFieldWriteOp = "Set" | "Add";
@@ -12760,9 +13086,13 @@ export type WorldStateRow = {
      */
     heightScale?: number;
     /**
-     * The color the row's surface shades with — a #RRGGBB literal or a state.<row>[.<key>] Text-cell binding (WorldColor's shared grammar, resolved live at emit); required when HeightScale is nonzero.
+     * The color the row's surface shades with — a #RRGGBB literal or a state.<row>[.<key>] Text-cell binding (WorldColor's shared grammar, resolved live at emit); defaults to white when no material is supplied.
      */
     color?: string | null;
+    /**
+     * Optional surface material using the creation palette vocabulary.
+     */
+    material?: PaletteEntryDocument | null;
     /**
      * The initial fills, applied in order over Initial.
      */

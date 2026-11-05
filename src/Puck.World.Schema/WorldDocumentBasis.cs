@@ -28,12 +28,13 @@ namespace Puck.World;
 /// <c>grantee</c> + <c>capability</c> + <c>subject</c> triple taken together — merges by key: a derived row refines
 /// its same-key basis row in place (basis order is preserved — list order is meaning for spawn seats and rules), a
 /// new key appends in authored order, and a tombstone row <c>{"&lt;key&gt;": …, "$drop": true}</c> removes the named
-/// basis row. A tombstone naming no basis row refuses by name.</description></item>
+/// basis row. A tombstone naming no basis row refuses by name. A row's <c>$before</c> positions it before the named
+/// surviving identity after merging; missing targets and cycles refuse.</description></item>
 /// <item><description>A list that cannot key (scalar elements, mixed shapes, or duplicate keys on either side)
 /// replaces wholesale, and a keyed list can opt into the same with a leading marker row
 /// <c>{"$replace": true}</c>.</description></item>
 /// </list>
-/// <para><c>$drop</c>/<c>$replace</c> are compose-time vocabulary only: <see cref="TryMerge"/> consumes them, so
+/// <para><c>$drop</c>/<c>$replace</c>/<c>$before</c> are compose-time vocabulary only: <see cref="TryMerge"/> consumes them, so
 /// they never reach the parser, and one appearing anywhere a keyed list is not being merged refuses by name rather
 /// than flowing through to an unmapped-member parse failure.</para>
 /// <para><c>basis</c> here is the document a delta layers over — unrelated to the coordinate basis the validator's
@@ -65,6 +66,8 @@ public static class WorldDocumentBasis {
     /// <summary>The tombstone member: a row carrying <c>"$drop": true</c> beside its identity key removes the
     /// same-key basis row during a keyed-list merge.</summary>
     public const string DropMemberName = "$drop";
+    /// <summary>Positions a keyed row before another surviving row's identity during composition.</summary>
+    public const string BeforeMemberName = "$before";
     /// <summary>The document root member naming, in order, the fragment documents this file imports — the fan-in
     /// half of composition beside the single-parent <see cref="BasisMemberName"/> chain (see the type remarks).</summary>
     public const string ImportsMemberName = "imports";
@@ -128,8 +131,7 @@ public static class WorldDocumentBasis {
         }
 
         // A keyed reconstruction replays surviving basis rows in basis order, then appends new keys in target order.
-        // When the target's own order is anything else (rows were reordered), no keyed delta can express it — fall
-        // back to the wholesale marker form.
+        // For reordered targets the diff chooses the wholesale marker form rather than synthesizing positions.
         var reconstructed = new List<JsonNode?>();
 
         foreach (var basisRow in basis) {
@@ -424,6 +426,18 @@ public static class WorldDocumentBasis {
             return ((JsonArray)WorldDocumentOrigins.Clone(node: overlay, origins: origins)!);
         }
 
+        var positions = new List<(JsonNode? Row, JsonNode? Before)>();
+        var positioned = (JsonArray)WorldDocumentOrigins.Clone(node: overlay, origins: origins)!;
+        foreach (var node in positioned) {
+            var row = (JsonObject)node!;
+            if (!row.TryGetPropertyValue(BeforeMemberName, out var before)) { continue; }
+            if (before is null || row.ContainsKey(DropMemberName)) {
+                throw new JsonException($"{path}: '{BeforeMemberName}' needs a surviving target identity and cannot accompany '{DropMemberName}'.");
+            }
+            positions.Add((RowIdentity(row, key)?.DeepClone(), before.DeepClone()));
+            row.Remove(BeforeMemberName);
+        }
+        overlay = positioned;
         var merged = new JsonArray();
         var consumed = new bool[overlay.Count];
 
@@ -499,7 +513,37 @@ public static class WorldDocumentBasis {
             merged.Add(value: WorldDocumentOrigins.Clone(node: appended, origins: origins));
         }
 
-        return merged;
+        return PositionRows(merged, positions, key, path, origins);
+    }
+    // Stable dependency ordering: unpositioned rows retain their order, and predecessors of a target retain
+    // authored order. Resolve after all drops/appends, so forward references work and missing targets refuse.
+    private static JsonArray PositionRows(JsonArray rows, List<(JsonNode? Row, JsonNode? Before)> positions,
+        string key, string path, WorldDocumentOrigins? origins) {
+        if (positions.Count == 0) { return rows; }
+        var predecessors = new List<int>[rows.Count];
+        var positioned = new bool[rows.Count];
+        foreach (var (row, before) in positions) {
+            var from = IndexOfRowKey(rows, key, row);
+            var to = IndexOfRowKey(rows, key, before);
+            if (from < 0 || to < 0) {
+                throw new JsonException($"{path}: '{BeforeMemberName}' from {DescribeKey(row)} names missing target {DescribeKey(before)}.");
+            }
+            (predecessors[to] ??= []).Add(from);
+            positioned[from] = true;
+        }
+        var state = new byte[rows.Count];
+        var result = new JsonArray();
+        void Visit(int index) {
+            if (state[index] == 2) { return; }
+            if (state[index] == 1) { throw new JsonException($"{path}: cyclic '{BeforeMemberName}' positions."); }
+            state[index] = 1;
+            foreach (var predecessor in predecessors[index] ?? []) { Visit(predecessor); }
+            state[index] = 2;
+            result.Add(WorldDocumentOrigins.Clone(rows[index], origins));
+        }
+        for (var index = 0; index < rows.Count; index++) { if (!positioned[index]) { Visit(index); } }
+        for (var index = 0; index < rows.Count; index++) { Visit(index); }
+        return result;
     }
     private static void MergeObject(JsonObject target, JsonObject overlay, string path, WorldDocumentOrigins? origins) {
         foreach (var (name, value) in overlay) {
@@ -509,6 +553,7 @@ public static class WorldDocumentBasis {
                 b: DropMemberName,
                 comparisonType: StringComparison.Ordinal
             ) ||
+                name == BeforeMemberName ||
                 string.Equals(
                 a: name,
                 b: ReplaceMemberName,
@@ -782,6 +827,9 @@ public static class WorldDocumentBasis {
             throw new JsonException(message: $"{path} carries '{DropMemberName}', but {context}.");
         }
 
+        if (row.ContainsKey(propertyName: BeforeMemberName)) {
+            throw new JsonException(message: $"{path} carries '{BeforeMemberName}', but {context}.");
+        }
         if (row.ContainsKey(propertyName: ReplaceMemberName)) {
             throw new JsonException(message: $"{path} carries '{ReplaceMemberName}', but {context}.");
         }

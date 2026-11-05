@@ -711,9 +711,8 @@ public sealed partial class WorldDocument {
 
             if (request.Kind != WorldRebuildKind.Reload) { Host.Input.Restart(); }
             SwapSolids(solids: rebuildSolids);
-            // The lattice allocation and every evolved cell survive a rebuild, the hash and scatter paints included;
-            // a draw fill repaints only where the loaded document names a different pass than the one on the field.
-            var rebuiltFrom = m_definition;
+            // A whole-document rebuild restarts scalar state and lattice stores together. Preserving one while
+            // reseeding the other can duplicate finite stores; live mutations and checkpoints retain their own paths.
 
             Install(
                 arena: rebuildArena,
@@ -722,10 +721,7 @@ public sealed partial class WorldDocument {
                 rebuildPopulation: true,
                 rebuildKind: request.Kind
             );
-            Host.RepaintChangedLatticeDraws(
-                current: candidate,
-                previous: rebuiltFrom
-            );
+            Host.ReseedLatticeFields(installed);
 
             if (rebuildAddonPlan is not null) {
                 Host.Addons!.Commit(plan: rebuildAddonPlan);
