@@ -11,6 +11,7 @@ namespace Puck.Vulkan;
 public sealed unsafe class VulkanNativeBufferApi : IVulkanBufferApi {
     private const uint MemoryPropertyDeviceLocalBit = 0x00000001;
     private const uint MemoryPropertyHostCoherentBit = 0x00000004;
+    private const uint MemoryPropertyHostCachedBit = 0x00000008;
     private const uint MemoryPropertyHostVisibleBit = 0x00000002;
     private const uint SharingModeExclusive = 0;
     private const uint StructureTypeBufferCreateInfo = 12;
@@ -26,12 +27,20 @@ public sealed unsafe class VulkanNativeBufferApi : IVulkanBufferApi {
         VulkanBufferMemory.HostCoherentDeviceLocal => (MemoryPropertyDeviceLocalBit | MemoryPropertyHostVisibleBit | MemoryPropertyHostCoherentBit, true, GpuMemoryRole.HostVisibleDeviceLocal),
         VulkanBufferMemory.DeviceLocal => (MemoryPropertyDeviceLocalBit, true, GpuMemoryRole.DeviceLocal),
         VulkanBufferMemory.PreferDeviceLocal => (MemoryPropertyDeviceLocalBit, false, GpuMemoryRole.DeviceLocal),
+        VulkanBufferMemory.HostCachedCoherent => (MemoryPropertyHostVisibleBit | MemoryPropertyHostCoherentBit | MemoryPropertyHostCachedBit, false, GpuMemoryRole.HostVisible),
         _ => throw new ArgumentOutOfRangeException(
             actualValue: memory,
             message: "The buffer memory is not a defined value.",
             paramName: nameof(memory)
         ),
     };
+    /// <summary>Returns the <c>VkMemoryPropertyFlagBits</c> a memory type must carry to stand in when none carries
+    /// <paramref name="memory"/>'s preferred properties (<see cref="MemoryProperties"/>): <c>HOST_VISIBLE</c> and
+    /// <c>HOST_COHERENT</c> for <see cref="VulkanBufferMemory.HostCachedCoherent"/>, none otherwise.</summary>
+    /// <param name="memory">The memory a buffer is allocated from.</param>
+    /// <returns>The properties a fallback type carries.</returns>
+    public static uint FallbackProperties(VulkanBufferMemory memory) =>
+        ((memory == VulkanBufferMemory.HostCachedCoherent) ? (MemoryPropertyHostVisibleBit | MemoryPropertyHostCoherentBit) : 0u);
     /// <inheritdoc/>
     /// <exception cref="ArgumentNullException"><paramref name="device"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="sizeBytes"/> is zero, or <paramref name="memory"/> is not a defined value.</exception>
@@ -82,7 +91,8 @@ public sealed unsafe class VulkanNativeBufferApi : IVulkanBufferApi {
                     memoryTypeBits: memoryRequirements.MemoryTypeBits,
                     preferredProperties: preferredProperties,
                     requireProperties: requireProperties,
-                    resourceDescription: $"a buffer of usage 0x{usage:X8}"
+                    resourceDescription: $"a buffer of usage 0x{usage:X8}",
+                    fallbackProperties: FallbackProperties(memory: memory)
                 ),
                 requirements: in memoryRequirements,
                 resource: bufferHandle,

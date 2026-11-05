@@ -12,14 +12,17 @@ public static class VulkanMemoryTypes {
     /// <param name="preferredProperties">A bitmask of <c>VkMemoryPropertyFlagBits</c> a selected type should carry in full.</param>
     /// <param name="requireProperties"><see langword="true"/> to fail when no permitted type carries every preferred property; <see langword="false"/> to fall back to the first permitted type.</param>
     /// <param name="resourceDescription">A short noun phrase naming the resource, used in the failure message.</param>
+    /// <param name="fallbackProperties">A bitmask of <c>VkMemoryPropertyFlagBits</c> the fallback type must carry in full
+    /// when <paramref name="requireProperties"/> is <see langword="false"/>; zero lets any permitted type stand in.</param>
     /// <returns>The index of a compatible memory type.</returns>
-    /// <exception cref="InvalidOperationException">No permitted memory type carries the preferred properties and either <paramref name="requireProperties"/> is set or none is permitted at all.</exception>
+    /// <exception cref="InvalidOperationException">No permitted memory type carries the preferred properties and either <paramref name="requireProperties"/> is set or no permitted type carries the fallback properties.</exception>
     public static uint FindIndex(
         in VkPhysicalDeviceMemoryProperties memoryProperties,
         uint memoryTypeBits,
         uint preferredProperties,
         bool requireProperties,
-        string resourceDescription
+        string resourceDescription,
+        uint fallbackProperties = 0u
     ) {
         var fallbackIndex = -1;
 
@@ -28,11 +31,13 @@ public static class VulkanMemoryTypes {
                 continue;
             }
 
-            if ((memoryProperties.MemoryTypePropertyFlags(memoryTypeIndex: index) & preferredProperties) == preferredProperties) {
+            var flags = memoryProperties.MemoryTypePropertyFlags(memoryTypeIndex: index);
+
+            if ((flags & preferredProperties) == preferredProperties) {
                 return ((uint)index);
             }
 
-            if (fallbackIndex < 0) {
+            if ((fallbackIndex < 0) && ((flags & fallbackProperties) == fallbackProperties)) {
                 fallbackIndex = index;
             }
         }
