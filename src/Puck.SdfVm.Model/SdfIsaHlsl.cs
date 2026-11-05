@@ -354,6 +354,7 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_MESH_IRRADIANCE_DEPTH_SIZE", value: SdfMeshIrradianceProbe.DepthSize);
         declarations.Count(name: "SDF_MESH_IRRADIANCE_OFFSET_WORD", value: SdfMeshIrradianceProbe.OffsetWord);
         declarations.Bits(name: "SDF_MESH_IRRADIANCE_WRITTEN", value: SdfMeshIrradianceProbe.WrittenFlag);
+        declarations.Bits(name: "SDF_MESH_IRRADIANCE_INVALID", value: SdfMeshIrradianceProbe.InvalidFlag);
         declarations.Tuning(name: "SDF_MESH_IRRADIANCE_NORMAL_BIAS", value: SdfMeshIrradianceProbe.NormalBias);
         declarations.Tuning(name: "SDF_MESH_IRRADIANCE_BEHIND_SHARE", value: SdfMeshIrradianceProbe.BehindShare);
         declarations.Real(name: "SDF_MESH_IRRADIANCE_SURFACE_REACH", value: SdfMeshIrradianceProbe.SurfaceReach);

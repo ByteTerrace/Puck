@@ -196,12 +196,12 @@ public sealed partial class SdfMeshIrradianceLawTests {
         var volume = new SdfMeshIrradiance();
 
         var (parameters, words) = Trace(volume, Frame() with { ConvergesLighting = true, IndirectBounces = 0 });
-        var reports = new SdfMeshProbeReport[8];
-        var cells = new (int X, int Y, int Z)[8];
-        var weights = new float[8];
+        var reports = new SdfMeshProbeReport[SdfMeshIrradiance.GatherSlots];
+        var cells = new (int X, int Y, int Z)[SdfMeshIrradiance.GatherSlots];
+        var weights = new float[SdfMeshIrradiance.GatherSlots];
 
-        Assert.True(condition: volume.TryGather(new Vector3(x: -9.5f, y: 1.5f, z: 0.5f), Vector3.UnitY, cells, weights, reports));
-        var own = Assert.Single(collection: reports, predicate: r => (r.Cell == (-10, 1, 0)));
+        Assert.True(condition: volume.TryGather(new Vector3(x: -9.5f, y: 1.5f, z: 0.5f), Vector3.UnitY, cells, weights, reports, out _));
+        var own = Assert.Single(collection: reports[..8], predicate: r => (r.Cell == (-10, 1, 0)));
         var probe = Probe(parameters: parameters, words: words, x: -10, y: 1, z: 0);
         var published = 0f;
 
@@ -222,16 +222,16 @@ public sealed partial class SdfMeshIrradianceLawTests {
         var volume = new SdfMeshIrradiance();
 
         _ = Trace(frame: frame, volume: volume);
-        var cells = new (int X, int Y, int Z)[8];
-        var weights = new float[8];
-        var reports = new SdfMeshProbeReport[8];
+        var cells = new (int X, int Y, int Z)[SdfMeshIrradiance.GatherSlots];
+        var weights = new float[SdfMeshIrradiance.GatherSlots];
+        var reports = new SdfMeshProbeReport[SdfMeshIrradiance.GatherSlots];
 
-        Assert.True(condition: volume.TryGather(new Vector3(x: 1.4f, y: 0.8f, z: 0.5f), -Vector3.UnitX, cells, weights, reports));
-        var blocked = Assert.Single(collection: reports, predicate: r => (r.Cell == (0, 0, 0)));
+        Assert.True(condition: volume.TryGather(new Vector3(x: 1.4f, y: 0.8f, z: 0.5f), -Vector3.UnitX, cells, weights, reports, out _));
+        var blocked = Assert.Single(collection: reports[..8], predicate: r => (r.Cell == (0, 0, 0)));
 
         Assert.True(condition: (blocked.Visibility < 0.05f), userMessage: $"finite shadow visibility={blocked.Visibility}");
-        Assert.True(condition: volume.TryGather(new Vector3(x: 1.4f, y: 1.3f, z: 0.5f), -Vector3.UnitX, cells, weights, reports));
-        var clear = Assert.Single(collection: reports, predicate: r => (r.Cell == (0, 0, 0)));
+        Assert.True(condition: volume.TryGather(new Vector3(x: 1.4f, y: 1.3f, z: 0.5f), -Vector3.UnitX, cells, weights, reports, out _));
+        var clear = Assert.Single(collection: reports[..8], predicate: r => (r.Cell == (0, 0, 0)));
 
         Assert.True(condition: (clear.Visibility > 0.95f), userMessage: $"beyond the block's extent visibility={clear.Visibility}");
 
@@ -239,8 +239,8 @@ public sealed partial class SdfMeshIrradianceLawTests {
 
         volume = new SdfMeshIrradiance();
         _ = Trace(frame: wall, volume: volume);
-        Assert.True(condition: volume.TryGather(new Vector3(x: 1.4f, y: 1.3f, z: 0.5f), -Vector3.UnitX, cells, weights, reports));
-        var hidden = Assert.Single(collection: reports, predicate: r => (r.Cell == (0, 0, 0)));
+        Assert.True(condition: volume.TryGather(new Vector3(x: 1.4f, y: 1.3f, z: 0.5f), -Vector3.UnitX, cells, weights, reports, out _));
+        var hidden = Assert.Single(collection: reports[..8], predicate: r => (r.Cell == (0, 0, 0)));
 
         Assert.True(condition: (hidden.Visibility < 0.001f), userMessage: $"through-wall visibility={hidden.Visibility} {string.Join(separator: " | ", values: volume.DescribeProbes(new Vector3(x: 1.4f, y: 1.3f, z: 0.5f), -Vector3.UnitX))}");
     }
@@ -258,8 +258,8 @@ public sealed partial class SdfMeshIrradianceLawTests {
         var volume = new SdfMeshIrradiance();
 
         _ = Trace(frame: frame, tier: SdfIndirectTier.Medium, volume: volume);
-        var cells = new (int X, int Y, int Z)[8];
-        var weights = new float[8];
+        var cells = new (int X, int Y, int Z)[SdfMeshIrradiance.GatherSlots];
+        var weights = new float[SdfMeshIrradiance.GatherSlots];
         // Both halves, across x = 1 (the sign contains this column's upper probes).
         foreach (var height in new[] { -0.4f, 0f, 0.4f, 0.65f }) {
             Dictionary<(int, int, int), float>? previous = null;
@@ -272,7 +272,7 @@ public sealed partial class SdfMeshIrradianceLawTests {
                 var total = weights.Sum();
 
                 Assert.True(condition: (total > 0.001f), userMessage: $"sphere height={height} total={total}");
-                var current = Enumerable.Range(count: 8, start: 0).GroupBy(keySelector: i => cells[i]).ToDictionary(g => g.Key, g => (g.Sum(selector: i => weights[i]) / total));
+                var current = Enumerable.Range(count: SdfMeshIrradiance.GatherSlots, start: 0).GroupBy(keySelector: i => cells[i]).ToDictionary(g => g.Key, g => (g.Sum(selector: i => weights[i]) / total));
 
                 if (previous is not null) {
                     foreach (var cell in current.Keys.Union(second: previous.Keys)) {
@@ -366,12 +366,13 @@ public sealed partial class SdfMeshIrradianceLawTests {
         var east = Gather(volume: volume, point: new Vector3(x: 0.551f, y: 1f, z: 0.5f));
 
         // The probe below the column answers on both sides, while the upper west probe leaves the set with zero
-        // trilinear share: west of the plane the gather reads as it does east of it.
+        // trilinear share: west of the plane the gather reads as it does east of it. The weights are the answer's shares,
+        // summing to one, so a cell's share moves by at most about a percent across the plane.
         Assert.True(condition: (west[(0, 0, 0)] > 0f));
         Assert.True(condition: (west[(-1, 1, 0)] > 0f));
         Assert.False(condition: east.ContainsKey(key: (-1, 1, 0)));
         foreach (var cell in west.Keys.Union(second: east.Keys)) {
-            Assert.InRange(actual: MathF.Abs(x: (west.GetValueOrDefault(key: cell) - east.GetValueOrDefault(key: cell))), high: 0.005f, low: 0f);
+            Assert.InRange(actual: MathF.Abs(x: (west.GetValueOrDefault(key: cell) - east.GetValueOrDefault(key: cell))), high: 0.0125f, low: 0f);
         }
     }
     /// <summary>THE LAW: a probe stands in the open. A lattice centre on a wall's face (where the face under the origin is
@@ -408,10 +409,10 @@ public sealed partial class SdfMeshIrradianceLawTests {
         Assert.True(condition: (SdfMeshProbeDepth.Visibility(coverage: SdfMeshProbeCoverage.Finest, surfaces: beyondEnd[SdfMeshIrradianceProbe.DepthWord..], toward: (Vector3.UnitZ * 0.5f)) > 0.95f));
 
         // The wall's own face reads the moved probe, and the report names where it stands.
-        var reports = new SdfMeshProbeReport[8];
+        var reports = new SdfMeshProbeReport[SdfMeshIrradiance.GatherSlots];
 
-        Assert.True(condition: volume.TryGather(cells: new (int X, int Y, int Z)[8], normal: Vector3.UnitX, point: new Vector3(x: 0.5f, y: 0.5f, z: 0.5f), reports: reports, weights: new float[8]));
-        var moved = Assert.Single(collection: reports, predicate: static report => (report.Cell == (0, 0, 0)));
+        Assert.True(condition: volume.TryGather(cells: new (int X, int Y, int Z)[SdfMeshIrradiance.GatherSlots], normal: Vector3.UnitX, point: new Vector3(x: 0.5f, y: 0.5f, z: 0.5f), reports: reports, selection: out _, weights: new float[SdfMeshIrradiance.GatherSlots]));
+        var moved = Assert.Single(collection: reports[..8], predicate: static report => (report.Cell == (0, 0, 0)));
 
         Assert.True(condition: moved.Present);
         Assert.False(condition: moved.Invalid);
@@ -453,15 +454,15 @@ public sealed partial class SdfMeshIrradianceLawTests {
     private static float Inside(ReadOnlySpan<uint> probe) => Half(high: true, word: probe[(SdfMeshIrradianceProbe.OffsetWord + 1)]);
     // The answering probes about an untraced receiver facing west, by cell.
     private static Dictionary<(int X, int Y, int Z), float> Gather(SdfMeshIrradiance volume, Vector3 point) {
-        var cells = new (int X, int Y, int Z)[8];
-        var weights = new float[8];
+        var cells = new (int X, int Y, int Z)[SdfMeshIrradiance.GatherSlots];
+        var weights = new float[SdfMeshIrradiance.GatherSlots];
 
         Assert.True(condition: volume.TryGather(cells: cells, normal: -Vector3.UnitX, point: point, weights: weights));
 
         var result = new Dictionary<(int X, int Y, int Z), float>();
 
-        for (var corner = 0; (corner < 8); corner++) {
-            if (weights[corner] > 0f) { result[cells[corner]] = weights[corner]; }
+        for (var corner = 0; (corner < SdfMeshIrradiance.GatherSlots); corner++) {
+            if (weights[corner] > 0f) { result[cells[corner]] = (result.GetValueOrDefault(key: cells[corner]) + weights[corner]); }
         }
 
         return result;

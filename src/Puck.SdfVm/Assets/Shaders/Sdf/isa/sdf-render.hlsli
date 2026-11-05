@@ -102,6 +102,7 @@
 #define SDF_MESH_IRRADIANCE_DEPTH_SIZE                  12u
 #define SDF_MESH_IRRADIANCE_OFFSET_WORD                 17u
 #define SDF_MESH_IRRADIANCE_WRITTEN                     0x40000000u
+#define SDF_MESH_IRRADIANCE_INVALID                     0x80000000u
 #define SDF_MESH_IRRADIANCE_NORMAL_BIAS                 0.05
 #define SDF_MESH_IRRADIANCE_BEHIND_SHARE                0.05
 #define SDF_MESH_IRRADIANCE_SURFACE_REACH               2.598076

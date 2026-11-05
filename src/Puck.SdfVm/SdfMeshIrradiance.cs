@@ -111,6 +111,8 @@ public sealed class SdfMeshIrradiance : IDisposable {
 
     /// <summary>The counter source's name.</summary>
     public const string SourceName = "sdf.mesh-gi";
+    /// <summary>The probe slots a gather fills: the chosen stage's eight corners, then the remainder stage's eight.</summary>
+    public const int GatherSlots = 16;
 
     /// <summary>Counts each trace scene built for a change of the static draws.</summary>
     public static readonly WorkKind Scenes = new(name: "sdf.mesh-gi.scenes", unit: "scenes", workClass: WorkClass.Pacing);
@@ -1897,8 +1899,8 @@ public sealed class SdfMeshIrradiance : IDisposable {
     private Vector3 Incoming(Lighting lighting, Vector3 point, Vector3 normal, Layout layout, (int X, int Y, int Z)[] lows) {
         var squared = (normal * normal);
         var skyIrradiance = (lighting.Sky ? (lighting.SkyIrradiance(normal: normal) * lighting.Gains.Sky) : Vector3.Zero);
-        Span<float> cornerWeights = stackalloc float[8];
-        Span<(int X, int Y, int Z)> cornerCells = stackalloc (int X, int Y, int Z)[8];
+        Span<float> cornerWeights = stackalloc float[GatherSlots];
+        Span<(int X, int Y, int Z)> cornerCells = stackalloc (int X, int Y, int Z)[GatherSlots];
         var cornerProbes = new Corners();
 
         _ = Select(cells: cornerCells, cornerProbes: ref cornerProbes, cornerWeights: cornerWeights, layout: layout, lows: lows, normal: normal, point: point);
@@ -1907,7 +1909,7 @@ public sealed class SdfMeshIrradiance : IDisposable {
         var bounce = Vector3.Zero;
         var total = 0f;
 
-        for (var corner = 0; (corner < 8); corner++) {
+        for (var corner = 0; (corner < GatherSlots); corner++) {
             if (cornerWeights[corner] <= 0f) { continue; }
 
             var probe = cornerProbes[corner];
@@ -1924,38 +1926,42 @@ public sealed class SdfMeshIrradiance : IDisposable {
         return ((skyIrradiance * (sky / total)) + (bounce / total));
     }
 
-    /// <summary>Reads the eight probes about a receiver as the views pass gathers them (<c>sdfMeshProbesAt</c>): each
-    /// corner's cell and its weight after facing and depth visibility, zero for a corner that does not answer, at the
-    /// level the views pass reads there. The lookup clamps to that level's window's boundary cells, and the visibility
-    /// tests the receiver pushed <see cref="SdfMeshIrradianceProbe.NormalBias"/> metres off its surface.</summary>
+    /// <summary>Reads the probes about a receiver as the views pass gathers them (<c>sdfMeshProbesAt</c>): the chosen
+    /// stage's eight corners, then the remainder stage's eight, each corner's cell and its weight after facing and depth
+    /// visibility scaled by its stage's share, so the weights sum to one, zero for a corner that does not answer. Each
+    /// stage's lookup clamps to its level's window's boundary cells, and the visibility tests the receiver pushed
+    /// <see cref="SdfMeshIrradianceProbe.NormalBias"/> metres off its surface.</summary>
     /// <param name="point">The receiver's position, in world units.</param>
     /// <param name="normal">The receiver's unit surface normal.</param>
-    /// <param name="cells">Receives the eight corners' cells, corner <c>c</c> at offset <c>(c &amp; 1, c &gt;&gt; 1 &amp; 1,
-    /// c &gt;&gt; 2)</c> from the lookup's first cell; at least eight long.</param>
-    /// <param name="weights">Receives the eight corners' weights; at least eight long.</param>
+    /// <param name="cells">Receives the slots' cells, corner <c>c</c> of a cage at offset <c>(c &amp; 1, c &gt;&gt; 1 &amp; 1,
+    /// c &gt;&gt; 2)</c> from its lookup's first cell; at least <see cref="GatherSlots"/> long.</param>
+    /// <param name="weights">Receives the slots' weights; at least <see cref="GatherSlots"/> long.</param>
     /// <returns><see langword="false"/> while the volume's published geometry is still changing.</returns>
     public bool TryGather(Vector3 point, Vector3 normal, Span<(int X, int Y, int Z)> cells, Span<float> weights) =>
-        TryGather(cells: cells, normal: normal, point: point, reports: default, weights: weights);
-    /// <summary>Reads the eight probes about a receiver as <see cref="TryGather(Vector3, Vector3, Span{ValueTuple{int, int, int}}, Span{float})"/>
-    /// does, and reports each corner's record and the terms of its weight.</summary>
+        TryGather(cells: cells, normal: normal, point: point, reports: default, selection: out _, weights: weights);
+    /// <summary>Reads the probes about a receiver as <see cref="TryGather(Vector3, Vector3, Span{ValueTuple{int, int, int}}, Span{float})"/>
+    /// does, and reports each slot's record and the terms of its weight, and which stages answer.</summary>
     /// <param name="point">The receiver's position, in world units.</param>
     /// <param name="normal">The receiver's unit surface normal.</param>
-    /// <param name="cells">Receives the eight corners' cells; at least eight long.</param>
-    /// <param name="weights">Receives the eight corners' weights; at least eight long.</param>
-    /// <param name="reports">Receives each corner's report; at least eight long.</param>
+    /// <param name="cells">Receives the slots' cells; at least <see cref="GatherSlots"/> long.</param>
+    /// <param name="weights">Receives the slots' weights; at least <see cref="GatherSlots"/> long.</param>
+    /// <param name="reports">Receives each slot's report, or empty for none; otherwise at least <see cref="GatherSlots"/> long.</param>
+    /// <param name="selection">Receives the stages that answer.</param>
     /// <returns><see langword="false"/> while the volume's published geometry is still changing.</returns>
-    public bool TryGather(Vector3 point, Vector3 normal, Span<(int X, int Y, int Z)> cells, Span<float> weights, Span<SdfMeshProbeReport> reports) {
+    public bool TryGather(Vector3 point, Vector3 normal, Span<(int X, int Y, int Z)> cells, Span<float> weights, Span<SdfMeshProbeReport> reports, out SdfMeshProbeSelection selection) {
         lock (m_gate) {
+            selection = default;
             if ((m_lighting is null) || !m_windowValid || GeometrySettling || Dirty) { return false; }
             var probes = new Corners();
 
-            _ = Select(cells: cells, cornerProbes: ref probes, cornerWeights: weights, layout: m_layout, lows: Lows(), normal: normal, point: point, reports: reports);
+            selection = Select(cells: cells, cornerProbes: ref probes, cornerWeights: weights, layout: m_layout, lows: Lows(), normal: normal, point: point, reports: reports);
 
             return true;
         }
     }
-    /// <summary>Reads a traced static light's visibility using the published gather, as the views shader does: zero where
-    /// no measured probe answers.</summary>
+    /// <summary>Reads a traced static light's visibility using the published gather, as the views shader does: the
+    /// weight of the slots read bounded by their probes' measured reach whose probe sees the light, so it scales with
+    /// the measured share of the answer and is zero where no measured probe answers.</summary>
     /// <param name="point">The receiver position.</param>
     /// <param name="normal">The receiver's unit normal.</param>
     /// <param name="lightIndex">The lights-table index.</param>
@@ -1963,43 +1969,38 @@ public sealed class SdfMeshIrradiance : IDisposable {
     public float LightVisibility(Vector3 point, Vector3 normal, int lightIndex) {
         if (((uint)lightIndex) >= (32u * SdfMeshIrradianceProbe.LightWords)) { return 1f; }
         lock (m_gate) {
-            Span<(int X, int Y, int Z)> cells = stackalloc (int, int, int)[8];
-            Span<float> weights = stackalloc float[8];
+            Span<(int X, int Y, int Z)> cells = stackalloc (int, int, int)[GatherSlots];
+            Span<float> weights = stackalloc float[GatherSlots];
             var probes = new Corners();
-
-            var (_, measured) = Select(point: point, normal: normal, layout: m_layout, lows: Lows(),
+            var selection = Select(point: point, normal: normal, layout: m_layout, lows: Lows(),
                 cells: cells, cornerWeights: weights, cornerProbes: ref probes);
-
-            if (!measured) { return 0f; }
-
             var visible = 0f;
-            var total = 0f;
 
-            for (var corner = 0; (corner < 8); corner++) {
-                if (weights[corner] <= 0f) { continue; }
+            for (var corner = 0; (corner < GatherSlots); corner++) {
+                if ((weights[corner] <= 0f) || !((corner < 8) ? selection.Measured : selection.RemainderMeasured)) { continue; }
                 if ((probes[corner].Lights[(lightIndex >> 5)] & (1u << (lightIndex & 31))) != 0u) { visible += weights[corner]; }
-                total += weights[corner];
             }
-            return ((total > 0f) ? (visible / total) : 0f);
+            return visible;
         }
     }
-    /// <summary>Describes the eight probes about a receiver as the views pass gathers them: the level it reads, whether
-    /// a measured probe answers there, and that level's spacing and window, then one line a corner with its cell, where
-    /// its probe stands (its centre plus the offset the trace moved it by), the share of its rays that met back faces,
-    /// whether it is valid, the relights it holds under the current lighting, and the terms of its weight at the receiver
-    /// (trilinear share, facing, the depth visibility, whether it lies in front) with the weight it answers with. The
-    /// cubes a relight in progress has not reached yet read as they were last relit.</summary>
+    /// <summary>Describes the probes about a receiver as the views pass gathers them: the level the chosen stage reads,
+    /// whether it reads its probes bounded by their measured reach, its share of the answer, the remainder stage's level
+    /// and boundedness, and the chosen level's spacing and window, then one line a slot with its cell, where its probe
+    /// stands (its centre plus the offset the trace moved it by), the share of its rays that met back faces, whether it is
+    /// valid, the relights it holds under the current lighting, and the terms of its weight at the receiver (trilinear
+    /// share, facing, the depth visibility, whether it lies in front) with the weight it answers with. The remainder's
+    /// eight lines follow only where a remainder stage answers. The cubes a relight in progress has not reached yet read
+    /// as they were last relit.</summary>
     /// <param name="point">The receiver's position, in world units.</param>
     /// <param name="normal">The receiver's unit surface normal.</param>
     /// <returns>The lines; one line while the volume holds no window to read or its geometry is still changing.</returns>
     public IReadOnlyList<string> DescribeProbes(Vector3 point, Vector3 normal) {
-        var cells = new (int X, int Y, int Z)[8];
-        var weights = new float[8];
-        var reports = new SdfMeshProbeReport[8];
+        var cells = new (int X, int Y, int Z)[GatherSlots];
+        var weights = new float[GatherSlots];
+        var reports = new SdfMeshProbeReport[GatherSlots];
         Layout layout;
         (int X, int Y, int Z) low;
-        int level;
-        bool measured;
+        SdfMeshProbeSelection selection;
 
         lock (m_gate) {
             if (GeometrySettling) {
@@ -2015,10 +2016,10 @@ public sealed class SdfMeshIrradiance : IDisposable {
 
             var probes = new Corners();
 
-            (level, measured) = Select(cells: cells, cornerProbes: ref probes, cornerWeights: weights, layout: layout, lows: Lows(), normal: normal, point: point, reports: reports);
-            low = m_levels[level].Low;
+            selection = Select(cells: cells, cornerProbes: ref probes, cornerWeights: weights, layout: layout, lows: Lows(), normal: normal, point: point, reports: reports);
+            low = m_levels[selection.Level].Low;
 
-            var lines = new List<string>(capacity: 9);
+            var lines = new List<string>(capacity: (2 + GatherSlots));
             var total = 0f;
             var answering = 0;
 
@@ -2028,10 +2029,13 @@ public sealed class SdfMeshIrradiance : IDisposable {
                     answering++;
                 }
             }
+            var level = selection.Level;
+
             lines.Add(item: string.Create(provider: CultureInfo.InvariantCulture,
-                $"[world.probe: point=({point.X:0.###}, {point.Y:0.###}, {point.Z:0.###}) normal=({normal.X:0.##}, {normal.Y:0.##}, {normal.Z:0.##}) level={level} measured={(measured ? 1 : 0)} spacing={layout.SpacingOf(level: level):0.##} window=({low.X}, {low.Y}, {low.Z})+{layout.DimsOf(level: level).X}x{layout.DimsOf(level: level).Y}x{layout.DimsOf(level: level).Z} answering={answering} weight={total:0.####} relighting={(m_owed ? 1 : 0)}]"));
+                $"[world.probe: point=({point.X:0.###}, {point.Y:0.###}, {point.Z:0.###}) normal=({normal.X:0.##}, {normal.Y:0.##}, {normal.Z:0.##}) level={level} measured={(selection.Measured ? 1 : 0)} share={selection.Share:0.####} remainder-level={selection.RemainderLevel} remainder-measured={(selection.RemainderMeasured ? 1 : 0)} spacing={layout.SpacingOf(level: level):0.##} window=({low.X}, {low.Y}, {low.Z})+{layout.DimsOf(level: level).X}x{layout.DimsOf(level: level).Y}x{layout.DimsOf(level: level).Z} answering={answering} weight={total:0.####} relighting={(m_owed ? 1 : 0)}]"));
             lines.Add(item: Describe());
-            foreach (var report in reports) {
+            for (var slot = 0; (slot < ((selection.RemainderLevel >= 0) ? GatherSlots : 8)); slot++) {
+                var report = reports[slot];
                 var description = report.Describe();
 
                 if (report.Present && !report.Invalid && (m_scene is { } scene)) {
@@ -2048,56 +2052,77 @@ public sealed class SdfMeshIrradiance : IDisposable {
         }
     }
 
-    // KEEP IN SYNC with sdfMeshProbesAt. Chooses the probes a receiver reads: those of the finest level whose probes
-    // measured it. A finer level answers a receiver past its window's boundary probes as far as their surface maps reach
-    // (SurfaceReachOf), before the level whose window holds it: an 8 m level's probes sit in the slabs and on both sides of
-    // the walls of rooms a few metres tall, so a receiver just past the finest window that the coarser level answers reads
-    // black where every coarse probe is hidden and the light outdoors where one grazes through. The level whose window
-    // holds the receiver (the finest such, the coarsest past every window) answers next, extended as far as its boundary
-    // probes' surface support admits. A coarser level never answers inside a finer window: its angular support is metres
-    // wide there, so it would see through the thin wall a finer probe measured. When none of that level's measured probes
-    // answer, the same probes answer past their measured reach, blocked only by the surfaces they measured, and Measured
-    // is false: the receiver lies past what they measured, they are the best estimate of its light, reading none would
-    // draw a surface the camera sees black, and a surface they saw between them and it still hides it. Where those answer
-    // nothing either, the finest level's boundary probes answer the same way.
-    private (int Level, bool Measured) Select(Vector3 point, Vector3 normal, Layout layout, ReadOnlySpan<(int X, int Y, int Z)> lows,
+    // KEEP IN SYNC with sdfMeshProbesAt. Chooses the probes a receiver reads from a chain of stages, finest first: each
+    // finer level whose boundary probes' surface maps reach the receiver past its window (SurfaceReachOf), then the level
+    // whose window holds it (the finest such, the coarsest past every window) bounded by its probes' measured reach, the
+    // same probes unbounded, blocked only by the surfaces they measured, and last the finest level's boundary probes
+    // unbounded. A coarser level never answers inside a finer window, where its metres-wide angular support would see
+    // through a thin wall a finer probe measured.
+    // The first stage whose probes answer is chosen, and it answers only in its share: its corners' weight over the same
+    // cage's front weight before visibility, clamped to one. An 8 m level has a probe plane in every other storey, so a
+    // single corner it measured across a slab, normalized to the whole, would light a room with another's light. The rest
+    // of the answer comes from the next stage over another cage (a later stage of the chosen level reads the same probes,
+    // so it adds nothing a share would want), with its weights normalized to that rest; where none answers, the chosen
+    // stage's weights are normalized to the whole, the finest level's reads within its window among them. Each slot's
+    // weight is pre-scaled by its stage's share, so the slots' weights sum to one.
+    private SdfMeshProbeSelection Select(Vector3 point, Vector3 normal, Layout layout, ReadOnlySpan<(int X, int Y, int Z)> lows,
         Span<(int X, int Y, int Z)> cells, Span<float> cornerWeights, ref Corners cornerProbes, Span<SdfMeshProbeReport> reports = default) {
         var held = (m_levels.Length - 1);
 
         for (var level = 0; (level < held); level++) {
-            var beyond = Beyond(layout: layout, level: level, low: lows[level], normal: normal, point: point);
-
-            if (beyond <= 0f) {
+            if (Beyond(layout: layout, level: level, low: lows[level], normal: normal, point: point) <= 0f) {
                 held = level;
                 break;
             }
-            if ((beyond <= SurfaceReachOf(spacing: layout.SpacingOf(level: level))) &&
-                Answers(cells: cells, cornerProbes: ref cornerProbes, cornerWeights: cornerWeights, depth: true, layout: layout, level: level, low: lows[level], normal: normal, point: point, reports: reports)) {
-                return (level, true);
+        }
+        cells[..GatherSlots].Clear();
+        cornerWeights[..GatherSlots].Clear();
+        if (!reports.IsEmpty) { reports[..GatherSlots].Clear(); }
+
+        var chosen = -1;
+        var chosenMeasured = false;
+        var chosenTotal = 0f;
+        var share = 0f;
+        var remainder = -1;
+        var remainderMeasured = false;
+
+        for (var stage = 0; (stage <= (held + 2)); stage++) {
+            var level = ((stage > (held + 1)) ? 0 : Math.Min(val1: stage, val2: held));
+            var bounded = (stage <= held);
+
+            if (((stage < held) || (stage > (held + 1))) && (held == 0)) { continue; }
+            if ((stage < held) && (Beyond(layout: layout, level: level, low: lows[level], normal: normal, point: point) > SurfaceReachOf(spacing: layout.SpacingOf(level: level)))) { continue; }
+            if ((chosen >= 0) && (level == chosen)) { continue; }
+
+            var slot = ((chosen >= 0) ? 8 : 0);
+            var total = Gather(cells: cells, cornerProbes: ref cornerProbes, cornerWeights: cornerWeights, depth: bounded, front: out var front, layout: layout, level: level,
+                low: lows[level], normal: normal, point: point, reports: reports, slot: slot);
+
+            if (!(total > 0f)) { continue; }
+            if (chosen < 0) {
+                chosen = level;
+                chosenMeasured = bounded;
+                chosenTotal = total;
+                share = ((front > total) ? (total / front) : 1f);
+                if (share >= 1f) { break; }
+                continue;
+            }
+            remainder = level;
+            remainderMeasured = bounded;
+            Scale(scale: ((1f - share) / total), slot: 8, weights: cornerWeights, reports: reports);
+            break;
+        }
+        if (chosen < 0) { return new SdfMeshProbeSelection(Level: 0, Measured: false, Share: 0f); }
+        if (remainder < 0) { share = 1f; }
+        Scale(scale: (share / chosenTotal), slot: 0, weights: cornerWeights, reports: reports);
+        return new SdfMeshProbeSelection(Level: chosen, Measured: chosenMeasured, RemainderLevel: remainder, RemainderMeasured: remainderMeasured, Share: share);
+
+        static void Scale(int slot, float scale, Span<float> weights, Span<SdfMeshProbeReport> reports) {
+            for (var corner = slot; (corner < (slot + 8)); corner++) {
+                weights[corner] *= scale;
+                if (!reports.IsEmpty) { reports[corner] = (reports[corner] with { Weight = weights[corner] }); }
             }
         }
-        if (Answers(cells: cells, cornerProbes: ref cornerProbes, cornerWeights: cornerWeights, depth: true, layout: layout, level: held, low: lows[held], normal: normal, point: point, reports: reports)) {
-            return (held, true);
-        }
-        if (Answers(cells: cells, cornerProbes: ref cornerProbes, cornerWeights: cornerWeights, depth: false, layout: layout, level: held, low: lows[held], normal: normal, point: point, reports: reports) ||
-            (held == 0)) {
-            return (held, false);
-        }
-        // A coarser level's probes stand in a room's slabs and beyond its walls, so all of them can miss its far wall;
-        // the finest level's boundary probes then answer it with the light of the room they measured.
-        Gather(cells: cells, cornerProbes: ref cornerProbes, cornerWeights: cornerWeights, depth: false, layout: layout, level: 0, low: lows[0],
-            normal: normal, point: point, reports: reports);
-        return (0, false);
-    }
-    // Gathers a level's probes about a receiver; true when any answers.
-    private bool Answers(int level, Vector3 point, Vector3 normal, Layout layout, (int X, int Y, int Z) low, bool depth, Span<(int X, int Y, int Z)> cells,
-        Span<float> cornerWeights, ref Corners cornerProbes, Span<SdfMeshProbeReport> reports) {
-        Gather(cells: cells, cornerProbes: ref cornerProbes, cornerWeights: cornerWeights, depth: depth, layout: layout, level: level, low: low, normal: normal, point: point, reports: reports);
-
-        var total = 0f;
-
-        foreach (var weight in cornerWeights[..8]) { total += weight; }
-        return (total > 0f);
     }
     /// <summary>Returns the farthest receiver from a probe its surface map measured, in metres: its reach
     /// (<see cref="SdfMeshIrradianceProbe.SurfaceReach"/> spacings) plus the receiver's normal bias.</summary>
@@ -2125,10 +2150,12 @@ public sealed class SdfMeshIrradiance : IDisposable {
 
         return (unclamped, sample);
     }
-    // The eight probes of a level about a receiver: each corner's cell, probe and weight after facing and angular surface
-    // visibility, bounded by each probe's measured reach when `depth`, zero where the corner does not answer. A nonempty
-    // `reports` receives each corner's record and the terms of its weight.
-    private void Gather(int level, Vector3 point, Vector3 normal, Layout layout, (int X, int Y, int Z) low, bool depth, Span<(int X, int Y, int Z)> cells, Span<float> cornerWeights, ref Corners cornerProbes, Span<SdfMeshProbeReport> reports = default) {
+    // The eight probes of a level about a receiver, into the eight slots from `slot`: each corner's cell, probe and weight
+    // after facing and angular surface visibility, bounded by each probe's measured reach when `depth`, zero where the
+    // corner does not answer. Returns the corners' total weight, and in `front` the same cage's weight before visibility
+    // with the facing fade alone (no behind floor), over every present probe, invalid ones included: the support a share
+    // is measured against. A nonempty `reports` receives each corner's record and the terms of its weight.
+    private float Gather(int level, Vector3 point, Vector3 normal, Layout layout, (int X, int Y, int Z) low, bool depth, int slot, Span<(int X, int Y, int Z)> cells, Span<float> cornerWeights, ref Corners cornerProbes, out float front, Span<SdfMeshProbeReport> reports = default) {
         var spacing = layout.SpacingOf(level: level);
         var dims = layout.DimsOf(level: level);
         var cache = m_levels[level].Cache;
@@ -2140,14 +2167,17 @@ public sealed class SdfMeshIrradiance : IDisposable {
         var outside = Math.Clamp(value: (unclamped - sample).Length(), min: 0f, max: 1f);
         var floor = new Vector3(x: MathF.Floor(x: sample.X), y: MathF.Floor(x: sample.Y), z: MathF.Floor(x: sample.Z));
         var fraction = (sample - floor);
+        var total = 0f;
 
+        front = 0f;
         for (var corner = 0; (corner < 8); corner++) {
             var offset = new Vector3(x: corner & 1, y: (corner >> 1) & 1, z: (corner >> 2) & 1);
             var cell = (((int)(floor.X + offset.X)), ((int)(floor.Y + offset.Y)), ((int)(floor.Z + offset.Z)));
+            var index = (slot + corner);
 
-            cells[corner] = cell;
-            cornerWeights[corner] = 0f;
-            if (!reports.IsEmpty) { reports[corner] = new SdfMeshProbeReport(Cell: cell, Position: ((new Vector3(x: (cell.Item1 + 0.5f), y: (cell.Item2 + 0.5f), z: (cell.Item3 + 0.5f)) * spacing))); }
+            cells[index] = cell;
+            cornerWeights[index] = 0f;
+            if (!reports.IsEmpty) { reports[index] = new SdfMeshProbeReport(Cell: cell, Position: ((new Vector3(x: (cell.Item1 + 0.5f), y: (cell.Item2 + 0.5f), z: (cell.Item3 + 0.5f)) * spacing))); }
             if (
                 (cell.Item1 < low.X) || (cell.Item1 >= (low.X + dims.X)) ||
                 (cell.Item2 < low.Y) || (cell.Item2 >= (low.Y + dims.Y)) ||
@@ -2171,11 +2201,13 @@ public sealed class SdfMeshIrradiance : IDisposable {
             // resolve the receiver's own wall, so a probe behind its plane there takes no part. Irradiance is already
             // evaluated along the normal.
             var ahead = Math.Clamp((Vector3.Dot(vector1: toward, vector2: normal) / (0.5f * spacing)), 0f, 1f);
-            var front = (ahead > 0f);
-            var facing = float.Lerp(amount: outside, value1: MathF.Max(x: ((ahead * ahead) * (3f - (2f * ahead))), y: ((level == 0) ? SdfMeshIrradianceProbe.BehindShare : 0f)), value2: 1f);
+            var fade = ((ahead * ahead) * (3f - (2f * ahead)));
+            var facing = float.Lerp(amount: outside, value1: MathF.Max(x: fade, y: ((level == 0) ? SdfMeshIrradianceProbe.BehindShare : 0f)), value2: 1f);
             var trilinear = ((weights.X * weights.Y) * weights.Z);
             var visibility = (probe.Invalid ? 0f : SdfMeshProbeDepth.Visibility(bounded: depth, coverage: SdfMeshProbeCoverage.Of(level: level), surfaces: probe.Depth, toward: (pushed - probePoint)));
             var weight = ((trilinear * facing) * visibility);
+
+            front += (trilinear * float.Lerp(amount: outside, value1: fade, value2: 1f));
 
             if (!reports.IsEmpty) {
                 var sky = 0f;
@@ -2185,20 +2217,22 @@ public sealed class SdfMeshIrradiance : IDisposable {
                     sky += (probe.Sky[axis] / 6f);
                     luminance += (SdfPhotometry.LuminanceOf(color: probe.Radiance[axis]) / 6f);
                 }
-                reports[corner] = new SdfMeshProbeReport(Cell: cell, Facing: facing, Front: front, Inside: probe.Inside, Invalid: probe.Invalid, Luminance: luminance,
+                reports[index] = new SdfMeshProbeReport(Cell: cell, Facing: facing, Front: (ahead > 0f), Inside: probe.Inside, Invalid: probe.Invalid, Luminance: luminance,
                     Offset: probe.Offset, Position: probePoint, Present: true, Sky: sky, Passes: probe.Passes, Trilinear: trilinear, Visibility: visibility);
             }
             if (probe.Invalid || (weight <= 0f)) { continue; }
 
-            cornerProbes[corner] = probe;
-            cornerWeights[corner] = weight;
+            cornerProbes[index] = probe;
+            cornerWeights[index] = weight;
+            total += weight;
         }
 
         if (!reports.IsEmpty) {
-            for (var corner = 0; (corner < 8); corner++) {
+            for (var corner = slot; (corner < (slot + 8)); corner++) {
                 reports[corner] = (reports[corner] with { Weight = cornerWeights[corner] });
             }
         }
+        return total;
     }
     private static float Cube(ReadOnlySpan<float> cube, Vector3 normal, Vector3 squared) =>
         (((squared.X * cube[((normal.X >= 0f) ? 0 : 1)]) + (squared.Y * cube[((normal.Y >= 0f) ? 2 : 3)])) + (squared.Z * cube[((normal.Z >= 0f) ? 4 : 5)]));
@@ -2461,8 +2495,8 @@ public sealed class SdfMeshIrradiance : IDisposable {
         public int LocalVersion { get; set; }
         public bool Settled { get; set; }
     }
-    // The eight probes about a point a read gathers, held without an allocation on the hot path.
-    [System.Runtime.CompilerServices.InlineArray(8)]
+    // The probes a read gathers (GatherSlots), held without an allocation on the hot path.
+    [System.Runtime.CompilerServices.InlineArray(GatherSlots)]
     private struct Corners {
         private ProbeData m_first;
     }

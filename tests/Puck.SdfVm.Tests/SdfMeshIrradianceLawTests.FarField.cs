@@ -1,6 +1,5 @@
 using System.Globalization;
 using System.Numerics;
-using System.Text.RegularExpressions;
 using Puck.Abstractions.Cameras;
 using Puck.Abstractions.Presentation;
 using Puck.SignedDistance;
@@ -24,17 +23,16 @@ public sealed partial class SdfMeshIrradianceLawTests {
     // Where the far third starts: past the finest window's reach at High about a camera at the hall's west end.
     private const float FarStart = 38f;
 
-    /// <summary>A far receiver's gather, as the CPU reads it: the stage it chose and each corner's report.</summary>
-    private readonly record struct FarRead(Vector3 Point, Vector3 Normal, int Storey, int Level, bool Measured, SdfMeshProbeReport[] Reports, bool[] Clear);
+    /// <summary>A far receiver's gather, as the CPU reads it: the stages it chose and each slot's report.</summary>
+    private readonly record struct FarRead(Vector3 Point, Vector3 Normal, int Storey, SdfMeshProbeSelection Selection, SdfMeshProbeReport[] Reports, bool[] Clear) {
+        public int LevelOf(int slot) => ((slot < 8) ? Selection.Level : Selection.RemainderLevel);
+    }
 
     /// <summary>The counts the far field's laws read over every far receiver.</summary>
     private readonly record struct FarCounts(int Receivers, int Answering, int Blocked, int CoarseBlocked, int Clear, int OverOccluded, int StoreyFallbacks, int PlanelessReceivers) {
         public override string ToString() => string.Create(provider: CultureInfo.InvariantCulture,
             handler: $"receivers={Receivers} answering={Answering} exact-blocked={Blocked} coarse-exact-blocked={CoarseBlocked} clear={Clear} over-occluded={OverOccluded} planeless-fallbacks={StoreyFallbacks}/{PlanelessReceivers}");
     }
-
-    [GeneratedRegex(pattern: @"level=(\d) measured=(\d)")]
-    private static partial Regex FarLevelPattern();
 
     /// <summary>THE LAW: a coarse level's probe answers no receiver in another room. Over the far third of a four-storey
     /// hall, no answering corner of a coarse level stands where the exact segment to its receiver meets a slab or a wall,
@@ -132,29 +130,24 @@ public sealed partial class SdfMeshIrradianceLawTests {
     // Reads every far receiver's gather, and each corner's exact segment test from its probe to the pushed receiver.
     private static FarRead[] ReadFar(SdfMeshIrradiance volume, SdfMeshIrradianceScene scene) {
         var reads = new List<FarRead>();
-        var cells = new (int X, int Y, int Z)[8];
-        var weights = new float[8];
+        var cells = new (int X, int Y, int Z)[SdfMeshIrradiance.GatherSlots];
+        var weights = new float[SdfMeshIrradiance.GatherSlots];
 
         foreach (var (point, normal, storey) in FarReceivers()) {
-            var reports = new SdfMeshProbeReport[8];
-            var clear = new bool[8];
+            var reports = new SdfMeshProbeReport[SdfMeshIrradiance.GatherSlots];
+            var clear = new bool[SdfMeshIrradiance.GatherSlots];
 
-            Assert.True(condition: volume.TryGather(cells: cells, normal: normal, point: point, reports: reports, weights: weights));
-
-            var match = FarLevelPattern().Match(input: volume.DescribeProbes(normal: normal, point: point)[0]);
-
-            Assert.True(condition: match.Success);
+            Assert.True(condition: volume.TryGather(cells: cells, normal: normal, point: point, reports: reports, selection: out var selection, weights: weights));
 
             var pushed = (point + (normal * SdfMeshIrradianceProbe.NormalBias));
 
-            for (var corner = 0; (corner < 8); corner++) {
+            for (var corner = 0; (corner < SdfMeshIrradiance.GatherSlots); corner++) {
                 var toward = (pushed - reports[corner].Position);
                 var distance = toward.Length();
 
                 clear[corner] = ((distance <= 1e-3f) || scene.Unblocked(direction: (toward / distance), maximum: (distance - 1e-3f), origin: reports[corner].Position));
             }
-            reads.Add(item: new FarRead(Clear: clear, Level: int.Parse(s: match.Groups[1].Value, provider: CultureInfo.InvariantCulture), Measured: (match.Groups[2].Value == "1"),
-                Normal: normal, Point: point, Reports: reports, Storey: storey));
+            reads.Add(item: new FarRead(Clear: clear, Normal: normal, Point: point, Reports: reports, Selection: selection, Storey: storey));
         }
         return [.. reads];
     }
@@ -183,9 +176,9 @@ public sealed partial class SdfMeshIrradianceLawTests {
         foreach (var read in reads) {
             if (!HoldsCoarsePlane(parameters: parameters, storey: read.Storey)) {
                 planeless++;
-                if ((read.Level == 0) && !read.Measured) { fallbacks++; }
+                if ((read.Selection.Level == 0) && !read.Selection.Measured) { fallbacks++; }
             }
-            for (var corner = 0; (corner < 8); corner++) {
+            for (var corner = 0; (corner < SdfMeshIrradiance.GatherSlots); corner++) {
                 var report = read.Reports[corner];
 
                 if (!report.Present || report.Invalid || ((report.Trilinear * report.Facing) <= 0f)) { continue; }
@@ -193,7 +186,7 @@ public sealed partial class SdfMeshIrradianceLawTests {
                     answering++;
                     if (!read.Clear[corner]) {
                         blocked++;
-                        if (read.Level > 0) { coarseBlocked++; }
+                        if (read.LevelOf(slot: corner) > 0) { coarseBlocked++; }
                     }
                 }
                 if (read.Clear[corner]) {
