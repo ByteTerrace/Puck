@@ -1228,13 +1228,9 @@ and none has an authored field yet):
   generated schema and TypeScript model.
 - [low] The built-in view ladder's transition envelope is baked into the
   composer (`BuiltinTransitionSeconds` and `BuiltinTransitionRenderScale`,
-  `src/Puck.World.Client/WorldViewComposer.cs:29-33`, returned at `:311`). Its
-  comment says it copies `ScreenLayoutDirector`'s compiled 0.6 s and 0.5
-  scale, but no such class remains in `src`; the same name survives in comments
-  at `src/Puck.SdfVm/Views/ViewTransition.cs:36,44` and
-  `SdfCameraRig.cs`. Check that a built-in ladder has authored source in
-  `worlds/standard` to carry the envelope, move the values there, and delete
-  the stale mentions.
+  `src/Puck.World.Client/WorldViewComposer.cs:29-33`, returned at `:311`).
+  Check that a built-in ladder has authored source in `worlds/standard` to
+  carry the envelope, and move the values there.
 - [low] The tabletop framing clamps an authored engage pitch to
   `MaximumPitchRadians` (`0.4972 pi`,
   `src/Puck.World.Client/WorldTabletopFraming.cs:19`, applied at `:90-92`),

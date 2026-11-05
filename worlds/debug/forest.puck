@@ -19,9 +19,11 @@ let forestInside = quadraticPathPoint(lawnPaths[6], 0.82)
 
 prototypes {
   broadleafTree(id: "forest-veteran", height: 1.65, spread: 1.45, lean: 0.055,
-    leaves: ["#304F39", "#4B6C43", "#788B4F"])
+    leaves: ["#304F39", "#4B6C43", "#788B4F"]
+  )
   broadleafTree(id: "forest-sapling", height: 0.56, spread: 0.52,
-    leaves: ["#496839", "#698345", "#8A9C57"])
+    leaves: ["#496839", "#698345", "#8A9C57"]
+  )
   scrubClump(id: "forest-scrub", size: 0.9, crowns: 3, colors: ["#304F40", "#46694C", "#66834F"])
   scrubClump(id: "forest-bramble", size: 0.62, crowns: 4, colors: ["#4C603A", "#667647", "#829250"])
   fernClump(id: "forest-fern")
@@ -32,14 +34,18 @@ prototypes {
   leafLitter(id: "forest-duff")
   // A bounded test of actual field relief, below the tree-free clearing rather than the whole valley disc.
   sceneryPatch(id: "forest-ground-relief", radii: [7, 0.34, 5], color: "#6C8A33",
-    seed: 7291, amplitude: 0.12, frequency: 1.6, surface: groundSurface("#6C8A33"))
+    seed: 7291, amplitude: 0.12, frequency: 1.6, surface: groundSurface("#6C8A33")
+  )
   sceneryPatch(id: "forest-west-bank", radii: [20, 4.5, 13], color: "#6C8A33",
-    seed: 4821, amplitude: 0.035, frequency: 0.7, surface: groundSurface("#6C8A33"))
+    seed: 4821, amplitude: 0.035, frequency: 0.7, surface: groundSurface("#6C8A33")
+  )
   sceneryPatch(id: "forest-east-bank", radii: [15, 3.8, 12], color: "#6C8A33",
-    seed: 9182, amplitude: 0.035, frequency: 0.8, surface: groundSurface("#6C8A33"))
+    seed: 9182, amplitude: 0.035, frequency: 0.8, surface: groundSurface("#6C8A33")
+  )
   for (tile, i) in forestGrassTiles {
     windMeadowTile(id: $"forest-grass-{i}", tile: tile, origin: forestGrassOrigin,
-      fringe: [5.5, 6.7, 0.67, 0.67], clearing: [0, 0, 0])
+      fringe: [5.5, 6.7, 0.67, 0.67], clearing: [0, 0, 0]
+    )
   }
 }
 
@@ -47,17 +53,23 @@ placements {
   placement "forest-west-bank" {
     prototype: "forest-west-bank"
     position [-55, -2.2, -154]
-    solid { margin: 0 }
+    solid {
+      margin: 0
+    }
   }
   placement "forest-east-bank" {
     prototype: "forest-east-bank"
     position [93, -2.1, -163]
-    solid { margin: 0 }
+    solid {
+      margin: 0
+    }
   }
   placement "forest-ground-relief" {
     prototype: "forest-ground-relief"
     position [65, -0.18, -169]
-    solid { margin: 0 }
+    solid {
+      margin: 0
+    }
   }
 
   placement "forest-veteran" {
@@ -65,7 +77,9 @@ placements {
     position [43, 0, -144]
     surface: forestGround
     yawDegrees: 24
-    solid { margin: 0 }
+    solid {
+      margin: 0
+    }
   }
 
   for (p, i) in forestLogs {
@@ -75,7 +89,9 @@ placements {
       position [p[0], 0, p[1]]
       scale: 0.8 + 0.35 * forestVariation(i, 0.3)
       yawDegrees: p[2]
-      solid { margin: 0 }
+      solid {
+        margin: 0
+      }
     }
   }
   for (tile, i) in forestGrassTiles {

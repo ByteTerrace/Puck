@@ -402,7 +402,6 @@ public sealed class TestCommandLawTests {
                 authoringHeadroomScreens: 0
                 candidateCap: 1
                 candidateRadius: 1
-                derivedFaceScreens: 2
                 maxPlacementScale: 1
                 minPlacementScale: 1
                 previewDeadlineFrames: 1
@@ -488,7 +487,6 @@ public sealed class TestCommandLawTests {
                 authoringHeadroomScreens: 0
                 candidateCap: 1
                 candidateRadius: 1
-                derivedFaceScreens: 2
                 maxPlacementScale: 1
                 minPlacementScale: 1
                 previewDeadlineFrames: 1
