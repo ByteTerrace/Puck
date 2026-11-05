@@ -387,7 +387,38 @@ They disagree on two points. NVIDIA prefers committed resources for
 uncompressed resources on Direct3D 12 ([NV-MEM]) where AMD sub-allocates
 everything; Puck keeps render targets and depth committed and places the rest.
 NVIDIA aims for 5 to 10 `ExecuteCommandLists` a frame ([NV-CMD]) where AMD
-batches into one submission ([AMD-RDNA]); Puck submits 5 to 9 a frame.
+batches into one submission ([AMD-RDNA]); `world.counters gpu.queue` counts
+Puck's per frame (below).
+
+## Count queue work and record jobs
+
+`world.counters gpu.queue` (`GpuQueueWork`) counts every native execute, list,
+signal and present the process makes, on both backends and every device. Each
+execute is counted under who caused it (`graph`, `bake`, `probe`, `upload`,
+`transfer`, `readback`, `present`, `drain`) and why it reached the queue then
+(`unbatched`, `batch-end`, `door`, `fence-wait`, `external-wait`, `drain`,
+`empty-fence`); lists count under the category they were deferred with. Divide
+two readings' deltas by the `frames` delta (presents). `unattributed` nonzero
+past boot means a submitter that names no category: give it a
+`GpuQueueWork.Attribute` scope rather than reading it as a category of work. A
+Vulkan fence or timeline signal rides its `vkQueueSubmit`, so Vulkan's
+`signals` are carried completions, not separate calls.
+
+- **One frame should be about two executes plus its background jobs:** the graph
+  batch's `batch-end` and the presenter's own. Background `bake` and `probe` jobs
+  submit unbatched at their pumps so they start before the frame records.
+  `external-wait` is the cost to watch: on Direct3D 12 an outstanding external
+  wait must split the batch, since `ID3D12CommandQueue::Wait` holds everything
+  after it on the queue, so every sampling node would split the frame. The
+  submitters drop a wait whose fence already reached its value
+  (`GpuExternalWait.IsReached`), and `waits` / `waits-reached` count both.
+  `transfer.door` is an export's completion signal, which reads the queue door.
+- **`world.counters render.record`** (`RenderRecordWork`) gives the host time of
+  render nodes' record jobs per phase: preparation, recording and commit, the
+  serial record sum, and `longest-microseconds`, each frame's longest single
+  recording. Divided by `frames`, the longest is the critical path a frame would
+  keep with its jobs recorded side by side; its gap to the serial sum is all that
+  concurrent recording could save.
 
 ## Puck's open cases
 
@@ -395,10 +426,8 @@ batches into one submission ([AMD-RDNA]); Puck submits 5 to 9 a frame.
   resolve are unexamined ([rendering plan](../../../../docs/plans/rendering.md#gpu-submission-and-routed-worlds)).
 - **The main mesh pass shades several fragments a pixel,** with no
   front-to-back order and no depth prepass ([rendering plan](../../../../docs/plans/rendering.md#gpu-submission-and-routed-worlds)).
-- **Each node submits alone** (5 to 9 submissions a frame) and growing the
-  program region waits for the device to go idle
-  ([rendering plan](../../../../docs/plans/rendering.md#gpu-submission-and-routed-worlds),
-  [hot reload](../../../../docs/plans/open-items.md#edit-to-running-hot-reload-and-boot)).
+- **Growing the program region waits for the device to go idle**
+  ([hot reload](../../../../docs/plans/open-items.md#edit-to-running-hot-reload-and-boot)).
 - **Tick-bound views record on tick frames,** beside the tick itself; rated
   views and screens still share one phase ([simulation tick](../../../../docs/plans/open-items.md#engine-job-system)).
 - **The sky reduction's bank conflict,** **the views filter tile's 2-way

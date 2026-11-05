@@ -51,7 +51,8 @@ public enum GpuQueueCause : byte {
 /// <c>executes</c> and a call nothing named counts as <see cref="GpuQueueCategory.Unattributed"/>. A caller names itself
 /// with <see cref="Attribute"/> around the code that submits; a batch remembers each deferred list's category, so one
 /// batched execute counts its lists by their owners and the execute by what split the batch. <c>frames</c> counts
-/// presents, the interval a reading divides by.
+/// presents, the interval a reading divides by; <c>waits</c> counts external waits put on a queue and
+/// <c>waits-reached</c> those dropped because their fence had already reached its value.
 /// <para>The counts are process-wide: every device of every backend, on any thread. A Vulkan fence or timeline signal
 /// rides its <c>vkQueueSubmit</c>, so <c>signals</c> counts the completions a submission carries there, not separate
 /// native calls.</para>
@@ -66,6 +67,8 @@ public sealed class GpuQueueWork : IWorkCounterSource {
     private readonly WorkKind m_signals = Kind(name: "gpu.queue.signals");
     private readonly WorkKind m_frames = Kind(name: "gpu.queue.frames");
     private readonly WorkKind m_batches = Kind(name: "gpu.queue.batches");
+    private readonly WorkKind m_waits = Kind(name: "gpu.queue.waits");
+    private readonly WorkKind m_waitsReached = Kind(name: "gpu.queue.waits-reached");
     private readonly WorkKind[] m_listsBy;
     private readonly WorkKind[] m_signalsBy;
     private readonly WorkKind[] m_executesBy;
@@ -86,7 +89,7 @@ public sealed class GpuQueueWork : IWorkCounterSource {
                 m_executesBy[(category * causes) + cause] = Kind(name: $"gpu.queue.executes.{CategoryNames[category]}.{CauseNames[cause]}");
             }
         }
-        m_kinds = [m_frames, m_batches, m_executes, m_lists, m_signals, .. m_executesBy, .. m_listsBy, .. m_signalsBy];
+        m_kinds = [m_frames, m_batches, m_waits, m_waitsReached, m_executes, m_lists, m_signals, .. m_executesBy, .. m_listsBy, .. m_signalsBy];
         m_counts = new WorkCounterSet(name: "gpu.queue", kinds: m_kinds);
     }
 
@@ -139,6 +142,14 @@ public sealed class GpuQueueWork : IWorkCounterSource {
     public void Present() => m_counts.Count(m_frames);
     /// <summary>Counts one batch closed with deferred work.</summary>
     public void Batch() => m_counts.Count(m_batches);
+    /// <summary>Counts one external wait a submitter was handed: dropped because its fence had already reached its value,
+    /// or put on the queue.</summary>
+    /// <param name="reached">Whether the wait's fence had already reached its value.</param>
+    /// <returns><paramref name="reached"/>, so a submitter drops the wait in the same expression.</returns>
+    public bool Waits(bool reached) {
+        m_counts.Count(reached ? m_waitsReached : m_waits);
+        return reached;
+    }
 
     private void CountExecute(GpuQueueCause cause, GpuQueueCategory category) {
         m_counts.Count(m_executes);

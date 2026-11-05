@@ -36,7 +36,8 @@ public sealed unsafe class DirectXGpuQueueSubmitter : IGpuQueueSubmitter {
 
     /// <inheritdoc/>
     /// <remarks>Takes a <see cref="DirectXSharedFence"/> or a <see cref="DirectXExportableFence"/> of this
-    /// device.</remarks>
+    /// device. A wait still outstanding splits an open batch, since <c>ID3D12CommandQueue::Wait</c> holds everything after
+    /// it on the queue.</remarks>
     public void AddExternalWait(GpuExternalWait wait) {
         ArgumentOutOfRangeException.ThrowIfZero(wait.Value);
 
@@ -47,6 +48,7 @@ public sealed unsafe class DirectXGpuQueueSubmitter : IGpuQueueSubmitter {
             );
         }
 
+        if (GpuQueueWork.Process.Waits(reached: wait.IsReached)) { return; }
         // A wait belongs after earlier submissions, never before a producer that may signal it.
         m_batch.Split(cause: GpuQueueCause.ExternalWait);
 

@@ -56,6 +56,7 @@ public sealed class VulkanGpuQueueSubmitter(IVulkanDeviceContext deviceContext, 
                 paramName: nameof(wait)
             );
         }
+        if (GpuQueueWork.Process.Waits(reached: wait.IsReached)) { return; }
 
         if (m_waitCount == m_waitSemaphores.Length) {
             var capacity = Math.Max(
