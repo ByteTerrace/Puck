@@ -13365,6 +13365,10 @@ export type WorldViewDefaults = {
    */
   programs?: (WorldCameraProgram | null)[] | null;
   /**
+   * The ease into or out of the built-in seat ladder (the composition no authored layout selects), or null for the WorldViewTransition defaults. An authored layout brings its own envelope.
+   */
+  builtinTransition?: WorldViewTransition | null;
+  /**
    * Gets the authored named layouts. The absence-coalesce lives in the accessor for the same reason Elements's does.
    */
   layouts?: (WorldViewLayout | null)[] | null;
@@ -13552,6 +13556,17 @@ export type WorldViewSlot = {
    * The views.graphs row name whose output fills this slot, or null for a seat or camera slot.
    */
   instance?: string | null;
+};
+
+export type WorldViewTransition = {
+  /**
+   * How long the ease takes, in seconds; 0 is a cut.
+   */
+  seconds?: number;
+  /**
+   * The render scale (0, 1] applied to every slot mid-transition; 1 is no dip.
+   */
+  renderScale?: number;
 };
 
 /**
