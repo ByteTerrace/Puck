@@ -179,6 +179,16 @@ had just written, a second retry loop in a change built to remove one among
 them, so duplicates were created about as fast as they were found; naming the
 mechanism up front is cheaper than the review that catches it.
 
+A brief asks for the fix at the cause and never lists a stopgap as an
+acceptable direction (AGENTS.md: the proper fix is always preferred). A lane
+takes the cheapest option a brief offers: a rebake brief that listed
+"quantize the change" as one shape got whole-step water levels (`surfaceStep`)
+that visibly jump, when the cause was that a moved surface needed a new mesh at
+all. When the lead does not yet know the proper fix, the brief asks the lane
+to find it and say why, or names it as a design step before the code; a
+mitigation that lands in the meantime is recorded as one, beside the open item
+that removes it.
+
 A performance sweep partitions its lanes by target type or method, never by
 benchmark scenario: two scenarios share hot code, so lanes split by scenario
 rewrite the same method twice. ASP.NET's agent effort produced pairs of PRs
@@ -398,7 +408,9 @@ direction: concurrent whole-solution builds exhaust a machine's memory.
   (`relative:0.5` in `worlds/debug/sweep.json`); a lane runs it before hand-back
   and names any change over 10%. The lead regenerates the tip's report under the
   main checkout's ignored scratch directory (a `tip-sweep` folder) whenever the tip moves, and briefs
-  name that path. The lead runs it, and every lead verb, from a CLI built at the tip, and reinstalls the
+  name that path. The tip report is a sweep without `--baseline`: a report
+  recorded against an older one keeps that comparison's red statuses, and every
+  later landing then reads a status change it did not cause. The lead runs it, and every lead verb, from a CLI built at the tip, and reinstalls the
   global `puck` tool ([publishing](../../../docs/reference/cli.md#publishing)) once `puck --version`
   warns that it is stale: a stale global tool refuses the current sweep plan's keys, and a report taken
   against an old baseline blames the landing for the tip's own drift. A single-project `Puck.World`

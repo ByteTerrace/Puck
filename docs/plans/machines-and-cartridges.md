@@ -216,9 +216,10 @@ immutable content-admission policy the machine host invokes.
 
 **Delivers:** firmware split by origin: a hand-authored replacement image is
 source and its bytes stay committed beside their license, while an image
-generated from a program (`puck firmware hgb` and `puck firmware agb` build them)
-is a derived product, built on demand, removed from git, and never verified by a
-byte compare, so `--verify` is deleted; cold and fast
+generated from a program is a derived product. HGB startup images derive in
+process on demand; the AGB BIOS remains packaged under the measured toolchain
+[exception](../decisions/engine-design.md#a-derived-product-is-a-cache-never-the-truth).
+Neither has a byte-compare verify mode. Remaining qualification: cold and fast
 handoff, IRQ and services, model transitions, graphics and audio exercised with
 independent expected values; HGB's boot-mapping and model-change guard kept;
 AGB service coverage including stateful sequences, sound, and MultiBoot (the

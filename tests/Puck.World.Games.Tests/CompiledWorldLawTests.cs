@@ -193,6 +193,10 @@ public sealed class CompiledWorldLawTests {
         var cache = new CompiledWorldCache(chunks: chunks, directory: directory.PathOf(name: "state/compiled"));
         var valid = Compile(chunks: chunks, path: path);
 
+        Assert.NotEqual(expected: CompiledWorld.EngineBuild, actual: chunks.EngineBuild);
+        Assert.True(condition: chunks.Code.Reads(type: typeof(DocumentIdChunk)));
+        Assert.DoesNotContain(collection: chunks.Code.Members.Keys, filter: static member => member.Contains(value: "DocumentIdChunk.UnrelatedHelper", comparisonType: StringComparison.Ordinal));
+
         Assert.Throws<ArgumentException>(testCode: () => chunks.With(chunk: DocumentIdChunk.Instance));
         Assert.True(condition: CompiledWorld.TryDecode(container: out var container, content: valid, header: out var header, reason: out var reason), userMessage: reason);
         Assert.True(condition: container.TryFind(chunk: out var registered, code: DocumentIdChunk.Instance.Code));
@@ -220,6 +224,8 @@ internal sealed class DocumentIdChunk : ICompiledWorldChunk {
     private DocumentIdChunk() { }
 
     public static DocumentIdChunk Instance { get; } = new();
+
+    public static int UnrelatedHelper() => 37;
 
     public ChunkCode Code { get; } = ChunkCode.Parse(text: "DOCI");
     public IReadOnlyList<ChunkCode> DependsOn { get; } = [AssetChunk.Instance.Code];

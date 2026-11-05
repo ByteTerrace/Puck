@@ -159,7 +159,7 @@ machines: map(televisions, tv => {
   configuration {
     schema: "puck.humble-gaming-deck.configuration.v1"
     content {
-      path: "cartridges/deck/moving-sprite.nes"
+      path: "cartridges/deck/moving-sprite.deck"
     }
   }
 })

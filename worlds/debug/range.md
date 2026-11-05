@@ -122,7 +122,7 @@ rates no body.
   away. The debug world imports range.puck last, so the walkers take the
   population's lowest free slots, below the chess pieces, and no other body is
   renumbered.
-- Each screen's deck runs `cartridges/deck/moving-sprite.nes` at an outdoor LED
+- Each screen's deck runs `cartridges/deck/moving-sprite.deck` at an outdoor LED
   wall's 10,000 nits, so the picture reads in full sun.
 - Each window is a door into the garden, as the garden painting is
   (`counterpart: "arrival/glass"`). Walking into one crosses to the garden, and
