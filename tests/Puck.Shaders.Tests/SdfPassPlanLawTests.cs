@@ -6,7 +6,7 @@ namespace Puck.Shaders.Tests;
 
 /// <summary>
 /// The <c>sdf.world</c> package's fragment (<see cref="SdfWorldPackage.NativeFragment"/>), spliced into a view's graph by the
-/// graph compiler, is the one statement of an SDF view's dispatch set: the planner orders its passes mask, bake, the three
+/// graph compiler, is the one statement of an SDF view's dispatch set: the planner orders its passes the three
 /// shadow cascades, mesh, the depth pyramid, surface, views, sky and composite, the sky's field runs and the composite after the hits are
 /// shaded, and plans between them exactly the buffer transitions the kernels' reads and writes need, each after the pass
 /// that last wrote or read what the next writes or reads. Every scratch buffer is retained, one allocation shared by every
@@ -90,7 +90,7 @@ public sealed partial class SdfPassPlanLawTests {
     // Each stage declares exactly what it reads and writes: only the surface pass reads the mesh and cascade targets, and
     // every later stage reads the hit from the visibility record.
     // THE LAW: a view that skips shadows runs every pass but the cascades, holds none of their depths, and its surface
-    // pass reads only the mesh target, the depth pyramid and the bake samples, whichever fragment it starts from.
+    // pass reads only the mesh target and the depth pyramid, whichever fragment it starts from.
     [Fact]
     public void AShadowlessFragmentDropsTheCascadesTheirDepthsAndTheirReads() {
         string[] cascades = [

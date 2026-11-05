@@ -34,6 +34,15 @@ A sweep warms and measures frame signals with ordinary display-paced presentatio
 its capture tour enables lockstep separately. Do not enable still-capture lighting
 convergence before a normal frame window. It can relight the complete probe set
 every frame and exhaust the call before any signal is read.
+
+For per-tick headless counter comparisons, check the counter's scope first.
+`FixedStaticContactWork.Process` sums every solver in the process, whereas the
+registered rule counters belong to the boot server. `world.rate pause` pauses
+only the boot instance; neighboring worlds keep ticking. List them with
+`world.instance.status` and pause each through `world.rate pause instance:<name>`
+before the measured interval when comparing only the boot world's work. Use
+`world.at` for identical counter endpoints in both builds and compare deltas,
+not totals that include neighboring worlds' earlier work.
 ## The landing bar
 
 A queued World build can outlive a cancelled start. Do not change a checkout's

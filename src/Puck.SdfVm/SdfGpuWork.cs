@@ -10,7 +10,7 @@ namespace Puck.SdfVm;
 /// once its submission completes. The mesh bake's sampling is one (<see cref="SdfMeshBakeGpuWork"/>). Every member runs
 /// on the device's recording thread, the frame thread.
 /// </summary>
-internal interface ISdfGpuWorkClient : IDisposable {
+public interface ISdfGpuWorkClient : IDisposable {
     /// <summary>Takes the client's next job, or none: a job taken is recorded, submitted and answered, or abandoned.</summary>
     /// <param name="tables">The tables whose World set the job binds, holding the latest submitted upload.</param>
     /// <param name="job">The job, handed back to <see cref="Record"/> and then to <see cref="Complete"/> or
@@ -26,12 +26,14 @@ internal interface ISdfGpuWorkClient : IDisposable {
     void Record(object job, in SdfGpuWorkRecording recording);
     /// <summary>Answers a job whose submission completed with what it copied back. The slot stays the client's until it
     /// releases the readback (<see cref="SdfGpuWorkReadback.Release"/>), which it may do on any thread once it has read
-    /// it; the slot is reused only after that.</summary>
+    /// it; the slot is reused only after that. A successful return transfers ownership; a throwing completion revokes
+    /// the readback and abandons the job.</summary>
     /// <param name="job">The job.</param>
     /// <param name="readback">The bytes <see cref="SdfGpuWorkRecording.CopyToReadback"/> copied, released exactly
     /// once.</param>
     void Complete(object job, SdfGpuWorkReadback readback);
-    /// <summary>Hands a job back unanswered: its recording failed or the service is disposed before it completed.</summary>
+    /// <summary>Hands a job back unanswered: recording or completion failed, or the service is disposed before it
+    /// completed. The client must not throw from this cleanup.</summary>
     /// <param name="job">The job.</param>
     void Abandon(object job);
     /// <summary>Gets the bytes of the client's own buffers for its jobs, by the memory they live in.</summary>
@@ -40,49 +42,58 @@ internal interface ISdfGpuWorkClient : IDisposable {
 /// <summary>What a completed job of the background GPU work copied back (<see cref="ISdfGpuWorkClient.Complete"/>): the
 /// slot's readback, which its client reads and then releases, on any thread, giving the slot back to the service. The
 /// release is the client's acknowledgement: the slot's next job is taken only after it.</summary>
-internal sealed class SdfGpuWorkReadback {
-    private readonly ManualResetEventSlim m_released = new(initialState: true);
+public sealed class SdfGpuWorkReadback {
+    private readonly object m_gate = new();
+    private bool m_released;
     private IGpuReadbackBuffer? m_buffer;
 
-    internal SdfGpuWorkReadback(int slot) => Slot = slot;
+    // A new token for each job, never reset or handed out again. An old holder cannot release a later job.
+    internal SdfGpuWorkReadback(int slot, IGpuReadbackBuffer? buffer, int length) {
+        Slot = slot;
+        m_buffer = buffer;
+        Length = length;
+    }
 
     /// <summary>Gets the slot the job ran in, from zero to <see cref="SdfGpuWork.SlotCount"/>.</summary>
     public int Slot { get; }
     /// <summary>Gets the bytes the job copied back.</summary>
-    public int Length { get; private set; }
-    // Whether the client has released the readback since the service last handed it out.
-    internal bool Released => m_released.IsSet;
+    public int Length { get; }
+    internal bool Released { get { lock (m_gate) { return m_released; } } }
 
     /// <summary>Copies the bytes the job copied back into <paramref name="destination"/>; valid until
     /// <see cref="Release"/>.</summary>
     /// <param name="destination">The bytes to fill, at least <see cref="Length"/> long.</param>
     /// <exception cref="InvalidOperationException">The readback was released.</exception>
     public void Read(Span<byte> destination) {
-        if (m_released.IsSet || (m_buffer is not { } buffer)) { throw new InvalidOperationException(message: "A released readback is no longer the client's to read."); }
-        if (Length > 0) { buffer.Read(destination: destination[..Length]); }
+        lock (m_gate) {
+            if (m_released) { throw new InvalidOperationException(message: "A released readback is no longer the client's to read."); }
+            if (Length > 0) { m_buffer!.Read(destination: destination[..Length]); }
+        }
     }
     /// <summary>Gives the slot back to the service, once its client has read what it needs.</summary>
     /// <exception cref="InvalidOperationException">The readback was released already.</exception>
     public void Release() {
-        if (m_released.IsSet) { throw new InvalidOperationException(message: "A background GPU job's readback is released once."); }
-        m_buffer = null;
-        m_released.Set();
+        lock (m_gate) {
+            if (m_released) { throw new InvalidOperationException(message: "A background GPU job's readback is released once."); }
+            Revoke();
+        }
     }
 
-    // Hands the readback to a client: the slot's readback buffer and the bytes its job copied.
-    internal void HandOut(IGpuReadbackBuffer? buffer, int length) {
-        m_buffer = buffer;
-        Length = length;
-        m_released.Reset();
+    // A failed completion did not accept ownership. Serialize revocation with any read it started before throwing.
+    internal void Revoke() {
+        lock (m_gate) {
+            m_buffer = null;
+            m_released = true;
+            Monitor.PulseAll(m_gate);
+        }
     }
-    // Waits, on the host's event, until the client has released the readback.
-    internal void WaitReleased() => m_released.Wait();
-    internal void Dispose() => m_released.Dispose();
+    // There is no disposable event for a late release to race. The condition and the buffer share one gate.
+    internal void WaitReleased() { lock (m_gate) { while (!m_released) { Monitor.Wait(m_gate); } } }
 }
 /// <summary>A slot of the background GPU work a client records one job into (<see cref="ISdfGpuWorkClient.Record"/>),
 /// valid only during that call: its index, which a client's own per-slot resources follow, and its open command
 /// buffer.</summary>
-internal readonly ref struct SdfGpuWorkRecording {
+public readonly ref struct SdfGpuWorkRecording {
     private readonly SdfGpuWork m_owner;
     private readonly int m_slot;
 
@@ -131,6 +142,7 @@ public sealed class SdfGpuWork : IDisposable {
     // The GPU time, in seconds, an idle service may bank: an idle spell admits no more than this at once.
     private const double MostCreditSeconds = 0.02;
 
+    private readonly IGpuDeviceContext m_device;
     private readonly GpuDeviceServices m_gpu;
     private readonly Slot[] m_slots = new Slot[SlotCount];
     private readonly List<ISdfGpuWorkClient> m_clients = [];
@@ -138,6 +150,8 @@ public sealed class SdfGpuWork : IDisposable {
     private readonly string m_name;
     private int m_nextClient;
     private bool m_disposed;
+    private bool m_faulted;
+    private bool m_submissionFailed;
 
     private double m_credit = MostCreditSeconds;
     private long m_creditAt;
@@ -156,20 +170,22 @@ public sealed class SdfGpuWork : IDisposable {
     private long m_budgetHolds;
 
     /// <summary>Initializes a new instance of the <see cref="SdfGpuWork"/> class: a slot's command buffer, fence and
-    /// timestamp readback each, created on <paramref name="gpu"/>.</summary>
-    /// <param name="gpu">The device's services; the service records and submits through them on the recording
+    /// timestamp readback each, created on <paramref name="device"/>.</summary>
+    /// <param name="device">The device; the service records and submits through its services on the recording
     /// thread.</param>
     /// <param name="name">The owner's name, which the slots' objects are named for.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="gpu"/> or <paramref name="name"/> is
+    /// <exception cref="ArgumentNullException"><paramref name="device"/> or <paramref name="name"/> is
     /// <see langword="null"/>.</exception>
-    public SdfGpuWork(GpuDeviceServices gpu, string name) {
-        ArgumentNullException.ThrowIfNull(argument: gpu);
+    public SdfGpuWork(IGpuDeviceContext device, string name) {
+        ArgumentNullException.ThrowIfNull(argument: device);
         ArgumentNullException.ThrowIfNull(argument: name);
 
-        m_gpu = gpu;
+        m_device = device;
+        m_gpu = device.Services;
         m_name = name;
 
         using var scope = new GpuCreationScope();
+        var gpu = m_gpu;
 
         if (gpu.TimestampFactory?.Create(count: (2u * SlotCount), name: new GpuObjectName(detail: "timestamps", owner: name, part: "gpu-work")) is { } timestamps) {
             m_timestamps = scope.Own(created: timestamps);
@@ -178,8 +194,7 @@ public sealed class SdfGpuWork : IDisposable {
             m_slots[slot] = new Slot(
                 Commands: scope.Own(created: gpu.CommandPoolFactory.Create(name: new GpuObjectName(index: slot, owner: name, part: "gpu-work"))),
                 Fence: scope.Own(created: gpu.QueueSubmitter.CreateSubmissionFence()),
-                Times: scope.Own(created: gpu.BufferFactory.CreateReadback(name: new GpuObjectName(detail: "times", index: slot, owner: name, part: "gpu-work"), sizeBytes: (2 * sizeof(ulong)))),
-                Lease: new SdfGpuWorkReadback(slot: slot)
+                Times: scope.Own(created: gpu.BufferFactory.CreateReadback(name: new GpuObjectName(detail: "times", index: slot, owner: name, part: "gpu-work"), sizeBytes: (2 * sizeof(ulong))))
             );
         }
         scope.Complete();
@@ -188,8 +203,9 @@ public sealed class SdfGpuWork : IDisposable {
     /// <summary>Gets the jobs in flight now.</summary>
     public int InFlight => m_inFlight;
 
-    // Adds a job source the service takes jobs from in turn and disposes with itself.
-    internal void Add(ISdfGpuWorkClient client) {
+    /// <summary>Adds a job source the service takes jobs from in turn and disposes with itself.</summary>
+    /// <param name="client">The source, called only on the recording thread.</param>
+    public void Add(ISdfGpuWorkClient client) {
         ArgumentNullException.ThrowIfNull(argument: client);
         ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
         m_clients.Add(item: client);
@@ -204,12 +220,17 @@ public sealed class SdfGpuWork : IDisposable {
     public void Pump(SdfWorldTables tables) {
         ArgumentNullException.ThrowIfNull(argument: tables);
         ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
-
-        m_pumps++;
-        Poll();
-        if (m_clients.Count == 0) { return; }
-        if (!tables.BindsBackgroundWork) { m_unbound++; return; }
-        Refill(tables: tables);
+        if (m_faulted) { throw new InvalidOperationException("A failed background GPU service must be disposed before it can be replaced."); }
+        try {
+            m_pumps++;
+            Poll();
+            if (m_clients.Count == 0) { return; }
+            if (!tables.BindsBackgroundWork) { m_unbound++; return; }
+            Refill(tables: tables);
+        } catch {
+            m_faulted = true;
+            throw;
+        }
     }
 
     /// <summary>Describes the work done since the first job: jobs submitted and answered, their measured GPU time, the
@@ -238,19 +259,23 @@ public sealed class SdfGpuWork : IDisposable {
 
     /// <inheritdoc/>
     /// <remarks>Waits every job in flight, a host wait on its fence, then hands it back to its client unanswered; waits,
-    /// on the host's event, for every client still reading a readback to release it; and disposes the clients and the
+    /// on the host's monitor, for every client still reading a readback to release it; and disposes the clients and the
     /// slots.</remarks>
     public void Dispose() {
         if (m_disposed) { return; }
         m_disposed = true;
+        // A submit can execute commands and then fail to arm its fence. That fence proves nothing; drain the device
+        // before freeing the recorded resources, including on a backend that armed a fence but never submitted it.
+        if (m_submissionFailed) { m_device.TryWaitIdle(); }
         foreach (var slot in m_slots) {
             if (slot.Job is not { } job) { continue; }
-            try { slot.Fence.Wait(); } catch (DeviceLostException) { }
+            if (!m_submissionFailed) { try { slot.Fence.Wait(); } catch (DeviceLostException) { } }
             slot.Client!.Abandon(job: job);
             slot.Job = null;
             slot.Client = null;
         }
-        foreach (var slot in m_slots) { slot.Lease.WaitReleased(); }
+        m_inFlight = 0;
+        foreach (var slot in m_slots) { slot.Lease?.WaitReleased(); }
         foreach (var client in m_clients) { client.Dispose(); }
         m_clients.Clear();
         foreach (var slot in m_slots) {
@@ -258,7 +283,6 @@ public sealed class SdfGpuWork : IDisposable {
             slot.Times.Dispose();
             slot.Fence.Dispose();
             slot.Commands.Dispose();
-            slot.Lease.Dispose();
         }
         m_timestamps?.Dispose();
     }
@@ -274,13 +298,20 @@ public sealed class SdfGpuWork : IDisposable {
 
             var client = slot.Client!;
 
+            Settle(slot: slot);
+            var readback = new SdfGpuWorkReadback(slot: index, buffer: slot.Readback, length: (int)slot.ReadbackBytes);
+            slot.Lease = readback;
             slot.Job = null;
             slot.Client = null;
             if (--m_inFlight == 0) { m_busyTicks += (Stopwatch.GetTimestamp() - m_busySince); }
-            Settle(slot: slot);
-            m_answered++;
-            slot.Lease.HandOut(buffer: slot.Readback, length: (int)slot.ReadbackBytes);
-            client.Complete(job: job, readback: slot.Lease);
+            try {
+                client.Complete(job: job, readback: readback);
+                m_answered++;
+            } catch {
+                readback.Revoke();
+                client.Abandon(job: job);
+                throw;
+            }
         }
     }
     // Replaces a job's estimated charge with its measured GPU time, when the queue writes timestamps.
@@ -315,7 +346,7 @@ public sealed class SdfGpuWork : IDisposable {
         for (var index = 0; (index < SlotCount); index++) {
             var slot = m_slots[index];
 
-            if ((slot.Job is not null) || !slot.Lease.Released) { continue; }
+            if ((slot.Job is not null) || (slot.Lease is { Released: false })) { continue; }
             if (m_credit <= 0.0) { m_budgetHolds++; return; }
             if (!TryTake(tables: tables, client: out var client, estimate: out var estimate, job: out var job)) { return; }
             Submit(client: client, estimate: estimate, index: index, job: job, slot: slot);
@@ -344,8 +375,8 @@ public sealed class SdfGpuWork : IDisposable {
 
         slot.ReadbackBytes = 0;
         slot.Copied = false;
-        recorder.BeginCommandBuffer(commandBufferHandle: commandBuffer);
         try {
+            recorder.BeginCommandBuffer(commandBufferHandle: commandBuffer);
             recorder.BeginDebugGroup(commandBufferHandle: commandBuffer, label: $"{m_name} gpu-work");
             m_timestamps?.Reset(command: commandBuffer, count: 2, first: first);
             m_timestamps?.Write(command: commandBuffer, index: first);
@@ -363,9 +394,11 @@ public sealed class SdfGpuWork : IDisposable {
             client.Abandon(job: job);
             throw;
         }
-        m_gpu.QueueSubmitter.Submit(commandBufferHandles: [commandBuffer], fence: slot.Fence);
+        // Retain the taken job even if submission throws after executing commands but before arming its fence.
         slot.Job = job;
         slot.Client = client;
+        try { m_gpu.QueueSubmitter.Submit(commandBufferHandles: [commandBuffer], fence: slot.Fence); }
+        catch { m_submissionFailed = true; throw; }
         slot.Estimate = estimate;
         m_credit -= estimate;
         m_submitted++;
@@ -410,11 +443,11 @@ public sealed class SdfGpuWork : IDisposable {
     }
     // One slot: its command buffer, fence and timestamp readback, the job in it and its client, the readback its job
     // copied into and how many bytes, and the GPU seconds the job was charged.
-    private sealed class Slot(IGpuCommandPool Commands, IGpuSubmissionFence Fence, IGpuReadbackBuffer Times, SdfGpuWorkReadback Lease) {
+    private sealed class Slot(IGpuCommandPool Commands, IGpuSubmissionFence Fence, IGpuReadbackBuffer Times) {
         public IGpuCommandPool Commands { get; } = Commands;
         public IGpuSubmissionFence Fence { get; } = Fence;
         public IGpuReadbackBuffer Times { get; } = Times;
-        public SdfGpuWorkReadback Lease { get; } = Lease;
+        public SdfGpuWorkReadback? Lease { get; set; }
         public IGpuReadbackBuffer? Readback { get; set; }
         public ulong ReadbackBytes { get; set; }
         public bool Copied { get; set; }

@@ -650,6 +650,19 @@ laws exercise that boundary.
   abandoned (a recording that failed, a disposed service) returns its lattices
   to their groups, which dispatch them again, and counts its samples as
   `discarded`; `Answered` settles a batch once.
+- **Readback ownership belongs to a job, never a recycled token.** Every
+  completion gets a new `SdfGpuWorkReadback`; its gate serializes reading,
+  release and revocation. A stale or concurrent second release cannot free
+  the next occupant, and disposal waits for the reader before freeing native
+  storage. `SdfWorldTablesWorkLawTests` exercises those interleavings and
+  recording, submission, completion and device-loss failures. A throwing
+  completion never accepts ownership. Keep a submitted job tracked until its
+  timestamps have been read; a failed submission may have executed commands
+  without a usable fence, so disposal drains the device before abandoning it.
+  `DirectXSubmissionFenceLawTests` drives the actual fence through native
+  stand-ins at rollover: renew a drained fence before `UINT64_MAX`, which
+  `GetCompletedValue` reserves for device loss, never signal that value or
+  wrap to zero.
 - **Groups are keyed by geometry** (`SdfMeshGeometryBuilder`: instructions with
   side-table values for offsets, materials by place, a dynamic bound's radius
   alone, other slots by their rounded pose in the group's frame, lane-erosion
