@@ -349,12 +349,21 @@ direction: concurrent whole-solution builds exhaust a machine's memory.
   headroom (writers spend most of their time reading, not building), and holds
   or sheds them when memory runs low. Commit charge against the commit limit is
   the line that matters: allocations fail at the limit while physical memory
-  can still look free. A windowed debug World grows past ten gigabytes, so a
+  can still look free. The tooling holds that line for every heavy start, so a
+  lane polices nothing by hand: `puck lease heavy`, `puck lease gpu`,
+  `puck_world_start` (windowed as a device step, headless as an ordinary one),
+  `gate` and `affected` each wait, after they hold their lease, until the commit
+  charge is under its share of the limit (`HostLoadThresholds.CommitCapacityPercent`)
+  beside free memory and disk, and name what holds them
+  ([admission](../../../docs/reference/cli.md#puck-host-loadadmission-lines-for-the-machine)).
+  A windowed debug World grows past ten gigabytes, so a
   GPU lane closes its World between capture batches. A test run that holds
   gigabytes (the mesh-irradiance laws trace a whole hall and reached 9 GB
   private) is a heavy suite: the brief says to run it under `puck lease heavy`
-  and by name, never the whole class beside a windowed World; a windowed World
-  and such a run peaking together took the machine to 95% of its commit limit.
+  and by name, never the whole class beside a windowed World, because admission
+  counts only the memory already charged when a run starts, not the gigabytes it
+  is about to take: a windowed World and such a run peaking together took the
+  machine to 95% of its commit limit.
   The lead cannot stop another lane's process; it asks the lane. CPU saturation does not
   endanger lanes but voids timings: a lane whose evidence is a time (a tick, a
   frame, a bake) attributes cost by samples and counts while the machine is

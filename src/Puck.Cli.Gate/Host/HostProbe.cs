@@ -8,7 +8,7 @@ namespace Puck.Cli.Host;
 
 /// <summary>
 /// Reads the machine for <see cref="HostLoadMonitor"/>: CPU busy time since the previous reading, free physical memory,
-/// free disk on the checkout's drive, and the running processes <see cref="HostProcesses"/> classifies. It uses only
+/// the commit charge against its limit, free disk on the checkout's drive, and the running processes <see cref="HostProcesses"/> classifies. It uses only
 /// cheap operating-system queries (kernel time counters, the memory status, the process list and each process's command
 /// line) and never starts a process, so running it is never itself heavy or GPU work. Windows reads through kernel32 and
 /// ntdll; Linux through <c>/proc</c>.
@@ -133,8 +133,12 @@ public sealed partial class HostProbe(string checkoutRoot, IReadOnlyDictionary<s
             }
         }
 
+        var commit = Puck.Hosting.HostMemory.CommitBytes();
+
         return new HostSample(
             At: DateTimeOffset.UtcNow,
+            CommitChargeGb: (commit is { } charged ? (charged.Charge / 1073741824.0) : double.NaN),
+            CommitLimitGb: (commit is { } limited ? (limited.Limit / 1073741824.0) : double.NaN),
             CpuPercent: cpu,
             FreeDiskGb: FreeDiskGb(availableBytes: AvailableDiskBytes, directory: checkoutRoot),
             FreeRamGb: FreeRamGb(),

@@ -12,14 +12,32 @@ namespace Puck.Cli.Host;
 /// <c>-nodeReuse:false</c>).</param>
 /// <param name="HeavyTestHolder">A heavy test run (<see cref="HostProcesses.IsHeavyTest"/>) the reading process did not
 /// start, its name and id, or <see langword="null"/> when none runs.</param>
-public readonly record struct HostSample(DateTimeOffset At, double CpuPercent, double FreeRamGb, double FreeDiskGb, string? GpuHolder, int ReuseNodes, string? HeavyTestHolder = null);
+/// <param name="CommitChargeGb">The system's commit charge, in gigabytes; NaN when the platform reports none.</param>
+/// <param name="CommitLimitGb">The system's commit limit, in gigabytes; NaN when the platform reports none.</param>
+public readonly record struct HostSample(DateTimeOffset At, double CpuPercent, double FreeRamGb, double FreeDiskGb, string? GpuHolder, int ReuseNodes, string? HeavyTestHolder = null, double CommitChargeGb = double.NaN, double CommitLimitGb = double.NaN) {
+    /// <summary>Gets the commit charge as a percentage of the commit limit: allocations fail at 100 whatever physical memory
+    /// is free. NaN when the charge or the limit is unknown.</summary>
+    public double CommitPercent => ((double.IsFinite(d: CommitChargeGb) && double.IsFinite(d: CommitLimitGb) && (CommitLimitGb > 0)) ? (100.0 * CommitChargeGb / CommitLimitGb) : double.NaN);
+}
 /// <summary>The thresholds that turn readings into admission lines. A threshold left out is never judged, so with
 /// none the monitor reports only GPU transitions.</summary>
 /// <param name="CapacityCpuPercent">CAPACITY needs the CPU mean below this.</param>
 /// <param name="CapacityRamGb">CAPACITY needs free memory above this.</param>
 /// <param name="PressureRamGb">PRESSURE when free memory is below this.</param>
 /// <param name="PressureDiskGb">PRESSURE when free disk is below this.</param>
-public sealed record HostLoadThresholds(double? CapacityCpuPercent, double? CapacityRamGb, double? PressureRamGb, double? PressureDiskGb) {
+/// <param name="CapacityCommitPercent">CAPACITY needs the commit charge below this share of the commit limit, when the
+/// platform reports one.</param>
+public sealed record HostLoadThresholds(double? CapacityCpuPercent, double? CapacityRamGb, double? PressureRamGb, double? PressureDiskGb, double? CapacityCommitPercent = null) {
+    /// <summary>The share of the commit limit, in percent, a charge must stay under for the machine to take more work.
+    /// Allocation fails at the limit with physical memory still free, and one windowed World or heavy suite charges
+    /// ten gigabytes, so the margin is what keeps two of them from meeting there.</summary>
+    public const double CommitCapacityPercent = 75;
+
+    /// <summary>Gets whether a reading's commit charge is under <see cref="CapacityCommitPercent"/> of its limit. A
+    /// threshold left out, or a platform that reports no commit limit, never holds a reading back.</summary>
+    /// <param name="reading">The reading.</param>
+    /// <returns><see langword="true"/> when the commit charge leaves room for more work or is not judged.</returns>
+    public bool CommitHasHeadroom(HostSample reading) => ((CapacityCommitPercent is not { } limit) || double.IsNaN(d: reading.CommitPercent) || (reading.CommitPercent < limit));
     /// <summary>The free disk, in gigabytes, below which every machine is under pressure. A build and a suite write the
     /// same outputs whatever the machine's size, so this one threshold does not scale.</summary>
     public const double DiskPressureGb = 10;
@@ -42,7 +60,8 @@ public sealed record HostLoadThresholds(double? CapacityCpuPercent, double? Capa
     /// CPU threshold leaves idle logical processors for the work being admitted: three, but never fewer than 40% of the
     /// machine nor more than half of it. Free disk under <see cref="DiskPressureGb"/> is pressure on every machine. A
     /// 16 GB, six-thread machine gets CPU below 50%, more than 5 GB free and pressure under 2 GB; a 32 GB, 16-thread
-    /// machine gets CPU below 60%, more than 10 GB free and pressure under 4 GB.</summary>
+    /// machine gets CPU below 60%, more than 10 GB free and pressure under 4 GB. Capacity also needs the commit charge
+    /// under <see cref="CommitCapacityPercent"/> of the commit limit on every machine.</summary>
     /// <param name="installedRamGb">The installed physical memory, in gigabytes.</param>
     /// <param name="logicalProcessors">The logical processors.</param>
     /// <returns>The thresholds.</returns>
@@ -59,6 +78,7 @@ public sealed record HostLoadThresholds(double? CapacityCpuPercent, double? Capa
         var idle = Math.Clamp(max: (0.5 * logicalProcessors), min: (0.4 * logicalProcessors), value: 3.0);
 
         return new HostLoadThresholds(
+            CapacityCommitPercent: CommitCapacityPercent,
             CapacityCpuPercent: Math.Round(digits: 1, value: (100.0 * (1.0 - (idle / logicalProcessors)))),
             CapacityRamGb: ((installed * 5.0) / 16.0),
             PressureDiskGb: DiskPressureGb,
@@ -74,7 +94,8 @@ public sealed record HostLoadThresholds(double? CapacityCpuPercent, double? Capa
 /// <item><c>PRESSURE &lt;why&gt; …</c> when free memory or disk falls under its pressure threshold, and again when the
 /// reasons change;</item>
 /// <item><c>CAPACITY …</c> when, without pressure, the CPU mean over the last <c>cpuSamples</c> readings falls under its
-/// threshold and free memory is over its own, once that many readings exist;</item>
+/// threshold, free memory is over its own and the commit charge is under its share of the commit limit, once that many
+/// readings exist;</item>
 /// <item><c>LOADED …</c> when, without pressure, that window shows no capacity, so a watcher sees capacity end.</item>
 /// </list>
 /// One line per transition: a state that holds prints nothing more. PRESSURE wins over CAPACITY within one reading.
@@ -105,7 +126,8 @@ public sealed class HostLoadMonitor(HostLoadThresholds thresholds, int cpuSample
         }
 
         var mean = m_cpu.Average();
-        var values = $"cpu={mean.ToString(format: "0", provider: CultureInfo.InvariantCulture)}% freeRAM={Number(value: sample.FreeRamGb)}GB freeDisk={Number(value: sample.FreeDiskGb)}GB reuseNodes={sample.ReuseNodes.ToString(provider: CultureInfo.InvariantCulture)}";
+        var commit = (double.IsNaN(d: sample.CommitPercent) ? string.Empty : $" commit={sample.CommitPercent.ToString(format: "0", provider: CultureInfo.InvariantCulture)}%");
+        var values = $"cpu={mean.ToString(format: "0", provider: CultureInfo.InvariantCulture)}% freeRAM={Number(value: sample.FreeRamGb)}GB freeDisk={Number(value: sample.FreeDiskGb)}GB{commit} reuseNodes={sample.ReuseNodes.ToString(provider: CultureInfo.InvariantCulture)}";
         var busy = (sample.GpuHolder is not null);
 
         if (m_gpuBusy != busy) {
@@ -128,7 +150,7 @@ public sealed class HostLoadMonitor(HostLoadThresholds thresholds, int cpuSample
         HasCapacity = ((pressure.Count == 0) &&
             (thresholds.CapacityCpuPercent is { } cpu) &&
             (thresholds.CapacityRamGb is { } free) &&
-            (m_cpu.Count == cpuSamples) && (mean < cpu) && (sample.FreeRamGb > free));
+            (m_cpu.Count == cpuSamples) && (mean < cpu) && (sample.FreeRamGb > free) && thresholds.CommitHasHeadroom(reading: sample));
 
         // Capacity is judged only with both its thresholds and a full window; until then a reading without pressure has
         // no admission state, and the next one that does prints.
