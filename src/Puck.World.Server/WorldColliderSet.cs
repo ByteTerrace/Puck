@@ -58,8 +58,11 @@ public sealed partial class WorldColliderSet : IContactField {
     // holdable or tetherable today.
     private readonly IReadOnlyList<(WorldPlacement Placement, WorldPrototype Creation)> m_attachedRows;
     private readonly FixedStaticCollider[] m_colliders;
-    // Each m_colliders entry's world bounds, in the same order, so a sweep skips the colliders a body cannot reach.
-    private readonly FixedVector3?[] m_colliderExtents;
+    // m_colliders with each one's world bounds, compiled once: what every solve runs over.
+    private readonly FixedStaticColliderSet m_staticSet;
+    // m_attachedColliders with each one's world bounds, published from it at the end of every refresh or restore that
+    // rebuilds it, which are the only writers between solves.
+    private readonly FixedStaticColliderSet m_attachedSet = new();
 
     // A uniform grid over world X and Z of those bounds, so a sweep visits the colliders near its move rather than
     // all of them. A collider without bounds, or one spanning more than GridCellLimit cells, joins every query.
@@ -98,8 +101,8 @@ public sealed partial class WorldColliderSet : IContactField {
 
     private WorldColliderSet(FixedStaticCollider[] colliders, FixedStaticCollider[] holdableColliders, bool[] holdableGrantedByOverride, FixedWorldCollision tuning, IReadOnlyList<(WorldPlacement Placement, WorldPrototype Creation)> attachedRows) {
         m_colliders = colliders;
-        m_colliderExtents = Array.ConvertAll(array: colliders, converter: static collider => collider.WorldHalfExtent());
-        (m_colliderGrid, m_unboundedColliders) = BuildGrid(colliders: colliders, extents: m_colliderExtents);
+        m_staticSet = new FixedStaticColliderSet(colliders: colliders);
+        (m_colliderGrid, m_unboundedColliders) = BuildGrid(boxes: m_staticSet.Boxes);
         m_holdableColliders = holdableColliders;
         m_holdableGrantedByOverride = holdableGrantedByOverride;
         m_attachedRows = attachedRows;
@@ -786,6 +789,7 @@ public sealed partial class WorldColliderSet : IContactField {
         RefreshAttachedRows(population: population);
         FoldAttachedMoves(colliders: m_previousAttachedColliders, rows: m_previousAttachedColliderRows);
         FoldAttachedMoves(colliders: m_attachedColliders, rows: m_attachedColliderRows);
+        m_attachedSet.Refresh(colliders: System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: m_attachedColliders));
     }
 
     /// <summary>Takes the box that every attached row moved since the previous take swept through: the bounds of its
@@ -969,16 +973,18 @@ public sealed partial class WorldColliderSet : IContactField {
          ((int)((center.Z - extent.Z).Value >> GridCellShift)), ((int)((center.Z + extent.Z).Value >> GridCellShift)));
     private static long CellCount((int X0, int X1, int Z0, int Z1) range) =>
         (((((long)range.X1) - range.X0) + 1L) * ((((long)range.Z1) - range.Z0) + 1L));
-    private static (Dictionary<(int X, int Z), int[]> Grid, int[] Unbounded) BuildGrid(FixedStaticCollider[] colliders, FixedVector3?[] extents) {
+    private static (Dictionary<(int X, int Z), int[]> Grid, int[] Unbounded) BuildGrid(ReadOnlySpan<FixedColliderBox> boxes) {
         var cells = new Dictionary<(int X, int Z), List<int>>();
         var unbounded = new List<int>();
 
-        for (var index = 0; (index < colliders.Length); index++) {
-            if (extents[index] is not { } extent) {
+        for (var index = 0; (index < boxes.Length); index++) {
+            ref readonly var box = ref boxes[index];
+
+            if (!box.IsBounded) {
                 unbounded.Add(item: index);
                 continue;
             }
-            var range = CellRange(center: colliders[index].Center, extent: extent);
+            var range = CellRange(center: box.Center, extent: box.Extent);
 
             if (CellCount(range: range) > GridCellLimit) {
                 unbounded.Add(item: index);
@@ -1030,9 +1036,10 @@ public sealed partial class WorldColliderSet : IContactField {
 
         if (CellCount(range: range) > GridCellLimit) { return default; }
         m_candidates.Clear();
+        var boxes = m_staticSet.Boxes;
+
         foreach (var index in m_unboundedColliders) {
-            if ((m_colliderExtents[index] is not { } extent) || !m_solver.Misses(bodyCenter: regionCenter, bodyExtent: regionExtent,
-                colliderCenter: m_colliders[index].Center, colliderExtent: extent)) {
+            if (!m_solver.Misses(box: in boxes[index], bodyCenter: regionCenter, bodyExtent: regionExtent)) {
                 m_candidates.Add(item: index);
             }
         }
@@ -1040,8 +1047,7 @@ public sealed partial class WorldColliderSet : IContactField {
             for (var z = range.Z0; (z <= range.Z1); z++) {
                 if (!m_colliderGrid.TryGetValue(key: (x, z), value: out var cell)) { continue; }
                 foreach (var index in cell) {
-                    if (!m_solver.Misses(bodyCenter: regionCenter, bodyExtent: regionExtent,
-                        colliderCenter: m_colliders[index].Center, colliderExtent: m_colliderExtents[index]!.Value)) {
+                    if (!m_solver.Misses(box: in boxes[index], bodyCenter: regionCenter, bodyExtent: regionExtent)) {
                         m_candidates.Add(item: index);
                     }
                 }
@@ -1062,23 +1068,22 @@ public sealed partial class WorldColliderSet : IContactField {
         // ATTACHED solid rows ride the second span: RefreshAttached recomputes them once per tick, never here (Resolve
         // runs once PER BODY, so refreshing here would repeat that recompute for every other body in the world).
         m_solver.Resolve(
-            colliders: m_colliders,
-            dynamicColliders: System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: m_attachedColliders),
+            colliders: m_staticSet,
+            dynamicColliders: m_attachedSet,
             orientation: in orientation,
             position: ref position,
             up: in up,
             velocity: ref velocity,
             volumes: volumes,
-            colliderExtents: m_colliderExtents,
             candidates: Candidates(orientation: in orientation, position: position, previousPosition: position, volumes: volumes)
         );
     /// <inheritdoc/>
     public ContactResolution ResolveSweep(in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity,
         in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up) =>
-        m_solver.ResolveSweep(colliders: m_colliders,
-            dynamicColliders: System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: m_attachedColliders),
+        m_solver.ResolveSweep(colliders: m_staticSet,
+            dynamicColliders: m_attachedSet,
             previousPosition: in previousPosition, position: ref position, velocity: ref velocity,
-            orientation: in orientation, volumes: volumes, up: in up, colliderExtents: m_colliderExtents,
+            orientation: in orientation, volumes: volumes, up: in up,
             candidates: Candidates(orientation: in orientation, position: position, previousPosition: in previousPosition, volumes: volumes));
     /// <inheritdoc/>
     // Searches m_holdableColliders alone (never m_attachedColliders — see the field's own remarks), with a zero

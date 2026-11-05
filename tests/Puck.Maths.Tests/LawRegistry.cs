@@ -473,6 +473,12 @@ internal static partial class LawRegistry {
         EdgeFraction: 0.4,
         NeighborhoodFraction: 0.3
     );
+    private static readonly Domain LinearSolve3 = new(
+        Key: "linear-solve3",
+        Block: 512,
+        EdgeFraction: 0.4,
+        NeighborhoodFraction: 0.3
+    );
     private static readonly Domain SymmetricInvert2 = new(
         Key: "symmetric-invert2",
         Block: 256,

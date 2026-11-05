@@ -1186,10 +1186,15 @@ separate pure angular-velocity
 decay while grounded—rolling resistance, not slip friction. Rolling
 friction and both damping coefficients are authored per-second RATES,
 applied as `(1 - rate·dt)` each tick so the same value decays identically at
-any simulation rate; the rest thresholds and hold window
-(`collision.bodyContacts.rigidRestLinearSpeed`/`rigidRestAngularSpeed`/`rigidRestHoldSeconds`)
-are authored the same way, defaulting to the engine's original hard-coded
-values.
+any simulation rate; the rest speed and hold window
+(`collision.bodyContacts.rigidRestSpeed`/`rigidRestHoldSeconds`)
+are authored the same way. The rest speed reads the body's fastest point,
+linear speed plus angular speed times the bounding radius, the same quantity
+the substep count derives from, so a long piece turning slowly about its
+centre does not latch while its ends still move. Before contact, every awake
+non-spherical rigid body takes one implicit gyroscopic step a tick
+(`Puck.Physics.FixedGyroscopicStep`), so its angular momentum is not held
+fixed in world axes while it turns.
 
 Dynamic-vs-dynamic rigid contact rides the SAME broadphase/narrowphase
 `ResolveDynamicContacts` already runs for two `solid` kits
