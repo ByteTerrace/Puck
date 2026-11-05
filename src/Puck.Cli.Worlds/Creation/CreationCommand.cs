@@ -129,8 +129,8 @@ public static partial class CreationCommand {
             return 2;
         }
 
-        // Canonical, as a boot composes it, then in the engine frame, as the World's creation.shape reads it.
-        var document = CreationFrame.ToEngine(document: CreationCanonicalizer.Canonicalize(document: creation.Document, source: prototypeId).Document);
+        // Normalized and in the engine frame, as the World's creation.shape reads it.
+        var document = creation.EngineDocument;
         var shapes = (document.Shapes ?? []);
         var selected = new List<int>();
 

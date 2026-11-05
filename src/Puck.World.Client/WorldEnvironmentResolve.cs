@@ -60,6 +60,7 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
 
     private PresentedTick m_tick;
     private SdfExposure m_exposure = SdfExposure.Default;
+    private Vector4 m_lanes;
 
     /// <summary>Initializes a new instance of the <see cref="WorldEnvironmentResolve"/> class.</summary>
     /// <param name="domains">The guard that holds the last valid value of a bound value and reports its transitions.</param>
@@ -132,6 +133,7 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
                 sky: m_sky
             );
             WriteIndirect(mirror, definition.Render.Indirect);
+            m_lanes = Lanes(mirror: mirror, lanes: definition.Render.Lanes);
             m_exposure = WorldRenderExposure.Held(
                 exposure: definition.Render.Exposure,
                 value: (scalar, field) => Scalar(
@@ -172,7 +174,19 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
 
         ApplyShadows(lights: lights, mirror: mirror);
         ApplySunDiscLight(lights: lights, sky: sky);
-        return new WorldResolvedEnvironment(Indirect: m_indirect, Lights: lights, Sky: sky, Exposure: m_exposure);
+        return new WorldResolvedEnvironment(Indirect: m_indirect, Lights: lights, Sky: sky, Exposure: m_exposure, Lanes: m_lanes);
+    }
+
+    // The world's render lanes (render.lanes), each resolved through the one binding path; a missing entry reads zero.
+    private Vector4 Lanes(WorldStateMirror mirror, IReadOnlyList<BindableScalar>? lanes) {
+        if (lanes is null) { return Vector4.Zero; }
+        Span<float> values = stackalloc float[WorldRenderDefaults.MaxLanes];
+
+        for (var index = 0; (index < Math.Min(val1: lanes.Count, val2: values.Length)); index++) {
+            values[index] = Scalar(fallback: 0f, field: WorldValueFields.RenderLane, mirror: mirror, scalar: lanes[index], site: new WorldValueSite(Index: index, Section: "render.lanes"));
+        }
+
+        return new Vector4(x: values[0], y: values[1], z: values[2], w: values[3]);
     }
 
     // A point light's anchor rides the live dynamic-transform slot every call, never the cached resolution: an anchored
@@ -1089,4 +1103,6 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
 /// <param name="Sky">The sky.</param>
 /// <param name="Indirect">The source, solve and receiver controls.</param>
 /// <param name="Exposure">The camera exposure the frame's views map luminance to the display by.</param>
-public readonly record struct WorldResolvedEnvironment(SdfLights Lights, SdfSky Sky, WorldResolvedIndirect Indirect, SdfExposure Exposure);
+/// <param name="Lanes">The world's render lanes (<c>render.lanes</c>, <see cref="SdfLanes"/> 4 to 7) at the presented
+/// tick, which the frame carries as <see cref="SdfFrame.WorldLanes"/>.</param>
+public readonly record struct WorldResolvedEnvironment(SdfLights Lights, SdfSky Sky, WorldResolvedIndirect Indirect, SdfExposure Exposure, Vector4 Lanes = default);
