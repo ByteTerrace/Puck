@@ -78,6 +78,8 @@ public static class MotionRouteRun {
         if (backend is not null) { arguments.AddRange(["--backend", backend]); }
         if (cache is not null) { arguments.AddRange(["--cache-dir", cache]); }
 
+        WorldAdmission.Wait(step: "motion route", worldArguments: arguments);
+
         using var process = MotionWorldProcess.Start(artifact, arguments, repository, directory);
         using var controlBudget = new SweepBudget(TimeSpan.FromTicks(Math.Max(1, (deadline - timer.Elapsed).Ticks)), CancellationToken.None);
         MotionScriptResult Run(params string[] lines) {

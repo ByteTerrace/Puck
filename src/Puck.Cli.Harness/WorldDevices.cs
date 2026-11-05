@@ -10,4 +10,25 @@ public static class WorldDevices {
     /// <summary>The World arguments (<c>--devices none</c>) that open no gamepad and drop every OS key, text and pointer
     /// event before a seat sees it.</summary>
     public static string[] NoneArguments { get; } = ["--devices", "none"];
+
+    /// <summary>Whether a World started with these arguments opens a GPU device: it does unless it boots headless
+    /// (<c>--headless</c> alone or followed by a value other than <c>false</c>) or runs a test batch
+    /// (<c>--test-batch</c>), which boots every scenario headless.</summary>
+    /// <param name="arguments">The World's command-line arguments.</param>
+    /// <param name="start">The index of the first argument to read.</param>
+    /// <returns><see langword="true"/> when the World opens a device.</returns>
+    public static bool OpensDevice(IReadOnlyList<string> arguments, int start = 0) {
+        var opens = true;
+        var decided = false;
+
+        for (var index = start; (index < arguments.Count); index++) {
+            if (string.Equals(a: arguments[index], b: "--test-batch", comparisonType: StringComparison.OrdinalIgnoreCase)) { return false; }
+            if (!decided && string.Equals(a: arguments[index], b: "--headless", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+                decided = true;
+                opens = (((index + 1) < arguments.Count) && string.Equals(a: arguments[index + 1], b: "false", comparisonType: StringComparison.OrdinalIgnoreCase));
+            }
+        }
+
+        return opens;
+    }
 }

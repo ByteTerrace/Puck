@@ -131,16 +131,30 @@ public static class WorldOffscreenLeg {
         CliProcessResult process;
 
         try {
+            string[] worldArguments = [
+                artifact,
+                "--world", world,
+                .. WorldDevices.NoneArguments,
+                "--backend", backend,
+                "--exit-after-seconds", exitAfterSeconds.ToString(provider: System.Globalization.CultureInfo.InvariantCulture),
+                "--state-dir", StateDirectoryOf(backend: backend, runDirectory: runDirectory),
+                .. arguments,
+            ];
+
+            // The wait for the host's headroom spends the suite's budget like any other time, so the leg's ceiling is what it leaves.
+            WorldAdmission.Wait(step: verb, worldArguments: worldArguments);
+            remaining = CliProcess.RemainingBudget(budget: budget, clock: suiteClock);
+
+            if (remaining <= TimeSpan.FromSeconds(value: 1)) {
+                return new WorldOffscreenLegResult(
+                    Detail: $"the {budget.TotalSeconds:0}-second whole-suite budget was exhausted while the {backend} leg waited for the host's headroom.",
+                    Process: null,
+                    Status: WorldOffscreenLegStatus.NotRun
+                );
+            }
+
             process = CliProcess.RunCaptured(
-                arguments: [
-                    artifact,
-                    "--world", world,
-                    .. WorldDevices.NoneArguments,
-                    "--backend", backend,
-                    "--exit-after-seconds", exitAfterSeconds.ToString(provider: System.Globalization.CultureInfo.InvariantCulture),
-                    "--state-dir", StateDirectoryOf(backend: backend, runDirectory: runDirectory),
-                    .. arguments,
-                ],
+                arguments: worldArguments,
                 environment: environment,
                 fileName: "dotnet",
                 // quit ends the leg the moment the script has run instead of idling out the exit backstop.
