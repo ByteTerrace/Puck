@@ -168,7 +168,7 @@ A derived product is keyed by the code that makes it, computed by the running
 build and never recorded. The key is narrowed to the deriving call graph: the
 methods the derivation reaches, hashed from the running build, so an edit
 elsewhere in the same assembly does not move it. `CompiledWorldChunks` roots each
-registered concrete producer, including its codec and input reader, in the shared
+registered producer's contract methods and initialization, including its codec and input reader, in the shared
 `CodeClosure` walker. Its `EngineBuild` keys the header, so adding a custom producer
 includes that producer automatically. Applied metadata updates are filtered to the
 types the closure reads; an unrelated edit in the same assembly preserves the key.

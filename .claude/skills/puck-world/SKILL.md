@@ -5,7 +5,7 @@ description: "Maps Puck.World: .puck worlds, rules, grants, console verbs, exten
 
 # Puck.World
 
-`CompiledWorldChunks.Code` roots every registered concrete producer in the shared
+`CompiledWorldChunks.Code` roots every registered producer's contract methods and initialization in the shared
 `Puck.Assets.CodeClosure` walker. Its `EngineBuild` keys compiled worlds, including
 custom chunks, and filters hot-reload updates to the types the closure reads.
 Keep container/cache transport outside the producer closure; a whole assembly MVID

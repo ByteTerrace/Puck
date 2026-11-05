@@ -6,7 +6,7 @@ namespace Puck.HumbleGamingDeck.Forge;
 
 /// <summary>Prepares authored selections of the Deck's original diagnostic programs.</summary>
 public sealed class DeckContentProvider : IMachineContentProvider {
-    private static readonly Lazy<DerivedBytes> Cache = new(valueFactory: static () => new DerivedBytes(name: "deck", roots: [("Puck.HumbleGamingDeck.Forge", "Puck.HumbleGamingDeck.Forge.DeckTestCartridges", null)]));
+    private static readonly Lazy<DerivedBytes> Cache = new(valueFactory: static () => new DerivedBytes(name: "deck", roots: [("Puck.HumbleGamingDeck.Forge", "Puck.HumbleGamingDeck.Forge.DeckTestCartridges", "get_All")]));
     /// <inheritdoc/>
     public string EngineId => HumbleGamingDeckEngine.EngineId;
     /// <inheritdoc/>

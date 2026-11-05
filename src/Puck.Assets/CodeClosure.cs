@@ -38,7 +38,7 @@ public sealed partial class CodeClosure {
     /// <returns>Whether the closure reads it.</returns>
     public bool Reads(Type type) {
         ArgumentNullException.ThrowIfNull(argument: type);
-        var name = FileLocalChecksum().Replace(input: (type.FullName ?? type.Name), replacement: "__").Replace(oldChar: '+', newChar: '/');
+        var name = CanonicalTypeName(name: type.FullName ?? type.Name);
         return m_types.Contains(item: ((type.Assembly.GetName().Name ?? string.Empty) + "!" + name));
     }
     /// <summary>Walks roots in a build without loading its assemblies. Missing roots fail by name.</summary>
@@ -97,6 +97,8 @@ public sealed partial class CodeClosure {
     [System.Text.RegularExpressions.GeneratedRegex(pattern: "F[0-9A-F]{64}__")]
     private static partial System.Text.RegularExpressions.Regex FileLocalChecksum();
 
+    private static string CanonicalTypeName(string name) => FileLocalChecksum().Replace(input: name, replacement: "__").Replace(oldChar: '+', newChar: '/');
+
     // One assembly the walk reads: its metadata, its image and its types by full name.
     private sealed class Module {
         public Module(string name, byte[] image) {
@@ -115,7 +117,7 @@ public sealed partial class CodeClosure {
 
         public string FullName(TypeDefinitionHandle handle) {
             var type = Metadata.GetTypeDefinition(handle: handle);
-            var name = FileLocalChecksum().Replace(input: Metadata.GetString(handle: type.Name), replacement: "__");
+            var name = CanonicalTypeName(name: Metadata.GetString(handle: type.Name));
             var declaring = type.GetDeclaringType();
             var space = Metadata.GetString(handle: type.Namespace);
 
@@ -165,7 +167,7 @@ public sealed partial class CodeClosure {
                 var module = (Load(name: assembly) ?? throw new FileNotFoundException(message: $"'{directory}' holds no {assembly}.dll.", fileName: Path.Combine(path1: directory, path2: (assembly + ".dll"))));
 
                 Index(root: module);
-                Root(method: method, module: module, type: module.Types[type]);
+                Root(method: method, module: module, type: module.Types[CanonicalTypeName(name: type)]);
             }
             while ((m_methods.Count > 0) || (m_types.Count > 0)) {
                 if (m_types.TryDequeue(result: out var type)) {
