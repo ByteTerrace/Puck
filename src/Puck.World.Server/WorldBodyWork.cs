@@ -24,8 +24,9 @@ public sealed class WorldBodyWork : IWorkCounterSource {
     public static WorkKind Advances { get; } = new(name: "physics.bodies.advances", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting parked rigid bodies a contact-field change woke.</summary>
     public static WorkKind FieldWakes { get; } = new(name: "physics.bodies.field-wakes", unit: "count", workClass: WorkClass.Deterministic);
-    /// <summary>Gets the kind counting parked rigid bodies that observed a moving attached solid without waking, because
-    /// their bounds miss everything it moved.</summary>
+    /// <summary>Gets the kind counting parked rigid bodies that observed a bounded contact-field change without waking (a
+    /// moving attached solid, a response swap, a field lattice's changed cells), because their bounds miss everything it
+    /// changed.</summary>
     public static WorkKind FieldObserved { get; } = new(name: "physics.bodies.field-observed", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the ledger a host's populations count into. Declared after the kinds, which its counter set reads
     /// as it is created.</summary>

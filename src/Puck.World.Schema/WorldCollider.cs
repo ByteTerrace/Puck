@@ -375,4 +375,8 @@ public readonly record struct FixedWorldCollision(
         DefaultHold: collision.DefaultHold,
         GridCellSize: FixedQ4816.FromDouble(value: collision.GridCellSize)
     );
+    /// <summary>Gets how far past a body's collider surface a contact still acts on the body, in metres: two contact
+    /// skins (a carrier's support reaches that far) and one fixed-point step, beyond the single skin every other contact
+    /// keeps. A change to the contact field farther than this from a body cannot reach it.</summary>
+    public FixedQ4816 ContactReach => ((ContactSkin + ContactSkin) + FixedQ4816.Epsilon);
 }

@@ -1247,6 +1247,23 @@ lowers it to the same JSON as before, except where the look changes on purpose.
     claims exact 1-Lipschitz for every radius, while the Valley packet and
     `hazards.md` keep the CPU/GPU small-radius disagreement open. One of them
     is wrong.
+- [low] A bounded contact-field change still visits every parked rigid body.
+  `WorldPopulation.WakeSleepersNear` (`src/Puck.World.Server/WorldPopulation.Sleep.cs`)
+  box-tests each sleeper, and `ObserveFieldChange` writes each survivor's
+  `m_lastContactFieldVersion`, on every lattice step, carrier move and response
+  swap: the debug world counts 61 `physics.bodies.field-observed` a tick (488
+  sleepers every eight ticks as the pool's medium follows the river). The
+  candidates can come from the retained `SleepingIndex` query over the change
+  box, and a parked body's observation is the population's own
+  (`m_sleepFieldVersion`, which `ParkRigidIslands` already stamps), so the
+  checkpoint's `ContactFieldObservationCurrent` can be derived from it and the
+  per-sleeper write dropped. Done when a change that reaches nobody costs no
+  per-sleeper work and `puck test --reproduce` still matches over a restore.
+- [low] A non-rigid sleeper (`bodies.sleepAfterSeconds` above zero) still wakes
+  on every `ContactFieldVersion` move, bounded or not
+  (`WorldBody.TryDeferSleepingAdvance`, `src/Puck.World.Server/WorldBody.Sleep.cs`):
+  only parked rigid islands take the local wake. No live world enables non-rigid
+  sleep yet; the first one that does wants the same box test.
 
 Engine defaults that carry a look or a rule of play, which the authors rule
 wants authored with a neutral engine default (each one sits in C# or HLSL,

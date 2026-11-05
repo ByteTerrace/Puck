@@ -115,6 +115,7 @@ public sealed partial class WorldColliderSet : IContactField {
             GroundedThreshold: tuning.GroundedThreshold,
             MaxIterations: tuning.MaxIterations
         );
+        ContactReach = tuning.ContactReach;
     }
 
     /// <summary>Gets a counter that advances whenever <see cref="RefreshAttached"/> finds an attached solid row at a
@@ -122,9 +123,9 @@ public sealed partial class WorldColliderSet : IContactField {
     /// A sleeping body compares this against the value it last observed to decide whether a moving carrier woke it.</summary>
     public ulong AttachedRevision { get; private set; }
     /// <summary>Gets how far past a body's collider surface a collider of this set still acts on the body, in metres:
-    /// the reach of a carrier's support (<see cref="TryRideDisplacement"/>), two contact skins and one fixed-point step,
-    /// which is beyond the single skin every other contact keeps.</summary>
-    internal FixedQ4816 ContactReach => ((m_solver.ContactSkin + m_solver.ContactSkin) + FixedQ4816.Epsilon);
+    /// the tuning's <see cref="FixedWorldCollision.ContactReach"/>, the reach of a carrier's support
+    /// (<see cref="TryRideDisplacement"/>).</summary>
+    internal FixedQ4816 ContactReach { get; }
     /// <summary>Gets the number of solid boxes in the set.</summary>
     public int BoxCount { get; private init; }
     /// <summary>Gets the number of solid circular cylinders in the set.</summary>

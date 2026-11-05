@@ -131,7 +131,10 @@ public sealed partial class WorldPopulation {
     private void CompileSolidConsumers(WorldDefinition definition, WorldSolidField? solids, NavigationRuntime? previousNavigation) {
         m_contactCensus = null;
         m_censusDefinition = definition;
-        var derivedSolids = solids?.WithRegions(regions: m_fieldRegions, tuning: FixedWorldCollision.Compile(collision: definition.Collision));
+        var tuning = FixedWorldCollision.Compile(collision: definition.Collision);
+        var derivedSolids = solids?.WithRegions(regions: m_fieldRegions, tuning: tuning);
+
+        m_contactReach = tuning.ContactReach;
 
         if (
             (derivedSolids is null) &&

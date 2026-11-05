@@ -148,10 +148,12 @@ public sealed partial class WorldPopulation {
     /// narrates nothing.</summary>
     public WorldOutputHub? NarrationHub { get; set; }
     /// <summary>Gets a counter a sleeping body compares against the value it last observed to decide whether the
-    /// contact surface it sleeps against could now answer a query differently — an install (a document rebuild or an
-    /// adjacency source (re)configured), an attached solid row RefreshAttached found at a new pose
-    /// (<see cref="WorldColliderSet.AttachedRevision"/>), or a field-lattice repaint/medium step
-    /// (<see cref="FieldLattice.Revision"/>). The counter advances on every read that finds any of those terms
+    /// contact surface it sleeps against, or the medium it floats in, could now answer differently — an install (a
+    /// document rebuild or an adjacency source (re)configured), an attached solid row RefreshAttached found at a new pose
+    /// (<see cref="WorldColliderSet.AttachedRevision"/>), or a field-lattice cell a body reads
+    /// (<see cref="FieldLattice.BodyReadRevision"/>: a medium cell, and a solid cell when the contact provider unions the
+    /// lattices' solids). A lattice cell no body reads (a store, a solid under the analytic provider) never moves it.
+    /// The counter advances on every read that finds any of those terms
     /// different from the previous read and never moves backward, so an unchanged value proves none of them changed
     /// since it was last observed, across a rebuild that restarts the attached revision. Equality with a body's last
     /// observation is what a checkpoint keeps; the absolute value is process-local.</summary>
@@ -233,6 +235,9 @@ public sealed partial class WorldPopulation {
     // The world's compiled cos(collision.maxSlopeDegrees), handed to every body on the same terms as the frame
     // policy above so a hold and the ground it ends on cannot disagree about which faces are walkable.
     private FixedQ4816 m_walkableThreshold = FixedQ4816.One;
+    // The compiled collision tuning's ContactReach, compiled with the solid consumers: how far past a body's surface a
+    // contact-field change can act on it, whichever provider holds the field.
+    private FixedQ4816 m_contactReach;
 
     // The census of the definition the contact field was last compiled from, measured when read (ContactCensus).
     private WorldContactCensus? m_contactCensus;

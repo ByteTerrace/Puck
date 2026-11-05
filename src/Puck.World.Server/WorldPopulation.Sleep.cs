@@ -27,7 +27,7 @@ public sealed partial class WorldPopulation {
 
     private bool m_wakingIsland;
     private ulong m_sleepFieldVersion;
-    // The contact-field terms the sleepers last answered for (PrepareBodyStep), and whether they are known. A restore
+    // The contact-field terms the sleepers last answered for (RecordSleepFieldObservation), and whether they are known. A restore
     // whose sleepers observed an older field leaves them unknown, so its next change wakes every sleeper, as the
     // uninterrupted run's global change did.
     private (ulong Install, ulong Attached, ulong Fields) m_sleepFieldTerms;
@@ -102,31 +102,7 @@ public sealed partial class WorldPopulation {
         b.Add(item: left);
     }
     private ReadOnlySpan<int> PrepareBodyStep() {
-        var version = ContactFieldVersion;
-        var terms = m_contactFieldTerms;
-        var colliders = (m_baseContactField as WorldColliderSet);
-        var moved = (colliders?.TakeAttachedChange() ?? default);
-
-        if (m_sleepFieldVersion != version) {
-            // Only a moving attached solid changed the field, and every collider it moved has bounds: it can reach only
-            // the sleepers whose bounds meet the box those colliders swept. Any other change reaches every sleeper.
-            var local = (
-                m_sleepFieldTermsKnown &&
-                moved is { Any: true, Unbounded: false } &&
-                (terms.Install == m_sleepFieldTerms.Install) &&
-                (terms.Fields == m_sleepFieldTerms.Fields)
-            );
-
-            if (local) {
-                WakeSleepersNear(box: in moved, contactFieldVersion: version, margin: FieldWakeMargin(colliders: colliders!));
-            } else {
-                WorldBodyWork.Process.Add(amount: m_sleepingBodies.Count, kind: WorldBodyWork.FieldWakes);
-                while (m_sleepingBodies.Count > 0) { WakeBodyIsland(index: m_sleepingBodies.Min); }
-            }
-            m_sleepFieldVersion = version;
-        }
-        m_sleepFieldTerms = terms;
-        m_sleepFieldTermsKnown = true;
+        ObserveContactFieldChange();
         m_awakeBodies.CopyTo(array: m_stepBodies);
         foreach (var index in m_awakeBodies) { m_eventBodies.Add(item: index); }
         foreach (var index in m_awakeBodies) { m_rigidNeighbours.Remove(key: index); }
@@ -135,8 +111,57 @@ public sealed partial class WorldPopulation {
         }
         return m_stepBodies.AsSpan(start: 0, length: m_awakeBodies.Count);
     }
+    /// <summary>Settles the parked rigid bodies on the field lattices' step, right after
+    /// <see cref="WorldTick.StepFields"/>: the sleepers a changed cell can reach wake to join the next tick's
+    /// integration, and the rest observe the change, so the tick ends with no sleeper behind the lattices and a
+    /// checkpoint taken there restores the same continuation. Any other change still owed (an install, an attached
+    /// move) is left whole to the next <see cref="PrepareBodyStep"/>, which settles every term together.</summary>
+    internal void ObserveFieldSteps() {
+        var version = ContactFieldVersion;
+
+        if ((m_sleepFieldVersion == version) || !m_sleepFieldTermsKnown ||
+            (m_contactFieldTerms.Install != m_sleepFieldTerms.Install) || (m_contactFieldTerms.Attached != m_sleepFieldTerms.Attached)) {
+            return;
+        }
+        ObserveContactFieldChange();
+    }
+    // Wakes every sleeper a change since the sleepers last observed the field can reach, then records the observation.
+    // A change bounded to boxes (attached colliders that moved, regions whose body-read cells changed) reaches only the
+    // sleepers whose bounds, grown by FieldWakeMargin, meet the box; an install, an unbounded collider, an attached move
+    // without a box, or sleepers whose observation is unknown (a restore that found one behind) reach every sleeper.
+    private void ObserveContactFieldChange() {
+        var version = ContactFieldVersion;
+        var terms = m_contactFieldTerms;
+        var box = ((m_baseContactField as WorldColliderSet)?.TakeAttachedChange() ?? default);
+
+        if (m_sleepFieldVersion != version) {
+            var local = (
+                m_sleepFieldTermsKnown &&
+                (terms.Install == m_sleepFieldTerms.Install) &&
+                (box.Any || (terms.Attached == m_sleepFieldTerms.Attached))
+            );
+
+            if (local && (terms.Fields != m_sleepFieldTerms.Fields)) { FoldFieldRegionChanges(box: ref box); }
+            if (local && box is { Any: true, Unbounded: false }) {
+                WakeSleepersNear(box: in box, contactFieldVersion: version, margin: FieldWakeMargin());
+            } else {
+                WorldBodyWork.Process.Add(amount: m_sleepingBodies.Count, kind: WorldBodyWork.FieldWakes);
+                while (m_sleepingBodies.Count > 0) { WakeBodyIsland(index: m_sleepingBodies.Min); }
+            }
+            m_sleepFieldVersion = version;
+        }
+        RecordSleepFieldObservation(known: true);
+    }
+    // Records what the sleepers now stand observed against: the contact-field terms and each region's body-read stamp,
+    // taken together so the next change names what moved since. Every place that settles the sleepers records through
+    // here, so the terms and the region stamps can never describe different moments.
+    private void RecordSleepFieldObservation(bool known) {
+        m_sleepFieldTerms = m_contactFieldTerms;
+        m_sleepFieldTermsKnown = known;
+        RecordFieldRegionRevisions();
+    }
     // Wakes, island by island in slot order, every sleeper whose bounds grown by the margin meet the box; every other
-    // sleeper observes the change, since no collider it could touch moved.
+    // sleeper observes the change, since nothing it could reach changed.
     private void WakeSleepersNear(in WorldColliderBox box, ulong contactFieldVersion, FixedQ4816 margin) {
         var before = m_sleepingBodies.Count;
 
@@ -147,10 +172,10 @@ public sealed partial class WorldPopulation {
         foreach (var index in m_fieldWakes) { WakeBodyIsland(index: index); }
         ObserveFieldChange(contactFieldVersion: contactFieldVersion, sleepersBefore: before);
     }
-    // How far past a sleeper's broadphase radius a changed collider of the set still reaches it: the farthest the set's
-    // contact acts (ContactReach) plus the travel of a rigid body's downward support probe (RefreshRigidStaticSupport),
-    // so a body a moved collider could touch or support is never left asleep.
-    private FixedQ4816 FieldWakeMargin(WorldColliderSet colliders) => (colliders.ContactReach + m_rigidContactPolicy.SubstepMinimumTravel);
+    // How far past a sleeper's broadphase radius a change still reaches it: the farthest a contact acts (the tuning's
+    // ContactReach) plus the travel of a rigid body's downward support probe (RefreshRigidStaticSupport), so a body a
+    // moved collider or a changed lattice cell could touch or support is never left asleep.
+    private FixedQ4816 FieldWakeMargin() => (m_contactReach + m_rigidContactPolicy.SubstepMinimumTravel);
     private static bool FieldChangeReaches(in WorldColliderBox box, WorldBody body, FixedQ4816 margin) =>
         box.Meets(position: body.FixedPosition, reach: (body.BroadphaseRadius + margin));
     // Every sleeper still parked observes the change, and the counts record what it woke and what it left asleep.
@@ -239,8 +264,7 @@ public sealed partial class WorldPopulation {
             m_awakeBodies.Remove(item: index);
             m_sleepingBodies.Add(item: index);
         }
-        m_sleepFieldTerms = m_contactFieldTerms;
-        m_sleepFieldTermsKnown = !pendingFieldWake;
+        RecordSleepFieldObservation(known: !pendingFieldWake);
         if (pendingFieldWake) { m_sleepFieldVersion = unchecked((ContactFieldVersion - 1UL)); }
         foreach (var row in checkpoint.SleepingGravity) {
             if (m_sleepingBodies.Contains(item: row.Body)) { m_sleepGravity.Add(key: row.Body, value: row.Acceleration); }
