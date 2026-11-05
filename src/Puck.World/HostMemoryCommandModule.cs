@@ -74,12 +74,15 @@ internal sealed class HostMemoryCommandModule(IAllocator allocator, IEnumerable<
         );
     }
 
+    private static readonly CommandForms HostMemoryForms = CommandForms.Of("host.memory", "owners [limit]", "collect", "budget <bytes|auto>");
+
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
             audience: CommandAudience.Operator,
             bindability: CommandBindability.Unbindable,
-            description: "Reads process working set/private bytes, uptime and managed heap generations in MiB, then the process account's live, reserved, cached, retirement and metadata bytes, budget/headroom, and allocator committed/reserved bytes, then the JIT's compiled-method count, IL bytes and compilation time so far. Reservations are future admission promises, not allocated bytes. host.memory owners [limit] reads one atomic charged/reserved-owner census (default 20 largest rows, 0 all), including categories, actual peaks, future promises and disposed owners whose storage is still held; omitted totals reconcile the displayed rows. Registered memory.* backend counters follow as separate observations, with aperture bytes already included in device-local bytes; these overlapping views do not establish a unified physical total. host.memory collect trims cache claims, compacts the LOH and asks the native allocator to collect (under --debug-allocator, checking every quarantined block first); active consumers retain their storage, and deferred-trims counts cache trims still waiting for their owner thread (a residency services its own on its next frame), so a reading taken right after collect can still hold their storage. host.memory budget <bytes|auto> lowers the background admission budget or restores the machine-derived budget, and a lowered budget trims the caches; existing owners keep their allocations, and a bake group that does not fit waits while others of its bake are admitted, and is admitted alone once none is, so a bake always settles.",
+            description: $"Reads process working set/private bytes, uptime and managed heap generations in MiB, then the process account's live, reserved, cached, retirement and metadata bytes, budget/headroom, and allocator committed/reserved bytes, then the JIT's compiled-method count, IL bytes and compilation time so far; with an argument it takes the forms {HostMemoryForms.Spelling}. Reservations are future admission promises, not allocated bytes. owners reads one atomic charged/reserved-owner census (default 20 largest rows, 0 all), including categories, actual peaks, future promises and disposed owners whose storage is still held; omitted totals reconcile the displayed rows. Registered memory.* backend counters follow as separate observations, with aperture bytes already included in device-local bytes; these overlapping views do not establish a unified physical total. collect trims cache claims, compacts the LOH and asks the native allocator to collect (under --debug-allocator, checking every quarantined block first); active consumers retain their storage, and deferred-trims counts cache trims still waiting for their owner thread (a residency services its own on its next frame), so a reading taken right after collect can still hold their storage. budget lowers the background admission budget or restores the machine-derived budget, and a lowered budget trims the caches; existing owners keep their allocations, and a bake group that does not fit waits while others of its bake are admitted, and is admitted alone once none is, so a bake always settles.",
+            forms: HostMemoryForms,
             handler: (_, args) => {
                 if ((args.Count is 1 or 2) && args.Is(index: 0, value: "owners")) {
                     var limit = 20;
@@ -113,7 +116,7 @@ internal sealed class HostMemoryCommandModule(IAllocator allocator, IEnumerable<
                     return new CommandResult(Output: Describe());
                 }
 
-                return CommandResult.Error(output: "[host.memory: expects no argument, owners [limit], collect, or budget <bytes|auto>]");
+                return HostMemoryForms.Refuse(args: in args);
             },
             name: "host.memory"
         );

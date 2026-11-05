@@ -36,6 +36,8 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
     private static readonly CommandForms WorldGrantRemoveForms = CommandForms.Of(verb: "world.grant.remove", WorldGrantCommandModule.RevokeForm);
     private static readonly CommandForms WorldPopulationDefaultsForms = CommandForms.Of(verb: "world.population.defaults", "<local> <network>");
     private static readonly CommandForms WorldPlacementGetForms = CommandForms.Of(verb: "world.placement.get", "<id>");
+    private static readonly CommandForms WorldUndoForms = CommandForms.Of(verb: "world.undo", "[n]");
+    private static readonly CommandForms WorldSaveForms = CommandForms.Of(verb: "world.save", "[path]");
     private static readonly CommandForms WorldLoadForms = CommandForms.Of(verb: "world.load", "<path> [force]");
     private static readonly CommandForms WorldTextForms = CommandForms.Of(verb: "world.text", "[font]");
     // Buffer a mutation over the link and return a quiet ack — the server prints the loud accept/reject line when the
@@ -331,7 +333,8 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
         );
         yield return Simulation(
             name: "world.undo",
-            description: "Undoes the last n applied mutations (default 1) by replaying the journal minus its tail through the same apply path: world.undo [n]. The journal IS the edit history; replay IS the undo engine. Refused by name, naming host.journalDepth, when n reaches past what a bounded journal has kept — entries beyond that horizon already compacted into the base and cannot be replayed.",
+            description: $"Undoes the last n applied mutations (default 1) by replaying the journal minus its tail through the same apply path: {WorldUndoForms.Spelling}. The journal IS the edit history; replay IS the undo engine. Refused by name, naming host.journalDepth, when n reaches past what a bounded journal has kept — entries beyond that horizon already compacted into the base and cannot be replayed.",
+            forms: WorldUndoForms,
             handler: (context, args) => {
                 if (scheduleRoot.RefuseInsideArmedRun(
                     definition: server.Definition,
@@ -363,7 +366,8 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.save",
-            description: "Writes a SESSION SNAPSHOT of the live world to a file in canonical form (stable member order, invariant numbers, LF newlines, one trailing newline) and compacts the journal (the saved definition becomes the new base, dirty → 0): world.save [path]. The snapshot is the AUTHORED document: the live definition (mutations included), with a moved session lever folded into the section it belongs to when the document authors that section (render levers into render, the master volume into audio, the present target into host, the peer-source default into bodies, magazine selectors into screens) and the host's named machine declarations into machines; a section the document omits stays omitted, and an untouched section is written as authored. No argument writes back to the loaded world file. A .puck target is saved into its source tree: each changed authored node is rewritten in the source that authors it (an import's in the import, a value read from a let in the let), unrelated text is retained, the simulation's state stays as authored, and the recomposed snapshot is proved before writing. A template, compile-time for or module-generated row refuses by name; a generated duplicate requires an authored id. A refused edit can be saved to a JSON target declaring the source as its basis. A target file naming a basis stays a delta: the write is the proved minimal difference over its composed basis chain, and the echo names the preserved basis (or why the save degraded to flat).",
+            description: $"Writes a SESSION SNAPSHOT of the live world to a file in canonical form (stable member order, invariant numbers, LF newlines, one trailing newline) and compacts the journal (the saved definition becomes the new base, dirty → 0): {WorldSaveForms.Spelling}. The snapshot is the AUTHORED document: the live definition (mutations included), with a moved session lever folded into the section it belongs to when the document authors that section (render levers into render, the master volume into audio, the present target into host, the peer-source default into bodies, magazine selectors into screens) and the host's named machine declarations into machines; a section the document omits stays omitted, and an untouched section is written as authored. No argument writes back to the loaded world file. A .puck target is saved into its source tree: each changed authored node is rewritten in the source that authors it (an import's in the import, a value read from a let in the let), unrelated text is retained, the simulation's state stays as authored, and the recomposed snapshot is proved before writing. A template, compile-time for or module-generated row refuses by name; a generated duplicate requires an authored id. A refused edit can be saved to a JSON target declaring the source as its basis. A target file naming a basis stays a delta: the write is the proved minimal difference over its composed basis chain, and the echo names the preserved basis (or why the save degraded to flat).",
+            forms: WorldSaveForms,
             handler: (context, args) => {
                 if (scheduleRoot.RefuseInsideArmedRun(
                     definition: server.Definition,

@@ -33,6 +33,9 @@ internal sealed class WorldWheelCommandModule(PlayerRoster roster, WorldWheelFee
 
     private readonly WorldWheelFeed? m_feed = feed;
     private readonly PlayerRoster m_roster = roster;
+    private static readonly CommandForms PlayerWheelRingForms = CommandForms.Of(verb: RingCommand, "[next|prev] [player]");
+    private static readonly CommandForms PlayerWheelCommitForms = CommandForms.Of(verb: CommitCommand, "[player]");
+    private static readonly CommandForms PlayerWheelCancelForms = CommandForms.Of(verb: CancelCommand, "[player]");
     private static readonly CommandForms WorldViewWheelForms = CommandForms.Of(verb: "world.view.wheel", "[<player>]");
 
     private CommandResult CancelHandler(CommandContext context, WireArgs args) {
@@ -263,7 +266,8 @@ internal sealed class WorldWheelCommandModule(PlayerRoster roster, WorldWheelFee
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: RingCommand,
-            description: "Cycles an Explicit open radial menu's ACTIVE ring (wrapping): player.wheel.ring [next|prev] [player] (player 1..4, default 1). Authors may bind any digital source with a constant Axis1D direction; mouse-wheel motion cycles the pointer seat too. REFUSES when no radial is open or its ring selection is neutral-relative Excursion.",
+            description: $"Cycles an Explicit open radial menu's ACTIVE ring (wrapping): {PlayerWheelRingForms.Spelling} (player 1..4, default 1). Authors may bind any digital source with a constant Axis1D direction; mouse-wheel motion cycles the pointer seat too. REFUSES when no radial is open or its ring selection is neutral-relative Excursion.",
+            forms: PlayerWheelRingForms,
             handler: RingHandler,
             // Every binding row targeting this verb carries a constant Axis1D value — declared so
             // BindingVocabularyCheck admits the rows (the world.row.step delta-fold precedent).
@@ -272,13 +276,15 @@ internal sealed class WorldWheelCommandModule(PlayerRoster roster, WorldWheelFee
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: CommitCommand,
-            description: "Commits the open radial menu: player.wheel.commit [player] (player 1..4, default 1) — queues the hovered sector's compiled activation in that seat's deterministic lane, or cancels when nothing is selected. Authors decide which opener releases commit. A release is deferred while another source still holds the same radial open.",
+            description: $"Commits the open radial menu: {PlayerWheelCommitForms.Spelling} (player 1..4, default 1) — queues the hovered sector's compiled activation in that seat's deterministic lane, or cancels when nothing is selected. Authors decide which opener releases commit. A release is deferred while another source still holds the same radial open.",
+            forms: PlayerWheelCommitForms,
             handler: CommitHandler
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: CancelCommand,
-            description: "Cancels the open radial without activating a sector: player.wheel.cancel [player]. Bind any desired key or gamepad button on a radial hold page.",
+            description: $"Cancels the open radial without activating a sector: {PlayerWheelCancelForms.Spelling}. Bind any desired key or gamepad button on a radial hold page.",
+            forms: PlayerWheelCancelForms,
             handler: CancelHandler
         );
         yield return CommandDefinition.WithWireArgs(

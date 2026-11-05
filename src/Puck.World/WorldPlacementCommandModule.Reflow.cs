@@ -5,6 +5,8 @@ using Puck.World.Protocol;
 namespace Puck.World;
 
 internal sealed partial class WorldPlacementCommandModule {
+    private static readonly CommandForms WorldReflowPreviewForms = CommandForms.Of(verb: "world.reflow.preview", "<template|request-json>");
+
     private CommandResult ReflowQuery(WorldQuery query, Principal principal) {
         if (link is not IPrincipalServerLink attributed) {
             return CommandResult.Error(output: "[world.reflow: this link cannot attribute authoring queries]");
@@ -22,9 +24,10 @@ internal sealed partial class WorldPlacementCommandModule {
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: "world.reflow.preview",
-            description: "Starts bounded background planning. Usage: world.reflow.preview <template|request-json>. A request can include seed edits and an explicit placement group. Review status before committing; previews expire after five minutes.",
+            description: $"Starts bounded background planning: {WorldReflowPreviewForms.Spelling}. A request can include seed edits and an explicit placement group. Review status before committing; previews expire after five minutes.",
+            forms: WorldReflowPreviewForms,
             handler: (context, args) => {
-                if (args.Count == 0) { return CommandResult.Error(output: "usage: world.reflow.preview <template|request-json>"); }
+                if (args.Count == 0) { return WorldReflowPreviewForms.Refuse(args: in args); }
                 WorldPlacementReflowRequest request;
                 var text = WorldCommandArguments.Raw(
                     args: args,
@@ -42,7 +45,7 @@ internal sealed partial class WorldPlacementCommandModule {
                         return CommandResult.Error(output: $"[world.reflow: {exception.Message}]");
                     }
                 } else {
-                    if (args.Count != 1) { return CommandResult.Error(output: "usage: world.reflow.preview <template|request-json>"); }
+                    if (args.Count != 1) { return WorldReflowPreviewForms.Refuse(args: in args); }
                     request = new WorldPlacementReflowRequest(TemplateId: text);
                 }
                 return ReflowQuery(
@@ -54,32 +57,30 @@ internal sealed partial class WorldPlacementCommandModule {
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: "world.reflow.status",
-            description: "Reviews proposed positions, growth, price, and constraints. Usage: world.reflow.status.",
-            handler: (context, args) => ((args.Count == 0)
-            ? ReflowQuery(
+            description: "Reviews proposed positions, growth, price, and constraints.",
+            handler: (context, args) => (CommandResult.RequireNoArguments(args: in args, verb: "world.reflow.status")
+                ?? ReflowQuery(
                     new WorldQuery.ReflowStatus(),
                     context.Principal
-                )
-            : CommandResult.Error(output: "usage: world.reflow.status"))
+                ))
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: "world.reflow.cancel",
-            description: "Discards the cached plan without changing the world or paying. Usage: world.reflow.cancel.",
-            handler: (context, args) => ((args.Count == 0)
-            ? ReflowQuery(
+            description: "Discards the cached plan without changing the world or paying.",
+            handler: (context, args) => (CommandResult.RequireNoArguments(args: in args, verb: "world.reflow.cancel")
+                ?? ReflowQuery(
                     new WorldQuery.ReflowCancel(),
                     context.Principal
-                )
-            : CommandResult.Error(output: "usage: world.reflow.cancel"))
+                ))
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: "world.reflow.commit",
             routing: CommandRouting.Simulation,
-            description: "Submits the reviewed growth, layout, and payment as one guarded batch. Usage: world.reflow.commit.",
+            description: "Submits the reviewed growth, layout, and payment as one guarded batch.",
             handler: (context, args) => {
-                if (args.Count != 0) { return CommandResult.Error(output: "usage: world.reflow.commit"); }
+                if (CommandResult.RequireNoArguments(args: in args, verb: "world.reflow.commit") is { } refusal) { return refusal; }
                 if (!server.TryTakeReviewedReflow(
                     principal: context.Principal,
                     proposal: out var proposal,

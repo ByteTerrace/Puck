@@ -149,7 +149,9 @@ public sealed class WorldNetworkCommandModule(IWorldConsoleAuthority authority, 
             )}]"
         );
     }
-    private static string DescribeProjection(WorldServer server, in WireArgs arguments) {
+    private static readonly CommandForms WorldProjectionForms = CommandForms.Of(verb: "world.projection", "[frames|presentation|replica]", "peer <authority-namespace>");
+
+    private static CommandResult DescribeProjection(WorldServer server, in WireArgs arguments) {
         var first = ((arguments.Count > 0)
             ? arguments[0].ToString()
             : string.Empty
@@ -166,7 +168,7 @@ public sealed class WorldNetworkCommandModule(IWorldConsoleAuthority authority, 
             );
 
             if (string.IsNullOrWhiteSpace(value: authority)) {
-                return "[world.projection refused: 'peer' needs an authority namespace]";
+                return WorldProjectionForms.Refuse(args: in arguments);
             }
 
             var refusal = WorldAdmissionDoor.TryAdmitArrival(
@@ -175,23 +177,23 @@ public sealed class WorldNetworkCommandModule(IWorldConsoleAuthority authority, 
                 verdict: out var verdict
             );
 
-            return ((refusal is { } named)
+            return new CommandResult(Output: ((refusal is { } named)
                 ? $"[world.projection: peer '{authority}' {named} — no admission row names it; the wire default {WorldDisclosureTier.Presentation} applies]"
                 : $"[world.projection: peer '{authority}' tier={verdict!.Tier} | {DescribeTier(
                     server: server,
                     tier: verdict.Tier
                 )}]"
-            );
+            ));
         }
 
         if (string.IsNullOrWhiteSpace(value: first)) {
-            return $"[world.projection: {string.Join(
+            return new CommandResult(Output: $"[world.projection: {string.Join(
                 separator: " | ",
                 values: Enum.GetValues<WorldDisclosureTier>().Select(selector: tier => DescribeTier(
                     server: server,
                     tier: tier
                 ))
-            )}]";
+            )}]");
         }
 
         return ((Enum.TryParse<WorldDisclosureTier>(
@@ -199,14 +201,11 @@ public sealed class WorldNetworkCommandModule(IWorldConsoleAuthority authority, 
             result: out var requested,
             value: first
         ) && Enum.IsDefined(value: requested))
-            ? $"[world.projection: {DescribeTier(
+            ? new CommandResult(Output: $"[world.projection: {DescribeTier(
                 server: server,
                 tier: requested
-            )}]"
-            : $"[world.projection refused: '{first}' names no disclosure tier — one of {string.Join(
-                separator: ", ",
-                values: Enum.GetNames<WorldDisclosureTier>()
-            )}]"
+            )}]")
+            : WorldProjectionForms.Refuse(args: in arguments, got: first)
         );
     }
     private static string DescribeTier(WorldServer server, WorldDisclosureTier tier) {
@@ -293,7 +292,8 @@ public sealed class WorldNetworkCommandModule(IWorldConsoleAuthority authority, 
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.projection",
-            description: "Echoes what this authority would hand a peer at a named disclosure tier: 'world.projection' answers for every tier, 'world.projection <frames|presentation|replica>' for one, and 'world.projection peer <authority-namespace>' for the tier an authenticated federation authority resolves to through the admission section. Each line names the tier, the byte size of the document that tier serves, and the section inventory it carries — the redacted set is what is absent from that list. The document half is world.admission; the runtime half is world.peers' tier column.",
+            forms: WorldProjectionForms,
+            description: $"Echoes what this authority would hand a peer at a named disclosure tier: {WorldProjectionForms.Spelling}. With no argument it answers for every tier, a tier name answers for that one, and peer answers for the tier an authenticated federation authority resolves to through the admission section. Each line names the tier, the byte size of the document that tier serves, and the section inventory it carries — the redacted set is what is absent from that list. The document half is world.admission; the runtime half is world.peers' tier column.",
             handler: (context, args) => {
                 if (!authority.TryResolveServer(
                     context: context,
@@ -304,10 +304,10 @@ public sealed class WorldNetworkCommandModule(IWorldConsoleAuthority authority, 
                     return error;
                 }
 
-                return new CommandResult(Output: DescribeProjection(
+                return DescribeProjection(
                     arguments: in args,
                     server: server
-                ));
+                );
             }
         );
     }

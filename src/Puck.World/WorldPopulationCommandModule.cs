@@ -27,6 +27,7 @@ namespace Puck.World;
 /// <param name="gamepads">The optional hardware manager <c>world.devices</c> reads each gamepad's battery and
 /// accessories from; absent in a headless host or off Windows.</param>
 public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopulation population, WorldServer server, IServerLink link, WorldRenderProbe? renderProbe = null, GamepadManager? gamepads = null) : ICommandModule {
+    private static readonly CommandForms WorldPopulationForms = CommandForms.Of(verb: "world.population", "[count] [idle|producer:<name>]");
     // The live budget's reader and its text, reused by every world.budget.
     private readonly RenderGraphLiveBudget m_liveBudget = new();
     private readonly StringBuilder m_liveText = new();
@@ -525,7 +526,8 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.population",
-            description: "Sets the simulated peer count and its between-tape source: world.population [count] [idle|producer:<name>] (tokens are order-independent; no argument reads both).",
+            description: $"Sets the simulated peer count and its between-tape source: {WorldPopulationForms.Spelling} (tokens are order-independent; no argument reads both).",
+            forms: WorldPopulationForms,
             handler: (context, args) => {
                 if (args.Count == 0) {
                     return new CommandResult(Output: DescribePopulation());

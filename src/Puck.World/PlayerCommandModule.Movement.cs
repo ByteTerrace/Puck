@@ -14,6 +14,7 @@ internal sealed partial class PlayerCommandModule {
     private static readonly CommandForms BodyReconcileForms = CommandForms.Of(verb: "body.reconcile", ReconcileForm);
     private static readonly CommandForms BodyImpulseForms = CommandForms.Of(verb: "body.impulse", "<x> <y> <z> [body]");
     private static readonly CommandForms BodyCarryForms = CommandForms.Of(verb: "body.carry", "<carrier> <target>");
+    private static readonly CommandForms BodyReleaseForms = CommandForms.Of(verb: "body.release", OptionalBodyForm);
     private static readonly CommandForms BodyStopForms = CommandForms.Of(verb: "body.stop", StopForm);
     private static readonly CommandForms BodyWhereForms = CommandForms.Of(verb: "body.where", WhereForm);
     // The body.reconcile smoothing window: the default when [seconds] is omitted, and the clamp a supplied value is

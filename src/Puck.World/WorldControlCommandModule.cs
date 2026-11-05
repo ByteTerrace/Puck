@@ -32,14 +32,17 @@ internal sealed class WorldControlCommandModule(Func<TextCommandSource> source, 
         Dispose();
         await m_draining.ConfigureAwait(continueOnCapturedContext: false);
     }
+    private static readonly CommandForms WorldControlForms = CommandForms.Of(verb: "world.control", "start|stop|status");
+
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
             name: "world.control",
-            description: "Local trusted Operator attachment: world.control start|stop|status. start prints a private attachment file for puck mcp --profile operator --attach <file>, as the --control launch option does at boot. The endpoint exposes the full Console registry and composed screenshots to this OS user; stop closes attachments while World keeps running.",
+            description: $"Local trusted Operator attachment: {WorldControlForms.Spelling}. start prints a private attachment file for puck mcp --profile operator --attach <file>, as the --control launch option does at boot. The endpoint exposes the full Console registry and composed screenshots to this OS user; stop closes attachments while World keeps running.",
             bindability: CommandBindability.Unbindable,
+            forms: WorldControlForms,
             handler: (context, args) => {
                 if (context.Principal != Principal.Console) { return CommandResult.Error(output: "Local control requires the host Console principal."); }
-                if (args.Count != 1) { return CommandResult.Error(output: "Expected world.control start|stop|status."); }
+                if (args.Count != 1) { return WorldControlForms.Refuse(args: in args); }
                 if (args.Is(
                     index: 0,
                     value: "stop"
@@ -56,7 +59,7 @@ internal sealed class WorldControlCommandModule(Func<TextCommandSource> source, 
                 } else if (!args.Is(
                     index: 0,
                     value: "status"
-                )) { return CommandResult.Error(output: "Expected world.control start|stop|status."); }
+                )) { return WorldControlForms.Refuse(args: in args, got: args[0].ToString()); }
                 return new(Describe());
             }
         );

@@ -236,7 +236,8 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: "body.release",
-            description: "Ends a body's active carry, if any: body.release [body] (optional trailing body index, default 0). The released body re-enters the rigid solver carrying the carrier's own current velocity. A friendly no-op refusal when the body is not carrying anything.",
+            description: $"Ends a body's active carry, if any: {BodyReleaseForms.Spelling} (optional trailing body index, default 0). The released body re-enters the rigid solver carrying the carrier's own current velocity. A friendly no-op refusal when the body is not carrying anything.",
+            forms: BodyReleaseForms,
             handler: ReleaseHandler,
             ackOnly: true
         );
