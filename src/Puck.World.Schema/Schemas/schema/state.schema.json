@@ -2568,6 +2568,14 @@
                               "value": {
                                 "description": "The constant written or added; the result clamps to the field\u0027s range.",
                                 "title": "WorldLatticeScalar"
+                              },
+                              "takeFrom": {
+                                "description": "For Add, a distinct donor field at the same cell. Transfers at most Value, donor availability above its minimum, and destination capacity; debits exactly what is deposited.",
+                                "type": [
+                                  "string",
+                                  "null"
+                                ],
+                                "default": null
                               }
                             },
                             "required": [

@@ -290,7 +290,7 @@ lake's outlet falls down the face, the stream runs 186 m from the falls' foot to
 pool, and the river drains into an aquifer that fills, gives water back and settles
 against it. The cycle is a 24-cell chain on a flow lattice hidden under the floor
 (source, lake, sill, falls, river and aquifer stages, each a run of cells at a bed
-elevation), driven by an integer melt clock in simulation ticks, so a reproduce run
+elevation), transferring a finite ice store into water in fixed-point quantities, so a reproduce run
 repeats it. The scenery binds the chain's gauges (the glacier's lumps hinge into the
 rock with the clock, the lake follows its level, the falls fold into the wall as
 their flow ebbs) and a float gauge on the pool's bank reads the aquifer.
@@ -309,19 +309,15 @@ gauge float):
   `swim`). Ground following under a medium hold pinned a swimmer to the bed she rises
   from, so it no longer runs there, and a kit may carry a Medium hold in a world with no
   medium, so the Moth's swim is in her own document and every world she is worn in.
-- The cycle at 60 times speed on a lab world carrying the same documents: the glacier is
-  gone at three hours (the clock saturates at 324,000 ticks), the falls' top cell reads
-  2 raw units, the lake stands at its sill (0.40005), the river runs low while the
-  aquifer fills (depth 0.11 at 0.75 h, 0.45 at 2.7 h), peaks at 0.727 and settles at 0.680, and the
-  aquifer's last cell reads 0.93 of its fill. The chain's total, `world.fields`' `total`,
-  is 21.57535 against 1.8 at the start plus the glacier's 19.775390625, so nothing is
-  lost. The steady level is set by that total: the water the chain starts with and the
-  glacier adds, shared across the river's and the aquifer's cells above the river's bed.
+- The steady level is set by the authored starting water plus ice, shared across the
+  river's and aquifer's cells above the river's bed. `world.fields` reports each store's
+  total; `hydroIce` plus `hydroWater` stays constant through melt and transport.
 - The pool follows the river: with the clock at 60 times speed on the debug world the
   pool's level rose from 1.60 to 2.14 over the melt and the gauge float rose with the
   aquifer, in a Vulkan capture. From the spawn the falls show on the north-west wall.
-  `world.state.cell.set hydroClock $value 162000` puts the glacier at half and
-  `water.speed 60` runs the cycle sixty times faster.
+  `water.speed 60` runs the cycle sixty times faster. The subsequent area fix pass
+  made ice a finite lattice store: `hydroClock` now reports actual melt, and
+  `hydroIce` plus `hydroWater` is conserved by exact transfers.
 
 Cost, on a machine other lanes were loading (counts are the evidence): the chain is 72
 cell visits a lattice step and the pool 1,600; the water adds two of the world's 1,428

@@ -5740,6 +5740,10 @@ export type WorldFieldWrite = {
    * The constant written or added; the result clamps to the field's range.
    */
   value: WorldLatticeScalar | null;
+  /**
+   * For Add, a distinct donor field at the same cell. Transfers at most Value, donor availability above its minimum, and destination capacity; debits exactly what is deposited.
+   */
+  takeFrom?: string | null;
 };
 
 export type WorldFieldWriteOp = "Set" | "Add";

@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using Puck.Abstractions.Counting;
 using Puck.Maths;
 using Puck.State;
 
@@ -54,6 +55,12 @@ public readonly record struct FixedFieldSurface(FixedVector3 Point, FixedVector3
 /// <see cref="FieldLatticeInput"/> the host compiles once from its own document.
 /// </summary>
 public sealed class FieldLattice {
+    private static readonly WorkKind Steps = new("physics.fields.steps", "count", WorkClass.Deterministic);
+    private static readonly WorkKind CellVisits = new("physics.fields.cell-visits", "count", WorkClass.Deterministic);
+    private static readonly WorkKind BodyVisits = new("physics.fields.body-visits", "count", WorkClass.Deterministic);
+    /// <summary>Executed lattice steps and kernel visits, outside simulation state and checkpoints. Readers take
+    /// differences of these process totals for a work window; skipped cadence ticks spend no lattice step.</summary>
+    public static WorkCounterSet ProcessWork { get; } = new("physics.fields", [Steps, CellVisits, BodyVisits]);
     private readonly FixedQ4816 m_bodyCouplingCeiling;
     private readonly FixedQ4816 m_cellSize;
     private readonly bool[][] m_deltaDirty;
@@ -152,11 +159,6 @@ public sealed class FieldLattice {
             m_values[field] = new FixedQ4816[CellCount];
             m_deltaDirty[field] = new bool[CellCount];
 
-            Array.Fill(
-                array: m_values[field],
-                value: row.Initial
-            );
-
             // DERIVED, never authored: the tallest surface any height-bearing field can raise. A body standing ON
             // that surface still sits above the top voxel row, so the Emit/Expose body coupling must reach it —
             // see TryBodyCellOf.
@@ -172,7 +174,17 @@ public sealed class FieldLattice {
         m_reactionSets = CompileReactionSets(reactions: input.Reactions);
         RecomputePassCounts();
 
-        foreach (var fill in input.Paint) {
+        Reseed(worldSeed);
+    }
+
+    /// <summary>Restarts cells from the installed initial values and authored paints. The host reapplies draw fills
+    /// afterwards. Live program edits and checkpoint restoration do not call this whole-world restart operation.</summary>
+    public void Reseed(ulong worldSeed) {
+        for (var field = 0; field < m_values.Length; field++) {
+            Array.Fill(m_values[field], m_input.Fields[field].Initial);
+            m_valueRevisions[field]++;
+        }
+        foreach (var fill in m_input.Paint) {
             if (fill is not FieldFillInput.DrawMarker) {
                 ApplyPaintFill(
                     field: fill.Field,
@@ -182,7 +194,9 @@ public sealed class FieldLattice {
                 );
             }
         }
-
+        ClearDeltas();
+        m_fullResync = true;
+        m_revision++;
     }
 
     /// <summary>Gets the lattice's cell count (width × layers × depth).</summary>
@@ -508,18 +522,24 @@ public sealed class FieldLattice {
         return sets;
     }
     private static ReactionSets CompileTransformSets(FieldReactionInput.Transform transform) {
+        foreach (var write in transform.Then) {
+            if (write.TakeFrom is { } source && ((write.Op != FieldWriteOp.Add) || (source == write.Field))) {
+                throw new ArgumentException(message: "A transfer requires Add and a distinct donor field.", paramName: nameof(transform));
+            }
+        }
+        var donors = transform.Then.Where(static write => write.TakeFrom.HasValue).Select(static write => write.TakeFrom!.Value);
         var fieldReads = transform.When
             .Select(selector: static condition => condition.Field)
             .Concat(second: transform.Then
                 .Where(predicate: static write => (write.Op == FieldWriteOp.Add))
-                .Select(selector: static write => write.Field));
+                .Select(selector: static write => write.Field)).Concat(donors);
         var stateReads = transform.When.Select(selector: static condition => condition.Value)
             .Concat(second: transform.Then.Select(selector: static write => write.Value));
 
         return new ReactionSets(
             true,
             CanonicalFields(fields: fieldReads),
-            CanonicalFields(fields: transform.Then.Select(selector: static write => write.Field)),
+            CanonicalFields(fields: transform.Then.Select(selector: static write => write.Field).Concat(donors)),
             CanonicalStates(inputs: stateReads),
             []
         );
@@ -707,6 +727,7 @@ public sealed class FieldLattice {
         : []
     );
     private void StepDecay(int field, FixedQ4816 rate) {
+        ProcessWork.Add(CellVisits, CellCount);
         var values = m_values[field];
 
         for (var cell = 0; (cell < values.Length); cell++) {
@@ -724,6 +745,7 @@ public sealed class FieldLattice {
         }
     }
     private void StepDiffuse(int field, FixedQ4816 rate) {
+        ProcessWork.Add(CellVisits, CellCount);
         var values = m_values[field];
 
         Array.Copy(
@@ -822,8 +844,8 @@ public sealed class FieldLattice {
     // contributes to its own height (Flow transports it, but only an 'over' field's static terrain decides
     // direction), so that feedback cannot occur and the half-gap cap is skipped.
     //
-    // Deltas accumulate exactly in Int128 and clamp only once, at the final write, so mass is conserved exactly
-    // whenever that clamp does not bind.
+    // Shares round down in raw units. Each pair is capped by the remaining donor budget and receiver capacity,
+    // so the final writes cannot clamp away a transfer, even at the authored envelope edges.
     private void StepFlow(FieldReactionInput.Flow reaction, FixedQ4816 rate, IFieldLatticeHost host, ulong tick) {
         if (m_flowDirections == 0) {
             return;
@@ -831,6 +853,8 @@ public sealed class FieldLattice {
 
         var field = reaction.Field;
         var values = m_values[field];
+
+        ProcessWork.Add(CellVisits, 3L * CellCount);
 
         Array.Copy(
             sourceArray: values,
@@ -850,12 +874,12 @@ public sealed class FieldLattice {
 
         Array.Clear(array: m_flowDelta);
 
-        var directionDivisor = FixedQ4816.FromInteger(value: m_flowDirections);
         var ownHeightScale = m_heightScale[field];
         var hasSpill = reaction.SpillRow.IsValid;
         var spilled = Int128.Zero;
 
-        FixedQ4816 FairShare(int donorCell) => (m_scratch[donorCell] / directionDivisor);
+        FixedQ4816 FairShare(int donorCell) => FixedQ4816.FromRawBits(value: FixedSaturate.ToInt64(
+            value: (((Int128)m_scratch[donorCell].Value - m_min[field].Value) / m_flowDirections)));
 
         void Pair(int a, int b) {
             if (m_flowHeights[a] == m_flowHeights[b]) {
@@ -883,7 +907,9 @@ public sealed class FieldLattice {
                 );
             }
 
-            var flux = (capped * rate).Value;
+            var available = (Int128)m_scratch[donor].Value + m_flowDelta[donor] - m_min[field].Value;
+            var capacity = (Int128)m_max[field].Value - m_scratch[receiver].Value - m_flowDelta[receiver];
+            var flux = Int128.Max(0, Int128.Min((capped * rate).Value, Int128.Min(available, capacity)));
 
             m_flowDelta[donor] -= flux;
             m_flowDelta[receiver] += flux;
@@ -998,6 +1024,7 @@ public sealed class FieldLattice {
         }
     }
     private void StepTransform(FieldReactionInput.Transform reaction, IFieldLatticeHost host, ulong tick) {
+        ProcessWork.Add(CellVisits, CellCount);
         // Row-referenced terms resolve ONCE per step, before the cell loop — a season row's value is a step-wide
         // constant, never a per-cell read.
         // Transform nodes execute serially; install-sized scratch serves every node without per-step arrays.
@@ -1040,6 +1067,21 @@ public sealed class FieldLattice {
 
             for (var index = 0; (index < reaction.Then.Count); index++) {
                 var write = reaction.Then[index];
+
+                if (write.TakeFrom is { } source) {
+                    // One transfer door: both values remain inside their envelopes, and exactly the same raw
+                    // quantity leaves the donor and enters the destination. No rounded product or clamped write
+                    // can create or discard mass; a stale requested amount can only exhaust this finite store.
+                    var available = (Int128)m_values[source][cell].Value - m_min[source].Value;
+                    var capacity = (Int128)m_max[write.Field].Value - m_values[write.Field][cell].Value;
+                    var amount = Int128.Max(0, Int128.Min(thenValues[index].Value, Int128.Min(available, capacity)));
+                    if (amount == 0) { continue; }
+                    Write(field: source, cell: cell,
+                        value: FixedQ4816.FromRawBits((long)((Int128)m_values[source][cell].Value - amount)));
+                    Write(field: write.Field, cell: cell,
+                        value: FixedQ4816.FromRawBits((long)((Int128)m_values[write.Field][cell].Value + amount)));
+                    continue;
+                }
 
                 Write(
                     cell: cell,
@@ -1649,6 +1691,7 @@ public sealed class FieldLattice {
         }
 
         ArgumentNullException.ThrowIfNull(argument: host);
+        ProcessWork.Add(Steps, 1);
 
         for (var reactionIndex = 0; (reactionIndex < m_input.Reactions.Count); reactionIndex++) {
             var reaction = m_input.Reactions[reactionIndex];
@@ -1682,6 +1725,7 @@ public sealed class FieldLattice {
                     );
                     break;
                 case FieldReactionInput.Emit emit:
+                    ProcessWork.Add(BodyVisits, bodyCount);
                     for (var body = 0; (body < bodyCount); body++) {
                         if (
                             (host.BodyPosition(body: body) is not { } position) ||
@@ -1727,6 +1771,7 @@ public sealed class FieldLattice {
                     );
                     break;
                 case FieldReactionInput.Expose expose:
+                    ProcessWork.Add(BodyVisits, bodyCount);
                     for (var body = 0; (body < bodyCount); body++) {
                         if (host.BodyPosition(body: body) is not { } position) {
                             continue;

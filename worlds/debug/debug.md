@@ -202,7 +202,7 @@ shoulders at the surface. The cycle's levers:
 |---|---|
 | Go to the pool | `debug.go pool` |
 | Read the glacier (1 full, 0 gone), the river and the aquifer's gauge | `world.state glacier`, `world.state riverDepth`, `world.state aquiferFill` |
-| Put the glacier at half | `world.state.cell.set hydroClock $value 162000` (324000 ticks of melt is three hours at 30 Hz) |
+| Read actual glacier melt | `world.state hydroClock` (324000 ticks of melt is three hours at 30 Hz; this is a gauge) |
 | Run the cycle faster | `water.speed 60` (the three hours in three minutes); `water.speed 1` is its own pace |
 | Read the conserved water | `world.fields`, each lattice row's `total` |
 | Restart the cycle | boot the world again: a reload keeps the lattice's water |

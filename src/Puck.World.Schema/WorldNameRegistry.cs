@@ -1153,6 +1153,13 @@ public static partial class WorldNameRegistry {
             WorldExportFacet.Action
         ),
         new(
+            typeof(WorldFieldWrite),
+            nameof(WorldFieldWrite.TakeFrom),
+            WorldNameKind.Field,
+            WorldNameRole.Names,
+            WorldExportFacet.Action
+        ),
+        new(
             typeof(WorldReaction.Diffuse),
             nameof(WorldReaction.Diffuse.Field),
             WorldNameKind.Field,

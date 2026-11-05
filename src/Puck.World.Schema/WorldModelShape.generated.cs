@@ -3449,6 +3449,7 @@ public static partial class WorldModelShape {
                 M("field", typeof(global::System.String), typeof(global::Puck.World.WorldFieldWrite), "Field", Read | Write | Required, static value => ((global::Puck.World.WorldFieldWrite)value).Field),
                 M("op", typeof(global::Puck.World.WorldFieldWriteOp), typeof(global::Puck.World.WorldFieldWrite), "Op", Read | Write | Required, static value => ((global::Puck.World.WorldFieldWrite)value).Op),
                 M("value", typeof(global::Puck.World.WorldLatticeScalar), typeof(global::Puck.World.WorldFieldWrite), "Value", Read | Write | Required, static value => ((global::Puck.World.WorldFieldWrite)value).Value),
+                M("takeFrom", typeof(global::System.String), typeof(global::Puck.World.WorldFieldWrite), "TakeFrom", Read | Write, static value => ((global::Puck.World.WorldFieldWrite)value).TakeFrom),
             ],
             []),
         T(typeof(global::Puck.World.WorldFieldsSection), true, JsonTypeInfoKind.Object, null,

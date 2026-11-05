@@ -935,6 +935,29 @@ public sealed class FieldLatticeLawTests {
             expectedSubstring: "dependencies=[0>1]"
         );
     }
+    [Theory]
+    [InlineData(3)]
+    [InlineData(100)]
+    public void ATransferRetainsExcessInTheDonorAndCannotRepeatAnExhaustedDeposit(int capacity) {
+        var seed = Fields();
+        var source = seed.Fields[0] with { Name = "source", Initial = FixedQ4816.FromInteger(10) };
+        var destination = source with { Name = "destination", Initial = FixedQ4816.Zero, Maximum = FixedQ4816.FromInteger(capacity) };
+        var input = seed with {
+            Fields = [source, destination],
+            Reactions = [new FieldReactionInput.Transform([], [new FieldWriteInput(1, FieldWriteOp.Add,
+                new FieldScalarInput(FixedQ4816.FromInteger(100), default), TakeFrom: 0)])],
+        };
+        var lattice = new FieldLattice(input);
+        for (ulong tick = 1; tick <= 20; tick++) {
+            lattice.Step(tick, 0, new LambdaHost());
+            Assert.Equal(FixedQ4816.FromInteger(10), lattice.Value(0, 0) + lattice.Value(1, 0));
+        }
+        Assert.Equal(FixedQ4816.FromInteger(10 - Math.Min(capacity, 10)), lattice.Value(0, 0));
+        Assert.Equal(FixedQ4816.FromInteger(Math.Min(capacity, 10)), lattice.Value(1, 0));
+        lattice.Reseed(0);
+        Assert.Equal(FixedQ4816.FromInteger(10), lattice.Value(0, 0));
+        Assert.Equal(FixedQ4816.Zero, lattice.Value(1, 0));
+    }
     [Fact]
     public void RestoreRefusesCellValuesOutsideTheAuthoredRangeBeforeWritingAnything() {
         var lattice = new FieldLattice(input: Fields());

@@ -634,8 +634,11 @@ public sealed record WorldFieldCondition(string Field, [property: JsonConverter(
 /// <param name="Field">The field written at the cell.</param>
 /// <param name="Op">Set or add.</param>
 /// <param name="Value">The constant written or added; the result clamps to the field's range.</param>
+/// <param name="TakeFrom">For Add, a distinct donor field at the same cell. Transfers at most Value, donor
+/// availability above its minimum, and destination capacity; debits exactly what is deposited.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldFieldWrite(string Field, WorldFieldWriteOp Op, WorldLatticeScalar Value);
+public sealed record WorldFieldWrite(string Field, WorldFieldWriteOp Op, WorldLatticeScalar Value,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? TakeFrom = null);
 /// <summary>One reaction — a local rule every cell (or every tagged body) applies each lattice step. Reactions run
 /// in document order; <see cref="Diffuse"/> reads the previous step's values for the whole field, every other kind
 /// reads and writes cells in place, row-major.</summary>

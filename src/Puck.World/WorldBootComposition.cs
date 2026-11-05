@@ -170,6 +170,7 @@ public static class WorldBootComposition {
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: Puck.Physics.FixedStaticContactWork.Process);
         // The bodies each tick steps, and the parked rigid bodies a contact-field change wakes.
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: WorldBodyWork.Process);
+        services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: Puck.Physics.Fields.FieldLattice.ProcessWork);
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: Puck.SignedDistance.Queries.SdfBoundsCache.ProcessWork);
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: Puck.SignedDistance.Queries.SdfFieldEvaluator.PointWork);
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: Puck.SignedDistance.Queries.SdfQueryWork.ProcessWork);
