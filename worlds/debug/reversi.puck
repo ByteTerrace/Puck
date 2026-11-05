@@ -54,14 +54,15 @@ let reversiTrayOrigin = [
 ]
 let reversiHomeColumn = map(
   range(0, reversiDiscs),
-  i => ((i < reversiPerSide) ? 0 : (reversiTrayColumns - reversiTrayWide)) + (((i < reversiPerSide) ? i : (i -
-    reversiPerSide)) % reversiTrayWide)
+  i => ((i < reversiPerSide) ? 0 : (reversiTrayColumns - reversiTrayWide)) +
+    (((i < reversiPerSide) ? i : (i - reversiPerSide)) % reversiTrayWide)
 )
 // A compile-time `/` divides exactly, so a row is counted down from its column.
 let reversiHomeRow = map(
   range(0, reversiDiscs),
-  i => ((((i < reversiPerSide) ? i : (i - reversiPerSide)) - (((i < reversiPerSide) ? i : (i - reversiPerSide)) %
-    reversiTrayWide)) / reversiTrayWide)
+  i => ((((i < reversiPerSide) ? i : (i - reversiPerSide)) -
+    (((i < reversiPerSide) ? i : (i - reversiPerSide)) % reversiTrayWide)) /
+    reversiTrayWide)
 )
 let reversiHome = map(range(0, reversiDiscs), i => (reversiHomeRow[i] * reversiTrayColumns) + reversiHomeColumn[i])
 

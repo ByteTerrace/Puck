@@ -318,41 +318,44 @@ let hallOpenings = flatMap(range(0, 4), k => concat(
 ))
 let hallCassetteRows = flatMap(range(0, 4), k => map(["south", "north", "east"], face => { level: k, face: face }))
 // Each blind board: its level, its name, and its world bounds.
-let hallBlindBoards = flatMap(range(0, 4), k => concat([
-  {
-    level: k
-    name: "south"
-    x0: ((k == 0) ? 20.97 : 13.97)
-    x1: 69.03
-    y0: ((storey * k) + 0.87)
-    y1: ((storey * k) + 3.33)
-    z0: 12.03
-    z1: 12.25
-  }
-  {
-    level: k
-    name: "north"
-    x0: 20.97
-    x1: 69.03
-    y0: ((storey * k) + 0.87)
-    y1: ((storey * k) + 3.33)
-    z0: 39.75
-    z1: 39.97
-  }
-  {
-    level: k
-    name: "east"
-    x0: 69.75
-    x1: 69.97
-    y0: ((storey * k) + 0.87)
-    y1: ((storey * k) + 3.33)
-    z0: 14.47
-    z1: 37.53
-  }
-], map(
-  ((k == 3) ? skylightStarts : []),
-  x => { level: k, name: $"skylight-{x}", x0: (x - 0.03), x1: (x + 10.03), y0: 17.8, y1: 18.02, z0: 17.97, z1: 34.03 }
-)))
+let hallBlindBoards = flatMap(range(0, 4), k => concat(
+  [
+    {
+      level: k
+      name: "south"
+      x0: ((k == 0) ? 20.97 : 13.97)
+      x1: 69.03
+      y0: ((storey * k) + 0.87)
+      y1: ((storey * k) + 3.33)
+      z0: 12.03
+      z1: 12.25
+    }
+    {
+      level: k
+      name: "north"
+      x0: 20.97
+      x1: 69.03
+      y0: ((storey * k) + 0.87)
+      y1: ((storey * k) + 3.33)
+      z0: 39.75
+      z1: 39.97
+    }
+    {
+      level: k
+      name: "east"
+      x0: 69.75
+      x1: 69.97
+      y0: ((storey * k) + 0.87)
+      y1: ((storey * k) + 3.33)
+      z0: 14.47
+      z1: 37.53
+    }
+  ],
+  map(
+    ((k == 3) ? skylightStarts : []),
+    x => { level: k, name: $"skylight-{x}", x0: (x - 0.03), x1: (x + 10.03), y0: 17.8, y1: 18.02, z0: 17.97, z1: 34.03 }
+  )
+))
 let blindPalette = [{ color: "#CFCFCC", roughness: 0.9, specular: 0.03 }]
 // The seams painted across a window's board, the most a palette slot's paints hold.
 let blindSeams = 8

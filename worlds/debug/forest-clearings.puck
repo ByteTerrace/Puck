@@ -1,19 +1,19 @@
 import "forest-layout"
 
-let forestFlowers = filter(scatterPoints(cellSize: 0.5, width: 560, depth: 220, spacing: 9, radius: 4,
-  seed: 25103
-), p => forestInBelt(p[0], p[2] - 150, 4) and forestInGlade(p[0], p[2] - 150, 2) and not forestInGlade(
-  p[0],
-  p[2] - 150,
-  -2
-) and lawnPathClear(p[0], p[2] - 150, 0.35))
-let forestRocks = filter(scatterPoints(cellSize: 0.5, width: 560, depth: 220, spacing: 28, radius: 13,
-  seed: 1439
-), p => forestInBelt(p[0], p[2] - 150) and not forestInGlade(p[0], p[2] - 150, -2) and lawnPathClear(
-  p[0],
-  p[2] - 150,
-  1.4
-) and forestThicket(p[0], p[2] - 150) > 0.15)
+let forestFlowers = filter(
+  scatterPoints(cellSize: 0.5, width: 560, depth: 220, spacing: 9, radius: 4, seed: 25103),
+  p => forestInBelt(p[0], p[2] - 150, 4) and
+    forestInGlade(p[0], p[2] - 150, 2) and
+    not forestInGlade(p[0], p[2] - 150, -2) and
+    lawnPathClear(p[0], p[2] - 150, 0.35)
+)
+let forestRocks = filter(
+  scatterPoints(cellSize: 0.5, width: 560, depth: 220, spacing: 28, radius: 13, seed: 1439),
+  p => forestInBelt(p[0], p[2] - 150) and
+    not forestInGlade(p[0], p[2] - 150, -2) and
+    lawnPathClear(p[0], p[2] - 150, 1.4) and
+    forestThicket(p[0], p[2] - 150) > 0.15
+)
 
 // Hand-composed drifts frame the path's destination; their centres leave room to stand.
 let forestFlowerDrifts = [[58, -170], [69, -162], [72, -169], [62, -174], [-41, -158], [-30, -163], [6, -184]]
