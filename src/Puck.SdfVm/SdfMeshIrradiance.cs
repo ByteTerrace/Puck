@@ -67,7 +67,11 @@ public readonly record struct SdfMeshIrradianceParameters(bool Enabled, SdfMeshI
 /// alone. The dynamic draws (moving bodies) receive the volume's light and do not cast into it; an anchored light, which
 /// moves, is neither traced nor occluded.</para>
 /// </summary>
-public sealed class SdfMeshIrradiance : IDisposable {
+public sealed partial class SdfMeshIrradiance : IDisposable {
+    internal SdfMeshProbeGpuWork? GpuTrace { get; set; }
+    internal bool KeepsGpuScene(SdfMeshIrradianceScene scene) {
+        lock (m_gate) { return !m_disposed && ReferenceEquals(m_scene, scene); }
+    }
     private bool m_disposed;
     private bool m_trimListening;
 
@@ -133,6 +137,12 @@ public sealed class SdfMeshIrradiance : IDisposable {
     public static readonly WorkKind Traced = new(name: "sdf.mesh-gi.traced", unit: "probes", workClass: WorkClass.Pacing);
     /// <summary>Counts each probe relight: its radiance cubes and light visibility shaded from its cached hits.</summary>
     public static readonly WorkKind Relit = new(name: "sdf.mesh-gi.relit", unit: "probes", workClass: WorkClass.Pacing);
+    /// <summary>Counts rays in completed GPU trace jobs, including placement trials and subsequently invalidated batches.</summary>
+    public static readonly WorkKind GpuRays = new(name: "sdf.mesh-gi.gpu-rays", unit: "rays", workClass: WorkClass.Pacing);
+    /// <summary>Measured GPU time of completed trace submissions, including their hierarchy upload and readback copy.</summary>
+    public static readonly WorkKind GpuTraceNanoseconds = new(name: "sdf.mesh-gi.gpu-trace-nanoseconds", unit: "nanoseconds", workClass: WorkClass.Pacing);
+    /// <summary>Queued trace jobs cancelled because their scene was replaced before admission.</summary>
+    public static readonly WorkKind GpuCancelled = new(name: "sdf.mesh-gi.gpu-cancelled", unit: "jobs", workClass: WorkClass.Pacing);
     /// <summary>Counts each relight cycle whose oldest lighting was past the budget's age target.</summary>
     public static readonly WorkKind Behind = new(name: "sdf.mesh-gi.behind", unit: "cycles", workClass: WorkClass.Pacing);
     /// <summary>Counts camera hit traces, including rejected samples inside opaque geometry.</summary>
@@ -143,7 +153,7 @@ public sealed class SdfMeshIrradiance : IDisposable {
     /// <summary>Counts each exposure meter reading asked of the volume (<see cref="TryMeter"/>).</summary>
     public static readonly WorkKind Meters = new(name: "sdf.mesh-gi.meters", unit: "readings", workClass: WorkClass.Pacing);
 
-    private static readonly WorkKind[] DeclaredKinds = [Scenes, GeometriesBuilt, GeometriesReused, TrianglesBuilt, Traced, Relit, Behind, CameraTraces, CameraRelights, Meters];
+    private static readonly WorkKind[] DeclaredKinds = [Scenes, GeometriesBuilt, GeometriesReused, TrianglesBuilt, Traced, Relit, GpuRays, GpuTraceNanoseconds, GpuCancelled, Behind, CameraTraces, CameraRelights, Meters];
 
     /// <summary>Gets the kinds the counters count, in report order, for a reader that registers the source before a
     /// volume exists.</summary>
@@ -573,7 +583,7 @@ public sealed class SdfMeshIrradiance : IDisposable {
         // meters never depend on how far asynchronous work had got by the time the frame was asked for, nor on the
         // bounce earlier frames left in the cache. The drain takes the gate itself, so it runs outside it, after the
         // worker in flight, which may hold it, has finished.
-        if (drain) {
+        if (drain && GpuTrace is null) {
             // The worker returns at its next batch, so the drain takes over whatever budgeted work it had left.
             lock (m_gate) { m_yield = true; }
             try {
@@ -592,8 +602,11 @@ public sealed class SdfMeshIrradiance : IDisposable {
                 m_worker = null;
                 throw new InvalidOperationException(message: "The irradiance volume's trace failed.", innerException: faulted.Exception);
             }
-            if (m_owed && (m_scene is not null) && (m_lighting is not null) && (m_worker is null or { IsCompleted: true }) && Granted) {
-                m_worker = Task.Run(action: Work);
+            if ((m_owed || drain) && (m_scene is not null) && (m_lighting is not null) && (m_worker is null or { IsCompleted: true }) && (Granted || drain)) {
+                m_worker = Task.Run(action: () => {
+                    try { if (drain && GpuTrace is not null) { Drain(); } else { Work(); } }
+                    catch (OperationCanceledException) when (GpuTrace is not null) { m_listed = false; }
+                });
             }
             Publish(layout: layout, write: write);
             return m_published;
@@ -1671,12 +1684,13 @@ public sealed class SdfMeshIrradiance : IDisposable {
         var scene = snapshot.Scene;
         var geometry = snapshot.Geometry;
         var sweep = snapshot.Sweep;
+        var prepared = traces ? PlaceBatch(candidates, first, count, layout, scene, geometry, hits!, parallel) : null;
 
         _ = Parallel.For(fromInclusive: 0, toExclusive: count, parallelOptions: parallel, body: index => {
             var candidate = candidates[(first + index)];
 
             results[index] = Process(candidate: candidate, feedback: feedback, geometry: geometry, hits: hits, index: index, layout: layout, lighting: lighting,
-                lights: lights, lows: lows, scene: scene, sweep: sweep);
+                lights: lights, lows: lows, scene: scene, sweep: sweep, prepared: prepared?[index]);
         });
 
         m_landed.Clear();
@@ -1763,7 +1777,7 @@ public sealed class SdfMeshIrradiance : IDisposable {
     // One probe of a batch: its placement and hit buffer, when it lacks a trace against the current geometry, then its
     // relight under the batch's lighting. An invalid probe takes no relight: no view reads it.
     private ProbeData Process(in Candidate candidate, int geometry, Layout layout, Lighting lighting, (int X, int Y, int Z)[] lows, SdfMeshIrradianceScene scene,
-        bool feedback, ProbeBlock? hits, LightBlock lights, int index, int sweep) {
+        bool feedback, ProbeBlock? hits, LightBlock lights, int index, int sweep, ProbeData? prepared) {
         var cache = m_levels[candidate.Level].Cache;
         ProbeData probe;
 
@@ -1771,15 +1785,13 @@ public sealed class SdfMeshIrradiance : IDisposable {
             var spacing = layout.SpacingOf(level: candidate.Level);
             var cell = candidate.Cell;
             var centre = (new Vector3(x: (cell.X + 0.5f), y: (cell.Y + 0.5f), z: (cell.Z + 0.5f)) * spacing);
-            var valid = Place(centre: centre, hits: hits!.Hits(index: index), inside: out var inside, layout: layout, offset: out var offset, scene: scene,
-                sky: hits.Sky(index: index), spacing: spacing);
+            probe = prepared!.Value;
 
-            if (valid) {
+            if (!probe.Invalid) {
                 // The farthest in-window receiver is a spacing diagonal plus relocation and the normal bias.
-                SdfMeshProbeDepth.Surfaces(hits: hits.Hits(index: index), origin: (centre + offset), reach: SurfaceReachOf(spacing: spacing), scene: scene,
+                SdfMeshProbeDepth.Surfaces(hits: hits!.Hits(index: index), origin: (centre + probe.Offset), reach: SurfaceReachOf(spacing: spacing), scene: scene,
                     sheets: layout.Levels[candidate.Level].Sheets, surfaces: hits.Depth(index: index));
             }
-            probe = new ProbeData(Geometry: geometry, Hits: hits, HitIndex: index, Inside: inside, Invalid: !valid, Offset: offset);
         } else if (!cache.TryGetValue(key: candidate.Cell, value: out probe)) {
             // Only a drain whose first pass was dropped can list a relight of an untraced probe; nothing lands.
             return default;
@@ -1820,42 +1832,6 @@ public sealed class SdfMeshIrradiance : IDisposable {
         }
         return true;
     }
-    // Take the nearest clear exit, then try the cell's grid nearest-first. Openness scoring moved probes a metre
-    // off thin floors and made neighbouring cells choose different storeys. Surface reconstruction handles grazing.
-    // The hits and sky shares left are the chosen origin's, the centre's when nothing in the cell stands clear.
-    private static bool Place(Vector3 centre, Vector3 spacing, Layout layout, SdfMeshIrradianceScene scene, Span<uint> hits, Span<float> sky, out Vector3 offset, out float inside) {
-        var clearance = SdfMeshIrradianceProbe.Clearance;
-        var reach = (0.5f * spacing);
-
-        offset = Vector3.Zero;
-
-        var near = scene.TryNearestSurface(bakeHalfDiagonal: out _, normal: out var normal, point: centre, radius: clearance, surface: out var surface);
-        var valid = TraceHits(hits: hits, inside: out inside, layout: layout, origin: centre, scene: scene, sky: sky);
-
-        if (valid && !near) { return true; }
-        if (!near && !scene.TryNearestSurface(bakeHalfDiagonal: out _, normal: out normal, point: centre, radius: (reach.Length() + clearance), surface: out surface)) { return false; }
-
-        var pushed = ((surface + (normal * (1.25f * clearance))) - centre);
-
-        for (var candidate = -1; (candidate < Candidates.Length); candidate++) {
-            var trial = ((candidate < 0) ? pushed : (Candidates[candidate] * spacing));
-
-            if ((MathF.Abs(x: trial.X) > reach.X) || (MathF.Abs(x: trial.Y) > reach.Y) || (MathF.Abs(x: trial.Z) > reach.Z)) { continue; }
-
-            var origin = (centre + trial);
-
-            if (scene.TryNearestSurface(bakeHalfDiagonal: out _, normal: out _, point: origin, radius: clearance, surface: out _)) { continue; }
-            if (Blocked(origin: origin, reach: MathF.Max(x: spacing.X, y: MathF.Max(x: spacing.Y, y: spacing.Z)), scene: scene)) { continue; }
-            if (!TraceHits(hits: hits, inside: out inside, layout: layout, origin: origin, scene: scene, sky: sky)) { continue; }
-
-            offset = trial;
-            return true;
-        }
-
-        // Nothing in the cell stands clear: the centre's own measurement is kept, as an invalid probe's.
-        _ = TraceHits(hits: hits, inside: out inside, layout: layout, origin: centre, scene: scene, sky: sky);
-        return false;
-    }
     // Reject a buried candidate with a few local rays before tracing its full hit buffer.
     private static bool Blocked(Vector3 origin, SdfMeshIrradianceScene scene, float reach) {
         const int Rays = 32;
@@ -1874,13 +1850,19 @@ public sealed class SdfMeshIrradiance : IDisposable {
     // the hit buffer's quadrature. `inside` receives the share of the rays that met back faces; the measurement is valid
     // while it is at most InsideShare.
     private static bool TraceHits(Vector3 origin, Layout layout, SdfMeshIrradianceScene scene, Span<uint> hits, Span<float> sky, out float inside) {
-        _ = SdfMeshProbeDepth.TraceHits(backFaces: out var backFaces, hits: hits, maximum: layout.Reach, origin: origin, scene: scene);
+        _ = SdfMeshProbeDepth.TraceHits(backFaces: out _, hits: hits, maximum: layout.Reach, origin: origin, scene: scene);
+        return SummarizeHits(hits, sky, out inside);
+    }
+
+    private static bool SummarizeHits(ReadOnlySpan<uint> hits, Span<float> sky, out float inside) {
+        var backFaces = 0;
 
         var directions = SdfMeshProbeDepth.RayDirections;
         var weights = SdfMeshProbeDepth.RayWeights;
 
         sky.Clear();
         for (var texel = 0; (texel < SdfMeshProbeDepth.HitCount); texel++) {
+            if (BitConverter.UInt32BitsToSingle(hits[2 * texel]) < 0) { backFaces++; }
             if (!float.IsPositiveInfinity(f: BitConverter.UInt32BitsToSingle(value: hits[(2 * texel)]))) { continue; }
             for (var axis = 0; (axis < 6); axis++) {
                 sky[axis] += (weights[texel] * MathF.Max(x: 0f, y: Vector3.Dot(vector1: directions[texel], vector2: Axes[axis])));

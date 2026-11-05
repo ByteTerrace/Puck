@@ -4,6 +4,12 @@ using System.Runtime.InteropServices;
 namespace Puck.SdfVm;
 
 public sealed partial class SdfMeshIrradianceScene {
+    internal bool HasGpuPlacements(IReadOnlyDictionary<SdfMesh, SdfMeshRegionMesh> placements, IReadOnlySet<SdfMesh> owed) {
+        foreach (var instance in m_instances) {
+            if (!placements.ContainsKey(instance.Mesh) || owed.Contains(instance.Mesh)) { return false; }
+        }
+        return true;
+    }
     /// <summary>Exports the existing hierarchy in traversal order, referencing triangles in an already placed mesh
     /// region. Word zero is the top root's address, or zero for an empty scene. No triangles or hierarchy are rebuilt.
     /// The caller retains this scene and the region's placements until the GPU submission completes.</summary>

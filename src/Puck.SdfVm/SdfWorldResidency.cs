@@ -914,6 +914,9 @@ public sealed partial class SdfWorldResidency : IDisposable {
 
         // The bake samples through the tables' background GPU work, which owns its jobs' slots and the tables' lifetime.
         tables.GpuWork.Add(client: new SdfMeshBakeGpuWork(bake: MeshPathBake, tables: tables));
+        var probeWork = new SdfMeshProbeGpuWork(tables, MeshIrradiance);
+        tables.GpuWork.Add(probeWork);
+        MeshIrradiance.GpuTrace = probeWork;
         MeshPathBake.DispatchReport = tables.GpuWork.Describe;
         // The construction uploaded the frame's program; the frame is packed afresh.
         NoteProgram(program: frame.Program);

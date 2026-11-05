@@ -48,16 +48,19 @@ public sealed class SdfGpuWorkReadback {
     private IGpuReadbackBuffer? m_buffer;
 
     // A new token for each job, never reset or handed out again. An old holder cannot release a later job.
-    internal SdfGpuWorkReadback(int slot, IGpuReadbackBuffer? buffer, int length) {
+    internal SdfGpuWorkReadback(int slot, IGpuReadbackBuffer? buffer, int length, double? gpuSeconds) {
         Slot = slot;
         m_buffer = buffer;
         Length = length;
+        GpuSeconds = gpuSeconds;
     }
 
     /// <summary>Gets the slot the job ran in, from zero to <see cref="SdfGpuWork.SlotCount"/>.</summary>
     public int Slot { get; }
     /// <summary>Gets the bytes the job copied back.</summary>
     public int Length { get; }
+    /// <summary>The submission's GPU timestamp duration in seconds, or null on a queue without timestamps.</summary>
+    public double? GpuSeconds { get; }
     internal bool Released { get { lock (m_gate) { return m_released; } } }
 
     /// <summary>Copies the bytes the job copied back into <paramref name="destination"/>; valid until
@@ -298,8 +301,8 @@ public sealed class SdfGpuWork : IDisposable {
 
             var client = slot.Client!;
 
-            Settle(slot: slot);
-            var readback = new SdfGpuWorkReadback(slot: index, buffer: slot.Readback, length: (int)slot.ReadbackBytes);
+            var seconds = Settle(slot: slot);
+            var readback = new SdfGpuWorkReadback(slot: index, buffer: slot.Readback, length: (int)slot.ReadbackBytes, gpuSeconds: m_timestamps is null ? null : seconds);
             slot.Lease = readback;
             slot.Job = null;
             slot.Client = null;
@@ -315,7 +318,7 @@ public sealed class SdfGpuWork : IDisposable {
         }
     }
     // Replaces a job's estimated charge with its measured GPU time, when the queue writes timestamps.
-    private void Settle(Slot slot) {
+    private double Settle(Slot slot) {
         var seconds = slot.Estimate;
 
         if (m_timestamps is { } timestamps) {
@@ -330,6 +333,7 @@ public sealed class SdfGpuWork : IDisposable {
             m_credit += (slot.Estimate - seconds);
         }
         m_gpuSeconds += seconds;
+        return seconds;
     }
     // Banks the GPU time the share allows since the last pump, up to MostCreditSeconds.
     private void Accrue() {
