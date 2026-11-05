@@ -102,6 +102,9 @@ Add-Case no-node-reuse 'dotnet msbuild Puck.slnx' deny deny
 Add-Case no-node-reuse 'dotnet build src/Puck.Cli -nodeReuse:false' pass pass
 Add-Case no-node-reuse 'dotnet build src/Puck.Cli /nodeReuse:false' pass pass
 Add-Case no-node-reuse 'dotnet build src/Puck.Cli -nr:false' pass pass
+Add-Case no-node-reuse 'dotnet lane/Puck.Cli.dll lease build --holder lane -- dotnet build Puck.slnx -m:2 -nodeReuse:false' pass pass
+Add-Case no-node-reuse 'dotnet lane/Puck.Cli.dll lease build --holder lane -- dotnet build Puck.slnx -nodeReuse:true' deny deny
+Add-Case no-node-reuse 'dotnet lane/Puck.Cli.dll lease build --holder lane -- dotnet build Puck.slnx -nodeReuse: false' deny deny pwsh
 Add-Case no-node-reuse 'dotnet build A -nodeReuse:false -nr:true' deny deny
 Add-Case no-node-reuse 'dotnet build A -nodeReuse:false && dotnet build B' deny deny
 Add-Case no-node-reuse 'dotnet restore Puck.slnx' deny deny
