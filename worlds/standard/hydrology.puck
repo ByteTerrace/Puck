@@ -161,7 +161,7 @@ template hydrology(stages = hydrologyStages, origin = [0, -90, 0], cell = 1, mel
     when $tick >= 0
     mode: Level
     hydroClock = minimum(meltTicks, hydroClock + hydroSpeed)
-    glacierLength = maximum(0, 1.0 - hydroClock / meltTicks)
+    glacierLength = hydroClock < meltTicks ? maximum(0.0000152587890625, 1.0 - hydroClock / meltTicks) : 0.0
     hydroTarget = waterPerCell
     meltStrength = 1.0
     for i in range(0, meltExponent) {

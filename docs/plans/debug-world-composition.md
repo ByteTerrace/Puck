@@ -307,6 +307,16 @@ float reads aquifer fill and rises over the same chamber floor and height scale 
 its surface. A cream pavilion with teal structure and orange shade covers a glazed
 inspection window in the dry terrace. The pool uses the standard `waterMaterial`,
 through the ordinary palette and glass path: the engine has no water shading path.
+The chamber and pool have modelled wall openings joined by a submerged passage;
+its field surface reads the same aquifer gauge. Their elevations share the flow
+model's datum. Stream foam and brush edges are material paints on one moving sheet
+per segment, so decorative strokes no longer require separate animated bake groups.
+
+Height fields publish immutable sampled values in `SdfProgram`; the geometry key
+and the bake read that same owned snapshot. This applies to opaque and glass fields.
+The glass pass integrates absorption from every material before the opaque hit,
+so the inspection pane transmits the reservoir's water colour. Reflection and
+refraction still use the nearest interface.
 
 The Moth uses the standard `swimHold` before her ground hold, placing her feet 1.25 m
 under the surface. Her existing motion drivers gate a tread and alternating limb
@@ -314,7 +324,7 @@ strokes on `InMedium`; no second swim controller runs in engine code.
 
 The [art pack](../game/art/caldera-water-pack/README.md) remains the visual target.
 The glacier is six shrinking lobes; crevasses, melt channels, wet rock and the
-reservoir's routed inlet and submerged passage still need fuller art treatment.
+reservoir's descending inlet still need fuller art treatment.
 The [water packet](open-items.md#water) owns the remaining measured system work.
 ## The owner's answers
 

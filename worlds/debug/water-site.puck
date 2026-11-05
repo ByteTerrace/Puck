@@ -19,7 +19,7 @@ let valleyBasins = [
   { sector: "north-west", label: "lake-outlet", lateral: 0, radial: 408, y: 330, radii [7, 8, 34] }
 ]
 // The falls' profile from the outlet to the floor, [r, y] in the sector frame: the face at each height.
-let fallsHeights = [323, 300, 275, 250, 225, 200, 175, 150, 125, 100, 75, 50, 30, 14, 3]
+let fallsHeights = [323, 300, 275, 250, 225, 200, 175, 150, 125, 100, 75, 50, 30, 14, -1]
 let fallsProfile = map(fallsHeights, y => [sectorFace(wallSector, y), y])
 
 // The opening in the floor, [minX, minZ, maxX, maxZ] in world X/Z, and the basin's floor under it.
