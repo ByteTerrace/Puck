@@ -15,9 +15,11 @@ let lakeSite = { lateral: 0, radial: 440, surface: 324.5, radius: 44 }
 // The bowls cut into the valley's masses, per sector (valley.puck).
 let valleyBasins = [
   { sector: "north-west", label: "lake-basin", lateral: 0, radial: lakeSite.radial, y: 336, radii [46, 17, 46] }
+  // A real cut through the lip, shared by the terrain mesh and its collider.
+  { sector: "north-west", label: "lake-outlet", lateral: 0, radial: 408, y: 330, radii [7, 8, 34] }
 ]
 // The falls' profile from the outlet to the floor, [r, y] in the sector frame: the face at each height.
-let fallsHeights = [323, 300, 275, 250, 225, 200, 175, 150, 125, 100, 75, 50, 30, 14, 3]
+let fallsHeights = [323, 300, 275, 250, 225, 200, 175, 150, 125, 100, 75, 50, 30, 14, -1]
 let fallsProfile = map(fallsHeights, y => [sectorFace(wallSector, y), y])
 
 // The opening in the floor, [minX, minZ, maxX, maxZ] in world X/Z, and the basin's floor under it.
@@ -25,3 +27,5 @@ let poolHole = [-66, -22, -46, -2]
 let poolFloor = -2.4
 let poolCentre = [(poolHole[0] + poolHole[2]) / 2, (poolHole[1] + poolHole[3]) / 2]
 let poolHalf = [(poolHole[2] - poolHole[0]) / 2, (poolHole[3] - poolHole[1]) / 2]
+let plungeHole = [-153, 134, -133, 154]
+let reservoirHole = [-44, -24, -34, -12]

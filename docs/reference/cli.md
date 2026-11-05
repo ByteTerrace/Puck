@@ -3571,7 +3571,7 @@ sources are formatted by [`puck format`](#puck-formatthe-one-formatter), the one
 formatter for every source kind.
 
 ```text
-puck compile [<source.puck|document.world.json>...] [-o <out.json-or-directory>] [--tree <root> [--written <report>] [--check]] [--validate] [--strict] [--watch] [--update-assets]
+puck compile [<source.puck|document.world.json>...] [-o <out.json-or-directory>] [--tree <root> [--written <report>] [--check]] [--validate] [--measure] [--strict] [--watch] [--update-assets]
 puck decompile <source.json> [-o <out.puck>] [--overwrite] [--embeddings <file.embeddings.json>]
 puck embed <path> [--check] [--provider <fixture|openai-compatible>] [--endpoint <url>] [--omit-dimensions] [--batch-size <n>] [--timeout-seconds <n>]
 puck embed probe <path> <text> [--space <name>] [--against <table>] [--top <n>]
@@ -3587,6 +3587,8 @@ under `<root>` recursively, in ordinal path order; a cartridge source is
 selected by its schema, never by its folder or suffix. A world source given
 `--validate` without `--output` is validated and writes nothing; a world source
 has no committed document beside it. With source paths, it
+may report elapsed time, peak process working set, managed allocation and live
+managed bytes with `--measure`; these measurements are observations, not gates. It
 compiles only those paths, in the supplied order within one process. Each
 source gets its normal adjacent `.world.json` or
 `.cartridge.json` output; the first failure stops the batch, leaving earlier

@@ -10,18 +10,18 @@
 //
 // Levers: `water.speed <k>` runs the whole cycle k times faster (the melt clock and the flow together; 60 is the three hours
 // in three minutes), `world.state glacier` reads the glacier (1 full, 0 gone). `world.fields` prints each lattice row's
-// total: hydroIce plus hydroWater is the conserved quantity. hydroClock is a read-back of actual melt, not a control.
+// total: hydroIce plus hydroWater is the conserved quantity. hydroClock is elapsed simulated melt ticks.
 // A fresh boot returns the cycle to its start.
 import "../standard/hydrology"
 // The gauges the pool reads and the scenery binds.
 exports {
-  bindings [glacier, lakeLevel, fallsFlow, riverDepth, aquiferFill]
-  reads [poolLevel]
+  bindings [glacier, glacierLength, meltStrength, meltVisible, lakeLevel, fallsFlow, riverDepth, aquiferFill]
+  reads [poolLevel, aquiferFill]
 }
 
 // The chain's numbers. A cell is a metre; the glacier holds 20 units of water, the aquifer ten cells at bed 0 under a river
 // of four cells at bed 1 whose water above that is the pool's depth above its 1.5 m base (pool.puck).
-hydrology(origin: [-60, -90, 30], poolBase: 1.5, poolLevelMax: 2.35, waterPerCell: 10, rate: 0.005, fullHead: 1.8)
+hydrology(origin: [-60, -90, 30], meltSeconds: 10800, meltExponent: 3, poolBase: 1.5, poolLevelMax: 2.35, waterPerCell: 10, rate: 0.000625, fullHead: 1.8)
 
 commands [
   {

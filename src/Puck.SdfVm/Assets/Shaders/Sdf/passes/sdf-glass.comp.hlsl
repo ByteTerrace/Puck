@@ -21,8 +21,9 @@
 // darkened. In a temporal view the pixel's reactivity is raised to one where the refracted read comes from a pixel
 // away or more, since the resolve's history follows the opaque hit the record names, not what the glass shows; a flat
 // pane bending nothing keeps its history and its edges resolve like any other. A debug view's lit image passes through.
-// Glass seen through glass shades as the opaque image behind the nearer pane: the farther pane is the lit image's
-// opaque pixels, never shaded as glass. The eye inside a glass solid sees no front face, so the pixel passes through.
+// Transmission integrates each glass material before the opaque hit, including glass behind glass. Reflection and
+// refraction use the nearest front face; farther interfaces do not contribute separate reflected images.
+// The eye inside a glass solid sees no front face, so the pixel passes through.
 #define SDF_DYNAMIC_TRANSFORMS
 #include "../isa/sdf-glass.interface.hlsli"
 #include "../frame/sdf-viewport.hlsli"
@@ -144,8 +145,8 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         SdfMaterialData material = sdfMaterialLoad(sdfMeshMaterial(draw, triangleIndex));
         float ior = max(material.ior, 1.0);
         uint word = sdfGlassSumWord(pixel, extent);
-        float thickness = sdfGlassThickness(asint(sdfGlassSums[word]), asint(sdfGlassSums[(word + 1u)]), t, opaque);
-        float3 transmittance = exp(-(material.absorption * thickness));
+        float thickness = sdfGlassThicknessAt(word, t, opaque);
+        float3 transmittance = exp(-max(sdfGlassOpticalDepthAt(word), 0.0));
 
         // The ray bent into the glass leaves it `thickness` along, then carries on parallel to the pixel's ray to the
         // opaque hit's depth: where that lands on the render grid is where the light through the glass is read.

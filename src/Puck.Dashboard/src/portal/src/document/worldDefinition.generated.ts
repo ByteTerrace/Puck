@@ -5744,6 +5744,10 @@ export type WorldFieldWrite = {
    * For Add, a distinct donor field at the same cell. Transfers at most Value, donor availability above its minimum, and destination capacity; debits exactly what is deposited.
    */
   takeFrom?: string | null;
+  /**
+   * Optional amount to leave in the donor, or its declared minimum when greater. Requires TakeFrom.
+   */
+  retain?: WorldLatticeScalar | null;
 };
 
 export type WorldFieldWriteOp = "Set" | "Add";
@@ -9933,6 +9937,10 @@ export type WorldPrototype = {
        */
       isKnownKind?: boolean;
     } | null)[] | null;
+    /**
+     * Optional driver whose phase, clamped to [0, 1], uniformly scales the rendered creation about its origin. Its weight blends from the neutral size 1; zero hides it. Presentation only, never collider scale.
+     */
+    sizeBy?: string | null;
   } | null;
 };
 

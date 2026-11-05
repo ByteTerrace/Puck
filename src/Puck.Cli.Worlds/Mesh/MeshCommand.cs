@@ -39,7 +39,7 @@ public static class MeshCommand {
 
     private static Command AuditCommand() {
         var worldOption = new Option<string>(name: "--world") { Description = "The world document whose meshes to audit.", Required = true };
-        var prototypeOption = new Option<string?>(name: "--prototype") { Description = "Audit only the groups of bodies wearing this prototype's creation." };
+        var prototypeOption = new Option<string?>(name: "--prototype") { Description = "Audit this prototype's groups, from bodies and static or animated placements." };
         var groupOption = new Option<string?>(name: "--group") { Description = "Audit only the groups whose label holds this text, such as a shape's name (podBand1-left) or a slot (slot 6745)." };
         var cacheOption = new Option<string?>(name: "--cache-dir") { Description = "The device-cache root the World booted with (its --cache-dir); the meshes are its meshes subdirectory. Absent reads the per-user store (%LOCALAPPDATA%/Puck/meshes on Windows)." };
         var buildOption = new Option<string?>(name: "--build") { Description = "The directory of the World build whose bake stored the meshes (its Puck.World.dll's directory); the store keys each mesh by that build's bake identity. Absent uses this tool's own build." };
@@ -199,11 +199,11 @@ public static class MeshCommand {
             return false;
         }
     }
-    // Whether the request selects a group: by the prototype its body wears and by its label.
+    // Selection uses emission identity, not the presence of a body or a parsed display label.
     private static bool Selected(SdfMeshBakeGroup group, RestScene scene, AuditRequest request) {
         var owner = scene.Owner(group: group);
 
-        return (((request.Prototype is null) || ((owner is not null) && string.Equals(a: owner.Creation.Id, b: request.Prototype, comparisonType: StringComparison.Ordinal)))
+        return (((request.Prototype is null) || string.Equals(a: scene.Prototype(group), b: request.Prototype, comparisonType: StringComparison.Ordinal))
             && ((request.Group is null) || scene.Label(group: group, owner: owner).Contains(value: request.Group, comparisonType: StringComparison.Ordinal)));
     }
     // One group's audit: its stored mesh, or with baked its offline bake, measured against its field, or why it was not.

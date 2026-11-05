@@ -127,6 +127,7 @@ public sealed partial class SdfProgram {
     /// when <paramref name="instructions"/> carries no <see cref="SdfShapeType.Sweep"/> shape.</param>
     /// <param name="paths">One bounded edge table per Path instruction; snapshotted before validation.</param>
     /// <param name="reservedPathWords">Extra uint words reserved by a capacity probe for future path tables; never executed.</param>
+    /// <param name="sampledValues">Immutable voxel snapshots for inline sampled instructions.</param>
     /// <exception cref="ArgumentException">An instruction's opcode, shape, blend, or material lane is outside the domain
     /// the packed format carries; an operand lane that is not a reinterpreted integer field is not finite; field scopes
     /// are unbalanced, empty, nested beyond the supported depth, or cross an instance boundary; two screen surfaces claim one
@@ -137,7 +138,7 @@ public sealed partial class SdfProgram {
     /// not orthonormal, or its half-width or half-height is not finite and positive; a material component is not finite
     /// and non-negative; an instance bound is not finite and non-negative; or a trapezoid's profile slant vanishes in
     /// the deterministic field's representation.</exception>
-    public SdfProgram(IReadOnlyList<SdfInstruction> instructions, IReadOnlyList<SdfMaterial> materials, IReadOnlyList<SdfInstanceRange>? instances = null, IReadOnlyList<SdfScreenSurface>? screenSurfaces = null, IReadOnlyList<(int InstructionIndex, Vector2[] Vertices)>? convexPolygonProfiles = null, IReadOnlyList<SdfSweepCurve>? sweepCurves = null, IReadOnlyList<SdfCompiledPath>? paths = null, int reservedPathWords = 0) {
+    public SdfProgram(IReadOnlyList<SdfInstruction> instructions, IReadOnlyList<SdfMaterial> materials, IReadOnlyList<SdfInstanceRange>? instances = null, IReadOnlyList<SdfScreenSurface>? screenSurfaces = null, IReadOnlyList<(int InstructionIndex, Vector2[] Vertices)>? convexPolygonProfiles = null, IReadOnlyList<SdfSweepCurve>? sweepCurves = null, IReadOnlyList<SdfCompiledPath>? paths = null, int reservedPathWords = 0, IReadOnlyList<SdfSampledValues>? sampledValues = null) {
         ArgumentNullException.ThrowIfNull(instructions);
         ArgumentNullException.ThrowIfNull(materials);
         ArgumentOutOfRangeException.ThrowIfNegative(reservedPathWords);
@@ -151,6 +152,7 @@ public sealed partial class SdfProgram {
         m_instructions = [.. instructions];
         m_screenSurfaces = [.. (screenSurfaces ?? [])];
         m_sweepCurves = [.. (sweepCurves ?? [])];
+        m_sampledValues = (sampledValues ?? []).Select(entry => new SdfSampledValues(entry.InstructionIndex, entry.Values.ToArray())).ToArray();
         m_paths = (paths ?? []).Select(selector: path => new SdfCompiledPath(path.InstructionIndex, path.Edges.ToArray())).ToArray();
         var convexPolygonProfilesSource = (convexPolygonProfiles ?? []);
 
@@ -189,6 +191,7 @@ public sealed partial class SdfProgram {
         ValidateConvexPolygonProfiles(paramName: nameof(convexPolygonProfiles));
         ValidateSweepCurves(paramName: nameof(sweepCurves));
         ValidatePaths();
+        ValidateSampledValues();
 
         var instructionOwners = ValidatePackedContract(
             materials: materialTable,
@@ -293,6 +296,7 @@ public sealed partial class SdfProgram {
             Materials: materialCount,
             Paints: paintCount,
             PathEdges: pathEdges,
+            SampledVectors: m_sampledValues.Sum(entry => (entry.Values.Count + 3) / 4),
             RigidLeaves: rigidPlan.Leaves.Count,
             Segments: segments.Count,
             SweepCurves: m_sweepCurves.Length,
@@ -340,6 +344,7 @@ public sealed partial class SdfProgram {
 
         InstructionCount = instructionCount;
         m_words = new uint[(totalVectors * WordsPerVector)];
+        PackSampledValues(layout.SampledOffset);
 
         // PATCH every ConvexPolygon instruction's Data0.x (its host-emitted placeholder is 0f) to the real packed
         // (table offset, vertex count) it will carry — BEFORE the instruction-header loop below packs m_instructions

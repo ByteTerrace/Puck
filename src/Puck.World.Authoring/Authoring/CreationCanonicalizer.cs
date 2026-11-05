@@ -361,6 +361,9 @@ public static partial class CreationCanonicalizer {
         }
     }
     private static void ValidateDrivers(CreationDocument document, List<DocumentValidationError> errors) {
+        if (document.SizeBy is { } sizeBy && !(document.Drivers ?? []).Any(driver => driver.Name == sizeBy)) {
+            errors.Add(item: new(Message: $"names no declared driver '{sizeBy}'.", Path: "sizeBy"));
+        }
         if (document.Drivers is not { Count: > 0 } drivers) {
             return;
         }

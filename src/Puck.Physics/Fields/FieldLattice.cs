@@ -32,12 +32,13 @@ public interface IFieldLatticeHost {
     FixedQ4816 ReadScalar(StateHandle row, ulong tick);
     /// <summary>Adds to a scalar fixed-kind state row's slot cell, clamped to the row's declared envelope (a
     /// <see cref="FieldReactionInput.Flow"/> spill accumulator) — the host resolves and applies the clamp itself, so
-    /// this never refuses.</summary>
+    /// the caller debits only the accepted amount returned here.</summary>
     /// <param name="row">The compiled state row handle.</param>
     /// <param name="amount">The raw amount to add.</param>
     /// <param name="tick">The stepping tick.</param>
+    /// <returns>The accepted amount, between zero and the non-negative offered amount.</returns>
     [Replaces(root: typeof(StateArena))]
-    void AddScalar(StateHandle row, FixedQ4816 amount, ulong tick);
+    FixedQ4816 AddScalar(StateHandle row, FixedQ4816 amount, ulong tick);
 }
 /// <summary>A field lattice's own free surface at one column — a point on it and the lattice's own frame normal
 /// (always world +Y: the lattice carries no rotation of its own). A medium hold's law projects displacement along
@@ -93,6 +94,7 @@ public sealed class FieldLattice {
     private int m_revision;
     private FixedQ4816[] m_transformWhen = [];
     private FixedQ4816[] m_transformThen = [];
+    private FixedQ4816[] m_transformRetain = [];
 
     /// <summary>One captured lattice: raw Q48.16 cell values per field, field-major.</summary>
     /// <param name="Raw">The raw values, one array per declared field.</param>
@@ -534,6 +536,9 @@ public sealed class FieldLattice {
     }
     private static ReactionSets CompileTransformSets(FieldReactionInput.Transform transform) {
         foreach (var write in transform.Then) {
+            if (write.Retain.HasValue && !write.TakeFrom.HasValue) {
+                throw new ArgumentException(message: "A retained donor floor requires a transfer.", paramName: nameof(transform));
+            }
             if (write.TakeFrom is { } source && ((write.Op != FieldWriteOp.Add) || (source == write.Field))) {
                 throw new ArgumentException(message: "A transfer requires Add and a distinct donor field.", paramName: nameof(transform));
             }
@@ -545,7 +550,8 @@ public sealed class FieldLattice {
                 .Where(predicate: static write => (write.Op == FieldWriteOp.Add))
                 .Select(selector: static write => write.Field)).Concat(donors);
         var stateReads = transform.When.Select(selector: static condition => condition.Value)
-            .Concat(second: transform.Then.Select(selector: static write => write.Value));
+            .Concat(second: transform.Then.Select(selector: static write => write.Value))
+            .Concat(transform.Then.Where(static write => write.Retain.HasValue).Select(static write => write.Retain!.Value));
 
         return new ReactionSets(
             true,
@@ -682,6 +688,7 @@ public sealed class FieldLattice {
             if (m_input.Reactions[index] is FieldReactionInput.Transform transform) {
                 if (m_transformWhen.Length < transform.When.Count) { m_transformWhen = new FixedQ4816[transform.When.Count]; }
                 if (m_transformThen.Length < transform.Then.Count) { m_transformThen = new FixedQ4816[transform.Then.Count]; }
+                if (m_transformRetain.Length < transform.Then.Count) { m_transformRetain = new FixedQ4816[transform.Then.Count]; }
             }
             m_cellPassCount += m_input.Reactions[index] switch {
                 FieldReactionInput.Diffuse => 2,
@@ -887,7 +894,6 @@ public sealed class FieldLattice {
 
         var ownHeightScale = m_heightScale[field];
         var hasSpill = reaction.SpillRow.IsValid;
-        var spilled = Int128.Zero;
 
         FixedQ4816 FairShare(int donorCell) => FixedQ4816.FromRawBits(value: FixedSaturate.ToInt64(
             value: (((Int128)m_scratch[donorCell].Value - m_min[field].Value) / m_flowDirections)));
@@ -927,10 +933,15 @@ public sealed class FieldLattice {
         }
 
         void Spill(int cell) {
-            var flux = (FairShare(donorCell: cell) * rate).Value;
-
-            m_flowDelta[cell] -= flux;
-            spilled += flux;
+            var available = Int128.Max(0, (Int128)m_scratch[cell].Value + m_flowDelta[cell] - m_min[field].Value);
+            var offered = FixedQ4816.FromRawBits(FixedSaturate.ToInt64(Int128.Min(available, (FairShare(cell) * rate).Value)));
+            if (offered == FixedQ4816.Zero) { return; }
+            // The bounded destination commits first and returns its actual credit. Refused supply stays here.
+            var accepted = host.AddScalar(reaction.SpillRow, offered, tick);
+            if ((accepted < FixedQ4816.Zero) || (accepted > offered)) {
+                throw new InvalidOperationException("A scalar spill store accepted an amount outside its offer.");
+            }
+            m_flowDelta[cell] -= accepted.Value;
         }
 
         for (var z = 0; (z < m_depth); z++) {
@@ -1023,16 +1034,6 @@ public sealed class FieldLattice {
             );
         }
 
-        if (
-            hasSpill &&
-            (spilled != Int128.Zero)
-        ) {
-            host.AddScalar(
-                row: reaction.SpillRow,
-                amount: FixedQ4816.FromRawBits(value: FixedSaturate.ToInt64(value: spilled)),
-                tick: tick
-            );
-        }
     }
     private void StepTransform(FieldReactionInput.Transform reaction, IFieldLatticeHost host, ulong tick) {
         ProcessWork.Add(CellVisits, CellCount);
@@ -1041,6 +1042,7 @@ public sealed class FieldLattice {
         // Transform nodes execute serially; install-sized scratch serves every node without per-step arrays.
         var whenValues = m_transformWhen;
         var thenValues = m_transformThen;
+        var retainedValues = m_transformRetain;
 
         for (var index = 0; (index < reaction.When.Count); index++) {
             whenValues[index] = Resolve(
@@ -1050,6 +1052,9 @@ public sealed class FieldLattice {
             );
         }
         for (var index = 0; (index < reaction.Then.Count); index++) {
+            retainedValues[index] = reaction.Then[index].Retain is { } retain
+                ? Resolve(host: host, input: retain, tick: tick)
+                : FixedQ4816.MinValue;
             thenValues[index] = Resolve(
                 host: host,
                 input: reaction.Then[index].Value,
@@ -1083,7 +1088,8 @@ public sealed class FieldLattice {
                     // One transfer door: both values remain inside their envelopes, and exactly the same raw
                     // quantity leaves the donor and enters the destination. No rounded product or clamped write
                     // can create or discard mass; a stale requested amount can only exhaust this finite store.
-                    var available = (Int128)m_values[source][cell].Value - m_min[source].Value;
+                    var floor = Math.Max(m_min[source].Value, retainedValues[index].Value);
+                    var available = (Int128)m_values[source][cell].Value - floor;
                     var capacity = (Int128)m_max[write.Field].Value - m_values[write.Field][cell].Value;
                     var amount = Int128.Max(0, Int128.Min(thenValues[index].Value, Int128.Min(available, capacity)));
                     if (amount == 0) { continue; }
@@ -1256,10 +1262,12 @@ public sealed class FieldLattice {
 
         for (var field = 0; (field < FieldCount); field++) {
             var sum = 0.0;
+            Int128 totalRaw = 0;
             var nonzero = 0;
 
             foreach (var value in m_values[field]) {
                 sum += ((double)value);
+                totalRaw += value.Value;
 
                 if (value != FixedQ4816.Zero) {
                     nonzero++;
@@ -1273,7 +1281,7 @@ public sealed class FieldLattice {
 
             parts.Add(item: string.Create(
                 provider: CultureInfo.InvariantCulture,
-                handler: $"{m_names[field]} nonzero={nonzero} mean={(sum / CellCount):0.###} total={sum:0.#####}{color}"
+                handler: $"{m_names[field]} nonzero={nonzero} mean={(sum / CellCount):0.###} total={sum:0.#####} totalRaw={totalRaw}{color}"
             ));
         }
 

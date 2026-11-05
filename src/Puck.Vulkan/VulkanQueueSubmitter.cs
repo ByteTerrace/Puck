@@ -200,13 +200,9 @@ public sealed unsafe class VulkanQueueSubmitter {
     /// <exception cref="ArgumentException"><paramref name="waitSemaphores"/> and <paramref name="waitValues"/> differ in
     /// length.</exception>
     public void SubmitAndWait(VulkanDeviceCommands device, VkQueue graphicsQueue, ReadOnlySpan<nint> commandBufferHandles, ReadOnlySpan<nint> waitSemaphores = default, ReadOnlySpan<ulong> waitValues = default) {
-        if (commandBufferHandles.IsEmpty) {
-            return;
-        }
-        SubmitCore(
+        Submit(
             commandBufferHandles: commandBufferHandles,
             device: device,
-            fenceHandle: 0,
             graphicsQueue: graphicsQueue,
             waitSemaphores: waitSemaphores,
             waitValues: waitValues

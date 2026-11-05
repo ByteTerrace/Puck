@@ -111,6 +111,7 @@ public sealed partial class WorldCreationInstances {
         public int Slots => Motion.SlotCount;
 
         public readonly DynamicTransform[] ShapeTransforms = new DynamicTransform[(document.Shapes?.Count ?? 0)];
+        public DynamicTransform? PackedRoot;
         // The registration's reads of the client's state mirror: every lane operand, driver signal and gate, pose and
         // effector reference the look reads, bound to BodyIndex so a $body key names the wearing body. Released when
         // the registration retires, so the mirror stops reading what no body wears any more.
@@ -956,6 +957,7 @@ public sealed partial class WorldCreationInstances {
     // The root pose FollowedRootPose falls back to before the first PackTransforms has ever latched one, or for a
     // registration whose root has no dynamics — the un-followed RootPose, bit for bit.
     private static (Vector3 Position, Quaternion Rotation, float Scale) FollowedRootPose(Registration live, IWorldStampSource client) {
+        if (live.PackedRoot is { } packed) { return (packed.Position, packed.Orientation, packed.Scale); }
         var (position, rotation, scale) = RootPose(
             client: client,
             live: live
@@ -1540,46 +1542,15 @@ public sealed partial class WorldCreationInstances {
     // domain-bearing shape's slot holds only its parent's delta frame, and composing its rest pose onto that delta is
     // what its drawn geometry shows.
     private static SdfAnchor LatchedShapePose(Registration live, int shapeSlot, IReadOnlyList<ShapeDocument> shapes, IWorldStampSource client) {
-        var poses = FramePoses(
-            frameCursor: live.EffectiveCursor,
-            live: live
-        );
-
-        var (localPosition, localRotation) = BasePose(
-            poses: poses,
-            shape: shapes[shapeSlot]
-        );
-
-        if (shapeSlot < (live.Creation.EngineDocument.Shapes?.Count ?? 0)) {
-            WorldGaitDrivers.Apply(
-                deltaRotation: live.PartDeltaRotation[shapeSlot],
-                deltaTranslation: live.PartDeltaTranslation[shapeSlot],
-                position: ref localPosition,
-                rotation: ref localRotation
-            );
+        // Before the first pack there is no published animation pose; expose the authored rest/frame pose.
+        if (live.PackedRoot is null) {
+            var (position, rotation) = BasePose(poses: FramePoses(frameCursor: live.EffectiveCursor, live: live), shape: shapes[shapeSlot]);
+            var root = RootPose(live: live, client: client);
+            return new SdfAnchor(Position: root.Position + Vector3.Transform(position * root.Scale, root.Rotation),
+                Orientation: Quaternion.Normalize(root.Rotation * rotation));
         }
-
-        var (rootPosition, rootRotation, scale) = FollowedRootPose(
-            client: client,
-            live: live
-        );
-        var worldPosition = (rootPosition + Vector3.Transform(
-            rotation: rootRotation,
-            value: (localPosition * scale)
-        ));
-
-        if (
-            (shapeSlot < (live.Creation.EngineDocument.Shapes?.Count ?? 0)) &&
-            live.PartFollows[shapeSlot] &&
-            live.PartFollower[shapeSlot].Seeded
-        ) {
-            worldPosition = live.PartFollower[shapeSlot].Value;
-        }
-
-        return new SdfAnchor(
-            Position: worldPosition,
-            Orientation: Quaternion.Normalize(value: (rootRotation * localRotation))
-        );
+        var pose = PackedShapePose(live, shapeSlot);
+        return new SdfAnchor(Position: pose.Position, Orientation: pose.Orientation);
     }
 
     /// <summary>Reads a packed shape's world pose by authored index, independently of the shared transform layout.</summary>
@@ -1588,12 +1559,17 @@ public sealed partial class WorldCreationInstances {
 
         if ((live is null) || (((uint)shapeIndex) >= ((uint)live.ShapeTransforms.Length))) { throw new ArgumentOutOfRangeException(paramName: nameof(shapeIndex)); }
         NotePoseRead(live: live);
+        return PackedShapePose(live, shapeIndex);
+    }
+
+    // Anchor and rig readers use exactly the pose the pack published, including uniform size and followers.
+    private static DynamicTransform PackedShapePose(Registration live, int shapeIndex) {
         var pose = live.ShapeTransforms[shapeIndex];
         var shape = live.Creation.EngineDocument.Shapes![shapeIndex];
 
         return ((shape.Domain is { Count: > 0 }) ? new DynamicTransform(
-            Position: (pose.Position + Vector3.Transform((shape.Position.Value * live.Scale), pose.Orientation)),
-            Orientation: Quaternion.Normalize(value: (pose.Orientation * shape.Rotation.Value)), Lanes: pose.Lanes) : pose);
+            Position: (pose.Position + Vector3.Transform((shape.Position.Value * pose.Scale), pose.Orientation)),
+            Orientation: Quaternion.Normalize(value: (pose.Orientation * shape.Rotation.Value)), Lanes: pose.Lanes) { Scale = pose.Scale } : pose);
     }
     /// <summary>Resolves a body-rooted creation look's authored part pose from the current packed transforms.</summary>
     /// <param name="bodyIndex">The population entity index.</param>
@@ -1637,7 +1613,7 @@ public sealed partial class WorldCreationInstances {
         var transform = transforms[transformSlot];
         var shape = live.Creation.EngineDocument.Shapes![shapeSlot];
 
-        pose = new SdfAnchor(Position: (transform.Position + Vector3.Transform((shape.Position.Value * live.Scale), transform.Orientation)),
+        pose = new SdfAnchor(Position: (transform.Position + Vector3.Transform((shape.Position.Value * transform.Scale), transform.Orientation)),
             Orientation: Quaternion.Normalize(value: (transform.Orientation * shape.Rotation.Value)));
 
         return true;

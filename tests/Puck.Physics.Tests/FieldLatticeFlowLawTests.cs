@@ -197,7 +197,7 @@ public sealed class FieldLatticeFlowLawTests {
             bodyCount: 0,
             host: new SpillHost(onAddScalar: (row, amount) => {
                 written = row;
-                spilled = amount;
+                spilled += amount;
                 calls++;
             })
         );
@@ -206,7 +206,7 @@ public sealed class FieldLatticeFlowLawTests {
         // rate * value / directionCount share off the lattice edge -- 4/2 = 2 from cell 0, 6/2 = 3 from cell 1.
         Assert.Equal(
             actual: calls,
-            expected: 1
+            expected: 2
         );
         Assert.Equal(
             expected: flow.SpillRow,
@@ -238,6 +238,20 @@ public sealed class FieldLatticeFlowLawTests {
                 lattice: lattice
             ) + spilled.Value)
         );
+    }
+    [Fact]
+    public void FullSpillStoreLeavesUnacceptedSupplyInTheLattice() {
+        var lattice = new FieldLattice(FlowFields(width: 2, depth: 1,
+            waterHeightScale: FixedQ4816.Zero, includeGround: false, spillRow: Row("spill")));
+        lattice.Restore(IntCheckpoint([4, 6]));
+        var stored = FixedQ4816.Zero;
+        var host = new SpillHost((_, amount) => stored += amount, FixedQ4816.FromInteger(3));
+        for (ulong tick = 1; tick <= 10; tick++) {
+            lattice.Step(tick: tick, bodyCount: 0, host: host);
+            Assert.Equal(10L * 65536, SumRaw(lattice, 0, 2) + stored.Value);
+        }
+        Assert.Equal(FixedQ4816.FromInteger(3), stored);
+        Assert.Equal(7L * 65536, SumRaw(lattice, 0, 2));
     }
     [Fact]
     public void ConservationHoldsExactlyOverManyStepsWhenNoClampBindsAndNoSpillIsDeclared() {
@@ -375,17 +389,20 @@ public sealed class FieldLatticeFlowLawTests {
     }
 
     private sealed class NoopHost : IFieldLatticeHost {
-        public void AddScalar(StateHandle row, FixedQ4816 amount, ulong tick) { }
+        public FixedQ4816 AddScalar(StateHandle row, FixedQ4816 amount, ulong tick) => FixedQ4816.Zero;
         public FixedVector3? BodyPosition(int body) => null;
         public FixedQ4816 ReadScalar(StateHandle row, ulong tick) => FixedQ4816.Zero;
         public long ReadTag(StateHandle row, int body, ulong tick) => 0L;
         public void WriteTag(StateHandle row, int body, long value, ulong tick) { }
     }
-    private sealed class SpillHost(Action<StateHandle, FixedQ4816> onAddScalar) : IFieldLatticeHost {
-        public void AddScalar(StateHandle row, FixedQ4816 amount, ulong tick) => onAddScalar(
-            row,
-            amount
-        );
+    private sealed class SpillHost(Action<StateHandle, FixedQ4816> onAddScalar, FixedQ4816? capacity = null) : IFieldLatticeHost {
+        private FixedQ4816 m_remaining = capacity ?? FixedQ4816.MaxValue;
+        public FixedQ4816 AddScalar(StateHandle row, FixedQ4816 amount, ulong tick) {
+            var accepted = amount < m_remaining ? amount : m_remaining;
+            m_remaining -= accepted;
+            onAddScalar(row, accepted);
+            return accepted;
+        }
         public FixedVector3? BodyPosition(int body) => null;
         public FixedQ4816 ReadScalar(StateHandle row, ulong tick) => FixedQ4816.Zero;
         public long ReadTag(StateHandle row, int body, ulong tick) => 0L;
