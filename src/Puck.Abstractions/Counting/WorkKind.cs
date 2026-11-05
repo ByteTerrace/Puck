@@ -15,6 +15,11 @@ namespace Puck.Abstractions.Counting;
 /// </para>
 /// </summary>
 public sealed class WorkKind {
+    // The first WorkCounterSet that lists this kind and the kind's index in it, so a count into that set finds its
+    // counter without scanning the set's kinds. The index is written before the set is published.
+    internal WorkCounterSet? HomeSet;
+    internal int HomeIndex;
+
     /// <summary>Gets what two readings of this kind may be expected to agree on.</summary>
     public WorkClass Class { get; }
     /// <summary>Gets the dotted name a report prints for this kind.</summary>

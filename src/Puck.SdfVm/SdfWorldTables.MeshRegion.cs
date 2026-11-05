@@ -343,6 +343,7 @@ public sealed partial class SdfWorldTables {
         var changedRecords = 0;
         var changedWords = 0L;
         var comparedRecords = 0;
+        var tally = new StagingTally();
 
         for (var run = 0; run < (candidates?.Count ?? 1); run++) {
             var start = candidates?.Start(run) ?? 0;
@@ -355,7 +356,7 @@ public sealed partial class SdfWorldTables {
                     (m_reseatedDraws.Contains(index) && MeshTransformWasReseated(in draw))) {
                     var record = records.Slice(length: SdfMeshRecord.DrawWords, start: (index * SdfMeshRecord.DrawWords));
 
-                    StageMeshDraw(draw: in draw, index: index, old: old, record: record, incremental: true);
+                    StageMeshDraw(draw: in draw, index: index, old: old, record: record, tally: ref tally, incremental: true);
                     changedWords += m_meshDrawDifferences.AddDifferences(
                         previous: MemoryMarshal.Cast<byte, uint>(span: old.Slice(start: (index * SdfMeshRegion.DrawBytes), length: SdfMeshRegion.DrawBytes)),
                         current: record,
@@ -372,6 +373,7 @@ public sealed partial class SdfWorldTables {
         // Every previous-matrix decision above reads the unmodified shadow. Only the exact packed-word delta is
         // copied and owed now; bounded run coarsening may include unchanged words already valid in records.
         if (m_meshDrawDifferences.Count > 0) { _ = m_meshRegion.WriteRuns(words: records, runs: m_meshDrawDifferences); }
+        tally.Publish();
         SdfMeshHistory.ProcessWork.Add(kind: SdfMeshHistory.RecordsCompared, amount: comparedRecords);
         SdfMeshHistory.ProcessWork.Add(kind: SdfMeshHistory.RecordsChanged, amount: changedRecords);
         SdfMeshHistory.ProcessWork.Add(kind: SdfMeshHistory.PackedWordsChanged, amount: changedWords);

@@ -60,6 +60,8 @@ public static class MotionRun {
             arguments.AddRange(collection: ["--cache-dir", cacheDirectory]);
         }
 
+        WorldAdmission.Wait(step: "motion", worldArguments: arguments);
+
         using var process = MotionWorldProcess.Start(
             arguments: arguments,
             artifact: request.Artifact,

@@ -18,11 +18,12 @@ internal static unsafe class SdfMeshStoreCodec {
 
     internal static byte[] Encode(UInt128 key, SdfMesh? mesh, int[] materials) {
         var pieces = ((mesh is null) ? Array.Empty<SdfMesh>() : ((mesh.Chunks.Count == 0) ? new[] { mesh } : mesh.Chunks));
-        var low = ((pieces.Count == 0) ? Vector3.Zero : pieces[0].Positions.Span[0]);
-        var high = low;
+        var low = ((pieces.Count == 0) ? Vector3.Zero : pieces[0].PositionLow);
+        var high = ((pieces.Count == 0) ? Vector3.Zero : pieces[0].PositionHigh);
 
         foreach (var piece in pieces) {
-            foreach (var position in piece.Positions.Span) { low = Vector3.Min(value1: low, value2: position); high = Vector3.Max(value1: high, value2: position); }
+            low = Vector3.Min(value1: low, value2: piece.PositionLow);
+            high = Vector3.Max(value1: high, value2: piece.PositionHigh);
         }
         // Every shared seam vertex uses exactly the same grid, including its width. A per-piece grid opens cracks.
         var width = ((pieces.Count == 0) ? 4 : PositionWidth(high: high, low: low, pieces: pieces));

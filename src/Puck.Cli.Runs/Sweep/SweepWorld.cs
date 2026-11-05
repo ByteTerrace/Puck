@@ -83,6 +83,11 @@ public sealed class SweepWorld : IDisposable {
         session = null;
 
         try {
+            // Waiting for the host's headroom is other runs' time, so the sweep's own budget stands still for it.
+            using (budget.Pause()) {
+                WorldAdmission.Wait(step: "sweep", worldArguments: arguments, cancellationToken: budget.Token);
+            }
+
             process = MotionWorldProcess.Start(
                 arguments: [.. arguments, "--control"],
                 artifact: artifact,

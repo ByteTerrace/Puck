@@ -154,7 +154,7 @@ public static partial class TestCommand {
         var started = Stopwatch.GetTimestamp();
 
         foreach (var (_, directory) in legs) { Puck.Confinement.ConfinedDirectory.RemoveTree(path: directory); }
-        var ran = RunWorker(artifact: artifact!, batch: Path.Combine(path1: runDirectory, path2: "batch-disclosure.json"), legs: [.. legs.Select(selector: leg => (object)new {
+        var ran = RunWorker(artifact: artifact!, batch: Path.Combine(path1: runDirectory, path2: "batch-disclosure.json"), heavy: true, legs: [.. legs.Select(selector: leg => (object)new {
             World = staged,
             Directory = leg.Directory,
             ExitAfterSeconds = ((int)Math.Ceiling(a: LegCeiling(exportTick: schedule.ExportTick, rateHz: schedule.RateHz).TotalSeconds)),
