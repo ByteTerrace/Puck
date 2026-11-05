@@ -253,6 +253,12 @@ injected allocator; published World bake payloads, decoded readback answers,
 lattice planes, lattice indices and point workspaces use the injected native
 allocator, charged to the group that owns them. A caller that overwrites every
 entry grows a buffer with `Resize(..., preserve: false)`, which copies nothing.
+Mesh-store decode scratch follows the same scope (`SdfMeshStoreCodec.TryDecode`):
+expanded bytes live in an accounted `OwnedBuffer<byte>` until parsing ends, and
+the returned mesh owns its decoded arrays. Do not put large, burst-only payloads
+in `ArrayPool.Shared`: parallel loading can leave one large buffer per bucket
+on each worker after the load ends. Attribute the pool's retained arrays before
+and after collection, rather than treating every returned buffer as freed.
 Reference-bearing contour roots and the bounded worker-slot refinement
 collections stay managed under their existing ownership; the slots report their
 retained bytes (`mesh-bake-worker-scratch`) and release them once a bake settles

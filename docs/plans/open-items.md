@@ -2075,8 +2075,9 @@ Grounded causes and leads:
   build also keeps the composed-document store (`WorldDefinitionFileSource.cs`,
   `ForgetComposedDocuments` after boot) and may keep the authoring document tree
   after compiling; confirm and release what a booted compiled world no longer
-  reads. `Puck.World.csproj:26-28` still says the LOH keeps baked meshes, though
-  payloads have been native for some time and the settled LOH is GI and caches.
+  reads. Expanded mesh-store payloads now use scoped, accounted storage rather
+  than the shared array pool; the decoded mesh arrays before native publication
+  remain a separate transient to remove.
 - Order of shrinkage once attributed: the unattributed bucket, the crossing's
   spike and the tour's growth (the unbounded probe cache), GI's managed working
   set, then the mesh copies (release normals and levels 1 and 2 after landing
