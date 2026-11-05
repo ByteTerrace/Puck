@@ -37,6 +37,16 @@ void sdfSkyEnvironmentBasis(float3 d, out float basis[9]) {
     basis[7] = ((1.0925484305920792 * d.x) * d.z);
     basis[8] = (0.54627421529603959 * ((d.x * d.x) - (d.y * d.y)));
 }
+float3 sdfSkyEnvironmentIrradiance(float3 normal, float3 coefficients[9]) {
+    float basis[9];
+    sdfSkyEnvironmentBasis(normal, basis);
+    float3 result = 0.0;
+    [unroll] for (uint k = 0u; k < 9u; k++) {
+        float convolution = k == 0u ? 3.141592653589793 : (k < 4u ? 2.0943951023931953 : 0.7853981633974483);
+        result += coefficients[k] * (basis[k] * convolution);
+    }
+    return max(result, 0.0);
+}
 // A texel's two words: the colour's channels clamped to [0, the largest half float] as half floats, and a zero.
 uint2 sdfSkyEnvironmentPack(float3 color) {
     float3 clamped = clamp(color, 0.0, SDF_SKY_ENVIRONMENT_MAX_RADIANCE);

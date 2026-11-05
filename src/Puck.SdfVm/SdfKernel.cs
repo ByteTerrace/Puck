@@ -4,6 +4,18 @@ namespace Puck.SdfVm;
 /// (<see cref="SdfKernelSet.StemOf"/>), pipeline, build order and loaded bytecode (<see cref="SdfKernelSet"/>) derive
 /// from.</summary>
 public enum SdfKernel {
+    /// <summary>The background probe trace over the uploaded static scene hierarchy.</summary>
+    ProbeTrace,
+    /// <summary>Shades cached probe hits against the uploaded hierarchy and feedback volume.</summary>
+    ProbeRelight,
+    /// <summary>Selects probes owing geometry or lighting work from captured cache metadata.</summary>
+    ProbeSelect,
+    /// <summary>Compacts a relight batch into indirect dispatch arguments and a stable work list.</summary>
+    ProbeCompact,
+    /// <summary>Stores newly traced hit blocks in the resident cache before relighting.</summary>
+    ProbeCache,
+    /// <summary>Meters view cameras from probes or GPU-cached camera rays.</summary>
+    ProbeMeter,
     /// <summary>The mesh bake's instance mask, selecting one bake group's instances.</summary>
     MeshBakeMask,
     /// <summary>The mesh bake's field sampler over one group's lattice: the frame's one walk of the SDF program, run

@@ -281,6 +281,30 @@ public static class SdfIsaHlsl {
     private static Declarations DeclareRenderDeclarations() {
         var declarations = new Declarations(builtOn: DeclareField(), guard: SdfRenderHlsl.Guard, include: FileName);
 
+        declarations.Count(name: "SDF_PROBE_HIT_COUNT", value: SdfMeshProbeTrace.HitCount);
+        declarations.Count(name: "SDF_PROBE_HIT_WORDS", value: SdfMeshProbeTrace.HitWords);
+        declarations.Count(name: "SDF_PROBE_UNKNOWN_MATERIAL", value: SdfMeshProbeTrace.UnknownMaterial);
+        declarations.Count(name: "SDF_PROBE_NODE_COUNT_BITS", value: SdfMeshProbeTrace.NodeCountBits);
+        declarations.Count(name: "SDF_PROBE_NODE_WORDS", value: SdfMeshProbeTrace.NodeWords);
+        declarations.Count(name: "SDF_PROBE_ENTRY_WORDS", value: SdfMeshProbeTrace.EntryWords);
+        declarations.Count(name: "SDF_PROBE_NORMAL_WORD", value: SdfMeshProbeTrace.NormalWord);
+        declarations.Count(name: "SDF_PROBE_GEOMETRY_WORD", value: SdfMeshProbeTrace.GeometryWord);
+        declarations.Count(name: "SDF_PROBE_IDENTITY_WORD", value: SdfMeshProbeTrace.IdentityWord);
+        declarations.Count(name: "SDF_PROBE_INSTANCE_INDEX_WORD", value: SdfMeshProbeTrace.InstanceIndexWord);
+        declarations.Count(name: "SDF_PROBE_STACK_DEPTH", value: SdfMeshProbeTrace.StackDepth);
+        declarations.Count(name: "SDF_PROBE_GROUP_SIZE", value: SdfMeshProbeTrace.GroupSize);
+        declarations.Count(name: "SDF_PROBE_RELIGHT_OUTPUT_WORDS", value: SdfMeshProbeRelight.OutputWords);
+        declarations.Count(name: "SDF_PROBE_RELIGHT_INPUT_WORDS", value: SdfMeshProbeRelight.InputWords);
+        declarations.Count(name: "SDF_PROBE_RELIGHT_HEADER_ROWS", value: SdfMeshProbeRelight.HeaderRows);
+        declarations.Count(name: "SDF_PROBE_RELIGHT_MATERIAL_ROWS", value: SdfMeshProbeRelight.MaterialRows);
+        declarations.Count(name: "SDF_PROBE_RELIGHT_LIGHT_ROWS", value: SdfMeshProbeRelight.LightRows);
+        declarations.Count(name: "SDF_PROBE_SELECT_INPUT_WORDS", value: SdfMeshProbeRelight.SelectionInputWords);
+        declarations.Count(name: "SDF_PROBE_CACHE_WORDS", value: SdfMeshProbeRelight.CacheWords);
+        declarations.Count(name: "SDF_PROBE_RELIGHT_RESULT_WORDS", value: SdfMeshProbeRelight.ResultWords);
+        declarations.Count(name: "SDF_PROBE_RECORD_INPUT_WORD", value: SdfMeshProbeRelight.RecordInputWord);
+        declarations.Real(name: "SDF_MESH_IRRADIANCE_CLEARANCE", value: SdfMeshIrradianceProbe.Clearance);
+        declarations.Real(name: "SDF_MESH_IRRADIANCE_DEPTH_SHEET_THICKNESS", value: SdfMeshIrradianceProbe.DepthSheetThickness);
+
         declarations.Members<SdfIndirectSources>(prefix: "SDF_INDIRECT_SOURCES");
         declarations.Section(title: "The renderer's capacities, the photometry and the exposure (SdfPhotometry, SdfExposure).");
         declarations.Count(

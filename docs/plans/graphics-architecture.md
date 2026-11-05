@@ -123,8 +123,8 @@ building a hierarchy) is submitted by a service that owns a bounded ring of
 slots, fences and memory admission, and that submits the next batch when the
 last completes rather than once per rendered frame. B1 built it as
 `SdfGpuWork`, the bake its first client, replacing the bake's frame-paced
-dispatch (the Codex synthesis's rank 2); the probe trace has no GPU form yet
-and is its second client (G1). One service serves both, on one queue first; a second compute queue is an
+dispatch (the Codex synthesis's rank 2); the probe trace, relight and meter
+are its second client (G1). One service serves both, on one queue first; a second compute queue is an
 overlap measured per device, never a correctness dependency (the Codex
 synthesis's S6 to S8 agree that overlap shares bandwidth and caches and can
 regress). The job system's `Lighting` and `Bake` classes
@@ -313,12 +313,12 @@ on the Deck as well as the 2060.
    likewise, so the lockstep drain with the day running becomes a frame's
    work and the sweep's windowed leg runs; the trace stops competing with
    the bake's workers during a cold bake (the irradiance worker takes a
-   quarter of the processors more); the CPU probe cache's hit blocks (329 MB
-   after a tour) and the scene build's managed transient (about a gigabyte)
-   go, leaving the record table and a diagnostic readback. **Adopted as the
+   quarter of the processors more); the CPU probe cache's full hit blocks
+   move to device storage, while the CPU retains depth/sky and diagnostic
+   lighting. The CPU scene builder and its transient workspace remain. **Adopted as the
    baseline, G1.** What it does not change: the gather, the record, the
-   visibility rule, the meter's camera trace (which stays a CPU read until
-   the exposure path moves, as the illumination plan's third gap says).
+   visibility rule or scene construction. Camera queries and their fallback
+   trace now share the GPU relight's service and shading function.
 2. **Hardware ray query behind the same interface** (M1's structure is a
    BLAS per geometry and a TLAS over instances). DXR 1.1 `RayQuery` in the
    same compute kernel on Direct3D 12 and `VK_KHR_ray_query` on Vulkan, built
@@ -456,7 +456,7 @@ whose numbers every step takes itself.
 
 | Rank | Step | Mechanism | Frame bar | Memory bar | Cold-bake bar | What it proves on the debug world |
 |---|---|---|---|---|---|---|
-| 1 | **G1.** GPU probe trace and relight, software traversal, with the GPU work list | M1 (the hierarchy uploaded once per geometry), M2 (the background GPU service, shared with B1) | The relight's CPU contention goes (holding the sun saved 1 to 3 ms); the GPU gains a budgeted dispatch of milliseconds | The CPU probe cache's hit blocks and the scene build's transient go (about 1.3 GB after a tour); a hierarchy of 140 to 280 MB arrives on the GPU | The trace's quarter of the processors returns to the contour | `[sdf.mesh-gi] done` seconds for a full High window; the lockstep still with the day running; `sdf.mesh-gi.relit` per tick; the device law's hits |
+| 1 | **G1** (mechanism implemented; acceptance below). GPU probe trace and relight, software traversal, with the GPU work list | M1 (the hierarchy uploaded once per geometry), M2 (the background GPU service, shared with B1) | Trace, relight, work selection and camera metering run on the shared service; full convergence still misses the moving-light targets | CPU full hit blocks are released; CPU hierarchy construction and depth/sky/light caches remain. The hierarchy and hit words reside on the GPU; shared staging is serialized | Full CPU probe tracing and shading leave the runtime path; nearest-surface placement remains | `[sdf.mesh-gi] done` seconds for a full High window; the lockstep still with the day running; `sdf.mesh-gi.relit` per tick; the device law's hits |
 | 2 | **B1** (landed). The completion-driven bake service, the GPU service G1 reuses | M2 | Produce no longer decodes samples (83 to 69 ms while baking) | The slot ring bounds in-flight bytes | The pacing floor went: 170 to 102–125 s on Direct3D 12, 190 to 129 s on Vulkan; the CPU half is the packet's separate cut | Measured: identical products within the run-to-run spread, 6–7 s of GPU a cold bake |
 | 3 | **A1.** Portal sight by the consumer's pyramid, and **A2.** Direct3D 12 batching and caller-stated layouts | M4; the recording preconditions | About 5 to 6 ms of GPU at the forest pose; a submission saving measured, not assumed | None | None | `world.budget`'s live frame line shows no hall session from the forest; a painting shows fresh on its first visible frame; `ExecuteCommandLists` count per frame |
 | 4 | **V1b.** The geometry/instance split, with the hierarchy offset and residency handle in the geometry table | M1 | As the visibility plan expects of buckets | The draw table shrinks (the meadow's 539 KB to about 225 KB by the Antigravity file's arithmetic, unverified) | None | The visibility plan's V1b checks |
@@ -478,9 +478,10 @@ plans' fifth goal names.
 **Risks.** G1's throughput is an extrapolation from a Pascal Titan X to the
 2060 and from nothing to the Deck; its first check is a measured rays per
 second on each. The CPU/GPU parity of a float traversal is by tolerance (a
-ray grazing an edge may hit on one side and miss on the other), so the
-device law compares hit distances to a relative tolerance and normals and
-materials exactly where both hit, and the gather law that already compares
+ray grazing an edge is ill-conditioned), so the
+device law requires exact hit/miss, instance/triangle identity and discrete
+flags, permits independently checked near-tied triangles, and bounds distances
+and positions by scene scale and float precision. The gather law that already compares
 both backends' slots stays the pixel-level check. A kernel with a traversal
 stack must not spill to local memory on NVIDIA's Vulkan driver (the
 rendering skill's constant-index rule); a groupshared stack per lane is the
@@ -501,10 +502,22 @@ legs under `puck lease gpu`.
 
 ### G1. The GPU probe trace and relight
 
-**Family and model.** Codex Astra at high effort, or a Claude `specialist`;
-principal-grade review of the invariant below before the kernels are
-written (the orchestration skill's rule for work whose correctness rests on
-an invariant).
+**Implemented mechanism.** `SdfMeshProbeGpuWork` runs trace, relight, selection
+and camera metering on `SdfGpuWork`, with resident hit words and GPU record
+publication. The [mesh-GI reference](../../.claude/skills/rendering/references/mesh-gi.md)
+owns lifetime, packing and capture-readiness procedures. The CPU scene builder,
+nearest-surface placement and short clearance queries remain; the CPU full trace
+and shading remain diagnostic references. This removes no scene-build transient
+workspace by itself.
+
+**Remaining acceptance.** A moving-sun lockstep drain still takes many frames.
+Measure job/fence round trips and host placement/selection alongside kernel time
+before choosing the next cut; GPU execution time alone is not the drain's cost.
+The outdoor CPU-reference relight diagnostic also needs attribution near foliage,
+beyond the transformed-box device-law corpus. Keep the fixed day,
+exposure and explicit unobstructed cameras for image comparisons. A blocked or
+exposure-mismatched old still is not a parity reference. Quiet timing comparisons,
+RTX 2060/Deck throughput and cold-bake contention remain qualification work.
 
 **Outcome.** `SdfMeshProbeDepth.TraceHits` and `SdfMeshIrradiance.Relight`
 have GPU implementations that fill the same hit words and the same record,
@@ -525,12 +538,18 @@ kernel and the CPU `TraceHits` share the hit-word packing through
 (a sync pair, listed in [sync pairs](../../.claude/skills/rendering/references/sync-pairs.md)),
 and a device law (`SdfMeshIrradianceTraceDeviceLawTests`, beside the gather
 law) traces one published scene on the CPU and on each backend and requires
-every texel's material and normal bytes equal where both hit and the
-distances within a relative tolerance; a texel where one hits and the other
-misses fails unless the hit lies within that tolerance of the reach. Where
-the guarantee stops: a grazing ray's hit on one side of an edge and miss on
-the other is inside the tolerance by construction, and the gather law holds
-the pixels.
+every texel's hit/miss and instance/triangle identity, material, normal bytes
+and back-face flag exactly. Distances and reconstructed positions use
+`64 * 2^-23 * scale / abs(dot(normal, direction))` metres, where scale is the
+largest world-space vertex magnitude, ray-origin magnitude or reach (at least
+one metre). The rounding allowance covers the fixture's affine transforms,
+cross/dot products and division; the denominator accounts for plane-intersection
+conditioning at grazing incidence. A different identity is accepted only when
+the CPU independently intersects that claimed triangle within the same distance
+bound, with its flags still exact. Ties are counted and must be below 0.1% of
+rays. A skipped top-level subtree is the negative control on each backend.
+Where the guarantee stops: this bounds the law's well-conditioned transformed
+box corpus, not arbitrary singular geometry, and the gather law holds the pixels.
 
 **Reuse, no second mechanism.** The hierarchy is `SdfMeshIrradianceScene`'s,
 uploaded (its `Node` layout, leaf order and per-draw inverse transforms),
@@ -545,12 +564,14 @@ shader reads is `Tuning`. The relight's local part, sweep convergence and
 `ConvergedShare` rule are unchanged; the relight kernel reads the published
 volume for bounce exactly as the CPU read does.
 
-**Order.** (1) Upload the hierarchy and trace hits on the GPU, read them
-back into the existing CPU cache so the relight and publication are
-untouched; the device law lands here. (2) Relight on the GPU and publish
-from the GPU record, with the meter's eight-probe read a readback. (3) The
-work list on the GPU; delete the CPU `Work` listing. (4) Delete the CPU
-trace from the frame's path on both backends.
+The implementation streams the existing hierarchy through `GpuRegion` rather
+than packing a second full host array. One query at a time owns the scene and
+feedback staging; the service slots retain their own outputs until release.
+Selection checks allocation tokens before reusing device hit words, and its
+compacted list feeds indirect relights. Scene/window-checked completed records
+copy to feedback, then to the published table; the camera meter returns only
+its small answer. Settled captures latch lighting and exposure readiness at
+frame preparation, so a late completion cannot certify held exposure.
 
 **Checks.** Rays per second on the 4070 (and, when the lead can reach them,
 the 2060 and the Deck) read from `world.counters sdf.mesh-gi` against the
