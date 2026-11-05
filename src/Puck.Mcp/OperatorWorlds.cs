@@ -131,6 +131,8 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
         string? holder = null;
         string? lane = null;
         var ownerPlay = false;
+        var paused = false;
+        var lockstep = false;
         var seconds = 900;
         var windowed = false;
 
@@ -149,6 +151,10 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
                 windowed = value.GetBoolean();
             } else if ((key == "ownerPlay") && (value.ValueKind is JsonValueKind.True or JsonValueKind.False)) {
                 ownerPlay = value.GetBoolean();
+            } else if ((key == "paused") && (value.ValueKind is JsonValueKind.True or JsonValueKind.False)) {
+                paused = value.GetBoolean();
+            } else if ((key == "lockstep") && (value.ValueKind is JsonValueKind.True or JsonValueKind.False)) {
+                lockstep = value.GetBoolean();
             } else if ((key == "holder") && (value.ValueKind == JsonValueKind.String) && !string.IsNullOrWhiteSpace(value: value.GetString()) && (value.GetString()!.IndexOfAny(anyOf: ['\r', '\n']) < 0)) {
                 holder = value.GetString()!;
             } else if ((key == "lane") && (value.ValueKind == JsonValueKind.String) && !string.IsNullOrWhiteSpace(value: value.GetString()) && (value.GetString()!.IndexOfAny(anyOf: ['\r', '\n']) < 0)) {
@@ -206,7 +212,7 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
                 CallToolResult result;
 
                 try {
-                    result = await StartWorldAsync(checkout, path, backend, cacheDirectory, captureTool, holder, lane, windowed, ownerPlay, seconds, attachment, progress, stop.Token).ConfigureAwait(continueOnCapturedContext: false);
+                    result = await StartWorldAsync(checkout, path, backend, cacheDirectory, captureTool, holder, lane, windowed, ownerPlay, paused, lockstep, seconds, attachment, progress, stop.Token).ConfigureAwait(continueOnCapturedContext: false);
                 } catch (OperationCanceledException) {
                     result = Refuse($"Start {id} was cancelled or reached its {seconds}-second deadline; any World it launched was stopped.");
                 } catch (Exception error) {
@@ -248,7 +254,7 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
         return Result(metadata: metadata);
     }
     private async Task<CallToolResult> StartWorldAsync(string checkout, string path, string? backend, string? cacheDirectory, string? captureTool, string holder, string? lane,
-        bool windowed, bool ownerPlay, int seconds, OperatorAttachment attachment, StartProgress progress, CancellationToken cancellationToken) {
+        bool windowed, bool ownerPlay, bool paused, bool lockstep, int seconds, OperatorAttachment attachment, StartProgress progress, CancellationToken cancellationToken) {
         var budget = TimeSpan.FromSeconds(seconds: seconds);
         // The build comes before the GPU lease, so a long build never holds the machine's GPU.
         var resolved = await launch!.ResolveBuild(checkout, (backend == "vulkan"), cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
@@ -298,7 +304,7 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
         Started started;
 
         try {
-            started = Launch(backend: backend, cacheDirectory: cacheDirectory, captureTool: captureTool, build: build, buildLease: resolved.Lease, checkout: checkout, document: path, lease: lease, ownerPlay: ownerPlay, target: attachment.Target, windowed: windowed);
+            started = Launch(backend: backend, cacheDirectory: cacheDirectory, captureTool: captureTool, build: build, buildLease: resolved.Lease, checkout: checkout, document: path, lease: lease, ownerPlay: ownerPlay, paused: paused, lockstep: lockstep, target: attachment.Target, windowed: windowed);
         } catch (Exception error) when ((error is InvalidOperationException or IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)) {
             lease?.Dispose();
             resolved.Lease?.Dispose();
@@ -496,7 +502,7 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
             ? (wanted, null)
             : (null, $"Refused: {wanted} is not a checkout of this repository ({own} or one of its worktrees); a start boots only those."));
     }
-    private Started Launch(string? backend, string? cacheDirectory, string? captureTool, string build, IDisposable? buildLease, string checkout, string document, IDisposable? lease, bool ownerPlay, string target, bool windowed) {
+    private Started Launch(string? backend, string? cacheDirectory, string? captureTool, string build, IDisposable? buildLease, string checkout, string document, IDisposable? lease, bool ownerPlay, bool paused, bool lockstep, string target, bool windowed) {
         var runDirectory = Path.Combine(
             path1: target,
             path2: "puck-mcp-worlds",
@@ -528,6 +534,8 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
             info.ArgumentList.Add(item: "--backend");
             info.ArgumentList.Add(item: backend);
         }
+        if (paused) { info.ArgumentList.Add(item: "--paused"); }
+        if (lockstep) { info.ArgumentList.Add(item: "--lockstep"); }
 
         if (cacheDirectory is not null) {
             info.ArgumentList.Add(item: "--cache-dir");

@@ -195,6 +195,13 @@ than writing a boot line:
   to the World as `--backend`; `vulkan` also builds with SPIR-V, a separate
   build in the store, since the default build carries Direct3D 12 bytecode
   alone.
+  `paused: true` forwards World's `--paused`: the boot instance is paused before
+  the host starts, so no simulation tick precedes attachment; `world.rate resume`
+  starts simulation again. Presentation and mesh baking continue while paused.
+  `lockstep: true` forwards `--lockstep`, pinning presentation clocks to completed
+  ticks before the first frame. Combine both with a fresh `cacheDir` for repeated
+  cold bakes with identical inputs: pausing alone still animates placements on
+  the display clock, changing the poses and keys of their initial baked meshes.
   The checkout is the adapter's own (the default) or a worktree of its
   repository, named by absolute path, so a lane boots its own build; the
   document must lie under that checkout's `worlds/`. Anything else is refused
@@ -409,7 +416,7 @@ also limits headers to 16 KiB and connections to 64, with a ten-second header de
 |---|---|---|
 | `puck_adapter` | None (local stdio only). | The answering backend's `processId`, `moduleId`, installed `directory`, live `ownedWorlds` (process/attachment IDs) and `pendingStarts` (start IDs). |
 | `puck_worlds` | None (local stdio only). | Structured `worlds`: each running World's `attachmentId`, `processId`, `document`, `startedUtc`, and `current` or `started` when true. |
-| `puck_world_start` | Optional `document` (default `worlds/debug`), `checkout` (absolute path; default the adapter's), `backend` (`directx` or `vulkan`), `cacheDir` (absolute path of a private device-cache root, the World's `--cache-dir`; an empty one makes the boot bake every mesh), `windowed`, `captureTool` (`pix` or `renderdoc`, requires windowed; PIX requires Direct3D 12), `ownerPlay`, `holder`, `lane` and `timeoutSeconds` (1–7200, default 900; the boot only). Local stdio only. | `status: pending` and `startId`, or a validation refusal (`output`, `isError: true`). Poll the id instead of repeating the start. |
+| `puck_world_start` | Optional `document` (default `worlds/debug`), `checkout` (absolute path; default the adapter's), `backend` (`directx` or `vulkan`), `cacheDir` (absolute path of a private device-cache root, the World's `--cache-dir`; an empty one makes the boot bake every mesh), `windowed`, `paused`, `lockstep`, `captureTool` (`pix` or `renderdoc`, requires windowed; PIX requires Direct3D 12), `ownerPlay`, `holder`, `lane` and `timeoutSeconds` (1–7200, default 900; the boot only). Local stdio only. | `status: pending` and `startId`, or a validation refusal (`output`, `isError: true`). Poll the id instead of repeating the start. |
 | `puck_world_start_wait` | Required `startId`. Optional `timeoutMs` (1–120000, default 20000) and `cancel`. Local stdio only. | Structured `status` (`pending`, `started` or `refused`), `startId`, `stage` and `elapsedSeconds` while pending, `world`, `processId`, `stdoutLog` and `stderrLog` once started, and `output`, `isError: true` (plus `checkout`, `build`, `stateDirectory`, logs and exit fields if launched) when refused. Completed results repeat. |
 | `puck_world_stop` | Required `world`: the `processId` or `attachmentId` the start returned. Optional `timeoutMs` before the kill, same range/default. Local stdio only. | The same shape with `status` `stopped` or `refused`, plus `exitCode` and, when true, `killed` and `leaseReleased`. |
 | `puck_exec` | Required `command`: a console line or newline-separated script, at most 8192 characters total and 64 nonblank, noncomment lines. Optional integer `timeoutMs`: 1–120000 for the whole script, default 30000. Optional output filters, applied to each line's answer and never changing what the command does: `lines` (one-based ranges such as `1-20,40,60-`), `match` (keep lines containing the text, ignoring case), `fields` (array of names: the keys of a `key=value` answer, or property names anywhere in a JSON answer) and integer `maxBytes` (256–1048576; a cut ends in an explicit mark and sets `truncated`). Optional `world` (local stdio only): an attachment id or process id from `puck_worlds`. | Structured decimal-string `requestId`, `status`, `world`, and `output` (single-line text), `data` (single-line JSON) or `commands` (multi-line script), plus `isError`, `clearTranscript` and `truncated` when true. Empty output is `submitted`, not authoritative application. |
