@@ -8,7 +8,7 @@ public sealed record WorldComposedLink(string Path, byte[] Bytes);
 public sealed record WorldComposedDocument(IReadOnlyList<WorldComposedLink> Chain, byte[] ComposedJson, int Reach, IReadOnlyList<CompileInput>? Inputs) {
     // Effective scalar provenance is process-local. Older/persisted images without it still serve ordinary reads;
     // a provenance read recomposes once and holds a new image. No mutable JSON node is shared with a caller.
-    internal IReadOnlyDictionary<string, WorldDocumentValueOrigin>? Origins { get; init; }
+    internal IReadOnlyDictionary<string, WorldDocumentOrigins.Origin>? Origins { get; init; }
 }
 /// <summary>The persistent composition entries of the compile cache.</summary>
 public interface IWorldCompositionStore {

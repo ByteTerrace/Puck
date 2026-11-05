@@ -58,9 +58,8 @@ public static partial class WorldDefinitionFileSource {
 
             overlay.Remove(propertyName: WorldDocumentBasis.BasisMemberName);
 
-            if (!WorldDocumentBasis.TryMerge(
-                basis: mergedFromTop,
-                composed: out var merged,
+            if (!WorldDocumentBasis.TryMergeInto(
+                target: mergedFromTop,
                 overlay: overlay,
                 reason: out var mergeReason
             )) {
@@ -70,7 +69,6 @@ public static partial class WorldDefinitionFileSource {
                 return false;
             }
 
-            mergedFromTop = merged!;
         }
 
         composed = mergedFromTop;

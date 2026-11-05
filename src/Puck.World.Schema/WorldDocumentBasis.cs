@@ -86,6 +86,45 @@ public static class WorldDocumentBasis {
     private static readonly string[] RowKeyPrecedence = ["id", "name", "key", "index", "grantee+capability+subject"];
     private const char CompositeKeySeparator = '+';
 
+    // Equality stays exact JSON equality. Equal numbers necessarily round to the same double, which supplies
+    // only the hash: collisions (large integers included) are still distinguished by DeepEquals. CLR-backed
+    // restatement/position keys use their JSON spelling too, just as DeepEquals does across numeric backings.
+    private sealed class RowIdentityEquality : IEqualityComparer<JsonNode> {
+        internal static readonly RowIdentityEquality Instance = new();
+        public bool Equals(JsonNode? x, JsonNode? y) => JsonNode.DeepEquals(x, y);
+        public int GetHashCode(JsonNode obj) {
+            if (obj is JsonValue scalar && scalar.TryGetValue<string>(out var text)) {
+                return StringComparer.Ordinal.GetHashCode(text);
+            }
+            if (obj is JsonValue number) {
+                if (number.TryGetValue<double>(out var value)) { return value.GetHashCode(); }
+                if (number.GetValueKind() == JsonValueKind.Number) {
+                    return JsonSerializer.SerializeToElement(number).GetDouble().GetHashCode();
+                }
+            }
+            if (obj is JsonArray array) {
+                var hash = new HashCode();
+                foreach (var item in array) { hash.Add(item is null ? 0 : GetHashCode(item)); }
+                return hash.ToHashCode();
+            }
+            return 0;
+        }
+    }
+    private static Dictionary<JsonNode, int> IndexRows(JsonArray list, string key, out string duplicate) {
+        var rows = new Dictionary<JsonNode, int>(list.Count, RowIdentityEquality.Instance);
+        var firstDuplicate = int.MaxValue;
+        duplicate = string.Empty;
+        for (var index = 0; index < list.Count; index++) {
+            var identity = RowIdentity(list[index], key);
+            if (identity is null) { continue; }
+            if (!rows.TryAdd(identity, index) && rows[identity] < firstDuplicate) {
+                firstDuplicate = rows[identity];
+                duplicate = $"{key} {DescribeKey(identity)}";
+            }
+        }
+        return rows;
+    }
+
     // Copies a row's identity members onto another row: the one member of a simple key, every member of a composite.
     private static void CopyRowIdentity(JsonObject source, JsonObject target, string key) {
         foreach (var member in key.Split(separator: CompositeKeySeparator)) {
@@ -310,24 +349,8 @@ public static class WorldDocumentBasis {
         return delta;
     }
     private static bool HasDuplicateKey(JsonArray list, string key, out string duplicate) {
-        for (var outer = 0; (outer < list.Count); outer++) {
-            var outerKey = RowIdentity(key: key, row: list[index: outer]!);
-
-            for (var inner = (outer + 1); (inner < list.Count); inner++) {
-                if (JsonNode.DeepEquals(
-                    node1: outerKey,
-                    node2: RowIdentity(key: key, row: list[index: inner]!)
-                )) {
-                    duplicate = $"{key} {DescribeKey(value: outerKey)}";
-
-                    return true;
-                }
-            }
-        }
-
-        duplicate = string.Empty;
-
-        return false;
+        _ = IndexRows(list, key, out duplicate);
+        return duplicate.Length != 0;
     }
     private static int IndexOfRowKey(JsonArray list, string key, JsonNode? value) {
         for (var index = 0; (index < list.Count); index++) {
@@ -365,12 +388,13 @@ public static class WorldDocumentBasis {
             return false;
         }
 
+        var members = key.Split(separator: CompositeKeySeparator);
         foreach (var row in list) {
             if (row is not JsonObject rowObject) {
                 return false;
             }
 
-            foreach (var member in key.Split(separator: CompositeKeySeparator)) {
+            foreach (var member in members) {
                 if (rowObject[propertyName: member] is not JsonValue keyValue) {
                     return false;
                 }
@@ -427,7 +451,10 @@ public static class WorldDocumentBasis {
         }
 
         var positions = new List<(JsonNode? Row, JsonNode? Before)>();
-        var positioned = (JsonArray)WorldDocumentOrigins.Clone(node: overlay, origins: origins)!;
+        // Only position markers need a private overlay: ordinary overlays are read, never changed.
+        var positioned = overlay.Any(static node => node is JsonObject row && row.ContainsKey(BeforeMemberName))
+            ? (JsonArray)WorldDocumentOrigins.Clone(node: overlay, origins: origins)!
+            : overlay;
         foreach (var node in positioned) {
             var row = (JsonObject)node!;
             if (!row.TryGetPropertyValue(BeforeMemberName, out var before)) { continue; }
@@ -438,21 +465,18 @@ public static class WorldDocumentBasis {
             row.Remove(BeforeMemberName);
         }
         overlay = positioned;
-        var merged = new JsonArray();
+        var merged = basis;
         var consumed = new bool[overlay.Count];
+        var overlayRows = IndexRows(overlay, key, out _);
+        List<JsonNode?>? survivors = null;
 
-        foreach (var basisRow in basis) {
-            var basisObject = ((JsonObject)basisRow!);
+        for (var basisIndex = 0; basisIndex < merged.Count; basisIndex++) {
+            var basisObject = ((JsonObject)merged[basisIndex]!);
             var basisKey = RowIdentity(key: key, row: basisObject);
-            var overlayIndex = IndexOfRowKey(
-                key: key,
-                list: overlay,
-                value: basisKey
-            );
+            var overlayIndex = overlayRows.GetValueOrDefault(basisKey!, -1);
 
             if (overlayIndex < 0) {
-                merged.Add(value: WorldDocumentOrigins.Clone(node: basisObject, origins: origins));
-
+                survivors?.Add(basisObject);
                 continue;
             }
 
@@ -466,6 +490,11 @@ public static class WorldDocumentBasis {
                     key: key,
                     path: $"{path}[{key}={DescribeKey(value: basisKey)}]"
                 );
+                // Compact once after all drops; RemoveAt per tombstone would shift the remaining list repeatedly.
+                if (survivors is null) {
+                    survivors = new List<JsonNode?>(merged.Count);
+                    for (var prior = 0; prior < basisIndex; prior++) { survivors.Add(merged[prior]); }
+                }
 
                 continue;
             }
@@ -480,18 +509,21 @@ public static class WorldDocumentBasis {
                 basis: basisObject,
                 overlay: overlayRow
             )) {
-                merged.Add(value: WorldDocumentOrigins.Clone(node: overlayRow, origins: origins));
+                merged[basisIndex] = WorldDocumentOrigins.Clone(node: overlayRow, origins: origins);
             } else {
-                var mergedRow = ((JsonObject)WorldDocumentOrigins.Clone(node: basisObject, origins: origins)!);
-
                 MergeObject(
                     origins: origins,
-                    target: mergedRow,
+                    target: basisObject,
                     overlay: overlayRow,
                     path: $"{path}[{key}={DescribeKey(value: basisKey)}]"
                 );
-                merged.Add(value: mergedRow);
             }
+            survivors?.Add(merged[basisIndex]);
+        }
+
+        if (survivors is not null) {
+            merged.Clear();
+            foreach (var row in survivors) { merged.Add(row); }
         }
 
         for (var index = 0; (index < overlay.Count); index++) {
@@ -522,9 +554,10 @@ public static class WorldDocumentBasis {
         if (positions.Count == 0) { return rows; }
         var predecessors = new List<int>[rows.Count];
         var positioned = new bool[rows.Count];
+        var indexed = IndexRows(rows, key, out _);
         foreach (var (row, before) in positions) {
-            var from = IndexOfRowKey(rows, key, row);
-            var to = IndexOfRowKey(rows, key, before);
+            var from = row is null ? -1 : indexed.GetValueOrDefault(row, -1);
+            var to = before is null ? -1 : indexed.GetValueOrDefault(before, -1);
             if (from < 0 || to < 0) {
                 throw new JsonException($"{path}: '{BeforeMemberName}' from {DescribeKey(row)} names missing target {DescribeKey(before)}.");
             }
@@ -532,18 +565,20 @@ public static class WorldDocumentBasis {
             positioned[from] = true;
         }
         var state = new byte[rows.Count];
-        var result = new JsonArray();
+        var order = new List<JsonNode?>(rows.Count);
         void Visit(int index) {
             if (state[index] == 2) { return; }
             if (state[index] == 1) { throw new JsonException($"{path}: cyclic '{BeforeMemberName}' positions."); }
             state[index] = 1;
             foreach (var predecessor in predecessors[index] ?? []) { Visit(predecessor); }
             state[index] = 2;
-            result.Add(WorldDocumentOrigins.Clone(rows[index], origins));
+            order.Add(rows[index]);
         }
         for (var index = 0; index < rows.Count; index++) { if (!positioned[index]) { Visit(index); } }
         for (var index = 0; index < rows.Count; index++) { Visit(index); }
-        return result;
+        rows.Clear();
+        foreach (var row in order) { rows.Add(row); }
+        return rows;
     }
     private static void MergeObject(JsonObject target, JsonObject overlay, string path, WorldDocumentOrigins? origins) {
         foreach (var (name, value) in overlay) {
@@ -657,19 +692,18 @@ public static class WorldDocumentBasis {
             return existing;
         }
 
-        var merged = ((JsonArray)WorldDocumentOrigins.Clone(node: existing, origins: origins)!);
+        var merged = existing;
         var restatedArray = (restated as JsonArray);
+        var existingRows = IndexRows(merged, key, out _);
+        var restatedRows = restatedArray is null ? null : IndexRows(restatedArray, key, out _);
 
         foreach (var row in overlay) {
             var rowObject = ((JsonObject)row!);
             var rowKey = RowIdentity(key: key, row: rowObject);
-            var existingIndex = IndexOfRowKey(
-                key: key,
-                list: merged,
-                value: rowKey
-            );
+            var existingIndex = existingRows.GetValueOrDefault(rowKey!, -1);
 
             if (existingIndex < 0) {
+                existingRows.Add(rowKey!, merged.Count);
                 merged.Add(value: WorldDocumentOrigins.Clone(node: rowObject, origins: origins));
                 owners[$"{path}[{DescribeKey(value: rowKey)}]"] = overlayName;
 
@@ -690,12 +724,7 @@ public static class WorldDocumentBasis {
             }
 
             var restatesRow = (
-                (restatedArray is not null) &&
-                (IndexOfRowKey(
-                key: key,
-                list: restatedArray,
-                value: rowKey
-            ) >= 0)
+                (restatedRows is not null) && restatedRows.ContainsKey(rowKey!)
             );
 
             if (!restatesRow) {
@@ -1080,8 +1109,20 @@ public static class WorldDocumentBasis {
         ArgumentNullException.ThrowIfNull(argument: basis);
         ArgumentNullException.ThrowIfNull(argument: overlay);
 
+        var target = ((JsonObject)WorldDocumentOrigins.Clone(node: basis, origins: origins)!);
+        if (TryMergeInto(target, overlay, out reason, origins)) {
+            composed = target;
+            return true;
+        }
+        composed = null;
+        return false;
+    }
+
+    // The file composer exclusively owns each parsed/cache-served tree. Mutate that tree across layers instead
+    // of cloning inherited content at every merge. Public TryMerge enters through a private copy; callers needing
+    // both the pre-body stack and final tree take that one snapshot at their fork. A refused target is discarded.
+    internal static bool TryMergeInto(JsonObject target, JsonObject overlay, out string reason, WorldDocumentOrigins? origins = null) {
         try {
-            var target = ((JsonObject)WorldDocumentOrigins.Clone(node: basis, origins: origins)!);
 
             MergeObject(
                 origins: origins,
@@ -1090,12 +1131,10 @@ public static class WorldDocumentBasis {
                 target: target
             );
 
-            composed = target;
             reason = string.Empty;
 
             return true;
         } catch (JsonException exception) {
-            composed = null;
             reason = exception.Message;
 
             return false;
