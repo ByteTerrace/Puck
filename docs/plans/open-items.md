@@ -1742,6 +1742,12 @@ the fixed poses and the approaches already rejected.
   with day held. Separate retraced hit differences, shadow rays and the
   current CPU/GPU feedback gathers before naming a cause. The transformed-box
   trace device law and the gather law do not qualify every foliage surface.
+- Compact the relight's host answer while retaining its GPU publication record:
+  `SdfMeshProbeGpuWork.Record` reads back `SdfMeshProbeRelight.ResultWords`,
+  while `SdfMeshIrradiance.RelightGpu` decodes only the
+  `SdfMeshProbeRelight.OutputWords` prefix and publication copies the device
+  buffer. Preserve the source output's readback-token/fence ownership through
+  commit; do not trade that lifetime guarantee for fewer copied bytes.
 
 - [high] Night lighting, from the owner's walkthrough at the lawn's trees:
   - **The jump to night is wrong.** Forcing midnight
