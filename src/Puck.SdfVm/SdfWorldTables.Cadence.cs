@@ -32,13 +32,11 @@ namespace Puck.SdfVm;
 //   - m_screenSurfaceRegion, m_screenMappingRegion : the screen-surface sampling table and the mapping and bound flag
 //                          each screen is drawn from.
 //   - m_decalRevision    : the glyph-decal buffer — revision-tracked (it is 820 KB, not re-hashed each frame).
-//   - brick serials and slice cursors : read when a signature is requested, including writes made by this frame's upload.
 // Not covered by any packed span — handled conservatively by forcing a render:
 //   - a sky layer sampling a screen (a panorama, a textured disc): the screen's image updates in place like a slab's, so
 //                          the sky and the composite run every frame (ForcesPass) and the whole view never stands.
 //   - m_programDeclaresScreenSlab : a bound screen's image content updates in place each frame with the same view handle,
 //                          unseen by any packed span, so any declared ScreenSlab force-renders.
-//   - AnyBrickBaking()  : an in-progress carve bake writing brick voxels each upload.
 // The pass block's temporal values (jitter, previous view) and the previous transform tables belong to each instance's
 // history, not the tables: SdfWorldPasses.IsUnchanged holds them through SdfTemporalHistory.Stands.
 public sealed partial class SdfWorldTables {
@@ -58,7 +56,7 @@ public sealed partial class SdfWorldTables {
     private static readonly (int Offset, int Length)[] CompositeValues = Members(members: [SdfWorldPackage.GeometryOnly]);
     private static readonly (int Offset, int Length)[] LightingValues = Members(members: [
         SdfWorldPackage.ToonBands, SdfWorldPackage.ToonShadow, SdfWorldPackage.ToonOutline, SdfWorldPackage.ToonInk,
-        SdfWorldPackage.LightCount, SdfWorldPackage.LightMask, SdfWorldPackage.Exposure, SdfWorldPackage.ExposeShare, SdfWorldPackage.AirLight, SdfWorldPackage.MeterLuminance, SdfWorldPackage.LocalAdaptation, SdfWorldPackage.SkyPeakLuminance, SdfWorldPackage.FlowClock, SdfWorldPackage.DisableScreenLights, SdfWorldPackage.IndirectSources,
+        SdfWorldPackage.LightCount, SdfWorldPackage.LightMask, SdfWorldPackage.Exposure, SdfWorldPackage.ExposeShare, SdfWorldPackage.AirLight, SdfWorldPackage.MeterLuminance, SdfWorldPackage.LocalAdaptation, SdfWorldPackage.SkyPeakLuminance, SdfWorldPackage.FlowClock, SdfWorldPackage.WorldLanes, SdfWorldPackage.DisableScreenLights, SdfWorldPackage.IndirectSources,
         SdfWorldPackage.IndirectSourceGains, SdfWorldPackage.IndirectApply, SdfWorldPackage.IndirectContact,
         SdfWorldPackage.GridFlags, SdfWorldPackage.GridLineWidth, SdfWorldPackage.GridPlaneY,
         SdfWorldPackage.GridWorldPitch, SdfWorldPackage.GridWorldOrigin, SdfWorldPackage.GridWorldFrame,
@@ -104,7 +102,6 @@ public sealed partial class SdfWorldTables {
         var geometry = Fnv1aHash.Create();
 
         geometry.Add(value: m_geometrySignature);
-        AddBrickGeometry(hash: ref geometry);
         geometry.Add(values: block);
         var hash = Fnv1aHash.Create();
 
@@ -156,16 +153,8 @@ public sealed partial class SdfWorldTables {
     private static void AddMembers(ref Fnv1aHash hash, Span<byte> block, (int Offset, int Length)[] members) {
         foreach (var member in members) { hash.Add(values: block.Slice(length: member.Length, start: member.Offset)); }
     }
-    // Uploads follow table packing: include their actual slot revisions and slice progress at the point of use.
-    private void AddBrickGeometry(ref Fnv1aHash hash) {
-        if (!m_brickPoolEnabled) { return; }
-        hash.Add(values: MemoryMarshal.AsBytes(span: m_brickSerials.AsSpan()));
-        hash.Add(values: MemoryMarshal.AsBytes(span: m_brickVoxelCursor.AsSpan()));
-    }
-
     /// <summary>Returns whether the frame the tables hold forces every view to render whatever its signature: a
-    /// declared screen slab, whose bound image changes in place, a carve bake in progress, or a sky layer sampling a
-    /// screen (<see cref="ForcesPass"/>).</summary>
+    /// declared screen slab, whose bound image changes in place, or a sky layer sampling a screen (<see cref="ForcesPass"/>).</summary>
     /// <param name="frame">The frame the tables packed.</param>
     /// <returns><see langword="true"/> when no view's latest render may stand for the frame.</returns>
     public bool ForcesRender(SdfFrame frame) {
@@ -190,8 +179,7 @@ public sealed partial class SdfWorldTables {
 
     private bool ForcesEveryPass(SdfFrame frame) => (
         !frame.EnableCadenceGate ||
-        m_programDeclaresScreenSlab ||
-        AnyBrickBaking()
+        m_programDeclaresScreenSlab
     );
     // Whether any layer of the sky names a screen to sample: a panorama, or a disc with a texture.
     private static bool SkySamplesScreen(SdfSky sky) {
@@ -235,7 +223,6 @@ public sealed partial class SdfWorldTables {
             value: in m_tablesSignature
         );
         hash.Add(values: tables);
-        AddBrickGeometry(hash: ref hash);
         hash.Add(value: unchecked((ulong)m_skyEnvironment.Renders));
         hash.Add(value: unchecked((ulong)m_screenEmission.Renders));
         hash.Add(values: block);
@@ -355,21 +342,6 @@ public sealed partial class SdfWorldTables {
         m_visualSignature = visual.Value;
     }
 
-    // Whether any brick slot is mid-bake: a Baking slot has RecordBrickBakeSlices writing new voxels every upload, so the
-    // sampled field the bake reads changes with no packed-span change — the cadence must render through it.
-    private bool AnyBrickBaking() {
-        if (m_brickBakePipeline is null) {
-            return false;
-        }
-
-        for (var slot = 0; (slot < SdfBrickPoolLayout.MaxBricks); slot++) {
-            if (m_brickStates[slot] == BrickBakeState.Baking) {
-                return true;
-            }
-        }
-
-        return false;
-    }
     // Whether the program's instruction stream declares any shape of the given type — a one-time UploadProgram walk
     // backing per-program facts (the cadence's ScreenSlab force-render).
     private static bool ProgramDeclaresShape(SdfProgram program, SdfShapeType shapeType) {

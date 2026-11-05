@@ -35,7 +35,6 @@ public sealed class SdfViewsReadinessLawTests {
         var films = true;
 
         using var residency = new SdfWorldResidency(
-            brickPoolVoxelCapacity: 0,
             film: _ => films,
             frameSource: source,
             height: Extent,

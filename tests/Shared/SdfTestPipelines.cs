@@ -16,11 +16,10 @@ internal static class SdfTestPipelines {
 
     // Leases a set from a pass-pipeline cache and blocks the calling thread until it is built; the cache counts what it
     // creates.
-    public static SdfWorldPipelines Build(IGpuDeviceContext device, SdfKernelSet kernels, GpuPassPipelineCache cache, bool includeBrickPipelines = false) {
+    public static SdfWorldPipelines Build(IGpuDeviceContext device, SdfKernelSet kernels, GpuPassPipelineCache cache) {
         var set = SdfWorldPipelines.Acquire(
             cache: cache,
             device: device,
-            includeBrickPipelines: includeBrickPipelines,
             kernels: kernels
         );
 
@@ -104,12 +103,10 @@ internal static class SdfTestPipelines {
             ledger: ledger
         );
     // The build's own SPIR-V kernel set, whose bake mask kernel's generator word the caller chooses so two sets can differ
-    // by one kernel whose bindings are the same, and whose brick kernel is empty, so no set built from it has brick
-    // pipelines. Every kernel reads the host's interface, so a reload of it passes the interface check.
+    // by one kernel whose bindings are the same. Every kernel reads the host's interface, so a reload of it passes the interface check.
     public static SdfKernelSet Kernels(byte mask = 1) =>
         new(bytecode: [.. SdfKernelSet.Kernels.Select(selector: kernel => kernel switch {
             SdfKernel.MeshBakeMask => SpirvEdits.WithGenerator(generator: mask, module: Compiled.Value[((int)kernel)].Span),
-            SdfKernel.BrickBake => ReadOnlyMemory<byte>.Empty,
             _ => Compiled.Value[((int)kernel)],
         })]);
     // A reflector for a reload's interface check; the kernels a harness reloads are SPIR-V, which needs no tool.

@@ -17,8 +17,8 @@ public sealed partial class SdfProgram {
     // present when its threshold (14.w, 16.w) is positive, and a deposit when the settle share (12.z) is.
     // 27..30 the flow layer (SdfFlow; KEEP IN SYNC with sdfApplyFlow in shade/shade-layers.hlsli): 27 (velocity,
     // pattern scale), 28 (stretch, cycles per clock period, tilt, coverage), 29 (revealed colour, softness), 30 (revealed
-    // roughness, revealed metal, seed bits, control bits: the lane plus one, or zero, in the low byte and the world-frame
-    // flag at bit 8); all zero for a material with no flow, which a zero scale says.
+    // roughness, revealed metal, seed bits, control bits: FlowControl); all zero for a material with no flow, which a zero
+    // scale says.
     private void PackMaterials(int materialOffsetVectors, int paintOffsetVectors, IReadOnlyList<SdfMaterial> materialTable, int materialCount) {
         var paintCursor = paintOffsetVectors;
         Span<Vector4> toonRows = stackalloc Vector4[4];
@@ -239,10 +239,13 @@ public sealed partial class SdfProgram {
             }
         }
     }
-    // A flow's control word (row 30.w): its lane plus one, or zero for a constant flow, and FlowWorldFrame for a
-    // velocity authored in world space.
+    // A flow's control word (row 30.w): its velocity lane plus one, or zero for a constant flow, under FlowLaneMask;
+    // FlowWorldFrame for a velocity authored in world space; its coverage lane plus one, or zero, at
+    // FlowCoverageLaneShift.
     private static uint FlowControl(SdfFlow flow) =>
-        (((flow.Lane is { } lane) ? (((uint)lane) + 1u) : 0u) | ((flow.Frame == SdfFlowFrame.World) ? FlowWorldFrame : 0u));
+        (LanePlusOne(lane: flow.Lane) | ((flow.Frame == SdfFlowFrame.World) ? FlowWorldFrame : 0u) |
+        (LanePlusOne(lane: flow.CoverageLane) << FlowCoverageLaneShift));
+    private static uint LanePlusOne(int? lane) => ((lane is { } index) ? (((uint)index) + 1u) : 0u);
     // PaintVectorsPerEntry float4 rows. KEEP IN SYNC with sdfApplyPaints in shade/shade-layers.hlsli.
     // 0 frame origin, shape type (uint bits); 1 frame rotation; 2 residual scale, its smallest component;
     // 3..4 the shape's data vectors, a side-table shape's offset naming row 8; 5 color, stroke;

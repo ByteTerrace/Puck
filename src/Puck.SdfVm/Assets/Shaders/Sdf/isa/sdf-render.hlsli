@@ -19,9 +19,11 @@
 #define SDF_PROBE_RELIGHT_HEADER_ROWS             20u
 #define SDF_PROBE_RELIGHT_MATERIAL_ROWS           2u
 #define SDF_PROBE_RELIGHT_LIGHT_ROWS              4u
-#define SDF_PROBE_SELECT_INPUT_WORDS              11u
+#define SDF_PROBE_SELECT_INPUT_WORDS              12u
+#define SDF_PROBE_SELECT_HEADER_ROWS              8u
 #define SDF_PROBE_CACHE_WORDS                     290u
 #define SDF_PROBE_RELIGHT_RESULT_WORDS            275u
+#define SDF_PROBE_METER_OUTPUT_WORDS              8u
 #define SDF_PROBE_RECORD_INPUT_WORD               44u
 #define SDF_PROBE_RELIGHT_PREVIOUS_WORD           4u
 #define SDF_PROBE_SELECT_GROUP_SIZE               64u
@@ -164,10 +166,15 @@
 #define SDF_GLASS_DEPTH_DISTANCE_SCALE 32768.0
 #define SDF_GLASS_ABSORPTION_SCALE     65536.0
 
-// The flow layer's clock period in seconds (SdfFlow.ClockPeriodSeconds) and its control word (SdfProgram.FlowLaneMask, SdfProgram.FlowWorldFrame).
-#define SDF_FLOW_CLOCK_PERIOD 4096.0
-#define SDF_FLOW_LANE_MASK    0x000000FFu
-#define SDF_FLOW_WORLD_FRAME  0x00000100u
+// The flow layer's clock period in seconds (SdfFlow.ClockPeriodSeconds) and its control word (SdfProgram.FlowLaneMask, SdfProgram.FlowWorldFrame, SdfProgram.FlowCoverageLaneShift).
+#define SDF_FLOW_CLOCK_PERIOD        4096.0
+#define SDF_FLOW_LANE_MASK           0x000000FFu
+#define SDF_FLOW_WORLD_FRAME         0x00000100u
+#define SDF_FLOW_COVERAGE_LANE_SHIFT 16u
+
+// The render lanes (SdfLanes): a frame slot's lanes, then the world's (SdfWorldPackage.WorldLanes).
+#define SDF_FIRST_WORLD_LANE 4u
+#define SDF_LANE_COUNT       8u
 
 // The sky's environment map (SdfSkyEnvironment) and the volume table's capacity (SdfProgramBuilder.MaxVolumes).
 #define SDF_SKY_ENVIRONMENT_SIZE         64

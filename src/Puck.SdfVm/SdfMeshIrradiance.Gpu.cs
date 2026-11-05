@@ -107,7 +107,7 @@ public sealed partial class SdfMeshIrradiance {
     }
     private const uint NoGpuHits = uint.MaxValue;
 
-    private bool ListGpu(in Snapshot snapshot, bool all, List<Candidate> candidates, List<float>? ages) {
+    private bool ListGpu(in Snapshot snapshot, bool all, List<Candidate> candidates, List<float>? ages, bool interleave) {
         var layout = snapshot.Layout;
         uint[] records;
         lock (m_gate) {
@@ -120,7 +120,6 @@ public sealed partial class SdfMeshIrradiance {
         TrimGpuHits(layout: layout, lows: snapshot.Lows);
         var now = Stopwatch.GetTimestamp();
         candidates.Clear();
-        ages?.Clear();
         // This is a snapshot pack, with no eligibility decision. The device evaluates changed-box/ray reach,
         // missing traces, rebase, sweep and lighting versions; the host keeps the existing stable priority order.
         for (var level = 0; level < m_levels.Length; level++) {
@@ -137,7 +136,7 @@ public sealed partial class SdfMeshIrradiance {
                         var row = input.AsSpan(i * SdfMeshProbeRelight.SelectionInputWords, SdfMeshProbeRelight.SelectionInputWords);
                         var slot = layout.OffsetOf(level) + SlotOf(x, y, z, dims);
                         var written = (records[slot * SdfMeshIrradianceProbe.ProbeWords] & ~SdfMeshIrradianceProbe.InvalidFlag) == (KeyOf(x, y, z) | SdfMeshIrradianceProbe.WrittenFlag);
-                        row[0] = (present ? 1u : 0) | (written ? 0 : 2u);
+                        row[0] = (present ? 1u : 0) | (written ? 0 : 2u) | ((uint)ProbePhase(x, y, z) << 2);
                         row[1] = (uint)probe.Geometry; row[2] = (uint)probe.Lighting; row[3] = (uint)probe.Sweep; row[4] = (uint)level;
                         row[5] = BitConverter.SingleToUInt32Bits(probe.Offset.X);
                         row[6] = BitConverter.SingleToUInt32Bits(probe.Offset.Y);
@@ -146,8 +145,13 @@ public sealed partial class SdfMeshIrradiance {
                         var token = m_hitOwners.TryGetValue((level, (x, y, z)), out var owner) && owner.Token == probe.GpuToken ? probe.GpuToken : 0;
                         row[9] = (uint)token;
                         row[10] = (uint)(token >> 32);
-                        candidates.Add(new Candidate(Cell: (x, y, z), Distance: Vector3.DistanceSquared(center, snapshot.Camera), Level: level, LitAt: present ? probe.LitAt : 0, Trace: false));
-                        if (present) { ages?.Add(probe.Lighting == snapshot.Lighting.Version ? 0 : (float)Stopwatch.GetElapsedTime(StaleSince(probe.Lighting, in snapshot), now).TotalSeconds); }
+                        var age = !present || probe.Lighting == snapshot.Lighting.Version ? 0 : (float)Stopwatch.GetElapsedTime(StaleSince(probe.Lighting, in snapshot), now).TotalSeconds;
+                        row[11] = BitConverter.SingleToUInt32Bits(age);
+                        var priority = ProbePriority((x, y, z), low, center, snapshot.Camera, spacing);
+                        var bound = SdfMeshProbeRelight.AgeBoundOf(level, snapshot.AgeTarget);
+                        candidates.Add(new Candidate(Cell: (x, y, z), Band: priority.Band, Morton: priority.Morton, Level: level, LitAt: present ? probe.LitAt : 0, Trace: false,
+                            Overdue: bound > 0 && age >= bound, Urgency: AgePriority(age, bound, InAnyView(center, in snapshot), probe.Moved)));
+                        if (present) { RecordAge(ages, level, age); }
                     }
                 }
             }
@@ -157,11 +161,14 @@ public sealed partial class SdfMeshIrradiance {
             new(snapshot.Changes.Length, 0, BitConverter.Int32BitsToSingle(snapshot.Changes.Length == 0 ? 0 : snapshot.Changes[0].Geometry), layout.Reach),
             new(layout.SpacingOf(0), 0), new(layout.SpacingOf(1), 0), new(layout.SpacingOf(2), 0),
         };
+        for (var level = 0; level < m_levels.Length; level++) {
+            changes.Add(new(interleave ? 1 : 0, SdfMeshProbeRelight.InterleaveOf(level), SdfMeshProbeRelight.AgeBoundOf(level, snapshot.AgeTarget), BitConverter.Int32BitsToSingle(m_selectionSweep)));
+        }
         foreach (var (geometry, boxes) in snapshot.Changes) {
             if (boxes is null) { changes.Add(new(0, 0, 0, BitConverter.Int32BitsToSingle(geometry))); changes.Add(new(0, 0, 0, 1)); }
             else { foreach (var box in boxes) { changes.Add(new(box.Low, BitConverter.Int32BitsToSingle(geometry))); changes.Add(new(box.High, 0)); } }
         }
-        changes[1] = changes[1] with { Y = (changes.Count - 5) / 2 };
+        changes[1] = changes[1] with { Y = (changes.Count - SdfMeshProbeRelight.SelectionHeaderRows) / 2 };
         var selected = GpuTrace!.Select(snapshot.Scene, origins, input, [.. changes], GpuHitCapacity);
         var take = 0;
         var stale = false;

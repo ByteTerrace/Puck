@@ -9,7 +9,7 @@ namespace Puck.SdfVm;
 /// (<see cref="ShaderInterfaceHlsl"/>, checked in beside the kernels and owned by <c>puck shaders generate</c>), and
 /// the engine creates each pipeline from its interface's layout and binds by member name, so no binding number or
 /// register is written by hand on either side.
-/// <para>The native pass interfaces are the <c>sdf.world</c> and <c>sdf.bricks</c> packages' (<see cref="RenderGraphPackageCatalog"/>),
+/// <para>The native pass interface is the <c>sdf.world</c> package's (<see cref="RenderGraphPackageCatalog"/>),
 /// laid out as <see cref="ShaderPipelineParameterLayout.ForPackage"/> lays every package's: the standard frame group
 /// (<see cref="ShaderFrameInterface.FrameGroupMembers"/>), written once a frame, then a pass block holding the extent and
 /// every value in ordinal name order, so a graph document whose config names the same values reads the same block.</para>
@@ -27,10 +27,7 @@ namespace Puck.SdfVm;
 /// (<see cref="SdfWorldPackage.Tables"/> and those), one set per upload ring slot that every pass of every view binds,
 /// and its pass group one set per frame slot and pass, whose block holds the view's render extent and the frame's
 /// values.</para>
-/// <para><see cref="BrickBake"/> serves the carve-bake baker, the <c>sdf.bricks</c> pass: it binds the ring slot's frame
-/// set and one pass set per brick slot binding that slot's request buffer and the brick pool, whose block's extent is one
-/// slice as one row, the voxels one bake dispatch writes at most, with the slice ordinal pushed per dispatch.</para>
-/// <para><see cref="World"/>, <see cref="BrickBake"/> and <see cref="ResolveParameters"/> carry an instruction set's stamp
+/// <para><see cref="World"/> and <see cref="ResolveParameters"/> carry an instruction set's stamp
 /// (<see cref="SdfIsaHlsl.StampOf"/>, <see cref="Stamp"/>) in their pass blocks' variable names, so every kernel's bytecode
 /// reflects the instruction set it was compiled against, and a reload holds each kernel to its interface's layout, stamp
 /// included. The interfaces are declared for any stamps: <c>puck shaders generate</c> declares them for the model's own
@@ -62,10 +59,6 @@ public sealed class SdfKernelInterfaces {
     public const string ProbeCacheWritten = "sdfProbeCacheRW";
     /// <summary>Resident hit cache read by selection and relight.</summary>
     public const string ProbeCache = "sdfProbeCache";
-    /// <summary>The <see cref="BrickBake"/> request buffer: a three-row header, then the carves.</summary>
-    public const string BakeRequest = "bakeRequest";
-    /// <summary>The <see cref="BrickBake"/> brick pool the baker writes.</summary>
-    public const string BakePool = "brickPool";
     /// <summary>The bit the level of detail starts at in the index a <see cref="Mesh"/> draw call pushes, and in a counted
     /// indirect draw's identity; the bits below it name the draw. A draw of level <c>L</c> above zero draws the triangles
     /// from the one its record names (<see cref="SdfMeshRecord.LevelTableWord"/>). The occlusion kernel's pushed index
@@ -190,15 +183,6 @@ public sealed class SdfKernelInterfaces {
             members: EnvironmentMembers,
             package: "sdf-sky-environment"
         ).Stamped(stamp: stamp);
-        BrickBakeParameters = ShaderPipelineParameterLayout.ForPackage(
-            config: null,
-            members: [
-                Read(element: ShaderValueType.Float4, name: BakeRequest),
-                Written(element: ShaderValueType.Float, name: BakePool),
-            ],
-            package: RenderGraphPackageCatalog.SdfBricks,
-            pushesIndex: true
-        ).Stamped(stamp: stamp);
         // The glass shading pass binds the residency's World set too, for the material table, the lights and the sky's
         // environment map its reflections read.
         GlassParameters = ShaderPipelineParameterLayout.ForPackage(
@@ -243,7 +227,6 @@ public sealed class SdfKernelInterfaces {
             (IncludePath(shaderInterface: BloomParameters.Interface), BloomParameters.Interface),
             (IncludePath(shaderInterface: World), World),
             (IncludePath(shaderInterface: MeshBake), MeshBake),
-            (IncludePath(shaderInterface: BrickBake), BrickBake),
             (IncludePath(shaderInterface: Mesh), Mesh),
             (IncludePath(shaderInterface: ResolveParameters.Interface), ResolveParameters.Interface),
             (IncludePath(shaderInterface: SkyParameters.Interface), SkyParameters.Interface),
@@ -321,13 +304,6 @@ public sealed class SdfKernelInterfaces {
     public ShaderPipelineParameterLayout EnvironmentParameters { get; }
     /// <summary>Gets the interface every per-view SDF dispatch reads.</summary>
     public ShaderInterface World => WorldParameters.Interface;
-    /// <summary>Gets the frame data of the carve-bake baker, the <c>sdf.bricks</c> pass: the standard frame group, and a
-    /// pass group whose block holds the extent one bake dispatch covers, a slice of voxels as one row, followed by the
-    /// slot's request buffer and the brick pool, with the slice ordinal pushed: the kernel's first voxel is the ordinal
-    /// times the extent's width.</summary>
-    public ShaderPipelineParameterLayout BrickBakeParameters { get; }
-    /// <summary>Gets the interface the carve-bake baker reads.</summary>
-    public ShaderInterface BrickBake => BrickBakeParameters.Interface;
     /// <summary>Gets the interface the mesh pass draws with: the pass block <see cref="World"/> declares, member for member
     /// at the same offsets, so the mesh pass binds the block its node writes for it, then the mesh region and the work
     /// counters its fragments count the texels they write into (<see cref="ShaderWorkCounters"/>); and the index
@@ -338,8 +314,6 @@ public sealed class SdfKernelInterfaces {
     public ShaderInterface Mesh { get; }
     /// <summary>Gets the layout of <see cref="World"/>.</summary>
     public ShaderInterfaceLayout WorldLayout => WorldParameters.Layout;
-    /// <summary>Gets the layout of <see cref="BrickBake"/>.</summary>
-    public ShaderInterfaceLayout BrickBakeLayout => BrickBakeParameters.Layout;
     /// <summary>Gets the layout of <see cref="Mesh"/>.</summary>
     public ShaderInterfaceLayout MeshLayout { get; }
     /// <summary>Gets each interface with the repository-relative path of the include generated from it.</summary>
@@ -368,7 +342,7 @@ public sealed class SdfKernelInterfaces {
     public static uint MeshPushedIndex(uint level, uint draw) =>
         (level << MeshLevelShift) | draw;
     /// <summary>Returns the binding number, in the group that declares it, of a resource member of <see cref="World"/>,
-    /// <see cref="BrickBake"/> or <see cref="Mesh"/>.</summary>
+    /// <see cref="MeshBake"/> or <see cref="Mesh"/>.</summary>
     /// <param name="layout">The interface's layout.</param>
     /// <param name="member">The member's name.</param>
     /// <returns>The binding number.</returns>

@@ -592,7 +592,7 @@ public sealed partial class SdfWorldPassesLawTests {
             Produce();
 
             SdfWorldResidency Residency(string name) => new(
-                brickPoolVoxelCapacity: 0, frameSource: new CapturingFrameSource(capture: () => m_sourceFrame),
+                frameSource: new CapturingFrameSource(capture: () => m_sourceFrame),
                 height: Extent, kernels: SdfTestPipelines.Kernels(), name: name, pipelines: pipelines, width: Extent);
         }
 

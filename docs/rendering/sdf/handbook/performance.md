@@ -29,7 +29,7 @@ world.budget
   frame whose render inputs match the previous one keeps each view's retained
   output, so a still scene would read near zero.
 - **`world.counters gpu`** echoes what each render node counted for its newest
-  completed submission: per labeled pass (the residency's `fillers`, `bricks`, `upload` and
+  completed submission: per labeled pass (the residency's `fillers`, `upload` and
   `environment`, then each view's `mask`, `bake`, `shadow-near`, `shadow-far`,
   `shadow-second`, `mesh`, `pyramid`, `surface`, `views`, `resolve` where the view reduces
   or reconstructs, `sky` and `composite`) the dispatches, draws, barriers, binds,

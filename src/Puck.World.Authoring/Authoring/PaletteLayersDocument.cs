@@ -59,9 +59,12 @@ public sealed record PaletteGlassDocument(float Depth, float? Ior = null) {
 /// <param name="Softness">The coverage edge's width, in [0, 1] (null = 0.1).</param>
 /// <param name="Surface">The surface the coverage reveals; required when <paramref name="Coverage"/> is positive.</param>
 /// <param name="Seed">The pattern's seed (null = 0).</param>
-/// <param name="Lane">The render lane in [0, 3] whose value scales the velocity, read from an inhabited body's look
-/// lanes; a placement without lanes reads zero and stands still. Null keeps the velocity constant.</param>
+/// <param name="Lane">The render lane whose value scales the velocity: 0 to 3 an inhabited body's look lanes (a
+/// placement without them reads zero and stands still), 4 to 7 the world's <c>render.lanes</c> (<see cref="SdfLanes"/>).
+/// Null keeps the velocity constant.</param>
 /// <param name="Frame">The frame the velocity is authored in (null = <c>Object</c>).</param>
+/// <param name="CoverageLane">The render lane, as <paramref name="Lane"/>, whose value saturated to [0, 1] scales
+/// <paramref name="Coverage"/>. Null keeps the coverage constant.</param>
 public sealed record PaletteFlowDocument(
     DocumentVector3 Velocity,
     float? Scale = null,
@@ -73,7 +76,8 @@ public sealed record PaletteFlowDocument(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PaletteSurfaceDocument? Surface = null,
     uint? Seed = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Lane = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] SdfFlowFrame? Frame = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] SdfFlowFrame? Frame = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? CoverageLane = null
 ) {
     /// <summary>Resolves the engine flow at a placement scale.</summary>
     /// <param name="resolve">The color resolver.</param>
@@ -91,7 +95,8 @@ public sealed record PaletteFlowDocument(
         Surface: Surface?.ToSurface(resolve: resolve),
         Seed: (Seed ?? 0u),
         Lane: Lane,
-        Frame: (Frame ?? SdfFlowFrame.Object)
+        Frame: (Frame ?? SdfFlowFrame.Object),
+        CoverageLane: CoverageLane
     );
 }
 /// <summary>A paint plane in the winning dynamic frame, or world space when no slot owns the hit.</summary>

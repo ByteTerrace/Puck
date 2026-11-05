@@ -1,7 +1,7 @@
 using Puck.HumbleGamingBrick.Interfaces;
 using Puck.Maths;
 
-namespace Puck.HumbleGamingBrick.Forge;
+namespace Puck.HumbleGamingBrick;
 
 /// <summary>
 /// Builds the boot ROM image a revision executes from reset. The image is a real boot program: it verifies the

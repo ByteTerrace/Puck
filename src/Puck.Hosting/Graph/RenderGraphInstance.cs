@@ -97,7 +97,7 @@ public readonly record struct RenderGraphRefresh(int Divisor, int Hertz, int Flo
 /// renders.</param>
 public readonly record struct RenderGraphRead(string Producer, bool PreviousFrame = false, ShaderPipelineResourceKind Kind = ShaderPipelineResourceKind.Image);
 /// <summary>One view rendered by a graph: the main camera, a pane, a game camera shown on a screen, or a nested world;
-/// or world-scoped work, such as the SDF brick pool, whose output is a buffer the views read. Nesting is written as
+/// or world-scoped work, such as a residency's sky environment, whose output is a buffer the views read. Nesting is written as
 /// reads: an instance that shows another's output reads it.</summary>
 /// <param name="Name">The instance's unique name.</param>
 /// <param name="Refresh">How often it refreshes.</param>

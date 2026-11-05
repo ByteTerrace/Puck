@@ -15,11 +15,11 @@ public sealed partial class SdfWorldPassesLawTests {
         var unrelatedCaptures = 0;
         var laterCaptures = 0;
         using var own = new SdfWorldResidency(pipelines, new CapturingFrameSource(capture: () => { ownCaptures++; return source; }),
-            SdfTestPipelines.Kernels(), "own", Extent, Extent, brickPoolVoxelCapacity: 0);
+            SdfTestPipelines.Kernels(), "own", Extent, Extent);
         using var unrelated = new SdfWorldResidency(pipelines, new CapturingFrameSource(capture: () => { unrelatedCaptures++; return source; }),
-            SdfTestPipelines.Kernels(), "unrelated", Extent, Extent, brickPoolVoxelCapacity: 0);
+            SdfTestPipelines.Kernels(), "unrelated", Extent, Extent);
         using var later = new SdfWorldResidency(pipelines, new CapturingFrameSource(capture: () => { laterCaptures++; return source; }),
-            SdfTestPipelines.Kernels(), "later", Extent, Extent, brickPoolVoxelCapacity: 0);
+            SdfTestPipelines.Kernels(), "later", Extent, Extent);
         var views = new SdfWorldPasses(name => new SdfWorldView(Residency: name switch { "own" => own, "later" => later, _ => unrelated }, View: 0));
         var context = ContextOf(gpu: gpu);
 

@@ -75,6 +75,10 @@ public sealed class WorldAppliedCodeUpdateLawTests {
         AppliedCodeUpdate.Apply(typeof(WorldAppliedCodeUpdateLawTests));
         Assert.Equal(expected: before, actual: CompiledWorld.EngineBuild);
 
+        // The container is in the producer's assembly but does not derive a chunk.
+        AppliedCodeUpdate.Apply(typeof(CompiledWorld));
+        Assert.Equal(expected: before, actual: CompiledWorld.EngineBuild);
+
         AppliedCodeUpdate.Apply(typeof(WorldDefinition));
 
         var applied = CompiledWorld.EngineBuild;

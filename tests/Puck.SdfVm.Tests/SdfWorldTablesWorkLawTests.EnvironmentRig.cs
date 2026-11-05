@@ -25,7 +25,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
                     position: new Vector3(x: 0f, y: 0f, z: -5f), target: Vector3.Zero,
                     viewportHeight: Extent, viewportWidth: Extent),
                     Region: new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f))]);
-            var residency = new SdfWorldResidency(brickPoolVoxelCapacity: 0, frameSource: this,
+            var residency = new SdfWorldResidency(frameSource: this,
                 height: Extent, width: Extent, kernels: SdfTestPipelines.Kernels(), name: SdfTestView.Instance,
                 pipelines: pipelines);
 

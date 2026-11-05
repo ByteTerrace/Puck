@@ -128,12 +128,12 @@ public sealed class SdfWorldResidencyBuildRefusalLawTests {
     [Fact]
     public void AnEngineTheHeapCannotAdmitIsRefusedByNameAllocatesNothingAndRetriesOnlyOnAChangedInput() {
         using var rig = new Rig();
-        var demand = SdfWorldTables.DescriptorPools(brickPool: false).Aggregate(
+        var demand = SdfWorldTables.DescriptorPools.Aggregate(
             func: static (sum, pool) => (sum + pool.HeapDescriptors),
             seed: 0U
         );
         // The views sets hold the screen sampler, so the engine also needs sampler descriptors.
-        var samplers = SdfWorldTables.DescriptorPools(brickPool: false).Aggregate(
+        var samplers = SdfWorldTables.DescriptorPools.Aggregate(
             func: static (sum, pool) => (sum + pool.SamplerHeapDescriptors),
             seed: 0U
         );
@@ -193,12 +193,12 @@ public sealed class SdfWorldResidencyBuildRefusalLawTests {
     public void AHeapRefusedEngineRetriesExactlyOnceAfterAnotherOwnerReleasesItsPool() {
         using var rig = new Rig();
         IGpuBindings bindings = rig.Gpu;
-        var demand = SdfWorldTables.DescriptorPools(brickPool: false).Aggregate(
+        var demand = SdfWorldTables.DescriptorPools.Aggregate(
             func: static (sum, pool) => (sum + pool.HeapDescriptors),
             seed: 0U
         );
         // The views sets hold the screen sampler, so the engine also needs sampler descriptors.
-        var samplers = SdfWorldTables.DescriptorPools(brickPool: false).Aggregate(
+        var samplers = SdfWorldTables.DescriptorPools.Aggregate(
             func: static (sum, pool) => (sum + pool.SamplerHeapDescriptors),
             seed: 0U
         );
@@ -242,7 +242,7 @@ public sealed class SdfWorldResidencyBuildRefusalLawTests {
     [Fact]
     public void APersistentRefusalBuildsOnceAndEachChangedInputRetriesOnce() {
         using var rig = new Rig();
-        var demand = SdfWorldTables.DescriptorPools(brickPool: false).Aggregate(
+        var demand = SdfWorldTables.DescriptorPools.Aggregate(
             func: static (sum, pool) => (sum + pool.HeapDescriptors),
             seed: 0U
         );
@@ -391,7 +391,6 @@ public sealed class SdfWorldResidencyBuildRefusalLawTests {
             Faults = new GpuCreationFaults();
             m_source = new FixedFrameSource(frame: frame);
             Node = new SdfWorldResidency(
-                brickPoolVoxelCapacity: 0,
                 frameSource: m_source,
                 height: Extent,
                 kernels: SdfTestPipelines.Kernels(),
@@ -419,7 +418,7 @@ public sealed class SdfWorldResidencyBuildRefusalLawTests {
         public ref readonly FrameContext Context => ref m_context;
         // Each engine construction that reaches its own descriptor pool creates exactly one, after the copy pool it
         // reserves for its regions, and the pipeline set none, so the engine's own pools are the attempts.
-        public int EngineAttempts => Gpu.PoolsCreated.Count(predicate: static pool => (pool == SdfWorldTables.DescriptorPoolSizes(brickPool: false)));
+        public int EngineAttempts => Gpu.PoolsCreated.Count(predicate: static pool => (pool == SdfWorldTables.DescriptorPoolSizes));
         public GpuCreationFaults Faults { get; }
         public FakeGpuDevice Gpu { get; }
         public SdfWorldResidency Node { get; }

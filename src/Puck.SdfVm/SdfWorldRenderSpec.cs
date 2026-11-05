@@ -16,11 +16,6 @@ public sealed record SdfWorldRenderSpec(
     uint Width,
     uint Height
 ) {
-    /// <summary>The carve-bake brick pool's voxel capacity (see <see cref="SdfWorldTablesOptions.BrickPoolVoxelCapacity"/>),
-    /// frozen at construction. Defaults to <see cref="SdfWorldTables.DefaultBrickPoolVoxelCapacity"/> (64 MB); a host
-    /// whose scene never bakes carves sets 0 to allocate no pool.</summary>
-    public int BrickPoolVoxelCapacity { get; init; } = SdfWorldTables.DefaultBrickPoolVoxelCapacity;
-
     /// <summary>A floor on the dynamic-transform slot capacity — headroom above the program's own
     /// <see cref="SdfProgram.RequiredDynamicTransformCapacity"/> (the engine always raises the floor to that); a
     /// host whose moving-entity population grows over the run passes its peak here.</summary>

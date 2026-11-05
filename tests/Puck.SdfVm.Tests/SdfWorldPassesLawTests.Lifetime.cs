@@ -11,7 +11,6 @@ public sealed partial class SdfWorldPassesLawTests {
         var gpu = new FakeGpuDevice();
         var pipelines = SdfTestPipelines.Cache();
         using var residency = new SdfWorldResidency(
-            brickPoolVoxelCapacity: 0,
             frameSource: new FixedFrameSource(frame: Frame()),
             height: Extent,
             kernels: SdfTestPipelines.Kernels().With(bytecode: ReadOnlyMemory<byte>.Empty, kernel: SdfKernel.Surface),
@@ -37,7 +36,6 @@ public sealed partial class SdfWorldPassesLawTests {
     [Fact]
     public void AReleasedResidencyCannotBeRetainedOrResolvedAgain() {
         var residency = new SdfWorldResidency(
-            brickPoolVoxelCapacity: 0,
             frameSource: new FixedFrameSource(frame: Frame()),
             height: Extent,
             kernels: SdfTestPipelines.Kernels(),

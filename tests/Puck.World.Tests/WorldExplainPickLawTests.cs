@@ -14,7 +14,7 @@ public sealed class WorldExplainPickLawTests {
     }
 
     private static SdfWorldResidency Residency() => new(pipelines: SdfTestPipelines.Cache(), frameSource: new UncapturedSource(),
-        kernels: SdfTestPipelines.Kernels(), name: "explanation-pane", width: 32, height: 32, brickPoolVoxelCapacity: 0);
+        kernels: SdfTestPipelines.Kernels(), name: "explanation-pane", width: 32, height: 32);
     private static SdfWorldPicker Picker(SdfWorldResidency residency) {
         var picker = new SdfWorldPicker();
 

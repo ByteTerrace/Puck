@@ -28,7 +28,6 @@ public sealed partial class SdfWorldPassesLawTests {
         var gpu = new FakeGpuDevice();
         var pipelines = SdfTestPipelines.Cache();
         var first = new SdfWorldResidency(
-            brickPoolVoxelCapacity: 0,
             frameSource: new FixedFrameSource(frame: Frame()),
             height: Extent,
             instanceCapacity: FollowedInstances,
@@ -41,7 +40,6 @@ public sealed partial class SdfWorldPassesLawTests {
 
         otherFrame = otherFrame with { Views = [otherFrame.Views[0], otherFrame.Views[0]] };
         using var other = new SdfWorldResidency(
-            brickPoolVoxelCapacity: 0,
             frameSource: new FixedFrameSource(frame: otherFrame),
             height: Extent,
             instanceCapacity: otherInstances,

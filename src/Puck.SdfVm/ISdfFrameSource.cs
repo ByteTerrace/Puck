@@ -22,16 +22,6 @@ public interface ISdfFrameSource {
     /// <see cref="CaptureFrame"/>: whatever the source does for each produced frame beyond composing it, such as placing
     /// its views in the render graph, still happens. The default implementation does nothing.</summary>
     void PresentHeldFrame() { }
-    /// <summary>Advances a carve-bake planner by one produced frame against the live engine.
-    /// the host node calls this right BEFORE <see cref="CaptureFrame"/> once the engine exists, handing the frame source
-    /// the engine's brick-bake seam so its planner can poll bake states, request newly-settled bakes, and flip
-    /// <see cref="BrickBakeState.Ready"/> bins to bricks — a Ready flip bumps the source's content revision so THIS
-    /// frame's <see cref="CaptureFrame"/> rebuilds emitting the brick. The default implementation is a no-op, and a
-    /// pool-less engine's <see cref="ISdfBrickBakeService.BrickBakeAvailable"/>
-    /// short-circuits the planner regardless. Read straight off the frame source (mirroring <see cref="GlyphAtlas"/> /
-    /// <see cref="ScreenDecals"/>) so a host node's type coupling doesn't grow to thread it.</summary>
-    /// <param name="bakes">The engine's brick-bake service (poll/request), never null.</param>
-    void AdvanceBricks(ISdfBrickBakeService bakes) { }
     /// <summary>Hands the source what to call with each program a background build of its finishes and the dynamic
     /// transforms it was emitted under, on the build's thread, before any frame carries it: a residency plans its mesh
     /// bake there (<see cref="SdfMeshPathBake.PlanAhead"/>). A later call replaces the earlier. The default

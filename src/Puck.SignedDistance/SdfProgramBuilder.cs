@@ -170,7 +170,7 @@ public sealed partial class SdfProgramBuilder {
         m_screenSurfaces.Clear();
         m_convexPolygonProfiles.Clear();
         m_paths.Clear();
-        m_sampledValues.Clear();
+        m_sampledBindings.Clear();
         m_sweepCurves.Clear();
         m_fieldScopes?.Clear();
         m_reservedPathWords = 0;
@@ -1214,7 +1214,7 @@ public sealed partial class SdfProgramBuilder {
             instructions: m_instructions,
             materials: m_materials,
             paths: m_paths,
-            sampledValues: m_sampledValues,
+            sampledBindings: m_sampledBindings,
             reservedPathWords: m_reservedPathWords,
             screenSurfaces: m_screenSurfaces,
             sweepCurves: m_sweepCurves

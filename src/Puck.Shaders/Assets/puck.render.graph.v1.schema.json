@@ -154,7 +154,6 @@
                       "Viewports",
                       "DynamicTransforms",
                       "InstanceMaskWords",
-                      "BrickPoolVoxels",
                       "RenderExtent"
                     ],
                     "title": "ShaderPipelineCountBasis"

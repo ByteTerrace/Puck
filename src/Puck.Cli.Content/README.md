@@ -1,6 +1,6 @@
 # Puck.Cli.Content
 
-Puck.Cli.Content holds the generators of checked-in content: `branding`, `firmware`, `cartridge-cost`, `font-atlas` and `wasm-stdlib`.
+Puck.Cli.Content holds content generators and export tools: `branding`, `firmware`, `cartridge-cost`, `font-atlas` and `wasm-stdlib`.
 
 ## Documentation
 

@@ -20,7 +20,7 @@ namespace Puck.World;
 /// </summary>
 /// <param name="Id">The row's stable string id — its mutation address and the handle placements reference — authored
 /// literally or through a Text state cell.</param>
-/// <param name="Document">The canonical (validated + normalized) creation document.</param>
+/// <param name="Document">The creation document, normalized when a mutation upserted it.</param>
 /// <param name="HashRaw">The SHA-256 hex64 of the document's canonical bytes (<see cref="Puck.Assets.Documents.CanonicalDocument{TDocument}.Hash"/>
 /// on the canonical result the compose boundary produces). ABSENT resolves to the hash computed from
 /// <paramref name="Document"/> at load — an author never writes a content hash by hand; see <see cref="Hash"/>.</param>
@@ -37,7 +37,9 @@ public sealed record WorldPrototype(
     private CreationDocument? m_engineDocument;
     private string? m_canonicalHash;
 
-    /// <summary>Gets the canonical (validated + normalized) creation document, the author's own bytes.</summary>
+    /// <summary>Gets the creation document as it arrived: normalized when a mutation upserted it (the compose boundary
+    /// canonicalizes), the author's own bytes when the world loaded it. Consumers read <see cref="EngineDocument"/>,
+    /// which is normalized whichever way the row arrived.</summary>
     public CreationDocument Document {
         get;
         init {
@@ -46,12 +48,14 @@ public sealed record WorldPrototype(
             m_canonicalHash = null;
         }
     } = Document;
-    /// <summary>Gets <see cref="Document"/> converted once from the author frame to the engine frame
+    /// <summary>Gets <see cref="Document"/> normalized (<see cref="CreationCanonicalizer.Normalize"/>: unit swing and
+    /// slide axes, explicit gates, clamped amplitudes) and converted once from the author frame to the engine frame
     /// (<see cref="Puck.World.Authoring.CreationFrame.ToEngine"/>) — every render, collision, and anchor consumer
-    /// reads this, never <see cref="Document"/>, which stays the author's own bytes (what <see cref="Hash"/> pins).
-    /// Cached on first read since <see cref="WorldPrototype"/> rows are replaced, not mutated, on edit.</summary>
+    /// reads this, never <see cref="Document"/>, so a loaded row and an upserted one animate alike. Normalizing is
+    /// idempotent, so an upserted row's already normalized document passes through unchanged. Cached on first read
+    /// since <see cref="WorldPrototype"/> rows are replaced, not mutated, on edit.</summary>
     [JsonIgnore]
-    public CreationDocument EngineDocument => (m_engineDocument ??= Puck.World.Authoring.CreationFrame.ToEngine(document: Document));
+    public CreationDocument EngineDocument => (m_engineDocument ??= Puck.World.Authoring.CreationFrame.ToEngine(document: CreationCanonicalizer.Normalize(document: Document)));
     /// <summary>Gets the SHA-256 hex64 of <see cref="Document"/>'s canonical bytes, computed through
     /// <see cref="Puck.World.Authoring.CreationCanonicalizer"/> on first read and cached on this instance: the hash
     /// is a function of <see cref="Document"/> alone, so an edit, which builds a new row or document, reads a fresh

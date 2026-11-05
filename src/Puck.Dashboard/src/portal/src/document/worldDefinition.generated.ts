@@ -1840,7 +1840,7 @@ export type PaletteEntryDocument = {
    */
   paints?: PalettePaintDocument[] | null;
   /**
-   * The render lane in [0, 3] whose saturated value scales Emissive at shading time, read from each inhabited body's own look lanes; a placement without lanes reads zero, and null keeps the emissive static.
+   * The render lane whose saturated value scales Emissive at shading time: 0 to 3 an inhabited body's own look lanes (a placement without them reads zero), 4 to 7 the world's render.lanes (SdfLanes). Null keeps the emissive static.
    */
   emissiveLane?: number | null;
   /**
@@ -1899,13 +1899,17 @@ export type PaletteFlowDocument = {
    */
   seed?: number | null;
   /**
-   * The render lane in [0, 3] whose value scales the velocity, read from an inhabited body's look lanes; a placement without lanes reads zero and stands still. Null keeps the velocity constant.
+   * The render lane whose value scales the velocity: 0 to 3 an inhabited body's look lanes (a placement without them reads zero and stands still), 4 to 7 the world's render.lanes (SdfLanes). Null keeps the velocity constant.
    */
   lane?: number | null;
   /**
    * The frame the velocity is authored in (null = Object).
    */
   frame?: SdfFlowFrame | null;
+  /**
+   * The render lane, as Lane, whose value saturated to [0, 1] scales Coverage. Null keeps the coverage constant.
+   */
+  coverageLane?: number | null;
 };
 
 export type PaletteGlassDocument = {
@@ -8595,7 +8599,7 @@ export type WorldPrototype = {
    */
   mesh?: WorldPrototypeMesh | null;
   /**
-   * Gets the canonical (validated + normalized) creation document, the author's own bytes.
+   * Gets the creation document as it arrived: normalized when a mutation upserted it (the compose boundary canonicalizes), the author's own bytes when the world loaded it. Consumers read EngineDocument, which is normalized whichever way the row arrived.
    */
   document: {
     /**
@@ -8859,7 +8863,7 @@ export type WorldPrototype = {
         } | null;
       } | null)[] | null;
       /**
-       * The render lane in [0, 3] whose saturated value scales Emissive at shading time, read from each inhabited body's own look lanes; a placement without lanes reads zero, and null keeps the emissive static.
+       * The render lane whose saturated value scales Emissive at shading time: 0 to 3 an inhabited body's own look lanes (a placement without them reads zero), 4 to 7 the world's render.lanes (SdfLanes). Null keeps the emissive static.
        */
       emissiveLane?: number | null;
       /**
@@ -9035,13 +9039,17 @@ export type WorldPrototype = {
          */
         seed?: number | null;
         /**
-         * The render lane in [0, 3] whose value scales the velocity, read from an inhabited body's look lanes; a placement without lanes reads zero and stands still. Null keeps the velocity constant.
+         * The render lane whose value scales the velocity: 0 to 3 an inhabited body's look lanes (a placement without them reads zero and stands still), 4 to 7 the world's render.lanes (SdfLanes). Null keeps the velocity constant.
          */
         lane?: number | null;
         /**
          * The frame the velocity is authored in (null = Object).
          */
         frame?: "Object" | "World" | null;
+        /**
+         * The render lane, as Lane, whose value saturated to [0, 1] scales Coverage. Null keeps the coverage constant.
+         */
+        coverageLane?: number | null;
       } | null;
     } | null)[] | null;
     /**
@@ -10419,6 +10427,10 @@ export type WorldRenderDefaults = {
    * How far the key light's shadow cascades reach (WorldRenderShadowCoverage). Absent keeps the engine's 16 m near, 120 m far and 200 m caster reach; world.budget prints the coverage with each cascade's texel.
    */
   shadowCoverage?: WorldRenderShadowCoverage | null;
+  /**
+   * The world's render lanes: up to four bindable scalars (a literal, a state.<row> binding, or keys on a clock), resolved at each frame's presented tick and read by every surface and volume as render lanes 4 to 7 (SdfLanes), so a static placement sharing one baked mesh follows world state without a slot. Absent or a missing entry reads zero; world.lighting echoes them as authored.
+   */
+  lanes?: BindableScalar[] | null;
 };
 
 export type WorldRenderEnvironment = {

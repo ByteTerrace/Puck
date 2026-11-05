@@ -15,7 +15,7 @@
         <!-- ChildProcess, which the SameBoy co-simulation diagnostic runs sb-trace through. -->
         <ProjectReference Include="../Puck.Hosting/Puck.Hosting.csproj" />
         <ProjectReference Include="../Puck.HumbleGamingBrick/Puck.HumbleGamingBrick.csproj" />
-        <!-- BootRomBuilder, whose authored boot images the boot-handoff stage and the diagnostics boot through. -->
+        <!-- LightGunProbeCartridge, used by the light-gun stage. -->
         <ProjectReference Include="../Puck.HumbleGamingBrick.Forge/Puck.HumbleGamingBrick.Forge.csproj" />
         <ProjectReference Include="../Puck.Maths/Puck.Maths.csproj" />
     </ItemGroup>

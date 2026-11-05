@@ -72,7 +72,6 @@ public sealed class SdfPipelineBuildLivenessLawTests {
             principal: Principal.Console
         );
         using var node = new SdfWorldResidency(
-            brickPoolVoxelCapacity: 0,
             frameSource: new FixedFrameSource(frame: Frame()),
             height: Extent,
             kernels: SdfTestPipelines.Kernels(),
@@ -166,7 +165,6 @@ public sealed class SdfPipelineBuildLivenessLawTests {
             BeforeComputePipeline = driver.Enter,
         };
         using var node = new SdfWorldResidency(
-            brickPoolVoxelCapacity: 0,
             frameSource: new FixedFrameSource(frame: Frame()),
             height: Extent,
             kernels: SdfTestPipelines.Kernels(),
@@ -237,13 +235,11 @@ public sealed class SdfPipelineBuildLivenessLawTests {
         var first = SdfWorldPipelines.Acquire(
             cache: cache.Pipelines,
             device: gpu,
-            includeBrickPipelines: false,
             kernels: SdfTestPipelines.Kernels()
         );
         var last = SdfWorldPipelines.Acquire(
             cache: cache.Pipelines,
             device: gpu,
-            includeBrickPipelines: false,
             kernels: SdfTestPipelines.Kernels()
         );
 

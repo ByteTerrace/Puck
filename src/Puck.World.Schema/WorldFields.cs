@@ -730,15 +730,39 @@ public static class WorldFieldCapacity {
     public const int MaxExtent = 1024;
     /// <summary>The most fields a section may declare.</summary>
     public const int MaxFields = 8;
-    /// <summary>The most layers along +Y — one render brick's edge.</summary>
+    /// <summary>The most layers along +Y.</summary>
     public const int MaxLayers = 128;
     /// <summary>The most paint rows a section may declare.</summary>
     public const int MaxPaint = 256;
     /// <summary>The most reactions a section may declare.</summary>
     public const int MaxReactions = 64;
-    /// <summary>The most cells of surface a height field may raise above the origin — the render brick's edge less
-    /// the voxel below the origin and the one above the top.</summary>
-    public const int MaxSurfaceCells = 126;
+    /// <summary>The most cells a height-bearing lattice spans along X or Z, and the most cells of surface a height field
+    /// may raise above the origin: the drawn surface's sampled lattice (<see cref="SurfaceVoxels"/>) holds at most
+    /// <see cref="Puck.SignedDistance.SdfProgramBuilder.MaxSampledRegionDim"/> voxels an axis, which a column's border
+    /// voxels, the voxel below the origin and the one above the top must fit beside.</summary>
+    public const int MaxSurfaceCells = (Puck.SignedDistance.SdfProgramBuilder.MaxSampledRegionDim - 3);
+    /// <summary>The most bytes the drawn surfaces of every height field of a world's regions sample together, four a
+    /// voxel of each field's <see cref="SurfaceVoxels"/>: each surface's snapshot lives in the client, and a mesh bake
+    /// copies the snapshots its groups read into its job.</summary>
+    public const long MaxSurfaceBytes = ((64L * 1024) * 1024);
+
+    /// <summary>Returns the voxel lattice a height field of a region is drawn through: the lattice's columns padded one
+    /// voxel on each side along X and Z, and along +Y one voxel below the origin, the tallest column any of the region's
+    /// height fields can raise, and one above.</summary>
+    /// <param name="region">The region.</param>
+    /// <returns>The voxels along each axis.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="region"/> is <see langword="null"/>.</exception>
+    public static (int X, int Y, int Z) SurfaceVoxels(WorldFieldsSection region) {
+        ArgumentNullException.ThrowIfNull(argument: region);
+
+        var lattice = region.Lattice;
+        var tallest = 0f;
+
+        foreach (var row in region.Fields) {
+            tallest = MathF.Max(x: tallest, y: ((row.Max * row.HeightScale) * lattice.Layers));
+        }
+        return ((lattice.Width + 2), (((int)MathF.Ceiling(x: (tallest / lattice.CellSize))) + 3), (lattice.Depth + 2));
+    }
     /// <summary>The most conditions or writes one transform reaction may declare.</summary>
     public const int MaxTransformTerms = 64;
 }

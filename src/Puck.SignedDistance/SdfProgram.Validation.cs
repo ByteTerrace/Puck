@@ -14,7 +14,7 @@ public sealed partial class SdfProgram {
     // (Data0.xyzw, Data1.xyzw). A bit pattern there reads as NaN or an infinity as often as it reads as a number, so the
     // finiteness sweep must skip exactly these and no others. KEEP IN SYNC with the asuint() reads in
     // Assets/Shaders/Sdf/field/sdf-shapes.hlsli: sdfGlyphUnpackUv(data0.x)/sdfGlyphUnpackUv(data0.y), sdfSampledRegion's
-    // asuint(data1.y) packedDims / asuint(data1.z) brickWordOffset, and sdfConvexPolygonSolid's asuint(data0.x)
+    // asuint(data1.y) packedDims / asuint(data1.z) handle, and sdfConvexPolygonSolid's asuint(data0.x)
     // (table offset, vertex count) — patched from a finite 0f placeholder to its real packed value AFTER this sweep
     // runs (see PatchConvexPolygonProfileOffsets), so registering the lane here is a defense against a future caller
     // re-running this check post-patch, not a fix for today's ordering.
@@ -313,7 +313,7 @@ public sealed partial class SdfProgram {
                 !VectorFunctions.IsFinite(vector: bleed) ||
                 (bleed.X < 0f) || (bleed.Y < 0f) || (bleed.Z < 0f) ||
                 !float.IsFinite(f: material.Receive) || (material.Receive < 0f) ||
-                !SdfMaterial.IsEmissiveLane(lane: material.EmissiveLane) ||
+                !SdfLanes.IsLane(lane: material.EmissiveLane) ||
                 (material.Paints is { Count: > MaxPaintsPerMaterial }) ||
                 !material.IsGlassValid ||
                 (material.Toon is { Enabled: true, IsValid: false }) ||
@@ -325,7 +325,7 @@ public sealed partial class SdfProgram {
             )
             ) {
                 throw new ArgumentOutOfRangeException(
-                    message: $"Material {index} must carry finite, non-negative albedo, emissive, specular, fill, bleed and receive, with roughness/sheen/metal/coat/wrap/soften finite in [0, 1], an emissive lane absent or in [0, 3], a glass with a positive depth, an index of refraction in [{SdfGlass.MinIor}, {SdfGlass.MaxIor}] and a tint in [0, 1], a cel style within its ranges, and valid material layers; got {material}.",
+                    message: $"Material {index} must carry finite, non-negative albedo, emissive, specular, fill, bleed and receive, with roughness/sheen/metal/coat/wrap/soften finite in [0, 1], an emissive lane absent or in [0, {(SdfLanes.Count - 1)}], a glass with a positive depth, an index of refraction in [{SdfGlass.MinIor}, {SdfGlass.MaxIor}] and a tint in [0, 1], a cel style within its ranges, and valid material layers; got {material}.",
                     paramName: paramName
                 );
             }

@@ -64,7 +64,7 @@
         "title": "WorldPrototypeMesh"
       },
       "document": {
-        "description": "Gets the canonical (validated \u002B normalized) creation document, the author\u0027s own bytes.",
+        "description": "Gets the creation document as it arrived: normalized when a mutation upserted it (the compose boundary canonicalizes), the author\u0027s own bytes when the world loaded it. Consumers read EngineDocument, which is normalized whichever way the row arrived.",
         "title": "CreationDocument",
         "type": [
           "object",
@@ -812,7 +812,7 @@
                     "null"
                   ],
                   "default": null,
-                  "description": "The render lane in [0, 3] whose saturated value scales Emissive at shading time, read from each inhabited body\u0027s own look lanes; a placement without lanes reads zero, and null keeps the emissive static."
+                  "description": "The render lane whose saturated value scales Emissive at shading time: 0 to 3 an inhabited body\u0027s own look lanes (a placement without them reads zero), 4 to 7 the world\u0027s render.lanes (SdfLanes). Null keeps the emissive static."
                 },
                 "glass": {
                   "type": [
@@ -1165,7 +1165,7 @@
                         "null"
                       ],
                       "default": null,
-                      "description": "The render lane in [0, 3] whose value scales the velocity, read from an inhabited body\u0027s look lanes; a placement without lanes reads zero and stands still. Null keeps the velocity constant."
+                      "description": "The render lane whose value scales the velocity: 0 to 3 an inhabited body\u0027s look lanes (a placement without them reads zero and stands still), 4 to 7 the world\u0027s render.lanes (SdfLanes). Null keeps the velocity constant."
                     },
                     "frame": {
                       "enum": [
@@ -1179,6 +1179,14 @@
                         "Object": "The frame of the surface\u0027s own object: the creation\u0027s frame for a placed creation (its copies turn the vector with them), the slot\u0027s frame for a surface riding a slot, and world space for a surface emitted in world space (a field row).",
                         "World": "World space whatever the surface rides, the pattern included, so it runs continuously across every surface wearing the material: a wind across a meadow of separately swaying blades."
                       }
+                    },
+                    "coverageLane": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ],
+                      "default": null,
+                      "description": "The render lane, as Lane, whose value saturated to [0, 1] scales Coverage. Null keeps the coverage constant."
                     }
                   },
                   "required": [

@@ -116,7 +116,7 @@ public sealed partial class SdfMeshIrradiance {
         // A position read by no view of this frame answers only from its own row.
         if (row < 0 && view < 0) { row = Array.IndexOf(reading.Positions, position); }
         if (row < 0) { return false; }
-        var words = reading.Words.AsSpan(row * 8, 8);
+        var words = reading.Words.AsSpan(row * SdfMeshProbeRelight.MeterOutputWords, SdfMeshProbeRelight.MeterOutputWords);
         source = (words[7] & 3) switch { 1 => SdfExposureMeterSource.Probes, 2 => SdfExposureMeterSource.CameraTrace, _ => SdfExposureMeterSource.None };
         if (source == SdfExposureMeterSource.None) { return false; }
         var total = 0f;

@@ -299,8 +299,10 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_PROBE_RELIGHT_MATERIAL_ROWS", value: SdfMeshProbeRelight.MaterialRows);
         declarations.Count(name: "SDF_PROBE_RELIGHT_LIGHT_ROWS", value: SdfMeshProbeRelight.LightRows);
         declarations.Count(name: "SDF_PROBE_SELECT_INPUT_WORDS", value: SdfMeshProbeRelight.SelectionInputWords);
+        declarations.Count(name: "SDF_PROBE_SELECT_HEADER_ROWS", value: SdfMeshProbeRelight.SelectionHeaderRows);
         declarations.Count(name: "SDF_PROBE_CACHE_WORDS", value: SdfMeshProbeRelight.CacheWords);
         declarations.Count(name: "SDF_PROBE_RELIGHT_RESULT_WORDS", value: SdfMeshProbeRelight.ResultWords);
+        declarations.Count(name: "SDF_PROBE_METER_OUTPUT_WORDS", value: SdfMeshProbeRelight.MeterOutputWords);
         declarations.Count(name: "SDF_PROBE_RECORD_INPUT_WORD", value: SdfMeshProbeRelight.RecordInputWord);
         declarations.Count(name: "SDF_PROBE_RELIGHT_PREVIOUS_WORD", value: SdfMeshProbeRelight.PreviousWord);
         declarations.Count(name: "SDF_PROBE_SELECT_GROUP_SIZE", value: SdfMeshProbeRelight.SelectGroupSize);
@@ -416,10 +418,14 @@ public static class SdfIsaHlsl {
         declarations.Real(name: "SDF_GLASS_SUM_SCALE", value: SdfWorldPackage.GlassSumScale);
         declarations.Real(name: "SDF_GLASS_DEPTH_DISTANCE_SCALE", value: SdfWorldPackage.GlassDepthDistanceScale);
         declarations.Real(name: "SDF_GLASS_ABSORPTION_SCALE", value: SdfWorldPackage.GlassAbsorptionScale);
-        declarations.Section(title: "The flow layer's clock period in seconds (SdfFlow.ClockPeriodSeconds) and its control word (SdfProgram.FlowLaneMask, SdfProgram.FlowWorldFrame).");
+        declarations.Section(title: "The flow layer's clock period in seconds (SdfFlow.ClockPeriodSeconds) and its control word (SdfProgram.FlowLaneMask, SdfProgram.FlowWorldFrame, SdfProgram.FlowCoverageLaneShift).");
         declarations.Real(name: "SDF_FLOW_CLOCK_PERIOD", value: (float)SdfFlow.ClockPeriodSeconds);
         declarations.Bits(name: "SDF_FLOW_LANE_MASK", value: SdfProgram.FlowLaneMask);
         declarations.Bits(name: "SDF_FLOW_WORLD_FRAME", value: SdfProgram.FlowWorldFrame);
+        declarations.Count(name: "SDF_FLOW_COVERAGE_LANE_SHIFT", value: SdfProgram.FlowCoverageLaneShift);
+        declarations.Section(title: "The render lanes (SdfLanes): a frame slot's lanes, then the world's (SdfWorldPackage.WorldLanes).");
+        declarations.Count(name: "SDF_FIRST_WORLD_LANE", value: SdfLanes.FirstWorld);
+        declarations.Count(name: "SDF_LANE_COUNT", value: SdfLanes.Count);
         declarations.Section(title: "The sky's environment map (SdfSkyEnvironment) and the volume table's capacity (SdfProgramBuilder.MaxVolumes).");
         declarations.Signed(name: "SDF_SKY_ENVIRONMENT_SIZE", value: SdfSkyEnvironment.Size);
         declarations.Count(name: "SDF_SKY_ENVIRONMENT_COEFFICIENTS", value: SdfSkyEnvironment.CoefficientCount);

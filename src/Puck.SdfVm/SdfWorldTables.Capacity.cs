@@ -34,56 +34,37 @@ public sealed partial class SdfWorldTables {
 
         if (!device.Services.Bindings.CanAdmit(
             owner: "SDF world tables",
-            pools: DescriptorPools(brickPool: (options.BrickPoolVoxelCapacity > 0)),
+            pools: DescriptorPools,
             refusal: out var refusal
         )) {
             throw new GpuDescriptorHeapRefusalException(message: refusal);
         }
     }
-    /// <summary>Returns every descriptor pool the tables create, which a device's heap admits them by: their own
+    /// <summary>Gets every descriptor pool the tables create, which a device's heap admits them by: their own
     /// (<see cref="DescriptorPoolSizes"/>), then the one pool holding the copy sets they reserve for all their regions
     /// (<see cref="GpuRegionCopyPool"/>, sized by <see cref="GpuRegionCopyPool.SizesOf"/>), whatever policy the device
-    /// selects: the shared frame tables, the shadow handoff controls, the mesh region, and with a brick pool the brick staging. Construction creates
-    /// these and the strided history-copy pool, and the residency the mesh bake's background work pool, so no later
-    /// frame, the first to draw a mesh or a growing program included, takes a descriptor range.</summary>
-    /// <param name="brickPool">Whether the tables keep a brick pool.</param>
-    /// <returns>The pools' sizes, the tables' own first.</returns>
-    public static GpuDescriptorPoolSizes[] DescriptorPools(bool brickPool) => [
-        DescriptorPoolSizes(brickPool: brickPool),
-        RegionCopyPoolSizes(brickPool: brickPool),
+    /// selects: the shared frame tables, the shadow handoff controls and the mesh region. Construction creates these and
+    /// the strided history-copy pool, and the residency the mesh bake's background work pool, so no later frame, the
+    /// first to draw a mesh or a growing program included, takes a descriptor range.</summary>
+    public static GpuDescriptorPoolSizes[] DescriptorPools => [
+        DescriptorPoolSizes,
+        RegionCopyPoolSizes,
         GpuBufferStridedCopy.PoolSizes(frameSlotCount: FrameRingSize, recordingCount: 2),
         SdfMeshBakeGpuWork.PoolSizes,
     ];
-    /// <summary>Returns the one descriptor pool the tables create themselves, the statement their construction creates the
-    /// pool from: the World set per ring slot, holding the World group of
-    /// <see cref="SdfWorldInterfaces.World"/>, and with
-    /// a brick pool the baker's frame set, holding the frame group of <see cref="SdfWorldInterfaces.BrickBake"/>, and one
-    /// bake set per brick slot holding its pass group.</summary>
-    /// <param name="brickPool">Whether the tables keep a brick pool.</param>
-    /// <returns>The pool's sizes.</returns>
-    public static GpuDescriptorPoolSizes DescriptorPoolSizes(bool brickPool) {
-        var sizes = default(GpuDescriptorPoolSizes);
-        var world = GpuDescriptorPoolSizes.ForGroups(groups: PipelineLayouts.World.Groups.Where(predicate: static group => (group.Ordinal == WorldGroup)).ToArray());
+    /// <summary>Gets the one descriptor pool the tables create themselves, the statement their construction creates the
+    /// pool from: the World set per ring slot, holding the World group of <see cref="SdfWorldInterfaces.World"/>.</summary>
+    public static GpuDescriptorPoolSizes DescriptorPoolSizes {
+        get {
+            var sizes = default(GpuDescriptorPoolSizes);
+            var world = GpuDescriptorPoolSizes.ForGroups(groups: PipelineLayouts.World.Groups.Where(predicate: static group => (group.Ordinal == WorldGroup)).ToArray());
 
-        for (var slot = 0; (slot < FrameRingSize); slot++) {
-            sizes += world;
-        }
+            for (var slot = 0; (slot < FrameRingSize); slot++) {
+                sizes += world;
+            }
 
-        if (!brickPool) {
             return sizes;
         }
-
-        var groups = PipelineLayouts.BrickBake.Groups;
-
-        sizes += GpuDescriptorPoolSizes.ForGroups(groups: groups.Where(predicate: static group => (group.Ordinal == FrameGroup)).ToArray());
-
-        var bake = GpuDescriptorPoolSizes.ForGroups(groups: groups.Where(predicate: static group => (group.Ordinal == PassGroup)).ToArray());
-
-        for (var brick = 0; (brick < SdfBrickPoolLayout.MaxBricks); brick++) {
-            sizes += bake;
-        }
-
-        return sizes;
     }
 
     // Called only by UploadProgram. Grows the program region after the device is idle, since every view's submission

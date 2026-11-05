@@ -45,16 +45,10 @@ public static class SdfWorldInterfaces {
     public static ShaderPipelineParameterLayout EnvironmentParameters => Recorded.EnvironmentParameters;
     /// <summary>Gets <see cref="SdfKernelInterfaces.World"/> for this build's instruction set.</summary>
     public static ShaderInterface World => Recorded.World;
-    /// <summary>Gets <see cref="SdfKernelInterfaces.BrickBakeParameters"/> for this build's instruction set.</summary>
-    public static ShaderPipelineParameterLayout BrickBakeParameters => Recorded.BrickBakeParameters;
-    /// <summary>Gets <see cref="SdfKernelInterfaces.BrickBake"/> for this build's instruction set.</summary>
-    public static ShaderInterface BrickBake => Recorded.BrickBake;
     /// <summary>Gets <see cref="SdfKernelInterfaces.Mesh"/>.</summary>
     public static ShaderInterface Mesh => Recorded.Mesh;
     /// <summary>Gets <see cref="SdfKernelInterfaces.WorldLayout"/> for this build's instruction set.</summary>
     public static ShaderInterfaceLayout WorldLayout => Recorded.WorldLayout;
-    /// <summary>Gets <see cref="SdfKernelInterfaces.BrickBakeLayout"/> for this build's instruction set.</summary>
-    public static ShaderInterfaceLayout BrickBakeLayout => Recorded.BrickBakeLayout;
     /// <summary>Gets <see cref="SdfKernelInterfaces.MeshLayout"/>.</summary>
     public static ShaderInterfaceLayout MeshLayout => Recorded.MeshLayout;
     /// <summary>Gets <see cref="SdfKernelInterfaces.Includes"/> for this build's instruction set.</summary>

@@ -1,6 +1,5 @@
 using Puck.Abstractions.Machines;
 using Puck.Machines;
-using Puck.HumbleGamingBrick.Forge;
 using Puck.HumbleGamingBrick.Interfaces;
 
 namespace Puck.HumbleGamingBrick.Post;
@@ -172,13 +171,9 @@ internal sealed class BundledFirmwareStage : IPostStage<PostContext> {
     }
     private static string? VerifyRevision(ConsoleModel model) {
         var image = HgbFirmware.GetImage(model: model);
-        var generated = BootRomBuilder.Build(model: model);
-
-        if (!image.AsSpan().SequenceEqual(other: generated)) {
-            return "the bundled image differs from the current generator; regenerate firmware before shipping";
-        }
+        var original = image.ToArray();
         image[0] ^= 0xFF;
-        if (!HgbFirmware.GetImage(model: model).AsSpan().SequenceEqual(other: generated)) {
+        if (!HgbFirmware.GetImage(model: model).AsSpan().SequenceEqual(other: original)) {
             return "a caller mutated the package's shared firmware image";
         }
 
@@ -203,7 +198,7 @@ internal sealed class BundledFirmwareStage : IPostStage<PostContext> {
             (cold.Instance.Configuration.BootMode != MachineBootMode.Cold) ||
             (cold.PeekByte(address: MemoryMap.BootRomDisable) != 0xFE) ||
             (cold.Instance.GetRequiredService<ICpu>().ProgramCounter != 0) ||
-            (cold.PeekByte(address: 0) != generated[0])
+            (cold.PeekByte(address: 0) != original[0])
         ) {
             return "the convenience constructor did not begin in bundled native firmware";
         }
@@ -301,7 +296,7 @@ internal sealed class BundledFirmwareStage : IPostStage<PostContext> {
             return PostStageOutcome.Fail(detail: refusalFailure);
         }
 
-        return PostStageOutcome.Pass(detail: (((((string)$"{models.Length} bundled images match their native generator and return private copies; every revision cold-boots a valid cartridge, fast-starts at its seeded entry with the same firmware identity, ") +
+        return PostStageOutcome.Pass(detail: (((((string)$"{models.Length} derived startup images return private copies; every revision cold-boots a valid cartridge, fast-starts at its seeded entry with the same firmware identity, ") +
             "and restores/forks visible mid-boot state byte-identically; handheld boot emits PCM while companion boot stays silent; ") +
             "the screen engine cold-boots by default and honors fast startup; external images execute without fallback, ") +
             "wrong-image snapshots refuse without mutation, and malformed startup inputs refuse"));

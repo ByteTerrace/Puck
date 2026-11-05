@@ -572,7 +572,7 @@ public static partial class WorldDefinitionValidator {
             ValidateFieldRegion(definition: definition, errors: errors, fields: region);
         }
         var snapshotBytes = 0L;
-        var brickBytes = 0L;
+        var surfaceBytes = 0L;
 
         foreach (var region in definition.FieldRegions) {
             var cells = ((((long)region.Lattice.Width) * region.Lattice.Depth) * region.Lattice.Layers);
@@ -582,17 +582,17 @@ public static partial class WorldDefinitionValidator {
                 snapshotBytes += (cells * ((25L + System.Text.Encoding.UTF8.GetByteCount(s: region.Name)) +
                     System.Text.Encoding.UTF8.GetByteCount(s: field.Name)));
                 if (field.HeightScale > 0) {
-                    brickBytes += (((long)Puck.SignedDistance.SdfBrickPoolLayout.VoxelsPerBrick) * sizeof(float));
+                    var (x, y, z) = WorldFieldCapacity.SurfaceVoxels(region: region);
+
+                    surfaceBytes += (((((long)x) * y) * z) * sizeof(float));
                 }
             }
         }
         if (snapshotBytes > WorldFieldCapacity.MaxSnapshotBytes) {
             errors.Add(item: $"state.lattices physical primer needs {snapshotBytes} bytes across all regions, exceeding the {WorldFieldCapacity.MaxSnapshotBytes}-byte budget.");
         }
-        var brickBudget = (((long)Puck.SignedDistance.SdfBrickPoolLayout.TotalVoxels) * sizeof(float));
-
-        if (brickBytes > brickBudget) {
-            errors.Add(item: $"state.lattices sampled surfaces need {brickBytes} resident bytes across all regions, exceeding the {brickBudget}-byte brick buffer budget.");
+        if (surfaceBytes > WorldFieldCapacity.MaxSurfaceBytes) {
+            errors.Add(item: $"state.lattices drawn surfaces sample {surfaceBytes} bytes across all regions, exceeding the {WorldFieldCapacity.MaxSurfaceBytes}-byte budget.");
         }
     }
     private static void ValidateFieldRegion(WorldDefinition definition, WorldFieldsSection fields, List<string> errors) {
@@ -770,7 +770,7 @@ public static partial class WorldDefinitionValidator {
             hasHeightField &&
             ((lattice.Width > WorldFieldCapacity.MaxSurfaceCells) || (lattice.Depth > WorldFieldCapacity.MaxSurfaceCells))
         ) {
-            errors.Add(item: $"fields.lattice width/depth must be at most {WorldFieldCapacity.MaxSurfaceCells} when a field carries heightScale; one {(WorldFieldCapacity.MaxSurfaceCells + 2)}-voxel render brick must cover the lattice plus its border (was {lattice.Width}x{lattice.Depth}).");
+            errors.Add(item: $"fields.lattice width/depth must be at most {WorldFieldCapacity.MaxSurfaceCells} when a field carries heightScale, so its drawn surface's sampled lattice covers the lattice plus its border (was {lattice.Width}x{lattice.Depth}).");
         }
 
         var reactions = (fields.Reactions ?? []);

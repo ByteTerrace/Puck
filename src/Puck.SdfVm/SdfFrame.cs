@@ -169,6 +169,15 @@ public sealed record SdfFrame(
     /// <summary>Gets the words <see cref="Program"/> differs in from the program built before it, which tables holding
     /// that earlier program upload alone, or <see langword="null"/> when its builder measured none.</summary>
     public SdfProgramDelta? ProgramDelta { get; internal set; }
+    /// <summary>Gets the snapshots <see cref="Program"/>'s sampled fields hold this frame, by handle
+    /// (<see cref="SdfProgram.SampledFields"/>): the producer's capture (<see cref="SdfSampledSet.Capture"/>), or the
+    /// program's own (<see cref="SdfProgram.Sampled"/>) when it set none. A field publishing new values moves this set and
+    /// no program word; the mesh bake plans again only the groups that read a moved field.</summary>
+    public SdfSampledSet Sampled {
+        get => (m_sampled ?? Program.Sampled);
+        init => m_sampled = value;
+    }
+    private SdfSampledSet? m_sampled;
 
     /// <summary>Gets the slot ranges drawn on both sides of a portal this frame (<see cref="SdfSlotClip"/>): the frame's
     /// producer fills it from the stamp pools whose slots the frame carries (a composition from every emitter's
@@ -338,6 +347,11 @@ public sealed record SdfFrame(
     /// state mirror of the world the frame draws, never from <see cref="Time"/>, which advances by wall-clock
     /// deltas, so a frame at a given tick and fraction draws the same sky and media on every run.</summary>
     public PresentedTick Clock { get; init; }
+
+    /// <summary>Gets the world's four render lanes (<see cref="SdfLanes"/> 4 to 7), which every surface reads alike: the
+    /// host resolves them from the world's state at the frame's presented tick, as it resolves the sky's bindings, and the
+    /// pass block carries them (<c>SdfWorldPackage.WorldLanes</c>). Zero where the world authors none.</summary>
+    public System.Numerics.Vector4 WorldLanes { get; init; }
 
     /// <summary>The default far distance, 40 world units, which an unauthored <c>render.farDistance</c> resolves to.</summary>
     public const float DefaultFarDistance = 40f;

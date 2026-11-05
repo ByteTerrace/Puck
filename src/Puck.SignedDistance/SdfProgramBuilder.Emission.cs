@@ -11,7 +11,7 @@ public sealed partial class SdfProgramBuilder {
         internal Emission() { }
 
         internal SdfSweepCurve[] Curves { get; init; } = [];
-        internal SdfSampledValues[] Samples { get; init; } = [];
+        internal SdfSampledBinding[] Samples { get; init; } = [];
         internal int First { get; init; }
         internal (int InstructionIndex, int ReachPerUnit, int RawValue)? Fold { get; init; }
         internal SdfInstanceRange[] Instances { get; init; } = [];
@@ -29,7 +29,7 @@ public sealed partial class SdfProgramBuilder {
     /// this boundary; retained instances name those existing rows.</summary>
     public EmissionMark MarkEmission() {
         RequireEmissionBoundary();
-        return new(m_instructions.Count, m_instances.Count, m_convexPolygonProfiles.Count, m_paths.Count, m_sweepCurves.Count, m_materialRecolorWindows.Count, m_shapeCount, m_materials.Count, m_screenSurfaces.Count, m_materialScopes.Count, m_sampledValues.Count);
+        return new(m_instructions.Count, m_instances.Count, m_convexPolygonProfiles.Count, m_paths.Count, m_sweepCurves.Count, m_materialRecolorWindows.Count, m_shapeCount, m_materials.Count, m_screenSurfaces.Count, m_materialScopes.Count, m_sampledBindings.Count);
     }
     /// <summary>Retains the completed instances since a mark. Materials remain registered by the caller.</summary>
     public Emission RetainEmission(EmissionMark mark) {
@@ -55,7 +55,7 @@ public sealed partial class SdfProgramBuilder {
             Polygons = m_convexPolygonProfiles.GetRange(mark.Polygons, (m_convexPolygonProfiles.Count - mark.Polygons)).ToArray(),
             Paths = m_paths.GetRange(mark.Paths, (m_paths.Count - mark.Paths)).ToArray(),
             Curves = m_sweepCurves.GetRange(mark.Curves, (m_sweepCurves.Count - mark.Curves)).ToArray(),
-            Samples = m_sampledValues.GetRange(mark.Samples, m_sampledValues.Count - mark.Samples).ToArray(),
+            Samples = m_sampledBindings.GetRange(mark.Samples, (m_sampledBindings.Count - mark.Samples)).ToArray(),
             Windows = windows,
             Materials = m_materials.Count,
             ScopeBase = scope?.MaterialBase,
@@ -92,7 +92,7 @@ public sealed partial class SdfProgramBuilder {
             m_sweepCurves.Add(item: curve with { InstructionIndex = (curve.InstructionIndex + offset) });
         }
         foreach (var sample in emission.Samples) {
-            m_sampledValues.Add(sample with { InstructionIndex = sample.InstructionIndex + offset });
+            m_sampledBindings.Add(item: sample with { InstructionIndex = (sample.InstructionIndex + offset) });
         }
         foreach (var window in emission.Windows) {
             m_materialRecolorWindows.Add(item: (window.Op, window.Material, window.MaxDelta, (window.Scoped ? m_materialScopes[^1] : null)));

@@ -1,18 +1,15 @@
-# Bundled HGB firmware
+# HGB startup firmware
 
-These original Puck boot ROM startup images are generated from
-[`BootRomBuilder`](../../Puck.HumbleGamingBrick.Forge/BootRomBuilder.cs), one
-image per `ConsoleModel`. They are runtime resources, not external downloads.
-They belong to [`Puck.HumbleGamingBrick`](../README.md); this folder owns the
-generated images and their package-local notices.
-The `.bin` images in this directory are distributed under the adjacent
-[Apache-2.0 or MIT licenses](LICENSE); this does not change the license of the emulator or
-the Forge tooling.
+[`BootRomBuilder`](BootRomBuilder.cs) emits and calibrates the original Puck boot
+program for each hardware revision. `HgbFirmware.GetImage` derives it in process
+on demand, through the shared `DerivedBytes` cache keyed by the deriving code and
+revision. Missing or corrupt products derive again; hits, misses and derivation
+milliseconds are counted on stderr. Callers receive private bytes.
 
-Regenerate or verify them with the documented
-[`puck firmware hgb` command](../../Puck.Cli/README.md).
-Never hand-edit an image. A regeneration changes firmware identity, so review
-the source change and run the HGB Forge tests and Post firmware/handoff gates.
+Only source and the [firmware notices](LICENSE) are committed. The generated
+images use the adjacent Apache-2.0 or MIT licenses. Export images when needed with
+`puck firmware hgb --output <dir>`. Run the HGB Post `bundled-firmware`,
+`firmware-reconfigure` and `boot-rom-handoff` stages after changing the generator.
 The [Forge guide](../../../docs/emulation/hgb/forge.md#the-authored-boot-roms)
 owns presentation, header checks, hardware handoff and the limits of the
 independent conformance evidence.

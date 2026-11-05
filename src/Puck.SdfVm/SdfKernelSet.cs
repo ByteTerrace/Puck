@@ -17,8 +17,7 @@ public sealed class SdfKernelSet {
     private readonly ReadOnlyMemory<byte>[] m_bytecode;
 
     /// <summary>Initializes a new instance of the <see cref="SdfKernelSet"/> class from each kernel's bytecode.</summary>
-    /// <param name="bytecode">The bytecode of every kernel in <see cref="Kernels"/> order; the brick baker's may be empty
-    /// for an engine without a brick pool.</param>
+    /// <param name="bytecode">The bytecode of every kernel in <see cref="Kernels"/> order.</param>
     /// <exception cref="ArgumentNullException"><paramref name="bytecode"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="bytecode"/> does not hold one entry per kernel.</exception>
     public SdfKernelSet(IReadOnlyList<ReadOnlyMemory<byte>> bytecode) {
@@ -67,7 +66,7 @@ public sealed class SdfKernelSet {
 
     /// <summary>Gets a kernel's bytecode.</summary>
     /// <param name="kernel">The kernel.</param>
-    /// <returns>The bytecode, empty for a brick baker the set does not carry.</returns>
+    /// <returns>The bytecode.</returns>
     public ReadOnlyMemory<byte> this[SdfKernel kernel] => m_bytecode[((int)kernel)];
 
     /// <summary>Returns the file stem a kernel's bytecode ships under, completed by the backend's extension: the one
@@ -96,12 +95,10 @@ public sealed class SdfKernelSet {
         SdfKernel.SkyEnvironment => "sdf-sky-environment",
         SdfKernel.SkyEnvironmentReduce => "sdf-sky-environment-reduce",
         SdfKernel.ScreenEmission => "sdf-screen-emission",
-        SdfKernel.BrickBake => "sdf-brick-bake",
         SdfKernel.Resolve => "sdf-resolve",
         _ => throw new ArgumentOutOfRangeException(paramName: nameof(kernel), actualValue: kernel, message: "Not an SDF kernel."),
     };
-    /// <summary>Returns the layout of the interface a kernel reads: the brick baker's
-    /// (<see cref="SdfWorldInterfaces.BrickBakeLayout"/>), reconstruction's
+    /// <summary>Returns the layout of the interface a kernel reads: reconstruction's
     /// (<see cref="SdfWorldInterfaces.ResolveParameters"/>), the sky's and composite's
     /// (<see cref="SdfWorldInterfaces.SkyParameters"/>), the environment map's and its reduction's
     /// (<see cref="SdfWorldInterfaces.EnvironmentParameters"/>), the mesh bake's mask's and sampler's
@@ -115,7 +112,6 @@ public sealed class SdfKernelSet {
             SdfKernel.ProbeTrace => SdfWorldInterfaces.ProbeTraceLayout,
             SdfKernel.ProbeRelight => SdfWorldInterfaces.ProbeRelightLayout,
             SdfKernel.ProbeMeter or SdfKernel.ProbeSelect or SdfKernel.ProbeCompact or SdfKernel.ProbeCache => SdfWorldInterfaces.ProbeRelightLayout,
-            SdfKernel.BrickBake => SdfWorldInterfaces.BrickBakeLayout,
             SdfKernel.MeshBakeMask or SdfKernel.MeshBake => SdfWorldInterfaces.MeshBakeLayout,
             SdfKernel.Resolve => SdfWorldInterfaces.ResolveParameters.Layout,
             SdfKernel.Sky or SdfKernel.Composite => SdfWorldInterfaces.SkyParameters.Layout,

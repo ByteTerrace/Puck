@@ -1083,26 +1083,13 @@ source are the next lanes here; the items below are the system work beside them.
   static and animated placements), and profile bake admission, landing and
   illumination together. The stream is eight placements of one still segment
   and the falls still sheets, their motion the flow layer's shading.
-  Each changed height snapshot is a new program and mesh identity, so drawn
-  heights move by an authored `surfaceStep` with hysteresis; the standard's
-  hydrology and pool views still rebake a field surface every few seconds of the
-  melt. A field surface that moves without a program rebuild belongs with the
-  proportional-rebuild item below. Run costs and before/after evidence live in
-  the water follow-up commits.
+  Drawn heights move by an authored `surfaceStep` with hysteresis, and each
+  step publishes a new snapshot of the field's `SdfSampledField` without
+  rebuilding the program, so only that field's group rebakes. Run costs and
+  before/after evidence live in the water follow-up commits.
   The prototype audits also flag normal/topology defects in the glacier, lake and falls
   despite finding no uncovered surface. Inspect those witnesses through the
   existing mesh-audit image output before attributing them to authored style.
-- [medium] Make packed-program rebuilding proportional to changed emissions.
-  `WorldFieldEmitter.AdvanceBricks` correctly publishes changed sampled geometry,
-  but `SdfProgramBuilder.Build` constructs and analyzes the whole `SdfProgram`
-  again. Frequent field changes therefore repeat whole-world compilation.
-  The geometry identity does not force this: `SdfMeshGeometryBuilder` hashes
-  the voxel contents and ignores their packed address, so it would key the same
-  meshes from any immutable store. Storing the snapshot inside the one packed
-  `SdfProgram` word array does: a changed value is a new program, packed,
-  validated and uploaded whole. Profile in an isolated run,
-  then reuse unchanged compilation through one generic program path. Preserve
-  snapshot ownership, side-table relocation and geometry-key completeness.
 - [low] Investigate the reported operator attachment loss on `world.reset`.
   `WorldGrants.EndSessionsForRebuild` ends observation sessions, while
   `WorldControlCommandModule` owns a separate local console endpoint; do not
@@ -1263,25 +1250,9 @@ lowers it to the same JSON as before, except where the look changes on purpose.
   `tests/Shared/World/Fixtures.cs:963`. Put the fixture below the World test
   dependencies so physics and World laws can use one accepted-transfer adapter.
 
-- [medium] The rot sweep found three places where code and its own
+- [medium] The rot sweep found two places where code and its own
   documentation disagree. `puck docs links` does not read XML comments, so
-  none of these is checked yet.
-  - **The external brick pool is dead.** No in-tree producer requests a carve
-    brick bake (`ISdfBrickBakeService.RequestBrickBake`'s only callers are
-    tests), and `WorldFieldEmitter.AdvanceBricks` now publishes height fields
-    as inline sampled values in the program words (`SdfProgramBuilder.SampledValues`)
-    and never calls `UploadBrick`. Every residency still allocates the 64 MB
-    pool (`SdfWorldRenderSpec.BrickPoolVoxelCapacity`,
-    `SdfWorldTables.DefaultBrickPoolVoxelCapacity`), and the pool's second
-    sampled-region path survives in `sdfBrickVoxel` (the `SDF_SAMPLED_REGIONS`
-    arm, `field/sdf-shapes.hlsli:471`), `SdfWorldTables.BrickBake.cs`,
-    `sdf-brick-bake.comp.hlsl`, `SdfBrickBake`, `SdfBrickPoolLayout`, the
-    `sdfBrickPool` world-interface member and the brick budget in
-    `WorldDefinitionValidator.Topology.cs:585`. Delete the pool with its
-    kernel, interfaces, service, budget and `bricks-and-baking.md` chapters,
-    and rename `ISdfFrameSource.AdvanceBricks` for what it now does. Removing
-    the interface member changes the bake kernels' bytecode, so the change
-    rebakes every stored mesh once.
+  neither is checked yet.
   - **The rule host's effect skip.** `documents-rules.md` says a
     `setState`/`addState` effect is submitted only when it could move the
     destination, but the code that enforces this was not found.
@@ -1670,7 +1641,7 @@ confirmed the AV1 item in the code; the rest are unconfirmed):
 2. `WorldCompileCache.ComputeCompilerIdentity` and `Trim`
    (`Puck.World.Transpiler/Composition/WorldCompileCache.cs:186`, `494`) repeat
    `AssemblyReach.Of` (`Puck.Assets/AssemblyReach.cs:18`),
-   `CompiledWorld.ComputeEngineBuild` and `CacheRetention.EnforceOnWrite`,
+   and `CacheRetention.EnforceOnWrite`,
    skipping `CacheRetention.Due`'s one-minute scan throttle on every cache
    write (S) `[low]`.
 3. Camera plane validation and L8/BGRA packing:
@@ -2037,11 +2008,8 @@ colliders report's only red findings left are the valley's relief
 
 ### Derived products are caches
 
-Owner: delivery lane with the machines lane · ordinary · Next: build the deck's
-`.nes` test cartridges from `DeckProgram` on demand and delete the committed bytes
-and the verify mode; do the same for the generated firmware images; narrow
-`CompiledWorld.EngineBuild` to the deriving call graph; measure deriving the
-`wasm/*/dist` modules against edit-to-running.
+Owner: delivery lane with the machines lane · ordinary · Next: choose how hosts
+without Rust obtain addon caches before removing the committed `wasm/*/dist` modules.
 
 A derived product is a cache, never the truth
 ([decision](../decisions/engine-design.md#a-derived-product-is-a-cache-never-the-truth)):
@@ -2050,34 +2018,17 @@ it is never committed or compared by a gate. The owner's ruling on generated
 bytes: hand-authored bytes are source and stay committed; generated outputs are
 derived products, removed from git and built on demand.
 
-- Generated cartridges (engine work item): `worlds/debug/cartridges/deck/colour-bars.nes`
-  and `moving-sprite.nes` are assembled by `src/Puck.HumbleGamingDeck.Forge/DeckProgram.cs:7`
-  and verified by `puck cartridges deck`. Build them on demand (the way the debug
-  world's `.puck` cartridges are prepared at boot), delete the committed bytes and
-  the verify mode, and fix their callers in the same change.
-- Generated firmware (engine work item): the fourteen HGB boot ROMs in
-  `src/Puck.HumbleGamingBrick/Firmware/*.bin` (generated by `BootRomBuilder.Build`
-  through `puck firmware hgb`) and the AGB BIOS
-  `src/Puck.AdvancedGamingBrick/Firmware/puck-agb.bin` (built from the C and ARM
-  sources beside it through `puck firmware agb`) are generated outputs kept
-  beside their source with a byte-compare `--verify` (the ledger in
-  [runtime and delivery](runtime-and-delivery.md#open-items) and the firmware
-  package in [machines and cartridges](machines-and-cartridges.md#open-items)).
-  Build them on demand and delete the bytes, the `--verify` modes and the
-  documentation of checked-in images. The HGB images derive in process and cheaply;
-  the AGB BIOS needs Clang and an ELF linker on every machine that boots an AGB
-  cartridge, so measure that cost against edit-to-running first, as for the wasm
-  modules. A boot ROM or BIOS written by hand is source and stays.
-- A compiled world is keyed by every reachable assembly's MVID
-  (`src/Puck.World.Schema/CompiledWorld.cs:58-77`), against the decision that a
-  derived product's key covers the code that derives it. Narrow it to the deriving
-  call graph, as `SdfMeshBakeClosure` does for the bake.
 - Stop committing the built addon guests: the eleven `wasm/*/dist/*.wasm`
   modules are compiled from the Rust crates beside them, and a derived product
   is a cache ([decision](../decisions/engine-design.md#a-derived-product-is-a-cache-never-the-truth)).
-  Deriving them on a miss puts the Rust `wasm32` toolchain on every machine and
-  CI job that loads an addon, so measure that cost against edit-to-running
-  first. A hand-written fixture module (the transpiler sample's 8-byte
+  A measured Windows run with Rust 1.96.0 and the `wasm32-unknown-unknown` target
+  already installed built all eleven declared variants offline into an empty
+  scratch target in 6.942 seconds; repeating the same variants took 3.613 seconds.
+  Both fit the 30-second edit-to-running bar, before the engine build and boot;
+  neither includes installing Rust or its target. The committed modules were
+  untouched. A miss still requires that toolchain on each host, so the remaining
+  decision is toolchain availability and prewarming/provisioning caches.
+  A hand-written fixture module (the transpiler sample's 8-byte
   `Samples/addons/rules.wasm`) is source.
 
 ### Test runner and replay
@@ -2576,6 +2527,15 @@ Owner: sweep follow-up, with the lead scheduling the GPU slot · medium ·
 Next: reproduce the companion overlaps, then one paired windowed tour when no
 lane holds the GPU, compared stop by stop, with `--attach` on one World for
 both runs.
+
+- [medium] Baseline status comparisons can perpetuate a prior comparison failure
+  after its metrics match. `SweepBaseline.Changes`
+  (`src/Puck.Cli.Runs/Sweep/SweepReport.cs:277`) compares the stored, already
+  comparison-adjusted status with the current intrinsic status; `SweepRun`
+  (`src/Puck.Cli.Runs/Sweep/SweepRun.cs:410`) makes every such change red again.
+  Keep the intrinsic verdict separate from comparison failures. Check: identical
+  valid readings against a baseline whose only red reason was a prior baseline
+  difference remain clean, rather than becoming red for `red -> clean`.
 
 - [high] The windowed leg never reaches its tour while the day cycle runs.
   After settling, the sweep runs `world.rate resume`, `world.wait 300`,
