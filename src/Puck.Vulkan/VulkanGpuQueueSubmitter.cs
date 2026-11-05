@@ -149,7 +149,7 @@ public sealed class VulkanGpuQueueSubmitter(IVulkanDeviceContext deviceContext, 
 
 /// <summary>
 /// The Vulkan <see cref="IGpuSubmissionFence"/>: one unsignaled <c>VkFence</c>, armed by a fenced queue submit and
-/// drained by an unbounded <c>vkWaitForFences</c> + reset. Its batch and alias states are the shared
+/// drained by a bounded <c>vkWaitForFences</c> (<see cref="VulkanFenceWait"/>) + reset. Its batch and alias states are the shared
 /// <see cref="GpuBatchedSubmissionFence"/>'s: a fence answering from its batch's owner waits on the owner's
 /// <c>VkFence</c> without resetting it.
 /// </summary>
@@ -197,13 +197,13 @@ internal sealed class VulkanGpuSubmissionFence : GpuBatchedSubmissionFence {
         return true;
     }
     /// <inheritdoc/>
-    /// <remarks>Unbounded, like <c>vkDeviceWaitIdle</c>: a hung GPU surfaces as a device loss (ThrowIfFailed maps
-    /// <c>VK_ERROR_DEVICE_LOST</c> to the neutral <see cref="DeviceLostException"/> the host pump's recovery
-    /// catches).</remarks>
-    protected override void WaitNative() => m_frameSynchronizationApi.WaitForFence(
+    /// <remarks>Bounded by <see cref="VulkanFenceWait.TimeoutNanoseconds"/>: a hung GPU surfaces as a device loss
+    /// (ThrowIfFailed maps <c>VK_ERROR_DEVICE_LOST</c> to the neutral <see cref="DeviceLostException"/> the host pump's
+    /// recovery catches).</remarks>
+    protected override void WaitNative() => VulkanFenceWait.Wait(
+        api: m_frameSynchronizationApi,
         device: m_device,
-        fenceHandle: m_fenceHandle,
-        timeout: ulong.MaxValue
+        fenceHandle: m_fenceHandle
     ).ThrowIfFailed(device: m_device, operation: "vkWaitForFences");
     /// <inheritdoc/>
     protected override void DrainNative() => m_frameSynchronizationApi.ResetFence(

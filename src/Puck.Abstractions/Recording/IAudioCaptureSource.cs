@@ -14,6 +14,9 @@ public interface IAudioCaptureSource : IDisposable {
     int Channels { get; }
     /// <summary>Samples dropped to ring overflow since <see cref="Start"/> (honest accounting for status echoes).</summary>
     long DroppedSampleCount { get; }
+    /// <summary>Gets an auto-reset handle the device thread sets after each write to the ring, so a consumer waits on
+    /// it rather than sleeping and polling <see cref="Read"/>; valid until <see cref="IDisposable.Dispose"/>.</summary>
+    WaitHandle DataAvailable { get; }
 
     /// <summary>Starts device capture.</summary>
     void Start();

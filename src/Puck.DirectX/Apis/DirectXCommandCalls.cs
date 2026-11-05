@@ -375,14 +375,14 @@ public static unsafe partial class DirectXCommandCalls {
             calls: calls,
             operation: "ID3D12CommandQueue::Wait"
         );
-    /// <summary>Blocks until a fence reaches a value. A removed device's fence reads <c>UINT64_MAX</c>, so the wait
+    /// <summary>Blocks until a fence reaches a value, for at most <see cref="FenceWaitTimeout"/>. A removed device's fence reads <c>UINT64_MAX</c>, so the wait
     /// returns at once.</summary>
     /// <typeparam name="TCalls">The calls' answerer.</typeparam>
     /// <param name="calls">The calls.</param>
     /// <param name="fence">The fence waited on.</param>
     /// <param name="fenceEvent">The event the wait blocks on.</param>
     /// <param name="value">The value waited for.</param>
-    /// <exception cref="DeviceLostException">The device was removed.</exception>
+    /// <exception cref="DeviceLostException">The device was removed, or its work did not finish within <see cref="FenceWaitTimeout"/> (reason <c>DXGI_ERROR_DEVICE_HUNG</c>).</exception>
     /// <exception cref="DirectXException">Arming the event failed for another reason.</exception>
     public static void Wait<TCalls>(TCalls calls, ID3D12Fence* fence, HANDLE fenceEvent, ulong value) where TCalls : IDirectXCommandCalls {
         if (calls.CompletedValue(fence: fence) >= value) {
@@ -397,10 +397,17 @@ public static unsafe partial class DirectXCommandCalls {
             calls: calls,
             operation: "ID3D12Fence::SetEventOnCompletion"
         );
-        _ = PInvoke.WaitForSingleObject(
-            dwMilliseconds: uint.MaxValue,
-            hHandle: fenceEvent
+        var stalled = WaitForFenceEvent(
+            calls: calls,
+            fenceEvent: fenceEvent
         );
+
+        if (0 != stalled) {
+            throw new DeviceLostException(
+                message: StalledMessage(reason: stalled),
+                reasonCode: stalled
+            );
+        }
     }
     /// <summary>Signals a fence on a queue and blocks until the queue reaches it: every submission before the call has
     /// completed when it returns. A frame path's wait.</summary>
@@ -430,14 +437,15 @@ public static unsafe partial class DirectXCommandCalls {
         );
     }
     /// <summary>Drains a queue before its objects are released: <see cref="SignalAndWait"/>, except that a removed
-    /// device counts as drained (see the class remarks for the rule).</summary>
+    /// device counts as drained (see the class remarks for the rule), and so does one whose work did not finish within
+    /// <see cref="FenceWaitTimeout"/>, which is written to the error stream.</summary>
     /// <typeparam name="TCalls">The calls' answerer.</typeparam>
     /// <param name="calls">The calls.</param>
     /// <param name="queue">The queue drained.</param>
     /// <param name="fence">The fence signalled.</param>
     /// <param name="fenceEvent">The event the wait blocks on.</param>
     /// <param name="fenceValue">The next value to signal; advanced by one when the signal is queued.</param>
-    /// <returns><see langword="false"/> when the device was removed and nothing was waited on.</returns>
+    /// <returns><see langword="false"/> when the device was removed or hung and the queue was not drained.</returns>
     /// <exception cref="DirectXException">A call failed for a reason other than a removal.</exception>
     public static bool Drain<TCalls>(TCalls calls, ID3D12CommandQueue* queue, ID3D12Fence* fence, HANDLE fenceEvent, ref ulong fenceValue) where TCalls : IDirectXCommandCalls {
         var value = fenceValue;
@@ -475,11 +483,53 @@ public static unsafe partial class DirectXCommandCalls {
             calls: calls,
             operation: "ID3D12Fence::SetEventOnCompletion"
         );
-        _ = PInvoke.WaitForSingleObject(
-            dwMilliseconds: uint.MaxValue,
-            hHandle: fenceEvent
+        var stalled = WaitForFenceEvent(
+            calls: calls,
+            fenceEvent: fenceEvent
         );
+
+        if (0 != stalled) {
+            // Nothing more can be waited on: a removed device counts as drained, and a hung one is reported rather than
+            // waited on forever, so the teardown that called goes on to release its objects.
+            if (HResultExtensions.DxgiErrorDeviceHung == stalled) {
+                Console.Error.WriteLine(value: $"[d3d12] {StalledMessage(reason: stalled)}");
+            }
+
+            return false;
+        }
 
         return true;
     }
+    /// <summary>The longest <see cref="WaitForFenceEvent"/> blocks before it reports a removed or hung device. Windows'
+    /// own timeout detection resets a device whose work has not retired within two seconds, so a wait that outlasts many
+    /// times that has no GPU work behind it, and a submission that long would already have missed the frame bar.</summary>
+    public static readonly TimeSpan FenceWaitTimeout = TimeSpan.FromSeconds(30);
+
+    /// <summary>Sleeps on an operating-system event a fence was armed to set (<c>SetEventOnCompletion</c>), bounded by
+    /// <see cref="FenceWaitTimeout"/>, and says what stopped it when it was not set. The one wait every Direct3D 12 fence
+    /// block uses, so no wait is unbounded on a device that was removed or hung.</summary>
+    /// <typeparam name="TCalls">The calls' answerer, which reads the removal reason.</typeparam>
+    /// <param name="calls">The calls of the device the fence belongs to.</param>
+    /// <param name="fenceEvent">The event the fence was armed to set.</param>
+    /// <returns>Zero when the event was set; otherwise the device's removal reason, or
+    /// <c>DXGI_ERROR_DEVICE_HUNG</c> when the device is alive but its work did not finish within the timeout.</returns>
+    public static int WaitForFenceEvent<TCalls>(TCalls calls, HANDLE fenceEvent) where TCalls : IDirectXCommandCalls {
+        var wait = PInvoke.WaitForSingleObject(
+            dwMilliseconds: ((uint)FenceWaitTimeout.TotalMilliseconds),
+            hHandle: fenceEvent
+        );
+
+        // WAIT_OBJECT_0 is zero; anything else is the timeout (a wait on an event handle fails only for a bad handle).
+        if (0u == ((uint)wait)) {
+            return 0;
+        }
+
+        var reason = calls.DeviceRemovedReason();
+
+        return (reason.Failed ? reason.Value : HResultExtensions.DxgiErrorDeviceHung);
+    }
+    private static string StalledMessage(int reason) =>
+        ((HResultExtensions.DxgiErrorDeviceHung == reason)
+            ? $"a fence did not reach its value within {FenceWaitTimeout.TotalSeconds:0} seconds (graphics device hung)."
+            : $"the graphics device was removed (reason 0x{reason:X8}) before a fence reached its value.");
 }
