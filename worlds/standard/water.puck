@@ -17,8 +17,10 @@ let waterMaterial = {
 }
 
 // A spatial view of a scalar store. The authoritative store remains the caller's row; these cells supply the
-// ordinary surface and medium queries at the place where visitors meet it.
-template waterViews(views) {
+// ordinary surface and medium queries at the place where visitors meet it. The drawn surface moves in steps of
+// `surfaceStep` metres, so a level that drifts with the cycle rebakes its surface once a step; bodies float on the full
+// value.
+template waterViews(views, surfaceStep = 0.02) {
   state {
     lattices: map(views, view => field(
         name: view.name, origin: [view.hole[0], view.floorY, view.hole[1]], cellSize: view.cell,
@@ -41,6 +43,7 @@ template waterViews(views) {
           min: 0
           max: view.maximumDepth
           heightScale: view.heightScale
+          surfaceStep: surfaceStep
           material: waterMaterial
           medium {}
         }

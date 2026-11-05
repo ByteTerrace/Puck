@@ -398,7 +398,12 @@ direction: concurrent whole-solution builds exhaust a machine's memory.
   (`relative:0.5` in `worlds/debug/sweep.json`); a lane runs it before hand-back
   and names any change over 10%. The lead regenerates the tip's report under the
   main checkout's ignored scratch directory (a `tip-sweep` folder) whenever the tip moves, and briefs
-  name that path. An output-identity gate (a whole mesh store by hash)
+  name that path. The lead runs it, and every lead verb, from a CLI built at the tip, and reinstalls the
+  global `puck` tool ([publishing](../../../docs/reference/cli.md#publishing)) once `puck --version`
+  warns that it is stale: a stale global tool refuses the current sweep plan's keys, and a report taken
+  against an old baseline blames the landing for the tip's own drift. A single-project `Puck.World`
+  build carries no SPIR-V, so a Vulkan boot follows a solution build or
+  `-p:PuckShaderSpirvEnabled=true`, and the Direct3D 12 backend is named `directx`. An output-identity gate (a whole mesh store by hash)
   compares every stored payload: the mesh bake is byte-reproducible from its
   inputs (three cold bakes per backend match), so any difference is a finding.
   The hard limits are one heavy integration job and one GPU

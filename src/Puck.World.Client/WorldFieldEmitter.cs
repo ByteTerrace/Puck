@@ -24,7 +24,8 @@ public sealed class WorldFieldEmitter : ISdfSceneEmitter {
     private bool[] m_ready = [];
     private int[] m_uploadedChanged = [];
     private (WorldFieldsSection Region, WorldFieldRow Row)[] m_heightFields = [];
-    private float[] m_uploadedHeightScales = [];
+    // The height scale and surface step each field's drawn heights were taken at.
+    private (float HeightScale, float SurfaceStep)[] m_uploadedScales = [];
     private IReadOnlyList<WorldFieldsSection>? m_uploadedRegions;
     private float[] m_voxels = [];
 
@@ -171,7 +172,7 @@ public sealed class WorldFieldEmitter : ISdfSceneEmitter {
 
         m_uploadedChanged = new int[heightFields.Length];
         Array.Fill(array: m_uploadedChanged, value: int.MinValue);
-        m_uploadedHeightScales = new float[heightFields.Length];
+        m_uploadedScales = new (float, float)[heightFields.Length];
         m_ready = new bool[heightFields.Length];
         m_snapshots = new float[heightFields.Length][];
         m_heightSnapshots = new float[heightFields.Length][];
@@ -223,7 +224,7 @@ public sealed class WorldFieldEmitter : ISdfSceneEmitter {
 
             if (
                 (values.Length < cellCount) ||
-                ((m_uploadedChanged[field] == changed) && (m_uploadedHeightScales[field] == row.HeightScale))
+                ((m_uploadedChanged[field] == changed) && (m_uploadedScales[field] == (row.HeightScale, row.SurfaceStep)))
             ) {
                 continue;
             }
@@ -234,6 +235,15 @@ public sealed class WorldFieldEmitter : ISdfSceneEmitter {
                 m_heights = new float[heightCellCount];
             }
 
+            // The drawn heights move by whole surface steps (WorldFieldRow.SurfaceStep), at least the mesh identity's
+            // own resolution, and a column moves only once its raised height has left the step drawn by a whole step:
+            // a continuously changing store rebakes its surface once a step, never each lattice step, a value hovering
+            // about a step boundary redraws nothing, and a height revisited keys a mesh already baked. A scale change
+            // or step change or a first upload draws every column at its nearest step. Simulation and medium queries keep their full
+            // fixed-point values.
+            var step = MathF.Max(x: row.SurfaceStep, y: (1f / SdfMeshGeometryBuilder.PositionSteps));
+            var drawn = ((m_ready[field] && (m_uploadedScales[field] == (row.HeightScale, row.SurfaceStep))) ? m_heightSnapshots[field] : null);
+
             // A row slot's element i is lattice cell i: z, then layer, then x.
             for (var z = 0; (z < lattice.Depth); z++) {
                 for (var x = 0; (x < lattice.Width); x++) {
@@ -243,14 +253,16 @@ public sealed class WorldFieldEmitter : ISdfSceneEmitter {
                         raised += (((float)values[((((z * lattice.Layers) + y) * lattice.Width) + x)]) * row.HeightScale);
                     }
 
-                    // Use the mesh identity's spatial resolution. Sub-resolution simulation changes need no new
-                    // presentation geometry; simulation and medium queries retain their full fixed-point values.
-                    m_heights[((z * lattice.Width) + x)] = MathF.Round(raised * SdfMeshGeometryBuilder.PositionSteps) / SdfMeshGeometryBuilder.PositionSteps;
+                    var column = ((z * lattice.Width) + x);
+
+                    m_heights[column] = (((drawn is not null) && (MathF.Abs(x: (raised - drawn[column])) < step))
+                        ? drawn[column]
+                        : (MathF.Round(x: (raised / step)) * step));
                 }
             }
 
             m_uploadedChanged[field] = changed;
-            m_uploadedHeightScales[field] = row.HeightScale;
+            m_uploadedScales[field] = (row.HeightScale, row.SurfaceStep);
             var heights = m_heights.AsSpan(0, heightCellCount);
             if (m_ready[field] && heights.SequenceEqual(m_heightSnapshots[field])) { continue; }
             m_heightSnapshots[field] = heights.ToArray();

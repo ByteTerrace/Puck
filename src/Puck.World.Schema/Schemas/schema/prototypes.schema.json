@@ -64,7 +64,7 @@
         "title": "WorldPrototypeMesh"
       },
       "document": {
-        "description": "Gets the canonical (validated \u002B normalized) creation document, the author\u0027s own bytes.",
+        "description": "Gets the creation document as it arrived: normalized when a mutation upserted it (the compose boundary canonicalizes), the author\u0027s own bytes when the world loaded it. Consumers read EngineDocument, which is normalized whichever way the row arrived.",
         "title": "CreationDocument",
         "type": [
           "object",

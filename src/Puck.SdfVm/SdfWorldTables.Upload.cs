@@ -77,7 +77,7 @@ public sealed partial class SdfWorldTables {
             RecordPreviousTables(commandBuffer: commandBuffer, previousSlot: previousSlot);
         }
         RecordRegionCopies();
-        RecordGpuMeshIrradiance(commandBuffer);
+        RecordMeshIrradiance(commandBuffer);
         if (!keepsMotion) {
             CompletePreviousTables(commandBuffer: commandBuffer);
         }

@@ -8,7 +8,7 @@ bool probeMeets(float3 origin, float3 direction, float3 low, float3 high, float 
     float3 near = min(a, b), far = max(a, b);
     return max(max(near.x, near.y), max(near.z, 0)) <= min(min(far.x, far.y), min(far.z, reach));
 }
-[numthreads(64, 1, 1)]
+[numthreads(SDF_PROBE_SELECT_GROUP_SIZE, 1, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID) {
     uint count, stride;
     sdfProbeOrigins.GetDimensions(count, stride);
@@ -47,7 +47,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
                 float3 direction = sdfProbeDirections[ray].xyz;
                 if (dot(direction, axis) < cone) { continue; }
                 float reach = min(abs(asfloat(sdfProbeCache[hits + 2 * ray])), limits.w);
-                trace = probeMeets(origin, direction, low.xyz, high.xyz, reach + max(0.001, reach * 0.0001) + SDF_MESH_IRRADIANCE_DEPTH_SHEET_THICKNESS);
+                trace = probeMeets(origin, direction, low.xyz, high.xyz, reach + max(SDF_MESH_IRRADIANCE_BOX_MARGIN, reach * SDF_MESH_IRRADIANCE_BOX_MARGIN_SHARE) + SDF_MESH_IRRADIANCE_DEPTH_SHEET_THICKNESS);
             }
         }
     }

@@ -11,7 +11,7 @@ float3 meterNormal(uint axis) {
     normal[axis / 2] = (axis & 1) == 0 ? 1 : -1;
     return normal;
 }
-float meterLuminance(float3 value) { return dot(value, float3(0.2126, 0.7152, 0.0722)); }
+float meterLuminance(float3 value) { return dot(value, SDF_LUMINANCE); }
 float meterSkyLuminance(uint axis, float sky) {
     return sdfProbeLighting[1].w != 0 ? meterLuminance(sdfSkyPhysicalIrradiance(meterNormal(axis))) * (sky * sdfProbeLighting[2].w / 3.141592653589793) : 0;
 }
@@ -41,7 +41,7 @@ void CSMain(uint3 group : SV_GroupID, uint lane : SV_GroupIndex) {
         if (key == (sdfMeshIrradianceKey(cell) | SDF_MESH_IRRADIANCE_WRITTEN)) {
             float3 toward = (cell + 0.5) * spacing + sdfMeshProbeOffset(address) - origin.xyz;
             float distance = length(toward);
-            if (distance <= 0.001 || probeClear(origin.xyz, toward / distance, distance, lane)) {
+            if (distance <= SDF_MESH_IRRADIANCE_METER_COINCIDENT || probeClear(origin.xyz, toward / distance, distance, lane)) {
                 float3 weights = lerp(1 - fraction, fraction, (float3)high);
                 float weight = weights.x * weights.y * weights.z;
                 meterWeight[lane] = weight;
@@ -105,7 +105,7 @@ void CSMain(uint3 group : SV_GroupID, uint lane : SV_GroupIndex) {
             sdfProbeHitsRW[group.x * 8 + axis] = asuint(value);
             open += sky / 6;
         }
-        sdfProbeHitsRW[group.x * 8 + 6] = asuint(saturate(2 * open));
-        sdfProbeHitsRW[group.x * 8 + 7] = (total > 0 ? 1 : back <= SDF_PROBE_HIT_COUNT / 4 ? 2 : 0) | (meterTrace != 0 ? 4 : 0);
+        sdfProbeHitsRW[group.x * 8 + 6] = asuint(saturate(SDF_MESH_IRRADIANCE_OPEN_GROUND_SHARE * open));
+        sdfProbeHitsRW[group.x * 8 + 7] = (total > 0 ? 1 : back / (float)SDF_PROBE_HIT_COUNT <= SDF_MESH_IRRADIANCE_INSIDE_SHARE ? 2 : 0) | (meterTrace != 0 ? 4 : 0);
     }
 }

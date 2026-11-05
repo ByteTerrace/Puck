@@ -1090,9 +1090,12 @@ source are the next lanes here; the items below are the system work beside them.
   static and animated placements), and profile bake admission, landing and
   illumination together. The stream is eight placements of one still segment
   and the falls still sheets, their motion the flow layer's shading.
-  The sampled-field fix makes each changed height snapshot a new mesh identity;
-  measure ordinary-rate field updates as well as a paused cold boot. Run costs
-  and before/after evidence live in the water follow-up commits.
+  Each changed height snapshot is a new program and mesh identity, so drawn
+  heights move by an authored `surfaceStep` with hysteresis; the standard's
+  hydrology and pool views still rebake a field surface every few seconds of the
+  melt. A field surface that moves without a program rebuild belongs with the
+  proportional-rebuild item below. Run costs and before/after evidence live in
+  the water follow-up commits.
   The prototype audits also flag normal/topology defects in the glacier, lake and falls
   despite finding no uncovered surface. Inspect those witnesses through the
   existing mesh-audit image output before attributing them to authored style.
@@ -1749,6 +1752,20 @@ the fixed poses and the approaches already rejected.
   `SdfMeshProbeRelight.OutputWords` prefix and publication copies the device
   buffer. Preserve the source output's readback-token/fence ownership through
   commit; do not trade that lifetime guarantee for fewer copied bytes.
+
+- [medium] GPU probe work still duplicates memory and copies.
+  - The probe service's feedback region keeps a CPU copy as large as the
+    volume (`trace-feedback-shadow-bytes`, 46 MB at Medium) beside the
+    volume's own words (`SdfMeshProbeGpuWork.TryTake`). Read it from the
+    volume instead, keeping the snapshot's timing.
+  - `RecordCommit` records one buffer copy per probe because the source
+    interleaves records; one scatter dispatch replaces them.
+  - The bloom kernels (`sdf-bloom-down`, `sdf-bloom-apply`) and the overlay
+    keep literal luminance weights instead of the generated `SDF_LUMINANCE`.
+  - `SdfMeshProbeGpuWork.Abandon` leaves the scene carry to the next
+    completion.
+  - Relight, select, meter and cache have no CPU/GPU parity law; only
+    `world.probe`'s relight reference compares them.
 
 - [high] Night lighting, from the owner's walkthrough at the lawn's trees:
   - **The jump to night is wrong.** Forcing midnight

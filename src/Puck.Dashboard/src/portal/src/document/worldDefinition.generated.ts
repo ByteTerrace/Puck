@@ -8599,7 +8599,7 @@ export type WorldPrototype = {
    */
   mesh?: WorldPrototypeMesh | null;
   /**
-   * Gets the canonical (validated + normalized) creation document, the author's own bytes.
+   * Gets the creation document as it arrived: normalized when a mutation upserted it (the compose boundary canonicalizes), the author's own bytes when the world loaded it. Consumers read EngineDocument, which is normalized whichever way the row arrived.
    */
   document: {
     /**
@@ -13222,6 +13222,10 @@ export type WorldStateRow = {
      * Optional surface material using the creation palette vocabulary.
      */
     material?: PaletteEntryDocument | null;
+    /**
+     * The height, in world units, the drawn surface of a row carrying a HeightScale moves by (SurfaceStep); 0 draws it at the baked mesh's own resolution. Presentation only: bodies and media read the full value.
+     */
+    surfaceStep?: number;
     /**
      * The initial fills, applied in order over Initial.
      */
