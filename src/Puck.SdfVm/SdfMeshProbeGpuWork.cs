@@ -14,13 +14,14 @@ internal sealed class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
     private readonly nint m_pool;
     private readonly Slot[] m_slots = new Slot[SdfGpuWork.SlotCount];
     private readonly Lock m_gate = new();
-    private Job? m_pending;
+    private readonly Queue<Job> m_pending = new();
     private bool m_disposed;
     private bool m_stopping;
     private GpuRegion? m_sceneRegion;
     private IDisposable? m_sceneCarry;
     private GpuRegion? m_feedback;
     private IGpuBuffer? m_hitCache;
+    private IGpuBuffer? m_meterCache;
     private int m_feedbackWords;
     private SdfMeshIrradianceScene? m_scene;
     private long m_placementVersion = -1;
@@ -78,30 +79,33 @@ internal sealed class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
     }
     internal uint[] Select(SdfMeshIrradianceScene scene, Vector4[] centers, uint[] metadata, Vector4[] changes) =>
         Submit(new Job(scene.Acquire(), centers) { Input = metadata, Lighting = changes, Selection = true });
-    private uint[] Submit(Job job) {
+    internal Task<uint[]> Meter(SdfMeshIrradianceScene scene, Vector4[] origins, Vector4[] lighting, int words, int geometry, int window) =>
+        SubmitAsync(new Job(scene.Acquire(), origins) { Input = [0], Lighting = lighting, Meter = true, VolumeWords = words, Geometry = geometry, Window = window });
+    private uint[] Submit(Job job) => SubmitAsync(job).GetAwaiter().GetResult();
+    private Task<uint[]> SubmitAsync(Job job) {
         lock (m_gate) {
             if (m_stopping || m_disposed) { job.Scene.Dispose(); throw new OperationCanceledException(); }
-            if (m_pending is not null) { job.Scene.Dispose(); throw new InvalidOperationException("One volume coordinator owns the trace queue."); }
-            m_pending = job;
+            m_pending.Enqueue(job);
         }
-        return job.Answer.Task.GetAwaiter().GetResult();
+        return job.Answer.Task;
     }
 
     public bool TryTake(SdfWorldTables tables, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out object? job, out double estimatedSeconds) {
         job = null;
         estimatedSeconds = 0;
         lock (m_gate) {
-            if (m_pending is not { } pending || m_inFlight || !tables.BindsBackgroundWork) { return false; }
-            if (!(pending.CommitSource is null ? m_volume.KeepsGpuScene(pending.Scene) :
-                m_volume.KeepsGpuPublication(pending.Scene, pending.Geometry, pending.Window))) {
-                m_pending = null;
+            if (!m_pending.TryPeek(out var pending) || m_inFlight || !tables.BindsBackgroundWork) { return false; }
+            if (!(pending.CommitSource is null && !pending.Meter ? m_volume.KeepsGpuScene(pending.Scene) :
+                m_volume.KeepsGpuPublication(pending.Scene, pending.Geometry, pending.Window)) ||
+                (pending.Meter && (m_feedback is null || m_feedbackWords != pending.VolumeWords))) {
+                m_pending.Dequeue();
                 pending.Scene.Dispose();
                 m_volume.Counters.Add(SdfMeshIrradiance.GpuCancelled, 1);
                 pending.Answer.TrySetCanceled();
                 return false;
             }
             if (pending.CommitSource is not null) {
-                m_pending = null;
+                m_pending.Dequeue();
                 m_inFlight = true;
                 job = pending;
                 estimatedSeconds = pending.Destinations!.Length * 1e-8;
@@ -126,7 +130,7 @@ internal sealed class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
                 m_placementVersion = version;
             }
             pending.Meshes = meshes;
-            if (pending.Lighting is not null && !pending.Selection) {
+            if (pending.Lighting is not null && !pending.Selection && !pending.Meter) {
                 if (m_feedbackWords != pending.VolumeWords) {
                     if (m_feedback is not null) { tables.RetireBackgroundResource(m_feedback); }
                     m_feedback = tables.CreateProbeSceneRegion(pending.VolumeWords * 4);
@@ -134,7 +138,7 @@ internal sealed class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
                 }
                 foreach (var (word, words) in pending.Updates!) { m_feedback!.Write(word * 4, MemoryMarshal.AsBytes(words.AsSpan())); }
             }
-            m_pending = null;
+            m_pending.Dequeue();
             m_inFlight = true;
             job = pending;
             estimatedSeconds = pending.Origins.Length * (pending.Selection ? 1e-8 : SdfMeshProbeDepth.HitCount * 1e-8);
@@ -150,11 +154,11 @@ internal sealed class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         }
         var slot = m_slots[recording.Slot];
         var compute = query.Lighting is not null;
-        var relight = compute && !query.Selection;
-        var pipeline = m_tables.Pipeline(query.Selection ? SdfKernel.ProbeSelect : relight ? SdfKernel.ProbeRelight : SdfKernel.ProbeTrace);
+        var relight = compute && !query.Selection && !query.Meter;
+        var pipeline = m_tables.Pipeline(query.Meter ? SdfKernel.ProbeMeter : query.Selection ? SdfKernel.ProbeSelect : relight ? SdfKernel.ProbeRelight : SdfKernel.ProbeTrace);
         var layout = compute ? SdfWorldInterfaces.ProbeRelightLayout : SdfWorldInterfaces.ProbeTraceLayout;
         var set = compute ? slot.RelightSet : slot.Set;
-        var bytes = (ulong)query.Origins.Length * (ulong)(query.Selection ? 1 : relight ? SdfMeshProbeRelight.ResultWords : SdfMeshProbeDepth.HitWords) * 4;
+        var bytes = (ulong)query.Origins.Length * (ulong)(query.Meter ? 8 : query.Selection ? 1 : relight ? SdfMeshProbeRelight.ResultWords : SdfMeshProbeDepth.HitWords) * 4;
         if (slot.Origins is null || slot.Origins.SizeBytes != (ulong)query.Origins.Length * 16) {
             slot.Origins?.Dispose();
             slot.Origins = m_gpu.BufferFactory.CreateHostVisible(name: default, sizeBytes: (ulong)query.Origins.Length * 16, usage: GpuBufferUsage.Storage);
@@ -164,6 +168,14 @@ internal sealed class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
             slot.Hits = m_gpu.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: bytes, usage: GpuBufferUsage.Storage);
         }
         slot.Identities ??= m_gpu.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: 8, usage: GpuBufferUsage.Storage);
+        if (query.Meter) {
+            var cacheBytes = (ulong)query.Origins.Length * (1 + SdfMeshProbeDepth.HitWords) * 4;
+            if (m_meterCache is null || m_meterCache.SizeBytes < cacheBytes) {
+                m_meterCache?.Dispose();
+                m_meterCache = m_gpu.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: cacheBytes, usage: GpuBufferUsage.Storage);
+                for (var i = 0; i < query.Origins.Length; i++) { query.Origins[i].W = 1; }
+            }
+        }
         slot.Origins.Write<Vector4>(query.Origins);
         var command = recording.CommandBuffer;
         var copies = new GpuRegionCopyRecording(recording.Recorder, GpuStage.ComputeShader, () => command);
@@ -190,8 +202,8 @@ internal sealed class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
             }
             Bind(SdfKernelInterfaces.ProbeWorkWritten, slot.Work, 4, written: true);
             Bind(SdfKernelInterfaces.ProbeWork, slot.Work, 4);
-            Bind(SdfKernelInterfaces.ProbeCacheWritten, m_hitCache, 4, written: true);
-            Bind(SdfKernelInterfaces.ProbeCache, m_hitCache, 4);
+            Bind(SdfKernelInterfaces.ProbeCacheWritten, query.Meter ? m_meterCache! : m_hitCache, 4, written: true);
+            Bind(SdfKernelInterfaces.ProbeCache, query.Meter ? m_meterCache! : m_hitCache, 4);
         } else { Bind(SdfKernelInterfaces.ProbeIdentitiesWritten, slot.Identities, 8, written: true); }
         var recorder = recording.Recorder;
         recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: slot.Hits.BufferHandle,
@@ -200,6 +212,11 @@ internal sealed class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: slot.Identities.BufferHandle,
             sourceAccessMask: GpuAccess.ShaderWrite, sourceStageMask: GpuStage.ComputeShader,
             destinationAccessMask: GpuAccess.ShaderWrite, destinationStageMask: GpuStage.ComputeShader);
+        if (query.Meter) {
+            recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: m_meterCache!.BufferHandle,
+                sourceAccessMask: GpuAccess.ShaderWrite, sourceStageMask: GpuStage.ComputeShader,
+                destinationAccessMask: GpuAccess.ShaderRead | GpuAccess.ShaderWrite, destinationStageMask: GpuStage.ComputeShader);
+        }
         if (relight) {
             recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: m_hitCache!.BufferHandle,
                 sourceAccessMask: GpuAccess.ShaderRead, sourceStageMask: GpuStage.ComputeShader,
@@ -230,7 +247,7 @@ internal sealed class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
             group: (uint)ShaderInterfaceGroup.Pass, pipelineLayoutHandle: pipeline.LayoutHandle);
         if (relight) { recorder.DispatchIndirect(command, slot.Work!.BufferHandle, 0); }
         else { recorder.Dispatch(commandBufferHandle: command,
-            groupCountX: (uint)(query.Selection ? (query.Origins.Length + 63) / 64 : (query.Origins.Length * SdfMeshProbeDepth.HitCount + SdfMeshProbeTrace.GroupSize - 1) / SdfMeshProbeTrace.GroupSize), groupCountY: 1, groupCountZ: 1); }
+            groupCountX: (uint)(query.Meter ? query.Origins.Length : query.Selection ? (query.Origins.Length + 63) / 64 : (query.Origins.Length * SdfMeshProbeDepth.HitCount + SdfMeshProbeTrace.GroupSize - 1) / SdfMeshProbeTrace.GroupSize), groupCountY: 1, groupCountZ: 1); }
         recording.CopyToReadback(slot.Hits, bytes);
         query.Output = slot.Hits;
 
@@ -272,7 +289,7 @@ internal sealed class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
     public void Complete(object job, SdfGpuWorkReadback readback) {
         var query = (Job)job;
         var result = new uint[readback.Length / 4];
-        var holdsOutput = query.Lighting is not null && !query.Selection;
+        var holdsOutput = query.Lighting is not null && !query.Selection && !query.Meter;
         try { readback.Read(MemoryMarshal.AsBytes(result.AsSpan())); }
         catch { readback.Release(); throw; }
         if (holdsOutput) { query.HeldReadback = readback; }
@@ -280,7 +297,13 @@ internal sealed class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         m_sceneCarry?.Dispose();
         m_sceneCarry = null;
         if (query.Lighting is null && query.CommitSource is null) { m_volume.Counters.Add(SdfMeshIrradiance.GpuRays, query.Origins.Length * SdfMeshProbeDepth.HitCount); }
-        if (readback.GpuSeconds is { } seconds) { m_volume.Counters.Add(query.Selection ? SdfMeshIrradiance.GpuSelectNanoseconds : query.Lighting is null && query.CommitSource is null ? SdfMeshIrradiance.GpuTraceNanoseconds : SdfMeshIrradiance.GpuRelightNanoseconds, (long)(seconds * 1e9)); }
+        if (readback.GpuSeconds is { } seconds) { m_volume.Counters.Add(query.Meter ? SdfMeshIrradiance.GpuMeterNanoseconds : query.Selection ? SdfMeshIrradiance.GpuSelectNanoseconds : query.Lighting is null && query.CommitSource is null ? SdfMeshIrradiance.GpuTraceNanoseconds : SdfMeshIrradiance.GpuRelightNanoseconds, (long)(seconds * 1e9)); }
+        if (query.Meter) {
+            for (var i = 7; i < result.Length; i += 8) {
+                if ((result[i] & 4) != 0) { m_volume.Counters.Add(SdfMeshIrradiance.CameraTraces, 1); }
+                if ((result[i] & 2) != 0) { m_volume.Counters.Add(SdfMeshIrradiance.CameraRelights, 1); }
+            }
+        }
         lock (m_gate) { m_inFlight = false; }
         query.Scene.Dispose();
         query.Answer.SetResult(result);
@@ -297,7 +320,7 @@ internal sealed class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
             var device = bytes.DeviceLocal;
             var host = bytes.HostVisible + m_directions.SizeBytes;
             device += m_feedback?.OwnedBytes.DeviceLocal ?? 0;
-            device += m_hitCache?.SizeBytes ?? 0;
+            device += (m_hitCache?.SizeBytes ?? 0) + (m_meterCache?.SizeBytes ?? 0);
             host += m_feedback?.OwnedBytes.HostVisible ?? 0;
             foreach (var slot in m_slots) { device += (slot.Hits?.SizeBytes ?? 0) + (slot.Identities?.SizeBytes ?? 0) + (slot.Work?.SizeBytes ?? 0); host += (slot.Origins?.SizeBytes ?? 0) + (slot.Input?.SizeBytes ?? 0) + (slot.Lighting?.SizeBytes ?? 0); }
             return new GpuMemoryBytes(DeviceLocal: device, HostVisible: host);
@@ -306,7 +329,7 @@ internal sealed class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
     public void Stop() {
         lock (m_gate) {
             m_stopping = true;
-            if (m_pending is { } pending) { pending.Scene.Dispose(); pending.Answer.TrySetCanceled(); m_pending = null; }
+            while (m_pending.TryDequeue(out var pending)) { pending.Scene.Dispose(); pending.Answer.TrySetCanceled(); }
         }
     }
     public void Dispose() {
@@ -316,6 +339,7 @@ internal sealed class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         foreach (var slot in m_slots) { slot.Hits?.Dispose(); slot.Origins?.Dispose(); slot.Identities?.Dispose(); slot.Input?.Dispose(); slot.Lighting?.Dispose(); slot.Work?.Dispose(); }
         m_feedback?.Dispose();
         m_hitCache?.Dispose();
+        m_meterCache?.Dispose();
         m_sceneRegion?.Dispose();
         m_sceneCarry?.Dispose();
         m_scene?.Dispose();
@@ -332,6 +356,7 @@ internal sealed class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         public int VolumeWords;
         public (int Word, uint[] Words)[]? Updates;
         public bool Selection;
+        public bool Meter;
         public IGpuBuffer? Output;
         public SdfGpuWorkReadback? HeldReadback;
         public Result? CommitSource;

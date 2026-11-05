@@ -128,8 +128,7 @@ public sealed partial class SdfMeshIrradiance {
         return stale;
     }
 
-    private SdfMeshProbeGpuWork.Result RelightGpu(List<Candidate> candidates, int first, int count, ProbeData[] probes, LightBlock lights,
-        Lighting lighting, in Snapshot snapshot, bool feedback) {
+    private static Vector4[] LightingRows(Lighting lighting, in Snapshot snapshot, bool feedback) {
         var rows = new Vector4[SdfMeshProbeRelight.HeaderRows + (lighting.Materials.Length + 1) * SdfMeshProbeRelight.MaterialRows +
             (lighting.Lights.Length + lighting.Points.Length) * SdfMeshProbeRelight.LightRows];
         rows[0] = new(lighting.Materials.Length + 1, lighting.Lights.Length, lighting.Points.Length, snapshot.Layout.Reach);
@@ -164,6 +163,12 @@ public sealed partial class SdfMeshIrradiance {
             rows[cursor++] = new(light.SpotAxis, light.SpotOffset);
             rows[cursor++] = new(light.Bounce, light.Index, 1, 1);
         }
+        return rows;
+    }
+
+    private SdfMeshProbeGpuWork.Result RelightGpu(List<Candidate> candidates, int first, int count, ProbeData[] probes, LightBlock lights,
+        Lighting lighting, in Snapshot snapshot, bool feedback) {
+        var rows = LightingRows(lighting, in snapshot, feedback);
         var traced = 0;
         for (var i = 0; i < count; i++) { if (candidates[first + i].Trace) { traced++; } }
         var input = new uint[count * SdfMeshProbeRelight.InputWords + traced * SdfMeshProbeDepth.HitWords];
@@ -221,17 +226,19 @@ public sealed partial class SdfMeshIrradiance {
             lock (m_gate) { m_gpuVolume = null; }
             throw;
         }
-        for (var i = 0; i < count; i++) {
-            var probe = probes[i];
-            if (probe.Hits is null || probe.Invalid) { continue; }
-            var row = output.Words.AsSpan(i * SdfMeshProbeRelight.ResultWords, SdfMeshProbeRelight.OutputWords);
-            MemoryMarshal.Cast<uint, Vector3>(row[..18]).CopyTo(lights.Radiance(i));
-            MemoryMarshal.Cast<uint, Vector3>(row.Slice(18, 18)).CopyTo(lights.Local(i));
-            row[36..].CopyTo(lights.Lights(i));
-            var candidate = candidates[first + i];
-            probes[i] = probe with { Moved = candidate.Trace || !m_levels[candidate.Level].Cache.TryGetValue(candidate.Cell, out var previous) ||
-                previous.Shading is null || !Settled(lights.Radiance(i), previous.Radiance) };
-        }
+        try {
+            for (var i = 0; i < count; i++) {
+                var probe = probes[i];
+                if (probe.Hits is null || probe.Invalid) { continue; }
+                var row = output.Words.AsSpan(i * SdfMeshProbeRelight.ResultWords, SdfMeshProbeRelight.OutputWords);
+                MemoryMarshal.Cast<uint, Vector3>(row[..18]).CopyTo(lights.Radiance(i));
+                MemoryMarshal.Cast<uint, Vector3>(row.Slice(18, 18)).CopyTo(lights.Local(i));
+                row[36..].CopyTo(lights.Lights(i));
+                var candidate = candidates[first + i];
+                probes[i] = probe with { Moved = candidate.Trace || !m_levels[candidate.Level].Cache.TryGetValue(candidate.Cell, out var previous) ||
+                    previous.Shading is null || !Settled(lights.Radiance(i), previous.Radiance) };
+            }
+        } catch { output.Dispose(); throw; }
         return output;
     }
 }

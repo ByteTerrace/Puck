@@ -68,7 +68,13 @@ public readonly record struct SdfMeshIrradianceParameters(bool Enabled, SdfMeshI
 /// moves, is neither traced nor occluded.</para>
 /// </summary>
 public sealed partial class SdfMeshIrradiance : IDisposable {
-    internal SdfMeshProbeGpuWork? GpuTrace { get; set; }
+    private SdfMeshProbeGpuWork? m_gpuTrace;
+    private SdfMeshProbeGpuWork? m_nextGpuTrace;
+    private bool m_gpuReattach;
+    internal SdfMeshProbeGpuWork? GpuTrace {
+        get => m_gpuTrace;
+        set { lock (m_gate) { m_nextGpuTrace = value; m_gpuReattach = true; } }
+    }
     internal bool KeepsGpuScene(SdfMeshIrradianceScene scene) {
         lock (m_gate) { return !m_disposed && ReferenceEquals(m_scene, scene); }
     }
@@ -160,7 +166,9 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     /// <summary>Counts each exposure meter reading asked of the volume (<see cref="TryMeter"/>).</summary>
     public static readonly WorkKind Meters = new(name: "sdf.mesh-gi.meters", unit: "readings", workClass: WorkClass.Pacing);
 
-    private static readonly WorkKind[] DeclaredKinds = [Scenes, GeometriesBuilt, GeometriesReused, TrianglesBuilt, Traced, Relit, GpuRays, GpuTraceNanoseconds, GpuRelightNanoseconds, GpuSelectNanoseconds, GpuCancelled, Behind, CameraTraces, CameraRelights, Meters];
+    /// <summary>Device time spent gathering or tracing exposure meter samples.</summary>
+    public static readonly WorkKind GpuMeterNanoseconds = new(name: "sdf.mesh-gi.gpu-meter-nanoseconds", unit: "nanoseconds", workClass: WorkClass.Pacing);
+    private static readonly WorkKind[] DeclaredKinds = [Scenes, GeometriesBuilt, GeometriesReused, TrianglesBuilt, Traced, Relit, GpuRays, GpuTraceNanoseconds, GpuRelightNanoseconds, GpuSelectNanoseconds, GpuMeterNanoseconds, GpuCancelled, Behind, CameraTraces, CameraRelights, Meters];
 
     /// <summary>Gets the kinds the counters count, in report order, for a reader that registers the source before a
     /// volume exists.</summary>
@@ -439,7 +447,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         get {
             lock (m_gate) {
                 // A faulted worker settles nothing: the next Stage reports it.
-                return ((m_worker is { IsCompleted: false } or { IsFaulted: true }) || (m_build is { IsCompleted: false }) || ((m_scene is not null) && m_owed) || m_refillOwed || Dirty || m_wrote);
+                return ((m_gpuMeterTask is { IsCompleted: false } or { IsFaulted: true }) || (m_worker is { IsCompleted: false } or { IsFaulted: true }) || (m_build is { IsCompleted: false }) || ((m_scene is not null) && m_owed) || m_refillOwed || Dirty || m_wrote);
             }
         }
     }
@@ -517,6 +525,30 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         ArgumentNullException.ThrowIfNull(argument: write);
 
         if ((tier == SdfIndirectTier.Off) || (frame.Views.Count == 0)) { return default; }
+
+        lock (m_gate) {
+            if (m_gpuReattach) {
+                // A replaced device stops its jobs first. Let their coordinator unwind before resetting its allocations.
+                if (m_worker is { IsCompleted: false } || m_gpuMeterTask is { IsCompleted: false }) { return default; }
+                m_gpuTrace = m_nextGpuTrace;
+                m_gpuReattach = false;
+                foreach (var owner in m_hitOwners.Values.OrderByDescending(owner => owner.Slot)) { m_hitSlots.Free(owner.Slot); }
+                m_hitOwners.Clear();
+                m_gpuVolume = null;
+                m_gpuDirty.Clear();
+                m_listed = false;
+                m_drained = default;
+                m_gpuMeterClient = null;
+                m_gpuMeterWords = [];
+                m_gpuMeterPositions = [];
+                m_changedSlots.Clear();
+                Array.Clear(m_dirtySlots);
+                foreach (var level in m_levels) { level.Published = default; level.Changed.Clear(); }
+                m_published = default;
+                Owe();
+                m_traceOwed = true;
+            }
+        }
 
         // A lighting-converged frame must trace its own scene, not whichever asynchronous build happened to land first.
         // Wait outside the gate: the builder takes it to publish. A build already in flight may belong to an older
@@ -626,8 +658,9 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                 });
             }
             Publish(layout: layout, write: write);
-            return m_published;
         }
+        ScheduleGpuMeters(frame);
+        return m_published;
     }
     // What a drain's light is a function of: the geometry, the lighting, the windows and the layout.
     private (int Geometry, int Lighting, int Windows, Layout Layout) DrainKey() => (m_geometry, m_lightingVersion, m_windowVersion, m_layout);
@@ -871,6 +904,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         Counters.Count(kind: Meters);
 
         lock (m_gate) {
+            if (GpuTrace is not null) { return TryGpuMeter(position, forward, out luminance, out skyVisibility, out source); }
             if ((m_lighting is not { } lighting) || !m_windowValid) {
                 return false;
             }
