@@ -1,11 +1,10 @@
+using Puck.Abstractions;
 using System.Diagnostics;
 using System.Text;
-using Puck.Hosting;
-using Puck.Networking;
 
 namespace Puck.Cli;
 
-// The CLI's child-process boundary, over Puck.Hosting's ChildProcess. The tool runner (RunAsync, and RunCheckedAsync
+// The CLI's child-process boundary, over Puck.Abstractions' ChildProcess. The tool runner (RunAsync, and RunCheckedAsync
 // over it) adds the one CLI concern ChildProcess lacks, resolving the az and npm cmd.exe launchers to their
 // interpreters, and otherwise is ChildProcess.RunAsync. The proof runner (RunCaptured) differs because a proof judges
 // the transcript itself: it records every line with its sequence and arrival time, can hold stdin open for a
@@ -55,7 +54,7 @@ public static class CliProcess {
             OperatingSystem.IsWindows() &&
             (fileName is "az" or "npm")
         ) {
-            var home = Path.GetDirectoryName(path: FindOnPath(name: (fileName + ".cmd")))!;
+            var home = Path.GetDirectoryName(path: ChildProcess.FindExecutable(name: (fileName + ".cmd")))!;
 
             if (fileName == "az") {
                 fileName = Path.GetFullPath(path: Path.Combine(
@@ -92,17 +91,6 @@ public static class CliProcess {
         ).ConfigureAwait(continueOnCapturedContext: false);
     }
 
-    private static string FindOnPath(string name) {
-        foreach (var directory in (Environment.GetEnvironmentVariable(variable: "PATH") ?? "").Split(Path.PathSeparator)) {
-            var path = Path.Combine(
-                path1: directory.Trim(trimChar: '"'),
-                path2: name
-            );
-
-            if (File.Exists(path: path)) { return path; }
-        }
-        throw new FileNotFoundException(message: $"Cannot find {name} on PATH.");
-    }
     private static async Task<string> PumpAsync(
         StreamReader reader,
         CliProcessOutputStream stream,

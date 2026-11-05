@@ -29,8 +29,8 @@ public readonly record struct CompileInput(string Path, CompileInputKind Kind, s
     /// <exception cref="UnauthorizedAccessException">Access to the file or directory is refused.</exception>
     public CompileInput ReadCurrent() => Kind switch {
         CompileInputKind.Listing => new CompileInput(Path, Kind, CompileInputs.ListingHash(files: CompileInputs.FilesIn(directory: Path))),
-        CompileInputKind.Content when File.Exists(path: Path) => new CompileInput(Path, Kind, ContentPin.OfFile(path: Path).Hex),
-        _ => new CompileInput(Path, (File.Exists(path: Path) ? CompileInputKind.Present : CompileInputKind.Absent), string.Empty),
+        CompileInputKind.Content when CompileInputs.Assets.Exists(path: Path) => new CompileInput(Path, Kind, ContentPin.Compute(CompileInputs.Assets.Read(Path).Span).Hex),
+        _ => new CompileInput(Path, (CompileInputs.Assets.Exists(path: Path) ? CompileInputKind.Present : CompileInputKind.Absent), string.Empty),
     };
     /// <summary>Returns whether the file system still answers this fact the way it answered the compile: the file is
     /// still absent, still present, or still holds the same bytes, or the directory still lists the same files.</summary>
@@ -75,6 +75,7 @@ public sealed class CompileInputLog {
 /// enclosing scope's log, so a compile that runs another compile sees the inner one's reads too.
 /// </summary>
 public static class CompileInputs {
+    internal static readonly FileSystemAssetSource Assets = new();
     private static readonly AsyncLocal<Frame?> Recording = new();
 
     private static void Add(CompileInput input) {
@@ -87,7 +88,7 @@ public static class CompileInputs {
     /// <param name="path">The path to probe.</param>
     /// <returns><see langword="true"/> when a file exists there.</returns>
     public static bool Exists(string path) {
-        var exists = File.Exists(path: path);
+        var exists = Assets.Exists(path: path);
 
         Add(input: new CompileInput(
             ContentHash: string.Empty,
@@ -181,7 +182,7 @@ public static class CompileInputs {
         byte[] content;
 
         try {
-            content = File.ReadAllBytes(path: path);
+            content = Assets.ReadBytes(path);
         } catch (Exception exception) when ((exception is FileNotFoundException or DirectoryNotFoundException)) {
             Add(input: new CompileInput(
                 ContentHash: string.Empty,

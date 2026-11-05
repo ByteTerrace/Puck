@@ -1,9 +1,9 @@
+using Puck.Abstractions;
 using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using Puck.Confinement;
-using Puck.Hosting;
 
 namespace Puck.Cli.Laws;
 

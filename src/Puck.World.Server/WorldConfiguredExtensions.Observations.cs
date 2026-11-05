@@ -1,4 +1,4 @@
-using Puck.Networking;
+using Puck.Abstractions;
 using System.Globalization;
 using Puck.World.Protocol;
 

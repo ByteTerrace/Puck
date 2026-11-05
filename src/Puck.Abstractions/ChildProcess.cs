@@ -1,8 +1,7 @@
 using System.Diagnostics;
 using System.Text;
-using Puck.Networking;
 
-namespace Puck.Hosting;
+namespace Puck.Abstractions;
 
 /// <summary>
 /// <para>Starts child processes from an argument vector, never a shell expression, and owns their pipe lifecycle.</para>
@@ -18,6 +17,22 @@ namespace Puck.Hosting;
 /// then owns every redirected stream and must drain each one it does not close.</para>
 /// </summary>
 public static class ChildProcess {
+    /// <summary>Resolves an executable using the host's search path, without invoking a shell.</summary>
+    /// <param name="name">Executable name or explicit path.</param>
+    /// <returns>The absolute executable path.</returns>
+    /// <exception cref="FileNotFoundException">The executable is absent.</exception>
+    public static string FindExecutable(string name) {
+        if (Path.IsPathRooted(name) || name.Contains('/') || name.Contains('\\')) {
+            if (File.Exists(name)) { return Path.GetFullPath(name); }
+        } else {
+            var file = OperatingSystem.IsWindows() && Path.GetExtension(name).ToLowerInvariant() is not (".exe" or ".cmd" or ".bat" or ".com") ? name + ".exe" : name;
+            foreach (var directory in (Environment.GetEnvironmentVariable("PATH") ?? "").Split(Path.PathSeparator)) {
+                var path = Path.Combine(directory.Trim('"'), file);
+                if (File.Exists(path)) { return Path.GetFullPath(path); }
+            }
+        }
+        throw new FileNotFoundException($"Cannot find {name} on PATH.");
+    }
     /// <summary>How long to wait for EOF after exit. At expiry, readers consume the bytes still buffered in the pipe
     /// before ending, so scheduling delays cannot truncate the child's output.</summary>
     public static readonly TimeSpan ExitDrainGrace = TimeSpan.FromSeconds(seconds: 5);
@@ -36,6 +51,7 @@ public static class ChildProcess {
     /// <see cref="Timeout.InfiniteTimeSpan"/> leaves <paramref name="cancellationToken"/> as the only bound.</param>
     /// <param name="clock">The clock the timeout runs on; system time when it is <see langword="null"/>.</param>
     /// <param name="cancellationToken">The token that cancels the run.</param>
+    /// <param name="environment">Explicit child environment overrides; null values remove inherited variables.</param>
     /// <returns>The exit code and both captured texts. The texts hold everything the child wrote. A process that
     /// inherited its streams contributes through the final buffer snapshot after <see cref="ExitDrainGrace"/> on
     /// <paramref name="clock"/>, and never holds the run open. A timeout kills the whole tree, drains both streams, and
@@ -43,7 +59,7 @@ public static class ChildProcess {
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was cancelled. A token already
     /// cancelled starts nothing; one cancelled during the run first kills the whole tree and drains both streams.</exception>
     /// <exception cref="InvalidOperationException">The child could not be started.</exception>
-    public static async Task<ChildProcessResult> RunAsync(string fileName, IEnumerable<string> arguments, string? workingDirectory = null, bool capture = true, string? input = null, TimeSpan? timeout = null, TimeProvider? clock = null, CancellationToken cancellationToken = default) {
+    public static async Task<ChildProcessResult> RunAsync(string fileName, IEnumerable<string> arguments, string? workingDirectory = null, bool capture = true, string? input = null, TimeSpan? timeout = null, TimeProvider? clock = null, CancellationToken cancellationToken = default, IReadOnlyDictionary<string, string?>? environment = null) {
         cancellationToken.ThrowIfCancellationRequested();
 
         // A child that does not capture shares the caller's console. Given a hidden console of its own instead, a tool
@@ -59,6 +75,12 @@ public static class ChildProcess {
 
         if (capture) { info.StandardErrorEncoding = Encoding.UTF8; info.StandardOutputEncoding = Encoding.UTF8; }
         foreach (var argument in arguments) { info.ArgumentList.Add(item: argument); }
+        if (environment is not null) {
+            foreach (var (name, value) in environment) {
+                if (value is null) { info.Environment.Remove(name); }
+                else { info.Environment[name] = value; }
+            }
+        }
         var runClock = (clock ?? TimeProvider.System);
         using var process = (Process.Start(startInfo: info) ?? throw new InvalidOperationException(message: $"Cannot start {fileName}."));
         // Process.Dispose leaves streams that callers accessed open. Close stdin's handle even when a cancelled
