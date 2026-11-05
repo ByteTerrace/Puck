@@ -1,7 +1,6 @@
 using Puck.Abstractions;
 using Puck.Abstractions.Documents;
 using Puck.Assets.Documents;
-using Puck.Transpiler.Diagnostics;
 using Puck.World.Transpiler;
 using Puck.World.Transpiler.Composition;
 using Puck.World.Transpiler.Validation;
@@ -25,11 +24,11 @@ public static partial class CompileCommand {
 
             foreach (var output in outputs) {
                 if (WorldSemanticValidator.IsRootDocument(loweredJson: output.Json)) {
-                    WorldSemanticValidator.ValidateComposedWorld(output.Json, output.SourceMap, diagnostics, sourcePath, machines, fingerprint, sourceCompilation: sourceCompilation);
+                    _ = WorldSemanticValidator.ValidateComposedWorld(output.Json, output.SourceMap, diagnostics, sourcePath, machines, fingerprint, sourceCompilation: sourceCompilation);
                 }
             }
         }
-        SourceAcknowledgements.Acknowledge(diagnostics: diagnostics, document: compilation.Document, sourcePath: sourcePath);
+        compilation.Acknowledgements.Acknowledge(diagnostics: diagnostics);
         PrintDiagnostics(diagnostics: diagnostics, filePath: sourcePath, sourceText: source);
         if (diagnostics.HasErrors || (strict && diagnostics.HasWarnings) || !compilation.Success) { return 1; }
 

@@ -349,12 +349,26 @@ direction: concurrent whole-solution builds exhaust a machine's memory.
   headroom (writers spend most of their time reading, not building), and holds
   or sheds them when memory runs low. Commit charge against the commit limit is
   the line that matters: allocations fail at the limit while physical memory
-  can still look free. A windowed debug World grows past ten gigabytes, so a
+  can still look free. The tooling holds that line for every heavy start, so a
+  lane polices nothing by hand: `puck lease heavy`, `puck lease gpu`,
+  `puck_world_start` (windowed as a device step, headless as an ordinary one),
+  `gate` and `affected` each wait, after they hold their lease, until the commit
+  charge is under its share of the limit (`HostLoadThresholds.CommitCapacityPercent`)
+  beside free memory and disk, and name what holds them
+  ([admission](../../../docs/reference/cli.md#puck-host-loadadmission-lines-for-the-machine)).
+  Every verb that boots a World process (`puck test`, `canary`, `sweep`, `motion`,
+  `counters`, `parity`, `qualify`, `docs citations`, `verbs`, `bench startup`) waits
+  on the same admission before each process it starts, so a lane never wraps those
+  in a check of its own, and a run that boots several replicas in sequence (`puck
+  test --reproduce` or `--workers`) admits before every one of them.
+  A windowed debug World grows past ten gigabytes, so a
   GPU lane closes its World between capture batches. A test run that holds
   gigabytes (the mesh-irradiance laws trace a whole hall and reached 9 GB
   private) is a heavy suite: the brief says to run it under `puck lease heavy`
-  and by name, never the whole class beside a windowed World; a windowed World
-  and such a run peaking together took the machine to 95% of its commit limit.
+  and by name, never the whole class beside a windowed World, because admission
+  counts only the memory already charged when a run starts, not the gigabytes it
+  is about to take: a windowed World and such a run peaking together took the
+  machine to 95% of its commit limit.
   The lead cannot stop another lane's process; it asks the lane. CPU saturation does not
   endanger lanes but voids timings: a lane whose evidence is a time (a tick, a
   frame, a bake) attributes cost by samples and counts while the machine is
@@ -800,9 +814,15 @@ long-horizon work. Route it accordingly:
 |---|---|
 | Independent review and audit passes (a third family's blind spots differ from Claude's and Codex's) | Long implementation lanes with many build/test/World steps |
 | Security review of a change or an area | Lanes that need network or GPU legs from inside its sandbox |
-| Whole-area analysis that needs a large context | Anything that must push or mutate shared Git state |
-| Portal, dashboard and other TypeScript/UI work | |
-| Research synthesis | |
+| Portal, dashboard and other TypeScript/UI work | Anything that must push or mutate shared Git state |
+| Research synthesis, as one voice beside a family that opens its sources | Finding where time or memory goes: a cost claim read from code without a measurement |
+| | A code-reading pass whose claims nobody will measure before acting |
+
+A produce-path read it wrote ranked ten per-frame costs from the code; a
+measuring lane confirmed most of the code it quoted and found every cost wrong
+(none above 3.6% of the frame's samples), while the real hot spot, which no
+reading named, took 58%. Its value there was zero beside a trace; give a cost
+question to a lane that measures.
 
 An `agy -p` lane cannot open web pages directly. Its search tool returns
 summaries, and in one research round it labelled those summaries "Opened URL"
@@ -903,6 +923,15 @@ and not a spiral:
   next batch or filed into their packet, and that fix lands on its own evidence
   without a second review round. A lane that lands is followed at once by the
   next open item, and each batch deletes the items it closed.
+- Timings are owed, not skipped: while lanes keep the machine busy, every
+  wall-clock before/after a lane reports is indicative, and the lead keeps a
+  list of the quiet-window readings owed. When a wave lands, or at least every
+  few hours, the lead stops launching, lets running builds finish, and takes
+  every owed reading in one quiet window before relaunching.
+- Fundamentals do not crowd out features (AGENTS.md, "Fundamentals, driven by
+  features"): waves of findings feed the next wave without end, so whenever no
+  feature lane is running, the next free slot goes to a debug-world feature
+  chosen for the systems it stresses, not to another cleanup wave.
 - The lead's audit stops a stalled lane, saves a writing lane's tree as a WIP
   commit, and hands the work to another lane. A lane is stalled when it repeats
   a failure, or when its progress stops for 30 minutes: writes for a writing

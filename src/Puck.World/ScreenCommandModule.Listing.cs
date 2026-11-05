@@ -9,6 +9,7 @@ namespace Puck.World;
 /// (<c>world.view-refresh</c>). Both read only the screen binder and the live definition, which every boot shape
 /// composes, so an offscreen or headless boot answers them exactly as a windowed one does.</summary>
 internal sealed partial class ScreenCommandModule {
+    private static readonly CommandForms WorldViewRefreshForms = CommandForms.Of(verb: "world.view-refresh", ViewRefreshForm);
     // The source-kind keyword for a screen's declared source — the stable token a piped proof asserts against. A
     // producer source reads as its producer id.
     private static string ScreenSourceKind(WorldScreenSource source) {
@@ -121,7 +122,7 @@ internal sealed partial class ScreenCommandModule {
             (divisor < 1) ||
             (divisor > 8)
         ) {
-            return CommandResult.Usage(form: ViewRefreshForm, got: args[0].ToString(), verb: "world.view-refresh");
+            return WorldViewRefreshForms.Refuse(got: args[0].ToString());
         }
 
         m_binder.SetViewRefreshDivisor(divisor: divisor);

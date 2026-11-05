@@ -19,11 +19,8 @@ namespace Puck.World;
 /// </summary>
 internal sealed class WorldAddonCommandModule(WorldAddonRuntime runtime, WorldServer server) : ICommandModule {
     private CommandResult Describe(WireArgs args) {
-        if (args.Count > 0) {
-            return CommandResult.Usage(
-                form: "",
-                verb: "world.addons"
-            );
+        if (CommandResult.RequireNoArguments(args: in args, verb: "world.addons") is { } refusal) {
+            return refusal;
         }
 
         var rows = server.Definition.Addons;

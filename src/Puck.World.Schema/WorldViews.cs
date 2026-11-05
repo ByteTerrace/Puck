@@ -156,6 +156,11 @@ public sealed record WorldViewLayout(string Name, IReadOnlyList<WorldViewSlot> S
         init => m_slots = (value ?? []);
     }
 }
+/// <summary>The transition envelope of a composition change: how long the ease takes and how far the render scale dips
+/// while it runs. The defaults are neutral, a cut with no dip, as a layout's own envelope's are.</summary>
+/// <param name="Seconds">How long the ease takes, in seconds; 0 is a cut. Default 0.</param>
+/// <param name="RenderScale">The render scale (0, 1] applied to every slot mid-transition; 1 is no dip. Default 1.</param>
+public sealed record WorldViewTransition(float Seconds = 0f, float RenderScale = 1f);
 /// <summary>The <c>views</c> document section — the seat framing every seat wakes on plus the authored named layouts. A
 /// REQUIRED section every document carries; an empty layout list falls the composer through to the built-in seat
 /// ladder.</summary>
@@ -230,6 +235,9 @@ public enum WorldSeatYawReference : byte {
 /// <param name="ProgramsRaw">The named camera programs no camera or seat resolves through directly: the framings a
 /// <see cref="WorldCameraProgramOp.SelectProgram"/> or <see cref="WorldCameraProgramOp.Blend"/> names, such as the
 /// cases a seat rig selects between. <see cref="Programs"/> is what a reader resolves through.</param>
+/// <param name="BuiltinTransition">The ease into or out of the built-in seat ladder (the composition no authored
+/// layout selects), or <see langword="null"/> for the neutral <see cref="WorldViewTransition"/> defaults (a cut). An authored layout
+/// brings its own envelope.</param>
 public sealed record WorldViewDefaults(IReadOnlyList<WorldViewLayout>? Layouts = null,
     [property: System.Text.Json.Serialization.JsonPropertyName("seatRig"), System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldCameraProgram? SeatRigRaw = null,
     [property: System.Text.Json.Serialization.JsonPropertyName("seatControl"), System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldSeatViewControl? SeatControlRaw = null,
@@ -241,7 +249,8 @@ public sealed record WorldViewDefaults(IReadOnlyList<WorldViewLayout>? Layouts =
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldViewPostPass>? Post = null,
     [property: System.Text.Json.Serialization.JsonPropertyName("nestingDepth"), System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] int? NestingDepthRaw = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldViewQuality>? Quality = null,
-    [property: System.Text.Json.Serialization.JsonPropertyName("programs"), System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldCameraProgram>? ProgramsRaw = null) {
+    [property: System.Text.Json.Serialization.JsonPropertyName("programs"), System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldCameraProgram>? ProgramsRaw = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldViewTransition? BuiltinTransition = null) {
     private readonly IReadOnlyList<WorldViewLayout> m_layouts = (Layouts ?? []);
 
     /// <summary>Gets the named camera programs the section declares for selects and blends to name, or an empty list

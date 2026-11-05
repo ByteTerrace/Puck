@@ -10,7 +10,13 @@ namespace Puck.World;
 /// </summary>
 /// <param name="script">The pinned lines this verb arms and reads back.</param>
 public sealed class WorldTickScriptCommandModule(WorldTickScript script) : ICommandModule {
-    private const string Usage = "world.at <tick>|+<ticks> <console line>, world.at {\"start\": <tick>|\"+<ticks>\", \"steps\": [{\"at\": <offset>, \"run\": \"<console line>\"}, …]}, world.at clear, world.at --json, or world.at";
+    private static readonly CommandForms WorldAtForms = CommandForms.Of(
+        "world.at",
+        "<tick>|+<ticks> <console line>",
+        "{\"start\": <tick>|\"+<ticks>\", \"steps\": [{\"at\": <offset>, \"run\": \"<console line>\"}, …]}",
+        "clear",
+        "--json"
+    );
 
     // A tick token: an absolute tick, or +N ticks after the completed tick.
     private bool TryTick(ReadOnlySpan<char> token, out ulong tick) {
@@ -37,7 +43,7 @@ public sealed class WorldTickScriptCommandModule(WorldTickScript script) : IComm
             var root = document.RootElement;
 
             if (root.ValueKind != JsonValueKind.Object) {
-                return CommandResult.Error(output: $"[world.at: a script is a JSON object — {Usage}]");
+                return CommandResult.Error(output: $"[world.at: a script is a JSON object — {WorldAtForms.Form}]");
             }
 
             foreach (var member in root.EnumerateObject()) {
@@ -99,7 +105,8 @@ public sealed class WorldTickScriptCommandModule(WorldTickScript script) : IComm
             audience: CommandAudience.Operator,
             bindability: CommandBindability.Unbindable,
             name: "world.at",
-            description: "Pins console lines to exact ticks of the boot world, so a script gives the same ticks on every run however its lines arrive (stdin, a control attachment's calls). world.at <tick> <console line> runs the line in the console drain right after the boot world completes that tick and before the next tick steps (the point a line released by world.wait runs at); world.at +<ticks> <console line> pins it that many ticks after the tick the world has completed now. An Immediate line (a read such as world.state.hash or body.where, a capture such as world.screenshot <path.png>) sees the state of that tick, and a Simulation line (body.*, view.override, a state write) applies in the tick after it, whatever else that tick runs: every line of a tick runs in the order it was armed, none waits behind another. world.at {\"start\": <tick>|\"+<ticks>\", \"steps\": [{\"at\": <offset>, \"run\": \"<console line>\"}, …]} arms a whole script in one line, all or nothing, each step at start + at (start defaults to \"+1\"), and answers with the ticks it spans. A settled world.screenshot a line arms holds the rendered host at that tick until a frame of it serves the capture, so the still shows exactly that tick; its stderr line [still] <path> tick=<T> hash=<capture hash> pose=<pose hash> shown=<tick the frame shows> records it. Lines run as the console, so the verb is the operator's. world.wait until <tick> holds a session until a tick has completed, which is how a caller waits for a script. world.at lists the armed lines and the last ran ones with their answers; world.at --json returns tick, pending and ran arrays with each line\u0027s tick, command, status and output; world.at clear drops every armed line. Refused, nothing armed: a tick already completed, world.at, world.wait or quit as the pinned line, or more than 4096 armed lines. A paused world runs no armed line until it resumes, and a line runs on its tick only: pause, arm, then world.rate resume to pin a script to the very next ticks.",
+            description: $"Pins console lines to exact ticks of the boot world, so a script gives the same ticks on every run however its lines arrive (stdin, a control attachment's calls): {WorldAtForms.Spelling}. world.at <tick> <console line> runs the line in the console drain right after the boot world completes that tick and before the next tick steps (the point a line released by world.wait runs at); world.at +<ticks> <console line> pins it that many ticks after the tick the world has completed now. An Immediate line (a read such as world.state.hash or body.where, a capture such as world.screenshot <path.png>) sees the state of that tick, and a Simulation line (body.*, view.override, a state write) applies in the tick after it, whatever else that tick runs: every line of a tick runs in the order it was armed, none waits behind another. world.at {{\"start\": <tick>|\"+<ticks>\", \"steps\": [{{\"at\": <offset>, \"run\": \"<console line>\"}}, …]}} arms a whole script in one line, all or nothing, each step at start + at (start defaults to \"+1\"), and answers with the ticks it spans. A settled world.screenshot a line arms holds the rendered host at that tick until a frame of it serves the capture, so the still shows exactly that tick; its stderr line [still] <path> tick=<T> hash=<capture hash> pose=<pose hash> shown=<tick the frame shows> records it. Lines run as the console, so the verb is the operator's. world.wait until <tick> holds a session until a tick has completed, which is how a caller waits for a script. world.at lists the armed lines and the last ran ones with their answers; world.at --json returns tick, pending and ran arrays with each line\u0027s tick, command, status and output; world.at clear drops every armed line. Refused, nothing armed: a tick already completed, world.at, world.wait or quit as the pinned line, or more than 4096 armed lines. A paused world runs no armed line until it resumes, and a line runs on its tick only: pause, arm, then world.rate resume to pin a script to the very next ticks.",
+            forms: WorldAtForms,
             handler: (context, args) => {
                 if (args.Count == 0) {
                     return new CommandResult(Output: script.Describe());
@@ -125,7 +132,7 @@ public sealed class WorldTickScriptCommandModule(WorldTickScript script) : IComm
                 }
 
                 if ((args.Count < 2) || !TryTick(tick: out var tick, token: head)) {
-                    return CommandResult.Usage(form: Usage, verb: "world.at");
+                    return WorldAtForms.Refuse(args: in args);
                 }
 
                 var line = WorldCommandArguments.RawAfter(

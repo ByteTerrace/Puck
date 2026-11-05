@@ -17,7 +17,7 @@ public static class LeaseCommand {
     /// order is the same and the verb cannot deadlock against them; it releases in the reverse order.</summary>
     public static readonly IReadOnlyList<string> QuietOrder = ["heavy", "build", "gpu"];
 
-    private static async Task<int> RunAsync(ParseResult parse, string verb, IReadOnlyList<string> names, Option<string> holder, Option<string?> lane, Option<int> wait, Argument<string[]> arguments, TimeProvider clock, string? leaseRoot, Option<int>? settle, LeaseSettle? settleWait, CancellationToken cancellationToken) {
+    private static async Task<int> RunAsync(ParseResult parse, string verb, IReadOnlyList<string> names, Option<string> holder, Option<string?> lane, Option<int> wait, Argument<string[]> arguments, TimeProvider clock, string? leaseRoot, Option<int>? settle, LeaseSettle? settleWait, HostAdmit? admit, CancellationToken cancellationToken) {
         var seconds = parse.GetValue(option: wait);
 
         if (seconds < 0) { return CliExit.Refuse(verb: verb, what: "--wait", why: "must be nonnegative."); }
@@ -46,6 +46,15 @@ public static class LeaseCommand {
                 var remaining = (bound - clock.GetElapsedTime(startingTimestamp: started));
 
                 held.Add(item: await CliLease.AcquireAsync(ancestor: ProcessInspection.IsAncestor, lane: named, root: directory, name: name, holder: parse.GetValue(option: holder)!, wait: ((remaining > TimeSpan.Zero) ? remaining : TimeSpan.Zero), clock: clock, cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false));
+
+                // Admission follows the lease, in the queue's order: the one holder of a heavy or GPU lease is the only run
+                // judging the machine, so two starts never read the same headroom and both take it.
+                if (admit is not null) {
+                    var left = (bound - clock.GetElapsedTime(startingTimestamp: started));
+                    var admitted = await admit(checkout: Environment.CurrentDirectory, step: $"{verb} {parse.GetValue(option: holder)}", device: (name == "gpu"), heavySuite: (name == "heavy"), bound: ((left > TimeSpan.Zero) ? left : TimeSpan.Zero), progress: Console.Error, stage: null, cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
+
+                    if (!admitted) { return CliExit.Refuse(verb: verb, what: "host admission", why: "the machine had no memory, commit or disk headroom (or its GPU stayed busy) within --wait, so the command did not start and the lease is released."); }
+                }
             }
 
             if ((settleWait is not null) && (settled > 0)) {
@@ -104,8 +113,9 @@ public static class LeaseCommand {
     /// <param name="clock">The CLI clock.</param>
     /// <param name="leaseRoot">An explicit lease directory, or null for the main checkout's shared directory.</param>
     /// <param name="settleWait">How <c>puck lease quiet</c> tells the machine is idle (the host load sampler, which lives above this assembly); null leaves the quiet command out.</param>
+    /// <param name="admit">The host admission <c>puck lease heavy</c> and <c>puck lease gpu</c> wait on once they hold their lease and before they run the command; null admits at once.</param>
     /// <returns>The lease command.</returns>
-    public static Command Create(TimeProvider clock, string? leaseRoot = null, LeaseSettle? settleWait = null) {
+    public static Command Create(TimeProvider clock, string? leaseRoot = null, LeaseSettle? settleWait = null, HostAdmit? admit = null) {
         var root = new Command(description: "Run a command under an exclusive World-build, GPU or heavy-work lease, or all three once the machine is idle.", name: "lease");
 
         foreach (var name in new[] { "build", "gpu", "heavy" }) {
@@ -117,8 +127,8 @@ public static class LeaseCommand {
             arguments.Arity = ArgumentArity.OneOrMore;
             var command = new Command(description: $"Hold the {name} lease until the command exits or is cancelled.", name: name) { holder, lane, wait, arguments };
 
-            command.SetAction(action: (parse, cancellationToken) => RunAsync(arguments: arguments, cancellationToken: cancellationToken, clock: clock, holder: holder, lane: lane, leaseRoot: leaseRoot, names: [name], parse: parse, settle: null, settleWait: null, verb: ("lease " + name), wait: wait));
-            command.Detail(detail: (("Use: puck lease " + name) + " --holder <lane> [--lane <lane>] [--wait <seconds>] -- <executable> <arguments...>\nThe shared main checkout owns .claude/leases/. Waiters take tickets in .claude/leases/<name>.queue and are admitted by rotation between lanes (the first word of --holder, or --lane): the oldest ticket of the lane that held the lease least recently, first come, first served within a lane; a ticket of an exited process is dropped. A lease older than one hour is reclaimed only when its holder process is gone. Child failure preserves its exit code; cancellation kills the child tree and releases the lease."));
+            command.SetAction(action: (parse, cancellationToken) => RunAsync(arguments: arguments, cancellationToken: cancellationToken, clock: clock, holder: holder, lane: lane, leaseRoot: leaseRoot, names: [name], parse: parse, settle: null, settleWait: null, admit: ((name is "heavy" or "gpu") ? admit : null), verb: ("lease " + name), wait: wait));
+            command.Detail(detail: (("Use: puck lease " + name) + " --holder <lane> [--lane <lane>] [--wait <seconds>] -- <executable> <arguments...>\nThe shared main checkout owns .claude/leases/. Waiters take tickets in .claude/leases/<name>.queue and are admitted by rotation between lanes (the first word of --holder, or --lane): the oldest ticket of the lane that held the lease least recently, first come, first served within a lane; a ticket of an exited process is dropped. A lease older than one hour is reclaimed only when its holder process is gone." + ((name is "heavy" or "gpu") ? " Once the lease is held, the run also waits for host headroom, the admission `puck gate` uses (free memory, a commit charge under its share of the commit limit, free disk" + ((name == "gpu") ? ", an idle GPU" : ", no other heavy test run") + "), within what --wait has left, and is refused (exit 2, lease released) when it does not return; the wait lines go to standard error." : string.Empty) + " Child failure preserves its exit code; cancellation kills the child tree and releases the lease."));
             root.Subcommands.Add(item: command);
         }
 
@@ -143,7 +153,7 @@ public static class LeaseCommand {
             arguments.Arity = ArgumentArity.OneOrMore;
             var command = new Command(description: "Hold the heavy, build and gpu leases together, wait for an idle machine, then run the command: a settle window for timing measurements.", name: "quiet") { holder, lane, wait, settle, arguments };
 
-            command.SetAction(action: (parse, cancellationToken) => RunAsync(arguments: arguments, cancellationToken: cancellationToken, clock: clock, holder: holder, lane: lane, leaseRoot: leaseRoot, names: QuietOrder, parse: parse, settle: settle, settleWait: settleWait, verb: "lease quiet", wait: wait));
+            command.SetAction(action: (parse, cancellationToken) => RunAsync(arguments: arguments, cancellationToken: cancellationToken, clock: clock, holder: holder, lane: lane, leaseRoot: leaseRoot, names: QuietOrder, parse: parse, settle: settle, settleWait: settleWait, admit: null, verb: "lease quiet", wait: wait));
             command.Detail(detail: "Use: puck lease quiet --holder <lane> [--lane <lane>] [--wait <seconds>] [--settle <seconds>] -- <executable> <arguments...>\nTakes the heavy, build and gpu leases in that one order (the order a heavy suite, a World build and a World boot already nest in, so it cannot deadlock against them), then samples the machine with the `puck host load` sampler until it has been idle for --settle seconds: no GPU work, no heavy test run, and CAPACITY by the host-load thresholds (CPU mean and free memory). What the wait is on is printed to standard error whenever it changes. Then it runs the command and releases all three leases in reverse on every exit path. A run under the command that takes any of the three leases nests (the quiet holder is its ancestor) instead of waiting on it, so `puck sweep`, a World start and a World build run inside. --wait bounds the lease acquisition in total and, added to --settle, the wait for idle; a machine that never settles in time is refused (exit 2) and the leases are released. Child failure preserves its exit code; cancellation kills the child tree and releases the leases.");
             root.Subcommands.Add(item: command);
         }

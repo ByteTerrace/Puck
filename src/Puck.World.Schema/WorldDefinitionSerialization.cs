@@ -352,9 +352,9 @@ namespace Puck.World;
     // marks such a parameter `required`, correctly) and the loader would disagree about the contract, and the
     // document would lose the argument with absence answered by someone else's numbers, invisible to any battery.
     //
-    // The consequence is that "no C# default" now MEANS required, everywhere in the document graph. A member that is
-    // genuinely optional says so with an explicit default; a member that is genuinely required is authored in every
-    // document. There is no third state any more, which is the point.
+    // A member is required exactly when it is neither nullable nor defaulted, everywhere in the document graph
+    // (WorldJsonContext.OptionalWhenNullable lifts the nullable ones, which the serializer alone would require).
+    // There is no third state, which is the point.
     RespectRequiredConstructorParameters = true,
     // The context-wide default: an unmapped member on ANY row in the graph is a hard parse failure, not a silent
     // drop. WorldDefinition's [JsonExtensionData] root carve-out (see the type doc above) is the only exception —
@@ -521,11 +521,39 @@ public sealed class WorldJsonContext : IJsonTypeInfoResolver {
             RespectNullableAnnotations = untrusted,
             TypeInfoResolver = WorldJsonSourceContext.Default
                 .WithAddedModifier(modifier: WorldJsonVocabulary.Extend)
-                .WithAddedModifier(modifier: StateSpace.ExtendJson),
+                .WithAddedModifier(modifier: StateSpace.ExtendJson)
+                .WithAddedModifier(modifier: OptionalWhenNullable),
         };
 
         options.MakeReadOnly();
         Options = options;
+    }
+
+    /// <summary>Makes a nullable constructor parameter optional in a document: <c>RespectRequiredConstructorParameters</c>
+    /// marks every parameter without a C# default required, a nullable one included, though its absence has one
+    /// meaning (null). A member is therefore required only when it is neither nullable nor defaulted. The serializer
+    /// and <see cref="WorldModelShape"/> (the walk behind a missing-member refusal) read
+    /// <see cref="JsonPropertyInfo.IsRequired"/> from the type info this modifier edits. A member that states
+    /// <see cref="JsonRequiredAttribute"/> keeps it.</summary>
+    /// <param name="typeInfo">The type info being resolved.</param>
+    private static void OptionalWhenNullable(JsonTypeInfo typeInfo) {
+        if (typeInfo.Kind != JsonTypeInfoKind.Object) {
+            return;
+        }
+
+        foreach (var property in typeInfo.Properties) {
+            if (
+                property.IsRequired &&
+                property.IsSetNullable &&
+                (property.AssociatedParameter is not null) &&
+                (property.AttributeProvider?.IsDefined(
+                    attributeType: typeof(JsonRequiredAttribute),
+                    inherit: true
+                ) != true)
+            ) {
+                property.IsRequired = false;
+            }
+        }
     }
 
     /// <summary>Gets the type info for any type the world document's graph reaches, resolved through

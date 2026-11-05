@@ -16,6 +16,14 @@ namespace Puck.World;
 /// and returns <see cref="CommandResult.None"/> — the server prints the loud <c>[world.mutation: … applied/rejected]</c> line.
 /// </summary>
 public sealed class WorldGroupCommandModule(IWorldConsoleAuthority authority) : ICommandModule {
+    private static readonly CommandForms WorldGroupFormForms = CommandForms.Of(verb: "world.group.form", "<id> <kindName>");
+    private static readonly CommandForms WorldGroupsForms = CommandForms.Of(verb: "world.groups", "[group-id]");
+    private static readonly CommandForms WorldOwnershipOfferForms = CommandForms.Of(verb: "world.ownership.offer", "<subject> <recipient> <deadlineTick>");
+    private static readonly CommandForms WorldGroupJoinForms = CommandForms.Of(verb: "world.group.join", "<group-id> <principal>");
+    private static readonly CommandForms WorldGroupLeaveForms = CommandForms.Of(verb: "world.group.leave", "<group-id> <principal>");
+    private static readonly CommandForms WorldGroupKickForms = CommandForms.Of(verb: "world.group.kick", "<group-id> <principal>");
+    private static readonly CommandForms WorldOwnershipAcceptForms = CommandForms.Of(verb: "world.ownership.accept", "<subject>");
+    private static readonly CommandForms WorldOwnershipReclaimForms = CommandForms.Of(verb: "world.ownership.reclaim", "<subject>");
     // Narrower than Grantee.TokenGrammar: a group member/ownership party is never group:<id> or document:<id>
     // (a group cannot itself be a member — see this class's own remarks) or world (never a real actor).
     private const string MemberTokenGrammar = "seat1..seat4|console|addon:<name>|peer:<n>:<generation>";
@@ -151,13 +159,11 @@ public sealed class WorldGroupCommandModule(IWorldConsoleAuthority authority) : 
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.group.form",
-            description: "Forms a new, empty RUNTIME group of a declared kind: world.group.form <id> <kindName>. Rejected loudly if <id> is already taken or <kindName> names no declared kind. Never written back to the server's base document, so a whole-document rebuild (world.reset/.load/.reload) discards it — the runtime half of the party-vs-roster split. Buffers and applies at the tick boundary under Mutate/section:groups.",
+            description: $"Forms a new, empty RUNTIME group of a declared kind: {WorldGroupFormForms.Spelling}. Rejected loudly if <id> is already taken or <kindName> names no declared kind. Never written back to the server's base document, so a whole-document rebuild (world.reset/.load/.reload) discards it — the runtime half of the party-vs-roster split. Buffers and applies at the tick boundary under Mutate/section:groups.",
+            forms: WorldGroupFormForms,
             handler: (context, args) => {
                 if (args.Count != 2) {
-                    return CommandResult.Usage(
-                        form: "<id> <kindName>",
-                        verb: "world.group.form"
-                    );
+                    return WorldGroupFormForms.Refuse();
                 }
 
                 if (!authority.TryResolveLink(context: context, error: out var error, link: out var link, verb: "world.group.form")) {
@@ -177,11 +183,12 @@ public sealed class WorldGroupCommandModule(IWorldConsoleAuthority authority) : 
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.group.join",
-            description: "Admits <principal> into the group named <group-id>: world.group.join <group-id> <principal>. Same principal token grammar as world.grant (seat1..seat4|console|addon:<name>|peer:<n>:<generation> — never group:<id>, FLAT ONLY refuses a group member that is itself a group, and never world/document, neither of which is a real actor). Rejected loudly if the group does not exist, the principal already belongs, or admitting it would exceed the kind's declared capacity. Buffers and applies at the tick boundary under Mutate/section:groups.",
+            description: $"Admits <principal> into the group named <group-id>: {WorldGroupJoinForms.Spelling}. Same principal token grammar as world.grant (seat1..seat4|console|addon:<name>|peer:<n>:<generation> — never group:<id>, FLAT ONLY refuses a group member that is itself a group, and never world/document, neither of which is a real actor). Rejected loudly if the group does not exist, the principal already belongs, or admitting it would exceed the kind's declared capacity. Buffers and applies at the tick boundary under Mutate/section:groups.",
+            forms: WorldGroupJoinForms,
             handler: (context, args) => Handle(
                 context: context,
                 args: args,
-                verb: "world.group.join",
+                forms: WorldGroupJoinForms,
                 build: static (groupId, member, actor) => new WorldMutation.JoinGroup(
                     GroupId: groupId,
                     Member: member,
@@ -193,11 +200,12 @@ public sealed class WorldGroupCommandModule(IWorldConsoleAuthority authority) : 
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.group.leave",
-            description: "Removes <principal> from the group named <group-id> — voluntary self-departure, never the kind's evictionPolicy (that governs world.group.kick alone): world.group.leave <group-id> <principal>. Dissolves the whole group afterward if that empties it and the kind's lifetime is ephemeral. Rejected loudly if the group does not exist or the principal does not belong. Buffers and applies at the tick boundary under Mutate/section:groups.",
+            description: $"Removes <principal> from the group named <group-id> — voluntary self-departure, never the kind's evictionPolicy (that governs world.group.kick alone): {WorldGroupLeaveForms.Spelling}. Dissolves the whole group afterward if that empties it and the kind's lifetime is ephemeral. Rejected loudly if the group does not exist or the principal does not belong. Buffers and applies at the tick boundary under Mutate/section:groups.",
+            forms: WorldGroupLeaveForms,
             handler: (context, args) => Handle(
                 context: context,
                 args: args,
-                verb: "world.group.leave",
+                forms: WorldGroupLeaveForms,
                 build: static (groupId, member, actor) => new WorldMutation.LeaveGroup(
                     GroupId: groupId,
                     Member: member,
@@ -209,11 +217,12 @@ public sealed class WorldGroupCommandModule(IWorldConsoleAuthority authority) : 
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.group.kick",
-            description: "Removes <principal> from the group named <group-id> under the kind's OWN evictionPolicy: world.group.kick <group-id> <principal>. 'remove' drops only the kicked member's row (then dissolves the group under the same ephemeral-lifetime rule world.group.leave applies); 'disband' drops the WHOLE group row immediately — the kind decides the consequence of a kick, never who may issue one (the same Mutate/section:groups hold every group mutation checks). Rejected loudly if the group does not exist or the principal does not belong. Buffers and applies at the tick boundary.",
+            description: $"Removes <principal> from the group named <group-id> under the kind's OWN evictionPolicy: {WorldGroupKickForms.Spelling}. 'remove' drops only the kicked member's row (then dissolves the group under the same ephemeral-lifetime rule world.group.leave applies); 'disband' drops the WHOLE group row immediately — the kind decides the consequence of a kick, never who may issue one (the same Mutate/section:groups hold every group mutation checks). Rejected loudly if the group does not exist or the principal does not belong. Buffers and applies at the tick boundary.",
+            forms: WorldGroupKickForms,
             handler: (context, args) => Handle(
                 context: context,
                 args: args,
-                verb: "world.group.kick",
+                forms: WorldGroupKickForms,
                 build: static (groupId, member, actor) => new WorldMutation.KickMember(
                     GroupId: groupId,
                     Member: member,
@@ -225,13 +234,11 @@ public sealed class WorldGroupCommandModule(IWorldConsoleAuthority authority) : 
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.groups",
-            description: "Echoes the group+membership binding substrate (Immediate; the stdin barrier makes it read the settled table after any pending group mutation): world.groups [group-id]. With a group id, echoes only that group's row. Lists declared kinds (name, roles, lifetime, evictionPolicy, capacity), every live group row (id, kind, typed members), and every ownership binding — including an escrowed row's offerer/recipient/deadline.",
+            description: $"Echoes the group+membership binding substrate (Immediate; the stdin barrier makes it read the settled table after any pending group mutation): {WorldGroupsForms.Spelling}. With a group id, echoes only that group's row. Lists declared kinds (name, roles, lifetime, evictionPolicy, capacity), every live group row (id, kind, typed members), and every ownership binding — including an escrowed row's offerer/recipient/deadline.",
+            forms: WorldGroupsForms,
             handler: (context, args) => {
                 if (args.Count > 1) {
-                    return CommandResult.Usage(
-                        form: "[group-id]",
-                        verb: "world.groups"
-                    );
+                    return WorldGroupsForms.Refuse();
                 }
 
                 if (!authority.TryResolveServer(
@@ -257,13 +264,11 @@ public sealed class WorldGroupCommandModule(IWorldConsoleAuthority authority) : 
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.ownership.offer",
-            description: "Places a Principal-owned subject into ESCROW, naming the intended recipient and a tick deadline: world.ownership.offer <subject> <recipient> <deadlineTick>. <subject> is group:<id> (the only declared subject kind today); <recipient> is a principal token (seat1..seat4|console|addon:<name>|peer:<n>:<generation>). Rejected loudly unless the acting principal IS the subject's current owner, <recipient> differs from the acting principal, and <deadlineTick> lies strictly after the tick this applies at. While escrowed, the subject is owned by NEITHER party — see world.groups' ownership line. Buffers and applies at the tick boundary under Mutate/section:groups.",
+            description: $"Places a Principal-owned subject into ESCROW, naming the intended recipient and a tick deadline: {WorldOwnershipOfferForms.Spelling}. <subject> is group:<id> (the only declared subject kind today); <recipient> is a principal token (seat1..seat4|console|addon:<name>|peer:<n>:<generation>). Rejected loudly unless the acting principal IS the subject's current owner, <recipient> differs from the acting principal, and <deadlineTick> lies strictly after the tick this applies at. While escrowed, the subject is owned by NEITHER party — see world.groups' ownership line. Buffers and applies at the tick boundary under Mutate/section:groups.",
+            forms: WorldOwnershipOfferForms,
             handler: (context, args) => {
                 if (args.Count != 3) {
-                    return CommandResult.Usage(
-                        form: "<subject> <recipient> <deadlineTick>",
-                        verb: "world.ownership.offer"
-                    );
+                    return WorldOwnershipOfferForms.Refuse();
                 }
 
                 if (!OwnershipSubject.TryParse(
@@ -305,35 +310,36 @@ public sealed class WorldGroupCommandModule(IWorldConsoleAuthority authority) : 
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.ownership.accept",
-            description: "Accepts a subject currently held in ESCROW: world.ownership.accept <subject>. Rejected loudly unless the subject is in escrow and the acting principal is that escrow's own named recipient. Buffers and applies at the tick boundary under Mutate/section:groups.",
+            description: $"Accepts a subject currently held in ESCROW: {WorldOwnershipAcceptForms.Spelling}. Rejected loudly unless the subject is in escrow and the acting principal is that escrow's own named recipient. Buffers and applies at the tick boundary under Mutate/section:groups.",
+            forms: WorldOwnershipAcceptForms,
             handler: (context, args) => Settle(
                 args: args,
                 context: context,
                 reclaim: false,
-                verb: "world.ownership.accept"
+                forms: WorldOwnershipAcceptForms
             ),
             routing: CommandRouting.Simulation
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.ownership.reclaim",
-            description: "Reclaims a subject currently held in ESCROW back to its offerer: world.ownership.reclaim <subject>. Rejected loudly unless the subject is in escrow, the acting principal is that escrow's own named offerer, and the tick this applies at has reached the escrow's deadline. The engine ALSO fires this automatically (as the world's own program) the tick a deadline passes with no accept — this verb is the operator's own remedy, on the identical gate, never a way to jump the queue. Buffers and applies at the tick boundary under Mutate/section:groups.",
+            description: $"Reclaims a subject currently held in ESCROW back to its offerer: {WorldOwnershipReclaimForms.Spelling}. Rejected loudly unless the subject is in escrow, the acting principal is that escrow's own named offerer, and the tick this applies at has reached the escrow's deadline. The engine ALSO fires this automatically (as the world's own program) the tick a deadline passes with no accept — this verb is the operator's own remedy, on the identical gate, never a way to jump the queue. Buffers and applies at the tick boundary under Mutate/section:groups.",
+            forms: WorldOwnershipReclaimForms,
             handler: (context, args) => Settle(
                 args: args,
                 context: context,
                 reclaim: true,
-                verb: "world.ownership.reclaim"
+                forms: WorldOwnershipReclaimForms
             ),
             routing: CommandRouting.Simulation
         );
 
         // Local function: accept/reclaim take the identical <subject> shape and differ only in Reclaim.
-        CommandResult Settle(CommandContext context, in WireArgs args, string verb, bool reclaim) {
+        CommandResult Settle(CommandContext context, in WireArgs args, CommandForms forms, bool reclaim) {
+            var verb = forms.Verb;
+
             if (args.Count != 1) {
-                return CommandResult.Usage(
-                    form: "<subject>",
-                    verb: verb
-                );
+                return forms.Refuse();
             }
 
             if (!OwnershipSubject.TryParse(
@@ -358,12 +364,11 @@ public sealed class WorldGroupCommandModule(IWorldConsoleAuthority authority) : 
 
         // Local function: join/leave/kick above take the identical <group-id> <principal> shape and differ only in which
         // WorldMutation kind they build.
-        CommandResult Handle(CommandContext context, in WireArgs args, string verb, Build build) {
+        CommandResult Handle(CommandContext context, in WireArgs args, CommandForms forms, Build build) {
+            var verb = forms.Verb;
+
             if (args.Count != 2) {
-                return CommandResult.Usage(
-                    form: "<group-id> <principal>",
-                    verb: verb
-                );
+                return forms.Refuse();
             }
 
             if (!PrincipalTokens.TryParse(

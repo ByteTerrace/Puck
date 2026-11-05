@@ -15,6 +15,11 @@ namespace Puck.World.Silo;
 public sealed class SiloCommandModule(WorldSiloHost host, IGrainFactory grainFactory, SiloConsoleRouting routing) : ICommandModule {
     private const string CheckpointForm = "[<key>]";
     private const string PublishForm = "<key> <path>";
+    private static readonly CommandForms SiloPublishForms = CommandForms.Of(verb: "silo.publish", PublishForm);
+    private static readonly CommandForms SiloCheckpointForms = CommandForms.Of(verb: "silo.checkpoint", CheckpointForm);
+    private static readonly CommandForms SiloUseForms = CommandForms.Of(verb: "silo.use", "<key>");
+    private static readonly CommandForms SiloActivateForms = CommandForms.Of(verb: "silo.activate", "<key>");
+    private static readonly CommandForms SiloDeactivateForms = CommandForms.Of(verb: "silo.deactivate", "<key>");
     private static void FireAndForget(Task work, string verb, string key) {
         _ = work.ContinueWith(
             continuationAction: task => {
@@ -36,9 +41,11 @@ public sealed class SiloCommandModule(WorldSiloHost host, IGrainFactory grainFac
         keyExtension: identity.World.Value,
         primaryKey: identity.Owner
     );
-    private CommandResult HandleGrainLifecycleAction(in WireArgs args, string verb, Func<IWorldGrain, Task> action) {
+    private CommandResult HandleGrainLifecycleAction(in WireArgs args, CommandForms forms, Func<IWorldGrain, Task> action) {
+        var verb = forms.Verb;
+
         if (args.Count != 1) {
-            return CommandResult.Usage(form: "<key>", verb: verb);
+            return forms.Refuse();
         }
 
         if (!host.TryResolveKey(
@@ -98,10 +105,11 @@ public sealed class SiloCommandModule(WorldSiloHost host, IGrainFactory grainFac
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "silo.publish",
-            description: "silo.publish " + PublishForm + ": composes the local world document at <path> (basis folded, validated through a drawn copy) and publishes it undrawn, as a release publishes it, through the authority root as the hosted, composed definition for the declared row named by <key> (owner/{oid}/{world} or the bare world id).",
+            description: SiloPublishForms.Spelling + ": composes the local world document at <path> (basis folded, validated through a drawn copy) and publishes it undrawn, as a release publishes it, through the authority root as the hosted, composed definition for the declared row named by <key> (owner/{oid}/{world} or the bare world id).",
+            forms: SiloPublishForms,
             handler: (context, args) => {
                 if (args.Count != 2) {
-                    return CommandResult.Usage(form: PublishForm, verb: "silo.publish");
+                    return SiloPublishForms.Refuse();
                 }
 
                 if (!host.TryResolveKey(
@@ -149,30 +157,33 @@ public sealed class SiloCommandModule(WorldSiloHost host, IGrainFactory grainFac
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "silo.activate",
-            description: "silo.activate <key>: requests activation of the declared row named by <key> through its grain. Requested, not synchronous — read silo.grains for the outcome.",
+            description: $"{SiloActivateForms.Spelling}: requests activation of the declared row named by <key> through its grain. Requested, not synchronous — read silo.grains for the outcome.",
+            forms: SiloActivateForms,
             handler: (context, args) => HandleGrainLifecycleAction(
                 action: static grain => grain.ActivateAsync(),
                 args: args,
-                verb: "silo.activate"
+                forms: SiloActivateForms
             )
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "silo.deactivate",
-            description: "silo.deactivate <key>: requests deactivation (with a final checkpoint) of the admitted row named by <key> through its grain. Requested, not synchronous — read silo.grains for the outcome.",
+            description: $"{SiloDeactivateForms.Spelling}: requests deactivation (with a final checkpoint) of the admitted row named by <key> through its grain. Requested, not synchronous — read silo.grains for the outcome.",
+            forms: SiloDeactivateForms,
             handler: (context, args) => HandleGrainLifecycleAction(
                 action: static grain => grain.DeactivateAsync(),
                 args: args,
-                verb: "silo.deactivate"
+                forms: SiloDeactivateForms
             )
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "silo.checkpoint",
-            description: "silo.checkpoint " + CheckpointForm + ": requests an immediate checkpoint of the named row, or of every currently admitted row when <key> is omitted, through each row's own grain. Requested, not synchronous — read silo.grains for the outcome.",
+            description: SiloCheckpointForms.Spelling + ": requests an immediate checkpoint of the named row, or of every currently admitted row when <key> is omitted, through each row's own grain. Requested, not synchronous — read silo.grains for the outcome.",
+            forms: SiloCheckpointForms,
             handler: (context, args) => {
                 if (args.Count > 1) {
-                    return CommandResult.Usage(form: CheckpointForm, got: args[1].ToString(), verb: "silo.checkpoint");
+                    return SiloCheckpointForms.Refuse(got: args[1].ToString());
                 }
 
                 if (args.Count == 1) {
@@ -215,10 +226,11 @@ public sealed class SiloCommandModule(WorldSiloHost host, IGrainFactory grainFac
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "silo.use",
-            description: "silo.use <key>: selects the row an untagged console line (one with no leading '@<key> ') routes to. Never refuses admitted-row traffic addressed with an explicit tag.",
+            description: $"{SiloUseForms.Spelling}: selects the row an untagged console line (one with no leading '@<key> ') routes to. Never refuses admitted-row traffic addressed with an explicit tag.",
+            forms: SiloUseForms,
             handler: (context, args) => {
                 if (args.Count != 1) {
-                    return CommandResult.Usage(form: "<key>", verb: "silo.use");
+                    return SiloUseForms.Refuse();
                 }
 
                 if (!host.TryResolveKey(

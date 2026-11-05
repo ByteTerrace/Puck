@@ -31,6 +31,11 @@ internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, Worl
     private readonly WorldEngagement m_engagement = server.Engagement;
     private readonly WorldServer m_server = server;
     private readonly IServerLink m_link = link;
+    private static readonly CommandForms ScreenEjectForms = CommandForms.Of(verb: "screen.eject", IndexForm);
+    private static readonly CommandForms ScreenInsertForms = CommandForms.Of(verb: "screen.insert", "<index> <contentPath>");
+    private static readonly CommandForms ScreenPeekForms = CommandForms.Of(verb: "screen.peek", PeekForm);
+    private static readonly CommandForms ScreenSourceForms = CommandForms.Of(verb: "screen.source", CameraSourceForm, SourceForm);
+    private static readonly CommandForms ScreenStateForms = CommandForms.Of(verb: "screen.state", IndexForm);
 
     // The Control check over a screen subject, under whichever identity this dispatch's ingress door stamped.
     private bool AllowsControl(Principal principal, int index) =>
@@ -56,20 +61,23 @@ internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, Worl
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "screen.insert",
-            description: "Inserts content into the named machine displayed by a screen: screen.insert <index> <contentPath>. Uses the current generation and provider content.insert operation, requiring Control over the screen and machine; the content path must name a file directly in one of the machine's contentFolders, and anything else is refused by name. The machine retains its authored configuration. A screen showing no declared machine mounts nothing and refuses the insert by name.",
+            description: $"Inserts content into the named machine displayed by a screen: {ScreenInsertForms.Spelling}. Uses the current generation and provider content.insert operation, requiring Control over the screen and machine; the content path must name a file directly in one of the machine's contentFolders, and anything else is refused by name. The machine retains its authored configuration. A screen showing no declared machine mounts nothing and refuses the insert by name.",
+            forms: ScreenInsertForms,
             handler: InsertHandler
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "screen.source",
-            description: "Binds a declared screen's live PRESENTATION source, absorbing the five former per-kind verbs into one: screen.source " + SourceForm + " — <kind> is camera | capture | desktop | probe | qr | view | row, each carrying its own former arg grammar unchanged: camera [color|infrared] [seat N] (a camera is an input device seated like a pad — <seat> (1-based, default 1) names which seat's camera device to show, never hardware directly; one shared feed per (seat, sensor); concurrent color and infrared are used only when the seat's device proves both streams live; default color); probe <probeId> (a declared probe whose kind writes a texture output); capture <windowTitle...> (a case-insensitive substring match, may contain spaces); desktop [monitorIndex] (0-based, default 0 = primary); qr [payload] [ecLevel] [quietZoneModules] (payload a single token; ecLevel one of L|M|Q|H, default M; quietZoneModules default 4 — NO payload echoes the current authoring instead of changing it); view <cameraName> (the jumbotron recursion — one offscreen camera render, budgeted round-robin); row (drops the live bind and shows the source the screen's row authors again, re-binding a row's own camera view; an error when the screen already shows its row's source). Changes the presentation binding. A named machine keeps its identity and continues running when the screen changes source. Errors on an undeclared screen, an unresolved kind, or the kind's own refusal; an unassigned seat or an incompatible sensor is NOT a refusal — the bind succeeds and the fault surfaces through screen.state/screen.camera instead.",
+            forms: ScreenSourceForms,
+            description: "Binds a declared screen's live PRESENTATION source, absorbing the five former per-kind verbs into one: " + ScreenSourceForms.Spelling + " — <kind> is camera | capture | desktop | probe | qr | view | row, each carrying its own former arg grammar unchanged: camera [color|infrared] [seat N] (a camera is an input device seated like a pad — <seat> (1-based, default 1) names which seat's camera device to show, never hardware directly; one shared feed per (seat, sensor); concurrent color and infrared are used only when the seat's device proves both streams live; default color); probe <probeId> (a declared probe whose kind writes a texture output); capture <windowTitle...> (a case-insensitive substring match, may contain spaces); desktop [monitorIndex] (0-based, default 0 = primary); qr [payload] [ecLevel] [quietZoneModules] (payload a single token; ecLevel one of L|M|Q|H, default M; quietZoneModules default 4 — NO payload echoes the current authoring instead of changing it); view <cameraName> (the jumbotron recursion — one offscreen camera render, budgeted round-robin); row (drops the live bind and shows the source the screen's row authors again, re-binding a row's own camera view; an error when the screen already shows its row's source). Changes the presentation binding. A named machine keeps its identity and continues running when the screen changes source. Errors on an undeclared screen, an unresolved kind, or the kind's own refusal; an unassigned seat or an incompatible sensor is NOT a refusal — the bind succeeds and the fault surfaces through screen.state/screen.camera instead.",
             handler: SourceHandler,
             ackOnly: true
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "screen.eject",
-            description: "Ejects a screen's live source, live: screen.eject " + IndexForm + ". A named machine display removes only the screen source through a WorldMutation.UpsertScreen submission and keeps its producer alive, while a presentation source ejects directly through the binder.",
+            description: "Ejects a screen's live source, live: " + ScreenEjectForms.Spelling + ". A named machine display removes only the screen source through a WorldMutation.UpsertScreen submission and keeps its producer alive, while a presentation source ejects directly through the binder.",
+            forms: ScreenEjectForms,
             handler: EjectHandler
         );
         yield return CommandDefinition.WithWireArgs(
@@ -93,13 +101,15 @@ internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, Worl
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "screen.state",
-            description: "Echoes a screen's live machine state: screen.state " + IndexForm + " — assigned/empty, the hosting engine id, bound/unbound (a nonzero source handle this frame), the stepped-frame count, the engaged players, and for content compiled from a cartridge document cartridge <path> hash <source hash> rom <rom hash>. A query (always echoes, even under wire.ack quiet) — the pipe-assertable machine state.",
+            description: "Echoes a screen's live machine state: " + ScreenStateForms.Spelling + " — assigned/empty, the hosting engine id, bound/unbound (a nonzero source handle this frame), the stepped-frame count, the engaged players, and for content compiled from a cartridge document cartridge <path> hash <source hash> rom <rom hash>. A query (always echoes, even under wire.ack quiet) — the pipe-assertable machine state.",
+            forms: ScreenStateForms,
             handler: StateHandler
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "screen.peek",
-            description: "Reads one memory byte from a screen's machine: screen.peek " + PeekForm + " — <addr> a 0x-prefixed hex machine address (or variable symbol for compiled cartridges). A read only, never a write into machine state, so a piped proof can assert a game's stored bytes. A query (always echoes). Errors when the screen carries no machine, or its machine has no memory-peek capability.",
+            description: "Reads one memory byte from a screen's machine: " + ScreenPeekForms.Spelling + " — <addr> a 0x-prefixed hex machine address (or variable symbol for compiled cartridges). A read only, never a write into machine state, so a piped proof can assert a game's stored bytes. A query (always echoes). Errors when the screen carries no machine, or its machine has no memory-peek capability.",
+            forms: ScreenPeekForms,
             handler: PeekHandler
         );
         yield return CommandDefinition.WithWireArgs(
@@ -117,7 +127,8 @@ internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, Worl
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.view-refresh",
-            description: "Sets the diegetic views' deterministic offscreen refresh cadence: world.view-refresh " + ViewRefreshForm + ". 1 renders every produced frame; 4 (the default) renders every fourth frame and preserves the previous images between refreshes. No argument echoes the current divisor and how many camera views are registered in the offscreen pool (a removed View screen releases its camera's render, dropping that count). Every boot shape answers it.",
+            description: "Sets the diegetic views' deterministic offscreen refresh cadence: " + WorldViewRefreshForms.Spelling + ". 1 renders every produced frame; 4 (the default) renders every fourth frame and preserves the previous images between refreshes. No argument echoes the current divisor and how many camera views are registered in the offscreen pool (a removed View screen releases its camera's render, dropping that count). Every boot shape answers it.",
+            forms: WorldViewRefreshForms,
             handler: ViewRefreshHandler
         );
     }
@@ -137,7 +148,7 @@ internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, Worl
         CommandResult.Error(output: $"[{verb}: {principal.Describe()} lacks Control over screen {index} — grant it (world.grant {principal.Describe()} control screen:{index})]");
     private CommandResult EjectHandler(CommandContext context, WireArgs args) {
         if (args.Count != 1) {
-            return CommandResult.Usage(form: IndexForm, verb: "screen.eject");
+            return ScreenEjectForms.Refuse();
         }
 
         if (!args.TryInt(
@@ -179,7 +190,7 @@ internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, Worl
     }
     private CommandResult InsertHandler(CommandContext context, WireArgs args) {
         if (args.Count != 2) {
-            return CommandResult.Usage(form: "<index> <contentPath>", verb: "screen.insert");
+            return ScreenInsertForms.Refuse();
         }
 
         if (!args.TryInt(
@@ -263,7 +274,7 @@ internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, Worl
     }
     private CommandResult PeekHandler(CommandContext context, WireArgs args) {
         if (args.Count != 2) {
-            return CommandResult.Usage(form: PeekForm, verb: "screen.peek");
+            return ScreenPeekForms.Refuse();
         }
 
         if (!args.TryInt(
@@ -336,7 +347,7 @@ internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, Worl
                 b: "color",
                 comparisonType: StringComparison.OrdinalIgnoreCase
             )) {
-                return CommandResult.Usage(form: CameraSourceForm, got: sensorToken, verb: "screen.source");
+                return ScreenSourceForms.Refuse(args: in args, got: sensorToken);
             }
 
             token++;
@@ -347,7 +358,7 @@ internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, Worl
                 index: token,
                 value: "seat"
             )) {
-                return CommandResult.Usage(form: CameraSourceForm, got: args[token].ToString(), verb: "screen.source");
+                return ScreenSourceForms.Refuse(args: in args, got: args[token].ToString());
             }
 
             token++;
@@ -449,7 +460,7 @@ internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, Worl
     // one position by the inserted <kind> token.
     private CommandResult SourceHandler(CommandContext context, WireArgs args) {
         if (args.Count < 2) {
-            return CommandResult.Usage(form: SourceForm, verb: "screen.source");
+            return ScreenSourceForms.Refuse(args: in args);
         }
 
         if (!args.TryInt(
@@ -639,7 +650,7 @@ internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, Worl
     }
     private CommandResult StateHandler(CommandContext context, WireArgs args) {
         if (args.Count != 1) {
-            return CommandResult.Usage(form: IndexForm, verb: "screen.state");
+            return ScreenStateForms.Refuse();
         }
 
         if (!args.TryInt(

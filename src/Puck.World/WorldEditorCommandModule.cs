@@ -38,6 +38,8 @@ public sealed partial class WorldEditorCommandModule(WorldEditorSeats seats, IWo
     public const float MaxStepPitch = 64f;
     /// <summary>The verb that moves a seat's snapping.</summary>
     public const string SnapCommand = "world.snap";
+    private static readonly CommandForms WorldGridForms = CommandForms.Of(verb: GridCommand, "on|off|toggle", "next", "pitch <x> [<z>]", "pitch up|down", "plane <y>", "follow", "surface");
+    private static readonly CommandForms WorldSnapForms = CommandForms.Of(verb: SnapCommand, "on|off|toggle", "angle <deg>", "surface on|off", "reference [<placement>]", "clear");
 
     // The world a verb edits: its name as the seat's route names it, the authority identity it answers as, its document
     // and that document's version as this host last saw them, the read of whatever it delivers next, the link an edit is
@@ -201,7 +203,7 @@ public sealed partial class WorldEditorCommandModule(WorldEditorSeats seats, IWo
             var z = x;
 
             if ((args.Count == 3) && !args.TryFloat(index: 2, value: out z)) {
-                return CommandResult.Usage(form: "pitch <x> [<z>]", verb: GridCommand);
+                return WorldGridForms.Refuse(args: in args);
             }
 
             var pitch = ((args.Count == 3)
@@ -214,7 +216,7 @@ public sealed partial class WorldEditorCommandModule(WorldEditorSeats seats, IWo
 
             seats.SetGridPitch(pitch: pitch, slot: slot);
         } else {
-            return CommandResult.Usage(form: "on|off|toggle|next|pitch <x> [<z>]|pitch up|down|plane <y>|follow|surface", verb: GridCommand);
+            return WorldGridForms.Refuse(args: in args);
         }
 
         return EchoGrid(editor: world.Editor, slot: slot);
@@ -260,7 +262,7 @@ public sealed partial class WorldEditorCommandModule(WorldEditorSeats seats, IWo
 
             seats.SetReference(placement: id, slot: slot, world: world.Name);
         } else {
-            return CommandResult.Usage(form: "on|off|toggle|angle <deg>|surface on|off|reference [<placement>]|clear", verb: SnapCommand);
+            return WorldSnapForms.Refuse(args: in args);
         }
 
         return EchoSnap(slot: slot, world: world);
@@ -271,14 +273,16 @@ public sealed partial class WorldEditorCommandModule(WorldEditorSeats seats, IWo
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: GridCommand,
-            description: "Moves the acting seat's editor grid, which its view draws while it builds: world.grid on|off|toggle; next (cycles surface, follow, plane); pitch <x> [<z>] (one value sets every axis); pitch up|down (doubles or halves it); plane <y> (a fixed working plane at that height); follow (the working plane follows the surface under the pointer); surface (the grid lies on every surface). With no argument, and after every change, echoes the seat's whole grid. A value no verb has moved reads through to the document's editor section, and world.save folds seat 1's moved values back into it.",
+            forms: WorldGridForms,
+            description: $"Moves the acting seat's editor grid, which its view draws while it builds: {WorldGridForms.Spelling}. next cycles surface, follow, plane; pitch with one value sets every axis; pitch up|down doubles or halves it; plane fixes a working plane at that height; follow makes the working plane follow the surface under the pointer; surface lays the grid on every surface. With no argument, and after every change, echoes the seat's whole grid. A value no verb has moved reads through to the document's editor section, and world.save folds seat 1's moved values back into it.",
             handler: GridHandler,
             routing: CommandRouting.Immediate
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: SnapCommand,
-            description: "Moves the acting seat's editor snapping: world.snap on|off|toggle; angle <deg> (the turn step, within (0, 180]); surface on|off (whether placing rests on the surface it lands on); reference [<placement>] (aligns to a placement's own lattice, drawn as the object grid; bare, the seat's current placement); clear (drops the reference). With no argument, and after every change, echoes the seat's whole snapping. world.save folds seat 1's moved values back into the editor section.",
+            forms: WorldSnapForms,
+            description: $"Moves the acting seat's editor snapping: {WorldSnapForms.Spelling}. angle sets the turn step, within (0, 180]; surface on|off chooses whether placing rests on the surface it lands on; reference aligns to a placement's own lattice, drawn as the object grid (bare, the seat's current placement); clear drops the reference. With no argument, and after every change, echoes the seat's whole snapping. world.save folds seat 1's moved values back into the editor section.",
             handler: SnapHandler,
             routing: CommandRouting.Immediate
         );

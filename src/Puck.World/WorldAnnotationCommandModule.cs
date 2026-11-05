@@ -13,7 +13,7 @@ namespace Puck.World;
 /// <param name="annotations">The annotation state.</param>
 public sealed class WorldAnnotationCommandModule(WorldAnnotations annotations) : ICommandModule {
     private const string Verb = "view.annotate";
-    private const string Form = "[on|off|toggle|clear|undo|list|add <cx> <cy> <rx> [<ry>]]";
+    private static readonly CommandForms ViewAnnotateForms = CommandForms.Of(verb: Verb, "[on|off|toggle|clear|undo|list|add <cx> <cy> <rx> [<ry>]]");
 
     private static string Describe(int index, in OverlayAnnotationCircle circle) => string.Create(
         provider: CultureInfo.InvariantCulture,
@@ -27,13 +27,13 @@ public sealed class WorldAnnotationCommandModule(WorldAnnotations annotations) :
             !args.TryFloat(index: 2, value: out var centerY) ||
             !args.TryFloat(index: 3, value: out var radiusX)
         ) {
-            return CommandResult.Usage(form: "add <cx> <cy> <rx> [<ry>]", verb: Verb);
+            return ViewAnnotateForms.Refuse();
         }
 
         var radiusY = radiusX;
 
         if ((args.Count == 5) && !args.TryFloat(index: 4, value: out radiusY)) {
-            return CommandResult.Usage(form: "add <cx> <cy> <rx> [<ry>]", verb: Verb);
+            return ViewAnnotateForms.Refuse();
         }
         if (
             !float.IsFinite(f: centerX) || (centerX < 0f) || (centerX > 1f) ||
@@ -103,7 +103,7 @@ public sealed class WorldAnnotationCommandModule(WorldAnnotations annotations) :
             return Add(args: args);
         }
 
-        return CommandResult.Usage(form: Form, verb: Verb);
+        return ViewAnnotateForms.Refuse();
     }
 
     /// <inheritdoc/>
@@ -111,7 +111,8 @@ public sealed class WorldAnnotationCommandModule(WorldAnnotations annotations) :
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: Verb,
-            description: "On-screen annotations for pointing something out: view.annotate [on|off|toggle|clear|undo|list|add <cx> <cy> <rx> [<ry>]]. In annotate mode a left drag in the window draws the ellipse fitting the drag box (a click draws a small dot ring), a right click clears every outline, and no pointer button or drag reaches a binding or the camera. Leaving the mode keeps the outlines until clear. The outlines draw on the overlay, so world.screenshot captures them. list (and bare view.annotate) echoes the mode and each outline, numbered as drawn, as center x,y and radii x,y in fractions of the window's width and height (origin top-left); add keeps one at those fractions (ry defaults to rx), undo removes the newest. Bind it with a text payload (toggle). Presentation only: nothing reaches the simulation.",
+            description: $"On-screen annotations for pointing something out: {ViewAnnotateForms.Spelling}. In annotate mode a left drag in the window draws the ellipse fitting the drag box (a click draws a small dot ring), a right click clears every outline, and no pointer button or drag reaches a binding or the camera. Leaving the mode keeps the outlines until clear. The outlines draw on the overlay, so world.screenshot captures them. list (and bare view.annotate) echoes the mode and each outline, numbered as drawn, as center x,y and radii x,y in fractions of the window's width and height (origin top-left); add keeps one at those fractions (ry defaults to rx), undo removes the newest. Bind it with a text payload (toggle). Presentation only: nothing reaches the simulation.",
+            forms: ViewAnnotateForms,
             handler: (_, args) => Handle(args: args),
             routing: CommandRouting.Immediate
         );

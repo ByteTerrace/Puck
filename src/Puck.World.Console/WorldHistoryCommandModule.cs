@@ -25,8 +25,9 @@ public sealed partial class WorldHistoryCommandModule(WorldHistory history, Worl
     public const string Command = "world.history";
     /// <summary>The scrubber row's held pointer verb.</summary>
     public const string DragCommand = "world.history.drag";
+    // The verb's forms, once: the description spells them and a refusal names the one nearest what was typed.
+    private static readonly CommandForms WorldHistoryForms = CommandForms.Of(Command, OnForm, "off", "status", "row", SeekForm, StepForm, ScrubForm, DiffForm, "resume", BranchForm, SwitchForm, SaveForm, ReplayEditForm);
 
-    // Each sub-form once: its own refusal prints it and the whole-verb refusal joins them, so they cannot drift.
     private const string BranchForm = "branch <name>";
     private const string DiffForm = "diff <a> <b> [--json]";
     private const string OnForm = "on [<MiB>]";
@@ -36,7 +37,6 @@ public sealed partial class WorldHistoryCommandModule(WorldHistory history, Worl
     private const string SeekForm = "seek <tick>";
     private const string StepForm = "step <±n>";
     private const string SwitchForm = "switch <branch>";
-    private const string VerbForm = "[" + OnForm + " | off | status | row | " + SeekForm + " | " + StepForm + " | " + ScrubForm + " | " + DiffForm + " | resume | " + BranchForm + " | " + SwitchForm + " | " + SaveForm + " | " + ReplayEditForm + "]";
     // The most diff lines the console prints before naming how many more the machine form carries.
     private const int MaxDiffLines = 24;
 
@@ -52,7 +52,7 @@ public sealed partial class WorldHistoryCommandModule(WorldHistory history, Worl
     });
     private CommandResult Branch(WireArgs args) {
         if (args.Count != 2) {
-            return CommandResult.Usage(form: BranchForm, verb: Command);
+            return WorldHistoryForms.Refuse(args: in args);
         }
 
         var name = args[1].ToString();
@@ -83,7 +83,7 @@ public sealed partial class WorldHistoryCommandModule(WorldHistory history, Worl
             !args.TryUnsignedDigits(index: 1, value: out var from) ||
             !args.TryUnsignedDigits(index: 2, value: out var to)
         ) {
-            return CommandResult.Usage(form: DiffForm, verb: Command);
+            return WorldHistoryForms.Refuse(args: in args);
         }
 
         if (!m_history.TryDiff(
@@ -132,7 +132,7 @@ public sealed partial class WorldHistoryCommandModule(WorldHistory history, Worl
 
             budget = ((((long)mebibytes) * 1024L) * 1024L);
         } else if (args.Count != 1) {
-            return CommandResult.Usage(form: OnForm, verb: Command);
+            return WorldHistoryForms.Refuse(args: in args);
         }
 
         if (!m_history.TryOn(
@@ -149,7 +149,7 @@ public sealed partial class WorldHistoryCommandModule(WorldHistory history, Worl
             (args.Count != 2) ||
             !args.TryInt(index: 1, value: out var ticksBack)
         ) {
-            return CommandResult.Usage(form: ReplayEditForm, verb: Command);
+            return WorldHistoryForms.Refuse(args: in args);
         }
 
         if (!m_history.TryReplayEdit(
@@ -286,7 +286,7 @@ public sealed partial class WorldHistoryCommandModule(WorldHistory history, Worl
             !args.TryLong(index: 1, value: out var delta) ||
             (delta == 0L)
         ) {
-            return CommandResult.Usage(form: StepForm, verb: Command);
+            return WorldHistoryForms.Refuse(args: in args);
         }
 
         if (m_history.CursorTick is not { } cursor) {
@@ -337,7 +337,7 @@ public sealed partial class WorldHistoryCommandModule(WorldHistory history, Worl
         if (args.Is(index: 0, value: "seek")) {
             return (((args.Count == 2) && args.TryUnsignedDigits(index: 1, value: out var target))
                 ? Seek(target: target, verb: "seek")
-                : CommandResult.Usage(form: SeekForm, verb: Command));
+                : WorldHistoryForms.Refuse(args: in args));
         }
 
         if (args.Is(index: 0, value: "step")) {
@@ -372,14 +372,15 @@ public sealed partial class WorldHistoryCommandModule(WorldHistory history, Worl
             return ReplayEdit(args: args);
         }
 
-        return CommandResult.Usage(form: VerbForm, verb: Command);
+        return WorldHistoryForms.Refuse(args: in args);
     }
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
-            description: "Deterministic time travel over the boot world (Immediate): world.history on [<MiB>] keeps a bounded ring of checkpoint keyframes plus each tick's recorded input and authoritative hash (default 64 MiB; off by default); off releases it; status (or no argument) echoes the window, the cursor, the keyframe spacing, the bytes held against the budget, and the counted cost. row echoes what the scrubber row draws: the window, the cursor, the keyframe ticks, and the kept branches as forks. seek <tick> moves the live world to any tick in the window, backward or forward, by restoring the nearest keyframe and re-simulating the recorded input, proving every tick against the recorded hash; a seek behind the head pauses the world. step <±n> seeks relative to the cursor; scrub <0..1> seeks to that fraction of the window. resume continues live input from the cursor and discards the recorded future at the next tick; branch <name> keeps that future under the name instead. switch <name> re-enters a kept branch: the live world returns to its fork, the future recorded after the fork is kept under the same name in its place, and the branch's ticks re-simulate, each proved against the hash it recorded. save <name> <tape> writes a kept branch as a .puckreplay tape that starts from the keyframe before its fork and names its fork, and reports the tape's re-drive verdict. diff <a> <b> [--json] re-simulates both ticks in an isolated shadow and prints which bodies, cells, fields, and hash components changed, with values (--json prints the exact machine form). replay-edit <n> moves the document edits made at the cursor n ticks earlier in an isolated shadow and reports the first tick the world would have diverged, with the diff there. Bindable: on (bare, at the default budget), step, resume, branch, and scrub run for a seat that holds control over history (world.grant control history <seat>; the seeded control wildcard covers it), and row answers anyone; every other form answers the operator only. Refused by name across a crossing, a live neighbour, a remote peer, an engagement, an active replay recording or drive, input not yet run, and state a checkpoint cannot capture.",
+            forms: WorldHistoryForms,
+            description: $"Deterministic time travel over the boot world (Immediate): {WorldHistoryForms.Spelling}. on keeps a bounded ring of checkpoint keyframes plus each tick's recorded input and authoritative hash (default 64 MiB; off by default); off releases it; status (or no argument) echoes the window, the cursor, the keyframe spacing, the bytes held against the budget, and the counted cost. row echoes what the scrubber row draws: the window, the cursor, the keyframe ticks, and the kept branches as forks. seek moves the live world to the given tick in the window, backward or forward, by restoring the nearest keyframe and re-simulating the recorded input, proving every tick against the recorded hash; a seek behind the head pauses the world. step seeks n ticks relative to the cursor; scrub seeks to that fraction of the window. resume continues live input from the cursor and discards the recorded future at the next tick; branch keeps that future under the given name instead. switch re-enters a kept branch: the live world returns to its fork, the future recorded after the fork is kept under the same name in its place, and the branch's ticks re-simulate, each proved against the hash it recorded. save writes a kept branch as a .puckreplay tape that starts from the keyframe before its fork and names its fork, and reports the tape's re-drive verdict. diff re-simulates both ticks in an isolated shadow and prints which bodies, cells, fields, and hash components changed, with values (--json prints the exact machine form). replay-edit moves the document edits made at the cursor n ticks earlier in an isolated shadow and reports the first tick the world would have diverged, with the diff there. Bindable: on (bare, at the default budget), step, resume, branch, and scrub run for a seat that holds control over history (world.grant control history <seat>; the seeded control wildcard covers it), and row answers anyone; every other form answers the operator only. Refused by name across a crossing, a live neighbour, a remote peer, an engagement, an active replay recording or drive, input not yet run, and state a checkpoint cannot capture.",
             handler: Dispatch,
             name: Command
         );

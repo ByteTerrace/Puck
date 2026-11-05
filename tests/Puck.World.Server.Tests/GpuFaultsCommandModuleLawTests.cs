@@ -27,19 +27,19 @@ public sealed class GpuFaultsCommandModuleLawTests {
         Assert.EndsWith(expectedEndString: " frames=0]", actualString: registry.Submit(line: "gpu.faults disarm").Output);
         Assert.False(condition: faults.TryGetArmedLoss(remaining: out _, removes: out _));
     }
-    [InlineData("gpu.faults remove 0")]
-    [InlineData("gpu.faults remove 1 2")]
-    [InlineData("gpu.faults lose x")]
-    [InlineData("gpu.faults arm nothing")]
-    [InlineData("gpu.faults arm pipeline 0")]
-    [InlineData("gpu.faults list extra")]
-    [InlineData("gpu.faults wobble")]
+    [InlineData("gpu.faults remove 0", "expected remove [<n>]]")]
+    [InlineData("gpu.faults remove 1 2", "expected remove [<n>]]")]
+    [InlineData("gpu.faults lose x", "expected lose [<n>]]")]
+    [InlineData("gpu.faults arm nothing", "expected arm <kind> [<n>]]")]
+    [InlineData("gpu.faults arm pipeline 0", "expected arm <kind> [<n>]]")]
+    [InlineData("gpu.faults list extra", "expected list]")]
+    [InlineData("gpu.faults wobble", "expected arm <kind> [<n>] | lose [<n>] | remove [<n>] | disarm | list]")]
     [Theory]
-    public void AMalformedFormAnswersItsUsage(string line) {
+    public void AMalformedFormAnswersTheNearestForm(string line, string expected) {
         var (registry, _) = Console();
         var result = registry.Submit(line: line);
 
-        Assert.True(condition: result.IsError);
-        Assert.Contains(expectedSubstring: "remove [<n>]", actualString: result.Output);
+        Assert.True(condition: result.IsGrammar);
+        Assert.EndsWith(expectedEndString: expected, actualString: result.Output);
     }
 }

@@ -32,6 +32,8 @@ namespace Puck.World;
 /// <c>mutate section:audio</c> grant has been revoked has its volume change refused, not applied; on accept,
 /// <c>world.save</c> folds the live gain into the document's <c>audio.masterGain</c>.</remarks>
 internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink link, WorldAudioDirector director, Audio.WorldAudioRenderService device, WorldSeatAuthorityRouter seatRouter) : ICommandModule {
+    private static readonly CommandForms VoiceBabbleForms = CommandForms.Of(verb: "voice.babble", "<identityId> <syllableCount> <utteranceOrdinal>");
+    private static readonly CommandForms WorldVolumeForms = CommandForms.Of(verb: "world.volume", $"<level 0..{Puck.World.Authoring.CreationSoundDocument.MaxLevel}>");
     // The count-based identity-babble debug/test trigger. HUD text instead uses WorldHudSpeechFeed and the
     // sample-frame TextSpeechSource. <identityId> <syllableCount> <utteranceOrdinal>. Echoes its OWN confirmation (never
     // voice.state's bracket text) so the two verbs' occurrences are never conflated by a piped proof.
@@ -49,7 +51,7 @@ internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink li
             value: out var utteranceOrdinal
         )
         ) {
-            return CommandResult.Usage(form: "<identityId> <syllableCount> <utteranceOrdinal>", verb: "voice.babble");
+            return VoiceBabbleForms.Refuse();
         }
 
         var identityId = args[0].ToString();
@@ -162,7 +164,7 @@ internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink li
             (volume < 0f) ||
             (volume > Puck.World.Authoring.CreationSoundDocument.MaxLevel)
         ) {
-            return CommandResult.Usage(form: $"<level 0..{Puck.World.Authoring.CreationSoundDocument.MaxLevel}>", got: ((args.Count == 1) ? args[0].ToString() : null), verb: "world.volume");
+            return WorldVolumeForms.Refuse(got: ((args.Count == 1) ? args[0].ToString() : null));
         }
 
         // Routed, not written: the server checks Mutate over section:audio — the section this lever folds into — and the
@@ -215,7 +217,8 @@ internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink li
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.volume",
-            description: "The master-volume SESSION lever (the render-levers asymmetry): world.volume <0..8> applies the live mix gain NOW and owns it for the session (world.save folds it into audio.masterGain when the world authors an audio section; world.status names 'audio' drift); no argument reads the effective volume. Until first engaged, the document's audio.masterGain flows live. A query/lever — always echoes.",
+            description: $"The master-volume SESSION lever (the render-levers asymmetry): {WorldVolumeForms.Spelling} applies the live mix gain NOW and owns it for the session (world.save folds it into audio.masterGain when the world authors an audio section; world.status names 'audio' drift); no argument reads the effective volume. Until first engaged, the document's audio.masterGain flows live. A query/lever — always echoes.",
+            forms: WorldVolumeForms,
             handler: VolumeHandler
         );
         yield return CommandDefinition.WithWireArgs(
@@ -243,7 +246,8 @@ internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink li
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "voice.babble",
-            description: "Count-based identity-babble debug/test trigger: voice.babble <identityId> <syllableCount> <utteranceOrdinal> schedules one babbled utterance off the delivered identity's voice profile. HUD Text elements use their authored voice and the text-aware source instead. Echoes what it scheduled; read voice.state separately for live status. A lever — always echoes.",
+            description: $"Count-based identity-babble debug/test trigger: {VoiceBabbleForms.Spelling} schedules one babbled utterance off the delivered identity's voice profile. HUD Text elements use their authored voice and the text-aware source instead. Echoes what it scheduled; read voice.state separately for live status. A lever — always echoes.",
+            forms: VoiceBabbleForms,
             handler: BabbleHandler
         );
         yield return CommandDefinition.Verb(

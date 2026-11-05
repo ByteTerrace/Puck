@@ -68,6 +68,7 @@ public static partial class CanaryCommand {
 
         foreach (var backend in warm.Backends) {
             budget.Cancellation.ThrowIfCancellationRequested();
+            AdmitWorld(backend: backend, budget: budget, debugLayers: false, manifest: warm.Manifest);
             budget.Tally.WarmStarted();
 
             var process = CliProcess.RunCaptured(

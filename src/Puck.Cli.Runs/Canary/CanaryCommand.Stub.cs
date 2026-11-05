@@ -171,6 +171,8 @@ public static partial class CanaryCommand {
     // Every stub boot ends the World it launches the way every other leg does: the runner's quit follows the boot's
     // input, and --exit-after-seconds at the leg's own timeout stops a World this runner can no longer kill.
     private static CliProcessResult LaunchStub(IReadOnlyList<string> arguments, string input, string installDirectory, CanaryManifest manifest, CanaryBudget budget) {
+        WorldAdmission.Wait(cancellationToken: budget.Cancellation, step: "canary", worldArguments: arguments);
+
         var result = CliProcess.RunCaptured(
             arguments: [
                 .. arguments,

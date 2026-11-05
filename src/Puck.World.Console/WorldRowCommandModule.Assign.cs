@@ -7,6 +7,7 @@ namespace Puck.World;
 // world.assign: the one row→entity assignment-sequence primitive over the kits and looks tables, submitted through the
 // addressed instance's own link.
 public sealed partial class WorldRowCommandModule {
+    private static readonly CommandForms WorldAssignForms = CommandForms.Of(verb: "world.assign", "kits|looks r1", "cycle <name> [<name>…]");
     // The one r1/cycle assignment-sequence builder both kits and looks reduce to — they differ only in which
     // WorldMutation kind wraps the built WorldRowAssignment and r1's own additive offset (the two sequences must not
     // land on the same index for the same tick, so each table keeps its own authored offset).
@@ -64,10 +65,7 @@ public sealed partial class WorldRowCommandModule {
     }
     private CommandResult HandleAssign(CommandContext context, WireArgs args) {
         if (args.Count < 2) {
-            return CommandResult.Usage(
-                form: "kits|looks r1 | cycle <name> [<name>…]",
-                verb: "world.assign"
-            );
+            return WorldAssignForms.Refuse(args: in args);
         }
 
         if (!authority.TryResolveInstance(

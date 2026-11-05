@@ -4,9 +4,11 @@ using Puck.World.Protocol;
 namespace Puck.World;
 
 internal sealed partial class PlayerCommandModule {
+    private static readonly CommandForms BodyDesignateForms = CommandForms.Of(verb: "body.designate", "<register> <body:n|nearest|at:x,y,z> [body]");
+    private static readonly CommandForms BodyTargetsForms = CommandForms.Of(verb: "body.targets", TargetsForm);
     private CommandResult DesignateHandler(CommandContext context, WireArgs args) {
         if (args.Count is not (2 or 3)) {
-            return CommandResult.Usage(form: "<register> <body:n|nearest|at:x,y,z> [body]", verb: "body.designate");
+            return BodyDesignateForms.Refuse();
         }
 
         var (player, index, error) = ResolveTarget(
@@ -109,7 +111,7 @@ internal sealed partial class PlayerCommandModule {
     }
     private CommandResult TargetsHandler(CommandContext context, WireArgs args) {
         if (args.Count > 1) {
-            return CommandResult.Usage(form: TargetsForm, verb: "body.targets");
+            return BodyTargetsForms.Refuse();
         }
 
         var (player, index, error) = ResolveTarget(

@@ -242,7 +242,10 @@ template deductionRules(seats, moles) {
     for t in filter(range(1, seats), t => t != s) {
       rule $"deduction-whisper-{s}-{t}" {
         when deduction.phase == 2 and $"deductionMail{s}".to == t
-        setState(state: $"deductionHeard{t}", key: expr(deductionLines[$"{t}"] % 4), fromState: $"deductionMailText{s}",
+        setState(
+          state: $"deductionHeard{t}",
+          key: expr(deductionLines[$"{t}"] % 4),
+          fromState: $"deductionMailText{s}",
           fromKey: text
         )
         $"deductionHeardFrom{t}"[deductionLines[$"{t}"] % 4] = s
@@ -261,7 +264,10 @@ template deductionRules(seats, moles) {
           $"deductionMail{s}".to == deductionDenSeat and
           deductionRole[$"{s}"] == 2 and
           deductionRole[$"{t}"] == 2)
-        setState(state: $"deductionDen{t}", key: expr(deductionDenLines[$"{t}"] % 4), fromState: $"deductionMailText{s}",
+        setState(
+          state: $"deductionDen{t}",
+          key: expr(deductionDenLines[$"{t}"] % 4),
+          fromState: $"deductionMailText{s}",
           fromKey: text
         )
         $"deductionDenFrom{t}"[deductionDenLines[$"{t}"] % 4] = s

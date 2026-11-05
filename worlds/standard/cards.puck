@@ -125,8 +125,11 @@ let heartOutline = concat(
 let heartPoints = map(
   heartOutline,
   p => [
-    (p[0] + heartBow["offset"] + clamp(p[1], heartBow["from"], heartBow["to"]) * (heartBow["linear"] +
-      heartBow["quadratic"] * clamp(p[1], heartBow["from"], heartBow["to"]))) * heartAspect
+    (p[0] +
+      heartBow["offset"] +
+      clamp(p[1], heartBow["from"], heartBow["to"]) *
+        (heartBow["linear"] + heartBow["quadratic"] * clamp(p[1], heartBow["from"], heartBow["to"]))) *
+      heartAspect
     p[1]
   ]
 )
@@ -922,17 +925,20 @@ let clubBend = { offset: -0.04, linear: -0.02, quadratic: 0.16 }
 
 // The club in suit units (the same frame the suit paths use: about -0.55..0.55 tall). Each lobe is a disc, shifted
 // by the bow at its height; the heart disc closes the gap between the three lobes.
-let clubLobes = map([
-  { tag: "top", cx: 0, cy: 0.33, r: 0.19 }
-  { tag: "left", cx: -0.18, cy: 0.02, r: 0.19 }
-  { tag: "right", cx: 0.18, cy: 0.02, r: 0.19 }
-  { tag: "heart", cx: 0, cy: 0.12, r: 0.12 }
-], lobe => {
-  tag: lobe["tag"]
-  cx: lobe["cx"] + clubBend["offset"] + lobe["cy"] * (clubBend["linear"] + clubBend["quadratic"] * lobe["cy"])
-  cy: lobe["cy"]
-  r: lobe["r"]
-})
+let clubLobes = map(
+  [
+    { tag: "top", cx: 0, cy: 0.33, r: 0.19 }
+    { tag: "left", cx: -0.18, cy: 0.02, r: 0.19 }
+    { tag: "right", cx: 0.18, cy: 0.02, r: 0.19 }
+    { tag: "heart", cx: 0, cy: 0.12, r: 0.12 }
+  ],
+  lobe => {
+    tag: lobe["tag"]
+    cx: lobe["cx"] + clubBend["offset"] + lobe["cy"] * (clubBend["linear"] + clubBend["quadratic"] * lobe["cy"])
+    cy: lobe["cy"]
+    r: lobe["r"]
+  }
+)
 
 // The club's stem runs from a neck hidden inside the lobes down to a wide, flat foot. Its flanks flare concavely by sag
 // and follow the bow. Each flank's x is quadratic along its length (straight flank + bow + sag), so it is exactly a
@@ -944,8 +950,8 @@ let clubStemSpecs = [
 // Per stem: the bow at the neck, the middle, and the foot.
 let clubStemBows = map(clubStemSpecs, s => {
   top: clubBend["offset"] + s["top"] * (clubBend["linear"] + clubBend["quadratic"] * s["top"])
-  mid: clubBend["offset"] + (s["top"] + s["bottom"]) / 2 * (clubBend["linear"] + clubBend["quadratic"] * ((s["top"] +
-    s["bottom"]) / 2))
+  mid: clubBend["offset"] +
+    (s["top"] + s["bottom"]) / 2 * (clubBend["linear"] + clubBend["quadratic"] * ((s["top"] + s["bottom"]) / 2))
   bottom: clubBend["offset"] + s["bottom"] * (clubBend["linear"] + clubBend["quadratic"] * s["bottom"])
 })
 let clubStems = map(clubStemSpecs, (s, i) => {
@@ -955,9 +961,9 @@ let clubStems = map(clubStemSpecs, (s, i) => {
     {
       end [(clubStemBows[i]["bottom"] + s["foot"]) / clubStemFrame, s["bottom"] / clubStemFrame]
       control [
-        (2 * (clubStemBows[i]["mid"] + (s["neck"] + s["foot"]) / 2 - s["sag"]) - (clubStemBows[i]["top"] +
-          s["neck"] +
-          clubStemBows[i]["bottom"] + s["foot"]) / 2) / clubStemFrame,
+        (2 * (clubStemBows[i]["mid"] + (s["neck"] + s["foot"]) / 2 - s["sag"]) -
+          (clubStemBows[i]["top"] + s["neck"] + clubStemBows[i]["bottom"] + s["foot"]) / 2) /
+          clubStemFrame,
         (s["top"] + s["bottom"]) / 2 / clubStemFrame
       ]
     }
@@ -965,9 +971,9 @@ let clubStems = map(clubStemSpecs, (s, i) => {
     {
       end [(clubStemBows[i]["top"] - s["neck"]) / clubStemFrame, s["top"] / clubStemFrame]
       control [
-        (2 * (clubStemBows[i]["mid"] - (s["neck"] + s["foot"]) / 2 + s["sag"]) - (clubStemBows[i]["top"] -
-          s["neck"] +
-          clubStemBows[i]["bottom"] - s["foot"]) / 2) / clubStemFrame,
+        (2 * (clubStemBows[i]["mid"] - (s["neck"] + s["foot"]) / 2 + s["sag"]) -
+          (clubStemBows[i]["top"] - s["neck"] + clubStemBows[i]["bottom"] - s["foot"]) / 2) /
+          clubStemFrame,
         (s["top"] + s["bottom"]) / 2 / clubStemFrame
       ]
     }
