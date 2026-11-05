@@ -151,7 +151,7 @@ public sealed partial class StateArena {
         foreach (var entry in image.Observations) { WriteReferenceRaw(column: ArenaColumn.Observation, index: ScopePosition(image, ArenaColumn.Observation, entry.Index), value: entry.Value); }
         foreach (var row in image.Rows) {
             if (m_layout[row].IsStored) { Reindex(row, m_layout[row]); }
-            m_rowVersions[row]++; m_rowGenerations[row]++; m_deliveryRows[row] = true;
+            BumpRowVersion(rowOrdinal: row); m_rowGenerations[row]++; m_deliveryRows[row] = true;
         }
     }
 

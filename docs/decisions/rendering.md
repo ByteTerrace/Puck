@@ -1113,6 +1113,24 @@ still blocks, while a missed ray no longer invents a far blocker. This read
 reports `measured=0` and supplies no traced positional-light visibility. It
 estimates unmeasured light rather than painting every far surface black.
 
+**A level answers only in the share it measured.** The chain's first stage
+that answers contributes its share: its weight over the same cage's front
+weight before visibility, clamped to one. The rest comes from the next stage
+over another cage, and only the last stage that answers is normalized to what
+remains; a receiver reads sixteen probe slots, pre-scaled by their stages'
+shares. Each level's table row carries its coverage ramp. The storey level's
+closes on almost any measured hit, since its probes stand in every room and a
+hit its metres-wide taps measured before the receiver is a slab or a wall; the
+error it makes is darkening, which the next stage lights, never another room's
+light. The 32 m level keeps the finest level's tolerant ramp: over open ground
+its taps alias a curved surface's near bulge, and the conservative ramp
+darkened one clear corner in six there. Levels are a table per tier with a spacing per axis: the middle level's
+4 m × 2 m × 4 m cells put a probe plane in every storey 2.4 m or taller,
+which no isotropic coarse level does (an 8 m level had one in every other
+4.5 m storey, and its single corner across a slab lit a whole storey). The
+[far-field memo](../plans/far-field-irradiance.md) holds the measurement and
+the research behind this rule.
+
 **Relocation takes the nearest clear candidate.** An embedded or too-near
 centre first tries an exit from the nearest surface, then quarter-cell grid
 candidates in increasing distance order within half a cell on each axis. Each candidate

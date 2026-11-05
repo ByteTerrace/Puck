@@ -554,19 +554,6 @@ public static partial class WorldDefinitionValidator {
 
         return exception.Message;
     }
-    /// <summary>Gets whether the document declares at least one medium lattice field — the premise a kit authoring
-    /// a <c>Medium</c> hold row requires.</summary>
-    private static bool HasMediumField(WorldDefinition definition) {
-        var fields = definition.FieldRegions.SelectMany(selector: static region => region.Fields);
-
-        foreach (var field in fields) {
-            if (field.Medium) {
-                return true;
-            }
-        }
-
-        return false;
-    }
     private static void ValidateFields(WorldDefinition definition, List<string> errors) {
         ValidateDiscreteState(
             definition: definition,

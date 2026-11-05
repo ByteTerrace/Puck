@@ -328,28 +328,17 @@ public sealed class WorldMediumLawTests {
         Assert.False(condition: dryBody.InMedium);
     }
     [Fact]
-    public void AMediumHoldInADryWorld_RefusesByName_WhereTheSameHoldWithAMediumRowIsAdmitted() {
+    public void AMediumHoldInADryWorldIsAdmitted_SoAnAvatarCarriesItIntoEveryWorldItIsWornIn() {
         var topology = Topology();
         var admitted = BuildMediumHoldDocument(topology: topology);
+        var dry = (admitted with { StateRaw = new WorldStateSection() });
 
         Assert.True(
             condition: WorldDefinitionValidator.TryValidateLocally(
-                definition: admitted,
-                reason: out var admittedReason
+                definition: dry,
+                reason: out var dryReason
             ),
-            userMessage: admittedReason
-        );
-
-        var dry = (admitted with { StateRaw = new WorldStateSection() });
-
-        Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
-            definition: dry,
-            reason: out var dryReason
-        ));
-        Assert.Contains(
-            actualString: dryReason,
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "requires a medium lattice row"
+            userMessage: dryReason
         );
     }
     [Fact]

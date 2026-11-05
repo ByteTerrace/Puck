@@ -58,10 +58,15 @@ public static partial class SdfWorldPackage {
     /// <summary>The irradiance volume, a World-group table of uints: per probe slot its cell key and its sky
     /// visibility and radiance ambient cubes as halves (<c>SdfMeshIrradiance</c> in <c>Puck.SdfVm</c>).</summary>
     public const string MeshIrradiance = "sdfMeshIrradiance";
-    /// <summary>The pass-block value describing the irradiance volume views read: x whether views read it, then the probe
-    /// spacing in metres, as bits, of each of its <see cref="MeshIrradianceLevelCount"/> levels, finest first, zero for
-    /// a level not yet published (<c>uint4</c>).</summary>
+    /// <summary>The pass-block value saying whether views read the irradiance volume, nonzero when they do
+    /// (<c>uint</c>).</summary>
     public const string MeshIrradianceVolume = "meshIrradianceVolume";
+    /// <summary>The pass-block array holding each irradiance level's probe spacing along each axis in metres in xyz,
+    /// finest first, zero for a level not yet published (<c>float4</c> a level).</summary>
+    public const string MeshIrradianceSpacings = "meshIrradianceSpacings";
+    /// <summary>The pass-block array holding each irradiance level's surface-visibility closing ramp, finest first: the
+    /// blocked share it starts closing at in x and its slope in y (<c>float4</c> a level).</summary>
+    public const string MeshIrradianceCoverages = "meshIrradianceCoverages";
     /// <summary>The pass-block array holding each irradiance level's window, finest first: its first cell in xyz and its
     /// probes along each axis in w, packed ten bits each, x lowest (<c>int4</c> a level).</summary>
     public const string MeshIrradianceLevels = "meshIrradianceLevels";

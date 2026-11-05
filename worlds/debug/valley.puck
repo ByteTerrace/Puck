@@ -13,25 +13,11 @@
 //   reserved on the floor; nothing here stands there
 
 import "../standard/terrain"
+import "valley-form"
+import "water-site"
 
 let valleyRock = 0
 let valleyDeck = 1
-
-// Each sector's macro form: its bearing, where the floor plane cuts its main mass, how high that mass rises, the mass's
-// half-extents out from the centre and along the ring, and the seed of its relief.
-let valleySectors = [
-  { name: "north", compass: 0, foot: 230, peak: 380, radial: 280, across: 230, seed: 101 }
-  { name: "north-east", compass: 45, foot: 215, peak: 330, radial: 260, across: 220, seed: 102 }
-  { name: "east", compass: 90, foot: 225, peak: 300, radial: 270, across: 240, seed: 103 }
-  { name: "south-east", compass: 135, foot: 210, peak: 350, radial: 290, across: 220, seed: 104 }
-  { name: "south", compass: 180, foot: 220, peak: 430, radial: 300, across: 240, seed: 105 }
-  { name: "south-west", compass: 225, foot: 215, peak: 360, radial: 280, across: 230, seed: 106 }
-  { name: "west", compass: 270, foot: 220, peak: 300, radial: 260, across: 230, seed: 107 }
-  { name: "north-west", compass: 315, foot: 205, peak: 340, radial: 270, across: 220, seed: 108 }
-]
-
-// The fraction of each main mass's vertical half-extent below the floor plane (terrainMass's sink).
-let valleySink = 0.3
 
 // The overlook: a deck at deckHeight on the south-west sector's inner face, standing out over the floor. The face's
 // distance from the centre at that height follows the main mass's ellipse (terrainMass, exponent 2).
@@ -157,6 +143,9 @@ prototypes {
           sink: valleySink,
           material: valleyRock
         )
+        for basin in filter(valleyBasins, b => b.sector == sector.name) {
+          terrainBasin(label: basin.label, lateral: basin.lateral, radial: basin.radial, y: basin.y, radii: basin.radii)
+        }
         terrainFloorCut(top: (sector.peak + 10))
       }
     }

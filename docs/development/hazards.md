@@ -49,6 +49,7 @@ preferred outcome.
 | Determinism: same document and input, bit-identical state | `puck test --reproduce`; fixed-point `Puck.Maths` types in simulation state | No |
 | The C# and HLSL shader interface: bindings, block layout, strides | One `ShaderInterface` generates both sides; `ShaderInterfaceLayout.Mismatch` refuses a module that disagrees | No |
 | The SDF ISA's C# encoder and HLSL decoder (`SdfProgram.IsaLayout`, the SdfVm README's contract pairs) | Convention | Yes |
+| An exactness-preserving skip in an exact evaluator: a cull, certificate or bound that claims a skipped part could not change the answer (`SdfFieldEvaluator`'s segment hierarchy and relief certificates) | Counterexample tests at the arithmetic edges (overflow, seeds, ties); sampled agreement with a reference evaluator misses them | Yes |
 | [A reference read after its replacement](#a-reference-captured-across-a-replacement) | `STALE001`-`003` | No |
 | GPU fences and resource lifetimes: a buffer retired, reused or resized while a queue still reads it | Review | Yes |
 | Process environment reads and any-address listeners | `ENV001`, `NET001` | No |
@@ -112,16 +113,15 @@ with it. A local taken before the swap names the old instance after it.
   one door: `RuleEvaluator.Deliver`
   (`src/Puck.State.Rules/Evaluation/RuleEvaluator.Effects.cs`) reads the scratch
   the host serves after the commit.
-- `RuleEvaluator.RunFixpoint` takes `arena` before the pass and ends its change
-  window on it after members that can fire a transactional commit
-  (STALE001).
-  Open.
-- `RuleEvaluator.EvaluateOnceCore` enters a fault scope on the scratch, runs an
-  evaluation that can fire a transactional commit, and leaves the scope on the
-  scratch it entered
-  (STALE001): a fault the rest of the evaluation raises lands in the new arena's
-  scratch, outside the scope. Open; step 4 of the
-  [rule-faults plan](../plans/rule-faults.md#the-design) deletes the register.
+- `RuleEvaluator.RunFixpoint` took `arena` before a pass and ended its change
+  window on it after members that can fire a transactional commit. It now ends
+  the window on the arena the host serves after the pass
+  (`RuleEvaluator.EndPassWindow`), and a replaced arena counts as progress.
+- `RuleEvaluator.EvaluateOnce` entered a fault scope on the scratch, ran an
+  evaluation that can fire a transactional commit, and left the scope on the
+  scratch it entered. The scope now covers judging alone
+  (`RuleEvaluator.Judge`), which fires nothing; the firing scopes its own
+  faults before and after its commit.
 
 **Closed by** reading the live object from its owner after the call, or by
 moving the work after the call into a method of its own that reads it there
@@ -136,7 +136,7 @@ moving the work after the call into a method of its own that reads it there
 - `[Replaces(typeof(StateArena))]` on a member that can swap it:
   `WorldServer.AdoptPreparedArena`, `IEffectHost.CommitTransactional`, and the
   members the rule below requires.
-- **STALE001** (warning): a local or parameter of a replaceable type read, on a
+- **STALE001**: a local or parameter of a replaceable type read, on a
   path of the method's control flow graph, after a call that replaces its root,
   with no new value written between. The analyzer follows calls inside one
   compilation on its own. A variable handed to the replacing call is exempt,
@@ -158,8 +158,8 @@ that cannot see `StateArena` (`IFixedStepSimulation.Step` in `Puck.Hosting`,
 `IWorldGrain.ActivateAsync` in `Puck.Actors`) carries
 `[Replaces(typeof(object))]`, which covers every root. Test assemblies are not
 held to STALE001: a test keeps the retired arena on purpose, or drives a host
-whose commit never replaces. STALE001 stays a warning while the findings above
-are open; it turns into an error when they close.
+whose commit never replaces. STALE001 is an error like every other warning
+(`TreatWarningsAsErrors`).
 
 What the rule cannot see: a replacement reached through a delegate, an event,
 reflection or a constructor; a capture held in another object's field; dispatch

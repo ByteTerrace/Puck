@@ -4,7 +4,7 @@ using System.Numerics;
 namespace Puck.SdfVm;
 
 /// <summary>
-/// One corner of the irradiance gather about a receiver, as <see cref="SdfMeshIrradiance.TryGather(Vector3, Vector3, Span{ValueTuple{int, int, int}}, Span{float}, Span{SdfMeshProbeReport})"/>
+/// One corner of the irradiance gather about a receiver, as <see cref="SdfMeshIrradiance.TryGather(Vector3, Vector3, Span{ValueTuple{int, int, int}}, Span{float}, Span{SdfMeshProbeReport}, out SdfMeshProbeSelection)"/>
 /// reports it: the probe's record and the terms of its weight at the receiver.
 /// </summary>
 /// <param name="Cell">The corner's lattice cell.</param>
@@ -25,8 +25,8 @@ namespace Puck.SdfVm;
 /// front of it.</param>
 /// <param name="Visibility">The angular surface visibility of the pushed receiver from the probe, from zero to one.</param>
 /// <param name="Front">Whether the probe lies in front of the receiver's surface.</param>
-/// <param name="Weight">The weight the corner answers with, after facing and depth visibility; zero
-/// where it does not answer.</param>
+/// <param name="Weight">The weight the corner answers with, after facing and depth visibility and scaled by its stage's
+/// share of the answer; zero where it does not answer.</param>
 public readonly record struct SdfMeshProbeReport((int X, int Y, int Z) Cell, Vector3 Position, bool Present = false, bool Invalid = false, Vector3 Offset = default, float Inside = 0f,
     int Passes = 0, float Sky = 0f, float Luminance = 0f, float Trilinear = 0f, float Facing = 0f, float Visibility = 0f, bool Front = false, float Weight = 0f) {
     /// <summary>Describes the corner on one line: its cell and position, then, for a present probe, its offset, inside

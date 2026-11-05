@@ -292,7 +292,7 @@ public static partial class WorldDefinitionValidator {
         return true;
     }
     // A kit's full locomotion tuning: speed, turn, holds, and the shaping table every body integrates under.
-    private static void ValidateMotion(WorldMotion tuning, string path, ISet<string> channelNames, ISet<string> dynamicsNames, IReadOnlyDictionary<string, ActionStateSlot> stateSlots, bool hasMedium, bool hasMoveUpChannel, int simulationRateHz, List<string> errors) {
+    private static void ValidateMotion(WorldMotion tuning, string path, ISet<string> channelNames, ISet<string> dynamicsNames, IReadOnlyDictionary<string, ActionStateSlot> stateSlots, bool hasMoveUpChannel, int simulationRateHz, List<string> errors) {
         if (tuning.Speed is null) {
             errors.Add(item: $"{path}.speed is required.");
         } else {
@@ -330,7 +330,6 @@ public static partial class WorldDefinitionValidator {
         ValidateHolds(
             channelNames: channelNames,
             errors: errors,
-            hasMedium: hasMedium,
             hasMoveUpChannel: hasMoveUpChannel,
             holds: tuning.Holds,
             path: $"{path}.holds",
@@ -493,7 +492,7 @@ public static partial class WorldDefinitionValidator {
     // and the presence of an unconditional row, are checked by the caller (ValidateMotionRow) against the compiled
     // program's kind — the hold list is the only spelling of a vertical channel, so a Motion-kind kit must always
     // author at least one row, including an unconditional one.
-    private static void ValidateHolds(IReadOnlyList<WorldHold>? holds, string path, ISet<string> channelNames, IReadOnlyDictionary<string, ActionStateSlot> stateSlots, bool hasMedium, bool hasMoveUpChannel, List<string> errors) {
+    private static void ValidateHolds(IReadOnlyList<WorldHold>? holds, string path, ISet<string> channelNames, IReadOnlyDictionary<string, ActionStateSlot> stateSlots, bool hasMoveUpChannel, List<string> errors) {
         if (holds is not { Count: > 0 }) {
             return;
         }
@@ -571,9 +570,6 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"{rowPath}.cone is refused for a {hold.Bond} hold — only a surface hold has a face for a cone to admit.");
             }
             if (hold.Bond == BodyHoldBond.Medium) {
-                if (!hasMedium) {
-                    errors.Add(item: $"{rowPath}.bond 'Medium' requires a medium lattice row (state.world[].field.medium) — a medium hold implies a medium to stand in.");
-                }
                 if (hold.Medium is not { } medium) {
                     errors.Add(item: $"{rowPath}.medium is required for a medium hold — the idle drift, the equilibrium offset and the settle rate are its whole law.");
                 } else {
@@ -753,7 +749,7 @@ public static partial class WorldDefinitionValidator {
     // The kit.motion gate: required (a kit with no declared row is a dead kit), coherent with its body motion
     // program's selected operations (program is null when ValidateKits already refused bodyMotionProgram, in which
     // case coherence has nothing sound to check against), and its own fields valid.
-    private static void ValidateMotionRow(WorldMotion? motion, CompiledBodyMotionProgram? program, string path, ISet<string> channelNames, ISet<string> dynamicsNames, IReadOnlyDictionary<string, ActionStateSlot> stateSlots, bool hasMedium, bool hasMoveUpChannel, int simulationRateHz, List<string> errors) {
+    private static void ValidateMotionRow(WorldMotion? motion, CompiledBodyMotionProgram? program, string path, ISet<string> channelNames, ISet<string> dynamicsNames, IReadOnlyDictionary<string, ActionStateSlot> stateSlots, bool hasMoveUpChannel, int simulationRateHz, List<string> errors) {
         if (motion is null) {
             errors.Add(item: $"{path} is required.");
 
@@ -791,7 +787,6 @@ public static partial class WorldDefinitionValidator {
             channelNames: channelNames,
             dynamicsNames: dynamicsNames,
             errors: errors,
-            hasMedium: hasMedium,
             hasMoveUpChannel: hasMoveUpChannel,
             path: path,
             simulationRateHz: simulationRateHz,

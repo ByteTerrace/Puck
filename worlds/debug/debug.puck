@@ -57,6 +57,10 @@ import "machine-debugger"
 import "range"
 import "valley"
 import "lawn"
+// The water: the chain from glacier to aquifer (water.puck) and the pool the river ends in (pool.puck).
+import "water"
+import "pool"
+import "water-scenery"
 import "forest"
 // The time of day: the sun and the sky on one clock (day.puck).
 import "day"
