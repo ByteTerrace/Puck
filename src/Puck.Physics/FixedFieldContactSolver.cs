@@ -312,6 +312,17 @@ public sealed class FixedFieldContactSolver(
             )
         );
     }
+    /// <summary>Reads the field at a point without a surface solve (<see cref="FixedFieldColliderContact.TryRead"/>): a
+    /// signed reading whose sign is exact and whose magnitude is a lower bound on the distance to the surface, the
+    /// material read there and the field's outward direction. What a diagnostic claiming a point lies off the surface
+    /// rests on.</summary>
+    /// <param name="position">The world-space point to read.</param>
+    /// <param name="distance">The signed reading, in metres, negative inside geometry, when the method returns <see langword="true"/>.</param>
+    /// <param name="material">The material id the field reads there, when the method returns <see langword="true"/>.</param>
+    /// <param name="gradient">The unit outward direction there; zero where the field measures none.</param>
+    /// <returns><see langword="false"/> when the field does not answer at the point.</returns>
+    public bool Read(in FixedVector3 position, out FixedQ4816 distance, out int material, out FixedVector3 gradient) =>
+        FixedFieldColliderContact.TryRead(collider: in m_surface, distance: out distance, material: out material, normal: out gradient, point: position);
     /// <inheritdoc/>
     /// <remarks>A contact pushes and may ground the body; an embedded volume is extracted along the direction the solve
     /// measured out of the solid, by its depth plus its reach, and never grounds it. One volume claims the extraction a

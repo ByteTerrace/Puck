@@ -761,7 +761,11 @@ Remaining:
   `FixedFieldColliderContact.TryMeasure`) answers nothing at 36 of 105 points of a
   1 m grid around a lawn flat-crown tree (x 6 to 20, y 0.5 to 6.5, z -27.3 in
   the debug world), and beside a crown it can read the floor 6 m below instead
-  of the crown 0.3 m away. Contact resolution does not read it; the measure's
+  of the crown 0.3 m away. Inside a solid it reports the exit along the
+  gradient, which at a crease of touching solids (a log on the floor) or in
+  overlapping crowns runs through other solids, reading metres deep at a point
+  on a log's end face. Contact resolution and the scene diagnostics do not read it (the
+  diagnostics read `FixedFieldColliderContact.TryRead`); the measure's
   projection and bracketing need a look against the Superellipsoid's
   lower-bound field.
 - [medium] The Superellipsoid's field (`SdfFieldEvaluator`, `mapCore`) is a
