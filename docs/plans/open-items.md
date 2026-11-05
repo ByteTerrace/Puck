@@ -1074,7 +1074,11 @@ worlds in place is rewritten.
 Owner: debug-world content lane (rendering, puck-world, sdf-authoring) · ordinary ·
 Next: what the water as a forcing workload showed
 ([C3 as built](debug-world-composition.md#c3-as-built)); each item is a system
-the water strained, measured, and not yet fixed.
+the water strained, measured, and not yet fixed. The rendering capabilities
+the water lacks (a medium response on the glass pass, flow-driven shading,
+presentation particles, reflections of geometry on glass) are planned in
+[water rendering](water-rendering.md), whose ranked steps W2, W1 and W3 are
+the next lanes here; the items below are the system work beside them.
 
 - [medium] Cold mesh residency still misses the one-minute target. Attribute the
   remaining large water meshes with `puck mesh audit --prototype` (now selects
