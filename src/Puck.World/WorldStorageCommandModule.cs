@@ -34,6 +34,8 @@ internal sealed class WorldStorageCommandModule(WorldOwnedWorlds profiles, IPlay
     private readonly WorldStorageSettings m_settings = settings;
     private readonly WorldStorageSyncHandle m_sync = sync;
     private string m_credential = "not probed";
+    private static readonly CommandForms StoragePushForms = CommandForms.Of(verb: "storage.push", "[<world-id>]");
+    private static readonly CommandForms StoragePullForms = CommandForms.Of(verb: "storage.pull", "[<world-id>]");
 
     private string Describe() {
         var identity = (m_identity.TryResolve(
@@ -144,9 +146,10 @@ internal sealed class WorldStorageCommandModule(WorldOwnedWorlds profiles, IPlay
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "storage.push",
-            description: "Pushes one owned world (storage.push <world-id>) or the whole catalog (no argument) to the per-user cloud container. First contact is create-only; a tracked world pushes with its token, and a moved cloud copy refuses with the remedy. A world whose id cannot address a blob of its own refuses by name instead of pushing (Immediate, up to 15s per blob — a basis chain multiplies this).",
+            description: $"Pushes one owned world, or with no world the whole catalog, to the per-user cloud container: {StoragePushForms.Spelling}. First contact is create-only; a tracked world pushes with its token, and a moved cloud copy refuses with the remedy. A world whose id cannot address a blob of its own refuses by name instead of pushing (Immediate, up to 15s per blob — a basis chain multiplies this).",
+            forms: StoragePushForms,
             handler: (_, args) => ((args.Count > 1)
-            ? CommandResult.Usage(form: "[<world-id>]", got: args[1].ToString(), verb: "storage.push")
+            ? StoragePushForms.Refuse(got: args[1].ToString())
             : Run(
                     id: ((args.Count == 1)
                 ? args[0].ToString()
@@ -158,9 +161,10 @@ internal sealed class WorldStorageCommandModule(WorldOwnedWorlds profiles, IPlay
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "storage.pull",
-            description: "Pulls one owned world (storage.pull <world-id>) or every local/tracked/cloud-discovered one (no argument) from the per-user cloud container, validating each through the boot loader's gate before adopting it. A whole-catalog pull also lists the cloud puck/worlds/ namespace and adopts any id it does not already know; a cloud object whose name no owned-world id can address refuses by name instead of being silently skipped. A pulled copy replaces the owned identity in place, so every seat bound to it follows; while a tape records, every adoption refuses by name (PullWhileRecording), because a tape never carries an owned document (Immediate, up to 15s per blob — a basis chain multiplies this).",
+            forms: StoragePullForms,
+            description: $"Pulls one owned world, or with no world every local/tracked/cloud-discovered one, from the per-user cloud container: {StoragePullForms.Spelling}. Each is validated through the boot loader's gate before adopting it. A whole-catalog pull also lists the cloud puck/worlds/ namespace and adopts any id it does not already know; a cloud object whose name no owned-world id can address refuses by name instead of being silently skipped. A pulled copy replaces the owned identity in place, so every seat bound to it follows; while a tape records, every adoption refuses by name (PullWhileRecording), because a tape never carries an owned document (Immediate, up to 15s per blob — a basis chain multiplies this).",
             handler: (_, args) => ((args.Count > 1)
-            ? CommandResult.Usage(form: "[<world-id>]", got: args[1].ToString(), verb: "storage.pull")
+            ? StoragePullForms.Refuse(got: args[1].ToString())
             : Run(
                     id: ((args.Count == 1)
                 ? args[0].ToString()

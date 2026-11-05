@@ -12,18 +12,26 @@ internal sealed class ForgeCommandModule(WorldServer server, IServerLink link, I
     private readonly Dictionary<Principal, CartridgeDraft> m_drafts = [];
     private readonly IEnumerable<ICartridgeCompiler>? m_compilers = compilers;
 
-    private CommandDefinition Command(string name, string grammar, string detail) => CommandDefinition.WithWireArgs(
-        bindability: CommandBindability.Unbindable,
-        name: ("forge." + name),
-        description: $"forge.{name} {grammar} — {detail} Drafts belong to the acting local console or seat; file paths are explicit and relative to the host working directory.",
-        handler: (context, args) => Execute(
-            args: args,
-            context: context,
-            grammar: grammar,
-            name: name
-        )
-    );
-    private CommandResult Execute(string name, string grammar, CommandContext context, WireArgs args) {
+    private CommandDefinition Command(string name, string grammar, string detail) {
+        var verb = ("forge." + name);
+        var forms = ((grammar.Length == 0)
+            ? null
+            : CommandForms.Of(verb: verb, grammar));
+
+        return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: verb,
+            description: $"{(forms?.Spelling ?? verb)} — {detail} Drafts belong to the acting local console or seat; file paths are explicit and relative to the host working directory.",
+            forms: forms,
+            handler: (context, args) => Execute(
+                args: args,
+                context: context,
+                forms: forms,
+                name: name
+            )
+        );
+    }
+    private CommandResult Execute(string name, CommandForms? forms, CommandContext context, WireArgs args) {
         var principal = context.Principal;
 
         if (principal.Kind is not (PrincipalKind.Console or PrincipalKind.Seat)) {
@@ -37,7 +45,9 @@ internal sealed class ForgeCommandModule(WorldServer server, IServerLink link, I
                 ((name is "undo" or "check" or "build") && (args.Count != 0)) ||
                 ((name is "show" or "remove") && (args.Count > 1))
             ) {
-                return CommandResult.Usage(form: grammar, verb: $"forge.{name}");
+                return ((forms is not null)
+                    ? forms.Refuse(args: in args)
+                    : (CommandResult.RequireNoArguments(args: in args, verb: $"forge.{name}") ?? CommandResult.None));
             }
             if (name == "new") {
                 m_drafts[key: principal] = new CartridgeDraft(document: CartridgeDocuments.Create(

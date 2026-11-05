@@ -6,9 +6,11 @@ using Puck.World.Protocol;
 namespace Puck.World;
 
 internal sealed partial class PlayerCommandModule {
+    private static readonly CommandForms BodyDisengageForms = CommandForms.Of(verb: "body.disengage", DisengageForm);
+    private static readonly CommandForms BodyEngageForms = CommandForms.Of(verb: "body.engage", EngageForm);
     private CommandResult DisengageHandler(CommandContext context, WireArgs args) {
         if (args.Count > 1) {
-            return CommandResult.Usage(form: DisengageForm, verb: "body.disengage");
+            return BodyDisengageForms.Refuse();
         }
 
         var (player, index, error) = ResolveTarget(
@@ -71,7 +73,7 @@ internal sealed partial class PlayerCommandModule {
     }
     private CommandResult EngageHandler(CommandContext context, WireArgs args) {
         if (args.Count is (< 1 or > 3)) {
-            return CommandResult.Usage(form: EngageForm, verb: "body.engage");
+            return BodyEngageForms.Refuse();
         }
 
         // capture:on|off, when present, is ALWAYS the LAST token — this keeps the target and the (optional) body

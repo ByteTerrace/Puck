@@ -18,10 +18,12 @@ namespace Puck.World;
 /// </summary>
 internal sealed class ProbeCommandModule(Func<WorldProbes> probes) : ICommandModule {
     private readonly Func<WorldProbes> m_probes = probes;
+    private static readonly CommandForms ProbeRecordForms = CommandForms.Of(verb: "probe.record", "<probe>[$<seat>] <path> <seconds>");
+    private static readonly CommandForms ProbeSetForms = CommandForms.Of(verb: "probe.set", "<probe>[$<seat>] <field> <value>");
 
     private CommandResult RecordHandler(CommandContext context, WireArgs args) {
         if (args.Count != 3) {
-            return CommandResult.Usage(form: "<probe>[$<seat>] <path> <seconds>", verb: "probe.record");
+            return ProbeRecordForms.Refuse();
         }
 
         if (!args.TryFloat(
@@ -47,7 +49,7 @@ internal sealed class ProbeCommandModule(Func<WorldProbes> probes) : ICommandMod
     }
     private CommandResult SetHandler(CommandContext context, WireArgs args) {
         if (args.Count != 3) {
-            return CommandResult.Usage(form: "<probe>[$<seat>] <field> <value>", verb: "probe.set");
+            return ProbeSetForms.Refuse();
         }
 
         if (!args.TryFloat(
@@ -101,13 +103,15 @@ internal sealed class ProbeCommandModule(Func<WorldProbes> probes) : ICommandMod
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "probe.record",
-            description: "Arms a live recording of one declared probe instance to a puck.probe.track.v1 document: probe.record <probe>[$<seat>] <path> <seconds> — every fresh reading the instance publishes over the window is captured (serviced once per host frame, so this only progresses while the world is running windowed); the document writes once the window elapses and completion narrates on stderr with the sample count. The recorded document plugs into a track-input probe (probes[].track) in place of a live device — the hardware-free proof leg. The $<seat> suffix names one instance of a seat-relative probe (required — omitting it is ambiguous and refused, naming the live instances) or, for a single-instance probe, is optional. Errors on an unknown probe, an unresolved or ambiguous instance, a non-positive or non-numeric seconds, an already-armed recording, or an unwritable path.",
+            description: $"Arms a live recording of one declared probe instance to a puck.probe.track.v1 document: {ProbeRecordForms.Spelling} — every fresh reading the instance publishes over the window is captured (serviced once per host frame, so this only progresses while the world is running windowed); the document writes once the window elapses and completion narrates on stderr with the sample count. The recorded document plugs into a track-input probe (probes[].track) in place of a live device — the hardware-free proof leg. The $<seat> suffix names one instance of a seat-relative probe (required — omitting it is ambiguous and refused, naming the live instances) or, for a single-instance probe, is optional. Errors on an unknown probe, an unresolved or ambiguous instance, a non-positive or non-numeric seconds, an already-armed recording, or an unwritable path.",
+            forms: ProbeRecordForms,
             handler: RecordHandler
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "probe.set",
-            description: "Patches one float config field of a declared probe's kind live: probe.set <probe>[$<seat>] <field> <value> — the same constants write a probe-target parameter binding performs, applied immediately to the running kernel(s). Bound only by the field's own declared range, not any binding's authored one; a parameter binding targeting the same field overwrites this write on its own next changed reading. With no $<seat> suffix, a single-instance probe's one instance is written; a seat-relative probe's every live instance is written. With a suffix, only that one instance. Errors on an unknown probe, an unresolved instance, a field that is not a declared float config field of the probe's kind, or a value outside the field's declared range.",
+            description: $"Patches one float config field of a declared probe's kind live: {ProbeSetForms.Spelling} — the same constants write a probe-target parameter binding performs, applied immediately to the running kernel(s). Bound only by the field's own declared range, not any binding's authored one; a parameter binding targeting the same field overwrites this write on its own next changed reading. With no $<seat> suffix, a single-instance probe's one instance is written; a seat-relative probe's every live instance is written. With a suffix, only that one instance. Errors on an unknown probe, an unresolved instance, a field that is not a declared float config field of the probe's kind, or a value outside the field's declared range.",
+            forms: ProbeSetForms,
             handler: SetHandler
         );
     }

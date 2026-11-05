@@ -8,6 +8,7 @@ namespace Puck.World;
 /// <param name="comparison">The held frames and display controls.</param>
 /// <param name="capture">The ordinary capture and result-reporting seam.</param>
 public sealed class WorldCompareCommandModule(WorldFrameComparison comparison, WorldCompareCapture capture) : ICommandModule {
+    private static readonly CommandForms WorldCompareForms = CommandForms.Of(verb: "world.compare", "hold|wipe [position]|split|diff|off");
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
@@ -15,7 +16,8 @@ public sealed class WorldCompareCommandModule(WorldFrameComparison comparison, W
             bindability: CommandBindability.Bindable,
             routing: CommandRouting.Immediate,
             valueKind: CommandValueKind.Axis1D,
-            description: "Holds and compares the acting seat's displayed frame: world.compare hold|wipe [position]|split|diff|off. Wipe position is in 0..1 and defaults to the previous position (initially 0.5). A bound Axis1D value sets the wipe position without a capture. A typed hold or mode change captures through the ordinary live-root capture gate and reports changed-pixels at the shared two-code threshold. A text session waits for that capture before its next line. Off releases comparison GPU work and keeps the held CPU image for reuse. Bare, reports the latest comparison.",
+            description: $"Holds and compares the acting seat's displayed frame: {WorldCompareForms.Spelling}. Wipe position is in 0..1 and defaults to the previous position (initially 0.5). A bound Axis1D value sets the wipe position without a capture. A typed hold or mode change captures through the ordinary live-root capture gate and reports changed-pixels at the shared two-code threshold. A text session waits for that capture before its next line. Off releases comparison GPU work and keeps the held CPU image for reuse. Bare, reports the latest comparison.",
+            forms: WorldCompareForms,
             handler: (context, args) => {
                 var slot = context.Slot;
 
@@ -39,7 +41,7 @@ public sealed class WorldCompareCommandModule(WorldFrameComparison comparison, W
                 };
 
                 if ((args.Count > 2) || ((args.Count == 2) && (mode != WorldCompareMode.Wipe)) || (!hold && !Enum.IsDefined(value: mode))) {
-                    return CommandResult.Usage(form: "hold|wipe [position]|split|diff|off", verb: "world.compare");
+                    return WorldCompareForms.Refuse();
                 }
                 float? wipe = null;
 

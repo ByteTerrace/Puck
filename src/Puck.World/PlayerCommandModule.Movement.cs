@@ -8,6 +8,14 @@ using Puck.World.Server;
 namespace Puck.World;
 
 internal sealed partial class PlayerCommandModule {
+    private static readonly CommandForms BodyFlyForms = CommandForms.Of(verb: "body.fly", FlyForm);
+    private static readonly CommandForms BodyMotionForms = CommandForms.Of(verb: "body.motion", "[<program>] [body]");
+    private static readonly CommandForms BodyPoseForms = CommandForms.Of(verb: "body.pose", PoseForm);
+    private static readonly CommandForms BodyReconcileForms = CommandForms.Of(verb: "body.reconcile", ReconcileForm);
+    private static readonly CommandForms BodyImpulseForms = CommandForms.Of(verb: "body.impulse", "<x> <y> <z> [body]");
+    private static readonly CommandForms BodyCarryForms = CommandForms.Of(verb: "body.carry", "<carrier> <target>");
+    private static readonly CommandForms BodyStopForms = CommandForms.Of(verb: "body.stop", StopForm);
+    private static readonly CommandForms BodyWhereForms = CommandForms.Of(verb: "body.where", WhereForm);
     // The body.reconcile smoothing window: the default when [seconds] is omitted, and the clamp a supplied value is
     // held to.
     private const float DefaultReconcileSeconds = 0.25f;
@@ -85,7 +93,7 @@ internal sealed partial class PlayerCommandModule {
         }
 
         if (instanceTarget.EffectiveCount is not (7 or 8)) {
-            return CommandResult.Usage(form: FlyForm, verb: "body.fly");
+            return BodyFlyForms.Refuse();
         }
 
         if (!TryParseFlySegment(
@@ -210,9 +218,8 @@ internal sealed partial class PlayerCommandModule {
 
         var (player, index, error) = ResolveModeTarget(
             args: in args,
-            choices: "<program>",
             hasMode: hasMode,
-            verb: "body.motion"
+            forms: BodyMotionForms
         );
 
         if (error is { } modeError) {
@@ -435,7 +442,7 @@ internal sealed partial class PlayerCommandModule {
         }
 
         if (instanceTarget.EffectiveCount is not (6 or 7)) {
-            return CommandResult.Usage(form: PoseForm, verb: "body.pose");
+            return BodyPoseForms.Refuse();
         }
 
         // Follow the identical live route body.where/body.fly already use before falling back to the boot
@@ -564,7 +571,7 @@ internal sealed partial class PlayerCommandModule {
     // always echoes.
     private CommandResult ReconcileHandler(CommandContext context, WireArgs args) {
         if (args.Count is not (3 or 4 or 5)) {
-            return CommandResult.Usage(form: ReconcileForm, verb: "body.reconcile");
+            return BodyReconcileForms.Refuse();
         }
 
         // Layout: <x> <z> <yawDegrees> [seconds] [body]. The trailing body index is the LAST token (as with every
@@ -644,10 +651,7 @@ internal sealed partial class PlayerCommandModule {
             values: out var impulse
         )
         ) {
-            return CommandResult.Usage(
-                form: "<x> <y> <z> [body]",
-                verb: "body.impulse"
-            );
+            return BodyImpulseForms.Refuse();
         }
 
         var (player, index, error) = ResolveTarget(
@@ -688,10 +692,7 @@ internal sealed partial class PlayerCommandModule {
     // single-body verbs read a bare 0.
     private CommandResult CarryHandler(CommandContext context, WireArgs args) {
         if (args.Count != 2) {
-            return CommandResult.Usage(
-                form: "<carrier> <target>",
-                verb: "body.carry"
-            );
+            return BodyCarryForms.Refuse();
         }
 
         var (carrier, carrierIndex, carrierError) = ResolveTarget(
@@ -795,7 +796,7 @@ internal sealed partial class PlayerCommandModule {
         }
 
         if (instanceTarget.EffectiveCount > 1) {
-            return CommandResult.Usage(form: StopForm, verb: "body.stop");
+            return BodyStopForms.Refuse();
         }
 
         if (!WorldArgs.TryParseIndex(
@@ -1081,7 +1082,7 @@ internal sealed partial class PlayerCommandModule {
         }
 
         if (instanceTarget.EffectiveCount > 1) {
-            return CommandResult.Usage(form: WhereForm, verb: "body.where");
+            return BodyWhereForms.Refuse();
         }
 
         if (

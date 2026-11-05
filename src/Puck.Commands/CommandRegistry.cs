@@ -65,9 +65,9 @@ public sealed partial class CommandRegistry {
     private const int MaxWireTokens = 64;
     private const string WireAckCommandName = "wire.ack";
     private const string WireErrorsCommandName = "wire.errors";
-    private const string WireAckForm = "[on|quiet]";
-    private const string WireErrorsForm = "[reset]";
-    private const string HelpForm = "[--full|--names] [<prefix>]";
+    private static readonly CommandForms WireAckForms = CommandForms.Of(verb: WireAckCommandName, "[on|quiet]");
+    private static readonly CommandForms WireErrorsForms = CommandForms.Of(verb: WireErrorsCommandName, "[reset]");
+    private static readonly CommandForms HelpForms = CommandForms.Of(verb: HelpCommandName, "[--full|--names] [<prefix>]");
 
     // The span-keyed alternate view over m_byName, so RoutesToSimulation classifies a line's verb token without
     // materializing it. Built once at construction, after registration completes.
@@ -612,7 +612,7 @@ public sealed partial class CommandRegistry {
         }
 
         if (args.Count > 1) {
-            return CommandResult.Usage(form: WireAckForm, got: args[1].ToString(), verb: WireAckCommandName);
+            return WireAckForms.Refuse(got: args[1].ToString());
         }
 
         // Case-insensitively, through WireArgs.Is — every module verb reads its mode words that way, and a built-in
@@ -635,7 +635,7 @@ public sealed partial class CommandRegistry {
             return new CommandResult(Output: "[wire.ack: quiet]");
         }
 
-        return CommandResult.Usage(form: WireAckForm, got: args[0].ToString(), verb: WireAckCommandName);
+        return WireAckForms.Refuse(got: args[0].ToString());
     }
     /// <summary>Reports (and optionally clears) the refused-submission count for the built-in <c>wire.errors</c> verb.
     /// The count is over the lines the CALLER submitted — see <see cref="Submit"/>'s remarks for what a macro verb's
@@ -645,7 +645,7 @@ public sealed partial class CommandRegistry {
     /// <returns>A result echoing the count, or an <see cref="CommandResult.IsError"/> result for a bad argument.</returns>
     private CommandResult ApplyWireErrors(in WireArgs args) {
         if (args.Count > 1) {
-            return CommandResult.Usage(form: WireErrorsForm, got: args[1].ToString(), verb: WireErrorsCommandName);
+            return WireErrorsForms.Refuse(got: args[1].ToString());
         }
 
         var reset = args.Is(
@@ -657,7 +657,7 @@ public sealed partial class CommandRegistry {
             (args.Count == 1) &&
             !reset
         ) {
-            return CommandResult.Usage(form: WireErrorsForm, got: args[0].ToString(), verb: WireErrorsCommandName);
+            return WireErrorsForms.Refuse(got: args[0].ToString());
         }
 
         // Read the counts BEFORE `reset` zeroes them, and do not let this verb's own report count as a rejection.
@@ -687,26 +687,30 @@ public sealed partial class CommandRegistry {
     // every other unbindable verb, with a message about bindability rather than "unknown command".
     private IEnumerable<CommandDefinition> BuiltInCommands() {
         yield return CommandDefinition.WithWireArgs(
+            forms: HelpForms,
             name: HelpCommandName,
-            description: "Lists the available commands: help " + HelpForm + " — bare `help` prints the registered verb names, one per line, this registry's own built-ins included, ordinal-ordered by name; generated commands marked prefix-only appear only with a prefix; `<prefix>` keeps the verbs whose names equal it or start with it, ignoring case (help world.state, help player.), as `name - synopsis` lines (the first sentence, at most 200 characters, ending in ` ...` when words were left out) unless `--names` is given; `--full` prints the whole `name - description` for every verb (or for `<prefix>`).",
+            description: "Lists the available commands: " + HelpForms.Spelling + " — bare `help` prints the registered verb names, one per line, this registry's own built-ins included, ordinal-ordered by name; generated commands marked prefix-only appear only with a prefix; `<prefix>` keeps the verbs whose names equal it or start with it, ignoring case (help world.state, help player.), as `name - synopsis` lines (the first sentence, at most 200 characters, ending in ` ...` when words were left out) unless `--names` is given; `--full` prints the whole `name - description` for every verb (or for `<prefix>`).",
             handler: (context, args) => Help(args: in args, caller: context.Principal, slot: context.Slot),
             bindability: CommandBindability.Unbindable
         );
         yield return CommandDefinition.WithWireArgs(
+            forms: WireAckForms,
             name: WireAckCommandName,
-            description: "Sets or reports the acknowledgement mode for accepted commands: wire.ack " + WireAckForm + " — `on` (default) echoes every accepted command; `quiet` drops the bare success acknowledgements of side-effecting verbs, while failures and any verb that answers with data still echo; no argument reports the current mode.",
+            description: "Sets or reports the acknowledgement mode for accepted commands: " + WireAckForms.Spelling + " — `on` (default) echoes every accepted command; `quiet` drops the bare success acknowledgements of side-effecting verbs, while failures and any verb that answers with data still echo; no argument reports the current mode.",
             handler: (_, args) => ApplyWireAck(args: in args),
             bindability: CommandBindability.Unbindable
         );
         yield return CommandDefinition.WithWireArgs(
+            forms: WireErrorsForms,
             name: WireErrorsCommandName,
-            description: "Reports the number of submitted lines this session REFUSED — an unknown verb, a parse error, a handler's failure result, or a refusal raised after the line was accepted: wire.errors " + WireErrorsForm + " — no argument reports the running count; `reset` reports it and zeroes the counter. It is the one number that says whether any submitted line silently no-opped. It counts the lines YOU submitted: a verb that submits lines of its own contributes one refusal when it reports the failure back, and none when it swallows it. A command observer that threw while being told about a dispatch is a broken reporting surface rather than a refused line, so it is reported as a separate trailing `| <n> observer faults` segment, and only when there have been some.",
+            description: "Reports the number of submitted lines this session REFUSED — an unknown verb, a parse error, a handler's failure result, or a refusal raised after the line was accepted: " + WireErrorsForms.Spelling + " — no argument reports the running count; `reset` reports it and zeroes the counter. It is the one number that says whether any submitted line silently no-opped. It counts the lines YOU submitted: a verb that submits lines of its own contributes one refusal when it reports the failure back, and none when it swallows it. A command observer that threw while being told about a dispatch is a broken reporting surface rather than a refused line, so it is reported as a separate trailing `| <n> observer faults` segment, and only when there have been some.",
             handler: (_, args) => ApplyWireErrors(args: in args),
             bindability: CommandBindability.Unbindable
         );
         yield return CommandDefinition.WithWireArgs(
+            forms: RunForms,
             name: RunCommandName,
-            description: "Runs a console command the world document authors (its `commands` section): run <command> [args…], the same as typing <command> [args…]. An authored command submits its lines in order, the arguments substituted, under the caller's own principal and session policy, on the simulation tick its line applies on; the first refused line stops it and is reported. help lists the world's authored commands beside the engine's verbs.",
+            description: "Runs a console command the world document authors (its `commands` section): " + RunForms.Spelling + ", the same as typing <command> [args…]. An authored command submits its lines in order, the arguments substituted, under the caller's own principal and session policy, on the simulation tick its line applies on; the first refused line stops it and is reported. help lists the world's authored commands beside the engine's verbs.",
             handler: RunAuthored,
             bindability: CommandBindability.Bindable,
             routing: CommandRouting.Simulation
@@ -1692,11 +1696,7 @@ public sealed partial class CommandRegistry {
             } else if ((prefix is null) && !args[index].StartsWith(value: '-')) {
                 prefix = args[index].ToString();
             } else {
-                return CommandResult.Usage(
-                    form: HelpForm,
-                    got: args[index].ToString(),
-                    verb: HelpCommandName
-                );
+                return HelpForms.Refuse(got: args[index].ToString());
             }
         }
 
@@ -1825,7 +1825,7 @@ public sealed partial class CommandRegistry {
         ArgumentNullException.ThrowIfNull(name);
 
         return ((m_idByName.TryGetValue(key: name, value: out var id) && !m_definitionById[id].BindingOnly)
-            ? CommandUsage.Parse(description: m_definitionById[id].Description, verb: m_definitionById[id].Name)
+            ? (m_definitionById[id].Forms?.Usages ?? CommandUsage.Parse(description: m_definitionById[id].Description, verb: m_definitionById[id].Name))
             : []);
     }
     /// <summary>Gets the declared facts for a command name or alias — the affordance-vocabulary lookup

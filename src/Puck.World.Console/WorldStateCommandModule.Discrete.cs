@@ -7,6 +7,11 @@ using Puck.World.Server;
 namespace Puck.World;
 
 public sealed partial class WorldStateCommandModule {
+    private static readonly CommandForms WorldTopologyForms = CommandForms.Of(verb: "world.topology", "<topology> [<cell>]");
+    private static readonly CommandForms WorldObserveForms = CommandForms.Of(verb: "world.observe", "<principal>");
+    private static readonly CommandForms WorldMatchForms = CommandForms.Of(verb: "world.match", "<pattern> <row> [<attribute>]", "<pattern> <board-row> <origin-cell> <direction|any>");
+    private static readonly CommandForms WorldStateTransformForms = CommandForms.Of(verb: "world.state.transform", "<transform-json>");
+    private static readonly CommandForms WorldStateActForms = CommandForms.Of(verb: "world.state.act", "<phase-row> <sequence> <transform-json>");
     private IEnumerable<CommandDefinition> DiscreteCommands() {
         yield return CommandDefinition.Verb(
             name: "world.state.observe",
@@ -39,7 +44,8 @@ public sealed partial class WorldStateCommandModule {
         yield return CommandDefinition.WithWireArgs(
             name: "world.state.transform",
             bindability: CommandBindability.Unbindable,
-            description: "Applies one atomic state transform: world.state.transform <transform-json>. Checks edit authority over every touched row.",
+            description: $"Applies one atomic state transform: {WorldStateTransformForms.Spelling}. Checks edit authority over every touched row.",
+            forms: WorldStateTransformForms,
             routing: CommandRouting.Simulation,
             handler: (context, args) => SubmitTransform(
                 context,
@@ -50,7 +56,8 @@ public sealed partial class WorldStateCommandModule {
         yield return CommandDefinition.WithWireArgs(
             name: "world.state.act",
             bindability: CommandBindability.Unbindable,
-            description: "Submits a phase-guarded state operation: world.state.act <phase-row> <sequence> <transform-json>. Refuses stale, ineligible, ready or expired actions.",
+            description: $"Submits a phase-guarded state operation: {WorldStateActForms.Spelling}. Refuses stale, ineligible, ready or expired actions.",
+            forms: WorldStateActForms,
             routing: CommandRouting.Simulation,
             handler: (context, args) => SubmitTransform(
                 context,
@@ -146,14 +153,12 @@ public sealed partial class WorldStateCommandModule {
         yield return CommandDefinition.WithWireArgs(
             name: "world.topology",
             bindability: CommandBindability.Unbindable,
-            description: "Lists a discrete topology's point-group elements, and with a cell key, that cell's image under each: world.topology <topology> [<cell>].",
+            description: $"Lists a discrete topology's point-group elements, and with a cell key, that cell's image under each: {WorldTopologyForms.Spelling}.",
+            forms: WorldTopologyForms,
             routing: CommandRouting.Immediate,
             handler: (context, args) => {
                 if (args.Count is < 1 or > 2) {
-                    return CommandResult.Usage(
-                        form: "<topology> [<cell>]",
-                        verb: "world.topology"
-                    );
+                    return WorldTopologyForms.Refuse();
                 }
                 if (!authority.TryResolveServer(
                     context: context,
@@ -174,14 +179,12 @@ public sealed partial class WorldStateCommandModule {
         yield return CommandDefinition.WithWireArgs(
             name: "world.observe",
             bindability: CommandBindability.Unbindable,
-            description: "Composes the literal state observations an EXPLICITLY NAMED principal would see — the read-back side of a hidden-hand table, for inspecting another seat's disclosure without submitting as it: world.observe <principal>. Same token grammar as world.grant (PrincipalTokens.TryParse). Unlike world.state.observe (which reads the CALLER's own stamped identity), this composes for the named principal directly through WorldStateDisclosure.Compose, the same trusted-authority read world.why/world.grants already use — a console/authority tool, not a wire capability check.",
+            description: $"Composes the literal state observations an EXPLICITLY NAMED principal would see — the read-back side of a hidden-hand table, for inspecting another seat's disclosure without submitting as it: {WorldObserveForms.Spelling}. Same token grammar as world.grant (PrincipalTokens.TryParse). Unlike world.state.observe (which reads the CALLER's own stamped identity), this composes for the named principal directly through WorldStateDisclosure.Compose, the same trusted-authority read world.why/world.grants already use — a console/authority tool, not a wire capability check.",
+            forms: WorldObserveForms,
             routing: CommandRouting.Immediate,
             handler: (context, args) => {
                 if (args.Count != 1) {
-                    return CommandResult.Usage(
-                        form: "<principal>",
-                        verb: "world.observe"
-                    );
+                    return WorldObserveForms.Refuse();
                 }
                 if (!authority.TryResolveServer(
                     context: context,
@@ -221,14 +224,12 @@ public sealed partial class WorldStateCommandModule {
         yield return CommandDefinition.WithWireArgs(
             name: "world.match",
             bindability: CommandBindability.Unbindable,
-            description: "Walks one word through a pattern and narrates it: world.match <pattern> <row> [<attribute>] for a keyed row or zone, world.match <pattern> <board-row> <origin-cell> <direction|any> for a board.",
+            description: $"Walks one word through a pattern and narrates it: {WorldMatchForms.Spelling} (the first form for a keyed row or zone, the second for a board).",
+            forms: WorldMatchForms,
             routing: CommandRouting.Immediate,
             handler: (context, args) => {
                 if (args.Count is < 2 or > 4) {
-                    return CommandResult.Usage(
-                        form: "<pattern> <row> [<attribute>] | <pattern> <board-row> <origin-cell> <direction|any>",
-                        verb: "world.match"
-                    );
+                    return WorldMatchForms.Refuse(args: in args);
                 }
                 if (!authority.TryResolveReadView(
                     context: context,
@@ -278,22 +279,18 @@ public sealed partial class WorldStateCommandModule {
         );
     }
     private CommandResult SubmitTransform(CommandContext context, WireArgs args, bool guarded) {
-        var verb = (guarded
-            ? "world.state.act"
-            : "world.state.transform"
+        var forms = (guarded
+            ? WorldStateActForms
+            : WorldStateTransformForms
         );
+        var verb = forms.Verb;
         var prefix = (guarded
             ? 3
             : 1
         );
 
         if (args.Count < prefix) {
-            return CommandResult.Usage(
-                form: (guarded
-                ? "<phase-row> <sequence> <transform-json>"
-                : "<transform-json>"),
-                verb: verb
-            );
+            return forms.Refuse();
         }
         PhaseGuard? guard = null;
 

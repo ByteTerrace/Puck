@@ -4,7 +4,7 @@ using Puck.World.Client;
 namespace Puck.World;
 
 internal sealed partial class WorldViewCommandModule {
-    private const string IsolateForm = "[toggle] <prototype> <shape-name>... | off";
+    private static readonly CommandForms ViewIsolateForms = CommandForms.Of(verb: "view.isolate", "[toggle] <prototype> <shape-name...>", "off");
 
     // Sets, clears or echoes the stamp pool's shape isolation. Names resolve against the live document so a refusal
     // names what is missing; the emitters resolve them again at each rebuild against the document they then emit.
@@ -31,7 +31,7 @@ internal sealed partial class WorldViewCommandModule {
         var first = (toggle ? 1 : 0);
 
         if ((args.Count - first) < 2) {
-            return CommandResult.Usage(form: IsolateForm, verb: "view.isolate");
+            return ViewIsolateForms.Refuse(args: in args);
         }
 
         var prototype = args[first].ToString();

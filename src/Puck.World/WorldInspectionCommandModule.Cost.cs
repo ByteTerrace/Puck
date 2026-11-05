@@ -8,9 +8,10 @@ using Puck.World.Client;
 namespace Puck.World;
 
 internal sealed partial class WorldInspectionCommandModule {
+    private static readonly CommandForms WorldCostForms = CommandForms.Of(verb: "world.cost", "[<placement>]", "top [<n>]", "sky");
     private CommandResult Cost(CommandContext context, WireArgs args) {
         if ((args.Count > 0) && args.Is(index: 0, value: "sky")) {
-            return ((args.Count == 1) ? SkyCost() : CommandResult.Usage(form: "sky", verb: "world.cost"));
+            return ((args.Count == 1) ? SkyCost() : WorldCostForms.Refuse(args: in args));
         }
         var residency = ((inspector is null) ? probe?.Residency : inspector.ResidencyOf(slot: context.Slot));
 
@@ -22,7 +23,7 @@ internal sealed partial class WorldInspectionCommandModule {
 
         if ((args.Count > (top ? 2 : 1)) || (top && (args.Count == 2) &&
             (!int.TryParse(s: args[1].ToString(), provider: CultureInfo.InvariantCulture, result: out count) || (count < 1)))) {
-            return CommandResult.Usage(form: "[<placement>|top [<n>]]", verb: "world.cost");
+            return WorldCostForms.Refuse(args: in args);
         }
         var pointer = ((cursor?.Status.Slot == context.Slot) ? cursor.Pick : null);
         var placement = (((args.Count == 1) && !top) ? args[0].ToString() : (pointer?.Target as WorldPickTarget)?.Placement);

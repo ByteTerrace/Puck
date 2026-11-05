@@ -27,6 +27,7 @@ namespace Puck.World;
 /// analyzer ceilings.</para>
 /// </remarks>
 internal sealed class WorldIdentifyCommandModule(WorldScreenBinder binder, WorldServer server) : ICommandModule {
+    private static readonly CommandForms WorldIdentifyForms = CommandForms.Of(verb: "world.identify", "<screenIndex> [ecLevel]");
     // The payload's URI scheme. Compact (a QR pays for every byte), self-describing (the scheme names the engine, the
     // path segment names the document family), and scanner-friendly: a phone shows it as plain text rather than
     // mangling it, and every character used is URI-unreserved so no encoder mode question arises.
@@ -47,7 +48,7 @@ internal sealed class WorldIdentifyCommandModule(WorldScreenBinder binder, World
     }
     private CommandResult IdentifyHandler(CommandContext context, WireArgs args) {
         if (args.Count is < 1 or > 2) {
-            return CommandResult.Usage(form: "<screenIndex> [ecLevel]", verb: "world.identify");
+            return WorldIdentifyForms.Refuse();
         }
 
         if (!args.TryInt(
@@ -113,7 +114,8 @@ internal sealed class WorldIdentifyCommandModule(WorldScreenBinder binder, World
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.identify",
-            description: "Draws the running world's own identity onto a declared screen as a scannable QR code: world.identify <screenIndex> [ecLevel] — [ecLevel] one of L|M|Q|H (default M, the document default). The payload is puck:world/<documentId>?schema=<schema>&hash=sha256-64/<hex>, deterministic in the definition alone (no clock, no counter, no session state): the same world always mints the same payload. The hash is recomputed from the LIVE definition's canonical bytes on every invocation, so a world mutated since boot reports its CURRENT identity rather than the identity of the file it was loaded from — the echo says which document it covers. Drives the same live-QR path screen.source <index> qr does (any existing producer on the slot is cleared; a booted machine ejects first through the ordered domain) and echoes what it drew: version, EC level, mask, quiet zone, rendered extent, and the payload in full. Errors on an undeclared screen, an unrecognized EC-level letter, a world carrying no documentId, or a payload too large for the encoder's supported version range.",
+            description: $"Draws the running world's own identity onto a declared screen as a scannable QR code: {WorldIdentifyForms.Spelling} — [ecLevel] one of L|M|Q|H (default M, the document default). The payload is puck:world/<documentId>?schema=<schema>&hash=sha256-64/<hex>, deterministic in the definition alone (no clock, no counter, no session state): the same world always mints the same payload. The hash is recomputed from the LIVE definition's canonical bytes on every invocation, so a world mutated since boot reports its CURRENT identity rather than the identity of the file it was loaded from — the echo says which document it covers. Drives the same live-QR path screen.source <index> qr does (any existing producer on the slot is cleared; a booted machine ejects first through the ordered domain) and echoes what it drew: version, EC level, mask, quiet zone, rendered extent, and the payload in full. Errors on an undeclared screen, an unrecognized EC-level letter, a world carrying no documentId, or a payload too large for the encoder's supported version range.",
+            forms: WorldIdentifyForms,
             handler: IdentifyHandler,
             routing: CommandRouting.Simulation
         );

@@ -14,13 +14,15 @@ namespace Puck.Launcher.Commands;
 internal sealed class HostLogCommandModule(HostLog log) : ICommandModule {
     private const string Form = "[last <n>] [since <seq>] [ticks <from>..<to>] [category <prefix>] [stream out|err] [text <word>|\"<words>\"]";
     private const int DefaultLast = 100;
+    private static readonly CommandForms HostLogForms = CommandForms.Of(verb: "host.log", Form);
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
             audience: CommandAudience.Operator,
             bindability: CommandBindability.Unbindable,
-            description: $"Reads the recent lines this World wrote to stdout and stderr (bake lines, refusals, narration, pacing), each as #<seq> t<tick> out|err <line>, where tick is the one the World had completed when the line was written (t- before the first). host.log {Form}: last answers the newest n matching lines (default {DefaultLast}); since only lines after a sequence (the header's next since reads on from this read); ticks only lines written at those ticks, either end optional; category only lines whose leading tag ([sdf.mesh-bake] …, [world.wait: …]) starts with the prefix; stream only one stream; text only lines containing the word, or the quoted words, ignoring case. Clauses combine in any order. The World holds its newest {HostLog.Capacity} lines and {HostLog.CharacterBudget} characters, evicting the oldest; command answers reach the session that asked and are not held, refusals are.",
+            description: $"Reads the recent lines this World wrote to stdout and stderr (bake lines, refusals, narration, pacing), each as #<seq> t<tick> out|err <line>, where tick is the one the World had completed when the line was written (t- before the first). {HostLogForms.Spelling}: last answers the newest n matching lines (default {DefaultLast}); since only lines after a sequence (the header's next since reads on from this read); ticks only lines written at those ticks, either end optional; category only lines whose leading tag ([sdf.mesh-bake] …, [world.wait: …]) starts with the prefix; stream only one stream; text only lines containing the word, or the quoted words, ignoring case. Clauses combine in any order. The World holds its newest {HostLog.Capacity} lines and {HostLog.CharacterBudget} characters, evicting the oldest; command answers reach the session that asked and are not held, refusals are.",
+            forms: HostLogForms,
             handler: (_, args) => {
                 var query = new HostLogQuery { Last = DefaultLast };
 
@@ -54,7 +56,7 @@ internal sealed class HostLogCommandModule(HostLog log) : ICommandModule {
         );
     }
 
-    private static CommandResult Refuse(string got) => CommandResult.Usage(form: Form, got: got, verb: "host.log");
+    private static CommandResult Refuse(string got) => HostLogForms.Refuse(got: got);
     // <from>..<to>, <from>.. or ..<to>.
     private static bool TryTicks(ReadOnlySpan<char> text, out ulong? from, out ulong? to) {
         from = null;

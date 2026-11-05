@@ -21,6 +21,12 @@ public readonly record struct CommandResult(string Output, bool ClearTranscript 
     /// </summary>
     public bool IsError { get; init; }
     /// <summary>
+    /// Gets a value indicating whether this failure is a grammar refusal: the verb could not read the line (a wrong
+    /// argument count, an unknown mode word), as <see cref="CommandForms"/> refuses it, rather than a refusal of what the
+    /// line asked for. Only that door sets it, so the distinction is a property of the result and never of its text.
+    /// </summary>
+    public bool IsGrammar { get; init; }
+    /// <summary>
     /// Gets a value indicating whether the handler THREW rather than returning this verdict — the one
     /// <see cref="IsError"/> result that says nothing about the command's subject. Set only by the registry's own
     /// exception boundary, never by a handler, so a caller that must separate "the world said no" from "the host
@@ -64,24 +70,14 @@ public readonly record struct CommandResult(string Output, bool ClearTranscript 
         ClearTranscript: true,
         Output: ""
     );
-    /// <summary>Creates an error result with transcript output. A grammar refusal (a wrong argument count, an unknown
-    /// mode word) is never spelled here: it is <see cref="Usage"/>, the one spelling of <c>[verb: expected form]</c>.</summary>
+    /// <summary>Creates a value refusal: the verb understood its line and the world or the value said no (an unknown
+    /// target, an out-of-range number, a denied grant). A line the verb could not read is a grammar refusal, which only
+    /// <see cref="CommandForms"/> produces; nothing reads this text to tell the two apart.</summary>
     /// <param name="output">The text to append to the transcript.</param>
-    /// <returns>A result with <see cref="IsError"/> set to <see langword="true"/>.</returns>
-    /// <exception cref="ArgumentException"><paramref name="output"/> opens <c>[verb: expected</c>, the shape of a
-    /// grammar refusal, so a hand-spelled one fails the first time its refusal runs.</exception>
-    public static CommandResult Error(string output) {
-        if (IsGrammarShaped(text: output)) {
-            throw new ArgumentException(
-                message: $"A grammar refusal is CommandResult.Usage(verb, form), never a hand-spelled Error: {output}",
-                paramName: nameof(output)
-            );
-        }
-
-        return new(Output: output) {
-            IsError = true,
-        };
-    }
+    /// <returns>A result with <see cref="IsError"/> set to <see langword="true"/> and <see cref="IsGrammar"/> clear.</returns>
+    public static CommandResult Error(string output) => new(Output: output) {
+        IsError = true,
+    };
     /// <summary>Refuses a wire call carrying any trailing token for a verb that takes none — the shared body every
     /// zero-argument verb's argument check reduces to: <c>[verb: unrecognized '&lt;token&gt;' — expected no
     /// arguments]</c>.</summary>
@@ -105,7 +101,7 @@ public readonly record struct CommandResult(string Output, bool ClearTranscript 
     /// <param name="got">The offending token, or <see langword="null"/> when the grammar as a whole is wrong (a
     /// wrong argument count).</param>
     /// <returns>A result with <see cref="IsError"/> set to <see langword="true"/>.</returns>
-    public static CommandResult Usage(string verb, string form, string? got = null) {
+    internal static CommandResult Usage(string verb, string form, string? got = null) {
         var expected = (string.IsNullOrEmpty(value: form)
             ? "expected no arguments"
             : $"expected {form}");
@@ -115,15 +111,7 @@ public readonly record struct CommandResult(string Output, bool ClearTranscript 
             : $"[{verb}: unrecognized '{got}' — {expected}]"
         )) {
             IsError = true,
+            IsGrammar = true,
         };
-    }
-
-    // The shape Usage writes and nothing else may: the verb, then "expected" straight away.
-    private static bool IsGrammarShaped(string text) {
-        if (!text.StartsWith(value: '[')) { return false; }
-
-        var colon = text.IndexOf(value: ": expected ", comparisonType: StringComparison.Ordinal);
-
-        return ((colon > 1) && (text.AsSpan(start: 1, length: (colon - 1)).IndexOfAny(values: " ]") < 0));
     }
 }

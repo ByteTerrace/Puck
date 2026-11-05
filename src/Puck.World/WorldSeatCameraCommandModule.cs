@@ -10,6 +10,10 @@ namespace Puck.World;
 /// so their observability belongs to the authoritative client/seat core and is available in every executable shape,
 /// including a headless federation canary.</summary>
 internal sealed class WorldSeatCameraCommandModule(WorldInstanceHost instances, PlayerRoster roster, WorldContinuum continuum, WorldSeatAuthorityRouter seatRouter, WorldSeatBindings seatBindings) : ICommandModule {
+    private static readonly CommandForms WorldViewCameraForms = CommandForms.Of(verb: "world.view.camera", "[<player>] [full|compact|<key>,<key>...]");
+    private static readonly CommandForms ViewRecenterForms = CommandForms.Of(verb: "view.recenter", "[player]");
+    private static readonly CommandForms PlayerCameraViewForms = CommandForms.Of(verb: "player.camera.view", "[first|third|toggle|auto]");
+    private static readonly CommandForms PlayerCameraAutomaticForms = CommandForms.Of(verb: "player.camera.automatic", "[on|off|auto|toggle]");
     // The keys the default reading keeps: where the camera is and looks, how, and what the clearance did to the view.
     private static readonly string[] CompactKeys = ["tick", "view", "eye", "target", "yaw", "pitch", "fov", "fade", "clearance", "cutaway"];
 
@@ -18,7 +22,7 @@ internal sealed class WorldSeatCameraCommandModule(WorldInstanceHost instances, 
     // refusal rather than dropped.
     private CommandResult Read(CommandContext context, WireArgs args) {
         if (args.Count > 2) {
-            return CommandResult.Usage(form: "[<player>] [full|compact|<key>,<key>...]", got: args[2].ToString(), verb: "world.view.camera");
+            return WorldViewCameraForms.Refuse(got: args[2].ToString());
         }
 
         // A lone token that is not a seat number is the shape, read for the acting seat.
@@ -190,10 +194,11 @@ internal sealed class WorldSeatCameraCommandModule(WorldInstanceHost instances, 
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "view.recenter",
-            description: "Resets a seat's live camera orbit and boom to its authored frame: view.recenter [player], player 1..4 (default the acting seat). Answers with the camera state, including without physical devices. Session presentation only.",
+            description: $"Resets a seat's live camera orbit and boom to its authored frame: {ViewRecenterForms.Spelling}, player 1..4 (default the acting seat). Answers with the camera state, including without physical devices. Session presentation only.",
+            forms: ViewRecenterForms,
             handler: (context, args) => {
                 if (args.Count > 1) {
-                    return CommandResult.Usage(form: "[player]", verb: "view.recenter");
+                    return ViewRecenterForms.Refuse();
                 }
                 var (slot, error) = SeatCommandArgs.ResolveSlot(args: in args, at: 0, context: context, verb: "view.recenter");
                 if (error is { } refusal) { return refusal; }
@@ -208,10 +213,11 @@ internal sealed class WorldSeatCameraCommandModule(WorldInstanceHost instances, 
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: "player.camera.view",
-            description: "Eases this seat into its authored eye or back out: player.camera.view [first|third|toggle|auto]. No argument toggles. Auto restores the camera program's state-driven view and optional automatic pull-in.",
+            description: $"Eases this seat into its authored eye or back out: {PlayerCameraViewForms.Spelling}. No argument toggles. Auto restores the camera program's state-driven view and optional automatic pull-in.",
+            forms: PlayerCameraViewForms,
             handler: (context, args) => {
                 if (args.Count > 1) {
-                    return CommandResult.Usage(form: "first|third|toggle|auto", verb: "player.camera.view");
+                    return PlayerCameraViewForms.Refuse();
                 }
                 var seat = roster.Seat(slot: context.Slot);
 
@@ -225,7 +231,7 @@ internal sealed class WorldSeatCameraCommandModule(WorldInstanceHost instances, 
                     case "third": seat.View.SetView(first: false); break;
                     case "toggle": seat.View.SetView(first: !seat.View.FirstPerson); break;
                     case "auto": seat.View.SetView(first: null); break;
-                    default: return CommandResult.Usage(form: "first|third|toggle|auto", verb: "player.camera.view");
+                    default: return PlayerCameraViewForms.Refuse();
                 }
                 return new CommandResult(Output: Describe(slot: context.Slot));
             },
@@ -234,10 +240,11 @@ internal sealed class WorldSeatCameraCommandModule(WorldInstanceHost instances, 
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: "player.camera.automatic",
-            description: "Chooses automatic first-person pull-in: player.camera.automatic [on|off|auto|toggle]. Auto restores the portable preference or author's default. Explicit first/third view choices take priority; player.camera.view auto restores state-driven behavior.",
+            description: $"Chooses automatic first-person pull-in: {PlayerCameraAutomaticForms.Spelling}. Auto restores the portable preference or author's default. Explicit first/third view choices take priority; player.camera.view auto restores state-driven behavior.",
+            forms: PlayerCameraAutomaticForms,
             handler: (context, args) => {
                 if (args.Count > 1) {
-                    return CommandResult.Usage(form: "on|off|auto|toggle", verb: "player.camera.automatic");
+                    return PlayerCameraAutomaticForms.Refuse();
                 }
                 var seat = roster.Seat(slot: context.Slot);
 
@@ -253,7 +260,7 @@ internal sealed class WorldSeatCameraCommandModule(WorldInstanceHost instances, 
                     case "off": seat.View.SetAutomaticFirstPerson(enabled: false); break;
                     case "auto": seat.View.SetAutomaticFirstPerson(enabled: null); break;
                     case "toggle": seat.View.SetAutomaticFirstPerson(enabled: !seat.View.AutomaticFirstPerson(control: definition.Views.SeatControl, feel: feel)); break;
-                    default: return CommandResult.Usage(form: "on|off|auto|toggle", verb: "player.camera.automatic");
+                    default: return PlayerCameraAutomaticForms.Refuse();
                 }
                 return new CommandResult(Output: Describe(slot: context.Slot));
             },
@@ -262,7 +269,8 @@ internal sealed class WorldSeatCameraCommandModule(WorldInstanceHost instances, 
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.view.camera",
-            description: $"Echoes a seat's camera: world.view.camera [player] [full|<key>,<key>...], player 1..{PlayerRoster.MaxSlots}; the default reading is tick, view, eye, target, yaw, pitch, fov, fade, clearance and cutaway. `full` reads every field (control policy, held free-look state, motion-input state, camera orbit and the last presented eye), and a comma list reads just those keys in the order given; a value holding a space is quoted. tick= is the latest simulation tick the client received, view= first or third, eye= and target= are world metres, yaw= and pitch= degrees, fov= the vertical field of view in degrees of the last framed seat camera (0 before any frame, as in a headless World). full also reads viewSource= player, program or clearance, transition= zero (third) to one (first), autoFirstPerson= the effective preference, room= independent head clearance in full-size metres, dwell= consecutive entry/exit seconds, boom= the placed boom over the authored one, rise= the degrees the boom rose over the body, near= the metres of geometry the near plane cuts away between the eye and the body, fade= zero (solid) to one (hidden), clearance= none (the camera program authors no clearance op), open, shortened, risen or crowded, then the clearance op's parameters as the frame resolved them, full-size: cutaway= true or false, eyeRadius=, surfaceSkin=, maxRise= degrees, minimumBoom=, fadeStart=, fadeEnd=, closeTarget=, closeTargetStart=, closeTargetFull=, nearMargin=, retractionSkin= and obstructedTargetSkin=. The definition follows the seat's current authority route; profile look preferences remain seat-owned across handoff.",
+            description: $"Echoes a seat's camera: {WorldViewCameraForms.Spelling}, player 1..{PlayerRoster.MaxSlots}; the default reading is tick, view, eye, target, yaw, pitch, fov, fade, clearance and cutaway. `full` reads every field (control policy, held free-look state, motion-input state, camera orbit and the last presented eye), and a comma list reads just those keys in the order given; a value holding a space is quoted. tick= is the latest simulation tick the client received, view= first or third, eye= and target= are world metres, yaw= and pitch= degrees, fov= the vertical field of view in degrees of the last framed seat camera (0 before any frame, as in a headless World). full also reads viewSource= player, program or clearance, transition= zero (third) to one (first), autoFirstPerson= the effective preference, room= independent head clearance in full-size metres, dwell= consecutive entry/exit seconds, boom= the placed boom over the authored one, rise= the degrees the boom rose over the body, near= the metres of geometry the near plane cuts away between the eye and the body, fade= zero (solid) to one (hidden), clearance= none (the camera program authors no clearance op), open, shortened, risen or crowded, then the clearance op's parameters as the frame resolved them, full-size: cutaway= true or false, eyeRadius=, surfaceSkin=, maxRise= degrees, minimumBoom=, fadeStart=, fadeEnd=, closeTarget=, closeTargetStart=, closeTargetFull=, nearMargin=, retractionSkin= and obstructedTargetSkin=. The definition follows the seat's current authority route; profile look preferences remain seat-owned across handoff.",
+            forms: WorldViewCameraForms,
             handler: Read,
             routing: CommandRouting.Immediate
         );
