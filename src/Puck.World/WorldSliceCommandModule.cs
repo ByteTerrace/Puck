@@ -47,6 +47,7 @@ public sealed partial class WorldSliceCommandModule(WorldServer server, WorldRen
     public const string NearToken = "near";
 
     private const string SaveVerb = "world.slice.save";
+    private const string SaveForm = "<placement|near> <x|y|z> [offset <m>] [bands <m>] [res <n>]";
     private const string Verb = "world.slice";
     private const string Form = "<x|y|z> <offset> <u> <v> <half> <path.png> | <placement> <x|y|z> <path.png> [offset <m>] — then [bands <m>] [res <n>]";
 
@@ -60,13 +61,13 @@ public sealed partial class WorldSliceCommandModule(WorldServer server, WorldRen
     /// <param name="request">The parsed request, on success.</param>
     /// <param name="refusal">The refusal, naming what was wrong, on failure.</param>
     /// <returns><see langword="true"/> when the arguments parse.</returns>
-    public static bool TryParse(IReadOnlyList<string> args, WorldDefinition definition, out WorldSliceRequest request, out string refusal) {
+    public static bool TryParse(IReadOnlyList<string> args, WorldDefinition definition, out WorldSliceRequest request, out CommandResult refusal) {
         ArgumentNullException.ThrowIfNull(args);
         ArgumentNullException.ThrowIfNull(definition);
 
         request = default;
         if (args.Count < 3) {
-            refusal = $"{Verb}: expected {Form}";
+            refusal = CommandResult.Usage(form: Form, verb: Verb);
             return false;
         }
 
@@ -80,7 +81,7 @@ public sealed partial class WorldSliceCommandModule(WorldServer server, WorldRen
         if (TryAxis(token: args[0], axis: out axis)) {
             if ((args.Count < 6) || !TryNumber(token: args[1], value: out offset) || !TryNumber(token: args[2], value: out var u) ||
                 !TryNumber(token: args[3], value: out var v) || !TryNumber(token: args[4], value: out half) || !(half > 0f)) {
-                refusal = $"{Verb}: expected <x|y|z> <offset> <u> <v> <half> <path.png> with finite numbers and a positive half";
+                refusal = CommandResult.Error(output: $"[{Verb}: <x|y|z> <offset> <u> <v> <half> <path.png> takes finite numbers and a positive half]");
                 return false;
             }
             centre = new Vector2(x: u, y: v);
@@ -88,11 +89,11 @@ public sealed partial class WorldSliceCommandModule(WorldServer server, WorldRen
             next = 6;
         } else {
             if (WorldDefinitionRows.FindPlacement(id: args[0], placements: definition.Placements) is not { } placement) {
-                refusal = $"{Verb}: '{args[0]}' is neither an axis (x|y|z) nor a placement — placements: {string.Join(separator: ", ", values: definition.Placements.Select(selector: static row => row.Id))}";
+                refusal = CommandResult.Error(output: $"[{Verb}: '{args[0]}' is neither an axis (x|y|z) nor a placement — placements: {string.Join(separator: ", ", values: definition.Placements.Select(selector: static row => row.Id))}]");
                 return false;
             }
             if (!TryAxis(token: args[1], axis: out axis)) {
-                refusal = $"{Verb}: expected an axis (x|y|z) after placement '{placement.Id}', got '{args[1]}'";
+                refusal = CommandResult.Usage(form: Form, got: args[1], verb: Verb);
                 return false;
             }
 
@@ -102,7 +103,7 @@ public sealed partial class WorldSliceCommandModule(WorldServer server, WorldRen
 
             half = ((WorldSliceRequest.PlacementMargin * reach) * MathF.Abs(x: placement.Scale));
             if (!float.IsFinite(f: half) || !(half > 0f)) {
-                refusal = $"{Verb}: placement '{placement.Id}' has no finite bound to frame (an unclipped lattice) — use {Verb} <x|y|z> <offset> <u> <v> <half> <path.png>";
+                refusal = CommandResult.Error(output: $"[{Verb}: placement '{placement.Id}' has no finite bound to frame (an unclipped lattice) — use {Verb} <x|y|z> <offset> <u> <v> <half> <path.png>]");
                 return false;
             }
             path = args[2];
@@ -110,7 +111,7 @@ public sealed partial class WorldSliceCommandModule(WorldServer server, WorldRen
             offset = Component(axis: axis, value: position);
             if ((args.Count > (next + 1)) && string.Equals(a: args[next], b: "offset", comparisonType: StringComparison.OrdinalIgnoreCase)) {
                 if (!TryNumber(token: args[(next + 1)], value: out var shift)) {
-                    refusal = $"{Verb}: offset expects a finite number of metres, got '{args[(next + 1)]}'";
+                    refusal = CommandResult.Error(output: $"[{Verb}: offset expects a finite number of metres, got '{args[(next + 1)]}']");
                     return false;
                 }
                 offset += shift;
@@ -126,7 +127,7 @@ public sealed partial class WorldSliceCommandModule(WorldServer server, WorldRen
             var key = args[next];
 
             if ((next + 1) >= args.Count) {
-                refusal = $"{Verb}: '{key}' expects a value — {Form}";
+                refusal = CommandResult.Error(output: $"[{Verb}: '{key}' expects a value — {Form}]");
                 return false;
             }
             if (string.Equals(a: key, b: "bands", comparisonType: StringComparison.OrdinalIgnoreCase) && TryNumber(token: args[(next + 1)], value: out var spacing) && (spacing > 0f)) {
@@ -135,18 +136,18 @@ public sealed partial class WorldSliceCommandModule(WorldServer server, WorldRen
                 (samples >= SdfFieldSlice.MinResolution) && (samples <= SdfFieldSlice.MaxResolution)) {
                 resolution = samples;
             } else {
-                refusal = $"{Verb}: cannot read '{key} {args[(next + 1)]}' — bands takes a positive number of metres, res a whole number in [{SdfFieldSlice.MinResolution}, {SdfFieldSlice.MaxResolution}]";
+                refusal = CommandResult.Error(output: $"[{Verb}: cannot read '{key} {args[(next + 1)]}' — bands takes a positive number of metres, res a whole number in [{SdfFieldSlice.MinResolution}, {SdfFieldSlice.MaxResolution}]]");
                 return false;
             }
             next += 2;
         }
         if (!path.EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: ".png")) {
-            refusal = $"{Verb}: the path must name a .png file, got '{path}'";
+            refusal = CommandResult.Error(output: $"[{Verb}: the path must name a .png file, got '{path}']");
             return false;
         }
 
         request = new WorldSliceRequest(Axis: axis, Bands: bands, Centre: centre, Half: half, Offset: offset, Path: System.IO.Path.GetFullPath(path: path), Resolution: resolution);
-        refusal = string.Empty;
+        refusal = default;
         return true;
     }
     /// <summary>Writes an answered slice to its PNG and returns the line that reports it.</summary>
@@ -175,7 +176,7 @@ public sealed partial class WorldSliceCommandModule(WorldServer server, WorldRen
 
                 for (var index = 0; (index < tokens.Length); index++) { tokens[index] = args[index].ToString(); }
                 if (!TryParse(args: tokens, definition: server.Definition, refusal: out var refusal, request: out var request)) {
-                    return CommandResult.Error(output: $"[{refusal}]");
+                    return refusal;
                 }
                 return Arm(request: request);
             }
@@ -183,10 +184,10 @@ public sealed partial class WorldSliceCommandModule(WorldServer server, WorldRen
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: SaveVerb,
-            description: $"Slices the field through a placement into the booted package's own {FolderName} folder: {SaveVerb} <placement|near> <x|y|z> [offset <m>] [bands <m>] [res <n>], as {Verb}'s placement form, writing <package>/{FolderName}/<placement>-<axis>.png. The caller names no path, so a binding row or an authored command (the debug world's gallery.slice) may call it; the placement id must be a file-safe token (letters, digits, '-', '_', '.').",
+            description: $"Slices the field through a placement into the booted package's own {FolderName} folder: {SaveVerb} {SaveForm}, as {Verb}'s placement form, writing <package>/{FolderName}/<placement>-<axis>.png. The caller names no path, so a binding row or an authored command (the debug world's gallery.slice) may call it; the placement id must be a file-safe token (letters, digits, '-', '_', '.').",
             handler: (context, args) => {
                 if (args.Count < 2) {
-                    return CommandResult.Error(output: $"[{SaveVerb}: expected <placement|near> <x|y|z> [offset <m>] [bands <m>] [res <n>]]");
+                    return CommandResult.Usage(form: SaveForm, verb: SaveVerb);
                 }
 
                 var placement = args[0].ToString();
@@ -220,7 +221,7 @@ public sealed partial class WorldSliceCommandModule(WorldServer server, WorldRen
                 );
                 for (var index = 2; (index < args.Count); index++) { tokens[(index + 1)] = args[index].ToString(); }
                 if (!TryParse(args: tokens, definition: server.Definition, refusal: out var refusal, request: out var request)) {
-                    return CommandResult.Error(output: $"[{refusal}]");
+                    return refusal;
                 }
                 return Arm(request: request);
             }

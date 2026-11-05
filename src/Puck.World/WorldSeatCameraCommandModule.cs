@@ -18,7 +18,7 @@ internal sealed class WorldSeatCameraCommandModule(WorldInstanceHost instances, 
     // refusal rather than dropped.
     private CommandResult Read(CommandContext context, WireArgs args) {
         if (args.Count > 2) {
-            return CommandResult.Error(output: $"[world.view.camera: too many arguments — expected [<player>] [full|compact|<key>,<key>...], player an integer 1..{PlayerRoster.MaxSlots}]");
+            return CommandResult.Usage(form: "[<player>] [full|compact|<key>,<key>...]", got: args[2].ToString(), verb: "world.view.camera");
         }
 
         // A lone token that is not a seat number is the shape, read for the acting seat.

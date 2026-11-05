@@ -8,7 +8,7 @@ namespace Puck.World;
 internal sealed partial class PlayerCommandModule {
     private CommandResult DisengageHandler(CommandContext context, WireArgs args) {
         if (args.Count > 1) {
-            return CommandResult.Error(output: "[body.disengage: expected at most 1 value — an optional body index]");
+            return CommandResult.Usage(form: DisengageForm, verb: "body.disengage");
         }
 
         var (player, index, error) = ResolveTarget(
@@ -71,7 +71,7 @@ internal sealed partial class PlayerCommandModule {
     }
     private CommandResult EngageHandler(CommandContext context, WireArgs args) {
         if (args.Count is (< 1 or > 3)) {
-            return CommandResult.Error(output: "[body.engage: expected a target (a screen index, body:<n> or placement:<id> for a tabletop) — plus an optional capture:on|off and an optional body index]");
+            return CommandResult.Usage(form: EngageForm, verb: "body.engage");
         }
 
         // capture:on|off, when present, is ALWAYS the LAST token — this keeps the target and the (optional) body

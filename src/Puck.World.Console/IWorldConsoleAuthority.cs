@@ -185,7 +185,7 @@ public static class WorldConsoleAuthorityExtensions {
             description: description,
             handler: (context, args) => {
                 if (args.Count > 1) {
-                    return CommandResult.Error(output: $"[{name}: expected [{paramName}]]");
+                    return CommandResult.Usage(form: $"[{paramName}]", got: args[1].ToString(), verb: name);
                 }
 
                 if (!authority.TryResolveServer(

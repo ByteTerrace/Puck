@@ -13,9 +13,6 @@ public sealed class SourceAcknowledgements {
 
     private readonly record struct Range(string? Path, string Code, int Start, int End);
 
-    /// <summary>Gets whether no <c>allow</c> line was found.</summary>
-    public bool IsEmpty => (m_ranges.Count == 0);
-
     private static string? Normalize(string? path) => ((path is null) ? null : Path.GetFullPath(path: path).Replace(oldChar: '\\', newChar: '/'));
 
     /// <summary>Reads every <c>allow</c> line in <paramref name="document"/>, at any depth.</summary>
@@ -28,20 +25,11 @@ public sealed class SourceAcknowledgements {
         ArgumentNullException.ThrowIfNull(argument: document);
 
         var acknowledgements = new SourceAcknowledgements();
-
-        acknowledgements.Add(document: document, sourcePath: sourcePath);
-
-        return acknowledgements;
-    }
-    /// <summary>Adds every <c>allow</c> line in another source's <paramref name="document"/>.</summary>
-    /// <param name="document">The parsed source.</param>
-    /// <param name="sourcePath">The file <paramref name="document"/> was parsed from.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="document"/> is <see langword="null"/>.</exception>
-    public void Add(DocumentNode document, string? sourcePath) {
-        ArgumentNullException.ThrowIfNull(argument: document);
-
         var root = Normalize(path: sourcePath);
 
+        // An import brings a library's lets and templates alone (ModuleResolver.CollectModules), each carrying the file
+        // that defines it; every other statement is the source's own. A document an import composes at load keeps its
+        // allow lines in its own compile, which WorldFindingLocator reads.
         foreach (var statement in document.Statements) {
             var path = (statement switch {
                 LetNode { DefinitionPath: { } defined } => Normalize(path: defined),
@@ -49,7 +37,25 @@ public sealed class SourceAcknowledgements {
                 _ => root,
             });
 
-            Walk(node: statement, path: path);
+            acknowledgements.Walk(node: statement, path: path);
+        }
+
+        return acknowledgements;
+    }
+    /// <summary>Removes from <paramref name="diagnostics"/> every diagnostic an <c>allow</c> line in
+    /// <paramref name="document"/>, or in a library it imported, acknowledges: the one step every reporter of a
+    /// source's findings (its compile, its lint, its semantic validation) runs before printing them.</summary>
+    /// <param name="diagnostics">The diagnostics to filter in place.</param>
+    /// <param name="document">The parsed source, with the declarations its imports brought in; <see langword="null"/>
+    /// when the source did not parse, so nothing is acknowledged.</param>
+    /// <param name="sourcePath">The file <paramref name="document"/> was parsed from, or <see langword="null"/> for a
+    /// buffer.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="diagnostics"/> is <see langword="null"/>.</exception>
+    public static void Acknowledge(DiagnosticBag diagnostics, DocumentNode? document, string? sourcePath) {
+        ArgumentNullException.ThrowIfNull(argument: diagnostics);
+
+        if (document is not null) {
+            Of(document: document, sourcePath: sourcePath).Apply(diagnostics: diagnostics, rootPath: sourcePath);
         }
     }
     private void Walk(SyntaxNode node, string? path) {
@@ -91,13 +97,7 @@ public sealed class SourceAcknowledgements {
 
         return false;
     }
-    /// <summary>Removes from <paramref name="diagnostics"/> every diagnostic an <c>allow</c> line acknowledges.</summary>
-    /// <param name="diagnostics">The diagnostics to filter in place.</param>
-    /// <param name="rootPath">The compiled source's own file, or <see langword="null"/> for a buffer.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="diagnostics"/> is <see langword="null"/>.</exception>
-    public void Apply(DiagnosticBag diagnostics, string? rootPath) {
-        ArgumentNullException.ThrowIfNull(argument: diagnostics);
-
+    private void Apply(DiagnosticBag diagnostics, string? rootPath) {
         if (m_ranges.Count > 0) {
             diagnostics.RemoveAll(match: diagnostic => Acknowledges(diagnostic: diagnostic, rootPath: rootPath));
         }

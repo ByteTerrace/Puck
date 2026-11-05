@@ -177,7 +177,7 @@ public sealed partial class CommandRegistry {
 
         if (verb.Equals(comparisonType: StringComparison.OrdinalIgnoreCase, other: RunCommandName)) {
             if (args.Count == 0) {
-                return CommandResult.Usage(form: "run <command> [args…]", verb: RunCommandName);
+                return CommandResult.Usage(form: "<command> [args…]", verb: RunCommandName);
             }
 
             verb = args[0];

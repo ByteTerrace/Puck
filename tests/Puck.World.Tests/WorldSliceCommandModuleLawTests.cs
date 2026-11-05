@@ -43,7 +43,7 @@ public sealed class WorldSliceCommandModuleLawTests {
         });
     }
     private static WorldSliceRequest Parse(params string[] args) {
-        Assert.True(condition: WorldSliceCommandModule.TryParse(args: args, definition: Definition(), refusal: out var refusal, request: out var request), userMessage: refusal);
+        Assert.True(condition: WorldSliceCommandModule.TryParse(args: args, definition: Definition(), refusal: out var refusal, request: out var request), userMessage: refusal.Output);
         return request;
     }
 
@@ -77,17 +77,17 @@ public sealed class WorldSliceCommandModuleLawTests {
         var clip = (Cube with { Id = 1, Name = "clip", Blend = SdfBlendOp.Intersection, Position = new Vector3(x: 0f, y: 1f, z: 0f) });
         var clipped = WorldSliceCommandModule.TryParse(args: ["cube-a", "y", "c.png"], definition: Definition(lattice, clip), refusal: out var refusal, request: out var request);
 
-        Assert.True(condition: clipped, userMessage: refusal);
+        Assert.True(condition: clipped, userMessage: refusal.Output);
         Assert.True(condition: (float.IsFinite(f: request.Half) && (request.Half > 0f)), userMessage: $"{request.Half}");
         Assert.False(condition: WorldSliceCommandModule.TryParse(args: ["cube-a", "y", "c.png"], definition: Definition(lattice), refusal: out refusal, request: out _));
-        Assert.Contains(expectedSubstring: "placement 'cube-a' has no finite bound", actualString: refusal, comparisonType: StringComparison.Ordinal);
+        Assert.Contains(expectedSubstring: "placement 'cube-a' has no finite bound", actualString: refusal.Output, comparisonType: StringComparison.Ordinal);
     }
     [Theory]
     [InlineData("expected <x|y|z> <offset>", "y", "0")]
     [InlineData("finite numbers and a positive half", "y", "0", "0", "0", "-1", "s.png")]
     [InlineData("finite numbers and a positive half", "y", "zero", "0", "0", "1", "s.png")]
     [InlineData("'nope' is neither an axis (x|y|z) nor a placement — placements: cube-a", "nope", "y", "s.png")]
-    [InlineData("expected an axis (x|y|z) after placement 'cube-a', got 'w'", "cube-a", "w", "s.png")]
+    [InlineData("unrecognized 'w' — expected <x|y|z>", "cube-a", "w", "s.png")]
     [InlineData("offset expects a finite number of metres, got 'up'", "cube-a", "y", "s.png", "offset", "up")]
     [InlineData("'bands' expects a value", "cube-a", "y", "s.png", "bands")]
     [InlineData("cannot read 'res 9'", "cube-a", "y", "s.png", "res", "9")]
@@ -96,7 +96,7 @@ public sealed class WorldSliceCommandModuleLawTests {
     [InlineData("the path must name a .png file, got 's.jpg'", "cube-a", "y", "s.jpg")]
     public void AMalformedLineIsRefusedByName(string refusal, params string[] args) {
         Assert.False(condition: WorldSliceCommandModule.TryParse(args: args, definition: Definition(), refusal: out var actual, request: out _));
-        Assert.Contains(expectedSubstring: refusal, actualString: actual, comparisonType: StringComparison.Ordinal);
+        Assert.Contains(expectedSubstring: refusal, actualString: actual.Output, comparisonType: StringComparison.Ordinal);
     }
     [Fact]
     public void TheWriterReportsTheSliceAndItsPathOrTheFailure() {
@@ -132,7 +132,7 @@ public sealed class WorldSliceCommandModuleLawTests {
         var registry = new CommandRegistry(modules: [new WorldSliceCommandModule(renderProbe: new WorldRenderProbe(), server: row.Server, source: new WorldDefinitionSource(Definition: row.Server.Definition, SourcePath: "worlds/test/test.puck"))]);
         var parsed = WorldSliceCommandModule.TryParse(args: ["cube-a", "y", "slice.png", "offset", "1.2"], definition: row.Server.Definition, refusal: out var refusal, request: out var request);
 
-        Assert.True(condition: parsed, userMessage: refusal);
+        Assert.True(condition: parsed, userMessage: refusal.Output);
         Assert.StartsWith(expectedStartString: "[world.slice: no renderer", actualString: registry.Submit(line: "world.slice.save cube-a y offset 1.2").Output, comparisonType: StringComparison.Ordinal);
         Assert.StartsWith(expectedStartString: "[world.slice.save: expected", actualString: registry.Submit(line: "world.slice.save cube-a").Output, comparisonType: StringComparison.Ordinal);
         Assert.StartsWith(expectedStartString: "[world.slice.save: placement", actualString: registry.Submit(line: "world.slice.save .. y").Output, comparisonType: StringComparison.Ordinal);
