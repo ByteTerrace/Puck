@@ -514,6 +514,15 @@ public static class WorldLightingText {
             .Field(key: "adaptation", value: exposure.Adaptation.ToString(format: "0.##", provider: CultureInfo.InvariantCulture))
             .Field(key: "local", value: exposure.Local.ToString(format: "0.##", provider: CultureInfo.InvariantCulture))
             .Segment()
+            .Head(head: "lanes");
+        var lanes = (definition.Render.Lanes ?? []);
+
+        echo = echo.Field(key: "count", value: lanes.Count.ToString(provider: CultureInfo.InvariantCulture));
+        for (var index = 0; (index < lanes.Count); index++) {
+            echo = echo.Field(key: $"lane{(SdfLanes.FirstWorld + index).ToString(provider: CultureInfo.InvariantCulture)}", value: Describe(value: lanes[index]));
+        }
+        echo = echo
+            .Segment()
             .Head(head: "keys")
             .Field(
             key: "lighting",

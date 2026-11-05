@@ -647,6 +647,17 @@
       "additionalProperties": false,
       "default": null,
       "title": "WorldRenderShadowCoverage"
+    },
+    "lanes": {
+      "description": "The world\u0027s render lanes: up to four bindable scalars (a literal, a state.\u003Crow\u003E binding, or keys on a clock), resolved at each frame\u0027s presented tick and read by every surface and volume as render lanes 4 to 7 (SdfLanes), so a static placement sharing one baked mesh follows world state without a slot. Absent or a missing entry reads zero; world.lighting echoes them as authored.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "default": null,
+      "items": {
+        "$ref": "./common.schema.json#/$defs/BindableScalar"
+      }
     }
   },
   "additionalProperties": false,

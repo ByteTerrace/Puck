@@ -8,7 +8,7 @@
 |---|---|---|---|
 | `color` | `#RRGGBB` or `state.<row>[.<key>]` | required | linear-RGB albedo; also the metallic reflectance tint |
 | `emissive` | finite ≥ 0 | 0 | `albedo × emissive` added after shading, so it glows through shadow |
-| `emissiveLane` | [0, 3] | absent | scales `emissive` by `saturate(lane)` at shading time, from each inhabited body's own lanes; absent keeps `emissive` static. A placement without lanes reads zero and stays dark |
+| `emissiveLane` | [0, 7] | absent | scales `emissive` by `saturate(lane)` at shading time ([render lanes](#render-lanes): 0 to 3 a body's own, 4 to 7 the world's); absent keeps `emissive` static. A body lane on a placement without lanes reads zero and stays dark |
 | `specular` | finite ≥ 0 | 0 | dielectric reflectance at normal incidence. With `metal` also 0 the GGX term is skipped entirely |
 | `roughness` | [0, 1] | 0.202 | 0 is a mirror-tight highlight, 1 the broadest lobe |
 | `sheen` | [0, 1] | 0 | fresnel edge lift multiplied into the lit color — a painted catch along a bevel, never a halo |
@@ -25,7 +25,7 @@
 | `paints` | see below | absent | |
 
 `roughness`, `sheen`, `metal`, `coat`, `wrap`, and `soften` are refused **by
-name** outside [0, 1], and `emissiveLane` outside [0, 3]. There is no `shininess` member; it is refused as unmapped.
+name** outside [0, 1], and `emissiveLane` outside [0, 7]. There is no `shininess` member; it is refused as unmapped.
 A palette slot has no `bounce` member either; it is refused as unmapped, and
 `fill` is the artistic tint. A light's `bounce` is a separate transport gain.
 
@@ -67,7 +67,7 @@ something to reflect — see the environment section below.
 | `seed` | uint | 0 | |
 | `scale` | ≥ 0 | 1 | pattern frequency |
 | `floor` | [0, 1] | 0 | coverage shown independent of the lane |
-| `lane` | [0, 3] | 0 | which render lane drives the amount |
+| `lane` | [0, 7] | 0 | which [render lane](#render-lanes) drives the amount |
 | `under` | 0 to 2 stages | null | what shows through |
 | `deposit` | surface | null | the settle material |
 
@@ -88,9 +88,9 @@ Two cross-rules the validator enforces together:
   something to reveal.
 - `settle > 0` **requires** `deposit`.
 
-Both fail with one message: `Invalid inset, weathering or paint: check frames,
-ordered stops, surfaces, ranges, lane [0, 3], a nonzero paint rotation, a positive
-paint scale and a non-negative stroke.`
+Both fail with one message, which names the paint and flow rules too: `Invalid
+inset, weathering, paint or flow: check frames, ordered stops, surfaces, ranges,
+lanes in [0, 7], …`.
 
 The live amount is `max(saturate(lane), floor)`. The mesh surface pass estimates
 mean curvature from the world-space gradient of the triangle's interpolated
@@ -108,8 +108,10 @@ instead of increasing that all-over pattern.
 
 ### Static landscape surfaces
 
-Static scenery supplies zero render lanes. A weathering pattern without a positive
-`floor` remains inactive, even when its `lines`, `edge` and reveal stages validate.
+Static scenery supplies zero body lanes (0 to 3). A weathering pattern reading one
+without a positive `floor` remains inactive, even when its `lines`, `edge` and
+reveal stages validate; a world lane (4 to 7) reads the same on static scenery as
+anywhere.
 The standard foliage library's `landscapeSurface` opts its authored masks in with
 `floor: 1`; callers supply the substrate/deposit colours rather than expecting a
 material name to generate them.
@@ -285,9 +287,13 @@ Fields and defaults: `velocity` (required), `scale` (1, positive), `stretch` (1,
 at least 1), `cycle` (1 s, in [0.25, 4096], rounded so a whole number of cycles
 fills the clock's 4096 s period), `tilt` (0), `coverage` (0, in [0, 1]),
 `softness` (0.1), `surface` (required when coverage is positive), `seed` (0),
-`lane` (none: a render lane in [0, 3] scaling the velocity, read from an
-inhabited body's look lanes; a placement without lanes stands still) and
-`frame` (`Object`, or `World`). Keep the travel of one cycle
+`lane` (none: a [render lane](#render-lanes) in [0, 7] scaling the velocity; a
+body lane on a placement without lanes stands still), `coverageLane` (none: a
+render lane in [0, 7] whose value, saturated to [0, 1], scales `coverage`) and
+`frame` (`Object`, or `World`). A world lane drives a flow on any placement,
+static copies included: the debug world's falls thins its foam with the melt's
+discharge through `coverageLane: 4` under `render { lanes
+["state.meltStrength"] }`. Keep the travel of one cycle
 (`|velocity| × cycle`) under about a third of a pattern feature along the flow
 (`stretch / scale`), or the pattern visibly smears before it fades.
 
@@ -307,11 +313,32 @@ pass does not run it yet.
 
 ## Render lanes
 
-`looks.rows[].motion.lanes` holds **up to four** expressions in x, y, z, w
-order. Missing/null entries read zero. Only body registrations receive the
-look's lanes; an inhabited placement needs a look selecting its creation, a
+A shading-time consumer names one of eight lanes (`SdfLanes`): 0 to 3 are the
+surface's own **body lanes**, 4 to 7 the **world lanes**.
+
+**World lanes.** `render.lanes` holds up to four bindable scalars, each a
+literal, a `state.<row>[.<key>]` binding or keys on a clock, the spelling of
+every other bindable render value:
+
+```puck
+render {
+  lanes ["state.meltStrength"]   // lane 4
+}
+```
+
+The client resolves them at each frame's presented tick through the state
+mirror, as it resolves the sky, and every surface and volume reads them alike,
+whatever its placement: a static copy sharing one baked mesh follows world state
+with no slot and no per-instance record. A missing entry reads zero.
+`world.lighting` echoes the authored lanes; `world.state <row>` reads the value.
+Use a world lane for a look that follows a world-wide gauge (a discharge, a
+season, an alarm); use a body lane for a look that follows one body.
+
+**Body lanes.** `looks.rows[].motion.lanes` holds **up to four** expressions in
+x, y, z, w order. Missing/null entries read zero. Only body registrations receive
+the look's lanes; an inhabited placement needs a look selecting its creation, a
 kit, a body motion program, and body capacity. Static, animated and attached
-placement registrations do not supply lanes, even when they have a dynamic
+placement registrations do not supply body lanes, even when they have a dynamic
 slot.
 
 ```json
@@ -341,14 +368,16 @@ stage separate lane expressions over a common range. Check healthy and depleted
 endpoints and sample the intervening hp values: every plate must transition in
 order, and no hp value should leave all three mid-erosion.
 
-Four consumers address a lane by index, each validated to [0, 3]:
+These consumers address a lane by index:
 
-| Consumer | Spelling | Reads the lane |
-|---|---|---|
-| shape erosion | `shapes[].erode = { lane, from, to, noise }` | in the bake: frozen at the value the bake read |
-| material weathering | `palette[].weathering.lane` | at shading time, every frame |
-| material emission | `palette[].emissiveLane` | at shading time, every frame |
-| volume intensity | `volumes[].intensityLane` | at shading time, every frame |
+| Consumer | Spelling | Lanes | Reads the lane |
+|---|---|---|---|
+| shape erosion | `shapes[].erode = { lane, from, to, noise }` | body, [0, 3] | in the bake: frozen at the value the bake read |
+| morph blend | `shapes[].morph = { lane, from, to }` | body, [0, 3] | in the bake, as erosion |
+| material weathering | `palette[].weathering.lane` | [0, 7] | at shading time, every frame |
+| material emission | `palette[].emissiveLane` | [0, 7] | at shading time, every frame |
+| flow velocity and coverage | `palette[].flow.lane`, `palette[].flow.coverageLane` | [0, 7] | at shading time, every frame |
+| volume intensity | `volumes[].intensityLane` | [0, 7] | at shading time, every frame |
 
 Every view draws the residency's baked meshes, and erosion is geometry: the
 bake samples the lanes the frames hold while a new program bakes (at boot, or
@@ -387,7 +416,7 @@ no collider.
 | `extinction` | ≥ 0 | 1 |
 | `pulseAmplitude` | [0, 1] | 0 |
 | `pulseFrequency` | ≥ 0 | 0 |
-| `intensityLane` | [0, 3] | null |
+| `intensityLane` | [0, 7] | null |
 | `enabled` | bool; a disabled volume is omitted from emission | true |
 | `coverage` | [0, 1]; cloud only | 0.55 |
 | `softness` | (0, 1]; cloud only | 0.18 |

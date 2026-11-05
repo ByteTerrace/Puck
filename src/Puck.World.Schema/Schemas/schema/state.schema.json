@@ -1166,7 +1166,7 @@
                     "default": null
                   },
                   "emissiveLane": {
-                    "description": "The render lane in [0, 3] whose saturated value scales Emissive at shading time, read from each inhabited body\u0027s own look lanes; a placement without lanes reads zero, and null keeps the emissive static.",
+                    "description": "The render lane whose saturated value scales Emissive at shading time: 0 to 3 an inhabited body\u0027s own look lanes (a placement without them reads zero), 4 to 7 the world\u0027s render.lanes (SdfLanes). Null keeps the emissive static.",
                     "type": [
                       "integer",
                       "null"
@@ -1401,7 +1401,7 @@
                         "default": null
                       },
                       "lane": {
-                        "description": "The render lane in [0, 3] whose value scales the velocity, read from an inhabited body\u0027s look lanes; a placement without lanes reads zero and stands still. Null keeps the velocity constant.",
+                        "description": "The render lane whose value scales the velocity: 0 to 3 an inhabited body\u0027s look lanes (a placement without them reads zero and stands still), 4 to 7 the world\u0027s render.lanes (SdfLanes). Null keeps the velocity constant.",
                         "type": [
                           "integer",
                           "null"
@@ -1417,6 +1417,14 @@
                         ],
                         "default": null,
                         "title": "SdfFlowFrame"
+                      },
+                      "coverageLane": {
+                        "description": "The render lane, as Lane, whose value saturated to [0, 1] scales Coverage. Null keeps the coverage constant.",
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "default": null
                       }
                     },
                     "required": [

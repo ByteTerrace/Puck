@@ -84,6 +84,9 @@ public sealed partial class SdfProgram {
     /// <summary>The bit of a flow's control word saying its velocity is in world space rather than the surface's object
     /// frame (<c>SDF_FLOW_WORLD_FRAME</c>).</summary>
     public const uint FlowWorldFrame = 0x100u;
+    /// <summary>The shift of the byte of a flow's control word holding its coverage lane plus one, zero for a constant
+    /// coverage (<c>SDF_FLOW_COVERAGE_LANE_SHIFT</c>).</summary>
+    public const int FlowCoverageLaneShift = 16;
     /// <summary>The second-highest bit of a rigid leaf's shape index: the leaf rides a fold run, described by the slot
     /// that follows it (<c>SDF_RIGID_LEAF_FOLDED</c>).</summary>
     public const uint RigidLeafFoldedFlag = 0x40000000u;

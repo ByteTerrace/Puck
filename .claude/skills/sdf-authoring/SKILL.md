@@ -235,20 +235,23 @@ highlights. Ranges, defaults and examples are in `references/surface.md`.
 
 ## Binding to state
 
-Nothing in the renderer knows what health, charge, or speed are. A look row
-carries up to four anonymous **render lanes**, each an expression over world
-state. Only body registration supplies those lanes: an inhabited placement
-needs a look, kit, and body capacity. Static, animated, and attached placement
-registrations supply zero lanes. Use bare `hp` or `airPose[$body]` in a lane,
-and `bodyState($body, flightFuel)` for one of the body's own action-state slots;
-`state.hp` is driver/binding spelling and reads the wrong row here. Shapes and
-materials read a lane by index:
+Nothing in the renderer knows what health, charge, or speed are. A surface
+reads eight anonymous **render lanes** by index. Lanes 0 to 3 are body lanes: a
+look row's up to four expressions over world state, supplied only by body
+registration (an inhabited placement needs a look, kit, and body capacity);
+static, animated, and attached placements read them as zero. Use bare `hp` or
+`airPose[$body]` in a lane, and `bodyState($body, flightFuel)` for one of the
+body's own action-state slots; `state.hp` is driver/binding spelling and reads
+the wrong row here. Lanes 4 to 7 are world lanes: `render.lanes`, up to four
+bindable scalars (`"state.meltStrength"`), which every surface reads alike,
+static copies included. Shapes and materials read a lane by index:
 
 | Consumer | Reads the lane |
 |---|---|
-| `shapes[].erode` | in the bake: erodes a shape away over a lane range with a ragged front, frozen at the value the bake read |
+| `shapes[].erode` | in the bake, body lanes only: erodes a shape away over a lane range with a ragged front, frozen at the value the bake read |
 | `palette[].weathering.lane` | at shading time, every frame: chips and scratches, with a static floor |
 | `palette[].emissiveLane` | at shading time, every frame: `emissive × saturate(lane)` |
+| `palette[].flow.lane`, `.coverageLane` | at shading time, every frame: the flow's speed and its revealed coverage |
 | `volumes[].intensityLane` | at shading time, every frame |
 
 Erosion is geometry, and every view draws baked meshes. A bake reads the lanes

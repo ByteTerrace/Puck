@@ -54,6 +54,8 @@ public static class WorldValueFields {
     private const string PowerWhy = "a luminous power in lumens";
     private const string TemperatureWhy = "a colour temperature in kelvin, on the black-body locus between a candle's and a blue sky's";
 
+    /// <summary>A world render lane, an anonymous number the world's materials and volumes read.</summary>
+    public static WorldValueField RenderLane { get; } = new(typeof(WorldRenderDefaults), nameof(WorldRenderDefaults.Lanes), WorldValueDomain.Finite);
     /// <summary>Explicit diffuse light admitted to indirect transport.</summary>
     public static WorldValueField IndirectLights { get; } = new(typeof(WorldRenderIndirectSources), nameof(WorldRenderIndirectSources.Lights), WorldValueDomain.Unit);
     /// <summary>Material emission admitted to indirect transport.</summary>
@@ -329,6 +331,7 @@ public static class WorldValueFields {
     /// <summary>Gets every field, in declaration order.</summary>
     public static IReadOnlyList<WorldValueField> All { get; } = [
         SpeakerGain,
+        RenderLane,
         IndirectLights, IndirectEmission, IndirectScreens, IndirectSky, IndirectFeedback, IndirectIntensity, IndirectContact,
         LightBounce,
         DirectionalIlluminance,

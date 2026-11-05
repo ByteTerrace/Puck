@@ -259,12 +259,9 @@ public static partial class CreationCanonicalizer {
                 errors,
                 path
             );
-            if (
-                (volume.IntensityLane is { } lane) &&
-                (((uint)lane) > 3u)
-            ) {
+            if (!SdfLanes.IsLane(lane: volume.IntensityLane)) {
                 errors.Add(item: new(
-                    Message: "Intensity lane must be in [0, 3].",
+                    Message: $"Intensity lane must be in [0, {(SdfLanes.Count - 1)}].",
                     Path: (path + ".intensityLane")
                 ));
             }
