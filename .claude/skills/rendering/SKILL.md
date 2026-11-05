@@ -462,6 +462,21 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   both backends. The handbook's
   [glass section](../../../docs/rendering/sdf/handbook/frame-rendering.md#glass-after-the-opaque-image)
   states the limits.
+- **A flow moves shading, never geometry, and never reads a clock.** A palette
+  slot's `flow` (`SdfFlow`, material rows 27 to 30) runs `sdfApplyFlow`
+  (`shade/shade-layers.hlsli`) in the light stage after the weathering: two
+  half-cycle layers of the lattice noise advected along the velocity's
+  tangential part, revealing a surface and tilting the shading normal. Its
+  phase enters only through the pass block's `flowClock`, which
+  `SdfFrameBlock` integrates from `SdfFrame.Clock` and writes zero for a program
+  without flow (`SdfProgram.HasFlow`), so a still world's views keep standing;
+  the clock is a lighting value of the cadence signature, so only the shading
+  passes rerun as the flow moves. No `sdf-*` kernel reads the Frame group's
+  `time` or `timeDelta`: `puck search -M 0 "frameGroup\.(time|timeDelta)"
+  src/Puck.SdfVm/Assets/Shaders/Sdf` finds nothing. An `Object` velocity on a
+  draw shading in world space (a static copy) turns by the draw's matrix;
+  `World` keeps the velocity and the pattern in world space. The glass pass
+  does not run the layer.
 - **Camera history uses the camera's sample grid.** The first recorder can be
   a shadow cascade, so `TemporalOf` receives the recording's `RenderWidth` and
   `RenderHeight`, never its pass-local `Width` and `Height`. A still camera's

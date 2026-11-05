@@ -380,6 +380,10 @@ public static class SdfIsaHlsl {
         declarations.Real(name: "SDF_GLASS_SUM_SCALE", value: SdfWorldPackage.GlassSumScale);
         declarations.Real(name: "SDF_GLASS_DEPTH_DISTANCE_SCALE", value: SdfWorldPackage.GlassDepthDistanceScale);
         declarations.Real(name: "SDF_GLASS_ABSORPTION_SCALE", value: SdfWorldPackage.GlassAbsorptionScale);
+        declarations.Section(title: "The flow layer's clock period in seconds (SdfFlow.ClockPeriodSeconds) and its control word (SdfProgram.FlowLaneMask, SdfProgram.FlowWorldFrame).");
+        declarations.Real(name: "SDF_FLOW_CLOCK_PERIOD", value: (float)SdfFlow.ClockPeriodSeconds);
+        declarations.Bits(name: "SDF_FLOW_LANE_MASK", value: SdfProgram.FlowLaneMask);
+        declarations.Bits(name: "SDF_FLOW_WORLD_FRAME", value: SdfProgram.FlowWorldFrame);
         declarations.Section(title: "The sky's environment map (SdfSkyEnvironment) and the volume table's capacity (SdfProgramBuilder.MaxVolumes).");
         declarations.Signed(name: "SDF_SKY_ENVIRONMENT_SIZE", value: SdfSkyEnvironment.Size);
         declarations.Count(name: "SDF_SKY_ENVIRONMENT_COEFFICIENTS", value: SdfSkyEnvironment.CoefficientCount);

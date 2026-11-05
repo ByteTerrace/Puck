@@ -15,6 +15,10 @@ public sealed partial class SdfProgram {
     // 15.w/17.w/19.z; noise coverage is 19.w; reveal softness is 17.z. The second octave's frequency ratio is 15.z and
     // its gain 18.w (zero reads one octave); the turn is row 26 as a unit quaternion (x, y, z, w). A reveal stage is
     // present when its threshold (14.w, 16.w) is positive, and a deposit when the settle share (12.z) is.
+    // 27..30 the flow layer (SdfFlow; KEEP IN SYNC with sdfApplyFlow in shade/shade-layers.hlsli): 27 (velocity,
+    // pattern scale), 28 (stretch, cycles per clock period, tilt, coverage), 29 (revealed colour, softness), 30 (revealed
+    // roughness, revealed metal, seed bits, control bits: the lane plus one, or zero, in the low byte and the world-frame
+    // flag at bit 8); all zero for a material with no flow, which a zero scale says.
     private void PackMaterials(int materialOffsetVectors, int paintOffsetVectors, IReadOnlyList<SdfMaterial> materialTable, int materialCount) {
         var paintCursor = paintOffsetVectors;
         Span<Vector4> toonRows = stackalloc Vector4[4];
@@ -85,6 +89,22 @@ public sealed partial class SdfProgram {
                 for (var row = 0; (row < toonRows.Length); row++) {
                     Row(row: (22 + row), value: toonRows[row]);
                 }
+            }
+            if (m.Flow is { } flow) {
+                var revealed = (flow.Surface ?? default);
+
+                Row(row: 27, value: new(value: flow.Velocity, w: flow.Scale));
+                Row(row: 28, value: new(flow.Stretch, flow.CyclesPerClock, flow.Tilt, flow.Coverage));
+                Row(row: 29, value: new(value: revealed.Color, w: flow.Softness));
+                Row(
+                    row: 30,
+                    value: new(
+                        revealed.Roughness,
+                        revealed.Metal,
+                        BitConverter.UInt32BitsToSingle(value: flow.Seed),
+                        BitConverter.UInt32BitsToSingle(value: FlowControl(flow: flow))
+                    )
+                );
             }
             if (m.Glass is { } glass) {
                 Row(
@@ -219,6 +239,10 @@ public sealed partial class SdfProgram {
             }
         }
     }
+    // A flow's control word (row 30.w): its lane plus one, or zero for a constant flow, and FlowWorldFrame for a
+    // velocity authored in world space.
+    private static uint FlowControl(SdfFlow flow) =>
+        (((flow.Lane is { } lane) ? (((uint)lane) + 1u) : 0u) | ((flow.Frame == SdfFlowFrame.World) ? FlowWorldFrame : 0u));
     // PaintVectorsPerEntry float4 rows. KEEP IN SYNC with sdfApplyPaints in shade/shade-layers.hlsli.
     // 0 frame origin, shape type (uint bits); 1 frame rotation; 2 residual scale, its smallest component;
     // 3..4 the shape's data vectors, a side-table shape's offset naming row 8; 5 color, stroke;

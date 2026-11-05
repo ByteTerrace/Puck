@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-mesh' (sha256/efff9319d9f769e39407091e6c7c8f2794f6630ca60a58420dd66364567f447d). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-mesh' (sha256/c9d302ebd40055e4cd03a7240df631215b07f33ffc96e3b07e06abc7b976a321). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_MESH
 #define PUCK_SHADER_INTERFACE_SDF_MESH
 
@@ -22,7 +22,7 @@ struct SdfMeshPass {
     [[vk::offset(72)]] float exposeShare;
     [[vk::offset(76)]] float exposure;
     [[vk::offset(80)]] float farDistance;
-    [[vk::offset(84)]] uint _pad84;
+    [[vk::offset(84)]] float flowClock;
     [[vk::offset(88)]] float2 frustumOffset;
     [[vk::offset(96)]] uint geometryOnly;
     [[vk::offset(100)]] uint gridFlags;

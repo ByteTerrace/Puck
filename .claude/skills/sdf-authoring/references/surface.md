@@ -254,6 +254,57 @@ of its `scale`) follow the placement scale. A static placement shares one palett
 placements and draws no parented paint. To find a frame, paint a test stripe and
 look before trusting the numbers.
 
+## Flow
+
+`palette[].flow` moves a slot's shading along an authored flow while its
+geometry stands still: running water, a falls, wind over grass, a conveyor.
+A seeded value-noise pattern (the weathering's lattice, sampled with its
+gradient) advects along `velocity` in two layers half a `cycle` apart whose
+weights cross-fade, so neither restart shows, with a low-frequency per-place
+phase offset so the surface never pulses as one (Vlachos's flow shading,
+procedural instead of a texture). It tilts the shading normal by `tilt` times
+the pattern's slope and reveals `surface` over `coverage` of the slot. Only the
+velocity's part along the surface moves the pattern there, so one downward
+flow runs down every sheet of a falls at its own slope.
+
+```puck
+flow {
+  velocity [0, 0, -1.2]           // units per second, in the frame below
+  scale: 0.6                      // pattern cells per unit
+  stretch: 4                      // features 4x longer along the flow: streaks
+  cycle: 2                        // seconds a layer advects before it restarts
+  tilt: 0.25                      // normal slope per unit pattern slope
+  coverage: 0.18                  // share of the slot the surface covers
+  softness: 0.08
+  surface { color: "#F4F8F6", roughness: 0.55, metal: 0 }
+  seed: 7
+}
+```
+
+Fields and defaults: `velocity` (required), `scale` (1, positive), `stretch` (1,
+at least 1), `cycle` (1 s, in [0.25, 4096], rounded so a whole number of cycles
+fills the clock's 4096 s period), `tilt` (0), `coverage` (0, in [0, 1]),
+`softness` (0.1), `surface` (required when coverage is positive), `seed` (0),
+`lane` (none: a render lane in [0, 3] scaling the velocity, read from an
+inhabited body's look lanes; a placement without lanes stands still) and
+`frame` (`Object`, or `World`). Keep the travel of one cycle
+(`|velocity| × cycle`) under about a third of a pattern feature along the flow
+(`stretch / scale`), or the pattern visibly smears before it fades.
+
+**Frames.** As the other palette layers, an `Object` velocity is in the
+shader's frame: for a creation its engine frame, the author frame with x and z
+negated, so a creation whose author +Z is its flow authors `[0, 0, -speed]`; it
+turns with every placement and slot, and its pattern is placed as the
+weathering's is (world space on a static placement). `World` keeps both the
+velocity and the pattern in world space whatever the surface rides, so a
+gust's patches run continuously across separately swaying blades.
+
+The phase comes from the presented tick: the host integrates it into the pass
+block's `flowClock` (`SdfWorldPackage.FlowClock`), the one way it enters the
+kernels, so a settled capture holds still and lockstep stills repeat. The
+layer runs in the views pass's light stage after the weathering; the glass
+pass does not run it yet.
+
 ## Render lanes
 
 `looks.rows[].motion.lanes` holds **up to four** expressions in x, y, z, w
