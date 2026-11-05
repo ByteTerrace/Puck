@@ -224,8 +224,8 @@ public sealed partial class SdfWorldTables {
             destinationBufferHandle: destination.BufferHandle, sizeBytes: bytes, sourceOffsetBytes: sourceOffset, destinationOffsetBytes: destinationOffset);
     private void BeginHistoryCopy(nint commandBuffer, IGpuBuffer source, IGpuBuffer destination, bool compute = false) {
         // An unread routed world can copy history again without an intervening shader reader. Order earlier copies
-        // as well as readers and region-upload shader writes. First use in a new Direct3D 12 recording is COMMON;
-        // its tracker supplies any state established earlier in this recording instead.
+        // as well as readers and region-upload shader writes. The buffer transitions below declare no prior access:
+        // the global barrier is what orders it.
         m_gpu.Recorder.MemoryBarrier(commandBufferHandle: commandBuffer,
             destinationAccessMask: (compute ? (GpuAccess.ShaderRead | GpuAccess.ShaderWrite) : (GpuAccess.TransferRead | GpuAccess.CopyWrite)),
             destinationStageMask: (compute ? GpuStage.ComputeShader : GpuStage.Transfer),
