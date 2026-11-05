@@ -295,6 +295,8 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     private CameraSnapshot[] m_viewCameras = [];
     private ProbeData[] m_results = [];
     private readonly List<float> m_ages = [];
+    private readonly float[] m_listAgeMax = new float[SdfMeshIrradianceProbe.Levels];
+    private readonly int[] m_listAgeCount = new int[SdfMeshIrradianceProbe.Levels];
     // Where the worker stands in its list, and the geometry, windows and layout the list was made for; the worker's
     // alone, as the list is.
     private bool m_listed;
@@ -1704,6 +1706,11 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             m_selectionSweep = snapshot.Sweep;
         }
         var interleave = m_interleaving;
+        if (ages is not null) {
+            ages.Clear();
+            Array.Clear(m_listAgeMax);
+            Array.Clear(m_listAgeCount);
+        }
         if (GpuTrace is not null) { return ListGpu(in snapshot, all, candidates, ages, interleave); }
         var stale = false;
         var layout = snapshot.Layout;
@@ -1711,7 +1718,6 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         var now = Stopwatch.GetTimestamp();
 
         candidates.Clear();
-        ages?.Clear();
         for (var level = 0; (level < m_levels.Length); level++) {
             var cache = m_levels[level].Cache;
             var low = snapshot.Lows[level];
@@ -1731,7 +1737,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                         var bound = SdfMeshProbeRelight.AgeBoundOf(level, snapshot.AgeTarget);
 
                         if (present) {
-                            ages?.Add(age);
+                            RecordAge(ages, level, age);
                         }
                         if (!all && !trace && !rebase && (probe.Sweep == snapshot.Sweep) && !(bound > 0 && age >= bound)) {
                             stale |= !current;
@@ -1769,6 +1775,12 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         var weight = bound > 0 && age >= bound ? 1 : (inView ? 1 : .25f) * (changed ? 1.25f : 1);
         return (int)Math.Clamp(Math.Floor((double)relative * weight * 8), 0, int.MaxValue);
     }
+    private void RecordAge(List<float>? ages, int level, float age) {
+        if (ages is null) { return; }
+        ages.Add(age);
+        m_listAgeMax[level] = MathF.Max(m_listAgeMax[level], age);
+        m_listAgeCount[level]++;
+    }
     private static int ProbePhase(int x, int y, int z) => (x & 1) | ((y & 1) << 1) | ((z & 1) << 2);
     private static int CompareSpatial(Candidate a, Candidate b) => a.Band != b.Band ? a.Band.CompareTo(b.Band) : a.Morton.CompareTo(b.Morton);
     // Eight-cell radial bands retain near-first demand while adjacent probes share hierarchy cache lines.
@@ -1799,15 +1811,23 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         if (seconds > 0d) { m_cycleRate = ((float)((Counters.Read(kind: Relit) - m_cycleRelit) / seconds)); }
         m_cycleStart = now;
         m_cycleRelit = Counters.Read(kind: Relit);
-        if ((m_budget.Age <= 0f) || (m_ageMax <= m_budget.Age)) { return; }
+        if (m_budget.Age <= 0f) { return; }
+        var worst = -1;
+        var overrun = 1f;
+        var needed = 0f;
+        for (var level = 0; level < m_levels.Length; level++) {
+            var bound = SdfMeshProbeRelight.AgeBoundOf(level, m_budget.Age);
+            needed += m_listAgeCount[level] / bound;
+            var ratio = m_listAgeMax[level] / bound;
+            if (ratio > overrun) { worst = level; overrun = ratio; }
+        }
+        if (worst < 0) { return; }
         Counters.Count(kind: Behind);
         if ((m_behindAt != 0L) && (Stopwatch.GetElapsedTime(startingTimestamp: m_behindAt, endingTimestamp: now) < BehindInterval)) { return; }
         m_behindAt = now;
 
-        var needed = ((ages.Count / m_budget.Age));
-
         Console.Error.WriteLine(value: string.Create(provider: CultureInfo.InvariantCulture,
-            handler: $"[sdf.mesh-gi] behind age-max={m_ageMax:0.##} age-p50={m_ageMedian:0.##} target={m_budget.Age:0.##} probes={ages.Count} relit-per-second={m_cycleRate:0} needed-per-second={needed:0} shortfall-per-second={MathF.Max(x: 0f, y: (needed - m_cycleRate)):0} budget-relight={m_budget.Relight}"));
+            handler: $"[sdf.mesh-gi] behind level={worst} age-max={m_listAgeMax[worst]:0.##} target={SdfMeshProbeRelight.AgeBoundOf(worst, m_budget.Age):0.##} combined-age-p50={m_ageMedian:0.##} probes={ages.Count} relit-per-second={m_cycleRate:0} needed-per-second={needed:0} shortfall-per-second={MathF.Max(x: 0f, y: (needed - m_cycleRate)):0} budget-relight={m_budget.Relight}"));
     }
     // Traces and relights one batch of the listed probes on the pool, then lands it. The batch reads the cache as it stood
     // before the batch, so its probes' bounce does not depend on the order the pool runs them in. A pass of zero or more

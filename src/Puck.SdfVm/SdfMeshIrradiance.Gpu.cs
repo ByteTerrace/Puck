@@ -74,7 +74,6 @@ public sealed partial class SdfMeshIrradiance {
         TrimGpuHits(in snapshot);
         var now = Stopwatch.GetTimestamp();
         candidates.Clear();
-        ages?.Clear();
         // This is a snapshot pack, with no eligibility decision. The device evaluates changed-box/ray reach,
         // missing traces, rebase, sweep and lighting versions; the host keeps the existing stable priority order.
         for (var level = 0; level < m_levels.Length; level++) {
@@ -106,7 +105,7 @@ public sealed partial class SdfMeshIrradiance {
                         var bound = SdfMeshProbeRelight.AgeBoundOf(level, snapshot.AgeTarget);
                         candidates.Add(new Candidate(Cell: (x, y, z), Band: priority.Band, Morton: priority.Morton, Level: level, LitAt: present ? probe.LitAt : 0, Trace: false,
                             Overdue: bound > 0 && age >= bound, Urgency: AgePriority(age, bound, InAnyView(center, in snapshot), probe.Moved)));
-                        if (present) { ages?.Add(age); }
+                        if (present) { RecordAge(ages, level, age); }
                     }
                 }
             }

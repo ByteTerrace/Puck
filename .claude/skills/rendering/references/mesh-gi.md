@@ -55,6 +55,9 @@ unvisited phase. The
 CPU reference uses the same eligibility rule; lockstep always visits all cells.
 Partial interleaved sweeps neither certify convergence nor consume the
 full-window `MaxSweeps` limit.
+The combined ages remain diagnostic totals; `behind` compares each level to
+its own bound and reports the worst relative overrun. Its needed relight rate
+is the sum of each level's probe count divided by that level's bound.
 Relight priority uses age relative to the level's bound before level, capture
 age and spatial band. Overload can exceed the targets; no probe retires on its
 own small change.
@@ -386,9 +389,9 @@ after the main residency's done line; a nested residency's done line is insuffic
   grants relights and traces. A lighting that changes every frame keeps the
   relight cycling over the window; overload lengthens the lighting's age, not
   the frame. Each cycle's start records the window's age (median and oldest,
-  `world.budget` and `Describe`); a cycle older than the budget's `age` counts
+  `world.budget` and `Describe`); a level past its scaled age bound counts
   `behind` and prints `[sdf.mesh-gi] behind` (at most every ten seconds) with
-  the relit and needed rates. A re-traced probe keeps drawing its previous
+  that level, its bound and the relit and needed rates. A re-traced probe keeps drawing its previous
   measurement until its trace lands. Clear the CPU cache and staging volume
   only when the layout changes. On a resize or window move, retain the uploaded
   GPU table **and its old coordinates** until every new slot has a measured
