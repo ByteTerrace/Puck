@@ -80,7 +80,7 @@ public sealed class OrientedBoxContactLawTests {
         ));
         _ = new FixedStaticContactSolver(ContactSkin: FixedQ4816.Zero, GroundedThreshold: FixedQ4816.FromDouble(value: 0.5d), MaxIterations: 4).Resolve(
             colliders: new(colliders: [Wall]),
-            dynamicColliders: [],
+            dynamicColliders: FixedStaticColliderSet.Empty,
             orientation: FixedQuaternion.Identity,
             position: ref resolved,
             up: FixedVector3.UnitY,

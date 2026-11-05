@@ -60,6 +60,9 @@ public sealed partial class WorldColliderSet : IContactField {
     private readonly FixedStaticCollider[] m_colliders;
     // m_colliders with each one's world bounds, compiled once: what every solve runs over.
     private readonly FixedStaticColliderSet m_staticSet;
+    // m_attachedColliders with each one's world bounds, published from it at the end of every refresh or restore that
+    // rebuilds it, which are the only writers between solves.
+    private readonly FixedStaticColliderSet m_attachedSet = new();
 
     // A uniform grid over world X and Z of those bounds, so a sweep visits the colliders near its move rather than
     // all of them. A collider without bounds, or one spanning more than GridCellLimit cells, joins every query.
@@ -786,6 +789,7 @@ public sealed partial class WorldColliderSet : IContactField {
         RefreshAttachedRows(population: population);
         FoldAttachedMoves(colliders: m_previousAttachedColliders, rows: m_previousAttachedColliderRows);
         FoldAttachedMoves(colliders: m_attachedColliders, rows: m_attachedColliderRows);
+        m_attachedSet.Refresh(colliders: System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: m_attachedColliders));
     }
 
     /// <summary>Takes the box that every attached row moved since the previous take swept through: the bounds of its
@@ -1065,7 +1069,7 @@ public sealed partial class WorldColliderSet : IContactField {
         // runs once PER BODY, so refreshing here would repeat that recompute for every other body in the world).
         m_solver.Resolve(
             colliders: m_staticSet,
-            dynamicColliders: System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: m_attachedColliders),
+            dynamicColliders: m_attachedSet,
             orientation: in orientation,
             position: ref position,
             up: in up,
@@ -1077,7 +1081,7 @@ public sealed partial class WorldColliderSet : IContactField {
     public ContactResolution ResolveSweep(in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity,
         in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up) =>
         m_solver.ResolveSweep(colliders: m_staticSet,
-            dynamicColliders: System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: m_attachedColliders),
+            dynamicColliders: m_attachedSet,
             previousPosition: in previousPosition, position: ref position, velocity: ref velocity,
             orientation: in orientation, volumes: volumes, up: in up,
             candidates: Candidates(orientation: in orientation, position: position, previousPosition: in previousPosition, volumes: volumes));

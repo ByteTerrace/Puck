@@ -37,7 +37,7 @@ public sealed class RoundedBoxContactLawTests {
         Assert.False(condition: Cube.TryGetPush(uncertain: out _, position: position, orientation: FixedQuaternion.Identity,
             volume: volume, skin: FixedQ4816.Zero, push: out _));
         position += V(x: 0, y: -0.03, z: 0);
-        var resolution = solver.Resolve(colliders: new(colliders: [Cube]), dynamicColliders: [], position: ref position,
+        var resolution = solver.Resolve(colliders: new(colliders: [Cube]), dynamicColliders: FixedStaticColliderSet.Empty, position: ref position,
             velocity: ref velocity, orientation: FixedQuaternion.Identity, volumes: [volume], up: FixedVector3.UnitY);
 
         Assert.True(condition: resolution.Grounded);
@@ -91,7 +91,7 @@ public sealed class RoundedBoxContactLawTests {
         var target = V(x: 1.96, y: 1.98, z: 1.96);
         var falling = target;
         var velocity = -FixedVector3.UnitY;
-        var landing = solver.ResolveSweep(colliders: new(colliders: [Cube]), dynamicColliders: [], previousPosition: V(x: 1.96, y: 2.01, z: 1.96),
+        var landing = solver.ResolveSweep(colliders: new(colliders: [Cube]), dynamicColliders: FixedStaticColliderSet.Empty, previousPosition: V(x: 1.96, y: 2.01, z: 1.96),
             position: ref falling, velocity: ref velocity, orientation: FixedQuaternion.Identity, volumes: [volume], up: FixedVector3.UnitY);
 
         Assert.True(condition: landing.Grounded);
@@ -100,7 +100,7 @@ public sealed class RoundedBoxContactLawTests {
         var walking = target;
 
         velocity = -FixedVector3.UnitX;
-        var blocked = solver.ResolveSweep(colliders: FixedStaticColliderSet.Empty, dynamicColliders: [Cube], previousPosition: V(x: 1.99, y: 1.98, z: 1.96),
+        var blocked = solver.ResolveSweep(colliders: FixedStaticColliderSet.Empty, dynamicColliders: new(colliders: [Cube]), previousPosition: V(x: 1.99, y: 1.98, z: 1.96),
             position: ref walking, velocity: ref velocity, orientation: FixedQuaternion.Identity, volumes: [volume], up: FixedVector3.UnitY);
 
         Assert.False(condition: blocked.Grounded);
@@ -116,7 +116,7 @@ public sealed class RoundedBoxContactLawTests {
         var position = V(x: 1.925, y: 2.009, z: 0);
         var velocity = -FixedVector3.UnitX;
         var solver = new FixedStaticContactSolver(ContactSkin: FixedQ4816.Zero, GroundedThreshold: Q(value: 0.5), MaxIterations: 4);
-        var resolution = solver.ResolveSweep(new FixedStaticColliderSet(colliders: [Cube]), [], start, ref position, ref velocity,
+        var resolution = solver.ResolveSweep(new FixedStaticColliderSet(colliders: [Cube]), FixedStaticColliderSet.Empty, start, ref position, ref velocity,
             FixedQuaternion.Identity, [volume], FixedVector3.UnitY);
 
         Assert.True(condition: resolution.Grounded);

@@ -32,7 +32,7 @@ public sealed class FixedStepUpLawTests {
                 MaxIterations: 4
             ).ResolveSweep(
                 colliders: new(colliders: m_colliders),
-                dynamicColliders: [],
+                dynamicColliders: FixedStaticColliderSet.Empty,
                 orientation: FixedQuaternion.Identity,
                 position: ref position,
                 previousPosition: in previousPosition,

@@ -70,14 +70,14 @@ public sealed class ChamferedBoxContactLawTests {
         var target = V(x: 1.805, y: 1.805, z: 0);
         var position = target;
         var velocity = -FixedVector3.UnitY;
-        var falling = solver.ResolveSweep(new FixedStaticColliderSet(colliders: [Cube]), [], V(x: 1.805, y: 1.9, z: 0), ref position, ref velocity,
+        var falling = solver.ResolveSweep(new FixedStaticColliderSet(colliders: [Cube]), FixedStaticColliderSet.Empty, V(x: 1.805, y: 1.9, z: 0), ref position, ref velocity,
             FixedQuaternion.Identity, [body], FixedVector3.UnitY);
 
         Cube.TryGetPush(target, FixedQuaternion.Identity, body, FixedQ4816.Zero, out var diagnosticPush, out _);
         Assert.True(condition: falling.Grounded, userMessage: $"{falling}; {diagnosticPush}");
         position = target;
         velocity = -FixedVector3.UnitX;
-        var walking = solver.ResolveSweep(new FixedStaticColliderSet(colliders: [Cube]), [], V(x: 1.9, y: 1.805, z: 0), ref position, ref velocity,
+        var walking = solver.ResolveSweep(new FixedStaticColliderSet(colliders: [Cube]), FixedStaticColliderSet.Empty, V(x: 1.9, y: 1.805, z: 0), ref position, ref velocity,
             FixedQuaternion.Identity, [body], FixedVector3.UnitY);
 
         Assert.False(condition: walking.Grounded);

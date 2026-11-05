@@ -19,6 +19,13 @@ public sealed class FixedStaticContactSolverTests {
                 z: 0d
             )
         );
+    // The per-tick colliders, as a caller that recomputes them each tick publishes them.
+    private static FixedStaticColliderSet Refreshed(FixedStaticCollider[] colliders) {
+        var set = new FixedStaticColliderSet();
+
+        set.Refresh(colliders: colliders);
+        return set;
+    }
     private static FixedStaticContactSolver Solver(int iterations = 4) =>
         new(
             ContactSkin: FixedQ4816.Zero,
@@ -58,7 +65,7 @@ public sealed class FixedStaticContactSolverTests {
 
         var resolution = Solver().Resolve(
             colliders: new(colliders: colliders),
-            dynamicColliders: [],
+            dynamicColliders: FixedStaticColliderSet.Empty,
             orientation: FixedQuaternion.Identity,
             up: Vector(
                 x: 0d,
@@ -116,7 +123,7 @@ public sealed class FixedStaticContactSolverTests {
 
         var resolution = Solver().Resolve(
             colliders: new(colliders: colliders),
-            dynamicColliders: [],
+            dynamicColliders: FixedStaticColliderSet.Empty,
             orientation: FixedQuaternion.Identity,
             up: Vector(
                 x: 0d,
@@ -173,7 +180,7 @@ public sealed class FixedStaticContactSolverTests {
 
         var splitResolution = Solver().Resolve(
             colliders: new(colliders: floor),
-            dynamicColliders: wall,
+            dynamicColliders: Refreshed(colliders: wall),
             orientation: FixedQuaternion.Identity,
             up: Vector(
                 x: 0d,
@@ -186,7 +193,7 @@ public sealed class FixedStaticContactSolverTests {
         );
         var combinedResolution = Solver().Resolve(
             colliders: new(colliders: [.. floor, .. wall]),
-            dynamicColliders: [],
+            dynamicColliders: FixedStaticColliderSet.Empty,
             orientation: FixedQuaternion.Identity,
             up: Vector(
                 x: 0d,
@@ -224,7 +231,7 @@ public sealed class FixedStaticContactSolverTests {
 
         var resolution = Solver().Resolve(
             colliders: FixedStaticColliderSet.Empty,
-            dynamicColliders: [],
+            dynamicColliders: FixedStaticColliderSet.Empty,
             orientation: FixedQuaternion.Identity,
             up: Vector(
                 x: 0d,
@@ -260,7 +267,7 @@ public sealed class FixedStaticContactSolverTests {
         FixedStaticCollider[] colliders = [FixedStaticCollider.AxisAlignedBox(
             center: Vector(x: (wall ? 0d : 20d), y: 1d, z: 0d), halfExtents: Vector(x: 0.05d, y: 2d, z: 2d))];
         FixedBodyColliderVolume[] volumes = [UnitSphere() with { Radius = FixedQ4816.FromDouble(value: 0.25d) }];
-        var result = Solver().ResolveSweep(colliders: new(colliders: colliders), dynamicColliders: [], previousPosition: start,
+        var result = Solver().ResolveSweep(colliders: new(colliders: colliders), dynamicColliders: FixedStaticColliderSet.Empty, previousPosition: start,
             position: ref position, velocity: ref velocity, orientation: FixedQuaternion.Identity, volumes: volumes, up: FixedVector3.UnitY);
 
         Assert.Equal(expected: ContactRefusal.None, actual: result.Refusal);
@@ -283,7 +290,7 @@ public sealed class FixedStaticContactSolverTests {
         FixedStaticCollider[] colliders = [FixedStaticCollider.AxisAlignedBox(center: Vector(x: 500d, y: 1d, z: 0d),
             halfExtents: Vector(x: 0.05d, y: 2d, z: 2d))];
         FixedBodyColliderVolume[] volumes = [UnitSphere() with { Radius = FixedQ4816.FromDouble(value: 0.25d) }];
-        var result = Solver().ResolveSweep(colliders: new(colliders: colliders), dynamicColliders: [], previousPosition: start,
+        var result = Solver().ResolveSweep(colliders: new(colliders: colliders), dynamicColliders: FixedStaticColliderSet.Empty, previousPosition: start,
             position: ref position, velocity: ref velocity, orientation: FixedQuaternion.Identity, volumes: volumes, up: FixedVector3.UnitY);
 
         Assert.True(condition: result.Unproved);
@@ -303,7 +310,7 @@ public sealed class FixedStaticContactSolverTests {
         FixedStaticCollider[] colliders = [FixedStaticCollider.AxisAlignedBox(center: Vector(x: 1d, y: 1d, z: 50d),
             halfExtents: Vector(x: 0.05d, y: 2d, z: 2d))];
         FixedBodyColliderVolume[] volumes = [UnitSphere() with { Radius = FixedQ4816.FromDouble(value: 0.01d) }];
-        var result = Solver().ResolveSweep(colliders: new(colliders: colliders), dynamicColliders: [], previousPosition: start,
+        var result = Solver().ResolveSweep(colliders: new(colliders: colliders), dynamicColliders: FixedStaticColliderSet.Empty, previousPosition: start,
             position: ref position, velocity: ref velocity, orientation: FixedQuaternion.Identity, volumes: volumes,
             up: FixedVector3.UnitY);
 

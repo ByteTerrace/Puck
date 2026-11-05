@@ -88,13 +88,16 @@ public readonly record struct FixedColliderFrame(FixedVector3 AxisX, FixedVector
             (FixedQ4816.Abs(value: FixedVector3.Dot(left: axis, right: offset)) - (reach + FixedVector3.Dot(left: FixedVector3.Abs(value: axis), right: bodyExtent)));
     }
 }
-/// <summary>Static colliders compiled once with their <see cref="FixedColliderBox"/> bounds and
-/// <see cref="FixedColliderFrame"/> certificates: the only form in which <see cref="FixedStaticContactSolver"/> takes
-/// static colliders, so every bound it culls by is the collider's own and no caller supplies one.</summary>
+/// <summary>Colliders with their <see cref="FixedColliderBox"/> bounds and <see cref="FixedColliderFrame"/> certificates,
+/// computed from the colliders themselves: the only form in which <see cref="FixedStaticContactSolver"/> takes colliders,
+/// so every bound it culls by is the collider's own and no caller supplies one. A set is either compiled once over an
+/// array or refreshed by its owner with the colliders it recomputes each tick.</summary>
 public sealed class FixedStaticColliderSet {
-    private readonly FixedStaticCollider[] m_colliders;
-    private readonly FixedColliderBox[] m_boxes;
-    private readonly FixedColliderFrame[] m_frames;
+    private readonly bool m_refreshable;
+    private FixedStaticCollider[] m_colliders;
+    private FixedColliderBox[] m_boxes;
+    private FixedColliderFrame[] m_frames;
+    private int m_count;
 
     /// <summary>Initializes a new instance of the <see cref="FixedStaticColliderSet"/> class over an array it keeps.</summary>
     /// <param name="colliders">The colliders, in the order every query visits them; the set reads the array and the
@@ -105,22 +108,49 @@ public sealed class FixedStaticColliderSet {
         m_colliders = colliders;
         m_boxes = new FixedColliderBox[colliders.Length];
         m_frames = new FixedColliderFrame[colliders.Length];
-
-        for (var index = 0; (index < colliders.Length); index++) {
-            m_boxes[index] = FixedColliderBox.Of(collider: in colliders[index]);
-            m_frames[index] = FixedColliderFrame.Of(collider: in colliders[index]);
-        }
+        Compile(count: colliders.Length);
+    }
+    /// <summary>Initializes a new, empty instance of the <see cref="FixedStaticColliderSet"/> class that owns its storage
+    /// and that <see cref="Refresh"/> fills.</summary>
+    public FixedStaticColliderSet() {
+        m_colliders = [];
+        m_boxes = [];
+        m_frames = [];
+        m_refreshable = true;
     }
 
     /// <summary>Gets the set of no colliders.</summary>
     public static FixedStaticColliderSet Empty { get; } = new(colliders: []);
 
     /// <summary>Gets the colliders, in query order.</summary>
-    public ReadOnlySpan<FixedStaticCollider> Colliders => m_colliders;
+    public ReadOnlySpan<FixedStaticCollider> Colliders => m_colliders.AsSpan(start: 0, length: m_count);
     /// <summary>Gets each collider's bounds, at the collider's index.</summary>
-    public ReadOnlySpan<FixedColliderBox> Boxes => m_boxes;
+    public ReadOnlySpan<FixedColliderBox> Boxes => m_boxes.AsSpan(start: 0, length: m_count);
     /// <summary>Gets each collider's oriented frame, at the collider's index.</summary>
-    public ReadOnlySpan<FixedColliderFrame> Frames => m_frames;
+    public ReadOnlySpan<FixedColliderFrame> Frames => m_frames.AsSpan(start: 0, length: m_count);
     /// <summary>Gets the number of colliders.</summary>
-    public int Count => m_colliders.Length;
+    public int Count => m_count;
+
+    /// <summary>Replaces the colliders of a set that owns its storage with copies of the given ones and compiles their
+    /// bounds; storage grows only past its largest earlier count.</summary>
+    /// <param name="colliders">The colliders, in the order every query visits them.</param>
+    /// <exception cref="InvalidOperationException">The set was compiled over a caller's array.</exception>
+    public void Refresh(ReadOnlySpan<FixedStaticCollider> colliders) {
+        if (!m_refreshable) { throw new InvalidOperationException(message: "A collider set compiled over a caller's array is fixed."); }
+        if (m_colliders.Length < colliders.Length) {
+            m_colliders = new FixedStaticCollider[colliders.Length];
+            m_boxes = new FixedColliderBox[colliders.Length];
+            m_frames = new FixedColliderFrame[colliders.Length];
+        }
+        colliders.CopyTo(destination: m_colliders);
+        Compile(count: colliders.Length);
+    }
+
+    private void Compile(int count) {
+        for (var index = 0; (index < count); index++) {
+            m_boxes[index] = FixedColliderBox.Of(collider: in m_colliders[index]);
+            m_frames[index] = FixedColliderFrame.Of(collider: in m_colliders[index]);
+        }
+        m_count = count;
+    }
 }
