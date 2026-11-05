@@ -1,4 +1,4 @@
-namespace Puck.HumbleGamingBrick.Forge;
+namespace Puck.HumbleGamingBrick;
 
 /// <summary>
 /// Re-encodes <see cref="BootDivPrediction.ChecksumContributions"/> for the Color boot image. The prediction indexes a

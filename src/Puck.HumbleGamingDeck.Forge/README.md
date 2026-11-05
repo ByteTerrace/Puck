@@ -7,12 +7,11 @@ NES 2.0 MMC1 or MMC3 image whose last 16 KiB holds the program; the Post
 battery's fixtures, the Deck's board laws and the shipped test cartridges
 (`DeckTestCartridges`) are written with it.
 `HumbleGamingDeckExtension` registers the `humble-gaming-deck` machine engine,
-which mounts iNES and NES 2.0 images as raw bytes, so no content provider
-registers beside it.
+which mounts native images directly. Its `DeckContentProvider` prepares authored
+`.deck` selections through the shared code-keyed derived-byte cache.
 
-`puck cartridges deck --output worlds/debug/cartridges/deck` rebuilds
-the shipped `.nes` images, and `--check` compares them byte for byte without
-writing.
+`puck cartridges deck --output <dir>` exports native `.nes` images when needed.
+Worlds commit `.deck` sources and derive executable bytes at boot, with counted cache misses and hits.
 
 ## Documentation
 

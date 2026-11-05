@@ -114,3 +114,5 @@ worlds/debug/slices/
 
 # Cartridge documents are derived from authored sources.
 /worlds/**/*.cartridge.json
+/worlds/debug/cartridges/deck/*.nes
+/src/Puck.HumbleGamingBrick/Firmware/*.bin

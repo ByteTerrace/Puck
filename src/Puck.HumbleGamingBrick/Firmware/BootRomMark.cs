@@ -1,4 +1,4 @@
-namespace Puck.HumbleGamingBrick.Forge;
+namespace Puck.HumbleGamingBrick;
 
 /// <summary>The cartridge-header logo policy of a Puck-branded boot program.</summary>
 /// <remarks>

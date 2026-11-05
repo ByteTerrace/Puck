@@ -220,7 +220,7 @@ its exact original bytes and path even after the source file is changed or
 deleted; live reconfiguration never reloads that path.
 
 The `boot-rom-handoff` Tier-A stage boots every revision through the image
-`Puck.HumbleGamingBrick.Forge`'s `BootRomBuilder` emits, against ten synthetic
+`Puck.HumbleGamingBrick`'s `BootRomBuilder` emits, against ten synthetic
 headers (both licensee buckets, both color flags, the title checksums the Color
 handoff branches on, and the checksums its boot timing tells apart by the fourth
 title letter) plus the seven named mooneye divider-reference cartridges when

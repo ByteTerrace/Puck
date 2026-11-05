@@ -1,6 +1,5 @@
 using Puck.Cli.Firmware;
 using Puck.HumbleGamingBrick;
-using Puck.HumbleGamingBrick.Forge;
 using Puck.Testing;
 using Xunit;
 
@@ -26,8 +25,7 @@ public sealed class FirmwareCommandTests {
             source: directory.RootPath,
             output: image,
             clang: executable,
-            linker: executable,
-            verify: false
+            linker: executable
         );
 
         Assert.Equal(
@@ -41,7 +39,7 @@ public sealed class FirmwareCommandTests {
         Assert.Single(collection: Directory.GetFiles(path: directory.RootPath));
     }
     [Fact]
-    public void HgbGenerationAndVerificationCoverEveryRevision() {
+    public void HgbExportCoversEveryRevision() {
         using var directory = new TemporaryDirectory(prefix: "puck-firmware tests ");
 
         Assert.Equal(
@@ -70,10 +68,7 @@ public sealed class FirmwareCommandTests {
             );
         }
 
-        Assert.Equal(
-            expected: 0,
-            actual: SuiteRoot.Invoke(args: ["firmware", "hgb", "--output", directory.RootPath, "--verify"])
-        );
+
     }
     [Fact]
     public void MissingOrUnknownOptionsAreUsageErrors() {
@@ -89,55 +84,5 @@ public sealed class FirmwareCommandTests {
             expected: 2,
             actual: SuiteRoot.Invoke(args: ["firmware", "agb", "--source", "unused"])
         );
-    }
-    [Fact]
-    public void VerificationDoesNotCreateMissingArtifactsOrRepairDrift() {
-        using var directory = new TemporaryDirectory(prefix: "puck-firmware tests ");
-        var missingDirectory = Path.Combine(
-            path1: directory.RootPath,
-            path2: "not created"
-        );
-        var image = Path.Combine(
-            path1: missingDirectory,
-            path2: "test.bin"
-        );
-        byte[] expected = [3, 1, 4, 1, 5];
-
-        Assert.False(condition: GeneratedArtifact.WriteOrVerify(
-            bytes: expected,
-            path: image,
-            verb: "test",
-            verify: true
-        ));
-        Assert.False(condition: Directory.Exists(path: missingDirectory));
-        Assert.True(condition: GeneratedArtifact.WriteOrVerify(
-            bytes: expected,
-            path: image,
-            verb: "test",
-            verify: false
-        ));
-        Assert.True(condition: GeneratedArtifact.WriteOrVerify(
-            bytes: expected,
-            path: image,
-            verb: "test",
-            verify: true
-        ));
-
-        byte[] different = [3, 1, 4, 1, 6];
-
-        Assert.False(condition: GeneratedArtifact.WriteOrVerify(
-            bytes: different,
-            path: image,
-            verb: "test",
-            verify: true
-        ));
-        Assert.Equal(
-            expected: expected,
-            actual: File.ReadAllBytes(path: image)
-        );
-        Assert.Empty(collection: Directory.GetFiles(
-            path: missingDirectory,
-            searchPattern: "*.tmp"
-        ));
     }
 }

@@ -487,6 +487,13 @@ Why: the owner's ruling. Shipped bake products are acceptable so long as Puck
 never again becomes a slave to a recorded artifact, as it did with the deleted
 ledgers and the bake derivation fingerprint.
 
+The AGB BIOS is an explicit measured exception to repository removal: native
+compilation takes under a second with LLVM, but a host without Clang and an ELF
+linker cannot derive it at all. Keep its packaged image so direct embedding and
+world startup need no native build toolchain. The measurement is recorded in the
+change's commit evidence. This exception adds no image-comparison gate;
+`puck firmware agb` exports from the maintained C and ARM sources.
+
 Mesh derivation and drawing have separate owners. `SdfMeshPathBake` reconciles
 product inputs and derives meshes; `SdfMeshDresser` retains poses, draws and picks;
 `SdfMeshPathBake.Complete` interprets sampler answers, `SdfMeshBakeGpuWork` carries a batch to the device and back as background GPU work outside the closure, and `SdfMeshBakeBlock` owns the
