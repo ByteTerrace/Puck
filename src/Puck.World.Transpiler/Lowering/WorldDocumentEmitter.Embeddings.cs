@@ -1,3 +1,4 @@
+using Puck.Assets.Documents;
 using System.Globalization;
 using System.Text.Json.Nodes;
 using Puck.State;
@@ -170,7 +171,7 @@ public static partial class WorldDocumentEmitter {
             stateObj["spaces"] = spacesArr;
         }
 
-        var spacesPointer = $"{statePointer}/spaces";
+        var spacesPointer = DocumentJsonPointer.Child(name: "spaces", pointer: statePointer);
 
         scope.SourceMap?.Register(jsonPointer: spacesPointer, span: block.Span);
 
@@ -208,7 +209,7 @@ public static partial class WorldDocumentEmitter {
                 }
 
                 var spaceIdx = spacesArr.Count;
-                var spacePointer = $"{spacesPointer}/{spaceIdx}";
+                var spacePointer = DocumentJsonPointer.Child(index: spaceIdx, pointer: spacesPointer);
                 var oldPointer = scope.CurrentPointer;
 
                 scope.SourceMap?.Register(

@@ -1356,20 +1356,13 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"{path}.seatCount {layout.SeatCount} must be non-negative.");
             }
 
-            RequireNonNegative(
-                value: layout.TransitionSeconds,
-                name: $"{path}.transitionSeconds",
-                errors: errors
-            );
-
-            RequireRange(
-                value: layout.TransitionRenderScale,
-                min: 0f,
-                max: 1f,
-                name: $"{path}.transitionRenderScale",
-                errors: errors,
-                minExclusive: true
-            );
+            if (layout.Transition is { } transition) {
+                RequireViewTransition(
+                    errors: errors,
+                    path: $"{path}.transition",
+                    transition: transition
+                );
+            }
 
             var slots = layout.Slots;
 

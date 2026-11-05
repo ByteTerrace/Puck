@@ -1,3 +1,4 @@
+using Puck.Assets.Documents;
 using System.Text.Json.Nodes;
 using Puck.State;
 using Puck.Transpiler.Ast;
@@ -252,7 +253,7 @@ public static partial class WorldDocumentEmitter {
         }
 
         scope.SourceMap?.Register(
-            jsonPointer: $"{scope.CurrentPointer}/ruleGroups/{groups.Count}",
+            jsonPointer: DocumentJsonPointer.Child(index: groups.Count, pointer: DocumentJsonPointer.Child(name: "ruleGroups", pointer: scope.CurrentPointer)),
             span: span
         );
         groups.AppendNode(item: group);

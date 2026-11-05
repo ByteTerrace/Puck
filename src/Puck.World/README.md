@@ -2265,7 +2265,7 @@ does not author is refused by name. The shipped worlds share one table,
 another basis imports it by name, so every presenting world answers each tier
 without moving its own boot levers. Render scale applies
 to both seat views and named cameras as each view's ceiling. A layout
-transition's `transitionRenderScale` multiplies only the grid rendered inside
+transition's `renderScale` multiplies only the grid rendered inside
 that ceiling, which allocates and rebuilds nothing, so it has no effect at the
 native tier, where a view reconstructs nothing. `world.temporal on` reconstructs
 the world's own views over time at any render scale: each jitters its samples,

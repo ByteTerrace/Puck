@@ -155,8 +155,10 @@ public class ComprehensiveSyntheticTests {
                             y: 0
                         }
                     ]
-                    transitionRenderScale: 1
-                    transitionSeconds: tickRate
+                    transition {
+                        renderScale: 1
+                        seconds: tickRate
+                    }
                 }
 
                 seatControl {
@@ -286,7 +288,7 @@ public class ComprehensiveSyntheticTests {
         );
         Assert.Equal(
             0.25,
-            layout0["transitionSeconds"].AsNumber()
+            layout0["transition"]!["seconds"].AsNumber()
         );
 
         var seatRig = Assert.IsType<JsonObject>(@object: views["seatRig"]);

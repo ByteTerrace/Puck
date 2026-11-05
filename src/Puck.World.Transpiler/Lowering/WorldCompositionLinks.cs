@@ -1,3 +1,4 @@
+using Puck.Assets.Documents;
 using System.Text.Json.Nodes;
 using Puck.State;
 using Puck.Transpiler.Ast;
@@ -443,20 +444,20 @@ public static class WorldCompositionLinks {
                 continue;
             }
             for (var index = start; (index < rows.Count); index++) {
-                map.Register(jsonPointer: $"/{sectionName}/{index}", origin: origin);
+                map.Register(jsonPointer: DocumentJsonPointer.Child(index: index, pointer: DocumentJsonPointer.Child(name: sectionName, pointer: string.Empty)), origin: origin);
             }
         }
         if (world["placements"]?["rows"] is JsonArray placements) {
             for (var placementIndex = 0; (placementIndex < placements.Count); placementIndex++) {
                 if (placementIndex >= before.Placements) {
-                    map.Register(jsonPointer: $"/placements/rows/{placementIndex}", origin: origin);
+                    map.Register(jsonPointer: DocumentJsonPointer.Child(index: placementIndex, pointer: "/placements/rows"), origin: origin);
                 }
                 if (placements[placementIndex]?["faceSources"] is not JsonArray faces) {
                     continue;
                 }
                 for (var faceIndex = 0; (faceIndex < faces.Count); faceIndex++) {
                     if ((faces[faceIndex] is JsonObject face) && (face["portal"] is JsonObject portal) && string.Equals(a: StringValue(node: portal["destination"]), b: portalDestination, comparisonType: StringComparison.Ordinal)) {
-                        map.Register(jsonPointer: $"/placements/rows/{placementIndex}/faceSources/{faceIndex}/portal", origin: origin);
+                        map.Register(jsonPointer: DocumentJsonPointer.Child(name: "portal", pointer: DocumentJsonPointer.Child(index: faceIndex, pointer: DocumentJsonPointer.Child(name: "faceSources", pointer: DocumentJsonPointer.Child(index: placementIndex, pointer: "/placements/rows")))), origin: origin);
                     }
                 }
             }

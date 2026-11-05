@@ -13814,13 +13814,9 @@ export type WorldViewLayout = {
    */
   seatCount?: number;
   /**
-   * How long the ease into this composition takes when it becomes active. Default 0, a cut.
+   * The ease into this composition when it becomes active: how long it takes and how far the render scale dips while it runs. Absent is the neutral WorldViewTransition, a cut with no dip.
    */
-  transitionSeconds?: number;
-  /**
-   * The render scale (0, 1] applied to every slot mid-transition (a soft dip that sharpens on settle). It multiplies the render grid inside each view's render-scale ceiling and allocates nothing, so a view rendering at native scale, which reconstructs nothing, does not dip. Default 1, no dip.
-   */
-  transitionRenderScale?: number;
+  transition?: WorldViewTransition | null;
   /**
    * Gets the slots, in order. The absence-coalesce lives in the accessor for the same reason Elements's does.
    */
@@ -13888,6 +13884,9 @@ export type WorldViewSlot = {
   instance?: string | null;
 };
 
+/**
+ * The transition envelope of a composition change: how long the ease takes and how far the render scale dips while it runs. A layout carries one as Transition and the built-in seat ladder as BuiltinTransition; the defaults are neutral, a cut with no dip.
+ */
 export type WorldViewTransition = {
   /**
    * How long the ease takes, in seconds; 0 is a cut. Default 0.

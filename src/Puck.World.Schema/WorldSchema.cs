@@ -1615,7 +1615,7 @@ public static partial class WorldSchema {
     }
     // The document-absolute JSON pointer of node under root, by parent-chain walk; null when node is not in root.
     private static string? JsonPointerOf(JsonNode node, JsonObject root) {
-        var segments = new List<string>();
+        var steps = new List<(string? Name, int Index)>();
         var cursor = node;
 
         while (!ReferenceEquals(
@@ -1628,15 +1628,19 @@ public static partial class WorldSchema {
                 return null;
             }
 
-            segments.Add(item: ((parent is JsonArray array)
-                ? array.IndexOf(item: cursor).ToString(provider: System.Globalization.CultureInfo.InvariantCulture)
-                : Puck.Assets.Documents.DocumentJsonPointer.Escape(value: cursor.GetPropertyName())));
+            steps.Add(item: ((parent is JsonArray array) ? (null, array.IndexOf(item: cursor)) : (cursor.GetPropertyName(), -1)));
             cursor = parent;
         }
 
-        segments.Reverse();
+        var pointer = string.Empty;
 
-        return string.Concat(values: segments.Select(selector: static segment => ("/" + segment)));
+        for (var at = (steps.Count - 1); (at >= 0); at--) {
+            pointer = ((steps[at].Name is { } name)
+                ? Puck.Assets.Documents.DocumentJsonPointer.Child(name: name, pointer: pointer)
+                : Puck.Assets.Documents.DocumentJsonPointer.Child(index: steps[at].Index, pointer: pointer));
+        }
+
+        return pointer;
     }
     private static JsonConverter? ResolveConverter(Type type) =>
         Converters.GetOrAdd(

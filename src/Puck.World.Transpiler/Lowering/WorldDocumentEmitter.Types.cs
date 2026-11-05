@@ -1,3 +1,4 @@
+using Puck.Assets.Documents;
 using System.Globalization;
 using System.Text.Json.Nodes;
 using Puck.Transpiler.Ast;
@@ -181,7 +182,7 @@ public static partial class WorldDocumentEmitter {
                 fieldObj["enum"] = field.TypeName;
                 MaterializeRuntimeEnum(name: field.TypeName, state: state, scope: scope);
                 if (pointer is not null) {
-                    scope.SourceMap?.Register(jsonPointer: $"{pointer}/fields/{fields.Count}/enum", span: field.Span);
+                    scope.SourceMap?.Register(jsonPointer: DocumentJsonPointer.Child(name: "enum", pointer: DocumentJsonPointer.Child(index: fields.Count, pointer: DocumentJsonPointer.Child(name: "fields", pointer: pointer))), span: field.Span);
                 }
             }
             if (field.Default is { } defaultExpr) {
@@ -274,7 +275,7 @@ public static partial class WorldDocumentEmitter {
         }
 
         scope.SourceMap?.Register(
-            jsonPointer: $"{pointer}/enum",
+            jsonPointer: DocumentJsonPointer.Child(name: "enum", pointer: pointer),
             span: span
         );
     }

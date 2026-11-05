@@ -71,8 +71,6 @@ let motionCameras = map(concat(motionShots, courseShots), shot => {
 template studioLayouts() {
   layout "motion" {
     seatCount: 0
-    transitionSeconds: 0
-    transitionRenderScale: 1
     slots [
       { x: 0, y: 0, width: 0.5, height: 0.5, camera: "motion-profile" }
       { x: 0.5, y: 0, width: 0.5, height: 0.5, camera: "motion-front" }
@@ -82,8 +80,6 @@ template studioLayouts() {
   }
   layout "motion-course" {
     seatCount: 0
-    transitionSeconds: 0
-    transitionRenderScale: 1
     slots [
       { x: 0, y: 0, width: 0.5, height: 0.5, camera: "motion-profile" }
       { x: 0.5, y: 0, width: 0.5, height: 0.5, camera: "motion-rear" }
@@ -93,8 +89,6 @@ template studioLayouts() {
   }
   layout "studio-armor" {
     seatCount: 0
-    transitionSeconds: 0
-    transitionRenderScale: 1
     slots [
       { x: 0, y: 0, width: 0.5, height: 0.5, camera: "studio-shoulders-front" }
       { x: 0.5, y: 0, width: 0.5, height: 0.5, camera: "studio-shoulders-quarter" }
@@ -104,8 +98,6 @@ template studioLayouts() {
   }
   layout "studio-torso" {
     seatCount: 0
-    transitionSeconds: 0
-    transitionRenderScale: 1
     slots [
       { x: 0, y: 0, width: 0.5, height: 0.5, camera: "studio-torso-front" }
       { x: 0.5, y: 0, width: 0.5, height: 0.5, camera: "studio-torso-quarter" }
@@ -115,8 +107,6 @@ template studioLayouts() {
   }
   layout "studio-jets" {
     seatCount: 0
-    transitionSeconds: 0
-    transitionRenderScale: 1
     slots [
       { x: 0, y: 0, width: 0.5, height: 0.5, camera: "studio-jets-quarter" }
       { x: 0.5, y: 0, width: 0.5, height: 0.5, camera: "studio-boots-side" }
@@ -126,8 +116,6 @@ template studioLayouts() {
   }
   layout "studio-boots" {
     seatCount: 0
-    transitionSeconds: 0
-    transitionRenderScale: 1
     slots [
       { x: 0, y: 0, width: 0.5, height: 0.5, camera: "studio-boots-front" }
       { x: 0.5, y: 0, width: 0.5, height: 0.5, camera: "studio-boots-side" }

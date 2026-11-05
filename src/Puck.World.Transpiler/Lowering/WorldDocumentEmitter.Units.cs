@@ -42,9 +42,9 @@ public static class WorldDocumentEmitterUnits {
     private static readonly HashSet<string> MetersFields = new(comparer: StringComparer.Ordinal) {
         "position", "scale", "radius", "margin", "reach", "standoff", "cellSize", "spacing", "distance",
     };
-    // A key's time on its clock: seconds, minutes or hours on a clock whose span reads as a time of day.
+    // A key whose value is a time: `at` on a clock whose span reads as a time of day, and `seconds`, a duration record's length (a key ending in Seconds is classified by its name).
     private static readonly HashSet<string> SecondsFields = new(comparer: StringComparer.Ordinal) {
-        "at",
+        "at", "seconds",
     };
     private static readonly HashSet<string> FractionFields = new(comparer: StringComparer.Ordinal) {
         "alpha", "opacity", "fraction", "ratio", "percent", "chance", "probability",

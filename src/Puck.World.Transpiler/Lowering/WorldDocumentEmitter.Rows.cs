@@ -1,3 +1,4 @@
+using Puck.Assets.Documents;
 using System.Text.Json.Nodes;
 using Puck.SignedDistance;
 using Puck.Transpiler.Ast;
@@ -30,7 +31,7 @@ public static partial class WorldDocumentEmitter {
         );
 
         var shapeIdx = shapesArr.Count;
-        var shapePointer = $"{scope.CurrentPointer}/shapes/{shapeIdx}";
+        var shapePointer = DocumentJsonPointer.Child(index: shapeIdx, pointer: DocumentJsonPointer.Child(name: "shapes", pointer: scope.CurrentPointer));
 
         scope.SourceMap?.Register(
             jsonPointer: shapePointer,
@@ -85,7 +86,7 @@ public static partial class WorldDocumentEmitter {
             target[property.Name] = sectionObject;
         }
 
-        var rowsPointer = $"{pointer}/{WorldSectionRows.Member}";
+        var rowsPointer = DocumentJsonPointer.Child(name: WorldSectionRows.Member, pointer: pointer);
         var offset = ((sectionObject[WorldSectionRows.Member] is JsonArray existing) ? existing.Count : 0);
         var lowered = DocumentLowering.LowerMember(
             fieldKey: WorldSectionRows.Member,
@@ -105,7 +106,7 @@ public static partial class WorldDocumentEmitter {
         ) {
             for (var index = 0; (index < authored.Elements.Count); ++index) {
                 scope.SourceMap?.Register(
-                    jsonPointer: $"{rowsPointer}/{(offset + index)}",
+                    jsonPointer: DocumentJsonPointer.Child(index: offset + index, pointer: rowsPointer),
                     span: authored.Elements[index].Span
                 );
             }
@@ -122,7 +123,7 @@ public static partial class WorldDocumentEmitter {
             parent["placements"] = placementsObj;
         }
 
-        var placementsPointer = $"{scope.CurrentPointer}/placements";
+        var placementsPointer = DocumentJsonPointer.Child(name: "placements", pointer: scope.CurrentPointer);
         var oldPointer = scope.CurrentPointer;
 
         scope.SourceMap?.Register(
@@ -144,7 +145,7 @@ public static partial class WorldDocumentEmitter {
 
                 var rowIdx = rowsArr.Count;
 
-                rowScope.CurrentPointer = $"{placementsPointer}/rows/{rowIdx}";
+                rowScope.CurrentPointer = DocumentJsonPointer.Child(index: rowIdx, pointer: DocumentJsonPointer.Child(name: "rows", pointer: placementsPointer));
                 rowScope.SourceMap?.Register(
                     jsonPointer: rowScope.CurrentPointer,
                     span: row.Span
@@ -170,7 +171,7 @@ public static partial class WorldDocumentEmitter {
             } else if (stmt is BlockNode { Name: null, Target: null, NameExpression: null } nested) {
                 // An object-valued field of the section, written in block form: `policy { }` is the section's own
                 // `policy` object, the same field the property spelling fills.
-                rowScope.CurrentPointer = $"{placementsPointer}/{nested.Identifier}";
+                rowScope.CurrentPointer = DocumentJsonPointer.Child(name: nested.Identifier, pointer: placementsPointer);
                 rowScope.SourceMap?.Register(
                     jsonPointer: rowScope.CurrentPointer,
                     span: nested.Span
@@ -366,7 +367,7 @@ public static partial class WorldDocumentEmitter {
             parent["prototypes"] = protoArr;
         }
 
-        var prototypesPointer = $"{scope.CurrentPointer}/prototypes";
+        var prototypesPointer = DocumentJsonPointer.Child(name: "prototypes", pointer: scope.CurrentPointer);
         var oldPointer = scope.CurrentPointer;
 
         scope.SourceMap?.Register(
@@ -381,7 +382,7 @@ public static partial class WorldDocumentEmitter {
             if (stmt is BlockNode { Identifier: "prototype" } row) {
                 var rowIdx = protoArr.Count;
 
-                rowScope.CurrentPointer = $"{prototypesPointer}/{rowIdx}";
+                rowScope.CurrentPointer = DocumentJsonPointer.Child(index: rowIdx, pointer: prototypesPointer);
                 rowScope.SourceMap?.Register(
                     jsonPointer: rowScope.CurrentPointer,
                     span: row.Span

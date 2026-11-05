@@ -9521,6 +9521,27 @@
         null
       ]
     },
+    "WorldViewTransition": {
+      "description": "The transition envelope of a composition change: how long the ease takes and how far the render scale dips while it runs. A layout carries one as Transition and the built-in seat ladder as BuiltinTransition; the defaults are neutral, a cut with no dip.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "seconds": {
+          "description": "How long the ease takes, in seconds; 0 is a cut. Default 0.",
+          "type": "number",
+          "default": 0
+        },
+        "renderScale": {
+          "description": "The render scale (0, 1] applied to every slot mid-transition; 1 is no dip. Default 1.",
+          "type": "number",
+          "default": 1
+        }
+      },
+      "additionalProperties": false,
+      "title": "WorldViewTransition"
+    },
     "WorldChannelSelection": {
       "type": [
         "object",

@@ -20,7 +20,7 @@ file is corrected in the same change.
 |---|---|
 | Parser, printer, lowering, diagnostics | `src/Puck.Transpiler` (`Parsing/PuckParser*.cs`, `Formatting/PuckPrinter*.cs`, `Lowering/DocumentLowering*.cs` and `DocumentBuiltins.cs`, `Diagnostics/PuckDiagnosticCodes.cs`) |
 | World vocabulary, its linter and language server | `src/Puck.World.Transpiler` (`Vocabulary/` describes every construct once; `Validation/PuckLinter*.cs`; `Lsp/`) |
-| World compile contract | `src/Puck.World.Transpiler/WorldCompiler.cs`; `WorldDocumentMembers.cs` walks the emitted document along `WorldModelShape`: it refuses unconsumed members, lowers authored pins to canonical document identities, and writes each typed value's canonical form (float spelling, rotation sign, convex profile start, zero-is-absent shape members, a write's `value`/`fromState`, model member order) |
+| World compile contract | `src/Puck.World.Transpiler/WorldCompiler.cs`; `WorldDocumentMembers.cs` walks the emitted document along `WorldModelShape`: it refuses unconsumed members (naming the nearest declared members through `DocumentNearestNames`), lowers authored pins to canonical document identities, and writes each typed value's canonical form (float spelling, rotation sign, convex profile start, zero-is-absent shape members, a write's `value`/`fromState`, model member order) |
 | Cartridge vocabulary | `src/Puck.GamingBricks.Transpiler` |
 | Expression vocabulary (operators, named functions) | `Puck.State.ExpressionOperators`, `Puck.State.ExpressionVocabulary` |
 | CLI verbs | `src/Puck.Cli.Worlds` (`Transpiler/`: compile, decompile, lint, lsp, migrate, embed; `Test/`; `Vocabulary/`), `src/Puck.Cli.Format` (format) |

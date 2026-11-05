@@ -1,3 +1,4 @@
+using Puck.Assets.Documents;
 using System.Text.Json.Nodes;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Diagnostics;
@@ -21,7 +22,7 @@ public static partial class WorldDocumentEmitter {
             return;
         }
 
-        var pointer = $"{scope.CurrentPointer}/{GraphParametersKey}";
+        var pointer = DocumentJsonPointer.Child(name: GraphParametersKey, pointer: scope.CurrentPointer);
 
         // The member's first statement stands for it in the source map.
         if (target[GraphParametersKey] is not JsonObject parameters) {
@@ -42,7 +43,7 @@ public static partial class WorldDocumentEmitter {
             return;
         }
 
-        scope.SourceMap?.Register(jsonPointer: $"{pointer}/{parameter.Pass}/{parameter.Member}", span: parameter.Span);
+        scope.SourceMap?.Register(jsonPointer: DocumentJsonPointer.Child(name: parameter.Member, pointer: DocumentJsonPointer.Child(name: parameter.Pass, pointer: pointer)), span: parameter.Span);
         pass[parameter.Member] = DocumentLowering.At(
             context: null,
             lower: () => DocumentLowering.LowerValue(expr: parameter.Value, fieldKey: parameter.Member, scope: scope),

@@ -1,3 +1,4 @@
+using Puck.Assets.Documents;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
@@ -77,7 +78,7 @@ public static partial class WorldSchema {
                 defs: defs,
                 name: name,
                 node: defs[name],
-                path: $"#/$defs/{name}",
+                path: DocumentJsonPointer.Child(name: name, pointer: "#/$defs"),
                 text: text
             );
         }
@@ -129,7 +130,7 @@ public static partial class WorldSchema {
                 defs: defs,
                 indent: indent,
                 node: items,
-                path: $"{path}/items"
+                path: DocumentJsonPointer.Child(name: "items", pointer: path)
             )
             : TypeScriptType.Unknown
         );
@@ -184,7 +185,7 @@ public static partial class WorldSchema {
                 : "?"
             );
 
-            members.Append(value: $"{inner}{key}{optional}: {TypeScriptOf(defs: defs, indent: inner, node: schema, path: $"{path}/properties/{name}").Text};\n");
+            members.Append(value: $"{inner}{key}{optional}: {TypeScriptOf(defs: defs, indent: inner, node: schema, path: DocumentJsonPointer.Child(name: name, pointer: DocumentJsonPointer.Child(name: "properties", pointer: path))).Text};\n");
         }
 
         var additional = obj["additionalProperties"];
@@ -205,7 +206,7 @@ public static partial class WorldSchema {
                     defs: defs,
                     indent: inner,
                     node: additional,
-                    path: $"{path}/additionalProperties"
+                    path: DocumentJsonPointer.Child(name: "additionalProperties", pointer: path)
                 ).Text
                 : "unknown"
             );
@@ -325,7 +326,7 @@ public static partial class WorldSchema {
                 defs: defs,
                 indent: indent,
                 node: arm,
-                path: $"{path}/{keyword}/{index}"
+                path: DocumentJsonPointer.Child(index: index, pointer: DocumentJsonPointer.Child(name: keyword, pointer: path))
             )).ToList();
 
             // Beside a union, "type" contributes only what the arms cannot say for themselves: an object whose own
@@ -371,7 +372,7 @@ public static partial class WorldSchema {
                 defs: defs,
                 indent: indent,
                 node: member,
-                path: $"{path}/allOf/{index}"
+                path: DocumentJsonPointer.Child(index: index, pointer: DocumentJsonPointer.Child(name: "allOf", pointer: path))
             )).Where(predicate: static member => !member.IsUnknown));
         }
 

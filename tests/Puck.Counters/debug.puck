@@ -55,7 +55,5 @@ views {
         y: 0
       }
     ]
-    transitionRenderScale: 1
-    transitionSeconds: 0
   }
 }
