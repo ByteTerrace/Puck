@@ -960,7 +960,9 @@ and not a spiral:
   or an area is in a spiral when two attempts, or about two hours of the lead's
   attention, have produced no measurable progress: no cause named, no check
   turned green, no counter moved. The lead stops it and changes something
-  real: the approach (a `principal` lane steps back over the design and the
+  real, and first thinks at a higher level of abstraction (the owner's
+  guidance): name the general mechanism the stuck problem is one instance of,
+  and ask whether the fix belongs there instead. The approach (a `principal` lane steps back over the design and the
   record of what failed, and implements the new approach when its brief says
   so), the model (a stronger role or the other family), or the work (park it
   in its packet with the record and take other work). More effort on the same
