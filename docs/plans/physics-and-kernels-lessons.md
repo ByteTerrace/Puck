@@ -1,0 +1,677 @@
+# Physics and kernels: lessons from Box3D and OpenBLAS
+
+The owner asked what Puck can learn now from Box3D (Erin Catto's 3D engine,
+the successor to Box2D v3) and from OpenBLAS, for accuracy and for
+performance. This memo is the research round's answer. It reads Puck's live
+physics paths, names what the debug world measured, sets each lesson against
+the opened sources (several independent ones per topic, with their
+disagreements), ranks the lessons, and gives a brief for each of the top
+three. Every page cited under [Sources](#sources) was opened for this memo;
+a claim that rests on a page that could not be opened is marked so.
+
+Nothing here ran a World or changed engine code. The counts quoted are the
+ones recorded in commits, and each brief starts by taking the measurement its
+claim rests on.
+
+The frame (AGENTS.md): determinism pins the mapping, so fixed point and a
+stable order give bit-identical state on every machine, backend and thread
+count (rule 4); Puck code over engine code; one implementation per mechanism;
+and "Puck is free to learn and combine", so each lesson says what transfers
+from a float engine and what Puck's integers make better.
+
+## What Puck does today
+
+### The live paths
+
+- **Kit bodies** (walkers, seats, inhabitants) advance one at a time inside
+  `WorldPopulation.AdvanceSimulated`
+  (`src/Puck.World.Server/WorldPopulation.Step.cs:820`). Each step resolves its
+  swept move through `FixedStaticContactSolver.ResolveSweep`
+  (`src/Puck.Physics/FixedStaticContactSolver.cs:260`). The move is cut into
+  slices of half the body's least support radius (`:279`). Each slice's
+  endpoint is relaxed for up to `MaxIterations` passes (`:381`), and every
+  pass re-runs the exact collider query (`TryGetPush`, GJK and EPA for convex
+  kinds) for every collider whose box comes within the skin of the body's box
+  (`Misses`, `:143`; counted at `:161`). Candidates come from a 4 m grid over
+  the static colliders (`WorldColliderSet.cs:66-71`). A step that ends
+  ungrounded on a crest or a descent runs `FixedStepUp.TrySnap`
+  (`WorldBody.Contacts.cs:83`): one sweep to test, eight bisection sweeps
+  (`FixedStepUp.LandingProbes`, `FixedStepUp.cs:41`) and a landing sweep, each
+  a full `ResolveSweep`.
+- **Rigid bodies** (chess pieces, Go stones, reversi discs, alchemy tokens)
+  advance in `WorldBody.AdvanceRigid` (`WorldBody.Rigid.cs:635`). It damps,
+  adds gravity, derives a substep count from travel against an authored
+  fraction of the bounding radius (`:697-719`), and per substep integrates the
+  orientation with the world-frame angular velocity held constant
+  (`:751`) and runs a full `ResolveSweep` against the static field (`:763`).
+  Body-against-body contact is a separate pass after every body has moved:
+  `WorldPopulation.ResolveDynamicContacts`
+  (`WorldPopulation.Resolve.cs:805`) runs a sweep-and-prune over awake bodies
+  and nearby sleepers, takes the deepest overlap per pair
+  (`FixedDynamicBodyContacts.TryCorrection`, `:990`), applies one impulse with
+  friction and splits the positional correction
+  (`WorldPopulation.ResolveRigidPairContact`, `WorldPopulation.Rigid.cs:65-209`),
+  and repeats the whole broadphase and narrowphase up to an authored ceiling
+  of passes (`Resolve.cs:1045`).
+- **Sleep** parks a whole resting contact component
+  (`WorldPopulation.ParkRigidIslands`, `WorldPopulation.Sleep.cs:189`). The
+  island graph is rebuilt every tick from that tick's contacts: awake bodies'
+  edges are dropped in `PrepareBodyStep` (`:104-113`) and relinked as pairs
+  resolve (`LinkRigidBodies`, `:90-103`, which allocates a `SortedSet` per
+  newly linked body). Parked bodies keep a retained index
+  (`SleepingIndex`, `:329`) that the pair sweep queries
+  (`NearbySleepingBodies`, `:319`). A bounded contact-field change still
+  box-tests every sleeper (`WakeSleepersNear`, `:165-174`), an item already in
+  the [refactoring packet](open-items.md#refactoring-campaign).
+- **A second rigid solver exists, unwired.** `FixedRigidSolver`
+  (`src/Puck.Physics/FixedRigidSolver.cs:5-20`) is a substepped sequential
+  impulse solver with soft constraints, warm starting, persistent manifold
+  slots, speculative activation and a relax pass, which "re-derives every
+  separation from the displacement the solver has itself accumulated within
+  the step" (its summary). `FixedRigidWorld` (`FixedRigidWorld.cs:5-30`)
+  generalises it to pairs and is marked "SHAPE ONLY — not wired into any
+  world tick". That is the Box2D v3 Soft Step design, built in fixed point,
+  beside a different live implementation of the same mechanism.
+
+### The measurements
+
+From `puck bench world` on the debug world (the lattice-wake fix and its
+quiet-window measurement record them; deterministic counts, 120 sampled ticks
+after 60 of warmup):
+
+| Reading | Regression head | After the lattice-wake fix |
+|---|---|---|
+| Sleeping rigid bodies | 0 | 488 |
+| Body advances a tick | 557 | 69.1 |
+| Exact contact queries a tick (`physics.contact.queries`) | 41,341 | 4,029.8 |
+| Idle tick (quiet window) | 96.5 to 102 ms | 5.8 to 6.3 ms |
+
+A temporary per-body probe in the lattice-wake fix split the 41,341: Go stones
+30,324, reversi discs 4,224, alchemy tokens 2,130, chess pieces 640, and the
+always-awake bodies of the 4,030 baseline: the range walkers 2,925 (six Moths,
+about 490 queries each a tick) and the fuzzer and traversal stand-ins 540
+each. At the regression head a sampled trace put 76 % of the tick in the
+analytic static sweep (`FixedStaticContactSolver.Sweep` into
+`FixedConvexContact`), about 73 ms over 41,341 queries, or about 1.8 µs a
+query including the sweep's own overhead. The same unit cost over today's
+4,030 queries would be about 7 ms, more than the whole 5.9 ms tick, so a
+walker's query costs less than a rigid piece's GJK query did. The static sweep
+is still the likeliest largest physics share of the idle tick, and no profile
+of the idle tick has been recorded; [brief A](#brief-a-kit-body-contact-work-certify-cheaply-query-exactly-only-what-a-certificate-cannot-settle)
+takes it first.
+
+Two order-dependent accumulations were fixed just before this round: glass
+optical depth now sums integer-quantized terms with integer atomics
+(its commit: "every glass sum word is a function of the multiset of faces,
+not their order"), and the evaluator's certificates had overflow edges closed.
+The FMM gravity solver already forms exact `Int128` mass moments
+([physics reference](../reference/physics.md#determinism-and-workspace-reuse)).
+
+## The sources and where they disagree
+
+**Box3D.** Public under the MIT licence at
+`erincatto/box3d` (the announcement names no licence; the README does). "The
+core architecture of Box3D remains almost identical to Box2D", with some
+convex hull and collision code from Rubikon-Lite, and Catto calls it "alpha
+software". Its README lists the Soft Step solver, island-based sleep,
+continuous collision, "Extensive multithreading and SIMD", "Cross platform
+determinism" and "Recording and replay". Its `src/solver.c` was opened and
+carries the Box2D structure: graph-colour overflow, the sleepiest split
+candidate with island-id tie-breaking "for determinism", dynamic-versus-static
+continuous collision, and a Newton-Raphson gyroscopic step. The Box2D posts
+since its announcement (SIMD for collision, inscribed spheres, contact recycling) are
+written about Box3D or both engines.
+
+**Box2D v3.** The posts on simulation islands, Solver2D, SIMD, determinism,
+replay, contact recycling and the 3.0 and 3.2 releases, and the source files
+`constraint_graph.c`/`.h`, `solver_set.c`, `island.c`, `solver.c`,
+`broad_phase.c` and `include/box2d/constants.h`.
+
+**Independent physics sources.** Jolt's documentation (determinism, islands,
+the large island splitter, double precision), Rapier's determinism guide,
+Bullet's `btRigidBody.h` (gyroscopic flags), and Catto's GDC talk on
+numerical methods (the gyroscopic derivation).
+
+**OpenBLAS and the BLAS lineage.** The OpenBLAS FAQ and developer guide and
+its `driver/others/blas_server.c`; Goto and van de Geijn, "Anatomy of
+High-Performance Matrix Multiplication"; Van Zee and van de Geijn, "BLIS: A
+Framework for Rapidly Instantiating BLAS Functionality"; BLIS's kernel guide;
+and Intel's oneMKL Conditional Numerical Reproducibility pages as a second
+vendor's answer to reproducibility. The ReproBLAS pages (Demmel and Nguyen's
+reproducible summation) refused a TLS connection and are not cited.
+
+Where they disagree:
+
+- **Island splitting.** The islands post splits with depth-first search
+  and names "the largest island with removed constraints" as the heuristic.
+  The current `island.c` splits with union-find ("This uses union-find."), and
+  `solver.c` picks the sleepiest candidate ("Track the sleepiest candidate",
+  "Largest island id wins. Needed due to work stealing."). The source is the
+  current truth; the post is history.
+- **The cost of float determinism.** Catto reports no noticeable cost for
+  Box2D's cross-platform determinism (no FMA contraction, custom `sinf`,
+  `cosf` and `atan2f`). Jolt says its cross-platform mode is "approximately 8%
+  slower". Rapier's `enhanced-determinism` cannot be combined with `simd8`,
+  which "forms a separate determinism domain". Intel's CNR mode costs 10 to 20
+  % and holds across thread counts only in a strict mode limited to the GEMM
+  family on AVX2 or AVX-512 ("even when the number of threads changes").
+- **Thread-count independence.** Box2D (bit arrays merged with OR) and Rapier
+  ("the results of the parallel solver are identical to the results of the
+  sequential one") claim results independent of worker count. OpenBLAS
+  promises nothing: its FAQ attributes varying test errors to "changing the
+  order of mathematical operations by splitting an original problem workload"
+  and to FMA. oneMKL needs a fixed thread count outside strict mode.
+- **OpenBLAS idle threads.** The FAQ gives the default
+  `OPENBLAS_THREAD_TIMEOUT` as 26; `blas_server.c` defines `THREAD_TIMEOUT 28`
+  (a spin of `1 << 28` timestamp-counter ticks before `pthread_cond_wait`).
+- **Large worlds.** The Box3D announcement and the Box2D 3.2 post say "doubles
+  for position"; Box3D's `solver.c` also re-centres each continuous sweep on a
+  world base "to keep TOI in float precision". Jolt documents a 5 to 10 %
+  cost for doubles. Puck's `FixedPosition` (cell plus local offset) and Q48.16
+  already cover this; it is not a lesson.
+- **Contact recycling's adoption.** Catto reports that Avian and Rapier
+  adopted recycling. Rapier's published documentation did not show it, so the
+  claim is unconfirmed here. Catto's post gives no benchmark numbers for
+  recycling alone; the 3.2 post attributes about 40 % of 3.2's speed-up to it.
+
+## The lessons, ranked
+
+Each lesson names the general mechanism it is an instance of, so the work
+builds the mechanism once rather than a fix per site.
+
+| Rank | Lesson | Mechanism | Applies | Gain against the counters | Determinism | Cost |
+|---|---|---|---|---|---|---|
+| 1 | Cut the kit bodies' contact work | Certify cheaply; query exactly only what a certificate cannot settle | Directly (cull); inspires (snap) | The only measured idle physics work: 4,030 queries a tick | A conservative cull changes no result: hashes stay identical | Small to medium |
+| 2 | One rigid solver: Soft Step | Hoist geometry out of the iteration loop; iterate on cached constraints | Directly: Puck already wrote it | None at idle; large in an active rigid scene, plus stacking accuracy | Fixed point already; hashes move once | Large |
+| 3 | The gyroscopic term | Implicit integration of a quadratic term in the frame where its operator is constant | Directly | Accuracy for 457 thin rigid pieces in flight | One Newton step, exact integers | Small |
+| 4 | Wake and islands proportional to change | A spatial index over the parked set; persistent islands | Directly (filed) | 488 sleeper visits each lattice step, about 61 a tick; allocation in active scenes | Order fixed by slot index | Small |
+| 5 | Order-free merges and exact reductions for the parallel tick | Combine with an associative, commutative operation and a total tie-break | Directly (a contract) | Enables the job system's later phases without hash drift | The point of it | Small |
+| 6 | Packed hot data and integer SIMD kernels with runtime dispatch | Pack once, stream many; one architecture-specific micro-kernel | Inspires | Unmeasured; follows brief A's profile | Integer lanes are exact at every width | Medium |
+| 7 | Graph colouring for a parallel rigid solve | Partition constraints so no body appears twice in a batch | Inspires; after lesson 2 | Active scenes only | Colouring computed serially in a fixed order | Medium |
+| 8 | Contact recycling across steps | Reuse a cached linearization while relative motion stays under a tolerance | Inspires; after lesson 2 | About 40 % of Box2D 3.2's gain; Puck's share unmeasured | The cache becomes continuation state | Medium |
+| 9 | Sleep on the farthest point's speed | Bound a body's motion by its fastest surface point | Directly | Accuracy of the rest latch for thin pieces | None beyond a hash move | Small |
+
+### 1. Cut the kit bodies' contact work
+
+**What the sources do.** Box3D's inscribed-sphere post bounds a polytope
+pair's separation by `n·d − r` with the hulls' inscribed spheres before the
+exact face and edge tests, culling 86 % of face tests and 98 % of edge-pair
+tests on its convex pile and cutting collide time 62 %; "This technique gives
+the global maximum separation value. It is not approximate and cannot get
+stuck in a local maximum." Box2D's speculative contact
+(`B2_SPECULATIVE_DISTANCE`, "Box2D uses limited speculative collision. This
+reduces jitter.") makes a contact that is near but not touching a constraint
+the solver lands on exactly, rather than a search. Box2D keeps proxy boxes
+"fattened" by a small margin and found that "keeping the margin small improves
+performance by reducing the number of contacts" (`B2_MAX_AABB_MARGIN`). Goto
+and van de Geijn's packing argument (pack the operand "in a contiguous work
+array" sized to cache and TLB) applies to the bounds pass that runs before
+every exact query.
+
+**What Puck does.** Every relaxation pass re-runs the exact query for every
+collider that survives the world-axis box test
+(`FixedStaticContactSolver.cs:143-161`). A rotated or large collider's
+world-axis box can be far larger than the collider, so the exact query runs
+where a tighter conservative bound would have said "no push". The ground snap
+spends ten full sweeps to find a support distance that one distance query
+returns: `FixedConvexContact` already has a nearest-point query, and the
+analytic kinds have closed-form distances. The bound check reads
+`FixedStaticCollider.Center` from the full collider record and the extent from
+a `FixedVector3?[]`, not from a packed bounds array.
+
+**Expected gain.** The 4,030 queries a tick are 98 % kit bodies; brief A
+reads `physics.contact.resolves`, `.queries`, `.convex-queries` and
+`.supports` per tick (already rows of `puck bench world`,
+`src/Puck.Cli.Bench/WorldBenchmarks.cs:508-513`) to split them into sweeps,
+passes and candidates before choosing a cut. If the 1.8 µs estimate is near
+the walkers' cost, the queries are most of the idle tick and a cull that
+removes half of them is worth about a quarter of it.
+
+**Determinism.** A conservative cull skips only colliders whose exact query
+would return no push, and `ResolveSweep` already states that contract
+("Skipping a collider these bounds rule out never changes the result",
+`FixedStaticContactSolver.cs` on `colliderExtents`). Puck's bounds are exact
+integer comparisons, so the cull needs no round-off margin, where Box3D
+shrinks its radius "slightly for round-off safety". State hashes must not move
+at all: the strongest possible check. Replacing the snap's bisection with a
+distance query does move results (the landing lands at the exact support
+instead of within the bisection's resolution) and is a deliberate correction
+with a re-record.
+
+**Cost.** A tighter bound per collider kind (the oriented box Puck already
+owns in `FixedOrientedBox`, a sphere for rounded and superellipsoid kinds) at
+compile time, one packed bounds array, and a cull ahead of `TryGetPush`.
+
+### 2. One rigid solver: Soft Step
+
+**What the sources do.** Box2D v3 chose Soft Step: sub-stepping instead of
+iterations, soft constraints as a damped spring tuned in hertz, warm
+starting, and a relax pass that "removes the extra energy" (Solver2D post).
+The contact points are computed once per step and updated across substeps from
+anchors held relative to the bodies, so neither the broadphase nor the contact
+points are recomputed inside the solver. Its stages, from `solver.c`:
+prepare, integrate velocities, warm start, solve, integrate positions, relax,
+restitution, store impulses. Catto: "Relaxation is expensive, but it improves
+the simulation quality dramatically." Box3D keeps the same solver.
+
+**What Puck does.** The live path iterates on geometry three times over: every
+rigid substep re-runs a full static `ResolveSweep` with its relaxation passes
+(`WorldBody.Rigid.cs:763`); every pair pass re-runs the broadphase and the
+narrowphase over all awake bodies (`WorldPopulation.Resolve.cs:853-1072`); and
+a pair resolves one impulse at one witness point with a positional split, no
+warm starting and no persistent manifold. `FixedRigidSolver` and
+`FixedRigidWorld` implement the Soft Step sequence in fixed point (the
+substep sequence and the "softness coefficients formed at the substep width",
+`FixedRigidSolver.cs:17-19`; `FixedSoftConstraint`) and are wired nowhere.
+That is two implementations of rigid contact, which AGENTS.md counts as a
+defect.
+
+**Expected gain.** Nothing at idle: every rigid piece sleeps. In an active
+scene (a Go board knocked, a chess capture, a reversi flip, the regression's
+557 advances) the exact query count per awake rigid body falls from
+substeps × passes × candidates to candidates once a step, and the pair work
+from passes × (broadphase + narrowphase) to one broadphase and a fixed solver
+budget over cached constraints. Stacking and resting stability improve with
+warm starting and multi-point manifolds; the debug world's
+`physics(quiescent)` gates (the chess demo) depend on bodies settling.
+
+**Determinism.** Everything is already fixed point, ordered by canonical keys
+with no hash container (`FixedRigidWorld`'s remarks). What does not transfer
+from Box2D is its float discipline, which Puck does not need. What Puck must
+add is that the manifold slots and accumulated impulses are continuation
+state: they ride the checkpoint and the authority hash, as Box2D's replay post
+found when it added "snapshots" that copy "internal data structures" to make
+rollback possible. Hashes move once.
+
+**Cost.** Large: candidate generation from Puck's colliders into
+`FixedContactCandidate` and `FixedTwoBodyContact`, the World's features the
+live path carries (sweep refusal, the continuous-collision substep bound,
+support blocking, kinematic carriers, rolling resistance, sleep islands), the
+pair budget, and deletion of the old path.
+
+### 3. The gyroscopic term
+
+**What the sources do.** Euler's equation `Iω̇ + ω × Iω = T`: the gyroscopic
+term "accounts for non-spherical shapes that may wobble as they spin freely in
+the air" (Catto's GDC talk). Explicit integration "blows up" because the term
+is quadratic in ω; dropping it, as Catto did "for many years", makes "a slender
+box that spins a bit too much" and a capsule that "spins forever". His fix
+splits the step: the applied torques explicitly, the gyroscopic term
+implicitly, solved in body coordinates where the inertia is constant, with one
+Newton-Raphson step: residual `f = h ω_b × I_b ω_b`, Jacobian
+`J = I_b + h (skew(ω_b) I_b − skew(I_b ω_b))`, `ω_b ← ω_b − J⁻¹ f`. Bullet
+made the body-frame implicit form its default from 2.83
+(`BT_ENABLE_GYROSCOPIC_FORCE_IMPLICIT_BODY`; "explicit version is best avoided,
+it gains energy"). Box3D's solver carries the same Newton step, and the
+announcement names the missing term in Unreal's Chaos as one reason Box3D
+exists.
+
+**What Puck does.** `AdvanceRigid` holds the world-frame angular velocity
+constant through free flight, changing it only by damping and contact
+(`WorldBody.Rigid.cs:686-692`, `:751`). For a body whose inertia is not
+spherical, a constant world ω while the body turns does not conserve angular
+momentum. The debug world's rigid pieces are mostly oblate (361 Go stones, 64
+reversi discs) or slender (32 chess pieces).
+
+**Expected gain.** Accuracy: a flicked or tossed disc wobbles and settles as
+it should, and the dissipation the implicit step adds (Catto: "the kinetic
+energy dissipates over time") helps pieces come to rest. Cost per awake rigid
+body is one 3×3 solve a step.
+
+**Determinism.** Exact. The body-local inverse inertia is already stored at
+its own 40-bit placement (`FixedRigidBody.InverseInertia*`,
+`FixedRigidTypes.cs`). The Jacobian is not symmetric, so
+`FixedSymmetricSolve` does not apply; the solve is Cramer's rule with
+`Int128` cofactors rounded once (a new `Puck.Maths` member with its law case).
+
+**Cost.** Small.
+
+### 4. Wake and islands proportional to change
+
+**What the sources do.** Box2D keeps islands persistent: a contact that
+begins touching links two islands by union-find, removal only flags the island
+(`constraintRemoveCount`), and splitting is deferred to one island a step,
+chosen when a body "wants to sleep". Measured: "Persistent islands are roughly
+an order of magnitude faster than DFS" (pyramids 0.69 ms to 0.01 ms). Sleeping
+islands move to their own solver set and leave the constraint graph
+(`solver_set.c`, `b3TrySleepIsland`). "Islands are not required for
+correctness. They are an optimization." "Sleeping must be done per island, not
+per body." Jolt documents the same per-island rest rule.
+
+**What Puck does.** Puck sleeps per island (correctly) but rebuilds the island
+graph from that tick's contacts every tick (`WorldPopulation.Sleep.cs:104-113`,
+`:90-103`), allocating `SortedSet`s as it relinks, and box-tests every sleeper
+on a bounded field change (`:165-174`) while `SleepingIndex` already answers a
+spatial query over parked bounds (`:329`).
+
+**Expected gain.** The wake: 488 box tests and 488 per-sleeper writes each
+lattice step (61 `physics.bodies.field-observed` a tick) fall to the sleepers
+near the change box, usually none. Small in milliseconds; it removes a cost
+that scales with the parked population. Persistent islands remove a per-tick
+rebuild and allocation in active rigid scenes; unmeasured.
+
+**Determinism.** The index's answers are re-sorted into slot order before any
+wake (the existing pair sweep does this), so the wake order is unchanged.
+
+**Cost.** Small; the wake half is filed in the
+[refactoring packet](open-items.md#refactoring-campaign) and is a Codex-sized
+lane.
+
+### 5. Order-free merges and exact reductions for the parallel tick
+
+**What the sources do.** Box2D: "The atomic increment does not prevent
+randomness, it just prevents a data race", so workers fill local bit arrays
+that the main thread merges with OR, "a deterministic sequence of set bits",
+and a cross-worker choice breaks ties by island id. OpenBLAS and oneMKL show
+the cost of not designing for this: results that move with the thread count
+and the kernel chosen, and a reproducibility mode that costs 10 to 20 % and
+holds across thread counts for only a few routines.
+
+**What Puck does.** The [job-system memo](engine-job-system.md#the-contract)
+merges partition logs by a commit key, which is sound. It keeps the rigid
+pair contacts serial (`engine-job-system.md`, "Serial phases stay serial").
+
+**What transfers.** Integer sums of terms each rounded once are associative,
+so a parallel fixed-point sum is reproducible for free, where a float engine
+pays for it. A rounded product is not (maths-usage: "Do not reassociate a
+rounded product"), so the rule is: round each term once onto a common grid,
+then combine exactly (`Int128` where the range needs it). That is the glass
+fix and the FMM's moments, stated once. A set of bodies a partitioned phase
+marks (woken, enlarged, wanting to sleep) merges as a bit set by OR and is
+read in index order, with no ordered log needed. A choice across partitions
+takes a total key.
+
+**Cost.** Small: the contract text in the job-system memo and, when a second
+phase needs it, one exact-reduction helper in `Puck.Maths` rather than a copy
+per phase.
+
+### 6. Packed hot data and integer SIMD kernels with runtime dispatch
+
+**What the sources do.** GotoBLAS packs a block of A "in a contiguous work
+array" so that it is addressable by the TLB and streams from L2, and the
+packing "needs not to create a substantial overhead". BLIS reduces the
+architecture-specific code to a micro-kernel ("By implementing and optimizing
+the `gemm` microkernel, all level-3 operations except `trsm` are fully
+optimized") with generic loops around it. OpenBLAS's `DYNAMIC_ARCH` selects
+kernels at run time by CPU, overridable with `OPENBLAS_CORETYPE`. Box2D 3.2
+credits AVX2 runtime dispatch with about 15 % of its speed-up, and Box3D's
+SIMD edge tests run 2.2 to 2.4× faster than scalar, with the data in
+"structure of arrays format".
+
+**What Puck does.** `SleepingIndex` already packs parked bounds so that "no
+sleeping body's object is read on an idle tick". The pair sweep, the wake test
+and the static bounds pass read positions and radii through `WorldBody` and
+`FixedStaticCollider` objects.
+
+**What transfers, and what Puck adds.** Bounds tests are 64-bit integer
+compares, which `Vector256<long>` does four at a time and gives the same bits
+as the scalar loop at every width. So unlike Rapier (where `simd8` is its own
+determinism domain) or Jolt (8 % for cross-platform mode), a Puck integer
+kernel can dispatch by CPU with no determinism cost, and the scalar path stays
+as the oracle, forced on with the runtime's ISA-disable settings, to compare
+hashes. Q48.16 products need a 64×64→128 multiply that AVX2 lacks, so the
+kernels worth vectorising are the culls and bounds, not the contact
+arithmetic. As with PDEP and PEXT
+([maths-usage](../../.claude/skills/maths-usage/SKILL.md)), dispatch reads a
+capability gate, never a bare `IsSupported`.
+
+**Cost.** Medium; scheduled from brief A's profile, not before it.
+
+### 7. Graph colouring for a parallel rigid solve
+
+**What the sources do.** Box2D colours contact constraints greedily into at
+most `B2_GRAPH_COLOR_COUNT` (24) colours; "The constraint is assigned to the
+first color with a bitset that doesn't have either body bit set to 1", the
+colouring persists across steps, and "static bodies are never set in the
+bitsets because static bodies are not modified by the contact solver".
+Constraints that find no colour go to an overflow set solved single-threaded,
+and dynamic-against-dynamic constraints keep a lower priority than
+dynamic-against-static ones, which "reduces tunneling due to push through"
+(`constraint_graph.h`). Jolt's large island splitter is the same idea ("Within
+a group, the order of execution does not matter since every memory location is
+only read/written once").
+
+**For Puck.** After lesson 2, a colour's constraints write distinct bodies, so
+a colour can run in partitions with exact integer results at any thread count;
+the colouring itself is computed serially in slot order. It changes the solve
+order from today's sweep order once. Worth building only when an active rigid
+scene shows in the frame; the job-system memo rightly keeps the pair pass
+serial until then.
+
+### 8. Contact recycling across steps
+
+**What the sources do.** Box2D 3.2 and Box3D cache a pair's one-shot manifold
+with the relative transform at which it was computed, and reuse it while the
+relative movement (linear plus angular times extent) stays under a tolerance,
+updating each point's separation from the rotations: "Suddenly I can use very
+large tolerances, up to several centimeters." "A word of caution: do not
+update the cached relative transform when recycling. This causes drift."
+Box2D's defaults are `B2_CONTACT_RECYCLE_DISTANCE` and
+`B2_CONTACT_RECYCLE_COS_ANGLE` ("0.98 ~= 11.5 degrees").
+
+**For Puck.** Recycling is approximate, so the cached transform and manifold
+become continuation state (checkpointed and hashed), and the tolerance is an
+authored contact parameter with a neutral default, not an engine constant
+(AGENTS.md, "Authors rule"). It belongs inside the one solver of lesson 2 and
+is measured there; applied to the kit-body controller it would change step-up
+and edge rules, so it is not proposed there.
+
+### 9. Sleep on the farthest point's speed
+
+Box2D's sleep test uses "the velocity of the farthest point on the body to
+account for rotation" and folds in position correction ("Sleep needs to
+observe position correction as well as true velocity", `solver.c`). Puck's
+rest latch compares linear and angular speed against two separate thresholds
+(`WorldBody.Rigid.cs:612`), so a long piece turning slowly about its centre
+can latch while its ends still move. The substep bound already uses linear
+speed plus angular speed times the bounding radius (`:697-705`); the rest
+latch can read the same quantity. Small; it rides brief C.
+
+## What does not transfer
+
+- **Float determinism discipline** (no FMA contraction, custom trigonometry,
+  one SIMD width): Puck's fixed point has none of these hazards. It pays
+  instead in wide multiplies, which is why lesson 6 vectorises compares and
+  not products.
+- **Doubles for position:** `FixedPosition` and Q48.16 already exceed it.
+- **Speculative-plus-time-of-impact continuous collision for kit bodies:**
+  Box2D's approach "seems to prevent almost all dynamic versus static
+  tunneling"; Puck's certified sweep proves it for every core
+  ([physics reference](../reference/physics.md#contact-and-rigid-body-kernels)),
+  a stronger contract, and stays.
+- **OpenBLAS's threading:** idle workers spin for `1 << 28` timestamp ticks
+  before sleeping, and its FAQ warns that an already threaded application "will
+  conflict with OpenBLAS multi-threading". AGENTS.md rules spinning out
+  ("Puck plays nice with its host"), and `JobPool` already idles on an
+  operating-system semaphore ([job-system memo](engine-job-system.md)). It is
+  an anti-lesson.
+- **A parallel union-find over islands:** Box2D tried Jolt's and rejected it,
+  because "its atomic compare-and-swap merging makes constraint order
+  non-deterministic" (islands post); Puck's serial island bookkeeping is the
+  right shape.
+
+## Brief A: kit-body contact work: certify cheaply, query exactly only what a certificate cannot settle
+
+**Mechanism.** A conservative certificate cheaper than the exact query,
+tested first, so the exact work runs only where the certificate cannot rule a
+push out. It is the same mechanism as the field sweep's bounds queries, Box3D's
+inscribed spheres and Box2D's fat-box margin.
+
+**Invariant.** A collider the certificate skips would have returned no push:
+the certificate's region contains the collider grown by the contact skin.
+**Enforcement:** one door. The certificate is compiled with the collider (one
+`FixedStaticCollider` member, or the compiled bounds record `WorldColliderSet`
+already builds) and the solver reads only that member; no caller supplies its
+own. **Where it stops:** the certificate says nothing about colliders it keeps,
+which still take the exact query, and step 4's snap change is outside the
+invariant, a deliberate correction.
+
+**Steps, each with its check.**
+
+0. Attribute the idle physics work. Run `puck bench world` and a sampled
+   thread-time trace of it on the lead machine; record per tick
+   `physics.contact.resolves`, `.queries`, `.convex-queries`, `.supports` and
+   `physics.sweep.*`, and the trace's share for `FixedStaticContactSolver`,
+   `FixedStepUp` and `FixedConvexContact`. Add temporary counts (not
+   committed) splitting queries into main sweep, snap and step-up. **Check:**
+   the shares and counts in the commit body, and a decision recorded there on
+   which of steps 1 to 4 pays.
+1. Pack the bounds pass: one contiguous array of collider centres and padded
+   half-extents (six longs a collider) read by `Misses`, in place of reading
+   the collider record and a nullable extent. **Check:** queries a tick and
+   every state hash identical on `puck bench world` and on
+   `puck test --reproduce` for the water, chess and hall worlds; the trace's
+   bounds share falls.
+2. A tighter certificate per kind: an oriented-box test for box kinds (from
+   `FixedOrientedBox`, which already owns the SAT verdict) and a bounding
+   sphere for the rounded, superellipsoid and cylinder kinds, before
+   `TryGetPush`. **Check:** `physics.contact.queries` falls; every state hash
+   identical, as in step 1. A hash that moves means the certificate is not
+   conservative and is a defect, not a re-record.
+3. Stop relaxing a pass that cannot push: after a pass, re-query only the
+   colliders whose certificates meet the body's box grown by the pass's total
+   push. **Check:** as step 2.
+4. Replace the snap's bisection with one support-distance query (the convex
+   nearest-point query or the analytic distance) followed by the landing
+   sweep, keeping `TrySnap`'s acceptance rules. **Check:** `physics.sweep.sweeps`
+   a tick falls; the range walkers still follow the ground on the range's
+   slopes (a headless `body.where` trace over their loop); hashes move once and
+   the persisted replays it invalidates are re-recorded in the same change.
+
+Done when the idle queries a tick and the static sweep's trace share have
+fallen by the amount step 0 predicted, with hashes unchanged through step 3.
+A Codex lane can take steps 1 to 3; step 4 and the profile want a lane that
+loads `sdf-authoring` for contact admission.
+
+## Brief B: one rigid solver: Soft Step
+
+**Mechanism.** Hoist geometry out of the iteration loop: compute each
+contact's manifold once a step, then run substeps and solver passes on cached
+constraints whose separations are updated from anchor displacement. One
+implementation of rigid contact for the World and `Puck.Physics`.
+
+**Invariant.** Every rigid contact, static or between bodies, is solved by
+`FixedRigidWorld`'s substep sequence, and a step runs the exact geometry
+queries once per candidate pair. **Enforcement:** the old path is deleted
+(`WorldPopulation.ResolveRigidPairContact`, the rigid branch of
+`ResolveDynamicContacts`' pass loop, and `AdvanceRigid`'s per-substep
+`ResolveSweep`), so no second route exists for a new caller. **Where it
+stops:** kit bodies keep `FixedStaticContactSolver` and the certified sweep;
+a kit-against-rigid pair keeps today's rule that a kinematic body is never
+pushed by a rigid one, expressed as a static body in the pair.
+
+**Steps.**
+
+0. Measure an active scene: a fixture that wakes the Go board (an impulse on
+   one stone) on a headless World, reading `physics.contact.*` and the
+   `world.budget` rigid segment a tick. **Check:** the counts in the commit
+   body, the baseline for step 4.
+1. Candidate generation: turn a static collider's contact into
+   `FixedContactCandidate`s with stable source and feature ids, with up to four
+   points for a face contact (the ground manifold `WorldBody.Rigid.cs` already
+   builds is the starting point), and a body pair's into `FixedTwoBodyContact`.
+   **Check:** a Physics law that a box resting flat yields four slots with
+   stable ids across steps.
+2. Size the pair registry from the population (rigid bodies times a
+   per-body contact budget, refused by name in the validator), replacing the
+   least-recently-active eviction and the dropping of overflow candidates,
+   since a contact solver must not discard contacts for a budget (the physics
+   reference says so of perception). **Check:** a validation refusal names the
+   budget; no `LastStepDroppedPairCount` above zero on the debug world.
+3. Wire `FixedRigidWorld` into the tick in place of the rigid advance and the
+   rigid pair passes, with the manifold slots and accumulated impulses in the
+   body continuation (checkpoint, hash and scoped replay), and the World's
+   existing contracts carried over: sweep refusal, the continuous bound (as
+   speculative contacts plus the existing substep ceiling), support blocking,
+   carriers, rolling resistance and island parking. **Check:**
+   `puck test --reproduce` on chess (17 authorities), water and hall; the chess
+   idle demo plays (`physics(quiescent)` holds); a stack fixture stands for
+   600 ticks.
+4. Delete the old path. **Check:** the build; `puck references` finds no
+   caller of the deleted members; the step 0 scene's exact queries per awake
+   rigid body a tick fall to roughly one per candidate pair.
+
+This is a specialist lane (physics, with `maths-usage` loaded), several
+commits, re-recording the rigid scenarios once.
+
+## Brief C: the gyroscopic term and the rest latch
+
+**Mechanism.** Integrate a stiff or quadratic term implicitly in the frame
+where its operator is constant (here the body frame, where inertia is fixed),
+one Newton step.
+
+**Invariant.** The gyroscopic correction is applied exactly once per rigid
+step, in the integrate-velocities stage, to free angular velocity before
+contact. **Enforcement:** one method on the rigid integration path called from
+one site (`AdvanceRigid` today; `FixedRigidWorld`'s integrate stage after brief
+B, the same member moved, not copied). **Where it stops:** a singular Jacobian
+(a degenerate inertia) skips the correction, counted, never wrapped.
+
+**Steps.**
+
+1. Add a general 3×3 solve to `Puck.Maths` (Cramer's rule, `Int128`
+   cofactors, one rounding, refusing a zero determinant) with its law case.
+   **Check:** the Maths build and the law against an exact rational oracle.
+2. Apply `ω_b ← ω_b − J⁻¹ (h ω_b × I_b ω_b)` in body coordinates once per step,
+   with `I_b` from the authored mass properties (the inverse inertia is
+   already stored). **Check:** a free-flight disc spun about a tilted axis:
+   world angular momentum `I_world ω` holds within the fixed-point budget and
+   kinetic energy never rises over 300 steps; today's code fails the momentum
+   check. A Physics law, since a running World cannot show an exact
+   conservation result.
+3. Make the rest latch read linear speed plus angular speed times the bounding
+   radius against one threshold, as the substep bound does (lesson 9).
+   **Check:** `puck test --reproduce` on chess, Go and reversi; the chess idle
+   demo still starts; hashes move once and are re-recorded.
+
+A Codex lane can take all three steps.
+
+## Open questions and who settles them
+
+- **The idle tick's physics share.** Brief A's step 0 settles it, on the lead
+  machine in a quiet window, and decides whether lesson 6 is scheduled.
+- **Whether contact recycling pays in fixed point.** Settled inside brief B's
+  solver by measurement on the step 0 scene, after brief B lands; until then
+  lesson 8 is not scheduled.
+- **Whether a parallel rigid solve pays.** The job-system memo's T2 measures
+  the rigid share of an active tick; lesson 7 waits on that reading.
+
+## Sources
+
+Every page below was opened for this memo.
+
+Box3D and Box2D:
+- Catto, "Announcing Box3D", https://box2d.org/posts/2026/06/announcing-box3d/
+- Box3D repository and README, https://github.com/erincatto/box3d
+- Box3D `src/solver.c`, https://raw.githubusercontent.com/erincatto/box3d/main/src/solver.c
+- Catto, "Contact Recycling", https://box2d.org/posts/2026/10/contact-recycling/
+- Catto, "Inscribed Spheres", https://box2d.org/posts/2026/09/inscribed-spheres/
+- Catto, "SIMD for Collision", https://box2d.org/posts/2026/07/simd-for-collision/
+- Catto, "Replay", https://box2d.org/posts/2026/06/replay/
+- Catto, "Box2D 3.2", https://box2d.org/posts/2026/10/box2d-3.2/
+- Catto, "Dynamic Tree Improvements", https://box2d.org/posts/2025/03/dynamic-tree-improvements/
+- Catto, "Determinism", https://box2d.org/posts/2024/08/determinism/
+- Catto, "SIMD Matters", https://box2d.org/posts/2024/08/simd-matters/
+- Catto, "Releasing Box2D 3.0", https://box2d.org/posts/2024/08/releasing-box2d-3.0/
+- Catto, "Solver2D", https://box2d.org/posts/2024/02/solver2d/
+- Catto, "Simulation Islands", https://box2d.org/posts/2023/10/simulation-islands/
+- Box2D source: `src/constraint_graph.c`, `src/constraint_graph.h`,
+  `src/solver_set.c`, `src/island.c`, `src/solver.c`, `src/broad_phase.c`,
+  `src/body.c`, `include/box2d/constants.h`, at https://github.com/erincatto/box2d
+- Catto, "Numerical Methods", GDC 2015, https://box2d.org/files/ErinCatto_NumericalMethods_GDC2015.pdf
+
+Independent physics sources:
+- Jolt Physics documentation, https://jrouwe.github.io/JoltPhysics/index.html
+- Rapier, "Determinism", https://rapier.rs/docs/user_guides/rust/determinism
+- Bullet, `btRigidBody.h`, https://github.com/bulletphysics/bullet3/blob/master/src/BulletDynamics/Dynamics/btRigidBody.h
+
+OpenBLAS and the BLAS lineage:
+- OpenBLAS FAQ, http://www.openmathlib.org/OpenBLAS/docs/faq/
+- OpenBLAS developer guide, http://www.openmathlib.org/OpenBLAS/docs/developers/
+- OpenBLAS `driver/others/blas_server.c`, https://github.com/OpenMathLib/OpenBLAS/blob/develop/driver/others/blas_server.c
+- Goto and van de Geijn, "Anatomy of High-Performance Matrix Multiplication",
+  ACM TOMS, https://www.cs.utexas.edu/~flame/pubs/GotoTOMS_final.pdf
+- Van Zee and van de Geijn, "BLIS: A Framework for Rapidly Instantiating BLAS
+  Functionality", ACM TOMS 2015, https://www.cs.utexas.edu/~flame/pubs/BLISTOMSrev2.pdf
+- BLIS, "Kernels HowTo", https://github.com/flame/blis/blob/master/docs/KernelsHowTo.md
+- Intel oneMKL, "Reproducibility Conditions", https://www.intel.com/content/www/us/en/docs/onemkl/developer-guide-linux/2025-1/reproducibility-conditions.html
