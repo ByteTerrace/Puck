@@ -9,24 +9,25 @@ using Puck.SignedDistance;
 namespace Puck.SdfVm;
 
 /// <summary>One level's window of the mesh path's irradiance volume (<see cref="SdfMeshIrradiance"/>).</summary>
-/// <param name="Spacing">The distance between neighbouring probes, in metres; zero for a level not published.</param>
+/// <param name="Spacing">The distance between neighbouring probes along each axis, in metres; zero for a level not
+/// published.</param>
 /// <param name="Dims">The probes along each axis of the window.</param>
-/// <param name="Low">The window's first cell: a probe of cell <c>c</c> sits at <c>(c + 0.5) * Spacing</c>.</param>
-public readonly record struct SdfMeshIrradianceWindow(float Spacing, (int X, int Y, int Z) Dims, (int X, int Y, int Z) Low) {
+/// <param name="Low">The window's first cell: a probe of cell <c>c</c> sits at <c>(c + 0.5) * Spacing</c>, per axis.</param>
+public readonly record struct SdfMeshIrradianceWindow(Vector3 Spacing, (int X, int Y, int Z) Dims, (int X, int Y, int Z) Low) {
     /// <summary>Gets whether the window holds probes views read.</summary>
-    public bool Present => ((Spacing > 0f) && (Dims.X > 0) && (Dims.Y > 0) && (Dims.Z > 0));
+    public bool Present => ((Spacing.X > 0f) && (Spacing.Y > 0f) && (Spacing.Z > 0f) && (Dims.X > 0) && (Dims.Y > 0) && (Dims.Z > 0));
     /// <summary>Gets the probes the window holds.</summary>
     public int Count => ((Dims.X * Dims.Y) * Dims.Z);
 }
 /// <summary>The pass-block parameters of the mesh path's irradiance volume (<see cref="SdfMeshIrradiance"/>): the finest
 /// level's window, and the coarser levels' about it.</summary>
 /// <param name="Enabled">Whether views read the volume; false until a level has measured probes to read.</param>
-/// <param name="Spacing">The finest level's distance between neighbouring probes, in metres.</param>
+/// <param name="Spacing">The finest level's distance between neighbouring probes along each axis, in metres.</param>
 /// <param name="Dims">The probes along each axis of the finest level.</param>
 /// <param name="Low">The finest level's first cell: a probe of cell <c>c</c> sits at <c>(c + 0.5) * Spacing</c>.</param>
 /// <param name="Middle">The second level's window.</param>
 /// <param name="Far">The coarsest level's window.</param>
-public readonly record struct SdfMeshIrradianceParameters(bool Enabled, float Spacing, (int X, int Y, int Z) Dims, (int X, int Y, int Z) Low,
+public readonly record struct SdfMeshIrradianceParameters(bool Enabled, Vector3 Spacing, (int X, int Y, int Z) Dims, (int X, int Y, int Z) Low,
     SdfMeshIrradianceWindow Middle = default, SdfMeshIrradianceWindow Far = default) {
     /// <summary>Returns a level's window, finest first.</summary>
     /// <param name="level">The level, from zero to <see cref="SdfMeshIrradianceProbe.Levels"/> less one.</param>
@@ -55,7 +56,7 @@ public readonly record struct SdfMeshIrradianceParameters(bool Enabled, float Sp
 /// coordinates name modulo the window's size, keyed by its cell, so the views pass rejects a slot holding another cell's
 /// probe, and a move of the camera rewrites only the slots of cells it brings in.</para>
 /// <para>The volume has <see cref="SdfMeshIrradianceProbe.Levels"/> nested levels about the camera, each window a
-/// coarser lattice over a wider reach (<see cref="LevelSpacing"/>), traced alike against the same scene. A receiver
+/// coarser lattice over a wider reach (<see cref="LevelsOf"/>), traced alike against the same scene. A receiver
 /// reads the finest level whose window holds it, the coarsest past every window; where none of that level's probes
 /// measured it, the same probes answer past their measured reach, blocked only by the surfaces they measured, so no
 /// surface the camera sees reads the absence of a measurement as darkness.</para>
@@ -102,12 +103,21 @@ public sealed class SdfMeshIrradiance : IDisposable {
         lock (m_gate) { m_scene?.Dispose(); m_scene = null; m_materialsScene = null; m_diagnosticDraws = []; }
     }
 
-    /// <summary>The most probes a volume holds, the High tier's: its finest window and the coarser levels'.</summary>
-    public const int MaxProbes = (((48 * 16) * 48) + ((SdfMeshIrradianceProbe.Levels - 1) * ((32 * 12) * 32)));
+    // Each tier's levels, finest first. The finest is the tier's own; the storey level's 2 m vertical spacing puts a probe
+    // plane in every storey 2.4 m or taller, which no isotropic coarse level does, over a 128 m by 48 m by 128 m window;
+    // the 32 m level reaches past it.
+    private static readonly SdfMeshIrradianceLevel StoreyLevel = new(Dims: (32, 24, 32), Spacing: new Vector3(x: 4f, y: 2f, z: 4f));
+    private static readonly SdfMeshIrradianceLevel FarLevel = new(Dims: (32, 12, 32), Spacing: new Vector3(value: 32f));
+    private static readonly SdfMeshIrradianceLevel[] HighLevels = [new(Dims: (48, 16, 48), Spacing: Vector3.One), StoreyLevel, FarLevel];
+    private static readonly SdfMeshIrradianceLevel[] MediumLevels = [new(Dims: (32, 12, 32), Spacing: new Vector3(value: 2f)), StoreyLevel, FarLevel];
 
-    /// <summary>The probe spacing, in metres, of each level past the finest, whatever the tier: a window of 32 cells
-    /// reaches 256 metres at the second level and 1,024 at the third.</summary>
-    public static ReadOnlySpan<float> LevelSpacing => [8f, 32f];
+    /// <summary>Returns a tier's levels, finest first: each one's cell size and its window's probes along each axis.</summary>
+    /// <param name="tier">The indirect tier.</param>
+    /// <returns><see cref="SdfMeshIrradianceProbe.Levels"/> levels.</returns>
+    public static ReadOnlySpan<SdfMeshIrradianceLevel> LevelsOf(SdfIndirectTier tier) => ((tier == SdfIndirectTier.High) ? HighLevels : MediumLevels);
+
+    /// <summary>The most probes a volume holds, over every tier's levels.</summary>
+    public static readonly int MaxProbes = Math.Max(val1: HighLevels.Sum(selector: static level => level.Count), val2: MediumLevels.Sum(selector: static level => level.Count));
 
     /// <summary>The counter source's name.</summary>
     public const string SourceName = "sdf.mesh-gi";
@@ -168,9 +178,6 @@ public sealed class SdfMeshIrradiance : IDisposable {
         }
         return totals;
     }
-
-    private static readonly (int X, int Y, int Z) HighDims = (48, 16, 48);
-    private static readonly (int X, int Y, int Z) MediumDims = (32, 12, 32);
 
     // A probe whose rays meet back faces more than this share of the time lies inside geometry.
     private const float InsideShare = 0.25f;
@@ -505,7 +512,7 @@ public sealed class SdfMeshIrradiance : IDisposable {
                 m_nextCameraSample = 0;
             }
 
-            var resizing = (!m_windowValid || (layout.Dims != m_layout.Dims) || (layout.Spacing != m_layout.Spacing));
+            var resizing = (!m_windowValid || (layout.Levels != m_layout.Levels));
 
             if (resizing) {
                 m_volume = new uint[(layout.TotalCount * SdfMeshIrradianceProbe.ProbeWords)];
@@ -614,13 +621,13 @@ public sealed class SdfMeshIrradiance : IDisposable {
     // Whether a probe traced against an earlier geometry may have other hits or another placement under the current
     // one: some draw a change since added or removed lies in the region its placement searches, or meets one of its
     // rays before the hit the ray recorded. A probe no change can reach keeps its hits, which a trace would reproduce.
-    private static bool Affected(in ProbeData probe, (int X, int Y, int Z) cell, float spacing, Layout layout, in Snapshot snapshot) {
+    private static bool Affected(in ProbeData probe, (int X, int Y, int Z) cell, Vector3 spacing, Layout layout, in Snapshot snapshot) {
         var changes = snapshot.Changes;
 
         if ((changes.Length == 0) || (probe.Geometry < (changes[0].Geometry - 1))) { return true; }
 
         var centre = (new Vector3(x: (cell.X + 0.5f), y: (cell.Y + 0.5f), z: (cell.Z + 0.5f)) * spacing);
-        var placement = new Vector3(value: ((1.5f * spacing) + SdfMeshIrradianceProbe.Clearance));
+        var placement = ((1.5f * spacing) + new Vector3(value: SdfMeshIrradianceProbe.Clearance));
         var origin = (centre + probe.Offset);
         var hits = probe.HitWords;
         var directions = SdfMeshProbeDepth.RayDirections;
@@ -753,7 +760,7 @@ public sealed class SdfMeshIrradiance : IDisposable {
     // it yet places the coarser levels' slots after its own.
     private SdfMeshIrradianceWindow PublishedOf(Layout layout, int level) => (m_levels[level].Published.Present
         ? m_levels[level].Published
-        : new SdfMeshIrradianceWindow(Dims: layout.DimsOf(level: level), Low: default, Spacing: 0f));
+        : new SdfMeshIrradianceWindow(Dims: layout.DimsOf(level: level), Low: default, Spacing: Vector3.Zero));
     // The first cell of a level's window. It centres on the box of the cells of every view's camera this residency
     // renders when that box fits in the window's middle, and on the first view's camera alone when it does not, so each
     // level follows every view as far as its reach allows and a coarser level covers views a finer one cannot. It
@@ -788,8 +795,8 @@ public sealed class SdfMeshIrradiance : IDisposable {
 
         return ((((low.X + high.X) >> 1) - (dims.X / 2)), (((low.Y + high.Y) >> 1) - (dims.Y / 2)), (((low.Z + high.Z) >> 1) - (dims.Z / 2)));
     }
-    private static (int X, int Y, int Z) CellOf(Vector3 position, float spacing) =>
-        (((int)MathF.Floor(x: (position.X / spacing))), ((int)MathF.Floor(x: (position.Y / spacing))), ((int)MathF.Floor(x: (position.Z / spacing))));
+    private static (int X, int Y, int Z) CellOf(Vector3 position, Vector3 spacing) =>
+        (((int)MathF.Floor(x: (position.X / spacing.X))), ((int)MathF.Floor(x: (position.Y / spacing.Y))), ((int)MathF.Floor(x: (position.Z / spacing.Z))));
     // Whether cells from low to high fit in a window's middle along one axis.
     private static bool Fits(int low, int high, int dims) => ((high - low) < (dims - (2 * Math.Max(val1: 1, val2: (dims / 8)))));
 
@@ -959,7 +966,7 @@ public sealed class SdfMeshIrradiance : IDisposable {
 
             foreach (var level in m_levels) { cached += level.Cache.Count; }
 
-            return string.Create(provider: CultureInfo.InvariantCulture, handler: $"[sdf.mesh-gi] spacing={m_layout.Spacing:0.##} dims={m_layout.Dims.X}x{m_layout.Dims.Y}x{m_layout.Dims.Z} levels={string.Join(separator: ',', values: LevelSpacing.ToArray().Prepend(element: m_layout.Spacing).Select(selector: static spacing => spacing.ToString(format: "0.##", provider: CultureInfo.InvariantCulture)))} rays={SdfMeshProbeDepth.HitCount} bounce={(m_layout.Bounce ? "on" : "off")} triangles={(m_scene?.TriangleCount ?? 0)} lights={(m_lighting?.Points.Length ?? 0)} cached={cached} lighting-version={m_lightingVersion} local-version={m_localVersion} traced={m_traced} relit={m_relit} traced-rays={m_rays} {DescribeAge()} record-bytes={(SdfMeshIrradianceProbe.ProbeWords * sizeof(uint))} volume-bytes={(m_volume.LongLength * sizeof(uint))} table-device-bytes={buffers.DeviceLocal} table-upload-bytes={buffers.HostVisible} table-cpu-bytes={(m_writeTables?.MeshIrradianceCpuBytes ?? 0)}");
+            return string.Create(provider: CultureInfo.InvariantCulture, handler: $"[sdf.mesh-gi] spacing={SpacingText(spacing: m_layout.Spacing)} dims={m_layout.Dims.X}x{m_layout.Dims.Y}x{m_layout.Dims.Z} levels={string.Join(separator: ',', values: m_layout.Levels.Select(selector: static level => SpacingText(spacing: level.Spacing)))} rays={SdfMeshProbeDepth.HitCount} bounce={(m_layout.Bounce ? "on" : "off")} triangles={(m_scene?.TriangleCount ?? 0)} lights={(m_lighting?.Points.Length ?? 0)} cached={cached} lighting-version={m_lightingVersion} local-version={m_localVersion} traced={m_traced} relit={m_relit} traced-rays={m_rays} {DescribeAge()} record-bytes={(SdfMeshIrradianceProbe.ProbeWords * sizeof(uint))} volume-bytes={(m_volume.LongLength * sizeof(uint))} table-device-bytes={buffers.DeviceLocal} table-upload-bytes={buffers.HostVisible} table-cpu-bytes={(m_writeTables?.MeshIrradianceCpuBytes ?? 0)}");
         }
     }
     // The budget and the lighting's age, as key=value pairs; under the gate.
@@ -978,10 +985,14 @@ public sealed class SdfMeshIrradiance : IDisposable {
             var cpuBytes = (((ProbeBlock.FloatsPerProbe + LightBlock.FloatsPerProbe) * sizeof(float)));
 
             return string.Create(provider: CultureInfo.InvariantCulture,
-                handler: $"indirect volume {counts} probe(s) over {SdfMeshIrradianceProbe.Levels} level(s) at {m_layout.Spacing:0.##}/{LevelSpacing[0]:0.##}/{LevelSpacing[1]:0.##} m, {(SdfMeshIrradianceProbe.ProbeWords * sizeof(uint))} byte(s) a probe in the table and {cpuBytes} in the CPU cache, {SdfMeshProbeDepth.HitCount} hit(s) a probe, bounce {(m_layout.Bounce ? "on" : "off")}; {DescribeAge()}");
+                handler: $"indirect volume {counts} probe(s) over {SdfMeshIrradianceProbe.Levels} level(s) at {string.Join(separator: '/', values: m_layout.Levels.Select(selector: static level => SpacingText(spacing: level.Spacing)))} m, {(SdfMeshIrradianceProbe.ProbeWords * sizeof(uint))} byte(s) a probe in the table and {cpuBytes} in the CPU cache, {SdfMeshProbeDepth.HitCount} hit(s) a probe, bounce {(m_layout.Bounce ? "on" : "off")}; {DescribeAge()}");
         }
     }
 
+    // A cell size as text: one number for a cube, else its three axes.
+    private static string SpacingText(Vector3 spacing) => (((spacing.X == spacing.Y) && (spacing.Y == spacing.Z))
+        ? spacing.X.ToString(format: "0.##", provider: CultureInfo.InvariantCulture)
+        : string.Create(provider: CultureInfo.InvariantCulture, handler: $"{spacing.X:0.##}x{spacing.Y:0.##}x{spacing.Z:0.##}"));
     // Whether a frame whose bake still lands opaque static meshes builds a scene from what has landed: never a lighting-converged
     // frame, which renders the whole bake; otherwise once no build runs, the installed scene's trace has finished (or no
     // scene is installed), and PendingSceneInterval has passed since the last build began. The finished trace paces the
@@ -1724,7 +1735,7 @@ public sealed class SdfMeshIrradiance : IDisposable {
     // Take the nearest clear exit, then try the cell's grid nearest-first. Openness scoring moved probes a metre
     // off thin floors and made neighbouring cells choose different storeys. Surface reconstruction handles grazing.
     // The hits and sky shares left are the chosen origin's, the centre's when nothing in the cell stands clear.
-    private static bool Place(Vector3 centre, float spacing, Layout layout, SdfMeshIrradianceScene scene, Span<uint> hits, Span<float> sky, out Vector3 offset, out float inside) {
+    private static bool Place(Vector3 centre, Vector3 spacing, Layout layout, SdfMeshIrradianceScene scene, Span<uint> hits, Span<float> sky, out Vector3 offset, out float inside) {
         var clearance = SdfMeshIrradianceProbe.Clearance;
         var reach = (0.5f * spacing);
 
@@ -1734,19 +1745,19 @@ public sealed class SdfMeshIrradiance : IDisposable {
         var valid = TraceHits(hits: hits, inside: out inside, layout: layout, origin: centre, scene: scene, sky: sky);
 
         if (valid && !near) { return true; }
-        if (!near && !scene.TryNearestSurface(bakeHalfDiagonal: out _, normal: out normal, point: centre, radius: ((reach * MathF.Sqrt(x: 3f)) + clearance), surface: out surface)) { return false; }
+        if (!near && !scene.TryNearestSurface(bakeHalfDiagonal: out _, normal: out normal, point: centre, radius: (reach.Length() + clearance), surface: out surface)) { return false; }
 
         var pushed = ((surface + (normal * (1.25f * clearance))) - centre);
 
         for (var candidate = -1; (candidate < Candidates.Length); candidate++) {
             var trial = ((candidate < 0) ? pushed : (Candidates[candidate] * spacing));
 
-            if ((MathF.Abs(x: trial.X) > reach) || (MathF.Abs(x: trial.Y) > reach) || (MathF.Abs(x: trial.Z) > reach)) { continue; }
+            if ((MathF.Abs(x: trial.X) > reach.X) || (MathF.Abs(x: trial.Y) > reach.Y) || (MathF.Abs(x: trial.Z) > reach.Z)) { continue; }
 
             var origin = (centre + trial);
 
             if (scene.TryNearestSurface(bakeHalfDiagonal: out _, normal: out _, point: origin, radius: clearance, surface: out _)) { continue; }
-            if (Blocked(origin: origin, reach: spacing, scene: scene)) { continue; }
+            if (Blocked(origin: origin, reach: MathF.Max(x: spacing.X, y: MathF.Max(x: spacing.Y, y: spacing.Z)), scene: scene)) { continue; }
             if (!TraceHits(hits: hits, inside: out inside, layout: layout, origin: origin, scene: scene, sky: sky)) { continue; }
 
             offset = trial;
@@ -2032,7 +2043,7 @@ public sealed class SdfMeshIrradiance : IDisposable {
             var level = selection.Level;
 
             lines.Add(item: string.Create(provider: CultureInfo.InvariantCulture,
-                $"[world.probe: point=({point.X:0.###}, {point.Y:0.###}, {point.Z:0.###}) normal=({normal.X:0.##}, {normal.Y:0.##}, {normal.Z:0.##}) level={level} measured={(selection.Measured ? 1 : 0)} share={selection.Share:0.####} remainder-level={selection.RemainderLevel} remainder-measured={(selection.RemainderMeasured ? 1 : 0)} spacing={layout.SpacingOf(level: level):0.##} window=({low.X}, {low.Y}, {low.Z})+{layout.DimsOf(level: level).X}x{layout.DimsOf(level: level).Y}x{layout.DimsOf(level: level).Z} answering={answering} weight={total:0.####} relighting={(m_owed ? 1 : 0)}]"));
+                $"[world.probe: point=({point.X:0.###}, {point.Y:0.###}, {point.Z:0.###}) normal=({normal.X:0.##}, {normal.Y:0.##}, {normal.Z:0.##}) level={level} measured={(selection.Measured ? 1 : 0)} share={selection.Share:0.####} remainder-level={selection.RemainderLevel} remainder-measured={(selection.RemainderMeasured ? 1 : 0)} spacing={SpacingText(spacing: layout.SpacingOf(level: level))} window=({low.X}, {low.Y}, {low.Z})+{layout.DimsOf(level: level).X}x{layout.DimsOf(level: level).Y}x{layout.DimsOf(level: level).Z} answering={answering} weight={total:0.####} relighting={(m_owed ? 1 : 0)}]"));
             lines.Add(item: Describe());
             for (var slot = 0; (slot < ((selection.RemainderLevel >= 0) ? GatherSlots : 8)); slot++) {
                 var report = reports[slot];
@@ -2125,15 +2136,15 @@ public sealed class SdfMeshIrradiance : IDisposable {
         }
     }
     /// <summary>Returns the farthest receiver from a probe its surface map measured, in metres: its reach
-    /// (<see cref="SdfMeshIrradianceProbe.SurfaceReach"/> spacings) plus the receiver's normal bias.</summary>
-    /// <param name="spacing">The probe spacing of the probe's level, in metres.</param>
+    /// (<see cref="SdfMeshIrradianceProbe.SurfaceReach"/> cell diagonals) plus the receiver's normal bias.</summary>
+    /// <param name="spacing">The probe spacing of the probe's level along each axis, in metres.</param>
     /// <returns>The reach, in metres.</returns>
-    public static float SurfaceReachOf(float spacing) => ((SdfMeshIrradianceProbe.SurfaceReach * spacing) + SdfMeshIrradianceProbe.NormalBias);
+    public static float SurfaceReachOf(Vector3 spacing) => ((SdfMeshIrradianceProbe.SurfaceReach * spacing.Length()) + SdfMeshIrradianceProbe.NormalBias);
     // How far past a level's boundary probes a receiver pushed along its normal stands, in metres; zero within them.
     private static float Beyond(Layout layout, int level, (int X, int Y, int Z) low, Vector3 normal, Vector3 point) {
         var (unclamped, sample) = Lattice(layout: layout, level: level, low: low, normal: normal, point: point);
 
-        return ((unclamped - sample).Length() * layout.SpacingOf(level: level));
+        return ((unclamped - sample) * layout.SpacingOf(level: level)).Length();
     }
     // A receiver's lattice coordinate in a level's window, pushed along its normal, unclamped and clamped to the window's
     // boundary probes.
@@ -2200,7 +2211,8 @@ public sealed class SdfMeshIrradiance : IDisposable {
             // whose every visible probe lies behind its plane still reads them. A coarser level's depth test cannot
             // resolve the receiver's own wall, so a probe behind its plane there takes no part. Irradiance is already
             // evaluated along the normal.
-            var ahead = Math.Clamp((Vector3.Dot(vector1: toward, vector2: normal) / (0.5f * spacing)), 0f, 1f);
+            // The fade runs over half the cell's extent along the normal, half the spacing for a cube.
+            var ahead = Math.Clamp((Vector3.Dot(vector1: toward, vector2: normal) / (0.5f * (spacing * normal).Length())), 0f, 1f);
             var fade = ((ahead * ahead) * (3f - (2f * ahead)));
             var facing = float.Lerp(amount: outside, value1: MathF.Max(x: fade, y: ((level == 0) ? SdfMeshIrradianceProbe.BehindShare : 0f)), value2: 1f);
             var trilinear = ((weights.X * weights.Y) * weights.Z);
@@ -2503,17 +2515,15 @@ public sealed class SdfMeshIrradiance : IDisposable {
     // A static point or spot light the probes trace: its index in the lights table, and its record's position, colour,
     // intensity over pi, range, cone and bounce gain.
     private readonly record struct TracedLight(int Index, Vector3 Position, Vector3 Color, float Weight, float Range, Vector3 SpotAxis, float SpotOffset, float Bounce);
-    // A tier's volume: its finest level's probe spacing and probes along each axis, whether hits reflect the bounce the
-    // volume holds about them (any bounce the frame asks for), and the reach of its rays (the frame's far distance). The coarser levels take LevelSpacing and the Medium tier's window,
-    // whatever the tier, and their slots follow the finer levels' in the volume.
-    private readonly record struct Layout(float Spacing, (int X, int Y, int Z) Dims, bool Bounce, float Reach) {
-        public float SpacingOf(int level) => ((level == 0) ? Spacing : LevelSpacing[(level - 1)]);
-        public (int X, int Y, int Z) DimsOf(int level) => ((level == 0) ? Dims : MediumDims);
-        public int CountOf(int level) {
-            var dims = DimsOf(level: level);
-
-            return ((dims.X * dims.Y) * dims.Z);
-        }
+    // A tier's volume: its levels (LevelsOf), each level's slots after the finer levels' in the volume, whether hits
+    // reflect the bounce the volume holds about them (any bounce the frame asks for), and the reach of its rays (the
+    // frame's far distance).
+    private readonly record struct Layout(SdfMeshIrradianceLevel[] Levels, bool Bounce, float Reach) {
+        public Vector3 Spacing => Levels[0].Spacing;
+        public (int X, int Y, int Z) Dims => Levels[0].Dims;
+        public Vector3 SpacingOf(int level) => Levels[level].Spacing;
+        public (int X, int Y, int Z) DimsOf(int level) => Levels[level].Dims;
+        public int CountOf(int level) => Levels[level].Count;
         public int OffsetOf(int level) {
             var offset = 0;
 
@@ -2525,16 +2535,11 @@ public sealed class SdfMeshIrradiance : IDisposable {
 
         public SdfMeshIrradianceWindow WindowOf(int level, (int X, int Y, int Z) low) =>
             new(Dims: DimsOf(level: level), Low: low, Spacing: SpacingOf(level: level));
-        public static Layout Of(SdfIndirectTier tier, int? bounces, float reach) {
-            var high = (tier == SdfIndirectTier.High);
-
-            return new Layout(
-                Bounce: ((bounces ?? 1) > 0),
-                Dims: (high ? HighDims : MediumDims),
-                Reach: reach,
-                Spacing: (high ? 1f : 2f)
-            );
-        }
+        public static Layout Of(SdfIndirectTier tier, int? bounces, float reach) => new(
+            Bounce: ((bounces ?? 1) > 0),
+            Levels: ((tier == SdfIndirectTier.High) ? HighLevels : MediumLevels),
+            Reach: reach
+        );
     }
     // The lighting the probes are relit under: its version and when it was captured, the directional lights, the static
     // point and spot lights, the program's materials, the gains and sources, and the sky's irradiance projected on the CPU

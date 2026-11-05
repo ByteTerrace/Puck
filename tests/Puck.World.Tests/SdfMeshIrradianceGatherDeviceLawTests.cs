@@ -18,10 +18,10 @@ namespace Puck.World.Tests;
 /// read the same probes with the same weights. A storeyed hall at the High tier is traced and published on the CPU; the
 /// shipped gather then runs on both hardware backends over the published table words and the pass-block parameters
 /// <see cref="SdfFrameBlock.WriteMeshIrradiance"/> packs, at receivers on floors, slab undersides, walls, an exhibit, an end
-/// wall just past the finest window, the inside of a sealed room no coarser probe sees, surfaces past every window, and the
-/// far storeys of a four-storey annex: one with no plane of the 8 m level's probes, where the coarse share blends with the
-/// finest level's boundary probes, and walls whose coarse corners leaked across a slab under the finest level's coverage
-/// ramp. Each receiver must answer from the same sixteen slots (the chosen and remainder stages' levels and cells), each
+/// wall just past the finest window, the inside of a sealed room, surfaces past every window, and the far storeys of a
+/// four-storey annex (4.5 m storeys, where an isotropic 8 m level would hold a probe plane in every other storey), whose
+/// floors, ceilings and walls blend the storey level's share with another stage's, including walls under the roof slab
+/// a coarse corner reaches across. Each receiver must answer from the same sixteen slots (the chosen and remainder stages' levels and cells), each
 /// slot's weight within <see cref="WeightTolerance"/> of the CPU's, with the same share and each stage measured or not
 /// alike.</summary>
 [SupportedOSPlatform("windows10.0.15063")]
@@ -118,8 +118,8 @@ public sealed class SdfMeshIrradianceGatherDeviceLawTests {
         foreach (var x in new[] { 30f, 70f, 140f, 400f, 2000f }) {
             receivers.Add(item: new Receiver(Normal: Vector3.UnitY, Point: new Vector3(x: x, y: 0f, z: 0f)));
         }
-        // The annex's far storeys: floors, ceilings and walls of its second storey, which holds no plane of the 8 m
-        // level's probes, and the walls of its top storey whose coarse corners leaked across the roof slab.
+        // The annex's far storeys: floors, ceilings and walls of its second storey, and the walls of its top storey under
+        // the roof slab.
         for (var x = 40.7f; (x < AnnexEnd); x += 4.6f) {
             receivers.Add(item: new Receiver(Normal: Vector3.UnitY, Point: new Vector3(x: x, y: AnnexStorey, z: (AnnexMiddle + 1.3f))));
             receivers.Add(item: new Receiver(Normal: -Vector3.UnitY, Point: new Vector3(x: x, y: ((2f * AnnexStorey) - 0.3f), z: (AnnexMiddle - 2.1f))));
@@ -235,10 +235,12 @@ public sealed class SdfMeshIrradianceGatherDeviceLawTests {
 
         var volumeOffset = ((int)SdfWorldInterfaces.WorldParameters.BlockOffsetOf(member: SdfWorldPackage.MeshIrradianceVolume));
         var levelsOffset = ((int)SdfWorldInterfaces.WorldParameters.BlockOffsetOf(member: SdfWorldPackage.MeshIrradianceLevels));
-        var packed = new uint[(4 * (1 + SdfMeshIrradianceProbe.Levels))];
+        var spacingsOffset = ((int)SdfWorldInterfaces.WorldParameters.BlockOffsetOf(member: SdfWorldPackage.MeshIrradianceSpacings));
+        var packed = new uint[(4 * (1 + (2 * SdfMeshIrradianceProbe.Levels)))];
 
-        MemoryMarshal.Cast<byte, uint>(span: block.AsSpan(length: 16, start: volumeOffset)).CopyTo(destination: packed);
+        MemoryMarshal.Cast<byte, uint>(span: block.AsSpan(length: sizeof(uint), start: volumeOffset)).CopyTo(destination: packed);
         MemoryMarshal.Cast<byte, uint>(span: block.AsSpan(length: (16 * SdfMeshIrradianceProbe.Levels), start: levelsOffset)).CopyTo(destination: packed.AsSpan(start: 4));
+        MemoryMarshal.Cast<byte, uint>(span: block.AsSpan(length: (16 * SdfMeshIrradianceProbe.Levels), start: spacingsOffset)).CopyTo(destination: packed.AsSpan(start: (4 * (1 + SdfMeshIrradianceProbe.Levels))));
 
         var points = new Vector4[(2 * receivers.Length)];
 

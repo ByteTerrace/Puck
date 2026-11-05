@@ -582,7 +582,7 @@ public sealed partial class SdfMeshIrradianceLawTests {
         _ = Trace(frame: frame, volume: volume);
         var (resized, _) = Trace(frame: frame, tier: SdfIndirectTier.Medium, volume: volume);
 
-        Assert.Equal(expected: 2f, actual: resized.Spacing);
+        Assert.Equal(expected: new Vector3(value: 2f), actual: resized.Spacing);
         var view = frame.Views[0];
 
         SdfFrame At(float x) => frame with {
@@ -685,7 +685,7 @@ public sealed partial class SdfMeshIrradianceLawTests {
         var (parameters, words) = Trace(frame: frame, volume: volume);
 
         Assert.True(condition: parameters.Enabled);
-        Assert.Equal(expected: 1f, actual: parameters.Spacing);
+        Assert.Equal(expected: Vector3.One, actual: parameters.Spacing);
 
         // The probe at (0.5, 5.5, 0.5), beside the light in the upper room, and the one at (0.5, 1.5, 0.5) under the slab.
         var upper = Probe(parameters: in parameters, words: words, x: 0, y: 5, z: 0);
@@ -826,7 +826,7 @@ public sealed partial class SdfMeshIrradianceLawTests {
         var (parameters, words) = Trace(frame: OpenFloor() with { ConvergesLighting = true }, tier: SdfIndirectTier.Medium, volume: volume);
 
         Assert.True(condition: parameters.Middle.Present && parameters.Far.Present);
-        Assert.Equal(expected: 8f, actual: parameters.Middle.Spacing);
+        Assert.Equal(expected: new Vector3(x: 4f, y: 2f, z: 4f), actual: parameters.Middle.Spacing);
 
         var far = volume.DescribeProbes(point: new Vector3(x: 60f, y: 0f, z: 0f), normal: Vector3.UnitY)[0];
 
@@ -842,11 +842,9 @@ public sealed partial class SdfMeshIrradianceLawTests {
     }
     /// <summary>THE LAW: a finer level's probes answer a receiver past their window as far as their surface maps reach,
     /// before a coarser level does. At the High tier the finest window about a camera at the origin ends half a metre
-    /// short of a room's end wall; the 8 m level's probes stand in the room's slabs and on both sides of its walls, so the
-    /// wall read from them was black or the outdoors' light. The wall reads the finest level's boundary probes, measured,
-    /// with weight; a floor far past the finest probes' reach still reads the coarser level. The inner wall of a sealed
-    /// room past that reach, which no coarser probe sees, reads the finest level's boundary probes unmeasured rather than
-    /// black.</summary>
+    /// short of a room's end wall, whose metres-wide coarse taps cannot resolve it. The wall reads the finest level's
+    /// boundary probes, measured, with weight; a floor far past the finest probes' reach still reads the coarser level.
+    /// The inner wall of a sealed room past that reach reads light rather than black.</summary>
     [Fact]
     public void AReceiverJustPastTheFinestWindowReadsTheFinestProbesThatMeasuredIt() {
         const float EndWall = 24.3f;
@@ -870,7 +868,7 @@ public sealed partial class SdfMeshIrradianceLawTests {
         var (parameters, _) = Trace(frame: room, tier: SdfIndirectTier.High, volume: volume);
         var finest = parameters.Window(level: 0);
         var point = new Vector3(x: EndWall, y: 2f, z: 0.5f);
-        var beyond = ((point.X - SdfMeshIrradianceProbe.NormalBias) - ((finest.Low.X + finest.Dims.X - 0.5f) * finest.Spacing));
+        var beyond = ((point.X - SdfMeshIrradianceProbe.NormalBias) - ((finest.Low.X + finest.Dims.X - 0.5f) * finest.Spacing.X));
 
         Assert.InRange(actual: beyond, low: 0.01f, high: SdfMeshIrradiance.SurfaceReachOf(spacing: finest.Spacing));
 
@@ -878,11 +876,10 @@ public sealed partial class SdfMeshIrradianceLawTests {
 
         Assert.Contains(expectedSubstring: "level=0 measured=1", actualString: wall);
         Assert.DoesNotContain(expectedSubstring: "weight=0]", actualString: wall);
-        Assert.Contains(expectedSubstring: "level=1 measured=1", actualString: volume.DescribeProbes(point: new Vector3(x: 100f, y: -0.3f, z: 0f), normal: Vector3.UnitY)[0]);
+        Assert.Contains(expectedSubstring: "level=1 measured=1", actualString: volume.DescribeProbes(point: new Vector3(x: 50f, y: -0.3f, z: 0f), normal: Vector3.UnitY)[0]);
 
         var sealedWall = volume.DescribeProbes(point: new Vector3(x: 63f, y: 1.5f, z: 1.65f), normal: -Vector3.UnitX)[0];
 
-        Assert.Contains(expectedSubstring: "level=0 measured=0", actualString: sealedWall);
         Assert.DoesNotContain(expectedSubstring: "weight=0]", actualString: sealedWall);
     }
     /// <summary>THE LAW: the meter answers while the bake still lands static meshes: a frame with the bake pending builds

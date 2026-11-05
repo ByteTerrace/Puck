@@ -5,8 +5,9 @@
 [[vk::binding(2, 3)]] StructuredBuffer<uint4> gatherParameters : register(t2, space3);
 [[vk::binding(3, 3)]] [[vk::image_format("rgba32f")]] RWTexture2D<float4> gatherResults : register(u3, space3);
 struct GatherPass {
-    uint4 meshIrradianceVolume;
+    uint meshIrradianceVolume;
     int4 meshIrradianceLevels[3];
+    float4 meshIrradianceSpacings[3];
     uint indirectSources;
     float4 indirectSourceGains;
 };
@@ -16,9 +17,10 @@ float3 sdfSkyPhysicalIrradiance(float3 normal) { return 0.0; }
 
 [numthreads(1, 1, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID) {
-    passGroup.meshIrradianceVolume = gatherParameters[0];
+    passGroup.meshIrradianceVolume = gatherParameters[0].x;
     [unroll] for (uint level = 0u; (level < 3u); level++) {
         passGroup.meshIrradianceLevels[level] = asint(gatherParameters[1u + level]);
+        passGroup.meshIrradianceSpacings[level] = asfloat(gatherParameters[4u + level]);
     }
     passGroup.indirectSources = 0u;
     passGroup.indirectSourceGains = 0.0;

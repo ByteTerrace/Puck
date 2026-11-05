@@ -9,7 +9,7 @@
 #include "../field/sdf-octahedral.hlsli"
 
 bool sdfMeshIrradianceEnabled() {
-    return (passGroup.meshIrradianceVolume.x != 0u);
+    return (passGroup.meshIrradianceVolume != 0u);
 }
 uint sdfMeshIrradianceKey(int3 cell) {
     uint3 low = (asuint(cell) & 1023u);
@@ -191,10 +191,10 @@ struct SdfMeshProbes {
 bool sdfMeshProbeAnswers(SdfMeshProbes probes, uint corner) {
     return (probes.address[corner] != SdfMeshProbeNone);
 }
-// A level's probe spacing, zero for a level not published, and its window: first cell and probes along each axis.
-float sdfMeshIrradianceSpacing(uint level) {
-    uint4 volume = passGroup.meshIrradianceVolume;
-    return asfloat((level == 0u) ? volume.y : ((level == 1u) ? volume.z : volume.w));
+// A level's probe spacing along each axis, zero for a level not published, and its window: first cell and probes along
+// each axis.
+float3 sdfMeshIrradianceSpacing(uint level) {
+    return passGroup.meshIrradianceSpacings[level].xyz;
 }
 int3 sdfMeshIrradianceDims(uint level) {
     uint packed = (uint)passGroup.meshIrradianceLevels[level].w;
@@ -207,7 +207,7 @@ int3 sdfMeshIrradianceDims(uint level) {
 // Returns the total weight, and in `front` the cage's weight before visibility with the facing fade alone (no behind
 // floor) over every present probe, invalid ones included: the support a share is measured against. KEEP IN SYNC with
 // SdfMeshIrradiance.Gather.
-float sdfMeshProbesGather(uint base, float spacing, int3 low, int3 dims, float3 position, float3 normal, float3 pushed, bool bounded, float behind, float2 ramp, out float front, out SdfMeshProbeCage probes) {
+float sdfMeshProbesGather(uint base, float3 spacing, int3 low, int3 dims, float3 position, float3 normal, float3 pushed, bool bounded, float behind, float2 ramp, out float front, out SdfMeshProbeCage probes) {
     uint count, stride;
     sdfMeshIrradiance.GetDimensions(count, stride);
 
@@ -253,7 +253,8 @@ float sdfMeshProbesGather(uint base, float spacing, int3 low, int3 dims, float3 
         // The trilinear share is the cell's; the direction, the distance and the depth test are the probe's own position.
         float3 probePoint = ((((float3)cell + 0.5) * spacing) + sdfMeshProbeOffset(address));
         float3 toward = (probePoint - position);
-        float fade = smoothstep(0.0, 0.5 * spacing, dot(toward, normal));
+        // The fade runs over half the cell's extent along the normal, half the spacing for a cube.
+        float fade = smoothstep(0.0, 0.5 * length(spacing * normal), dot(toward, normal));
         front += (trilinear * lerp(fade, 1.0, outside));
         if ((key & SDF_MESH_IRRADIANCE_INVALID) != 0u) {
             continue;
@@ -274,10 +275,10 @@ float sdfMeshProbesGather(uint base, float spacing, int3 low, int3 dims, float3 
     return total;
 }
 // How far past a level's boundary probes the pushed receiver stands, in metres; zero within them.
-float sdfMeshIrradianceBeyond(float3 pushed, float spacing, int3 low, int3 dims) {
+float sdfMeshIrradianceBeyond(float3 pushed, float3 spacing, int3 low, int3 dims) {
     float3 unclamped = ((pushed / spacing) - 0.5);
 
-    return (length(unclamped - clamp(unclamped, (float3)low, (float3)(low + dims - 1))) * spacing);
+    return length((unclamped - clamp(unclamped, (float3)low, (float3)(low + dims - 1))) * spacing);
 }
 // The probes a receiver reads. KEEP IN SYNC with SdfMeshIrradiance.Select: a chain of stages, finest first: each finer
 // published level whose boundary probes' surface maps reach the receiver past its window, then the level whose window
@@ -300,7 +301,7 @@ SdfMeshProbes sdfMeshProbesAt(float3 position, float3 normal) {
         probes.address[corner] = SdfMeshProbeNone;
         probes.weight[corner] = 0.0;
     }
-    if ((passGroup.meshIrradianceVolume.x == 0u) || any(!isfinite(position))) {
+    if ((passGroup.meshIrradianceVolume == 0u) || any(!isfinite(position))) {
         return probes;
     }
 
@@ -310,10 +311,10 @@ SdfMeshProbes sdfMeshProbesAt(float3 position, float3 normal) {
 
     // The finest published level holding the receiver, else the coarsest published.
     [unroll] for (uint level = 0u; (level < SDF_MESH_IRRADIANCE_LEVELS); level++) {
-        float levelSpacing = sdfMeshIrradianceSpacing(level);
+        float3 levelSpacing = sdfMeshIrradianceSpacing(level);
         int3 levelDims = sdfMeshIrradianceDims(level);
 
-        if (!held && (levelSpacing > 0.0) && all(levelDims > 0)) {
+        if (!held && all(levelSpacing > 0.0) && all(levelDims > 0)) {
             chosen = level;
             held = (sdfMeshIrradianceBeyond(pushed, levelSpacing, passGroup.meshIrradianceLevels[level].xyz, levelDims) <= 0.0);
         }
@@ -334,7 +335,7 @@ SdfMeshProbes sdfMeshProbesAt(float3 position, float3 normal) {
     [loop] for (uint attempt = 0u; (attempt <= (chosen + 2u)); attempt++) {
         uint level = ((attempt > (chosen + 1u)) ? 0u : min(attempt, chosen));
         bool bounded = (attempt <= chosen);
-        float spacing = sdfMeshIrradianceSpacing(level);
+        float3 spacing = sdfMeshIrradianceSpacing(level);
         int3 low = passGroup.meshIrradianceLevels[level].xyz;
         int3 dims = sdfMeshIrradianceDims(level);
         uint base = 0u;
@@ -344,11 +345,11 @@ SdfMeshProbes sdfMeshProbesAt(float3 position, float3 normal) {
 
             base += ((finer < level) ? (uint)(finerDims.x * finerDims.y * finerDims.z) : 0u);
         }
-        if (((attempt < chosen) || (attempt > (chosen + 1u))) && (!(spacing > 0.0) || any(dims <= 0) || (chosen == 0u))) {
+        if (((attempt < chosen) || (attempt > (chosen + 1u))) && (!all(spacing > 0.0) || any(dims <= 0) || (chosen == 0u))) {
             continue;
         }
         if ((attempt < chosen) &&
-            (sdfMeshIrradianceBeyond(pushed, spacing, low, dims) > ((SDF_MESH_IRRADIANCE_SURFACE_REACH * spacing) + SDF_MESH_IRRADIANCE_NORMAL_BIAS))) {
+            (sdfMeshIrradianceBeyond(pushed, spacing, low, dims) > ((SDF_MESH_IRRADIANCE_SURFACE_REACH * length(spacing)) + SDF_MESH_IRRADIANCE_NORMAL_BIAS))) {
             continue;
         }
         if (found && (level == first)) {

@@ -28,16 +28,22 @@ public sealed partial class SdfMeshIrradianceLawTests {
         public int LevelOf(int slot) => ((slot < 8) ? Selection.Level : Selection.RemainderLevel);
     }
 
-    /// <summary>The counts the far field's laws read over every far receiver.</summary>
-    private readonly record struct FarCounts(int Receivers, int Answering, int Blocked, int CoarseBlocked, int Clear, int OverOccluded, int StoreyFallbacks, int PlanelessReceivers) {
+    /// <summary>The counts the far field's laws read over every far receiver: answering corners, those the exact segment
+    /// test finds blocked (at the storey level, at the coarsest level), clear corners and those read at zero
+    /// visibility, receivers on storeys with no plane of the storey level and those of them read by the finest level's
+    /// boundary probes unbounded, and receivers whose chosen stage is the storey level, measured, with two or more
+    /// answering corners.</summary>
+    private readonly record struct FarCounts(int Receivers, int Answering, int Blocked, int StoreyBlocked, int FarBlocked, int Clear, int OverOccluded, int StoreyFallbacks, int PlanelessReceivers, int StoreyReads) {
         public override string ToString() => string.Create(provider: CultureInfo.InvariantCulture,
-            handler: $"receivers={Receivers} answering={Answering} exact-blocked={Blocked} coarse-exact-blocked={CoarseBlocked} clear={Clear} over-occluded={OverOccluded} planeless-fallbacks={StoreyFallbacks}/{PlanelessReceivers}");
+            handler: $"receivers={Receivers} answering={Answering} exact-blocked={Blocked} storey-exact-blocked={StoreyBlocked} far-exact-blocked={FarBlocked} clear={Clear} over-occluded={OverOccluded} planeless-fallbacks={StoreyFallbacks}/{PlanelessReceivers} storey-reads={StoreyReads}");
     }
 
-    /// <summary>THE LAW: a coarse level's probe answers no receiver in another room. Over the far third of a four-storey
-    /// hall, no answering corner of a coarse level stands where the exact segment to its receiver meets a slab or a wall,
-    /// even where a tap only partly saw that slab, and the conservative ramp that closes them darkens at most one in a
-    /// hundred clear corners.</summary>
+    /// <summary>THE LAW: the storey level's probes answer every storey of a hall, and no receiver in another room. Over
+    /// the far third of a four-storey hall, every receiver reads the storey level, measured, with two or more answering
+    /// corners; no answering corner of that level stands where the exact segment to its receiver meets a slab or a wall,
+    /// even where a tap only partly saw that slab; and the conservative ramp that closes them darkens at most one in a
+    /// hundred clear corners. The coarsest level, which answers the hall's end past the storey level's window, is not
+    /// held to the segment test: its taps are sixteen metres wide.</summary>
     [Fact]
     public void ACoarseProbeAnswersNoReceiverAcrossASlabOrAWall() {
         var frame = StoreyedHall();
@@ -49,7 +55,8 @@ public sealed partial class SdfMeshIrradianceLawTests {
 
         var counts = Count(parameters: parameters, reads: ReadFar(scene: scene, volume: volume));
 
-        Assert.True(condition: (counts.CoarseBlocked == 0), userMessage: counts.ToString());
+        Assert.True(condition: (counts.StoreyBlocked == 0), userMessage: counts.ToString());
+        Assert.True(condition: (counts.StoreyReads == counts.Receivers), userMessage: counts.ToString());
         Assert.True(condition: (counts.OverOccluded <= (counts.Clear / 100)), userMessage: counts.ToString());
     }
 
@@ -151,14 +158,14 @@ public sealed partial class SdfMeshIrradianceLawTests {
         }
         return [.. reads];
     }
-    // Whether a storey holds a plane of the 8 m level's probes, as the hall's camera places that level's window.
+    // Whether a storey holds a plane of the storey level's probes, as the hall's camera places that level's window.
     private static bool HoldsCoarsePlane(in SdfMeshIrradianceParameters parameters, int storey) {
         var window = parameters.Middle;
         var floor = (storey * StoreyHeight);
         var ceiling = (floor + (StoreyHeight - SlabThickness));
 
         for (var y = window.Low.Y; (y < (window.Low.Y + window.Dims.Y)); y++) {
-            var plane = ((y + 0.5f) * window.Spacing);
+            var plane = ((y + 0.5f) * window.Spacing.Y);
 
             if ((plane > floor) && (plane < ceiling)) { return true; }
         }
@@ -167,7 +174,9 @@ public sealed partial class SdfMeshIrradianceLawTests {
     private static FarCounts Count(FarRead[] reads, in SdfMeshIrradianceParameters parameters) {
         var answering = 0;
         var blocked = 0;
-        var coarseBlocked = 0;
+        var storeyBlocked = 0;
+        var farBlocked = 0;
+        var storeyReads = 0;
         var clear = 0;
         var overOccluded = 0;
         var fallbacks = 0;
@@ -178,6 +187,7 @@ public sealed partial class SdfMeshIrradianceLawTests {
                 planeless++;
                 if ((read.Selection.Level == 0) && !read.Selection.Measured) { fallbacks++; }
             }
+            if ((read.Selection.Level == 1) && read.Selection.Measured && (read.Reports[..8].Count(predicate: static report => (report.Weight > 0f)) >= 2)) { storeyReads++; }
             for (var corner = 0; (corner < SdfMeshIrradiance.GatherSlots); corner++) {
                 var report = read.Reports[corner];
 
@@ -186,7 +196,8 @@ public sealed partial class SdfMeshIrradianceLawTests {
                     answering++;
                     if (!read.Clear[corner]) {
                         blocked++;
-                        if (read.LevelOf(slot: corner) > 0) { coarseBlocked++; }
+                        if (read.LevelOf(slot: corner) == 1) { storeyBlocked++; }
+                        if (read.LevelOf(slot: corner) == 2) { farBlocked++; }
                     }
                 }
                 if (read.Clear[corner]) {
@@ -195,7 +206,7 @@ public sealed partial class SdfMeshIrradianceLawTests {
                 }
             }
         }
-        return new FarCounts(Answering: answering, Blocked: blocked, Clear: clear, CoarseBlocked: coarseBlocked, OverOccluded: overOccluded,
-            PlanelessReceivers: planeless, Receivers: reads.Length, StoreyFallbacks: fallbacks);
+        return new FarCounts(Answering: answering, Blocked: blocked, Clear: clear, FarBlocked: farBlocked, OverOccluded: overOccluded,
+            PlanelessReceivers: planeless, Receivers: reads.Length, StoreyBlocked: storeyBlocked, StoreyFallbacks: fallbacks, StoreyReads: storeyReads);
     }
 }
