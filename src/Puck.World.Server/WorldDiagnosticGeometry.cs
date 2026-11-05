@@ -112,9 +112,10 @@ public static class WorldDiagnosticGeometry {
     /// <returns>Signed separation in metres.</returns>
     public static double SignedDistance(FixedStaticCollider collider, Vector3 point) {
         if (collider.Kind == FixedStaticColliderKind.Field) {
-            // The surface solve's distance; a point it reaches no surface from reads as far.
-            return (FixedFieldColliderContact.TryMeasure(collider: in collider, distance: out var measured, normal: out _, point: FixedVector3.FromVector3(value: point))
-                ? (double)measured
+            // The field's own reading: exact in sign and a lower bound in magnitude, like a superellipsoid's, so a point
+            // deep inside a field neighbour reads inside it; a point the field does not answer reads as far.
+            return (FixedFieldColliderContact.TryRead(collider: in collider, distance: out var read, material: out _, normal: out _, point: FixedVector3.FromVector3(value: point))
+                ? (double)read
                 : double.PositiveInfinity);
         }
         var relative = (FixedVector3.FromVector3(value: point) - collider.Center);
