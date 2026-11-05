@@ -4,6 +4,10 @@ namespace Puck.World.Client;
 
 /// <summary>Actual creation posing and surface-probe work across the composed World, including authored placements.</summary>
 public static class WorldCreationWork {
+    /// <summary>Bytes copied to retain the previous articulated pose before packing or carrying it.</summary>
+    public static WorkKind PreviousPoseBytes { get; } = new(name: "sdf.creations.previous-pose.bytes-copied", unit: "bytes", workClass: WorkClass.Pacing);
+    /// <summary>Articulated pose packs, including packs retaining all their slots.</summary>
+    public static WorkKind Packs { get; } = new(name: "sdf.creations.packs", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Live registrations considered by a pose pack.</summary>
     public static WorkKind Visited { get; } = new(name: "sdf.creations.registrations.visited", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Registrations whose authored pose programs ran.</summary>
@@ -41,5 +45,5 @@ public static class WorldCreationWork {
     /// <summary>Retained static occurrences published during a visual program build.</summary>
     public static WorkKind StaticCopies { get; } = new(name: "sdf.creations.static.copies", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Process totals; read twice to measure a window. Posed, retained and rate-held partition visited registrations.</summary>
-    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.creations", kinds: [Visited, Posed, Retained, RateHeld, PlacementsPosed, SlotsPosed, SlotsRetained, Probes, ProbeHits, ProbeMisses, ProbeSkipped, DriverInitializations, DriverEvaluations, DriverIntegrations, DriverPhaseChanges, DriverContinuations, StaticTemplates, StaticCopies]);
+    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.creations", kinds: [Visited, Posed, Retained, RateHeld, PlacementsPosed, SlotsPosed, SlotsRetained, Probes, ProbeHits, ProbeMisses, ProbeSkipped, DriverInitializations, DriverEvaluations, DriverIntegrations, DriverPhaseChanges, DriverContinuations, StaticTemplates, StaticCopies, PreviousPoseBytes, Packs]);
 }

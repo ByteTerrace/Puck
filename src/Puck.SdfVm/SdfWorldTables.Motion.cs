@@ -246,13 +246,15 @@ public sealed partial class SdfWorldTables {
             destinationAccessMask: GpuAccess.ShaderRead, destinationStageMask: GpuStage.ComputeShader);
     }
     // Observes and packs one record through the same door for full and incremental staging.
-    private void StageMeshDraw(int index, in SdfMeshDraw draw, Span<uint> record, ReadOnlySpan<byte> old, ref StagingTally tally, bool incremental = false) {
+    private ulong StageMeshDraw(int index, in SdfMeshDraw draw, Span<uint> record, ReadOnlySpan<byte> old, ref StagingTally tally, bool incremental = false) {
         var observation = m_meshHistory.Observe(draw: in draw, index: index, reseat: MeshTransformWasReseated(in draw));
         var packedWords = SdfMeshRecord.DrawWords;
+        var changedWords = 0UL;
         if (incremental) {
             var work = SdfMeshRegion.WriteDrawIncremental(draw: in draw, previous: in m_stagedDraws[index],
                 placement: m_meshArena.Placements[draw.Mesh], generation: observation.Generation, record: record);
             packedWords = work.PackedWords;
+            changedWords = work.ChangedWords;
             if (work.NormalComputed) { tally.Normals++; }
             if (work.SelectionComputed) { tally.Selections++; }
         } else {
@@ -264,15 +266,17 @@ public sealed partial class SdfWorldTables {
         tally.RecordBytes += (packedWords * sizeof(uint));
         if (observation.Seed) {
             m_seededMeshDraws.Add(length: 1, start: index);
-            return;
+            return changedWords;
         }
         var offset = (index * SdfMeshRegion.DrawBytes);
         var matrix = System.Runtime.InteropServices.MemoryMarshal.AsBytes(span: record[..SdfMeshRecord.MatrixWords]);
 
-        if ((offset > (old.Length - MeshMatrixBytes)) || !matrix.SequenceEqual(other: old.Slice(length: MeshMatrixBytes, start: offset))) {
+        if (incremental ? (changedWords & ((1UL << SdfMeshRecord.MatrixWords) - 1)) != 0 :
+            (offset > (old.Length - MeshMatrixBytes)) || !matrix.SequenceEqual(other: old.Slice(length: MeshMatrixBytes, start: offset))) {
             m_changedMeshMatrices.Add(length: 1, start: index);
             tally.Matrices++;
         }
+        return changedWords;
     }
     // The staging work of one pass over draw records, counted locally and published once: an interlocked count per
     // record and kind was a measurable share of staging thousands of records a frame.

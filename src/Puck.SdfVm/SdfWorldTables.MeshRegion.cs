@@ -355,12 +355,8 @@ public sealed partial class SdfWorldTables {
                     (m_reseatedDraws.Contains(index) && MeshTransformWasReseated(in draw))) {
                     var record = records.Slice(length: SdfMeshRecord.DrawWords, start: (index * SdfMeshRecord.DrawWords));
 
-                    StageMeshDraw(draw: in draw, index: index, old: old, record: record, tally: ref tally, incremental: true);
-                    changedWords += m_meshDrawDifferences.AddDifferences(
-                        previous: MemoryMarshal.Cast<byte, uint>(span: old.Slice(start: (index * SdfMeshRegion.DrawBytes), length: SdfMeshRegion.DrawBytes)),
-                        current: record,
-                        startWord: (index * SdfMeshRecord.DrawWords)
-                    );
+                    var mask = StageMeshDraw(draw: in draw, index: index, old: old, record: record, tally: ref tally, incremental: true);
+                    changedWords += m_meshDrawDifferences.AddMask(mask, start: (index * SdfMeshRecord.DrawWords));
                     changedRecords++;
                     if (draw.Glass != m_stagedDraws[index].Glass) {
                         m_glassDrawCount = (draw.Glass ? (m_glassDrawCount + 1) : (m_glassDrawCount - 1));
