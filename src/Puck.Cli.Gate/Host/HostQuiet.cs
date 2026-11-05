@@ -25,7 +25,7 @@ public static class HostQuiet {
                 ? $"a heavy test run is held by {sample.HeavyTestHolder}"
                 : (hasCapacity
                     ? null
-                    : string.Create(provider: CultureInfo.InvariantCulture, handler: $"the machine is loaded: cpu={sample.CpuPercent:0}% (idle needs a mean under {thresholds.CapacityCpuPercent:0.#}%) freeRAM={sample.FreeRamGb:0.0}GB (needs over {thresholds.CapacityRamGb:0.0}GB) freeDisk={sample.FreeDiskGb:0.0}GB"))));
+                    : string.Create(provider: CultureInfo.InvariantCulture, handler: $"the machine is loaded: cpu={sample.CpuPercent:0}% (idle needs a mean under {thresholds.CapacityCpuPercent:0.#}%) freeRAM={sample.FreeRamGb:0.0}GB (needs over {thresholds.CapacityRamGb:0.0}GB) freeDisk={sample.FreeDiskGb:0.0}GB{(double.IsNaN(d: sample.CommitPercent) ? string.Empty : $" commit={sample.CommitPercent:0}% (needs under {thresholds.CapacityCommitPercent:0.#}%)")}"))));
 
     /// <summary>Takes readings until the machine has stayed idle (<see cref="Busy"/>) for the settle period without a break.</summary>
     /// <param name="composition">The verbs composed beside this one whose own arguments decide whether a run is GPU work.</param>

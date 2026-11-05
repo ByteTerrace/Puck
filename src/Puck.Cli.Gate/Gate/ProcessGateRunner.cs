@@ -38,10 +38,7 @@ internal sealed class ProcessGateRunner(TimeProvider clock, CancellationToken ca
     }
     /// <inheritdoc/>
     public bool WaitForCapacity(string repositoryRoot, string step, bool device, bool heavySuite) {
-        var probe = new HostProbe(checkoutRoot: repositoryRoot, gpuVerbGrammars: gpuVerbGrammars);
-
-        return HostAdmission.Wait(step, device, heavySuite, () => probe.Sample(firstInterval: TimeSpan.FromSeconds(seconds: 1)), clock,
-            delay => Task.Delay(cancellationToken: cancellationToken, delay: delay, timeProvider: clock).GetAwaiter().GetResult(), Console.Error, cancellationToken, HostLoadThresholds.ThisMachine);
+        return HostAdmission.Wait(step, device, heavySuite, new HostProbe(checkoutRoot: repositoryRoot, gpuVerbGrammars: gpuVerbGrammars), clock, Console.Error, cancellationToken);
     }
     public string CopyCli(string repositoryRoot, string directory) {
         var output = Path.Combine(

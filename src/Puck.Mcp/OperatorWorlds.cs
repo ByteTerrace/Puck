@@ -19,6 +19,10 @@ namespace Puck.Mcp;
 /// takes the holder's first word), waiting in the machine's queue for as long as the CLI's lease policy allows, which is
 /// never the start's own timeout, and returns the held lease, which releases on disposal; throws
 /// <see cref="TimeoutException"/> when it stays held.</param>
+/// <param name="Admit">Waits until the host has headroom for a World of a checkout (memory, commit charge, disk and, for a
+/// windowed World, an idle GPU) and reports what it is waiting on through its action, as the stage of a pending start;
+/// returns <see langword="false"/> when headroom did not return in the admission's bound. It runs after the GPU lease is
+/// held, so one admitted start at a time judges the machine, and before the World is launched.</param>
 /// <param name="ResolveBuild">Resolves the World build of a checkout's current sources, given the checkout, building it
 /// only when no earlier run built those sources; the CLI answers it with its content-keyed
 /// World build store, so the build a start boots can never be older than the sources it boots. Its boolean asks for a
@@ -26,6 +30,7 @@ namespace Puck.Mcp;
 public sealed record OperatorWorldLaunch(
     string Checkout,
     Func<string, string?, CancellationToken, Task<IDisposable>> AcquireGpuLease,
+    Func<string, bool, Action<string>, CancellationToken, Task<bool>> Admit,
     Func<string, bool, CancellationToken, Task<OperatorWorldBuild>> ResolveBuild
 );
 /// <summary>The World build a start boots, or why none could be made.</summary>
@@ -267,6 +272,24 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
                 resolved.Lease?.Dispose();
                 throw;
             }
+        }
+
+        // Headroom is judged with the lease held, so the one start that holds it reads the machine before it takes any of
+        // it. The wait reports itself as the start's stage ("waiting for memory headroom: commit 82% of limit").
+        progress.Stage = "host-admission";
+
+        try {
+            if (!await launch!.Admit(checkout, windowed, text => progress.Stage = text, cancellationToken).ConfigureAwait(continueOnCapturedContext: false)) {
+                lease?.Dispose();
+                resolved.Lease?.Dispose();
+
+                return Refuse(output: $"Refused: the host had no memory, commit or disk headroom{(windowed ? " (or its GPU stayed busy)" : string.Empty)} within the admission's bound, so no World was started. Retry the start when `puck host load` reports CAPACITY.");
+            }
+        } catch {
+            lease?.Dispose();
+            resolved.Lease?.Dispose();
+
+            throw;
         }
 
         Started started;

@@ -49,7 +49,7 @@ public static class McpCommand {
             throw;
         }
     }
-    private static async Task<int> RunAsync(string? attachmentPath, string? configurationPath, string? siloPath, string? installRoot, string? buildSource, string? checkoutPath, bool worker, bool prepareInstall, Func<int, long, bool>? ancestor, CancellationToken cancellationToken) {
+    private static async Task<int> RunAsync(string? attachmentPath, string? configurationPath, string? siloPath, string? installRoot, string? buildSource, string? checkoutPath, bool worker, bool prepareInstall, Func<int, long, bool>? ancestor, HostAdmit? admit, CancellationToken cancellationToken) {
         // The root already turns Ctrl+C and SIGTERM into this token with no deadline; this handler adds Ctrl+Break,
         // so every console interrupt is a graceful drain rather than a tear-down mid-session.
         using var stop = CancellationTokenSource.CreateLinkedTokenSource(token: cancellationToken);
@@ -99,11 +99,15 @@ public static class McpCommand {
             }
 
             // A World the adapter starts boots from this checkout or one of its worktrees, and a windowed one holds the
-            // machine's shared GPU lease, the one `puck lease gpu` takes.
+            // machine's shared GPU lease, the one `puck lease gpu` takes. Every start also waits for the host admission
+            // `puck lease` and the gate wait on: a windowed World as a device step, a headless one as an ordinary step.
             var checkout = (checkoutPath ?? RepositoryPaths.FindRoot());
             var launch = ((checkout is null)
                 ? null
                 : new OperatorWorldLaunch(
+                    Admit: ((admit is null)
+                        ? static (_, _, _, _) => Task.FromResult(result: true)
+                        : (worldCheckout, windowed, stage, token) => admit(bound: null, cancellationToken: token, checkout: worldCheckout, device: windowed, heavySuite: false, progress: Console.Error, stage: stage, step: "puck_world_start")),
                     AcquireGpuLease: async (holder, lane, token) => await CliLease.AcquireAsync(
                         ancestor: ancestor,
                         cancellationToken: token,
@@ -142,7 +146,7 @@ public static class McpCommand {
         }
     }
 
-    public static Command Create(Func<int, long, bool>? ancestor = null) {
+    public static Command Create(Func<int, long, bool>? ancestor = null, HostAdmit? admit = null) {
         var attachOption = new Option<string?>(name: "--attach") {
             Description = "The attachment file printed by `world.control start` in a running World's console, or `latest` to follow the newest running World across restarts. When omitted with --profile operator, defaults to `latest`. Each tool call attaches on demand, so the adapter may start before any World.",
         };
@@ -215,6 +219,7 @@ public static class McpCommand {
             }
         });
         command.SetAction(action: (parseResult, cancellationToken) => RunAsync(
+            admit: admit,
             ancestor: ancestor,
             attachmentPath: parseResult.GetValue(option: attachOption),
             cancellationToken: cancellationToken,

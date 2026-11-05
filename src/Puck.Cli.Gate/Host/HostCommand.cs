@@ -51,32 +51,36 @@ public static class HostCommand {
         var windowOption = new Option<int>(name: "--window") { DefaultValueFactory = _ => 6, Description = "Readings the CPU mean covers with --watch; CAPACITY waits until that many exist." };
         var capacityCpuOption = new Option<double?>(name: "--capacity-cpu") { DefaultValueFactory = _ => HostLoadThresholds.ThisMachine.CapacityCpuPercent, Description = "CAPACITY needs the CPU mean below this percentage (with --capacity-ram)." };
         var capacityRamOption = new Option<double?>(name: "--capacity-ram") { DefaultValueFactory = _ => HostLoadThresholds.ThisMachine.CapacityRamGb, Description = "CAPACITY needs free memory above this many gigabytes (with --capacity-cpu)." };
+        var capacityCommitOption = new Option<double?>(name: "--capacity-commit") { DefaultValueFactory = _ => HostLoadThresholds.ThisMachine.CapacityCommitPercent, Description = "CAPACITY needs the commit charge below this percentage of the commit limit, when the platform reports one." };
         var pressureRamOption = new Option<double?>(name: "--pressure-ram") { DefaultValueFactory = _ => HostLoadThresholds.ThisMachine.PressureRamGb, Description = "PRESSURE when free memory is below this many gigabytes." };
         var pressureDiskOption = new Option<double?>(name: "--pressure-disk") { DefaultValueFactory = _ => HostLoadThresholds.ThisMachine.PressureDiskGb, Description = "PRESSURE when free disk on the working directory's drive is below this many gigabytes." };
 
         ValidateThreshold(maximum: 100, option: capacityCpuOption);
         ValidateThreshold(option: capacityRamOption);
+        ValidateThreshold(maximum: 100, option: capacityCommitOption);
         ValidateThreshold(option: pressureRamOption);
         ValidateThreshold(option: pressureDiskOption);
         var command = new Command(
             description: "Report CPU, memory, disk and GPU busyness as admission lines: GPU busy|idle, PRESSURE, CAPACITY, LOADED.",
             name: "load"
-        ) { watchOption, intervalOption, windowOption, capacityCpuOption, capacityRamOption, pressureRamOption, pressureDiskOption };
+        ) { watchOption, intervalOption, windowOption, capacityCpuOption, capacityRamOption, capacityCommitOption, pressureRamOption, pressureDiskOption };
 
         command.Detail(detail: $"""
-              Lines (each carries cpu=, freeRAM=, freeDisk= and reuseNodes=):
+              Lines (each carries cpu=, freeRAM=, freeDisk=, commit= where the platform reports a commit limit, and reuseNodes=):
                 GPU busy (<process> <id>) | GPU idle   at the first reading and on every change after
                 PRESSURE <why>                         free memory or disk falls under its pressure
                                                        threshold, and again when the reasons change
                 CAPACITY                               otherwise, the CPU mean under --capacity-cpu and free
-                                                       memory over --capacity-ram, once --window readings exist
+                                                       memory over --capacity-ram and commit charge under
+                                                       --capacity-commit of the commit limit, once --window
+                                                       readings exist
                 LOADED                                 otherwise, once --window readings exist: capacity ended
               One line per transition: a state that holds prints nothing more.
               PRESSURE wins over CAPACITY within one reading. Defaults scale with the machine: CAPACITY needs free
               RAM above 5/16 of the installed memory (rounded up to whole gigabytes) and three logical processors
               idle, but never fewer than 40% of them nor more than half; PRESSURE is free RAM below 1/8 of the
               installed memory or free disk below {HostLoadThresholds.DiskPressureGb}GB. Here: CPU below {HostLoadThresholds.ThisMachine.CapacityCpuPercent:0.#}%, free RAM above
-              {HostLoadThresholds.ThisMachine.CapacityRamGb:0.##}GB; pressure below {HostLoadThresholds.ThisMachine.PressureRamGb:0.##}GB RAM. Options override these defaults; gate uses them unchanged.
+              {HostLoadThresholds.ThisMachine.CapacityRamGb:0.##}GB, commit under {HostLoadThresholds.ThisMachine.CapacityCommitPercent:0.##}% of the commit limit (allocation fails at the limit with RAM still free); pressure below {HostLoadThresholds.ThisMachine.PressureRamGb:0.##}GB RAM. Options override these defaults; gate, lease and the MCP World start admit by them unchanged.
 
               GPU work is the World (Puck.World or Puck.World.dll), a canary, parity or counters verb,
               or a test host for Puck.DirectX.Tests, Puck.Vulkan.Tests, Puck.World.Tests or Puck.Platform.Windows.Tests
@@ -89,7 +93,7 @@ public static class HostCommand {
               The readings are cheap operating-system queries: the verb starts no process and is never
               itself heavy or GPU work. Without --watch it takes one reading over one second and exits.
 
-              Thresholds must be finite and nonnegative; --capacity-cpu must be at most 100.
+              Thresholds must be finite and nonnegative; --capacity-cpu and --capacity-commit must be at most 100.
               Exit codes: 0 done; 2 refused (invalid thresholds or an interval or window below 1); 130 cancelled.
             """);
         command.SetAction(action: (parseResult, cancellationToken) => Task.Run(function: () => Load(
@@ -98,6 +102,7 @@ public static class HostCommand {
             interval: parseResult.GetValue(option: intervalOption),
             thresholds: new HostLoadThresholds(
                 CapacityCpuPercent: parseResult.GetValue(option: capacityCpuOption),
+                CapacityCommitPercent: parseResult.GetValue(option: capacityCommitOption),
                 CapacityRamGb: parseResult.GetValue(option: capacityRamOption),
                 PressureDiskGb: parseResult.GetValue(option: pressureDiskOption),
                 PressureRamGb: parseResult.GetValue(option: pressureRamOption)
