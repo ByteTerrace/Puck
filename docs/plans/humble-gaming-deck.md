@@ -33,8 +33,7 @@ APU, DMA, controllers, NROM and the `humble-gaming-deck` engine are in; the
 - **World cabinets** (package 8). A world screen hosts a Deck machine that
   mounts a raw `.nes` image from its `contentFolders`, and the debug world's
   device row runs it on two test cartridges the forge's `DeckProgram`
-  assembles; removing their committed copies is the
-  [derived-products packet](open-items.md#derived-products-are-caches)'s.
+  assembles through the counted derived cache; no native cartridge output is committed.
   Ordered operations while recording and replay receipts remain.
 
 Every other package below is not started.

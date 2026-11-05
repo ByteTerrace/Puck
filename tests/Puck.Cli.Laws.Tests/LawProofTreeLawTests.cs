@@ -1,4 +1,3 @@
-using Puck.Abstractions;
 using Puck.Confinement;
 using Puck.Testing;
 using Xunit;

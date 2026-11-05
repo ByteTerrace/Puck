@@ -29,11 +29,15 @@ body—using `puck_stdlib::Inputs` to drain the host's batch and
 `puck_stdlib::Outputs`'s `act_bipolar`/`act_binary`/`act_unipolar` methods
 against your declared channel handles, never a raw byte offset.
 
-Build it with `puck wasm build`, which writes the committed copy
-`wasm/puck-addon-default/dist/puck-addon-default.wasm` that `Cargo.toml` declares under
-`[package.metadata.puck]`, or with plain `cargo build --release` run from `wasm/`, whose module lands at
-`../target/wasm32-unknown-unknown/release/puck_addon_default.wasm`.
+The loader derives the logical module path
+`wasm/puck-addon-default/dist/puck-addon-default.wasm` from the variant in
+`wasm/builds.json`, using its counted source cache. `puck wasm build` exports
+an ignored copy for inspection; no module bytes are committed. See the
+[workspace build workflow](../README.md#build-the-addons).
 
+This guest is freestanding (`no_std`), with a trapping panic handler. Its shared
+library needs only `core`; linking the hostless Rust standard library would add
+tables and segment state the World's checkpoint serializer currently refuses.
 ## Documentation
 
 📚 [WebAssembly addons](../README.md) · 🛠️ [Development](../../docs/development/README.md)

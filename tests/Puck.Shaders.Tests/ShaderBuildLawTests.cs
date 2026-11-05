@@ -1,6 +1,5 @@
 using Puck.Abstractions;
 using System.Collections.Concurrent;
-using Puck.Hosting;
 using Puck.Testing;
 
 namespace Puck.Shaders.Tests;

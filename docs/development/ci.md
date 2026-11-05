@@ -43,6 +43,15 @@ CI boots the debug world headlessly from the published artifact and requires a c
 console verdict before uploading it. This checks host packaging, not GPU rendering.
 The download requires .NET 11 and suitable graphics hardware to run. A build
 artifact is not a signed installer or a verified GPU rendering session.
+The machine setup includes LLVM and Rust with `wasm32-unknown-unknown`.
+`setup-puck` installs the pinned product toolchains through `setup-toolchains`;
+the artifact producer installs the same action before publishing. `Puck.World`'s
+publish target prewarms the native AGB BIOS and Rust addon variants through the
+runtime's counted `DerivedBytes` cache. `world prepare` writes the same prewarmed
+store beside its hosted definitions. The Azure silo Docker build installs those
+compiler versions only in its build stage and ships the prewarmed store in the
+runtime image. Players need no toolchain, and no generated BIOS or guest module
+enters Git.
 SDK roll-forward is disabled: selecting a newer SDK on a hosted runner changes
 implicit linker dependencies and invalidates the locked restore. Upgrade the SDK
 and its dependency locks together. Regenerate locks across the entire solution

@@ -1,5 +1,4 @@
 using Puck.Abstractions;
-using Puck.Hosting;
 using Xunit;
 
 namespace Puck.Cli.Core.Tests;

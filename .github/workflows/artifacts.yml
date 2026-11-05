@@ -30,6 +30,8 @@ jobs:
         run: dotnet workload install wasm-tools
       - name: Install pinned DXC
         uses: ./.github/actions/setup-dxc
+      - name: Install firmware and addon toolchains
+        uses: ./.github/actions/setup-toolchains
       # Every build below compiles shaders through the per-user cache, which this restores: each output a restored entry
       # holds is published from it and runs no DXC.
       - id: shader-cache

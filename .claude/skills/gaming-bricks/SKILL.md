@@ -30,7 +30,7 @@ change.
   exercise it without a worker, renderer or audio device.
 - Keep firmware identity separate from startup mode. `MachineBootMode.Fast` skips startup without discarding the
   selected image; AGB still executes runtime BIOS services from that image. Explicit low-level diagnostic inputs
-  remain supported. HGB images derive in process through `HgbFirmware.GetImage` and `BootRomBuilder` in the core package; `DerivedBytes` counts cache hits, misses and time. The AGB BIOS remains packaged under the measured toolchain exception; exporting it requires Clang and an ELF linker, running it does not.
+  remain supported. HGB images derive in process through `HgbFirmware.GetImage` and `BootRomBuilder` in the core package; `DerivedBytes` counts cache hits, misses and time. The AGB BIOS uses that same cache through `AgbFirmwareCompiler`; a miss needs LLVM clang and ld.lld from machine setup. Player publishing and `world prepare` prewarm it, so shipped players need no compiler. No firmware output is committed.
 - Keep floating point and host timing beyond a one-way presentation seam.
 - Express console differences through capability gates (a named question on
   `ConsoleModelExtensions`), not forked SM83 cores and not a revision switch inside

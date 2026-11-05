@@ -37,6 +37,18 @@ macOS, and nothing here is verified there.
   (`dotnet workload install wasm-tools`), which `Puck.World.Browser` compiles
   with; the [CI guide](ci.md#shared-repository-tooling) shows the full local
   build with it.
+- **LLVM 19.1.6 or later**, with both `clang` (ARM target enabled) and the
+  `ld.lld` ELF linker on `PATH`. The AGB BIOS compiles from its C/ARM sources on
+  a counted cache miss. CI pins LLVM 19.1.6 in
+  `.github/actions/setup-toolchains/action.yml`; the silo Docker build uses the
+  same release. An unavailable tool is refused by name when an AGB cartridge
+  boots, with a link back here.
+- **Rust 1.96.0 or later with Cargo and `wasm32-unknown-unknown`**. Install through
+  [rustup](https://rustup.rs/), then run `rustup toolchain install 1.96.0
+  --profile minimal --target wasm32-unknown-unknown` and select it with
+  `rustup default 1.96.0`. CI pins that version. Rust addon variants compile through
+  the addon loader on a counted cache miss. Published players carry prewarmed
+  BIOS and addon caches and need neither LLVM nor Rust installed.
 - **DXC on `PATH`.** Every build compiles the shaders, so a machine with no GPU
   needs it too. Install the release CI pins (`.github/actions/setup-dxc/action.yml`
   names the version, the Windows and Linux archives and their checksums);

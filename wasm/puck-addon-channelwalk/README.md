@@ -19,8 +19,8 @@ Three build-time variants (Cargo features—see `Cargo.toml`; exactly one select
 - `bound65`: declares 65—must fault `BadExport` at handshake, naming the bound.
 
 Build: `puck wasm build` builds all three into `dist/` (`channelwalk.wasm`, `channelwalk-bound64.wasm`,
-`channelwalk-bound65.wasm`) from the builds `Cargo.toml` declares under `[package.metadata.puck]`, with every other
-committed guest, and prints each module's hash. Run it after any source change and re-pin each hash it prints (see
+`channelwalk-bound65.wasm`) from the variants `wasm/builds.json` declares, with every other
+source-backed guest, and prints each module's hash. Run it after any source change and re-pin each hash it prints (see
 below).
 
 ## Learning a module's content hash
@@ -29,7 +29,7 @@ below).
 built some other way has its hash learned by mounting it with a deliberately wrong `hash` in the world document,
 booting, and reading the computed value off the `HashMismatch` line
 (`content sha256/{hex} does not match the declared moduleHash pin sha256/{pin}`).
-`worlds/channel-walk-world.json`'s three addon rows are pinned to the hashes of the committed `dist/` builds;
+`worlds/channel-walk-world.json`'s three addon rows are pinned to the hashes of the source-derived variants;
 re-pin all three whenever the build rewrites them.
 
 ## Test world

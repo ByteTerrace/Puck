@@ -487,13 +487,20 @@ Why: the owner's ruling. Shipped bake products are acceptable so long as Puck
 never again becomes a slave to a recorded artifact, as it did with the deleted
 ledgers and the bake derivation fingerprint.
 
-The AGB BIOS is an explicit measured exception to repository removal: native
-compilation takes under a second with LLVM, but a host without Clang and an ELF
-linker cannot derive it at all. Keep its packaged image so direct embedding and
-world startup need no native build toolchain. The measurement is recorded in the
-change's commit evidence. This exception adds no image-comparison gate;
-`puck firmware agb` exports from the maintained C and ARM sources.
+The AGB BIOS and Rust addon guests follow the same rule. LLVM (`clang` and
+`ld.lld`) and Rust with `wasm32-unknown-unknown` are machine requirements,
+installed at pinned versions in CI; see [machine setup](../development/contributing.md#setting-up-a-machine).
+`AgbFirmwareCompiler` and `WasmGuestBuild` use the shared `DerivedBytes` counted
+cache. Keys include source contents, build options, compiler identity and the
+reachable deriving code. No image or module output is committed, and an old
+`dist` file cannot bypass source derivation.
 
+`world prepare` and player publishing prewarm the same store. Shipping entries
+carry compiler provenance keyed by the current sources and deriving code; the
+player verifies content-addressed bytes without discovering a compiler. A cache
+miss derives with the installed tools, and a missing tool is a named refusal
+with the setup link. Prewarming is a shipping operation, never a repository
+exception or an output-comparison gate.
 Mesh derivation and drawing have separate owners. `SdfMeshPathBake` reconciles
 product inputs and derives meshes; `SdfMeshDresser` retains poses, draws and picks;
 `SdfMeshPathBake.Complete` interprets sampler answers, `SdfMeshBakeGpuWork` carries a batch to the device and back as background GPU work outside the closure, and `SdfMeshBakeBlock` owns the

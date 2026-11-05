@@ -1,4 +1,3 @@
-using Puck.Abstractions;
 using Puck.Testing;
 
 namespace Puck.Shaders.Tests;
