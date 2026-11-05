@@ -64,8 +64,11 @@ public static class WorldExpressionJson {
                 for (var at = 0; (at < obj.Count); at++) {
                     var (member, child) = obj.GetAt(index: at);
 
+                    // A look's motion lanes are programs (WorldLookMotion.Lanes); render.lanes are bindable scalars,
+                    // whose state.<row> strings stay text.
                     if (
                         (member == "lanes") &&
+                        (array == "motion") &&
                         (child is JsonArray lanes)
                     ) {
                         for (var index = 0; (index < lanes.Count); index++) {

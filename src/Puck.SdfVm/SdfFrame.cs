@@ -339,6 +339,11 @@ public sealed record SdfFrame(
     /// deltas, so a frame at a given tick and fraction draws the same sky and media on every run.</summary>
     public PresentedTick Clock { get; init; }
 
+    /// <summary>Gets the world's four render lanes (<see cref="SdfLanes"/> 4 to 7), which every surface reads alike: the
+    /// host resolves them from the world's state at the frame's presented tick, as it resolves the sky's bindings, and the
+    /// pass block carries them (<c>SdfWorldPackage.WorldLanes</c>). Zero where the world authors none.</summary>
+    public System.Numerics.Vector4 WorldLanes { get; init; }
+
     /// <summary>The default far distance, 40 world units, which an unauthored <c>render.farDistance</c> resolves to.</summary>
     public const float DefaultFarDistance = 40f;
 }

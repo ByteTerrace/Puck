@@ -105,14 +105,17 @@ float4 sdfFlowNoise(float3 q, uint seed) {
 // by its slope, scaled by the share of the flow that runs along the surface. `layerFlow` is the velocity in the layer
 // frame the caller converted it to; `clock` is the pass block's flow clock (SdfFlow.Clock), the one way the phase enters;
 // `footprint` the world size of the pixel at the hit, which fades unresolved pattern toward its mean as the weathering
-// does. Returns the shading normal in the layer frame: `layerNormal` itself for a material with no flow or no tilt.
+// does; `lanes` the surface's frame-slot lanes, which with the world's (sdfLane) drive the velocity and coverage lanes.
+// Returns the shading normal in the layer frame: `layerNormal` itself for a material with no flow or no tilt.
 // KEEP IN SYNC with SdfProgram.PackMaterials's flow rows.
 float3 sdfApplyFlow(float3 layerPoint, float3 layerNormal, float3 layerFlow, float clock, float footprint, float4 lanes, inout SdfMaterialData material) {
     float scale = material.flowVelocity.w;
     float4 shape = material.flowShape;
     if ((scale <= 0.0) || ((shape.z <= 0.0) && (shape.w <= 0.0))) return layerNormal;
     uint lane = (material.flowControl & SDF_FLOW_LANE_MASK);
-    float3 flow = (layerFlow * ((lane != 0u) ? lanes[min(lane - 1u, 3u)] : 1.0));
+    uint coverageLane = ((material.flowControl >> SDF_FLOW_COVERAGE_LANE_SHIFT) & SDF_FLOW_LANE_MASK);
+    float3 flow = (layerFlow * ((lane != 0u) ? sdfLane(lanes, lane - 1u) : 1.0));
+    float coverage = (shape.w * ((coverageLane != 0u) ? saturate(sdfLane(lanes, coverageLane - 1u)) : 1.0));
     float3 tangent = (flow - (layerNormal * dot(layerNormal, flow)));
     float speed = length(tangent);
     float3 along = ((speed > 1.0e-6) ? (tangent / speed) : float3(0.0, 0.0, 0.0));
@@ -131,11 +134,11 @@ float3 sdfApplyFlow(float3 layerPoint, float3 layerNormal, float3 layerFlow, flo
     float4 pattern = (((w0 * sdfFlowNoise(q0, seed)) + (w1 * sdfFlowNoise(q1, seed))) * rsqrt(max(((w0 * w0) + (w1 * w1)), 1.0e-6)));
     float rate = (footprint * scale);
     float fade = (1.0 - smoothstep(0.35, 0.9, rate));
-    if (shape.w > 0.0) {
-        float threshold = (1.0 - shape.w);
+    if (coverage > 0.0) {
+        float threshold = (1.0 - coverage);
         float soft = max(material.flowColor.w, 0.001);
         float reveal = smoothstep((threshold - soft), (threshold + soft), (0.5 + (0.5 * clamp(pattern.x, -1.0, 1.0))));
-        sdfRevealSurface(material.flowColor.rgb, material.flowResponse, lerp(shape.w, reveal, fade), material);
+        sdfRevealSurface(material.flowColor.rgb, material.flowResponse, lerp(coverage, reveal, fade), material);
     }
     if ((shape.z <= 0.0) || (speed <= 1.0e-6)) return layerNormal;
     float3 slope = (pattern.yzw * fade);
