@@ -1,5 +1,6 @@
 using System.Collections.Frozen;
 using System.Runtime.CompilerServices;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 
 namespace Puck.World;
@@ -15,7 +16,12 @@ public readonly record struct WorldDocumentValueOrigin(string DocumentPath, stri
 public sealed class WorldDocumentOrigins {
     // Provenance follows a live value; it must not root every superseded merge tree through JsonNode.Parent.
     // Copies share immutable origin records, while weak keys release the old document once its merge is consumed.
-    private sealed record Origin(WorldDocumentValueOrigin Value);
+    // JsonElement holds immutable source bytes, never a JsonNode or its Parent. Most origins are only carried
+    // through staging; serialize a scalar only when a diagnostic or world.save actually asks for it.
+    internal sealed record Origin(string DocumentPath, string Pointer, JsonElement Scalar) {
+        private string? m_json;
+        internal WorldDocumentValueOrigin Value => new(DocumentPath, Pointer, m_json ??= JsonSerializer.Serialize(Scalar));
+    }
     private readonly ConditionalWeakTable<JsonNode, Origin> m_values = new();
 
     /// <summary>Finds the original authored value of an effective scalar.</summary>
@@ -31,26 +37,28 @@ public sealed class WorldDocumentOrigins {
         return false;
     }
 
-    internal IReadOnlyDictionary<string, WorldDocumentValueOrigin> Snapshot(JsonNode node) {
-        var snapshot = new Dictionary<string, WorldDocumentValueOrigin>(comparer: StringComparer.Ordinal);
+    internal IReadOnlyDictionary<string, Origin> Snapshot(JsonNode node) {
+        var snapshot = new Dictionary<string, Origin>(comparer: StringComparer.Ordinal);
 
         Puck.Assets.Documents.DocumentJsonPointer.WalkValues(node: node, pointer: "", visit: (value, pointer) => {
             if (m_values.TryGetValue(key: value, value: out var origin)) {
-                snapshot.Add(key: pointer, value: origin.Value);
+                snapshot.Add(key: pointer, value: origin);
             }
         });
         return snapshot.ToFrozenDictionary(comparer: StringComparer.Ordinal);
     }
-    internal void Restore(JsonNode node, IReadOnlyDictionary<string, WorldDocumentValueOrigin> snapshot) =>
+    internal void Restore(JsonNode node, IReadOnlyDictionary<string, Origin> snapshot) =>
         Puck.Assets.Documents.DocumentJsonPointer.WalkValues(node: node, pointer: "", visit: (value, pointer) => {
             if (snapshot.TryGetValue(key: pointer, value: out var origin)) {
-                m_values.AddOrUpdate(value, new Origin(origin));
+                m_values.AddOrUpdate(value, origin);
             }
         });
 
     internal void Capture(JsonNode? node, string documentPath, string pointer = "") =>
         Puck.Assets.Documents.DocumentJsonPointer.WalkValues(node: node, pointer: pointer, visit: (value, path) =>
-            m_values.AddOrUpdate(value, new Origin(new WorldDocumentValueOrigin(DocumentPath: documentPath, JsonPointer: path, Json: value.ToJsonString()))));
+            m_values.AddOrUpdate(value, new Origin(documentPath, path,
+                value is JsonValue scalar && scalar.TryGetValue<JsonElement>(out var element)
+                    ? element : JsonSerializer.SerializeToElement(value))));
     internal static JsonNode? Clone(JsonNode? node, WorldDocumentOrigins? origins) {
         var clone = node?.DeepClone();
 
