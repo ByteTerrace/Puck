@@ -227,14 +227,14 @@ public sealed class CertifiedFieldContactLawTests {
 
         var solver = new FixedStaticContactSolver(ContactSkin: FixedQ4816.Zero, GroundedThreshold: Q(value: 0.7d), MaxIterations: 4);
 
-        Assert.True(condition: solver.ResolveSweep(colliders: [collider], dynamicColliders: [], orientation: FixedQuaternion.Identity, position: ref position,
+        Assert.True(condition: solver.ResolveSweep(colliders: new(colliders: [collider]), dynamicColliders: [], orientation: FixedQuaternion.Identity, position: ref position,
             previousPosition: FixedVector3.Zero, up: FixedVector3.UnitY, velocity: ref velocity, volumes: [body]).Unproved);
 
         var sphere = new SdfProgramBuilder();
         var sphereMaterial = sphere.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
 
         _ = sphere.Sphere(material: sphereMaterial, radius: 10f);
-        Assert.True(condition: solver.ResolveSweep(colliders: [ProgramCollider(program: sphere.Build())], dynamicColliders: [], orientation: FixedQuaternion.Identity,
+        Assert.True(condition: solver.ResolveSweep(colliders: new(colliders: [ProgramCollider(program: sphere.Build())]), dynamicColliders: [], orientation: FixedQuaternion.Identity,
             position: ref position, previousPosition: FixedVector3.Zero, up: FixedVector3.UnitY, velocity: ref velocity, volumes: [Ball(radius: 0.35d)]).Unproved);
     }
 
@@ -270,7 +270,7 @@ public sealed class CertifiedFieldContactLawTests {
     // One swept move a snap runs, through the static solver over fixed colliders.
     private readonly struct StaticStep(FixedStaticContactSolver solver, FixedStaticCollider[] colliders, FixedBodyColliderVolume[] volumes) : IFixedContactStep {
         public ContactResolution Sweep(in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity) =>
-            solver.ResolveSweep(colliders: colliders, dynamicColliders: [], orientation: FixedQuaternion.Identity, position: ref position,
+            solver.ResolveSweep(colliders: new(colliders: colliders), dynamicColliders: [], orientation: FixedQuaternion.Identity, position: ref position,
                 previousPosition: previousPosition, up: FixedVector3.UnitY, velocity: ref velocity, volumes: volumes);
     }
     // Two radius-1/32 spheres either side of the axis at a height, as one field collider.

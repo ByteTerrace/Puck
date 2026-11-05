@@ -3,8 +3,8 @@ using Puck.Maths;
 namespace Puck.Physics;
 
 /// <summary>Which of <see cref="FixedSurfaceQuery"/>'s two collider spans supplied a candidate — the same
-/// static/dynamic split <see cref="FixedStaticContactSolver.Resolve"/> already takes two spans for, so a caller
-/// holding a set it compiled once beside one it rebuilds per tick reads back which one answered.</summary>
+/// static/dynamic split <see cref="FixedStaticContactSolver.Resolve"/> takes as a compiled set and a per-tick span, so a
+/// caller holding colliders it compiled once beside ones it rebuilds per tick reads back which one answered.</summary>
 public enum FixedSurfaceColliderSource : byte {
     /// <summary>The first span (<c>colliders</c>) — compiled once.</summary>
     Static,

@@ -31,7 +31,7 @@ public sealed class FixedStepUpLawTests {
                 GroundedThreshold: GroundedThreshold,
                 MaxIterations: 4
             ).ResolveSweep(
-                colliders: m_colliders,
+                colliders: new(colliders: m_colliders),
                 dynamicColliders: [],
                 orientation: FixedQuaternion.Identity,
                 position: ref position,
