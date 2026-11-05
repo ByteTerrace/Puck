@@ -112,16 +112,15 @@ with it. A local taken before the swap names the old instance after it.
   one door: `RuleEvaluator.Deliver`
   (`src/Puck.State.Rules/Evaluation/RuleEvaluator.Effects.cs`) reads the scratch
   the host serves after the commit.
-- `RuleEvaluator.RunFixpoint` takes `arena` before the pass and ends its change
-  window on it after members that can fire a transactional commit
-  (STALE001).
-  Open.
-- `RuleEvaluator.EvaluateOnceCore` enters a fault scope on the scratch, runs an
-  evaluation that can fire a transactional commit, and leaves the scope on the
-  scratch it entered
-  (STALE001): a fault the rest of the evaluation raises lands in the new arena's
-  scratch, outside the scope. Open; step 4 of the
-  [rule-faults plan](../plans/rule-faults.md#the-design) deletes the register.
+- `RuleEvaluator.RunFixpoint` took `arena` before a pass and ended its change
+  window on it after members that can fire a transactional commit. It now ends
+  the window on the arena the host serves after the pass
+  (`RuleEvaluator.EndPassWindow`), and a replaced arena counts as progress.
+- `RuleEvaluator.EvaluateOnce` entered a fault scope on the scratch, ran an
+  evaluation that can fire a transactional commit, and left the scope on the
+  scratch it entered. The scope now covers judging alone
+  (`RuleEvaluator.Judge`), which fires nothing; the firing scopes its own
+  faults before and after its commit.
 
 **Closed by** reading the live object from its owner after the call, or by
 moving the work after the call into a method of its own that reads it there

@@ -225,7 +225,7 @@ public static partial class RuleCompiler {
                 );
             case "search" when (name == RuleFacts.SearchPly):
                 RefuseKeyOnReservedChannel(key: cell, keyFieldLabel: site.KeyFieldLabel, name: name, ruleName: ruleName);
-                context.Needs.MarkVolatile();
+                context.Needs.MarkReadsSearchPly();
 
                 return new ResolvedOperand(describe: name, operand: SearchPlyOperand.Instance);
         }

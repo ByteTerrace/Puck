@@ -128,9 +128,8 @@ public sealed partial class RuleEvaluator {
         }
 
         var applied = false;
-        var arena = m_host.Arena;
 
-        arena.BeginChangeWindow();
+        m_host.Arena.BeginChangeWindow();
         try {
             foreach (var member in group.Members) {
                 _ = EvaluateRule(
@@ -142,11 +141,12 @@ public sealed partial class RuleEvaluator {
                 applied |= moved;
             }
         } catch {
-            _ = arena.EndChangeWindow(rows: group.WriteSet);
+            _ = EndPassWindow(group: group, replaced: out _);
 
             throw;
         }
 
+        var windowChanged = EndPassWindow(group: group, replaced: out var replaced);
         var versionMoved = false;
 
         for (var index = 0; (index < group.WriteRows.Length); index++) {
@@ -161,7 +161,7 @@ public sealed partial class RuleEvaluator {
             versionMoved |= (version != m_groupVersions[index]);
         }
 
-        var changed = (arena.EndChangeWindow(rows: group.WriteSet) && versionMoved);
+        var changed = (replaced || (windowChanged && versionMoved));
 
         if (!changed) {
             CommitUndoIfPending(group: group);
@@ -209,6 +209,16 @@ public sealed partial class RuleEvaluator {
         );
 
         return applied;
+    }
+    // Closes the pass's change window on the arena the host serves now. A member whose firing installed a new arena
+    // left the window open on the retired one, and the live arena opened none: a replaced store is a changed write
+    // set, so the pass counts as progress (its row versions began again too, so they cannot say otherwise).
+    private bool EndPassWindow(CompiledRuleGroup group, out bool replaced) {
+        var live = m_host.Arena;
+
+        replaced = !live.ChangeWindowOpen;
+
+        return (replaced || live.EndChangeWindow(rows: group.WriteSet));
     }
     // One step per tick. The cursor advances when the step's own firing commits, stalls when it refuses or its gate
     // is closed, and skips past a refusal when the step declares it.

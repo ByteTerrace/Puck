@@ -228,6 +228,7 @@ public sealed partial class WorldRuleHost {
         );
         SyncIdentityFactLanes();
         FreezeDecisionPerception(rules: m_rules);
+        m_ruleGateHeld.CountTick();
 
         var applied = m_evaluator.Evaluate(
             latch: m_ruleGateHeld,

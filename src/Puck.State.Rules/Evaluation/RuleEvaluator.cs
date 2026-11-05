@@ -123,6 +123,18 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
     /// <see langword="true"/>; a law flips it off to prove the skip changes no observable result.</summary>
     public bool SchedulingEnabled { get; set; } = true;
 
+    /// <summary>Returns the read schedule this evaluator holds for a rule, deriving it when the rule has not been
+    /// scheduled yet: what the measured sheet and <c>--why</c> print beside a rule's counts.</summary>
+    /// <param name="rule">The compiled rule.</param>
+    /// <param name="latch">The family's edge latch, which holds the rule's state.</param>
+    /// <returns>The schedule.</returns>
+    public RuleSchedule ScheduleOf(CompiledRule rule, RuleLatch latch) {
+        ArgumentNullException.ThrowIfNull(argument: rule);
+        ArgumentNullException.ThrowIfNull(argument: latch);
+
+        return Schedule(rule: rule, state: latch.Rule(name: rule.Name));
+    }
+
     // A rule's and its locals' schedules are a function of the compiled rule and the layout, both of which outlive
     // one tick, so they are derived once per compiled instance and held in the rule's latch state beside it.
     private RuleSchedule Schedule(CompiledRule rule, RuleLatch.RuleState state) {
@@ -368,6 +380,9 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
 
         applied = false;
 
+        var bindings = latch.Rule(name: rule.Name);
+
+        bindings.Spent.Visits++;
         if (
             (m_owner is { } owner) &&
             owner.TryEvaluateOwn(
@@ -385,9 +400,6 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
                 : RuleOutcome.Idle
             );
         }
-
-        var bindings = latch.Rule(name: rule.Name);
-
         if ((rule.ForEachOrdinal < 0) && !rule.ForEachZones && !rule.ForEachBodies && (rule.PoolForEach is null) && (rule.Iteration is null)) {
             return EvaluateOnce(
                 applied: out applied,
@@ -501,12 +513,49 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
     /// <returns>What the evaluation did.</returns>
     [Replaces(root: typeof(StateArena))]
     public RuleOutcome EvaluateOnce(CompiledRule rule, RuleLatch latch, RuleLatch.RuleState state, LatchKey binding, ulong stepTicks, out bool applied) {
-        var scratch = m_host.Scratch;
-        var faults = scratch.EnterFaultScope();
-
         m_host.BeginRuleEvaluation();
         try { return EvaluateOnceCore(applied: out applied, binding: binding, state: state, latch: latch, rule: rule, stepTicks: stepTicks); } finally {
             m_host.EndRuleEvaluation();
+        }
+    }
+
+    // What judging one binding decided: the gate's verdict, or that its bindings could not evaluate, and whether a fault
+    // was raised while it ran.
+    private readonly record struct Judgement(bool Open, bool Decided, bool Faulted);
+
+    // Runs the bindings, the live-row selection and the gate inside one fault scope of their own. Judging fires
+    // nothing, so nothing in it can replace the arena, and the scope is entered and left on one scratch; the firing
+    // that may follow scopes its own faults (FireEffects before its commit, Deliver on the scratch served after it).
+    private Judgement Judge(CompiledRule rule, RuleLatch.RuleState state, RuleLatch.BindingSchedule scheduling, RuleSchedule? schedule, ulong tick, RuleTraceEvaluation? trace) {
+        var scratch = m_host.Scratch;
+        var faults = scratch.EnterFaultScope();
+
+        try {
+            if (!EvaluateBindings(
+                rule: rule,
+                memos: ((schedule is not null) ? Memos(scheduling: scheduling, count: (rule.Locals?.Length ?? 0)) : null),
+                localSchedules: state.LocalSchedules,
+                tick: tick,
+                trace: trace
+            )) {
+                return new Judgement(Decided: false, Faulted: (scratch.RaisedFault != ExpressionFault.None), Open: false);
+            }
+
+            // Every live row the rule spells must select a row, or this evaluation is simply not for these indices: the
+            // gate reads closed, nothing is refused, and the trace names what each spelling selected.
+            var open = (RowsSelected(
+                rule: rule,
+                trace: trace?.Zones
+            ) && GateOpen(
+                faulted: out _,
+                gate: rule.Gate,
+                ruleName: rule.Name,
+                trace: trace?.Conjuncts
+            ));
+            var faulted = (scratch.RaisedFault != ExpressionFault.None);
+
+            return new Judgement(Decided: !faulted, Faulted: faulted, Open: open);
+        } finally {
             _ = scratch.LeaveFaultScope(scope: faults);
         }
     }
@@ -518,6 +567,7 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
 
         applied = false;
         m_evaluations.Increment();
+        state.Spent.Evaluations++;
 
         var tick = m_host.Tick;
         var trace = BeginTrace(
@@ -549,37 +599,27 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
             // Nothing this rule reads has changed since it last closed, and it reads no host or tick fact a version
             // cannot see through — the verdict is still closed, so bindings and gate need not run at all.
             m_skips.Increment();
+            state.Spent.Skips++;
             latch.Touch(schedule: scheduling);
             EndTrace(entry: trace);
 
             return RuleOutcome.Idle;
         }
 
-        if (!EvaluateBindings(
+        var judged = Judge(
             rule: rule,
-            memos: ((schedule is not null) ? Memos(scheduling: scheduling, count: (rule.Locals?.Length ?? 0)) : null),
-            localSchedules: state.LocalSchedules,
+            schedule: schedule,
+            scheduling: scheduling,
+            state: state,
             tick: tick,
             trace: trace
-        )) {
-            return HoldOnFault(latch: latch, scheduling: scheduling, trace: trace);
+        );
+
+        if (!judged.Decided) {
+            return HoldOnFault(faulted: judged.Faulted, latch: latch, scheduling: scheduling, trace: trace);
         }
 
-        // Every live row the rule spells must select a row, or this evaluation is simply not for these indices: the
-        // gate reads closed, nothing is refused, and the trace names what each spelling selected.
-        var open = (RowsSelected(
-            rule: rule,
-            trace: trace?.Zones
-        ) && GateOpen(
-            faulted: out _,
-            gate: rule.Gate,
-            ruleName: rule.Name,
-            trace: trace?.Conjuncts
-        ));
-
-        if (m_host.Scratch.RaisedFault != ExpressionFault.None) {
-            return HoldOnFault(latch: latch, scheduling: scheduling, trace: trace);
-        }
+        var open = judged.Open;
 
         ref var slot = ref CollectionsMarshal.GetValueRefOrAddDefault(
             dictionary: held,
@@ -624,6 +664,7 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
 
         if (outcome == RuleOutcome.Fired) {
             m_firings.Increment();
+            state.Spent.Firings++;
 
             if (rule.Effects is [RewindGroupEffect]) {
                 latch.InvalidateScheduler();
@@ -637,8 +678,8 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
 
     // A fault decided nothing. A binding that merely could not evaluate (an absence) leaves its entry for the sweep to
     // close, as a closed gate would; one that faulted touches it, so the sweep keeps the verdict the entry last held.
-    private RuleOutcome HoldOnFault(RuleLatch latch, RuleLatch.BindingSchedule scheduling, RuleTraceEvaluation? trace) {
-        if (m_host.Scratch.RaisedFault != ExpressionFault.None) {
+    private RuleOutcome HoldOnFault(bool faulted, RuleLatch latch, RuleLatch.BindingSchedule scheduling, RuleTraceEvaluation? trace) {
+        if (faulted) {
             latch.Touch(schedule: scheduling);
         }
         EndTrace(entry: trace);

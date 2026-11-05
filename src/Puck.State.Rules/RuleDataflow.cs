@@ -85,11 +85,14 @@ public static class RuleDataflow {
 
         foreach (var token in (tokens ?? [])) {
             into.AddFact(fact: token.Operand);
-            // Tick is a library operand, not an effect or facet, so its compilation-time marker is not carried by
-            // ICompiledFact. This walk also builds local memo schedules after compilation, where it must restore
-            // that volatility from the token itself.
+            // The tick and the search ply are library operands, not effects or facets, so their compilation-time
+            // markers are not carried by ICompiledFact. This walk also builds local memo schedules after compilation,
+            // where it must restore that volatility from the token itself.
             if (token.Operand is TickOperand) {
                 into.MarkReadsTick();
+            }
+            if (token.Operand is SearchPlyOperand) {
+                into.MarkReadsSearchPly();
             }
             // A local operand has no facet of its own; its dependency is the earlier binding it reads. Follow it
             // here as CollectExpression already does for row reach, so a memoized alias stays volatile whenever

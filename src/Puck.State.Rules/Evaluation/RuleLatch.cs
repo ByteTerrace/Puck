@@ -37,6 +37,22 @@ public sealed class RuleLatch {
         public ulong[] Versions { get; set; } = [];
     }
 
+    /// <summary>What the evaluator spent on one rule since its latch state was minted: deterministic counts, never
+    /// hashed, flattened or restored, read by the measured sheet.</summary>
+    public sealed class RuleSpent {
+        internal RuleSpent() { }
+
+        /// <summary>Gets how many times the evaluator visited the rule: one per sweep, or one per evaluation of a rule
+        /// evaluated once.</summary>
+        public long Visits { get; internal set; }
+        /// <summary>Gets how many bindings the evaluator was asked to judge, skipped ones included.</summary>
+        public long Evaluations { get; internal set; }
+        /// <summary>Gets how many of <see cref="Evaluations"/> the schedule answered without running bindings or gate.</summary>
+        public long Skips { get; internal set; }
+        /// <summary>Gets how many firings committed and moved the arena.</summary>
+        public long Firings { get; internal set; }
+    }
+
     /// <summary>One rule name's share of the latch: its edge bits, which are simulation state, and the scheduler's
     /// per-binding caches beside them, which are not and are never hashed, flattened or restored. An evaluator
     /// resolves it once per rule and tick, so evaluating a binding costs one lookup into each table.</summary>
@@ -45,6 +61,9 @@ public sealed class RuleLatch {
 
         /// <summary>Gets whether the gate held at the last evaluation, per binding: the hashed and checkpointed half.</summary>
         public Dictionary<LatchKey, bool> Held { get; } = [];
+
+        /// <summary>Gets what the evaluator spent on the rule.</summary>
+        public RuleSpent Spent { get; } = new();
 
         internal readonly Dictionary<LatchKey, BindingSchedule> Scheduling = [];
 
@@ -85,6 +104,27 @@ public sealed class RuleLatch {
 
     private readonly List<HashEntry> m_hashScratch = [];
 
+    /// <summary>Gets how many ticks the host counted through <see cref="CountTick"/> since the latch was created or
+    /// last cleared: the window every rule's <see cref="RuleState.Spent"/> covers.</summary>
+    public long SpentTicks { get; private set; }
+
+    /// <summary>Counts one tick of the family's evaluation into <see cref="SpentTicks"/>.</summary>
+    public void CountTick() => SpentTicks++;
+    /// <summary>Returns one rule's state when the latch holds it.</summary>
+    /// <param name="name">The rule's name.</param>
+    /// <param name="state">The state, when held.</param>
+    /// <returns><see langword="true"/> when the latch holds state for the name.</returns>
+    public bool TryGetRule(string name, out RuleState state) {
+        if (m_byRule.TryGetValue(key: name, value: out var held)) {
+            state = held;
+
+            return true;
+        }
+
+        state = null!;
+
+        return false;
+    }
     /// <summary>Gets how many bound entries the latch holds across every rule.</summary>
     public int Count {
         get {
@@ -212,8 +252,11 @@ public sealed class RuleLatch {
             }
         }
     }
-    /// <summary>Forgets every entry, including the scheduler's own caches.</summary>
-    public void Clear() => m_byRule.Clear();
+    /// <summary>Forgets every entry, including the scheduler's own caches and the spent counts.</summary>
+    public void Clear() {
+        m_byRule.Clear();
+        SpentTicks = 0L;
+    }
     /// <summary>Forgets scheduler observations while preserving every edge-held binding.</summary>
     /// <remarks>Use this when the backing arena is replaced by an equivalent layout whose row-version counters
     /// begin again. The held bits describe rule semantics and survive; cached versions and lexical values belong
