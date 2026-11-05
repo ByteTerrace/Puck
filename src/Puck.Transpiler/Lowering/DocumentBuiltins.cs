@@ -15,15 +15,65 @@ namespace Puck.Transpiler.Lowering;
 /// <see cref="ExpressionVocabulary"/>, the table the rule language is built from, so the two cannot drift over a
 /// spelling. <see cref="DocumentScalars"/> folds them.</para></remarks>
 public static class DocumentBuiltins {
-    /// <summary>The collection builtins — the document language's own, with no rule-language counterpart.</summary>
-    public static IReadOnlySet<string> Collections { get; } = new HashSet<string>(comparer: StringComparer.Ordinal) {
-        "concat", "distinct", "filter", "flatMap", "groupBy", "length", "map", "range", "reduce", "sort",
+    /// <summary>The collection builtins — the document language's own, with no rule-language counterpart — by name:
+    /// each one's spelling and meaning, as the language server shows them, beside the evaluation a call runs.</summary>
+    public static IReadOnlyDictionary<string, DocumentCollectionBuiltin> Collections { get; } = new Dictionary<string, DocumentCollectionBuiltin>(comparer: StringComparer.Ordinal) {
+        ["range"] = new(
+            description: "Produces count consecutive integers beginning at start. Count must be nonnegative.",
+            evaluate: static (call, scope, _) => Range(args: call.Arguments, call: call, scope: scope),
+            signature: "range(start, count)"
+        ),
+        ["length"] = new(
+            description: "Returns the number of array elements, object properties, or UTF-16 string code units.",
+            evaluate: static (call, scope, fieldKey) => Length(args: call.Arguments, call: call, fieldKey: fieldKey, scope: scope),
+            signature: "length(value)"
+        ),
+        ["concat"] = new(
+            description: "Concatenates arrays and scalar values into one array.",
+            evaluate: static (call, scope, fieldKey) => Concat(args: call.Arguments, fieldKey: fieldKey, scope: scope),
+            signature: "concat(values...)"
+        ),
+        ["map"] = new(
+            description: "Transforms each element. The index parameter is optional.",
+            evaluate: static (call, scope, fieldKey) => Map(args: call.Arguments, call: call, fieldKey: fieldKey, scope: scope),
+            signature: "map(array, (item, index) => value)"
+        ),
+        ["flatMap"] = new(
+            description: "Transforms each element and splices an array result into the output, so a flatten is one call. The index parameter is optional.",
+            evaluate: static (call, scope, fieldKey) => FlatMap(args: call.Arguments, call: call, fieldKey: fieldKey, scope: scope),
+            signature: "flatMap(array, (item, index) => value)"
+        ),
+        ["filter"] = new(
+            description: "Keeps elements whose condition is truthy. The index parameter is optional.",
+            evaluate: static (call, scope, fieldKey) => Filter(args: call.Arguments, call: call, fieldKey: fieldKey, scope: scope),
+            signature: "filter(array, (item, index) => condition)"
+        ),
+        ["reduce"] = new(
+            description: "Folds elements into an accumulated value starting with initial.",
+            evaluate: static (call, scope, fieldKey) => Reduce(args: call.Arguments, call: call, fieldKey: fieldKey, scope: scope),
+            signature: "reduce(array, initial, (accumulator, item) => value)"
+        ),
+        ["distinct"] = new(
+            description: "Removes duplicate values, preserving the first occurrence.",
+            evaluate: static (call, scope, fieldKey) => Distinct(args: call.Arguments, call: call, fieldKey: fieldKey, scope: scope),
+            signature: "distinct(array)"
+        ),
+        ["sort"] = new(
+            description: "Stably sorts an array. The key lambda is optional.",
+            evaluate: static (call, scope, fieldKey) => Sort(args: call.Arguments, call: call, fieldKey: fieldKey, scope: scope),
+            signature: "sort(array, item => key)"
+        ),
+        ["groupBy"] = new(
+            description: "Groups elements into an object of arrays by key. The index parameter is optional.",
+            evaluate: static (call, scope, fieldKey) => GroupBy(args: call.Arguments, call: call, fieldKey: fieldKey, scope: scope),
+            signature: "groupBy(array, (item, index) => key)"
+        ),
     };
     /// <summary>Every name reserved in value position: the collection builtins, plus every named function of the
     /// shared expression vocabulary.</summary>
     public static IReadOnlySet<string> Names { get; } =
         new HashSet<string>(
-        collection: Collections.Concat(second: ExpressionVocabulary.Functions.Keys),
+        collection: Collections.Keys.Concat(second: ExpressionVocabulary.Functions.Keys),
         comparer: StringComparer.Ordinal
     );
 
@@ -659,117 +709,28 @@ public static class DocumentBuiltins {
             return false;
         }
 
-        var args = call.Arguments;
-
-        switch (call.Name) {
-            case "range":
-                result = Range(
-                    args: args,
-                    call: call,
-                    scope: scope
-                );
-
-                break;
-
-            case "length":
-                result = Length(
-                    args: args,
-                    call: call,
-                    fieldKey: fieldKey,
-                    scope: scope
-                );
-
-                break;
-
-            case "concat":
-                result = Concat(
-                    args: args,
-                    fieldKey: fieldKey,
-                    scope: scope
-                );
-
-                break;
-
-            case "map":
-                result = Map(
-                    args: args,
-                    call: call,
-                    fieldKey: fieldKey,
-                    scope: scope
-                );
-
-                break;
-
-            case "flatMap":
-                result = FlatMap(
-                    args: args,
-                    call: call,
-                    fieldKey: fieldKey,
-                    scope: scope
-                );
-
-                break;
-
-            case "filter":
-                result = Filter(
-                    args: args,
-                    call: call,
-                    fieldKey: fieldKey,
-                    scope: scope
-                );
-
-                break;
-
-            case "reduce":
-                result = Reduce(
-                    args: args,
-                    call: call,
-                    fieldKey: fieldKey,
-                    scope: scope
-                );
-
-                break;
-
-            case "distinct":
-                result = Distinct(
-                    args: args,
-                    call: call,
-                    fieldKey: fieldKey,
-                    scope: scope
-                );
-
-                break;
-
-            case "sort":
-                result = Sort(
-                    args: args,
-                    call: call,
-                    fieldKey: fieldKey,
-                    scope: scope
-                );
-
-                break;
-
-            case "groupBy":
-                result = GroupBy(
-                    args: args,
-                    call: call,
-                    fieldKey: fieldKey,
-                    scope: scope
-                );
-
-                break;
-
-            default:
-                result = DocumentScalars.Evaluate(
-                    call: call,
-                    fieldKey: fieldKey,
-                    scope: scope
-                );
-
-                break;
-        }
+        result = (Collections.TryGetValue(key: call.Name, value: out var collection)
+            ? collection.Evaluate(arg1: call, arg2: scope, arg3: fieldKey)
+            : DocumentScalars.Evaluate(
+                call: call,
+                fieldKey: fieldKey,
+                scope: scope
+            ));
 
         return true;
     }
+}
+
+/// <summary>One collection builtin of <see cref="DocumentBuiltins.Collections"/>: how a call to it is written, what
+/// it produces, and the evaluation the lowering runs for that call.</summary>
+/// <param name="signature">The call as an author writes it, its lambda's parameters named.</param>
+/// <param name="description">What the call produces, in one or two sentences.</param>
+/// <param name="evaluate">The evaluation of a call: the call as written, the lowering scope and the enclosing JSON
+/// key, returning the produced node or <see langword="null"/> after reporting a refusal into the scope.</param>
+public sealed class DocumentCollectionBuiltin(string signature, string description, Func<CallExpressionNode, DocumentScope, string?, JsonNode?> evaluate) {
+    /// <summary>Gets the call as an author writes it.</summary>
+    public string Signature { get; } = signature;
+    /// <summary>Gets what the call produces.</summary>
+    public string Description { get; } = description;
+    internal Func<CallExpressionNode, DocumentScope, string?, JsonNode?> Evaluate { get; } = evaluate;
 }

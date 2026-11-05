@@ -1,0 +1,22 @@
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+let fuel = 0.3
+let step = fuel * 0.0000152587890625
+let fifth = fuel * 0.2
+
+inputModes {
+  global []
+  families [
+    {
+      name: "fuel"
+      selector { kind: BodyState, name: "fuel" }
+      default: "empty"
+      states [
+        { name: "empty", ranges [{ minimum: 0, maximum: 0 }], channels [] }
+        { name: $"from-{step}", ranges [{ minimum: step, maximum: 0.075 }], channels [] }
+        { name: $"from-{fifth}", ranges [{ minimum: fifth, maximum: ((fifth == 0.06) ? fuel : 1) }], channels [] }
+      ]
+    }
+  ]
+}

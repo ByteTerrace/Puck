@@ -136,7 +136,7 @@ public static class WorldSourceDiagnostics {
                 document: compilation.Document,
                 library: !compilation.EmitsDocument
             );
-            SourceAcknowledgements.Of(document: compilation.Document, sourcePath: sourcePath).Apply(diagnostics: diagnostics, rootPath: sourcePath);
+            SourceAcknowledgements.Acknowledge(diagnostics: diagnostics, document: compilation.Document, sourcePath: sourcePath);
         }
 
         return new WorldSourceDiagnosis(
@@ -260,9 +260,7 @@ public static class WorldSourceDiagnostics {
     // A finding the source itself, or a library it imports, acknowledges with an `allow` line is not reported; the
     // locator already dropped one a basis or an import document acknowledges.
     private static DiagnosticBag Acknowledged(WorldSourceDiagnosis diagnosis, DiagnosticBag diagnostics) {
-        if (diagnosis.Document is { } document) {
-            SourceAcknowledgements.Of(document: document, sourcePath: diagnosis.SourcePath).Apply(diagnostics: diagnostics, rootPath: diagnosis.SourcePath);
-        }
+        SourceAcknowledgements.Acknowledge(diagnostics: diagnostics, document: diagnosis.Document, sourcePath: diagnosis.SourcePath);
 
         return diagnostics;
     }
