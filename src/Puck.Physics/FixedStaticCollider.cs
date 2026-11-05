@@ -228,7 +228,7 @@ public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, 
 
     // A rotated unit axis that lands exactly on a world axis: two of its components are exactly zero and the third is
     // exactly one in magnitude.
-    private static bool IsWorldAxis(FixedVector3 axis) =>
+    internal static bool IsWorldAxis(FixedVector3 axis) =>
         ((((((axis.X == FixedQ4816.Zero) ? 1 : 0) + ((axis.Y == FixedQ4816.Zero) ? 1 : 0)) + ((axis.Z == FixedQ4816.Zero) ? 1 : 0)) == 2) &&
          (((FixedQ4816.Abs(value: axis.X) + FixedQ4816.Abs(value: axis.Y)) + FixedQ4816.Abs(value: axis.Z)) == FixedQ4816.One));
 
@@ -295,24 +295,27 @@ public readonly record struct FixedStaticCollider(FixedStaticColliderKind Kind, 
 
         if (Kind == FixedStaticColliderKind.Sphere) { return (new FixedVector3(X: Extent.X, Y: Extent.X, Z: Extent.X) + padding); }
         if (Kind == FixedStaticColliderKind.AxisAlignedBox) { return (Extent + padding); }
-        var local = Kind switch {
-            FixedStaticColliderKind.RoundedBox => (Extent + new FixedVector3(X: Radius, Y: Radius, Z: Radius)),
-            // The support along each local axis is the solid's reach on it; both shapes are symmetric about Center.
-            FixedStaticColliderKind.ChamferedBox or FixedStaticColliderKind.Superellipsoid => new FixedVector3(
-                X: FixedQ4816.Abs(value: FixedConvexGeometry.Support(collider: in this, direction: FixedVector3.UnitX).X),
-                Y: FixedQ4816.Abs(value: FixedConvexGeometry.Support(collider: in this, direction: FixedVector3.UnitY).Y),
-                Z: FixedQ4816.Abs(value: FixedConvexGeometry.Support(collider: in this, direction: FixedVector3.UnitZ).Z)),
-            _ => Extent,
-        };
+        var local = LocalHalfExtent();
         var axisX = FixedVector3.Abs(value: Rotation.Rotate(vector: FixedVector3.UnitX));
         var axisY = FixedVector3.Abs(value: Rotation.Rotate(vector: FixedVector3.UnitY));
         var axisZ = FixedVector3.Abs(value: Rotation.Rotate(vector: FixedVector3.UnitZ));
 
         return ((((axisX * local.X) + (axisY * local.Y)) + (axisZ * local.Z)) + padding);
     }
+    // A solid turned by Rotation reaches no further than this along each of its own axes about Center, unpadded: the
+    // outer face of a rounded box, the support of a chamfered box or superellipsoid (both symmetric about Center), and
+    // Extent for an oriented box, a cylinder's radius and half-height, or a field's frame.
+    internal FixedVector3 LocalHalfExtent() => Kind switch {
+        FixedStaticColliderKind.RoundedBox => (Extent + new FixedVector3(X: Radius, Y: Radius, Z: Radius)),
+        FixedStaticColliderKind.ChamferedBox or FixedStaticColliderKind.Superellipsoid => new FixedVector3(
+            X: FixedQ4816.Abs(value: FixedConvexGeometry.Support(collider: in this, direction: FixedVector3.UnitX).X),
+            Y: FixedQ4816.Abs(value: FixedConvexGeometry.Support(collider: in this, direction: FixedVector3.UnitY).Y),
+            Z: FixedQ4816.Abs(value: FixedConvexGeometry.Support(collider: in this, direction: FixedVector3.UnitZ).Z)),
+        _ => Extent,
+    };
 
     // Far wider than any rounding in a rotation or a contact query, and still tight enough to cull at room scale.
-    private static readonly FixedQ4816 BoundsPadding = (FixedQ4816.One / FixedQ4816.FromInteger(value: 64));
+    internal static readonly FixedQ4816 BoundsPadding = (FixedQ4816.One / FixedQ4816.FromInteger(value: 64));
 
     /// <summary>Queries the depenetration required for one body volume.</summary>
     /// <param name="position">The body's world position.</param>

@@ -113,10 +113,12 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
     public bool Misses(in FixedColliderBox box, in FixedVector3 bodyCenter, in FixedVector3 bodyExtent) =>
         (box.IsBounded && Misses(bodyCenter: bodyCenter, bodyExtent: bodyExtent, colliderCenter: box.Center, colliderExtent: box.Extent));
 
-    // boxes is empty for a span without compiled bounds (the per-tick colliders), which queries every collider.
+    // boxes and frames are empty for a span without compiled bounds (the per-tick colliders), which queries every
+    // collider.
     private bool Sweep(
         ReadOnlySpan<FixedStaticCollider> colliders,
         ReadOnlySpan<FixedColliderBox> boxes,
+        ReadOnlySpan<FixedColliderFrame> frames,
         in FixedColliderCandidates candidates,
         FixedSurfaceColliderSource source,
         ref ContactSupportWitness? support,
@@ -148,6 +150,9 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
                 index = candidates.Indices[next];
             }
             if (culls && Misses(box: in boxes[index], bodyCenter: bounds.Center, bodyExtent: bounds.Extent)) {
+                continue;
+            }
+            if (culls && frames[index].Separates(bodyExtent: in bounds.Extent, offset: (bounds.Center - boxes[index].Center), skin: ContactSkin)) {
                 continue;
             }
             ref readonly var collider = ref colliders[index];
@@ -391,6 +396,7 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
                     candidates: in candidates,
                     colliders: colliders.Colliders,
                     boxes: colliders.Boxes,
+                    frames: colliders.Frames,
                     groundNormal: ref groundNormal,
                     grounded: ref grounded,
                     lastNormal: ref lastNormal,
@@ -411,6 +417,7 @@ public readonly record struct FixedStaticContactSolver(FixedQ4816 ContactSkin, F
                     candidates: default,
                     colliders: dynamicColliders,
                     boxes: default,
+                    frames: default,
                     groundNormal: ref groundNormal,
                     grounded: ref grounded,
                     lastNormal: ref lastNormal,
