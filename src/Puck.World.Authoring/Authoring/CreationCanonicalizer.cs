@@ -72,6 +72,8 @@ public static partial class CreationCanonicalizer {
             sounds: behavior.Sounds,
             shapeIds: shapeIds
         );
+        // False is the default, so it normalizes to absent.
+        var reducedRate = ((behavior.ReducedRateAtDistance == true) ? (bool?)true : null);
 
         // Fully default → null (byte-stable round-trip with a manifest-less creation).
         if (
@@ -81,7 +83,8 @@ public static partial class CreationCanonicalizer {
             comparisonType: StringComparison.Ordinal
         ) &&
             (faces is not { Count: > 0 }) &&
-            (sounds is not { Count: > 0 })
+            (sounds is not { Count: > 0 }) &&
+            (reducedRate is null)
         ) {
             return null;
         }
@@ -89,6 +92,7 @@ public static partial class CreationCanonicalizer {
         return new CreationBehaviorDocument(
             Faces: faces,
             Locomotion: locomotion,
+            ReducedRateAtDistance: reducedRate,
             Sounds: sounds
         );
     }

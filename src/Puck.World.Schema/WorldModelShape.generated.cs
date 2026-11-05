@@ -1473,6 +1473,7 @@ public static partial class WorldModelShape {
                 M("locomotion", typeof(global::System.String), typeof(global::Puck.World.Authoring.CreationBehaviorDocument), "Locomotion", Read | Write | Required, static value => ((global::Puck.World.Authoring.CreationBehaviorDocument)value).Locomotion),
                 M("faces", typeof(global::System.Collections.Generic.IReadOnlyList<global::Puck.World.Authoring.CreationFaceDocument>), typeof(global::Puck.World.Authoring.CreationBehaviorDocument), "Faces", Read | Write | Required, static value => ((global::Puck.World.Authoring.CreationBehaviorDocument)value).Faces),
                 M("sounds", typeof(global::System.Collections.Generic.IReadOnlyList<global::Puck.World.Authoring.CreationSoundDocument>), typeof(global::Puck.World.Authoring.CreationBehaviorDocument), "Sounds", Read | Write, static value => ((global::Puck.World.Authoring.CreationBehaviorDocument)value).Sounds),
+                M("reducedRateAtDistance", typeof(global::System.Nullable<global::System.Boolean>), typeof(global::Puck.World.Authoring.CreationBehaviorDocument), "ReducedRateAtDistance", Read | Write, static value => ((global::Puck.World.Authoring.CreationBehaviorDocument)value).ReducedRateAtDistance),
             ],
             []),
         T(typeof(global::Puck.World.Authoring.CreationCameraDocument), true, JsonTypeInfoKind.Object, null,

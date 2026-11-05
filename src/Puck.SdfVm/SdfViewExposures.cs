@@ -22,7 +22,17 @@ public sealed class SdfViewExposures {
     private float[] m_airLight = [];
     private bool[] m_reads = [];
     private string[] m_sources = [];
+    // Per view, the presentation clock and the frame serial it was last staged at.
+    private double[] m_stagedAt = [];
+    private long[] m_stagedFrame = [];
     private int m_count;
+    // The open frame (Stage) its views stage against on their first read, the presentation clock its seconds advance, and
+    // whether reads may stage (false while a frame holds every exposure).
+    private SdfFrame? m_frame;
+    private SdfMeshIrradiance? m_irradiance;
+    private double m_clock;
+    private long m_frameSerial;
+    private bool m_open;
 
     /// <summary>Gets each view's exposure multiplier, per nit, for the frame <see cref="Stage"/> last staged.</summary>
     public ReadOnlySpan<float> Multipliers => m_multipliers.AsSpan(length: m_count, start: 0);
@@ -46,8 +56,10 @@ public sealed class SdfViewExposures {
             ? (float.IsFinite(f: previousTime) ? Math.Max(val1: 0d, val2: (frame.Time - previousTime)) : 0d)
             : frameSeconds);
     }
-    /// <summary>Stages a frame's exposures: each view's <c>EV100</c> eased toward its target over the frame's
-    /// presentation time, and the open sky its air sees.</summary>
+    /// <summary>Opens a frame's exposures: each view is staged on its first read in the frame (<see cref="MultiplierOf"/>,
+    /// <see cref="AirLightOf"/>, <see cref="MeteredOf"/>), its <c>EV100</c> eased toward its target over the presentation
+    /// time since it was last staged, so a view nothing renders or reads meters nothing and a view rendered at a reduced
+    /// rate meters at that rate.</summary>
     /// <param name="frame">The frame.</param>
     /// <param name="irradiance">The residency's irradiance volume, which the meter reads.</param>
     /// <param name="seconds">The presentation time since the last frame, in seconds.</param>
@@ -71,71 +83,105 @@ public sealed class SdfViewExposures {
             Array.Resize(array: ref m_airLight, newSize: grown);
             Array.Resize(array: ref m_reads, newSize: grown);
             Array.Resize(array: ref m_sources, newSize: grown);
+            Array.Resize(array: ref m_stagedAt, newSize: grown);
+            Array.Resize(array: ref m_stagedFrame, newSize: grown);
             Array.Fill(array: m_ev100, count: (grown - first), startIndex: first, value: float.NaN);
+            Array.Fill(array: m_multipliers, count: (grown - first), startIndex: first, value: 1f);
+            Array.Fill(array: m_airLight, count: (grown - first), startIndex: first, value: 1f);
         }
         for (var index = count; (index < m_count); index++) {
             m_ev100[index] = float.NaN;
         }
 
-        var exposure = frame.Exposure;
-
+        m_count = count;
+        m_frame = frame;
+        m_irradiance = irradiance;
+        m_clock += Math.Max(val1: 0d, val2: seconds);
+        m_open = true;
+        m_frameSerial++;
         SkyPeakLuminance = irradiance.SkyPeakLuminance;
-        for (var index = 0; (index < count); index++) {
-            var view = frame.Views[index];
-
-            // A cut stays owed until the meter reads: the first reading after it is the camera's own and snaps.
-            m_cutOwed[index] |= (view.CutRevision != m_cuts[index]);
-
-            var cut = m_cutOwed[index];
-            var ev100 = exposure.Ev100;
-
-            m_cuts[index] = view.CutRevision;
-            // Another residency renders the view and meters it there; its camera is in that world's coordinates.
-            if (view.Elsewhere) {
-                m_reads[index] = false;
-                m_sources[index] = "elsewhere";
-                m_multipliers[index] = SdfPhotometry.ExposureOf(ev100: (float.IsFinite(f: m_ev100[index]) ? m_ev100[index] : ev100));
-                continue;
-            }
-            m_reads[index] = irradiance.TryMeter(forward: view.Camera.Forward, fresh: cut, luminance: out var luminance,
-                position: view.Camera.Position, skyVisibility: out var airLight, source: out var source);
-            if (m_reads[index]) { m_cutOwed[index] = false; }
-            m_sources[index] = source switch {
-                SdfExposureMeterSource.Probes => "probes",
-                SdfExposureMeterSource.CameraTrace => "camera-trace",
-                _ => (float.IsFinite(f: m_ev100[index]) ? "held" : "initial"),
-            };
-            if (m_reads[index] || !float.IsFinite(f: m_ev100[index])) {
-                m_airLight[index] = airLight;
-                m_metered[index] = luminance;
-            }
-            if (exposure.Mode == SdfExposureMode.Auto) {
-                ev100 = (m_reads[index]
-                    ? exposure.Target(luminance: m_metered[index])
-                    : (float.IsFinite(f: m_ev100[index]) ? m_ev100[index] : Math.Clamp(value: exposure.Ev100, min: exposure.Minimum, max: MathF.Max(x: exposure.Minimum, y: exposure.Maximum))));
-                ev100 = (cut ? ev100 : exposure.Adapt(current: m_ev100[index], seconds: ((float)seconds), target: ev100));
-            }
-
-            m_ev100[index] = ev100;
-            m_multipliers[index] = SdfPhotometry.ExposureOf(ev100: ev100);
+    }
+    /// <summary>Holds every view's exposure through this frame: a locked tick whose geometry is still landing adapts
+    /// nothing, and its reads take the exposures last staged.</summary>
+    public void Hold() => m_open = false;
+    // Stages a view on its first read in an open frame: meters about its camera and eases its EV100 over the presentation
+    // time since it was last staged. A cut stays owed until the meter reads, and the first reading after it snaps.
+    private void StageView(int index) {
+        if (!m_open || (m_stagedFrame[index] == m_frameSerial) || (m_frame is not { } frame) || (m_irradiance is not { } irradiance)) {
+            return;
         }
 
-        m_count = count;
+        m_stagedFrame[index] = m_frameSerial;
+
+        var view = frame.Views[index];
+        var exposure = frame.Exposure;
+        var seconds = (float.IsFinite(f: m_ev100[index]) ? ((float)(m_clock - m_stagedAt[index])) : 0f);
+
+        m_stagedAt[index] = m_clock;
+        m_cutOwed[index] |= (view.CutRevision != m_cuts[index]);
+
+        var cut = m_cutOwed[index];
+        var ev100 = exposure.Ev100;
+
+        m_cuts[index] = view.CutRevision;
+        // Another residency renders the view and meters it there; its camera is in that world's coordinates.
+        if (view.Elsewhere) {
+            m_reads[index] = false;
+            m_sources[index] = "elsewhere";
+            m_multipliers[index] = SdfPhotometry.ExposureOf(ev100: (float.IsFinite(f: m_ev100[index]) ? m_ev100[index] : ev100));
+            return;
+        }
+        m_reads[index] = irradiance.TryMeter(forward: view.Camera.Forward, fresh: cut, luminance: out var luminance,
+            position: view.Camera.Position, skyVisibility: out var airLight, source: out var source);
+        if (m_reads[index]) { m_cutOwed[index] = false; }
+        m_sources[index] = source switch {
+            SdfExposureMeterSource.Probes => "probes",
+            SdfExposureMeterSource.CameraTrace => "camera-trace",
+            _ => (float.IsFinite(f: m_ev100[index]) ? "held" : "initial"),
+        };
+        if (m_reads[index] || !float.IsFinite(f: m_ev100[index])) {
+            m_airLight[index] = airLight;
+            m_metered[index] = luminance;
+        }
+        if (exposure.Mode == SdfExposureMode.Auto) {
+            ev100 = (m_reads[index]
+                ? exposure.Target(luminance: m_metered[index])
+                : (float.IsFinite(f: m_ev100[index]) ? m_ev100[index] : Math.Clamp(value: exposure.Ev100, min: exposure.Minimum, max: MathF.Max(x: exposure.Minimum, y: exposure.Maximum))));
+            ev100 = (cut ? ev100 : exposure.Adapt(current: m_ev100[index], seconds: seconds, target: ev100));
+        }
+
+        m_ev100[index] = ev100;
+        m_multipliers[index] = SdfPhotometry.ExposureOf(ev100: ev100);
     }
-    /// <summary>Returns a view's exposure multiplier for the staged frame, or one for a view it did not stage.</summary>
+    /// <summary>Returns a view's exposure multiplier, staging the view on its first read in the frame, or one for a view
+    /// the frame does not hold.</summary>
     /// <param name="view">The view's index in the frame's views.</param>
     /// <returns>The multiplier, per nit.</returns>
-    public float MultiplierOf(int view) => (((view >= 0) && (view < m_count)) ? m_multipliers[view] : 1f);
+    public float MultiplierOf(int view) {
+        if ((view < 0) || (view >= m_count)) { return 1f; }
+        StageView(index: view);
+        return m_multipliers[view];
+    }
     /// <summary>Returns the share of the sky the air about a view's camera sees open, which scales the sky's in-scatter
-    /// into the view's atmosphere: one in the open, held at its last reading while the scene cannot answer.</summary>
+    /// into the view's atmosphere, staging the view on its first read in the frame: one in the open, held at its last
+    /// reading while the scene cannot answer.</summary>
     /// <param name="view">The view's index in the frame's views.</param>
-    /// <returns>The share, in [0, 1]; one for a view it did not stage.</returns>
-    public float AirLightOf(int view) => (((view >= 0) && (view < m_count)) ? m_airLight[view] : 1f);
+    /// <returns>The share, in [0, 1]; one for a view the frame does not hold.</returns>
+    public float AirLightOf(int view) {
+        if ((view < 0) || (view >= m_count)) { return 1f; }
+        StageView(index: view);
+        return m_airLight[view];
+    }
     /// <summary>Returns the luminance a view's meter read about its camera, in nits, which the local adaptation measures
-    /// each surface's surroundings against, held at its last reading while the scene cannot answer.</summary>
+    /// each surface's surroundings against, staging the view on its first read in the frame; held at its last reading
+    /// while the scene cannot answer.</summary>
     /// <param name="view">The view's index in the frame's views.</param>
-    /// <returns>The last reading, or zero for a view it did not stage or whose meter never had a reading.</returns>
-    public float MeteredOf(int view) => (((view >= 0) && (view < m_count)) ? m_metered[view] : 0f);
+    /// <returns>The last reading, or zero for a view the frame does not hold or whose meter never had a reading.</returns>
+    public float MeteredOf(int view) {
+        if ((view < 0) || (view >= m_count)) { return 0f; }
+        StageView(index: view);
+        return m_metered[view];
+    }
     /// <summary>Describes each staged view's exposure: its <c>EV100</c>, multiplier, the meter's reading and the open
     /// sky its air sees.</summary>
     /// <returns>One line a view.</returns>
