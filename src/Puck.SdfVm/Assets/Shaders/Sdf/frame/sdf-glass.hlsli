@@ -3,6 +3,8 @@
 // sum of every glass face's ray distance before the pixel's opaque hit, in SDF_GLASS_SUM_SCALE steps a world unit, a
 // front face subtracting and a back face adding; the second the count of front faces less back faces. Both are two's
 // complement in a uint, accumulated atomically, so the order faces rasterize in never moves a sum.
+// The remaining three words are presentation floats accumulating RGB optical depth through all materials, by atomic
+// compare/exchange. Their rounding can depend on raster order; simulation state never reads them.
 #ifndef FRAME_SDF_GLASS_HLSLI
 #define FRAME_SDF_GLASS_HLSLI
 #include "../isa/sdf-render.hlsli"
