@@ -13365,7 +13365,7 @@ export type WorldViewDefaults = {
    */
   programs?: (WorldCameraProgram | null)[] | null;
   /**
-   * The ease into or out of the built-in seat ladder (the composition no authored layout selects), or null for the WorldViewTransition defaults. An authored layout brings its own envelope.
+   * The ease into or out of the built-in seat ladder (the composition no authored layout selects), or null for the neutral WorldViewTransition defaults (a cut). An authored layout brings its own envelope.
    */
   builtinTransition?: WorldViewTransition | null;
   /**
@@ -13560,11 +13560,11 @@ export type WorldViewSlot = {
 
 export type WorldViewTransition = {
   /**
-   * How long the ease takes, in seconds; 0 is a cut.
+   * How long the ease takes, in seconds; 0 is a cut. Default 0.
    */
   seconds?: number;
   /**
-   * The render scale (0, 1] applied to every slot mid-transition; 1 is no dip.
+   * The render scale (0, 1] applied to every slot mid-transition; 1 is no dip. Default 1.
    */
   renderScale?: number;
 };
