@@ -1,22 +1,43 @@
 # Mesh irradiance
 
-The CPU trace and the views shader share one probe lookup. Read this before
+The GPU relight, CPU reference and views shader share one probe lookup. Read this before
 changing indirect light, probe visibility, the volume boundary or exposure.
 
-The software trace prototype's device law compares scene instance and original
+The software trace device law compares scene instance and original
 mesh triangle ordinals through a diagnostic output separate from the hit words.
 Hit/miss, material, normal bytes and back-face flags are exact; distance and
 reconstructed position use a scene-scale FP32 bound with a grazing-incidence
 factor (`SdfMeshIrradianceTraceDeviceLawTests`). A different triangle must itself
 intersect within that bound; the law reports near ties and rejects more than
 0.1% of rays. It also skips a top-level subtree and requires rejection on each
-backend. This law does not establish runtime GPU integration; the volume still
-uses the CPU until G1's runtime steps land.
+backend. Runtime trace, relight, selection and exposure queries use
+`SdfMeshProbeGpuWork` on the residency's shared `SdfGpuWork` service on both
+backends. CPU `TraceHits` and `Relight` remain reference/diagnostic paths;
+placement still uses CPU nearest-surface and short clearance queries.
+
+The runtime streams the existing scene's nodes and leaf indices through a
+`GpuRegion` source, without a second packed hierarchy on the CPU. One admitted
+query owns the shared scene and feedback regions until its fence completes;
+they therefore have one staging slot. Service slots independently retain their
+outputs through readback release. GPU hit-cache allocations carry nonrepeating
+tokens, checked by selection before reuse. A relight commits records only after
+`Stands` accepts their scene/window, then frame upload copies the ready slots
+into the published GPU table. The CPU retains depth/sky and diagnostic lighting,
+and releases full hit arrays after their device-cache upload. Exposure reads
+the GPU meter's small answer rather than traversing the hierarchy on the frame.
+
+`SdfWorldResidency.LightingPending` latches convergence after preparation for
+the whole frame, including the final meter. `SdfWorldPasses.WaitingOf` feeds it
+to render-graph completion. A worker finishing later cannot certify an image
+whose exposure was held. Readiness waits for the next prepared frame, while
+the service keeps pumping. A settled PNG must have a capture completion line
+after the main residency's done line; a nested residency's done line is insufficient.
 
 | Part | Owner |
 |---|---|
 | Static scene and ray visibility | `SdfMeshIrradianceScene` |
-| Trace, cache, bounce lookup and exposure meter | `SdfMeshIrradiance` |
+| Volume coordination, CPU reference and bounce lookup | `SdfMeshIrradiance` |
+| Device trace, hit cache, relight, selection and exposure meter | `SdfMeshProbeGpuWork` |
 | Probe record and generated shader constants | `SdfMeshIrradianceProbe`, `SdfIsaHlsl.DeclareRender` |
 | Pixel gather, indirect light, reflections and traced-light visibility | `shade/sdf-mesh-irradiance.hlsli` |
 
@@ -336,27 +357,31 @@ uses the CPU until G1's runtime steps land.
 - A record is 235 words (940 bytes): 19 header/cube/light/origin words, 144
   packed first-hit surface words and 72 packed normal-gradient words.
   Medium's three levels hold 49,152 probes in 44.0625 MiB; High's 73,728 in
-  66.09375 MiB. The CPU cache holds each probe's hit buffer beside it: 510
-  geometry words and 40 light words a probe, 2,200 bytes (`world.budget` prints the
-  bytes), about twice the record. A level's cache holds its window grown by the
+  66.09375 MiB. The GPU runtime releases the CPU hit array after upload, keeping
+  depth/sky and diagnostic lighting (`ProbeBlock` and `LightBlock`); the CPU
+  reference keeps the full hits too. `world.budget` derives the retained block
+  cost from those types. A level's cache holds its window grown by the
   window's band (`MarginOf`, dims/8 a side) on every side: when the window moves,
   `ProbeCache.Retain` publishes a compacted table of the cells inside that box once
   the cache holds more probes than the box has cells (at Medium 92,800 probes over
-  the three levels). `world.residency`'s `probe-cache-*` line reads it. A debug-world
-  tour that grew the main residency's cache to 223,267 probes and 606 MB unbounded
-  ends at 70,158 and 354 MB. A batch's hit and light blocks stay alive while any
-  kept probe names them, so block bytes per kept probe run above the nominal
-  2,200.
-  The table starts at one inert record and both
-  it and CPU staging fit the published tier. Reuse `GpuRegion` grow/shrink and
+  the three levels). `world.residency`'s `probe-cache-*` line reads it. A batch's
+  depth/sky and light blocks stay alive while any kept probe names them, so
+  bytes per kept probe can exceed their nominal payload.
+  Publication starts with one inert record and fits the published tier.
+  Reuse `GpuRegion` grow/shrink and
   existing frame-ring retirement; increment the binding revision when its buffer
   changes. Keep the old table and coordinates until every new slot is measured.
-  Five full payloads (device, two uploads, native shadow, CPU volume) total
-  220.3125 MiB at Medium or 330.46875 MiB at High, before headers, cache,
-  batches and temporary retired buffers. Upload buffers can shrink after small flushes;
-  live `world.probe` GI diagnostics report actual device/upload/shadow/header
-  and CPU-volume bytes. Cache blocks hold 244 words (976 bytes) per probe.
-  Publication compares/uploads changed slots only, coalesced into runs.
+  The GPU feedback table and the published table are distinct: a relight reads
+  completed prior batches, while views retain their last complete window.
+  Feedback has a CPU shadow for reset snapshots; hierarchy staging streams
+  from the scene arrays with only a root-word shadow. Upload buffers shrink
+  after small flushes. `world.residency` reports scene, hit-cache and feedback
+  device/upload/shadow bytes separately. `trace-scene-cpu-array-bytes` counts
+  actual hierarchy array payload, including retained geometry, excluding
+  dictionaries, shared bake meshes and temporary build workspace.
+  `world.probe` reports publication and CPU-volume bytes. These logical holdings
+  overlap process/account/backend readings; never add those readings together.
+  Publication copies changed slots only, coalesced into runs.
 - Each published probe contains its own measured cubes, exactly as the CPU bounce
   read sees them. Sky, surface radiance and the surface map come from the same
   hits, so an opening cannot count as sky in one sample set and a bounced hit in
@@ -365,7 +390,7 @@ uses the CPU until G1's runtime steps land.
   stamped spatial noise into homogeneous lighting. Sharing directions
   correlates sampling error without borrowing any neighbour's light. Camera
   samples use the same quadrature. Placement uses shared short rejection rays bounded to one spacing, never lighting reach.
-- A probe stands in the open (`SdfMeshIrradiance.Place`). A centre inside geometry
+- A probe stands in the open (`SdfMeshIrradiance.PlaceBatch`). A centre inside geometry
   or within `Clearance` (0.1 m) first tries the nearest surface's clear exit, then
   the cell's quarter-spacing lattice nearest-first. Every candidate must stand
   clear of all surfaces and pass the back-face validity test; a short 32-ray
@@ -422,14 +447,18 @@ compare Vulkan with Direct3D on the same source state with all geometry settled
 ([open items](../../../../docs/plans/open-items.md#vulkan-regressions-and-gpu-robustness)
 records the remaining shaft difference).
 
-The probe trace runs on the CPU and costs about the same on both backends. To
-time it, pose the teal corner (`world.lockstep on`, `body.pose 4.60 0.07 29.76
+The runtime trace and relight run on the GPU. To
+time them, pose the teal corner (`world.lockstep on`, `body.pose 4.60 0.07 29.76
 152 0 0`, `view.override camera look 5.929 2.188 27.222 4.60 4.2 29.76`), warm
 once, then switch `world.indirect high`, `world.wait 5`, `world.indirect
 medium`, `world.wait 5` and read the two `[sdf.mesh-gi] done … seconds=` lines.
-Repeat each reading on a quiet machine and compare ray counts first: they are
-identical across backends. A reading taken beside other CPU work is not a
-backend comparison.
+Read `gpu-rays`, `gpu-trace-nanoseconds`, `gpu-relight-nanoseconds`, selection
+and meter counters beside the main residency's done lines. Trace timestamps
+include upload and readback; the ray count includes placement trial rounds.
+Compare deltas over a matching workload, not startup totals from different
+camera histories. Repeat on a quiet machine; a reading beside other CPU work
+is not a backend speed comparison. GPU execution time alone does not establish
+the full trace/relight wall cost or the lockstep frame target.
 
 Read `world.exposure` in the hall. Double the outer-wall camera's distance,
 and move the hall camera and target 8 m along +X, to check that moving the

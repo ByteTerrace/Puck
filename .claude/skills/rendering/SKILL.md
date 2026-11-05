@@ -439,7 +439,7 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   `world.shadows off`) reads a shadowing directional's visibility from the probes'
   light bits. `SdfMeshIrradianceGatherDeviceLawTests` holds the GPU and CPU
   gathers to the same slots, weights, share and sun visibility.
-  Relocation (`SdfMeshIrradiance.Place`) keeps a probe clear of geometry within
+  Relocation (`SdfMeshIrradiance.PlaceBatch`) keeps a probe clear of geometry within
   its own cell; every lookup uses its recorded offset. Placement takes the nearest clear exit; its short rejection rays
   stop at one spacing, with no openness score. Debug with `world.probe` after bakes and GI settle;
   its exact reference segment distinguishes sampling errors from cube content.
