@@ -520,36 +520,13 @@ unprofiled.
 
 ### Rule evaluation stays serial
 
-This memo's first revision proposed speculative gate evaluation validated by
-row generations. The review showed three reasons it is unsound as proposed, and
-the rule VM stays serial in this memo:
-
-- A gate reads host facts a row version cannot see: `Read(BodyPositionOperand)`
-  reads a body's live position (`WorldRuleHost.cs:414-427`), which an earlier
-  rule's pose arm changes (`WorldRuleHost.Arms.cs:581-586`), so an arena read
-  set validates nothing about it. The engine already knows this: `RuleSchedule`
-  marks a rule `Volatile` when its needs or any row with value-over-time traits
-  make row versions unprovable (`RuleSchedule.cs:9-44`), and the evaluator
-  consumes that (`RuleEvaluator.cs:126-199`). Any future speculation must reuse
-  `RuleSchedule`, never a second dependency map.
-- Evaluation shares mutable state beyond scratch: the host's locals, instance
-  bindings and bound keys (`WorldRuleHost.cs:180-199`), which pool iteration
-  writes before each gate (`RuleEvaluator.cs:413-414,450-458`).
-- Pool iteration enumerates the pool when the rule is reached, after earlier
-  firings (`RuleEvaluator.cs:390-414`); a phase-start snapshot can miss an
-  instance an earlier rule claims, with no verdict to invalidate.
-
-The rule-read semantics are therefore what the comment at
-`WorldRuleHost.Evaluation.cs:217-220` promises, document-order sequential
-evaluation, and this memo changes nothing about them. The path to a parallel
-rule phase, if the measurement ever justifies 0.7 ms of gate reads, is: a
-partition-owned evaluation context (locals, bindings, bound keys), `RuleSchedule`
-deciding which gates are speculable (non-volatile, non-iterating), and the
-serial commit re-evaluating every volatile or iterating gate at its own point.
-The [rule-evaluation memo](rule-evaluation-cost.md) measures the phase (37 %
-of the headless debug tick, most of it the machinery that visits rules rather
-than the authored programs), designs the due list and the facet versions that
-come before any thread, and takes that path as its step 5.
+Rule evaluation is document-order sequential, and this memo changes nothing
+about it. Its cost is the [rule-evaluation memo](rule-evaluation-cost.md)'s:
+the schedule names host facts beside rows, a push-based due list visits only
+the rules something they read moved for, and a speculated gate phase on the
+pool is that memo's open decision, taken only when its measurement shows a due
+list worth a fork. Any speculation reuses `RuleSchedule` and its one version
+door (`RuleEvaluator.VersionsMatch`), never a second dependency map.
 
 ### The fork and join
 

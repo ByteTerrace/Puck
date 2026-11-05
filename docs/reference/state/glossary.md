@@ -311,7 +311,7 @@ One complete run of an undo-enabled rule group, which can later be rewound. [Lea
 Who can read a row or cell, and what hidden cells reveal to everyone else. [Learn more](traits.md#control-what-observers-learn).
 
 **volatile rule**<br/>
-A rule the scheduler always evaluates, because its answer can change without any row version moving. [Learn more](analysis.md#skip-rules-whose-inputs-havent-changed).
+A rule the scheduler always evaluates, because its answer can change without any version it can name moving. [Learn more](analysis.md#skip-rules-whose-inputs-havent-changed).
 
 ## W
 

@@ -233,7 +233,18 @@ priced at that number. `world.budget.rules` lists every line, costliest first,
 with its multiplier, its firings when `maxFirings` bounds them (`firings=`),
 setup, check, fire, and total, and the pinned ranges it's priced under.
 `world.budget.rules --why <rule>` prints one line's derivation: where the
-multiplier comes from and each effect's own cost.
+multiplier comes from and each effect's own cost, then the rule's
+[schedule](#what-a-schedule-names).
+
+The worst case is a ceiling over capacities; `world.budget.rules --spent [top]`
+is what the rules actually spent. Per rule and interaction it lists the visits,
+the ticks a due list left it alone (`elided=`), the evaluations, the skips and
+the firings the evaluator counted since the latches began, and the work those
+cost at the sheet's own prices: setup per visit, check per evaluation that ran,
+fire per firing. Every count is deterministic, so two runs of one document and
+input print the same sheet. The costliest line comes first, with its schedule,
+so a rule that spends because its Level gate is always open, or because it reads
+a fact with no version, says which.
 
 Puck.World also reports contradictory gates, where a gate pins a cell to an
 empty range and can never hold (`WorldRuleWorkBudget.ContradictoryGates`).
@@ -275,57 +286,118 @@ still needed before admission can move to reference cycles is described in
 
 ## Skip rules whose inputs haven't changed
 
-A rule whose gate closed last time, and whose inputs haven't changed, will
-close again. The evaluator uses that to skip work without changing any answer.
+A verdict that fires nothing, judged against inputs that haven't changed, is
+the verdict judging would give again. The evaluator uses that twice without
+changing any answer: it keeps such a verdict instead of judging, and it doesn't
+visit a rule nothing it reads has moved for.
 
-```mermaid
-flowchart TD
-    A["Gate closed last time,<br/>and no trace armed?"] -- no --> E["Evaluate in full"]
-    A -- yes --> B["Rule volatile?"]
-    B -- yes --> E
-    B -- no --> C["Every read row's<br/>version unchanged?"]
-    C -- no --> E
-    C -- yes --> D["Keep the closed verdict"]
-```
+### What a schedule names
 
-The first time a rule is evaluated, `RuleSchedule.Build` collects the distinct
-row ordinals its reads touch. It works from the fully constructed rule, so a
-host's own `CollectReads` override is included. Each time the gate closes, the
-latch records the version of every one of those rows
-(`IStateReader.TryRowVersion`, which reads `StateArena.RowVersion`). On the next
-evaluation, if every version matches, the rule keeps its closed verdict without
-running its locals or its gate. A local's value is memoized the same way. An
-open gate always runs, and a traced evaluation always runs in full.
+A rule's **schedule** (`RuleSchedule`, built once per compiled rule from
+`RuleDataflow.CollectJudgement`) names every dependency one judgement can have.
+A judgement is the rule's locals, its live-row selection and its gate; its
+effects run only once the verdict is in, so they aren't part of it. The
+schedule names:
 
-A **row version** is a per-row change counter that moves when a commit leaves
-the row's bytes different (see
-[The state arena](arena.md#row-versions-and-generations)). An unchanged version
-proves the stored values are unchanged, but it can't prove the answer to a read
-that depends on anything else. A rule's schedule is **volatile**, and the rule
-is never skipped, when it:
+- the arena rows the judgement reads, by **row version**: a per-row change
+  counter that moves when a commit leaves the row's bytes different (see
+  [The state arena](arena.md#row-versions-and-generations));
+- the host facts it reads, which the host versions
+  (`IStateReader.TryScheduleFact`): the world names `bodyState(...)` as the
+  arena row its slot is stored in, and a body's pose (what
+  `bodyPosition(...)`, `board(cellOf, ...)` and `upright(...)` read), its
+  `fact(...)` bits and the live-body roster as per-body versions it derives by
+  comparing what each body answers now with what it answered last
+  (`WorldRuleHost.RefreshFacts`), for a literal body or the body bound to
+  `$each`; a pose read through a placement reference (`placement:$each`) names
+  the pose of whichever body inhabits the placement, paired with the
+  population's placement table version;
+- for a sweep, the set it sweeps: the keyed row it iterates, or the live-body
+  roster;
+- a **deadline**: a gate conjunct `$tick >= X` or `$tick > X` (or the same with
+  the tick on the right) whose falsehood alone closes the gate, and where X
+  reads no tick (`RuleDeadline`). Its tick read is not a dependency: a closed
+  verdict carries the first tick the comparison holds, and is judged again
+  then.
 
-- reads `$tick` or `$search:ply`;
-- reads a host fact through a facet, or reads a host-owned row;
-- names a row the compiler couldn't resolve, or reads an ordinal the arena's
-  layout doesn't carry;
+A schedule is **volatile** when it can't name a dependency, and a volatile rule
+is judged every tick. It is volatile when the judgement:
+
+- reads `$tick` anywhere but a deadline, or `$search:ply` on a host whose ply
+  moves (`IStateReader.SearchPlyIsFixed`);
+- reads a host fact the host advertises no version for, or a host-owned row;
+- reads an ordinal the arena's layout doesn't carry;
 - reads a row whose row or cells declare a value-over-time trait (advance,
   cycle, dynamics, or a cell behavior), since the live value moves every tick
   from the same stored bits.
 
-A `$local:` read follows the source local's dependencies transitively, so a
-chain of locals can't hide a volatile source.
+A `$local:` read follows the source local's dependencies transitively, and a
+pattern's token expression and a history read's age are walked too, so a chain
+can't hide a volatile source. `world.budget.rules --why <rule>` prints a rule's
+schedule, and the reason it's volatile when it is.
+
+### Keep a verdict
+
+```mermaid
+flowchart TD
+    A["Closed, or an Edge already held,<br/>and no trace armed?"] -- no --> E["Judge in full"]
+    A -- yes --> B["Schedule volatile?"]
+    B -- yes --> E
+    B -- no --> C["Deadline still ahead, and every<br/>row and fact version unchanged?"]
+    C -- no --> E
+    C -- yes --> D["Keep the verdict"]
+```
+
+Each time a binding's verdict fires nothing while its reads hold (a closed
+gate, or an Edge gate that is held once it crosses), the latch records the
+version of every dependency the schedule names and the binding's wake tick.
+On the next evaluation, if the tick is before the wake and every version
+matches (`RuleEvaluator.VersionsMatch`, the one door every kept verdict
+passes), the binding keeps its verdict without running its locals or gate. A
+local's value is memoized the same way. A Level gate that held always runs,
+and so does a traced evaluation.
+
+### Visit only the rules that are due
+
+The rules a family evaluates directly walk a **due list**
+(`RuleEvaluator.EvaluateDue`, `RuleDueList`) in document order instead of the
+rule array. A rule is due when its schedule is volatile, when its last verdict
+asks for it (a Level gate that held, a refusal, a fault), when its deadline
+comes, or when a row or host fact it names moves. A host-owned rule (a
+decision, an interaction), a rule with live rows or a `maxFirings`, and a
+sweep over a set no version names (a pool, a zone table) are due every tick.
+
+Moves are pushed, not polled. Every row version moves through one door in the
+arena (`BumpRowVersion`), which records the row in the moved-row feed
+(`StateArena.DrainMovedRows`); the host records each fact that moved
+(`IStateReader.DrainFactMoves`) whenever it refreshes, which the evaluator asks
+for before a walk and after any firing that delivered an arm. After every
+visit, the walk drains both feeds and marks each mover's readers due. A mark on
+a rule later in document order is seen this tick; one on a rule the walk has
+passed is seen next tick, exactly where an in-place version check would first
+see the move. A body sweep is due per body: it judges only the bodies whose
+facts moved, and all of them when a row it reads or the roster moved.
+
+`state.rules.due` and `state.rules.elided` in `world.counters state` count the
+rules the walk visited and the ones it left alone, beside `evaluations`,
+`skips` and `firings`. `world.budget.rules --spent` lists the same counts per
+rule (see [Price a tick's rules](#price-a-ticks-rules)).
 
 `RuleEvaluator.SchedulingEnabled` is `true` by default. Tests turn it off to
-prove the skip changes no observable result.
+prove the skip and the due list change no observable result
+(`LatchAndTriggerLawTests`).
 
 > [!IMPORTANT]
 > Scheduling caches are acceleration. They live in `RuleLatch`, per rule and
-> iteration binding, and never enter `AppendStateHash`, `Flatten`, or
-> `Restore`. Each cache belongs to the exact `RuleSchedule` instance that
-> captured it, and a schedule belongs to one compiled rule instance, so
+> iteration binding, and in the due list, and never enter `AppendStateHash`,
+> `Flatten`, or `Restore`. Each cache belongs to the exact `RuleSchedule`
+> instance that captured it, and a schedule belongs to one compiled rule
+> instance and host fact epoch (`IStateReader.FactScheduleEpoch`), so
 > recompiling a rule under the same name can't match an old cache. When a host
 > replaces its arena, it calls `RuleLatch.InvalidateScheduler`, which keeps the
-> edge-held bindings and forgets the versions the old arena counted.
+> edge-held bindings and forgets the versions the old arena counted; the due
+> list also notices a replaced arena or a forgotten cache itself
+> (`RuleLatch.SchedulerEpoch`) and marks every rule due.
 
 A caller that evaluates many unrelated positions, such as a search judge, resets
 the latch before each one so no memo carries one position's value into the next.
@@ -370,7 +442,9 @@ ceiling and how they behave.
 | `RuleDataflow` | `Puck.State.Rules` | Collects read and write sets and scheduling facts. |
 | `RuleHazards`, `RuleHazard` | `Puck.State.Rules` | Order-sensitive rule pairs. |
 | `RuleCost`, `RuleWorkBudget`, `RuleWorkContributor`, `RulePinnedCell` | `Puck.State.Rules` | Line costs, the exclusion trie, writer counts, and the tally. |
-| `RuleSchedule` | `Puck.State.Rules` | A rule's read rows and whether they're volatile. |
+| `RuleSchedule`, `RuleDeadline` | `Puck.State.Rules` | A judgement's rows, host facts, sweep set and deadline, and why it's volatile. |
+| `RuleDueList` | `Puck.State.Rules` | The rules (and bodies) due this tick, and the index that pushes readers onto it. |
+| `FactRead` | `Puck.State` | One versioned host fact a schedule names. |
 | `RuleLatch` | `Puck.State.Rules` | Edge memory plus the scheduler's caches. |
 | `WorldRuleWorkBudget` | `Puck.World.Schema` | The world's sheet, including interactions and admission's refusal. |
 

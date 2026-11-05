@@ -273,18 +273,13 @@ both backends; and background work proportional to change (the bake rebaking
 only what an edit touched, GI re-measuring only the probes that can see newly
 landed geometry).
 
-- [high] Rule evaluation is the largest phase of the headless debug tick (37 %
-  of `StepCore`'s samples; body advance 27 %, the machine worker wait 13 %,
-  the instance host 11 %), and 58 % of the rule phase is the machinery that
-  visits rules rather than the authored gates, locals and effects. The
-  [rule-evaluation memo](rule-evaluation-cost.md) holds the per-rule
-  measurement, the research round and the design: schedules that name facets
-  as well as rows, a push-based due list, speculated gates on the pool
-  validated by versions and committed in document order, and
-  `world.budget.rules --spent`. Its [implementation brief](rule-evaluation-cost.md#implementation-brief)
-  is the next lane here; its steps 1 to 4 need no thread and land before
-  step 5, the parallel phase the memo's "Rule evaluation stays serial" section
-  filed.
+- [medium] The rule phase's remaining volatile and visit costs, as
+  `world.budget.rules --spent` names them: `physics(quiescent, ...)` has no
+  version (the chess sweeps), a placement-pose move marks its readers in full
+  (`go-read-stones` is visited every tick), and a moved row re-judges every
+  binding of a sweep. The [rule-evaluation memo](rule-evaluation-cost.md#what-it-leaves-open)
+  lists each, and why speculated gates on the pool wait for a sheet that
+  shows hundreds of non-firing versioned evaluations a tick.
 - [medium] Snapshot emission's entity rows, which T1 partitioned, are a small
   share of its cost, so most of it lies in the serial tail or the subscribers'
   `DeliverSnapshot`; profile it before T3 or any R step assumes otherwise. The
@@ -3509,9 +3504,9 @@ read one. The plans that keep open items:
 - [Owned memory for Puck's own host](memory-pooling.md): memory ownership is the
   [engine job system](#engine-job-system)'s; the page holds M1 and R1 to R3,
   the later custom no-GC runtime port.
-- [Rule evaluation proportional to change](rule-evaluation-cost.md#implementation-brief):
-  the measured sheet, the pull's constants, facet versions and the due list,
-  deadline wake, speculated gates on the pool, and the documents; the
+- [Rule evaluation proportional to change](rule-evaluation-cost.md#what-it-leaves-open):
+  the volatile rest the spent sheet names, per-cell due sets, more host fact
+  doors, and speculated gates once a sheet justifies a fork; the
   [engine job system](#engine-job-system) packet ranks it.
 - [Machines and cartridges](machines-and-cartridges.md#open-items): the
   programme's packages, the Humble corpus failures and the emulator batteries'
