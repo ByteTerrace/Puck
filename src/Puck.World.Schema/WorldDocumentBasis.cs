@@ -86,15 +86,21 @@ public static class WorldDocumentBasis {
     private static readonly string[] RowKeyPrecedence = ["id", "name", "key", "index", "grantee+capability+subject"];
     private const char CompositeKeySeparator = '+';
 
-    // Hash only what has the same representation under DeepEquals. Numeric spellings (including CLR-backed
-    // Diff nodes) share a bucket so indexing never changes JSON's exact numeric equality. Authored string ids
-    // and composite grant identities get ordinary hashed lookups rather than a scan for every inherited row.
+    // Equality stays exact JSON equality. Equal numbers necessarily round to the same double, which supplies
+    // only the hash: collisions (large integers included) are still distinguished by DeepEquals. CLR-backed
+    // restatement/position keys use their JSON spelling too, just as DeepEquals does across numeric backings.
     private sealed class RowIdentityEquality : IEqualityComparer<JsonNode> {
         internal static readonly RowIdentityEquality Instance = new();
         public bool Equals(JsonNode? x, JsonNode? y) => JsonNode.DeepEquals(x, y);
         public int GetHashCode(JsonNode obj) {
             if (obj is JsonValue scalar && scalar.TryGetValue<string>(out var text)) {
                 return StringComparer.Ordinal.GetHashCode(text);
+            }
+            if (obj is JsonValue number) {
+                if (number.TryGetValue<double>(out var value)) { return value.GetHashCode(); }
+                if (number.GetValueKind() == JsonValueKind.Number) {
+                    return JsonSerializer.SerializeToElement(number).GetDouble().GetHashCode();
+                }
             }
             if (obj is JsonArray array) {
                 var hash = new HashCode();
@@ -462,6 +468,7 @@ public static class WorldDocumentBasis {
         var merged = basis;
         var consumed = new bool[overlay.Count];
         var overlayRows = IndexRows(overlay, key, out _);
+        List<JsonNode?>? survivors = null;
 
         for (var basisIndex = 0; basisIndex < merged.Count; basisIndex++) {
             var basisObject = ((JsonObject)merged[basisIndex]!);
@@ -469,6 +476,7 @@ public static class WorldDocumentBasis {
             var overlayIndex = overlayRows.GetValueOrDefault(basisKey!, -1);
 
             if (overlayIndex < 0) {
+                survivors?.Add(basisObject);
                 continue;
             }
 
@@ -482,7 +490,11 @@ public static class WorldDocumentBasis {
                     key: key,
                     path: $"{path}[{key}={DescribeKey(value: basisKey)}]"
                 );
-                merged.RemoveAt(basisIndex--);
+                // Compact once after all drops; RemoveAt per tombstone would shift the remaining list repeatedly.
+                if (survivors is null) {
+                    survivors = new List<JsonNode?>(merged.Count);
+                    for (var prior = 0; prior < basisIndex; prior++) { survivors.Add(merged[prior]); }
+                }
 
                 continue;
             }
@@ -506,6 +518,12 @@ public static class WorldDocumentBasis {
                     path: $"{path}[{key}={DescribeKey(value: basisKey)}]"
                 );
             }
+            survivors?.Add(merged[basisIndex]);
+        }
+
+        if (survivors is not null) {
+            merged.Clear();
+            foreach (var row in survivors) { merged.Add(row); }
         }
 
         for (var index = 0; (index < overlay.Count); index++) {
@@ -536,9 +554,10 @@ public static class WorldDocumentBasis {
         if (positions.Count == 0) { return rows; }
         var predecessors = new List<int>[rows.Count];
         var positioned = new bool[rows.Count];
+        var indexed = IndexRows(rows, key, out _);
         foreach (var (row, before) in positions) {
-            var from = IndexOfRowKey(rows, key, row);
-            var to = IndexOfRowKey(rows, key, before);
+            var from = row is null ? -1 : indexed.GetValueOrDefault(row, -1);
+            var to = before is null ? -1 : indexed.GetValueOrDefault(before, -1);
             if (from < 0 || to < 0) {
                 throw new JsonException($"{path}: '{BeforeMemberName}' from {DescribeKey(row)} names missing target {DescribeKey(before)}.");
             }

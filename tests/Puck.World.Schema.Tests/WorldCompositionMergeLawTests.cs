@@ -37,4 +37,30 @@ public sealed class WorldCompositionMergeLawTests {
         Assert.Equal(beforeBasis, basis.ToJsonString());
         Assert.Equal(beforeOverlay, overlay.ToJsonString());
     }
+
+    [Fact]
+    public void Drops_compact_survivors_once_before_appends_and_positioning() {
+        var basis = JsonNode.Parse("""{"rows":[{"name":"a"},{"name":"b","value":1},{"name":"c"},{"name":"d"},{"name":"e"}]}""")!.AsObject();
+        var overlay = JsonNode.Parse("""{"rows":[{"name":"a","$drop":true},{"name":"b","value":2},{"name":"c","$drop":true},{"name":"e","$drop":true},{"name":"new","$before":"b"}]}""")!.AsObject();
+        Assert.True(WorldDocumentBasis.TryMerge(basis, overlay, out var composed, out var reason), reason);
+        Assert.Equal(new[] { "new", "b", "d" }, composed!["rows"]!.AsArray().Select(row => row!["name"]!.GetValue<string>()));
+        Assert.Equal(2, composed["rows"]![1]!["value"]!.GetValue<int>());
+        Assert.Equal(5, basis["rows"]!.AsArray().Count);
+    }
+
+    [Fact]
+    public void Numeric_hash_collisions_still_distinguish_exact_large_integer_keys() {
+        var basis = JsonNode.Parse("""{"rows":[{"id":9007199254740992,"kept":1}]}""")!.AsObject();
+        var overlay = JsonNode.Parse("""{"rows":[{"id":9007199254740993,"added":2}]}""")!.AsObject();
+        Assert.True(WorldDocumentBasis.TryMerge(basis, overlay, out var composed, out var reason), reason);
+        Assert.Equal(2, composed!["rows"]!.AsArray().Count);
+    }
+
+    [Fact]
+    public void Numeric_restatement_keys_match_across_CLR_and_JSON_backings() {
+        var first = JsonNode.Parse("""{"rows":[{"id":1,"value":"first"}]}""")!.AsObject();
+        var second = JsonNode.Parse("""{"rows":[{"id":1.0,"value":"second"}]}""")!.AsObject();
+        var restated = new JsonObject { ["rows"] = new JsonArray(new JsonObject { ["id"] = 1 }) };
+        Assert.True(WorldDocumentBasis.TryMergeImports([("first", first), ("second", second)], restated, out _, out var reason), reason);
+    }
 }
