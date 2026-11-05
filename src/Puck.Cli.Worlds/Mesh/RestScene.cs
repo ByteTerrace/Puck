@@ -150,6 +150,10 @@ public sealed class RestScene {
     /// <param name="group">The group.</param>
     /// <returns>The body, or <see langword="null"/>.</returns>
     public RestBody? Owner(SdfMeshBakeGroup group) => (group.Dynamic ? (m_rigidTemplates.GetValueOrDefault(group.Slot) ?? BodyOf(slot: group.Slot)) : null);
+    /// <summary>Returns the prototype captured with a group's emission, including static and animated placements.</summary>
+    /// <param name="group">The bake group.</param>
+    /// <returns>The prototype, or null for anonymous world geometry.</returns>
+    public string? Prototype(SdfMeshBakeGroup group) => Owner(group)?.Creation.Id.Value ?? Pick(group.FirstInstance)?.Prototype;
     /// <summary>Returns a group's label: its slot and the body and shape the slot carries, its first instance, or the world
     /// segments.</summary>
     /// <param name="group">The group.</param>
@@ -158,7 +162,7 @@ public sealed class RestScene {
     public string Label(SdfMeshBakeGroup group, RestBody? owner) {
         if (group.IsWorld) { return "world segments"; }
         if (!group.Dynamic) { return $"instance {-(group.Selector + 1)}{((group.Instances > 1) ? $"+{(group.Instances - 1)}" : string.Empty)}{Placed(instance: -(group.Selector + 1))}"; }
-        if (owner is null) { return $"slot {group.Slot}"; }
+        if (owner is null) { return $"slot {group.Slot}{Placed(group.FirstInstance)}"; }
 
         var first = ((group.FirstInstance >= 0) ? Program.Instances[group.FirstInstance].First : 0);
         var end = ((group.FirstInstance >= 0) ? Program.Instances[group.FirstInstance].End : Program.Instructions.Count);
@@ -212,17 +216,19 @@ public sealed class RestScene {
         var transform = Transforms[(rigid?.RootSlot ?? group.Slot)];
         var turn = ((transform.Orientation == default) ? Quaternion.Identity : transform.Orientation);
 
-        return point => (transform.Position + Vector3.Transform(value: (point * (rigid?.Scale ?? 1f)), rotation: turn));
+        return point => (transform.Position + Vector3.Transform(value: (point * (rigid?.Scale ?? transform.Scale)), rotation: turn));
     }
 
     // The placement and prototype a static instance stands for, as the frame's pick map names it: both for an instance a
     // placement emitted itself, the prototype alone for a shared template many placements copy; empty where it names none.
     private string Placed(int instance) =>
-        ((m_picks?.Resolve(identity: SdfVisibility.IdentityOf(kind: SdfVisibilityKind.Sdf, source: ((uint)(instance + 1))))) switch {
+        (Pick(instance) switch {
             WorldPickTarget { Placement: { } placement } target => $" {placement} ({target.Prototype})",
             WorldPickTarget { Prototype: { } prototype } => $" ({prototype})",
             _ => string.Empty,
         });
+    private WorldPickTarget? Pick(int instance) => (instance < 0 ? null :
+        m_picks?.Resolve(identity: SdfVisibility.IdentityOf(kind: SdfVisibilityKind.Sdf, source: ((uint)(instance + 1)))) as WorldPickTarget);
     private RestBody? BodyOf(int slot) => Bodies.FirstOrDefault(predicate: body => ((slot >= body.RootSlot) && (slot < (body.RootSlot + body.SlotCount))));
 
     // Keeps the program and transforms of the frame it last dressed.
