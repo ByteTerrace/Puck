@@ -1153,8 +1153,8 @@ public sealed class FieldLattice {
 
         return new Checkpoint(Raw: raw);
     }
-    /// <summary>Gets the solid surface height of a column — the greatest height any height field raises there, or
-    /// the lattice origin's Y when none does.</summary>
+    /// <summary>Gets the solid surface height of a column — the greatest height any height field raises there,
+    /// excluding media, which provide immersion rather than solid contact.</summary>
     /// <param name="x">The column's X cell index.</param>
     /// <param name="z">The column's Z cell index.</param>
     /// <returns>The surface height, world units; <see langword="null"/> when no height field is nonzero.</returns>
@@ -1162,7 +1162,7 @@ public sealed class FieldLattice {
         FixedQ4816? best = null;
 
         for (var field = 0; (field < m_values.Length); field++) {
-            if (m_heightScale[field] == FixedQ4816.Zero) {
+            if (m_isMedium[field] || (m_heightScale[field] == FixedQ4816.Zero)) {
                 continue;
             }
 

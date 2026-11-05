@@ -1075,11 +1075,6 @@ the water strained, measured, and not yet fixed.
   glacier, lake and bridge creations, not in the eight stream segments, the
   hydrology rules or the lattices, so it grows with a creation's extent or kind
   rather than its shape count; the validate stage that holds it is not yet found.
-- [medium] A lattice height column is solid under the field contact provider
-  (`FieldLattice.cs:1161` `ColumnHeight` unions every height row, a medium
-  included, through `WorldSolidField.cs:118`), so a medium world on that
-  provider would stand on its water; the analytic provider the debug world uses
-  ignores lattice columns. A medium row should be excluded from the solid.
 - [low] A lattice transform's row-referenced term is read, not consumed
   (`FieldLattice.cs:1000`): the hydrology's melt hands water through a slot
   (`hydroMeltStep`), so a rule firing that is refused (a gauge outside its

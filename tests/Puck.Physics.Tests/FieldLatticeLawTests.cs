@@ -276,6 +276,18 @@ public sealed class FieldLatticeLawTests {
         );
     }
     [Fact]
+    public void AMediumSurfaceDoesNotBecomeSolidContact() {
+        var input = MediumFields(initial: FixedQ4816.One, heightScale: FixedQ4816.FromInteger(value: 5));
+        var lattice = new FieldLattice(input: input);
+        Assert.Null(@object: lattice.ColumnHeight(x: 0, z: 0));
+
+        var ground = input.Fields[0] with { Name = "ground", IsMedium = false, HeightScale = FixedQ4816.One };
+        var mixed = new FieldLattice(input: input with { Fields = [input.Fields[0], ground] });
+        Assert.Equal(expected: FixedQ4816.One, actual: mixed.ColumnHeight(x: 0, z: 0));
+        var position = new FixedVector3(X: FixedQ4816.Zero, Y: FixedQ4816.Zero, Z: FixedQ4816.Zero);
+        Assert.Equal(expected: FixedQ4816.FromInteger(value: 5), actual: mixed.MediumSurface(position: in position)!.Value.Point.Y);
+    }
+    [Fact]
     public void ANoiseFillIsBitIdenticalAcrossConstructionsAndMovesWithTheWorldSeed() {
         var fill = new FieldFillInput.Noise(
             Field: 0,
