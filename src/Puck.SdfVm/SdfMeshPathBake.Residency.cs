@@ -163,10 +163,17 @@ public sealed partial class SdfMeshPathBake {
 
         return string.Create(provider: CultureInfo.InvariantCulture, handler: $" kinds=[{kinds}] cpu=[{stages}] frames={m_bakeFrames} idle={m_idleFrames} share-use={((m_shareTaps > 0) ? (m_taps / ((double)m_shareTaps)) : 0d):0.00} stop=[share:{m_stopShare},samples:{m_stopSamples},batch:{m_stopBatch},drained:{m_stopDrained}] per-frame=[waiting:{(m_waitingGroups / ((double)frames)):0.0},flying:{(m_flyingGroups / ((double)frames)):0.0},working:{(m_workingGroups / ((double)frames)):0.0}] frame-gate=[max:{((m_frameGateWaitMax * 1000d) / Stopwatch.Frequency):0.00}ms,total:{((m_frameGateWaitTotal * 1000d) / Stopwatch.Frequency):0.0}ms,over-1ms:{m_frameGateWaitsSlow}]");
     }
-    // Measures every group still owing a mesh by its demand box at the demand points, under the gate; with none, the
-    // priorities stand as they were and the plan's order decides.
+    // Measures every group still owing a mesh by its demand box at the demand points; with none, the priorities stand as
+    // they were and the plan's order decides. It runs on the frame's thread with the gate open: the frame's thread alone
+    // replaces the group list and the copy index (Restart, Settle, IndexCopies), and a priority only orders work, never
+    // changes a mesh, so a worker reading one mid-measure, or finishing a group this measures, orders no mesh differently.
     private void Prioritize() {
         if (Demand.Count == 0) { return; }
+        // With every group done there is nothing to order: the done cursor makes this check constant once the bake ends.
+        lock (m_gate) {
+            while ((m_doneThrough < m_groups.Count) && m_groups[m_doneThrough].Done) { m_doneThrough++; }
+            if (m_doneThrough >= m_groups.Count) { return; }
+        }
         foreach (var group in m_groups) {
             if (group.Done || !group.HasDemandBox) { continue; }
 

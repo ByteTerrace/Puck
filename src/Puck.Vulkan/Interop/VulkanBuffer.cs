@@ -5,7 +5,8 @@ namespace Puck.Vulkan.Interop;
 
 /// <summary>
 /// Owns a buffer and its memory made by <see cref="IVulkanBufferApi"/>, and releases both through that API when
-/// disposed. A <see cref="VulkanBufferMemory.HostCoherent"/> or <see cref="VulkanBufferMemory.HostCoherentDeviceLocal"/>
+/// disposed. A <see cref="VulkanBufferMemory.HostCoherent"/>, <see cref="VulkanBufferMemory.HostCoherentDeviceLocal"/> or
+/// <see cref="VulkanBufferMemory.HostCachedCoherent"/>
 /// buffer is mapped once, at construction, and stays mapped
 /// for its lifetime, so a write is visible to the device without a flush and a read after the device's work completes
 /// needs no invalidate. A device-local buffer is never mapped, and its host operations throw.
@@ -52,7 +53,7 @@ public sealed class VulkanBuffer : IGpuStorageBuffer, IGpuReadbackBuffer {
         Memory = memory;
         SizeBytes = sizeBytes;
 
-        if (memory is VulkanBufferMemory.HostCoherent or VulkanBufferMemory.HostCoherentDeviceLocal) {
+        if (memory is VulkanBufferMemory.HostCoherent or VulkanBufferMemory.HostCoherentDeviceLocal or VulkanBufferMemory.HostCachedCoherent) {
             m_mappedPointer = bufferApi.Map(
                 handles: handles,
                 sizeBytes: sizeBytes
@@ -99,7 +100,7 @@ public sealed class VulkanBuffer : IGpuStorageBuffer, IGpuReadbackBuffer {
         );
 
         if (0 == m_mappedPointer) {
-            throw new InvalidOperationException(message: $"A {Memory} Vulkan buffer is not host-mapped; only a {VulkanBufferMemory.HostCoherent} or {VulkanBufferMemory.HostCoherentDeviceLocal} buffer has host access.");
+            throw new InvalidOperationException(message: $"A {Memory} Vulkan buffer is not host-mapped; only a {VulkanBufferMemory.HostCoherent}, {VulkanBufferMemory.HostCoherentDeviceLocal} or {VulkanBufferMemory.HostCachedCoherent} buffer has host access.");
         }
 
         return m_mappedPointer;

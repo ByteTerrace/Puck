@@ -17,4 +17,9 @@ public enum VulkanBufferMemory {
     /// <summary>A <c>DEVICE_LOCAL</c> type when one is permitted, otherwise the first type the buffer's requirements
     /// permit. The host never maps it.</summary>
     PreferDeviceLocal,
+    /// <summary>A type that is <c>HOST_VISIBLE</c>, <c>HOST_COHERENT</c> and <c>HOST_CACHED</c> when one is permitted,
+    /// otherwise one that is <c>HOST_VISIBLE</c> and <c>HOST_COHERENT</c>, or the creation fails: the memory a buffer the
+    /// device writes and the host reads back is allocated from. The host reads a cached mapping at memory speed, where an
+    /// uncached coherent type is write-combined and a read of it crawls (a 40 MB readback took most of a frame).</summary>
+    HostCachedCoherent,
 }
