@@ -110,7 +110,7 @@ public sealed class RecordingSession : ICaptureSink, IAudioPacketSink {
         );
         m_muxer.Start();
         m_videoTrackRegistered = true;
-        m_muxerStarted = true;
+        MarkMuxerStarted();
     }
     private static OpusAudioLane? ResolveAudioLane(RecordingSessionOptions options, List<string> notes) {
         if (
@@ -192,21 +192,27 @@ public sealed class RecordingSession : ICaptureSink, IAudioPacketSink {
 
         return encoder;
     }
+    // Sleeps until the muxer has started (or the session stops), then pumps whenever a source has written samples.
     private void RunAudio() {
+        _ = WaitHandle.WaitAny(waitHandles: [m_stopSignal, m_muxerReady]);
+
+        if (!m_muxerStarted) {
+            return;
+        }
+
         while (m_running) {
-            if (!m_muxerStarted) {
-                Thread.Sleep(millisecondsTimeout: 2);
-
-                continue;
-            }
-
             m_audioLane!.Pump(sink: this);
-            Thread.Sleep(millisecondsTimeout: 10);
+
+            if (!m_audioLane.WaitForSamples(cancel: m_stopSignal)) {
+                break;
+            }
         }
 
-        if (m_muxerStarted) {
-            m_audioLane!.Flush(sink: this);
-        }
+        m_audioLane!.Flush(sink: this);
+    }
+    private void MarkMuxerStarted() {
+        m_muxerStarted = true;
+        _ = m_muxerReady.Set();
     }
     private void RunEncode() {
         while (true) {
@@ -223,7 +229,9 @@ public sealed class RecordingSession : ICaptureSink, IAudioPacketSink {
                 break;
             }
 
-            _ = m_frameAvailable.WaitOne(millisecondsTimeout: 5);
+            // Consume sets the event after publishing a slot and Stop sets it after clearing m_running, so a wake is
+            // never lost between the take above and this wait.
+            _ = m_frameAvailable.WaitOne();
         }
 
         lock (m_muxSync) {
@@ -398,6 +406,7 @@ public sealed class RecordingSession : ICaptureSink, IAudioPacketSink {
 
         m_running = false;
         _ = m_frameAvailable.Set();
+        _ = m_stopSignal.Set();
         m_encodeThread?.Join();
         m_audioThread?.Join();
         m_audioLane?.Stop();
@@ -411,6 +420,8 @@ public sealed class RecordingSession : ICaptureSink, IAudioPacketSink {
         m_videoEncoder?.Dispose();
         m_audioLane?.Dispose();
         m_frameAvailable.Dispose();
+        m_muxerReady.Dispose();
+        m_stopSignal.Dispose();
     }
     /// <summary>Attempts to create a recording session for a document against the platform's capture factories.</summary>
     /// <param name="options">The document, factories, and source resolution.</param>
@@ -521,7 +532,9 @@ public sealed class RecordingSession : ICaptureSink, IAudioPacketSink {
 
     private byte[] m_av1Scratch = [];
     private readonly AutoResetEvent m_frameAvailable = new(initialState: false);
+    private readonly ManualResetEvent m_muxerReady = new(initialState: false);
     private readonly Lock m_muxSync = new();
+    private readonly ManualResetEvent m_stopSignal = new(initialState: false);
     private volatile bool m_running = true;
     private int m_videoTrackNumber = -1;
 
@@ -567,7 +580,7 @@ public sealed class RecordingSession : ICaptureSink, IAudioPacketSink {
         } else {
             // Audio only: no frames arrive, so the muxer can start immediately (the OpusHead is already known).
             m_muxer.Start();
-            m_muxerStarted = true;
+            MarkMuxerStarted();
         }
 
         if (audioLane is not null) {

@@ -399,9 +399,9 @@ direction: concurrent whole-solution builds exhaust a machine's memory.
   and names any change over 10%. The lead regenerates the tip's report under the
   main checkout's ignored scratch directory (a `tip-sweep` folder) whenever the tip moves, and briefs
   name that path. An output-identity gate (a whole mesh store by hash)
-
-  first runs the baseline twice: the mesh bake is not byte-reproducible run to
-  run, so only a difference outside the baseline's own variation counts. The hard limits are one heavy integration job and one GPU
+  compares every stored payload: the mesh bake is byte-reproducible from its
+  inputs (three cold bakes per backend match), so any difference is a finding.
+  The hard limits are one heavy integration job and one GPU
   leg at a time. A windowed debug World holds a large share of
   the machine's memory within a minute of boot (`host.memory` reads it), so
   only a couple of building lanes fit beside one. Keep windowed capture
@@ -433,6 +433,18 @@ direction: concurrent whole-solution builds exhaust a machine's memory.
   branch's deleted files (`git diff --diff-filter=D` against the integration tip)
   and compares them with what the brief allowed. A deletion the brief didn't name
   is reported to the lead before landing, never merged silently.
+- **Briefs size their checks to the lease they hold.** A heavy suite or a
+  windowed World holds an exclusive lease, so a brief that re-runs the full
+  reproduce set after every step makes every other lane that needs that lease
+  wait: one writer re-running 17-world reproduce runs per step held the heavy
+  lease 20+ minutes at a time while its sibling waited. Per step, run a small
+  representative subset; run the full set once at the end and again at
+  integration. Two lanes that each need the same exclusive lease for long
+  stretches are not parallel work; sequence them or split the lease-bound part.
+- **Workflows are a standing permission (the owner's ruling):** the lead runs the
+  Workflow tool whenever a multi-agent orchestration pays for itself (a wave, a
+  fan-out of independent reviews or research, a pipeline of write then verify),
+  without asking first; the agent-count guidance in the tool still applies.
 - **A wave** fans many small fixes out as several writers and one integrator: a
   scout pass inventories, the lead triages into file-disjoint batches (each
   names its items, the files it may touch, and which batch alone owns the

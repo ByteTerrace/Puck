@@ -305,7 +305,6 @@ public sealed class WindowHostPresentation {
                     frequency: frequency,
                     requestedHertz: m_presentPacing.TargetHertz
                 );
-                var spinThreshold = LauncherHostLoop.SpinThreshold(frequency: frequency);
                 var startTimestamp = m_time.GetTimestamp();
                 var nextRenderDeadline = startTimestamp;
                 var deviceLoss = new DeviceLossRecovery(
@@ -315,7 +314,6 @@ public sealed class WindowHostPresentation {
                     sleep: duration => LauncherHostLoop.WaitUntil(
                         deadlineTimestamp: (m_time.GetTimestamp() + ((long)(duration.TotalSeconds * frequency))),
                         precisionWaiter: precisionWaiter,
-                        spinThreshold: spinThreshold,
                         time: m_time
                     ),
                     time: m_time,
@@ -702,7 +700,6 @@ public sealed class WindowHostPresentation {
                                 LauncherHostLoop.WaitUntil(
                                     deadlineTimestamp: nextRenderDeadline,
                                     precisionWaiter: precisionWaiter,
-                                    spinThreshold: spinThreshold,
                                     time: m_time
                                 );
 

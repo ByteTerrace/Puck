@@ -146,9 +146,7 @@ public sealed partial record SdfMesh {
             var input = source.Span;
 
             for (var index = 0; (index < input.Length); index++) {
-                var place = Array.IndexOf(array: from, value: ((int)input[index]));
-
-                values[index] = (((place >= 0) && (place < to.Length)) ? (uint)to[place] : input[index]);
+                values[index] = SdfMeshMaterials.Renumber(material: input[index], from: from, to: to);
             }
             return values.Memory;
         }

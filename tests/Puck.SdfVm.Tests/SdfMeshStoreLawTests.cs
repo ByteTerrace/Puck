@@ -17,6 +17,35 @@ public sealed class SdfMeshStoreLawTests {
     private static readonly UInt128 Identity = 7;
 
     [Fact]
+    public void PaletteRegistrationNeverChangesStoredBytesAndLoadsIntoTheReadersPalette() {
+        using var scratch = new TemporaryDirectory(prefix: "puck-mesh-store-");
+        var store = new SdfMeshStore(directory: scratch.PathOf(name: "meshes"));
+
+        foreach (var chunked in new[] { false, true }) {
+            byte[]? first = null;
+            foreach (var palette in new[] { new[] { 4, 9 }, new[] { 900, 300 }, new[] { 1, 2 } }) {
+                // Zero is deliberately outside the palette. It must not collide with canonical place zero.
+                var original = Mesh();
+                var piece = new SdfMesh(positions: original.Positions, indices: original.Indices, normals: original.Normals, triangleMaterials: new uint[] { (uint)palette[0], 0 }) {
+                    Levels = [Level() with { TriangleMaterials = new uint[] { (uint)palette[1] } }],
+                };
+                var source = (chunked ? SdfMeshChunks.Join(chunks: [piece, piece]) : piece);
+
+                Assert.True(store.Write(Identity, Geometry, source, palette));
+                var bytes = File.ReadAllBytes(Assert.Single(store.EntryPaths()));
+                if (first is null) { first = bytes; } else { Assert.Equal(first, bytes); }
+                using var library = new SdfMeshLibrary(store: store);
+                Assert.True(library.TryLoad(Identity, Geometry, palette, out var loaded, out _));
+                Assert.NotNull(loaded);
+                Assert.Equal(source.TriangleMaterials.ToArray(), loaded.TriangleMaterials.ToArray());
+                var read = (chunked ? loaded.Chunks[0] : loaded);
+                Assert.Equal(piece.Levels[0].TriangleMaterials.ToArray(), read.Levels[0].TriangleMaterials.ToArray());
+                loaded.Release();
+            }
+        }
+    }
+
+    [Fact]
     public void AnEmptyBakeSurvivesAFreshLibraryWithoutBakingAgain() {
         using var scratch = new TemporaryDirectory(prefix: "puck-mesh-store-");
         var store = new SdfMeshStore(directory: scratch.PathOf(name: "meshes"));
@@ -67,17 +96,17 @@ public sealed class SdfMeshStoreLawTests {
         Assert.True(condition: store.Contains(geometry: Geometry, identity: Identity));
         Assert.True(condition: store.TryRead(geometry: Geometry, identity: Identity, materials: out var materials, mesh: out var read, refusal: out _));
         Assert.NotNull(@object: read);
-        Assert.Equal(actual: materials, expected: [4, 9]);
+        Assert.Equal(actual: materials, expected: [0, 1]);
         Assert.Equal(expected: mesh.Positions.ToArray(), actual: read.Positions.ToArray());
         Assert.Equal(expected: mesh.Normals.ToArray(), actual: read.Normals.ToArray());
         Assert.Equal(expected: mesh.Indices.ToArray(), actual: read.Indices.ToArray());
-        Assert.Equal(expected: mesh.TriangleMaterials.ToArray(), actual: read.TriangleMaterials.ToArray());
+        Assert.Equal(expected: new uint[] { 0, 1 }, actual: read.TriangleMaterials.ToArray());
         Assert.Equal(mesh.BakeCell, read.BakeCell);
 
         var level = Assert.Single(collection: read.Levels);
 
         Assert.Equal(expected: Level().Indices.ToArray(), actual: level.Indices.ToArray());
-        Assert.Equal(expected: Level().TriangleMaterials.ToArray(), actual: level.TriangleMaterials.ToArray());
+        Assert.Equal(expected: new uint[] { 1 }, actual: level.TriangleMaterials.ToArray());
         Assert.Equal(expected: Level().Error, actual: level.Error);
 
         // Another bake, another surface, or the same surface in a slot's frame reads nothing.
@@ -414,11 +443,11 @@ public sealed class SdfMeshStoreLawTests {
         File.SetLastWriteTimeUtc(lastWriteTimeUtc: stamped, path: path);
         Assert.True(condition: store.TryPeek(geometry: Geometry, identity: Identity, materials: out var materials, mesh: out var mesh, refusal: out _));
         Assert.NotNull(@object: mesh);
-        Assert.Equal(actual: materials, expected: [4, 9]);
+        Assert.Equal(actual: materials, expected: [0, 1]);
         Assert.Equal(expected: Mesh().Positions.ToArray(), actual: mesh.Positions.ToArray());
         Assert.Equal(expected: stamped, actual: File.GetLastWriteTimeUtc(path: path));
         Assert.True(condition: SdfMeshStore.TryReadFile(materials: out var any, mesh: out _, path: path));
-        Assert.Equal(actual: any, expected: [4, 9]);
+        Assert.Equal(actual: any, expected: [0, 1]);
 
         // A damaged entry is refused and stays where it was, and a file that is no entry reads as none.
         File.WriteAllBytes(bytes: File.ReadAllBytes(path: path)[..20], path: path);

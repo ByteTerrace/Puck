@@ -49,8 +49,8 @@ public static partial class WorldDefinitionFileSource {
     }
     // The one recursive whole-file composer: resolves `resolvedPath`'s basis (recursively, through this same core)
     // and its own `imports` (each recursively resolved through this same core, then folded left to right by
-    // WorldDocumentBasis.TryMergeImports), then layers basis -> imports -> this file's own body via ordinary
-    // TryMerge, per WorldDocumentBasis's remarks. `stack` is the pre-own-body layer (basis merged under the folded
+    // WorldDocumentBasis.TryMergeImports), then layers basis -> imports -> this file's own body into its owned
+    // tree, per WorldDocumentBasis's remarks. `stack` is the pre-own-body layer (basis merged under the folded
     // import layer) — what a derivation-preserving save diffs a target against; `composed` is the final tree.
     // `ancestors` is the resolution path from the top down to (not including) `resolvedPath`: a stack, not a global
     // visited set, so two imports independently reaching the same shared ancestor (a diamond) is never a cycle.
@@ -192,7 +192,7 @@ public static partial class WorldDefinitionFileSource {
             !root.ContainsKey(propertyName: WorldDocumentBasis.ImportsMemberName)
         ) {
             stack = new JsonObject();
-            composed = ((JsonObject)WorldDocumentOrigins.Clone(node: root, origins: origins)!);
+            composed = root;
             reason = string.Empty;
             WorldBootWork.Count(kind: WorldBootWork.Compositions);
             if (retainImage) {
@@ -287,17 +287,15 @@ public static partial class WorldDefinitionFileSource {
             touchedPaths.AddRange(collection: basisTouchedPaths);
         }
 
-        var ownBody = ((JsonObject)WorldDocumentOrigins.Clone(node: root, origins: origins)!);
+        var hasImports = root.TryGetPropertyValue(WorldDocumentBasis.ImportsMemberName, out var importsNode);
+        var ownBody = root;
 
         ownBody.Remove(propertyName: WorldDocumentBasis.BasisMemberName);
         ownBody.Remove(propertyName: WorldDocumentBasis.ImportsMemberName);
 
         var importsLayer = new JsonObject();
 
-        if (root.TryGetPropertyValue(
-            jsonNode: out var importsNode,
-            propertyName: WorldDocumentBasis.ImportsMemberName
-        )) {
+        if (hasImports) {
             if (importsNode is not JsonArray importsArray) {
                 reason = $"'{WorldDocumentBasis.ImportsMemberName}' in {WorldDocumentLabel.Of(path: resolvedPath)} must be an array of import entries.";
 
@@ -450,9 +448,8 @@ public static partial class WorldDefinitionFileSource {
             importsLayer = mergedImports!;
         }
 
-        if (!WorldDocumentBasis.TryMerge(
-            basis: basisComposed,
-            composed: out var afterImports,
+        if (!WorldDocumentBasis.TryMergeInto(
+            target: basisComposed,
             origins: origins,
             overlay: importsLayer,
             reason: out var stackReason
@@ -462,11 +459,12 @@ public static partial class WorldDefinitionFileSource {
             return false;
         }
 
-        stack = afterImports;
+        // Only the derivation-preserving save requests the pre-own-body stack (serveHeldImage=false).
+        // Every other reader consumes the same owned accumulator, keeping inherited subtrees in place.
+        stack = serveHeldImage ? null : (JsonObject)WorldDocumentOrigins.Clone(basisComposed, origins)!;
 
-        if (!WorldDocumentBasis.TryMerge(
-            basis: afterImports!,
-            composed: out var final,
+        if (!WorldDocumentBasis.TryMergeInto(
+            target: basisComposed,
             origins: origins,
             overlay: ownBody,
             reason: out var finalReason
@@ -476,7 +474,7 @@ public static partial class WorldDefinitionFileSource {
             return false;
         }
 
-        composed = final;
+        composed = basisComposed;
         reason = string.Empty;
         WorldBootWork.Count(kind: WorldBootWork.Compositions);
         if (retainImage) {

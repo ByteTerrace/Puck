@@ -100,19 +100,18 @@ public sealed class VulkanFrameSynchronization : IDisposable {
         InFlightFenceHandle = 0;
         m_disposed = true;
     }
-    /// <summary>Waits for the in-flight fence to become signaled, or until the timeout elapses.</summary>
-    /// <param name="timeout">The maximum time to wait, in nanoseconds.</param>
-    /// <returns><see cref="VkResult.Success"/> if the fence became signaled, <see cref="VkResult.Timeout"/> if the timeout elapsed first, or an error code.</returns>
+    /// <summary>Waits for the in-flight fence to become signaled, for at most <see cref="VulkanFenceWait.TimeoutNanoseconds"/>.</summary>
+    /// <returns><see cref="VkResult.Success"/> if the fence became signaled, <see cref="VkResult.ErrorDeviceLost"/> if the device was lost or the fence did not signal in time, or an error code.</returns>
     /// <exception cref="ObjectDisposedException">The synchronization object has been disposed.</exception>
-    public VkResult WaitForInFlightFence(ulong timeout) {
+    public VkResult WaitForInFlightFence() {
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
             instance: this
         );
-        return m_frameSynchronizationApi.WaitForFence(
+        return VulkanFenceWait.Wait(
+            api: m_frameSynchronizationApi,
             device: Device,
-            fenceHandle: InFlightFenceHandle,
-            timeout: timeout
+            fenceHandle: InFlightFenceHandle
         );
     }
 }

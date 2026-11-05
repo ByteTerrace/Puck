@@ -26,6 +26,7 @@ public sealed class OpusAudioLane : IDisposable {
     private readonly List<SourceState> m_mix = [];
     private readonly OpusStreamEncoder? m_mixEncoder;
     private readonly float[] m_readScratch = new float[16384];
+    private readonly WaitHandle[] m_waitHandles;
 
     private float[] m_dequeueScratch = new float[9600];
     private bool m_disposed;
@@ -88,6 +89,13 @@ public sealed class OpusAudioLane : IDisposable {
             } else {
                 m_mix.Add(item: state);
             }
+        }
+
+        // Slot zero is the caller's cancel handle, set per wait; the rest are the sources' data handles.
+        m_waitHandles = new WaitHandle[(sources.Count + 1)];
+
+        for (var index = 0; (index < sources.Count); index++) {
+            m_waitHandles[(index + 1)] = sources[index].Source.DataAvailable;
         }
     }
 
@@ -302,6 +310,25 @@ public sealed class OpusAudioLane : IDisposable {
                 state: state
             );
         }
+    }
+    /// <summary>Sleeps until a bound source has written samples or a cancel handle is set; the audio thread's wait
+    /// between pumps (<see cref="IAudioCaptureSource.DataAvailable"/>). Call on the audio thread.</summary>
+    /// <param name="cancel">The handle whose signal ends the wait.</param>
+    /// <returns><see langword="true"/> when a source has data; <see langword="false"/> when <paramref name="cancel"/> is
+    /// set.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="cancel"/> is <see langword="null"/>.</exception>
+    public bool WaitForSamples(WaitHandle cancel) {
+        ArgumentNullException.ThrowIfNull(argument: cancel);
+
+        if (m_waitHandles.Length == 1) {
+            _ = cancel.WaitOne();
+
+            return false;
+        }
+
+        m_waitHandles[0] = cancel;
+
+        return (WaitHandle.WaitAny(waitHandles: m_waitHandles) != 0);
     }
     /// <summary>Starts device capture on every bound source.</summary>
     public void Start() => SetCaptureRunning(running: true);

@@ -4,12 +4,6 @@ using Puck.Hosting;
 namespace Puck.Launcher;
 
 internal static class LauncherHostLoop {
-    // Deliberate busy waiting is limited to the final 100 us. The previous 2 ms threshold burned roughly 120 ms of
-    // one CPU core per second at 60 Hz before doing useful work, which is especially costly when a laptop CPU and
-    // integrated GPU share the same thermal/power envelope. The precision waiter handles the bulk of the interval;
-    // this small tail only absorbs scheduler/timer granularity without becoming a standing frame tax.
-    private const long SpinThresholdMicroseconds = 100L;
-
     /// <summary>The host's OWN pacing default — used when no <see cref="Puck.Hosting.IFixedStepSimulation"/> is
     /// registered (a composition root that drives no fixed-step sim at all, so nothing declares a rate via
     /// <see cref="Puck.Hosting.IFixedStepSimulation.RatePerSecond"/>), AND as the fixed-step pump's own calling
@@ -39,13 +33,11 @@ internal static class LauncherHostLoop {
 
         return item;
     }
-    public static long SpinThreshold(long frequency) => Math.Max(
-        val1: 1L,
-        val2: ((frequency * SpinThresholdMicroseconds) / 1_000_000L)
-    );
-    // Waits until the host clock reads the deadline: the precision waiter (or a coarse sleep) for the bulk, a short spin
-    // for the tail. Every read is of `time`, the host loop's own clock, so the wait and the deadline share one clock.
-    public static void WaitUntil(TimeProvider time, long deadlineTimestamp, long spinThreshold, IPrecisionWaiter? precisionWaiter) {
+    // Waits until the host clock reads the deadline by sleeping on the host: the precision waiter (a high-resolution
+    // waitable timer) for the whole remainder, or a one-millisecond sleep where the host offers none. The loop re-reads
+    // the clock after each wait, so a wait that wakes early waits again and one that wakes late ends it. Every read is of
+    // `time`, the host loop's own clock, so the wait and the deadline share one clock.
+    public static void WaitUntil(TimeProvider time, long deadlineTimestamp, IPrecisionWaiter? precisionWaiter) {
         var frequency = time.TimestampFrequency;
 
         while (true) {
@@ -55,17 +47,11 @@ internal static class LauncherHostLoop {
                 break;
             }
 
-            if (remaining > spinThreshold) {
-                var sleepTicks = (remaining - spinThreshold);
-
-                if (
-                    (precisionWaiter is null) ||
-                    !precisionWaiter.TryWait(duration: TimeSpan.FromSeconds(value: (((double)sleepTicks) / frequency)))
-                ) {
-                    Thread.Sleep(millisecondsTimeout: 1);
-                }
-            } else {
-                Thread.SpinWait(iterations: 48);
+            if (
+                (precisionWaiter is null) ||
+                !precisionWaiter.TryWait(duration: TimeSpan.FromSeconds(value: (((double)remaining) / frequency)))
+            ) {
+                Thread.Sleep(millisecondsTimeout: 1);
             }
         }
     }
