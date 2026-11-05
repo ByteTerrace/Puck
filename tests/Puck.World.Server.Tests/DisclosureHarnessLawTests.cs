@@ -183,12 +183,10 @@ public sealed class DisclosureHarnessLawTests {
         Assert.Contains(first, input => (input.Words[0] == "guarded") && (input.Words.Count == 7));
     }
     [Fact]
-    public void AVerbsUsageIsReadFromItsDescription() {
-        var forms = CommandUsage.Parse(verb: "world.state.cell.set",
-            description: "Upserts one cell: world.state.cell.set <row> <key> <value> [add] | <row> <key> <text...> | <row> <key> <base64url-vector>. The row's declared kind decides the form.");
+    public void AVerbsUsageIsReadFromItsFormTable() {
+        var forms = CommandForms.Of("world.state.cell.set", "<row> <key> <value> [add]", "<row> <key> <text...>", "<row> <key> <base64url-vector>");
 
-        Assert.Equal(expected: ["<row> <key> <value> [add]", "<row> <key> <text...>", "<row> <key> <base64url-vector>"], actual: forms.Select(selector: static form => form.ToString()));
-        Assert.Equal(expected: ["[row] [key]"], actual: CommandUsage.Parse(verb: "world.state", description: "Reads it back: world.state [row] [key].").Select(selector: static form => form.ToString()));
-        Assert.Empty(collection: CommandUsage.Parse(verb: "world.state", description: "Composes world.state.observe for the caller."));
+        Assert.Equal(expected: ["<row> <key> <value> [add]", "<row> <key> <text...>", "<row> <key> <base64url-vector>"], actual: forms.Usages.Select(selector: static form => form.ToString()));
+        Assert.Equal(expected: ["[row] [key]"], actual: CommandForms.Of("world.state", "[row] [key]").Usages.Select(selector: static form => form.ToString()));
     }
 }

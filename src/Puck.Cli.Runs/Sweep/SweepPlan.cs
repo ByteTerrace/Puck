@@ -90,7 +90,13 @@ public sealed record SweepPlan(IReadOnlyList<SweepTool> Tools, IReadOnlyList<Swe
                 return false;
             }
 
-            foreach (var rule in signal.RedRules.Concat(second: signal.AmberRules)) {
+            if ((signal.MaxAsks is < 1 or > 64) || ((signal.MaxAsks > 1) && (signal.Pending is null))) {
+                error = $"signal '{signal.Name}' asks its line 1..64 times, and more than once only with a pending rule that says when to ask again";
+
+                return false;
+            }
+
+            foreach (var rule in signal.RedRules.Concat(second: signal.AmberRules).Concat(second: (signal.Pending is null) ? [] : [signal.Pending])) {
                 if (!SweepRule.TryParse(rule: out _, text: rule)) {
                     error = $"signal '{signal.Name}' has the rule '{rule}', which is not '<metric> <op> <value>' with op one of {string.Join(separator: " ", values: SweepRule.Operators)}";
 
@@ -174,6 +180,10 @@ public sealed record SweepUntil(string Line, string Metric, IReadOnlyList<string
 /// <param name="TimeoutSeconds">How long the read may take.</param>
 /// <param name="Recheck">Whether the signal is a failure signal that is read again, as <c>&lt;name&gt;.after-tour</c>,
 /// once the tour has run, so a violation the walking workload or the tour caused is not missed.</param>
+/// <param name="Pending">A rule that holds while the World's answer says the read is unfinished and a later ask resumes
+/// it, for a line whose work outlasts one call's deadline; <see langword="null"/> for a line that answers whole.</param>
+/// <param name="MaxAsks">The most times the line is asked in all while <paramref name="Pending"/> holds, each ask with
+/// the signal's own deadline; a read still pending after the last is unmeasured.</param>
 public sealed record SweepSignal(
     string Name,
     string Line,
@@ -184,7 +194,9 @@ public sealed record SweepSignal(
     IReadOnlyDictionary<string, string>? Compare = null,
     IReadOnlyDictionary<string, string>? Metrics = null,
     int TimeoutSeconds = 60,
-    bool Recheck = false
+    bool Recheck = false,
+    string? Pending = null,
+    int MaxAsks = 1
 ) {
     /// <summary>The leg value that reads a signal on every leg.</summary>
     public const string AnyLeg = "any";

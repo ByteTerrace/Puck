@@ -1,3 +1,4 @@
+using Puck.Assets.Documents;
 using System.Text.Json.Nodes;
 using Puck.State;
 using Puck.Transpiler.Ast;
@@ -17,7 +18,7 @@ public static partial class WorldDocumentEmitter {
         }
 
         var ruleIdx = rulesArr.Count;
-        var rulePointer = $"{scope.CurrentPointer}/rules/{ruleIdx}";
+        var rulePointer = DocumentJsonPointer.Child(index: ruleIdx, pointer: DocumentJsonPointer.Child(name: "rules", pointer: scope.CurrentPointer));
 
         scope.SourceMap?.Register(
             jsonPointer: rulePointer,
@@ -121,7 +122,7 @@ public static partial class WorldDocumentEmitter {
                     );
 
                     scope.SourceMap?.Register(
-                        jsonPointer: $"{rulePointer}/gate",
+                        jsonPointer: DocumentJsonPointer.Child(name: "gate", pointer: rulePointer),
                         span: when1.Span
                     );
                     obj["gate"] = CombineGates(existing: (obj["gate"] as JsonObject), newGate: ruleGate);
@@ -129,14 +130,14 @@ public static partial class WorldDocumentEmitter {
                 case LocalStatementNode local:
                     locals ??= [];
                     scope.SourceMap?.Register(
-                        jsonPointer: $"{rulePointer}/locals/{locals.Count}",
+                        jsonPointer: DocumentJsonPointer.Child(index: locals.Count, pointer: DocumentJsonPointer.Child(name: "locals", pointer: rulePointer)),
                         span: local.Span
                     );
                     locals.AppendNode(item: LowerLocal(local: local, scope: stmtScope));
                     break;
                 case DecisionBlockNode decision:
                     scope.SourceMap?.Register(
-                        jsonPointer: $"{rulePointer}/decision",
+                        jsonPointer: DocumentJsonPointer.Child(name: "decision", pointer: rulePointer),
                         span: decision.Span
                     );
                     obj["decision"] = LowerDecisionBlock(
@@ -155,7 +156,7 @@ public static partial class WorldDocumentEmitter {
                 case EffectStatementNode or ExpressionStatementNode:
                     AppendEffect(
                         effects: effects,
-                        pointer: $"{rulePointer}/effects",
+                        pointer: DocumentJsonPointer.Child(name: "effects", pointer: rulePointer),
                         ruleObj: obj,
                         scope: stmtScope,
                         statement: stmt
@@ -279,7 +280,7 @@ public static partial class WorldDocumentEmitter {
     }
 
     private static JsonObject LowerDecisionBlock(DecisionBlockNode decision, DocumentScope scope) {
-        var decisionPointer = $"{scope.CurrentPointer}/decision";
+        var decisionPointer = DocumentJsonPointer.Child(name: "decision", pointer: scope.CurrentPointer);
         var obj = new JsonObject();
         var options = new JsonArray();
         decimal? periodSeconds = null;
@@ -337,7 +338,7 @@ public static partial class WorldDocumentEmitter {
                     break;
                 case InterruptStatementNode interrupt:
                     scope.SourceMap?.Register(
-                        jsonPointer: $"{decisionPointer}/interrupt",
+                        jsonPointer: DocumentJsonPointer.Child(name: "interrupt", pointer: decisionPointer),
                         span: interrupt.Span
                     );
                     obj["interrupt"] = LowerPredicate(
@@ -350,11 +351,11 @@ public static partial class WorldDocumentEmitter {
                     break;
                 case OnNoChoiceBlockNode onNoChoice: {
                         scope.SourceMap?.Register(
-                            jsonPointer: $"{decisionPointer}/onNoChoice",
+                            jsonPointer: DocumentJsonPointer.Child(name: "onNoChoice", pointer: decisionPointer),
                             span: onNoChoice.Span
                         );
                         obj["onNoChoice"] = LowerEffectList(
-                            pointer: $"{decisionPointer}/onNoChoice",
+                            pointer: DocumentJsonPointer.Child(name: "onNoChoice", pointer: decisionPointer),
                             ruleObj: null,
                             scope: scope,
                             statements: onNoChoice.Effects
@@ -363,12 +364,12 @@ public static partial class WorldDocumentEmitter {
                     }
                 case OptionBlockNode option:
                     scope.SourceMap?.Register(
-                        jsonPointer: $"{decisionPointer}/options/{options.Count}",
+                        jsonPointer: DocumentJsonPointer.Child(index: options.Count, pointer: DocumentJsonPointer.Child(name: "options", pointer: decisionPointer)),
                         span: option.Span
                     );
                     options.AppendNode(item: LowerOptionBlock(
                         option: option,
-                        pointer: $"{decisionPointer}/options/{options.Count}",
+                        pointer: DocumentJsonPointer.Child(index: options.Count, pointer: DocumentJsonPointer.Child(name: "options", pointer: decisionPointer)),
                         scope: scope
                     ));
                     break;
@@ -440,7 +441,7 @@ public static partial class WorldDocumentEmitter {
                 case EffectStatementNode or ExpressionStatementNode or ForStatementNode:
                     AppendEffect(
                         effects: effects,
-                        pointer: $"{pointer}/effects",
+                        pointer: DocumentJsonPointer.Child(name: "effects", pointer: pointer),
                         ruleObj: null,
                         scope: scope,
                         statement: stmt
@@ -829,7 +830,7 @@ public static partial class WorldDocumentEmitter {
             scope: scope,
             statements: [statement]
         )) {
-            var element = $"{pointer}/{effects.Count}";
+            var element = DocumentJsonPointer.Child(index: effects.Count, pointer: pointer);
 
             if (LowerEffectStatement(
                 pointer: element,
@@ -978,7 +979,7 @@ public static partial class WorldDocumentEmitter {
             foreach (var nested in body) {
                 AppendEffect(
                     effects: effects,
-                    pointer: $"{pointer}/effects",
+                    pointer: DocumentJsonPointer.Child(name: "effects", pointer: pointer),
                     ruleObj: ruleObj,
                     scope: scope,
                     statement: nested
@@ -1102,7 +1103,7 @@ public static partial class WorldDocumentEmitter {
     // `break` still have nothing to lower onto in a straight-line rule body.
     private static JsonObject LowerIf(IfStatementNode ifStmt, DocumentScope scope, string pointer, JsonObject? ruleObj = null) {
         var thenArr = LowerEffectList(
-            pointer: $"{pointer}/then",
+            pointer: DocumentJsonPointer.Child(name: "then", pointer: pointer),
             ruleObj: ruleObj,
             scope: scope,
             statements: ifStmt.Then
@@ -1119,7 +1120,7 @@ public static partial class WorldDocumentEmitter {
 
         if (ifStmt.Else is { } elseStatements) {
             obj["else"] = LowerEffectList(
-                pointer: $"{pointer}/else",
+                pointer: DocumentJsonPointer.Child(name: "else", pointer: pointer),
                 ruleObj: ruleObj,
                 scope: scope,
                 statements: elseStatements
@@ -1603,7 +1604,7 @@ public static partial class WorldDocumentEmitter {
         var obj = new JsonObject {
             ["$type"] = "transaction",
             ["effects"] = LowerEffectList(
-                pointer: $"{pointer}/effects",
+                pointer: DocumentJsonPointer.Child(name: "effects", pointer: pointer),
                 ruleObj: ruleObj,
                 scope: scope,
                 statements: transaction.MainEffects
@@ -1613,11 +1614,11 @@ public static partial class WorldDocumentEmitter {
         if (transaction.OnFailureEffects is { } onFailure) {
             // The `onFailure` block's own node is the array: its refusals name the array, never one element.
             scope.SourceMap?.Register(
-                jsonPointer: $"{pointer}/onFailure",
+                jsonPointer: DocumentJsonPointer.Child(name: "onFailure", pointer: pointer),
                 span: (transaction.OnFailureSpan ?? transaction.Span)
             );
             obj["onFailure"] = LowerEffectList(
-                pointer: $"{pointer}/onFailure",
+                pointer: DocumentJsonPointer.Child(name: "onFailure", pointer: pointer),
                 ruleObj: ruleObj,
                 scope: scope,
                 statements: onFailure

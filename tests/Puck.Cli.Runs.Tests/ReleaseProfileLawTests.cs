@@ -15,7 +15,7 @@ namespace Puck.Cli.Runs.Tests;
 /// expectation counts, with a resize naming the exact extents its layout slot halves to.
 /// </summary>
 public sealed class ReleaseProfileLawTests {
-    private const string Layout = """{"name":"pipeline","seatCount":0,"slots":[{"camera":null,"height":1,"instance":"ink","width":1,"x":0,"y":0}],"transitionRenderScale":1,"transitionSeconds":0.25}""";
+    private const string Layout = """{"name":"pipeline","seatCount":0,"slots":[{"camera":null,"height":1,"instance":"ink","width":1,"x":0,"y":0}],"transition":{"renderScale":1,"seconds":0.25}}""";
 
     private static JsonObject Valid() => JsonNode.Parse(json: """
         {

@@ -853,6 +853,16 @@ explicit skipped reasons. `coverage.comparisons` gives red, clean and unknown
 sample counts for each attempted comparison; these count witnesses, while the
 banner counts clustered causes. Missing evaluation is **unknown**, never a zero.
 
+The colliders report reads each collider's boundary witnesses against the
+authored field, which takes minutes in a world of many relieved creations. The
+reads run on half the processors. A call that owes its caller an answer before
+they finish (a control attachment's deadline) answers an unfinished report
+instead: one unknown finding, `coverage.pending` naming the colliders still to
+read, nothing retained. The reads already taken are kept, and the next
+`report colliders` call resumes them and, once none remain, answers the report
+one uninterrupted call would have. A collider-set or field edit in between
+starts the reads over.
+
 `world.debug-view colliders` or `world.debug-view contacts` keeps the beauty
 image and adds at most sixteen causal pins, exterior marks and support calipers.
 The banner counts severities and reports pin overflow, including badges that
@@ -951,7 +961,7 @@ member-by-member surface.
 | Type | Role |
 |------|------|
 | `CommandRegistry` | The immutable command catalog and dispatch hub. Aggregates modules and its own three verbs, interns command and map metadata, and dispatches snapshots and text lines. |
-| `CommandForms` | One verb's argument forms, declared once (`CommandForms.Of(verb, form, ...)`): its `Spelling` is what the verb's description contains (the definition refuses one that lacks it), `Usages` is the grammar help publishes, and `Refuse` is the only grammar refusal, naming the form nearest the words typed. `CommandResult.IsGrammar` marks it; a value refusal is `CommandResult.Error`. |
+| `CommandForms` | One verb's argument forms, declared once (`CommandForms.Of(verb, form, ...)`): its `Spelling` is what the verb's description contains (the definition refuses one that lacks it), `Usages` is the grammar help publishes (the only source of a verb's grammar; no description is parsed), and `Refuse` is the only grammar refusal, naming the form nearest the words typed. `CommandResult.IsGrammar` marks it; a value refusal is `CommandResult.Error`. |
 | `CommandDefinition` | Named, typed, invokable command—the shared identity behind every way it can be driven. Its identity-bearing members (`Name`, `TextCommand`, `Description`, `Map`) are readable but settable only inside the assembly, so a `with` expression cannot split a command's dispatch identity from its text identity. Build one through `Verb` or `WithWireArgs`, which refuse a null handler, name, or description at the registration rather than at the first dispatch. |
 | `ICommandModule` | Unit of composition: contributes a set of `CommandDefinition`s. |
 | `CommandContext` | Per-invocation state handed to a handler (value, phase, logical slot, stamped principal, local device, parse result, text, registry). Internal to construct. |

@@ -4,7 +4,9 @@ namespace Puck.World;
 
 /// <summary>The sole grammar for render ceilings, tier floors, pins, automatic mode and echoes.</summary>
 public readonly record struct WorldRenderScaleCommand(string View, WorldRenderScaleOperation Operation, float Scale) {
-    /// <summary>Parses an optional leading view target followed by one operation, refusing surplus arguments.</summary>
+    /// <summary>Parses an optional leading view target followed by one operation, refusing surplus arguments.
+    /// <paramref name="refusal"/> is the value refusal of a pin that cannot be read, and <see langword="null"/> when
+    /// the words fit no form of the verb.</summary>
     public static bool TryParse(in WireArgs args, out WorldRenderScaleCommand command, out string? refusal) {
         var view = "*";
         var start = 0;
@@ -47,7 +49,7 @@ public readonly record struct WorldRenderScaleCommand(string View, WorldRenderSc
             command = command with { Operation = WorldRenderScaleOperation.Ceiling, Scale = ceiling };
             return true;
         }
-        refusal = $"world.render-scale: expected [view] [<scale>|floor <tier>|pin <scale>|auto [on|off]], got '{args.Tail(start: 0)}'";
+        refusal = null;
         return false;
     }
 

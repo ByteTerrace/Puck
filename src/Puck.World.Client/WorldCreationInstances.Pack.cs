@@ -397,9 +397,9 @@ public sealed partial class WorldCreationInstances {
         if (!SameRuns(held: SlotClips, packed: m_slotClipRun)) {
             // A body drawn clipped at a door shows only past the glass, so every change is logged: a body that vanishes
             // away from any door is a straddle test that should not have matched.
-            Console.Error.WriteLine(value: ((m_slotClipBodies.Count == 0)
-                ? "[world.straddle: none]"
-                : $"[world.straddle: {string.Join(separator: ' ', values: m_slotClipRun.Select(selector: (clip, index) => $"body:{m_slotClipBodies[index]} plane=({clip.Plane.X:0.##},{clip.Plane.Y:0.##},{clip.Plane.Z:0.##},{clip.Plane.W:0.##})"))} clipped]"));
+            WorldClientDiagnostics.Report(channel: "world.straddle", text: ((m_slotClipBodies.Count == 0)
+                ? "none"
+                : $"{string.Join(separator: ' ', values: m_slotClipRun.Select(selector: (clip, index) => $"body:{m_slotClipBodies[index]} plane=({clip.Plane.X:0.##},{clip.Plane.Y:0.##},{clip.Plane.Z:0.##},{clip.Plane.W:0.##})"))} clipped"));
             SlotClips = ((m_slotClipRun.Count == 0)
                 ? []
                 : [.. m_slotClipRun]

@@ -168,8 +168,6 @@ template cameraLayout(name) {
         y: 0
       }
     ]
-    transitionRenderScale: 1
-    transitionSeconds: 0
   }
 }
 
@@ -6979,8 +6977,6 @@ views {
         y: 0
       }
     ]
-    transitionRenderScale: 1
-    transitionSeconds: 0
   }
 
   cameraLayout("three-quarter")
@@ -7060,8 +7056,6 @@ views {
         y: 0.5
       }
     ]
-    transitionRenderScale: 1
-    transitionSeconds: 0
   }
 
   // The shoulders from eight sides at once.
@@ -7125,8 +7119,6 @@ views {
         y: 0.5
       }
     ]
-    transitionRenderScale: 1
-    transitionSeconds: 0
   }
 
   // The jetpack from eight sides at once.
@@ -7190,8 +7182,6 @@ views {
         y: 0.5
       }
     ]
-    transitionRenderScale: 1
-    transitionSeconds: 0
   }
 }
 

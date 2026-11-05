@@ -2452,7 +2452,12 @@ fail the stop. A stop's optional `expectedMotion` regular expression must match
 its held body pose and rig; the outdoor stops require the destination instance,
 so a capture before a portal crossing completes fails. A tool is unmeasured when it did not finish within its
 ticks; a stop is unmeasured when the sweep could not reach it. Unmeasured fails
-the run like red. A signal the plan marks `recheck` (the watchdog, the rule
+the run like red. A line that passes its own call deadline is unmeasured with that
+reason and costs the lines after it nothing: the World stays up and the sweep opens
+a new session on its attachment for the next line. A signal whose work outlasts one
+call names a `pending` rule (`coverage.pending > 0`) and `maxAsks`: the sweep asks
+the line again, each ask under the signal's own deadline, while the rule holds, and
+a read still pending after the last ask is unmeasured. A signal the plan marks `recheck` (the watchdog, the rule
 failures, the addons) is read again after the tour as `<name>.after-tour`.
 `--timeout` bounds the whole sweep, an attached World and the scenarios
 included, and an interrupt ends it the same way; the Worlds, the GPU lease and

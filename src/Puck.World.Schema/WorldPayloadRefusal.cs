@@ -133,9 +133,7 @@ public sealed record WorldPayloadRefusal(string Path, string Pointer, DocumentVa
 
         foreach (var step in steps) {
             type = ((type is null) ? null : Descend(node: node, step: step, type: type));
-            node = (step.IsIndex
-                ? DocumentJsonPointer.At(root: node, pointer: $"/{step.Text}")
-                : DocumentJsonPointer.At(root: node, pointer: $"/{DocumentJsonPointer.Escape(value: step.Text)}"));
+            node = DocumentJsonPointer.At(root: node, pointer: DocumentJsonPointer.Child(name: step.Text, pointer: string.Empty));
             if (type is null) {
                 return null;
             }
@@ -206,7 +204,7 @@ public sealed record WorldPayloadRefusal(string Path, string Pointer, DocumentVa
             .Where(predicate: static member => ((member.Access & (WorldModelAccess.Write | WorldModelAccess.Ignored)) == WorldModelAccess.Write))
             .Select(selector: static member => member.Name)
             .ToArray();
-        var near = Nearest(name: steps[^1].Text, candidates: accepted);
+        var near = DocumentNearestNames.Among(candidates: accepted, name: steps[^1].Text);
         var listed = ((near.Length > 0) ? near : ((accepted.Length <= MaxListedMembers) ? accepted : []));
 
         return ((listed.Length == 0)
@@ -214,40 +212,6 @@ public sealed record WorldPayloadRefusal(string Path, string Pointer, DocumentVa
             : $"unknown member; {((near.Length > 0) ? "nearest" : "valid")} members: {string.Join(separator: ", ", values: listed.Select(selector: static name => $"'{name}'"))}");
     }
     private const int MaxListedMembers = 12;
-    private const int MaxNearMembers = 3;
-    // The candidates spelled within a third of the name's length (at least two edits) of it, closest first.
-    private static string[] Nearest(string name, string[] candidates) {
-        var limit = Math.Max(val1: 2, val2: (name.Length / 3));
-
-        return [.. candidates
-            .Select(selector: candidate => (Candidate: candidate, Distance: EditDistance(a: name.ToLowerInvariant(), b: candidate.ToLowerInvariant())))
-            .Where(predicate: pair => (pair.Distance <= limit))
-            .OrderBy(keySelector: static pair => pair.Distance)
-            .ThenBy(keySelector: static pair => pair.Candidate, comparer: StringComparer.Ordinal)
-            .Take(count: MaxNearMembers)
-            .Select(selector: static pair => pair.Candidate)];
-    }
-    // The Levenshtein distance between two names.
-    private static int EditDistance(string a, string b) {
-        var previous = new int[(b.Length + 1)];
-        var current = new int[(b.Length + 1)];
-
-        for (var j = 0; (j <= b.Length); j++) {
-            previous[j] = j;
-        }
-        for (var i = 1; (i <= a.Length); i++) {
-            current[0] = i;
-            for (var j = 1; (j <= b.Length); j++) {
-                current[j] = Math.Min(
-                    val1: Math.Min(val1: (previous[j] + 1), val2: (current[(j - 1)] + 1)),
-                    val2: (previous[(j - 1)] + ((a[(i - 1)] == b[(j - 1)]) ? 0 : 1))
-                );
-            }
-            (previous, current) = (current, previous);
-        }
-
-        return previous[b.Length];
-    }
     // The refusal of a member read through the strict enum converter, which accepts exactly the declared names: the
     // names it accepts against what the document holds, or null when the member is not read that way or holds a name.
     private static string? EnumWords(Type root, List<Step> steps, JsonNode? document) {
@@ -280,7 +244,7 @@ public sealed record WorldPayloadRefusal(string Path, string Pointer, DocumentVa
     private static bool IsStrictConverter(Type? converter) =>
         (converter is { IsGenericType: true }) && (converter.GetGenericTypeDefinition() == typeof(Puck.Abstractions.Documents.StrictEnumConverter<>));
     private static string PointerOf(List<Step> steps) =>
-        string.Concat(values: steps.Select(selector: static step => ('/' + (step.IsIndex ? step.Text : DocumentJsonPointer.Escape(value: step.Text)))));
+        steps.Aggregate(func: static (pointer, step) => DocumentJsonPointer.Child(name: step.Text, pointer: pointer), seed: string.Empty);
     // The refusal's words for required members the document leaves out.
     private static string MissingWords(List<string> missing) => ((missing.Count == 1)
         ? $"missing required member '{missing[0]}'"

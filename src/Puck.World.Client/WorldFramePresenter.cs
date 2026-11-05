@@ -513,7 +513,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     }
     private void ReportFieldExclusion(WorldPlacement placement, string reason) {
         if (m_reportedFieldExclusions.Add(item: (placement.Id, reason))) {
-            Console.Error.WriteLine(value: $"[world.presentation-field: excluded placement '{placement.Id}': {reason}]");
+            WorldClientDiagnostics.Report(channel: "world.presentation-field", text: $"excluded placement '{placement.Id}': {reason}");
         }
     }
     // Publishes the presentation field's evaluator once its build has finished, or waits for it.
@@ -533,7 +533,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     }
     // Placement admission isolates unsupported props. A failure in the remaining combined scene still leaves no field;
     // name it so missing surface targets cannot be mistaken for a probe or rig problem.
-    private static void ReportStaticFieldUnavailable(ArgumentException exception) => Console.Error.WriteLine(value: $"[world.presentation-field: unavailable; camera clearance and surface effectors have no query field: {exception.Message.ReplaceLineEndings(replacementText: " ")}]");
+    private static void ReportStaticFieldUnavailable(ArgumentException exception) => WorldClientDiagnostics.Report(channel: "world.presentation-field", text: $"unavailable; camera clearance and surface effectors have no query field: {exception.Message.ReplaceLineEndings(replacementText: " ")}");
     // The delivery boundary: a definition delivery (scene/screen mutation, swap, or undo) landed since the last frame,
     // so the binder's runtime source machinery reconciles to the new definition BEFORE the host rebuilds the program
     // off the live geometry — cameras FIRST, so a same-delivery View source change resolves the new camera rows.
@@ -634,7 +634,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
 
             if (!m_missingSeatAnchorNarrated[slot]) {
                 m_missingSeatAnchorNarrated[slot] = true;
-                Console.Error.WriteLine(value: $"[world.continuum: seat {(slot + 1)} authority '{route.Endpoint.Identity}' has not delivered body:{route.EntityIndex}; holding the last continuous camera anchor]");
+                WorldClientDiagnostics.Report(channel: "world.continuum", text: $"seat {(slot + 1)} authority '{route.Endpoint.Identity}' has not delivered body:{route.EntityIndex}; holding the last continuous camera anchor");
             }
         } else {
             var fallbackBody = m_anchor.PerceivedBody(slot: slot);
@@ -2093,7 +2093,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             if (!m_noLocalSeatsNarrated) {
                 m_noLocalSeatsNarrated = true;
 
-                Console.Error.WriteLine(value: "[frame] no local seats — presenting the world camera");
+                WorldClientDiagnostics.Report(channel: "frame", text: "no local seats — presenting the world camera");
             }
 
             m_views.Add(item: new SdfViewSnapshot(
@@ -2450,7 +2450,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         try {
             _ = WorldPlacementStamper.PrepareResponses(definition: definition);
         } catch (Exception exception) when ((exception is ArgumentException or InvalidOperationException)) {
-            Console.Error.WriteLine(value: $"[world.presentation: the creations responses show were not prepared ahead; each compiles when first shown: {exception.Message.ReplaceLineEndings(replacementText: " ")}]");
+            WorldClientDiagnostics.Report(channel: "world.presentation", text: $"the creations responses show were not prepared ahead; each compiles when first shown: {exception.Message.ReplaceLineEndings(replacementText: " ")}");
         }
     }
 

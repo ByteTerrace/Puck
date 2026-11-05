@@ -1,3 +1,4 @@
+using Puck.Assets.Documents;
 using System.Text.Json.Nodes;
 using Puck.State;
 using Puck.Transpiler.Ast;
@@ -48,7 +49,7 @@ public static partial class WorldDocumentEmitter {
                 return true;
             }
 
-            scope.SourceMap?.Register(jsonPointer: $"{scope.CurrentPointer}/spawnPoints/{spawnRows.Count}", span: block.Span);
+            scope.SourceMap?.Register(jsonPointer: DocumentJsonPointer.Child(index: spawnRows.Count, pointer: DocumentJsonPointer.Child(name: "spawnPoints", pointer: scope.CurrentPointer)), span: block.Span);
             spawnRows.AppendNode(item: new JsonObject {
                 ["id"] = name,
                 ["position"] = position.DeepClone(),
@@ -92,9 +93,9 @@ public static partial class WorldDocumentEmitter {
             size: sizeArray
         );
 
-        scope.SourceMap?.Register(jsonPointer: $"{scope.CurrentPointer}/prototypes/{prototypes.Count}", span: block.Span);
+        scope.SourceMap?.Register(jsonPointer: DocumentJsonPointer.Child(index: prototypes.Count, pointer: DocumentJsonPointer.Child(name: "prototypes", pointer: scope.CurrentPointer)), span: block.Span);
         prototypes.AppendNode(item: prototype);
-        scope.SourceMap?.Register(jsonPointer: $"{scope.CurrentPointer}/placements/rows/{placements.Count}", span: block.Span);
+        scope.SourceMap?.Register(jsonPointer: DocumentJsonPointer.Child(index: placements.Count, pointer: DocumentJsonPointer.Child(name: "rows", pointer: DocumentJsonPointer.Child(name: "placements", pointer: scope.CurrentPointer))), span: block.Span);
         placements.AppendNode(item: placement);
         groundRows.AppendNode(item: new JsonObject { ["name"] = name, ["center"] = center.DeepClone(), ["size"] = size.DeepClone() });
         return true;

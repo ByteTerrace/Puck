@@ -314,6 +314,7 @@ public sealed class McpAdversarialTests {
                 ("puck_world_start", """{"bogus":1}""", "Invalid argument: bogus."),
                 ("puck_world_start", """{"document":"worlds/debug","checkout":"x","windowed":true,"ownerPlay":false,"holder":"lane","timeoutSeconds":7200}""", "serves no Puck checkout"),
                 ("puck_world_start", """{"timeoutSeconds":7201}""", "Invalid argument: timeoutSeconds."),
+                ("puck_world_start", """{"cacheDir":"relative/cache"}""", "Invalid argument: cacheDir."),
                 ("puck_world_stop", """{"timeoutMs":5}""", "Invalid argument: world."),
                 ("puck_world_stop", """{"world":"1","bogus":1}""", "Invalid argument: bogus."),
                 ("puck_world_stop", """{"world":"1"}""", "names no World this adapter started"),

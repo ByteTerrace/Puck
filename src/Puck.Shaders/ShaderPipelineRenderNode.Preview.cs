@@ -411,7 +411,9 @@ public sealed partial class ShaderPipelineRenderNode {
             return null;
         }
         // Records the draw of one slot into the frame's list. sourceBarrier is the node's barrier before the source is
-        // sampled; the preview's own targets are private to it and are tracked here.
+        // sampled; the preview's own targets are private to it and are tracked here. The recording states the target's
+        // old layout from what the last submitted recording left it in, so a slot counts as drawn only once its list is
+        // submitted (Submitted).
         public void Record(ShaderPipelineBarrier sourceBarrier, ShaderPipelineExternalImage image, int slot, nint command) {
             var sourceImageHandle = image.ImageHandle;
             var sourceImageView = image.ImageViewHandle;
@@ -500,7 +502,8 @@ public sealed partial class ShaderPipelineRenderNode {
                 GpuStage.ColorAttachmentOutput,
                 GpuStage.ComputeShader | GpuStage.FragmentShader
             );
-            m_targetInitialized[slot] = true;
         }
+        // Marks a slot's target as holding the output layout, once the list Record wrote into reached the queue.
+        public void Submitted(int slot) => m_targetInitialized[slot] = true;
     }
 }

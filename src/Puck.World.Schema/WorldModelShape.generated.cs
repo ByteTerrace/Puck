@@ -6387,8 +6387,7 @@ public static partial class WorldModelShape {
             [
                 M("name", typeof(global::System.String), typeof(global::Puck.World.WorldViewLayout), "Name", Read | Write | Required, static value => ((global::Puck.World.WorldViewLayout)value).Name),
                 M("seatCount", typeof(global::System.Int32), typeof(global::Puck.World.WorldViewLayout), "SeatCount", Read | Write, static value => ((global::Puck.World.WorldViewLayout)value).SeatCount),
-                M("transitionSeconds", typeof(global::System.Single), typeof(global::Puck.World.WorldViewLayout), "TransitionSeconds", Read | Write, static value => ((global::Puck.World.WorldViewLayout)value).TransitionSeconds),
-                M("transitionRenderScale", typeof(global::System.Single), typeof(global::Puck.World.WorldViewLayout), "TransitionRenderScale", Read | Write, static value => ((global::Puck.World.WorldViewLayout)value).TransitionRenderScale),
+                M("transition", typeof(global::Puck.World.WorldViewTransition), typeof(global::Puck.World.WorldViewLayout), "Transition", Read | Write, static value => ((global::Puck.World.WorldViewLayout)value).Transition),
                 M("slots", typeof(global::System.Collections.Generic.IReadOnlyList<global::Puck.World.WorldViewSlot>), typeof(global::Puck.World.WorldViewLayout), "Slots", Read | Write | Required, static value => ((global::Puck.World.WorldViewLayout)value).Slots),
             ],
             []),
