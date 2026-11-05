@@ -145,10 +145,8 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         SdfMaterialData material = sdfMaterialLoad(sdfMeshMaterial(draw, triangleIndex));
         float ior = max(material.ior, 1.0);
         uint word = sdfGlassSumWord(pixel, extent);
-        float thickness = sdfGlassThickness(asint(sdfGlassSums[word]), asint(sdfGlassSums[(word + 1u)]), t, opaque);
-        float3 opticalDepth = float3(asfloat(sdfGlassSums[word + 2u]), asfloat(sdfGlassSums[word + 3u]),
-            asfloat(sdfGlassSums[word + 4u]));
-        float3 transmittance = exp(-max(opticalDepth, 0.0));
+        float thickness = sdfGlassThicknessAt(word, t, opaque);
+        float3 transmittance = exp(-max(sdfGlassOpticalDepthAt(word), 0.0));
 
         // The ray bent into the glass leaves it `thickness` along, then carries on parallel to the pixel's ray to the
         // opaque hit's depth: where that lands on the render grid is where the light through the glass is read.
