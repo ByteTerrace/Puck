@@ -310,16 +310,25 @@ public sealed class WorldBodyFactOperand : WorldFactOperand {
     /// <param name="cost">The conservative work units one read costs.</param>
     /// <param name="read">The world reader's own read of the same fact.</param>
     /// <param name="describe">The authored channel, for the read-back.</param>
-    public WorldBodyFactOperand(CellKind valueKind, WorldBodyRef bodyA, WorldBodyRef bodyB, int rowOrdinal, long cost, Func<IWorldFacts, RuleFact> read, string describe) : base(valueKind: valueKind) {
+    /// <param name="payload">The payload <paramref name="read"/> hands the world reader, when it is one, so a host can
+    /// name what the read depends on (<see cref="IStateReader.TryScheduleFact"/>); <see langword="null"/> otherwise.</param>
+    public WorldBodyFactOperand(CellKind valueKind, WorldBodyRef bodyA, WorldBodyRef bodyB, int rowOrdinal, long cost, Func<IWorldFacts, RuleFact> read, string describe, WorldOperandFact? payload = null) : base(valueKind: valueKind) {
         ArgumentNullException.ThrowIfNull(argument: read);
 
         BodyA = bodyA;
         BodyB = bodyB;
         Describe = describe;
+        Payload = payload;
         RowOrdinal = rowOrdinal;
         m_cost = cost;
         m_read = read;
     }
+
+    /// <summary>Gets the payload the read hands the world reader, or <see langword="null"/> when the read builds its own.</summary>
+    public WorldOperandFact? Payload { get; }
+
+    /// <inheritdoc/>
+    public override string ToString() => Describe;
 
     /// <summary>Gets the first body reference.</summary>
     public WorldBodyRef BodyA { get; }

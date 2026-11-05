@@ -56,11 +56,10 @@ structural reasons, each of which the rounds found one instance of:
    `worlds/debug/rule-faults-tests.puck` is the witness W9 grows from. The
    register still lives on a replaceable object, so the reason stands for the
    design. `STALE001` ([hazards](../development/hazards.md#a-reference-captured-across-a-replacement))
-   names the two captures left: `RuleEvaluator.EvaluateOnce` leaves its scope on
-   the scratch it entered before the evaluation fired, and `RunFixpoint` ends its
-   change window on the arena it took before its members fired
-   (`src/Puck.State.Rules/Evaluation/RuleEvaluator.cs:510`,
-   `RuleEvaluator.Groups.cs:145`).
+   holds every capture across a replacement as a build error: an evaluation's
+   own scope covers judging alone (`RuleEvaluator.Judge`), which fires nothing,
+   and `RunFixpoint` ends its window on the arena served after the pass
+   (`RuleEvaluator.EndPassWindow`).
 3. **Deciding places must remember to read it.** `RuleEvaluator.cs:580` and
    `:641`, `WorldRuleHost.Decisions.cs:214` and `:257`, `RuleEvaluation.cs:133`
    and `:179` each poll `RaisedFault`; `GateOpen(faulted: out _)` discards its

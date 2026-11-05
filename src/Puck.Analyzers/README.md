@@ -75,8 +75,8 @@ that hands out the root carries it. STALE003 holds a method that assigns a field
 a property serves (the live pointer, as `WorldServer.Arena` serves `m_arena`)
 outside a constructor to the mark. A replacement reached through a delegate, an
 event, reflection, a constructor or a framework interface, and a capture held in
-another object's field, are outside what the rule sees. STALE001 is a warning,
-kept out of `TreatWarningsAsErrors`, while its open findings stand
+another object's field, are outside what the rule sees. Like every warning,
+STALE001 fails the build under `TreatWarningsAsErrors`
 ([hazards](../../docs/development/hazards.md#a-reference-captured-across-a-replacement)).
 
 IVT001 refuses every `InternalsVisibleTo` grant, a test assembly included. It
