@@ -12,6 +12,62 @@ namespace Puck.DirectX.Tests;
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed class DirectXSubmissionBatchLawTests {
     [Fact]
+    public void EmptyFencedAndBlockingSubmissionsCoverEarlierWorkAndKeepTheBatchOpen() {
+        using var context = DirectXTestDevices.Warp();
+        var gpu = context.Services;
+        using var commands = gpu.CommandPoolFactory.Create(name: new GpuObjectName(owner: "batch law", part: "empty boundary"));
+        using var earlier = gpu.QueueSubmitter.CreateSubmissionFence();
+        using var empty = gpu.QueueSubmitter.CreateSubmissionFence();
+        Record(gpu, commands);
+        gpu.QueueSubmitter.BeginBatch();
+        try {
+            gpu.QueueSubmitter.Submit([commands.CommandBufferHandle], earlier);
+            gpu.QueueSubmitter.Submit([], empty);
+            empty.Wait();
+            Assert.True(earlier.IsSignaled);
+            earlier.Wait();
+            gpu.QueueSubmitter.Submit([commands.CommandBufferHandle], earlier);
+            Assert.False(earlier.IsSignaled);
+            gpu.QueueSubmitter.SubmitAndWait([]);
+            Assert.True(earlier.IsSignaled);
+            earlier.Wait();
+            gpu.QueueSubmitter.Submit([commands.CommandBufferHandle], earlier);
+            Assert.False(earlier.IsSignaled);
+        } finally {
+            gpu.QueueSubmitter.FlushBatch();
+        }
+        earlier.Wait();
+    }
+
+    [Fact]
+    public void BackgroundWorkBetweenFrameListsSharesTheirOrderAndOwnerLifetime() {
+        using var context = DirectXTestDevices.Warp();
+        var gpu = context.Services;
+        using var first = gpu.CommandPoolFactory.Create(name: new GpuObjectName(owner: "batch law", part: "frame first"));
+        using var work = gpu.CommandPoolFactory.Create(name: new GpuObjectName(owner: "batch law", part: "background"));
+        using var last = gpu.CommandPoolFactory.Create(name: new GpuObjectName(owner: "batch law", part: "frame last"));
+        using var before = gpu.QueueSubmitter.CreateSubmissionFence();
+        using var background = gpu.QueueSubmitter.CreateSubmissionFence();
+        using var owner = gpu.QueueSubmitter.CreateSubmissionFence();
+        Record(gpu, first);
+        Record(gpu, work);
+        Record(gpu, last);
+        gpu.QueueSubmitter.BeginBatch();
+        try {
+            gpu.QueueSubmitter.Submit([first.CommandBufferHandle], before);
+            gpu.QueueSubmitter.Submit([work.CommandBufferHandle], background);
+            background.Wait();
+            Assert.True(before.IsSignaled);
+            gpu.QueueSubmitter.Submit([last.CommandBufferHandle], owner);
+            Assert.False(owner.IsSignaled);
+        } finally {
+            gpu.QueueSubmitter.FlushBatch();
+        }
+        owner.Dispose();
+        before.Wait();
+    }
+
+    [Fact]
     public void AReleaseThatDrainsTheQueueInsideABatchCoversTheListsDeferredBeforeIt() {
         using var context = DirectXTestDevices.Warp();
         var gpu = context.Services;
