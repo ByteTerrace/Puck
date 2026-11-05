@@ -9,6 +9,7 @@ documents remain the implementation sources.
 
 | Document or package | Scope | Description |
 |---|---|---|
+| [Caldera water pack](caldera-water-pack/README.md) | C3 water and visible melt | Six B-based references for glacier/lake, falls, river/bridge/pool, reservoir gauge and a matched-camera three-hour end state. |
 | [Canyon discovery gallery](canyon-discovery-pack/README.md) | Major demo layout and interaction design | B-based portal court, sixteen-station shape workshop, Wonderland/link lab, six-game commons and studio/trail. |
 | [Canyon workshop environment pack](canyon-workshop-pack/README.md) | Selected valley and gallery direction | B-based environment views, interior scenes, construction details, and modeller handoff. |
 | [Valley and gallery visual references](valley-and-gallery.md) | Environment direction and real-life references | Source references, initial comparisons, and the selected B direction for a painterly, cartoony futuristic valley and gallery. |
@@ -30,6 +31,10 @@ checking partner, covering:
 - the character's fixed facts.
 
 A panel that fails is regenerated or removed, never kept with a caveat.
+
+For the [caldera water pack](caldera-water-pack/review.md), the owner explicitly
+assigns the primary artist as the deciding judge. Its written audit records
+that scoped arrangement and does not claim checking-partner approval.
 
 ## Authored avatars
 
