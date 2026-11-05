@@ -103,7 +103,7 @@ public sealed class SdfMeshStore {
     /// <param name="identity">The bake's identity.</param>
     /// <param name="geometry">The group's geometry.</param>
     /// <param name="mesh">The mesh, or null when a sound entry records that the bake found no surface.</param>
-    /// <param name="materials">The group's material ids, when this returns <see langword="true"/>.</param>
+    /// <param name="materials">The stored canonical ids by material place; the library maps them into the taking group's palette.</param>
     /// <param name="refusal">Why a held entry was refused, or <see langword="null"/> when there was none to read.</param>
     /// <returns><see langword="true"/> when the store held a sound entry.</returns>
     public bool TryRead(UInt128 identity, SdfMeshGeometry geometry, out SdfMesh? mesh, out int[] materials, out string? refusal) {
@@ -124,7 +124,7 @@ public sealed class SdfMeshStore {
     /// <param name="identity">The bake's identity.</param>
     /// <param name="geometry">The group's geometry.</param>
     /// <param name="mesh">The mesh, or null when a sound entry records that the bake found no surface.</param>
-    /// <param name="materials">The group's material ids, when this returns <see langword="true"/>.</param>
+    /// <param name="materials">The stored canonical ids by material place; the library maps them into the taking group's palette.</param>
     /// <param name="refusal">Why a held entry was refused, or <see langword="null"/> when there was none to read.</param>
     /// <returns><see langword="true"/> when the store held a sound entry.</returns>
     public bool TryPeek(UInt128 identity, SdfMeshGeometry geometry, out SdfMesh? mesh, out int[] materials, out string? refusal) =>
@@ -151,7 +151,7 @@ public sealed class SdfMeshStore {
     /// entries.</summary>
     /// <param name="path">The entry's file (<see cref="EntryPaths"/>).</param>
     /// <param name="mesh">The mesh, or null when a sound entry records that the bake found no surface.</param>
-    /// <param name="materials">The group's material ids, when this returns <see langword="true"/>.</param>
+    /// <param name="materials">The stored canonical ids by material place; the library maps them into the taking group's palette.</param>
     /// <returns><see langword="true"/> when the file holds a sound entry.</returns>
     /// <exception cref="ArgumentException"><paramref name="path"/> is <see langword="null"/>, empty or white
     /// space.</exception>

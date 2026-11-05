@@ -21,10 +21,12 @@ Pausing or enabling lockstep after attachment is too late to control those
 initial inputs. Keep the backend and built source state fixed across repeats.
 
 Compare the key sets before comparing each key's decompressed payload. A
-different pose can legitimately produce a different key; a changed palette
-registration can change absolute material ids in a payload whose geometry key
-uses material places. Report these separately from a differing mesh at identical
-inputs. Trace a varying key back through `SdfMeshBakeGroup` and its saved poses,
+different pose can legitimately produce a different key. The store codec maps
+material ids to canonical places before writing every chunk and level, so a
+program's palette registration order cannot change a keyed payload. The library
+maps those places into the loading program's palette. Ids outside the group's
+palette retain their values and are reserved before canonical ids are chosen,
+so they cannot collide with a place. Trace a varying key back through `SdfMeshBakeGroup` and its saved poses,
 and use `puck mesh audit --cpu --group ...` to separate CPU contour work from
 device sampling. Do not infer a GPU race from a whole-store hash alone.
 
