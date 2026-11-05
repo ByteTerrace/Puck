@@ -63,7 +63,8 @@ bool sdfProbeTriangleHit(float3 origin, float3 direction, float3 v0, float3 e1, 
     distance = dot(e2, q) * inverse;
     return distance > 1.0e-4 && distance < maximum;
 }
-bool sdfProbeIntersect(float3 origin, float3 direction, float maximum, uint lane, out float distance, out float3 normal, out uint material, out uint2 identity) {
+// One walk for nearest-hit and boolean visibility. The latter ends at its first accepted two-sided triangle.
+bool sdfProbeWalk(float3 origin, float3 direction, float maximum, uint lane, bool anyHit, out float distance, out float3 normal, out uint material, out uint2 identity) {
     distance = maximum; normal = 0; material = 0;
     identity = uint2(0xffffffffu, 0xffffffffu);
     uint root = sdfProbeScene[0];
@@ -112,6 +113,7 @@ bool sdfProbeIntersect(float3 origin, float3 direction, float maximum, uint lane
                     sdfProbeTriangle(instance, primitive, v0, e1, e2);
                     float hit;
                     if (sdfProbeTriangleHit(localOrigin, localDirection, v0, e1, e2, distance, hit)) {
+                        if (anyHit) { return true; }
                         distance = hit; hitInstance = instance; hitTriangle = primitive;
                     }
                 }
@@ -132,6 +134,13 @@ bool sdfProbeIntersect(float3 origin, float3 direction, float maximum, uint lane
     uint materials = sdfProbeScene[hitInstance + SDF_PROBE_GEOMETRY_WORD + 2];
     material = sdfProbeScene[hitInstance + SDF_PROBE_GEOMETRY_WORD + 3] + (materials == 0xffffffffu ? 0 : sdfMeshRegion[materials + hitTriangle]);
     return true;
+}
+bool sdfProbeIntersect(float3 origin, float3 direction, float maximum, uint lane, out float distance, out float3 normal, out uint material, out uint2 identity) {
+    return sdfProbeWalk(origin, direction, maximum, lane, false, distance, normal, material, identity);
+}
+bool sdfProbeOccluded(float3 origin, float3 direction, float maximum, uint lane) {
+    float distance; float3 normal; uint material; uint2 identity;
+    return sdfProbeWalk(origin, direction, maximum, lane, true, distance, normal, material, identity);
 }
 uint2 sdfProbeHit(float3 origin, float3 direction, float maximum, uint lane, out uint2 identity) {
     float distance; float3 normal; uint material;

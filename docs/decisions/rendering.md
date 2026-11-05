@@ -1094,6 +1094,12 @@ visible until its replacement is ready. Camera exposure queries use the same
 service and shading function. CPU traversal and shading remain the diagnostic
 reference, and CPU nearest-surface and short clearance queries still place probes.
 
+Visibility is an any-hit query: GPU `sdfProbeOccluded` and CPU `Unblocked`
+stop at the first accepted triangle, sharing their nearest-hit walk's node
+and triangle tests. Shadows, light bits and camera visibility use this door.
+The budget diagnostic samples median and oldest lighting age per level so a
+coarse window cannot hide the finest window's response time.
+
 Software compute is the baseline on both backends; no ray-tracing hardware is
 required. The trace device law requires exact identities and discrete flags,
 scene-scaled float tolerance and independently intersected near ties, with an

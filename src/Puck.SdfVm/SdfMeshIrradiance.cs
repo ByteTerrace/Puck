@@ -1051,7 +1051,31 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     }
     // The budget and the lighting's age, as key=value pairs; under the gate.
     private string DescribeAge() => string.Create(provider: CultureInfo.InvariantCulture,
-        handler: $"budget-relight={((m_budget.Relight > 0) ? m_budget.Relight.ToString(provider: CultureInfo.InvariantCulture) : "unbounded")} budget-trace={((m_budget.Trace > 0) ? m_budget.Trace.ToString(provider: CultureInfo.InvariantCulture) : "unbounded")} age-target={((m_budget.Age > 0f) ? m_budget.Age.ToString(format: "0.##", provider: CultureInfo.InvariantCulture) : "none")} age-p50={m_ageMedian:0.##} age-max={m_ageMax:0.##} relit-per-second={m_cycleRate:0}");
+        handler: $"budget-relight={((m_budget.Relight > 0) ? m_budget.Relight.ToString(provider: CultureInfo.InvariantCulture) : "unbounded")} budget-trace={((m_budget.Trace > 0) ? m_budget.Trace.ToString(provider: CultureInfo.InvariantCulture) : "unbounded")} age-target={((m_budget.Age > 0f) ? m_budget.Age.ToString(format: "0.##", provider: CultureInfo.InvariantCulture) : "none")} age-p50={m_ageMedian:0.##} age-max={m_ageMax:0.##} relit-per-second={m_cycleRate:0} {DescribeLevelAges()}");
+
+    // Sample at the diagnostic read, rather than reporting the ages from the last work-list rebuild.
+    private string DescribeLevelAges() {
+        if (m_lighting is null) { return ""; }
+        var now = Stopwatch.GetTimestamp();
+        var descriptions = new List<string>();
+        for (var level = 0; level < m_levels.Length; level++) {
+            var low = m_levels[level].Low;
+            var dims = m_layout.DimsOf(level);
+            var ages = new List<float>();
+            for (var z = low.Z; z < low.Z + dims.Z; z++) {
+                for (var y = low.Y; y < low.Y + dims.Y; y++) {
+                    for (var x = low.X; x < low.X + dims.X; x++) {
+                        if (!m_levels[level].Cache.TryGetValue((x, y, z), out var probe)) { continue; }
+                        var next = Math.Clamp(probe.Lighting + 1 - m_versionBase, 0, m_versionTimes.Count - 1);
+                        ages.Add(probe.Lighting == m_lightingVersion ? 0 : (float)Stopwatch.GetElapsedTime(m_versionTimes[next], now).TotalSeconds);
+                    }
+                }
+            }
+            ages.Sort();
+            descriptions.Add(FormattableString.Invariant($"level-{level}-age-p50={(ages.Count == 0 ? 0 : ages[ages.Count / 2]):0.###} level-{level}-age-max={(ages.Count == 0 ? 0 : ages[^1]):0.###}"));
+        }
+        return string.Join(' ', descriptions);
+    }
 
     /// <summary>Describes the volume's cost sheet for <c>world.budget</c>: its probes per level, the bytes a probe takes in
     /// the table and in the CPU cache, the budget each frame grants, and the lighting age the current scene settles

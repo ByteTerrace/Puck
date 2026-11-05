@@ -15,6 +15,13 @@ backend. Runtime trace, relight, selection and exposure queries use
 backends. CPU `TraceHits` and `Relight` remain reference/diagnostic paths;
 placement still uses CPU nearest-surface and short clearance queries.
 
+Boolean visibility uses `sdfProbeOccluded` through the same `sdfProbeWalk` node
+and triangle tests as `sdfProbeIntersect`, returning at the first accepted
+triangle. `probeClear` uses that entry for shadows, light bits and the meter.
+The CPU twin is `Unblocked` through `Walk` and `ILeaves` any-hit leaves.
+`world.budget` samples per-level median and maximum lighting ages when read,
+in addition to the work-list cycle's combined ages.
+
 The runtime streams the existing scene's nodes and leaf indices through a
 `GpuRegion` source, without a second packed hierarchy on the CPU. One admitted
 query owns the shared scene and feedback regions until its fence completes;
