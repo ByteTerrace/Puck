@@ -3268,10 +3268,7 @@ Monitor hook check remain supporting work alongside the landscape priority.
     the repository records.
 
 - [low] The hazard detectors' follow-ups ([hazards](../development/hazards.md)):
-  turn STALE001 into an error once `RuleEvaluator.EvaluateOnce` and
-  `RunFixpoint` stop reading a captured scratch and arena (the rule-faults
-  plan's step 4 removes the first); mark the next replaceable family when one
-  appears (a GPU device lost and recreated is the likely one); and triage the
+  mark the next replaceable family when one appears (a GPU device lost and recreated is the likely one); and triage the
   rest of `puck scan --only clones` below the heaviest thirty clusters of `src`
   and `tests`, which this pass did not read. A C# and HLSL formula pair has no
   detector: the two languages share no tree, so an agreement law per pair

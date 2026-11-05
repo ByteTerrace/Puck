@@ -135,7 +135,7 @@ moving the work after the call into a method of its own that reads it there
 - `[Replaces(typeof(StateArena))]` on a member that can swap it:
   `WorldServer.AdoptPreparedArena`, `IEffectHost.CommitTransactional`, and the
   members the rule below requires.
-- **STALE001** (warning): a local or parameter of a replaceable type read, on a
+- **STALE001**: a local or parameter of a replaceable type read, on a
   path of the method's control flow graph, after a call that replaces its root,
   with no new value written between. The analyzer follows calls inside one
   compilation on its own. A variable handed to the replacing call is exempt,
@@ -157,8 +157,8 @@ that cannot see `StateArena` (`IFixedStepSimulation.Step` in `Puck.Hosting`,
 `IWorldGrain.ActivateAsync` in `Puck.Actors`) carries
 `[Replaces(typeof(object))]`, which covers every root. Test assemblies are not
 held to STALE001: a test keeps the retired arena on purpose, or drives a host
-whose commit never replaces. STALE001 stays a warning while the findings above
-are open; it turns into an error when they close.
+whose commit never replaces. STALE001 is an error like every other warning
+(`TreatWarningsAsErrors`).
 
 What the rule cannot see: a replacement reached through a delegate, an event,
 reflection or a constructor; a capture held in another object's field; dispatch
