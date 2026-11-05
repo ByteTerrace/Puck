@@ -40,13 +40,13 @@ public sealed class DeckEngineLawTests {
         var catalog = TestMachines.Catalog();
 
         Assert.True(condition: catalog.IsRegistered(engineId: HumbleGamingDeckEngine.EngineId));
-        Assert.False(condition: catalog.HasContentProvider(engineId: HumbleGamingDeckEngine.EngineId));
+        Assert.True(condition: catalog.HasContentProvider(engineId: HumbleGamingDeckEngine.EngineId));
 
         var document = Fixtures.BuildDocument();
         var deck = new WorldMachine(
             "deck",
             HumbleGamingDeckEngine.EngineId,
-            JsonSerializer.SerializeToElement(new { schema = "puck.humble-gaming-deck.configuration.v1", content = new { path = Cartridge(file: "colour-bars.nes") } })
+            JsonSerializer.SerializeToElement(new { schema = "puck.humble-gaming-deck.configuration.v1", content = new { path = Cartridge(file: "colour-bars.deck") } })
         );
         var display = Screen(
             route: Engageable,
@@ -126,7 +126,7 @@ public sealed class DeckEngineLawTests {
         );
 
         using var configuration = JsonDocument.Parse(json: "{\"schema\":\"puck.humble-gaming-deck.configuration.v1\"}");
-        using var payload = JsonDocument.Parse(json: "{\"schema\":\"puck.humble-gaming-deck.content-insert.v1\",\"content\":{\"path\":\"moving-sprite.nes\"}}");
+        using var payload = JsonDocument.Parse(json: "{\"schema\":\"puck.humble-gaming-deck.content-insert.v1\",\"content\":{\"path\":\"moving-sprite.deck\"}}");
         var inserted = Assert.IsType<MachineOperationPreparation.Replacement>(@object: engine.PrepareOperation(
             current: new MachineCreationRequest(
                 Assets: new Dictionary<string, PreparedMachineAsset>(),
@@ -139,7 +139,7 @@ public sealed class DeckEngineLawTests {
         ));
 
         Assert.Equal(
-            expected: "moving-sprite.nes",
+            expected: "moving-sprite.deck",
             actual: inserted.Configuration.GetProperty(propertyName: "content").GetProperty(propertyName: "path").GetString()
         );
     }

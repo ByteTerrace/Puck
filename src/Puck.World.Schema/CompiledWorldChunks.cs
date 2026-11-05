@@ -110,10 +110,36 @@ public sealed class CompiledWorldContext {
 /// </summary>
 public sealed class CompiledWorldChunks : IReadOnlyList<ICompiledWorldChunk> {
     private readonly ICompiledWorldChunk[] m_chunks;
+    private readonly Lazy<CodeClosure> m_code;
 
     private CompiledWorldChunks(ICompiledWorldChunk[] chunks) {
         m_chunks = chunks;
+        m_code = new Lazy<CodeClosure>(valueFactory: () => CodeClosure.Of(directory: AppContext.BaseDirectory,
+            roots: [.. m_chunks.SelectMany(selector: ProducerRoots).Distinct()],
+            stopTypes: new HashSet<string>(collection: [typeof(CompiledWorld).FullName!, typeof(CompiledWorldChunks).FullName!, typeof(CodeClosure).FullName!], comparer: StringComparer.Ordinal)));
     }
+
+    private static IEnumerable<(string Assembly, string Type, string? Method)> ProducerRoots(ICompiledWorldChunk chunk) {
+        var type = chunk.GetType();
+        var initializers = new List<System.Reflection.MethodBase>();
+        for (var initializing = type; initializing is not null; initializing = initializing.BaseType) {
+            if (initializing.TypeInitializer is { } initializer) { initializers.Add(item: initializer); }
+        }
+        var methods = type.GetInterfaceMap(interfaceType: typeof(ICompiledWorldChunk)).TargetMethods.Cast<System.Reflection.MethodBase>()
+            .Concat(second: type.GetConstructors(bindingAttr: System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance))
+            .Concat(second: initializers);
+        foreach (var method in methods) {
+            var owner = method.DeclaringType!;
+            yield return (owner.Assembly.GetName().Name!, owner.FullName!, method.Name);
+        }
+    }
+
+    /// <summary>Gets the code and layouts deriving this registry's chunks. Each producer's contract methods,
+    /// constructors and type initializer are roots; unrelated helpers join only when those entries reach them.</summary>
+    public CodeClosure Code => m_code.Value;
+
+    /// <summary>Gets the deriving code identity, including hot-reload updates to types its closure reads.</summary>
+    public string EngineBuild => AssetContentHash.Compute(content: Encoding.UTF8.GetBytes(s: $"{Code.Hash:x32}\n{Puck.Abstractions.CodeRevision.AppliedTo(reads: Code.Reads)}")).ToString();
 
     /// <summary>Gets the standard derivations: <see cref="DefinitionChunk"/>, <see cref="AssetChunk"/> and <see cref="CurvatureChunk"/>.</summary>
     public static CompiledWorldChunks Standard { get; } = new(chunks: [DefinitionChunk.Instance, AssetChunk.Instance, CurvatureChunk.Instance]);

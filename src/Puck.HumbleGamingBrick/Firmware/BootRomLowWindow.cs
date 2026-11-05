@@ -1,4 +1,4 @@
-namespace Puck.HumbleGamingBrick.Forge;
+namespace Puck.HumbleGamingBrick;
 
 /// <summary>
 /// The Color image's low window past its entry jump. The Color overlay covers <c>0x0000</c>-<c>0x00FF</c> as well as

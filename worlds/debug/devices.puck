@@ -1202,7 +1202,7 @@ machines [
     configuration {
       schema: "puck.humble-gaming-deck.configuration.v1"
       content {
-        path: "cartridges/deck/colour-bars.nes"
+        path: "cartridges/deck/colour-bars.deck"
       }
     }
     contentFolders ["cartridges/deck", "../../roms/hgd"]

@@ -1,4 +1,4 @@
-namespace Puck.HumbleGamingBrick.Forge;
+namespace Puck.HumbleGamingBrick;
 
 /// <summary>
 /// Builds the throwaway cartridge a boot image is booted against while its timing is solved. It carries a real logo and

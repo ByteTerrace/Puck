@@ -1,7 +1,8 @@
 # Puck.HumbleGamingBrick.Forge
 
 Puck.HumbleGamingBrick.Forge compiles `puck.cartridge.v1` documents into native
-CGB ROMs, providing SM83 code emission, tile encoders, and boot-ROM tooling.
+CGB ROMs with tile encoders and the shared SM83 emitter in `Puck.HumbleGamingBrick`.
+The core package owns startup firmware generation and caching.
 
 ## Documentation
 

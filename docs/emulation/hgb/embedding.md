@@ -67,7 +67,7 @@ token (`dmg0`, `dmgb`, `dmgc`, `mgb`, `sgb`, `sgb2`, `cgb0`, `cgba`, `cgbb`,
 
 The screen engine and the convenience `HumbleGamingBrickCore(model, cartridgeRom)`
 constructor cold-boot through bundled Puck firmware. Each hardware revision has
-its own generated image, embedded in the runtime package: consumers do not need
+its own image, derived and calibrated in process on a cache miss: consumers do not need
 Forge, an assembler, or a separate firmware download. `HgbFirmware.GetImage(model)`
 returns a private copy. Its generation and native presentation are owned by the
 [Forge firmware guide](../../../src/Puck.HumbleGamingBrick.Forge/README.md).

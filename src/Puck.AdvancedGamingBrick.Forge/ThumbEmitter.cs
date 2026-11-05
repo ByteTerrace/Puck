@@ -1,4 +1,4 @@
-using Puck.GamingBricks.Forge;
+using Puck.Assets;
 
 namespace Puck.AdvancedGamingBrick.Forge;
 

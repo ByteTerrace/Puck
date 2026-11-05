@@ -33,7 +33,7 @@ machines [
     engine: "humble-gaming-deck"
     configuration {
       schema: "puck.humble-gaming-deck.configuration.v1"
-      content { path: "cartridges/deck/colour-bars.nes" }
+      content { path: "cartridges/deck/colour-bars.deck" }
     }
     contentFolders ["cartridges/deck"]
     preferFolderDefault: false
