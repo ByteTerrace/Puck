@@ -133,15 +133,23 @@ public sealed partial class SdfWorldPassesLawTests {
 
         for (var frame = 0; (frame < 12); frame++) { rig.Produce(); }
         Assert.True(condition: rig.Stood());
-        var frames = rig.HistoryFrames();
+
+        var completed = 0u;
 
         for (var frame = 0; (frame < 12); frame++) {
             rig.SourceFrame.Sky.First<SdfSkyClouds>().DriftOffset = new Vector2(x: (frame + 0.1f), y: 0f);
             rig.SourceFrame = rig.SourceFrame with { };
             rig.Produce();
             Assert.Equal(expected: new[] { SdfWorldPackage.Parts.Sky, SdfWorldPackage.Parts.Composite }, actual: Executed(work: CadenceWork(rig: rig)));
-            // The last resolve block precedes its completed sample; a sky-only block sees that completed count.
-            Assert.Equal(expected: (frames + 1u), actual: rig.HistoryFrames());
+            // A sky-only block carries the history's completed sample count, a converged period of samples, and no
+            // sky-only frame advances it. The rig's readiness loop renders as many frames as its asynchronous builds
+            // take, so the last block before the drift may be a resolve's (the count before its sample completed) or a
+            // later frame's (the count after): the drift's own blocks are the reference.
+            if (frame == 0) {
+                completed = rig.HistoryFrames();
+                Assert.True(condition: (completed >= SdfWorldPackage.TemporalPeriod), userMessage: $"completed samples {completed}");
+            }
+            Assert.Equal(expected: completed, actual: rig.HistoryFrames());
         }
         Assert.Empty(collection: rig.StateConflicts);
     }

@@ -49,7 +49,7 @@ public sealed class SdfMeshIrradianceGatherDeviceLawTests {
     private readonly record struct Receiver(Vector3 Point, Vector3 Normal);
 
     private static void Verify(GpuDeviceServices services, string extension) {
-        var volume = new SdfMeshIrradiance();
+        using var volume = new SdfMeshIrradiance();
         var (parameters, words) = Trace(volume: volume, frame: Hall());
         var receivers = Receivers();
         var results = Run(extension: extension, parameters: parameters, receivers: receivers, services: services, words: words);

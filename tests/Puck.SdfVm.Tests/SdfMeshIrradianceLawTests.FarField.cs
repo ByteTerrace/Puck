@@ -48,7 +48,7 @@ public sealed partial class SdfMeshIrradianceLawTests {
     [Fact]
     public void ACoarseProbeAnswersNoReceiverAcrossASlabOrAWall() {
         var frame = StoreyedHall();
-        var volume = new SdfMeshIrradiance();
+        var volume = Volume();
         var (parameters, _) = Trace(frame: frame, volume: volume);
         using var scene = volume.DiagnosticScene(frame: frame);
 
@@ -76,7 +76,7 @@ public sealed partial class SdfMeshIrradianceLawTests {
                 .. hills.Select(selector: static hill => Draw(mesh: Sphere(centre: hill.Item1, radius: hill.Item2))),
             ],
         };
-        var volume = new SdfMeshIrradiance();
+        var volume = Volume();
 
         _ = Trace(frame: frame, volume: volume);
         using var scene = volume.DiagnosticScene(frame: frame);
