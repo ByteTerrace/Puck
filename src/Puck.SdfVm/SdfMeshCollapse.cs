@@ -535,9 +535,13 @@ public static class SdfMeshCollapse {
             var first = -1;
             var second = -1;
 
+            // The edge lookup already visits every neighbour; stamp the link here rather than walking the fan again.
+            m_stampValue++;
             foreach (var triangle in fan) {
                 var (_, next, after) = Around(place: from, triangle: triangle);
 
+                m_stamp[next] = m_stampValue;
+                m_stamp[after] = m_stampValue;
                 if (next == to) { first = triangle; }
                 if (after == to) { second = triangle; }
             }
@@ -546,7 +550,7 @@ public static class SdfMeshCollapse {
             var (_, _, firstOpposite) = Around(place: from, triangle: first);
             var (_, secondOpposite, _) = Around(place: from, triangle: second);
 
-            if ((firstOpposite == secondOpposite) || !Links(fan: fan, firstOpposite: firstOpposite, from: from, secondOpposite: secondOpposite, to: to)) { return false; }
+            if ((firstOpposite == secondOpposite) || !Links(firstOpposite: firstOpposite, from: from, secondOpposite: secondOpposite, to: to)) { return false; }
 
             // Each side of the collapsed edge keeps its own vertices: a triangle about the place takes, at the neighbour,
             // the vertex the edge's triangle on its side has there.
@@ -609,6 +613,14 @@ public static class SdfMeshCollapse {
         // (one cutting through a thin rod, its corners on opposite sides) is measured here. False when one strays past the
         // bound.
         private bool MeasureReverse(List<int> fan, double error) {
+            // Only a forward measurement that passed needs the old surface. Refused targets never read this layout.
+            for (var index = 0; (index < fan.Count); index++) {
+                var triangle = fan[index];
+                var (ax, ay, az, bx, by, bz, ex, ey, ez) = Positions(triangle: triangle);
+
+                m_previous[index] = new Candidate { Ax = ax, Ay = ay, Az = az, Bx = bx, By = by, Bz = bz, Ex = ex, Ey = ey, Ez = ez, Material = m_materials[triangle], Triangle = triangle };
+                Bounds(candidate: ref m_previous[index]);
+            }
             m_strays.Clear();
             for (var at = 0; (at < m_laidCount); at++) {
                 ref readonly var candidate = ref m_measured[at];
@@ -736,14 +748,7 @@ public static class SdfMeshCollapse {
             return Math.Sqrt(d: (((dx * dx) + (dy * dy)) + (dz * dz)));
         }
         // Whether the two places share no neighbour but the edge's two opposite places, so the collapse pinches nothing.
-        private bool Links(List<int> fan, int from, int to, int firstOpposite, int secondOpposite) {
-            m_stampValue++;
-            foreach (var triangle in fan) {
-                var (_, next, after) = Around(place: from, triangle: triangle);
-
-                m_stamp[next] = m_stampValue;
-                m_stamp[after] = m_stampValue;
-            }
+        private bool Links(int from, int to, int firstOpposite, int secondOpposite) {
             foreach (var triangle in Alive(fan: m_to, place: to)) {
                 var (_, next, after) = Around(place: to, triangle: triangle);
 
@@ -832,10 +837,6 @@ public static class SdfMeshCollapse {
 
             for (var index = 0; (index < fan.Count); index++) {
                 var triangle = fan[index];
-
-                var (ax, ay, az, bx, by, bz, ex, ey, ez) = Positions(triangle: triangle);
-                m_previous[index] = new Candidate { Ax = ax, Ay = ay, Az = az, Bx = bx, By = by, Bz = bz, Ex = ex, Ey = ey, Ez = ez, Material = m_materials[triangle], Triangle = triangle };
-                Bounds(candidate: ref m_previous[index]);
 
                 m_laid[index] = (((triangle == first) || (triangle == second)) ? -1 : count);
                 if (m_laid[index] < 0) { continue; }
