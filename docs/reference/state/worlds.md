@@ -463,7 +463,7 @@ principal's grants and can be scripted through stdin.
 | `identity.facts [player]`, `identity.fact.set <key> <value> [player]` | Reads or writes the integer facts an owned identity carries. |
 | `world.search` | Lists every search job's progress. |
 | `world.rule.trace <rule> [evaluations]` | Captures a rule's next evaluations, from 1 to 256, and reads them back. |
-| `world.rule.hazards [top]`, `world.budget.rules [top \| --why <rule>]`, `world.rule.failures` | Read the analyses described in [Rule analysis, scheduling, and work budgets](analysis.md) and the refusal counts. |
+| `world.rule.hazards [top]`, `world.budget.rules [top \| --why <rule> \| --spent [top]]`, `world.rule.failures` | Read the analyses described in [Rule analysis, scheduling, and work budgets](analysis.md) and the refusal counts. |
 | `world.tables`, `world.patterns`, `world.topologies`, `world.topology`, `world.match` | Echo tables, compiled patterns, and topologies, and walk one word through a pattern. |
 | `world.undo [n]` | Undoes the last applied mutations by replaying the journal minus its tail. |
 | `world.history …` | Records the boot world's recent past and travels through it: seek, step, branch, diff, and replay an edit earlier (see [below](#travel-through-recorded-time)). |

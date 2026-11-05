@@ -55,6 +55,11 @@ public sealed class CellKeyTable {
     private long m_bytes;
     private ulong m_ledgerSum;
 
+    // The local keys whose names spell an index below StateCapacity.MaxCellsPerRow in canonical decimal, by index,
+    // the invalid default where no local key does. A derived view of local membership, kept by the only doors that
+    // change it (TryIntern and the fork add, Rewind releases), so a read never writes it.
+    private CellKey[] m_indexKeys = [];
+
     /// <summary>Initializes an empty table.</summary>
     public CellKeyTable() {
         m_byName = new Dictionary<string, CellKey>(comparer: StringComparer.Ordinal);
@@ -77,8 +82,36 @@ public sealed class CellKeyTable {
             m_byName.Add(key: m_names[index].Value, value: m_keys[index]);
             m_bytes += EntryBytes(name: m_names[index]);
             m_ledgerSum = unchecked((m_ledgerSum + m_nameDigests[index]));
+            NoteIndex(key: m_keys[index], name: m_names[index].Value);
         }
         m_readOnlyNames = m_names.AsReadOnly();
+    }
+
+    // Records a local key in the index view when its name is an index's canonical spelling.
+    private void NoteIndex(string name, CellKey key) {
+        if (!TryParseIndex(index: out var index, name: name)) {
+            return;
+        }
+        if (index >= m_indexKeys.Length) {
+            Array.Resize(array: ref m_indexKeys, newSize: Math.Min(val1: StateCapacity.MaxCellsPerRow, val2: Math.Max(val1: (index + 1), val2: (m_indexKeys.Length * 2))));
+        }
+        m_indexKeys[index] = key;
+    }
+    // Whether a name is the canonical decimal spelling IndexKeyCache gives an index below its cache bound: digits
+    // only, no sign, and no leading zero except "0" itself.
+    private static bool TryParseIndex(string name, out int index) {
+        index = 0;
+        if ((name.Length == 0) || (name.Length > 9) || ((name.Length > 1) && (name[0] == '0'))) {
+            return false;
+        }
+        foreach (var digit in name) {
+            if ((digit < '0') || (digit > '9')) {
+                return false;
+            }
+            index = ((index * 10) + (digit - '0'));
+        }
+
+        return (index < StateCapacity.MaxCellsPerRow);
     }
 
     internal CellKeyTable Fork() => new(source: this);
@@ -115,6 +148,9 @@ public sealed class CellKeyTable {
             m_bytes -= EntryBytes(name: m_names[index]);
             m_ledgerSum = unchecked((m_ledgerSum - m_nameDigests[index]));
             m_byName.Remove(key: m_names[index].Value);
+            if (TryParseIndex(index: out var released, name: m_names[index].Value) && (released < m_indexKeys.Length)) {
+                m_indexKeys[released] = default;
+            }
         }
         m_nameDigests.RemoveRange(index: count, count: (m_nameDigests.Count - count));
         m_keys.RemoveRange(index: count, count: (m_keys.Count - count));
@@ -202,10 +238,26 @@ public sealed class CellKeyTable {
         m_nameDigests.Add(item: digest);
         m_bytes += EntryBytes(name: name);
         m_ledgerSum = unchecked((m_ledgerSum + digest));
+        NoteIndex(key: key, name: name.Value);
 
         reason = string.Empty;
 
         return true;
+    }
+    /// <summary>Attempts to resolve the already-interned key whose name is an index's decimal spelling
+    /// (<see cref="IndexKeyCache"/>), without minting one: the same answer as <see cref="TryResolve(ReadOnlySpan{char}, out CellKey)"/>
+    /// over that spelling, read from an index table instead of a string lookup when the key is local.</summary>
+    /// <param name="index">The index.</param>
+    /// <param name="key">The existing key on success; otherwise the invalid default.</param>
+    /// <returns>Whether this table or its compiler symbol source already knows the index's name.</returns>
+    public bool TryResolveIndex(long index, out CellKey key) {
+        if ((((ulong)index) < ((ulong)m_indexKeys.Length)) && m_indexKeys[index].IsValid) {
+            key = m_indexKeys[index];
+
+            return true;
+        }
+
+        return TryResolve(key: out key, name: IndexKeyCache.Get(index: index).AsSpan());
     }
     /// <summary>Attempts to read the name behind a key this table minted.</summary>
     /// <param name="key">The key to render.</param>

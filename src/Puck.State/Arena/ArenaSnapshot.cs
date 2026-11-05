@@ -97,7 +97,7 @@ public sealed partial class StateArena {
         snapshot.Vectors.CopyTo(m_vectors, 0);
         for (var row = 0; row < m_layout.RowCount; row++) {
             if (m_layout[row].IsStored) { Reindex(rowOrdinal: row, layout: m_layout[row]); }
-            m_rowVersions[row]++; m_rowGenerations[row]++;
+            BumpRowVersion(rowOrdinal: row); m_rowGenerations[row]++;
         }
         // Admission at this cold boundary checks values and metadata using the ordinary importer.
         m_poolMutationDepth++;

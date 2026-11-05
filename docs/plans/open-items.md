@@ -273,18 +273,13 @@ both backends; and background work proportional to change (the bake rebaking
 only what an edit touched, GI re-measuring only the probes that can see newly
 landed geometry).
 
-- [high] Rule evaluation is the largest phase of the headless debug tick (37 %
-  of `StepCore`'s samples; body advance 27 %, the machine worker wait 13 %,
-  the instance host 11 %), and 58 % of the rule phase is the machinery that
-  visits rules rather than the authored gates, locals and effects. The
-  [rule-evaluation memo](rule-evaluation-cost.md) holds the per-rule
-  measurement, the research round and the design: schedules that name facets
-  as well as rows, a push-based due list, speculated gates on the pool
-  validated by versions and committed in document order, and
-  `world.budget.rules --spent`. Its [implementation brief](rule-evaluation-cost.md#implementation-brief)
-  is the next lane here; its steps 1 to 4 need no thread and land before
-  step 5, the parallel phase the memo's "Rule evaluation stays serial" section
-  filed.
+- [medium] The rule phase's remaining volatile and visit costs, as
+  `world.budget.rules --spent` names them: `physics(quiescent, ...)` has no
+  version (the chess sweeps), a placement-pose move marks its readers in full
+  (`go-read-stones` is visited every tick), and a moved row re-judges every
+  binding of a sweep. The [rule-evaluation memo](rule-evaluation-cost.md#what-it-leaves-open)
+  lists each, and why speculated gates on the pool wait for a sheet that
+  shows hundreds of non-firing versioned evaluations a tick.
 - [medium] Snapshot emission's entity rows, which T1 partitioned, are a small
   share of its cost, so most of it lies in the serial tail or the subscribers'
   `DeliverSnapshot`; profile it before T3 or any R step assumes otherwise. The
@@ -491,16 +486,16 @@ The custom no-GC runtime port stays later work, on the
   portal face each tick, with an occupancy dictionary `Observe` or `Forget` per
   pair (`WorldInstanceHost.Adjacency.cs:294-434`), a sixth of a standing tick.
   A body-major loop with a bounds test before the occupancy write cuts it.
-- [low] The rule VM's latch scheduling hashes each rule's name every tick
-  (`RuleLatch.Rule`, `RuleLatch.cs:181-189`, from `RuleEvaluator.cs:385`) and
-  keeps a binding in two dictionaries: `Held` (`TryGetValue` at
-  `RuleEvaluator.cs:523`, `GetValueRefOrAddDefault` at `:579`) and `Scheduling`
-  (`RuleLatch.cs:66`), both walked by `EndSweep` after each swept rule
-  (`RuleLatch.cs:244-257`). Resolve each compiled rule's `RuleState` once, when
-  its family compiles, and keep a binding's edge bit and schedule in one entry
-  of one table. The state hash sorts the bindings and folds only the edge bit
-  (`RuleLatch.cs:109-165`), so the merge leaves it unchanged, provided the
-  hashed, checkpointed bit stays apart from the unhashed schedule cache.
+- [low] The rule VM's latch keeps a binding in two dictionaries: `Held`
+  (`TryGetValue` and `GetValueRefOrAddDefault` in
+  `RuleEvaluator.EvaluateOnceCore`) and `Scheduling` (`RuleState.Binding`),
+  both walked by `RuleLatch.EndSweep` after each swept rule. Keep a binding's
+  edge bit and schedule in one entry of one table. The state hash sorts the
+  bindings and folds only the edge bit (`RuleLatch.AppendStateHash`), so the
+  merge leaves it unchanged, provided the hashed, checkpointed bit stays apart
+  from the unhashed schedule cache. The host's interaction path still resolves
+  its `RuleState` by name per tick (`IRuleOwner.TryEvaluateOwn` carries no
+  state); the evaluator's own family walk reads them from `RuleLatch.States`.
 - [low] `PaintLatticeDraw` rents its draw buffer from `ArrayPool<long>.Shared`
   (`WorldTick.LatticeDraws.cs:51`). That is safe because
   `GeneratorEngine.TryRunBatch` writes every index below `values.Length` on
@@ -3355,10 +3350,7 @@ Monitor hook check remain supporting work alongside the landscape priority.
     the repository records.
 
 - [low] The hazard detectors' follow-ups ([hazards](../development/hazards.md)):
-  turn STALE001 into an error once `RuleEvaluator.EvaluateOnce` and
-  `RunFixpoint` stop reading a captured scratch and arena (the rule-faults
-  plan's step 4 removes the first); mark the next replaceable family when one
-  appears (a GPU device lost and recreated is the likely one); and triage the
+  mark the next replaceable family when one appears (a GPU device lost and recreated is the likely one); and triage the
   rest of `puck scan --only clones` below the heaviest thirty clusters of `src`
   and `tests`, which this pass did not read. A C# and HLSL formula pair has no
   detector: the two languages share no tree, so an agreement law per pair
@@ -3582,9 +3574,9 @@ read one. The plans that keep open items:
 - [Owned memory for Puck's own host](memory-pooling.md): memory ownership is the
   [engine job system](#engine-job-system)'s; the page holds M1 and R1 to R3,
   the later custom no-GC runtime port.
-- [Rule evaluation proportional to change](rule-evaluation-cost.md#implementation-brief):
-  the measured sheet, the pull's constants, facet versions and the due list,
-  deadline wake, speculated gates on the pool, and the documents; the
+- [Rule evaluation proportional to change](rule-evaluation-cost.md#what-it-leaves-open):
+  the volatile rest the spent sheet names, per-cell due sets, more host fact
+  doors, and speculated gates once a sheet justifies a fork; the
   [engine job system](#engine-job-system) packet ranks it.
 - [Machines and cartridges](machines-and-cartridges.md#open-items): the
   programme's packages, the Humble corpus failures and the emulator batteries'
