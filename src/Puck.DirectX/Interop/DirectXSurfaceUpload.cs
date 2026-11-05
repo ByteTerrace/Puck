@@ -242,7 +242,6 @@ public sealed unsafe class DirectXSurfaceUpload : IGpuSurfaceUpload {
 
         var executable = ((ID3D12CommandList*)commandList);
 
-        ((IGpuDeviceContext)m_deviceContext).Services.QueueSubmitter.FlushBatch();
         ((ID3D12CommandQueue*)m_deviceContext.CommandQueueHandle)->ExecuteCommandLists(
             NumCommandLists: 1,
             ppCommandLists: &executable

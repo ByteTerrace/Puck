@@ -40,9 +40,7 @@ public sealed unsafe class DirectXGpuQueueSubmitter(DirectXDeviceContext deviceC
         }
 
         // A wait belongs after earlier submissions, never before a producer that may signal it.
-        var open = m_batch;
-        FlushBatch();
-        m_batch = open;
+        Split();
 
         m_externalWaits.Add(item: wait);
     }
@@ -57,14 +55,14 @@ public sealed unsafe class DirectXGpuQueueSubmitter(DirectXDeviceContext deviceC
         var native = (DirectXGpuSubmissionFence)fence;
         if (Defer(commandBufferHandles, native)) { return; }
         // An empty fenced submission still completes all work submitted before it.
-        if (commandBufferHandles.IsEmpty) { FlushBatch(); }
+        if (commandBufferHandles.IsEmpty) { Split(); }
         native.RequireDrained();
         Execute(commandBufferHandles: commandBufferHandles);
-        native.Arm(commandQueue: ((ID3D12CommandQueue*)deviceContext.CommandQueueHandle));
+        native.Arm(commandQueue: ((ID3D12CommandQueue*)deviceContext.SubmissionQueueHandle));
     }
     /// <inheritdoc/>
     public void SubmitAndWait(ReadOnlySpan<nint> commandBufferHandles) {
-        FlushBatch();
+        Split();
         Execute(commandBufferHandles: commandBufferHandles);
         deviceContext.WaitIdle();
     }
@@ -77,14 +75,24 @@ public sealed unsafe class DirectXGpuQueueSubmitter(DirectXDeviceContext deviceC
         var owner = m_fences.Count == 0 ? null : m_fences[^1];
         try {
             Execute(CollectionsMarshal.AsSpan(m_lists));
-            owner?.Arm((ID3D12CommandQueue*)deviceContext.CommandQueueHandle);
+            owner?.Arm((ID3D12CommandQueue*)deviceContext.SubmissionQueueHandle);
+        } finally {
+            // Even after a failed execute or signal, every fence answers from the owner, whose removed device then
+            // surfaces as a loss instead of leaving the others deferred in a batch that no longer exists.
             foreach (var fence in m_fences) {
                 if (!ReferenceEquals(fence, owner)) { fence.Alias(owner!); }
             }
-        } finally {
             m_lists.Clear();
             m_fences.Clear();
         }
+    }
+    /// <summary>Hands the deferred submissions to the queue and keeps the batch open: whatever reaches the queue next
+    /// follows every submission made before it, and later submissions are still deferred. Every read of the context's
+    /// queue handle (<see cref="DirectXDeviceContext.CommandQueueHandle"/>) calls it.</summary>
+    internal void Split() {
+        var open = m_batch;
+        FlushBatch();
+        m_batch = open;
     }
 
     private bool Defer(ReadOnlySpan<nint> handles, DirectXGpuSubmissionFence? fence) {
@@ -99,7 +107,7 @@ public sealed unsafe class DirectXGpuQueueSubmitter(DirectXDeviceContext deviceC
         new DirectXGpuSubmissionFence(device: ((ID3D12Device*)deviceContext.Device.Handle));
 
     private void Execute(ReadOnlySpan<nint> commandBufferHandles) {
-        var queue = ((ID3D12CommandQueue*)deviceContext.CommandQueueHandle);
+        var queue = ((ID3D12CommandQueue*)deviceContext.SubmissionQueueHandle);
 
         if (commandBufferHandles.IsEmpty) {
             return;

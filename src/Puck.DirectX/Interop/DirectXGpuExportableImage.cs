@@ -250,7 +250,6 @@ public sealed unsafe class DirectXGpuExportableImage : IGpuExportableImage {
     /// <remarks>Queues <c>ID3D12CommandQueue::Signal</c> on the shared fence; a foreign-written texture, which has no
     /// shared fence, drains the queue.</remarks>
     public ulong CompleteWrite() {
-        ((IGpuDeviceContext)m_deviceContext).Services.QueueSubmitter.FlushBatch();
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
             instance: this

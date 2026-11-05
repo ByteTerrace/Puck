@@ -16,7 +16,9 @@ public interface IDirectXDeviceContext {
     /// the value a foreign backend matches to share resources on the same GPU. Additive: Puck.World's D3D12-host GPU
     /// capture transport opens its window/monitor capture on this adapter so its shared textures import cross-API.</summary>
     long AdapterLuid { get; }
-    /// <summary>Gets the native <c>ID3D12CommandQueue</c> handle work is submitted to.</summary>
+    /// <summary>Gets the native <c>ID3D12CommandQueue</c> handle work is submitted to. Every submission the device's
+    /// queue submitter has deferred in an open batch reaches the queue before the handle is returned, so an execute,
+    /// signal or drain put on it follows them.</summary>
     nint CommandQueueHandle { get; }
     /// <summary>Gets the owning Direct3D 12 device.</summary>
     DirectXDevice Device { get; }

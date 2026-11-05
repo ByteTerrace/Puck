@@ -443,7 +443,6 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         var executable = ((ID3D12CommandList*)commandListHandle);
         var commandQueue = ((ID3D12CommandQueue*)deviceContext.CommandQueueHandle);
 
-        deviceContext.Services.QueueSubmitter.FlushBatch();
         commandQueue->ExecuteCommandLists(
             NumCommandLists: 1,
             ppCommandLists: &executable
