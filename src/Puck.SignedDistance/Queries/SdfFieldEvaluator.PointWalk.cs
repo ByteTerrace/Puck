@@ -113,7 +113,6 @@ public sealed partial class SdfFieldEvaluator {
 
         return (resultDistance, resultMaterial, ((int)walked));
     }
-
     // Walks [first, end) at one point from the far seed and answers the distance and material. With reaches, it tests
     // each cullable instance as it meets it: an instance whose reach clears the running answer, or exceeds the primer's
     // answer, is skipped. The first instance the running answer cannot skip first walks the nearest instance on its own,

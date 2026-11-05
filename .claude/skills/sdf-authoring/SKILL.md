@@ -315,9 +315,10 @@ shape contact omits.
 CPU cull certificates live in `SdfFieldEvaluator.Cull.cs`. A scoped instance's
 lowering candidates include its finite `FarDistance` seed after slack and pop
 scaling, not just its shapes. Slack accumulation must fit independently of the
-point carrier. Instance and scope boundaries do not reset the local point:
-`PointDiesBeforeRead` admits skips only when that state dies before its next read.
-`SdfCullAdversarialLawTests` compares these boundaries with the cull-off walk.
+point carrier. `SdfProgram.RequireSegmentsStartAtTheWorldPoint` rejects inherited
+moved points across segment and instance boundaries; `ClosesAtScopeEdge` checks
+reads within the segment. `SdfCullAdversarialLawTests` compares cull certificates
+with the cull-off walk.
 
 ## Verifying
 

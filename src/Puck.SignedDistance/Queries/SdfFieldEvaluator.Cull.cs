@@ -103,8 +103,8 @@ public sealed partial class SdfFieldEvaluator {
     // and union shapes; each scope one level deep, popping by union, holding union, smooth union, subtraction or
     // intersection shapes. Fills the lowering members' certificates in the answer's terms (a scope's slack subtracted
     // and its pop's scale applied), the instance's scope edges and shapes in stream order, and whether every shape has a
-    // box certificate. The instance's point state must start at a reset and die before the next read; its finite scope
-    // seeds are bounded separately from its geometric lowering members.
+    // box certificate. SdfProgram guarantees independent point state at segment boundaries; finite scope seeds are
+    // bounded separately from the geometric lowering members.
     private static bool TryCertifyInstance(CompiledInstruction[] compiled, SdfInstanceRange instance, ShapeReach?[] reaches, List<ShapeReach> lowering, List<ScopeStep> steps, out bool scoped, out bool boxed, out long seedFloor) {
         var depth = 0;
         var scopeStart = 0;
@@ -119,12 +119,6 @@ public sealed partial class SdfFieldEvaluator {
         scoped = false;
         boxed = true;
         seedFloor = long.MaxValue;
-
-        // Instance metadata neither initializes nor restores the interpreter's point. A primer must start at a reset,
-        // and a skipped instance must leave no point state that a later instruction reads.
-        if (!PointDiesBeforeRead(compiled: compiled, first: instance.First) || !PointDiesBeforeRead(compiled: compiled, first: instance.End)) {
-            return false;
-        }
 
         for (var index = instance.First; (index < instance.End); index++) {
             ref readonly var instruction = ref compiled[index];
@@ -256,7 +250,7 @@ public sealed partial class SdfFieldEvaluator {
     private static long ScopeSeedFloor(double slack, double scale) {
         var value = ((((double)FarDistance) - slack) * ((scale > 0.0) ? scale : 1.0));
 
-        var padding = (((((double)FarDistance) + slack) * ((scale > 0.0) ? scale : 1.0) * DoublePadding) + (2.0 * RawUnit));
+        var padding = ((((((double)FarDistance) + slack) * ((scale > 0.0) ? scale : 1.0)) * DoublePadding) + (2.0 * RawUnit));
 
         return (FixedDirectedRounding.TryFloorFromDouble(result: out var floor, value: (value - padding))
             ? floor.Value : long.MinValue);
@@ -394,7 +388,7 @@ public sealed partial class SdfFieldEvaluator {
     // The segment table: for each ResetPoint opening a chain a walk may skip whole, the chain's end and the certificate
     // around its shapes'. A chain qualifies when it runs from its ResetPoint to the next ResetPoint, instance boundary,
     // scope edge or the stream's end through point transforms and shapes alone, with no point read past a scope edge
-    // before the next reset (PointDiesBeforeRead), every shape certified and joining the answer by union, smooth union or
+    // before the next segment (ClosesAtScopeEdge), every shape certified and joining the answer by union, smooth union or
     // subtraction. Its margin is the most any smooth union in it needs, k + k·2⁻¹⁵ + 16 raws, at which both walks round
     // the blend weight to exactly one, and a chain that carves also needs its candidates past the answer's negation. A
     // chain never crosses an instance boundary, so a walk still meets every instance it tests in First order.
@@ -435,8 +429,9 @@ public sealed partial class SdfFieldEvaluator {
                     continue;
                 }
 
-                // Scope edges end the chain; the common endpoint check below proves that its point is dead.
+                // Scope edges end the chain, but must not expose its moved point before the next segment.
                 if (instruction.Op is SdfOp.PushField or SdfOp.PopField) {
+                    qualifies = ClosesAtScopeEdge(boundary: boundary, compiled: compiled, edge: end);
                     break;
                 }
 
@@ -489,7 +484,7 @@ public sealed partial class SdfFieldEvaluator {
                 end++;
             }
 
-            if (!qualifies || (shapes.Count == 0) || !PointDiesBeforeRead(compiled: compiled, first: end)) {
+            if (!qualifies || (shapes.Count == 0)) {
                 continue;
             }
 
@@ -520,6 +515,8 @@ public sealed partial class SdfFieldEvaluator {
     // No node spans a cullable instance or a scope edge, so a skip passes no cull bound's First and no point read.
     private static (int[] Heads, SegmentBound[] Groups, int[] Next) BuildSegmentGroups(CompiledInstruction[] compiled, int[] slots, SegmentBound[] bounds, List<ShapeReach> enclosures, CullBound[] cullBounds) {
         var heads = new int[bounds.Length];
+
+        CountArrayPayload(rows: heads, work: PointWork, arrays: CullArraysCreated, bytes: CullPayloadCreated);
         var groups = new List<SegmentBound>();
         var next = new List<int>();
         var culled = new bool[compiled.Length];
@@ -584,18 +581,20 @@ public sealed partial class SdfFieldEvaluator {
         }
 
         var groupRows = groups.ToArray();
+        var nextRows = next.ToArray();
 
         CountArrayPayload(rows: groupRows, work: PointWork, arrays: CullArraysCreated, bytes: CullPayloadCreated);
-        return (heads, groupRows, next.ToArray());
+        CountArrayPayload(rows: nextRows, work: PointWork, arrays: CullArraysCreated, bytes: CullPayloadCreated);
+        return (heads, groupRows, nextRows);
     }
 
     // How many consecutive chains, or nodes, one node of the segment hierarchy holds.
     private const int SegmentGroupFanout = 8;
 
-    // Whether only scope edges stand before the next ResetPoint or the stream's end. Scope and instance boundaries do
-    // not kill the local point, distance scale or pending material/erosion state; only ResetPoint does.
-    private static bool PointDiesBeforeRead(CompiledInstruction[] compiled, int first) {
-        for (var index = first; ((index < compiled.Length) && (compiled[index].Op != SdfOp.ResetPoint)); index++) {
+    // Only scope edges may follow before the next segment. SdfProgram.RequireSegmentsStartAtTheWorldPoint separately
+    // guarantees that no segment inherits a moved point, including across instance boundaries.
+    private static bool ClosesAtScopeEdge(CompiledInstruction[] compiled, bool[] boundary, int edge) {
+        for (var index = edge; ((index < compiled.Length) && !boundary[index] && (compiled[index].Op != SdfOp.ResetPoint)); index++) {
             if (compiled[index].Op is not (SdfOp.PushField or SdfOp.PopField)) {
                 return false;
             }
