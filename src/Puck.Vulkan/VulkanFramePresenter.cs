@@ -200,6 +200,7 @@ public sealed class VulkanFramePresenter : IVulkanFramePresenter {
         // The render-finished semaphore is the acquired IMAGE's: vkQueuePresentKHR's wait
         // on it is not fence-observable, so it may only be reused once the presentation
         // engine hands this image back through a future acquire.
+        using var attribution = GpuQueueWork.Attribute(category: GpuQueueCategory.Present);
         var renderFinishedSemaphoreHandle = frameSynchronization.RenderFinishedSemaphoreHandles[((int)imageIndex)];
         var submitRequest = new VulkanFrameSubmitRequest(
             CommandBufferHandle: commandResources.CommandBufferHandles[((int)imageIndex)],

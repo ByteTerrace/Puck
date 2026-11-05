@@ -182,6 +182,8 @@ internal sealed class SdfMeshBakeGpuWork : ISdfGpuWorkClient {
     /// <inheritdoc/>
     public void Abandon(object job) => m_bake.Abandon(batch: (SdfMeshBakeBatch)job);
     /// <inheritdoc/>
+    public GpuQueueCategory Category => GpuQueueCategory.Bake;
+    /// <inheritdoc/>
     /// <remarks>Each slot's pass block and point table (host-visible) and its instance masks and samples
     /// (device-local), with the frame block and the counters.</remarks>
     public GpuMemoryBytes OwnedBytes {

@@ -264,6 +264,7 @@ public sealed class VulkanSurfaceUpload : IDisposable {
             condition: m_disposed,
             instance: this
         );
+        using var attribution = GpuQueueWork.Attribute(category: GpuQueueCategory.Upload);
 
         var imageBytes = GpuPixelFormats.RequireImage(
             byteLength: pixels.Length,

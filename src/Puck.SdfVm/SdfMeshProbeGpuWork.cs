@@ -370,6 +370,7 @@ internal sealed class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         query.Scene.Dispose();
         query.Answer.TrySetCanceled();
     }
+    public GpuQueueCategory Category => GpuQueueCategory.Probe;
     public GpuMemoryBytes OwnedBytes {
         get {
             var bytes = m_sceneRegion?.OwnedBytes ?? default;

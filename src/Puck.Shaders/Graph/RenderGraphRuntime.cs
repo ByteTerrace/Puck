@@ -1317,6 +1317,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         // The frame's renders reach the queue together: every node's submission joins one batch, flushed once they have all
         // recorded (IGpuQueueSubmitter.BeginBatch), so a frame costs the queue one call rather than one a node.
         var queue = m_device.Services.QueueSubmitter;
+        using var attribution = GpuQueueWork.Attribute(category: GpuQueueCategory.Graph);
 
         queue.BeginBatch();
         try {

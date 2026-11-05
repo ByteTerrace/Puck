@@ -32,7 +32,7 @@ public sealed class VulkanGpuQueueSubmitter(IVulkanDeviceContext deviceContext, 
         var batch = deviceContext.LogicalDevice.Batch;
 
         if (!batch.IsOpen || commandBufferHandles.IsEmpty) { return false; }
-        _ = batch.TryDefer(entries: [new VulkanBatchedSubmission(CommandBuffers: commandBufferHandles.ToArray(), WaitSemaphores: WaitSemaphores.ToArray(), WaitValues: WaitValues.ToArray())], fence: fence);
+        _ = batch.TryDefer(entries: [new VulkanBatchedSubmission(CommandBuffers: commandBufferHandles.ToArray(), WaitSemaphores: WaitSemaphores.ToArray(), WaitValues: WaitValues.ToArray())], fence: fence, lists: commandBufferHandles.Length);
         m_waitCount = 0;
 
         return true;
@@ -113,6 +113,8 @@ public sealed class VulkanGpuQueueSubmitter(IVulkanDeviceContext deviceContext, 
         var vkFence = ((VulkanGpuSubmissionFence)fence);
 
         if (Defers(commandBufferHandles: commandBufferHandles, fence: vkFence)) { return; }
+        // An empty fenced submission still completes all work submitted before it.
+        if (commandBufferHandles.IsEmpty) { logicalDevice.Batch.Split(cause: GpuQueueCause.EmptyFence); }
         vkFence.RequireDrained();
         try {
             queueSubmitter.Submit(
@@ -133,6 +135,7 @@ public sealed class VulkanGpuQueueSubmitter(IVulkanDeviceContext deviceContext, 
     public void SubmitAndWait(ReadOnlySpan<nint> commandBufferHandles) {
         var logicalDevice = deviceContext.LogicalDevice;
 
+        logicalDevice.Batch.Split(cause: GpuQueueCause.Drain);
         try {
             queueSubmitter.SubmitAndWait(
                 commandBufferHandles: commandBufferHandles,
