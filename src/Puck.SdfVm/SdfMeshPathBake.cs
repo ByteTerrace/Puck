@@ -6,6 +6,7 @@ using System.Runtime.InteropServices;
 using Puck.Shaders;
 using Puck.SignedDistance;
 using Puck.SignedDistance.Baking;
+using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Memory;
 using Puck.Hosting;
 using Puck.Hosting.Jobs;
@@ -58,6 +59,17 @@ public readonly record struct SdfMeshBakeRequest(Vector3 Origin, Vector3 Cell, (
     /// instances of one rigid copy, which bake as one mesh (<see cref="SdfInstanceRange.BakesWithPrevious"/>). One for
     /// every other selector.</summary>
     public int Instances { get; init; } = 1;
+}
+/// <summary>A frame's bake point table: the rows a batch wrote and the runs of their 32-bit words, four a row, which are
+/// the only rows the bake kernel reads (<see cref="SdfMeshBakeBatch.WritePoints"/>). The rows between the runs are
+/// stale and never read, so the table uploads the runs alone, comparing nothing.</summary>
+/// <param name="Rows">The table from its first row through the last row the batch wrote.</param>
+/// <param name="Runs">The runs of words the batch wrote; <see langword="null"/> for an empty table.</param>
+public readonly ref struct SdfMeshBakeInput(ReadOnlySpan<Vector4> Rows, GpuUploadRuns? Runs) {
+    /// <summary>Gets the table from its first row through the last row the batch wrote.</summary>
+    public ReadOnlySpan<Vector4> Rows { get; } = Rows;
+    /// <summary>Gets the runs of words the batch wrote, or <see langword="null"/> for an empty table.</summary>
+    public GpuUploadRuns? Runs { get; } = Runs;
 }
 /// <summary>The lattices one bake dispatch samples, at most <see cref="SdfWorldPackage.MeshBakeBatch"/> holding at most
 /// <see cref="SdfWorldPackage.MeshBakeMaxSamples"/> samples together, and the group each answers.</summary>
@@ -122,14 +134,19 @@ public sealed record SdfMeshBakeBatch(SdfMeshBakeRequest[] Lattices, object[] Ti
     /// <summary>Writes the batch's point table: each points lattice's points at its first sample's place in the
     /// dispatch, then each lattice's poses from <see cref="PoseBase"/>.</summary>
     /// <param name="table">The table, at least <see cref="InputRows"/> entries.</param>
+    /// <param name="runs">When given, receives the runs of the table's 32-bit words the batch wrote, four a row: the only
+    /// rows the bake kernel reads, so an upload of these runs alone leaves no row it reads stale.</param>
     /// <returns>Whether the batch wrote an entry.</returns>
-    public bool WritePoints(Span<Vector4> table) {
+    public bool WritePoints(Span<Vector4> table, GpuUploadRuns? runs = null) {
+        const int RowWords = 4;
         var first = 0;
         var any = false;
 
+        runs?.Clear();
         foreach (var lattice in Lattices) {
             if (!lattice.Points.IsEmpty) {
                 lattice.Points.Span.CopyTo(destination: table[first..]);
+                runs?.Add(length: (lattice.Points.Length * RowWords), start: (first * RowWords));
                 any = true;
             }
             first += lattice.Samples;
@@ -138,7 +155,10 @@ public sealed record SdfMeshBakeBatch(SdfMeshBakeRequest[] Lattices, object[] Ti
             var rows = Poses[index].Rows;
 
             if (!rows.IsEmpty) {
-                rows.Span.CopyTo(destination: table[PoseBase(lattice: index)..]);
+                var poseBase = PoseBase(lattice: index);
+
+                rows.Span.CopyTo(destination: table[poseBase..]);
+                runs?.Add(length: (rows.Length * RowWords), start: (poseBase * RowWords));
                 any = true;
             }
         }
@@ -368,13 +388,16 @@ public sealed partial class SdfMeshPathBake {
     // workers cannot replace/release a landed mesh before the dresser has claimed it. No bake entry calls presentation.
     internal FrameAccess PrepareFrame(SdfFrame frame) {
         ArgumentNullException.ThrowIfNull(frame);
-        var scope = EnterFrameGate();
-        try {
+        using (EnterFrameGate()) {
             if (!ReferenceEquals(frame.Program, m_program)) { Restart(frame); }
             m_demandTransforms = frame.DynamicTransforms;
             m_demandCopies = frame.MeshInstances;
             if (!SameCopyLayout(frame)) { IndexCopies(frame); }
-            Prioritize();
+        }
+        // Measured with the gate open, so the workers keep publishing meanwhile (Prioritize).
+        Prioritize();
+        var scope = EnterFrameGate();
+        try {
             Settle(frame);
             return new FrameAccess(this, scope);
         } catch { scope.Dispose(); throw; }
@@ -458,8 +481,16 @@ public sealed partial class SdfMeshPathBake {
     /// <param name="frameSeconds">The interval the frame's presentation spans, in seconds; zero or less is a reference
     /// frame.</param>
     /// <returns>The frame's evaluations.</returns>
-    public static int FrameBudget(double frameSeconds) =>
-        (FrameTaps * ((int)Math.Clamp(value: Math.Floor(d: (frameSeconds / ReferenceFrameSeconds)), min: 1.0, max: MaxFrameShares)));
+    public static int FrameBudget(double frameSeconds) => (FrameTaps * FrameShares(frameSeconds: frameSeconds));
+    /// <summary>Returns the reference frames' shares a frame presented over <paramref name="frameSeconds"/> takes of a
+    /// per-frame budget: one for each whole <see cref="ReferenceFrameSeconds"/> it spans, between one and
+    /// <see cref="MaxFrameShares"/>. A budget sized for a 60 Hz frame then spends the same share of a longer frame's time
+    /// (the bake's evaluations, the mesh region's landing words).</summary>
+    /// <param name="frameSeconds">The interval the frame's presentation spans, in seconds; zero or less is a reference
+    /// frame.</param>
+    /// <returns>The frame's shares.</returns>
+    public static int FrameShares(double frameSeconds) =>
+        ((int)Math.Clamp(value: Math.Floor(d: (frameSeconds / ReferenceFrameSeconds)), min: 1.0, max: MaxFrameShares));
     /// <summary>Takes the lattices a frame dispatches: the first call of a frame takes the next lattice of each group that
     /// owes one and has none in flight, the groups the demand points see largest first (<see cref="SdfMeshDemand"/>) and the
     /// plan's order among equals, up to a batch, and every later call of the same frame answers the same, so the frame's
@@ -648,19 +679,22 @@ public sealed partial class SdfMeshPathBake {
     /// <param name="frame">The package frame.</param>
     /// <param name="frameSeconds">The interval the frame's presentation spans, in seconds, which sizes its share
     /// (<see cref="FrameBudget"/>).</param>
-    /// <returns>The exact sample points and saved pose rows to upload, or an empty span for no point table.</returns>
-    public ReadOnlySpan<Vector4> Stage(long frame, double frameSeconds) {
+    /// <returns>The sample points and saved pose rows to upload with the runs of words holding them, or an empty input for
+    /// no point table.</returns>
+    public SdfMeshBakeInput Stage(long frame, double frameSeconds) {
 
         using (EnterFrameGate()) {
             if (m_frameTaken != frame) { m_frameBudget = FrameBudget(frameSeconds: frameSeconds); }
         }
 
-        if (!TryTakeForFrame(batch: out var batch, frame: frame)) { return []; }
+        if (!TryTakeForFrame(batch: out var batch, frame: frame)) { return default; }
         var rows = batch.InputRows;
-        if (rows == 0) { return []; }
+        if (rows == 0) { return default; }
         var input = (m_inputTransport ??= new(allocator: Library.Allocator)).Acquire(requiredRows: rows);
-        return (batch.WritePoints(table: input) ? input : []);
+        return (batch.WritePoints(runs: m_inputRuns, table: input) ? new SdfMeshBakeInput(Rows: input, Runs: m_inputRuns) : default);
     }
+    // The runs of the point table a frame's batch wrote: each points lattice's and each lattice's poses, two a lattice.
+    private readonly GpuUploadRuns m_inputRuns = new(capacity: ((2 * SdfWorldPackage.MeshBakeBatch) + 2));
     /// <summary>Returns a dispatched batch's lattices to their groups unanswered, as when its submission never completed;
     /// each group dispatches its lattice again.</summary>
     /// <param name="batch">The batch <see cref="TryTakeForFrame"/> took, or <see langword="null"/>.</param>

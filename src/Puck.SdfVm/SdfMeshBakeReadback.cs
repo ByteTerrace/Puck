@@ -8,20 +8,24 @@ namespace Puck.SdfVm;
 internal sealed class SdfMeshBakeReadback {
     public SdfMeshBakeBatch? Batch { get; set; }
     public IGpuReadbackBuffer? Buffer { get; set; }
-    public byte[] Bytes { get; set; } = [];
     public IGpuSubmissionFence? Fence { get; set; }
     public bool Record { get; set; }
     public bool Submit { get; set; }
     public string? Version { get; set; }
+
+    // The bytes a poll reads a readback into, one buffer for every slot of every view a thread polls: Complete decodes
+    // the samples before it returns and keeps no view of them, so the next poll may overwrite them.
+    [ThreadStatic]
+    private static byte[]? ReadBytes;
 
     internal void Poll() {
         if ((Fence is not { } fence) || !fence.IsSignaled) { return; }
         Fence = null;
         if (Batch is not { } batch) { return; }
         var bytes = ((batch.Samples * SdfWorldPackage.MeshBakeSampleWords) * sizeof(uint));
-        if (Bytes.Length < bytes) { Bytes = new byte[bytes]; }
-        Buffer!.Read(destination: Bytes.AsSpan(length: bytes, start: 0));
+        if ((ReadBytes is not { } read) || (read.Length < bytes)) { ReadBytes = read = new byte[bytes]; }
+        Buffer!.Read(destination: read.AsSpan(length: bytes, start: 0));
         Batch = null;
-        batch.Bake?.Complete(batch: batch, samples: Bytes.AsSpan(length: bytes, start: 0));
+        batch.Bake?.Complete(batch: batch, samples: read.AsSpan(length: bytes, start: 0));
     }
 }

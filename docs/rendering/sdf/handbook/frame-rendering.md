@@ -1254,7 +1254,9 @@ world and returns finds its meshes placed and writes nothing for them; the arena
 packs again only once those words outnumber the named meshes' words and 32 MB
 (`SdfMeshRegionArena.RetainedSlackWords`).
 Meshes a list newly places land within a frame's share of words
-(`SdfWorldTables.MeshLandingWords`, 2 MB), in the list's order; a draw whose
+(`SdfWorldTables.MeshLandingWords`, 2 MB for each whole 60 Hz frame the frame
+spans, `SdfMeshPathBake.FrameShares`, so a cold bake's long frames land meshes
+as fast as a 60 Hz display would), in the list's order; a draw whose
 mesh is still owed waits out of the staged records until it lands, so a body
 whose meshes all arrive at once, as when it crosses into a world, lands over a
 few frames. A list with more draws than the reserve doubles it and moves only the

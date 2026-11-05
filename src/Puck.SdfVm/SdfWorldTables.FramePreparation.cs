@@ -260,11 +260,14 @@ public sealed partial class SdfWorldTables {
     /// owes only the words that changed; the frame's first pass sends them (<see cref="SubmitUpload"/>). The frame's values
     /// reach the passes through each pass block (<see cref="SdfFrameBlock"/>), not the tables.</summary>
     /// <param name="frame">The frame.</param>
+    /// <param name="frameSeconds">The interval the frame's presentation spans, in seconds, which sizes the owed mesh words
+    /// it lands (<see cref="MeshLandingWords"/>, <see cref="SdfMeshPathBake.FrameShares"/>); zero or less is a reference
+    /// frame.</param>
     /// <exception cref="ArgumentNullException"><paramref name="frame"/> is <see langword="null"/>.</exception>
     /// <exception cref="ObjectDisposedException">The tables are disposed.</exception>
     /// <exception cref="ArgumentException">The frame has no view, supplies fewer dynamic transforms than the program
     /// requires, or a far distance that is not finite and positive.</exception>
-    public void Pack(SdfFrame frame) {
+    public void Pack(SdfFrame frame, double frameSeconds = 0d) {
         ArgumentNullException.ThrowIfNull(frame);
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
@@ -309,6 +312,6 @@ public sealed partial class SdfWorldTables {
             bytes: m_volumeScratch,
             offset: 0
         );
-        StageMeshRegion(frame);
+        StageMeshRegion(frame: frame, frameSeconds: frameSeconds);
     }
 }
