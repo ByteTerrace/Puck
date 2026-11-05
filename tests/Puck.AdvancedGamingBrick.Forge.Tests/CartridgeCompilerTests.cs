@@ -291,6 +291,9 @@ public sealed class CartridgeCompilerTests {
         ));
         var before = draft.Show();
 
+        Assert.Throws<ArgumentException>(testCode: () => draft.Show(pointer: "/nothing/deeper"));
+        Assert.Throws<ArgumentException>(testCode: () => draft.Show(pointer: "tiles"));
+        Assert.Throws<ArgumentException>(testCode: () => draft.Remove(pointer: "/nothing"));
         Assert.Throws<ArgumentException>(testCode: () => draft.Set(
             json: "{}",
             pointer: "/tiles/99"
