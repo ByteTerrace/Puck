@@ -5,12 +5,14 @@ using Xunit;
 
 namespace Puck.World.Transpiler.Tests;
 
-/// <summary>CONTRACT UNDER TEST: a decimal-valued field never takes its value from a cast of a double. A literal
-/// answers with its authored text, exactly and however many digits it spells; a computed double answers with its
-/// fifteen significant digits, so the binary tail of a value such as 0.12 never reaches a document. Both are fixed
-/// functions of their operand, which a cast is not across runtimes. An authored decimal stays exact through the
+/// <summary>CONTRACT UNDER TEST: a decimal-valued field never takes its value from a cast of a double. A literal of
+/// at most fifteen significant digits answers with its authored text, exactly; a literal of sixteen or more is a
+/// double's round-trip spelling and is the double it spells, as is a computed double, which a decimal field reads at
+/// its fifteen significant digits, so the binary tail of a value such as 0.12 never reaches a document. Each is a
+/// fixed function of its operand, which a cast is not across runtimes. An authored decimal stays exact through the
 /// lowering for as long as the arithmetic applied to it is closed over finite decimals: a sign, a sum, a difference,
-/// a product, and a unit whose scale is a power of ten.</summary>
+/// a product, and a unit whose scale is a power of ten. The pasted digits of a double and the expression they came
+/// from are one value.</summary>
 public sealed class DecimalValuesLawTests {
     private static LiteralExpressionNode Literal(object value, string? text) => new(
         Column: 1,
@@ -38,11 +40,13 @@ public sealed class DecimalValuesLawTests {
         )
     );
     [InlineData("0.12")]
-    [InlineData("0.1234567890123456789012345")]
+    [InlineData("0.123456789012345")]
+    [InlineData("1234567.89012345")]
     [InlineData("1.5e3")]
+    [InlineData("1.50000000000000000000")]
     [InlineData("-0.000000000000000001")]
     [Theory]
-    public void ALiteralAnswersWithItsAuthoredTextExactly(string text) => Assert.Equal(
+    public void ALiteralOfFifteenSignificantDigitsOrFewerAnswersWithItsAuthoredTextExactly(string text) => Assert.Equal(
         actual: DecimalValues.FromLiteral(literal: Literal(
             text: text,
             value: double.Parse(
@@ -57,13 +61,41 @@ public sealed class DecimalValuesLawTests {
         )
     );
 
+    // Fifteen digits is the most every decimal round-trips through a double with; sixteen is where a double's own
+    // spelling begins, and the literal is the double.
+    [InlineData("0.2617993877991494")]
+    [InlineData("0.017453292519943295")]
+    [InlineData("0.1234567890123456")]
+    [InlineData("0.1234567890123456789012345")]
+    [InlineData("12345678901234.56")]
+    [Theory]
+    public void ALiteralOfSixteenSignificantDigitsOrMoreIsTheDoubleItSpells(string text) {
+        var real = double.Parse(
+            provider: System.Globalization.CultureInfo.InvariantCulture,
+            s: text
+        );
+        var literal = Literal(
+            text: text,
+            value: real
+        );
+
+        Assert.False(condition: DecimalValues.TryAuthored(
+            authored: out _,
+            literal: literal
+        ));
+        Assert.Equal(
+            actual: DecimalValues.FromLiteral(literal: literal),
+            expected: DecimalValues.FromDouble(value: real)
+        );
+    }
+
     // Each origin component is lowered through the general expression path, the one every field's value takes.
     // A reserved root key is data no model member types, so it shows the lowering's own numbers; a member the model
     // reads as a float holds the float's spelling instead (WorldDocumentRowDefaults.CanonicalFloat).
     private static string[] LoweredOrigin(string x, string y, string z) {
         var origin = Assert.IsType<JsonArray>(@object: WorldSources.LowerSourceClean(source: $$"""
             schema: "puck.world.definition.v1"
-            let long = 0.1234567890123456789012345
+            let long = 0.123456789012345
             _origin [{{x}}, {{y}}, {{z}}]
             """)["_origin"]);
 
@@ -73,14 +105,14 @@ public sealed class DecimalValuesLawTests {
     // Three authored components of one origin and the canonical JSON each lowers to.
     private static readonly Dictionary<string, (string X, string Y, string Z, string[] Expected)> Origins = new(comparer: StringComparer.Ordinal) {
         ["an authored decimal keeps every digit through the lowering"] = (
-            X: "0.1234567890123456789012345",
+            X: "0.123456789012345",
             Y: "-long",
             Z: "long",
-            Expected: ["0.1234567890123456789012345", "-0.1234567890123456789012345", "0.1234567890123456789012345"]
+            Expected: ["0.123456789012345", "-0.123456789012345", "0.123456789012345"]
         ),
         ["exact arithmetic over authored decimals stays exact"] = (
             X: "0.1 + 0.2",
-            Y: "long - 0.0234567890123456789012345",
+            Y: "long - 0.023456789012345",
             Z: "1.1 * 1.1",
             Expected: ["0.3", "0.1", "1.21"]
         ),
@@ -89,6 +121,13 @@ public sealed class DecimalValuesLawTests {
             Y: "2.0",
             Z: "1.5e3",
             Expected: ["1.5", "2", "1500"]
+        ),
+        // The digits of a double and the expression the double came from are one value, so each folds the same.
+        ["the pasted digits of a double and the quotient they came from are one value"] = (
+            X: "0.2617993877991494",
+            Y: "3.141592653589793 / 12",
+            Z: "(0.3333333333333333 == 1 / 3) + (0.2617993877991494 * 1.5 == (3.141592653589793 / 12) * 1.5)",
+            Expected: ["0.2617993877991494", "0.2617993877991494", "2"]
         ),
         ["a magnitude a decimal cannot hold stays the double it was"] = (
             X: "1e-40",
@@ -99,8 +138,8 @@ public sealed class DecimalValuesLawTests {
         // A comparison is worth 1 or 0, and it is decided on the exact values, so it agrees with the exact
         // arithmetic beside it: a difference the subtraction keeps is a difference the comparison sees.
         ["a comparison is decided on the exact values"] = (
-            X: "1.0000000000000001 > 1",
-            Y: "(1.0000000000000001 - 1) > 0",
+            X: "1.00000000000001 > 1",
+            Y: "(1.00000000000001 - 1) > 0",
             Z: "0.1 + 0.2 == 0.3",
             Expected: ["1", "1", "1"]
         ),

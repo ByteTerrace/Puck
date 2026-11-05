@@ -546,7 +546,10 @@ rule phase, if the measurement ever justifies 0.7 ms of gate reads, is: a
 partition-owned evaluation context (locals, bindings, bound keys), `RuleSchedule`
 deciding which gates are speculable (non-volatile, non-iterating), and the
 serial commit re-evaluating every volatile or iterating gate at its own point.
-It is filed, not built.
+The [rule-evaluation memo](rule-evaluation-cost.md) measures the phase (37 %
+of the headless debug tick, most of it the machinery that visits rules rather
+than the authored programs), designs the due list and the facet versions that
+come before any thread, and takes that path as its step 5.
 
 ### The fork and join
 

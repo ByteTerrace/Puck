@@ -350,7 +350,12 @@ direction: concurrent whole-solution builds exhaust a machine's memory.
   or sheds them when memory runs low. Commit charge against the commit limit is
   the line that matters: allocations fail at the limit while physical memory
   can still look free. A windowed debug World grows past ten gigabytes, so a
-  GPU lane closes its World between capture batches. CPU saturation does not
+  GPU lane closes its World between capture batches. A test run that holds
+  gigabytes (the mesh-irradiance laws trace a whole hall and reached 9 GB
+  private) is a heavy suite: the brief says to run it under `puck lease heavy`
+  and by name, never the whole class beside a windowed World; a windowed World
+  and such a run peaking together took the machine to 95% of its commit limit.
+  The lead cannot stop another lane's process; it asks the lane. CPU saturation does not
   endanger lanes but voids timings: a lane whose evidence is a time (a tick, a
   frame, a bake) attributes cost by samples and counts while the machine is
   busy and takes its before/after times in a quiet window the lead clears; a
