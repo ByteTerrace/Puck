@@ -166,11 +166,16 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
     /// <inheritdoc />
     /// <remarks>Reading it first hands the open batch's deferred submissions to the queue
     /// (<see cref="DirectXGpuQueueSubmitter.Split"/>), so an execute, signal or drain a caller puts on the returned queue
-    /// follows every submission made before it.</remarks>
+    /// follows every submission made before it. A removed device is not reported here: the caller's own queue
+    /// operation reports it, and a release's drain treats it as drained (<see cref="DirectXCommandCalls.Drain"/>).</remarks>
     public nint CommandQueueHandle {
         get {
             EnsureCreated();
-            m_submitter.Split();
+            try {
+                m_submitter.Split();
+            } catch (DeviceLostException) {
+                // A removed device executes nothing further; the lists are spent either way.
+            }
 
             return m_commandQueue;
         }
