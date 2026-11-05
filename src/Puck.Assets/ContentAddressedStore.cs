@@ -18,8 +18,8 @@ namespace Puck.Assets;
 /// lands in <c>tmp/</c> first and is promoted with <see cref="File.Move(string, string, bool)"/>, so a reader never
 /// observes a partially-written object or ref. Staging outside <c>objects/</c> and <c>refs/</c>, rather than beside the
 /// destination as <see cref="AtomicFile"/> does, keeps a temporary file out of <see cref="ListRefs"/>. Saving bytes
-/// already present is a no-op past the hash computation: the temp file is discarded rather than replacing the
-/// existing (byte-identical) object. A promotion that fails discards its temp file too, so <c>tmp/</c> never
+/// already present preserves a verified object; a corrupt object is replaced from the supplied bytes. A promotion
+/// that fails discards its temp file, so <c>tmp/</c> never
 /// accumulates an entry a failed write left behind.
 /// <para>A store opened with a <see cref="Retention"/> is a cache: a read that finds an object or a ref stamps it as
 /// used, and a write keeps the objects within the bound and the refs within its entry count, least recently used out
@@ -252,10 +252,11 @@ public sealed class ContentAddressedStore {
 
         Retain(isRef: true, written: refPath);
     }
-    /// <summary>Attempts to read the object bytes for <paramref name="pin"/>.</summary>
+    /// <summary>Attempts to read and verify the object bytes for <paramref name="pin"/>.</summary>
     /// <param name="pin">The object's pin.</param>
     /// <param name="content">When this method returns <see langword="true"/>, the object's bytes.</param>
-    /// <returns><see langword="true"/> if the object was found; otherwise <see langword="false"/>.</returns>
+    /// <returns><see langword="true"/> when the object's bytes match the pin; <see langword="false"/> for a missing
+    /// or corrupt object.</returns>
     public bool TryGet(ContentPin pin, out byte[] content) {
         var objectPath = ObjectPath(pin: pin);
 

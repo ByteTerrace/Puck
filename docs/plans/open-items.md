@@ -2564,6 +2564,15 @@ Next: reproduce the companion overlaps, then one paired windowed tour when no
 lane holds the GPU, compared stop by stop, with `--attach` on one World for
 both runs.
 
+- [medium] Baseline status comparisons can perpetuate a prior comparison failure
+  after its metrics match. `SweepBaseline.Changes`
+  (`src/Puck.Cli.Runs/Sweep/SweepReport.cs:277`) compares the stored, already
+  comparison-adjusted status with the current intrinsic status; `SweepRun`
+  (`src/Puck.Cli.Runs/Sweep/SweepRun.cs:410`) makes every such change red again.
+  Keep the intrinsic verdict separate from comparison failures. Check: identical
+  valid readings against a baseline whose only red reason was a prior baseline
+  difference remain clean, rather than becoming red for `red -> clean`.
+
 - [high] The windowed leg never reaches its tour while the day cycle runs.
   After settling, the sweep runs `world.rate resume`, `world.wait 300`,
   `world.rate pause` in one 120 s call (`SweepCommand.cs:267`) with lockstep on,
