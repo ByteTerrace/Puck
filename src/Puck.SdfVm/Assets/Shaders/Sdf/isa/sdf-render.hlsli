@@ -15,12 +15,14 @@
 #define SDF_PROBE_STACK_DEPTH                     64u
 #define SDF_PROBE_GROUP_SIZE                      32u
 #define SDF_PROBE_RELIGHT_OUTPUT_WORDS            40u
-#define SDF_PROBE_RELIGHT_INPUT_WORDS             45u
+#define SDF_PROBE_RELIGHT_INPUT_WORDS             280u
 #define SDF_PROBE_RELIGHT_HEADER_ROWS             20u
 #define SDF_PROBE_RELIGHT_MATERIAL_ROWS           2u
 #define SDF_PROBE_RELIGHT_LIGHT_ROWS              4u
 #define SDF_PROBE_SELECT_INPUT_WORDS              11u
 #define SDF_PROBE_CACHE_WORDS                     290u
+#define SDF_PROBE_RELIGHT_RESULT_WORDS            275u
+#define SDF_PROBE_RECORD_INPUT_WORD               45u
 #define SDF_MESH_IRRADIANCE_CLEARANCE             0.1
 #define SDF_MESH_IRRADIANCE_DEPTH_SHEET_THICKNESS 2.0
 

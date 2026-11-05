@@ -11,6 +11,9 @@ namespace Puck.SdfVm;
 /// on the device's recording thread, the frame thread.
 /// </summary>
 public interface ISdfGpuWorkClient : IDisposable {
+    /// <summary>Stops admission and wakes pending submitters before the service drains fences and waits for retained
+    /// readbacks. Releases no device resources; a client with no dependent submissions needs no action.</summary>
+    void Stop() { }
     /// <summary>Takes the client's next job, or none: a job taken is recorded, submitted and answered, or abandoned.</summary>
     /// <param name="tables">The tables whose World set the job binds, holding the latest submitted upload.</param>
     /// <param name="job">The job, handed back to <see cref="Record"/> and then to <see cref="Complete"/> or
@@ -267,6 +270,9 @@ public sealed class SdfGpuWork : IDisposable {
     public void Dispose() {
         if (m_disposed) { return; }
         m_disposed = true;
+        // A client can retain one completed output until a dependent copy finishes. Wake a coordinator waiting to
+        // submit that copy before waiting for its retained token; device resources stay alive until the drain below.
+        foreach (var client in m_clients) { client.Stop(); }
         // A submit can execute commands and then fail to arm its fence. That fence proves nothing; drain the device
         // before freeing the recorded resources, including on a backend that armed a fence but never submitted it.
         if (m_submissionFailed) { m_device.TryWaitIdle(); }

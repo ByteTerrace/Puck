@@ -29,7 +29,7 @@ bool probeClear(float3 positionWorld, float3 direction, float reach, uint lane) 
 void CSMain(uint3 group : SV_GroupID, uint lane : SV_GroupIndex) {
     uint probe = sdfProbeWork[3 + group.x];
     uint input = probe * SDF_PROBE_RELIGHT_INPUT_WORDS;
-    uint output = probe * SDF_PROBE_RELIGHT_OUTPUT_WORDS;
+    uint output = probe * SDF_PROBE_RELIGHT_RESULT_WORDS;
     uint hits = sdfProbeInput[input + 3] * SDF_PROBE_CACHE_WORDS + 2;
     uint flags = sdfProbeInput[input];
     bool valid = (flags & 1u) != 0;
@@ -145,4 +145,13 @@ void CSMain(uint3 group : SV_GroupID, uint lane : SV_GroupIndex) {
         }
     }
     for (uint w = lane; w < SDF_MESH_IRRADIANCE_LIGHT_WORDS; w += SDF_PROBE_GROUP_SIZE) { sdfProbeHitsRW[output + 36 + w] = probeVisible[w]; }
+    DeviceMemoryBarrierWithGroupSync();
+    uint record = output + SDF_PROBE_RELIGHT_OUTPUT_WORDS;
+    if (lane < 9) {
+        sdfProbeHitsRW[record + 4 + lane] = f32tof16(asfloat(sdfProbeHitsRW[output + 2 * lane])) |
+            (f32tof16(asfloat(sdfProbeHitsRW[output + 2 * lane + 1])) << 16);
+    }
+    for (uint w = lane; w < SDF_MESH_IRRADIANCE_LIGHT_WORDS; w += SDF_PROBE_GROUP_SIZE) {
+        sdfProbeHitsRW[record + SDF_MESH_IRRADIANCE_LIGHTS_WORD + w] = probeVisible[w];
+    }
 }

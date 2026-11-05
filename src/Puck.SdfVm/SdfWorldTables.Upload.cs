@@ -77,6 +77,7 @@ public sealed partial class SdfWorldTables {
             RecordPreviousTables(commandBuffer: commandBuffer, previousSlot: previousSlot);
         }
         RecordRegionCopies();
+        RecordGpuMeshIrradiance(commandBuffer);
         if (!keepsMotion) {
             CompletePreviousTables(commandBuffer: commandBuffer);
         }
@@ -99,6 +100,8 @@ public sealed partial class SdfWorldTables {
     // the object, and that upload may read it once more (a grown region's carry), so it is disposed once that upload's
     // fence signals, which one queue signals only after every earlier submission, every view that bound it among them.
     private void Retire(IDisposable replaced) => m_retired.Add(item: (m_uploads, replaced));
+    // A background client's buffer can be a source of the frame upload. Use the same retirement door as tables.
+    internal void RetireBackgroundResource(IDisposable replaced) => Retire(replaced);
     // Disposes every replaced object whose following upload has completed.
     private void DisposeRetired(ulong completed) {
         var kept = 0;

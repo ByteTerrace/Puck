@@ -72,6 +72,9 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     internal bool KeepsGpuScene(SdfMeshIrradianceScene scene) {
         lock (m_gate) { return !m_disposed && ReferenceEquals(m_scene, scene); }
     }
+    internal bool KeepsGpuPublication(SdfMeshIrradianceScene scene, int geometry, int window) {
+        lock (m_gate) { return !m_disposed && ReferenceEquals(m_scene, scene) && m_geometry == geometry && m_windowVersion == window; }
+    }
     private bool m_disposed;
     private bool m_trimListening;
 
@@ -197,6 +200,9 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     private const float InsideShare = 0.25f;
     // The probes one batch takes before it looks again at the camera, the lighting and the budget.
     private const int BatchProbes = 384;
+    // A converged frame already waits for the whole window. Larger bounded batches amortize completion/pump latency
+    // without submitting the entire High window as one long-running dispatch. CPU reference uses the same boundaries.
+    private const int DrainBatchProbes = 2048;
 
     // The trace's workers: a lighting-converged frame waits for its window traced to the end, so it traces on all but two of the
     // machine's processors; a trace behind rendered frames takes a quarter of them, so the frame thread keeps a core of
@@ -473,6 +479,10 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     }
 
     private void WriteToTables(ReadOnlyMemory<uint> words) {
+        if (GpuTrace is { } gpu) {
+            m_writeTables!.PublishGpuMeshIrradiance(gpu.FeedbackBuffer, words.Length, m_changedSlots);
+            return;
+        }
         m_writeTables!.FitMeshIrradiance(wordCount: words.Length);
         m_changedSlots.Sort();
         for (var index = 0; (index < m_changedSlots.Count);) {
@@ -1311,7 +1321,8 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                                     unwritten--;
                                     continue;
                                 }
-                                if (level.Cache.ContainsKey(key: (x, y, z))) { m_refillCells.Add(item: (level.Index, (x, y, z))); }
+                                // GPU records are restored by a selected relight and its guarded device commit.
+                                if (GpuTrace is null && level.Cache.ContainsKey(key: (x, y, z))) { m_refillCells.Add(item: (level.Index, (x, y, z))); }
                             }
                         }
                     }
@@ -1362,9 +1373,9 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     private bool Holds(int level, (int X, int Y, int Z) cell) =>
         ((m_volume[(VolumeSlot(cell: cell, level: level) * SdfMeshIrradianceProbe.ProbeWords)] & ~SdfMeshIrradianceProbe.InvalidFlag) == (KeyOf(x: cell.X, y: cell.Y, z: cell.Z) | SdfMeshIrradianceProbe.WrittenFlag));
     // A level's cell's slot words in the volume, marked changed for the level's next publication.
-    private Span<uint> SlotWords(int level, (int X, int Y, int Z) cell) {
+    private Span<uint> SlotWords(int level, (int X, int Y, int Z) cell, bool gpuWritten = false) {
         var slot = VolumeSlot(cell: cell, level: level);
-        if (GpuTrace is not null) { m_gpuDirty.Add(slot); }
+        if (GpuTrace is not null && !gpuWritten) { m_gpuDirty.Add(slot); }
 
         if (!m_dirtySlots[slot]) {
             m_dirtySlots[slot] = true;
@@ -1376,6 +1387,11 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // false, writing nothing, when the cache holds no probe of it. It reads the cache alone, so it runs outside the gate.
     private bool Compose(int level, (int X, int Y, int Z) cell, Span<uint> words) {
         if (!m_levels[level].Cache.TryGetValue(key: cell, value: out var probe)) { return false; }
+        Compose(in probe, cell, words);
+        return true;
+    }
+
+    private static void Compose(in ProbeData probe, (int X, int Y, int Z) cell, Span<uint> words) {
 
         var sky = probe.Sky;
         var radiance = probe.Radiance;
@@ -1393,7 +1409,6 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         words[(SdfMeshIrradianceProbe.OffsetWord + 1)] = Pack(high: probe.Inside, low: probe.Offset.Z);
         probe.Depth.CopyTo(destination: words[SdfMeshIrradianceProbe.DepthWord..]);
 
-        return true;
     }
     private static float Channel(ReadOnlySpan<Vector3> cube, int index) {
         var value = cube[(index / 3)];
@@ -1556,8 +1571,8 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             bool moved;
 
             lock (m_gate) { m_sweepMoved = false; }
-            for (var index = 0; (index < candidates.Count); index += BatchProbes) {
-                Batch(candidates: candidates, count: Math.Min(val1: BatchProbes, val2: (candidates.Count - index)), first: index, lighting: snapshot.Lighting, parallel: parallel, pass: pass, snapshot: in snapshot);
+            for (var index = 0; (index < candidates.Count); index += DrainBatchProbes) {
+                Batch(candidates: candidates, count: Math.Min(val1: DrainBatchProbes, val2: (candidates.Count - index)), first: index, lighting: snapshot.Lighting, parallel: parallel, pass: pass, snapshot: in snapshot);
             }
             // Every probe holds a trace now; later passes relight them all from the bounce this one left.
             for (var index = 0; (index < candidates.Count); index++) { candidates[index] = (candidates[index] with { Trace = false }); }
@@ -1679,7 +1694,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         var results = m_results;
 
         if (results.Length < count) {
-            results = new ProbeData[BatchProbes];
+            results = new ProbeData[Math.Max(BatchProbes, count)];
             m_results = results;
         }
 
@@ -1688,7 +1703,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         for (var index = 0; (index < count); index++) { traces |= candidates[(first + index)].Trace; }
 
         // A whole batch's hit block even for a short batch, so every block is large enough for the large object heap.
-        var hits = (traces ? new ProbeBlock(count: BatchProbes) : null);
+        var hits = (traces ? new ProbeBlock(count: Math.Max(BatchProbes, count)) : null);
         var lights = new LightBlock(count: count);
         var feedback = (lighting.Feedback && snapshot.Layout.Bounce && (pass != 0));
         var layout = snapshot.Layout;
@@ -1705,12 +1720,26 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                 lights: lights, lows: lows, scene: scene, sweep: sweep, prepared: prepared?[index]);
         });
 
-        if (GpuTrace is not null) { RelightGpu(candidates, first, count, results, lights, lighting, in snapshot, feedback); }
+        using var gpuResult = GpuTrace is not null ? RelightGpu(candidates, first, count, results, lights, lighting, in snapshot, feedback) : null;
         if (GpuTrace is not null) { hits?.ReleaseHits(); }
+
+        if (gpuResult is not null) {
+            var destinations = new int[count];
+            lock (m_gate) {
+                if (!Stands(in snapshot)) { m_gpuVolume = null; Array.Clear(results, 0, count); return; }
+                for (var i = 0; i < count; i++) {
+                    var candidate = candidates[first + i];
+                    destinations[i] = results[i].Hits is null ? -1 : VolumeSlot(candidate.Level, candidate.Cell);
+                }
+            }
+            try { GpuTrace!.Commit(snapshot.Scene, snapshot.Geometry, snapshot.WindowVersion, gpuResult, destinations); }
+            catch (OperationCanceledException) { lock (m_gate) { m_gpuVolume = null; } throw; }
+        }
 
         m_landed.Clear();
         lock (m_gate) {
             if (!Stands(snapshot: in snapshot)) {
+                m_gpuVolume = null;
                 Array.Clear(array: results, index: 0, length: count);
                 return;
             }
@@ -1781,7 +1810,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                     var (level, cell) = m_restoreCells[index];
 
                     if (!Holds(cell: cell, level: level)) { m_levels[level].Unwritten--; }
-                    m_restoreWords.AsSpan(length: SdfMeshIrradianceProbe.ProbeWords, start: (index * SdfMeshIrradianceProbe.ProbeWords)).CopyTo(destination: SlotWords(cell: cell, level: level));
+                    m_restoreWords.AsSpan(length: SdfMeshIrradianceProbe.ProbeWords, start: (index * SdfMeshIrradianceProbe.ProbeWords)).CopyTo(destination: SlotWords(cell: cell, level: level, gpuWritten: GpuTrace is not null));
                 }
                 m_landed.Clear();
 

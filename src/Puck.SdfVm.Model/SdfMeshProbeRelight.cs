@@ -9,7 +9,11 @@ public static class SdfMeshProbeRelight {
     /// <summary>Six RGB radiance values, six local values and the visibility bits.</summary>
     public const int OutputWords = 36 + SdfMeshIrradianceProbe.LightWords;
     /// <summary>Flags, allocation token, cache slot, optional upload address, then the previous output.</summary>
-    public const int InputWords = 5 + OutputWords;
+    public const int InputWords = RecordInputWord + SdfMeshIrradianceProbe.ProbeWords;
+    /// <summary>The geometric record supplied beside the relight inputs.</summary>
+    public const int RecordInputWord = 5 + OutputWords;
+    /// <summary>The diagnostic lighting output followed by the GPU-packed publication record.</summary>
+    public const int ResultWords = OutputWords + SdfMeshIrradianceProbe.ProbeWords;
     /// <summary>Float4 rows preceding materials: counts, sources, gains, three window pairs, axis totals and sky.</summary>
     public const int HeaderRows = 20;
     /// <summary>Reflected RGB and wrap, then emitted RGB.</summary>

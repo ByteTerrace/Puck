@@ -64,6 +64,11 @@ public sealed partial class SdfMeshIrradiance {
 
     private bool ListGpu(in Snapshot snapshot, bool all, List<Candidate> candidates, List<float>? ages) {
         var layout = snapshot.Layout;
+        uint[] records;
+        lock (m_gate) {
+            if (!Stands(in snapshot)) { throw new OperationCanceledException(); }
+            records = m_volume;
+        }
         var origins = new Vector4[layout.TotalCount];
         var input = new uint[layout.TotalCount * SdfMeshProbeRelight.SelectionInputWords];
         TrimGpuHits(in snapshot);
@@ -84,7 +89,9 @@ public sealed partial class SdfMeshIrradiance {
                         var center = new Vector3(x + .5f, y + .5f, z + .5f) * spacing;
                         origins[i] = new(center, 0);
                         var row = input.AsSpan(i * SdfMeshProbeRelight.SelectionInputWords, SdfMeshProbeRelight.SelectionInputWords);
-                        row[0] = present ? 1u : 0;
+                        var slot = layout.OffsetOf(level) + SlotOf(x, y, z, dims);
+                        var written = (records[slot * SdfMeshIrradianceProbe.ProbeWords] & ~SdfMeshIrradianceProbe.InvalidFlag) == (KeyOf(x, y, z) | SdfMeshIrradianceProbe.WrittenFlag);
+                        row[0] = (present ? 1u : 0) | (written ? 0 : 2u);
                         row[1] = (uint)probe.Geometry; row[2] = (uint)probe.Lighting; row[3] = (uint)probe.Sweep; row[4] = (uint)level;
                         row[5] = BitConverter.SingleToUInt32Bits(probe.Offset.X);
                         row[6] = BitConverter.SingleToUInt32Bits(probe.Offset.Y);
@@ -100,13 +107,13 @@ public sealed partial class SdfMeshIrradiance {
             }
         }
         var changes = new List<Vector4> {
-            new(all ? 1 : 0, snapshot.Geometry, snapshot.Lighting.Version, snapshot.Sweep),
-            new(snapshot.Changes.Length, 0, snapshot.Changes.Length == 0 ? 0 : snapshot.Changes[0].Geometry, layout.Reach),
+            new(all ? 1 : 0, BitConverter.Int32BitsToSingle(snapshot.Geometry), BitConverter.Int32BitsToSingle(snapshot.Lighting.Version), BitConverter.Int32BitsToSingle(snapshot.Sweep)),
+            new(snapshot.Changes.Length, 0, BitConverter.Int32BitsToSingle(snapshot.Changes.Length == 0 ? 0 : snapshot.Changes[0].Geometry), layout.Reach),
             new(layout.SpacingOf(0), 0), new(layout.SpacingOf(1), 0), new(layout.SpacingOf(2), 0),
         };
         foreach (var (geometry, boxes) in snapshot.Changes) {
-            if (boxes is null) { changes.Add(new(0, 0, 0, geometry)); changes.Add(new(0, 0, 0, 1)); }
-            else { foreach (var box in boxes) { changes.Add(new(box.Low, geometry)); changes.Add(new(box.High, 0)); } }
+            if (boxes is null) { changes.Add(new(0, 0, 0, BitConverter.Int32BitsToSingle(geometry))); changes.Add(new(0, 0, 0, 1)); }
+            else { foreach (var box in boxes) { changes.Add(new(box.Low, BitConverter.Int32BitsToSingle(geometry))); changes.Add(new(box.High, 0)); } }
         }
         changes[1] = changes[1] with { Y = (changes.Count - 5) / 2 };
         var selected = GpuTrace!.Select(snapshot.Scene, origins, input, [.. changes]);
@@ -121,7 +128,7 @@ public sealed partial class SdfMeshIrradiance {
         return stale;
     }
 
-    private void RelightGpu(List<Candidate> candidates, int first, int count, ProbeData[] probes, LightBlock lights,
+    private SdfMeshProbeGpuWork.Result RelightGpu(List<Candidate> candidates, int first, int count, ProbeData[] probes, LightBlock lights,
         Lighting lighting, in Snapshot snapshot, bool feedback) {
         var rows = new Vector4[SdfMeshProbeRelight.HeaderRows + (lighting.Materials.Length + 1) * SdfMeshProbeRelight.MaterialRows +
             (lighting.Lights.Length + lighting.Points.Length) * SdfMeshProbeRelight.LightRows];
@@ -182,6 +189,7 @@ public sealed partial class SdfMeshIrradiance {
             row[1] = (uint)probe.GpuToken;
             row[2] = (uint)(probe.GpuToken >> 32);
             row[3] = probe.GpuSlot;
+            Compose(in probe, candidate.Cell, row[SdfMeshProbeRelight.RecordInputWord..]);
             if (!candidate.Trace && m_levels[candidate.Level].Cache.TryGetValue(candidate.Cell, out var previous) && previous.Shading is not null &&
                 previous.Geometry == snapshot.Geometry && previous.LocalVersion == lighting.LocalVersion) {
                 row[0] |= 2;
@@ -206,7 +214,7 @@ public sealed partial class SdfMeshIrradiance {
             }
             m_gpuDirty.Clear();
         }
-        uint[] output;
+        SdfMeshProbeGpuWork.Result output;
         try { output = GpuTrace!.Relight(snapshot.Scene, origins, input, rows, volumeWords, updates); }
         catch (OperationCanceledException) {
             // Admission cancellation consumed no delta. Re-send a full snapshot on the next accepted job.
@@ -216,7 +224,7 @@ public sealed partial class SdfMeshIrradiance {
         for (var i = 0; i < count; i++) {
             var probe = probes[i];
             if (probe.Hits is null || probe.Invalid) { continue; }
-            var row = output.AsSpan(i * SdfMeshProbeRelight.OutputWords, SdfMeshProbeRelight.OutputWords);
+            var row = output.Words.AsSpan(i * SdfMeshProbeRelight.ResultWords, SdfMeshProbeRelight.OutputWords);
             MemoryMarshal.Cast<uint, Vector3>(row[..18]).CopyTo(lights.Radiance(i));
             MemoryMarshal.Cast<uint, Vector3>(row.Slice(18, 18)).CopyTo(lights.Local(i));
             row[36..].CopyTo(lights.Lights(i));
@@ -224,5 +232,6 @@ public sealed partial class SdfMeshIrradiance {
             probes[i] = probe with { Moved = candidate.Trace || !m_levels[candidate.Level].Cache.TryGetValue(candidate.Cell, out var previous) ||
                 previous.Shading is null || !Settled(lights.Radiance(i), previous.Radiance) };
         }
+        return output;
     }
 }

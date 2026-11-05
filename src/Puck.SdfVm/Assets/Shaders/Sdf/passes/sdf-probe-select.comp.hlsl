@@ -14,7 +14,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     sdfProbeOrigins.GetDimensions(count, stride);
     if (id.x >= count) { return; }
     uint at = id.x * SDF_PROBE_SELECT_INPUT_WORDS;
-    bool present = sdfProbeInput[at] != 0;
+    bool present = (sdfProbeInput[at] & 1u) != 0;
     uint cache = sdfProbeInput[at + 8] * SDF_PROBE_CACHE_WORDS;
     uint2 token = uint2(sdfProbeInput[at + 9], sdfProbeInput[at + 10]);
     present = present && any(token != 0) && all(token == uint2(sdfProbeCache[cache], sdfProbeCache[cache + 1]));
@@ -25,8 +25,8 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     float4 state = sdfProbeLighting[0];
     float4 limits = sdfProbeLighting[1];
     bool trace = !present;
-    if (present && geometry != (uint)state.y) {
-        trace = limits.x == 0 || geometry + 1 < (uint)limits.z;
+    if (present && geometry != asuint(state.y)) {
+        trace = limits.x == 0 || geometry + 1 < asuint(limits.z);
         float3 spacing = sdfProbeLighting[2 + level].xyz;
         float3 center = sdfProbeOrigins[id.x].xyz;
         float3 origin = center + asfloat(uint3(sdfProbeInput[at + 5], sdfProbeInput[at + 6], sdfProbeInput[at + 7]));
@@ -35,7 +35,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         for (uint box = 0; !trace && box < (uint)limits.y; box++) {
             float4 low = sdfProbeLighting[5 + 2 * box];
             float4 high = sdfProbeLighting[6 + 2 * box];
-            if ((uint)low.w <= geometry) { continue; }
+            if (asuint(low.w) <= geometry) { continue; }
             if (high.w != 0 || all(max(low.xyz, center - placement) <= min(high.xyz, center + placement))) { trace = true; break; }
             float3 toward = (low.xyz + high.xyz) * 0.5 - origin;
             float radius = length((high.xyz - low.xyz) * 0.5);
@@ -51,8 +51,8 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
             }
         }
     }
-    bool rebase = present && !trace && geometry != (uint)state.y;
-    bool due = state.x != 0 || trace || rebase || sweep != (uint)state.w;
-    bool stale = !due && lighting != (uint)state.z;
+    bool rebase = present && !trace && geometry != asuint(state.y);
+    bool due = state.x != 0 || (sdfProbeInput[at] & 2u) != 0 || trace || rebase || sweep != asuint(state.w);
+    bool stale = !due && lighting != asuint(state.z);
     sdfProbeHitsRW[id.x] = (trace ? 1u : 0u) | (due ? 2u : 0u) | (stale ? 4u : 0u);
 }
