@@ -48,6 +48,8 @@ public sealed class SdfKernelInterfaces {
     public const string ProbeDirections = "sdfProbeDirections";
     /// <summary>Signed hit distance and packed normal/material words written by the trace.</summary>
     public const string ProbeHitsWritten = "sdfProbeHitsRW";
+    /// <summary>Optional diagnostic instance and triangle ordinals for each traced ray.</summary>
+    public const string ProbeIdentitiesWritten = "sdfProbeIdentitiesRW";
     /// <summary>The <see cref="BrickBake"/> request buffer: a three-row header, then the carves.</summary>
     public const string BakeRequest = "bakeRequest";
     /// <summary>The <see cref="BrickBake"/> brick pool the baker writes.</summary>
@@ -128,6 +130,7 @@ public sealed class SdfKernelInterfaces {
             Read(element: ShaderValueType.Float4, name: ProbeOrigins),
             Read(element: ShaderValueType.Float4, name: ProbeDirections),
             Written(element: ShaderValueType.Uint, name: ProbeHitsWritten),
+            Written(element: ShaderValueType.Uint2, name: ProbeIdentitiesWritten),
         ], pushesIndex: false);
         WorldParameters = ShaderPipelineParameterLayout.ForPackage(
             config: null,

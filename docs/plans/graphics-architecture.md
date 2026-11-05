@@ -475,9 +475,10 @@ plans' fifth goal names.
 **Risks.** G1's throughput is an extrapolation from a Pascal Titan X to the
 2060 and from nothing to the Deck; its first check is a measured rays per
 second on each. The CPU/GPU parity of a float traversal is by tolerance (a
-ray grazing an edge may hit on one side and miss on the other), so the
-device law compares hit distances to a relative tolerance and normals and
-materials exactly where both hit, and the gather law that already compares
+ray grazing an edge is ill-conditioned), so the
+device law requires exact hit/miss, instance/triangle identity and discrete
+flags, permits independently checked near-tied triangles, and bounds distances
+and positions by scene scale and float precision. The gather law that already compares
 both backends' slots stays the pixel-level check. A kernel with a traversal
 stack must not spill to local memory on NVIDIA's Vulkan driver (the
 rendering skill's constant-index rule); a groupshared stack per lane is the
@@ -522,12 +523,18 @@ kernel and the CPU `TraceHits` share the hit-word packing through
 (a sync pair, listed in [sync pairs](../../.claude/skills/rendering/references/sync-pairs.md)),
 and a device law (`SdfMeshIrradianceTraceDeviceLawTests`, beside the gather
 law) traces one published scene on the CPU and on each backend and requires
-every texel's material and normal bytes equal where both hit and the
-distances within a relative tolerance; a texel where one hits and the other
-misses fails unless the hit lies within that tolerance of the reach. Where
-the guarantee stops: a grazing ray's hit on one side of an edge and miss on
-the other is inside the tolerance by construction, and the gather law holds
-the pixels.
+every texel's hit/miss and instance/triangle identity, material, normal bytes
+and back-face flag exactly. Distances and reconstructed positions use
+`64 * 2^-23 * scale / abs(dot(normal, direction))` metres, where scale is the
+largest world-space vertex magnitude, ray-origin magnitude or reach (at least
+one metre). The rounding allowance covers the fixture's affine transforms,
+cross/dot products and division; the denominator accounts for plane-intersection
+conditioning at grazing incidence. A different identity is accepted only when
+the CPU independently intersects that claimed triangle within the same distance
+bound, with its flags still exact. Ties are counted and must be below 0.1% of
+rays. A skipped top-level subtree is the negative control on each backend.
+Where the guarantee stops: this bounds the law's well-conditioned transformed
+box corpus, not arbitrary singular geometry, and the gather law holds the pixels.
 
 **Reuse, no second mechanism.** The hierarchy is `SdfMeshIrradianceScene`'s,
 uploaded (its `Node` layout, leaf order and per-draw inverse transforms),

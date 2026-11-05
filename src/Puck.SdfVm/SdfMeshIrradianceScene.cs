@@ -303,7 +303,11 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
     /// <param name="material">Program material.</param>
     /// <param name="bakeHalfDiagonal">Half of the hit draw's world-space contour cell diagonal; zero for authored triangles.</param>
     /// <returns>Whether a retained triangle was hit.</returns>
-    public bool Intersect(Vector3 origin, Vector3 direction, float maximum, out float distance, out Vector3 normal, out int material, out float bakeHalfDiagonal) {
+    public bool Intersect(Vector3 origin, Vector3 direction, float maximum, out float distance, out Vector3 normal, out int material, out float bakeHalfDiagonal) =>
+        Intersect(origin, direction, maximum, out distance, out normal, out material, out bakeHalfDiagonal, out _, out _);
+
+    /// <summary>Finds the nearest hit, also returning its scene instance and original mesh triangle ordinal, or -1 for a miss.</summary>
+    public bool Intersect(Vector3 origin, Vector3 direction, float maximum, out float distance, out Vector3 normal, out int material, out float bakeHalfDiagonal, out int instance, out int triangle) {
         var inverse = Reciprocal(direction: direction);
         var nearest = new DrawLeaves(any: false, direction: direction, entries: m_entries, instances: m_instances, inverse: inverse, origin: origin);
 
@@ -312,6 +316,8 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
         if ((m_nodes.Length > 0) && Slab(low: m_nodes[0].Low, high: m_nodes[0].High, origin: origin, inverse: inverse, maximum: distance, entry: out _)) {
             Walk(distance: ref distance, inverse: inverse, leaves: ref nearest, nodes: m_nodes, origin: origin, start: 0);
         }
+        instance = nearest.Instance;
+        triangle = instance < 0 ? -1 : m_instances[instance].Geometry.Triangles[nearest.Triangle];
         if (nearest.Instance < 0) {
             normal = default;
             material = 0;

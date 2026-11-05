@@ -3,6 +3,16 @@
 The CPU trace and the views shader share one probe lookup. Read this before
 changing indirect light, probe visibility, the volume boundary or exposure.
 
+The software trace prototype's device law compares scene instance and original
+mesh triangle ordinals through a diagnostic output separate from the hit words.
+Hit/miss, material, normal bytes and back-face flags are exact; distance and
+reconstructed position use a scene-scale FP32 bound with a grazing-incidence
+factor (`SdfMeshIrradianceTraceDeviceLawTests`). A different triangle must itself
+intersect within that bound; the law reports near ties and rejects more than
+0.1% of rays. It also skips a top-level subtree and requires rejection on each
+backend. This law does not establish runtime GPU integration; the volume still
+uses the CPU until G1's runtime steps land.
+
 | Part | Owner |
 |---|---|
 | Static scene and ray visibility | `SdfMeshIrradianceScene` |

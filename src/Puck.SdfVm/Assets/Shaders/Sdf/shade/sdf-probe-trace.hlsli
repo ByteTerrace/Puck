@@ -63,8 +63,9 @@ bool sdfProbeTriangleHit(float3 origin, float3 direction, float3 v0, float3 e1, 
     distance = dot(e2, q) * inverse;
     return distance > 1.0e-4 && distance < maximum;
 }
-bool sdfProbeIntersect(float3 origin, float3 direction, float maximum, uint lane, out float distance, out float3 normal, out uint material) {
+bool sdfProbeIntersect(float3 origin, float3 direction, float maximum, uint lane, out float distance, out float3 normal, out uint material, out uint2 identity) {
     distance = maximum; normal = 0; material = 0;
+    identity = uint2(0xffffffffu, 0xffffffffu);
     uint root = sdfProbeScene[0];
     float3 inverse = 1.0 / direction;
     float entryDistance;
@@ -118,6 +119,7 @@ bool sdfProbeIntersect(float3 origin, float3 direction, float maximum, uint lane
         }
     }
     if (hitInstance == 0) { return false; }
+    identity = uint2(sdfProbeScene[hitInstance + SDF_PROBE_INSTANCE_INDEX_WORD], hitTriangle);
     float3 v0, e1, e2;
     sdfProbeTriangle(hitInstance, hitTriangle, v0, e1, e2);
     precise float3 n = cross(e1, e2);
@@ -131,9 +133,9 @@ bool sdfProbeIntersect(float3 origin, float3 direction, float maximum, uint lane
     material = sdfProbeScene[hitInstance + SDF_PROBE_GEOMETRY_WORD + 3] + (materials == 0xffffffffu ? 0 : sdfMeshRegion[materials + hitTriangle]);
     return true;
 }
-uint2 sdfProbeHit(float3 origin, float3 direction, float maximum, uint lane) {
+uint2 sdfProbeHit(float3 origin, float3 direction, float maximum, uint lane, out uint2 identity) {
     float distance; float3 normal; uint material;
-    if (!sdfProbeIntersect(origin, direction, maximum, lane, distance, normal, material)) { return uint2(0x7f800000u, 0); }
+    if (!sdfProbeIntersect(origin, direction, maximum, lane, distance, normal, material, identity)) { return uint2(0x7f800000u, 0); }
     bool back = dot(normal, direction) > 0;
     if (back) { normal = -normal; }
     int2 packed = (int2)round(sdfOctEncode(normal) * SDF_MESH_IRRADIANCE_DEPTH_NORMAL_SCALE);

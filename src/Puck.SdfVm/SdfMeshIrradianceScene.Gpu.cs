@@ -51,6 +51,7 @@ public sealed partial class SdfMeshIrradianceScene {
             record[SdfMeshProbeTrace.GeometryWord + 2] = instance.TriangleMaterials.IsEmpty ? uint.MaxValue : (uint)placement.MaterialWord;
             record[SdfMeshProbeTrace.GeometryWord + 3] = unchecked((uint)instance.Material);
             record[SdfMeshProbeTrace.IdentityWord] = instance.Identity ? 1u : 0u;
+            record[SdfMeshProbeTrace.InstanceIndexWord] = (uint)index;
         }
         return result;
     }

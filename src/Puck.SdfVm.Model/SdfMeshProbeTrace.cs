@@ -22,6 +22,8 @@ public static class SdfMeshProbeTrace {
     public const int GeometryWord = 25;
     /// <summary>Whether the instance's transform is exactly identity.</summary>
     public const int IdentityWord = 29;
+    /// <summary>The scene instance ordinal, for hit identity diagnostics.</summary>
+    public const int InstanceIndexWord = 30;
     /// <summary>Traversal stack capacity shared with the CPU walk.</summary>
     public const int StackDepth = 64;
     /// <summary>Threads per trace group; the two per-thread stacks occupy 16 KiB.</summary>
