@@ -30,9 +30,9 @@ namespace Puck.World.Authoring;
 /// <param name="Receive">The finite nonnegative gain on received indirect light; null means one.</param>
 /// <param name="Paints">Up to <see cref="CreationDocument.MaxPalettePaints"/> paints, each drawn over the one
 /// before; null or empty paints none.</param>
-/// <param name="EmissiveLane">The render lane in [0, 3] whose saturated value scales <paramref name="Emissive"/> at
-/// shading time, read from each inhabited body's own look lanes; a placement without lanes reads zero, and null
-/// keeps the emissive static.</param>
+/// <param name="EmissiveLane">The render lane whose saturated value scales <paramref name="Emissive"/> at shading
+/// time: 0 to 3 an inhabited body's own look lanes (a placement without them reads zero), 4 to 7 the world's
+/// <c>render.lanes</c> (<see cref="SdfLanes"/>). Null keeps the emissive static.</param>
 /// <param name="Glass">The slot's glass (<see cref="PaletteGlassDocument"/>), whose tint is <paramref name="Color"/>
 /// and whose frost is <paramref name="Roughness"/>; null keeps the slot opaque.</param>
 /// <param name="Toon">The slot's own cel style (<see cref="ToonStyleDocument"/>, on unless it says

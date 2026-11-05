@@ -10,6 +10,7 @@
 #include "../field/sdf-quaternion.hlsli"
 #include "sdf-atmosphere.hlsli"
 #include "../isa/sdf-render.hlsli"
+#include "../frame/sdf-lanes.hlsli"
 // The table's capacity in volumes is SDF_MAX_VOLUMES (SdfProgramBuilder.MaxVolumes) and the phase anisotropy a medium
 // scatters the bodies' light by SDF_VOLUME_SCATTER_ANISOTROPY (SdfVolume.ScatterAnisotropy).
 struct SdfVolumeData {
@@ -87,11 +88,11 @@ float3 sdfVolumeLocalDirection(SdfVolumeData v, float3 worldDirection) {
 
     return rotatePointByInverseQuaternion(d, v.rotation);
 }
-// An absent lane uses constant gain; a selected lane without a riding slot reads zero.
+// An absent lane uses constant gain; a slot lane without a riding slot reads zero.
 float sdfVolumeIntensityScale(SdfVolumeData v) {
     if (v.intensityLane < 0) return 1.0;
-    if (v.dynamicSlot == SDF_TRANSFORM_SLOT_NONE) return 0.0;
-    return max(sdfDynamicTransforms[3u * (uint)v.dynamicSlot + 2u][(uint)v.intensityLane], 0.0);
+    float4 slotLanes = ((v.dynamicSlot != SDF_TRANSFORM_SLOT_NONE) ? sdfDynamicTransforms[3u * (uint)v.dynamicSlot + 2u] : float4(0.0, 0.0, 0.0, 0.0));
+    return max(sdfLane(slotLanes, (uint)v.intensityLane), 0.0);
 }
 
 // The volume-local AABB slab test (Kay/Kajiya), centered on the origin with the given half-extent. localDirection

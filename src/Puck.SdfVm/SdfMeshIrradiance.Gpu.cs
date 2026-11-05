@@ -34,18 +34,45 @@ public sealed partial class SdfMeshIrradiance {
     private readonly HashSet<int> m_gpuDirty = [];
     private uint[]? m_gpuVolume;
     private bool m_gpuDraining;
+    // Set by a device reattach; cleared once a completed job carried the volume's full snapshot into the new feedback.
+    private bool m_republishOwed;
+
+    // Under the gate, once the feedback holds the volume's words: owes every slot to the next publication, so each
+    // measured level republishes whole into the new tables.
+    private void RepublishAll() {
+        m_republishOwed = false;
+        for (var level = 0; level < m_levels.Length; level++) {
+            var first = m_layout.OffsetOf(level: level);
+            for (var slot = first; slot < first + m_layout.CountOf(level: level); slot++) {
+                if (m_dirtySlots[slot]) { continue; }
+                m_dirtySlots[slot] = true;
+                m_levels[level].Changed.Add(item: slot);
+            }
+        }
+    }
 
     // Allocation tokens never repeat. Selection validates both words on the device, so a cached CPU description
     // cannot reuse hits after its slot was reclaimed. Only the coordinator allocates or frees, between jobs.
-    internal static readonly int GpuHitCapacity = 2 * MaxProbes;
-    private readonly GpuRangeAllocator m_hitSlots = new((uint)GpuHitCapacity, GpuHitCapacity);
+    // The device hit cache holds GpuHitCapacity slots: every window cell's owner, plus two fresh slots for each probe a
+    // batch places (its first trace and its trial traces, PlaceBatch), so it follows the published tier.
+    private GpuRangeAllocator m_hitSlots = new(size: 1u, maxRanges: 1);
     private readonly Dictionary<(int Level, (int X, int Y, int Z) Cell), (uint Slot, ulong Token)> m_hitOwners = [];
     private ulong m_hitToken;
+    internal uint GpuHitCapacity => m_hitSlots.Size;
+    private static uint HitCapacityOf(Layout layout) => checked((uint)(layout.TotalCount + (2 * DrainBatchProbes)));
 
-    private void TrimGpuHits(in Snapshot snapshot) {
-        if (m_hitOwners.Count <= MaxProbes) { return; }
-        var lows = snapshot.Lows;
-        var layout = snapshot.Layout;
+    // A new tier's probes are all new, so its cache starts empty at its own size.
+    private void FitGpuHits(Layout layout) {
+        var capacity = HitCapacityOf(layout: layout);
+        if (m_hitSlots.Size == capacity) { return; }
+        m_hitOwners.Clear();
+        m_hitSlots = new GpuRangeAllocator(size: capacity, maxRanges: (int)capacity);
+    }
+
+    // Releases the owners outside the windows once more owners are held than the windows have cells, or whenever
+    // `force`; selection has no use for their hits, and a later visit retraces them.
+    private void TrimGpuHits(Layout layout, (int X, int Y, int Z)[] lows, bool force = false) {
+        if (!force && m_hitOwners.Count <= layout.TotalCount) { return; }
         var dropped = m_hitOwners.Where(entry => {
             var (level, cell) = entry.Key;
             var low = lows[level]; var dims = layout.DimsOf(level);
@@ -54,13 +81,31 @@ public sealed partial class SdfMeshIrradiance {
         foreach (var entry in dropped) { m_hitSlots.Free(entry.Value.Slot); m_hitOwners.Remove(entry.Key); }
     }
 
-    private (uint Slot, ulong Token) OwnGpuHits(Candidate candidate) {
+    // A fresh slot the trace writes a placed probe's hits into; the probe's relight adopts it (AdoptGpuHits).
+    private uint AllocateGpuHits(Layout layout, (int X, int Y, int Z)[] lows) {
+        if (m_hitSlots.FreeCount == 0) { TrimGpuHits(layout: layout, lows: lows, force: true); }
+        return m_hitSlots.Allocate(count: 1);
+    }
+
+    // Makes a placed probe's fresh slot its cell's owner under a new token, freeing the slot the cell owned before.
+    private (uint Slot, ulong Token) AdoptGpuHits(Candidate candidate, uint slot) {
         var key = (candidate.Level, candidate.Cell);
-        var slot = m_hitOwners.TryGetValue(key, out var previous) ? previous.Slot : m_hitSlots.Allocate(1);
+        if (m_hitOwners.TryGetValue(key, out var previous) && previous.Slot != slot) { m_hitSlots.Free(start: previous.Slot); }
         var owner = (slot, checked(++m_hitToken));
         m_hitOwners[key] = owner;
         return owner;
     }
+
+    // Frees each fresh slot a batch placed whose relight never adopted it (a dropped or cancelled batch).
+    private void FreeUnadoptedGpuHits(List<Candidate> candidates, int first, uint[] fresh) {
+        for (var i = 0; i < fresh.Length; i++) {
+            if (fresh[i] == NoGpuHits) { continue; }
+            var candidate = candidates[first + i];
+            if (m_hitOwners.TryGetValue((candidate.Level, candidate.Cell), out var owner) && owner.Slot == fresh[i]) { continue; }
+            m_hitSlots.Free(start: fresh[i]);
+        }
+    }
+    private const uint NoGpuHits = uint.MaxValue;
 
     private bool ListGpu(in Snapshot snapshot, bool all, List<Candidate> candidates, List<float>? ages) {
         var layout = snapshot.Layout;
@@ -71,7 +116,8 @@ public sealed partial class SdfMeshIrradiance {
         }
         var origins = new Vector4[layout.TotalCount];
         var input = new uint[layout.TotalCount * SdfMeshProbeRelight.SelectionInputWords];
-        TrimGpuHits(in snapshot);
+        FitGpuHits(layout: layout);
+        TrimGpuHits(layout: layout, lows: snapshot.Lows);
         var now = Stopwatch.GetTimestamp();
         candidates.Clear();
         ages?.Clear();
@@ -116,7 +162,7 @@ public sealed partial class SdfMeshIrradiance {
             else { foreach (var box in boxes) { changes.Add(new(box.Low, BitConverter.Int32BitsToSingle(geometry))); changes.Add(new(box.High, 0)); } }
         }
         changes[1] = changes[1] with { Y = (changes.Count - 5) / 2 };
-        var selected = GpuTrace!.Select(snapshot.Scene, origins, input, [.. changes]);
+        var selected = GpuTrace!.Select(snapshot.Scene, origins, input, [.. changes], GpuHitCapacity);
         var take = 0;
         var stale = false;
         for (var i = 0; i < selected.Length; i++) {
@@ -169,10 +215,7 @@ public sealed partial class SdfMeshIrradiance {
     private SdfMeshProbeGpuWork.Result RelightGpu(List<Candidate> candidates, int first, int count, ProbeData[] probes, LightBlock lights,
         Lighting lighting, in Snapshot snapshot, bool feedback) {
         var rows = LightingRows(lighting, in snapshot, feedback);
-        var traced = 0;
-        for (var i = 0; i < count; i++) { if (candidates[first + i].Trace) { traced++; } }
-        var input = new uint[count * SdfMeshProbeRelight.InputWords + traced * SdfMeshProbeDepth.HitWords];
-        var hitCursor = count * SdfMeshProbeRelight.InputWords;
+        var input = new uint[count * SdfMeshProbeRelight.InputWords];
         var origins = new Vector4[count];
         for (var i = 0; i < count; i++) {
             var candidate = candidates[first + i];
@@ -183,13 +226,12 @@ public sealed partial class SdfMeshIrradiance {
             var row = input.AsSpan(i * SdfMeshProbeRelight.InputWords, SdfMeshProbeRelight.InputWords);
             row[0] = probe.Invalid ? 0u : 1u;
             if (candidate.Trace) {
-                var owner = OwnGpuHits(candidate);
+                // The trace already wrote this probe's hits into its fresh device slot (PlaceBatch); the relight's cache
+                // pass stamps the slot with the new token before anything reads it.
+                var owner = AdoptGpuHits(candidate, probe.GpuSlot);
                 probe = probe with { GpuSlot = owner.Slot, GpuToken = owner.Token };
                 probes[i] = probe;
                 row[0] |= 4;
-                row[4] = (uint)hitCursor;
-                probe.HitWords.CopyTo(input.AsSpan(hitCursor));
-                hitCursor += SdfMeshProbeDepth.HitWords;
             }
             row[1] = (uint)probe.GpuToken;
             row[2] = (uint)(probe.GpuToken >> 32);
@@ -198,17 +240,19 @@ public sealed partial class SdfMeshIrradiance {
             if (!candidate.Trace && m_levels[candidate.Level].Cache.TryGetValue(candidate.Cell, out var previous) && previous.Shading is not null &&
                 previous.Geometry == snapshot.Geometry && previous.LocalVersion == lighting.LocalVersion) {
                 row[0] |= 2;
-                MemoryMarshal.Cast<Vector3, uint>(previous.Local).CopyTo(row[(5 + 18)..]);
-                previous.Lights.CopyTo(row[(5 + 36)..]);
+                MemoryMarshal.Cast<Vector3, uint>(previous.Local).CopyTo(row[(SdfMeshProbeRelight.PreviousWord + 18)..]);
+                previous.Lights.CopyTo(row[(SdfMeshProbeRelight.PreviousWord + 36)..]);
             }
         }
         (int Word, uint[] Words)[] updates;
         int volumeWords;
+        uint[]? snapshotOf = null;
         lock (m_gate) {
             volumeWords = m_volume.Length;
             if (!ReferenceEquals(m_gpuVolume, m_volume)) {
                 updates = [(0, (uint[])m_volume.Clone())];
                 m_gpuVolume = m_volume;
+                snapshotOf = m_volume;
             } else {
                 updates = new (int, uint[])[m_gpuDirty.Count];
                 var i = 0;
@@ -220,11 +264,16 @@ public sealed partial class SdfMeshIrradiance {
             m_gpuDirty.Clear();
         }
         SdfMeshProbeGpuWork.Result output;
-        try { output = GpuTrace!.Relight(snapshot.Scene, origins, input, rows, volumeWords, updates); }
+        try { output = GpuTrace!.Relight(snapshot.Scene, origins, input, rows, volumeWords, updates, GpuHitCapacity); }
         catch (OperationCanceledException) {
             // Admission cancellation consumed no delta. Re-send a full snapshot on the next accepted job.
             lock (m_gate) { m_gpuVolume = null; }
             throw;
+        }
+        if (snapshotOf is not null) {
+            lock (m_gate) {
+                if (m_republishOwed && ReferenceEquals(m_volume, snapshotOf)) { RepublishAll(); }
+            }
         }
         try {
             for (var i = 0; i < count; i++) {

@@ -1,6 +1,7 @@
 // The material table and the BRDF every shading path reads.
 #ifndef SHADE_SDF_MATERIAL_HLSLI
 #define SHADE_SDF_MATERIAL_HLSLI
+#include "../frame/sdf-lanes.hlsli"
 float sdfWrapDiffuse(float ndotl, float wrap) {
     return max(((ndotl + wrap) / (1.0 + wrap)), 0.0);
 }
@@ -166,11 +167,11 @@ float3 sdfMaterialPaints(int material, out uint paintFirst, out uint paintCount)
 
     return asfloat(sdfWords[materialBase]).rgb;
 }
-// Scales a lane-driven emissive by its render lane, saturated; `lanes` are the shaded surface's frame-slot lanes,
-// zero for a surface without a slot. A static emissive (lane 0 in the packed word) is untouched.
-void sdfApplyEmissiveLane(float4 lanes, inout SdfMaterialData material) {
+// Scales a lane-driven emissive by its render lane (sdfLane), saturated; `slotLanes` are the shaded surface's frame-slot
+// lanes. A static emissive (lane 0 in the packed word, which holds the lane plus one) is untouched.
+void sdfApplyEmissiveLane(float4 slotLanes, inout SdfMaterialData material) {
     if (material.emissiveLane != 0u) {
-        material.emissive *= saturate(lanes[min(material.emissiveLane - 1u, 3u)]);
+        material.emissive *= saturate(sdfLane(slotLanes, material.emissiveLane - 1u));
     }
 }
 // Thin wrapper for callers that only shade the base color (debug views, palette ramps).

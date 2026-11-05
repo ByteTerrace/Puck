@@ -54,6 +54,14 @@ reach multiplier over the default and the fog
 remnant `exp(−fogDensity·far)` at the far plane. Renderer contract:
 `rendering` skill sync pairs, the pass block (`farDistance`).
 
+`lanes` (up to four `BindableScalar`s, optional) are the world render lanes 4
+to 7 every material and volume reads alike (`SdfLanes`), resolved off the LIVE
+definition with `lighting` by `WorldEnvironmentResolve` at the presented tick
+into `SdfFrame.WorldLanes`; a fifth is refused by `ValidateRenderLanes`, and
+each judges as the `RenderLane` value field (finite). `world.lighting` echoes
+them. Their meaning and consumers:
+[sdf-authoring surface](../../sdf-authoring/references/surface.md#render-lanes).
+
 `environment` (`WorldRenderEnvironment`, optional) and `tonemap`
 (`WorldTonemap` {`none`, `filmic`}, optional) are also read off the LIVE
 definition every frame, alongside `lighting`/`sky`; a `tonemap` change

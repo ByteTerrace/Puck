@@ -302,7 +302,15 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_PROBE_CACHE_WORDS", value: SdfMeshProbeRelight.CacheWords);
         declarations.Count(name: "SDF_PROBE_RELIGHT_RESULT_WORDS", value: SdfMeshProbeRelight.ResultWords);
         declarations.Count(name: "SDF_PROBE_RECORD_INPUT_WORD", value: SdfMeshProbeRelight.RecordInputWord);
+        declarations.Count(name: "SDF_PROBE_RELIGHT_PREVIOUS_WORD", value: SdfMeshProbeRelight.PreviousWord);
+        declarations.Count(name: "SDF_PROBE_SELECT_GROUP_SIZE", value: SdfMeshProbeRelight.SelectGroupSize);
         declarations.Real(name: "SDF_MESH_IRRADIANCE_CLEARANCE", value: SdfMeshIrradianceProbe.Clearance);
+        declarations.Real(name: "SDF_MESH_IRRADIANCE_INSIDE_SHARE", value: SdfMeshIrradianceProbe.InsideShare);
+        declarations.Real(name: "SDF_MESH_IRRADIANCE_OPEN_GROUND_SHARE", value: SdfMeshIrradianceProbe.OpenGroundShare);
+        declarations.Real(name: "SDF_MESH_IRRADIANCE_METER_COINCIDENT", value: SdfMeshIrradianceProbe.MeterCoincident);
+        declarations.Real(name: "SDF_MESH_IRRADIANCE_LIGHT_BIAS", value: SdfMeshIrradianceProbe.LightBias);
+        declarations.Real(name: "SDF_MESH_IRRADIANCE_BOX_MARGIN", value: SdfMeshIrradianceProbe.BoxMargin);
+        declarations.Real(name: "SDF_MESH_IRRADIANCE_BOX_MARGIN_SHARE", value: SdfMeshIrradianceProbe.BoxMarginShare);
         declarations.Real(name: "SDF_MESH_IRRADIANCE_DEPTH_SHEET_THICKNESS", value: SdfMeshIrradianceProbe.DepthSheetThickness);
 
         declarations.Members<SdfIndirectSources>(prefix: "SDF_INDIRECT_SOURCES");
@@ -318,6 +326,10 @@ public static class SdfIsaHlsl {
         declarations.Tuning(name: "SDF_LIGHT_MINIMUM_DISTANCE", value: SdfPhotometry.MinimumDistance);
         declarations.Tuning(name: "SDF_LUMINANCE_CEILING", value: SdfPhotometry.LuminanceCeiling);
         declarations.Real(name: "SDF_WINDOW_ADAPTATION", value: SdfPhotometry.WindowAdaptation);
+        declarations.Real(name: "SDF_LUMINANCE_RED", value: SdfPhotometry.LuminanceRed);
+        declarations.Real(name: "SDF_LUMINANCE_GREEN", value: SdfPhotometry.LuminanceGreen);
+        declarations.Real(name: "SDF_LUMINANCE_BLUE", value: SdfPhotometry.LuminanceBlue);
+        declarations.Expression(name: "SDF_LUMINANCE", value: "float3(SDF_LUMINANCE_RED, SDF_LUMINANCE_GREEN, SDF_LUMINANCE_BLUE)");
         declarations.Tuning(name: "SDF_LOCAL_ADAPTATION_RANGE", value: SdfExposure.LocalRange);
         declarations.Tuning(name: "SDF_LOCAL_REFLECTANCE", value: SdfExposure.LocalReflectance);
         declarations.Tuning(name: "SDF_REFERENCE_WHITE", value: SdfExposure.ReferenceWhite);
@@ -404,10 +416,14 @@ public static class SdfIsaHlsl {
         declarations.Real(name: "SDF_GLASS_SUM_SCALE", value: SdfWorldPackage.GlassSumScale);
         declarations.Real(name: "SDF_GLASS_DEPTH_DISTANCE_SCALE", value: SdfWorldPackage.GlassDepthDistanceScale);
         declarations.Real(name: "SDF_GLASS_ABSORPTION_SCALE", value: SdfWorldPackage.GlassAbsorptionScale);
-        declarations.Section(title: "The flow layer's clock period in seconds (SdfFlow.ClockPeriodSeconds) and its control word (SdfProgram.FlowLaneMask, SdfProgram.FlowWorldFrame).");
+        declarations.Section(title: "The flow layer's clock period in seconds (SdfFlow.ClockPeriodSeconds) and its control word (SdfProgram.FlowLaneMask, SdfProgram.FlowWorldFrame, SdfProgram.FlowCoverageLaneShift).");
         declarations.Real(name: "SDF_FLOW_CLOCK_PERIOD", value: (float)SdfFlow.ClockPeriodSeconds);
         declarations.Bits(name: "SDF_FLOW_LANE_MASK", value: SdfProgram.FlowLaneMask);
         declarations.Bits(name: "SDF_FLOW_WORLD_FRAME", value: SdfProgram.FlowWorldFrame);
+        declarations.Count(name: "SDF_FLOW_COVERAGE_LANE_SHIFT", value: SdfProgram.FlowCoverageLaneShift);
+        declarations.Section(title: "The render lanes (SdfLanes): a frame slot's lanes, then the world's (SdfWorldPackage.WorldLanes).");
+        declarations.Count(name: "SDF_FIRST_WORLD_LANE", value: SdfLanes.FirstWorld);
+        declarations.Count(name: "SDF_LANE_COUNT", value: SdfLanes.Count);
         declarations.Section(title: "The sky's environment map (SdfSkyEnvironment) and the volume table's capacity (SdfProgramBuilder.MaxVolumes).");
         declarations.Signed(name: "SDF_SKY_ENVIRONMENT_SIZE", value: SdfSkyEnvironment.Size);
         declarations.Count(name: "SDF_SKY_ENVIRONMENT_COEFFICIENTS", value: SdfSkyEnvironment.CoefficientCount);
