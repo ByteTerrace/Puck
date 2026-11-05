@@ -42,6 +42,58 @@ public sealed record PaletteGlassDocument(float Depth, float? Ior = null) {
         Ior: (Ior ?? DefaultIor)
     );
 }
+/// <summary>A palette slot's flow layer: the slot's shading moves along <paramref name="Velocity"/> while its geometry
+/// stays still. A seeded noise pattern advects with the flow in two layers half a cycle apart, so neither restart shows,
+/// tilting the shading normal by <paramref name="Tilt"/> times its slope and revealing <paramref name="Surface"/> over
+/// <paramref name="Coverage"/> of the slot (streaks, foam). The velocity is authored in the shader's frame, as the other
+/// palette layers are: for a creation, its engine frame (the author frame's x and z negated), turned with each placement;
+/// for a field row, world space; <paramref name="Frame"/> <c>World</c> keeps it and the pattern in world space on any surface.</summary>
+/// <param name="Velocity">The flow, in units per second.</param>
+/// <param name="Scale">The pattern's frequency, in cells per unit; positive (null = 1).</param>
+/// <param name="Stretch">How many times longer a pattern feature is along the flow than across; at least 1
+/// (null = 1).</param>
+/// <param name="Cycle">The seconds a layer advects before it restarts, in [0.25, 4096] (null = 1).</param>
+/// <param name="Tilt">The normal tilt per unit slope of the pattern; non-negative (null = 0).</param>
+/// <param name="Coverage">The share of the slot the pattern reveals <paramref name="Surface"/> over, in [0, 1]
+/// (null = 0).</param>
+/// <param name="Softness">The coverage edge's width, in [0, 1] (null = 0.1).</param>
+/// <param name="Surface">The surface the coverage reveals; required when <paramref name="Coverage"/> is positive.</param>
+/// <param name="Seed">The pattern's seed (null = 0).</param>
+/// <param name="Lane">The render lane in [0, 3] whose value scales the velocity, read from an inhabited body's look
+/// lanes; a placement without lanes reads zero and stands still. Null keeps the velocity constant.</param>
+/// <param name="Frame">The frame the velocity is authored in (null = <c>Object</c>).</param>
+public sealed record PaletteFlowDocument(
+    DocumentVector3 Velocity,
+    float? Scale = null,
+    float? Stretch = null,
+    float? Cycle = null,
+    float? Tilt = null,
+    float? Coverage = null,
+    float? Softness = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PaletteSurfaceDocument? Surface = null,
+    uint? Seed = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Lane = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] SdfFlowFrame? Frame = null
+) {
+    /// <summary>Resolves the engine flow at a placement scale.</summary>
+    /// <param name="resolve">The color resolver.</param>
+    /// <param name="scale">The placement scale: the velocity, a length per second, multiplies by it, and the pattern
+    /// frequency divides by it, so the pattern keeps its size on the scaled surface; positive.</param>
+    /// <returns>The flow.</returns>
+    public SdfFlow ToFlow(Func<string, Vector3> resolve, float scale = 1f) => new(
+        Velocity: (Velocity.Value * scale),
+        Scale: ((Scale ?? 1f) / scale),
+        Stretch: (Stretch ?? 1f),
+        Cycle: (Cycle ?? 1f),
+        Tilt: (Tilt ?? 0f),
+        Coverage: (Coverage ?? 0f),
+        Softness: (Softness ?? 0.1f),
+        Surface: Surface?.ToSurface(resolve: resolve),
+        Seed: (Seed ?? 0u),
+        Lane: Lane,
+        Frame: (Frame ?? SdfFlowFrame.Object)
+    );
+}
 /// <summary>A paint plane in the winning dynamic frame, or world space when no slot owns the hit.</summary>
 public sealed record PaletteInsetDocument(DocumentVector3 Origin, DocumentQuaternion Rotation, float Depth, float Ior, PaletteRadialPaintDocument Paint) {
     /// <summary>Resolves the generic engine layer at a placement scale.</summary>

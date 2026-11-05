@@ -104,6 +104,7 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
     private IGpuSurfaceUpload? m_cpuUpload;
     private nint m_frameFence;
     private HANDLE m_frameFenceEvent;
+    private DirectXDeviceCommandCalls m_commandCalls;
 
     private ulong m_nextFrameFenceValue = 1;
 
@@ -483,18 +484,12 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
             return;
         }
 
-        var fence = ((ID3D12Fence*)m_frameFence);
-
-        if (fence->GetCompletedValue() < targetValue) {
-            fence->SetEventOnCompletion(
-                Value: targetValue,
-                hEvent: m_frameFenceEvent
-            );
-            _ = PInvoke.WaitForSingleObject(
-                dwMilliseconds: uint.MaxValue,
-                hHandle: m_frameFenceEvent
-            );
-        }
+        DirectXCommandCalls.Wait(
+            calls: m_commandCalls,
+            fence: ((ID3D12Fence*)m_frameFence),
+            fenceEvent: m_frameFenceEvent,
+            value: targetValue
+        );
     }
     /// <summary>Blocks until every presented frame has fully retired on the GPU — the guard for the resources the
     /// ring does not duplicate per slot: the single CPU-upload texture, the single encode SRV descriptor, and the
@@ -510,18 +505,12 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
             return;
         }
 
-        var fence = ((ID3D12Fence*)m_frameFence);
-
-        if (fence->GetCompletedValue() < lastSignaled) {
-            fence->SetEventOnCompletion(
-                Value: lastSignaled,
-                hEvent: m_frameFenceEvent
-            );
-            _ = PInvoke.WaitForSingleObject(
-                dwMilliseconds: uint.MaxValue,
-                hHandle: m_frameFenceEvent
-            );
-        }
+        DirectXCommandCalls.Wait(
+            calls: m_commandCalls,
+            fence: ((ID3D12Fence*)m_frameFence),
+            fenceEvent: m_frameFenceEvent,
+            value: lastSignaled
+        );
     }
 
     /// <summary>Gets the last display-confirmed present count and its QPC timestamp (Stopwatch ticks); <see langword="false"/> when unavailable.</summary>
@@ -604,8 +593,12 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
     /// <inheritdoc/>
     public void Dispose() {
         // The last present may still be executing against this slot's allocator/list — retire everything before
-        // any release below.
-        WaitForAllFrames();
+        // any release below. A removed or hung device has nothing left to wait on, and the releases below go on.
+        try {
+            WaitForAllFrames();
+        } catch (DeviceLostException) {
+        }
+
         m_cpuUpload?.Dispose();
         m_cpuUpload = null;
         m_surfaceImport?.Dispose();
@@ -994,6 +987,8 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         return sets;
     }
     private void CreateCommandInfrastructure(ID3D12Device* device) {
+        m_commandCalls = new DirectXDeviceCommandCalls(device: device);
+
         for (var i = 0u; (i < FrameCount); i++) {
             device->CreateCommandAllocator<ID3D12CommandAllocator>(
                 ppCommandAllocator: out var allocator,

@@ -823,9 +823,9 @@ and asset loads, beside the `.puck` compiles and compile-cache answers
 `Puck.World.Transpiler` counts, and the compiled-world hits and chunk
 derivations a boot's [compiled world](../../docs/architecture/worlds.md#compiled-worlds)
 (`CompiledWorld`, `CompiledWorldCache`, `CompiledWorldChunks`) counts. The
-compile-cache and compiled-world counts depend on what the per-user cache and
-the state root already hold, so they are pacing-class; the rest are
-deterministic. The loaders are static, so they count into the
+compile-cache, compiled-world and physical asset-read/preparation counts depend
+on held products, so they are pacing-class; the remaining kinds follow their
+`WorldBootWork` declarations. The loaders are static, so they count into the
 ledger a flow attributes (`WorldBootWork.Attribute`) or else the process
 ledger; a law attributes its own. `IWorldDocumentSource` generalizes the basis-chain walk (but not the
 import fan-in) onto any byte-level document source, so storage sync

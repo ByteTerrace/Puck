@@ -465,7 +465,7 @@ public sealed class VulkanRenderer(
         }
 
         // Unbounded like vkDeviceWaitIdle; a device loss surfaces as the neutral DeviceLostException for recovery.
-        synchronization.WaitForInFlightFence(timeout: ulong.MaxValue).ThrowIfFailed(device: synchronization.Device, operation: "vkWaitForFences");
+        synchronization.WaitForInFlightFence().ThrowIfFailed(device: synchronization.Device, operation: "vkWaitForFences");
     }
     public void WaitForGpuIdle() {
         if (m_device is null) {

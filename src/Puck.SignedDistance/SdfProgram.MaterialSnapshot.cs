@@ -10,6 +10,12 @@ public sealed partial class SdfProgram {
     public IReadOnlyList<SdfMaterial> Materials => m_materialsView;
 
     private bool? m_hasGlass;
+    private bool? m_hasFlow;
+
+    /// <summary>Gets whether any material of the program carries a flow layer (<see cref="SdfMaterial.Flow"/>): a frame
+    /// of such a program carries the flow clock in its pass block, and a frame of any other carries zero, so its
+    /// views stand while nothing else changes. Measured once, on first read.</summary>
+    public bool HasFlow => (m_hasFlow ??= m_materialsView.Any(predicate: static material => (material.Flow is not null)));
 
     /// <summary>Gets whether any drawn shape of the program carries a glass material (<see cref="SdfMaterial.IsGlass"/>):
     /// a view of such a program runs the glass passes (<c>SdfWorldPackage.WithGlass</c>), and a view of any other pays

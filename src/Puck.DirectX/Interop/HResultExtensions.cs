@@ -9,7 +9,7 @@ namespace Puck.DirectX.Interop;
 public static class HResultExtensions {
     // DXGI device-removal HRESULTs. A removed, reset or hung device is a recoverable signal, surfaced as the neutral
     // DeviceLostException so the host's device-loss recovery catches it rather than a DirectXException.
-    private const int DxgiErrorDeviceHung = unchecked((int)0x887A0006);
+    internal const int DxgiErrorDeviceHung = unchecked((int)0x887A0006);
     private const int DxgiErrorDeviceRemoved = unchecked((int)0x887A0005);
     private const int DxgiErrorDeviceReset = unchecked((int)0x887A0007);
 

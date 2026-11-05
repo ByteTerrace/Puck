@@ -442,7 +442,7 @@ its own.
 
 | Rank | Step | Mechanism | Expected frame cost | Memory and bake | What it proves on the debug world |
 |---|---|---|---|---|---|
-| 1 | **W2.** The flow layer, with the constant and lane sources, and the stream, falls and lake moved onto it as static geometry | W2; M1 (the eight stream legs share one geometry) | Two noise evaluations and a gradient per covered pixel, on water pixels only (Vlachos's 2 fetches and 21 ALU on 2010 hardware); the mesh pass loses 8 moving groups and their transform rows | The stream's bake groups go from eight to one shared; the falls' fourteen sheets and the foam paints stop being animated groups; `world.budget` and `[sdf.mesh-bake] done` read the cut | The stream flows and the falls fall in a presented burst with no draw record changing; a settled capture is still; lockstep stills repeat across two Worlds; the meadow's wind shimmer uses the same layer with a wind vector |
+| 1 | **W2** ([as built](#w2-as-built)). The flow layer, with the constant and lane sources, and the stream, falls and lake moved onto it as static geometry | W2; M1 (the eight stream legs share one geometry) | Two noise evaluations and a gradient per covered pixel, on water pixels only (Vlachos's 2 fetches and 21 ALU on 2010 hardware); the mesh pass loses 8 moving groups and their transform rows | The stream's bake groups go from eight to one shared; the falls' fourteen sheets and the foam paints stop being animated groups; `world.budget` and `[sdf.mesh-bake] done` read the cut | The stream flows and the falls fall in a presented burst with no draw record changing; a settled capture is still; lockstep stills repeat across two Worlds; the meadow's wind shimmer uses the same layer with a wind vector |
 | 2 | **W1.** The medium response on the glass pass (in-scatter, contact ramp) and W4a (probes on glass), with every water surface on `glass` rows | W1, W4 | A probe gather and a few ALU per glass pixel; no new pass | None; the water's four field surfaces already bake as glass | The pool reads turquoise at depth and clear at the margin, with foam at the steps and the bridge piers; the falls sheet transmits the rock; the hall's windows and the lift's glass reflect their rooms; `world.counters gpu pass sdf.world$glass-shade` before and after |
 | 3 | **W3.** The particle pool with an authored emitter and generic motion, collided against a brick derived from the bake, drawn as quads split by the glass target | W3; M1 (the brick), M4 (capacity and the visibility box) | A fixed step over the pool's capacity and a fill-rate bounded by sprite size; the Deck decides the capacity the standard chooses | A pool's buffers at its capacity; a brick per region at the bake's cell | Splash at the plunge pool and droplets at the falls' foot, refracted where they fall behind the surface; leaves in the forest from the same pool; a presented burst at `debug.go pool` with `host.frames` before and after on both backends |
 | 4 | **W2's field source.** A flow row sampled through the field brick, and the hydrology's derived transfer row | W2 on M3 | One brick sample per covered pixel | A row per lattice | The stream bends around the bridge piers with no authored comb; `world.fields` shows the derived row |
@@ -489,65 +489,77 @@ standard package (`worlds/standard/water.puck`, `foliage.puck`) chooses the
 water's and the meadow's values, and every engine default is the neutral one
 that reproduces today's image.
 
-### W2. The flow layer
+### W2 as built
 
-**Family and model.** Codex Astra at high effort or a Claude `specialist`:
-it touches the C#/HLSL material pair (a sync pair), the pass block and the
-lane packing, and its correctness rests on the phase invariant below.
+Steps (1) and (2) of the flow layer are in; the field source (3) remains,
+briefed below.
 
-**Outcome.** A material layer (`SdfMaterial` gains a `Flow` record;
-`SdfMaterialData` its words; `shade-layers.hlsli` a `sdfApplyFlow` evaluated
-where `applyWeathering` runs, before lighting) whose lookup point advects
-along an authored flow vector in the layer frame by a phase, in two
-half-offset layers with a per-cell noise, writing an authored normal tilt
-and an authored coverage colour. The flow vector is a constant on the
-material or a render lane index (two lanes: direction and speed, or one lane
-scaling a constant). The phase is a presentation value integrated by the
-host from the presented tick (`PresentedTick.Integrate`, as
-`SdfVolumeMotion.At` does), carried as a `Tuning` member of the pass block
-for the world phase and read through the instance's lanes for a per-instance
-one. `streamSegment`, `fallsRibbon` and `lakeSurface` in the standard lose
-their slides and swings and their foam paints, and author the layer instead;
-the falls keep the `meltStrength` fold only if the capture wants the sheet
-to narrow, else they author its coverage by the gauge. The debug world's
-eight stream legs become eight placements of one prototype with a per-leg
-phase offset in a lane.
+**What landed.** A palette slot's `flow` (`PaletteFlowDocument`, lowered to
+`SdfFlow` on `SdfMaterial.Flow`) packs material rows 27 to 30
+(`SdfProgram.PackMaterials`; the stride is `SdfProgram.MaterialVectorsPerEntry`)
+and runs `sdfApplyFlow` (`shade/shade-layers.hlsli`) in the views pass's light
+stage after `applyWeathering`: the weathering's lattice noise with an analytic
+gradient (`sdfFlowNoise`), advected along the velocity's tangential part in
+two layers half a cycle apart with triangle weights, a low-frequency
+per-place phase offset against pulsing, the blend renormalized so contrast
+holds through the cross-fade, a stretch along the flow, a coverage that
+reveals an authored surface through `sdfRevealSurface`, and a normal tilt
+scaled by the flow's share along the surface. Unresolved pattern fades toward
+its mean by the pixel footprint, as the weathering does. Sources: the material
+constant, and a render lane scaling it (`lane`). An `Object` velocity rides a
+slot's frame, or turns by the draw's matrix on a draw shading in world space
+(a static copy); a `World` velocity keeps the pattern in world space too.
 
-**Invariant and enforcement.** A flow layer's image at a presented tick is a
-function of the document and that tick alone. Enforced in one place: the
-phase enters the kernels only through values the host integrates from
-`SdfFrame.Clock` (the pass block's member and the lanes), and no SDF kernel
-reads the Frame group's `time` or `timeDelta`; a `puck search` over
-`src/Puck.SdfVm/Assets/Shaders/Sdf` for those members outside the interface
-file returns nothing before and after, and the existing lockstep still
-(`world.lockstep on`, one tick, two Worlds) is the check that the guarantee
-holds. Where it stops: a per-instance phase read through a lane is as
-deterministic as the lane's expression, which is the author's.
+**The phase invariant and its door.** A flow layer's image at a presented
+tick is a function of the document and that tick alone. The phase enters the
+kernels only through the pass block's `flowClock` (`SdfWorldPackage.FlowClock`),
+which `SdfFrameBlock` integrates from `SdfFrame.Clock` with
+`PresentedTick.Integrate`, as `SdfVolumeMotion.At` does for volumes, reduced by
+`SdfFlow.ClockPeriodSeconds`; the material carries a whole number of cycles a
+clock period (`SdfFlow.CyclesPerClock`), so the layer joins where the clock
+wraps. A program with no flow (`SdfProgram.HasFlow`) writes zero, so a still
+world's views stand; the clock is a lighting member of the cadence signature
+(`SdfWorldTables.Cadence.cs`), so the shading passes rerun as the flow moves
+and the geometry, the cascades and the surface pass stand. No `sdf-*` kernel
+reads the Frame group's `time` or `timeDelta`: `puck search -M 0
+"frameGroup\.(time|timeDelta)" src/Puck.SdfVm/Assets/Shaders/Sdf` finds
+nothing. Where it stops: a lane-driven flow is as deterministic as the lane's
+expression, and a lane reads zero on any placement without lanes (static and
+animated placements supply none), so the per-instance phase the brief
+imagined for the stream legs has no carrier there; the world-space pattern
+static copies shade in makes it unnecessary, since no two legs repeat.
 
-**Reuse, no second mechanism.** The layer runs in the existing layer order
-in `shade-layers.hlsli` and reads the material through `sdfMaterialLoad`;
-its patterns are `sdfPeriodicNoise3` and the weathering's lattice turn; its
-phase integration is `PresentedTick.Integrate`; its lanes are the four
-`DynamicTransform.Lanes` the look evaluator already fills
-(`WorldLookLaneEvaluator`); the material rows are packed by
-`SdfProgram.Materials` and declared to HLSL by the generator (a sync pair,
-listed in [sync pairs](../../.claude/skills/rendering/references/sync-pairs.md)).
-No new table, no new pass, no clock.
+**The water on it.** In the standard (`worlds/standard/water.puck`), the
+stream segment is one still sheet wearing `streamFlowLayer`; its slide, its
+brush-edge paints and its foam paints are gone (a paint on a static placement
+is world-space, so they could not ride a shared copy). The debug world places
+the one `stream` prototype eight times, alternate legs 2 cm higher so the
+overlapping ends at each bend never share a plane, a shorter leg starting back
+along the leg before it. The falls is fourteen still sheets wearing
+`fallsFlowLayer`, one downward velocity that runs down every sheet at its own
+slope; it lost the fold by `meltStrength` and keeps the visibility park. The
+lake keeps its level slide, a state gauge's legitimate rig use, and wears
+`lakeFlowLayer`, world-space breeze ripples. The meadow's grass
+(`windMeadowTile` in `foliage.puck`) wears `meadowWind`, a world-space flow
+whose paler gust patches cross every tile and blade together.
 
-**Order.** (1) The C#/HLSL material pair and the kernel with a constant
-flow and the world phase; the stream on it. (2) The lane source; the stream
-legs collapse to one prototype; the falls and the lake. (3) The field
-source (rank 4) as its own commit once (1) and (2) hold.
+**Not yet.** The glass pass does not run the layer, so a water surface on a
+glass row (W1) needs `sdfApplyFlow` in `sdf-glass.comp.hlsl` before the stream
+moves to glass. The falls no longer narrows as discharge falls: a coverage or
+tilt driven by the gauge needs a lane, and an animated placement supplies
+none.
 
-**Checks.** A presented burst (`puck_capture_frame` with `mode: "presented"`,
-`frames: 8`) at the bridge shows changed pixels on the water and
-`world.counters gpu` shows no draw record changing; a settled still is
-still; the lockstep still repeats across two Worlds within the gather's
-residue; `world.budget` and `[sdf.mesh-bake] done` show the stream's groups
-at one shared and the falls' at fourteen static; `world.counters gpu pass
-sdf.world$views` texels before and after at `debug.go pool` on both
-backends; the meadow's grass with a wind vector on the same layer, in a
-burst at `debug.go meadow`.
+### W2's field source
+
+**Outcome.** The flow vector read from a field row the state system owns: a
+`field` lattice row the author writes, or a derived row the hydrology's
+`FieldLattice.StepFlow` publishes as its per-cell transfer, sampled by the
+layer through the brick the field emitter already uploads, after the constant
+and the lane. **Invariant.** As W2's: the row is state, so the image stays a
+function of the document and the tick. **Reuse.** The field emitter's brick,
+`sdfSampledRegion`, `sdfApplyFlow`. **Check.** The stream bends around the
+bridge piers with no authored comb in a presented burst; `world.fields` shows
+the derived row.
 
 ### W1. The medium response on glass
 

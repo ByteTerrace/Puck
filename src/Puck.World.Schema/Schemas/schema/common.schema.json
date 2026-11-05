@@ -9976,6 +9976,31 @@
       "additionalProperties": false,
       "title": "StateGenerator"
     },
+    "PaletteSurfaceDocument": {
+      "description": "An authored surface tint and reflectance.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "color": {
+          "type": "string"
+        },
+        "roughness": {
+          "type": "number"
+        },
+        "metal": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "color",
+        "roughness",
+        "metal"
+      ],
+      "additionalProperties": false,
+      "title": "PaletteSurfaceDocument"
+    },
     "ActionFactNullable": {
       "enum": [
         "Grounded",

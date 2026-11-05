@@ -1054,14 +1054,14 @@ expect, so one could still be added later as an alternative pass.
 These decisions shape [P6-GI](../plans/rendering.md#p6-gi-global-illumination),
 the global illumination slices of P6.
 
-**Indirect light is an irradiance volume traced on the CPU against the baked
+**Indirect light is an irradiance volume traced on the GPU against the baked
 meshes.** The frame walks no field, and worlds are mostly static, so bounce
 lighting is cached rather than retraced per pixel. Each residency shares one
 three-level nested volume (`SdfMeshIrradianceProbe.Levels == 3`) among its views.
 The finest window uses the tier's spacing and dimensions; the storey level's
 32×24×32 window uses 4 m × 2 m × 4 m cells and the coarsest 32×12×32 window
-32 m cells (`SdfMeshIrradiance.LevelsOf`). The CPU traces a hierarchy of static
-mesh draws; views and later bounce sweeps gather the eight probes around a
+32 m cells (`SdfMeshIrradiance.LevelsOf`). Compute kernels traverse the CPU scene's
+uploaded two-level hierarchy of static mesh draws; views and later bounce sweeps gather the eight probes around a
 receiver through the same visibility rule. Moving bodies receive this light
 and cast none into the static volume.
 
@@ -1084,10 +1084,25 @@ whose measurements it can affect. This is the
 [job-system and GI scheduling work](../plans/open-items.md#engine-job-system),
 rather than a second executor.
 [`SdfMeshIrradiance`](../../src/Puck.SdfVm/SdfMeshIrradiance.cs) builds scenes
-and traces batches on the thread pool, reuses unchanged geometry hierarchies,
-and retains old probe data until replacements publish. A static-scene change
-invalidates the whole probe generation; selective retracing is part of that
-work.
+on the thread pool and reuses unchanged geometry hierarchies. Its probe client
+(`SdfMeshProbeGpuWork`) shares the bake's `SdfGpuWork` service: GPU selection
+classifies the window's owed work, compute traces and relights it, and indirect
+dispatch consumes the compacted relight list. Changed scene boxes retrace only
+the probes they can reach. The GPU keeps hit words and publishes measured
+records through fence-completed, scene/window-checked copies; old data remains
+visible until its replacement is ready. Camera exposure queries use the same
+service and shading function. CPU traversal and shading remain the diagnostic
+reference, and CPU nearest-surface and short clearance queries still place probes.
+
+Software compute is the baseline on both backends; no ray-tracing hardware is
+required. The trace device law requires exact identities and discrete flags,
+scene-scaled float tolerance and independently intersected near ties, with an
+injected skipped subtree as its negative control. It qualifies its corpus,
+not every possible authored geometry. A settled capture remains waiting while
+its prepared lighting or exposure is pending; background work continues to
+completion before that frame can certify a still. Throughput and the one-frame
+lockstep target remain measurement obligations in the
+[graphics plan](../plans/graphics-architecture.md#g1-the-gpu-probe-trace-and-relight).
 
 **Visibility is measured as local first-hit surfaces.** Each probe holds a
 12×12 octahedral surface map. One bounded closest-hit ray per texel stores an

@@ -80,7 +80,11 @@ orders, verifying a change by building and running it, and fixing a defect at it
   order forces included: stopping means your own jobs, watchers and Worlds stop too, not that they
   are left running for the lead. Keep one watcher per running job, ending on success, failure or
   exit; no `sleep` timers and no polling a job that reports its own exit
-  ([your harness](../orchestration/references/lane-work.md#running-long-tasks)).
+  ([your harness](../orchestration/references/lane-work.md#running-long-tasks)). A foreground wait
+  loop (`until grep …; do sleep …; done`) that outlives the tool's timeout is not killed with it: its
+  shell is orphaned and keeps polling, and rerunning the wait adds another copy every ten minutes.
+  Wait in the background with one notification, or bound a foreground loop below the tool's timeout
+  (`timeout 590 bash -c 'until …'`).
 - Once your finish line holds on the merged head, hand back. Start no review or hardening round of
   your own (a self-review, extra guards, fuzzing beyond the brief): the lead's area fix passes and any
   invariant review run beside your next work, and what else you noticed goes under **Found**.

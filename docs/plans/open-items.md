@@ -49,9 +49,9 @@ milestone. The owner requested its baseline and implementation plan, which
    process plus GPU memory at or under 10 GB on the Deck tier, attribution
    first.
 2. [Lighting and GI](#lighting-and-gi) [high]: the
-   [graphics architecture plan](graphics-architecture.md)'s G1, the GPU probe
-   trace and relight, which makes the lockstep relight under a moving sun a
-   frame's work; the sun's fixed grid stays the lockstep drain's correctness
+   [graphics architecture plan](graphics-architecture.md)'s G1 acceptance work:
+   reduce the landed GPU trace/relight's lockstep drain to a frame's work;
+   the sun's fixed grid stays the lockstep drain's correctness
    fix beside it.
 3. [Visibility](visibility.md): V2's first steps (V2a, V2b) ahead of V1a, as
    M1 read, after the draw-identity fix R2's review found
@@ -1081,14 +1081,15 @@ Next: what the water as a forcing workload showed
 the water strained, measured, and not yet fixed. The rendering capabilities
 the water lacks (a medium response on the glass pass, flow-driven shading,
 presentation particles, reflections of geometry on glass) are planned in
-[water rendering](water-rendering.md), whose ranked steps W2, W1 and W3 are
-the next lanes here; the items below are the system work beside them.
+[water rendering](water-rendering.md), whose W2 flow layer is in
+([as built](water-rendering.md#w2-as-built)) and whose W1, W3 and W2's field
+source are the next lanes here; the items below are the system work beside them.
 
 - [medium] Cold mesh residency still misses the one-minute target. Attribute the
   remaining large water meshes with `puck mesh audit --prototype` (now selects
   static and animated placements), and profile bake admission, landing and
-  illumination together. Stream strokes now paint one sheet per segment; they
-  no longer create fine geometric features or one animated group per stroke.
+  illumination together. The stream is eight placements of one still segment
+  and the falls still sheets, their motion the flow layer's shading.
   The sampled-field fix makes each changed height snapshot a new mesh identity;
   measure ordinary-rate field updates as well as a paused cold boot. Run costs
   and before/after evidence live in the water follow-up commits.
@@ -1724,9 +1725,10 @@ under-use the language where the shared libraries (`worlds/standard/bounds.puck`
 ### Lighting and GI
 
 Owner: next lighting batch (rendering, principal-grade review) · high · Next:
-the [graphics architecture plan](graphics-architecture.md)'s G1 (the GPU probe
-trace and relight over the uploaded scene hierarchy, with its brief there) and
-the lockstep relight under a moving sun, then light a cold area from the coarser
+the [graphics architecture plan](graphics-architecture.md)'s G1 acceptance work
+(the GPU trace/relight, selection, publication and camera meter are implemented):
+attribute the remaining lockstep relight cost under a moving sun and the outdoor
+CPU-reference discrepancy, then light a cold area from the coarser
 levels or the sky term the moment a view arrives (shading-side); the exposure
 meter is the [terrain pass](terrain-pass.md#exposure-at-its-cause)'s step 1, and
 the coverage, enclosure and wrapped-diffuse findings follow it. The
@@ -1735,6 +1737,18 @@ the order they land in, the graphics architecture plan redesigns its step 3
 and owns the coarse levels' connectivity visibility (G3), and the
 [mesh-GI reference](../../.claude/skills/rendering/references/mesh-gi.md) holds
 the fixed poses and the approaches already rejected.
+
+- Attribute `SdfMeshIrradiance.DescribeRelightReference`'s outdoor next-bounce
+  discrepancy at `world.probe -3 1 -5 0 1 0`, after the fixed outdoor visit
+  with day held. Separate retraced hit differences, shadow rays and the
+  current CPU/GPU feedback gathers before naming a cause. The transformed-box
+  trace device law and the gather law do not qualify every foliage surface.
+- Compact the relight's host answer while retaining its GPU publication record:
+  `SdfMeshProbeGpuWork.Record` reads back `SdfMeshProbeRelight.ResultWords`,
+  while `SdfMeshIrradiance.RelightGpu` decodes only the
+  `SdfMeshProbeRelight.OutputWords` prefix and publication copies the device
+  buffer. Preserve the source output's readback-token/fence ownership through
+  commit; do not trade that lifetime guarantee for fewer copied bytes.
 
 - [high] Night lighting, from the owner's walkthrough at the lawn's trees:
   - **The jump to night is wrong.** Forcing midnight

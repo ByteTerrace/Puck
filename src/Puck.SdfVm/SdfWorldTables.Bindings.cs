@@ -70,10 +70,10 @@ public sealed partial class SdfWorldTables {
     // Writes a World set of background work as the latest upload's ring slot's World set, with the work's own point
     // table at the bake's points: the set is the work's own, rewritten only while no job of it is in flight, and the
     // buffers it binds are retired only after the upload that follows the work's submission (Retire).
-    internal void WriteBackgroundWorldSet(nint set, IGpuBuffer points) {
+    internal void WriteBackgroundWorldSet(nint set, ReadOnlySpan<(string Member, IGpuBuffer Buffer)> overrides) {
         if (!BindsBackgroundWork) { throw new InvalidOperationException(message: "Background work binds the World set only after an upload, before the next pack moves what it binds."); }
         WriteWorldSet(set: set, slot: m_currentSlot);
-        WriteWorldBuffer(buffer: points, member: SdfWorldPackage.MeshBakePoints, set: set);
+        foreach (var (member, buffer) in overrides) { WriteWorldBuffer(buffer: buffer, member: member, set: set); }
     }
     // Writes a ring slot's World set: each table's buffer in the slot, the brick pool, the samplers and the glyph atlas,
     // with the sampled filler at an image not set, and the unused-member buffer at the bake's point table, which only
@@ -90,7 +90,7 @@ public sealed partial class SdfWorldTables {
         WriteWorldBuffer(buffer: m_volumeRegion.Buffer(slot: slot), member: SdfWorldPackage.Volumes, set: set);
         WriteWorldBuffer(buffer: m_meshRegion.Buffer(slot: slot), member: SdfWorldPackage.MeshRegion, set: set);
         WriteWorldBuffer(buffer: m_dummyBuffer, member: SdfWorldPackage.MeshBakePoints, set: set);
-        WriteWorldBuffer(buffer: m_meshIrradianceRegion.Buffer(slot: slot), member: SdfWorldPackage.MeshIrradiance, set: set);
+        WriteWorldBuffer(buffer: m_gpuMeshIrradiance ?? m_meshIrradianceRegion.Buffer(slot: slot), member: SdfWorldPackage.MeshIrradiance, set: set);
         WriteWorldBuffer(buffer: m_brickPoolBuffer, member: SdfWorldPackage.BrickPool, set: set);
         WriteLightAndSkySet(set: set, slot: slot);
 

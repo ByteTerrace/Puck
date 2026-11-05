@@ -749,7 +749,7 @@ public sealed class SdfMaterialLawTests {
         Assert.Equal(0f, At(15, 2));
         Assert.Equal(0f, At(18, 3));
         Assert.Equal(new Vector4(0f, 0f, 0f, 1f), new Vector4(At(26, 0), At(26, 1), At(26, 2), At(26, 3)));
-        Assert.True(SdfMaterialLayers.IsValid(null, weathering, null));
+        Assert.True(SdfMaterialLayers.IsValid(null, weathering, null, null));
 
         var character = new SdfProgram([Shape()], [new(Vector3.One, Weathering: weathering with {
             Octaves = 2, OctaveRatio = 2.03f, OctaveGain = 0.534f, Turn = new Quaternion(0.2f, -0.4f, -0.4f, 0.8f),
@@ -768,13 +768,13 @@ public sealed class SdfMaterialLawTests {
             weathering with { OctaveGain = 0f }, weathering with { OctaveGain = 1.5f },
             weathering with { Turn = new Quaternion(0f, 0f, 0f, 0f) },
         }) {
-            Assert.False(SdfMaterialLayers.IsValid(null, bad, null));
+            Assert.False(SdfMaterialLayers.IsValid(null, bad, null, null));
         }
         foreach (var scale in new[] { Vector3.Zero, new Vector3(-1, 1, 1), new Vector3(float.NaN, 1, 1) }) {
-            Assert.False(SdfMaterialLayers.IsValid(null, weathering with { PatternScale = scale }, null));
+            Assert.False(SdfMaterialLayers.IsValid(null, weathering with { PatternScale = scale }, null, null));
         }
-        Assert.False(SdfMaterialLayers.IsValid(null, weathering with { Noise = 1.1f }, null));
-        Assert.False(SdfMaterialLayers.IsValid(null, weathering with { Softness = 1.1f }, null));
+        Assert.False(SdfMaterialLayers.IsValid(null, weathering with { Noise = 1.1f }, null, null));
+        Assert.False(SdfMaterialLayers.IsValid(null, weathering with { Softness = 1.1f }, null, null));
     }
 
     [Fact]
@@ -784,7 +784,7 @@ public sealed class SdfMaterialLawTests {
         Assert.Throws<ArgumentOutOfRangeException>(() => NewBuilder().AddMaterial(material));
         Assert.Throws<ArgumentOutOfRangeException>(() => new SdfProgram([Shape()], [material]));
         // An inactive second octave contributes no frequency or footprint to the shader.
-        Assert.True(SdfMaterialLayers.IsValid(null, weathering with { Octaves = 1 }, null));
+        Assert.True(SdfMaterialLayers.IsValid(null, weathering with { Octaves = 1 }, null, null));
     }
 
 }

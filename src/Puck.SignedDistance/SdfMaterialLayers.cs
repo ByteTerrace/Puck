@@ -39,15 +39,25 @@ public static class SdfMaterialLayers {
     public static bool NonNegative(float v) => (float.IsFinite(f: v) && (v >= 0f));
 
     private static bool Positive(float v) => (float.IsFinite(f: v) && (v > 0f));
-    private static bool Surface(SdfSurface s) => (Color(v: s.Color) && Unit(v: s.Roughness) && Unit(v: s.Metal));
+    private static bool Surface(SdfSurface s) => IsSurface(surface: s);
     private static bool Unit(float v) => (NonNegative(v: v) && (v <= 1f));
+
+    /// <summary>Returns whether a surface is admissible: a finite, non-negative colour and a roughness and metal in
+    /// [0, 1].</summary>
+    /// <param name="surface">The surface.</param>
+    /// <returns><see langword="true"/> for an admissible surface.</returns>
+    public static bool IsSurface(SdfSurface surface) => (Color(v: surface.Color) && Unit(v: surface.Roughness) && Unit(v: surface.Metal));
 
     /// <summary>Returns whether all layer inputs are finite and their bounded collections and ranges are valid.</summary>
     /// <param name="inset">The refractive paint layer, or <see langword="null"/> for none.</param>
     /// <param name="weathering">The coverage layer, or <see langword="null"/> for none.</param>
     /// <param name="paints">The paints, or <see langword="null"/> for none.</param>
+    /// <param name="flow">The flow layer, or <see langword="null"/> for none.</param>
     /// <returns><see langword="true"/> when every present layer is admissible.</returns>
-    public static bool IsValid(SdfInset? inset, SdfWeathering? weathering, IReadOnlyList<SdfPaint>? paints) {
+    public static bool IsValid(SdfInset? inset, SdfWeathering? weathering, IReadOnlyList<SdfPaint>? paints, SdfFlow? flow) {
+        if ((flow is not null) && !flow.IsValid) {
+            return false;
+        }
         foreach (var paint in (paints ?? [])) {
             if (!SdfPaint.IsValid(paint: paint)) {
                 return false;
