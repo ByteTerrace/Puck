@@ -38,24 +38,24 @@ public sealed class WorldWaitCommandModule(IWorldConsoleAuthority authority, IWo
     // any scripted segment, and a loud ceiling on a fat-fingered wait that would otherwise wedge the pipe for hours.
     private const ulong MaxWaitTicks = 144_000UL;
 
-    // One keyword form: its keyword, its argument's spelling and meaning for the refusals, and the handler that arms it.
+    // One keyword form: its keyword, its argument's spelling for the refusals, and the handler that arms it.
     private delegate CommandResult KeywordArm(WorldWaitCommandModule module, CommandContext context, WireArgs args);
-    private readonly record struct KeywordForm(string Keyword, string Argument, string Takes, KeywordArm Arm);
+    private readonly record struct KeywordForm(string Keyword, string Argument, KeywordArm Arm);
 
     // The keyword forms, once, handler included: the dispatch walks this table, a keyword missing its argument is refused
     // naming its own form, and the arity refusal lists them, so a keyword cannot be listed without a handler or handled
     // without being listed (a new one never falls through to arming an until-tick).
     private static readonly KeywordForm[] KeywordForms = [
-        new(Keyword: "until", Argument: "<tick>", Takes: "an absolute tick", Arm: static (module, context, args) => module.ArmUntilTick(args: args, context: context)),
-        new(Keyword: "ready", Argument: "<seconds>", Takes: "a deadline in seconds", Arm: static (module, context, args) => module.ArmReady(args: args, context: context)),
-        new(Keyword: "bakes", Argument: "<seconds>", Takes: "a deadline in seconds", Arm: static (module, context, args) => module.ArmBakes(args: args, context: context)),
-        new(Keyword: "residency", Argument: "<seconds>", Takes: "a deadline in seconds", Arm: static (module, context, args) => module.ArmBakes(args: args, context: context, resident: true)),
-        new(Keyword: "captures", Argument: "<seconds>", Takes: "a deadline in seconds", Arm: static (module, context, args) => module.ArmCaptures(args: args, context: context)),
+        new(Keyword: "until", Argument: "<tick>", Arm: static (module, context, args) => module.ArmUntilTick(args: args, context: context)),
+        new(Keyword: "ready", Argument: "<seconds>", Arm: static (module, context, args) => module.ArmReady(args: args, context: context)),
+        new(Keyword: "bakes", Argument: "<seconds>", Arm: static (module, context, args) => module.ArmBakes(args: args, context: context)),
+        new(Keyword: "residency", Argument: "<seconds>", Arm: static (module, context, args) => module.ArmBakes(args: args, context: context, resident: true)),
+        new(Keyword: "captures", Argument: "<seconds>", Arm: static (module, context, args) => module.ArmCaptures(args: args, context: context)),
     ];
-    private static readonly string ArityRefusal = ("[world.wait: expected <ticks>, " + string.Join(
-        separator: ", ",
-        values: KeywordForms.SkipLast(count: 1).Select(static form => $"{form.Keyword} {form.Argument}")
-    ) + " or " + $"{KeywordForms[^1].Keyword} {KeywordForms[^1].Argument}]");
+    private static readonly string WaitForm = ("<ticks> | " + string.Join(
+        separator: " | ",
+        values: KeywordForms.Select(static form => $"{form.Keyword} {form.Argument}")
+    ));
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
@@ -72,7 +72,7 @@ public sealed class WorldWaitCommandModule(IWorldConsoleAuthority authority, IWo
                     }
 
                     if (args.Count != 2) {
-                        return CommandResult.Error(output: $"[world.wait: {form.Keyword} takes {form.Takes}: world.wait {form.Keyword} {form.Argument}]");
+                        return CommandResult.Usage(form: $"{form.Keyword} {form.Argument}", verb: "world.wait");
                     }
 
                     return form.Arm(
@@ -83,7 +83,7 @@ public sealed class WorldWaitCommandModule(IWorldConsoleAuthority authority, IWo
                 }
 
                 if (args.Count != 1) {
-                    return CommandResult.Error(output: ArityRefusal);
+                    return CommandResult.Usage(form: WaitForm, verb: "world.wait");
                 }
 
                 if (!args.TryUnsignedDigits(

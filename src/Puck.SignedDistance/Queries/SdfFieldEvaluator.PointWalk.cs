@@ -104,7 +104,6 @@ public sealed partial class SdfFieldEvaluator {
         var instructions = m_instructions;
         var cullBounds = m_cullBounds;
         var segmentSlots = m_segmentSlots;
-        var segmentBounds = m_segmentBounds;
         var localPosition = worldPosition;
         var distanceScale = FixedQ4816.One;
         // The render reading's chain state beside the point: a fold's material stride (mapCore's parityMaterialDelta)
@@ -183,8 +182,8 @@ public sealed partial class SdfFieldEvaluator {
 
                         var segment = segmentSlots[index];
 
-                        if ((segment >= 0) && segmentBounds[segment].Reach.PointClears(point: worldPosition, threshold: SegmentThreshold(above: resultDistance, below: resultDistance, bound: in segmentBounds[segment]))) {
-                            index = (segmentBounds[segment].End - 1);
+                        if ((segment >= 0) && (SkippedChainsEnd(answer: resultDistance, segment: segment, worldPosition: worldPosition) is var skipped and >= 0)) {
+                            index = (skipped - 1);
                         }
 
                         break;
@@ -560,6 +559,22 @@ public sealed partial class SdfFieldEvaluator {
             (((Bound >= 0) && (Distance < resultDistance)) ? (Distance + FixedQ4816.Epsilon) : resultDistance);
     }
 
+    // The end of the chains a point walk skips from the ResetPoint opening the chain in this slot: the largest node of the
+    // segment hierarchy starting there whose certificate clears the answer, else the chain alone; minus one when neither
+    // clears.
+    private int SkippedChainsEnd(int segment, FixedVector3 worldPosition, FixedQ4816 answer) {
+        for (var group = m_segmentGroupHeads[segment]; (group >= 0); group = m_segmentGroupNext[group]) {
+            ref readonly var node = ref m_segmentGroups[group];
+
+            if (node.Reach.PointClears(point: worldPosition, threshold: SegmentThreshold(above: answer, below: answer, bound: in node))) {
+                return node.End;
+            }
+        }
+
+        ref readonly var chain = ref m_segmentBounds[segment];
+
+        return (chain.Reach.PointClears(point: worldPosition, threshold: SegmentThreshold(above: answer, below: answer, bound: in chain)) ? chain.End : -1);
+    }
     // Whether an instance's candidates clear the threshold: its certificate at the largest axis distance first, then at
     // the exact distance, then each lowering member's.
     private bool InstanceClears(in CullBound bound, FixedQ4816 cheapReach, FixedQ4816 threshold, FixedVector3 worldPosition) =>

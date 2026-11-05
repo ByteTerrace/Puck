@@ -121,7 +121,7 @@ internal sealed partial class ScreenCommandModule {
             (divisor < 1) ||
             (divisor > 8)
         ) {
-            return CommandResult.Error(output: $"[world.view-refresh: expected an integer divisor from 1 through 8, got '{args[0]}']");
+            return CommandResult.Usage(form: ViewRefreshForm, got: args[0].ToString(), verb: "world.view-refresh");
         }
 
         m_binder.SetViewRefreshDivisor(divisor: divisor);

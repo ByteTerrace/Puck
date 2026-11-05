@@ -14,7 +14,7 @@ internal sealed partial class WorldHudCommandModule {
         var element = panel?.Elements.FirstOrDefault(predicate: row => (row.Id == elementId));
 
         if (element is not { Kind: WorldHudElementKind.Text, Voice: { } voice }) {
-            return CommandResult.Error(output: "[audio.render: expected a HUD Text element with an authored voice]");
+            return CommandResult.Error(output: $"[audio.render: '{panelId}/{elementId}' is not a HUD Text element with an authored voice]");
         }
         var text = WorldHudSpeechFeed.ResolveText(bindings: bindings, element: element, seat: -1);
 

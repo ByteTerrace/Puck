@@ -148,7 +148,7 @@ internal sealed class WorldRateCommandModule(WorldInstanceHost instances, WorldR
 
         if (!WorldArgs.IsInstanceToken(token: args[tokenIndex])) {
             instanceName = string.Empty;
-            error = CommandResult.Error(output: $"[{verb}: expected 'instance:<name>']");
+            error = CommandResult.Usage(form: "[instance:<name>]", got: args[tokenIndex].ToString(), verb: verb);
 
             return false;
         }
@@ -208,7 +208,7 @@ internal sealed class WorldRateCommandModule(WorldInstanceHost instances, WorldR
                     return Resume(name: name);
                 }
 
-                return CommandResult.Error(output: $"[world.rate: unrecognized '{operation}' — expected [instance:<name>], 'shed', 'pause [instance:<name>]', or 'resume [instance:<name>]']");
+                return CommandResult.Usage(form: "[instance:<name>] | shed | pause [instance:<name>] | resume [instance:<name>]", got: operation, verb: "world.rate");
             }
         );
     }

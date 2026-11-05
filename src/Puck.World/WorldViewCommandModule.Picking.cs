@@ -32,7 +32,7 @@ internal sealed partial class WorldViewCommandModule {
         }
         return (feed.TryOverridePointer(point: new Vector2(x: x, y: y))
             ? new CommandResult(Output: string.Create(provider: CultureInfo.InvariantCulture, handler: $"[world.view.pointer: override={x},{y}]"))
-            : CommandResult.Error(output: "[world.view.pointer: expected finite coordinates inside the client extent]"));
+            : CommandResult.Error(output: $"[world.view.pointer: ({x}, {y}) is not a finite point inside the client extent]"));
     }
     // The answer of a completed pick, one line.
     private static string Answer(string instance, SdfPickResult result) {

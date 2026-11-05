@@ -102,6 +102,11 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
     // Per instruction, the slot of the skippable chain a ResetPoint opens in m_segmentBounds; minus one otherwise.
     private readonly int[] m_segmentSlots;
     private readonly SegmentBound[] m_segmentBounds;
+    // The segment hierarchy (see BuildSegmentGroups): per chain slot the largest node starting at its ResetPoint, minus
+    // one for none; the nodes; and per node the next smaller node starting there, minus one for the chain itself.
+    private readonly int[] m_segmentGroupHeads;
+    private readonly SegmentBound[] m_segmentGroups;
+    private readonly int[] m_segmentGroupNext;
     // Whether every compose outside a scope is a hard union, so the answer is the least of the instances' own answers
     // and a walk may evaluate its nearest instance first (see ComposesByHardUnion).
     private readonly bool m_primeable;
@@ -138,7 +143,8 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
         var reaches = BuildShapeReaches(compiled: m_instructions, program: program);
 
         (m_cullBounds, m_members) = BuildCullBounds(compiled: m_instructions, program: program, reaches: reaches);
-        (m_segmentSlots, m_segmentBounds) = BuildSegments(compiled: m_instructions, program: program, reaches: reaches);
+        (m_segmentSlots, m_segmentBounds, var segmentEnclosures) = BuildSegments(compiled: m_instructions, program: program, reaches: reaches);
+        (m_segmentGroupHeads, m_segmentGroups, m_segmentGroupNext) = BuildSegmentGroups(bounds: m_segmentBounds, compiled: m_instructions, cullBounds: m_cullBounds, enclosures: segmentEnclosures, slots: m_segmentSlots);
         m_primeable = ComposesByHardUnion(compiled: m_instructions);
         (m_rotationSlots, m_rotationBounds) = BuildRotationBounds(instructions: m_instructions);
 

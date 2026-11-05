@@ -10,6 +10,8 @@ namespace Puck.World;
 
 /// <summary>The owned-world identity console surface.</summary>
 internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoster roster, WorldServer server) : ICommandModule {
+    private const string DeliverForm = "<source-id> <owner-id> <row> <set|add> <text...>";
+    private const string HudForm = "<panel-json> [player]";
     private readonly WorldOwnedWorlds m_worlds = worlds;
     private readonly PlayerRoster m_roster = roster;
     private readonly WorldServer m_server = server;
@@ -52,7 +54,7 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
     // StateCell.Value/.Text already carries.
     private CommandResult Deliver(CommandContext context, WireArgs args) {
         if (args.Count < 4) {
-            return CommandResult.Usage(form: "<source-id> <owner-id> <row> <set|add> <text...>", verb: "identity.deliver");
+            return CommandResult.Usage(form: DeliverForm, verb: "identity.deliver");
         }
 
         var sourceId = args[0].ToString();
@@ -74,7 +76,7 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
         )) {
             kind = WorldDocumentWriteKind.Add;
         } else {
-            return CommandResult.Error(output: $"[identity.deliver: unknown operation '{opToken}' — expected 'set' or 'add']");
+            return CommandResult.Usage(form: DeliverForm, got: opToken, verb: "identity.deliver");
         }
 
         var text = DeliverTextTail(
@@ -299,7 +301,7 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
     // told apart from the JSON by position alone, with no quote-preserving tokenizer needed for either half.
     private CommandResult SetHud(CommandContext context, WireArgs args) {
         if (args.Count is not (1 or 2)) {
-            return CommandResult.Error(output: "[identity.hud: expected <panel-json> [player] — panel-json is one compact (whitespace-free) WorldHudPanel {id, rect, layer, style, elements}]");
+            return CommandResult.Usage(form: HudForm, verb: "identity.hud");
         }
         if (!TryPlayer(
             args: in args,
@@ -520,7 +522,7 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "identity.hud",
-            description: "Replaces the identity-owned PRIVATE seat panel: identity.hud <panel-json> [player] — panel-json is one compact (whitespace-free) inline WorldHudPanel {id, rect, layer, style, elements}, validated through the SAME document validator every owned world loads through (schema caps, the closed HudBindingVocabulary against this identity's OWN state section, and the seat-panel rules: elements capped at WorldHudCapacity.MaxElementsPerSeatPanel, WorldHudLayer.Replace refused). A rejection leaves the document untouched. Takes effect immediately (WorldHudFeed recomposes seat panels every produced frame off the live identity) and is echoed back by world.hud seat:<n> or identity.show. Fires inline over loopback, no WorldMutation — the owner-side identity door, ungated like identity.motion.",
+            description: "Replaces the identity-owned PRIVATE seat panel: identity.hud " + HudForm + " — panel-json is one compact (whitespace-free) inline WorldHudPanel {id, rect, layer, style, elements}, validated through the SAME document validator every owned world loads through (schema caps, the closed HudBindingVocabulary against this identity's OWN state section, and the seat-panel rules: elements capped at WorldHudCapacity.MaxElementsPerSeatPanel, WorldHudLayer.Replace refused). A rejection leaves the document untouched. Takes effect immediately (WorldHudFeed recomposes seat panels every produced frame off the live identity) and is echoed back by world.hud seat:<n> or identity.show. Fires inline over loopback, no WorldMutation — the owner-side identity door, ungated like identity.motion.",
             handler: SetHud,
             routing: CommandRouting.Simulation
         );
@@ -548,7 +550,7 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "identity.deliver",
-            description: "DEV/TEST cross-document TEXT delivery — issues one WorldDocumentSubmission carrying a TEXT operand through the SAME write-back door the sim's own per-tick numeric outputs use (Server.WorldOwnedWorlds.Decide): identity.deliver <source-id> <owner-id> <row> <set|add> <text...>. <source-id> is the asking document (the door checks OWNER'S OWN grants section for a Mutate/state:<row> hold naming document:<source-id> with a write mask admitting the requested operation); <owner-id> is the document the row lives in; <row> names an ALREADY-DECLARED text-kind state row in the OWNER's document (declare it there first — there is no spooled delivery for an undeclared row, which refuses by name with the remedy); <set|add> is the requested WorldDocumentWriteKind — carried through even though <add> against a text row ALWAYS refuses by name at the door regardless of what the write mask admits (text is Set-only; this harness carries both so that refusal is exercisable, not merely asserted), which is why it is a required token here rather than assumed Set; <text...> is the raw tail (everything after <set|add>, spaces included, capped at StateCapacity.MaxTextValueLength). Applies inline and echoes the receipt immediately; identity.writebacks re-echoes the same receipt afterward. This is the MINIMAL test harness for the door only — the real, chat-integrated whisper verb (source id derived from the acting player's own identity) is chat.whisper (ChatCommandModule); this dev harness stays for probing the door with an arbitrary source id chat.whisper can never send from its own identity.",
+            description: "DEV/TEST cross-document TEXT delivery — issues one WorldDocumentSubmission carrying a TEXT operand through the SAME write-back door the sim's own per-tick numeric outputs use (Server.WorldOwnedWorlds.Decide): identity.deliver " + DeliverForm + ". <source-id> is the asking document (the door checks OWNER'S OWN grants section for a Mutate/state:<row> hold naming document:<source-id> with a write mask admitting the requested operation); <owner-id> is the document the row lives in; <row> names an ALREADY-DECLARED text-kind state row in the OWNER's document (declare it there first — there is no spooled delivery for an undeclared row, which refuses by name with the remedy); <set|add> is the requested WorldDocumentWriteKind — carried through even though <add> against a text row ALWAYS refuses by name at the door regardless of what the write mask admits (text is Set-only; this harness carries both so that refusal is exercisable, not merely asserted), which is why it is a required token here rather than assumed Set; <text...> is the raw tail (everything after <set|add>, spaces included, capped at StateCapacity.MaxTextValueLength). Applies inline and echoes the receipt immediately; identity.writebacks re-echoes the same receipt afterward. This is the MINIMAL test harness for the door only — the real, chat-integrated whisper verb (source id derived from the acting player's own identity) is chat.whisper (ChatCommandModule); this dev harness stays for probing the door with an arbitrary source id chat.whisper can never send from its own identity.",
             handler: (context, args) => Deliver(
                 args: args,
                 context: context

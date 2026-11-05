@@ -64,12 +64,24 @@ public readonly record struct CommandResult(string Output, bool ClearTranscript 
         ClearTranscript: true,
         Output: ""
     );
-    /// <summary>Creates an error result with transcript output.</summary>
+    /// <summary>Creates an error result with transcript output. A grammar refusal (a wrong argument count, an unknown
+    /// mode word) is never spelled here: it is <see cref="Usage"/>, the one spelling of <c>[verb: expected form]</c>.</summary>
     /// <param name="output">The text to append to the transcript.</param>
     /// <returns>A result with <see cref="IsError"/> set to <see langword="true"/>.</returns>
-    public static CommandResult Error(string output) => new(Output: output) {
-        IsError = true,
-    };
+    /// <exception cref="ArgumentException"><paramref name="output"/> opens <c>[verb: expected</c>, the shape of a
+    /// grammar refusal, so a hand-spelled one fails the first time its refusal runs.</exception>
+    public static CommandResult Error(string output) {
+        if (IsGrammarShaped(text: output)) {
+            throw new ArgumentException(
+                message: $"A grammar refusal is CommandResult.Usage(verb, form), never a hand-spelled Error: {output}",
+                paramName: nameof(output)
+            );
+        }
+
+        return new(Output: output) {
+            IsError = true,
+        };
+    }
     /// <summary>Refuses a wire call carrying any trailing token for a verb that takes none — the shared body every
     /// zero-argument verb's argument check reduces to: <c>[verb: unrecognized '&lt;token&gt;' — expected no
     /// arguments]</c>.</summary>
@@ -78,15 +90,40 @@ public readonly record struct CommandResult(string Output, bool ClearTranscript 
     /// <returns>The refusal, or <see langword="null"/> when no argument was passed.</returns>
     public static CommandResult? RequireNoArguments(in WireArgs args, string verb) => ((args.Count == 0)
         ? null
-        : Error(output: $"[{verb}: unrecognized '{args[0]}' — expected no arguments]")
+        : Usage(
+            form: "",
+            got: args[0].ToString(),
+            verb: verb
+        )
     );
-    /// <summary>Creates the shared wrong-argument-count refusal every command module hand-spelled locally:
-    /// <c>[verb: expected form]</c>, or <c>[verb: expected no arguments]</c> when <paramref name="form"/> is
-    /// empty.</summary>
+    /// <summary>Creates the one grammar refusal: <c>[verb: expected form]</c>, or <c>[verb: expected no
+    /// arguments]</c> when <paramref name="form"/> is empty. A handler that knows which word it could not read passes
+    /// it as <paramref name="got"/>, and the refusal echoes it: <c>[verb: unrecognized 'got' — expected form]</c>.</summary>
     /// <param name="verb">The verb name.</param>
-    /// <param name="form">The expected argument grammar, or empty for a no-argument verb.</param>
+    /// <param name="form">The verb's declared argument form, the spelling its description shows after the verb, or
+    /// empty for a no-argument verb.</param>
+    /// <param name="got">The offending token, or <see langword="null"/> when the grammar as a whole is wrong (a
+    /// wrong argument count).</param>
     /// <returns>A result with <see cref="IsError"/> set to <see langword="true"/>.</returns>
-    public static CommandResult Usage(string verb, string form) => Error(output: (string.IsNullOrEmpty(value: form)
-        ? $"[{verb}: expected no arguments]"
-        : $"[{verb}: expected {form}]"));
+    public static CommandResult Usage(string verb, string form, string? got = null) {
+        var expected = (string.IsNullOrEmpty(value: form)
+            ? "expected no arguments"
+            : $"expected {form}");
+
+        return new(Output: ((got is null)
+            ? $"[{verb}: {expected}]"
+            : $"[{verb}: unrecognized '{got}' — {expected}]"
+        )) {
+            IsError = true,
+        };
+    }
+
+    // The shape Usage writes and nothing else may: the verb, then "expected" straight away.
+    private static bool IsGrammarShaped(string text) {
+        if (!text.StartsWith(value: '[')) { return false; }
+
+        var colon = text.IndexOf(value: ": expected ", comparisonType: StringComparison.Ordinal);
+
+        return ((colon > 1) && (text.AsSpan(start: 1, length: (colon - 1)).IndexOfAny(values: " ]") < 0));
+    }
 }

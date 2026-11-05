@@ -19,7 +19,7 @@ public static class PuckDiagnosticCodes {
     /// cannot evaluate at compile time, or a name that is neither a compile-time function nor an arm the vocabulary
     /// declares (<c>min</c>, where the one spelling is <c>minimum</c>).</summary>
     public const string BuiltinRefused = "PUCK041";
-    /// <summary>PUCK040: a colon in front of a container value. A block or an array is written as a block
+    /// <summary>PUCK040: a colon in front of a container value. A block or a list is written without the colon
     /// (<c>host { }</c>, <c>cameras [ ]</c>); the colon is what marks a scalar leaf, so there is exactly one
     /// spelling for each.</summary>
     public const string ColonBeforeContainer = "PUCK040";

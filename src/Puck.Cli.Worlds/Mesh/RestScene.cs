@@ -215,12 +215,14 @@ public sealed class RestScene {
         return point => (transform.Position + Vector3.Transform(value: (point * (rigid?.Scale ?? 1f)), rotation: turn));
     }
 
-    // The placement and prototype a static instance stands for, as the frame's pick map names it; empty where it names
-    // none.
+    // The placement and prototype a static instance stands for, as the frame's pick map names it: both for an instance a
+    // placement emitted itself, the prototype alone for a shared template many placements copy; empty where it names none.
     private string Placed(int instance) =>
-        ((m_picks?.Resolve(identity: SdfVisibility.IdentityOf(kind: SdfVisibilityKind.Sdf, source: ((uint)(instance + 1)))) is WorldPickTarget { Placement: { } placement } target)
-            ? $" {placement} ({target.Prototype})"
-            : string.Empty);
+        ((m_picks?.Resolve(identity: SdfVisibility.IdentityOf(kind: SdfVisibilityKind.Sdf, source: ((uint)(instance + 1))))) switch {
+            WorldPickTarget { Placement: { } placement } target => $" {placement} ({target.Prototype})",
+            WorldPickTarget { Prototype: { } prototype } => $" ({prototype})",
+            _ => string.Empty,
+        });
     private RestBody? BodyOf(int slot) => Bodies.FirstOrDefault(predicate: body => ((slot >= body.RootSlot) && (slot < (body.RootSlot + body.SlotCount))));
 
     // Keeps the program and transforms of the frame it last dressed.

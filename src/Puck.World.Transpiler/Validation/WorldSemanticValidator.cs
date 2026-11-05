@@ -31,11 +31,13 @@ public static class WorldSemanticValidator {
     }
     /// <summary>Composes <paramref name="loweredJson"/>'s <c>basis</c>/<c>imports</c> graph, rooted beside
     /// <paramref name="sourcePath"/>, through <see cref="PuckDocumentComposer"/> — the same composition the game
-    /// boot path runs — and validates the composed document. A document naming neither composes to itself.</summary>
+    /// boot path runs — and validates the composed document. A document naming neither composes to itself. A finding
+    /// against a row only a basis or an import document authors is placed on that document's line, and dropped when an
+    /// <c>allow</c> line there acknowledges it (<see cref="WorldFindingLocator"/>); one the source or a library it
+    /// imports acknowledges is dropped by <see cref="SourceAcknowledgements.Acknowledge"/>, which the caller runs over
+    /// every finding it reports.</summary>
     /// <param name="loweredJson">The lowered JsonObject, not yet composed with its basis or imports.</param>
-    /// <param name="sourceMap">The SourceMap linking JSON pointer paths to source AST spans. Spans for fields a
-    /// basis or import supplied do not resolve (they trace no span in this source) and report at
-    /// <see cref="SourceSpan.None"/>.</param>
+    /// <param name="sourceMap">The SourceMap linking JSON pointer paths to source AST spans.</param>
     /// <param name="diagnostics">The DiagnosticBag to report composition and semantic errors into.</param>
     /// <param name="sourcePath">The <c>.puck</c> source file's own resolved path — basis and import references
     /// resolve relative to its directory.</param>
@@ -43,13 +45,16 @@ public static class WorldSemanticValidator {
     /// <param name="catalogFingerprint">The stable metadata fingerprint for composition under <paramref name="machines"/>.</param>
     /// <param name="sourceCompilation">The already compiled root and its input facts, when available.</param>
     /// <returns>True if the composed world passed semantic validation without errors.</returns>
-    public static bool ValidateComposedWorld(JsonObject loweredJson, SourceMap? sourceMap, DiagnosticBag diagnostics, string sourcePath, IMachineValidationCatalog? machines = null, string catalogFingerprint = "", WorldCompiledSource? sourceCompilation = null) =>
-        (TryComposeWorld(
+    public static bool ValidateComposedWorld(JsonObject loweredJson, SourceMap? sourceMap, DiagnosticBag diagnostics, string sourcePath, IMachineValidationCatalog? machines = null, string catalogFingerprint = "", WorldCompiledSource? sourceCompilation = null) {
+        var origins = new WorldDocumentOrigins();
+
+        return (TryComposeWorld(
             catalogFingerprint: catalogFingerprint,
             composed: out var composed,
             diagnostics: diagnostics,
             loweredJson: loweredJson,
             machines: machines,
+            origins: origins,
             sourceCompilation: sourceCompilation,
             sourceMap: sourceMap,
             sourcePath: sourcePath
@@ -58,10 +63,12 @@ public static class WorldSemanticValidator {
             diagnostics: diagnostics,
             loweredJson: composed,
             machines: machines,
+            origins: origins,
             source: loweredJson,
             sourceMap: sourceMap,
             sourcePath: sourcePath
         ));
+    }
     /// <summary>Composes <paramref name="loweredJson"/>'s <c>basis</c>/<c>imports</c> graph, rooted beside
     /// <paramref name="sourcePath"/>, through <see cref="PuckDocumentComposer"/>, and reports a refused composition
     /// once, as PUCK035 at the <c>basis</c>. Every consumer of a source's composed document composes it here, so one

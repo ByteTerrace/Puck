@@ -36,6 +36,8 @@ internal sealed class ChatCommandModule(WorldOwnedWorlds worlds, PlayerRoster ro
     /// <summary>The bounded, evicting row every log/inbox declares — small enough to prove eviction with a short
     /// script, large enough to be a plausible chat window.</summary>
     private const int ChatCapacity = 8;
+    private static readonly string LogForm = $"<player 1..{PlayerRoster.MaxSlots}> <text...>";
+    private static readonly string WhisperForm = $"<player 1..{PlayerRoster.MaxSlots}> <recipient-id> <text...>";
 
     private static readonly CellName LogRowName = WorldIdentityRows.ChatLog;
     private static readonly CellName InboxRowName = WorldIdentityRows.ChatInbox;
@@ -252,7 +254,7 @@ internal sealed class ChatCommandModule(WorldOwnedWorlds worlds, PlayerRoster ro
             (player < 1) ||
             (player > PlayerRoster.MaxSlots)
         ) {
-            return CommandResult.Error(output: $"[chat.log: expected <player 1..{PlayerRoster.MaxSlots}> <text...>]");
+            return CommandResult.Usage(form: LogForm, verb: "chat.log");
         }
         if (!TryAuthorize(
             context: context,
@@ -436,7 +438,7 @@ internal sealed class ChatCommandModule(WorldOwnedWorlds worlds, PlayerRoster ro
     }
     private CommandResult Whisper(CommandContext context, WireArgs args) {
         if (args.Count < 2) {
-            return CommandResult.Error(output: $"[chat.whisper: expected <player 1..{PlayerRoster.MaxSlots}> <recipient-id> <text...>]");
+            return CommandResult.Usage(form: WhisperForm, verb: "chat.whisper");
         }
 
         var (whisperSlot, whisperSeatError) = SeatCommandArgs.ResolveSlot(
@@ -447,7 +449,7 @@ internal sealed class ChatCommandModule(WorldOwnedWorlds worlds, PlayerRoster ro
         );
 
         if (whisperSeatError is not null) {
-            return CommandResult.Error(output: $"[chat.whisper: expected <player 1..{PlayerRoster.MaxSlots}> <recipient-id> <text...>]");
+            return CommandResult.Usage(form: WhisperForm, verb: "chat.whisper");
         }
 
         var player = PlayerRoster.DisplayNumber(slot: whisperSlot);
@@ -535,14 +537,14 @@ internal sealed class ChatCommandModule(WorldOwnedWorlds worlds, PlayerRoster ro
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "chat.log",
-            description: $"Appends one message to the acting player's OWN bounded, evicting chat-log row: chat.log <player 1..{PlayerRoster.MaxSlots}> <text...>. <player> is REQUIRED and LEADING (never a trailing optional index — free text could otherwise be misread as a player token); <text...> is the raw tail, spaces included, capped at {StateCapacity.MaxTextValueLength} UTF-16 code units. Refuses by name with the remedy (declare chat.inbox first) if chat-log is undeclared. Owner-only, identically to chat.inbox. The echo names the evicted key when the write pushed the row past its {ChatCapacity}-entry capacity.",
+            description: $"Appends one message to the acting player's OWN bounded, evicting chat-log row: chat.log {LogForm}. <player> is REQUIRED and LEADING (never a trailing optional index — free text could otherwise be misread as a player token); <text...> is the raw tail, spaces included, capped at {StateCapacity.MaxTextValueLength} UTF-16 code units. Refuses by name with the remedy (declare chat.inbox first) if chat-log is undeclared. Owner-only, identically to chat.inbox. The echo names the evicted key when the write pushed the row past its {ChatCapacity}-entry capacity.",
             handler: Log,
             routing: CommandRouting.Simulation
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "chat.whisper",
-            description: $"Delivers text from the acting player's OWN identity to a recipient's chat-inbox row, through the SAME cross-document text delivery door Server.WorldOwnedWorlds.Decide already gates (the real verb — never the identity.deliver dev harness, and the source id is the acting player's OWN identity, never a caller-supplied string): chat.whisper <player 1..{PlayerRoster.MaxSlots}> <recipient-id> <text...>. Refuses by name when the recipient has not granted this sender (chat.allow), or has since revoked it (chat.block) — that refusal IS the offline/not-allowed boundary. Owner-only over the SENDING player, identically to chat.inbox.",
+            description: $"Delivers text from the acting player's OWN identity to a recipient's chat-inbox row, through the SAME cross-document text delivery door Server.WorldOwnedWorlds.Decide already gates (the real verb — never the identity.deliver dev harness, and the source id is the acting player's OWN identity, never a caller-supplied string): chat.whisper {WhisperForm}. Refuses by name when the recipient has not granted this sender (chat.allow), or has since revoked it (chat.block) — that refusal IS the offline/not-allowed boundary. Owner-only over the SENDING player, identically to chat.inbox.",
             handler: Whisper,
             routing: CommandRouting.Simulation
         );

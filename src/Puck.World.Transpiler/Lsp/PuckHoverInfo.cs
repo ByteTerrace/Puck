@@ -11,24 +11,10 @@ internal static class PuckHoverInfo {
     private static readonly Lazy<PuckSchemaHover> Schema = new(valueFactory: () => new PuckSchemaHover());
 
     internal static string? Builtin(string word) {
-        var collection = word switch {
-            "range" => ("range(start, count)", "Produces count consecutive integers beginning at start. Count must be nonnegative."),
-            "length" => ("length(value)", "Returns the number of array elements, object properties, or UTF-16 string code units."),
-            "concat" => ("concat(values...)", "Concatenates arrays and scalar values into one array."),
-            "map" => ("map(array, (item, index) => value)", "Transforms each element. The index parameter is optional."),
-            "flatMap" => ("flatMap(array, (item, index) => value)", "Transforms each element and splices an array result into the output, so a flatten is one call. The index parameter is optional."),
-            "filter" => ("filter(array, (item, index) => condition)", "Keeps elements whose condition is truthy. The index parameter is optional."),
-            "reduce" => ("reduce(array, initial, (accumulator, item) => value)", "Folds elements into an accumulated value starting with initial."),
-            "distinct" => ("distinct(array)", "Removes duplicate values, preserving the first occurrence."),
-            "sort" => ("sort(array, item => key)", "Stably sorts an array. The key lambda is optional."),
-            "groupBy" => ("groupBy(array, (item, index) => key)", "Groups elements into an object of arrays by key. The index parameter is optional."),
-            _ => (((string, string)?)null)
-        };
-
-        if (collection is { } info) {
+        if (DocumentBuiltins.Collections.TryGetValue(key: word, value: out var collection)) {
             return Card(
-                declaration: info.Item1,
-                description: info.Item2,
+                declaration: collection.Signature,
+                description: collection.Description,
                 title: "Collection function — evaluated at compile time"
             );
         }

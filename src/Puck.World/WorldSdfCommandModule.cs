@@ -83,7 +83,7 @@ internal sealed class WorldSdfCommandModule(WorldSdfDocumentEmitter documents, W
         }
         if ((args.Count > 2) || !int.TryParse(args[0].ToString(), out var registration) ||
             !creations.TryRegistrationRig(registration: registration, state: out var rig, shapeName: ((args.Count == 2) ? args[1].ToString() : null))) {
-            return CommandResult.Error(output: "[world.sdf.rig: expected a live registration index and optional shape; omit arguments to list registrations]");
+            return CommandResult.Usage(form: "[registration] [shape]", verb: "world.sdf.rig");
         }
         return new CommandResult(Output: System.Text.Json.JsonSerializer.Serialize(value: rig, options: RigJson));
     }
