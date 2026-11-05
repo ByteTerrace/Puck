@@ -17,6 +17,8 @@ namespace Puck.SignedDistance.Queries;
 //   k above x, c once k below, at least c − k/4 from c ≤ x < c + k, and x − (k − t)²/(4k) ≥ c − k for t = c − x in
 //   (0, k); never below min(x, c − k). By induction a run of unions and smooth unions is never below the least operand
 //   it joined less its widest radius, beside the k/4 a blend that each blend's own bound gives.
+//   The finite FarDistance seed is also a lowering candidate: SeedFloor bounds it through the same slack and pop scale.
+//   Both instance-skip doors test that floor, including when the geometric members alone clear the answer.
 // - A chain of shapes (m_segmentBounds) is skipped from its ResetPoint to its end when its certificate clears the
 //   running answer (inside a scope, the scope's) by the chain's margin, the threshold at which every shape in it leaves
 //   the answer and its material bitwise: a union at or above it is not taken, a smooth union at least k + k·2⁻¹⁵ + 16
@@ -43,7 +45,6 @@ public sealed partial class SdfFieldEvaluator {
     // The rounding allowance, in raws, of one soft blend of radius k (see ScopeBlendRoundingRaws).
     private static long SmoothBlendRoundingRaws(FixedQ4816 k) =>
         (ScopeBlendRoundingRaws + (k.Value >> (FixedQ4816.FractionBitCount + 18)));
-
     // Every cullable instance, in First order, with its certificate over the candidates it can join the answer with and
     // its lowering members' certificates (m_members). Both certificates of an instance share one centre, the mean of its
     // shapes'.
@@ -54,13 +55,14 @@ public sealed partial class SdfFieldEvaluator {
         var steps = new List<ScopeStep>();
 
         foreach (var instance in program.Instances) {
-            if (instance.IsDynamic || !TryCertifyInstance(boxed: out var boxed, compiled: compiled, instance: instance, lowering: lowering, reaches: reaches, scoped: out var scoped, steps: steps)) {
+            if (instance.IsDynamic || !TryCertifyInstance(boxed: out var boxed, compiled: compiled, instance: instance, lowering: lowering, reaches: reaches, scoped: out var scoped, seedFloor: out var seedFloor, steps: steps)) {
                 continue;
             }
 
             var centre = MeanCentre(steps: steps);
             var point = Enclose(centre: centre, members: lowering);
-            var box = ((boxed && scoped) ? ScopeBoxReach(centre: centre, steps: steps) : point);
+            var boxSeedFloor = long.MaxValue;
+            var box = ((boxed && scoped) ? ScopeBoxReach(centre: centre, seedFloor: out boxSeedFloor, steps: steps) : point);
 
             if (!Reach.TryOf(reach: out var reach, shape: (point with { BoxCentred = box.BoxCentred, BoxGain = box.BoxGain, BoxRadius = box.BoxRadius, BoxSpread = box.BoxSpread, Boxed = (boxed && (box.BoxGain > 0.0)) }))) {
                 continue;
@@ -84,13 +86,16 @@ public sealed partial class SdfFieldEvaluator {
                 MemberCount: (members.Count - memberFirst),
                 MemberFirst: memberFirst,
                 Reach: reach,
-                Scoped: scoped
+                Scoped: scoped,
+                SeedFloor: Math.Min(val1: seedFloor, val2: boxSeedFloor)
             ));
         }
 
         var boundRows = bounds.ToArray();
+
         CountArrayPayload(rows: boundRows, work: PointWork, arrays: CullArraysCreated, bytes: CullPayloadCreated);
         var memberRows = members.ToArray();
+
         CountArrayPayload(rows: memberRows, work: PointWork, arrays: CullArraysCreated, bytes: CullPayloadCreated);
         return (boundRows, memberRows);
     }
@@ -98,20 +103,28 @@ public sealed partial class SdfFieldEvaluator {
     // and union shapes; each scope one level deep, popping by union, holding union, smooth union, subtraction or
     // intersection shapes. Fills the lowering members' certificates in the answer's terms (a scope's slack subtracted
     // and its pop's scale applied), the instance's scope edges and shapes in stream order, and whether every shape has a
-    // box certificate.
-    private static bool TryCertifyInstance(CompiledInstruction[] compiled, SdfInstanceRange instance, ShapeReach?[] reaches, List<ShapeReach> lowering, List<ScopeStep> steps, out bool scoped, out bool boxed) {
+    // box certificate. The instance's point state must start at a reset and die before the next read; its finite scope
+    // seeds are bounded separately from its geometric lowering members.
+    private static bool TryCertifyInstance(CompiledInstruction[] compiled, SdfInstanceRange instance, ShapeReach?[] reaches, List<ShapeReach> lowering, List<ScopeStep> steps, out bool scoped, out bool boxed, out long seedFloor) {
         var depth = 0;
         var scopeStart = 0;
         // A scope's slack: its smooth unions' quarter radii summed, or their widest radius when that is less (a run of
         // smooth unions, see the type remarks), plus every soft blend's rounding allowance.
-        var quarterRaws = 0L;
+        var quarterRaws = Int128.Zero;
         var radiusRaws = 0L;
-        var roundingRaws = 0L;
+        var roundingRaws = Int128.Zero;
 
         lowering.Clear();
         steps.Clear();
         scoped = false;
         boxed = true;
+        seedFloor = long.MaxValue;
+
+        // Instance metadata neither initializes nor restores the interpreter's point. A primer must start at a reset,
+        // and a skipped instance must leave no point state that a later instruction reads.
+        if (!PointDiesBeforeRead(compiled: compiled, first: instance.First) || !PointDiesBeforeRead(compiled: compiled, first: instance.End)) {
+            return false;
+        }
 
         for (var index = instance.First; (index < instance.End); index++) {
             ref readonly var instruction = ref compiled[index];
@@ -141,7 +154,11 @@ public sealed partial class SdfFieldEvaluator {
                         }
 
                         var scale = ((instruction.ScopeScale > 0L) ? (instruction.ScopeScale / ScopeScaleOne) : 0.0);
-                        var slack = ((Math.Min(val1: quarterRaws, val2: radiusRaws) + roundingRaws) * RawUnit);
+                        // A stream has at most Int32.MaxValue instructions, each adding at most Int64.MaxValue raws:
+                        // the certificate sum fits Int128 even when no useful bound fits the point carrier.
+                        var slack = (((double)(Int128.Min(x: quarterRaws, y: radiusRaws) + roundingRaws)) * RawUnit);
+
+                        seedFloor = Math.Min(val1: seedFloor, val2: ScopeSeedFloor(scale: scale, slack: slack));
 
                         for (var member = scopeStart; (member < lowering.Count); member++) {
                             lowering[member] = lowering[member].Scaled(scale: scale, slack: slack);
@@ -174,9 +191,9 @@ public sealed partial class SdfFieldEvaluator {
                                 case SdfBlendOp.SmoothUnion: {
                                         var k = FixedQ4816.Max(x: instruction.Data1X, y: SmoothRadiusMin);
 
-                                        quarterRaws = checked((quarterRaws + ((k.Value + 3L) >> 2)));
+                                        quarterRaws += ((((Int128)k.Value) + 3L) >> 2);
                                         radiusRaws = Math.Max(val1: radiusRaws, val2: k.Value);
-                                        roundingRaws = checked((roundingRaws + SmoothBlendRoundingRaws(k: k)));
+                                        roundingRaws += SmoothBlendRoundingRaws(k: k);
                                         break;
                                     }
                                 case SdfBlendOp.Subtraction:
@@ -187,7 +204,7 @@ public sealed partial class SdfFieldEvaluator {
                                 case SdfBlendOp.SmoothSubtraction:
                                 case SdfBlendOp.SmoothIntersection: {
                                         lowers = false;
-                                        roundingRaws = checked((roundingRaws + SmoothBlendRoundingRaws(k: FixedQ4816.Max(x: instruction.Data1X, y: SmoothRadiusMin))));
+                                        roundingRaws += SmoothBlendRoundingRaws(k: FixedQ4816.Max(x: instruction.Data1X, y: SmoothRadiusMin));
                                         break;
                                     }
                                 default: {
@@ -212,7 +229,7 @@ public sealed partial class SdfFieldEvaluator {
                             return false;
                         }
 
-                        roundingRaws = checked((roundingRaws + reliefRaws));
+                        roundingRaws += reliefRaws;
                         boxed = false;
                         continue;
                     }
@@ -229,11 +246,20 @@ public sealed partial class SdfFieldEvaluator {
     // unbounded box), in outward-rounded interval arithmetic; the point rule's addition is exact. None when the
     // enclosure leaves the carrier.
     private static long? ReliefLoweringRaws(in CompiledInstruction instruction) {
-        var relief = (FixedInterval.FromPoint(value: (instruction.Data0Y * instruction.Data1X)) * Pcg3dLatticeNoise.Fbm3Bounds(
-            gain: instruction.Data0Z, lacunarity: instruction.Data0W, octaves: ((int)instruction.Blend), seed: instruction.Shape,
-            x: FixedInterval.Entire, y: FixedInterval.Entire, z: FixedInterval.Entire));
+        var relief = NoiseDisplaceBounds(instruction: in instruction, result: Point(value: FixedQ4816.Zero),
+            local: new IntervalVector3(X: FixedInterval.Entire, Y: FixedInterval.Entire, Z: FixedInterval.Entire));
 
-        return (relief.IsUnbounded ? null : Math.Max(val1: 0L, val2: -relief.Lower.Value));
+        return ((relief.IsUnbounded || (relief.Lower.Value == long.MinValue)) ? null : Math.Max(val1: 0L, val2: -relief.Lower.Value));
+    }
+    // A scope starts with a finite candidate, not +infinity. Its seed can beat every shape after relief or a pop's
+    // scale. Bound that candidate as well as the geometric members; pad double conversion and the pop's rounding down.
+    private static long ScopeSeedFloor(double slack, double scale) {
+        var value = ((((double)FarDistance) - slack) * ((scale > 0.0) ? scale : 1.0));
+
+        var padding = (((((double)FarDistance) + slack) * ((scale > 0.0) ? scale : 1.0) * DoublePadding) + (2.0 * RawUnit));
+
+        return (FixedDirectedRounding.TryFloorFromDouble(result: out var floor, value: (value - padding))
+            ? floor.Value : long.MinValue);
     }
     // The mean of an instance's shapes' centres.
     private static (double X, double Y, double Z) MeanCentre(List<ScopeStep> steps) {
@@ -256,7 +282,7 @@ public sealed partial class SdfFieldEvaluator {
     // widest radius to Δ, and every soft blend adds 3r; a smooth intersection or subtraction is at least its current
     // operand's lower end less 3r. A pop by union scales the scope's lower end by its candidate scale and rounds it down
     // by a raw.
-    private static ShapeReach ScopeBoxReach((double X, double Y, double Z) centre, List<ScopeStep> steps) {
+    private static ShapeReach ScopeBoxReach((double X, double Y, double Z) centre, List<ScopeStep> steps, out long seedFloor) {
         var shapes = new List<ShapeReach>();
 
         foreach (var step in steps) {
@@ -269,6 +295,7 @@ public sealed partial class SdfFieldEvaluator {
 
         var (gain, radius, spread) = (all.BoxGain, all.BoxRadius, all.BoxSpread);
         var (quarters, widest, roundings) = (0.0, 0.0, 0.0);
+        seedFloor = long.MaxValue;
 
         foreach (var step in steps) {
             switch (step.Op) {
@@ -280,6 +307,8 @@ public sealed partial class SdfFieldEvaluator {
                         var scale = ((step.Scale > 0.0) ? step.Scale : 1.0);
                         var rounding = ((step.Scale > 0.0) ? RawUnit : 0.0);
                         var drop = (Math.Min(val1: quarters, val2: widest) + roundings);
+
+                        seedFloor = Math.Min(val1: seedFloor, val2: ScopeSeedFloor(slack: drop, scale: step.Scale));
 
                         gain = Math.Min(val1: gain, val2: (all.BoxGain * scale));
                         radius = Math.Max(val1: radius, val2: (((all.BoxRadius + drop) * scale) + rounding));
@@ -365,13 +394,14 @@ public sealed partial class SdfFieldEvaluator {
     // The segment table: for each ResetPoint opening a chain a walk may skip whole, the chain's end and the certificate
     // around its shapes'. A chain qualifies when it runs from its ResetPoint to the next ResetPoint, instance boundary,
     // scope edge or the stream's end through point transforms and shapes alone, with no point read past a scope edge
-    // before the next reset (ClosesAtScopeEdge), every shape certified and joining the answer by union, smooth union or
+    // before the next reset (PointDiesBeforeRead), every shape certified and joining the answer by union, smooth union or
     // subtraction. Its margin is the most any smooth union in it needs, k + k·2⁻¹⁵ + 16 raws, at which both walks round
     // the blend weight to exactly one, and a chain that carves also needs its candidates past the answer's negation. A
     // chain never crosses an instance boundary, so a walk still meets every instance it tests in First order.
     private static (int[] Slots, SegmentBound[] Bounds, List<ShapeReach> Enclosures) BuildSegments(SdfProgram program, CompiledInstruction[] compiled, ShapeReach?[] reaches) {
         var count = compiled.Length;
         var slots = new int[count];
+
         CountArrayPayload(rows: slots, work: PointWork, arrays: CullArraysCreated, bytes: CullPayloadCreated);
         var bounds = new List<SegmentBound>();
         var enclosures = new List<ShapeReach>();
@@ -405,9 +435,8 @@ public sealed partial class SdfFieldEvaluator {
                     continue;
                 }
 
-                // A scope edge ends the chain only when nothing past it reads the point before the next reset.
+                // Scope edges end the chain; the common endpoint check below proves that its point is dead.
                 if (instruction.Op is SdfOp.PushField or SdfOp.PopField) {
-                    qualifies = ClosesAtScopeEdge(boundary: boundary, compiled: compiled, edge: end);
                     break;
                 }
 
@@ -428,8 +457,16 @@ public sealed partial class SdfFieldEvaluator {
                             }
                         case SdfBlendOp.SmoothUnion: {
                                 var k = FixedQ4816.Max(x: instruction.Data1X, y: SmoothRadiusMin);
+                                var required = ((((Int128)k.Value) + (k.Value >> 15)) + 16L);
 
-                                margin = FixedQ4816.Max(x: margin, y: FixedQ4816.FromRawBits(value: ((k.Value + (k.Value >> 15)) + 16L)));
+                                // The radius can fit while its exact-identity margin does not. Such a chain has no
+                                // representable certificate; never wrap its margin into a smaller threshold.
+                                if (required > long.MaxValue) {
+                                    qualifies = false;
+                                    break;
+                                }
+
+                                margin = FixedQ4816.Max(x: margin, y: FixedQ4816.FromRawBits(value: ((long)required)));
                                 break;
                             }
                         case SdfBlendOp.Subtraction: {
@@ -452,7 +489,7 @@ public sealed partial class SdfFieldEvaluator {
                 end++;
             }
 
-            if (!qualifies || (shapes.Count == 0)) {
+            if (!qualifies || (shapes.Count == 0) || !PointDiesBeforeRead(compiled: compiled, first: end)) {
                 continue;
             }
 
@@ -468,6 +505,7 @@ public sealed partial class SdfFieldEvaluator {
         }
 
         var segmentRows = bounds.ToArray();
+
         CountArrayPayload(rows: segmentRows, work: PointWork, arrays: CullArraysCreated, bytes: CullPayloadCreated);
         PointWork.Count(kind: CullTableBuilds);
         return (slots, segmentRows, enclosures);
@@ -546,15 +584,18 @@ public sealed partial class SdfFieldEvaluator {
         }
 
         var groupRows = groups.ToArray();
+
         CountArrayPayload(rows: groupRows, work: PointWork, arrays: CullArraysCreated, bytes: CullPayloadCreated);
         return (heads, groupRows, next.ToArray());
     }
+
     // How many consecutive chains, or nodes, one node of the segment hierarchy holds.
     private const int SegmentGroupFanout = 8;
-    // Whether only scope edges stand between a chain's end and the next ResetPoint, instance boundary or the stream's
-    // end: a skipped chain leaves the point where its ResetPoint put it, which no instruction after it may read.
-    private static bool ClosesAtScopeEdge(CompiledInstruction[] compiled, bool[] boundary, int edge) {
-        for (var index = edge; ((index < compiled.Length) && !boundary[index] && (compiled[index].Op != SdfOp.ResetPoint)); index++) {
+
+    // Whether only scope edges stand before the next ResetPoint or the stream's end. Scope and instance boundaries do
+    // not kill the local point, distance scale or pending material/erosion state; only ResetPoint does.
+    private static bool PointDiesBeforeRead(CompiledInstruction[] compiled, int first) {
+        for (var index = first; ((index < compiled.Length) && (compiled[index].Op != SdfOp.ResetPoint)); index++) {
             if (compiled[index].Op is not (SdfOp.PushField or SdfOp.PopField)) {
                 return false;
             }
@@ -573,7 +614,7 @@ public sealed partial class SdfFieldEvaluator {
     // One cullable instance: its stream range, the certificate over every candidate it can join the answer with, whether
     // it holds a scope, and its run of lowering members in m_members. The certificate is a field, so a walk reads it in
     // place rather than through a copying property.
-    private readonly record struct CullBound(int First, int End, Reach Reach, bool Scoped, int MemberFirst, int MemberCount) {
+    private readonly record struct CullBound(int First, int End, Reach Reach, bool Scoped, int MemberFirst, int MemberCount, long SeedFloor) {
         public readonly Reach Reach = Reach;
     }
     // One step of a cullable instance in stream order: a scope's push, a shape with its blend, smooth radius in units and

@@ -312,6 +312,13 @@ or a union of admitted primitives keeps the shape. See
 [shapes](references/shapes.md#contact-admission). Every view still renders a
 shape contact omits.
 
+CPU cull certificates live in `SdfFieldEvaluator.Cull.cs`. A scoped instance's
+lowering candidates include its finite `FarDistance` seed after slack and pop
+scaling, not just its shapes. Slack accumulation must fit independently of the
+point carrier. Instance and scope boundaries do not reset the local point:
+`PointDiesBeforeRead` admits skips only when that state dies before its next read.
+`SdfCullAdversarialLawTests` compares these boundaries with the cull-off walk.
+
 ## Verifying
 
 Source first, then structure, then pixels:

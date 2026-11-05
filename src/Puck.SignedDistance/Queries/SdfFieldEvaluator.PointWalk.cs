@@ -297,8 +297,8 @@ public sealed partial class SdfFieldEvaluator {
 
                         var candidateDistance = ((EvaluateShape(
                             instruction: instruction,
-                            powerWork: ref powerWork,
-                            p: localPosition
+                            p: localPosition,
+                            powerWork: ref powerWork
                         ) * distanceScale) + erosion);
                         // A fold's stride recolours the shape below the screen sentinels, as mapCore applies it.
                         var candidateMaterial = (((materialDelta != 0) && (instruction.Material < SdfProgramBuilder.ScreenMaterialId))
@@ -402,7 +402,7 @@ public sealed partial class SdfFieldEvaluator {
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static FixedVector3 WarpPoint(in CompiledInstruction instruction, FixedVector3 localPosition, ref FixedQ4816 distanceScale) {
         if (instruction.Op == SdfOp.AxialProfile) {
-            var axis = (int)instruction.Shape;
+            var axis = ((int)instruction.Shape);
             var t = FixedQ4816.Clamp(maximum: FixedQ4816.One, minimum: FixedQ4816.Zero, value: ((instruction.Data0Z - Component(axis: axis, point: localPosition)) * instruction.Data0W));
             // sin(πt) is the sine of t half turns: t's raw Q48.16 bits shifted to a 2^64 fraction of a turn.
             var (sine, _) = FixedQ4816.SinCosTurns(fractionalTurns: (((ulong)t.Value) << 47));
@@ -418,14 +418,16 @@ public sealed partial class SdfFieldEvaluator {
         }
 
         var (u, v) = PlaneAxes(plane: instruction.Shape);
-        var (sin, cos) = FixedQ4816.SinCos(angle: (instruction.Data0X * (Component(axis: (int)instruction.Blend, point: localPosition) - instruction.Data0Y)));
+        var (sin, cos) = FixedQ4816.SinCos(angle: (instruction.Data0X * (Component(axis: ((int)instruction.Blend), point: localPosition) - instruction.Data0Y)));
         var pu = Component(axis: u, point: localPosition);
         var pv = Component(axis: v, point: localPosition);
 
         return WithComponents(point: localPosition, u: u, uValue: ((cos * pu) + (sin * pv)), v: v, vValue: ((cos * pv) - (sin * pu)));
     }
+
     // SDF_FLARE_MIN_SCALE in fixed point.
     private static readonly FixedQ4816 FlareMinScale = FixedQ4816.FromDouble(value: SdfProgramBuilder.FlareMinScale);
+
     // The axes a RotatePlane turns, as mapCore picks them: u is Y in the YZ plane and X otherwise, v is Y in the XY plane
     // and Z otherwise.
     private static (int U, int V) PlaneAxes(uint plane) => (((plane == ((uint)Puck.SignedDistance.SdfPlane.YZ)) ? 1 : 0), ((plane == ((uint)Puck.SignedDistance.SdfPlane.XY)) ? 1 : 2));
@@ -578,9 +580,9 @@ public sealed partial class SdfFieldEvaluator {
     // Whether an instance's candidates clear the threshold: its certificate at the largest axis distance first, then at
     // the exact distance, then each lowering member's.
     private bool InstanceClears(in CullBound bound, FixedQ4816 cheapReach, FixedQ4816 threshold, FixedVector3 worldPosition) =>
-        ((cheapReach >= threshold) ||
+        ((threshold.Value <= bound.SeedFloor) && ((cheapReach >= threshold) ||
             bound.Reach.PointClears(point: worldPosition, threshold: threshold.Value) ||
-            ((bound.MemberCount > 1) && MembersClear(bound: in bound, threshold: threshold.Value, worldPosition: worldPosition)));
+            ((bound.MemberCount > 1) && MembersClear(bound: in bound, threshold: threshold.Value, worldPosition: worldPosition))));
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool IsIdentityRotation(in CompiledInstruction instruction) =>
         ((instruction.Data0X == FixedQ4816.Zero) && (instruction.Data0Y == FixedQ4816.Zero) && (instruction.Data0Z == FixedQ4816.Zero) &&
