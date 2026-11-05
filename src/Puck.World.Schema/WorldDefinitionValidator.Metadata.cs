@@ -452,13 +452,8 @@ public static partial class WorldDefinitionValidator {
             errors: errors
         );
         RequireNonNegative(
-            value: bodyContacts.RigidRestLinearSpeed,
-            name: "collision.bodyContacts.rigidRestLinearSpeed",
-            errors: errors
-        );
-        RequireNonNegative(
-            value: bodyContacts.RigidRestAngularSpeed,
-            name: "collision.bodyContacts.rigidRestAngularSpeed",
+            value: bodyContacts.RigidRestSpeed,
+            name: "collision.bodyContacts.rigidRestSpeed",
             errors: errors
         );
         RequireNonNegative(
