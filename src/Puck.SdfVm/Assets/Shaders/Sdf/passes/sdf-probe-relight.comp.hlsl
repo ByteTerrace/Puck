@@ -27,7 +27,7 @@ bool probeClear(float3 positionWorld, float3 direction, float reach, uint lane) 
 // KEEP IN SYNC with SdfMeshIrradiance.Shade and Relight. CPU is the diagnostic/reference path.
 [numthreads(SDF_PROBE_GROUP_SIZE, 1, 1)]
 void CSMain(uint3 group : SV_GroupID, uint lane : SV_GroupIndex) {
-    uint probe = group.x;
+    uint probe = sdfProbeWork[3 + group.x];
     uint input = probe * SDF_PROBE_RELIGHT_INPUT_WORDS;
     uint output = probe * SDF_PROBE_RELIGHT_OUTPUT_WORDS;
     uint flags = sdfProbeInput[input];

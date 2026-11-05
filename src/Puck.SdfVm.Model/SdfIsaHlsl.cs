@@ -298,6 +298,9 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_PROBE_RELIGHT_HEADER_ROWS", value: SdfMeshProbeRelight.HeaderRows);
         declarations.Count(name: "SDF_PROBE_RELIGHT_MATERIAL_ROWS", value: SdfMeshProbeRelight.MaterialRows);
         declarations.Count(name: "SDF_PROBE_RELIGHT_LIGHT_ROWS", value: SdfMeshProbeRelight.LightRows);
+        declarations.Count(name: "SDF_PROBE_SELECT_INPUT_WORDS", value: SdfMeshProbeRelight.SelectionInputWords);
+        declarations.Real(name: "SDF_MESH_IRRADIANCE_CLEARANCE", value: SdfMeshIrradianceProbe.Clearance);
+        declarations.Real(name: "SDF_MESH_IRRADIANCE_DEPTH_SHEET_THICKNESS", value: SdfMeshIrradianceProbe.DepthSheetThickness);
 
         declarations.Members<SdfIndirectSources>(prefix: "SDF_INDIRECT_SOURCES");
         declarations.Section(title: "The renderer's capacities, the photometry and the exposure (SdfPhotometry, SdfExposure).");

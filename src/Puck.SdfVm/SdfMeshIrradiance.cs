@@ -143,6 +143,8 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     public static readonly WorkKind GpuTraceNanoseconds = new(name: "sdf.mesh-gi.gpu-trace-nanoseconds", unit: "nanoseconds", workClass: WorkClass.Pacing);
     /// <summary>Measured GPU time of completed relight submissions and feedback updates.</summary>
     public static readonly WorkKind GpuRelightNanoseconds = new(name: "sdf.mesh-gi.gpu-relight-nanoseconds", unit: "nanoseconds", workClass: WorkClass.Pacing);
+    /// <summary>Measured GPU time spent selecting probes owing work.</summary>
+    public static readonly WorkKind GpuSelectNanoseconds = new(name: "sdf.mesh-gi.gpu-select-nanoseconds", unit: "nanoseconds", workClass: WorkClass.Pacing);
     /// <summary>Queued trace jobs cancelled because their scene was replaced before admission.</summary>
     public static readonly WorkKind GpuCancelled = new(name: "sdf.mesh-gi.gpu-cancelled", unit: "jobs", workClass: WorkClass.Pacing);
     /// <summary>Counts each relight cycle whose oldest lighting was past the budget's age target.</summary>
@@ -155,7 +157,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     /// <summary>Counts each exposure meter reading asked of the volume (<see cref="TryMeter"/>).</summary>
     public static readonly WorkKind Meters = new(name: "sdf.mesh-gi.meters", unit: "readings", workClass: WorkClass.Pacing);
 
-    private static readonly WorkKind[] DeclaredKinds = [Scenes, GeometriesBuilt, GeometriesReused, TrianglesBuilt, Traced, Relit, GpuRays, GpuTraceNanoseconds, GpuRelightNanoseconds, GpuCancelled, Behind, CameraTraces, CameraRelights, Meters];
+    private static readonly WorkKind[] DeclaredKinds = [Scenes, GeometriesBuilt, GeometriesReused, TrianglesBuilt, Traced, Relit, GpuRays, GpuTraceNanoseconds, GpuRelightNanoseconds, GpuSelectNanoseconds, GpuCancelled, Behind, CameraTraces, CameraRelights, Meters];
 
     /// <summary>Gets the kinds the counters count, in report order, for a reader that registers the source before a
     /// volume exists.</summary>
@@ -1586,6 +1588,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // finest level and nearest. Each probe of the windows that holds a relight adds its lighting's age to ages. Returns
     // whether a probe this sweep already relit holds a lighting since replaced.
     private bool List(in Snapshot snapshot, bool all, List<Candidate> candidates, List<float>? ages) {
+        if (GpuTrace is not null) { return ListGpu(in snapshot, all, candidates, ages); }
         var stale = false;
         var layout = snapshot.Layout;
         var lighting = snapshot.Lighting;
@@ -1621,16 +1624,19 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                 }
             }
         }
+        OrderCandidates(candidates, all);
+        return stale;
+    }
+    private static void OrderCandidates(List<Candidate> candidates, bool all) {
         if (all) {
             candidates.Sort(comparison: static (a, b) => ((a.Level != b.Level) ? a.Level.CompareTo(value: b.Level) : a.Distance.CompareTo(value: b.Distance)));
-            return stale;
+            return;
         }
         candidates.Sort(comparison: static (a, b) =>
             (a.Trace != b.Trace) ? (a.Trace ? -1 : 1) :
             a.Trace ? ((a.Level != b.Level) ? a.Level.CompareTo(value: b.Level) : a.Distance.CompareTo(value: b.Distance)) :
             (a.LitAt != b.LitAt) ? a.LitAt.CompareTo(value: b.LitAt) :
             (a.Level != b.Level) ? a.Level.CompareTo(value: b.Level) : a.Distance.CompareTo(value: b.Distance));
-        return stale;
     }
     // When a probe's lighting went stale: the capture of the version after its own, or the oldest capture remembered.
     private static long StaleSince(int lighting, in Snapshot snapshot) {

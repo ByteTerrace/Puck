@@ -78,6 +78,8 @@ public sealed class SdfKernelSet {
     public static string StemOf(SdfKernel kernel) => kernel switch {
         SdfKernel.ProbeTrace => "sdf-probe-trace",
         SdfKernel.ProbeRelight => "sdf-probe-relight",
+        SdfKernel.ProbeSelect => "sdf-probe-select",
+        SdfKernel.ProbeCompact => "sdf-probe-compact",
         SdfKernel.MeshBakeMask => "sdf-mesh-bake-mask",
         SdfKernel.MeshBake => "sdf-mesh-bake",
         SdfKernel.MeshPyramid => "sdf-mesh-pyramid",
@@ -110,6 +112,7 @@ public sealed class SdfKernelSet {
         kernel switch {
             SdfKernel.ProbeTrace => SdfWorldInterfaces.ProbeTraceLayout,
             SdfKernel.ProbeRelight => SdfWorldInterfaces.ProbeRelightLayout,
+            SdfKernel.ProbeSelect or SdfKernel.ProbeCompact => SdfWorldInterfaces.ProbeRelightLayout,
             SdfKernel.BrickBake => SdfWorldInterfaces.BrickBakeLayout,
             SdfKernel.MeshBakeMask or SdfKernel.MeshBake => SdfWorldInterfaces.MeshBakeLayout,
             SdfKernel.Resolve => SdfWorldInterfaces.ResolveParameters.Layout,

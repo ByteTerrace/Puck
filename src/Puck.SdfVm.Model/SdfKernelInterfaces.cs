@@ -54,6 +54,10 @@ public sealed class SdfKernelInterfaces {
     public const string ProbeLighting = "sdfProbeLighting";
     /// <summary>Cached hit words and local light cubes for a relight batch.</summary>
     public const string ProbeInput = "sdfProbeInput";
+    /// <summary>Relight indirect dispatch arguments followed by the selected probe ordinals.</summary>
+    public const string ProbeWorkWritten = "sdfProbeWorkRW";
+    /// <summary>The completed work list, read together with its indirect arguments.</summary>
+    public const string ProbeWork = "sdfProbeWork";
     /// <summary>The <see cref="BrickBake"/> request buffer: a three-row header, then the carves.</summary>
     public const string BakeRequest = "bakeRequest";
     /// <summary>The <see cref="BrickBake"/> brick pool the baker writes.</summary>
@@ -145,6 +149,8 @@ public sealed class SdfKernelInterfaces {
             Read(element: ShaderValueType.Uint, name: ProbeInput),
             Read(element: ShaderValueType.Uint, name: SdfWorldPackage.MeshIrradiance),
             Written(element: ShaderValueType.Uint, name: ProbeHitsWritten),
+            Written(element: ShaderValueType.Uint, name: ProbeWorkWritten),
+            Read(element: ShaderValueType.Uint, name: ProbeWork),
         ], pushesIndex: false);
         WorldParameters = ShaderPipelineParameterLayout.ForPackage(
             config: null,

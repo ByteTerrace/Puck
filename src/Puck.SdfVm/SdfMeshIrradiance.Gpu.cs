@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 
 namespace Puck.SdfVm;
@@ -30,6 +31,73 @@ public sealed partial class SdfMeshIrradiance {
     private readonly HashSet<int> m_gpuDirty = [];
     private uint[]? m_gpuVolume;
     private bool m_gpuDraining;
+
+    private bool ListGpu(in Snapshot snapshot, bool all, List<Candidate> candidates, List<float>? ages) {
+        var layout = snapshot.Layout;
+        var origins = new Vector4[layout.TotalCount];
+        var input = new uint[layout.TotalCount * SdfMeshProbeRelight.SelectionInputWords];
+        var staleHits = new List<int>();
+        var now = Stopwatch.GetTimestamp();
+        candidates.Clear();
+        ages?.Clear();
+        // This is a snapshot pack, with no eligibility decision. The device evaluates changed-box/ray reach,
+        // missing traces, rebase, sweep and lighting versions; the host keeps the existing stable priority order.
+        for (var level = 0; level < m_levels.Length; level++) {
+            var low = snapshot.Lows[level];
+            var dims = layout.DimsOf(level);
+            var spacing = layout.SpacingOf(level);
+            for (var z = low.Z; z < low.Z + dims.Z; z++) {
+                for (var y = low.Y; y < low.Y + dims.Y; y++) {
+                    for (var x = low.X; x < low.X + dims.X; x++) {
+                        var i = candidates.Count;
+                        var present = m_levels[level].Cache.TryGetValue((x, y, z), out var probe);
+                        var center = new Vector3(x + .5f, y + .5f, z + .5f) * spacing;
+                        origins[i] = new(center, 0);
+                        var row = input.AsSpan(i * SdfMeshProbeRelight.SelectionInputWords, SdfMeshProbeRelight.SelectionInputWords);
+                        row[0] = present ? 1u : 0;
+                        row[1] = (uint)probe.Geometry; row[2] = (uint)probe.Lighting; row[3] = (uint)probe.Sweep; row[4] = (uint)level;
+                        row[5] = BitConverter.SingleToUInt32Bits(probe.Offset.X);
+                        row[6] = BitConverter.SingleToUInt32Bits(probe.Offset.Y);
+                        row[7] = BitConverter.SingleToUInt32Bits(probe.Offset.Z);
+                        if (present && probe.Geometry != snapshot.Geometry) { staleHits.Add(i); }
+                        candidates.Add(new Candidate(Cell: (x, y, z), Distance: Vector3.DistanceSquared(center, snapshot.Camera), Level: level, LitAt: present ? probe.LitAt : 0, Trace: false));
+                        if (present) { ages?.Add(probe.Lighting == snapshot.Lighting.Version ? 0 : (float)Stopwatch.GetElapsedTime(StaleSince(probe.Lighting, in snapshot), now).TotalSeconds); }
+                    }
+                }
+            }
+        }
+        if (staleHits.Count > 0) {
+            var cursor = input.Length;
+            Array.Resize(ref input, input.Length + staleHits.Count * SdfMeshProbeDepth.HitWords);
+            foreach (var i in staleHits) {
+                var candidate = candidates[i];
+                _ = m_levels[candidate.Level].Cache.TryGetValue(candidate.Cell, out var probe);
+                input[i * SdfMeshProbeRelight.SelectionInputWords + 8] = (uint)cursor;
+                probe.HitWords.CopyTo(input.AsSpan(cursor));
+                cursor += SdfMeshProbeDepth.HitWords;
+            }
+        }
+        var changes = new List<Vector4> {
+            new(all ? 1 : 0, snapshot.Geometry, snapshot.Lighting.Version, snapshot.Sweep),
+            new(snapshot.Changes.Length, 0, snapshot.Changes.Length == 0 ? 0 : snapshot.Changes[0].Geometry, layout.Reach),
+            new(layout.SpacingOf(0), 0), new(layout.SpacingOf(1), 0), new(layout.SpacingOf(2), 0),
+        };
+        foreach (var (geometry, boxes) in snapshot.Changes) {
+            if (boxes is null) { changes.Add(new(0, 0, 0, geometry)); changes.Add(new(0, 0, 0, 1)); }
+            else { foreach (var box in boxes) { changes.Add(new(box.Low, geometry)); changes.Add(new(box.High, 0)); } }
+        }
+        changes[1] = changes[1] with { Y = (changes.Count - 5) / 2 };
+        var selected = GpuTrace!.Select(snapshot.Scene, origins, input, [.. changes]);
+        var take = 0;
+        var stale = false;
+        for (var i = 0; i < selected.Length; i++) {
+            stale |= (selected[i] & 4) != 0;
+            if ((selected[i] & 2) != 0) { candidates[take++] = candidates[i] with { Trace = (selected[i] & 1) != 0 }; }
+        }
+        candidates.RemoveRange(take, candidates.Count - take);
+        OrderCandidates(candidates, all);
+        return stale;
+    }
 
     private void RelightGpu(List<Candidate> candidates, int first, int count, ProbeData[] probes, LightBlock lights,
         Lighting lighting, in Snapshot snapshot, bool feedback) {

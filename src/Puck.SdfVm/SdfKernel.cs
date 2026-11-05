@@ -8,6 +8,10 @@ public enum SdfKernel {
     ProbeTrace,
     /// <summary>Shades cached probe hits against the uploaded hierarchy and feedback volume.</summary>
     ProbeRelight,
+    /// <summary>Selects probes owing geometry or lighting work from captured cache metadata.</summary>
+    ProbeSelect,
+    /// <summary>Compacts a relight batch into indirect dispatch arguments and a stable work list.</summary>
+    ProbeCompact,
     /// <summary>The mesh bake's instance mask, selecting one bake group's instances.</summary>
     MeshBakeMask,
     /// <summary>The mesh bake's field sampler over one group's lattice: the frame's one walk of the SDF program, run
