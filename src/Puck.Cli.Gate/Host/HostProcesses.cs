@@ -30,16 +30,6 @@ public static class HostProcesses {
     private static string[] Arguments(string commandLine) => (commandLine.Contains(value: '\0')
         ? commandLine.TrimEnd(trimChar: '\0').Split(separator: '\0')
         : [.. CommandLineParser.SplitCommandLine(commandLine: commandLine)]);
-    // A World opens a device unless it boots headless: `--headless` alone or followed by a value other than `false`.
-    private static bool IsHeadlessWorld(string[] arguments, int start) {
-        for (var index = start; (index < arguments.Length); index++) {
-            if (!arguments[index].Equals(comparisonType: StringComparison.OrdinalIgnoreCase, value: "--headless")) { continue; }
-
-            return (((index + 1) >= arguments.Length) || !arguments[index + 1].Equals(comparisonType: StringComparison.OrdinalIgnoreCase, value: "false"));
-        }
-
-        return false;
-    }
     private static string FileName(string path) => path[(path.LastIndexOfAny(anyOf: ['/', '\\']) + 1)..];
     private static string ProgramName(string path) {
         var file = FileName(path: path);
@@ -138,7 +128,7 @@ public static class HostProcesses {
 
         var arguments = Arguments(commandLine: commandLine);
 
-        if (program.Equals(comparisonType: StringComparison.OrdinalIgnoreCase, value: "Puck.World")) { return !IsHeadlessWorld(arguments: arguments, start: 1); }
+        if (program.Equals(comparisonType: StringComparison.OrdinalIgnoreCase, value: "Puck.World")) { return WorldDevices.OpensDevice(arguments: arguments, start: 1); }
 
         // An unreadable command line cannot show a CPU selection.
         if (IsDeviceTest(program: program)) { return ((arguments.Length == 0) || SelectsGpuTests(arguments: arguments, start: 1)); }
@@ -146,7 +136,7 @@ public static class HostProcesses {
 
         var entry = EntryPoint(arguments: arguments, hostAssembly: out var hostAssembly, next: out var next);
 
-        if (entry.Equals(comparisonType: StringComparison.OrdinalIgnoreCase, value: "Puck.World")) { return !IsHeadlessWorld(arguments: arguments, start: next); }
+        if (entry.Equals(comparisonType: StringComparison.OrdinalIgnoreCase, value: "Puck.World")) { return WorldDevices.OpensDevice(arguments: arguments, start: next); }
         if (IsDeviceTest(program: entry)) { return SelectsGpuTests(arguments: arguments, start: next); }
         if (entry.StartsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: "testhost")) {
             return (((hostAssembly is not null) && IsDeviceTest(program: hostAssembly)) || arguments.Skip(count: next).Any(predicate: static argument => IsDeviceTest(program: ProgramName(path: argument))));

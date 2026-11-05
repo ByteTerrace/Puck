@@ -356,6 +356,11 @@ direction: concurrent whole-solution builds exhaust a machine's memory.
   charge is under its share of the limit (`HostLoadThresholds.CommitCapacityPercent`)
   beside free memory and disk, and name what holds them
   ([admission](../../../docs/reference/cli.md#puck-host-loadadmission-lines-for-the-machine)).
+  Every verb that boots a World process (`puck test`, `canary`, `sweep`, `motion`,
+  `counters`, `parity`, `qualify`, `docs citations`, `verbs`, `bench startup`) waits
+  on the same admission before each process it starts, so a lane never wraps those
+  in a check of its own, and a run that boots several replicas in sequence (`puck
+  test --reproduce` or `--workers`) admits before every one of them.
   A windowed debug World grows past ten gigabytes, so a
   GPU lane closes its World between capture batches. A test run that holds
   gigabytes (the mesh-irradiance laws trace a whole hall and reached 9 GB

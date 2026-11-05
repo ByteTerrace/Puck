@@ -40,16 +40,20 @@ public static class VerbsCommand {
     // One boot leg: the affordance manifest of a headless or a windowed World, or null with the reason printed.
     private static List<CommandMetadata>? Boot(string artifact, string repositoryRoot, string runDirectory, bool headless, string? cacheDirectory) {
         var shape = (headless ? "headless" : "windowed");
+        string[] arguments = [
+            artifact,
+            "--world", Path.Combine(paths: [repositoryRoot, "worlds", "debug"]),
+            .. WorldDevices.NoneArguments,
+            "--headless", (headless ? "true" : "false"),
+            "--exit-after-seconds", "60",
+            "--state-dir", Path.Combine(path1: runDirectory, path2: $"state-{shape}"),
+            .. ((cacheDirectory is null) ? Array.Empty<string>() : ["--cache-dir", cacheDirectory]),
+        ];
+
+        WorldAdmission.Wait(step: Verb, worldArguments: arguments);
+
         var process = CliProcess.RunCaptured(
-            arguments: [
-                artifact,
-                "--world", Path.Combine(paths: [repositoryRoot, "worlds", "debug"]),
-                .. WorldDevices.NoneArguments,
-                "--headless", (headless ? "true" : "false"),
-                "--exit-after-seconds", "60",
-                "--state-dir", Path.Combine(path1: runDirectory, path2: $"state-{shape}"),
-                .. ((cacheDirectory is null) ? Array.Empty<string>() : ["--cache-dir", cacheDirectory]),
-            ],
+            arguments: arguments,
             fileName: "dotnet",
             input: $"world.affordances{Environment.NewLine}quit{Environment.NewLine}",
             timeout: TimeSpan.FromSeconds(value: 120),

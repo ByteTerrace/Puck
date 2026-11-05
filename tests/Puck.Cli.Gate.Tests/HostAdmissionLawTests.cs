@@ -227,6 +227,57 @@ public sealed class HostAdmissionLawTests {
         Assert.Equal(expected: ["CAPACITY cpu=0% freeRAM=8.0GB freeDisk=100.0GB commit=60% reuseNodes=42"], actual: monitor.Observe(sample: Sample(commit: 60)));
         Assert.True(condition: monitor.HasCapacity);
     }
+    // A verb below the gate passes WorldAdmission before each World start, and the installed admission is HostAdmission: the
+    // start waits at a 90% commit charge and goes ahead at 60%, each replica admitted on its own reading, and a bound that
+    // passes first refuses the start by exception.
+    [Fact]
+    public void AVerbsWorldStartWaitsAtNinetyPercentCommitAndRunsAtSixtyThroughTheInstalledAdmission() {
+        var clock = new GateClock();
+        var readings = 0;
+        var asked = new List<(string Step, bool Device, bool Heavy)>();
+        using var error = new StringWriter();
+        HostAdmit admit = (checkout, step, device, heavySuite, bound, progress, stage, cancellationToken) => {
+            asked.Add(item: (step, device, heavySuite));
+
+            return Task.FromResult(result: HostAdmission.Wait(step, device, heavySuite, () => ((readings++ < 2) ? Sample(commit: 90) : Sample(commit: 60)), clock, clock.Advance, error, cancellationToken, Thresholds, bound, stage));
+        };
+
+        WorldAdmission.Install(admit: admit);
+        try {
+            string[] worker = ["Puck.World.dll", "--devices", "none", "--test-batch", "batch.json"];
+
+            // The first replica waits two samples at 90% and starts on the third.
+            WorldAdmission.Wait(step: "test worker", worldArguments: worker, heavySuite: true, cancellationToken: TestContext.Current.CancellationToken);
+            Assert.Equal(expected: 3, actual: readings);
+            Assert.Equal(expected: TimeSpan.FromSeconds(seconds: 20), actual: clock.GetElapsedTime(startingTimestamp: 0));
+            Assert.Contains(actualString: error.ToString(), expectedSubstring: "no memory headroom: commit 90% of limit (admission needs under 75%).");
+            Assert.Contains(actualString: error.ToString(), expectedSubstring: "capacity returned for test worker");
+
+            // The next replica is admitted on its own reading: 60% starts at once, a windowed boot asks for the GPU.
+            WorldAdmission.Wait(step: "test worker", worldArguments: worker, heavySuite: true, cancellationToken: TestContext.Current.CancellationToken);
+            WorldAdmission.Wait(step: "sweep", worldArguments: ["Puck.World.dll", "--world", "worlds/debug", "--headless", "false"], cancellationToken: TestContext.Current.CancellationToken);
+            Assert.Equal(expected: 5, actual: readings);
+            Assert.Equal(expected: TimeSpan.FromSeconds(seconds: 20), actual: clock.GetElapsedTime(startingTimestamp: 0));
+            Assert.Equal(expected: [("test worker", false, true), ("test worker", false, true), ("sweep", true, false)], actual: asked);
+
+            // A machine that never recovers refuses the start at the admission's bound, and the verb's start never happens.
+            readings = int.MinValue;
+            Assert.Throws<HostAdmissionRefusedException>(testCode: () => WorldAdmission.Wait(step: "canary", device: false, cancellationToken: TestContext.Current.CancellationToken));
+        } finally {
+            WorldAdmission.Install(admit: null);
+        }
+
+        // Without an installed admission a start is admitted at once.
+        WorldAdmission.Wait(step: "canary", device: true, cancellationToken: TestContext.Current.CancellationToken);
+    }
+    [InlineData(new string[0], true)]
+    [InlineData(new[] { "--headless" }, false)]
+    [InlineData(new[] { "--headless", "true" }, false)]
+    [InlineData(new[] { "--headless", "false" }, true)]
+    [InlineData(new[] { "--devices", "none", "--test-batch", "batch.json" }, false)]
+    [Theory]
+    public void AWorldOpensADeviceUnlessItBootsHeadlessOrRunsATestBatch(string[] arguments, bool opens) =>
+        Assert.Equal(expected: opens, actual: WorldDevices.OpensDevice(arguments: arguments));
     [Fact]
     public void PersistentPressureStopsAtTheBoundAndCancellationStartsNothing() {
         var clock = new GateClock();

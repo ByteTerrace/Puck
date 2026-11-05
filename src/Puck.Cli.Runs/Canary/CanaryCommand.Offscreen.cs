@@ -100,6 +100,13 @@ public static partial class CanaryCommand {
                 debugLayers: debugLayers
             ))],
     };
+    // Waits for the host's headroom before one leg process starts, as a World of this boot shape would need it. The wait is
+    // bounded by the admission and stops with the run's own cancellation.
+    private static void AdmitWorld(CanaryManifest manifest, string? backend, bool debugLayers, CanaryBudget budget) => WorldAdmission.Wait(
+        cancellationToken: budget.Cancellation,
+        step: "canary",
+        worldArguments: BootShapeArguments(backend: backend, debugLayers: debugLayers, manifest: manifest)
+    );
     private static string[] BackendArguments(string backend, bool debugLayers) => ["--backend", backend, .. DebugLayerOutput.Arguments(debugLayers: debugLayers)];
 
     // A pipeline.wait outcome narrated through the World's pipeline report: "[pipeline: <name> wait <phase> <outcome>".
