@@ -178,7 +178,7 @@ public static partial class SweepSignals {
                 metrics["tick"] = tick.GetRawText();
             }
             if (root.TryGetProperty(propertyName: "coverage", value: out var coverage) && (coverage.ValueKind == JsonValueKind.Object)) {
-                foreach (var name in new[] { "tested", "eligible", "complete" }) {
+                foreach (var name in new[] { "tested", "eligible", "complete", "pending" }) {
                     if (coverage.TryGetProperty(propertyName: name, value: out var value)) {
                         metrics[$"coverage.{name}"] = value.GetRawText();
                     }

@@ -81,6 +81,9 @@ public sealed record WorldDiagnosticFinding(string Id, string View, string Sever
 public sealed record WorldDiagnosticCoverage(int Tested, int Eligible, IReadOnlyDictionary<string, int> Skipped, bool Complete) {
     /// <summary>Per-comparison witness counts, distinct from clustered finding counts. Unknown samples are never clean.</summary>
     public IReadOnlyDictionary<string, WorldDiagnosticSampleCounts> Comparisons { get; init; } = new Dictionary<string, WorldDiagnosticSampleCounts>();
+    /// <summary>Gets how many colliders a report that ran out of time left unread, which a later report resumes; zero for
+    /// a whole report.</summary>
+    public int Pending { get; init; }
 }
 /// <summary>Mutually exclusive outcomes of sampled witnesses for one comparison.</summary>
 /// <param name="Red">Certified contract violations.</param>

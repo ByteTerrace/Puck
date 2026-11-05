@@ -362,6 +362,9 @@ public sealed class SweepRun(SweepPlan plan, SweepWorld world, string directory,
     private static string TickWaits(string script) => string.Join(separator: '\n', values: script.Split('\n').Select(selector: static line =>
         ((line.StartsWith(comparisonType: StringComparison.Ordinal, value: "world.wait ") && (ulong.TryParse(line[11..], out _) || line.StartsWith(comparisonType: StringComparison.Ordinal, value: "world.wait until ")))
             ? $"world.rate resume\n{line}\nworld.rate pause" : line)));
+    // Whether a signal's answer says its read is unfinished: its pending rule holds over the metrics.
+    private static bool Pending(SweepSignal signal, IReadOnlyDictionary<string, string> metrics) =>
+        ((signal.Pending is { } text) && SweepRule.TryParse(rule: out var rule, text: text) && (rule.Holds(metrics: metrics) == true));
     private List<SweepSignalResult> Read(IEnumerable<SweepSignal> signals, string suffix) {
         var results = new List<SweepSignalResult>();
         var answers = Path.Combine(path1: directory, path2: world.Leg);
@@ -378,12 +381,24 @@ public sealed class SweepRun(SweepPlan plan, SweepWorld world, string directory,
                 continue;
             }
 
-            var answer = world.Run(script: ((world.Leg == SweepLegs.Windowed) ? TickWaits(script: signal.Line) : signal.Line), timeoutSeconds: signal.TimeoutSeconds);
+            var script = ((world.Leg == SweepLegs.Windowed) ? TickWaits(script: signal.Line) : signal.Line);
+            var answer = world.Run(script: script, timeoutSeconds: signal.TimeoutSeconds);
+            var (status, reasons, metrics) = SweepEvidence.Check(answer: answer, signal: signal);
+
+            // A line whose work outlasts one call answers "unfinished" and resumes on the next ask, each ask under a
+            // deadline of its own; the read is whole only once the pending rule stops holding.
+            for (var asks = 1; (Pending(signal: signal, metrics: metrics) && (asks < signal.MaxAsks) && (Stopped() is null)); asks++) {
+                answer = world.Run(script: script, timeoutSeconds: signal.TimeoutSeconds);
+                (status, reasons, metrics) = SweepEvidence.Check(answer: answer, signal: signal);
+            }
+            if (Pending(signal: signal, metrics: metrics)) {
+                reasons.Add(item: $"unmeasured: still pending after {signal.MaxAsks} ask(s): {signal.Pending}");
+                status = SweepStatus.Worse(left: status, right: SweepStatus.Unknown);
+            }
+
             var file = Path.Combine(path1: answers, path2: $"{name}.txt");
 
             File.WriteAllText(contents: answer.Output, path: file);
-
-            var (status, reasons, metrics) = SweepEvidence.Check(answer: answer, signal: signal);
 
             // The answer's file keeps the whole text; the report keeps it only as a short text signal's value.
             if ((signal.Parse != "text") || ((metrics.GetValueOrDefault(key: "text")?.Length ?? 0) > MaximumTextMetric)) {
