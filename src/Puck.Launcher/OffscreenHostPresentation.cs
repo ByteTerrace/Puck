@@ -91,7 +91,6 @@ public sealed class OffscreenHostPresentation {
 
             var time = m_time;
             var frequency = time.TimestampFrequency;
-            var spinThreshold = LauncherHostLoop.SpinThreshold(frequency: frequency);
 
             var deviceLoss = new DeviceLossRecovery(
                 logger: m_logger,
@@ -100,7 +99,6 @@ public sealed class OffscreenHostPresentation {
                 sleep: duration => LauncherHostLoop.WaitUntil(
                     deadlineTimestamp: (time.GetTimestamp() + ((long)(duration.TotalSeconds * frequency))),
                     precisionWaiter: m_precisionWaiter,
-                    spinThreshold: spinThreshold,
                     time: time
                 ),
                 time: time,

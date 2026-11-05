@@ -50,7 +50,6 @@ public sealed class HostLoop(
             holdsClock: (produce is not null), timeline: timeline);
         var clock = TickClock.Start(time: time);
         var frequency = time.TimestampFrequency;
-        var spinThreshold = LauncherHostLoop.SpinThreshold(frequency: frequency);
         var nextDeadline = time.GetTimestamp();
         var exitAt = ((options.ExitAfter is { } duration) ? (nextDeadline + ((long)(duration.TotalSeconds * frequency))) : (long?)null);
         var frame = 0UL;
@@ -122,7 +121,7 @@ public sealed class HostLoop(
                     if ((now - nextDeadline) > period) {
                         nextDeadline = now;
                     } else {
-                        LauncherHostLoop.WaitUntil(deadlineTimestamp: nextDeadline, precisionWaiter: m_waiter, spinThreshold: spinThreshold, time: time);
+                        LauncherHostLoop.WaitUntil(deadlineTimestamp: nextDeadline, precisionWaiter: m_waiter, time: time);
                         timeline.NoteLate(ticks: Math.Max(val1: 0L, val2: (time.GetTimestamp() - nextDeadline)));
                     }
                     timeline.Mark(phase: HostFramePhase.Wait);
