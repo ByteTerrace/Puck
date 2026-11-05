@@ -209,7 +209,7 @@ internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLin
                 }
 
                 if (args.Count > 1) {
-                    return CommandResult.Error(output: "[world.contacts: too many arguments — expected [<body-index>]]");
+                    return CommandResult.Usage(form: "[<body-index>]", got: args[1].ToString(), verb: "world.contacts");
                 }
 
                 if (

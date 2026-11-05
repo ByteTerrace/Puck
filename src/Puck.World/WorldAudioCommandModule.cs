@@ -162,7 +162,7 @@ internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink li
             (volume < 0f) ||
             (volume > Puck.World.Authoring.CreationSoundDocument.MaxLevel)
         ) {
-            return CommandResult.Error(output: $"[world.volume: expected one value within [0, {Puck.World.Authoring.CreationSoundDocument.MaxLevel}]]");
+            return CommandResult.Usage(form: $"<level 0..{Puck.World.Authoring.CreationSoundDocument.MaxLevel}>", got: ((args.Count == 1) ? args[0].ToString() : null), verb: "world.volume");
         }
 
         // Routed, not written: the server checks Mutate over section:audio — the section this lever folds into — and the

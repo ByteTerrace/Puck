@@ -273,6 +273,18 @@ both backends; and background work proportional to change (the bake rebaking
 only what an edit touched, GI re-measuring only the probes that can see newly
 landed geometry).
 
+- [high] Rule evaluation is the largest phase of the headless debug tick (37 %
+  of `StepCore`'s samples; body advance 27 %, the machine worker wait 13 %,
+  the instance host 11 %), and 58 % of the rule phase is the machinery that
+  visits rules rather than the authored gates, locals and effects. The
+  [rule-evaluation memo](rule-evaluation-cost.md) holds the per-rule
+  measurement, the research round and the design: schedules that name facets
+  as well as rows, a push-based due list, speculated gates on the pool
+  validated by versions and committed in document order, and
+  `world.budget.rules --spent`. Its [implementation brief](rule-evaluation-cost.md#implementation-brief)
+  is the next lane here; its steps 1 to 4 need no thread and land before
+  step 5, the parallel phase the memo's "Rule evaluation stays serial" section
+  filed.
 - [medium] Snapshot emission's entity rows, which T1 partitioned, are a small
   share of its cost, so most of it lies in the serial tail or the subscribers'
   `DeliverSnapshot`; profile it before T3 or any R step assumes otherwise. The
@@ -1184,6 +1196,16 @@ lowers it to the same JSON as before, except where the look changes on purpose.
     claims exact 1-Lipschitz for every radius, while the Valley packet and
     `hazards.md` keep the CPU/GPU small-radius disagreement open. One of them
     is wrong.
+- [low] Console verb forms are still spelled twice in many modules: a
+  `CommandResult.Usage(form: "...")` literal repeats the form its
+  description prints, so the two can drift. Examples:
+  `src/Puck.World.Console/WorldTimelineCommandModule.cs` (`world.timeline`),
+  `WorldMachineCommandModule.cs`, `WorldStateCommandModule.cs`
+  (`<row> <key> <value> [add]`), `src/Puck.World/WorldCompareCommandModule.cs`,
+  `WorldRenderLeverCommandModule.cs`, `WorldAnnotationCommandModule.cs`,
+  `WorldEditorCommandModule.cs`, `ProbeCommandModule.cs`. Hoist each form to
+  one constant that the description and `Usage` both read, as
+  `CommandRegistry`'s `WireAckForm` does.
 
 Engine defaults that carry a look or a rule of play, which the authors rule
 wants authored with a neutral engine default (each one sits in C# or HLSL,
@@ -1228,13 +1250,9 @@ and none has an authored field yet):
   generated schema and TypeScript model.
 - [low] The built-in view ladder's transition envelope is baked into the
   composer (`BuiltinTransitionSeconds` and `BuiltinTransitionRenderScale`,
-  `src/Puck.World.Client/WorldViewComposer.cs:29-33`, returned at `:311`). Its
-  comment says it copies `ScreenLayoutDirector`'s compiled 0.6 s and 0.5
-  scale, but no such class remains in `src`; the same name survives in comments
-  at `src/Puck.SdfVm/Views/ViewTransition.cs:36,44` and
-  `SdfCameraRig.cs`. Check that a built-in ladder has authored source in
-  `worlds/standard` to carry the envelope, move the values there, and delete
-  the stale mentions.
+  `src/Puck.World.Client/WorldViewComposer.cs:29-33`, returned at `:311`).
+  Check that a built-in ladder has authored source in `worlds/standard` to
+  carry the envelope, and move the values there.
 - [low] The tabletop framing clamps an authored engage pitch to
   `MaximumPitchRadians` (`0.4972 pi`,
   `src/Puck.World.Client/WorldTabletopFraming.cs:19`, applied at `:90-92`),
@@ -3492,6 +3510,10 @@ read one. The plans that keep open items:
 - [Owned memory for Puck's own host](memory-pooling.md): memory ownership is the
   [engine job system](#engine-job-system)'s; the page holds M1 and R1 to R3,
   the later custom no-GC runtime port.
+- [Rule evaluation proportional to change](rule-evaluation-cost.md#implementation-brief):
+  the measured sheet, the pull's constants, facet versions and the due list,
+  deadline wake, speculated gates on the pool, and the documents; the
+  [engine job system](#engine-job-system) packet ranks it.
 - [Machines and cartridges](machines-and-cartridges.md#open-items): the
   programme's packages, the Humble corpus failures and the emulator batteries'
   cost; the [Humble Gaming Deck](humble-gaming-deck.md#open-items): accuracy,

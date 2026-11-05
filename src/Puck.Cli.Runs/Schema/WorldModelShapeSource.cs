@@ -75,7 +75,7 @@ public static class WorldModelShapeSource {
                     var (declaringType, member) = WorldNameRegistry.ResolveMember(property: property);
 
                     members.Add(item: new WorldModelMember(
-                        Access: (((property.Get is null) ? WorldModelAccess.None : WorldModelAccess.Read) | ((property.Set is null) ? WorldModelAccess.None : WorldModelAccess.Write)) | (property.IsExtensionData ? WorldModelAccess.ExtensionData : WorldModelAccess.None),
+                        Access: (((property.Get is null) ? WorldModelAccess.None : WorldModelAccess.Read) | ((property.Set is null) ? WorldModelAccess.None : WorldModelAccess.Write)) | (property.IsExtensionData ? WorldModelAccess.ExtensionData : WorldModelAccess.None) | (property.IsRequired ? WorldModelAccess.Required : WorldModelAccess.None),
                         DeclaringType: declaringType,
                         Member: member,
                         Name: property.Name,
@@ -192,7 +192,7 @@ public static class WorldModelShapeSource {
 
         var names = new List<string>();
 
-        foreach (var flag in ((ReadOnlySpan<WorldModelAccess>)[WorldModelAccess.Read, WorldModelAccess.Write, WorldModelAccess.ExtensionData, WorldModelAccess.Ignored])) {
+        foreach (var flag in ((ReadOnlySpan<WorldModelAccess>)[WorldModelAccess.Read, WorldModelAccess.Write, WorldModelAccess.ExtensionData, WorldModelAccess.Ignored, WorldModelAccess.Required])) {
             if ((access & flag) != 0) {
                 names.Add(item: flag.ToString());
             }

@@ -37,7 +37,7 @@ internal sealed class ForgeCommandModule(WorldServer server, IServerLink link, I
                 ((name is "undo" or "check" or "build") && (args.Count != 0)) ||
                 ((name is "show" or "remove") && (args.Count > 1))
             ) {
-                return CommandResult.Error(output: $"[forge.{name}: expected {grammar}]");
+                return CommandResult.Usage(form: grammar, verb: $"forge.{name}");
             }
             if (name == "new") {
                 m_drafts[key: principal] = new CartridgeDraft(document: CartridgeDocuments.Create(

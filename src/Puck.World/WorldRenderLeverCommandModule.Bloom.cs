@@ -9,9 +9,10 @@ using Puck.World.Protocol;
 namespace Puck.World;
 
 public sealed partial class WorldRenderLeverCommandModule {
+    private const string BloomForm = "[on|off|auto|toggle] | scale <0..1> [seat] | quality off|low|high|auto [view]";
     private CommandDefinition BloomCommand() => CommandDefinition.WithWireArgs(
         bindability: CommandBindability.Bindable, name: "world.bloom",
-        description: "Camera scatter: world.bloom [on|off|auto|toggle]; scale <0..1> [seat]; quality off|low|high|auto [view]. Status reports effective scatter, radius, quality and bypass reasons. world.debug-view bloom shows scatter alone.",
+        description: "Camera scatter: world.bloom " + BloomForm + ". Status reports effective scatter, radius, quality and bypass reasons. world.debug-view bloom shows scatter alone.",
         handler: (context, args) => {
             if (args.Count == 0) { return BloomEcho(); }
             WorldSessionLever lever;
@@ -28,7 +29,7 @@ public sealed partial class WorldRenderLeverCommandModule {
                 var automatic = args.Is(index: 1, value: "auto");
 
                 if (!automatic && (!Enum.TryParse<BloomQuality>(args[1], true, out _) || !Enum.IsDefined(value: Enum.Parse<BloomQuality>(args[1], true)))) {
-                    return CommandResult.Error(output: "[world.bloom: expected quality off|low|high|auto [view]]");
+                    return CommandResult.Usage(form: BloomForm, got: args[1].ToString(), verb: "world.bloom");
                 }
                 var view = ((args.Count == 3) ? args[2].ToString() : "*");
 
@@ -39,7 +40,7 @@ public sealed partial class WorldRenderLeverCommandModule {
 
                 lever = new(WorldSection.Render, WorldSessionLevers.Bloom,
                     (args.Is(index: 0, value: "auto") ? -1d : ((args.Is(index: 0, value: "on") || (args.Is(index: 0, value: "toggle") && !enabled)) ? 1d : 0d)));
-            } else { return CommandResult.Error(output: "[world.bloom: expected on|off|auto|toggle, scale <0..1> [seat], or quality off|low|high|auto [view]]"); }
+            } else { return CommandResult.Usage(form: BloomForm, got: ((args.Count > 0) ? args[0].ToString() : null), verb: "world.bloom"); }
             link.SubmitSessionLever(lever: lever, principal: context.Principal);
             return BloomEcho();
         });

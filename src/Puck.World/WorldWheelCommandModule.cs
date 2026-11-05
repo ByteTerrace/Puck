@@ -220,7 +220,7 @@ internal sealed class WorldWheelCommandModule(PlayerRoster roster, WorldWheelFee
         }
 
         if (args.Count > 1) {
-            return CommandResult.Error(output: $"[world.view.wheel: too many arguments — expected [<player>], player an integer 1..{PlayerRoster.MaxSlots}]");
+            return CommandResult.Usage(form: "[<player>]", got: args[1].ToString(), verb: "world.view.wheel");
         }
 
         var (slot, error) = SeatCommandArgs.ResolveSlot(

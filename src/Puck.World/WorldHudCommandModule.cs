@@ -165,7 +165,7 @@ internal sealed partial class WorldHudCommandModule(WorldServer server, IHudBind
             return DescribeSeatHud(seat: seat);
         }
 
-        return CommandResult.Error(output: "[world.hud: expected no arguments, toast, or seat:<n> (1..4)]");
+        return CommandResult.Usage(form: "[toast|seat:<n>] (<n> 1..4)", got: args[0].ToString(), verb: "world.hud");
     }
     private CommandResult DescribeSeatHud(int seat) {
         var slot = PlayerRoster.SlotFromDisplay(number: seat);

@@ -37,7 +37,7 @@ public sealed class WorldMachineCommandModule(IWorldConsoleAuthority authority) 
             out var generation
         )
         ) {
-            return CommandResult.Error(output: "[machine.operation: expected a nonblank instance and unsigned decimal generation]");
+            return CommandResult.Usage(form: "<instance> <generation> <operationId> <json>", verb: "machine.operation");
         }
 
         var operationId = args[2].ToString();
@@ -87,7 +87,7 @@ public sealed class WorldMachineCommandModule(IWorldConsoleAuthority authority) 
             description: "Reports named machine execution: machine.state [instance]. Includes generation, running state, hardware status, completed segments, backlog, and fault. Author declarations through world.row.set machines <json>.",
             handler: (context, args) => {
                 if (args.Count > 1) {
-                    return CommandResult.Error(output: "[machine.state: expected an optional instance name]");
+                    return CommandResult.Usage(form: "[instance]", got: args[1].ToString(), verb: "machine.state");
                 }
                 if (!authority.TryResolveServer(
                     context: context,

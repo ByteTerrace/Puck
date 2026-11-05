@@ -27,7 +27,7 @@ internal sealed class UpdateCommandModule(UpdateService service) : ICommandModul
             description: "Reports the resolved self-update configuration (Immediate): app, channel, cache root, installed version, check interval, and keep-N-versions.",
             handler: (_, args) => {
                 if (args.Count > 0) {
-                    return CommandResult.Error(output: $"[update.status: unrecognized '{args[0]}' — expected no arguments]");
+                    return CommandResult.Usage(form: "", got: args[0].ToString(), verb: "update.status");
                 }
 
                 var options = m_service.Options;
@@ -45,7 +45,7 @@ internal sealed class UpdateCommandModule(UpdateService service) : ICommandModul
             description: "Fetches and verifies the tracked channel's current release manifest and reports what would change — signature, sequence-replay, revocation, minimumSupported, version-monotonicity, and rollout-bucket checks, in that order. Downloads nothing (Immediate, network I/O — visibly stalls the session for its duration, like storage.push/.pull).",
             handler: (_, args) => {
                 if (args.Count > 0) {
-                    return CommandResult.Error(output: $"[update.check: unrecognized '{args[0]}' — expected no arguments]");
+                    return CommandResult.Usage(form: "", got: args[0].ToString(), verb: "update.check");
                 }
 
                 var result = m_service.CheckAsync(
@@ -66,7 +66,7 @@ internal sealed class UpdateCommandModule(UpdateService service) : ICommandModul
             description: "Re-checks the tracked channel and, only when a verified in-rollout newer version is found, stages and applies it — writing state-generation and atomically swapping the install's 'current' pointer the stub reads at its NEXT launch. Refuses without touching anything on disk when the check does not report available. Immediate, network I/O — visibly stalls the session for its duration, like storage.push/.pull.",
             handler: (_, args) => {
                 if (args.Count > 0) {
-                    return CommandResult.Error(output: $"[update.apply: unrecognized '{args[0]}' — expected no arguments]");
+                    return CommandResult.Usage(form: "", got: args[0].ToString(), verb: "update.apply");
                 }
 
                 var result = m_service.ApplyAsync(

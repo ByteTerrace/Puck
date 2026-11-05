@@ -957,22 +957,27 @@ public static class WorldDocumentBasis {
             return pointer;
         }
 
+        if (!Puck.Assets.Documents.DocumentJsonPointer.TrySegments(pointer: pointer, segments: out var segments)) {
+            return null;
+        }
+
         var traced = new System.Text.StringBuilder(capacity: pointer.Length);
 
-        foreach (var segment in pointer.Split(separator: '/')[1..]) {
+        foreach (var segment in segments) {
             switch (composed) {
-                case JsonObject composedObject when (layer is JsonObject layerObject): {
-                        var member = Puck.Assets.Documents.DocumentJsonPointer.Unescape(value: segment);
-
-                        if (!composedObject.TryGetPropertyValue(jsonNode: out composed, propertyName: member) || !layerObject.TryGetPropertyValue(jsonNode: out layer, propertyName: member)) {
+                case JsonObject when (layer is JsonObject): {
+                        if (!Puck.Assets.Documents.DocumentJsonPointer.TryChild(child: out var composedChild, node: composed, segment: segment) ||
+                            !Puck.Assets.Documents.DocumentJsonPointer.TryChild(child: out var layerChild, node: layer, segment: segment)) {
                             return traced.ToString();
                         }
 
-                        _ = traced.Append(value: '/').Append(value: segment);
+                        composed = composedChild;
+                        layer = layerChild;
+                        _ = traced.Append(value: '/').Append(value: Puck.Assets.Documents.DocumentJsonPointer.Escape(value: segment));
 
                         break;
                     }
-                case JsonArray composedList when ((layer is JsonArray layerList) && int.TryParse(provider: System.Globalization.CultureInfo.InvariantCulture, result: out var index, s: segment, style: System.Globalization.NumberStyles.None) && (index < composedList.Count)): {
+                case JsonArray composedList when ((layer is JsonArray layerList) && Puck.Assets.Documents.DocumentJsonPointer.TryIndex(count: composedList.Count, index: out var index, segment: segment)): {
                         var at = TraceIndex(
                             composed: composedList,
                             index: index,

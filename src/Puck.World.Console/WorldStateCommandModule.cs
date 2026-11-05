@@ -514,7 +514,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             rowName: args[0].ToString(),
             view: view
         ),
-            _ => CommandResult.Error(output: "[world.state: expected no arguments, <row>, or <row> <key>]"),
+            _ => CommandResult.Usage(form: "[<row> [<key>]]", got: args[2].ToString(), verb: "world.state"),
         };
     }
     // An absent cell carries no case at all, so what the line prints for one is a function of the row's declared
@@ -618,7 +618,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
                 b: "add",
                 comparisonType: StringComparison.OrdinalIgnoreCase
             )) {
-                return CommandResult.Error(output: $"[world.state.cell.set: unknown trailing token '{args[3]}' — expected 'add']");
+                return CommandResult.Usage(form: "<row> <key> <value> [add]", got: args[3].ToString(), verb: "world.state.cell.set");
             }
 
             kind = WorldDocumentWriteKind.Add;

@@ -342,20 +342,8 @@ internal sealed class PuckSchemaHover {
         }
         var node = root;
 
-        if (parts.Length == 2) {
-            foreach (var segment in parts[1].Split('/').Skip(count: 1)) {
-                var decoded = Puck.Assets.Documents.DocumentJsonPointer.Unescape(value: segment);
-
-                node = ((node is JsonObject obj)
-                    ? obj[decoded]
-                    : (((node is JsonArray array) && int.TryParse(
-                        result: out var index,
-                        s: decoded
-                    ) && (index >= 0) && (index < array.Count))
-                        ? array[index]
-                        : null
-                ));
-            }
+        if ((parts.Length == 2) && !Puck.Assets.Documents.DocumentJsonPointer.TryAt(node: out node, pointer: parts[1], root: root)) {
+            return null;
         }
         return (((node is null) || (root is null))
             ? null

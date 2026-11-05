@@ -38,8 +38,8 @@ public sealed class MeshCommandTests {
 
         return (scene, SdfMeshBakeGroup.Plan(create: static (selector, dynamic) => new SdfMeshBakeGroup(dynamic: dynamic, selector: selector), farDistance: WorldRenderFarDistance.Resolve(defaults: definition.Render), program: scene.Program, transforms: scene.Transforms));
     }
-    // The world with two boxes placed beside the Moth: a plain one, a static group whose shapes have no slot to be named
-    // by, and a hexagonal prism, whose regular polygon lowers to the convex polygon of its vertices.
+    // The world with two boxes placed beside the Moth: a plain one, a static group (the shared template its placement
+    // copies, labelled by its prototype) whose shapes have no slot to be named by, and a hexagonal prism, whose regular polygon lowers to the convex polygon of its vertices.
     private static string Placed(string path) {
         var definition = WorldDefinitionSerialization.Deserialize(utf8Json: File.ReadAllBytes(path: path));
 
@@ -123,8 +123,8 @@ public sealed class MeshCommandTests {
 
         var (scene, groups) = Plan(world: world);
         var store = new SdfMeshStore(directory: directory.PathOf(name: Path.Combine("cache", "meshes")));
-        var hexagonal = Group(groups: groups, scene: scene, shape: "hexagonal (hexagonal)");
-        var plain = Group(groups: groups, scene: scene, shape: "plain (plain)");
+        var hexagonal = Group(groups: groups, scene: scene, shape: "(hexagonal)");
+        var plain = Group(groups: groups, scene: scene, shape: "(plain)");
         var hinge = Group(groups: groups, scene: scene, shape: "podHinge-right");
         var dummy = new SdfMesh(indices: new uint[] { 0, 1, 2 }, positions: new[] { Vector3.Zero, Vector3.UnitX, Vector3.UnitY });
         var box = new SdfFieldEvaluator(program: SdfMeshAudit.Field(group: plain, program: scene.Program), reading: SdfFieldReading.Render);
@@ -147,12 +147,12 @@ public sealed class MeshCommandTests {
         // A regular polygon lowers to the convex polygon of its vertices, which the reading takes, so the stored dummy
         // mesh is measured against it.
         Assert.Equal(expected: 0, actual: refusal);
-        Assert.Contains(expectedSubstring: "hexagonal (hexagonal): 1 triangles", actualString: output);
+        Assert.Contains(expectedSubstring: "(hexagonal): 1 triangles", actualString: output);
 
         var (audited, report) = Invoke("mesh", "audit", "--world", world, "--group", "plain", "--identity", identity, "--cache-dir", directory.PathOf(name: "cache"));
 
         Assert.Equal(expected: 0, actual: audited);
-        Assert.Contains(expectedSubstring: "plain (plain): ", actualString: report);
+        Assert.Contains(expectedSubstring: "(plain): ", actualString: report);
         Assert.Contains(expectedSubstring: " triangles, ", actualString: report);
 
         // Mirrored hinges share one geometry, so both read the one damaged entry.
@@ -180,13 +180,13 @@ public sealed class MeshCommandTests {
         Assert.Equal(expected: 0, actual: baked);
         Assert.Contains(expectedSubstring: "baked offline on the CPU", actualString: report);
         Assert.Contains(expectedSubstring: ": 1 audited, 0 with no stored mesh, 0 refused", actualString: report);
-        Assert.Matches(expectedRegexPattern: @"plain \(plain\): \d+ triangles, .* score 0\.0", actualString: report);
+        Assert.Matches(expectedRegexPattern: @"\(plain\): \d+ triangles, .* score 0\.0", actualString: report);
         Assert.Contains(expectedSubstring: "topology: 0 folds, 0 flipped", actualString: report);
 
         var (prism, hexagon) = Invoke("mesh", "audit", "--cpu", "--world", world, "--group", "hexagonal");
 
         Assert.Equal(expected: 0, actual: prism);
-        Assert.Matches(expectedRegexPattern: @"hexagonal \(hexagonal\): \d+ triangles, ", actualString: hexagon);
+        Assert.Matches(expectedRegexPattern: @"\(hexagonal\): \d+ triangles, ", actualString: hexagon);
     }
     [Fact]
     public void EveryUsageTheVerbCannotServeIsRefusedByName() {
@@ -216,7 +216,7 @@ public sealed class MeshCommandTests {
         var identity = Identity.ToString(format: "x32", provider: null);
 
         SdfMeshBakeGroup Placement(string name) =>
-            groups.Single(predicate: group => scene.Label(group: group, owner: null).Contains(value: $" {name} ({name})", comparisonType: StringComparison.Ordinal));
+            groups.Single(predicate: group => scene.Label(group: group, owner: null).Contains(value: $" ({name})", comparisonType: StringComparison.Ordinal));
 
         var storedCounts = new Dictionary<string, int>(StringComparer.Ordinal);
 
@@ -247,7 +247,7 @@ public sealed class MeshCommandTests {
         // The store collapses geometry; choose by the stored triangle count, as the scene command does.
         var largestPlacement = storedCounts.MaxBy(entry => entry.Value).Key;
 
-        Assert.Contains(expectedSubstring: $"{largestPlacement} ({largestPlacement})", actualString: largestReport.Split(separator: '\n').Single(line => line.StartsWith("  change: ", StringComparison.Ordinal)));
+        Assert.Contains(expectedSubstring: $"({largestPlacement})", actualString: largestReport.Split(separator: '\n').Single(line => line.StartsWith("  change: ", StringComparison.Ordinal)));
 
         var malformed = directory.WriteText(name: "malformed.world.json", text: "[1, 2, 3]");
 
