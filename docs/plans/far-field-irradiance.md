@@ -3,9 +3,9 @@
 The research behind the coarse probe levels' rule: why an isotropic 8 m level
 drew pale triangles and dark wedges on the gallery's far wall, what shipped
 engines and the literature do about coarse probes indoors, and the Puck-native
-options weighed beside them. Three of them landed (conservative coverage past
-the finest level, share-blended level selection, a storey-resolving level with
-a spacing per axis); the rule is the
+options weighed beside them. Three of them landed (conservative coverage for
+the coarse levels' taps on sheets, share-blended level selection, a
+storey-resolving level with a spacing per axis); the rule is the
 [global illumination decision](../decisions/rendering.md#global-illumination)'s,
 the [mesh-GI reference](../../.claude/skills/rendering/references/mesh-gi.md)
 owns the gather's contract and the fixed poses, and the options left open are
@@ -221,11 +221,14 @@ own.
    per level, conservative past the finest, cost nothing and close the 32
    measured leaks in the soft half of the ramp; the 22 whose taps never saw
    the slab are option 1's to bound and option 2's to remove. **Adopted for
-   the storey level**, where it closed every measured slab leak and darkened 1
-   of 6,942 clear corners in the four-storey hall. Over curved hills the 32 m
-   level's taps alias a surface's near bulge, and the same ramp darkened 238 of
-   1,469 clear corners there, so that level keeps the tolerant ramp; each
-   level's table row carries its ramp.
+   the taps on sheets at every coarse level.** On the storey level it closed
+   every measured slab leak and darkened 1 of 6,942 clear corners in the
+   four-storey hall. Over curved hills the 32 m level's taps alias a surface's
+   near bulge, and the same ramp on every tap darkened one clear corner in six
+   there, so the trace tells the two apart from the scene's exact distance: a hit
+   with no solid thicker than 2 m behind it (a slab, a wall, a slab's edge) is a
+   sheet and closes conservatively, a hill's near side is a solid and closes only
+   as a majority ([the rule](../decisions/rendering.md#global-illumination)).
 7. **Higher angular resolution for coarse surface maps.** Assassin's Creed
    Shadows at 20×20 still needed indoor volumes; a 24×24 map on 24,576 coarse
    probes is 4× the rays and about 40 MiB more; the texel at 8 m is still

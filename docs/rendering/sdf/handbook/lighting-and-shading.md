@@ -228,14 +228,15 @@ in the frame.
   cosine concentrated near-floor probes into repeated spots. Normal bias is 5 cm;
   surface fade is 2 cm, independent of spacing.
   Support ends at 1.5 cell diagonals plus normal bias, while sky still traces to
-  lighting reach. Subtexel geometry remains a sampling limit. Each level carries
-  its coverage ramp in its table row. The storey level's closes on almost any
-  blocked share (from zero, complete at an eighth): its probes stand in every
-  room, and a hit a tap metres wide measured before the receiver is a slab or a
-  wall. The finest and 32 m levels let a half-blocked tap read visible: a 1 m
-  probe for thin objects, a 32 m probe because its taps alias a curved hill's
-  near bulge, which the conservative ramp read as a blocker on one clear corner
-  in six.
+  lighting reach. Subtexel geometry remains a sampling limit. Blocked taps close
+  by one rule at every level: taps on solids only as a majority, taps on sheets
+  at almost any share (from zero, complete at an eighth). A coarse level's trace
+  marks a hit a sheet when the scene holds no solid thicker than 2 m behind it:
+  a slab or a wall, a partition with another room beyond, which a tap metres
+  wide must not see through. A hill's near bulge, which such a tap aliases in
+  front of the slope it sees, reads as a solid. The finest level marks none: its
+  half-metre taps resolve slabs, and a minority tap of theirs on a railing lies
+  beside the receiver's segment.
 - **Every surface reads a level, in the share its probes measured.** A
   receiver's stages run finest first: each finer level whose boundary probes'
   support reaches it past their window, the level whose window holds it (the
@@ -249,8 +250,12 @@ in the frame.
   across a slab never stands for a whole receiver, and only the last stage that
   answers is normalized to what remains. A surface the camera sees never reads
   the absence of a measurement as black, while a wall a probe saw still hides
-  what lies behind it. A traced static light's visibility scales with the share
-  read within measured reach. Probes behind the receiver's plane keep a small
+  what lies behind it. A finer level answering past its window eases its share
+  out over the outer half of its reach. A traced static light's visibility
+  scales with the share read within measured reach, and so does the sun's in a
+  view that draws no shadow cascade (a session or screen camera, or
+  `world.shadows off`): each probe records whether its own ray toward the sun is
+  clear. Probes behind the receiver's plane keep a small
   share at the finest level alone; a coarser level's depth test cannot resolve
   the receiver's own wall.
   [Mesh GI](../../../../.claude/skills/rendering/references/mesh-gi.md) owns the

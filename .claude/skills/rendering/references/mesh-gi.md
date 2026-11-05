@@ -52,14 +52,25 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   level's boundary probes unbounded. The first stage that answers is chosen in
   its share: its weight over the same cage's front weight before visibility
   (trilinear × the facing fade without the behind floor, over every present
-  probe, invalid ones included), clamped to one. The rest comes from the next
+  probe, invalid ones included), clamped to one, and for a finer level past its
+  window times its reach share (`ReachShareOf`, `sdfMeshIrradianceReachShare`):
+  whole up to `SurfaceReachFadeStart` (half) of its reach, smoothstep to none at
+  the reach, so the remainder takes over across a band instead of the one-row
+  sawtooth a hard cut at `SurfaceReachOf` drew along walls
+  (`TheFinestLevelHandsAReceiverPastItsWindowOverAcrossItsReach`). The rest comes from the next
   stage over another cage, normalized to the rest; a later stage of the chosen
   level reads the same probes and is skipped, so every receiver inside the
   finest window keeps one gather. Where no remainder answers, the chosen stage
   is normalized to the whole. The receiver reads sixteen slots
   (`SdfMeshIrradiance.GatherSlots`: the chosen cage, then the remainder's),
   pre-scaled so they sum to one; a traced static light's visibility is the
-  weight of the lit slots of bounded stages. `world.probe` prints `level=`,
+  weight of the lit slots of bounded stages. A shadowing directional (its
+  `Shadows` flag) has a bit too, the probe's own ray toward it at the hits' reach,
+  marked on every relight (`Relight`, a reused local part included, since a moving
+  sun moves it): `sdfLightResponse` reads it in place of the cascades in a view
+  that draws none (`SdfShadeSurface.cascaded`: `meshShadowCount` zero, or soft
+  shadows disabled, as a session view's `ReducedQuality` and `world.shadows off`
+  are). The gather device law compares the sun's visibility on both backends. `world.probe` prints `level=`,
   `measured=`, `share=`, `remainder-level=` and `remainder-measured=`, and the
   remainder's eight corners after the chosen eight. An isotropic 8 m level could
   not resolve rooms a few metres tall: it had a probe plane in every other
@@ -168,16 +179,27 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   The flat-surface law also rejects radial-distance interpolation: it returned
   48% visibility for a coplanar receiver at radius 1.2 m and angle 89 degrees.
   No radial moments or squared-distance field remain. Misses supply no blocker.
-  Each level's table row carries its coverage ramp (`SdfMeshIrradianceLevel.Coverage`,
-  written into the pass block's `meshIrradianceCoverages` rows and read by
-  `sdfMeshProbeCoverage(level)`). The finest and 32 m levels close from half to
+  Blocked taps close by one rule at every level (`SdfMeshProbeCoverage.Visibility`,
+  `sdfMeshProbeCoverageVisibility`): the taps on solids from half to
   three-quarter support, so a minority hit cannot extend a finite block over the
-  footprint; the storey level closes from zero to an eighth
-  (`SdfMeshProbeCoverage.Coarse`): its probes stand in every room, and the soft
-  half of the tolerant ramp let corners across a slab answer at map visibility
-  0.1 to 0.5. Over curved terrain a 32 m probe's minority tap is the hill's own
-  near bulge: the conservative ramp darkened 238 of 1,469 clear corners on
-  three hills (`SdfMeshIrradianceLawTests.TheCoarsestLevelKeepsACurvedSurfaceItSeesLit`), the tolerant 6. Tests remain confined to these four
+  footprint, times the taps on sheets from zero to an eighth. A coarse level's
+  trace (`SdfMeshIrradianceLevel.Sheets`) marks a hit a sheet in the low bit of
+  its texel's curvature half (`SdfMeshProbeDepth.Surfaces`; every reader masks
+  it off before decoding the curvature) when the scene holds another surface
+  within 0.45 × `DepthSheetThickness` (2 m) of the point half that thickness
+  behind the hit: a slab, a wall or a slab's edge. A hill's near bulge reads only
+  its own surface there. Each measured case decided the rule: the conservative
+  ramp on every 32 m tap closed 254 of 1,439 exact-clear corners on the CPU test
+  hills (`TheCoarsestLevelKeepsACurvedSurfaceItSeesLit`), the tolerant one let 238
+  answering 32 m corners light the four-storey hall through slabs
+  (`ACoarseProbeAnswersNoReceiverAcrossASlabOrAWall`, `far-exact-blocked`); the
+  sheet rule leaves 6 and 18. A thickness measured along the normal alone read a
+  slab's edge 12.6 m thick and left 126 of those leaks. The finest level marks no
+  sheets: marking them closed a receiver beside a 0.15 m hanging panel
+  (`AFiniteBlockerShadowsItsOwnDirectionsAndAWallStopsTheFarProbe`).
+  `ASurfaceMapMarksASlabASheetAndAHillsNearSideASolid` checks the marks.
+  `Affected` extends each ray by the sheet thickness, so a change behind a hit
+  retraces the probe. Tests remain confined to these four
   angular taps: no 26-ray whole-sphere planes, neighbour separation, suspect sets
   or cross-probe vetoes return. Keep `SdfMeshProbeDepth.Visibility` and
   `sdfMeshProbeDepthVisibility` together, including signed normal decoding,
@@ -306,7 +328,15 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   Medium's three levels hold 49,152 probes in 44.0625 MiB; High's 73,728 in
   66.09375 MiB. The CPU cache holds each probe's hit buffer beside it: 510
   geometry words and 40 light words a probe, 2,200 bytes (`world.budget` prints the
-  bytes), about twice the record.
+  bytes), about twice the record. A level's cache holds its window grown by the
+  window's band (`MarginOf`, dims/8 a side) on every side: when the window moves,
+  `ProbeCache.Retain` publishes a compacted table of the cells inside that box once
+  the cache holds more probes than the box has cells (at Medium 92,800 probes over
+  the three levels). `world.residency`'s `probe-cache-*` line reads it. A debug-world
+  tour that grew the main residency's cache to 223,267 probes and 606 MB unbounded
+  ends at 70,158 and 354 MB. A batch's hit and light blocks stay alive while any
+  kept probe names them, so block bytes per kept probe run above the nominal
+  2,200.
   The table starts at one inert record and both
   it and CPU staging fit the published tier. Reuse `GpuRegion` grow/shrink and
   existing frame-ring retirement; increment the binding revision when its buffer
@@ -347,7 +377,11 @@ changing indirect light, probe visibility, the volume boundary or exposure.
   final shading and `world.exposure`. Check an outdoor view and move across
   the volume boundary as well as examining stills inside it.
 
-`SdfMeshIrradianceLawTests` holds the live two-room/slab trace scene. The old
+`SdfMeshIrradianceLawTests` holds the live two-room/slab trace scene. A law makes
+its volumes through `Volume()`, which disposes them when the law ends: a volume
+subscribes to the shared memory account's trim event until `Dispose`, which
+otherwise keeps every law's traced probes alive (the class reached 9 GB; disposed,
+it peaks near 1.5 GB). The old
 indirect canaries and comparison workloads under `experimental/` describe a
 retired renderer and are not live verification scenes.
 
