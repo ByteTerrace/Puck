@@ -12,7 +12,7 @@ public sealed class HostGpuWorkLawTests {
     private static IReadOnlyDictionary<string, Func<System.CommandLine.Command>> Grammars => PuckRootCommand.Gate.GpuVerbGrammars;
 
     [InlineData("Puck.World", @"C:\Puck\src\Puck.World\bin\Release\net11.0\Puck.World.exe --world worlds/a.puck")]
-    [InlineData("dotnet", @"dotnet C:\Users\a\AppData\Local\Puck\world-builds\k\Puck.World.dll --headless true")]
+    [InlineData("dotnet", @"dotnet C:\Users\a\AppData\Local\Puck\world-builds\k\Puck.World.dll --world w --headless false --devices none")]
     [InlineData("dotnet", @"dotnet ""C:\scratch\l1-cli\Puck.Cli.dll"" canary pipeline-ink")]
     [InlineData("dotnet", "dotnet /tmp/cli/Puck.Cli.dll parity")]
     [InlineData("puck", "puck counters --world w.json")]
@@ -25,6 +25,10 @@ public sealed class HostGpuWorkLawTests {
     [Theory]
     public void TheWorldAGpuVerbAndADeviceTestHostAreGpuWork(string name, string commandLine) =>
         Assert.True(condition: HostProcesses.IsGpuWork(commandLine: commandLine, grammars: Grammars, name: name));
+    // A headless World opens no device, so it never holds a device step back.
+    [InlineData("dotnet", @"dotnet C:\Users\a\AppData\Local\Puck\world-builds\k\Puck.World.dll --headless true")]
+    [InlineData("dotnet", "dotnet src/Puck.World/bin/Release/net11.0/Puck.World.dll --world worlds/debug --devices none --headless --exit-after-seconds 20")]
+    [InlineData("Puck.World", "Puck.World.exe --world worlds/debug --headless")]
     [InlineData("dotnet", "dotnet build tests/Puck.DirectX.Tests -c Release -m:2 -nodeReuse:false")]
     [InlineData("dotnet", "dotnet build src/Puck.World -c Release")]
     [InlineData("dotnet", "dotnet restore src/Puck.World")]

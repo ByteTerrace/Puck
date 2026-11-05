@@ -117,6 +117,7 @@ public sealed class HostLoadLawTests {
     [InlineData("dotnet", "dotnet exec tests/Puck.World.Tests/bin/Release/net11.0/Puck.World.Tests.dll --filter-not-trait Category=Gpu")]
     [InlineData("dotnet", "dotnet\0/tmp/a path/Puck.World.Tests.dll\0--filter-class\0*CaptureLawTests\0")]
     [InlineData("testhost", @"testhost.exe C:\Puck\tests\Puck.World.Tests\bin\Release\net11.0\Puck.World.Tests.dll")]
+    [InlineData("dotnet", @"dotnet exec C:\Puck\tests\Puck.SdfVm.Tests\bin\Release\net11.0\Puck.SdfVm.Tests.dll --filter-class *SdfMeshIrradianceLawTests")]
     [Theory]
     public void AHeavyTestRunIsAnyRunningPuckWorldTestsWhateverItsFilter(string name, string commandLine) =>
         Assert.True(condition: HostProcesses.IsHeavyTest(commandLine: commandLine, name: name));
