@@ -293,7 +293,7 @@ public static class WorldSourceSave {
                 }
                 if (rows.Count == next.Count) {
                     for (var index = 0; (index < rows.Count); index++) {
-                        if (!TryApply(now: next[index], old: rows[index], pointer: $"{pointer}/{index}", reason: out reason)) { return false; }
+                        if (!TryApply(now: next[index], old: rows[index], pointer: DocumentJsonPointer.Child(index: index, pointer: pointer), reason: out reason)) { return false; }
                     }
                     return true;
                 }
@@ -331,12 +331,12 @@ public static class WorldSourceSave {
                 return true;
             }
             for (var index = 0; (index < rows.Count); index++) {
-                if (!surviving.Any(predicate: pair => (pair.Before == index)) && !TryRemove(node: rows[index], pointer: $"{pointer}/{index}", reason: out reason)) {
+                if (!surviving.Any(predicate: pair => (pair.Before == index)) && !TryRemove(node: rows[index], pointer: DocumentJsonPointer.Child(index: index, pointer: pointer), reason: out reason)) {
                     return false;
                 }
             }
             foreach (var (from, to) in surviving) {
-                if (!TryApply(now: next[to], old: rows[from], pointer: $"{pointer}/{from}", reason: out reason)) {
+                if (!TryApply(now: next[to], old: rows[from], pointer: DocumentJsonPointer.Child(index: from, pointer: pointer), reason: out reason)) {
                     return false;
                 }
             }

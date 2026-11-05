@@ -22,7 +22,7 @@ public static partial class WorldDocumentEmitter {
             parent["state"] = stateObj;
         }
 
-        var statePointer = $"{scope.CurrentPointer}/state";
+        var statePointer = DocumentJsonPointer.Child(name: "state", pointer: scope.CurrentPointer);
         var oldPointer = scope.CurrentPointer;
 
         scope.SourceMap?.Register(
@@ -62,7 +62,7 @@ public static partial class WorldDocumentEmitter {
                 var records = ((stateObj["records"] as JsonArray) ?? new JsonArray());
 
                 stateObj["records"] = records;
-                records.Add(item: LowerRecordDeclaration(declaration: recordNode, pointer: $"{statePointer}/records/{records.Count}", scope: scope, state: stateObj));
+                records.Add(item: LowerRecordDeclaration(declaration: recordNode, pointer: DocumentJsonPointer.Child(index: records.Count, pointer: DocumentJsonPointer.Child(name: "records", pointer: statePointer)), scope: scope, state: stateObj));
                 continue;
             }
 
@@ -70,7 +70,7 @@ public static partial class WorldDocumentEmitter {
                 var pools = ((stateObj["pools"] as JsonArray) ?? new JsonArray());
 
                 stateObj["pools"] = pools;
-                scope.SourceMap?.Register(jsonPointer: $"{statePointer}/pools/{pools.Count}", span: poolNode.Span);
+                scope.SourceMap?.Register(jsonPointer: DocumentJsonPointer.Child(index: pools.Count, pointer: DocumentJsonPointer.Child(name: "pools", pointer: statePointer)), span: poolNode.Span);
                 pools.Add(item: LowerPoolDeclaration(declaration: poolNode, scope: scope));
                 continue;
             }
@@ -78,7 +78,7 @@ public static partial class WorldDocumentEmitter {
                 var pairPools = ((stateObj["pairPools"] as JsonArray) ?? new JsonArray());
 
                 stateObj["pairPools"] = pairPools;
-                scope.SourceMap?.Register(jsonPointer: $"{statePointer}/pairPools/{pairPools.Count}", span: pairPoolNode.Span);
+                scope.SourceMap?.Register(jsonPointer: DocumentJsonPointer.Child(index: pairPools.Count, pointer: DocumentJsonPointer.Child(name: "pairPools", pointer: statePointer)), span: pairPoolNode.Span);
                 pairPools.Add(item: LowerPairPoolDeclaration(declaration: pairPoolNode, scope: scope));
                 continue;
             }
@@ -132,7 +132,7 @@ public static partial class WorldDocumentEmitter {
             stateObj["world"] = worldArr;
         }
 
-        var worldPointer = $"{statePointer}/world";
+        var worldPointer = DocumentJsonPointer.Child(name: "world", pointer: statePointer);
 
         scope.SourceMap?.Register(
             jsonPointer: worldPointer,
@@ -205,12 +205,12 @@ public static partial class WorldDocumentEmitter {
             var rowIdx = worldArr.Count;
 
             rowScope.SourceMap?.Register(
-                jsonPointer: $"{worldPointer}/{rowIdx}",
+                jsonPointer: DocumentJsonPointer.Child(index: rowIdx, pointer: worldPointer),
                 span: stmt.Span
             );
             worldArr.AppendNode(item: rowObj);
             ResolveRowEnum(
-                pointer: $"{worldPointer}/{rowIdx}",
+                pointer: DocumentJsonPointer.Child(index: rowIdx, pointer: worldPointer),
                 row: rowObj,
                 scope: rowScope,
                 state: stateObj,
@@ -220,7 +220,7 @@ public static partial class WorldDocumentEmitter {
             // A grid also declares the lattice its board lies over, authored by the same declaration.
             if (((stateObj["lattices"] as JsonArray)?.Count is { } latticesAfter) && (latticesAfter > latticesBefore)) {
                 rowScope.SourceMap?.Register(
-                    jsonPointer: $"{statePointer}/lattices/{latticesBefore}",
+                    jsonPointer: DocumentJsonPointer.Child(index: latticesBefore, pointer: DocumentJsonPointer.Child(name: "lattices", pointer: statePointer)),
                     span: stmt.Span
                 );
             }
@@ -236,7 +236,7 @@ public static partial class WorldDocumentEmitter {
                     var compIdx = worldArr.Count;
 
                     rowScope.SourceMap?.Register(
-                        jsonPointer: $"{worldPointer}/{compIdx}",
+                        jsonPointer: DocumentJsonPointer.Child(index: compIdx, pointer: worldPointer),
                         span: stmt.Span
                     );
                     worldArr.AppendNode(item: companionRow);
