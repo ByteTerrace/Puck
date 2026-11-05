@@ -686,6 +686,35 @@ public static class FixedFieldColliderContact {
         FixedStaticContactWork.Process.CountField(bounds: sampler.Bounds, samples: sampler.Samples, unproved: !measured);
         return measured;
     }
+    /// <summary>Reads a field collider's field at a world point without a surface solve: the field's value scaled by
+    /// <see cref="FixedColliderField.BoundScale"/>, whose sign is exact and whose magnitude is a lower bound on the
+    /// Euclidean distance to the surface up to the field's fixed-point rounding, inside the solid as outside it. Where
+    /// <see cref="TryMeasure"/> follows one direction to a surface point (an upper bound, which inside a union or at a
+    /// crease of touching solids can run through other solids), this reading is the one a claim that a point lies off
+    /// the surface can rest on. It counts no contact work.</summary>
+    /// <param name="collider">The field collider.</param>
+    /// <param name="point">The world-space point.</param>
+    /// <param name="distance">The signed reading, in metres, negative inside, when the method returns <see langword="true"/>.</param>
+    /// <param name="material">The material id the field reads at the point, when the method returns <see langword="true"/>.</param>
+    /// <param name="normal">The field's unit outward direction there, in world space; zero where the field measures none.</param>
+    /// <returns><see langword="false"/> when the field does not answer at the point.</returns>
+    /// <exception cref="InvalidOperationException"><paramref name="collider"/> carries no field.</exception>
+    public static bool TryRead(in FixedStaticCollider collider, FixedVector3 point, out FixedQ4816 distance, out int material, out FixedVector3 normal) {
+        var sampler = new Sampler(field: Field(collider: in collider), width: MeasureTolerance);
+        var local = ToLocal(collider: in collider, world: point);
+
+        normal = FixedVector3.Zero;
+        if (!sampler.Field.Field.TryDistance(distance: out var value, material: out material, position: FixedPosition.FromLocal(local: local))) {
+            distance = FixedQ4816.Zero;
+            return false;
+        }
+
+        distance = (value * sampler.Field.BoundScale);
+        if (sampler.TryDirection(direction: out var direction, length: out _, local: local)) {
+            normal = collider.Rotation.Rotate(vector: direction);
+        }
+        return true;
+    }
     /// <summary>Projects a world point onto a field collider's surface by the surface solve.</summary>
     /// <param name="collider">The field collider.</param>
     /// <param name="probe">The world-space point to project.</param>
