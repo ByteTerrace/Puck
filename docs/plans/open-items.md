@@ -273,18 +273,13 @@ both backends; and background work proportional to change (the bake rebaking
 only what an edit touched, GI re-measuring only the probes that can see newly
 landed geometry).
 
-- [high] Rule evaluation is the largest phase of the headless debug tick (37 %
-  of `StepCore`'s samples; body advance 27 %, the machine worker wait 13 %,
-  the instance host 11 %), and 58 % of the rule phase is the machinery that
-  visits rules rather than the authored gates, locals and effects. The
-  [rule-evaluation memo](rule-evaluation-cost.md) holds the per-rule
-  measurement, the research round and the design: schedules that name facets
-  as well as rows, a push-based due list, speculated gates on the pool
-  validated by versions and committed in document order, and
-  `world.budget.rules --spent`. Its [implementation brief](rule-evaluation-cost.md#implementation-brief)
-  is the next lane here; its steps 1 to 4 need no thread and land before
-  step 5, the parallel phase the memo's "Rule evaluation stays serial" section
-  filed.
+- [medium] The rule phase's remaining volatile and visit costs, as
+  `world.budget.rules --spent` names them: `physics(quiescent, ...)` has no
+  version (the chess sweeps), a placement-pose move marks its readers in full
+  (`go-read-stones` is visited every tick), and a moved row re-judges every
+  binding of a sweep. The [rule-evaluation memo](rule-evaluation-cost.md#what-it-leaves-open)
+  lists each, and why speculated gates on the pool wait for a sheet that
+  shows hundreds of non-firing versioned evaluations a tick.
 - [medium] Snapshot emission's entity rows, which T1 partitioned, are a small
   share of its cost, so most of it lies in the serial tail or the subscribers'
   `DeliverSnapshot`; profile it before T3 or any R step assumes otherwise. The
@@ -491,16 +486,16 @@ The custom no-GC runtime port stays later work, on the
   portal face each tick, with an occupancy dictionary `Observe` or `Forget` per
   pair (`WorldInstanceHost.Adjacency.cs:294-434`), a sixth of a standing tick.
   A body-major loop with a bounds test before the occupancy write cuts it.
-- [low] The rule VM's latch scheduling hashes each rule's name every tick
-  (`RuleLatch.Rule`, `RuleLatch.cs:181-189`, from `RuleEvaluator.cs:385`) and
-  keeps a binding in two dictionaries: `Held` (`TryGetValue` at
-  `RuleEvaluator.cs:523`, `GetValueRefOrAddDefault` at `:579`) and `Scheduling`
-  (`RuleLatch.cs:66`), both walked by `EndSweep` after each swept rule
-  (`RuleLatch.cs:244-257`). Resolve each compiled rule's `RuleState` once, when
-  its family compiles, and keep a binding's edge bit and schedule in one entry
-  of one table. The state hash sorts the bindings and folds only the edge bit
-  (`RuleLatch.cs:109-165`), so the merge leaves it unchanged, provided the
-  hashed, checkpointed bit stays apart from the unhashed schedule cache.
+- [low] The rule VM's latch keeps a binding in two dictionaries: `Held`
+  (`TryGetValue` and `GetValueRefOrAddDefault` in
+  `RuleEvaluator.EvaluateOnceCore`) and `Scheduling` (`RuleState.Binding`),
+  both walked by `RuleLatch.EndSweep` after each swept rule. Keep a binding's
+  edge bit and schedule in one entry of one table. The state hash sorts the
+  bindings and folds only the edge bit (`RuleLatch.AppendStateHash`), so the
+  merge leaves it unchanged, provided the hashed, checkpointed bit stays apart
+  from the unhashed schedule cache. The host's interaction path still resolves
+  its `RuleState` by name per tick (`IRuleOwner.TryEvaluateOwn` carries no
+  state); the evaluator's own family walk reads them from `RuleLatch.States`.
 - [low] `PaintLatticeDraw` rents its draw buffer from `ArrayPool<long>.Shared`
   (`WorldTick.LatticeDraws.cs:51`). That is safe because
   `GeneratorEngine.TryRunBatch` writes every index below `values.Length` on
@@ -1840,25 +1835,42 @@ the fixed poses and the approaches already rejected.
   Isolate geometry and the moving bake from probe interpolation before
   attributing it. The Vulkan sweep also flags the cumulative moving-bake cap
   counter rising; its cause is unisolated.
-- [medium] Far interior walls past the finest probes' reach read the 8 m
-  level, whose metres-wide angular taps cannot resolve a room a few metres
-  tall. A wall no coarse probe answers now reads the finest level's boundary
-  probes, and coarse probes behind its plane take no part
-  ([mesh GI](../../.claude/skills/rendering/references/mesh-gi.md)), but coarse
-  probes in front still draw pale triangles and dark wedges from their angular
-  patches. Repro at the High tier: `world.indirect high`,
-  `body.pose 64 4.57 28.52 273`,
-  `view.override camera look 68 6.8 28.52 10 6.0 28.52`,
-  `world.debug-view indirect`. The far third of the hall shows them, and
-  `world.probe 10.6 6.5 28.5 1 0 0` reads `level=1`. The
-  [far-field memo](far-field-irradiance.md) measured the cause (storeys with
-  no coarse probe plane read nothing but single leaking corners normalized to
-  the whole) and holds the recommendation and its implementation brief:
-  conservative coverage past the finest level, share-blended level selection,
-  and a storey-resolving coarse level. Re-check the far-wall stops this item listed
-  (`finding-teal-roof`, `gallery-entrance`, `devices`, `desktop`, `rate-range`,
-  `camera-course`, `stage`, `jump`, `flight`, `noclip`, the `garden` return
-  portal).
+- [medium] The coarse probe levels' far field after the
+  [far-field memo](far-field-irradiance.md)'s three changes (every storey of
+  the gallery hall now reads the storey level, measured, with every answering
+  corner clear at `world.probe 12 4.5k+0.06 28.5 0 1 0`). What remains:
+  - At the finest window's edge, wall receivers show a sawtooth one probe row
+    tall where the finer-level stage ends at `SurfaceReachOf` and the next
+    level takes over at once (`body.pose 64 4.57 28.52 273`,
+    `view.override camera look 68 6.8 28.52 10 6.0 28.52`, `world.debug-view
+    indirect`, the left window band near x = 44). The share blend eases the
+    level boundary inside a stage, not this cut between stages; a fade of the
+    finer stage's share over its reach's last metre would.
+  - Past the storey level's 128 m window the 32 m level answers indoor
+    receivers, and its 16 m taps reach across slabs: in the four-storey hall
+    law, receivers at the hall's end 62 to 70 m from its camera take the storey
+    level's share and the 32 m level's remainder, 238 corners exact-blocked,
+    reading up to 1.2 times an outdoor ground receiver's sky
+    (`SdfMeshIrradianceLawTests.FarField.cs`, far-exact-blocked). The 32 m
+    level keeps the tolerant coverage ramp because the conservative one
+    darkened one clear corner in six on curved hills, the valley view's
+    blotches (`TheCoarsestLevelKeepsACurvedSurfaceItSeesLit`); a test that
+    tells a slab a 16 m tap grazes from a hill's near bulge would let it have
+    both.
+  - The level table is engine data (`SdfMeshIrradiance.LevelsOf`); the memo
+    asked that a world may choose it beside `render.indirect`'s tier. The
+    `(8, 2, 8)` m over 32×48×32 alternative keeps the 8 m band outdoors at 60 %
+    more probes; the overlook's mid-field showed no change under the default
+    table, so it was not taken.
+  - Left open by the memo: a sparse finest level and a forward window offset
+    (options 9 and 10) once the trace is on the GPU, an authored `indirect`
+    region (option 5) if a world asks for one, higher angular resolution for
+    coarse surface maps (option 7) if an atrium taller than its probe planes
+    still seams, and the per-probe visibility lattice (option 8) as the coarse
+    levels' test once rays are a GPU budget.
+  Re-check the far-wall stops the earlier item listed (`finding-teal-roof`,
+  `gallery-entrance`, `devices`, `desktop`, `rate-range`, `camera-course`,
+  `stage`, `jump`, `flight`, `noclip`, the `garden` return portal).
 - The SPIN exhibit (`gallery.go motion-spin`): a dotted bright seam at the level
   3 ceiling and wall junction reproduces in beauty but not in `indirect`,
   `normals` or `shadow`; behind it at level 2 a dotted bright line runs along
@@ -3336,10 +3348,7 @@ Monitor hook check remain supporting work alongside the landscape priority.
     the repository records.
 
 - [low] The hazard detectors' follow-ups ([hazards](../development/hazards.md)):
-  turn STALE001 into an error once `RuleEvaluator.EvaluateOnce` and
-  `RunFixpoint` stop reading a captured scratch and arena (the rule-faults
-  plan's step 4 removes the first); mark the next replaceable family when one
-  appears (a GPU device lost and recreated is the likely one); and triage the
+  mark the next replaceable family when one appears (a GPU device lost and recreated is the likely one); and triage the
   rest of `puck scan --only clones` below the heaviest thirty clusters of `src`
   and `tests`, which this pass did not read. A C# and HLSL formula pair has no
   detector: the two languages share no tree, so an agreement law per pair
@@ -3563,9 +3572,9 @@ read one. The plans that keep open items:
 - [Owned memory for Puck's own host](memory-pooling.md): memory ownership is the
   [engine job system](#engine-job-system)'s; the page holds M1 and R1 to R3,
   the later custom no-GC runtime port.
-- [Rule evaluation proportional to change](rule-evaluation-cost.md#implementation-brief):
-  the measured sheet, the pull's constants, facet versions and the due list,
-  deadline wake, speculated gates on the pool, and the documents; the
+- [Rule evaluation proportional to change](rule-evaluation-cost.md#what-it-leaves-open):
+  the volatile rest the spent sheet names, per-cell due sets, more host fact
+  doors, and speculated gates once a sheet justifies a fork; the
   [engine job system](#engine-job-system) packet ranks it.
 - [Machines and cartridges](machines-and-cartridges.md#open-items): the
   programme's packages, the Humble corpus failures and the emulator batteries'

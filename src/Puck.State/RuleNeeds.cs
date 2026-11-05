@@ -11,9 +11,10 @@ public sealed class RuleNeeds {
     private readonly FacetRef[] m_facets;
     private readonly int[] m_hostOwnedRows;
 
-    internal RuleNeeds(FacetRef[] facets, int[] hostOwnedRows, bool irreversible, bool readsTick, bool isVolatile) {
+    internal RuleNeeds(FacetRef[] facets, int[] hostOwnedRows, bool irreversible, bool readsTick, bool readsSearchPly, bool isVolatile) {
         Irreversible = irreversible;
         ReadsTick = readsTick;
+        ReadsSearchPly = readsSearchPly;
         Volatile = isVolatile;
         m_facets = facets;
         m_hostOwnedRows = hostOwnedRows;
@@ -32,11 +33,15 @@ public sealed class RuleNeeds {
         hostOwnedRows: [],
         irreversible: false,
         isVolatile: false,
+        readsSearchPly: false,
         readsTick: false
     );
     /// <summary>Gets a value indicating whether the rule reads the tick pair, which changes every tick with no
     /// state write.</summary>
     public bool ReadsTick { get; }
+    /// <summary>Gets a value indicating whether the rule reads the search ply (<see cref="RuleFacts.SearchPly"/>),
+    /// which a search host moves between the positions it judges with no state write.</summary>
+    public bool ReadsSearchPly { get; }
     /// <summary>Gets a value indicating whether row versions alone cannot prove the rule's reads unchanged.</summary>
     public bool Volatile { get; }
 
@@ -68,11 +73,16 @@ public sealed class RuleNeeds {
 /// machinery: nothing on it runs on the tick path.</remarks>
 public sealed class RuleNeedsBuilder {
     private readonly List<FacetRef> m_facets = [];
+    private readonly List<ICompiledFact> m_facetFacts = [];
     private readonly List<int> m_hostOwnedRows = [];
 
+    /// <summary>Gets every fact added so far whose type names a facet, each instance once, in walk order: what a read
+    /// schedule asks its host to version (<see cref="IStateReader.TryScheduleFact"/>).</summary>
+    public IReadOnlyList<ICompiledFact> FacetFacts => m_facetFacts;
+
     private bool m_irreversible;
+    private bool m_readsSearchPly;
     private bool m_readsTick;
-    private bool m_volatile;
 
     /// <summary>Records a facet the rule needs.</summary>
     /// <param name="facet">The facet.</param>
@@ -97,6 +107,9 @@ public sealed class RuleNeedsBuilder {
         }
         if (fact.RequiredFacet is { } declared) {
             Add(facet: declared);
+            if (!m_facetFacts.Contains(item: fact)) {
+                m_facetFacts.Add(item: fact);
+            }
         }
         if (fact is IEffectNeeds effect) {
             AddEffectNeeds(needs: effect.Needs);
@@ -122,22 +135,23 @@ public sealed class RuleNeedsBuilder {
             facets: [.. m_facets],
             hostOwnedRows: hostOwnedRows,
             irreversible: m_irreversible,
-            isVolatile: (m_volatile || m_readsTick || (m_facets.Count > 0) || (hostOwnedRows.Length > 0)),
+            isVolatile: (m_readsSearchPly || m_readsTick || (m_facets.Count > 0) || (hostOwnedRows.Length > 0)),
+            readsSearchPly: m_readsSearchPly,
             readsTick: m_readsTick
         );
     }
     /// <summary>Resets the builder for the next rule.</summary>
     public void Clear() {
         m_facets.Clear();
+        m_facetFacts.Clear();
         m_hostOwnedRows.Clear();
 
         m_irreversible = false;
+        m_readsSearchPly = false;
         m_readsTick = false;
-        m_volatile = false;
     }
     /// <summary>Records that the rule reads the tick pair.</summary>
     public void MarkReadsTick() => m_readsTick = true;
-    /// <summary>Records that row versions alone cannot prove the rule's reads unchanged for a reason outside the
-    /// facts — an unresolved row name, or a row carrying a value-over-time trait.</summary>
-    public void MarkVolatile() => m_volatile = true;
+    /// <summary>Records that the rule reads the search ply.</summary>
+    public void MarkReadsSearchPly() => m_readsSearchPly = true;
 }

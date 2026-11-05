@@ -20,6 +20,12 @@ public static class WorldAnchorGeometry {
             return Vector3.Zero;
         }
 
+        // A root anchor is already resolved by the document's shared placement-frame table. It needs neither
+        // the placement row nor its prototype; named shapes below still resolve their local position.
+        if (shapeId is null) {
+            return definition.PlacementFrames.TryGetValue(placementId, out var frame) ? frame.Position : Vector3.Zero;
+        }
+
         if (WorldDefinitionRows.FindPlacement(
             id: placementId,
             placements: definition.Placements

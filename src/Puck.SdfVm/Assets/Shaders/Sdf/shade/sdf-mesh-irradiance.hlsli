@@ -9,7 +9,7 @@
 #include "../field/sdf-octahedral.hlsli"
 
 bool sdfMeshIrradianceEnabled() {
-    return (passGroup.meshIrradianceVolume.x != 0u);
+    return (passGroup.meshIrradianceVolume != 0u);
 }
 uint sdfMeshIrradianceKey(int3 cell) {
     uint3 low = (asuint(cell) & 1023u);
@@ -60,15 +60,20 @@ float3 sdfMeshProbeOffset(uint address) {
 
     return float3(sdfMeshIrradianceHalf(first, 0u), sdfMeshIrradianceHalf(first, 1u), sdfMeshIrradianceHalf(second, 0u));
 }
-// First-hit surface support in four reflected angular taps, never whole-sphere plane vetoes.
-// KEEP IN SYNC with SdfMeshProbeDepth.Visibility and its signed octahedral normal bytes.
-float sdfMeshProbeCoverageVisibility(float blocked) {
-    float coverage = saturate((blocked - SDF_MESH_IRRADIANCE_DEPTH_COVERAGE_START) * SDF_MESH_IRRADIANCE_DEPTH_COVERAGE_SCALE);
+// A level's closing ramp over its taps' blocked share (start, scale), as its table row carries it
+// (SdfMeshIrradianceLevel.Coverage). KEEP IN SYNC with SdfMeshProbeCoverage.Visibility.
+float2 sdfMeshProbeCoverage(uint level) {
+    return passGroup.meshIrradianceCoverages[level].xy;
+}
+float sdfMeshProbeCoverageVisibility(float blocked, float2 ramp) {
+    float coverage = saturate((blocked - ramp.x) * ramp.y);
     coverage = coverage * coverage * (3.0 - 2.0 * coverage);
     return 1.0 - coverage;
 }
+// First-hit surface support in four reflected angular taps, never whole-sphere plane vetoes.
+// KEEP IN SYNC with SdfMeshProbeDepth.Visibility and its signed octahedral normal bytes.
 // `bounded` false lets a receiver past a measured miss's reach through, so only measured surfaces block it.
-float sdfMeshProbeDepthVisibility(uint address, float3 toward, bool bounded) {
+float sdfMeshProbeDepthVisibility(uint address, float3 toward, bool bounded, float2 ramp) {
     float distance = length(toward);
     if (!(distance > 0.0)) { return 1.0; }
     float2 texel = (sdfOctEncode(toward) * 0.5 + 0.5) * SDF_MESH_IRRADIANCE_DEPTH_SIZE - 0.5;
@@ -122,7 +127,7 @@ float sdfMeshProbeDepthVisibility(uint address, float3 toward, bool bounded) {
     }
     if (planar && planeWeight > 0.0 && planeHigh - planeLow <= 0.5 * SDF_MESH_IRRADIANCE_DEPTH_SURFACE_JOIN_GAP) {
         float gap = dot(firstNormal, toward) - planeSum / planeWeight;
-        return sdfMeshProbeCoverageVisibility(planeWeight * saturate(-gap / SDF_MESH_IRRADIANCE_DEPTH_SURFACE_FADE));
+        return sdfMeshProbeCoverageVisibility(planeWeight * saturate(-gap / SDF_MESH_IRRADIANCE_DEPTH_SURFACE_FADE), ramp);
     }
     float blocked = 0.0;
     [unroll] for (uint corner = 0u; corner < 4u; corner++) {
@@ -161,24 +166,35 @@ float sdfMeshProbeDepthVisibility(uint address, float3 toward, bool bounded) {
         float gap = dot(normalize(gradient), toward - hit);
         blocked += weights[corner] * saturate(-gap / SDF_MESH_IRRADIANCE_DEPTH_SURFACE_FADE);
     }
-    return sdfMeshProbeCoverageVisibility(blocked);
+    return sdfMeshProbeCoverageVisibility(blocked, ramp);
 }
-struct SdfMeshProbes {
+// One stage's eight corners about a receiver, as one level's gather fills them.
+struct SdfMeshProbeCage {
     uint address[8];
     float weight[8];
-    // Whether the probes answered as measured; false where the gather fell back to the nearest level's probes without
-    // their surface test.
+};
+// The probes a receiver reads (SdfMeshIrradiance.GatherSlots): corners 0 to 7 the chosen stage's, 8 to 15 the remainder
+// stage's, each weight pre-scaled by its stage's share so the weights sum to one. KEEP IN SYNC with
+// SdfMeshProbeSelection.
+struct SdfMeshProbes {
+    uint address[16];
+    float weight[16];
+    // The chosen stage's share of the answer: one where no remainder stage answers, zero where no stage answers.
+    float share;
+    // Whether each stage read its probes bounded by their measured reach; false where it read them past it, blocked
+    // only by the surfaces they measured.
     bool measured;
+    bool remainderMeasured;
 };
 
 // Whether a gathered probe answers.
 bool sdfMeshProbeAnswers(SdfMeshProbes probes, uint corner) {
     return (probes.address[corner] != SdfMeshProbeNone);
 }
-// A level's probe spacing, zero for a level not published, and its window: first cell and probes along each axis.
-float sdfMeshIrradianceSpacing(uint level) {
-    uint4 volume = passGroup.meshIrradianceVolume;
-    return asfloat((level == 0u) ? volume.y : ((level == 1u) ? volume.z : volume.w));
+// A level's probe spacing along each axis, zero for a level not published, and its window: first cell and probes along
+// each axis.
+float3 sdfMeshIrradianceSpacing(uint level) {
+    return passGroup.meshIrradianceSpacings[level].xyz;
 }
 int3 sdfMeshIrradianceDims(uint level) {
     uint packed = (uint)passGroup.meshIrradianceLevels[level].w;
@@ -186,10 +202,12 @@ int3 sdfMeshIrradianceDims(uint level) {
 }
 // One level's eight probes about the pushed receiver, its lookup clamped to the level's boundary probes: each corner's
 // weight is its trilinear share times the facing fade (at least `behind`, so a receiver whose every visible probe lies
-// behind its plane still reads them) times the angular surface visibility of the pushed receiver, `bounded` by each
-// probe's measured reach or, unbounded, blocked only by the surfaces it measured. Returns the total weight. KEEP IN SYNC
-// with SdfMeshIrradiance.Gather.
-float sdfMeshProbesGather(uint base, float spacing, int3 low, int3 dims, float3 position, float3 normal, float3 pushed, bool bounded, float behind, inout SdfMeshProbes probes) {
+// behind its plane still reads them) times the angular surface visibility of the pushed receiver under the level's
+// closing `ramp`, `bounded` by each probe's measured reach or, unbounded, blocked only by the surfaces it measured.
+// Returns the total weight, and in `front` the cage's weight before visibility with the facing fade alone (no behind
+// floor) over every present probe, invalid ones included: the support a share is measured against. KEEP IN SYNC with
+// SdfMeshIrradiance.Gather.
+float sdfMeshProbesGather(uint base, float3 spacing, int3 low, int3 dims, float3 position, float3 normal, float3 pushed, bool bounded, float behind, float2 ramp, out float front, out SdfMeshProbeCage probes) {
     uint count, stride;
     sdfMeshIrradiance.GetDimensions(count, stride);
 
@@ -207,6 +225,8 @@ float sdfMeshProbesGather(uint base, float spacing, int3 low, int3 dims, float3 
     float outside = saturate(length(unclamped - lattice));
     float total = 0.0;
 
+    front = 0.0;
+
     [unroll] for (uint corner = 0u; (corner < 8u); corner++) {
         probes.address[corner] = SdfMeshProbeNone;
         probes.weight[corner] = 0.0;
@@ -220,19 +240,29 @@ float sdfMeshProbesGather(uint base, float spacing, int3 low, int3 dims, float3 
 
         uint address = ((base + sdfMeshIrradianceSlot(cell, dims)) * SDF_MESH_IRRADIANCE_PROBE_WORDS);
 
-        if (((address + SDF_MESH_IRRADIANCE_PROBE_WORDS) > count) || (sdfMeshIrradiance[address] != (sdfMeshIrradianceKey(cell) | SDF_MESH_IRRADIANCE_WRITTEN))) {
+        if ((address + SDF_MESH_IRRADIANCE_PROBE_WORDS) > count) {
+            continue;
+        }
+        uint key = sdfMeshIrradiance[address];
+        if ((key & ~SDF_MESH_IRRADIANCE_INVALID) != (sdfMeshIrradianceKey(cell) | SDF_MESH_IRRADIANCE_WRITTEN)) {
             continue;
         }
 
         float3 axes = lerp((1.0 - fraction), fraction, float3(offset));
+        float trilinear = (axes.x * axes.y * axes.z);
         // The trilinear share is the cell's; the direction, the distance and the depth test are the probe's own position.
         float3 probePoint = ((((float3)cell + 0.5) * spacing) + sdfMeshProbeOffset(address));
         float3 toward = (probePoint - position);
-        float facing = lerp(max(smoothstep(0.0, 0.5 * spacing, dot(toward, normal)), behind), 1.0, outside);
-        float weight = ((axes.x * axes.y * axes.z) * facing);
+        // The fade runs over half the cell's extent along the normal, half the spacing for a cube.
+        float fade = smoothstep(0.0, 0.5 * length(spacing * normal), dot(toward, normal));
+        front += (trilinear * lerp(fade, 1.0, outside));
+        if ((key & SDF_MESH_IRRADIANCE_INVALID) != 0u) {
+            continue;
+        }
+        float weight = (trilinear * lerp(max(fade, behind), 1.0, outside));
 
         if (weight > 0.0) {
-            weight *= sdfMeshProbeDepthVisibility(address, (pushed - probePoint), bounded);
+            weight *= sdfMeshProbeDepthVisibility(address, (pushed - probePoint), bounded, ramp);
         }
         if (weight <= 0.0) {
             continue;
@@ -245,33 +275,33 @@ float sdfMeshProbesGather(uint base, float spacing, int3 low, int3 dims, float3 
     return total;
 }
 // How far past a level's boundary probes the pushed receiver stands, in metres; zero within them.
-float sdfMeshIrradianceBeyond(float3 pushed, float spacing, int3 low, int3 dims) {
+float sdfMeshIrradianceBeyond(float3 pushed, float3 spacing, int3 low, int3 dims) {
     float3 unclamped = ((pushed / spacing) - 0.5);
 
-    return (length(unclamped - clamp(unclamped, (float3)low, (float3)(low + dims - 1))) * spacing);
+    return length((unclamped - clamp(unclamped, (float3)low, (float3)(low + dims - 1))) * spacing);
 }
-// The probes a receiver reads. KEEP IN SYNC with SdfMeshIrradiance.Select: those of the finest published level whose
-// probes measured it. A finer level answers past its window's boundary probes as far as their surface maps reach, before
-// the level whose window holds the receiver (the finest such, the coarsest published past every window), which answers
-// next, extended as far as its boundary probes' surface support admits. A coarser level never answers inside a finer
-// window, where its metres-wide angular support would see through a thin wall a finer probe measured. When none of that
-// level's measured probes answer, the same probes answer past their measured reach, blocked only by the surfaces they
-// measured, `measured` false: they are the best estimate of an unmeasured receiver's light, where none would draw it
-// black, and a surface they saw between them and it still hides it. Where those answer nothing either (a room's far wall
-// read by a coarser level, whose probes sit in its slabs and beyond its walls), the finest level's boundary probes answer
-// the same way, so the wall reads the light of the room the finest level measured rather than black. Only the finest
-// level keeps the facing floor (SDF_MESH_IRRADIANCE_BEHIND_SHARE): its depth test resolves the receiver's own surface,
-// while a coarser probe behind the receiver's plane is as likely beyond the receiver's own wall, where one grazing ray
-// through it lights the whole receiver with the outdoors.
+// The probes a receiver reads. KEEP IN SYNC with SdfMeshIrradiance.Select: a chain of stages, finest first: each finer
+// published level whose boundary probes' surface maps reach the receiver past its window, then the level whose window
+// holds it (the finest such, the coarsest published past every window) bounded by its probes' measured reach, the same
+// probes unbounded, blocked only by the surfaces they measured, and last the finest level's boundary probes unbounded.
+// A coarser level never answers inside a finer window, where its metres-wide angular support would see through a thin
+// wall a finer probe measured. The first stage whose probes answer is chosen, in its share: its weight over the same
+// cage's front weight before visibility, clamped to one, so a single corner an 8 m level measured across a slab never
+// stands for the whole answer. The rest comes from the next stage over another cage (a later stage of the chosen level
+// reads the same probes), normalized to that rest; where none answers, the chosen stage is normalized to the whole.
+// Only the finest level keeps the facing floor (SDF_MESH_IRRADIANCE_BEHIND_SHARE): its depth test resolves the
+// receiver's own surface, while a coarser probe behind the receiver's plane is as likely beyond the receiver's own wall.
 SdfMeshProbes sdfMeshProbesAt(float3 position, float3 normal) {
     SdfMeshProbes probes;
 
+    probes.share = 0.0;
     probes.measured = false;
-    [unroll] for (uint corner = 0u; (corner < 8u); corner++) {
+    probes.remainderMeasured = false;
+    [unroll] for (uint corner = 0u; (corner < 16u); corner++) {
         probes.address[corner] = SdfMeshProbeNone;
         probes.weight[corner] = 0.0;
     }
-    if ((passGroup.meshIrradianceVolume.x == 0u) || any(!isfinite(position))) {
+    if ((passGroup.meshIrradianceVolume == 0u) || any(!isfinite(position))) {
         return probes;
     }
 
@@ -281,10 +311,10 @@ SdfMeshProbes sdfMeshProbesAt(float3 position, float3 normal) {
 
     // The finest published level holding the receiver, else the coarsest published.
     [unroll] for (uint level = 0u; (level < SDF_MESH_IRRADIANCE_LEVELS); level++) {
-        float levelSpacing = sdfMeshIrradianceSpacing(level);
+        float3 levelSpacing = sdfMeshIrradianceSpacing(level);
         int3 levelDims = sdfMeshIrradianceDims(level);
 
-        if (!held && (levelSpacing > 0.0) && all(levelDims > 0)) {
+        if (!held && all(levelSpacing > 0.0) && all(levelDims > 0)) {
             chosen = level;
             held = (sdfMeshIrradianceBeyond(pushed, levelSpacing, passGroup.meshIrradianceLevels[level].xyz, levelDims) <= 0.0);
         }
@@ -294,11 +324,18 @@ SdfMeshProbes sdfMeshProbesAt(float3 position, float3 normal) {
     }
 
     // One rolled loop, so the gather and its surface test inline once: each finer published level whose probes' reach
-    // covers the receiver, the chosen level's measured read, its extended read, then the finest level's extended read.
+    // covers the receiver, the chosen level's measured read, its extended read, then the finest level's extended read,
+    // until a stage answers in full or a second stage answers.
+    bool found = false;
+    uint first = 0u;
+    float firstTotal = 0.0;
+    float share = 1.0;
+    bool remainder = false;
+
     [loop] for (uint attempt = 0u; (attempt <= (chosen + 2u)); attempt++) {
         uint level = ((attempt > (chosen + 1u)) ? 0u : min(attempt, chosen));
         bool bounded = (attempt <= chosen);
-        float spacing = sdfMeshIrradianceSpacing(level);
+        float3 spacing = sdfMeshIrradianceSpacing(level);
         int3 low = passGroup.meshIrradianceLevels[level].xyz;
         int3 dims = sdfMeshIrradianceDims(level);
         uint base = 0u;
@@ -308,17 +345,54 @@ SdfMeshProbes sdfMeshProbesAt(float3 position, float3 normal) {
 
             base += ((finer < level) ? (uint)(finerDims.x * finerDims.y * finerDims.z) : 0u);
         }
-        if (((attempt < chosen) || (attempt > (chosen + 1u))) && (!(spacing > 0.0) || any(dims <= 0) || (chosen == 0u))) {
+        if (((attempt < chosen) || (attempt > (chosen + 1u))) && (!all(spacing > 0.0) || any(dims <= 0) || (chosen == 0u))) {
             continue;
         }
         if ((attempt < chosen) &&
-            (sdfMeshIrradianceBeyond(pushed, spacing, low, dims) > ((SDF_MESH_IRRADIANCE_SURFACE_REACH * spacing) + SDF_MESH_IRRADIANCE_NORMAL_BIAS))) {
+            (sdfMeshIrradianceBeyond(pushed, spacing, low, dims) > ((SDF_MESH_IRRADIANCE_SURFACE_REACH * length(spacing)) + SDF_MESH_IRRADIANCE_NORMAL_BIAS))) {
             continue;
         }
-        if (sdfMeshProbesGather(base, spacing, low, dims, position, normal, pushed, bounded, ((level == 0u) ? SDF_MESH_IRRADIANCE_BEHIND_SHARE : 0.0), probes) > 0.0) {
-            probes.measured = bounded;
-            break;
+        if (found && (level == first)) {
+            continue;
         }
+
+        SdfMeshProbeCage cage;
+        float front;
+        float total = sdfMeshProbesGather(base, spacing, low, dims, position, normal, pushed, bounded, ((level == 0u) ? SDF_MESH_IRRADIANCE_BEHIND_SHARE : 0.0), sdfMeshProbeCoverage(level), front, cage);
+
+        if (!(total > 0.0)) {
+            continue;
+        }
+        if (!found) {
+            found = true;
+            first = level;
+            firstTotal = total;
+            probes.measured = bounded;
+            share = ((front > total) ? (total / front) : 1.0);
+            [unroll] for (uint chosenCorner = 0u; (chosenCorner < 8u); chosenCorner++) {
+                probes.address[chosenCorner] = cage.address[chosenCorner];
+                probes.weight[chosenCorner] = cage.weight[chosenCorner];
+            }
+            if (share >= 1.0) {
+                break;
+            }
+            continue;
+        }
+        remainder = true;
+        probes.remainderMeasured = bounded;
+        [unroll] for (uint restCorner = 0u; (restCorner < 8u); restCorner++) {
+            probes.address[8u + restCorner] = cage.address[restCorner];
+            probes.weight[8u + restCorner] = (cage.weight[restCorner] * ((1.0 - share) / total));
+        }
+        break;
+    }
+    if (!found) {
+        return probes;
+    }
+    share = (remainder ? share : 1.0);
+    probes.share = share;
+    [unroll] for (uint scaled = 0u; (scaled < 8u); scaled++) {
+        probes.weight[scaled] *= (share / firstTotal);
     }
 
     return probes;
@@ -333,7 +407,7 @@ void sdfMeshIrradianceAt(SdfMeshProbes probes, float3 direction, out float skyVi
 
     skyVisibility = 0.0;
     radiance = 0.0;
-    [unroll] for (uint corner = 0u; (corner < 8u); corner++) {
+    [unroll] for (uint corner = 0u; (corner < 16u); corner++) {
         if (!sdfMeshProbeAnswers(probes, corner)) {
             continue;
         }
@@ -352,34 +426,28 @@ void sdfMeshIrradianceAt(SdfMeshProbes probes, float3 direction, out float skyVi
     skyVisibility = (sky / total);
     radiance = (reflected / total);
 }
-// The visibility of a light of the lights table at the surface: the share of the gathered probes whose centre sees it,
-// so a fixture lights nothing through the wall or slab between them; zero where no measured probe takes part.
+// The visibility of a light of the lights table at the surface: the weight of the gathered probes read bounded by their
+// measured reach whose centre sees it, so a fixture lights nothing through the wall or slab between them and its light
+// scales with the measured share of the answer; zero where no measured probe takes part. KEEP IN SYNC with
+// SdfMeshIrradiance.LightVisibility.
 float sdfMeshLightVisibility(SdfMeshProbes probes, uint lightIndex) {
     uint word = (SDF_MESH_IRRADIANCE_LIGHTS_WORD + (lightIndex >> 5u));
     uint bit = (1u << (lightIndex & 31u));
     float visible = 0.0;
-    float total = 0.0;
 
     if (lightIndex >= (32u * SDF_MESH_IRRADIANCE_LIGHT_WORDS)) {
         return 1.0;
     }
-    if (!probes.measured) {
-        return 0.0;
-    }
-    [unroll] for (uint corner = 0u; (corner < 8u); corner++) {
-        if (!sdfMeshProbeAnswers(probes, corner)) {
+    [unroll] for (uint corner = 0u; (corner < 16u); corner++) {
+        if (!sdfMeshProbeAnswers(probes, corner) || !((corner < 8u) ? probes.measured : probes.remainderMeasured)) {
             continue;
         }
         if ((sdfMeshIrradiance[probes.address[corner] + word] & bit) != 0u) {
             visible += probes.weight[corner];
         }
-        total += probes.weight[corner];
-    }
-    if (total <= 0.0) {
-        return 0.0;
     }
 
-    return (visible / total);
+    return visible;
 }
 // The mesh path's indirect light at a surface point, in the views pass's units (the cosine-weighted mean radiance about
 // the normal): the live sky's irradiance over pi under the volume's sky visibility, when the sky source is

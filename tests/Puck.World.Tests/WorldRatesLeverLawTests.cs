@@ -8,7 +8,7 @@ using Xunit;
 namespace Puck.World.Tests;
 
 /// <summary>
-/// CONTRACT UNDER TEST: <c>world.rates</c> echoes each live lever and its counts, switches every lever with
+/// CONTRACT UNDER TEST: <c>world.rates</c> switches every lever with
 /// <c>on</c>/<c>off</c> or one lever by name, refuses any other word, and submits the chosen set as the <c>rates</c>
 /// session lever carrying its flags, without touching the settings itself: the server's grant check applies the lever.
 /// </summary>
@@ -27,42 +27,6 @@ public sealed class WorldRatesLeverLawTests {
         return (new CommandRegistry(modules: [module]), settings, levers);
     }
 
-    [Fact]
-    public void NoArgumentAndStatusEchoEachLeverAndItsCounts() {
-        var (registry, settings, levers) = Rig();
-
-        settings.RateCounts.Count(kind: SdfUpdateRateCounts.ShadowFarHeld);
-        Assert.Equal(
-            expected: "[world.rates: bodies=on views=on screens=on shadow-far=on bodies.posed=0 bodies.held=0 views.rated=0 views.held=0 screens.rated=0 shadow-far.rendered=0 shadow-far.held=1 display=0hz grid=none period-ms: 30hz=33.3 15hz=66.7 longest-ms: bodies.30hz=- bodies.15hz=- views.30hz=- views.15hz=- screens.30hz=- screens.15hz=- shadow-far.30hz=- bodies: - views: - screens: -]",
-            actual: registry.Submit(line: "world.rates").Output
-        );
-
-        // On a 144 Hz signal a tier's period is whole refreshes, and each lever prints the longest interval it achieved.
-        settings.RateIntervals.Advance(frameSeconds: (1d / 144d), rate: new Puck.Hosting.PresentationRate(DisplayHertz: 144, GridHertz: 144d));
-        settings.RateIntervals.Record(hertz: 15, lever: SdfUpdateRates.Views, seconds: (9d / 144d));
-        Assert.EndsWith(
-            expectedEndString: " display=144hz grid=144hz period-ms: 30hz=27.8 15hz=62.5 longest-ms: bodies.30hz=- bodies.15hz=- views.30hz=- views.15hz=62.5 screens.30hz=- screens.15hz=- shadow-far.30hz=- bodies: - views: - screens: -]",
-            actualString: registry.Submit(line: "world.rates").Output
-        );
-
-        // Each lever lists the items it rated on the latest frame: a body by its pixels per metre (or near, inside a
-        // view's near plane), a view by its display pixels and a screen by its share of its image's height.
-        settings.RateReadings.Publish(lever: SdfUpdateRates.Bodies, readings: [new(Hertz: 30, Name: "body:3", Size: 24.14d), new(Hertz: 60, Name: "body:1", Size: double.PositiveInfinity)]);
-        settings.RateReadings.Publish(lever: SdfUpdateRates.Views, readings: [new(Hertz: 15, Name: "session", Size: 54.6d)]);
-        settings.RateReadings.Publish(lever: SdfUpdateRates.Screens, readings: [new(Hertz: 30, Name: "deck", Size: 0.625d)]);
-        Assert.EndsWith(
-            expectedEndString: " bodies: body:3=24.1px/m@30hz body:1=near@60hz views: session=55px@15hz screens: deck=0.63x@30hz]",
-            actualString: registry.Submit(line: "world.rates").Output
-        );
-
-        settings.UpdateRates = SdfUpdateRates.Views;
-
-        Assert.StartsWith(
-            expectedStartString: "[world.rates: bodies=off views=on screens=off shadow-far=off ",
-            actualString: registry.Submit(line: "world.rates status").Output
-        );
-        Assert.Empty(collection: levers);
-    }
     [InlineData("on", SdfUpdateRates.All)]
     [InlineData("off", SdfUpdateRates.None)]
     [InlineData("toggle", SdfUpdateRates.None)]

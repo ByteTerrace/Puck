@@ -40,7 +40,7 @@ public sealed partial class WorldCreationInstances {
     private byte[] m_slotRateCodes = [];
 
     // The latest pack's bodies' readings, published once it ends, and each body's name in them, by body index.
-    private readonly List<SdfUpdateRateReadings.Reading> m_bodyReadings = [];
+    private readonly SdfUpdateRateReadings.Buffer m_bodyReadings = new();
     private readonly Dictionary<int, string> m_bodyNames = [];
 
     /// <summary>Gets each dynamic-transform slot's <see cref="SdfUpdateRateCode"/> as the latest
@@ -223,7 +223,11 @@ public sealed partial class WorldCreationInstances {
         }
     }
     // Ends a pack's tiers: publishes the bodies' readings.
-    private void EndRateCodes() => m_rateReadings?.Publish(lever: SdfUpdateRates.Bodies, readings: m_bodyReadings);
+    private void EndRateCodes() {
+        if (m_rateReadings is { } readings) {
+            m_bodyReadings.PublishTo(readings: readings, lever: SdfUpdateRates.Bodies);
+        }
+    }
     // Whether a woken body-rooted registration holds its pose this frame rather than packing it in full: the floor at its
     // tier still holds over the seconds since its last full pack with this frame's (SdfUpdateRateTiers.Holds), counted
     // ahead by its phase's lead. The slowest tier since that pack is the one its next interval is recorded under.

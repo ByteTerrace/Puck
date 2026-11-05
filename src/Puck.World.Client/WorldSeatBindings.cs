@@ -75,6 +75,9 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
     private readonly BindingProfileDocument[] m_composed;
     // Read-back and compilation share the same layer composition; state changes matter only when an overlay gate flips.
     private readonly ComposedLayers?[] m_composedLayers = new ComposedLayers?[SeatCount];
+    private readonly FilteredComposition?[] m_filteredCompositions = new FilteredComposition?[SeatCount];
+    private sealed record FilteredComposition(BindingProfileDocument Source, WorldChannelTable Channels,
+        (CommandRegistry? Registry, AuthoredCommandSet? Commands) Vocabulary, BindingProfileDocument Document);
 
     private sealed record ComposedLayers(IReadOnlyList<WorldBindingOverlay> Overlays, BindingProfileDocument? Profile, BindingProfileDocument? Session, bool[] Gates, int Code, BindingProfileDocument Document);
 
@@ -1008,13 +1011,19 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
             : 0
         );
 
-        return SkipUnregisteredPages(
-            document: ((((uint)slot) < SeatCount)
-            ? ComposeSeat(slot: slot)
-            : ComposeBase()),
-            channels: m_channels[channelSlot],
-            label: null
-        );
+        var source = (((uint)slot) < SeatCount) ? ComposeSeat(slot: slot) : ComposeBase();
+        var channels = m_channels[channelSlot];
+        var vocabulary = WorldAffordances.RegistrationIdentity;
+        if (m_filteredCompositions[channelSlot] is { } held && ReferenceEquals(held.Source, source) &&
+            ReferenceEquals(held.Channels, channels) && held.Vocabulary == vocabulary) {
+            return held.Document;
+        }
+        var document = SkipUnregisteredPages(document: source, channels: channels, label: null);
+        // Do not retain a result across a vocabulary replacement during filtering.
+        if (vocabulary == WorldAffordances.RegistrationIdentity) {
+            m_filteredCompositions[channelSlot] = new(source, channels, vocabulary, document);
+        }
+        return document;
     }
     /// <summary>Gets the group the seat's composed <c>contexts</c> rows map a family state to — the first row
     /// (document order) for that family and state — or <see langword="null"/> when the document authors none: the

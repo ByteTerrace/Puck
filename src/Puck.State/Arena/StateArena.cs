@@ -792,7 +792,7 @@ public sealed partial class StateArena {
         m_deliveryRows[rowOrdinal] = true;
         if (m_rowChangeStamp[rowOrdinal] != m_changeEpoch) {
             m_rowChangeStamp[rowOrdinal] = m_changeEpoch;
-            m_rowVersions[rowOrdinal]++;
+            BumpRowVersion(rowOrdinal: rowOrdinal);
         }
     }
     private bool[] m_deliveryRows = [];

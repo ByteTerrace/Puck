@@ -118,6 +118,11 @@ public sealed partial class RuleEvaluator {
 
         m_host.CommitStateTransaction(mark: mark);
 
+        // An arm is the only work during rule evaluation that changes host state (a pose, a spawn, an install), so a
+        // firing that queued one brings the host's fact versions up to date once its arms are delivered; arena writes
+        // move row versions on their own.
+        var armed = (m_deferred.Count > queued);
+
         // The scope is closed. The transactional arms install first, as the unit the host prepared, and the rest are
         // delivered in authored order: a delivery that refuses is counted, undoes nothing, and stops no later
         // delivery. Every firing reads the queue from its own mark up, so an arm left below it would never
@@ -155,6 +160,9 @@ public sealed partial class RuleEvaluator {
             }
         } finally {
             DiscardQueued(from: queued);
+            if (armed) {
+                m_host.RefreshFacts();
+            }
         }
 
         return RuleOutcome.Fired;

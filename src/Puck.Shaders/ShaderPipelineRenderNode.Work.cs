@@ -78,8 +78,8 @@ public sealed partial class ShaderPipelineRenderNode : IGpuWorkSource, IWorkCoun
     // (IRenderGraphPackageRecorder.Skips) records nothing and is counted as skipped, never as a pass that ran and did no
     // work. A pass that throws leaves its submission unsealed, so the partial record is dropped rather than published
     // under a pass that never finished. The kernel
-    // counters of a graph that counts are cleared ahead of every pass and copied into the slot's readback behind them,
-    // outside every pass, and the ledger reads that slot once this submission completes.
+    // counters are cleared before the first executed pass and copied behind the last, outside every pass. When all
+    // outputs stand or skip, no kernel could count: the ledger's fresh zero rows need no GPU clear or readback.
     private void RecordPasses(nint command, in FrameContext context, int slot) {
         var passes = m_passes;
         var counters = ((passes.Length > 0)
@@ -90,11 +90,7 @@ public sealed partial class ShaderPipelineRenderNode : IGpuWorkSource, IWorkCoun
 
         try {
             PrepareWorkDetails(context: in context, counters: counters, slot: slot);
-            counters?.RecordClear(
-                commandBuffer: command,
-                recorder: m_gpu.Recorder,
-                slot: slot
-            );
+            var countersWritten = false;
             for (var index = 0; (index < passes.Length); index++) {
                 var pass = passes[index];
 
@@ -117,6 +113,10 @@ public sealed partial class ShaderPipelineRenderNode : IGpuWorkSource, IWorkCoun
                     m_work.StandPass(pass: index);
                     continue;
                 }
+                if (!countersWritten && counters is not null) {
+                    counters.RecordClear(commandBuffer: command, recorder: m_gpu.Recorder, slot: slot);
+                    countersWritten = true;
+                }
                 m_work.EnterPass(pass: index);
                 PrepareHistoryWrites(pass: pass);
                 m_gpu.Recorder.BeginDebugGroup(commandBufferHandle: command, label: pass.Label);
@@ -133,7 +133,7 @@ public sealed partial class ShaderPipelineRenderNode : IGpuWorkSource, IWorkCoun
                 RecordedCadence(pass: pass, signature: signature);
                 pass.Recorded = true;
             }
-            if (counters is not null) {
+            if (countersWritten && counters is not null) {
                 counters.RecordCopy(
                     commandBuffer: command,
                     recorder: m_gpu.Recorder,

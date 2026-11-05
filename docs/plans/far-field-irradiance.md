@@ -1,34 +1,37 @@
 # Far-field irradiance: what a coarse probe level may answer
 
-The design memo for the gallery's far third: why the 8 m probe level draws pale
-triangles and dark wedges on a far wall, what shipped engines and the literature
-do about coarse probes indoors, the Puck-native options weighed beside them, and
-the one approach this memo recommends with its implementation brief. It extends
-the [global illumination decision](../decisions/rendering.md#global-illumination)
-and the [illumination plan](illumination.md); the
-[mesh-GI reference](../../.claude/skills/rendering/references/mesh-gi.md) owns
-the gather's current contract and the fixed poses.
+The research behind the coarse probe levels' rule: why an isotropic 8 m level
+drew pale triangles and dark wedges on the gallery's far wall, what shipped
+engines and the literature do about coarse probes indoors, and the Puck-native
+options weighed beside them. Three of them landed (conservative coverage past
+the finest level, share-blended level selection, a storey-resolving level with
+a spacing per axis); the rule is the
+[global illumination decision](../decisions/rendering.md#global-illumination)'s,
+the [mesh-GI reference](../../.claude/skills/rendering/references/mesh-gi.md)
+owns the gather's contract and the fixed poses, and the options left open are
+in the [open items](open-items.md#lighting-and-gi). It extends the
+[illumination plan](illumination.md).
 
 ## The problem
 
 The mesh path's indirect light is a probe clipmap about the camera: the finest
-level at the tier's spacing (`SdfMeshIrradiance.Layout.Of`: 1 m over 48×16×48
-cells at High, 2 m over 32×12×32 at Medium), then two 32×12×32 levels of 8 m
-and 32 m cells (`SdfMeshIrradiance.LevelSpacing`). A receiver reads the finest
-level whose probes measured it, a finer level answering past its window as far
-as its surface maps reach (`SdfMeshIrradiance.SurfaceReachOf`: 1.5 cell
-diagonals plus the normal bias, 2.65 m at High), then the level whose window
-holds it; where that level's measured probes answer nothing, the same probes
-answer unbounded, then the finest level's boundary probes unbounded
-(`SdfMeshIrradiance.Select`, `sdfMeshProbesAt`).
+level at the tier's spacing (1 m over 48×16×48 cells at High, 2 m over 32×12×32
+at Medium), then, when this memo was written, two 32×12×32 levels of 8 m and
+32 m cells. A receiver read the finest level whose probes measured it, a finer
+level answering past its window as far as its surface maps reach
+(`SdfMeshIrradiance.SurfaceReachOf`: 1.5 cell diagonals plus the normal bias,
+2.65 m at High), then the level whose window holds it; where that level's
+measured probes answered nothing, the same probes answered unbounded, then the
+finest level's boundary probes unbounded, and the first stage with any weight
+was normalized to the whole answer.
 
 In the gallery hall (`worlds/debug/hall.puck`: storeys 4.5 m, slabs and walls
 0.3 m), the far third seen from the east end at High reads the 8 m level
 ([open items](open-items.md#lighting-and-gi): `body.pose 64 4.57 28.52 273`,
 `view.override camera look 68 6.8 28.52 10 6.0 28.52`, `world.debug-view
 indirect`; `world.probe 10.6 6.5 28.5 1 0 0` reads `level=1`). Medium shows the
-same past about 32 m. The brief's reading, that the 8 m cells span storeys and
-both sides of walls, is right, and a bounded measurement says exactly how.
+same past about 32 m. The 8 m cells span storeys and both sides of walls, and a
+bounded measurement says exactly how.
 
 ### The measurement
 
@@ -217,10 +220,12 @@ own.
    measured hit before the receiver is a slab or a wall. Coverage thresholds
    per level, conservative past the finest, cost nothing and close the 32
    measured leaks in the soft half of the ramp; the 22 whose taps never saw
-   the slab are option 1's to bound and option 2's to remove. **Adopted.** Its
-   over-occlusion is bounded by the harness: 22 of 1,948 clear corners today
-   at the soft ramp; the conservative ramp's figure is a check the
-   implementation runs before choosing it.
+   the slab are option 1's to bound and option 2's to remove. **Adopted for
+   the storey level**, where it closed every measured slab leak and darkened 1
+   of 6,942 clear corners in the four-storey hall. Over curved hills the 32 m
+   level's taps alias a surface's near bulge, and the same ramp darkened 238 of
+   1,469 clear corners there, so that level keeps the tolerant ramp; each
+   level's table row carries its ramp.
 7. **Higher angular resolution for coarse surface maps.** Assassin's Creed
    Shadows at 20×20 still needed indoor volumes; a 24×24 map on 24,576 coarse
    probes is 4× the rays and about 40 MiB more; the texel at 8 m is still
@@ -241,178 +246,6 @@ own.
     at High it covers 25 m of the far third. Turning the camera then moves
     the window by its offset and retraces what it uncovers. **Left open**, as a
     measured trade once the trace is budgeted on the GPU.
-
-## The recommendation
-
-Three changes, each one mechanism, landing in this order. Together they make
-the far field read what its probes measured, in proportion to how much of the
-receiver's support they measured, and give every storey a probe plane.
-
-**Invariant.** A level's probes answer a receiver only in the share of the
-receiver's front support they measured clear; the rest of the answer comes
-from the next stage of the chain, never from normalizing the share up. The one
-place that enforces it is the gather pair, `SdfMeshIrradiance.Select` and
-`sdfMeshProbesAt`, which every read goes through (the views pass, the CPU
-bounce reads, the meter and `world.probe`); the device law holds the pair to
-one answer. The guarantee stops where the surface maps stop: a receiver a
-coarse probe's tap cannot distinguish from the slab in front of it reads that
-probe's answer scaled by a conservative coverage, so the error is darkening,
-never a leak from another room.
-
-### 1. Conservative coverage past the finest level
-
-`SdfMeshProbeDepth.Visibility` and `sdfMeshProbeDepthVisibility` take the
-coverage ramp (`DepthCoverageStart`, `DepthCoverageScale`) as arguments of the
-level; the finest level keeps today's values, and every coarser level reads a
-ramp that closes a tap on any measured hit before the receiver. Over-occlusion
-at the coarse levels is then the safe error (Lumen's trade for diffuse rays),
-and the fallback chain lights what it darkens. No record changes.
-
-### 2. Share-blended level selection
-
-`Select` and `sdfMeshProbesAt` stop choosing the first level with any weight.
-The chain stays as it is (finer levels within reach, the holding level
-measured, the holding level unbounded, the finest level's boundary unbounded),
-and each stage contributes its **share**: the stage's total weight over the
-same cage's weight before visibility (trilinear × facing), clamped to one, of
-what the earlier stages left. The last stage takes all that remains. The
-receiver's probe set becomes two cages, the chosen stage's and the remainder's,
-whose weights are pre-scaled by their shares so `sdfMeshIrradianceAt`,
-`sdfMeshReflection` and `sdfMeshLightVisibility` sum sixteen corners as they
-sum eight today; `measured` becomes the chosen stage's share, so a traced
-light's visibility scales with it. The GTC slides' crush of near-zero weights
-is not needed on top: step 1 closes the soft band that produced them.
-
-### 3. A storey-resolving coarse level
-
-`Layout` carries a spacing per axis and dims per level, read from the tier's
-table rather than two constants (`LevelSpacing`, `MediumDims`), and the pass
-block carries three spacings per level. The default table keeps the finest
-level and makes the 8 m level `(4, 2, 4)` m over `32 × 24 × 32` cells (a
-128 × 48 × 128 m window, 24,576 probes), leaving the 32 m level as it is:
-12,288 more probes than today, 11 MiB more table and 26 MiB more CPU cache
-at either tier, a fifth more trace and relight work, and the band from 64 m
-to 128 m outdoors read by the 32 m level instead of the 8 m one. The
-alternative that keeps that band, `(8, 2, 8)` m over `32 × 48 × 32`, costs
-36,864 probes (60 % more work) and is the table to try if the overlook's
-mid-field shows the change. Which table a world uses belongs in authored data
-with these as the engine's defaults (AGENTS.md: the standard is authored, with
-a neutral engine default); the lane decides the home with the
-`render.indirect` settings that already name the tier.
-
-What each axis of a spacing means to the code: `Lattice`, `Beyond` and
-`sdfMeshIrradianceBeyond` divide per axis; `SurfaceReachOf` becomes 1.5 cell
-diagonals of the vector spacing (today's 1.5 √3 s is that for a cube); the
-facing fade's half spacing becomes half the cell's extent along the receiver's
-normal; `Place` searches a cell whose half extent is per axis; `Affected`'s
-placement region and `WindowLow`'s centring take the vector.
-
-### Cost
-
-- **Per frame, RTX 2060 at 1080p.** Steps 1 and 3 add nothing to a pixel.
-  Step 2 adds a second eight-probe gather on the far-field pixels whose chosen
-  stage's share is below one (today those pixels already run the chain until a
-  stage answers), and sixteen probe slots in the gather's live state instead
-  of eight; the views pass's occupancy is the figure to read
-  ([gpu cost](../../.claude/skills/rendering/references/gpu-cost.md)). Expected
-  under a tenth of a millisecond at the hall's far-field share of the screen;
-  measured by the lane.
-- **Per bake and per window move.** Step 3's 12,288 probes trace 144 rays
-  each, a fifth more than today's 61,440 at High; the relight budget covers a
-  fifth more probes a sweep, so the age counter is the thing to watch
-  (`world.budget`, `[sdf.mesh-gi] behind`). The Deck's four cores carry the
-  same fifth; the GPU trace step is where that cost goes.
-- **Memory.** 11 MiB of table and 26 MiB of CPU cache at both tiers for the
-  default table; none for steps 1 and 2.
-
-### The CPU/HLSL pair and the parity law
-
-The pair stays a pair: `SdfMeshProbeDepth.Visibility` with
-`sdfMeshProbeDepthVisibility` (step 1's ramp arguments), `Gather` with
-`sdfMeshProbesGather` (unchanged but for the vector spacing), `Select` with
-`sdfMeshProbesAt` (step 2's shares), `Layout` with the pass block's level rows
-(step 3's spacings, a [sync pair](../../.claude/skills/rendering/references/sync-pairs.md)).
-`SdfMeshIrradianceGatherDeviceLawTests` grows from eight corners to sixteen
-and from a `measured` bit to the chosen stage's share: every receiver must read
-the same sixteen slots with weights within its tolerance and the same share on
-both backends; its hall gains a storey with no coarse probe plane under today's
-table and a far receiver on it, so the law covers the share blend where it
-matters, and a receiver whose coarse corner leaked under the soft ramp, so the
-law covers step 1.
-
-### How it proves itself in the debug world
-
-Captures settled (`world.wait bakes`, `[sdf.mesh-gi] done`), `world.indirect
-high` and `medium`, both backends, `world.debug-view indirect` and the lit
-view:
-
-- the brief's pose (`body.pose 64 4.57 28.52 273`,
-  `view.override camera look 68 6.8 28.52 10 6.0 28.52`): the far third's
-  floors, slab undersides and west wall continuous, no triangle brighter than
-  its surround, no wedge darker, each storey's ceiling darker than its floor;
-- `world.probe 10.6 6.5 28.5 1 0 0` and the same on each storey's floor at
-  x = 12: `level=1`, two or more answering corners, every answering corner
-  `reference-clear=1`, and no corner with a weight above zero at
-  `reference-clear=0` anywhere along `x = 12 .. 36` at the hall's three
-  storey heights;
-- the fixed poses in the [mesh-GI reference](../../.claude/skills/rendering/references/mesh-gi.md#debug-world-corner-and-boundary-checks)
-  and its gallery isolation checks compared tolerantly with today's stills, so
-  the finest level's reads are untouched;
-- the outdoor control and `debug.go overlook`: the valley's mid-field under
-  the default table compared with today's, the `(8, 2, 8)` table tried if it
-  darkens or flattens;
-- `world.counters sdf.mesh-gi` and `world.budget`'s age line across the day
-  cycle, no `behind` line that today's run lacks; `world.gpu-timing` of the
-  views pass against today's on a quiet machine, and `host.frames` at the
-  pose.
-
-### What it leaves open
-
-- A sparse finest level and the window's forward offset (options 9 and 10),
-  both to be measured once the trace is on the GPU.
-- An authored `indirect` region as an author's override (option 5), only if a
-  world asks for it.
-- The coarse levels' angular resolution (option 7) if a far atrium taller than
-  its probe planes still shows a seam after step 3.
-- The exact-visibility lattice (option 8) as the coarse levels' test once rays
-  are a GPU budget.
-
-## Implementation brief
-
-For one lane, in `src/Puck.SdfVm`, `src/Puck.SdfVm.Model`, the irradiance
-shader and the two test projects that hold the laws. Each step has the check
-that shows it worked; the lane runs the scratch harness described above as a
-law in `tests/Puck.SdfVm.Tests` (a four-storey hall, far receivers, counts of
-exact-blocked answering corners and over-occluded clear corners) and keeps it.
-
-1. **Coverage per level.** Add the coarse ramp beside the finest one in
-   `SdfMeshIrradianceProbe` (generated into `sdf-render.hlsli`), thread the
-   ramp through `Visibility`/`sdfMeshProbeDepthVisibility` from `Gather` and
-   `sdfMeshProbesGather` by level. Check: the hall law's exact-blocked
-   answering corners at the coarse level read zero and its over-occluded clear
-   corners stay within a few percent; the existing laws in
-   `SdfMeshIrradianceLawTests` (the sparse sphere, the thin slab) unchanged,
-   since the finest ramp is untouched.
-2. **Share-blended selection.** Rewrite `Select` and the rolled loop in
-   `sdfMeshProbesAt` to accumulate stages by share into two cages;
-   `SdfMeshProbes` and `Corners` carry sixteen; `measured` becomes a share.
-   Check: the device law over sixteen slots and the share on both backends;
-   `world.probe`'s first line prints the chosen stage's share beside `level=`.
-3. **Per-axis level table.** `Layout` as a table of (spacing xyz, dims) per
-   level per tier with today's values, then the default table above;
-   `WriteMeshIrradiance` and the pass block's level rows carry the spacings;
-   `Lattice`, `Beyond`, `SurfaceReachOf`, the facing fade, `Place`, `Affected`
-   and `WindowLow` take the vector. Check: `puck mesh identity --against` shows
-   the bake's bytecode unchanged (the irradiance shader is outside the bake's
-   closure); the hall law reads `level=1` with answering corners on every
-   storey; `world.budget` prints the new counts and bytes; the debug-world
-   captures above.
-4. **Documents.** The [mesh-GI reference](../../.claude/skills/rendering/references/mesh-gi.md)'s
-   level and gather paragraphs, the [GI decision](../decisions/rendering.md#global-illumination)'s
-   "Coarser levels supply reach" paragraph, the handbook's volume section and
-   the far-field item in [open items](open-items.md#lighting-and-gi), each
-   rewritten to the landed rule; then this memo's recommendation section is
-   deleted and the decision cites the research table that stays here.
 
 ---
 

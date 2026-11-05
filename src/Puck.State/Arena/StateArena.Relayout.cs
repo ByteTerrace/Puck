@@ -223,5 +223,6 @@ public sealed partial class StateArena {
             array: m_rowVersions,
             value: next
         );
+        MarkEveryRowMoved();
     }
 }

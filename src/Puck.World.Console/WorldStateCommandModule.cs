@@ -38,7 +38,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
     private static readonly CommandForms WorldStateForms = CommandForms.Of(verb: "world.state", "[<row> [<key>]]");
     private static readonly CommandForms WorldStateCellSetForms = CommandForms.Of(verb: "world.state.cell.set", "<row> <key> <value> [add]", "<row> <key> <text...>", "<row> <key> <base64url-vector>");
     private static readonly CommandForms WorldRuleTraceForms = CommandForms.Of(verb: "world.rule.trace", $"<rule> [evaluations 1..{RuleEvaluator.MaxTraceEvaluations}]", "off");
-    private static readonly CommandForms WorldBudgetRulesForms = CommandForms.Of(verb: "world.budget.rules", "[top]", "--why <rule>");
+    private static readonly CommandForms WorldBudgetRulesForms = CommandForms.Of(verb: "world.budget.rules", "[top]", "--why <rule>", "--spent [top]");
     private static readonly CommandForms WorldRuleHazardsForms = CommandForms.Of(verb: "world.rule.hazards", "[top]");
     private static readonly CommandForms WorldStateCellRemoveForms = CommandForms.Of(verb: "world.state.cell.remove", "<row> <key>");
     private static readonly CommandForms WorldSymmetryForms = CommandForms.Of(verb: "world.symmetry", $"<node 0..{(SymmetryLattice.NodeCount - 1)}> [other 0..{(SymmetryLattice.NodeCount - 1)}]");
@@ -719,7 +719,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.budget.rules",
-            description: $"Lists every rule's and interaction's worst-case work per tick, costliest first (Immediate): {WorldBudgetRulesForms.Spelling}. Each line carries the evaluation multiplier (a forEach row's capacity, an interaction's carrier or pair count), the firings a rule's maxFirings bounds it to when that is fewer (firings=), what one sweep costs before its first evaluation (setup), what one evaluation costs whether or not its gate holds (check), what one firing costs (fire), the line's total, and — when the gate pins literal cells to ranges — the cells and ranges it prices exclusively under; a trailing total line reads work=<sum of the exclusion tree> of <RuleCapacity.MaxWorkUnitsPerTick>, followed by the reference model, evidence digest, cycle bound, allowance, and certification status. '--why <rule>' prints one line's derivation terms instead: the multiplier's source and every effect's own cost.",
+            description: $"Lists every rule's and interaction's worst-case work per tick, costliest first (Immediate): {WorldBudgetRulesForms.Spelling}. Each line carries the evaluation multiplier (a forEach row's capacity, an interaction's carrier or pair count), the firings a rule's maxFirings bounds it to when that is fewer (firings=), what one sweep costs before its first evaluation (setup), what one evaluation costs whether or not its gate holds (check), what one firing costs (fire), the line's total, and — when the gate pins literal cells to ranges — the cells and ranges it prices exclusively under; a trailing total line reads work=<sum of the exclusion tree> of <RuleCapacity.MaxWorkUnitsPerTick>, followed by the reference model, evidence digest, cycle bound, allowance, and certification status. '--why <rule>' prints one line's derivation terms instead: the multiplier's source and every effect's own cost, then the rule's read schedule (the rows and host facts it depends on, and why it is volatile when it is). '--spent [top]' prints the measured sheet instead: per rule, the visits, the ticks a due list left it alone (elided=), the evaluations, skips and firings the evaluator ran since the latches began, and the work units they spent at the same prices (setup per visit, check per evaluation that ran, fire per firing), costliest first, each with its schedule; its first line sums them over the ticks counted.",
             forms: WorldBudgetRulesForms,
             handler: (context, args) => {
                 if (!authority.TryResolveServer(
@@ -737,13 +737,23 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
                     other: "--why"
                 )
                 ) {
-                    return ((args.Count == 2)
-                        ? DescribeWhy(
-                            definition: server.Definition,
-                            name: args[1].ToString()
-                        )
-                        : WorldBudgetRulesForms.Refuse(args: in args)
-                    );
+                    if (args.Count != 2) {
+                        return WorldBudgetRulesForms.Refuse(args: in args);
+                    }
+
+                    var why = DescribeWhy(definition: server.Definition, name: args[1].ToString());
+                    var schedules = server.RuleHost.DescribeSchedules(name: args[1].ToString());
+
+                    return ((why.IsError || (schedules.Count == 0))
+                        ? why
+                        : new CommandResult(Output: string.Join(separator: Environment.NewLine, values: [why.Output, .. schedules])));
+                }
+                if ((args.Count >= 1) && args.Is(index: 0, value: "--spent")) {
+                    var spentTop = int.MaxValue;
+
+                    return (((args.Count > 2) || ((args.Count == 2) && (!args.TryInt(index: 1, value: out spentTop) || (spentTop < 1))))
+                        ? WorldBudgetRulesForms.Refuse(args: in args)
+                        : new CommandResult(Output: string.Join(separator: Environment.NewLine, values: server.RuleHost.DescribeSpent(top: spentTop))));
                 }
                 var top = int.MaxValue;
 

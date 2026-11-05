@@ -245,22 +245,30 @@ public sealed class SdfUpdateRateReadings {
     private readonly Lock m_gate = new();
     private readonly Dictionary<SdfUpdateRates, List<Reading>> m_latest = [];
 
-    /// <summary>Replaces a lever's readings with the latest frame's, copying them into storage the next publish of the
-    /// lever reuses.</summary>
-    /// <param name="lever">The lever.</param>
-    /// <param name="readings">The items the lever rated, in report order.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="readings"/> is <see langword="null"/>.</exception>
-    public void Publish(SdfUpdateRates lever, IReadOnlyCollection<Reading> readings) {
-        ArgumentNullException.ThrowIfNull(argument: readings);
+    /// <summary>One producer's reusable readings. Publication transfers its private storage under the reader lock
+    /// and takes back the previous storage. No mutable published list escapes. Use a buffer from one thread.</summary>
+    public sealed class Buffer {
+        private List<Reading> m_items = [];
 
-        lock (m_gate) {
-            if (!m_latest.TryGetValue(key: lever, value: out var latest)) {
-                latest = [];
-                m_latest[lever] = latest;
+        /// <summary>Clears the readings being prepared.</summary>
+        public void Clear() => m_items.Clear();
+        /// <summary>Adds a reading.</summary>
+        /// <param name="item">The reading.</param>
+        public void Add(Reading item) => m_items.Add(item);
+        /// <summary>Orders the prepared readings by name.</summary>
+        public void Sort() => m_items.Sort(static (left, right) => string.CompareOrdinal(left.Name, right.Name));
+        /// <summary>Publishes the prepared readings and takes back reusable storage, without copying the rows.</summary>
+        /// <param name="readings">The destination.</param>
+        /// <param name="lever">The lever.</param>
+        public void PublishTo(SdfUpdateRateReadings readings, SdfUpdateRates lever) {
+            ArgumentNullException.ThrowIfNull(readings);
+
+            lock (readings.m_gate) {
+                var previous = readings.m_latest.GetValueOrDefault(lever);
+                readings.m_latest[lever] = m_items;
+                m_items = previous ?? [];
             }
-
-            latest.Clear();
-            latest.AddRange(collection: readings);
+            m_items.Clear();
         }
     }
     /// <summary>Returns a lever's latest readings.</summary>

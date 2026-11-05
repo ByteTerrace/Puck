@@ -942,7 +942,13 @@ public sealed partial class WorldPopulation {
                 }
             }
         }
+
+        PlacementTableVersion++;
     }
+
+    /// <summary>Gets a count that moves every time the placement table <see cref="BodyForPlacementOrdinal"/> reads is
+    /// rebuilt, so a version derived from which body inhabits a placement knows the answer may have changed.</summary>
+    public ulong PlacementTableVersion { get; private set; }
 
     /// <summary>Resolves the <c>placement:&lt;id&gt;</c> body-reference token's compiled ordinal (the placement's own
     /// position in <see cref="WorldDefinition.Placements"/>) to the body index currently inhabiting it, or -1 when

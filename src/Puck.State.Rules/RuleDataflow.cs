@@ -80,33 +80,62 @@ public static class RuleDataflow {
         );
     }
 
+    /// <summary>Appends everything one judgement of a rule observes — its locals (declared and implicit, all evaluated
+    /// before the gate), its live-row selection and its gate, never its effects, which run only once the verdict is
+    /// in — as the rows it reads and the facts it observes: what a read schedule is built from.</summary>
+    /// <param name="rule">The compiled rule.</param>
+    /// <param name="reads">The read set being collected.</param>
+    /// <param name="facts">The needs being built, with every facet-bearing fact instance recorded.</param>
+    /// <param name="deadline">The gate's deadline conjunct, whose tick side is the schedule's wake rather than a read,
+    /// or <see langword="null"/>.</param>
+    public static void CollectJudgement(CompiledRule rule, List<CellAccess> reads, RuleNeedsBuilder facts, RuleDeadline? deadline = null) {
+        ArgumentNullException.ThrowIfNull(argument: rule);
+        ArgumentNullException.ThrowIfNull(argument: reads);
+        ArgumentNullException.ThrowIfNull(argument: facts);
+
+        for (var index = 0; (index < rule.Gate.Length); index++) {
+            var token = rule.Gate[index];
+            var deadlineHere = ((deadline is not null) && (deadline.Token == index));
+
+            if (!deadlineHere || !deadline!.TickOnLeft) {
+                token.LeftSource.CollectReads(into: reads);
+                CollectSourceFacts(into: facts, source: token.LeftSource);
+            }
+            if (!deadlineHere || deadline!.TickOnLeft) {
+                token.RightSource.CollectReads(into: reads);
+                CollectSourceFacts(into: facts, source: token.RightSource);
+            }
+        }
+        foreach (var local in (rule.Locals ?? [])) {
+            CollectExpression(into: reads, tokens: local.Expression);
+            CollectExpressionSchedulingFacts(into: facts, tokens: local.Expression);
+        }
+        foreach (var live in (rule.Zones?.References ?? [])) {
+            live.CollectReads(into: reads);
+            live.CollectFacts(into: facts);
+        }
+    }
+
+    /// <summary>Appends what one value source observes, its key indirections included: the walk a schedule is built
+    /// from.</summary>
+    /// <param name="source">The compiled value source.</param>
+    /// <param name="into">The needs being built.</param>
+    public static void CollectSourceFacts(in CompiledValueSource source, RuleNeedsBuilder into) {
+        ArgumentNullException.ThrowIfNull(argument: into);
+
+        CollectOperandFacts(includeKeyDependencies: true, into: into, operand: source.Operand);
+        CollectExpressionSchedulingFacts(into: into, tokens: source.Expression);
+    }
+
     private static void CollectExpressionFacts(CompiledExpressionToken[]? tokens, RuleNeedsBuilder into, bool includeKeyDependencies) {
         ArgumentNullException.ThrowIfNull(argument: into);
 
         foreach (var token in (tokens ?? [])) {
-            into.AddFact(fact: token.Operand);
-            // Tick is a library operand, not an effect or facet, so its compilation-time marker is not carried by
-            // ICompiledFact. This walk also builds local memo schedules after compilation, where it must restore
-            // that volatility from the token itself.
-            if (token.Operand is TickOperand) {
-                into.MarkReadsTick();
-            }
-            // A local operand has no facet of its own; its dependency is the earlier binding it reads. Follow it
-            // here as CollectExpression already does for row reach, so a memoized alias stays volatile whenever
-            // its source is volatile and advertises the source's host facets.
-            if (token.Operand is LocalOperand { Source: { } source }) {
-                CollectExpressionFacts(
-                    includeKeyDependencies: includeKeyDependencies,
-                    into: into,
-                    tokens: source.Expression
-                );
-            }
-            if (includeKeyDependencies && (token.Operand is IStateAddressedOperand { KeyFrom: { } keyFrom })) {
-                CompiledCellRef.CollectFacts(
-                    into: into,
-                    reference: keyFrom
-                );
-            }
+            CollectOperandFacts(
+                includeKeyDependencies: includeKeyDependencies,
+                into: into,
+                operand: token.Operand
+            );
             if (token.Fold is { } fold) {
                 CollectExpressionFacts(
                     includeKeyDependencies: includeKeyDependencies,
@@ -121,6 +150,36 @@ public static class RuleDataflow {
                     tokens: call.Body
                 );
             }
+        }
+    }
+    // One operand's observations: its own fact, the tick and the search ply (library operands whose compile-time
+    // markers ICompiledFact does not carry), and every program it evaluates inside itself — a local's source, a
+    // pattern's token expression, a history read's age — so a schedule built from this walk is volatile wherever its
+    // operand reads are.
+    private static void CollectOperandFacts(IRuleOperand? operand, RuleNeedsBuilder into, bool includeKeyDependencies) {
+        into.AddFact(fact: operand);
+        switch (operand) {
+            case TickOperand:
+                into.MarkReadsTick();
+                break;
+            case SearchPlyOperand:
+                into.MarkReadsSearchPly();
+                break;
+            case LocalOperand { Source: { } source }:
+                CollectExpressionFacts(includeKeyDependencies: includeKeyDependencies, into: into, tokens: source.Expression);
+                break;
+            case PatternOperand { TokenExpression: { } tokens }:
+                CollectExpressionFacts(includeKeyDependencies: includeKeyDependencies, into: into, tokens: tokens);
+                break;
+            case HistoryOperand { AgeExpression: { } age }:
+                CollectExpressionFacts(includeKeyDependencies: includeKeyDependencies, into: into, tokens: age);
+                break;
+        }
+        if (includeKeyDependencies && (operand is IStateAddressedOperand { KeyFrom: { } keyFrom })) {
+            CompiledCellRef.CollectFacts(
+                into: into,
+                reference: keyFrom
+            );
         }
     }
 

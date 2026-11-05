@@ -2,7 +2,6 @@ using System.Globalization;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
-using System.Text.RegularExpressions;
 using Puck.Abstractions.Cameras;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
@@ -19,14 +18,17 @@ namespace Puck.World.Tests;
 /// read the same probes with the same weights. A storeyed hall at the High tier is traced and published on the CPU; the
 /// shipped gather then runs on both hardware backends over the published table words and the pass-block parameters
 /// <see cref="SdfFrameBlock.WriteMeshIrradiance"/> packs, at receivers on floors, slab undersides, walls, an exhibit, an end
-/// wall just past the finest window, the inside of a sealed room no coarser probe sees and surfaces past every window. Each receiver must answer from the same eight slots
-/// (the level the CPU chose and its cells), each corner's weight within <see cref="WeightTolerance"/> of the CPU's, and as
-/// measured or not alike.</summary>
+/// wall just past the finest window, the inside of a sealed room, surfaces past every window, and the far storeys of a
+/// four-storey annex (4.5 m storeys, where an isotropic 8 m level would hold a probe plane in every other storey), whose
+/// floors, ceilings and walls blend the storey level's share with another stage's, including walls under the roof slab
+/// a coarse corner reaches across. Each receiver must answer from the same sixteen slots (the chosen and remainder stages' levels and cells), each
+/// slot's weight within <see cref="WeightTolerance"/> of the CPU's, with the same share and each stage measured or not
+/// alike.</summary>
 [SupportedOSPlatform("windows10.0.15063")]
 [Trait("Category", "Gpu")]
-public sealed partial class SdfMeshIrradianceGatherDeviceLawTests {
+public sealed class SdfMeshIrradianceGatherDeviceLawTests {
     private const string Kernel = "sdf-mesh-irradiance.comp";
-    private const int Rows = 5;
+    private const int Rows = 9;
     // Float rounding apart from the CPU's double octahedral encode and the record's FP16 offsets.
     private const float WeightTolerance = 0.002f;
 
@@ -45,48 +47,45 @@ public sealed partial class SdfMeshIrradianceGatherDeviceLawTests {
 
     private readonly record struct Receiver(Vector3 Point, Vector3 Normal);
 
-    [GeneratedRegex(pattern: @"level=(\d) measured=(\d)")]
-    private static partial Regex LevelPattern();
-
     private static void Verify(GpuDeviceServices services, string extension) {
         var volume = new SdfMeshIrradiance();
         var (parameters, words) = Trace(volume: volume, frame: Hall());
         var receivers = Receivers();
         var results = Run(extension: extension, parameters: parameters, receivers: receivers, services: services, words: words);
-        var cells = new (int X, int Y, int Z)[8];
-        var weights = new float[8];
+        var cells = new (int X, int Y, int Z)[SdfMeshIrradiance.GatherSlots];
+        var weights = new float[SdfMeshIrradiance.GatherSlots];
         var levels = new int[SdfMeshIrradianceProbe.Levels];
+        var blended = 0;
 
         Assert.True(condition: parameters.Window(level: 0).Present && parameters.Middle.Present && parameters.Far.Present);
         for (var level = 1; (level < levels.Length); level++) { levels[level] = (levels[(level - 1)] + parameters.Window(level: (level - 1)).Count); }
         for (var index = 0; (index < receivers.Length); index++) {
             var receiver = receivers[index];
 
-            Assert.True(condition: volume.TryGather(cells: cells, normal: receiver.Normal, point: receiver.Point, weights: weights));
+            Assert.True(condition: volume.TryGather(cells: cells, normal: receiver.Normal, point: receiver.Point, reports: default, selection: out var selection, weights: weights));
 
-            var match = LevelPattern().Match(input: volume.DescribeProbes(normal: receiver.Normal, point: receiver.Point)[0]);
+            var label = string.Create(provider: CultureInfo.InvariantCulture, handler: $"receiver {index} at {receiver.Point} facing {receiver.Normal}, {selection}");
+            var flags = results[((8 * receivers.Length) + index)];
 
-            Assert.True(condition: match.Success);
-
-            var level = int.Parse(s: match.Groups[1].Value, provider: CultureInfo.InvariantCulture);
-            var measured = (match.Groups[2].Value == "1");
-            var window = parameters.Window(level: level);
-            var label = string.Create(provider: CultureInfo.InvariantCulture, handler: $"receiver {index} at {receiver.Point} facing {receiver.Normal}, level {level}");
-
-            for (var corner = 0; (corner < 8); corner++) {
+            if (selection.RemainderLevel >= 0) { blended++; }
+            for (var corner = 0; (corner < SdfMeshIrradiance.GatherSlots); corner++) {
                 var gpuWeight = results[(((corner >> 2) * receivers.Length) + index)][corner & 3];
-                var gpuSlot = results[(((2 + (corner >> 2)) * receivers.Length) + index)][corner & 3];
+                var gpuSlot = results[(((4 + (corner >> 2)) * receivers.Length) + index)][corner & 3];
+                var level = ((corner < 8) ? selection.Level : selection.RemainderLevel);
                 var cell = cells[corner];
-                var slot = ((weights[corner] > 0f) ? (levels[level] + SdfMeshIrradiance.SlotOf(dims: window.Dims, x: cell.X, y: cell.Y, z: cell.Z)) : -1);
+                var slot = ((weights[corner] > 0f) ? (levels[level] + SdfMeshIrradiance.SlotOf(dims: parameters.Window(level: level).Dims, x: cell.X, y: cell.Y, z: cell.Z)) : -1);
 
                 Assert.True(condition: (MathF.Abs(x: (gpuWeight - weights[corner])) <= WeightTolerance),
-                    userMessage: $"{label}: corner {corner} weighs {gpuWeight} on the GPU and {weights[corner]} on the CPU");
+                    userMessage: $"{label}: slot {corner} weighs {gpuWeight} on the GPU and {weights[corner]} on the CPU");
                 if ((weights[corner] > WeightTolerance) || (gpuWeight > WeightTolerance)) {
-                    Assert.True(condition: (gpuSlot == slot), userMessage: $"{label}: corner {corner} reads slot {gpuSlot} on the GPU and {slot} on the CPU");
+                    Assert.True(condition: (gpuSlot == slot), userMessage: $"{label}: slot {corner} reads probe {gpuSlot} on the GPU and {slot} on the CPU");
                 }
             }
-            Assert.True(condition: ((results[((4 * receivers.Length) + index)].X == 1f) == measured), userMessage: $"{label}: measured differs");
+            Assert.True(condition: (MathF.Abs(x: (flags.X - selection.Share)) <= WeightTolerance), userMessage: $"{label}: share {flags.X} on the GPU");
+            Assert.True(condition: ((flags.Y == 1f) == selection.Measured), userMessage: $"{label}: measured differs");
+            Assert.True(condition: ((flags.Z == 1f) == selection.RemainderMeasured), userMessage: $"{label}: remainder measured differs");
         }
+        Assert.True(condition: (blended > 0), userMessage: "no receiver blends two stages");
     }
     // Receivers over the hall's surfaces, an exhibit, the end wall just past the finest window, and floors past each window.
     private static Receiver[] Receivers() {
@@ -119,7 +118,35 @@ public sealed partial class SdfMeshIrradianceGatherDeviceLawTests {
         foreach (var x in new[] { 30f, 70f, 140f, 400f, 2000f }) {
             receivers.Add(item: new Receiver(Normal: Vector3.UnitY, Point: new Vector3(x: x, y: 0f, z: 0f)));
         }
+        // The annex's far storeys: floors, ceilings and walls of its second storey, and the walls of its top storey under
+        // the roof slab.
+        for (var x = 40.7f; (x < AnnexEnd); x += 4.6f) {
+            receivers.Add(item: new Receiver(Normal: Vector3.UnitY, Point: new Vector3(x: x, y: AnnexStorey, z: (AnnexMiddle + 1.3f))));
+            receivers.Add(item: new Receiver(Normal: -Vector3.UnitY, Point: new Vector3(x: x, y: ((2f * AnnexStorey) - 0.3f), z: (AnnexMiddle - 2.1f))));
+            foreach (var y in new[] { (AnnexStorey + 1.3f), (AnnexStorey + 3.1f), ((3f * AnnexStorey) + 2.1f), ((3f * AnnexStorey) + 3.0f) }) {
+                receivers.Add(item: new Receiver(Normal: Vector3.UnitZ, Point: new Vector3(x: x, y: y, z: (AnnexMiddle - 6f))));
+                receivers.Add(item: new Receiver(Normal: -Vector3.UnitZ, Point: new Vector3(x: x, y: y, z: (AnnexMiddle + 6f))));
+            }
+        }
         return receivers.ToArray();
+    }
+
+    // A four-storey annex beside the hall, its storeys 4.5 m apart over 0.3 m slabs, 12 m wide, from x = 34 to AnnexEnd.
+    private const float AnnexStorey = 4.5f;
+    private const float AnnexMiddle = 26f;
+    private const float AnnexStart = 34f;
+    private const float AnnexEnd = 70f;
+
+    private static IEnumerable<SdfMeshDraw> Annex() {
+        for (var storey = 0; (storey <= 4); storey++) {
+            var top = (storey * AnnexStorey);
+
+            yield return Draw(low: new Vector3(x: (AnnexStart - 0.3f), y: (top - 0.3f), z: (AnnexMiddle - 6.3f)), high: new Vector3(x: (AnnexEnd + 0.3f), y: top, z: (AnnexMiddle + 6.3f)));
+        }
+        yield return Draw(low: new Vector3(x: (AnnexStart - 0.3f), y: 0f, z: (AnnexMiddle - 6.3f)), high: new Vector3(x: (AnnexEnd + 0.3f), y: (4f * AnnexStorey), z: (AnnexMiddle - 6f)));
+        yield return Draw(low: new Vector3(x: (AnnexStart - 0.3f), y: 0f, z: (AnnexMiddle + 6f)), high: new Vector3(x: (AnnexEnd + 0.3f), y: (4f * AnnexStorey), z: (AnnexMiddle + 6.3f)));
+        yield return Draw(low: new Vector3(x: (AnnexStart - 0.3f), y: 0f, z: (AnnexMiddle - 6f)), high: new Vector3(x: AnnexStart, y: (4f * AnnexStorey), z: (AnnexMiddle + 6f)));
+        yield return Draw(low: new Vector3(x: AnnexEnd, y: 0f, z: (AnnexMiddle - 6f)), high: new Vector3(x: (AnnexEnd + 0.3f), y: (4f * AnnexStorey), z: (AnnexMiddle + 6f)));
     }
 
     // The end wall's inner face, just past the High tier's finest window about a camera at the origin.
@@ -182,6 +209,7 @@ public sealed partial class SdfMeshIrradianceGatherDeviceLawTests {
                 Draw(low: new Vector3(x: 63f, y: 0f, z: 0f), high: new Vector3(x: 63.3f, y: 3f, z: 3.3f)),
                 Draw(low: new Vector3(x: 60.3f, y: 0f, z: 0f), high: new Vector3(x: 63f, y: 3f, z: 0.3f)),
                 Draw(low: new Vector3(x: 60.3f, y: 0f, z: 3f), high: new Vector3(x: 63f, y: 3f, z: 3.3f)),
+                .. Annex(),
             ],
         };
     }
@@ -207,10 +235,14 @@ public sealed partial class SdfMeshIrradianceGatherDeviceLawTests {
 
         var volumeOffset = ((int)SdfWorldInterfaces.WorldParameters.BlockOffsetOf(member: SdfWorldPackage.MeshIrradianceVolume));
         var levelsOffset = ((int)SdfWorldInterfaces.WorldParameters.BlockOffsetOf(member: SdfWorldPackage.MeshIrradianceLevels));
-        var packed = new uint[(4 * (1 + SdfMeshIrradianceProbe.Levels))];
+        var spacingsOffset = ((int)SdfWorldInterfaces.WorldParameters.BlockOffsetOf(member: SdfWorldPackage.MeshIrradianceSpacings));
+        var coveragesOffset = ((int)SdfWorldInterfaces.WorldParameters.BlockOffsetOf(member: SdfWorldPackage.MeshIrradianceCoverages));
+        var packed = new uint[(4 * (1 + (3 * SdfMeshIrradianceProbe.Levels)))];
 
-        MemoryMarshal.Cast<byte, uint>(span: block.AsSpan(length: 16, start: volumeOffset)).CopyTo(destination: packed);
+        MemoryMarshal.Cast<byte, uint>(span: block.AsSpan(length: sizeof(uint), start: volumeOffset)).CopyTo(destination: packed);
         MemoryMarshal.Cast<byte, uint>(span: block.AsSpan(length: (16 * SdfMeshIrradianceProbe.Levels), start: levelsOffset)).CopyTo(destination: packed.AsSpan(start: 4));
+        MemoryMarshal.Cast<byte, uint>(span: block.AsSpan(length: (16 * SdfMeshIrradianceProbe.Levels), start: spacingsOffset)).CopyTo(destination: packed.AsSpan(start: (4 * (1 + SdfMeshIrradianceProbe.Levels))));
+        MemoryMarshal.Cast<byte, uint>(span: block.AsSpan(length: (16 * SdfMeshIrradianceProbe.Levels), start: coveragesOffset)).CopyTo(destination: packed.AsSpan(start: (4 * (1 + (2 * SdfMeshIrradianceProbe.Levels)))));
 
         var points = new Vector4[(2 * receivers.Length)];
 
