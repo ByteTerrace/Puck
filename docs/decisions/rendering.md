@@ -1097,6 +1097,10 @@ reference, and CPU nearest-surface and short clearance queries still place probe
 Visibility is an any-hit query: GPU `sdfProbeOccluded` and CPU `Unblocked`
 stop at the first accepted triangle, sharing their nearest-hit walk's node
 and triangle tests. Shadows, light bits and camera visibility use this door.
+The shared scene builder certifies each hierarchy at no more than
+`SdfMeshProbeTrace.StackDepth - 2` edges, forcing median splits when necessary.
+A hierarchy that cannot fit is refused by name. CPU and GPU walks count stack
+overflow as an assertion failure rather than silently ending a walk.
 The budget diagnostic samples median and oldest lighting age per level so a
 coarse window cannot hide the finest window's response time.
 

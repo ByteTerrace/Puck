@@ -275,10 +275,7 @@ CPU's `ILeaves` any-hit path, the device law
 is `sdfProbeIntersect`'s loop with an early return, sharing its node and
 triangle tests.
 
-**Steps and checks.** (2) The depth bound in the builder. Check: a
-law building a hierarchy over a deliberately degenerate triangle set reaches
-the bound and still answers every ray as the brute-force nearest test does;
-`puck mesh scene` on the debug world prints the deepest hierarchy. (3) Morton
+**Steps and checks.** (3) Morton
 order within a band. Check: `GpuTraceNanoseconds` per ray for a full High
 window, hits unchanged by the device law.
 

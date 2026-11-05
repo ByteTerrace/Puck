@@ -147,7 +147,7 @@ public static class MeshSceneCommand {
         var clock = Stopwatch.StartNew();
         var scene = build()!;
 
-        output.WriteLine(value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"  {label}: seconds={clock.Elapsed.TotalSeconds:0.000} cpu-seconds={(Processor() - cpu):0.000} triangles={scene.TriangleCount} geometries={scene.GeometryCount} built={scene.GeometriesBuilt} built-triangles={scene.TrianglesBuilt} reused={scene.GeometriesReused} retained-triangles={scene.TrianglesRetained}"));
+        output.WriteLine(value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"  {label}: seconds={clock.Elapsed.TotalSeconds:0.000} cpu-seconds={(Processor() - cpu):0.000} triangles={scene.TriangleCount} geometries={scene.GeometryCount} built={scene.GeometriesBuilt} built-triangles={scene.TrianglesBuilt} reused={scene.GeometriesReused} retained-triangles={scene.TrianglesRetained} top-depth={scene.TopDepth} geometry-depth={scene.GeometryDepth} median-splits={scene.MedianSplits}"));
         return scene;
     }
     // One sweep of a High-tier window's probes about a point, as the volume traces it: each probe's rays spread over the

@@ -19,6 +19,14 @@ Boolean visibility uses `sdfProbeOccluded` through the same `sdfProbeWalk` node
 and triangle tests as `sdfProbeIntersect`, returning at the first accepted
 triangle. `probeClear` uses that entry for shadows, light bits and the meter.
 The CPU twin is `Unblocked` through `Walk` and `ILeaves` any-hit leaves.
+`Hierarchy.BuildNode` bounds both hierarchies to `StackDepth - 2` edges from
+the root, switching to median splits when only a balanced subtree fits and
+refusing a named hierarchy that cannot fit. Walks check before pushing and
+count `sdf.mesh-gi.stack-overflow`; CPU overflow also throws. GPU jobs reset
+and read their output buffer's final assertion word under the job's fence.
+`puck mesh scene` reports top/geometry depth and forced median splits. The
+degenerate-bounds scene law reaches depth 62 and compares nearest and any hits
+with brute force, with zero overflow.
 `world.budget` samples per-level median and maximum lighting ages when read,
 in addition to the work-list cycle's combined ages.
 

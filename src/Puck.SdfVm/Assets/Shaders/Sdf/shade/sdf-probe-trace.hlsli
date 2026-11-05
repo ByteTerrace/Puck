@@ -9,6 +9,13 @@
 groupshared uint sdfProbeTopStack[SDF_PROBE_STACK_DEPTH * SDF_PROBE_GROUP_SIZE];
 groupshared uint sdfProbeGeometryStack[SDF_PROBE_STACK_DEPTH * SDF_PROBE_GROUP_SIZE];
 
+// The service resets and reads the output buffer's final assertion word under this job's fence.
+void sdfProbeStackOverflow() {
+    uint words, stride;
+    sdfProbeHitsRW.GetDimensions(words, stride);
+    InterlockedAdd(sdfProbeHitsRW[words - 1], 1u);
+}
+
 float3 sdfProbeVector(uint word) {
     return asfloat(uint3(sdfProbeScene[word], sdfProbeScene[word + 1], sdfProbeScene[word + 2]));
 }
@@ -80,9 +87,12 @@ bool sdfProbeWalk(float3 origin, float3 direction, float maximum, uint lane, boo
         if (count == 0) {
             uint first, second;
             sdfProbeChildren(node, origin, inverse, distance, first, second);
+            if (top + (first != 0 ? 1u : 0u) + (second != 0 ? 1u : 0u) > SDF_PROBE_STACK_DEPTH) {
+                sdfProbeStackOverflow();
+                return anyHit;
+            }
             if (second != 0) { sdfProbeTopStack[(top++) * SDF_PROBE_GROUP_SIZE + lane] = second; }
             if (first != 0) { sdfProbeTopStack[(top++) * SDF_PROBE_GROUP_SIZE + lane] = first; }
-            if (top > SDF_PROBE_STACK_DEPTH - 2) { break; }
             continue;
         }
         uint entry = link >> SDF_PROBE_NODE_COUNT_BITS;
@@ -102,9 +112,12 @@ bool sdfProbeWalk(float3 origin, float3 direction, float maximum, uint lane, boo
                 if (innerCount == 0) {
                     uint first, second;
                     sdfProbeChildren(inner, localOrigin, localInverse, distance, first, second);
+                    if (depth + (first != 0 ? 1u : 0u) + (second != 0 ? 1u : 0u) > SDF_PROBE_STACK_DEPTH) {
+                        sdfProbeStackOverflow();
+                        return anyHit;
+                    }
                     if (second != 0) { sdfProbeGeometryStack[(depth++) * SDF_PROBE_GROUP_SIZE + lane] = second; }
                     if (first != 0) { sdfProbeGeometryStack[(depth++) * SDF_PROBE_GROUP_SIZE + lane] = first; }
-                    if (depth > SDF_PROBE_STACK_DEPTH - 2) { break; }
                     continue;
                 }
                 [loop] for (uint t = 0; t < innerCount; t++) {

@@ -1,5 +1,6 @@
 using System.Numerics;
 using System.Runtime.CompilerServices;
+using Puck.Abstractions.Counting;
 
 namespace Puck.SdfVm;
 
@@ -51,6 +52,10 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
         GeometriesBuilt = source.GeometriesBuilt;
         TrianglesBuilt = source.TrianglesBuilt;
         Materials = source.Materials;
+        Counters = source.Counters;
+        TopDepth = source.TopDepth;
+        GeometryDepth = source.GeometryDepth;
+        MedianSplits = source.MedianSplits;
         m_meshClaims = source.m_meshClaims.Clone();
         m_cachedMeshClaims = new([], cached: true);
     }
@@ -90,6 +95,14 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
     public int GeometriesReused => (GeometryCount - GeometriesBuilt);
     /// <summary>Gets the triangles of the geometry the scene keeps for a later scene though no draw of its own uses it.</summary>
     public long TrianglesRetained { get; }
+    /// <summary>Deepest top-level leaf, with the root at depth zero.</summary>
+    public int TopDepth { get; }
+    /// <summary>Deepest geometry leaf, with each geometry's root at depth zero.</summary>
+    public int GeometryDepth { get; }
+    /// <summary>Splits forced to the median to keep the hierarchy within the shared traversal stack.</summary>
+    public int MedianSplits { get; }
+    /// <summary>Traversal assertion counters, shared with the owning volume when built for presentation.</summary>
+    public WorkCounterSet Counters { get; private init; } = null!;
 
     /// <summary>Gets the managed array payload of this scene's hierarchy, including retained geometry hierarchies.
     /// Excludes object headers, dictionaries, mesh arrays shared with the bake, and temporary build workspace.</summary>
@@ -122,10 +135,11 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
     /// <param name="draws">The frame's mesh draws.</param>
     /// <param name="previous">The scene the draws change, whose geometries the new scene takes rather than builds, or
     /// <see langword="null"/> to build every geometry.</param>
+    /// <param name="counters">The owning volume's traversal counters, or null for a scene-local counter set.</param>
     /// <returns>The scene, empty when no static draw holds a triangle. An empty scene has no occluders and can still
     /// supply measured sky irradiance; it is distinct from a scene not built yet.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="draws"/> is <see langword="null"/>.</exception>
-    public static SdfMeshIrradianceScene Build(IReadOnlyList<SdfMeshDraw> draws, SdfMeshIrradianceScene? previous = null) {
+    public static SdfMeshIrradianceScene Build(IReadOnlyList<SdfMeshDraw> draws, SdfMeshIrradianceScene? previous = null, WorkCounterSet? counters = null) {
         ArgumentNullException.ThrowIfNull(argument: draws);
 
         var geometries = new Dictionary<GeometryKey, Geometry>();
@@ -182,7 +196,7 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
             instances: instances,
             retained: Retain(geometries: geometries, previous: previous),
             trianglesBuilt: trianglesBuilt
-        ) { Materials = order };
+        ) { Materials = order, Counters = counters ?? new(SdfMeshIrradiance.SourceName, [SdfMeshIrradiance.StackOverflow]) };
     }
 
     /// <summary>Gets the program material ids the scene's triangles carry, in increasing order: the materials a ray that
@@ -241,9 +255,9 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
             }
         }
 
-        var (nodes, order, _) = ((entries.Count == 0)
-            ? (Array.Empty<Node>(), Array.Empty<int>(), Array.Empty<int>())
-            : Hierarchy.Build(braid: 0, highs: [.. highs], leaf: 1, lows: [.. lows]));
+        var (nodes, order, _, depth, medians) = ((entries.Count == 0)
+            ? (Array.Empty<Node>(), Array.Empty<int>(), Array.Empty<int>(), 0, 0)
+            : Hierarchy.Build(braid: 0, highs: [.. highs], leaf: 1, lows: [.. lows], name: "mesh GI static scene"));
 
         m_instances = [.. instances];
         m_entries = new Entry[entries.Count];
@@ -251,6 +265,9 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
             m_entries[index] = entries[order[index]];
         }
         m_nodes = nodes;
+        TopDepth = depth;
+        GeometryDepth = geometries.Values.Select(static geometry => geometry.Depth).DefaultIfEmpty().Max();
+        MedianSplits = medians + geometries.Values.Sum(static geometry => geometry.MedianSplits);
         m_geometries = geometries;
         m_retained = retained;
         GeometriesBuilt = geometriesBuilt;
@@ -316,12 +333,12 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
     /// <summary>Finds the nearest hit, also returning its scene instance and original mesh triangle ordinal, or -1 for a miss.</summary>
     public bool Intersect(Vector3 origin, Vector3 direction, float maximum, out float distance, out Vector3 normal, out int material, out float bakeHalfDiagonal, out int instance, out int triangle) {
         var inverse = Reciprocal(direction: direction);
-        var nearest = new DrawLeaves(any: false, direction: direction, entries: m_entries, instances: m_instances, inverse: inverse, origin: origin);
+        var nearest = new DrawLeaves(any: false, direction: direction, entries: m_entries, instances: m_instances, inverse: inverse, origin: origin, counters: Counters);
 
         distance = maximum;
         bakeHalfDiagonal = 0;
         if ((m_nodes.Length > 0) && Slab(low: m_nodes[0].Low, high: m_nodes[0].High, origin: origin, inverse: inverse, maximum: distance, entry: out _)) {
-            Walk(distance: ref distance, inverse: inverse, leaves: ref nearest, nodes: m_nodes, origin: origin, start: 0);
+            Walk(distance: ref distance, inverse: inverse, leaves: ref nearest, nodes: m_nodes, origin: origin, start: 0, counters: Counters);
         }
         instance = nearest.Instance;
         triangle = instance < 0 ? -1 : m_instances[instance].Geometry.Triangles[nearest.Triangle];
@@ -345,11 +362,11 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
     /// <returns><see langword="true"/> when nothing blocks the ray.</returns>
     public bool Unblocked(Vector3 origin, Vector3 direction, float maximum) {
         var inverse = Reciprocal(direction: direction);
-        var any = new DrawLeaves(any: true, direction: direction, entries: m_entries, instances: m_instances, inverse: inverse, origin: origin);
+        var any = new DrawLeaves(any: true, direction: direction, entries: m_entries, instances: m_instances, inverse: inverse, origin: origin, counters: Counters);
         var distance = maximum;
 
         if ((m_nodes.Length > 0) && Slab(low: m_nodes[0].Low, high: m_nodes[0].High, origin: origin, inverse: inverse, maximum: distance, entry: out _)) {
-            Walk(distance: ref distance, inverse: inverse, leaves: ref any, nodes: m_nodes, origin: origin, start: 0);
+            Walk(distance: ref distance, inverse: inverse, leaves: ref any, nodes: m_nodes, origin: origin, start: 0, counters: Counters);
         }
         return (any.Instance < 0);
     }
@@ -358,7 +375,7 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
     // answers true ends the walk. A hit shortens distance, which prunes the nodes behind it. The caller has admitted
     // start: the top level's root by its own test, a braid subtree by the top-level leaf that names it.
     [SkipLocalsInit]
-    private static void Walk<TLeaves>(Node[] nodes, int start, Vector3 origin, Vector3 inverse, ref float distance, ref TLeaves leaves) where TLeaves : struct, ILeaves {
+    private static void Walk<TLeaves>(Node[] nodes, int start, Vector3 origin, Vector3 inverse, ref float distance, ref TLeaves leaves, WorkCounterSet counters) where TLeaves : struct, ILeaves {
         Span<int> stack = stackalloc int[StackDepth];
         var top = 0;
 
@@ -377,6 +394,11 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
             var hitLeft = Slab(low: nodes[left].Low, high: nodes[left].High, origin: origin, inverse: inverse, maximum: distance, entry: out var leftEntry);
             var hitRight = Slab(low: nodes[right].Low, high: nodes[right].High, origin: origin, inverse: inverse, maximum: distance, entry: out var rightEntry);
 
+            if (top + (hitLeft ? 1 : 0) + (hitRight ? 1 : 0) > stack.Length) {
+                counters.Count(SdfMeshIrradiance.StackOverflow);
+                throw new InvalidOperationException("mesh GI traversal exceeded its builder-certified stack depth.");
+            }
+
             if (hitLeft && hitRight) {
                 // The nearer child is visited first: it pops after the farther one is pushed.
                 if (leftEntry <= rightEntry) {
@@ -391,7 +413,6 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
             } else if (hitRight) {
                 stack[top++] = right;
             }
-            if (top > (stack.Length - 2)) { return; }
         }
     }
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -416,7 +437,7 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
     }
     // The top level's leaves: a braid subtree of a draw's geometry each, walked by the ray in the geometry's frame. A ray
     // carried through an affine transform keeps its parameter, so distances compare across draws.
-    private struct DrawLeaves(Entry[] entries, Instance[] instances, Vector3 origin, Vector3 direction, Vector3 inverse, bool any) : ILeaves {
+    private struct DrawLeaves(Entry[] entries, Instance[] instances, Vector3 origin, Vector3 direction, Vector3 inverse, bool any, WorkCounterSet counters) : ILeaves {
         public int Instance = -1;
         public int Triangle = -1;
 
@@ -427,7 +448,7 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
                 var local = (instance.Identity ? direction : Vector3.TransformNormal(normal: direction, matrix: instance.WorldToObject));
                 var triangles = new TriangleLeaves(any: any, direction: local, geometry: instance.Geometry, origin: (instance.Identity ? origin : Vector3.Transform(position: origin, matrix: instance.WorldToObject)));
 
-                Walk(distance: ref distance, inverse: (instance.Identity ? inverse : Reciprocal(direction: local)), leaves: ref triangles, nodes: instance.Geometry.Nodes, origin: triangles.Origin, start: entry.Node);
+                Walk(distance: ref distance, inverse: (instance.Identity ? inverse : Reciprocal(direction: local)), leaves: ref triangles, nodes: instance.Geometry.Nodes, origin: triangles.Origin, start: entry.Node, counters: counters);
                 if (triangles.Hit >= 0) {
                     Instance = entry.Instance;
                     Triangle = triangles.Hit;
@@ -583,6 +604,8 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
         public required Node[] Nodes { get; init; }
         public required ReadOnlyMemory<Vector3> Positions { get; init; }
         public required int[] Triangles { get; init; }
+        public int Depth { get; init; }
+        public int MedianSplits { get; init; }
 
         // The leaf position's triangle as its first corner and its two edges from it, the terms the ray test reads.
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -623,14 +646,14 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
                 at += piece.Count;
             }
 
-            var (nodes, order, braids) = Hierarchy.Build(braid: BraidTriangles, highs: highs, leaf: LeafTriangles, lows: lows);
+            var (nodes, order, braids, depth, medians) = Hierarchy.Build(braid: BraidTriangles, highs: highs, leaf: LeafTriangles, lows: lows, name: $"mesh GI geometry ({count} triangles)");
             var triangles = new int[order.Length];
 
             for (var index = 0; (index < order.Length); index++) {
                 triangles[index] = owners[order[index]];
             }
 
-            return new Geometry { Braids = braids, Indices = mesh.Indices, Mesh = mesh, Nodes = nodes, Positions = mesh.Positions, Triangles = triangles };
+            return new Geometry { Braids = braids, Indices = mesh.Indices, Mesh = mesh, Nodes = nodes, Positions = mesh.Positions, Triangles = triangles, Depth = depth, MedianSplits = medians };
         }
 
         private static void Chunked(int count, Action<int, int> body) {
@@ -713,6 +736,8 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
         private readonly List<int> m_braids = [];
 
         private int m_nodeCount = 1;
+        private int m_medianSplits;
+        private string m_name = "";
 
         private Hierarchy(Vector3[] lows, Vector3[] highs, int leaf, int braid) {
             var count = lows.Length;
@@ -733,14 +758,14 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
 
         // The nodes, root first, the primitive each leaf position holds, and with a braid width the widest nodes at most
         // that many primitives wide.
-        public static (Node[] Nodes, int[] Order, int[] Braids) Build(Vector3[] lows, Vector3[] highs, int leaf, int braid) {
+        public static (Node[] Nodes, int[] Order, int[] Braids, int Depth, int MedianSplits) Build(Vector3[] lows, Vector3[] highs, int leaf, int braid, string name) {
             ArgumentOutOfRangeException.ThrowIfGreaterThan(value: leaf, other: Node.MaxCount);
 
-            var hierarchy = new Hierarchy(braid: braid, highs: highs, leaf: leaf, lows: lows);
+            var hierarchy = new Hierarchy(braid: braid, highs: highs, leaf: leaf, lows: lows) { m_name = name };
 
-            hierarchy.BuildNode(count: lows.Length, first: 0, node: 0, wide: true);
+            var depth = hierarchy.BuildNode(count: lows.Length, first: 0, node: 0, wide: true, depth: 0);
             hierarchy.m_braids.Sort();
-            return (hierarchy.CopyNodes(), hierarchy.m_order, [.. hierarchy.m_braids]);
+            return (hierarchy.CopyNodes(), hierarchy.m_order, [.. hierarchy.m_braids], depth, hierarchy.m_medianSplits);
         }
 
         // A node's storage, its chunk allocated by the first build task to reach it; the last chunk is as long as the
@@ -771,7 +796,13 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
             return nodes;
         }
         // Builds a node over a range of the order; wide says its parent, if any, is wider than the braid width.
-        private void BuildNode(int node, int first, int count, bool wide) {
+        private int BuildNode(int node, int first, int count, bool wide, int depth) {
+            var levelsLeft = StackDepth - 2 - depth;
+            var leaves = ((long)count + m_leaf - 1) / m_leaf;
+            var balanced = leaves <= 1 ? 0 : BitOperations.Log2((ulong)(leaves - 1)) + 1;
+            if (levelsLeft < balanced) {
+                throw new InvalidOperationException($"{m_name}: {count} primitives cannot fit within the mesh GI hierarchy depth bound {StackDepth - 2}.");
+            }
             if (wide && (count <= m_braid)) {
                 lock (m_braids) { m_braids.Add(item: node); }
             }
@@ -797,33 +828,49 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
 
             if (count <= m_leaf) {
                 built.Link(count: count, first: first);
-                return;
+                return depth;
             }
 
-            var mid = Split(centroidHigh: centroidHigh, centroidLow: centroidLow, count: count, first: first);
+            // Once only a balanced tree fits, a surface-area split may no longer spend another level.
+            var median = levelsLeft == balanced;
+            int mid;
+            if (median) {
+                var axis = LongestAxis(centroidHigh - centroidLow);
+                Array.Sort(m_order, first, count, Comparer<int>.Create((a, b) => {
+                    var order = Component(m_centroids[a], axis).CompareTo(Component(m_centroids[b], axis));
+                    return order != 0 ? order : a.CompareTo(b);
+                }));
+                mid = first + count / 2;
+                Interlocked.Increment(ref m_medianSplits);
+            } else {
+                mid = Split(centroidHigh: centroidHigh, centroidLow: centroidLow, count: count, first: first);
+            }
             var child = (Interlocked.Add(location1: ref m_nodeCount, value: 2) - 2);
 
             built.Link(count: 0, first: child);
             var wider = (count > m_braid);
 
             if (count >= ParallelPrimitives) {
-                BuildChildrenInParallel(child: child, count: count, first: first, mid: mid, wide: wider);
-                return;
+                return BuildChildrenInParallel(child: child, count: count, first: first, mid: mid, wide: wider, depth: depth + 1);
             }
-            BuildNode(count: (mid - first), first: first, node: child, wide: wider);
-            BuildNode(count: ((first + count) - mid), first: mid, node: (child + 1), wide: wider);
+            return Math.Max(BuildNode(count: (mid - first), first: first, node: child, wide: wider, depth: depth + 1),
+                BuildNode(count: ((first + count) - mid), first: mid, node: (child + 1), wide: wider, depth: depth + 1));
         }
         // Apart from BuildNode, since the closure its two branches share is made on entry to the method holding them, and
         // nearly every node builds its children in line.
-        private void BuildChildrenInParallel(int child, int first, int count, int mid, bool wide) => Parallel.Invoke(
-            () => BuildNode(count: (mid - first), first: first, node: child, wide: wide),
-            () => BuildNode(count: ((first + count) - mid), first: mid, node: (child + 1), wide: wide)
-        );
+        private int BuildChildrenInParallel(int child, int first, int count, int mid, bool wide, int depth) {
+            var left = 0;
+            var right = 0;
+            Parallel.Invoke(
+                () => left = BuildNode(count: (mid - first), first: first, node: child, wide: wide, depth: depth),
+                () => right = BuildNode(count: ((first + count) - mid), first: mid, node: (child + 1), wide: wide, depth: depth));
+            return Math.Max(left, right);
+        }
         // A binned surface-area split along the centroids' longest axis, which partitions the range in place; an even
         // split when the bins cannot separate them.
         private int Split(int first, int count, Vector3 centroidLow, Vector3 centroidHigh) {
             var extent = (centroidHigh - centroidLow);
-            var axis = (((extent.X >= extent.Y) && (extent.X >= extent.Z)) ? 0 : ((extent.Y >= extent.Z) ? 1 : 2));
+            var axis = LongestAxis(extent);
             var axisLow = Component(axis: axis, value: centroidLow);
             var axisExtent = Component(axis: axis, value: extent);
             var mid = (first + (count / 2));
@@ -895,6 +942,7 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
         }
         private static int BinOf(float value, float low, float extent) =>
             Math.Clamp(max: (Bins - 1), min: 0, value: ((int)(((value - low) / extent) * Bins)));
+        private static int LongestAxis(Vector3 extent) => extent.X >= extent.Y && extent.X >= extent.Z ? 0 : extent.Y >= extent.Z ? 1 : 2;
         private static float Area(Vector3 low, Vector3 high) {
             var d = Vector3.Max(value1: (high - low), value2: Vector3.Zero);
 

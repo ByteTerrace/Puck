@@ -141,9 +141,10 @@ public sealed class SdfMeshIrradianceTraceDeviceLawTests(ITestOutputHelper outpu
         using var originBuffer = gpu.BufferFactory.CreateHostVisible(name: default, sizeBytes: (ulong)origins.Length * 16, usage: GpuBufferUsage.Storage);
         using var directionBuffer = gpu.BufferFactory.CreateHostVisible(name: default, sizeBytes: (ulong)SdfMeshProbeDepth.HitCount * 16, usage: GpuBufferUsage.Storage);
         var bytes = (ulong)(origins.Length * SdfMeshProbeDepth.HitWords * 4);
-        using var output = gpu.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: bytes, usage: GpuBufferUsage.Storage);
+        using var output = gpu.BufferFactory.CreateHostVisible(name: default, sizeBytes: bytes + 4, usage: GpuBufferUsage.Storage);
+        output.Write<uint>(new uint[(int)(bytes / 4) + 1]);
         using var identities = gpu.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: bytes, usage: GpuBufferUsage.Storage);
-        using var readback = gpu.BufferFactory.CreateReadback(name: default, sizeBytes: 2 * bytes);
+        using var readback = gpu.BufferFactory.CreateReadback(name: default, sizeBytes: 2 * bytes + 4);
         using var commands = gpu.CommandPoolFactory.Create(name: default);
         var pool = gpu.Bindings.CreatePool(name: default, sizes: GpuDescriptorPoolSizes.ForGroups(description.Layout!.Groups));
         try {
@@ -174,19 +175,21 @@ public sealed class SdfMeshIrradianceTraceDeviceLawTests(ITestOutputHelper outpu
             recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: output.BufferHandle,
                 sourceAccessMask: GpuAccess.ShaderWrite, sourceStageMask: GpuStage.ComputeShader,
                 destinationAccessMask: GpuAccess.TransferRead, destinationStageMask: GpuStage.Transfer);
-            recorder.CopyBuffer(commandBufferHandle: command, sourceBufferHandle: output.BufferHandle, destinationBufferHandle: readback.BufferHandle, sizeBytes: bytes);
+            recorder.CopyBuffer(commandBufferHandle: command, sourceBufferHandle: output.BufferHandle, destinationBufferHandle: readback.BufferHandle, sizeBytes: bytes + 4);
             recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: identities.BufferHandle,
                 sourceAccessMask: GpuAccess.ShaderWrite, sourceStageMask: GpuStage.ComputeShader,
                 destinationAccessMask: GpuAccess.TransferRead, destinationStageMask: GpuStage.Transfer);
-            recorder.CopyBuffer(commandBufferHandle: command, sourceBufferHandle: identities.BufferHandle, destinationBufferHandle: readback.BufferHandle, sizeBytes: bytes, destinationOffsetBytes: bytes);
+            recorder.CopyBuffer(commandBufferHandle: command, sourceBufferHandle: identities.BufferHandle, destinationBufferHandle: readback.BufferHandle, sizeBytes: bytes, destinationOffsetBytes: bytes + 4);
             recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: readback.BufferHandle,
                 sourceAccessMask: GpuAccess.TransferWrite, sourceStageMask: GpuStage.Transfer,
                 destinationAccessMask: GpuAccess.HostRead, destinationStageMask: GpuStage.Host);
             recorder.EndCommandBuffer(command);
             gpu.QueueSubmitter.SubmitAndWait([command]);
-            var result = new uint[origins.Length * SdfMeshProbeDepth.HitWords * 2];
+            var words = origins.Length * SdfMeshProbeDepth.HitWords;
+            var result = new uint[words * 2 + 1];
             readback.Read(MemoryMarshal.AsBytes(result.AsSpan()));
-            return (result[..(result.Length / 2)], result[(result.Length / 2)..]);
+            Assert.Equal(0u, result[words]);
+            return (result[..words], result[(words + 1)..]);
 
             void Bind(string name, IGpuBuffer buffer) {
                 var resource = SdfKernelInterfaces.ResourceOf(layout, name);

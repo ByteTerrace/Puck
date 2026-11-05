@@ -11,6 +11,7 @@ internal sealed class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
     private readonly GpuDeviceServices m_gpu;
     private readonly SdfWorldTables m_tables;
     private readonly IGpuStorageBuffer m_directions;
+    private readonly IGpuStorageBuffer m_zero;
     private readonly nint m_pool;
     private readonly Slot[] m_slots = new Slot[SdfGpuWork.SlotCount];
     private readonly Lock m_gate = new();
@@ -44,6 +45,8 @@ internal sealed class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         var directions = new Vector4[SdfMeshProbeDepth.HitCount];
         for (var i = 0; i < directions.Length; i++) { directions[i] = new(SdfMeshProbeDepth.RayDirections[i], SdfMeshProbeDepth.RayWeights[i]); }
         m_directions.Write<Vector4>(directions);
+        m_zero = scope.Own(created: m_gpu.BufferFactory.CreateHostVisible(name: default, sizeBytes: 4, usage: GpuBufferUsage.Storage));
+        m_zero.Write<uint>([0]);
         for (var i = 0; i < m_slots.Length; i++) {
             m_slots[i] = new Slot(
                 m_gpu.Bindings.AllocateSet(descriptorSetLayoutHandle: pipeline.GroupLayoutHandles[(int)ShaderInterfaceGroup.Pass], name: default, poolHandle: m_pool),
@@ -163,9 +166,9 @@ internal sealed class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
             slot.Origins?.Dispose();
             slot.Origins = m_gpu.BufferFactory.CreateHostVisible(name: default, sizeBytes: (ulong)query.Origins.Length * 16, usage: GpuBufferUsage.Storage);
         }
-        if (slot.Hits is null || slot.Hits.SizeBytes < bytes) {
+        if (slot.Hits is null || slot.Hits.SizeBytes != bytes + 4) {
             slot.Hits?.Dispose();
-            slot.Hits = m_gpu.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: bytes, usage: GpuBufferUsage.Storage);
+            slot.Hits = m_gpu.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: bytes + 4, usage: GpuBufferUsage.Storage);
         }
         slot.Identities ??= m_gpu.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: 8, usage: GpuBufferUsage.Storage);
         if (query.Meter) {
@@ -210,6 +213,11 @@ internal sealed class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         var recorder = recording.Recorder;
         recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: slot.Hits.BufferHandle,
             sourceAccessMask: GpuAccess.TransferRead, sourceStageMask: GpuStage.Transfer,
+            destinationAccessMask: GpuAccess.TransferWrite, destinationStageMask: GpuStage.Transfer);
+        recorder.CopyBuffer(commandBufferHandle: command, sourceBufferHandle: m_zero.BufferHandle,
+            destinationBufferHandle: slot.Hits.BufferHandle, sizeBytes: 4, destinationOffsetBytes: bytes);
+        recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: slot.Hits.BufferHandle,
+            sourceAccessMask: GpuAccess.TransferWrite, sourceStageMask: GpuStage.Transfer,
             destinationAccessMask: GpuAccess.ShaderWrite, destinationStageMask: GpuStage.ComputeShader);
         recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: slot.Identities.BufferHandle,
             sourceAccessMask: GpuAccess.ShaderWrite, sourceStageMask: GpuStage.ComputeShader,
@@ -250,7 +258,7 @@ internal sealed class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         if (relight) { recorder.DispatchIndirect(command, slot.Work!.BufferHandle, 0); }
         else { recorder.Dispatch(commandBufferHandle: command,
             groupCountX: (uint)(query.Meter ? query.Origins.Length : query.Selection ? (query.Origins.Length + 63) / 64 : (query.Origins.Length * SdfMeshProbeDepth.HitCount + SdfMeshProbeTrace.GroupSize - 1) / SdfMeshProbeTrace.GroupSize), groupCountY: 1, groupCountZ: 1); }
-        recording.CopyToReadback(slot.Hits, bytes);
+        recording.CopyToReadback(slot.Hits, bytes + 4);
         query.Output = slot.Hits;
 
         void Bind(string name, IGpuBuffer buffer, uint stride, bool written = false) {
@@ -290,14 +298,16 @@ internal sealed class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
 
     public void Complete(object job, SdfGpuWorkReadback readback) {
         var query = (Job)job;
-        var result = new uint[readback.Length / 4];
+        var readWords = new uint[readback.Length / 4];
         var holdsOutput = query.Lighting is not null && !query.Selection && !query.Meter;
-        try { readback.Read(MemoryMarshal.AsBytes(result.AsSpan())); }
+        try { readback.Read(MemoryMarshal.AsBytes(readWords.AsSpan())); }
         catch { readback.Release(); throw; }
         if (holdsOutput) { query.HeldReadback = readback; }
         else { readback.Release(); }
         m_sceneCarry?.Dispose();
         m_sceneCarry = null;
+        var result = query.CommitSource is not null ? readWords : readWords[..^1];
+        if (query.CommitSource is null) { m_volume.Counters.Add(SdfMeshIrradiance.StackOverflow, readWords[^1]); }
         if (query.Lighting is null && query.CommitSource is null) { m_volume.Counters.Add(SdfMeshIrradiance.GpuRays, query.Origins.Length * SdfMeshProbeDepth.HitCount); }
         if (readback.GpuSeconds is { } seconds) { m_volume.Counters.Add(query.Meter ? SdfMeshIrradiance.GpuMeterNanoseconds : query.Selection ? SdfMeshIrradiance.GpuSelectNanoseconds : query.Lighting is null && query.CommitSource is null ? SdfMeshIrradiance.GpuTraceNanoseconds : SdfMeshIrradiance.GpuRelightNanoseconds, (long)(seconds * 1e9)); }
         if (query.Meter) {
@@ -351,6 +361,7 @@ internal sealed class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         m_sceneCarry?.Dispose();
         m_scene?.Dispose();
         m_directions.Dispose();
+        m_zero.Dispose();
         m_gpu.Bindings.DestroyPool(m_pool);
     }
     private sealed class Job(SdfMeshIrradianceScene scene, Vector4[] origins) {
