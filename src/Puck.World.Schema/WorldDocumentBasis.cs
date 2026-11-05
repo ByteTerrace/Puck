@@ -1009,19 +1009,19 @@ public static class WorldDocumentBasis {
             return null;
         }
 
-        var traced = new System.Text.StringBuilder(capacity: pointer.Length);
+        var traced = string.Empty;
 
         foreach (var segment in segments) {
             switch (composed) {
                 case JsonObject when (layer is JsonObject): {
                         if (!Puck.Assets.Documents.DocumentJsonPointer.TryChild(child: out var composedChild, node: composed, segment: segment) ||
                             !Puck.Assets.Documents.DocumentJsonPointer.TryChild(child: out var layerChild, node: layer, segment: segment)) {
-                            return traced.ToString();
+                            return traced;
                         }
 
                         composed = composedChild;
                         layer = layerChild;
-                        _ = traced.Append(value: '/').Append(value: Puck.Assets.Documents.DocumentJsonPointer.Escape(value: segment));
+                        traced = Puck.Assets.Documents.DocumentJsonPointer.Child(name: segment, pointer: traced);
 
                         break;
                     }
@@ -1038,16 +1038,16 @@ public static class WorldDocumentBasis {
 
                         composed = composedList[index: index];
                         layer = layerList[index: at];
-                        _ = traced.Append(value: '/').Append(value: at.ToString(provider: System.Globalization.CultureInfo.InvariantCulture));
+                        traced = Puck.Assets.Documents.DocumentJsonPointer.Child(index: at, pointer: traced);
 
                         break;
                     }
                 default:
-                    return traced.ToString();
+                    return traced;
             }
         }
 
-        return traced.ToString();
+        return traced;
     }
 
     // The layer's index of the composed list's row at an index, or -1 when the layer authors no such row.

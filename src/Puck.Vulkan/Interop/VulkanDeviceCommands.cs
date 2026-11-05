@@ -12,9 +12,6 @@ namespace Puck.Vulkan.Interop;
 /// again or reused for another device.
 /// </summary>
 public sealed unsafe class VulkanDeviceCommands {
-    /// <summary>Gets the submissions this device defers while a batch is open, which every submission to its queue and
-    /// its wait for idle flush first.</summary>
-    public VulkanSubmissionBatch Batch { get; } = new();
     /// <summary>Gets the memory this device sub-allocates its buffers and offscreen images from.</summary>
     public VulkanMemoryArena Arena => (m_arena ??= new VulkanMemoryArena(device: this));
     private VulkanMemoryArena? m_arena;

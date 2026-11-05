@@ -39,8 +39,6 @@ views {
       { x: 0, y: 0, width: 1, height: (1 - paneHeight) }
       { x: 0, y: (1 - paneHeight), width: 1, height: paneHeight, instance: "desktop" }
     ]
-    transitionRenderScale: 1
-    transitionSeconds: 0
   }
 }
 

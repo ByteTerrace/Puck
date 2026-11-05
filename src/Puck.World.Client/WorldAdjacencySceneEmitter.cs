@@ -280,7 +280,7 @@ public sealed partial class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
             truncated &&
             m_truncationNarrated.Add(item: projection.Name)
         ) {
-            Console.Error.WriteLine(value: $"[world.adjacency: '{projection.Name}' neighbour bodies truncated for rendering at {MaxEntitiesPerBand} bodies]");
+            WorldClientDiagnostics.Report(channel: "world.adjacency", text: $"'{projection.Name}' neighbour bodies truncated for rendering at {MaxEntitiesPerBand} bodies");
         }
 
         for (var index = 0; (index < WorldBodiesLimits.CapacityCeiling); index++) {
@@ -485,7 +485,7 @@ public sealed partial class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
             // the extra band is dropped by name rather than indexed past the arrays it has no room in.
             if (bandIndex >= m_bandCount) {
                 if (m_truncationNarrated.Add(item: projection.Name)) {
-                    Console.Error.WriteLine(value: $"[world.adjacency: '{projection.Name}' is beyond the {m_bandCount} band(s) this render composition reserved at boot; its border renders nothing until the world reloads]");
+                    WorldClientDiagnostics.Report(channel: "world.adjacency", text: $"'{projection.Name}' is beyond the {m_bandCount} band(s) this render composition reserved at boot; its border renders nothing until the world reloads");
                 }
 
                 break;
@@ -533,7 +533,7 @@ public sealed partial class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
                     placements: (queryOnly ? WorldPlacementStamper.Queryable(
                         definition: mappedImage,
                         placements: mappedRows,
-                        excluded: (placement, reason) => Console.Error.WriteLine(value: $"[world.presentation-field: excluded adjacency '{projection.Name}' placement '{placement.Id}': {reason}]")
+                        excluded: (placement, reason) => WorldClientDiagnostics.Report(channel: "world.presentation-field", text: $"excluded adjacency '{projection.Name}' placement '{placement.Id}': {reason}")
                     ) : mappedRows),
                     palettes: m_palettes,
                     meshDraws: meshDraws,

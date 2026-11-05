@@ -7,6 +7,8 @@ namespace Puck.World;
 
 internal sealed partial class PlayerCommandModule {
     private static readonly CommandForms BodyReelForms = CommandForms.Of(verb: "body.reel", ReelForm);
+    private static readonly CommandForms BodyAttachForms = CommandForms.Of(verb: "body.attach", OptionalBodyForm);
+    private static readonly CommandForms BodyDetachForms = CommandForms.Of(verb: "body.detach", OptionalBodyForm);
     private static readonly CommandForms BodyHoldForms = CommandForms.Of(verb: "body.hold", OptionalBodyForm);
     private static readonly CommandForms BodyTetherForms = CommandForms.Of(verb: "body.tether", OptionalBodyForm);
     private static string DescribeTetherFixed(FixedQ4816 value) => ((double)value).ToString(
@@ -230,14 +232,16 @@ internal sealed partial class PlayerCommandModule {
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: "body.attach",
-            description: "Attaches the tether: body.attach [body] presses the target's own kit tether facet's attachChannel for one host step — the body's facing tries an anchor within the facet's maxAnchorDistance/aimHalfAngleDegrees. A body already attached ignores it (body.detach first). Refuses by name when the target's kit authors no tether facet or no attachChannel. Echoes the body.tether read-back.",
+            description: $"Attaches the tether: {BodyAttachForms.Spelling} presses the target's own kit tether facet's attachChannel for one host step — the body's facing tries an anchor within the facet's maxAnchorDistance/aimHalfAngleDegrees. A body already attached ignores it (body.detach first). Refuses by name when the target's kit authors no tether facet or no attachChannel. Echoes the body.tether read-back.",
+            forms: BodyAttachForms,
             handler: AttachHandler,
             ackOnly: true
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: "body.detach",
-            description: "Clears an active tether: body.detach [body] presses the target's own kit tether facet's detachChannel for one host step. Restores ordinary locomotion, carrying the released velocity scaled by the facet's releaseVelocityScale. A friendly no-op when unattached. Echoes the body.tether read-back.",
+            description: $"Clears an active tether: {BodyDetachForms.Spelling} presses the target's own kit tether facet's detachChannel for one host step. Restores ordinary locomotion, carrying the released velocity scaled by the facet's releaseVelocityScale. A friendly no-op when unattached. Echoes the body.tether read-back.",
+            forms: BodyDetachForms,
             handler: DetachHandler,
             ackOnly: true
         );

@@ -1321,11 +1321,6 @@ and none has an authored field yet):
   each is a driver or rig field (`CreationDriverDocument`,
   `src/Puck.World.Authoring/Authoring/CreationAnimation.cs`), which touches the
   generated schema and TypeScript model.
-- [low] The built-in view ladder's transition envelope is baked into the
-  composer (`BuiltinTransitionSeconds` and `BuiltinTransitionRenderScale`,
-  `src/Puck.World.Client/WorldViewComposer.cs:29-33`, returned at `:311`).
-  Check that a built-in ladder has authored source in `worlds/standard` to
-  carry the envelope, and move the values there.
 - [low] The tabletop framing clamps an authored engage pitch to
   `MaximumPitchRadians` (`0.4972 pi`,
   `src/Puck.World.Client/WorldTabletopFraming.cs:19`, applied at `:90-92`),

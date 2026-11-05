@@ -86,8 +86,8 @@ public sealed class WorldViewOutputRegionsLawTests {
                 new WorldViewLayout(Name: "mixed", Slots: [
                     new WorldViewSlot(Instance: "pane", Width: 0.75f),
                     new WorldViewSlot(Camera: "camera", Width: 0.25f, X: 0.75f),
-                ], TransitionSeconds: 1f),
-                new WorldViewLayout(Name: "camera", Slots: [new WorldViewSlot(Camera: "camera")], TransitionSeconds: 1f),
+                ], Transition: new WorldViewTransition(Seconds: 1f)),
+                new WorldViewLayout(Name: "camera", Slots: [new WorldViewSlot(Camera: "camera")], Transition: new WorldViewTransition(Seconds: 1f)),
             ],
         };
         var composer = new WorldViewComposer();
@@ -109,8 +109,8 @@ public sealed class WorldViewOutputRegionsLawTests {
     public void CameraAndPaneEnvelopesCoverTheOtherOccupantsRectAtTheSamePhysicalSlot() {
         var views = new WorldViewDefaults {
             Layouts = [
-                new WorldViewLayout(Name: "camera", Slots: [new WorldViewSlot(Camera: "camera")], TransitionSeconds: 1f),
-                new WorldViewLayout(Name: "pane", Slots: [new WorldViewSlot(Instance: "pane", Width: 0.25f, Height: 0.5f)], TransitionSeconds: 1f),
+                new WorldViewLayout(Name: "camera", Slots: [new WorldViewSlot(Camera: "camera")], Transition: new WorldViewTransition(Seconds: 1f)),
+                new WorldViewLayout(Name: "pane", Slots: [new WorldViewSlot(Instance: "pane", Width: 0.25f, Height: 0.5f)], Transition: new WorldViewTransition(Seconds: 1f)),
             ],
         };
 
@@ -122,8 +122,8 @@ public sealed class WorldViewOutputRegionsLawTests {
     public void ASmallCameraAndAPaneReserveTheWholeDisplaySpectatorOnEitherSideOfTheCut() {
         var views = new WorldViewDefaults {
             Layouts = [
-                new WorldViewLayout(Name: "camera", Slots: [new WorldViewSlot(Camera: "camera", Width: 0.25f)], TransitionSeconds: 1f),
-                new WorldViewLayout(Name: "pane", Slots: [new WorldViewSlot(Instance: "pane", Width: 0.25f)], TransitionSeconds: 1f),
+                new WorldViewLayout(Name: "camera", Slots: [new WorldViewSlot(Camera: "camera", Width: 0.25f)], Transition: new WorldViewTransition(Seconds: 1f)),
+                new WorldViewLayout(Name: "pane", Slots: [new WorldViewSlot(Instance: "pane", Width: 0.25f)], Transition: new WorldViewTransition(Seconds: 1f)),
             ],
         };
         var whole = new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f);
@@ -154,9 +154,9 @@ public sealed class WorldViewOutputRegionsLawTests {
             : new WorldViewSlot(Camera: "camera", Width: width));
         var views = new WorldViewDefaults {
             Layouts = [
-                new WorldViewLayout(Name: "wide", Slots: [Slot(width: 0.75f)], TransitionSeconds: 1f),
-                new WorldViewLayout(Name: "narrow", Slots: [Slot(width: 0.25f)], TransitionSeconds: 1f),
-                new WorldViewLayout(Name: "tiny", Slots: [Slot(width: 0.125f)], TransitionSeconds: 1f),
+                new WorldViewLayout(Name: "wide", Slots: [Slot(width: 0.75f)], Transition: new WorldViewTransition(Seconds: 1f)),
+                new WorldViewLayout(Name: "narrow", Slots: [Slot(width: 0.25f)], Transition: new WorldViewTransition(Seconds: 1f)),
+                new WorldViewLayout(Name: "tiny", Slots: [Slot(width: 0.125f)], Transition: new WorldViewTransition(Seconds: 1f)),
             ],
         };
         var composer = new WorldViewComposer();
@@ -191,8 +191,8 @@ public sealed class WorldViewOutputRegionsLawTests {
             : new WorldViewSlot(Camera: "camera", Height: height, Width: width));
         var views = new WorldViewDefaults {
             Layouts = [
-                new WorldViewLayout(Name: "wide", Slots: [Slot(height: 0.25f, width: 0.75f)], TransitionSeconds: 1f),
-                new WorldViewLayout(Name: "tall", Slots: [Slot(height: 0.75f, width: 0.25f)], TransitionSeconds: 1f),
+                new WorldViewLayout(Name: "wide", Slots: [Slot(height: 0.25f, width: 0.75f)], Transition: new WorldViewTransition(Seconds: 1f)),
+                new WorldViewLayout(Name: "tall", Slots: [Slot(height: 0.75f, width: 0.25f)], Transition: new WorldViewTransition(Seconds: 1f)),
             ],
         };
         var composer = new WorldViewComposer();
@@ -227,8 +227,8 @@ public sealed class WorldViewOutputRegionsLawTests {
     public void ASettledSplitAllocatesEachSeatItsHalfAndATransitionHoldsItsLargerEndpoint() {
         var views = new WorldViewDefaults {
             Layouts = [
-                new WorldViewLayout(Name: "action", Slots: [new WorldViewSlot()], TransitionSeconds: 0.4f),
-                new WorldViewLayout(Name: "split", Slots: [new WorldViewSlot(Width: 0.5f), new WorldViewSlot(Width: 0.5f, X: 0.5f)], TransitionSeconds: 0.4f),
+                new WorldViewLayout(Name: "action", Slots: [new WorldViewSlot()], Transition: new WorldViewTransition(Seconds: 0.4f)),
+                new WorldViewLayout(Name: "split", Slots: [new WorldViewSlot(Width: 0.5f), new WorldViewSlot(Width: 0.5f, X: 0.5f)], Transition: new WorldViewTransition(Seconds: 0.4f)),
             ],
         };
         var composer = new WorldViewComposer();

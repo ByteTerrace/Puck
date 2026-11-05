@@ -131,7 +131,7 @@ public static partial class WorldSessionLevers {
             name: RenderScale,
             setter: lever => {
                 if (!settings.SetResolution((lever.View ?? "*"), ((WorldRenderScaleOperation)((int)lever.B)), ((float)lever.A), out var refusal)) {
-                    Console.Error.WriteLine(value: $"[{refusal}]");
+                    WorldClientDiagnostics.Report(channel: "world.render-scale", text: refusal!);
                 }
             }
         );
@@ -147,7 +147,7 @@ public static partial class WorldSessionLevers {
         });
         sink.Register(name: SkyFieldScale, setter: lever => {
             if (lever.A is not (1d or .5d)) {
-                Console.Error.WriteLine(value: $"{SkyFieldScaleForms.Refuse(got: lever.A.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)).Output} — lever dropped");
+                WorldClientDiagnostics.Report(channel: "world.sky-field-scale", text: $"{lever.A.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)} is not a form of {SkyFieldScaleForms.Spelling} — lever dropped");
                 return;
             }
             settings.SkyFieldScale = ((float)lever.A);
@@ -177,7 +177,7 @@ public static partial class WorldSessionLevers {
                     (lever.Seat < 0) ||
                     (lever.Seat >= PlayerRoster.MaxSlots)
                 ) {
-                    Console.Error.WriteLine(value: $"[world.binding-bar: seat {lever.Seat} is outside 0..{(PlayerRoster.MaxSlots - 1)} — lever dropped]");
+                    WorldClientDiagnostics.Report(channel: "world.binding-bar", text: $"seat {lever.Seat} is outside 0..{(PlayerRoster.MaxSlots - 1)} — lever dropped");
 
                     return;
                 }

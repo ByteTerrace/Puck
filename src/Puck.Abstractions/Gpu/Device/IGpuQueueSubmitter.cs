@@ -7,9 +7,11 @@ namespace Puck.Abstractions.Gpu;
 /// external waits (<see cref="AddExternalWait"/>) that its next submission carries and then clears.
 /// <para>A batch (<see cref="BeginBatch"/>, <see cref="FlushBatch"/>) defers the submissions made inside it and hands
 /// them to the queue together, in their order, with their waits: a frame's render-graph nodes reach the queue in one
-/// call rather than one each. Anything that must see the deferred work first flushes it: waiting on a fence a deferred
-/// submission arms, <see cref="SubmitAndWait"/>, the device context's wait for idle, and every other submission to the
-/// device's queue. Every fence a batch's submissions arm signals once the whole batch retires. An external wait may split the batch before the waiting submission.</para>
+/// call rather than one each. Both backends defer through <see cref="GpuSubmissionBatch{TEntry}"/>. Anything that must
+/// see the deferred work first splits the batch, handing that work to the queue and keeping the batch open: waiting on a
+/// fence a deferred submission arms, <see cref="SubmitAndWait"/>, the device context's wait for idle, and every other
+/// operation on the device's queue. Every fence a batch's submissions arm signals once the whole batch retires. An
+/// external wait may split the batch before the waiting submission.</para>
 /// </summary>
 public interface IGpuQueueSubmitter {
     /// <summary>Adds a wait to the list the next submission carries: that submission, and on Direct3D 12 everything

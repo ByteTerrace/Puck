@@ -107,9 +107,6 @@ public sealed unsafe class DirectXGpuExportableImage : IGpuExportableImage {
         // The resource is counted from here on, so a failure below releases everything made so far, the count
         // included, before it propagates.
         try {
-
-            DirectXSimultaneousAccessResources.Register(resourceHandle: m_resource);
-
             var sharedHandle = default(HANDLE);
 
             device->CreateSharedHandle(
@@ -192,8 +189,6 @@ public sealed unsafe class DirectXGpuExportableImage : IGpuExportableImage {
 
     // Releases every object the image holds, each one only if it was made, and counts the resource's release.
     private void ReleaseResources(bool drainQueue) {
-        DirectXSimultaneousAccessResources.Withdraw(resourceHandle: m_resource);
-
         if (
             drainQueue &&
             (0 != m_fence)

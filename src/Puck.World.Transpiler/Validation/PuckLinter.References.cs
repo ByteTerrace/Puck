@@ -1,3 +1,4 @@
+using Puck.Assets.Documents;
 using Puck.Abstractions.Machines;
 using System.Text;
 using System.Text.Json.Nodes;
@@ -233,7 +234,7 @@ public static partial class PuckLinter {
                         catalog: catalog,
                         diagnostics: diagnostics,
                         node: value,
-                        pointer: $"{pointer}/{key}",
+                        pointer: DocumentJsonPointer.Child(name: key, pointer: pointer),
                         registered: registered,
                         resolveGlobalReferences: resolveGlobalReferences,
                         sourceMap: sourceMap
@@ -258,7 +259,7 @@ public static partial class PuckLinter {
                 for (var index = 0; (index < arr.Count); index++) {
                     WalkForReferences(
                         arr[index],
-                        $"{pointer}/{index}",
+                        DocumentJsonPointer.Child(index: index, pointer: pointer),
                         catalog,
                         sourceMap,
                         diagnostics,
@@ -298,7 +299,7 @@ public static partial class PuckLinter {
                     code: PuckDiagnosticCodes.UnresolvedParent,
                     diagnostics: diagnostics,
                     message: $"Shape parent '{parentName}' does not resolve to a sibling shape name in this collection.",
-                    pointer: $"{pointer}/{index}/parent",
+                    pointer: DocumentJsonPointer.Child(name: "parent", pointer: DocumentJsonPointer.Child(index: index, pointer: pointer)),
                     severity: DiagnosticSeverity.Warning,
                     sourceMap: sourceMap
                 );
@@ -320,7 +321,7 @@ public static partial class PuckLinter {
                     code: PuckDiagnosticCodes.LintUnresolvedPrototype,
                     diagnostics: diagnostics,
                     message: $"Unresolved prototypeId '{prototypeId}'.",
-                    pointer: $"{pointer}/prototypeId",
+                    pointer: DocumentJsonPointer.Child(name: "prototypeId", pointer: pointer),
                     severity: DiagnosticSeverity.Information,
                     sourceMap: sourceMap
                 );
@@ -337,7 +338,7 @@ public static partial class PuckLinter {
                     code: PuckDiagnosticCodes.LintUnresolvedPlacementParent,
                     diagnostics: diagnostics,
                     message: $"Unresolved placement parent '{placementParent}'.",
-                    pointer: $"{pointer}/parent",
+                    pointer: DocumentJsonPointer.Child(name: "parent", pointer: pointer),
                     severity: DiagnosticSeverity.Information,
                     sourceMap: sourceMap
                 );
@@ -389,7 +390,7 @@ public static partial class PuckLinter {
                     code: PuckDiagnosticCodes.LintUnresolvedView,
                     diagnostics: diagnostics,
                     message: $"Unresolved camera reference '{cameraName}'.",
-                    pointer: $"{pointer}/camera",
+                    pointer: DocumentJsonPointer.Child(name: "camera", pointer: pointer),
                     severity: DiagnosticSeverity.Information,
                     sourceMap: sourceMap
                 );
@@ -406,7 +407,7 @@ public static partial class PuckLinter {
                     code: PuckDiagnosticCodes.LintUnresolvedView,
                     diagnostics: diagnostics,
                     message: $"Unresolved spawn point reference '{spawnPointId}'.",
-                    pointer: $"{pointer}/spawnPoint",
+                    pointer: DocumentJsonPointer.Child(name: "spawnPoint", pointer: pointer),
                     severity: DiagnosticSeverity.Information,
                     sourceMap: sourceMap
                 );
@@ -432,7 +433,7 @@ public static partial class PuckLinter {
             code: PuckDiagnosticCodes.LintUnresolvedState,
             diagnostics: diagnostics,
             message: $"Unresolved state row '{name}'.",
-            pointer: $"{pointer}/{field}",
+            pointer: DocumentJsonPointer.Child(name: field, pointer: pointer),
             severity: DiagnosticSeverity.Information,
             sourceMap: sourceMap
         );
@@ -490,7 +491,7 @@ public static partial class PuckLinter {
                     code: PuckDiagnosticCodes.LintUnresolvedPlacementParent,
                     diagnostics: diagnostics,
                     message: $"Unresolved region placement '{placementId}'.",
-                    pointer: $"{PointerOf(node: holder)}/{member}",
+                    pointer: DocumentJsonPointer.Child(name: member, pointer: PointerOf(node: holder)),
                     severity: DiagnosticSeverity.Information,
                     sourceMap: sourceMap
                 );
@@ -512,7 +513,7 @@ public static partial class PuckLinter {
                         catalog: catalog,
                         diagnostics: diagnostics,
                         name: item,
-                        pointer: () => $"{PointerOf(node: holder)}/{member}/{index}",
+                        pointer: () => DocumentJsonPointer.Child(index: index, pointer: DocumentJsonPointer.Child(name: member, pointer: PointerOf(node: holder))),
                         resolveGlobalReferences: resolveGlobalReferences,
                         sourceMap: sourceMap
                     );
@@ -530,7 +531,7 @@ public static partial class PuckLinter {
             return;
         }
 
-        string Pointer() => $"{PointerOf(node: holder)}/{member}";
+        string Pointer() => DocumentJsonPointer.Child(name: member, pointer: PointerOf(node: holder));
 
         switch (field.Role) {
             case WorldNameRole.Names:

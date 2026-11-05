@@ -56,7 +56,7 @@ public sealed class WorldViewComposer {
     /// <summary>The transition progress fraction [0, 1] — 1 when settled.</summary>
     public float TransitionProgress { get; private set; } = 1f;
     /// <summary>The render-scale multiplier this frame — <c>1</c> when settled, the active layout's
-    /// <c>TransitionRenderScale</c> mid-ease.</summary>
+    /// <see cref="WorldViewTransition.RenderScale"/> mid-ease.</summary>
     public float CurrentRenderScale { get; private set; } = 1f;
 
     /// <summary>This frame's resolved slots (a reused buffer, valid until the next <see cref="Compose"/>).</summary>
@@ -264,7 +264,7 @@ public sealed class WorldViewComposer {
         }
     }
     // Selects the target layout, filling m_targetSlots with its resolved (rect, occupant) slots.
-    private (string Name, string Reason, float Seconds, float RenderScale) Select(int joinedCount, WorldViewDefaults views, string? layoutOverride) {
+    private (string Name, string Reason, WorldViewTransition Transition) Select(int joinedCount, WorldViewDefaults views, string? layoutOverride) {
         var layouts = views.Layouts;
 
         m_authoredLayoutNames.Clear();
@@ -281,7 +281,7 @@ public sealed class WorldViewComposer {
         ) {
             ResolveLayoutSlots(layout: overridden);
 
-            return (overridden.Name, "override", overridden.TransitionSeconds, overridden.TransitionRenderScale);
+            return (overridden.Name, "override", (overridden.Transition ?? WorldViewTransition.Cut));
         }
 
         if (FindBySeatCount(
@@ -290,7 +290,7 @@ public sealed class WorldViewComposer {
         ) is { } sized) {
             ResolveLayoutSlots(layout: sized);
 
-            return (sized.Name, "authored", sized.TransitionSeconds, sized.TransitionRenderScale);
+            return (sized.Name, "authored", (sized.Transition ?? WorldViewTransition.Cut));
         }
 
         if (FindBySeatCount(
@@ -299,14 +299,12 @@ public sealed class WorldViewComposer {
         ) is { } catchall) {
             ResolveLayoutSlots(layout: catchall);
 
-            return (catchall.Name, "authored", catchall.TransitionSeconds, catchall.TransitionRenderScale);
+            return (catchall.Name, "authored", (catchall.Transition ?? WorldViewTransition.Cut));
         }
 
         ResolveBuiltin(joinedCount: joinedCount);
 
-        var builtin = (views.BuiltinTransition ?? new WorldViewTransition());
-
-        return (BuiltinName, BuiltinName, builtin.Seconds, builtin.RenderScale);
+        return (BuiltinName, BuiltinName, (views.BuiltinTransition ?? WorldViewTransition.Cut));
     }
 
     /// <summary>Returns the authored layout name at a 1-based document ordinal from the most recent composition, or
@@ -365,7 +363,7 @@ public sealed class WorldViewComposer {
     /// <param name="elapsedSeconds">The presentation clock (drives the ease).</param>
     public void Compose(int joinedCount, WorldViewDefaults views,
         string? layoutOverride, string? cameraOverride, float elapsedSeconds) {
-        var (name, reason, seconds, renderScale) = Select(
+        var (name, reason, envelope) = Select(
             joinedCount: joinedCount,
             layoutOverride: layoutOverride,
             views: views
@@ -406,15 +404,15 @@ public sealed class WorldViewComposer {
             m_transition = new ViewTransition(
                 from: new ViewLayout(Bindings: m_currentBindings.ToArray()),
                 to: new ViewLayout(Bindings: m_toScratch.ToArray()),
-                durationSeconds: seconds,
+                durationSeconds: envelope.Seconds,
                 easing: VectorFunctions.Smoothstep
             );
             m_transitionStart = elapsedSeconds;
             m_transitionSeconds = MathF.Max(
-                x: seconds,
+                x: envelope.Seconds,
                 y: 0.001f
             );
-            m_transitionRenderScale = renderScale;
+            m_transitionRenderScale = envelope.RenderScale;
             m_activeName = name;
         }
 

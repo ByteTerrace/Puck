@@ -17,14 +17,22 @@ namespace Puck.DirectX;
 /// <see cref="IGpuDeviceContext.WaitIdle"/> on the device context. A submission fence is an
 /// <c>ID3D12Fence</c> + event pair signaled on the queue right after the fenced execute. An external wait is an
 /// <c>ID3D12CommandQueue::Wait</c> issued immediately before the next submission's execute, so that submission and every
-/// later one on the queue wait for the shared fence on the GPU.
+/// later one on the queue wait for the shared fence on the GPU. While a batch is open a submission joins the shared
+/// <see cref="GpuSubmissionBatch{TEntry}"/>, whose lists reach the queue in one <c>ExecuteCommandLists</c>.
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
-public sealed unsafe class DirectXGpuQueueSubmitter(DirectXDeviceContext deviceContext) : IGpuQueueSubmitter {
+public sealed unsafe class DirectXGpuQueueSubmitter : IGpuQueueSubmitter {
+    private readonly DirectXDeviceContext m_deviceContext;
     private readonly List<GpuExternalWait> m_externalWaits = [];
-    private readonly List<nint> m_lists = [];
-    private readonly List<DirectXGpuSubmissionFence> m_fences = [];
-    private bool m_batch;
+    private readonly Batch m_batch;
+
+    /// <summary>Initializes a new instance of the <see cref="DirectXGpuQueueSubmitter"/> class, submitting to the
+    /// context's direct command queue.</summary>
+    /// <param name="deviceContext">The device context whose queue receives the submissions; it owns the submitter.</param>
+    public DirectXGpuQueueSubmitter(DirectXDeviceContext deviceContext) {
+        m_deviceContext = deviceContext;
+        m_batch = new Batch(submitter: this);
+    }
 
     /// <inheritdoc/>
     /// <remarks>Takes a <see cref="DirectXSharedFence"/> or a <see cref="DirectXExportableFence"/> of this
@@ -40,81 +48,53 @@ public sealed unsafe class DirectXGpuQueueSubmitter(DirectXDeviceContext deviceC
         }
 
         // A wait belongs after earlier submissions, never before a producer that may signal it.
-        Split();
+        m_batch.Split();
 
         m_externalWaits.Add(item: wait);
     }
     /// <inheritdoc/>
     public void Submit(ReadOnlySpan<nint> commandBufferHandles) {
-        if (Defer(commandBufferHandles, null)) { return; }
-        Execute(commandBufferHandles);
+        if (m_batch.TryDefer(entries: commandBufferHandles, fence: null)) { return; }
+        Execute(commandBufferHandles: commandBufferHandles);
     }
     /// <inheritdoc/>
     public void Submit(ReadOnlySpan<nint> commandBufferHandles, IGpuSubmissionFence fence) {
+        var native = ((DirectXGpuSubmissionFence)fence);
 
-        var native = (DirectXGpuSubmissionFence)fence;
-        if (Defer(commandBufferHandles, native)) { return; }
+        if (m_batch.TryDefer(entries: commandBufferHandles, fence: native)) { return; }
         // An empty fenced submission still completes all work submitted before it.
-        if (commandBufferHandles.IsEmpty) { Split(); }
+        if (commandBufferHandles.IsEmpty) { m_batch.Split(); }
         native.RequireDrained();
         Execute(commandBufferHandles: commandBufferHandles);
-        native.Arm(commandQueue: ((ID3D12CommandQueue*)deviceContext.SubmissionQueueHandle));
+        native.Arm(commandQueue: ((ID3D12CommandQueue*)m_deviceContext.SubmissionQueueHandle));
     }
     /// <inheritdoc/>
     public void SubmitAndWait(ReadOnlySpan<nint> commandBufferHandles) {
-        Split();
+        m_batch.Split();
         Execute(commandBufferHandles: commandBufferHandles);
-        deviceContext.WaitIdle();
+        m_deviceContext.WaitIdle();
     }
     /// <inheritdoc/>
-    public void BeginBatch() => m_batch = true;
+    public void BeginBatch() => m_batch.Begin();
     /// <inheritdoc/>
-    public void FlushBatch() {
-        m_batch = false;
-        if (m_lists.Count == 0) { return; }
-        var owner = m_fences.Count == 0 ? null : m_fences[^1];
-        try {
-            Execute(CollectionsMarshal.AsSpan(m_lists));
-            owner?.Arm((ID3D12CommandQueue*)deviceContext.SubmissionQueueHandle);
-        } finally {
-            // Even after a failed execute or signal, every fence answers from the owner, whose removed device then
-            // surfaces as a loss instead of leaving the others deferred in a batch that no longer exists.
-            foreach (var fence in m_fences) {
-                if (!ReferenceEquals(fence, owner)) { fence.Alias(owner!); }
-            }
-            m_lists.Clear();
-            m_fences.Clear();
-        }
-    }
-    /// <summary>Hands the deferred submissions to the queue and keeps the batch open: whatever reaches the queue next
-    /// follows every submission made before it, and later submissions are still deferred. Every read of the context's
-    /// queue handle (<see cref="DirectXDeviceContext.CommandQueueHandle"/>) calls it.</summary>
-    internal void Split() {
-        var open = m_batch;
-        FlushBatch();
-        m_batch = open;
-    }
-
-    private bool Defer(ReadOnlySpan<nint> handles, DirectXGpuSubmissionFence? fence) {
-        if (!m_batch || handles.IsEmpty) { return false; }
-        fence?.Defer(this);
-        foreach (var handle in handles) { m_lists.Add(handle); }
-        if (fence is not null) { m_fences.Add(fence); }
-        return true;
-    }
+    public void FlushBatch() => m_batch.Flush();
+    /// <summary>Hands the deferred submissions to the queue and keeps the batch open
+    /// (<see cref="GpuSubmissionBatch.Split"/>). Every read of the context's queue handle
+    /// (<see cref="DirectXDeviceContext.CommandQueueHandle"/>) calls it.</summary>
+    internal void Split() => m_batch.Split();
     /// <inheritdoc/>
     public IGpuSubmissionFence CreateSubmissionFence() =>
-        new DirectXGpuSubmissionFence(device: ((ID3D12Device*)deviceContext.Device.Handle));
+        new DirectXGpuSubmissionFence(device: ((ID3D12Device*)m_deviceContext.Device.Handle));
 
     private void Execute(ReadOnlySpan<nint> commandBufferHandles) {
-        var queue = ((ID3D12CommandQueue*)deviceContext.SubmissionQueueHandle);
+        var queue = ((ID3D12CommandQueue*)m_deviceContext.SubmissionQueueHandle);
 
         if (commandBufferHandles.IsEmpty) {
             return;
         }
 
         if (m_externalWaits.Count != 0) {
-            var calls = DirectXDeviceCommandCalls.Of(deviceContext: deviceContext);
+            var calls = DirectXDeviceCommandCalls.Of(deviceContext: m_deviceContext);
 
             // The list is spent even when a wait fails, so a device loss never carries a lost device's fence onward.
             try {
@@ -147,15 +127,25 @@ public sealed unsafe class DirectXGpuQueueSubmitter(DirectXDeviceContext deviceC
         );
         DirectXSubmissionWork.Process.Execute(commandBufferHandles.Length);
     }
+
+    // The deferred command lists reach the queue in one ExecuteCommandLists, behind any external waits, with the owner's
+    // signal queued right after them.
+    private sealed class Batch(DirectXGpuQueueSubmitter submitter) : GpuSubmissionBatch<nint> {
+        protected override void Submit(ReadOnlySpan<nint> entries, GpuBatchedSubmissionFence? owner) {
+            submitter.Execute(commandBufferHandles: entries);
+            ((DirectXGpuSubmissionFence?)owner)?.Arm(commandQueue: ((ID3D12CommandQueue*)submitter.m_deviceContext.SubmissionQueueHandle));
+        }
+    }
 }
 
 /// <summary>
 /// The Direct3D 12 <see cref="IGpuSubmissionFence"/>: a monotonic <c>ID3D12Fence</c> + auto-reset event (the same
 /// pair <c>DirectXDeviceContext.WaitIdle</c> uses), signaled on the queue right after the fenced execute. A drained fence
-/// is replaced before its next value could equal the device-loss sentinel <c>UINT64_MAX</c>.
+/// is replaced before its next value could equal the device-loss sentinel <c>UINT64_MAX</c>. Its batch and alias states
+/// are the shared <see cref="GpuBatchedSubmissionFence"/>'s.
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
-public sealed unsafe class DirectXGpuSubmissionFence : IGpuSubmissionFence {
+public sealed unsafe class DirectXGpuSubmissionFence : GpuBatchedSubmissionFence {
     // The device the fence is on; the context owns it, and a removal is read from it.
     private readonly nint m_device;
 
@@ -163,10 +153,6 @@ public sealed unsafe class DirectXGpuSubmissionFence : IGpuSubmissionFence {
     private HANDLE m_fenceEvent;
     private ulong m_nextValue = 1UL;
     private ulong m_pendingValue; // 0 = no submission outstanding
-    private DirectXGpuQueueSubmitter? m_deferred;
-    private DirectXGpuSubmissionFence? m_alias;
-    private long m_aliasGeneration;
-    private long m_generation;
 
     /// <summary>Creates a reusable submission fence on the caller-owned device.</summary>
     /// <param name="device">The device, retained by the caller until the fence is disposed.</param>
@@ -191,37 +177,12 @@ public sealed unsafe class DirectXGpuSubmissionFence : IGpuSubmissionFence {
         }
     }
 
-    /// <inheritdoc/>
-    /// <remarks>Reads <c>ID3D12Fence::GetCompletedValue</c>. A removed device reports <c>UINT64_MAX</c>, a value this
-    /// fence never signals, which surfaces as <see cref="DeviceLostException"/>.</remarks>
-    public bool IsSignaled {
-        get {
-            if (m_deferred is not null) { return false; }
-            if (m_alias is { } alias) { return alias.m_generation != m_aliasGeneration || alias.IsSignaled; }
-            if (0UL == m_pendingValue) {
-                return true;
-            }
-
-            var completed = ((ID3D12Fence*)m_fence)->GetCompletedValue();
-
-            if (completed == ulong.MaxValue) {
-                var reason = new DirectXDeviceCommandCalls(device: ((ID3D12Device*)m_device)).DeviceRemovedReason();
-
-                throw new DeviceLostException(
-                    message: $"ID3D12Fence::GetCompletedValue reported a removed device (reason 0x{reason.Value:X8}).",
-                    reasonCode: reason.Value
-                );
-            }
-
-            return (completed >= m_pendingValue);
-        }
-    }
-
-    /// <summary>Queues a signal for the just-executed submission; the caller must have drained any prior one first.</summary>
+    /// <summary>Queues a signal for the just-executed submission; the caller must have drained any prior one first, or
+    /// the submission is the one its batch deferred.</summary>
     /// <param name="commandQueue">The queue the submission was executed on.</param>
+    /// <exception cref="InvalidOperationException">A submission is outstanding.</exception>
     public void Arm(ID3D12CommandQueue* commandQueue) {
-        if (m_deferred is null) { RequireDrained(); }
-        m_deferred = null;
+        MarkArmed();
         // Also retries a renewal that failed after the preceding Wait drained the old native fence.
         if (m_nextValue == ulong.MaxValue) { Renew(); }
 
@@ -235,58 +196,37 @@ public sealed unsafe class DirectXGpuSubmissionFence : IGpuSubmissionFence {
         DirectXSubmissionWork.Process.Signal();
     }
 
-    internal void RequireDrained() {
-        if (m_pendingValue != 0 || m_deferred is not null || m_alias is not null) {
-            throw new InvalidOperationException("A submission is already outstanding on this fence; Wait before re-arming it.");
-        }
-    }
-    internal void Defer(DirectXGpuQueueSubmitter batch) { RequireDrained(); m_deferred = batch; }
-    internal void Alias(DirectXGpuSubmissionFence owner) {
-        m_deferred = null;
-        m_alias = owner;
-        m_aliasGeneration = owner.m_generation;
-    }
-
     /// <inheritdoc/>
-    public void Wait() {
-        m_deferred?.FlushBatch();
-        if (m_alias is { } alias) {
-            if (alias.m_generation == m_aliasGeneration) {
-                DirectXCommandCalls.Wait(calls: new DirectXDeviceCommandCalls((ID3D12Device*)m_device),
-                    fence: (ID3D12Fence*)alias.m_fence, fenceEvent: alias.m_fenceEvent, value: alias.m_pendingValue);
-            }
-            m_alias = null;
-            m_generation++;
-            return;
-        }
-        if (0UL == m_pendingValue) {
-            return;
+    /// <remarks>Reads <c>ID3D12Fence::GetCompletedValue</c>. A removed device reports <c>UINT64_MAX</c>, a value this
+    /// fence never signals, which surfaces as <see cref="DeviceLostException"/>.</remarks>
+    protected override bool NativeSignaled() {
+        var completed = ((ID3D12Fence*)m_fence)->GetCompletedValue();
+
+        if (completed == ulong.MaxValue) {
+            var reason = new DirectXDeviceCommandCalls(device: ((ID3D12Device*)m_device)).DeviceRemovedReason();
+
+            throw new DeviceLostException(
+                message: $"ID3D12Fence::GetCompletedValue reported a removed device (reason 0x{reason.Value:X8}).",
+                reasonCode: reason.Value
+            );
         }
 
-        DirectXCommandCalls.Wait(
-            calls: new DirectXDeviceCommandCalls(device: ((ID3D12Device*)m_device)),
-            fence: ((ID3D12Fence*)m_fence),
-            fenceEvent: m_fenceEvent,
-            value: m_pendingValue
-        );
+        return (completed >= m_pendingValue);
+    }
+    /// <inheritdoc/>
+    protected override void WaitNative() => DirectXCommandCalls.Wait(
+        calls: new DirectXDeviceCommandCalls(device: ((ID3D12Device*)m_device)),
+        fence: ((ID3D12Fence*)m_fence),
+        fenceEvent: m_fenceEvent,
+        value: m_pendingValue
+    );
+    /// <inheritdoc/>
+    protected override void DrainNative() {
         m_pendingValue = 0UL;
-        m_generation++;
         if (m_nextValue == ulong.MaxValue) { Renew(); }
     }
-
-    // Only called with no submission outstanding. Create before releasing the old fence, so failed allocation leaves
-    // a valid, drained object; the old completion value can never satisfy a submission in the new sequence.
-    private void Renew() {
-        ((ID3D12Device*)m_device)->CreateFence(Flags: default, InitialValue: 0, ppFence: out ID3D12Fence* fence);
-        if (m_fence != 0) { _ = ((IUnknown*)m_fence)->Release(); }
-        m_fence = (nint)fence;
-        m_nextValue = 1;
-    }
     /// <inheritdoc/>
-    public void Dispose() {
-        m_deferred = null;
-        m_alias = null;
-        m_generation++;
+    protected override void DisposeNative() {
         if (0 != m_fence) {
             _ = ((IUnknown*)m_fence)->Release();
             m_fence = 0;
@@ -298,5 +238,14 @@ public sealed unsafe class DirectXGpuSubmissionFence : IGpuSubmissionFence {
         }
 
         m_pendingValue = 0UL;
+    }
+
+    // Only called with no submission outstanding. Create before releasing the old fence, so failed allocation leaves
+    // a valid, drained object; the old completion value can never satisfy a submission in the new sequence.
+    private void Renew() {
+        ((ID3D12Device*)m_device)->CreateFence(Flags: default, InitialValue: 0, ppFence: out ID3D12Fence* fence);
+        if (m_fence != 0) { _ = ((IUnknown*)m_fence)->Release(); }
+        m_fence = (nint)fence;
+        m_nextValue = 1;
     }
 }
