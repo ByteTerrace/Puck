@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using Puck.Abstractions.Counting;
+using Puck.Abstractions.Cameras;
 using Puck.Maths;
 using Puck.SignedDistance;
 
@@ -289,6 +290,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // The worker's candidates and a batch's results, kept across batches: one worker runs at a time.
     private readonly List<Candidate> m_candidates = [];
     private int m_selectionLighting;
+    private CameraSnapshot[] m_viewCameras = [];
     private ProbeData[] m_results = [];
     private readonly List<float> m_ages = [];
     // Where the worker stands in its list, and the geometry, windows and layout the list was made for; the worker's
@@ -578,6 +580,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             RefreshLighting(frame: frame, layout: layout);
             Grant(budget: frame.IndirectBudget);
             m_camera = WindowCamera(frame: frame);
+            CaptureViewCameras(frame);
             if (m_cameraSamples.Length != frame.Views.Count) {
                 m_cameraSamples = new CameraSample?[frame.Views.Count];
                 m_nextCameraSample = 0;
@@ -1065,19 +1068,42 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             var low = m_levels[level].Low;
             var dims = m_layout.DimsOf(level);
             var ages = new List<float>();
+            var visible = new List<float>();
+            var outside = new List<float>();
             for (var z = low.Z; z < low.Z + dims.Z; z++) {
                 for (var y = low.Y; y < low.Y + dims.Y; y++) {
                     for (var x = low.X; x < low.X + dims.X; x++) {
                         if (!m_levels[level].Cache.TryGetValue((x, y, z), out var probe)) { continue; }
                         var next = Math.Clamp(probe.Lighting + 1 - m_versionBase, 0, m_versionTimes.Count - 1);
-                        ages.Add(probe.Lighting == m_lightingVersion ? 0 : (float)Stopwatch.GetElapsedTime(m_versionTimes[next], now).TotalSeconds);
+                        var age = probe.Lighting == m_lightingVersion ? 0 : (float)Stopwatch.GetElapsedTime(m_versionTimes[next], now).TotalSeconds;
+                        ages.Add(age);
+                        var center = new Vector3(x + .5f, y + .5f, z + .5f) * m_layout.SpacingOf(level);
+                        (m_viewCameras.Length == 0 || InView(center, m_viewCameras[0], m_layout.Reach) ? visible : outside).Add(age);
                     }
                 }
             }
             ages.Sort();
-            descriptions.Add(FormattableString.Invariant($"level-{level}-interleave={SdfMeshProbeRelight.InterleaveOf(level)} level-{level}-age-bound={SdfMeshProbeRelight.AgeBoundOf(level, m_budget.Age):0.###} level-{level}-age-p50={(ages.Count == 0 ? 0 : ages[ages.Count / 2]):0.###} level-{level}-age-max={(ages.Count == 0 ? 0 : ages[^1]):0.###}"));
+            visible.Sort();
+            outside.Sort();
+            descriptions.Add(FormattableString.Invariant($"level-{level}-interleave={SdfMeshProbeRelight.InterleaveOf(level)} level-{level}-age-bound={SdfMeshProbeRelight.AgeBoundOf(level, m_budget.Age):0.###} level-{level}-age-p50={Median(ages):0.###} level-{level}-age-max={Oldest(ages):0.###} level-{level}-first-view-count={visible.Count} level-{level}-first-view-age-p50={Median(visible):0.###} level-{level}-first-view-age-max={Oldest(visible):0.###} level-{level}-outside-count={outside.Count} level-{level}-outside-age-p50={Median(outside):0.###} level-{level}-outside-age-max={Oldest(outside):0.###}"));
         }
         return string.Join(' ', descriptions);
+
+        static float Median(List<float> values) => values.Count == 0 ? 0 : values[values.Count / 2];
+        static float Oldest(List<float> values) => values.Count == 0 ? 0 : values[^1];
+    }
+    private void CaptureViewCameras(SdfFrame frame) {
+        var count = 0;
+        foreach (var view in frame.Views) { if (!view.Elsewhere) { count++; } }
+        if (m_viewCameras.Length != count) { m_viewCameras = new CameraSnapshot[count]; }
+        var index = 0;
+        foreach (var view in frame.Views) { if (!view.Elsewhere) { m_viewCameras[index++] = view.Camera; } }
+    }
+    private static bool InView(Vector3 center, CameraSnapshot camera, float far) => camera.MaySee(center, default, default, default, 0, far);
+    private static bool InAnyView(Vector3 center, in Snapshot snapshot) {
+        if (snapshot.ViewCameras.Length == 0) { return true; }
+        foreach (var camera in snapshot.ViewCameras) { if (InView(center, camera, snapshot.Layout.Reach)) { return true; } }
+        return false;
     }
 
     /// <summary>Describes the volume's cost sheet for <c>world.budget</c>: its probes per level, the bytes a probe takes in
@@ -1498,13 +1524,13 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
     // The state a worker reads under the gate before it lists or processes probes.
     private readonly record struct Snapshot(SdfMeshIrradianceScene Scene, Lighting Lighting, Layout Layout, (int X, int Y, int Z)[] Lows, Vector3 Camera, int Geometry, int WindowVersion,
-        (int Geometry, Box[]? Boxes)[] Changes, long[] VersionTimes, int VersionBase, int Sweep, float AgeTarget);
+        (int Geometry, Box[]? Boxes)[] Changes, long[] VersionTimes, int VersionBase, int Sweep, float AgeTarget, CameraSnapshot[] ViewCameras);
 
     private Snapshot? TakeSnapshot() {
         lock (m_gate) {
             if (m_disposed || (m_scene is null) || (m_lighting is null)) { return null; }
             return new Snapshot(Camera: m_camera, Changes: [.. m_changes], Geometry: m_geometry, Layout: m_layout, Lighting: m_lighting, Lows: Lows(), Scene: m_scene.Acquire(),
-                Sweep: m_sweep, VersionBase: m_versionBase, VersionTimes: [.. m_versionTimes], WindowVersion: m_windowVersion, AgeTarget: m_budget.Age);
+                Sweep: m_sweep, VersionBase: m_versionBase, VersionTimes: [.. m_versionTimes], WindowVersion: m_windowVersion, AgeTarget: m_budget.Age, ViewCameras: [.. m_viewCameras]);
         }
     }
     // Whether the windows, the layout and the geometry a worker listed its probes for still stand.
@@ -1705,7 +1731,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                             continue;
                         }
                         candidates.Add(item: new Candidate(Cell: (x, y, z), Band: priority.Band, Morton: priority.Morton, Level: level, LitAt: (present ? probe.LitAt : 0L), Trace: trace,
-                            Urgency: AgePriority(age, bound)));
+                            Overdue: bound > 0 && age >= bound, Urgency: AgePriority(age, bound, InAnyView(center, in snapshot), probe.Moved)));
                     }
                 }
             }
@@ -1721,11 +1747,17 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         candidates.Sort(comparison: static (a, b) =>
             (a.Trace != b.Trace) ? (a.Trace ? -1 : 1) :
             a.Trace ? ((a.Level != b.Level) ? a.Level.CompareTo(value: b.Level) : CompareSpatial(a, b)) :
+            (a.Overdue != b.Overdue) ? (a.Overdue ? -1 : 1) :
             (a.Urgency != b.Urgency) ? b.Urgency.CompareTo(a.Urgency) :
             (a.Level != b.Level) ? a.Level.CompareTo(value: b.Level) :
             (a.LitAt != b.LitAt) ? a.LitAt.CompareTo(value: b.LitAt) : CompareSpatial(a, b));
     }
-    private static int AgePriority(float age, float bound) => bound > 0 ? (int)MathF.Min(int.MaxValue, MathF.Floor(age / bound * 8)) : 0;
+    private static int AgePriority(float age, float bound, bool inView, bool changed) {
+        var relative = bound > 0 ? age / bound : age;
+        // Overdue probes ignore view/change weights. Below the bound these weights only reorder work; none retires.
+        var weight = bound > 0 && age >= bound ? 1 : (inView ? 1 : .25f) * (changed ? 1.25f : 1);
+        return (int)Math.Clamp(Math.Floor((double)relative * weight * 8), 0, int.MaxValue);
+    }
     private static int ProbePhase(int x, int y, int z) => (x & 1) | ((y & 1) << 1) | ((z & 1) << 2);
     private static int CompareSpatial(Candidate a, Candidate b) => a.Band != b.Band ? a.Band.CompareTo(b.Band) : a.Morton.CompareTo(b.Morton);
     // Eight-cell radial bands retain near-first demand while adjacent probes share hierarchy cache lines.
@@ -2525,7 +2557,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // A probe the worker lists: its level and cell, whether it lacks a trace against the current geometry, the capture
     // time of the lighting it was last relit under (zero for none), the relights it holds under the current lighting,
     // and its radial priority band and Morton cell order within that band.
-    private readonly record struct Candidate(int Level, (int X, int Y, int Z) Cell, bool Trace, long LitAt, int Band, uint Morton, int Urgency);
+    private readonly record struct Candidate(int Level, (int X, int Y, int Z) Cell, bool Trace, long LitAt, int Band, uint Morton, bool Overdue, int Urgency);
 
     // One probe: its geometry (where it stands relative to its cell's centre, the share of its rays that met back faces,
     // whether it lies inside geometry, the geometry it was traced against, and its hit buffer, sky shares and surface map

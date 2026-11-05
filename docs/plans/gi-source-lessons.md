@@ -284,34 +284,14 @@ lockstep still at `debug.go gallery` repeats across two Worlds within the
 gather's residue; `[sdf.mesh-gi] done … seconds=` for a full relight under a
 moving sun.
 
-### L3. Relight order by level, view and change
-
-**Family.** The lane that takes G1's step 3, as part of it.
-
-**Outcome.** The GPU work list orders relights by an interleave per level, a
-view weight and the probe's last change, inside an age bound per level that
-`world.budget` reports.
-
-**Invariant and enforcement.** Every probe is relit within its level's age
-bound of a lighting change, and no probe is skipped for its own small change.
-Enforced in the selection kernel (`sdf-probe-select.comp.hlsl` on the branch),
-the one place that marks a probe due: a coarse probe's due bit is gated by
-its phase, `(version + phase) % k == 0`, and forced once its age reaches the
-bound. The lockstep drain bypasses the gate by listing every probe, as it
-does today. The guarantee stops at the budget: overload still lengthens every
-age, now in proportion to each level's interleave.
-
-**Steps and checks.** (2) The view
-weight from the residency's view cameras. Check: the age of probes inside the
-first view's frustum against the rest.
-
 ## Sequencing against G1
 
 G1's own order stands (trace on the GPU, relight and publication on the GPU,
 the work list on the GPU, the CPU trace out of the frame's path). The traversal
 contracts are owned by the mesh-GI reference. L2's step 0 runs
 now in parallel: it reads the CPU path and touches only the mesh-scene verb or
-a scratch harness. L3 is part of G1's step 3. L2's steps 1 and 2 follow G1's
+a scratch harness. Relight selection and ordering are owned by the mesh-GI
+reference. L2's steps 1 and 2 follow G1's
 step 3, because they change the relight kernel and the trace's output. Lesson
 4 (slot-by-slot publication) follows G1's step 2, which rewrites publication;
 lesson 5's attribution of the 18 GB is a reading any lane can take now with

@@ -44,6 +44,13 @@ CPU reference uses the same eligibility rule; lockstep always visits all cells.
 Relight priority uses age relative to the level's bound before level, capture
 age and spatial band. Overload can exceed the targets; no probe retires on its
 own small change.
+Below the bound, age priority is weighted by 1 inside any residency view's
+frustum and 0.25 outside all of them, and by 1.25 when the probe's last relight
+moved past the existing convergence threshold. Overdue probes ignore these
+weights. Camera snapshots come from the same frame as the work snapshot;
+elsewhere cameras are excluded because their coordinates belong to another
+world. The diagnostic additionally reports the first view's counts, median
+and oldest ages against those outside that frustum at each level.
 
 The runtime streams the existing scene's nodes and leaf indices through a
 `GpuRegion` source, without a second packed hierarchy on the CPU. One admitted

@@ -1112,6 +1112,11 @@ priority. Geometry and publication work bypass the gate. Unchanged lighting
 takes whole bounce sweeps, and a lockstep drain always visits every cell from
 no bounce. These bounds describe demand under the budget, not guaranteed wall
 time when the device is overloaded.
+Below its bound, a probe outside every local view's frustum gets less age
+priority, and a probe whose last light changed gets more. Neither weight
+removes work. Overdue probes ignore both weights. The budget diagnostic
+reports ages inside the first frustum and outside it so the demand weighting
+can be measured independently of whole-window ages.
 
 Software compute is the baseline on both backends; no ray-tracing hardware is
 required. The trace device law requires exact identities and discrete flags,

@@ -103,8 +103,9 @@ public sealed partial class SdfMeshIrradiance {
                         var age = !present || probe.Lighting == snapshot.Lighting.Version ? 0 : (float)Stopwatch.GetElapsedTime(StaleSince(probe.Lighting, in snapshot), now).TotalSeconds;
                         row[11] = BitConverter.SingleToUInt32Bits(age);
                         var priority = ProbePriority((x, y, z), low, center, snapshot.Camera, spacing);
+                        var bound = SdfMeshProbeRelight.AgeBoundOf(level, snapshot.AgeTarget);
                         candidates.Add(new Candidate(Cell: (x, y, z), Band: priority.Band, Morton: priority.Morton, Level: level, LitAt: present ? probe.LitAt : 0, Trace: false,
-                            Urgency: AgePriority(age, SdfMeshProbeRelight.AgeBoundOf(level, snapshot.AgeTarget))));
+                            Overdue: bound > 0 && age >= bound, Urgency: AgePriority(age, bound, InAnyView(center, in snapshot), probe.Moved)));
                         if (present) { ages?.Add(age); }
                     }
                 }
