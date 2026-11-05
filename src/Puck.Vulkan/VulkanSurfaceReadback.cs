@@ -112,7 +112,7 @@ public sealed class VulkanSurfaceReadback : IDisposable {
             m_readbackBuffer = VulkanBuffer.Create(
                 bufferApi: m_bufferApi,
                 device: m_deviceContext,
-                memory: VulkanBufferMemory.HostCoherent,
+                memory: VulkanBufferMemory.HostCachedCoherent,
                 sizeBytes: ((((ulong)width) * height) * bytesPerPixel),
                 usage: VulkanBufferUsageFlags.TransferDestination
             );
