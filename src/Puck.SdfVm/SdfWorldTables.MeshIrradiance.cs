@@ -8,7 +8,7 @@ namespace Puck.SdfVm;
 // (sdfMeshIrradiance). It is staged, so it lives in device-local memory, and a frame no probe landed in writes nothing.
 public sealed partial class SdfWorldTables {
     private const int MeshIrradianceRegionIndex = 12;
-    private const int MeshIrradianceBytes = ((SdfMeshIrradiance.MaxProbes * SdfMeshIrradianceProbe.ProbeWords) * sizeof(uint));
+    private static readonly int MeshIrradianceBytes = ((SdfMeshIrradiance.MaxProbes * SdfMeshIrradianceProbe.ProbeWords) * sizeof(uint));
 
     private readonly GpuRegion m_meshIrradianceRegion;
 

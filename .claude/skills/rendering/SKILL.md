@@ -415,15 +415,18 @@ views passes share one head and entry (`passes/sdf-pixel-pass.hlsli`,
   Gather weights are trilinear share × a half-spacing smooth distance fade in front of the receiver × depth
   visibility. The actual receiver is biased by `NormalBias` metres, never by
   spacing; clamping the lookup must not move the visibility-test receiver.
-  The volume has three nested levels (8 m and 32 m cells past the tier's
-  window); a receiver reads the finest level whose probes measured it (a finer
-  level answers past its window as far as its surface maps reach), and where
-  none of that level's probes measured it, the same probes answer past their
-  reach, blocked only by surfaces they measured, with no traced static light,
-  then the finest level's boundary probes the same way. Only the finest level
-  keeps the behind-plane floor. Nothing a camera sees reads an unmeasured
+  The volume has three nested levels, a table per tier with a spacing per axis
+  (`SdfMeshIrradiance.LevelsOf`: the tier's window, 4×2×4 m storey cells, 32 m
+  cells); a receiver's stages run finest first (finer levels within their
+  surface maps' reach, the holding level bounded, the same probes unbounded,
+  the finest level's boundary probes), and the first that answers counts only in
+  its share, its weight over the cage's front weight before visibility, the rest
+  coming from the next stage over another cage. Sixteen pre-scaled slots; each
+  level's row carries its coverage ramp, the storey level's closing on almost
+  any measured hit, the finest and 32 m levels' tolerant. Only the finest
+  level keeps the behind-plane floor. Nothing a camera sees reads an unmeasured
   surface as black. `SdfMeshIrradianceGatherDeviceLawTests` holds the GPU and
-  CPU gathers to the same slots and weights.
+  CPU gathers to the same slots, weights and share.
   Relocation (`SdfMeshIrradiance.Place`) keeps a probe clear of geometry within
   its own cell; every lookup uses its recorded offset. Placement takes the nearest clear exit; its short rejection rays
   stop at one spacing, with no openness score. Debug with `world.probe` after bakes and GI settle;

@@ -1842,25 +1842,42 @@ the fixed poses and the approaches already rejected.
   Isolate geometry and the moving bake from probe interpolation before
   attributing it. The Vulkan sweep also flags the cumulative moving-bake cap
   counter rising; its cause is unisolated.
-- [medium] Far interior walls past the finest probes' reach read the 8 m
-  level, whose metres-wide angular taps cannot resolve a room a few metres
-  tall. A wall no coarse probe answers now reads the finest level's boundary
-  probes, and coarse probes behind its plane take no part
-  ([mesh GI](../../.claude/skills/rendering/references/mesh-gi.md)), but coarse
-  probes in front still draw pale triangles and dark wedges from their angular
-  patches. Repro at the High tier: `world.indirect high`,
-  `body.pose 64 4.57 28.52 273`,
-  `view.override camera look 68 6.8 28.52 10 6.0 28.52`,
-  `world.debug-view indirect`. The far third of the hall shows them, and
-  `world.probe 10.6 6.5 28.5 1 0 0` reads `level=1`. The
-  [far-field memo](far-field-irradiance.md) measured the cause (storeys with
-  no coarse probe plane read nothing but single leaking corners normalized to
-  the whole) and holds the recommendation and its implementation brief:
-  conservative coverage past the finest level, share-blended level selection,
-  and a storey-resolving coarse level. Re-check the far-wall stops this item listed
-  (`finding-teal-roof`, `gallery-entrance`, `devices`, `desktop`, `rate-range`,
-  `camera-course`, `stage`, `jump`, `flight`, `noclip`, the `garden` return
-  portal).
+- [medium] The coarse probe levels' far field after the
+  [far-field memo](far-field-irradiance.md)'s three changes (every storey of
+  the gallery hall now reads the storey level, measured, with every answering
+  corner clear at `world.probe 12 4.5k+0.06 28.5 0 1 0`). What remains:
+  - At the finest window's edge, wall receivers show a sawtooth one probe row
+    tall where the finer-level stage ends at `SurfaceReachOf` and the next
+    level takes over at once (`body.pose 64 4.57 28.52 273`,
+    `view.override camera look 68 6.8 28.52 10 6.0 28.52`, `world.debug-view
+    indirect`, the left window band near x = 44). The share blend eases the
+    level boundary inside a stage, not this cut between stages; a fade of the
+    finer stage's share over its reach's last metre would.
+  - Past the storey level's 128 m window the 32 m level answers indoor
+    receivers, and its 16 m taps reach across slabs: in the four-storey hall
+    law, receivers at the hall's end 62 to 70 m from its camera take the storey
+    level's share and the 32 m level's remainder, 238 corners exact-blocked,
+    reading up to 1.2 times an outdoor ground receiver's sky
+    (`SdfMeshIrradianceLawTests.FarField.cs`, far-exact-blocked). The 32 m
+    level keeps the tolerant coverage ramp because the conservative one
+    darkened one clear corner in six on curved hills, the valley view's
+    blotches (`TheCoarsestLevelKeepsACurvedSurfaceItSeesLit`); a test that
+    tells a slab a 16 m tap grazes from a hill's near bulge would let it have
+    both.
+  - The level table is engine data (`SdfMeshIrradiance.LevelsOf`); the memo
+    asked that a world may choose it beside `render.indirect`'s tier. The
+    `(8, 2, 8)` m over 32×48×32 alternative keeps the 8 m band outdoors at 60 %
+    more probes; the overlook's mid-field showed no change under the default
+    table, so it was not taken.
+  - Left open by the memo: a sparse finest level and a forward window offset
+    (options 9 and 10) once the trace is on the GPU, an authored `indirect`
+    region (option 5) if a world asks for one, higher angular resolution for
+    coarse surface maps (option 7) if an atrium taller than its probe planes
+    still seams, and the per-probe visibility lattice (option 8) as the coarse
+    levels' test once rays are a GPU budget.
+  Re-check the far-wall stops the earlier item listed (`finding-teal-roof`,
+  `gallery-entrance`, `devices`, `desktop`, `rate-range`, `camera-course`,
+  `stage`, `jump`, `flight`, `noclip`, the `garden` return portal).
 - The SPIN exhibit (`gallery.go motion-spin`): a dotted bright seam at the level
   3 ceiling and wall junction reproduces in beauty but not in `indirect`,
   `normals` or `shadow`; behind it at level 2 a dotted bright line runs along
