@@ -490,7 +490,7 @@ public static class WorldBootComposition {
             ) {
                 // The baked meshes persist in the device cache the boot was handed, so an unchanged world reboots without
                 // baking; a composition without the roots keeps them for the run.
-                MeshLibrary = new SdfMeshLibrary(allocator: sp.GetRequiredService<Puck.Abstractions.Memory.IAllocator>(), store: ((sp.GetService<WorldCacheRoots>() is { } caches) ? new SdfMeshStore(directory: caches.Meshes) : null)),
+                MeshLibrary = new SdfMeshLibrary(allocator: sp.GetRequiredService<Puck.Abstractions.Memory.IAllocator>(), store: ((sp.GetService<WorldCacheRoots>() is { } caches) ? new SdfMeshStore(directory: caches.Meshes, allocator: sp.GetRequiredService<Puck.Abstractions.Memory.IAllocator>()) : null)),
                 SkyLayers = sp.GetRequiredService<WorldRenderSettings>().SkyLayers,
                 ToonOverride = () => sp.GetRequiredService<WorldRenderSettings>().ToonOverride,
                 BloomSettings = sp.GetRequiredService<WorldRenderSettings>(),

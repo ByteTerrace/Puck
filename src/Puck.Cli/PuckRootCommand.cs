@@ -70,6 +70,9 @@ public static class PuckRootCommand {
     public static RootCommand Create(TimeProvider clock) => Create(clock: clock, schemaBootstrap: SchemaBootstrap.IsBootstrap);
     // A bootstrap binary cannot start a consumer of the deliberately absent model table.
     public static RootCommand Create(TimeProvider clock, bool schemaBootstrap) {
+        // Every verb below the gate that starts a World or a heavy test host waits on the admission the gate itself uses.
+        WorldAdmission.Install(admit: HostAdmission.For(clock: clock, composition: Gate));
+
         Command[] verbs = (schemaBootstrap ? [SchemaCommand.Create(clock: clock)] : [
             AffectedCommand.Create(composition: Gate),
             AgentsCommand.Create(),
@@ -96,9 +99,9 @@ public static class PuckRootCommand {
             LandingCommand.Create(),
             LanesCommand.Create(clock: clock),
             LawsCommand.Create(),
-            LeaseCommand.Create(clock: clock, settleWait: (settle, timeout, progress, cancellationToken) => HostQuiet.SettleAsync(cancellationToken: cancellationToken, clock: clock, composition: Gate, progress: progress, settle: settle, timeout: timeout)),
+            LeaseCommand.Create(admit: HostAdmission.For(clock: clock, composition: Gate), clock: clock, settleWait: (settle, timeout, progress, cancellationToken) => HostQuiet.SettleAsync(cancellationToken: cancellationToken, clock: clock, composition: Gate, progress: progress, settle: settle, timeout: timeout)),
             LocksCommand.Create(),
-            McpCommand.Create(ancestor: ProcessInspection.IsAncestor),
+            McpCommand.Create(admit: HostAdmission.For(clock: clock, composition: Gate), ancestor: ProcessInspection.IsAncestor),
             MotionCommand.Create(),
             NuGetCommand.Create(),
             OfficialCommand.Create(),

@@ -1256,28 +1256,12 @@ public static partial class WorldSchema {
     private static JsonNode? ResolvePointer(JsonObject root, string pointer) {
         JsonNode? cursor = root;
 
-        foreach (var escaped in pointer[2..].Split(separator: '/')) {
-            var segment = Puck.Assets.Documents.DocumentJsonPointer.Unescape(value: escaped);
+        if (!Puck.Assets.Documents.DocumentJsonPointer.TrySegments(pointer: pointer[1..], segments: out var segments)) {
+            return null;
+        }
 
-            cursor = cursor switch {
-                JsonObject obj => (obj.TryGetPropertyValue(
-                    jsonNode: out var member,
-                    propertyName: segment
-                )
-                    ? member
-                    : null),
-                JsonArray arr => ((int.TryParse(
-                    provider: System.Globalization.CultureInfo.InvariantCulture,
-                    result: out var index,
-                    s: segment,
-                    style: System.Globalization.NumberStyles.None
-                ) && (index < arr.Count))
-                    ? arr[index]
-                    : null),
-                _ => null,
-            };
-
-            if (cursor is null) {
+        foreach (var segment in segments) {
+            if (!Puck.Assets.Documents.DocumentJsonPointer.TryChild(child: out cursor, node: cursor, segment: segment) || (cursor is null)) {
                 return null;
             }
 

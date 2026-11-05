@@ -26,14 +26,8 @@ public static class SdfMeshChunks {
         ArgumentNullException.ThrowIfNull(mesh);
         if (mesh.TriangleCount == 0) { return Merge(mesh: mesh, preserveFeatures: preserveFeatures); }
         var positions = mesh.Positions.Span;
-        var low = positions[0];
-        var high = low;
-
-        foreach (var position in positions) {
-            low = Vector3.Min(value1: low, value2: position);
-            high = Vector3.Max(value1: high, value2: position);
-        }
-        var size = (high - low);
+        var low = mesh.PositionLow;
+        var size = (mesh.PositionHigh - low);
 
         if (MathF.Max(x: size.X, y: MathF.Max(x: size.Y, y: size.Z)) <= Side) {
             return Merge(mesh: mesh, preserveFeatures: preserveFeatures);

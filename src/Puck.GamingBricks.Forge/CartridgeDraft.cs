@@ -1,4 +1,4 @@
-using System.Globalization;
+using Puck.Assets.Documents;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -25,7 +25,7 @@ public sealed class CartridgeDraft {
         }
     }
     private void Edit(string pointer, JsonNode? value, bool remove) {
-        var parts = Parts(pointer: pointer);
+        var parts = DocumentJsonPointer.Segments(pointer: pointer);
         var next = m_root.DeepClone();
 
         if (parts.Length == 0) {
@@ -40,16 +40,16 @@ public sealed class CartridgeDraft {
             }
             next = value;
         } else {
-            var parent = Resolve(
-                root: next,
-                parts: parts[..^1]
+            var parent = DocumentJsonPointer.Require(
+                pointer: DocumentJsonPointer.Parent(pointer: pointer),
+                root: next
             );
             var key = parts[^1];
 
             switch (parent) {
                 case JsonObject obj:
                     if (remove) {
-                        if (!obj.Remove(propertyName: key)) { throw Missing(pointer: pointer); }
+                        if (!obj.Remove(propertyName: key)) { throw DocumentJsonPointer.Missing(pointer: pointer); }
                     } else { obj[propertyName: key] = value; }
                     break;
                 case JsonArray array:
@@ -57,66 +57,16 @@ public sealed class CartridgeDraft {
                         !remove &&
                         (key == "-")
                     ) { array.Add(item: value); break; }
-                    var index = Index(
-                        key: key,
-                        count: array.Count
-                    );
+                    if (!DocumentJsonPointer.TryIndex(count: array.Count, index: out var index, segment: key)) { throw DocumentJsonPointer.Missing(pointer: pointer); }
                     if (remove) { array.RemoveAt(index: index); } else { array[index: index] = value; }
                     break;
-                default: throw Missing(pointer: pointer);
+                default: throw DocumentJsonPointer.Missing(pointer: pointer);
             }
         }
         CheckSize(json: next.ToJsonString());
         m_previous = m_root;
         m_root = next;
     }
-    private static int Index(string key, int count) {
-        if (
-            (key.Length == 0) ||
-            ((key.Length > 1) && (key[0] == '0')) ||
-            !int.TryParse(
-            s: key,
-            style: NumberStyles.None,
-            provider: CultureInfo.InvariantCulture,
-            result: out var index
-        ) ||
-            (index < 0) ||
-            (index >= count)
-        ) { throw Missing(pointer: key); }
-        return index;
-    }
-    private static ArgumentException Missing(string pointer) => new(message: $"Invalid or missing JSON Pointer '{pointer}'.");
-    private static string[] Parts(string pointer) {
-        if (pointer.Length == 0) { return []; }
-        if (!pointer.StartsWith(value: '/')) { throw Missing(pointer: pointer); }
-        var parts = pointer[1..].Split(separator: '/');
-
-        foreach (var part in parts) {
-            for (var i = 0; (i < part.Length); ++i) {
-                if (
-                    (part[i] == '~') &&
-                    ((++i == part.Length) || (part[i] is not ('0' or '1')))
-                ) { throw Missing(pointer: pointer); }
-            }
-        }
-        return parts.Select(selector: Puck.Assets.Documents.DocumentJsonPointer.Unescape).ToArray();
-    }
-    private static JsonNode? Resolve(JsonNode root, string[] parts) {
-        var node = root;
-
-        foreach (var part in parts) {
-            node = node switch {
-                JsonObject obj when obj.ContainsKey(propertyName: part) => obj[propertyName: part],
-                JsonArray array => array[index: Index(
-                key: part,
-                count: array.Count
-            )],
-                _ => throw Missing(pointer: part),
-            };
-        }
-        return node;
-    }
-
     /// <summary>Validates the draft and returns canonical source data.</summary>
     /// <returns>The valid cartridge document.</returns>
     public CartridgeDocument Check() => CartridgeDocuments.Parse(utf8: Encoding.UTF8.GetBytes(s: Show()));
@@ -146,10 +96,7 @@ public sealed class CartridgeDraft {
     /// <summary>Reads the entire draft or a JSON Pointer subtree as JSON.</summary>
     /// <param name="pointer">An RFC 6901 pointer; empty selects the root.</param>
     /// <returns>The selected JSON, including string quotes.</returns>
-    public string Show(string pointer = "") => (Resolve(
-        root: m_root,
-        parts: Parts(pointer: pointer)
-    )?.ToJsonString() ?? "null");
+    public string Show(string pointer = "") => (DocumentJsonPointer.Require(pointer: pointer, root: m_root)?.ToJsonString() ?? "null");
     /// <summary>Swaps the current draft with the last successful edit, allowing undo and redo.</summary>
     public void Undo() {
         if (m_previous is null) { throw new InvalidOperationException(message: "No edit to undo."); }

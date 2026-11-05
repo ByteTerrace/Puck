@@ -1,11 +1,15 @@
 import "forest-layout"
 
-let forestTufts = filter(scatterPoints(cellSize: 0.5, width: 560, depth: 220, spacing: 7, radius: 3,
-  seed: 8132), p => forestInBelt(p[0], p[2] - 150, 4) and lawnPathClear(p[0], p[2] - 150, 0.15) and
-  (forestInGlade(p[0], p[2] - 150, 2) or forestThicket(p[0], p[2] - 150) < -0.2))
-let forestDuff = filter(scatterPoints(cellSize: 0.5, width: 560, depth: 220, spacing: 11, radius: 5,
-  seed: 51893), p => forestInBelt(p[0], p[2] - 150) and not forestInGlade(p[0], p[2] - 150) and
-  lawnPathClear(p[0], p[2] - 150, 2.8))
+let forestTufts = filter(
+  scatterPoints(cellSize: 0.5, width: 560, depth: 220, spacing: 7, radius: 3, seed: 8132),
+  p => forestInBelt(p[0], p[2] - 150, 4) and
+    lawnPathClear(p[0], p[2] - 150, 0.15) and
+    (forestInGlade(p[0], p[2] - 150, 2) or forestThicket(p[0], p[2] - 150) < -0.2)
+)
+let forestDuff = filter(
+  scatterPoints(cellSize: 0.5, width: 560, depth: 220, spacing: 11, radius: 5, seed: 51893),
+  p => forestInBelt(p[0], p[2] - 150) and not forestInGlade(p[0], p[2] - 150) and lawnPathClear(p[0], p[2] - 150, 2.8)
+)
 
 placements {
   for (p, i) in forestTufts {

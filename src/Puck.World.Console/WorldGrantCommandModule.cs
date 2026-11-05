@@ -56,6 +56,15 @@ namespace Puck.World;
 /// additionally accepts <c>body:&lt;n&gt;</c> naming a body that exists for any principal (an addon/peer must carry
 /// <c>budget:&lt;n&gt;</c>) or <c>all</c> (console/seat).</remarks>
 public sealed class WorldGrantCommandModule(IWorldConsoleAuthority authority) : ICommandModule {
+    /// <summary>The form <c>world.grant</c> and <c>world.grant.set</c> take: the whole token grammar, masks included.</summary>
+    public const string GrantForm = "<grantee> <capability> <subject> [exclusive] [budget:<n>] [events:<n>] [channels:<name,...>] [registers:<name,...>] [ceiling:<f>] [hold:<seconds>] [verbs:<name,...>] [writes:<name,...>]";
+    /// <summary>The form <c>world.revoke</c> and <c>world.grant.remove</c> take: the row's key and nothing else.</summary>
+    public const string RevokeForm = "<grantee> <capability> <subject>";
+    private const string WhyForm = "<grantee> <capability> <subject> [verbs:<name,...>] [writes:<name,...>]";
+    private static readonly CommandForms WorldGrantForms = CommandForms.Of(verb: "world.grant", GrantForm);
+    private static readonly CommandForms WorldRevokeForms = CommandForms.Of(verb: "world.revoke", RevokeForm);
+    private static readonly CommandForms WorldWhyForms = CommandForms.Of(verb: "world.why", WhyForm);
+    private static readonly CommandForms WorldGrantsForms =CommandForms.Of(verb: "world.grants", "[grantee]");
     // The DOCUMENT-AUTHORED half of the read-back — the `document:<id>` rows in WorldDefinition.Grants, which are
     // deliberately NOT replayed into the live table (Server.WorldServer.IsDocumentChannelRow, and the grant door
     // refuses one by name): the cross-document durable-state write-back channel resolves them by reading the OWNER'S
@@ -100,9 +109,9 @@ public sealed class WorldGrantCommandModule(IWorldConsoleAuthority authority) : 
     private CommandResult Handle(WorldInstance instance, Principal actor, in WireArgs args, bool exclusiveAllowed, bool revoke) {
         var server = instance.Server;
         var link = instance.SubmissionLink;
-        var verb = (revoke
-            ? "world.revoke"
-            : "world.grant"
+        var forms = (revoke
+            ? WorldRevokeForms
+            : WorldGrantForms
         );
 
         // verbsAllowed rides WITH exclusiveAllowed here: world.grant (true/true) accepts both the mutating trailing
@@ -112,7 +121,7 @@ public sealed class WorldGrantCommandModule(IWorldConsoleAuthority authority) : 
         if (!TryParseGrant(
             args: args,
             exclusiveAllowed: exclusiveAllowed,
-            verb: verb,
+            forms: forms,
             grant: out var grant,
             error: out var error,
             channels: server.Population.Channels,
@@ -229,7 +238,8 @@ public sealed class WorldGrantCommandModule(IWorldConsoleAuthority authority) : 
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.grant",
-            description: "Grants a capability to a grantee: world.grant <grantee> <capability> <subject> [exclusive] [budget:<n>] [events:<n>] [channels:<name,...>] [ceiling:<f>] [hold:<seconds>] [verbs:<name,...>] [writes:<name,...>]. grantee = seat1..seat4|console|addon:<name>|peer:<n>:<generation>|group:<id>|document:<id>; capability = drive|observe|control|mutate|edit; subject = body:<n>|screen:<n>|section:<name>|state:<name>|region:<name>|seat:<n>|creation:<id>|placement:<id>|adjacency:<name>|machine:<name>|all|composition (state:<name> narrows edit over ONE named state row, slot-shaped or keyed alike — a slot is a table with one key — reaching BOTH its whole-row world.row.set state/world.row.remove state and its per-cell world.state.cell.set/.remove writes). Applies at submit; an exclusive grant a live holder owns is rejected loudly, in either order (the seeded permissive wildcard never blocks one, and an exclusive hold never permanently blocks the wildcard's later re-grant either). budget:<n> (1..65535) sets the row's per-tick dispatch allowance: REQUIRED on an observe, drive, or mutate section:<name> grant to an untrusted addon:/peer: principal (a defaulted budget would silently decide a denial-of-service ceiling), REFUSED on every other row (trusted reads/drives/mutations are unmetered, and a mutate state:<name> row is the cross-document write-back channel, which has no dispatch door to meter — it is gated by writes:<name,...> instead), and budget:0 is refused at parse time (0 is not a spelling for 'no budget' — omit the token instead). events:<n> (1..65535) is the WORLD-EVENTS sibling budget: an observe grant may carry it independently of budget:<n> (dispatch and events meter different costs — they are two SEPARATE meters, not one renamed); it is REQUIRED on observe screen:<n>/region:<name>/seat:<n> (those subjects carry no other meaning under observe) and OPTIONAL on observe body:<n> (a bare observe body:<n> keeps its existing pose-query meaning; adding events:<n> additionally admits that body into collision/route event delivery). The PRE-EXISTING budget:<n> requirement on every untrusted observe row is UNCHANGED and stacks with this — an observe screen:<n>/region:<name>/seat:<n> row therefore needs BOTH budget:<n> AND events:<n> (the untrusted-Observe dispatch meter does not know a subject carries no query verb; only events:<n> is genuinely new vocabulary). events:0 is refused at parse time the same way budget:0 is. hold:<seconds> is the Drive row's timed-press ceiling, defaults to 2 seconds when omitted, may narrow or widen within the 60-second engine backstop, and never limits a live key/button hold. channels:<name,...> and ceiling:<f> are the CO-DRIVING pair, legal only on a drive grant and naming declared channels by their world/kit vocabulary. channels:<...> ALONE on an untrusted addon:/peer: row is that contributor's REACH — which channels it may touch. channels:<...> WITH ceiling:<f> (0..1) is only legal on the occupying seat's OWN row (seatN drive body:N) and authors the pool bound for exactly the channels it names, leaving other channels' ceilings as they were; issue it twice to give two channels different ceilings, and revoke the seat's own drive row to clear them. A reach with no seat-authored ceiling folds nothing. ceiling:0 is refused (pool-but-never-reach is accepted-and-inert; grant nothing instead), a bare ceiling with no channels is refused (it is one number per (seat, channel), not a scalar), and a ceiling on a contributor's row is refused (the ceiling is never derived from contributor rows). verbs:<name,...> is the MUTATION-KIND mask — legal on a mutate grant naming a CONCRETE section:<name>, creation:<id>, or placement:<id> subject (the dispatch door) and on an edit grant naming a CONCRETE state:<name> subject (never 'all' on either): it names WorldMutation kind types by their own record name (e.g. UpsertKit), and is refused if any names a kind outside that target's own declared kind set (an inert bit is a grant that lies) or if the resulting mask admits nothing at all (grant nothing instead). It is REQUIRED on an UNTRUSTED addon:/peer: mutate section:<name> row and refused without it: an absent mask means FULL REACH at the admission door (a trusted principal's maskless row is the seeded default), so a maskless untrusted row would silently admit every kind the section declares. On an EDIT row it is what separates bumping a state row from redefining it — 'verbs:UpsertStateCell,RemoveStateCell' admits the per-cell writes while denying the whole-row UpsertStateRow/RemoveStateRow that would re-author the row's envelope; an UNMASKED edit row keeps full reach, so a mask is opt-in narrowing beneath an already deny-by-default capability, never a new gate. writes:<name,...> is its SIBLING over a DIFFERENT vocabulary — WorldDocumentWriteKind's Set|Add, the cross-document durable-state write-back channel — legal ONLY on a mutate grant naming a CONCRETE state:<name> subject. The two are separate tokens because they are separate bit vocabularies: verbs: bit 0 is UpsertKit, writes: bit 0 is Set, and one field carrying both was a lane whose meaning depended on the row's subject kind. A RE-GRANT of the same row that OMITS either token CLEARS a previously-recorded mask of that kind — unlike budget/channels, which only ever write when carried. world.grants echoes a live mask by NAME (verbs:UpsertStateCell,RemoveStateCell / writes:Set,Add), never as a hex lane. Every capability rejects a subject shape it does not legitimately admit: drive wants body:<n> naming a body that exists (any principal; addon/peer must carry budget:<n>) or all (console/seat; addon must name body:<n>); control wants screen:<n> (any principal), composition (console/seat), or all (console/seat/peer); mutate wants section:<name> (any principal; an untrusted addon:/peer: row must carry BOTH budget:<n> and verbs:<name,...>) or creation:<id>/placement:<id> (the ROW-SCOPED slot, admitting that one creations/placements row and no other; same budget:/verbs: requirements for an untrusted principal, and refused outright for an addon: principal, whose mutation seam designates a section handle and could never dispatch it) or state:<name> (any principal, the cross-document write-back channel; no budget) or all (console/seat); edit wants state:<name> (any principal) or all (console/seat); observe wants body:<n> naming a body that exists (any principal; addon/peer must carry budget:<n>) or all (console/seat), and ADDITIONALLY (untrusted addon:/peer: principals only) screen:<n>, region:<name>, or seat:<n> — the world-events subjects, each requiring events:<n>.",
+            description: $"Grants a capability to a grantee: {WorldGrantForms.Spelling}. grantee = seat1..seat4|console|addon:<name>|peer:<n>:<generation>|group:<id>|document:<id>; capability = drive|observe|control|mutate|edit; subject = body:<n>|screen:<n>|section:<name>|state:<name>|region:<name>|seat:<n>|creation:<id>|placement:<id>|adjacency:<name>|machine:<name>|all|composition (state:<name> narrows edit over ONE named state row, slot-shaped or keyed alike — a slot is a table with one key — reaching BOTH its whole-row world.row.set state/world.row.remove state and its per-cell world.state.cell.set/.remove writes). Applies at submit; an exclusive grant a live holder owns is rejected loudly, in either order (the seeded permissive wildcard never blocks one, and an exclusive hold never permanently blocks the wildcard's later re-grant either). budget:<n> (1..65535) sets the row's per-tick dispatch allowance: REQUIRED on an observe, drive, or mutate section:<name> grant to an untrusted addon:/peer: principal (a defaulted budget would silently decide a denial-of-service ceiling), REFUSED on every other row (trusted reads/drives/mutations are unmetered, and a mutate state:<name> row is the cross-document write-back channel, which has no dispatch door to meter — it is gated by writes:<name,...> instead), and budget:0 is refused at parse time (0 is not a spelling for 'no budget' — omit the token instead). events:<n> (1..65535) is the WORLD-EVENTS sibling budget: an observe grant may carry it independently of budget:<n> (dispatch and events meter different costs — they are two SEPARATE meters, not one renamed); it is REQUIRED on observe screen:<n>/region:<name>/seat:<n> (those subjects carry no other meaning under observe) and OPTIONAL on observe body:<n> (a bare observe body:<n> keeps its existing pose-query meaning; adding events:<n> additionally admits that body into collision/route event delivery). The PRE-EXISTING budget:<n> requirement on every untrusted observe row is UNCHANGED and stacks with this — an observe screen:<n>/region:<name>/seat:<n> row therefore needs BOTH budget:<n> AND events:<n> (the untrusted-Observe dispatch meter does not know a subject carries no query verb; only events:<n> is genuinely new vocabulary). events:0 is refused at parse time the same way budget:0 is. hold:<seconds> is the Drive row's timed-press ceiling, defaults to 2 seconds when omitted, may narrow or widen within the 60-second engine backstop, and never limits a live key/button hold. channels:<name,...> and ceiling:<f> are the CO-DRIVING pair, legal only on a drive grant and naming declared channels by their world/kit vocabulary. channels:<...> ALONE on an untrusted addon:/peer: row is that contributor's REACH — which channels it may touch. channels:<...> WITH ceiling:<f> (0..1) is only legal on the occupying seat's OWN row (seatN drive body:N) and authors the pool bound for exactly the channels it names, leaving other channels' ceilings as they were; issue it twice to give two channels different ceilings, and revoke the seat's own drive row to clear them. A reach with no seat-authored ceiling folds nothing. ceiling:0 is refused (pool-but-never-reach is accepted-and-inert; grant nothing instead), a bare ceiling with no channels is refused (it is one number per (seat, channel), not a scalar), and a ceiling on a contributor's row is refused (the ceiling is never derived from contributor rows). verbs:<name,...> is the MUTATION-KIND mask — legal on a mutate grant naming a CONCRETE section:<name>, creation:<id>, or placement:<id> subject (the dispatch door) and on an edit grant naming a CONCRETE state:<name> subject (never 'all' on either): it names WorldMutation kind types by their own record name (e.g. UpsertKit), and is refused if any names a kind outside that target's own declared kind set (an inert bit is a grant that lies) or if the resulting mask admits nothing at all (grant nothing instead). It is REQUIRED on an UNTRUSTED addon:/peer: mutate section:<name> row and refused without it: an absent mask means FULL REACH at the admission door (a trusted principal's maskless row is the seeded default), so a maskless untrusted row would silently admit every kind the section declares. On an EDIT row it is what separates bumping a state row from redefining it — 'verbs:UpsertStateCell,RemoveStateCell' admits the per-cell writes while denying the whole-row UpsertStateRow/RemoveStateRow that would re-author the row's envelope; an UNMASKED edit row keeps full reach, so a mask is opt-in narrowing beneath an already deny-by-default capability, never a new gate. writes:<name,...> is its SIBLING over a DIFFERENT vocabulary — WorldDocumentWriteKind's Set|Add, the cross-document durable-state write-back channel — legal ONLY on a mutate grant naming a CONCRETE state:<name> subject. The two are separate tokens because they are separate bit vocabularies: verbs: bit 0 is UpsertKit, writes: bit 0 is Set, and one field carrying both was a lane whose meaning depended on the row's subject kind. A RE-GRANT of the same row that OMITS either token CLEARS a previously-recorded mask of that kind — unlike budget/channels, which only ever write when carried. world.grants echoes a live mask by NAME (verbs:UpsertStateCell,RemoveStateCell / writes:Set,Add), never as a hex lane. Every capability rejects a subject shape it does not legitimately admit: drive wants body:<n> naming a body that exists (any principal; addon/peer must carry budget:<n>) or all (console/seat; addon must name body:<n>); control wants screen:<n> (any principal), composition (console/seat), or all (console/seat/peer); mutate wants section:<name> (any principal; an untrusted addon:/peer: row must carry BOTH budget:<n> and verbs:<name,...>) or creation:<id>/placement:<id> (the ROW-SCOPED slot, admitting that one creations/placements row and no other; same budget:/verbs: requirements for an untrusted principal, and refused outright for an addon: principal, whose mutation seam designates a section handle and could never dispatch it) or state:<name> (any principal, the cross-document write-back channel; no budget) or all (console/seat); edit wants state:<name> (any principal) or all (console/seat); observe wants body:<n> naming a body that exists (any principal; addon/peer must carry budget:<n>) or all (console/seat), and ADDITIONALLY (untrusted addon:/peer: principals only) screen:<n>, region:<name>, or seat:<n> — the world-events subjects, each requiring events:<n>.",
+            forms: WorldGrantForms,
             handler: (context, args) => {
                 if (!authority.TryResolveInstance(
                     context: context,
@@ -253,7 +263,8 @@ public sealed class WorldGrantCommandModule(IWorldConsoleAuthority authority) : 
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.revoke",
-            description: "Revokes a capability from a grantee: world.revoke <grantee> <capability> <subject>. Same token grammar as world.grant, minus the trailing tokens (exclusive/budget/channels/ceiling do not apply — a revoke matches by (grantee, capability, subject) alone, which also clears any budget, channel reach, or authored pool ceilings the row carried; revoking a seat's own drive row is the only way to clear its ceilings). Applies at submit; the body/section then denies that principal's writes loudly.",
+            description: $"Revokes a capability from a grantee: {WorldRevokeForms.Spelling}. Same token grammar as world.grant, minus the trailing tokens (exclusive/budget/channels/ceiling do not apply — a revoke matches by (grantee, capability, subject) alone, which also clears any budget, channel reach, or authored pool ceilings the row carried; revoking a seat's own drive row is the only way to clear its ceilings). Applies at submit; the body/section then denies that principal's writes loudly.",
+            forms: WorldRevokeForms,
             handler: (context, args) => {
                 if (!authority.TryResolveInstance(
                     context: context,
@@ -277,7 +288,8 @@ public sealed class WorldGrantCommandModule(IWorldConsoleAuthority authority) : 
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.grants",
-            description: "Echoes the grant table (Immediate; the stdin barrier makes it read the settled table after any pending grant): world.grants [grantee]. With a grantee token it lists only that grantee's rows. An exclusive grant is tagged (x); a row carrying a dispatch budget is suffixed 'budget:<n>', and a row carrying a mask is suffixed 'verbs:<Name,...>' (mutation kinds) or 'writes:<Name,...>' (cross-document Set/Add) BY NAME — the same spelling world.grant's own tokens take, so a read-back and the line that authored it never disagree. A second [world.grants.document: ...] group follows when the world document's own grants section carries document:<id> rows: those are NEVER live-table rows (the cross-document durable-state write-back channel reads them off the OWNER'S DOCUMENT, so the table would hold them budget-less, mask-less, and enforced by nothing), so they are echoed where they actually live rather than seated where nothing reads them. It is omitted entirely when there are none.",
+            description: $"Echoes the grant table (Immediate; the stdin barrier makes it read the settled table after any pending grant): {WorldGrantsForms.Spelling}. With a grantee token it lists only that grantee's rows. An exclusive grant is tagged (x); a row carrying a dispatch budget is suffixed 'budget:<n>', and a row carrying a mask is suffixed 'verbs:<Name,...>' (mutation kinds) or 'writes:<Name,...>' (cross-document Set/Add) BY NAME — the same spelling world.grant's own tokens take, so a read-back and the line that authored it never disagree. A second [world.grants.document: ...] group follows when the world document's own grants section carries document:<id> rows: those are NEVER live-table rows (the cross-document durable-state write-back channel reads them off the OWNER'S DOCUMENT, so the table would hold them budget-less, mask-less, and enforced by nothing), so they are echoed where they actually live rather than seated where nothing reads them. It is omitted entirely when there are none.",
+            forms: WorldGrantsForms,
             handler: (context, args) => {
                 if (!authority.TryResolveServer(
                     context: context,
@@ -289,10 +301,7 @@ public sealed class WorldGrantCommandModule(IWorldConsoleAuthority authority) : 
                 }
 
                 if (args.Count > 1) {
-                    return CommandResult.Usage(
-                        form: "[grantee]",
-                        verb: "world.grants"
-                    );
+                    return WorldGrantsForms.Refuse();
                 }
 
                 Grantee? filter = null;
@@ -317,7 +326,8 @@ public sealed class WorldGrantCommandModule(IWorldConsoleAuthority authority) : 
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.why",
-            description: "Echoes WHICH RULE decides an authority check (Immediate; reads the settled table behind the stdin barrier): world.why <grantee> <capability> <subject> [verbs:<name,...>] [writes:<name,...>]. Same token grammar as world.grant (minus the mutating trailing tokens). The answer is the check's own verdict — reserver-match | beaten-by-reserver (naming the reserver) | concrete-hold | wildcard-hold | no-hold — so 'denied' stops being one indistinguishable state, and a surface with NO denial line at all can be positively cleared ('authority was fine, look elsewhere') instead of investigated. The pipe-assertable attribution read (the capability-channels campaign's 'A decision is data, never a boolean'). With a trailing verbs:<name,...> token on a mutate or edit check, additionally names the DECIDING row's kind mask (ConcreteHold beats WildcardHold, same as the bare check) and reports each queried kind as admitted or denied-by-mask — a row carrying NO mask admits every kind, since the mask is opt-in narrowing. writes:<name,...> does the same over the cross-document Set/Add vocabulary, where an ABSENT mask instead admits nothing.",
+            description: $"Echoes WHICH RULE decides an authority check (Immediate; reads the settled table behind the stdin barrier): {WorldWhyForms.Spelling}. Same token grammar as world.grant (minus the mutating trailing tokens). The answer is the check's own verdict — reserver-match | beaten-by-reserver (naming the reserver) | concrete-hold | wildcard-hold | no-hold — so 'denied' stops being one indistinguishable state, and a surface with NO denial line at all can be positively cleared ('authority was fine, look elsewhere') instead of investigated. The pipe-assertable attribution read (the capability-channels campaign's 'A decision is data, never a boolean'). With a trailing verbs:<name,...> token on a mutate or edit check, additionally names the DECIDING row's kind mask (ConcreteHold beats WildcardHold, same as the bare check) and reports each queried kind as admitted or denied-by-mask — a row carrying NO mask admits every kind, since the mask is opt-in narrowing. writes:<name,...> does the same over the cross-document Set/Add vocabulary, where an ABSENT mask instead admits nothing.",
+            forms: WorldWhyForms,
             handler: (context, args) => {
                 if (!authority.TryResolveServer(
                     context: context,
@@ -331,7 +341,7 @@ public sealed class WorldGrantCommandModule(IWorldConsoleAuthority authority) : 
                 if (!TryParseGrant(
                     args: args,
                     exclusiveAllowed: false,
-                    verb: "world.why",
+                    forms: WorldWhyForms,
                     grant: out var query,
                     error: out var error,
                     channels: server.Population.Channels,
@@ -540,7 +550,7 @@ public sealed class WorldGrantCommandModule(IWorldConsoleAuthority authority) : 
     /// <param name="args">The verb's wire arguments (the tokens after the verb name).</param>
     /// <param name="exclusiveAllowed">Whether trailing <c>exclusive</c>/<c>budget:&lt;n&gt;</c>/<c>channels:&lt;...&gt;</c>/
     /// <c>ceiling:&lt;f&gt;</c> tokens are accepted.</param>
-    /// <param name="verb">The calling verb's name, for the error echo.</param>
+    /// <param name="forms">The calling verb's declared forms, for its name and its grammar refusal.</param>
     /// <param name="grant">The parsed grant, on success.</param>
     /// <param name="error">The inline error echo, on failure.</param>
     /// <param name="channels">The world's compiled channel table, needed to resolve a <c>channels:&lt;name,...&gt;</c>
@@ -552,7 +562,9 @@ public sealed class WorldGrantCommandModule(IWorldConsoleAuthority authority) : 
     /// <paramref name="exclusiveAllowed"/>, since <c>world.why</c> accepts only this one trailing token (a read-only
     /// diagnostic) while accepting none of the four mutating ones.</param>
     /// <returns><see langword="true"/> when the tokens parsed to a well-formed grant.</returns>
-    public static bool TryParseGrant(in WireArgs args, bool exclusiveAllowed, string verb, out WorldGrant grant, out CommandResult error, WorldChannelTable? channels = null, WorldTargetRegisterTable? targets = null, bool verbsAllowed = false) {
+    public static bool TryParseGrant(in WireArgs args, bool exclusiveAllowed, CommandForms forms, out WorldGrant grant, out CommandResult error, WorldChannelTable? channels = null, WorldTargetRegisterTable? targets = null, bool verbsAllowed = false) {
+        var verb = forms.Verb;
+
         grant = default;
         error = default;
 
@@ -571,17 +583,7 @@ public sealed class WorldGrantCommandModule(IWorldConsoleAuthority authority) : 
             (args.Count < 3) ||
             (args.Count > maximum)
         ) {
-            var form = (exclusiveAllowed
-                ? "<grantee> <capability> <subject> [exclusive] [budget:<n>] [events:<n>] [channels:<name,...>] [registers:<name,...>] [ceiling:<f>] [hold:<seconds>] [verbs:<name,...>] [writes:<name,...>]"
-                : (verbsAllowed
-                    ? "<grantee> <capability> <subject> [verbs:<name,...>] [writes:<name,...>]"
-                    : "<grantee> <capability> <subject>"
-            ));
-
-            error = CommandResult.Usage(
-                form: form,
-                verb: verb
-            );
+            error = forms.Refuse();
 
             return false;
         }
@@ -940,14 +942,7 @@ public sealed class WorldGrantCommandModule(IWorldConsoleAuthority authority) : 
                 continue;
             }
 
-            var expected = (exclusiveAllowed
-                ? "'exclusive', 'budget:<n>', 'events:<n>', 'channels:<name,...>', 'registers:<name,...>', 'ceiling:<f>', 'hold:<seconds>', 'verbs:<name,...>', and/or 'writes:<name,...>', each at most once"
-                : (verbsAllowed
-                    ? "'verbs:<name,...>' and/or 'writes:<name,...>', each at most once"
-                    : "no trailing tokens"
-            ));
-
-            error = CommandResult.Error(output: $"[{verb}: unexpected trailing token '{token.ToString()}' — expected {expected}]");
+            error = forms.Refuse(got: token.ToString());
 
             return false;
         }

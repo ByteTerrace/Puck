@@ -92,7 +92,7 @@ public sealed class VulkanGpuBufferFactory(IVulkanDeviceContext deviceContext, I
         var buffer = VulkanBuffer.Create(
             bufferApi: bufferApi,
             device: deviceContext,
-            memory: VulkanBufferMemory.HostCoherent,
+            memory: VulkanBufferMemory.HostCachedCoherent,
             sizeBytes: sizeBytes,
             usage: VulkanBufferUsageFlags.TransferDestination
         );

@@ -18,6 +18,8 @@ namespace Puck.World;
 /// analyzer ceilings.
 /// </summary>
 internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLink link, Client.WorldSeatAuthorityRouter seatRouter) : ICommandModule {
+    private static readonly CommandForms WorldCollisionProbeForms = CommandForms.Of(verb: "world.collision.probe", "<x> <y> <z>");
+    private static readonly CommandForms WorldContactsForms = CommandForms.Of(verb: "world.contacts", "[<body-index>]");
     // The live analytic-vocabulary census, compiled by the same server path that materializes placement colliders.
     //
     // Names whether the world actually SOLVES against this vocabulary. A world that authors a field-selecting contact
@@ -70,10 +72,7 @@ internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLin
             values: out var xyz
         )
         ) {
-            return CommandResult.Usage(
-                form: "<x> <y> <z>",
-                verb: "world.collision.probe"
-            );
+            return WorldCollisionProbeForms.Refuse();
         }
 
         var (x, y, z) = (xyz[0], xyz[1], xyz[2]);
@@ -202,14 +201,15 @@ internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLin
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.contacts",
-            description: "Reports the solidity state (Immediate read): world.contacts prints the analytic collider census and placement contribution; world.contacts <body-index> prints that 1-based body's grounded flag, planar speed, grounded witness (resolved=1 when grounded, else 0), the medium facts (inMedium/atMediumBand — always false for a kit authoring no medium hold), and an obstruction witness (obstruction=none, or the LATCHED last non-walkable contact's unit surface normal at 3-decimal precision — a vertical wall reads a non-zero obstruction even though resolved=0, and even while the same body simultaneously reads resolved=1 from standing on the floor elsewhere; a walkable push, ground or ramp, never sets it). LATCHED, not a raw per-tick read: it survives a solver tick that happens not to re-register a push while the body stays actively driven and hasn't meaningfully moved, and clears the instant either input goes idle or the body actually gets clear — so a pinned body reads a stable obstruction rather than flickering.",
+            description: $"Reports the solidity state (Immediate read): {WorldContactsForms.Spelling}: with no argument it prints the analytic collider census and placement contribution; with a body index it prints that 1-based body's grounded flag, planar speed, grounded witness (resolved=1 when grounded, else 0), the medium facts (inMedium/atMediumBand — always false for a kit authoring no medium hold), and an obstruction witness (obstruction=none, or the LATCHED last non-walkable contact's unit surface normal at 3-decimal precision — a vertical wall reads a non-zero obstruction even though resolved=0, and even while the same body simultaneously reads resolved=1 from standing on the floor elsewhere; a walkable push, ground or ramp, never sets it). LATCHED, not a raw per-tick read: it survives a solver tick that happens not to re-register a push while the body stays actively driven and hasn't meaningfully moved, and clears the instant either input goes idle or the body actually gets clear — so a pinned body reads a stable obstruction rather than flickering.",
+            forms: WorldContactsForms,
             handler: (_, args) => {
                 if (args.Count == 0) {
                     return Census();
                 }
 
                 if (args.Count > 1) {
-                    return CommandResult.Error(output: "[world.contacts: too many arguments — expected [<body-index>]]");
+                    return WorldContactsForms.Refuse(got: args[1].ToString());
                 }
 
                 if (
@@ -251,7 +251,8 @@ internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLin
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.collision.probe",
-            description: "Reads the live field the simulation solves against (Immediate): world.collision.probe <x> <y> <z> prints signed distance, material, unit gradient, and the field's ambient up mode (gradient when GradientDerivedUp is authored, +Y otherwise). Body-frame policy separately decides whether that candidate, solved gravity, or a measured support normal may orient a body. Requires a field-selecting contact requirement.",
+            description: $"Reads the live field the simulation solves against (Immediate): {WorldCollisionProbeForms.Spelling} prints signed distance, material, unit gradient, and the field's ambient up mode (gradient when GradientDerivedUp is authored, +Y otherwise). Body-frame policy separately decides whether that candidate, solved gravity, or a measured support normal may orient a body. Requires a field-selecting contact requirement.",
+            forms: WorldCollisionProbeForms,
             handler: (_, args) => Probe(args: args)
         );
         yield return CommandDefinition.WithWireArgs(

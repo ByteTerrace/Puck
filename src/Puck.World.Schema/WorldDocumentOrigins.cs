@@ -26,7 +26,7 @@ public sealed class WorldDocumentOrigins {
     internal IReadOnlyDictionary<string, WorldDocumentValueOrigin> Snapshot(JsonNode node) {
         var snapshot = new Dictionary<string, WorldDocumentValueOrigin>(comparer: StringComparer.Ordinal);
 
-        Walk(node: node, pointer: "", visit: (value, pointer) => {
+        Puck.Assets.Documents.DocumentJsonPointer.WalkValues(node: node, pointer: "", visit: (value, pointer) => {
             if (m_values.TryGetValue(key: value, value: out var origin)) {
                 snapshot.Add(key: pointer, value: origin);
             }
@@ -34,28 +34,14 @@ public sealed class WorldDocumentOrigins {
         return snapshot.ToFrozenDictionary(comparer: StringComparer.Ordinal);
     }
     internal void Restore(JsonNode node, IReadOnlyDictionary<string, WorldDocumentValueOrigin> snapshot) =>
-        Walk(node: node, pointer: "", visit: (value, pointer) => {
+        Puck.Assets.Documents.DocumentJsonPointer.WalkValues(node: node, pointer: "", visit: (value, pointer) => {
             if (snapshot.TryGetValue(key: pointer, value: out var origin)) {
                 m_values[value] = origin;
             }
         });
 
-    private static void Walk(JsonNode? node, string pointer, Action<JsonValue, string> visit) {
-        if (node is JsonValue value) {
-            visit(value, pointer);
-        } else if (node is JsonObject obj) {
-            foreach (var (name, child) in obj) {
-                Walk(node: child, pointer: $"{pointer}/{Puck.Assets.Documents.DocumentJsonPointer.Escape(value: name)}", visit: visit);
-            }
-        } else if (node is JsonArray array) {
-            for (var index = 0; (index < array.Count); index++) {
-                Walk(node: array[index], pointer: $"{pointer}/{index}", visit: visit);
-            }
-        }
-    }
-
     internal void Capture(JsonNode? node, string documentPath, string pointer = "") =>
-        Walk(node: node, pointer: pointer, visit: (value, path) =>
+        Puck.Assets.Documents.DocumentJsonPointer.WalkValues(node: node, pointer: pointer, visit: (value, path) =>
             m_values[value] = new WorldDocumentValueOrigin(DocumentPath: documentPath, JsonPointer: path, Json: value.ToJsonString()));
     internal static JsonNode? Clone(JsonNode? node, WorldDocumentOrigins? origins) {
         var clone = node?.DeepClone();

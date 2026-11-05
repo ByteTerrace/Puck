@@ -6,6 +6,9 @@ using Puck.World.Server;
 namespace Puck.World;
 
 internal sealed partial class PlayerCommandModule {
+    private static readonly CommandForms BodyReelForms = CommandForms.Of(verb: "body.reel", ReelForm);
+    private static readonly CommandForms BodyHoldForms = CommandForms.Of(verb: "body.hold", OptionalBodyForm);
+    private static readonly CommandForms BodyTetherForms = CommandForms.Of(verb: "body.tether", OptionalBodyForm);
     private static string DescribeTetherFixed(FixedQ4816 value) => ((double)value).ToString(
         format: "0.#####",
         provider: CultureInfo.InvariantCulture
@@ -118,7 +121,7 @@ internal sealed partial class PlayerCommandModule {
     // composition channel today.
     private CommandResult ReelHandler(CommandContext context, WireArgs args) {
         if (args.Count is (< 1 or > 3)) {
-            return CommandResult.Error(output: "[body.reel: expected <rate> — plus an optional hold time and body index]");
+            return BodyReelForms.Refuse();
         }
 
         if (!args.TryFloat(
@@ -185,7 +188,7 @@ internal sealed partial class PlayerCommandModule {
     }
     private CommandResult HoldHandler(CommandContext context, WireArgs args) {
         if (args.Count > 1) {
-            return CommandResult.Error(output: "[body.hold: expected at most 1 value — an optional body index]");
+            return BodyHoldForms.Refuse();
         }
 
         var (player, index, error) = ResolveTarget(
@@ -205,7 +208,7 @@ internal sealed partial class PlayerCommandModule {
     }
     private CommandResult TetherHandler(CommandContext context, WireArgs args) {
         if (args.Count > 1) {
-            return CommandResult.Error(output: "[body.tether: expected at most 1 value — an optional body index]");
+            return BodyTetherForms.Refuse();
         }
 
         var (player, index, error) = ResolveTarget(
@@ -241,20 +244,23 @@ internal sealed partial class PlayerCommandModule {
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: "body.reel",
-            description: "Holds the tether's reel channel: body.reel <rate> [holdSeconds] [body] — <rate> is bipolar [-1, 1] (negative reels in, positive reels out), scaling the target's own kit tether facet's lengthRate; [holdSeconds] how long it reads held (default one host step). Meaningless while unattached. Echoes the body.tether read-back.",
+            description: $"Holds the tether's reel channel: {BodyReelForms.Spelling} — <rate> is bipolar [-1, 1] (negative reels in, positive reels out), scaling the target's own kit tether facet's lengthRate; [holdSeconds] how long it reads held (default one host step). Meaningless while unattached. Echoes the body.tether read-back.",
+            forms: BodyReelForms,
             handler: ReelHandler,
             ackOnly: true
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "body.tether",
-            description: "Echoes a body's tether state: body.tether [body] — [body.tether: body:<n> attached=<yes|no> anchor=(x, y, z) rope=<length|n/a>]. anchor and rope read n/a while unattached. Surface holds are body.hold's to echo.",
+            description: "Echoes a body's tether state: " + BodyTetherForms.Spelling + " — [body.tether: body:<n> attached=<yes|no> anchor=(x, y, z) rope=<length|n/a>]. anchor and rope read n/a while unattached. Surface holds are body.hold's to echo.",
+            forms: BodyTetherForms,
             handler: TetherHandler
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "body.hold",
-            description: "Echoes which of a body's authored holds holds it: body.hold [body] — [body.hold: body:<n> hold=<name|none> normal=(x, y, z) spend=<left|n/a>]. hold names the row of the kit's motion.holds list the body currently holds; normal is the held surface's outward normal, n/a for a free hold or none at all; spend is what the row's spend.state slot has left, n/a for a row that spends nothing.",
+            description: "Echoes which of a body's authored holds holds it: " + BodyHoldForms.Spelling + " — [body.hold: body:<n> hold=<name|none> normal=(x, y, z) spend=<left|n/a>]. hold names the row of the kit's motion.holds list the body currently holds; normal is the held surface's outward normal, n/a for a free hold or none at all; spend is what the row's spend.state slot has left, n/a for a row that spends nothing.",
+            forms: BodyHoldForms,
             handler: HoldHandler
         );
     }

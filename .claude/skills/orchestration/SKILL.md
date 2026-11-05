@@ -349,8 +349,31 @@ direction: concurrent whole-solution builds exhaust a machine's memory.
   headroom (writers spend most of their time reading, not building), and holds
   or sheds them when memory runs low. Commit charge against the commit limit is
   the line that matters: allocations fail at the limit while physical memory
-  can still look free. A windowed debug World grows past ten gigabytes, so a
-  GPU lane closes its World between capture batches. The hard limits are one heavy integration job and one GPU
+  can still look free. The tooling holds that line for every heavy start, so a
+  lane polices nothing by hand: `puck lease heavy`, `puck lease gpu`,
+  `puck_world_start` (windowed as a device step, headless as an ordinary one),
+  `gate` and `affected` each wait, after they hold their lease, until the commit
+  charge is under its share of the limit (`HostLoadThresholds.CommitCapacityPercent`)
+  beside free memory and disk, and name what holds them
+  ([admission](../../../docs/reference/cli.md#puck-host-loadadmission-lines-for-the-machine)).
+  Every verb that boots a World process (`puck test`, `canary`, `sweep`, `motion`,
+  `counters`, `parity`, `qualify`, `docs citations`, `verbs`, `bench startup`) waits
+  on the same admission before each process it starts, so a lane never wraps those
+  in a check of its own, and a run that boots several replicas in sequence (`puck
+  test --reproduce` or `--workers`) admits before every one of them.
+  A windowed debug World grows past ten gigabytes, so a
+  GPU lane closes its World between capture batches. A test run that holds
+  gigabytes (the mesh-irradiance laws trace a whole hall and reached 9 GB
+  private) is a heavy suite: the brief says to run it under `puck lease heavy`
+  and by name, never the whole class beside a windowed World, because admission
+  counts only the memory already charged when a run starts, not the gigabytes it
+  is about to take: a windowed World and such a run peaking together took the
+  machine to 95% of its commit limit.
+  The lead cannot stop another lane's process; it asks the lane. CPU saturation does not
+  endanger lanes but voids timings: a lane whose evidence is a time (a tick, a
+  frame, a bake) attributes cost by samples and counts while the machine is
+  busy and takes its before/after times in a quiet window the lead clears; a
+  paired timing taken at full CPU swung both ways by 30%. The hard limits are one heavy integration job and one GPU
   leg at a time. A windowed debug World holds a large share of
   the machine's memory within a minute of boot (`host.memory` reads it), so
   only a couple of building lanes fit beside one. Keep windowed capture
@@ -496,7 +519,10 @@ a brief that deletes files says to use `git rm`. Reading a file outside the
 workspace is auto-denied the same way ("a tool required the read_file
 permission that headless mode cannot prompt for"), so the lead copies any
 shared brief, findings or facts into the lane's worktree (`.claude/scratch/`)
-and the brief names workspace-relative paths only. A headless run also ends when the agent
+and the brief names workspace-relative paths only. A findings-only lane writes its file under
+`.claude/scratch/` and leaves it uncommitted: that directory is ignored, and a
+brief that says to commit it gets a force-add that the next merge carries into
+the tree. The lead reads the file from the lane's worktree. A headless run also ends when the agent
 goes idle waiting on a background task of its own (a background build), leaving
 its edits uncommitted, so a brief tells it to build and test in the foreground.
 A headless run can also stall with its process alive and its log empty, so the
@@ -722,7 +748,12 @@ implementation whose brief says why Fable fits. Codex is part of the same
 lineup: Sol is a peer of `implementer` and takes the same briefs, and Astra,
 the frontier model, takes demanding implementation, diagnosis and review, the
 work of `specialist`. Spread implementer briefs across
-`implementer` and Sol, so both families' slots stay busy. Concept art and
+`implementer` and Sol, so both families' slots stay busy. The owner's
+direction: Codex gets specialist work whenever a Codex slot is free (a
+fresh-eyes area fix pass over another family's recent work, a diagnosis, an
+invariant-heavy implementation), not only the leftovers, and a feature that
+needs visual reference gets a Codex art lane beside it, its pack under
+`docs/game/art/` written before or while the feature lane builds. Concept art and
 other image generation go to Codex as the primary artist and judge (the
 owner's ruling): its built-in `image_generation` tool makes the images and its
 verdicts decide which to keep, and a Claude partner writes the brief and
@@ -788,9 +819,15 @@ long-horizon work. Route it accordingly:
 |---|---|
 | Independent review and audit passes (a third family's blind spots differ from Claude's and Codex's) | Long implementation lanes with many build/test/World steps |
 | Security review of a change or an area | Lanes that need network or GPU legs from inside its sandbox |
-| Whole-area analysis that needs a large context | Anything that must push or mutate shared Git state |
-| Portal, dashboard and other TypeScript/UI work | |
-| Research synthesis | |
+| Portal, dashboard and other TypeScript/UI work | Anything that must push or mutate shared Git state |
+| Research synthesis, as one voice beside a family that opens its sources | Finding where time or memory goes: a cost claim read from code without a measurement |
+| | A code-reading pass whose claims nobody will measure before acting |
+
+A produce-path read it wrote ranked ten per-frame costs from the code; a
+measuring lane confirmed most of the code it quoted and found every cost wrong
+(none above 3.6% of the frame's samples), while the real hot spot, which no
+reading named, took 58%. Its value there was zero beside a trace; give a cost
+question to a lane that measures.
 
 An `agy -p` lane cannot open web pages directly. Its search tool returns
 summaries, and in one research round it labelled those summaries "Opened URL"
@@ -891,6 +928,15 @@ and not a spiral:
   next batch or filed into their packet, and that fix lands on its own evidence
   without a second review round. A lane that lands is followed at once by the
   next open item, and each batch deletes the items it closed.
+- Timings are owed, not skipped: while lanes keep the machine busy, every
+  wall-clock before/after a lane reports is indicative, and the lead keeps a
+  list of the quiet-window readings owed. When a wave lands, or at least every
+  few hours, the lead stops launching, lets running builds finish, and takes
+  every owed reading in one quiet window before relaunching.
+- Fundamentals do not crowd out features (AGENTS.md, "Fundamentals, driven by
+  features"): waves of findings feed the next wave without end, so whenever no
+  feature lane is running, the next free slot goes to a debug-world feature
+  chosen for the systems it stresses, not to another cleanup wave.
 - The lead's audit stops a stalled lane, saves a writing lane's tree as a WIP
   commit, and hands the work to another lane. A lane is stalled when it repeats
   a failure, or when its progress stops for 30 minutes: writes for a writing

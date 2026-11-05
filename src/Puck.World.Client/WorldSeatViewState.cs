@@ -38,6 +38,10 @@ public sealed class WorldSeatViewState {
     private float m_pitch;
     private float m_yaw;
     private float? m_distance;
+    // The authority claim, pose epoch and heading of the body the live yaw last observed (ObserveBody).
+    private float m_observedHeading;
+    private int m_observedPose;
+    private ulong m_observedRoute = ulong.MaxValue;
 
     /// <summary>Returns the requested boom distance, or the authored orbit distance before the first input.</summary>
     public float BoomDistance(WorldViewDefaults views) {
@@ -418,13 +422,50 @@ public sealed class WorldSeatViewState {
             CutTickStep();
         }
     }
-    public void Recenter() {
+    /// <summary>Resets the live orbit and boom to the authored frame: behind the body (see <see cref="RecenterLook"/>),
+    /// at the authored pitch and distance, with the eased boom reseeded.</summary>
+    /// <param name="heading">The body's authoritative heading, in radians about world up.</param>
+    /// <param name="views">The live seat view structure, whose yaw reference decides what the live yaw rides on.</param>
+    public void Recenter(float heading, WorldViewDefaults views) {
+        ArgumentNullException.ThrowIfNull(argument: views);
+
         lock (m_gate) {
-            m_yaw = 0f;
+            m_yaw = BehindYaw(heading: heading, views: views);
             m_pitch = 0f;
             m_distance = null;
             m_boom.Reseed();
             CutTickStep();
+        }
+    }
+    // The live yaw that seats the camera behind a body heading: nothing under a body-relative reference (the yaw rides
+    // the body's own heading), the heading itself under a world one.
+    private static float BehindYaw(float heading, WorldViewDefaults views) => ((views.SeatControl.YawReference == WorldSeatYawReference.Body)
+        ? 0f
+        : VectorFunctions.WrapAngle(radians: heading));
+    /// <summary>Carries a body that was moved discontinuously (posed, teleported) into the live look: when the pose
+    /// epoch the body is seen at differs from the last one observed under the same authority claim, a world-referenced
+    /// live yaw turns by the heading the body turned by, as it does through a portal (<see cref="Cross"/>), so the camera
+    /// keeps its place around the body; a body-referenced yaw already rides the heading. Every call records the heading
+    /// the next jump is measured from.</summary>
+    /// <param name="routeEpoch">The seat's authority claim epoch; a new claim records the body without turning the look
+    /// (a mapped arrival turns it through <see cref="Cross"/>).</param>
+    /// <param name="poseEpoch">The body's pose-discontinuity counter.</param>
+    /// <param name="heading">The body's authoritative heading, in radians about world up.</param>
+    /// <param name="yawReference">The yaw reference of the world the seat is framed in.</param>
+    public void ObserveBody(ulong routeEpoch, int poseEpoch, float heading, WorldSeatYawReference yawReference) {
+        lock (m_gate) {
+            if (
+                (yawReference == WorldSeatYawReference.World) &&
+                (m_observedRoute == routeEpoch) &&
+                (m_observedPose != poseEpoch)
+            ) {
+                m_yaw = VectorFunctions.WrapAngle(radians: (m_yaw + VectorFunctions.WrapAngle(radians: (heading - m_observedHeading))));
+                CutTickStep();
+            }
+
+            m_observedRoute = routeEpoch;
+            m_observedPose = poseEpoch;
+            m_observedHeading = heading;
         }
     }
     /// <summary>Turns the camera round BEHIND the body: the live yaw is set so the resulting logical facing is
@@ -436,10 +477,7 @@ public sealed class WorldSeatViewState {
         ArgumentNullException.ThrowIfNull(argument: views);
 
         lock (m_gate) {
-            m_yaw = ((views.SeatControl.YawReference == WorldSeatYawReference.Body)
-                ? 0f
-                : VectorFunctions.WrapAngle(radians: targetYaw)
-            );
+            m_yaw = BehindYaw(heading: targetYaw, views: views);
         }
     }
     public void Reclamp(WorldViewDefaults views) {

@@ -48,6 +48,10 @@ public sealed record WorldCompilation(
     public IReadOnlyList<WorldOutput> Worlds { get; init; } = [];
     /// <summary>Gets the asset verification context. An explicit refresh is saved by the caller after validation.</summary>
     public AssetCompilationContext? Assets { get; init; }
+    /// <summary>Gets the <c>allow</c> lines of the compiled tree and of the libraries it imported, read once from
+    /// <see cref="Document"/> after the import walk. Every reporter of this source's findings applies them
+    /// (<see cref="SourceAcknowledgements.Acknowledge"/>) before printing; none re-reads the source for them.</summary>
+    public SourceAcknowledgements Acknowledgements { get; init; } = SourceAcknowledgements.None;
     /// <summary>Gets whether a document was lowered and nothing refused it.</summary>
     public bool Success => (!Diagnostics.HasErrors && ((Json is not null) || (Worlds.Count > 0)));
     /// <summary>Gets what the compiled tree declares about the documents it emits (<see cref="WorldSourceDeclaration"/>),
@@ -318,7 +322,7 @@ public static class WorldCompiler {
             Json: ((worlds.Count == 0) ? loweringResult.Value : ((worlds.Count == 1) ? worlds[0].Json : null)),
             SourceMap: ((worlds.Count == 1) ? worlds[0].SourceMap : sourceMap),
             TestWorlds: testWorlds
-        ) { Assets = assets, Worlds = worlds };
+        ) { Acknowledgements = SourceAcknowledgements.Of(document: document, sourcePath: sourcePath), Assets = assets, Worlds = worlds };
     }
 
     /// <summary>Reads <paramref name="path"/> and compiles it.</summary>

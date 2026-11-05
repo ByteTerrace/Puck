@@ -85,8 +85,14 @@ templates inside `prototypes` or `placements`. `sceneryScatter` translates a
 table of positions, scales and yaws by an origin, with optional solid contact.
 The [debug meadow](../debug/meadow.md) is the worked placement and wind example.
 
+`hydrology.puck` is a library: `hydrology(...)` authors a conserved water cycle on a flow lattice (a melt clock, a
+glacier's meltwater, a lake at its sill, falls, a river and an aquifer that levels against it) and its gauges, and
+`water.puck` is the scenery bound to them (`streamSegment`, `fallsRibbon`, `glacierMass`, `lakeSurface`, `floatGauge`,
+`stoneBridge`). `kits.puck`'s `swimHold` is the hold a kit leads its list with to swim where a world has a medium. The
+debug world's [water](../debug/debug.md#water) is the worked example.
+
 `camera.puck` is a library. `cameraFeel()` authors the shared input feel (pointer, stick and gyro), the `camera-boom`
-response and the zoom bounds/step in `views.seatControl.boom`; `chaseCamera(rig, ...)` authors a seated body's whole
+response, the zoom bounds/step in `views.seatControl.boom` and the `views.builtinTransition` envelope (seconds and render-scale dip) of the built-in seat ladder; `chaseCamera(rig, ...)` authors a seated body's whole
 chase camera (seat control, clearance mode with each treatment's rise ceiling and close target, the eye's radius and
 skin, character fade, automatic first person, the boom and the rig) from the body's own offsets, with the chase-camera
 decision's values as its defaults. An avatar expands it in a document of its own: the

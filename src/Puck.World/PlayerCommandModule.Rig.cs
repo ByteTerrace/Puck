@@ -11,6 +11,7 @@ namespace Puck.World;
 /// Input answers headlessly too; animation reads the presentation's <see cref="WorldCreationInstances"/> pool.
 /// </content>
 internal sealed partial class PlayerCommandModule {
+    private static readonly CommandForms BodyRigForms = CommandForms.Of(verb: "body.rig", RigForm);
     private static string Scalar(float value) => value.ToString(
         format: "0.00",
         provider: CultureInfo.InvariantCulture
@@ -27,7 +28,7 @@ internal sealed partial class PlayerCommandModule {
         }
 
         if (instanceTarget.EffectiveCount > 2) {
-            return CommandResult.Error(output: "[body.rig: expected at most 2 values — an optional body index, then an optional shape name]");
+            return BodyRigForms.Refuse();
         }
         if (!WorldArgs.TryParseIndex(
             args: in args,

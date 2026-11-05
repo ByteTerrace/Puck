@@ -86,9 +86,10 @@ public sealed partial class SdfWorldTables {
     private int m_stagedCount;
     private bool m_stagedWhole;
 
-    /// <summary>The words of owed meshes a frame writes into the mesh region at most, past the first mesh it writes: 2 MB,
-    /// so a body whose meshes land at once, as when it crosses into a world, lands over a few frames rather than in
-    /// one.</summary>
+    /// <summary>The words of owed meshes a 60 Hz frame writes into the mesh region at most, past the first mesh it writes:
+    /// 2 MB, so a body whose meshes land at once, as when it crosses into a world, lands over a few frames rather than in
+    /// one. A longer frame writes a share for each whole 60 Hz frame it spans (<see cref="SdfMeshPathBake.FrameShares"/>),
+    /// so a cold bake's long frames land its meshes at the rate a 60 Hz display would.</summary>
     public const int MeshLandingWords = (1 << 19);
 
     private readonly GpuRegion m_meshRegion;
@@ -162,7 +163,7 @@ public sealed partial class SdfWorldTables {
 
     // Packs new draws or a new revision, growing the region when the list needs more
     // bytes; the upload sends the slot what it owes.
-    private void StageMeshRegion(SdfFrame frame) {
+    private void StageMeshRegion(SdfFrame frame, double frameSeconds) {
         var draws = frame.MeshDraws;
         var revision = frame.MeshDrawsRevision;
         if (!m_meshTrimListening) { Puck.Hosting.Jobs.MemoryAccount.Shared.TrimRequested += RequestMeshTrim; m_meshTrimListening = true; }
@@ -179,7 +180,7 @@ public sealed partial class SdfWorldTables {
             (m_meshClaims ??= new SdfMeshClaims()).Update(draws: draws);
             SdfMeshHistory.ProcessWork.Add(SdfMeshHistory.StagingClaimRecords, draws.Count);
         }
-        StageMeshRegionCore(draws: draws, revision: revision);
+        StageMeshRegionCore(draws: draws, landingWords: (((long)MeshLandingWords) * SdfMeshPathBake.FrameShares(frameSeconds: frameSeconds)), revision: revision);
         // Publish the cursor only after the whole roster has staged successfully. No landing-filtered index can be
         // interpreted as an index into the producer's list.
         m_drawChangesSource = (m_meshStaged && m_stagedWhole) ? frame.MeshDrawChanges : null;
@@ -214,7 +215,7 @@ public sealed partial class SdfWorldTables {
         m_drawChangesSerial = frame.MeshDrawChangesSerial;
         return true;
     }
-    private void StageMeshRegionCore(IReadOnlyList<SdfMeshDraw> draws, long revision) {
+    private void StageMeshRegionCore(IReadOnlyList<SdfMeshDraw> draws, long landingWords, long revision) {
         if (
             !ReferenceEquals(
                 objA: draws,
@@ -262,7 +263,7 @@ public sealed partial class SdfWorldTables {
             return;
         }
 
-        WriteOwedMeshes(draws: draws);
+        WriteOwedMeshes(draws: draws, words: landingWords);
         CountOwed();
 
         // A draw whose mesh's words are still owed waits for them: the staged list holds the draws whose meshes are
@@ -342,6 +343,7 @@ public sealed partial class SdfWorldTables {
         var changedRecords = 0;
         var changedWords = 0L;
         var comparedRecords = 0;
+        var tally = new StagingTally();
 
         for (var run = 0; run < (candidates?.Count ?? 1); run++) {
             var start = candidates?.Start(run) ?? 0;
@@ -354,7 +356,7 @@ public sealed partial class SdfWorldTables {
                     (m_reseatedDraws.Contains(index) && MeshTransformWasReseated(in draw))) {
                     var record = records.Slice(length: SdfMeshRecord.DrawWords, start: (index * SdfMeshRecord.DrawWords));
 
-                    StageMeshDraw(draw: in draw, index: index, old: old, record: record, incremental: true);
+                    StageMeshDraw(draw: in draw, index: index, old: old, record: record, tally: ref tally, incremental: true);
                     changedWords += m_meshDrawDifferences.AddDifferences(
                         previous: MemoryMarshal.Cast<byte, uint>(span: old.Slice(start: (index * SdfMeshRegion.DrawBytes), length: SdfMeshRegion.DrawBytes)),
                         current: record,
@@ -371,6 +373,7 @@ public sealed partial class SdfWorldTables {
         // Every previous-matrix decision above reads the unmodified shadow. Only the exact packed-word delta is
         // copied and owed now; bounded run coarsening may include unchanged words already valid in records.
         if (m_meshDrawDifferences.Count > 0) { _ = m_meshRegion.WriteRuns(words: records, runs: m_meshDrawDifferences); }
+        tally.Publish();
         SdfMeshHistory.ProcessWork.Add(kind: SdfMeshHistory.RecordsCompared, amount: comparedRecords);
         SdfMeshHistory.ProcessWork.Add(kind: SdfMeshHistory.RecordsChanged, amount: changedRecords);
         SdfMeshHistory.ProcessWork.Add(kind: SdfMeshHistory.PackedWordsChanged, amount: changedWords);
@@ -390,7 +393,7 @@ public sealed partial class SdfWorldTables {
 
     // Writes the owed meshes the draw list names, those the demand points see largest first, until the frame's share of
     // words is spent; a frame writes at least one. A placed mesh no draw names stays owed until a list names it again.
-    private void WriteOwedMeshes(IReadOnlyList<SdfMeshDraw> draws) {
+    private void WriteOwedMeshes(IReadOnlyList<SdfMeshDraw> draws, long words) {
         if (m_meshesOwed.Count == 0) { return; }
 
         var demand = ((MeshDemand is { Count: > 0 } points) ? points : null);
@@ -411,7 +414,7 @@ public sealed partial class SdfWorldTables {
         foreach (var (_, index) in m_owedOrder) {
             var mesh = draws[index].Mesh;
 
-            if (written >= MeshLandingWords) { return; }
+            if (written >= words) { return; }
             if (m_meshesOwed.Remove(item: mesh)) {
                 WriteMeshWords(mesh: mesh, placement: m_meshArena.Placements[mesh]);
                 written += SdfMeshRegion.WordsOf(mesh: mesh);

@@ -22,7 +22,7 @@ namespace Puck.Cli.Host;
 /// </summary>
 public static class HostProcesses {
     private static readonly string[] DeviceTestAssemblies = [.. GatePlan.Steps.Where(predicate: step => (step.Kind == GateStepKind.DeviceSuite)).Select(selector: step => step.Name)];
-    private static readonly string[] HeavyTestAssemblies = ["Puck.World.Presentation.Tests", "Puck.World.Tests"];
+    private static readonly string[] HeavyTestAssemblies = ["Puck.SdfVm.Tests", "Puck.World.Presentation.Tests", "Puck.World.Tests"];
     private static readonly string[] NeverWork = ["powershell", "pwsh", "bash", "sh", "cmd", "grep", "conhost", "MSBuild", "csc", "VBCSCompiler"];
     private static readonly string[] ExecValueOptions = ["--depsfile", "--runtimeconfig", "--additionalprobingpath", "--additional-deps", "--fx-version", "--roll-forward", "--roll-forward-on-no-candidate-fx"];
 
@@ -125,9 +125,10 @@ public static class HostProcesses {
         var program = ProgramName(path: name);
 
         if (NeverWork.Contains(value: program, comparer: StringComparer.OrdinalIgnoreCase)) { return false; }
-        if (program.Equals(comparisonType: StringComparison.OrdinalIgnoreCase, value: "Puck.World")) { return true; }
 
         var arguments = Arguments(commandLine: commandLine);
+
+        if (program.Equals(comparisonType: StringComparison.OrdinalIgnoreCase, value: "Puck.World")) { return WorldDevices.OpensDevice(arguments: arguments, start: 1); }
 
         // An unreadable command line cannot show a CPU selection.
         if (IsDeviceTest(program: program)) { return ((arguments.Length == 0) || SelectsGpuTests(arguments: arguments, start: 1)); }
@@ -135,7 +136,7 @@ public static class HostProcesses {
 
         var entry = EntryPoint(arguments: arguments, hostAssembly: out var hostAssembly, next: out var next);
 
-        if (entry.Equals(comparisonType: StringComparison.OrdinalIgnoreCase, value: "Puck.World")) { return true; }
+        if (entry.Equals(comparisonType: StringComparison.OrdinalIgnoreCase, value: "Puck.World")) { return WorldDevices.OpensDevice(arguments: arguments, start: next); }
         if (IsDeviceTest(program: entry)) { return SelectsGpuTests(arguments: arguments, start: next); }
         if (entry.StartsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: "testhost")) {
             return (((hostAssembly is not null) && IsDeviceTest(program: hostAssembly)) || arguments.Skip(count: next).Any(predicate: static argument => IsDeviceTest(program: ProgramName(path: argument))));

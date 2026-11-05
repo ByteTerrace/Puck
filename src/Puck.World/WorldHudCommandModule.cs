@@ -25,6 +25,8 @@ namespace Puck.World;
 internal sealed partial class WorldHudCommandModule(WorldServer server, IHudBindingResolver bindings, PlayerRoster roster, WorldOverlayFacts facts, OverlayToastStore toasts) : ICommandModule {
     private const string SeatFilterPrefix = "seat:";
     private const string ToastFilter = "toast";
+    private static readonly CommandForms WorldHudForms = CommandForms.Of(verb: "world.hud", "[toast|seat:<n>]");
+    private static readonly CommandForms WorldHudTemplateForms = CommandForms.Of(verb: "world.hud.template", "<template text...>");
 
     // The latest toast the overlay holds, whether or not a window draws it: the state a toast policy decision leaves.
     private CommandResult DescribeToast() => new(Output: (toasts.TrySnapshot(frame: out var frame)
@@ -165,7 +167,7 @@ internal sealed partial class WorldHudCommandModule(WorldServer server, IHudBind
             return DescribeSeatHud(seat: seat);
         }
 
-        return CommandResult.Error(output: "[world.hud: expected no arguments, toast, or seat:<n> (1..4)]");
+        return WorldHudForms.Refuse(got: args[0].ToString());
     }
     private CommandResult DescribeSeatHud(int seat) {
         var slot = PlayerRoster.SlotFromDisplay(number: seat);
@@ -317,21 +319,24 @@ internal sealed partial class WorldHudCommandModule(WorldServer server, IHudBind
             bindability: CommandBindability.Unbindable,
             name: "audio.render",
             audience: CommandAudience.Operator,
-            description: "Renders one HUD Text element's resolved text and authored voice to a 48 kHz stereo PCM WAV, without a device: audio.render <panelId> <elementId> <output.wav>. Ignores visibility so a headless World can export a hidden panel. Text, pitch, formants, cadence and rests use the live playback source; repeated exports of unchanged text and voice are byte-identical.",
+            description: $"Renders one HUD Text element's resolved text and authored voice to a 48 kHz stereo PCM WAV, without a device: {AudioRenderForms.Spelling}. Ignores visibility so a headless World can export a hidden panel. Text, pitch, formants, cadence and rests use the live playback source; repeated exports of unchanged text and voice are byte-identical.",
+            forms: AudioRenderForms,
             handler: (_, args) => RenderSpeech(args: args),
             routing: CommandRouting.Immediate
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.hud",
-            description: "Reads back the live hud state (Immediate): with no argument, the world-scope defaults row, every panel's id/layer/style/rect/element count against WorldHudCapacity's schema caps, and every element's kind/style/binding. A frame element additionally echoes its ranked source candidates (source JSON plus its condition's kind), the candidate winning now for the scope (world: any joined seat; seat:<n>: that seat), and fadeSeconds/fit/mirror/radius/opacity. With seat:<n> (1..4), that LOCAL seat's PRIVATE player-scope panel instead — authored through identity.hud <panel-json> [player] — or a refusal naming why there is none: world.hud [seat:<n>]. With toast, the latest toast the overlay holds (sequence, ok or error, text), or none: a toast narrates a player's own act, so an operator's write or grant never appears there. Either form resolves a bound element's LIVE value through the SAME IHudBindingResolver the renderer uses, and a templated element's placeholders through the SAME resolver too, so this read-back and what is on screen can never disagree.",
+            description: $"Reads back the live hud state (Immediate): with no argument, the world-scope defaults row, every panel's id/layer/style/rect/element count against WorldHudCapacity's schema caps, and every element's kind/style/binding. A frame element additionally echoes its ranked source candidates (source JSON plus its condition's kind), the candidate winning now for the scope (world: any joined seat; seat:<n>: that seat), and fadeSeconds/fit/mirror/radius/opacity. With seat:<n> (1..4), that LOCAL seat's PRIVATE player-scope panel instead — authored through identity.hud <panel-json> [player] — or a refusal naming why there is none: {WorldHudForms.Spelling}. With toast, the latest toast the overlay holds (sequence, ok or error, text), or none: a toast narrates a player's own act, so an operator's write or grant never appears there. Either form resolves a bound element's LIVE value through the SAME IHudBindingResolver the renderer uses, and a templated element's placeholders through the SAME resolver too, so this read-back and what is on screen can never disagree.",
+            forms: WorldHudForms,
             handler: (_, args) => DescribeHudHandler(args: args),
             routing: CommandRouting.Immediate
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.hud.template",
-            description: "Resolves an AD HOC template string against the live document ON DEMAND (Immediate) — never authored, never stored: world.hud.template <template text...>. Speaks the SAME HudTemplate brace/escape grammar a document-authored WorldHudElement.Template does ('{world.tick}', '{state.score}', '{state.inventory.coin}', ...; '{{'/'}}' escape a literal brace) and the SAME closed HudBindingVocabulary, checked against the LIVE document's own state section. Every placeholder is validated BEFORE any resolution runs — a malformed template or a placeholder naming an unknown token/row/cell refuses the WHOLE template by name, never a partial or silently-empty result.",
+            description: $"Resolves an AD HOC template string against the live document ON DEMAND (Immediate) — never authored, never stored: {WorldHudTemplateForms.Spelling}. Speaks the SAME HudTemplate brace/escape grammar a document-authored WorldHudElement.Template does ('{{world.tick}}', '{{state.score}}', '{{state.inventory.coin}}', ...; '{{{{'/'}}}}' escape a literal brace) and the SAME closed HudBindingVocabulary, checked against the LIVE document's own state section. Every placeholder is validated BEFORE any resolution runs — a malformed template or a placeholder naming an unknown token/row/cell refuses the WHOLE template by name, never a partial or silently-empty result.",
+            forms: WorldHudTemplateForms,
             handler: (context, args) => {
                 var template = WorldCommandArguments.Raw(
                     args: in args,
@@ -339,10 +344,7 @@ internal sealed partial class WorldHudCommandModule(WorldServer server, IHudBind
                 );
 
                 return ((template.Length == 0)
-                    ? CommandResult.Usage(
-                        form: "<template text...>",
-                        verb: "world.hud.template"
-                    )
+                    ? WorldHudTemplateForms.Refuse()
                     : ResolveDynamicTemplate(
                         template: template,
                         view: WorldStateReadView.Of(

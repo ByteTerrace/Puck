@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.Launcher;
 using Puck.SdfVm;
 using Puck.SignedDistance;
@@ -62,6 +63,10 @@ public static partial class WorldSessionLevers {
     public const string BloomScale = "bloom-scale";
     /// <summary>The upscale sharpness (<c>world.upscale-sharpness</c>).</summary>
     public const string UpscaleSharpness = "upscale-sharpness";
+
+    /// <summary>The values <c>world.sky-field-scale</c> takes: the verb refuses any other word with this form, and the
+    /// knob's setter refuses any other lever value with the same refusal.</summary>
+    public static readonly CommandForms SkyFieldScaleForms = CommandForms.Of(verb: "world.sky-field-scale", "[1|0.5]");
 
     private static bool Flag(WorldSessionLever lever) => (lever.A != 0.0);
 
@@ -142,7 +147,7 @@ public static partial class WorldSessionLevers {
         });
         sink.Register(name: SkyFieldScale, setter: lever => {
             if (lever.A is not (1d or .5d)) {
-                Console.Error.WriteLine(value: "[world.sky-field-scale: expected 1|0.5 — lever dropped]");
+                Console.Error.WriteLine(value: $"{SkyFieldScaleForms.Refuse(got: lever.A.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)).Output} — lever dropped");
                 return;
             }
             settings.SkyFieldScale = ((float)lever.A);

@@ -518,11 +518,17 @@ public sealed record CreationSoundDocument(
 /// face's default source is pure data, wirable to any camera feed.</param>
 /// <param name="Sounds">The declared sounds (null = none). Omitted from the wire when null, so a creation authored
 /// without this member serializes to unchanged bytes.</param>
+/// <param name="ReducedRateAtDistance">Whether a placed copy of the creation may animate at the update-rate lever's
+/// reduced tiers (<c>world.rates bodies</c>: at least 30 or 15 updates a second) while it stands small on every view
+/// that may see it. Null or false = full rate wherever anything may show or read it; a copy nothing may show holds
+/// either way. A body-rooted creation takes the reduced tiers whatever this says.</param>
 public sealed record CreationBehaviorDocument(
     string? Locomotion,
     IReadOnlyList<CreationFaceDocument>? Faces,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
-    IReadOnlyList<CreationSoundDocument>? Sounds = null
+    IReadOnlyList<CreationSoundDocument>? Sounds = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    bool? ReducedRateAtDistance = null
 );
 /// <summary>
 /// The <c>puck.creation.v1</c> document — an authored scene as data, the everything-as-data payoff for authoring: a

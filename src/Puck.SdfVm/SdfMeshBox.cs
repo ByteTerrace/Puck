@@ -1,5 +1,4 @@
 using System.Numerics;
-using System.Runtime.CompilerServices;
 using Puck.Abstractions.Cameras;
 
 namespace Puck.SdfVm;
@@ -45,10 +44,10 @@ public readonly record struct SdfMeshBox(Vector3 Center, Vector3 HalfX, Vector3 
             return false;
         }
 
-        var bounds = MeshBoundsCache.GetValue(key: mesh, createValueCallback: static mesh => BoundsOf(positions: mesh.Positions.Span));
+        var (low, high) = (mesh.PositionLow, mesh.PositionHigh);
         var matrix = draw.ObjectToWorld;
-        var center = ((bounds.Low + bounds.High) * 0.5f);
-        var half = ((bounds.High - bounds.Low) * 0.5f);
+        var center = ((low + high) * 0.5f);
+        var half = ((high - low) * 0.5f);
         var rotation = draw.CarryRotation;
         var scale = draw.CarryScale;
         var rowX = new Vector3(x: matrix.M11, y: matrix.M12, z: matrix.M13);
@@ -143,24 +142,6 @@ public readonly record struct SdfMeshBox(Vector3 Center, Vector3 HalfX, Vector3 
             sweep: (cascade.Forward * (cascade.Far - cascade.Near))
         );
     }
-
-    // Each mesh's object-space box, computed once from its positions and kept while the mesh lives: a mesh never
-    // changes its positions, and a frame stages thousands of draws.
-    private static readonly ConditionalWeakTable<SdfMesh, MeshBounds> MeshBoundsCache = new();
-
-    private static MeshBounds BoundsOf(ReadOnlySpan<Vector3> positions) {
-        var low = new Vector3(value: float.PositiveInfinity);
-        var high = new Vector3(value: float.NegativeInfinity);
-
-        foreach (var position in positions) {
-            low = Vector3.Min(value1: low, value2: position);
-            high = Vector3.Max(value1: high, value2: position);
-        }
-
-        return new MeshBounds(High: high, Low: low);
-    }
-
-    private sealed record MeshBounds(Vector3 Low, Vector3 High);
 
     // Whether the box's extent along a unit axis meets [low, high].
     private bool Within(Vector3 axis, float low, float high, Vector3 toward) {

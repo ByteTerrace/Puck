@@ -1,13 +1,21 @@
 import "forest-layout"
 
-let forestTrees = filter(scatterPoints(cellSize: 0.5, width: 560, depth: 220, spacing: 7, radius: 3,
-  seed: 91731), p => forestInBelt(p[0], p[2] - 150) and not forestInGlade(p[0], p[2] - 150, 2) and
-  lawnPathClear(p[0], p[2] - 150, 1.15) and forestHeroClear(p[0], p[2] - 150, 4.6) and
-  (forestThicket(p[0], p[2] - 150) > -1.35 or forestCore(p[0], p[2] - 150)))
-let forestSaplings = filter(scatterPoints(cellSize: 0.5, width: 560, depth: 220, spacing: 13, radius: 6,
-  seed: 3719), p => forestInBelt(p[0], p[2] - 150, 5) and not forestInGlade(p[0], p[2] - 150, 0) and
-  lawnPathClear(p[0], p[2] - 150, 0.7) and forestHeroClear(p[0], p[2] - 150, 2.3) and
-  (not forestInBelt(p[0], p[2] - 150, -8) or forestThicket(p[0], p[2] - 150) > 0.7))
+let forestTrees = filter(
+  scatterPoints(cellSize: 0.5, width: 560, depth: 220, spacing: 7, radius: 3, seed: 91731),
+  p => forestInBelt(p[0], p[2] - 150) and
+    not forestInGlade(p[0], p[2] - 150, 2) and
+    lawnPathClear(p[0], p[2] - 150, 1.15) and
+    forestHeroClear(p[0], p[2] - 150, 4.6) and
+    (forestThicket(p[0], p[2] - 150) > -1.35 or forestCore(p[0], p[2] - 150))
+)
+let forestSaplings = filter(
+  scatterPoints(cellSize: 0.5, width: 560, depth: 220, spacing: 13, radius: 6, seed: 3719),
+  p => forestInBelt(p[0], p[2] - 150, 5) and
+    not forestInGlade(p[0], p[2] - 150, 0) and
+    lawnPathClear(p[0], p[2] - 150, 0.7) and
+    forestHeroClear(p[0], p[2] - 150, 2.3) and
+    (not forestInBelt(p[0], p[2] - 150, -8) or forestThicket(p[0], p[2] - 150) > 0.7)
+)
 
 placements {
   for (p, i) in forestTrees {
@@ -17,7 +25,9 @@ placements {
       position [p[0], 0, p[2] - 150]
       scale: 0.86 + 0.38 * forestVariation(i, 0.47)
       yawDegrees: 360 * forestVariation(i, 0.13)
-      solid { margin: 0 }
+      solid {
+        margin: 0
+      }
     }
   }
   for (p, i) in forestSaplings {

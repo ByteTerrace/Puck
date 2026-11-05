@@ -256,7 +256,11 @@ on the display and 15 at or below half of it (`RenderGraphRefresh.AtLeast` on
 refresh, the most frequent demand winning); and a body's pose evaluation runs
 at least 30 times a second at or below 30 pixels per metre and 15 at or below
 15, its root followed every frame and its parts riding the root rigidly between
-packs (`WorldCreationInstances.Rates`). The machine behind a rated screen and the
+packs (`WorldCreationInstances.Rates`). A placed creation's animation decides
+through the same function: it holds while no view, shadow cascade or reader of
+its parts may show it, and takes the reduced tiers while visible only where its
+author allows them (the creation's `behavior.reducedRateAtDistance`; the
+standard's wind meadow tiles do), updating every frame otherwise. The machine behind a rated screen and the
 simulation behind a rated body run at full rate. Each tier bounds the step a
 held update jumps by on screen to two pixels for the speed it is sized for.
 
@@ -1254,7 +1258,9 @@ world and returns finds its meshes placed and writes nothing for them; the arena
 packs again only once those words outnumber the named meshes' words and 32 MB
 (`SdfMeshRegionArena.RetainedSlackWords`).
 Meshes a list newly places land within a frame's share of words
-(`SdfWorldTables.MeshLandingWords`, 2 MB), in the list's order; a draw whose
+(`SdfWorldTables.MeshLandingWords`, 2 MB for each whole 60 Hz frame the frame
+spans, `SdfMeshPathBake.FrameShares`, so a cold bake's long frames land meshes
+as fast as a 60 Hz display would), in the list's order; a draw whose
 mesh is still owed waits out of the staged records until it lands, so a body
 whose meshes all arrive at once, as when it crosses into a world, lands over a
 few frames. A list with more draws than the reserve doubles it and moves only the

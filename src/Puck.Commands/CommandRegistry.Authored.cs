@@ -6,6 +6,7 @@ public sealed partial class CommandRegistry {
     // The registry's own verb that dispatches every authored command. It is interned like help or wire.errors, so a
     // bound press on an authored command carries this id and the command's name in its line.
     private const string RunCommandName = "run";
+    private static readonly CommandForms RunForms = CommandForms.Of(verb: RunCommandName, "<command> [args…]");
 
     // Every authored name this registry has resolved, interned past the registered ids in first-resolution order and
     // never reused, so one name keeps one id for the registry's lifetime whatever sets come and go. A bound press
@@ -177,7 +178,7 @@ public sealed partial class CommandRegistry {
 
         if (verb.Equals(comparisonType: StringComparison.OrdinalIgnoreCase, other: RunCommandName)) {
             if (args.Count == 0) {
-                return CommandResult.Usage(form: "run <command> [args…]", verb: RunCommandName);
+                return RunForms.Refuse();
             }
 
             verb = args[0];

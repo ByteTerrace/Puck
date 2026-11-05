@@ -830,7 +830,7 @@ public sealed partial class WorldBody {
         // zero velocity, and finding nothing keeps the zero it already holds, so a resting body skips its sweeps.
         var resting = ((m_planarVelocity == FixedVector3.Zero) && (scratch.Velocity == FixedVector3.Zero));
 
-        if (!resting && m_grounded && !HoldOwnsVerticalChannel && (scratch.DirectVerticalVelocity <= FixedQ4816.Zero) &&
+        if (!resting && m_grounded && !HoldOwnsVerticalChannel && !HoldIsMedium && (scratch.DirectVerticalVelocity <= FixedQ4816.Zero) &&
             (m_contactField is { } field) && (m_collider is not null)) {
             var contactStep = new BodyContactStep(field: field, entityIndex: scratch.EntityIndex,
                 orientation: scratch.Orientation, up: scratch.Up, volumes: ScaledColliderVolumes());

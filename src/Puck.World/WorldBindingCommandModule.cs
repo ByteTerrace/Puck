@@ -28,6 +28,10 @@ namespace Puck.World;
 /// <c>player.bindings</c> is an Immediate read.</remarks>
 public sealed partial class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBindings seatBindings, IServerLink link, Func<InputRouter> router, Func<CommandRegistry> registry, Func<WorldWindowInputObservers?> windowObservers, WorldServer server, WorldOwnedWorlds ownedWorlds, WorldSeatAuthorityRouter seatRouter) : ICommandModule {
     private readonly PlayerRoster m_roster = roster;
+    private static readonly CommandForms PlayerBindForms = CommandForms.Of(verb: "player.bind", BindForm);
+    private static readonly CommandForms PlayerBindingsForms = CommandForms.Of(verb: "player.bindings", BindingsForm);
+    private static readonly CommandForms IdentityBindingsSaveForms = CommandForms.Of(verb: "identity.bindings.save", BindingsForm);
+    private static readonly CommandForms PlayerSignalForms = CommandForms.Of(verb: "player.signal", "<source> <press|release|value>", "<source> <x> <y>");
     // Each seat's current authority claim: the input read-backs ask the authority a seat is routed to.
     private readonly WorldSeatAuthorityRouter m_seatRouter = seatRouter;
     private readonly WorldSeatBindings m_seatBindings = seatBindings;
@@ -61,6 +65,9 @@ public sealed partial class WorldBindingCommandModule(PlayerRoster roster, World
     private const string ChordPrefix = "chord:";
     private const string HeldPrefix = "held:";
     private const string ScaleTokenPrefix = "scale:";
+    private const string BindForm = "<seat> <source> <destination> [scale:<value>|value:<value>]";
+    private static readonly CommandForms PlayerBindingBarForms = CommandForms.Of(verb: "player.binding-bar", "layout|model|scale <value> [seat]");
+    private const string BindingsForm = "[seat]";
     private const string ValueTokenPrefix = "value:";
 
     // A server read-back rendered with its verdict: a refusal (a missing/inactive subject) fails, so it reaches
@@ -100,7 +107,7 @@ public sealed partial class WorldBindingCommandModule(PlayerRoster roster, World
                 return CommandResult.Error(output: "[player.bind: scale:<value> and value:<value> are mutually exclusive — name at most one]");
             }
 
-            return CommandResult.Error(output: "[player.bind: expected <seat> <source> <destination> [scale:<value>|value:<value>] — seat 1..4; <source> may be chord:<m1>+<m2> (press order) or held:<m1>+<m2> (any order), either as <prefix>:<group>:<m1>+<m2>; <destination> a command name or channel:<name>]");
+            return PlayerBindForms.Refuse();
         }
 
         var (seatSlot, seatError) = SeatCommandArgs.ResolveSlot(
@@ -159,7 +166,7 @@ public sealed partial class WorldBindingCommandModule(PlayerRoster roster, World
                 !isScale &&
                 !isValue
             ) {
-                return CommandResult.Error(output: "[player.bind: expected scale:<value> or value:<value> as the fourth argument]");
+                return PlayerBindForms.Refuse(got: token);
             }
 
             if (isScale) {
@@ -171,7 +178,7 @@ public sealed partial class WorldBindingCommandModule(PlayerRoster roster, World
                     text: token.AsSpan(start: ScaleTokenPrefix.Length),
                     value: out var parsedScale
                 )) {
-                    return CommandResult.Error(output: "[player.bind: expected scale:<value> as the fourth argument]");
+                    return PlayerBindForms.Refuse(got: token);
                 }
 
                 scale = parsedScale;
@@ -195,7 +202,7 @@ public sealed partial class WorldBindingCommandModule(PlayerRoster roster, World
                     text: token.AsSpan(start: ValueTokenPrefix.Length),
                     value: out var parsedValue
                 )) {
-                    return CommandResult.Error(output: "[player.bind: expected value:<value> as the fourth argument]");
+                    return PlayerBindForms.Refuse(got: token);
                 }
 
                 constantValue = CommandValue.Axis(value: parsedValue);
@@ -323,7 +330,7 @@ public sealed partial class WorldBindingCommandModule(PlayerRoster roster, World
     }
     private CommandResult BindingsHandler(CommandContext context, WireArgs args) {
         if (args.Count > 1) {
-            return CommandResult.Error(output: "[player.bindings: expected at most 1 value — an optional seat index]");
+            return PlayerBindingsForms.Refuse(got: args[1].ToString());
         }
 
         var (slot, error) = SeatCommandArgs.ResolveSlot(
@@ -605,7 +612,7 @@ public sealed partial class WorldBindingCommandModule(PlayerRoster roster, World
     }
     private CommandResult SaveHandler(CommandContext context, WireArgs args) {
         if (args.Count > 1) {
-            return CommandResult.Error(output: "[identity.bindings.save: expected at most 1 value — an optional seat index]");
+            return IdentityBindingsSaveForms.Refuse(got: args[1].ToString());
         }
 
         var (slot, error) = SeatCommandArgs.ResolveSlot(
@@ -665,7 +672,7 @@ public sealed partial class WorldBindingCommandModule(PlayerRoster roster, World
             count--;
         }
         if (count is not (2 or 3)) {
-            return CommandResult.Usage(form: "<source> <press|release|value> or <source> <x> <y>", verb: "player.signal");
+            return PlayerSignalForms.Refuse(args: in args);
         }
 
         var source = args[0].ToString();
@@ -1043,27 +1050,31 @@ public sealed partial class WorldBindingCommandModule(PlayerRoster roster, World
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: "player.binding-bar",
-            description: "Sets one seat's binding bar preference: player.binding-bar layout|model|scale <value> [seat]. Layout names an authored layout, model selects single or a stacked model, scale is a positive multiplier; auto clears that preference. Unsaved until identity.bindings.save.",
+            forms: PlayerBindingBarForms,
+            description: "Sets one seat's binding bar preference: " + PlayerBindingBarForms.Spelling + ". Layout names an authored layout, model selects single or a stacked model, scale is a positive multiplier; auto clears that preference. Unsaved until identity.bindings.save.",
             handler: BarPreferenceHandler,
             routing: CommandRouting.Simulation
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "player.bind",
-            description: "Live-remaps one binding for a seat's SESSION layer (unsaved until identity.bindings.save): player.bind <seat> <source> <destination> [scale:<value>|value:<value>] — <seat> 1..4. <destination> is a command name (e.g. player.look.recenter) or channel:<name> (e.g. channel:jump). [scale:<value>] is only meaningful beside a channel destination (raw [-1, 1]; defaults to +1) and is refused on a BINARY channel. [value:<value>] is only meaningful beside a COMMAND destination whose declared value kind is Axis1D — the constant a digital source drives it with (the step-twin shape: a key bound with value:1 steps one way, value:-1 the other, exactly like world.affordances reports the destination taking); REQUIRED there (no default — there is no natural direction to assume), and refused by name on any other destination kind (Digital included — every other bindable verb keeps today's plain source→command behavior with no constant at all). scale: and value: are mutually exclusive; naming both is refused. <source> is a provider-neutral input source id (e.g. keyboard.e, gamepad.buttonEast) for a resting-page entry, or a CHORD ROW declaration: chord:<m1>+<m2> binds the ordered modifier chord to the destination in the default (play) group, chord:<group>:<m1>+<m2> targets an explicit group (modifier ids: lt, rt). Recomposes and hot-reloads that seat's mapping at once; a later bind of the same source or (group, chord) replaces it. This changes the input→command mapping mid-run (replay streams shift — World is not determinism-gated).",
+            description: "Live-remaps one binding for a seat's SESSION layer (unsaved until identity.bindings.save): " + PlayerBindForms.Spelling + " — <seat> 1..4. <destination> is a command name (e.g. player.look.recenter) or channel:<name> (e.g. channel:jump). [scale:<value>] is only meaningful beside a channel destination (raw [-1, 1]; defaults to +1) and is refused on a BINARY channel. [value:<value>] is only meaningful beside a COMMAND destination whose declared value kind is Axis1D — the constant a digital source drives it with (the step-twin shape: a key bound with value:1 steps one way, value:-1 the other, exactly like world.affordances reports the destination taking); REQUIRED there (no default — there is no natural direction to assume), and refused by name on any other destination kind (Digital included — every other bindable verb keeps today's plain source→command behavior with no constant at all). scale: and value: are mutually exclusive; naming both is refused. <source> is a provider-neutral input source id (e.g. keyboard.e, gamepad.buttonEast) for a resting-page entry, or a CHORD ROW declaration: chord:<m1>+<m2> binds the ordered modifier chord to the destination in the default (play) group, chord:<group>:<m1>+<m2> targets an explicit group (modifier ids: lt, rt). Recomposes and hot-reloads that seat's mapping at once; a later bind of the same source or (group, chord) replaces it. This changes the input→command mapping mid-run (replay streams shift — World is not determinism-gated).",
+            forms: PlayerBindForms,
             handler: BindHandler,
             routing: CommandRouting.Simulation
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "player.bindings",
-            description: "Echoes a seat's composed ACTIVE mapping after the world overlays ⊕ profile bindings ⊕ live session rebinds merge. Leads with the seat's context derivation — group=<active> (<step>) page=<id> where <step> is context <family>=<state>, requested, or default and page is the page the held chord selects (a page the active group leaves to the player's default group included) — then contexts: one segment per admitted family (<family>=<state>→<group> (wins), →<group> (shadowed), or →(no row)) and requested=<group|(none)> (marked (shadowed) when a context row overrides it); then the active group's resting-page trigger→destination entries and every chord row with its meaning (chord <group>:[m1+m2]→<destination> or →page <id>); a destination is a command name (with a trailing value:<v> when the entry carries a constant activation value — see player.bind) or channel:<name>; a trigger is a plain source id, or activator:held[...]/activator:tapped[...] for a row whose trigger is an ordered sequence, with a trailing [toggle] when the entry's mode is Toggle: player.bindings [seat] (optional seat 1..4, default 1).",
+            description: "Echoes a seat's composed ACTIVE mapping after the world overlays ⊕ profile bindings ⊕ live session rebinds merge. Leads with the seat's context derivation — group=<active> (<step>) page=<id> where <step> is context <family>=<state>, requested, or default and page is the page the held chord selects (a page the active group leaves to the player's default group included) — then contexts: one segment per admitted family (<family>=<state>→<group> (wins), →<group> (shadowed), or →(no row)) and requested=<group|(none)> (marked (shadowed) when a context row overrides it); then the active group's resting-page trigger→destination entries and every chord row with its meaning (chord <group>:[m1+m2]→<destination> or →page <id>); a destination is a command name (with a trailing value:<v> when the entry carries a constant activation value — see player.bind) or channel:<name>; a trigger is a plain source id, or activator:held[...]/activator:tapped[...] for a row whose trigger is an ordered sequence, with a trailing [toggle] when the entry's mode is Toggle: " + PlayerBindingsForms.Spelling + " (optional seat 1..4, default 1).",
+            forms: PlayerBindingsForms,
             handler: BindingsHandler
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "player.signal",
-            description: "Synthesizes one raw input signal — the scripted twin of a physical control, so chords, sticks, bindings, and pointer drags are drivable over the pipe: player.signal <source> <press|release|value> or player.signal <source> <x> <y>. A scalar is an Axis1D Active sample; x/y is an Axis2D Active sample (for example gamepad.leftStick), clamped to full deflection unless the source is relative (mouse.motion in pixels, mouse.wheel in notches), whose delta rides through as-is. A mouse control (mouse.motion, mouse.wheel, mouse.button<n>) enters through the physical mouse's own door — the raw window-input observers first, so a held player.orbit/player.steer drags the seat camera and the cursor sees the held button, then the router — exactly as a native pointer event does; every other source enters the router alone. The signal drives the issuing seat's lane (seat 1 from stdin or MCP) whatever physical devices are seated or idle, and never seats a device or counts as that seat's activity. It folds into the NEXT simulation tick's snapshot through the seat's bindings exactly like device input. Level destinations remain carried until a release/zero sample or focus loss; Relative destinations consume displacement once without a held value. Echoes [player.signal: p<seat> <source> <sample>].",
+            description: $"Synthesizes one raw input signal — the scripted twin of a physical control, so chords, sticks, bindings, and pointer drags are drivable over the pipe: {PlayerSignalForms.Spelling}. A scalar is an Axis1D Active sample; x/y is an Axis2D Active sample (for example gamepad.leftStick), clamped to full deflection unless the source is relative (mouse.motion in pixels, mouse.wheel in notches), whose delta rides through as-is. A mouse control (mouse.motion, mouse.wheel, mouse.button<n>) enters through the physical mouse's own door — the raw window-input observers first, so a held player.orbit/player.steer drags the seat camera and the cursor sees the held button, then the router — exactly as a native pointer event does; every other source enters the router alone. The signal drives the issuing seat's lane (seat 1 from stdin or MCP) whatever physical devices are seated or idle, and never seats a device or counts as that seat's activity. It folds into the NEXT simulation tick's snapshot through the seat's bindings exactly like device input. Level destinations remain carried until a release/zero sample or focus loss; Relative destinations consume displacement once without a held value. Echoes [player.signal: p<seat> <source> <sample>].",
+            forms: PlayerSignalForms,
             handler: SignalHandler,
             routing: CommandRouting.Simulation
         );
@@ -1076,7 +1087,8 @@ public sealed partial class WorldBindingCommandModule(PlayerRoster roster, World
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "identity.bindings.save",
-            description: "Folds a seat's live session rebinds into its identity-owned world: identity.bindings.save [seat].",
+            description: "Folds a seat's live session rebinds into its identity-owned world: " + IdentityBindingsSaveForms.Spelling + ".",
+            forms: IdentityBindingsSaveForms,
             handler: SaveHandler,
             routing: CommandRouting.Simulation
         );

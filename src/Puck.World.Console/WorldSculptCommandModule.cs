@@ -26,6 +26,7 @@ namespace Puck.World;
 /// anything is submitted. There is deliberately no <c>--write</c> flag: writing to disk is <c>world.save</c>.
 /// </summary>
 public sealed class WorldSculptCommandModule(IWorldConsoleAuthority authority, WorldDeferredVerbEchoes echoes, WorldRowStepWindowGuard stepGuard) : ICommandModule {
+    private static readonly CommandForms CreationSculptForms = CommandForms.Of(verb: "creation.sculpt", "<name>");
     // The handful of sections a sculpt's SculptPatch (JsonNode-only, no Schema reference — see CreationBuilder's
     // remarks) addresses by their raw document member path, which occasionally differs from the console's own
     // dotted row-verb vocabulary (world.row.set's own path table, Puck.World.WorldRowCommandModule). Identity for
@@ -112,13 +113,11 @@ public sealed class WorldSculptCommandModule(IWorldConsoleAuthority authority, W
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "creation.sculpt",
-            description: "Applies a registered sculpt's patch to the LIVE world document: creation.sculpt <name>. Echoes the patch's plan (every op's path and its inserted/replaced/set/removed/unset verdict against a working copy) and then one line per distinct row it composed and submitted — the same section table, Mutate grant check, whole-document revalidation and tick-boundary apply every world.row.set/.remove crosses, under the issuing principal; the apply verdict arrives deferred as [creation.sculpt: …] like any buffered mutation's. All-or-nothing: a row that fails to compose, or that already has an edit buffered this tick window, refuses the whole sculpt by name and submits nothing. No --write: writing to disk stays world.save.",
+            description: $"Applies a registered sculpt's patch to the LIVE world document: {CreationSculptForms.Spelling}. Echoes the patch's plan (every op's path and its inserted/replaced/set/removed/unset verdict against a working copy) and then one line per distinct row it composed and submitted — the same section table, Mutate grant check, whole-document revalidation and tick-boundary apply every world.row.set/.remove crosses, under the issuing principal; the apply verdict arrives deferred as [creation.sculpt: …] like any buffered mutation's. All-or-nothing: a row that fails to compose, or that already has an edit buffered this tick window, refuses the whole sculpt by name and submits nothing. No --write: writing to disk stays world.save.",
+            forms: CreationSculptForms,
             handler: (context, args) => {
                 if (args.Count != 1) {
-                    return CommandResult.Usage(
-                        form: "<name>",
-                        verb: "creation.sculpt"
-                    );
+                    return CreationSculptForms.Refuse();
                 }
 
                 var name = args[0].ToString();

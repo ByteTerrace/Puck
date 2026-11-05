@@ -10,11 +10,14 @@ let forestGlades = [
 ]
 function forestInGlade(x, z, margin = 0) = reduce(forestGlades, false, (inside, g) => inside or
   (x - g.x) * (x - g.x) / ((g.rx + margin) * (g.rx + margin)) +
-  (z - g.z) * (z - g.z) / ((g.rz + margin) * (g.rz + margin)) < 1)
+    (z - g.z) * (z - g.z) / ((g.rz + margin) * (g.rz + margin)) <
+    1)
 function forestInBelt(x, z, margin = 0) = x * x + z * z >
-  (130 - margin + 2.5 * sine(x * 0.09)) * (130 - margin + 2.5 * sine(x * 0.09)) and
-  x * x + z * z < (192 + margin + 3 * cosine(x * 0.07 + z * 0.03)) *
-  (192 + margin + 3 * cosine(x * 0.07 + z * 0.03)) and z < -96 and x < -z * 1.14 and -x < -z * 1.14
+  (130 - margin + 2.5 * sine(x * 0.09)) * (130 - margin + 2.5 * sine(x * 0.09)) and x * x + z * z < (192 +
+  margin +
+  3 * cosine(x * 0.07 + z * 0.03)) * (192 + margin + 3 * cosine(
+  x * 0.07 + z * 0.03
+)) and z < -96 and x < -z * 1.14 and -x < -z * 1.14
 function forestThicket(x, z) = sine(x * 0.19 + z * 0.06) + cosine(z * 0.17 - x * 0.045)
 function forestVariation(i, salt = 0) = i * 0.61803398875 + salt - floor(i * 0.61803398875 + salt)
 function forestCore(x, z) = x > 25 and x < 79 and z < -123 and z > -173
@@ -22,7 +25,8 @@ function forestHeroClear(x, z, radius) = (x - 43) * (x - 43) + (z + 144) * (z + 
 
 let forestShrubKinds = ["forest-scrub", "forest-bramble"]
 let forestTreeKinds = ["lawn-oak-0", "lawn-oak-1", "lawn-oak-2", "lawn-oak-0", "lawn-flat-1",
-  "lawn-oak-1", "lawn-column-0", "lawn-oak-2"]
+  "lawn-oak-1", "lawn-column-0", "lawn-oak-2"
+]
 // One static contact field supplies the canonical origins used by drawing and collision.
 let forestGround = {
   targets ["floor", "forest-ground-relief", "forest-west-bank", "forest-east-bank"]

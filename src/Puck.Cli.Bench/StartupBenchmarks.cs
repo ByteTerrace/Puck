@@ -66,6 +66,8 @@ public static class StartupBenchmarks {
                 StartupSample row;
 
                 try {
+                    WorldAdmission.Wait(step: "bench startup", worldArguments: arguments);
+
                     var result = CliProcess.RunCaptured("dotnet", arguments, input, TimeSpan.FromSeconds(seconds: timeout),
                         continueWhen: line => (headless
                             ? ((line.Stream == CliProcessOutputStream.Stdout) && (line.Line == "[wire.errors: 0 rejected]"))

@@ -1,15 +1,16 @@
 using System.Buffers.Binary;
-using System.Buffers;
 using System.IO.Compression;
 using System.IO.Hashing;
 using System.Numerics;
 using Puck.SignedDistance.Illumination;
+using Puck.Abstractions.Memory;
+using Puck.Hosting.Jobs;
 
 namespace Puck.SdfVm;
 
 // Mesh streams use independent attribute planes, delta predicted within each plane, then zlib.
 // The envelope checks compressed bytes before allocation; decoded counts are bounded by remaining bytes.
-internal static class SdfMeshStoreCodec {
+internal static unsafe class SdfMeshStoreCodec {
     internal const ulong Magic = 0x3948534D4B435550ul; // PUCKMSH9
     internal const int HeaderBytes = 28;
 
@@ -17,11 +18,12 @@ internal static class SdfMeshStoreCodec {
 
     internal static byte[] Encode(UInt128 key, SdfMesh? mesh, int[] materials) {
         var pieces = ((mesh is null) ? Array.Empty<SdfMesh>() : ((mesh.Chunks.Count == 0) ? new[] { mesh } : mesh.Chunks));
-        var low = ((pieces.Count == 0) ? Vector3.Zero : pieces[0].Positions.Span[0]);
-        var high = low;
+        var low = ((pieces.Count == 0) ? Vector3.Zero : pieces[0].PositionLow);
+        var high = ((pieces.Count == 0) ? Vector3.Zero : pieces[0].PositionHigh);
 
         foreach (var piece in pieces) {
-            foreach (var position in piece.Positions.Span) { low = Vector3.Min(value1: low, value2: position); high = Vector3.Max(value1: high, value2: position); }
+            low = Vector3.Min(value1: low, value2: piece.PositionLow);
+            high = Vector3.Max(value1: high, value2: piece.PositionHigh);
         }
         // Every shared seam vertex uses exactly the same grid, including its width. A per-piece grid opens cracks.
         var width = ((pieces.Count == 0) ? 4 : PositionWidth(high: high, low: low, pieces: pieces));
@@ -52,7 +54,7 @@ internal static class SdfMeshStoreCodec {
         return bytes;
     }
     internal static bool TryDecode(byte[] bytes, UInt128 key, out SdfMesh? mesh,
-        out int[] materials, [System.Diagnostics.CodeAnalysis.NotNullWhen(false)] out string? refusal) {
+        out int[] materials, [System.Diagnostics.CodeAnalysis.NotNullWhen(false)] out string? refusal, IAllocator? allocator = null) {
         mesh = null;
         materials = [];
         refusal = "is truncated";
@@ -69,18 +71,23 @@ internal static class SdfMeshStoreCodec {
         var length = BinaryPrimitives.ReadInt32LittleEndian(source: body[24..]);
 
         if ((length <= 0) || (length > 1_073_741_824)) { return false; }
-        byte[]? decoded = null;
-
         try {
-            decoded = ArrayPool<byte>.Shared.Rent(minimumLength: length);
+            // Expanded entries belong to this decode alone. A shared pool retains a large buffer per size bucket
+            // on every worker after a parallel store load, even though no mesh borrows the encoded planes.
+            using var owner = MemoryAccount.Shared.CreateOwner(name: "mesh-decode");
+            using var decoded = new OwnedBuffer<byte>(allocator: allocator, observer: owner);
+
+            decoded.Resize(length: length, clear: false, preserve: false);
             try {
                 using var compressed = new MemoryStream(bytes, HeaderBytes, (body.Length - HeaderBytes), writable: false);
                 using var decoder = new ZLibStream(mode: CompressionMode.Decompress, stream: compressed);
 
-                decoder.ReadExactly(buffer: decoded.AsSpan(length: length, start: 0));
+                decoder.ReadExactly(buffer: decoded.GetSpan());
                 if (decoder.ReadByte() != -1) { return false; }
             } catch (Exception exception) when ((exception is IOException or InvalidDataException)) { return false; }
-            using var input = new MemoryStream(decoded, 0, length, writable: false, publiclyVisible: true);
+            // The pin and every plane borrow end before the decode storage is released, on success and refusal.
+            using var pin = decoded.Pin();
+            using var input = new UnmanagedMemoryStream(pointer: (byte*)pin.Pointer, length: length);
             using var reader = new BinaryReader(input: input);
             var palette = new int[Count(itemBytes: 4, reader: reader)];
 
@@ -98,8 +105,6 @@ internal static class SdfMeshStoreCodec {
         } catch (Exception exception) when ((exception is IOException or InvalidDataException or ArgumentException or OverflowException)) {
             refusal = $"is no mesh: {exception.Message}";
             return false;
-        } finally {
-            if (decoded is not null) { ArrayPool<byte>.Shared.Return(decoded); }
         }
     }
 
@@ -249,8 +254,8 @@ internal static class SdfMeshStoreCodec {
 
         if (width is < 1 or > 4) { throw new InvalidDataException(message: "Invalid attribute width."); }
         var count = Count(itemBytes: width, reader: reader);
-        var input = ((MemoryStream)reader.BaseStream);
-        var bytes = input.GetBuffer().AsSpan(checked((int)input.Position), checked((count * width)));
+        var input = ((UnmanagedMemoryStream)reader.BaseStream);
+        var bytes = new ReadOnlySpan<byte>(pointer: input.PositionPointer, length: checked((count * width)));
 
         input.Position += bytes.Length;
         return new Plane(bytes: bytes, count: count, width: width);
@@ -309,15 +314,10 @@ internal static class SdfMeshStoreCodec {
     }
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveOptimization)]
     private static uint[] ReadPlane(BinaryReader reader) {
-        var width = reader.ReadByte();
-
-        if (width is < 1 or > 4) { throw new InvalidDataException(message: "Invalid attribute width."); }
-        var count = Count(itemBytes: width, reader: reader);
-        // Attribute bytes already live in the decoded payload. Slicing it avoids another allocation and copy per plane.
-        var input = ((MemoryStream)reader.BaseStream);
-        var bytes = input.GetBuffer().AsSpan(checked((int)input.Position), checked((count * width)));
-
-        input.Position += bytes.Length;
+        var plane = ReadPlaneBytes(reader: reader);
+        var width = plane.Width;
+        var count = plane.Count;
+        var bytes = plane.Bytes;
         var words = new uint[count];
         var previous = 0U;
 

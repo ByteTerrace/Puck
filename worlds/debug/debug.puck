@@ -57,6 +57,10 @@ import "machine-debugger"
 import "range"
 import "valley"
 import "lawn"
+// The water: the chain from glacier to aquifer (water.puck) and the pool the river ends in (pool.puck).
+import "water"
+import "pool"
+import "water-scenery"
 import "forest"
 // The time of day: the sun and the sky on one clock (day.puck).
 import "day"
@@ -165,10 +169,13 @@ cameras: concat(
 
 // Recovery at the hero spawn lands above the studio platform. The gallery adds a spawn point per exhibit
 // (shapes.puck's gallerySpawns) and the gallery.* commands (galleryCommands) that walk, inspect and flag them.
-spawnPoints: concat([
-  { id: "hero", position [48, 0.33, -48], yawDegrees: 0 }
-  { id: "stage", position [0, 0, 0], yawDegrees: 0 }
-], gallerySpawns)
+spawnPoints: concat(
+  [
+    { id: "hero", position [48, 0.33, -48], yawDegrees: 0 }
+    { id: "stage", position [0, 0, 0], yawDegrees: 0 }
+  ],
+  gallerySpawns
+)
 
 commands: galleryCommands
 

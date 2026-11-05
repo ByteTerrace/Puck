@@ -33,6 +33,7 @@ internal sealed class WorldWheelCommandModule(PlayerRoster roster, WorldWheelFee
 
     private readonly WorldWheelFeed? m_feed = feed;
     private readonly PlayerRoster m_roster = roster;
+    private static readonly CommandForms WorldViewWheelForms = CommandForms.Of(verb: "world.view.wheel", "[<player>]");
 
     private CommandResult CancelHandler(CommandContext context, WireArgs args) {
         if (m_feed is not { } feed) {
@@ -220,7 +221,7 @@ internal sealed class WorldWheelCommandModule(PlayerRoster roster, WorldWheelFee
         }
 
         if (args.Count > 1) {
-            return CommandResult.Error(output: $"[world.view.wheel: too many arguments — expected [<player>], player an integer 1..{PlayerRoster.MaxSlots}]");
+            return WorldViewWheelForms.Refuse(got: args[1].ToString());
         }
 
         var (slot, error) = SeatCommandArgs.ResolveSlot(
@@ -283,7 +284,8 @@ internal sealed class WorldWheelCommandModule(PlayerRoster roster, WorldWheelFee
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.view.wheel",
-            description: "Echoes a radial's last composed frame: world.view.wheel [player] — without a player reads the pointer seat; otherwise reads seat 1..4. Reports open state, radial id/group, rings, active ring, hovered sector or reason, authored pointer/ring-selection and placement policy, and hub anchor.",
+            description: $"Echoes a radial's last composed frame: {WorldViewWheelForms.Spelling} — without a player reads the pointer seat; otherwise reads seat 1..4. Reports open state, radial id/group, rings, active ring, hovered sector or reason, authored pointer/ring-selection and placement policy, and hub anchor.",
+            forms: WorldViewWheelForms,
             handler: ViewHandler,
             routing: CommandRouting.Immediate
         );

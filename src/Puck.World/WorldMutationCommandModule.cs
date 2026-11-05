@@ -31,6 +31,13 @@ namespace Puck.World;
 /// grant check applies to EVERY submitted mutation regardless of which module produced it, so revoking a
 /// principal's grant over a section refuses that principal's writes here exactly like any other's.</para></remarks>
 internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink link, WorldDeferredVerbEchoes echoes, WorldDefinitionSource definitionSource, WorldRenderSettings renderSettings, Client.WorldAudioDirector audioDirector, PresentPacingControl pacing, Client.WorldBindingBarVisibility bindingBarVisibility, Client.WorldEditorSeats editorSeats, Client.WorldTextCatalog textCatalog, WorldMachineCatalog machineCatalog, WorldScheduleRoot scheduleRoot, WorldSourceWatch sourceWatch) : ICommandModule {
+    private static readonly CommandForms WorldKitDefaultForms = CommandForms.Of(verb: "world.kit.default", "<name>");
+    private static readonly CommandForms WorldGrantSetForms = CommandForms.Of(verb: "world.grant.set", WorldGrantCommandModule.GrantForm);
+    private static readonly CommandForms WorldGrantRemoveForms = CommandForms.Of(verb: "world.grant.remove", WorldGrantCommandModule.RevokeForm);
+    private static readonly CommandForms WorldPopulationDefaultsForms = CommandForms.Of(verb: "world.population.defaults", "<local> <network>");
+    private static readonly CommandForms WorldPlacementGetForms = CommandForms.Of(verb: "world.placement.get", "<id>");
+    private static readonly CommandForms WorldLoadForms = CommandForms.Of(verb: "world.load", "<path> [force]");
+    private static readonly CommandForms WorldTextForms = CommandForms.Of(verb: "world.text", "[font]");
     // Buffer a mutation over the link and return a quiet ack — the server prints the loud accept/reject line when the
     // buffered edit applies at the tick boundary, and the barrier guarantees a following world.status sees the result.
     // world.load's own trailing-token grammar: <path> [force], where `force` is recognized only as the LAST token.
@@ -54,13 +61,11 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return Simulation(
             name: "world.kit.default",
-            description: "Sets the default seat kit (by name): world.kit.default <name>. Rejected if the name matches no kit row.",
+            description: $"Sets the default seat kit (by name): {WorldKitDefaultForms.Spelling}. Rejected if the name matches no kit row.",
+            forms: WorldKitDefaultForms,
             handler: (context, args) => {
                 if (args.Count != 1) {
-                    return CommandResult.Usage(
-                        form: "<name>",
-                        verb: "world.kit.default"
-                    );
+                    return WorldKitDefaultForms.Refuse();
                 }
 
                 return link.Submit(mutation: new WorldMutation.SetDefaultSeatKit(
@@ -71,7 +76,8 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
         );
         yield return Simulation(
             name: "world.population.defaults",
-            description: "Sets the census defaults (document-only; the live census stays the world.population verb): world.population.defaults <local> <network>, where <local> (1..4) is how many LEADING seats author 'eager' — seat 1 is always eager regardless, and every seat from <local> on authors 'onDemand'.",
+            description: $"Sets the census defaults (document-only; the live census stays the world.population verb): {WorldPopulationDefaultsForms.Spelling}, where <local> (1..4) is how many LEADING seats author 'eager' — seat 1 is always eager regardless, and every seat from <local> on authors 'onDemand'.",
+            forms: WorldPopulationDefaultsForms,
             handler: (context, args) => {
                 if (
                     (args.Count != 2) ||
@@ -84,10 +90,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                     value: out var network
                 )
                 ) {
-                    return CommandResult.Usage(
-                        form: "<local> <network>",
-                        verb: "world.population.defaults"
-                    );
+                    return WorldPopulationDefaultsForms.Refuse();
                 }
 
                 if (
@@ -118,13 +121,11 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.placement.get",
-            description: "Reads one live placement row as its exact WorldPlacement JSON shape: world.placement.get <id>.",
+            description: $"Reads one live placement row as its exact WorldPlacement JSON shape: {WorldPlacementGetForms.Spelling}.",
+            forms: WorldPlacementGetForms,
             handler: (_, args) => {
                 if (args.Count != 1) {
-                    return CommandResult.Usage(
-                        form: "<id>",
-                        verb: "world.placement.get"
-                    );
+                    return WorldPlacementGetForms.Refuse();
                 }
 
                 var id = args[0].ToString();
@@ -144,7 +145,8 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
         );
         yield return Simulation(
             name: "world.grant.set",
-            description: "Upserts a document-authored grant row (see WorldDefinition.Grants) — the FULL world.grant token grammar, masks included: world.grant.set <grantee> <capability> <subject> [exclusive] [budget:<n>] [events:<n>] [channels:<name,...>] [ceiling:<f>] [verbs:<name,...>] [writes:<name,...>]. Each mask still obeys its own carriage rule (verbs: only on mutate section:<name> or edit state:<name>; writes: only on mutate state:<name>), refused by name at the same door a live grant hits. Additionally accepts a document:<id> grantee, which world.grant refuses: a document grantee is meaningless in the LIVE table (the cross-document durable-state write-back channel reads its grants off the owner's document), so this verb is the ONLY place that capability is authorable — in session, through the ordered domain and the journal, like every other document mutation. DOCUMENT-ONLY, like world.row.set addons: applies at the NEXT BOOT through the identical WorldServer.Grant path world.grant itself submits through, so an illegitimate or conflicting row (including a missing/refused budget or a missing verb mask on an untrusted mutate row) prints the same loud accept/reject line an operator would see typing it live — this verb never touches the LIVE grant table world.grant/world.revoke administer. Replaces the row matching the SAME (grantee, capability, subject); a bare re-set changes only the trailing tokens actually supplied.",
+            description: $"Upserts a document-authored grant row (see WorldDefinition.Grants) — the FULL world.grant token grammar, masks included: {WorldGrantSetForms.Spelling}. Each mask still obeys its own carriage rule (verbs: only on mutate section:<name> or edit state:<name>; writes: only on mutate state:<name>), refused by name at the same door a live grant hits. Additionally accepts a document:<id> grantee, which world.grant refuses: a document grantee is meaningless in the LIVE table (the cross-document durable-state write-back channel reads its grants off the owner's document), so this verb is the ONLY place that capability is authorable — in session, through the ordered domain and the journal, like every other document mutation. DOCUMENT-ONLY, like world.row.set addons: applies at the NEXT BOOT through the identical WorldServer.Grant path world.grant itself submits through, so an illegitimate or conflicting row (including a missing/refused budget or a missing verb mask on an untrusted mutate row) prints the same loud accept/reject line an operator would see typing it live — this verb never touches the LIVE grant table world.grant/world.revoke administer. Replaces the row matching the SAME (grantee, capability, subject); a bare re-set changes only the trailing tokens actually supplied.",
+            forms: WorldGrantSetForms,
             handler: (context, args) => {
                 // verbsAllowed: the write-back channel's mask had no in-session author before this — the ONLY way to
                 // set one was hand-editing an owned world's JSON outside the process, which the unification contract
@@ -153,7 +155,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                 if (!WorldGrantCommandModule.TryParseGrant(
                     args: args,
                     exclusiveAllowed: true,
-                    verb: "world.grant.set",
+                    forms: WorldGrantSetForms,
                     grant: out var grant,
                     error: out var error,
                     channels: server.Population.Channels,
@@ -171,12 +173,13 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
         );
         yield return Simulation(
             name: "world.grant.remove",
-            description: "Removes a document-authored grant row by (grantee, capability, subject) — exclusive is ignored, matching world.revoke's own shape: world.grant.remove <grantee> <capability> <subject>. DOCUMENT-ONLY; the live grant table world.grant/world.revoke administer is untouched.",
+            description: $"Removes a document-authored grant row by (grantee, capability, subject) — exclusive is ignored, matching world.revoke's own shape: {WorldGrantRemoveForms.Spelling}. DOCUMENT-ONLY; the live grant table world.grant/world.revoke administer is untouched.",
+            forms: WorldGrantRemoveForms,
             handler: (context, args) => {
                 if (!WorldGrantCommandModule.TryParseGrant(
                     args: args,
                     exclusiveAllowed: false,
-                    verb: "world.grant.remove",
+                    forms: WorldGrantRemoveForms,
                     grant: out var grant,
                     error: out var error
                 )) {
@@ -208,7 +211,8 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
         );
         yield return Simulation(
             name: "world.load",
-            description: "Loads a DIFFERENT world file and rebuilds from it — the loaded document becomes the new base (fully validated off disk, then re-validated at the apply boundary → swap → derived rebuild → journal RESET): world.load <path> [force]. Refused (naming world.save/world.reset/force as the outs) while the journal is DIRTY unless force is passed — a load discards unsaved work, and doing that silently is dishonest. A missing/invalid file, or the every-section Mutate hold world.load/world.undo have always needed, leaves the running world untouched and echoes a loud line naming why. Fully replay-compatible: captured on the tape, CAS-pinned by a sha256-64 hash of the exact bytes read off disk — a re-drive re-reads the same path and refuses BY NAME if the file has moved since the recording was made. The accept echo names the new origin.",
+            description: $"Loads a DIFFERENT world file and rebuilds from it — the loaded document becomes the new base (fully validated off disk, then re-validated at the apply boundary → swap → derived rebuild → journal RESET): {WorldLoadForms.Spelling}. Refused (naming world.save/world.reset/force as the outs) while the journal is DIRTY unless force is passed — a load discards unsaved work, and doing that silently is dishonest. A missing/invalid file, or the every-section Mutate hold world.load/world.undo have always needed, leaves the running world untouched and echoes a loud line naming why. Fully replay-compatible: captured on the tape, CAS-pinned by a sha256-64 hash of the exact bytes read off disk — a re-drive re-reads the same path and refuses BY NAME if the file has moved since the recording was made. The accept echo names the new origin.",
+            forms: WorldLoadForms,
             handler: (context, args) => {
                 if (scheduleRoot.RefuseInsideArmedRun(
                     definition: server.Definition,
@@ -223,10 +227,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                     force: out var force,
                     path: out var path
                 )) {
-                    return CommandResult.Usage(
-                        form: "<path> [force]",
-                        verb: "world.load"
-                    );
+                    return WorldLoadForms.Refuse();
                 }
 
                 var fullPath = Path.GetFullPath(path: path);
@@ -452,13 +453,11 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.text",
-            description: "Reads the world text catalog: its default font and every named font's relative source, content pin, Unicode ranges, pixel size, distance range, padding, and preferred columns; world.text [font].",
+            description: $"Reads the world text catalog: its default font and every named font's relative source, content pin, Unicode ranges, pixel size, distance range, padding, and preferred columns; {WorldTextForms.Spelling}.",
+            forms: WorldTextForms,
             handler: (_, args) => {
                 if (args.Count > 1) {
-                    return CommandResult.Usage(
-                        form: "[font]",
-                        verb: "world.text"
-                    );
+                    return WorldTextForms.Refuse();
                 }
 
                 var text = server.Definition.Text;

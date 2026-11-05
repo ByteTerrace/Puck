@@ -5,6 +5,9 @@ using Puck.World.Protocol;
 namespace Puck.World;
 
 internal sealed partial class PlayerCommandModule {
+    private static readonly CommandForms PlayerFrameForms = CommandForms.Of(verb: FrameCommand, SeatForm);
+    private static readonly CommandForms PlayerModeForms = CommandForms.Of(verb: ModeCommand, "<family> <state> [seat]", "<family> [seat]");
+    private static readonly CommandForms PlayerCameraForms = CommandForms.Of(verb: CameraCommand, SeatForm);
     // The population placement id backing seat <paramref name="slot"/>'s camera body. A camera-capable world
     // authors one inhabited placement per local seat it wants Free Cam over; WorldClient.TryInhabitantBody resolves the placement's CURRENT entity index rather
     // than a baked constant, since an inhabited body's table slot is not authored — it is wherever
@@ -77,7 +80,7 @@ internal sealed partial class PlayerCommandModule {
     );
     private CommandResult ModeHandler(CommandContext context, WireArgs args) {
         if (args.Count is (< 1 or > 3)) {
-            return CommandResult.Error(output: $"[{ModeCommand}: expected <family> <state> [seat], or <family> [seat] to read back]");
+            return PlayerModeForms.Refuse(args: in args);
         }
 
         var family = args[0].ToString();
@@ -251,7 +254,7 @@ internal sealed partial class PlayerCommandModule {
     // family's authored default, then runs the SAME ApplyMode path player.mode does.
     private CommandResult CameraHandler(CommandContext context, WireArgs args) {
         if (args.Count > 1) {
-            return CommandResult.Error(output: $"[{CameraCommand}: expected [seat]]");
+            return PlayerCameraForms.Refuse();
         }
 
         var (slot, error) = SeatCommandArgs.ResolveSlot(
@@ -310,7 +313,7 @@ internal sealed partial class PlayerCommandModule {
     // picture and the other view (the held view of a carried screen, else the room). Presentation only.
     private CommandResult FrameHandler(CommandContext context, WireArgs args) {
         if (args.Count > 1) {
-            return CommandResult.Error(output: $"[{FrameCommand}: expected [seat]]");
+            return PlayerFrameForms.Refuse();
         }
 
         var (slot, error) = SeatCommandArgs.ResolveSlot(
@@ -382,21 +385,24 @@ internal sealed partial class PlayerCommandModule {
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: FrameCommand,
-            description: $"Switches a seat's view of the screen it is engaged on: player.frame [seat] (seat 1..{PlayerRoster.MaxSlots}, default 1). The framed picture (the screen's picture alone, as an emulator shows it) and the other view trade places: on a screen a body carries whose carry authors a camera (the Humble Gaming Brick in the Moth's hands) the engagement starts on the view that shows the body holding it and the toggle goes to the picture and back, and on any other screen it starts on the picture and the toggle goes back to the room. The choice lasts until the seat leaves the screen, and the device's own controls play in both views. Echoes [player.frame: p<n> view = picture|held|room]; refused by name when the seat engages no screen. Presentation only: nothing reaches the simulation.",
+            description: $"Switches a seat's view of the screen it is engaged on: {PlayerFrameForms.Spelling} (seat 1..{PlayerRoster.MaxSlots}, default 1). The framed picture (the screen's picture alone, as an emulator shows it) and the other view trade places: on a screen a body carries whose carry authors a camera (the Humble Gaming Brick in the Moth's hands) the engagement starts on the view that shows the body holding it and the toggle goes to the picture and back, and on any other screen it starts on the picture and the toggle goes back to the room. The choice lasts until the seat leaves the screen, and the device's own controls play in both views. Echoes [player.frame: p<n> view = picture|held|room]; refused by name when the seat engages no screen. Presentation only: nothing reaches the simulation.",
+            forms: PlayerFrameForms,
             handler: FrameHandler,
             routing: CommandRouting.Immediate
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: CameraCommand,
-            description: $"Toggles a seat's Free Cam: player.camera [seat] (seat 1..{PlayerRoster.MaxSlots}, default 1). It resolves the seat's own seatModes state whose target is \"camera\" and flips between that state and the family's default, so a wheel sector or a pad chord composes exactly what player.mode <family> <state> composes — the seat possesses its declared camera body through the ordinary ComposeControl door, its own body intent diverting to Idle while the camera body's pose becomes what the seat perceives, sees, and hears through (see views.cameraRig). Refused by name when the world declares no camera-targeting state.",
+            forms: PlayerCameraForms,
+            description: $"Toggles a seat's Free Cam: {PlayerCameraForms.Spelling} (seat 1..{PlayerRoster.MaxSlots}, default 1). It resolves the seat's own seatModes state whose target is \"camera\" and flips between that state and the family's default, so a wheel sector or a pad chord composes exactly what player.mode <family> <state> composes — the seat possesses its declared camera body through the ordinary ComposeControl door, its own body intent diverting to Idle while the camera body's pose becomes what the seat perceives, sees, and hears through (see views.cameraRig). Refused by name when the world declares no camera-targeting state.",
             handler: CameraHandler,
             routing: CommandRouting.Simulation
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: ModeCommand,
-            description: "Flips a seat's published state within an AUTHORED per-seat mode family (see the document's seatModes section): player.mode <family> <state> [seat] (seat 1..4, default 1). player.mode <family> [seat] reads back the seat's current state (a two-token line whose second token is an integer 1..4 reads that SEAT; a state named like a seat index needs the explicit three-token form). A state whose family declares target: \"camera\" composes the camera control application: the seat possesses its declared camera body through the ordinary ComposeControl door (the same possession primitive body.engage uses) — its own body intent diverts to Idle while the camera body's pose becomes what the seat perceives, sees, and hears through (see views.cameraRig); leaving such a state disengages, restoring the seat's own body. An unknown family or state is refused by name, naming every admissible sibling.",
+            forms: PlayerModeForms,
+            description: $"Flips a seat's published state within an AUTHORED per-seat mode family (see the document's seatModes section): {PlayerModeForms.Spelling} (seat 1..4, default 1). The family-only form reads back the seat's current state (a two-token line whose second token is an integer 1..4 reads that SEAT; a state named like a seat index needs the explicit three-token form). A state whose family declares target: \"camera\" composes the camera control application: the seat possesses its declared camera body through the ordinary ComposeControl door (the same possession primitive body.engage uses) — its own body intent diverts to Idle while the camera body's pose becomes what the seat perceives, sees, and hears through (see views.cameraRig); leaving such a state disengages, restoring the seat's own body. An unknown family or state is refused by name, naming every admissible sibling.",
             handler: ModeHandler,
             routing: CommandRouting.Simulation
         );

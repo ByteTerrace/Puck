@@ -24,10 +24,11 @@ public static partial class CompileCommand {
 
             foreach (var output in outputs) {
                 if (WorldSemanticValidator.IsRootDocument(loweredJson: output.Json)) {
-                    WorldSemanticValidator.ValidateComposedWorld(output.Json, output.SourceMap, diagnostics, sourcePath, machines, fingerprint, sourceCompilation: sourceCompilation);
+                    _ = WorldSemanticValidator.ValidateComposedWorld(output.Json, output.SourceMap, diagnostics, sourcePath, machines, fingerprint, sourceCompilation: sourceCompilation);
                 }
             }
         }
+        compilation.Acknowledgements.Acknowledge(diagnostics: diagnostics);
         PrintDiagnostics(diagnostics: diagnostics, filePath: sourcePath, sourceText: source);
         if (diagnostics.HasErrors || (strict && diagnostics.HasWarnings) || !compilation.Success) { return 1; }
 

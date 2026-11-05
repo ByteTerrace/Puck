@@ -562,7 +562,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
                 );
             }
 
-            tables.Pack(frame: frame);
+            tables.Pack(frame: frame, frameSeconds: context.FrameDeltaSeconds);
             m_packedFrame = frame;
             m_frame = frame;
             m_pendingFrame = null;
@@ -577,6 +577,8 @@ public sealed partial class SdfWorldResidency : IDisposable {
         // A locked tick adapts once its complete geometry supplies the meter, not over partial mesh arrivals.
         if (!m_frame!.TickLocked || !MeshPathBake.Pending) {
             Exposures.Stage(frame: m_frame, irradiance: MeshIrradiance, seconds: ExposureSeconds(context: in context, frame: m_frame));
+        } else {
+            Exposures.Hold();
         }
         tables.ViewExposures = Exposures;
 

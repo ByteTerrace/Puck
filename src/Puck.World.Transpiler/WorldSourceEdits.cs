@@ -82,7 +82,7 @@ public static class WorldSourceEdits {
                 pointer = Parent(pointer: pointer);
             }
             if (pointer.Length == 0) {
-                var sectionPointer = ("/" + changed.Split(options: StringSplitOptions.RemoveEmptyEntries, separator: '/')[0]);
+                var sectionPointer = ("/" + Escape(value: Segments(pointer: changed)[0]));
 
                 if (!Exists(root: original.Json!, pointer: sectionPointer) && Exists(pointer: sectionPointer, root: target)) {
                     if (m_edits.Any(predicate: edit => (edit.Pointer == sectionPointer))) { reason = string.Empty; return true; }
@@ -187,11 +187,11 @@ public static class WorldSourceEdits {
             var aligned = (JsonObject)target.DeepClone();
 
             if (preservesOrder && (At(pointer: Parent(pointer: pointer), root: aligned) is { } holder)) {
-                holder[Unescape(value: pointer[(pointer.LastIndexOf(value: '/') + 1)..])] = new JsonArray(items: [.. before.Select(selector: (row, index) => ((matched[index] >= 0) ? after[matched[index]] : row)?.DeepClone())]);
+                holder[Segments(pointer: pointer)[^1]] =new JsonArray(items: [.. before.Select(selector: (row, index) => ((matched[index] >= 0) ? after[matched[index]] : row)?.DeepClone())]);
             }
             for (var index = 0; (index < before.Count); index++) {
                 var next = (preservesOrder ? matched[index] : ((index < after.Count) ? index : -1));
-                var oldPointer = ((pointer + "/") + index.ToString(provider: CultureInfo.InvariantCulture));
+                var oldPointer = Child(index: index, pointer: pointer);
 
                 if (m_entries.TryGetValue(key: oldPointer, value: out var existing) && Local(origin: existing, sourcePath: sourcePath)) {
                     var rowEnd = (existing.Span.Offset + existing.Span.Length);
@@ -280,7 +280,7 @@ public static class WorldSourceEdits {
             }
             for (var at = 0; (at < before.Count); at++) {
                 if (!JsonNode.DeepEquals(node1: before[at], node2: after[index])) { continue; }
-                var previous = ((pointer + "/") + at.ToString(provider: CultureInfo.InvariantCulture));
+                var previous = Child(index: at, pointer: pointer);
 
                 if (!TryEditable(pointer: previous, reason: out reason)) { return false; }
                 if (!m_entries.TryGetValue(key: previous, value: out var origin)) { break; }
@@ -294,7 +294,7 @@ public static class WorldSourceEdits {
                 reason = string.Empty;
                 return true;
             }
-            return TryReplacement(target: target, pointer: ((pointer + "/") + index.ToString(provider: CultureInfo.InvariantCulture)), text: out text, reason: out reason);
+            return TryReplacement(target: target, pointer: Child(index: index, pointer: pointer), text: out text, reason: out reason);
         }
         private bool TryEditable(string pointer, out string reason) {
             foreach (var (at, origin) in m_entries) {
@@ -364,12 +364,11 @@ public static class WorldSourceEdits {
             x: Path.GetFullPath(path: origin.SourcePath), y: Path.GetFullPath(path: sourcePath)))));
     private static bool Contains(SourceSpan outer, SourceSpan inner) => ((outer.Offset <= inner.Offset) &&
         ((outer.Offset + outer.Length) >= (inner.Offset + inner.Length)));
-    internal static string Parent(string pointer) => pointer[..Math.Max(val1: 0, val2: pointer.LastIndexOf(value: '/'))];
     private static IEnumerable<string> Changes(JsonNode? before, JsonNode? after, string pointer) {
         if (JsonNode.DeepEquals(node1: before, node2: after)) { yield break; }
         if ((before is JsonObject left) && (after is JsonObject right)) {
             foreach (var key in left.Select(selector: static member => member.Key).Union(second: right.Select(selector: static member => member.Key), comparer: StringComparer.Ordinal)) {
-                var child = ((pointer + "/") + Escape(value: key));
+                var child = Child(name: key, pointer: pointer);
 
                 if (left.ContainsKey(propertyName: key) != right.ContainsKey(propertyName: key)) { yield return child; } else { foreach (var changed in Changes(before: left[key], after: right[key], pointer: child)) { yield return changed; } }
             }
@@ -385,7 +384,7 @@ public static class WorldSourceEdits {
         } else { yield return pointer; }
     }
     private static bool TryReplacement(JsonObject target, string pointer, out string text, out string reason) {
-        var parts = pointer.Split(options: StringSplitOptions.RemoveEmptyEntries, separator: '/').Select(selector: Unescape).ToArray();
+        var parts = Segments(pointer: pointer);
         JsonNode? value = target;
         var arraySteps = new bool[parts.Length];
         var mapped = new string[parts.Length];
@@ -393,11 +392,7 @@ public static class WorldSourceEdits {
         for (var index = 0; (index < parts.Length); index++) {
             arraySteps[index] = (value is JsonArray);
             mapped[index] = (arraySteps[index] ? "0" : Escape(value: parts[index]));
-            value = value switch {
-                JsonObject obj => obj[parts[index]],
-                JsonArray array when (int.TryParse(s: parts[index], provider: CultureInfo.InvariantCulture, result: out var element) && (element >= 0) && (element < array.Count)) => array[element],
-                _ => null,
-            };
+            value = (TryChild(child: out var child, node: value, segment: parts[index]) ? child : null);
         }
         var fragment = value?.DeepClone();
 
@@ -430,17 +425,6 @@ public static class WorldSourceEdits {
             reason = $"{exception.Message}; rename the generated row before saving source, or save a JSON delta with this source as its basis";
             return false;
         }
-    }
-    private static bool Exists(JsonObject root, string pointer) {
-        if (pointer.Length == 0) { return true; }
-        var parent = At(root: root, pointer: Parent(pointer: pointer));
-        var last = Unescape(value: pointer[(pointer.LastIndexOf(value: '/') + 1)..]);
-
-        return parent switch {
-            JsonObject obj => obj.ContainsKey(propertyName: last),
-            JsonArray array => (int.TryParse(s: last, provider: CultureInfo.InvariantCulture, result: out var index) && (index >= 0) && (index < array.Count)),
-            _ => false,
-        };
     }
     private static string Describe(JsonObject root, string pointer) {
         for (var at = pointer; (at.Length > 0); at = Parent(pointer: at)) {

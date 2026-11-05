@@ -1,0 +1,25 @@
+// The digits of a double's round-trip spelling and the quotient they came from are one number: a product folds the
+// same either way, and an exact sum beside them stays exact.
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+let hour = 3.141592653589793 / 12
+let first = 0.3 * hour
+let second = 1.1 * hour
+let sum = 0.1 + 0.2
+
+inputModes {
+  global []
+  families [
+    {
+      name: "fuel"
+      selector { kind: BodyState, name: "fuel" }
+      default: "empty"
+      states [
+        { name: "empty", ranges [{ minimum: 0, maximum: 0 }], channels [] }
+        { name: $"from-{first}", ranges [{ minimum: first, maximum: second }], channels [] }
+        { name: $"to-{sum}", ranges [{ minimum: sum, maximum: (second * 2) }], channels [] }
+      ]
+    }
+  ]
+}

@@ -35,6 +35,16 @@ namespace Puck.World;
 /// writes while denying the whole-row pair — the difference between bumping a row and redefining it. Revoking either
 /// grant, or narrowing its mask, refuses that principal's writes here, whichever verb produced them.</remarks>
 public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority authority, WorldDeferredVerbEchoes echoes) : ICommandModule {
+    private static readonly CommandForms WorldStateForms = CommandForms.Of(verb: "world.state", "[<row> [<key>]]");
+    private static readonly CommandForms WorldStateCellSetForms = CommandForms.Of(verb: "world.state.cell.set", "<row> <key> <value> [add]", "<row> <key> <text...>", "<row> <key> <base64url-vector>");
+    private static readonly CommandForms WorldRuleTraceForms = CommandForms.Of(verb: "world.rule.trace", $"<rule> [evaluations 1..{RuleEvaluator.MaxTraceEvaluations}]", "off");
+    private static readonly CommandForms WorldBudgetRulesForms = CommandForms.Of(verb: "world.budget.rules", "[top]", "--why <rule>");
+    private static readonly CommandForms WorldRuleHazardsForms = CommandForms.Of(verb: "world.rule.hazards", "[top]");
+    private static readonly CommandForms WorldStateCellRemoveForms = CommandForms.Of(verb: "world.state.cell.remove", "<row> <key>");
+    private static readonly CommandForms WorldSymmetryForms = CommandForms.Of(verb: "world.symmetry", $"<node 0..{(SymmetryLattice.NodeCount - 1)}> [other 0..{(SymmetryLattice.NodeCount - 1)}]");
+    private static readonly CommandForms WorldSymmetryWordForms = CommandForms.Of(verb: "world.symmetry.word", "<mirror...> [node:<n>]");
+    private static readonly CommandForms WorldGenerateForms = CommandForms.Of(verb: "world.generate", "<row> [key ...]");
+    private static readonly CommandForms WorldStateSimilarForms = CommandForms.Of(verb: "world.state.similar", "<row> <key> <table> [top]");
     private static string DescribeCell(WorldStateReadView view, WorldStateRow row, string key, CellValue value, StateAdvance? advance, StateDynamics? dynamics, StateCycle? cycle, StateCellClock? clock) =>
         $"[world.state.cell '{row.Name}'.'{key}' value={DescribeValue(
             row: row,
@@ -514,7 +524,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             rowName: args[0].ToString(),
             view: view
         ),
-            _ => CommandResult.Error(output: "[world.state: expected no arguments, <row>, or <row> <key>]"),
+            _ => WorldStateForms.Refuse(got: args[2].ToString()),
         };
     }
     // An absent cell carries no case at all, so what the line prints for one is a function of the row's declared
@@ -547,10 +557,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
     // SAME buffered batch (before this door can see it live) is the one case that still needs two steps.
     private CommandResult HandleCellSet(WorldServer server, IServerLink link, CommandContext context, WireArgs args) {
         if (args.Count < 2) {
-            return CommandResult.Usage(
-                form: "<row> <key> <value> [add] | <row> <key> <text...> | <row> <key> <base64url-vector>",
-                verb: "world.state.cell.set"
-            );
+            return WorldStateCellSetForms.Refuse(args: in args);
         }
 
         var rowName = args[0].ToString();
@@ -604,10 +611,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             (args.Count != 3) &&
             (args.Count != 4)
         ) {
-            return CommandResult.Usage(
-                form: "<row> <key> <value> [add] | <row> <key> <text...> | <row> <key> <base64url-vector>",
-                verb: "world.state.cell.set"
-            );
+            return WorldStateCellSetForms.Refuse(args: in args);
         }
 
         var kind = WorldDocumentWriteKind.Set;
@@ -618,7 +622,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
                 b: "add",
                 comparisonType: StringComparison.OrdinalIgnoreCase
             )) {
-                return CommandResult.Error(output: $"[world.state.cell.set: unknown trailing token '{args[3]}' — expected 'add']");
+                return WorldStateCellSetForms.Refuse(args: in args, got: args[3].ToString());
             }
 
             kind = WorldDocumentWriteKind.Add;
@@ -663,7 +667,8 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             audience: CommandAudience.Operator,
             bindability: CommandBindability.Unbindable,
             name: "world.rule.trace",
-            description: $"Captures one rule's or interaction's next evaluations and reads them back (Immediate): world.rule.trace <rule> [evaluations 1..{RuleEvaluator.MaxTraceEvaluations}] arms a capture (default {DefaultRuleTraceEvaluations}; replaces any earlier one); world.rule.trace alone prints what was captured so far — per evaluation its tick, the forEach key, every binding's value, every gate conjunct with the two values it compared and its verdict, whether the gate held (and whether an edge rule was already held), and each effect's spelling, computed value, and outcome: applied, refused with the reason, emitted, or skipped because the write could not move its destination; world.rule.trace off disarms. Arm, world.wait the ticks the rule should run over, then read. An observer only — a traced run hashes identically to an untraced one. A decision rule is refused here; world.decisions echoes it.",
+            description: $"Captures one rule's or interaction's next evaluations and reads them back (Immediate): {WorldRuleTraceForms.Spelling}. With a rule it arms a capture (default {DefaultRuleTraceEvaluations}; replaces any earlier one); with no argument it prints what was captured so far — per evaluation its tick, the forEach key, every binding's value, every gate conjunct with the two values it compared and its verdict, whether the gate held (and whether an edge rule was already held), and each effect's spelling, computed value, and outcome: applied, refused with the reason, emitted, or skipped because the write could not move its destination; off disarms. Arm, world.wait the ticks the rule should run over, then read. An observer only — a traced run hashes identically to an untraced one. A decision rule is refused here; world.decisions echoes it.",
+            forms: WorldRuleTraceForms,
             handler: (context, args) => {
                 if (!authority.TryResolveServer(
                     context: context,
@@ -696,10 +701,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
                     value: out evaluations
                 ))
                 ) {
-                    return CommandResult.Usage(
-                        form: $"[<rule> [evaluations 1..{RuleEvaluator.MaxTraceEvaluations}] | off]",
-                        verb: "world.rule.trace"
-                    );
+                    return WorldRuleTraceForms.Refuse(args: in args);
                 }
                 var rule = args[0].ToString();
 
@@ -717,7 +719,8 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.budget.rules",
-            description: "Lists every rule's and interaction's worst-case work per tick, costliest first (Immediate): world.budget.rules [top] | --why <rule>. Each line carries the evaluation multiplier (a forEach row's capacity, an interaction's carrier or pair count), the firings a rule's maxFirings bounds it to when that is fewer (firings=), what one sweep costs before its first evaluation (setup), what one evaluation costs whether or not its gate holds (check), what one firing costs (fire), the line's total, and — when the gate pins literal cells to ranges — the cells and ranges it prices exclusively under; a trailing total line reads work=<sum of the exclusion tree> of <RuleCapacity.MaxWorkUnitsPerTick>, followed by the reference model, evidence digest, cycle bound, allowance, and certification status. '--why <rule>' prints one line's derivation terms instead: the multiplier's source and every effect's own cost.",
+            description: $"Lists every rule's and interaction's worst-case work per tick, costliest first (Immediate): {WorldBudgetRulesForms.Spelling}. Each line carries the evaluation multiplier (a forEach row's capacity, an interaction's carrier or pair count), the firings a rule's maxFirings bounds it to when that is fewer (firings=), what one sweep costs before its first evaluation (setup), what one evaluation costs whether or not its gate holds (check), what one firing costs (fire), the line's total, and — when the gate pins literal cells to ranges — the cells and ranges it prices exclusively under; a trailing total line reads work=<sum of the exclusion tree> of <RuleCapacity.MaxWorkUnitsPerTick>, followed by the reference model, evidence digest, cycle bound, allowance, and certification status. '--why <rule>' prints one line's derivation terms instead: the multiplier's source and every effect's own cost.",
+            forms: WorldBudgetRulesForms,
             handler: (context, args) => {
                 if (!authority.TryResolveServer(
                     context: context,
@@ -739,10 +742,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
                             definition: server.Definition,
                             name: args[1].ToString()
                         )
-                        : CommandResult.Usage(
-                            form: "--why <rule>",
-                            verb: "world.budget.rules"
-                        )
+                        : WorldBudgetRulesForms.Refuse(args: in args)
                     );
                 }
                 var top = int.MaxValue;
@@ -754,10 +754,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
                     value: out top
                 ) || (top < 1)))
                 ) {
-                    return CommandResult.Usage(
-                        form: "[top] | --why <rule>",
-                        verb: "world.budget.rules"
-                    );
+                    return WorldBudgetRulesForms.Refuse(args: in args);
                 }
                 var report = server.CostReport;
                 var lines = report.Contributors;
@@ -802,11 +799,8 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
                 )) {
                     return error;
                 }
-                if (args.Count != 0) {
-                    return CommandResult.Usage(
-                        form: string.Empty,
-                        verb: "world.search"
-                    );
+                if (CommandResult.RequireNoArguments(args: in args, verb: "world.search") is { } refusal) {
+                    return refusal;
                 }
                 var jobs = server.SearchStatus();
                 var output = new List<string>(capacity: (jobs.Count + 1)) { $"[world.search: {jobs.Count} job(s)]" };
@@ -835,7 +829,8 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.rule.hazards",
-            description: "Lists what the rules' document order decides silently (Immediate): world.rule.hazards [top]. A write-after-read hazard is an earlier rule reading a cell a later rule writes, so the reader sees the previous tick's value; a write-after-write hazard is two rules writing one cell in a tick with at least one setting it, so the later wins (or a set discards an earlier add). A pair whose gates pin one literal cell to disjoint ranges never fires on one tick and is not listed. Rules run once per tick in document order with effects applying immediately, so reorder the rules to change the answer.",
+            description: $"Lists what the rules' document order decides silently (Immediate): {WorldRuleHazardsForms.Spelling}. A write-after-read hazard is an earlier rule reading a cell a later rule writes, so the reader sees the previous tick's value; a write-after-write hazard is two rules writing one cell in a tick with at least one setting it, so the later wins (or a set discards an earlier add). A pair whose gates pin one literal cell to disjoint ranges never fires on one tick and is not listed. Rules run once per tick in document order with effects applying immediately, so reorder the rules to change the answer.",
+            forms: WorldRuleHazardsForms,
             handler: (context, args) => {
                 if (!authority.TryResolveServer(
                     context: context,
@@ -854,10 +849,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
                     value: out top
                 ) || (top < 1)))
                 ) {
-                    return CommandResult.Usage(
-                        form: "[top]",
-                        verb: "world.rule.hazards"
-                    );
+                    return WorldRuleHazardsForms.Refuse();
                 }
                 var hazards = server.RuleHazards;
                 var shown = Math.Min(
@@ -883,7 +875,8 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: "world.state.cell.set",
-            description: $"Upserts one cell inside an already-declared row, leaving the row's own shape untouched (declare or redeclare the row with world.row.set state <row-json>): world.state.cell.set <row> <key> <value> [add] | <row> <key> <text...> | <row> <key> <base64url-vector>. The row's declared kind decides the form. When <row> is already live as a text-kind row, everything after <key> is the text, spaces included and unquoted, replacing the cell; 'add' is refused there. When <row> is already live as a vector-kind row, the one token after <key> is the unpadded base64url encoding of the vector's signed 8-bit components. Otherwise (int, fixed or bool, or a row the same batch has not yet declared, which this command cannot see live) <value> is a single token resolved at compose against the row's declared kind, so a same-batch world.row.set state that declares <row> ahead of this line composes first and this line lands against it: decimal text for a fixed-kind row (e.g. \"12.5\"), a whole number for int (or, on a row naming an enum, one of its member names), or true|false for bool, never raw FixedQ4816 bits. The optional trailing 'add' adds <value> to the key's current value (0 if the key is absent) instead of replacing it; it is refused on bool. Any row is reachable; pass the reserved key '{WorldStateRow.SlotKey}' to write a one-value row's own cell. Writing '{WorldStateRow.SlotKey}' on a row declaring 'advance' rebases it: the written value becomes the new base and its epoch becomes this tick, as redeclaring the row does. Writing a keyed cell that carries its own advance rebases that cell the same way, preserving its rate. A row or cell declaring 'dynamics' rebases the same way, preserving which dynamics row it names: its Y0/V0 become the live eased value and velocity at this tick (never the raw write) plus a velocity kick signed by that row's own response, and its epoch becomes this tick. The write moves the truth, never the follower's own position, which keeps chasing from wherever it was. A trailing 'add' adds to the row's live truth (the accumulated value for 'advance', the stored value itself for 'dynamics', never the eased follower position) rather than to the stored base. Buffers and applies at the tick boundary. Refused, against the candidate this batch has built so far rather than a stale read, if <row> names no state row (declare it first), if a numeric/bool write targets a text-kind row or the reverse, if 'add' targets a bool-kind row, if <value> does not parse under <row>'s kind, if the written text exceeds StateCapacity.MaxTextValueLength, if <key> carries the reserved '$' prefix and is not '{WorldStateRow.SlotKey}' (draw and generator bookkeeping such as a cursor or the drawn masks lives in the row's own fields, never in a cell this command can reach), or, at whole-document revalidation, if the resulting value falls outside the row's declared envelope, a non-negative row's value would go negative, the write would grow the row past its capacity, or the acting principal lacks a Mutate/section:state or Edit/state:<row> hold admitting UpsertStateCell.",
+            description: $"Upserts one cell inside an already-declared row, leaving the row's own shape untouched (declare or redeclare the row with world.row.set state <row-json>): {WorldStateCellSetForms.Spelling}. The row's declared kind decides the form. When <row> is already live as a text-kind row, everything after <key> is the text, spaces included and unquoted, replacing the cell; 'add' is refused there. When <row> is already live as a vector-kind row, the one token after <key> is the unpadded base64url encoding of the vector's signed 8-bit components. Otherwise (int, fixed or bool, or a row the same batch has not yet declared, which this command cannot see live) <value> is a single token resolved at compose against the row's declared kind, so a same-batch world.row.set state that declares <row> ahead of this line composes first and this line lands against it: decimal text for a fixed-kind row (e.g. \"12.5\"), a whole number for int (or, on a row naming an enum, one of its member names), or true|false for bool, never raw FixedQ4816 bits. The optional trailing 'add' adds <value> to the key's current value (0 if the key is absent) instead of replacing it; it is refused on bool. Any row is reachable; pass the reserved key '{WorldStateRow.SlotKey}' to write a one-value row's own cell. Writing '{WorldStateRow.SlotKey}' on a row declaring 'advance' rebases it: the written value becomes the new base and its epoch becomes this tick, as redeclaring the row does. Writing a keyed cell that carries its own advance rebases that cell the same way, preserving its rate. A row or cell declaring 'dynamics' rebases the same way, preserving which dynamics row it names: its Y0/V0 become the live eased value and velocity at this tick (never the raw write) plus a velocity kick signed by that row's own response, and its epoch becomes this tick. The write moves the truth, never the follower's own position, which keeps chasing from wherever it was. A trailing 'add' adds to the row's live truth (the accumulated value for 'advance', the stored value itself for 'dynamics', never the eased follower position) rather than to the stored base. Buffers and applies at the tick boundary. Refused, against the candidate this batch has built so far rather than a stale read, if <row> names no state row (declare it first), if a numeric/bool write targets a text-kind row or the reverse, if 'add' targets a bool-kind row, if <value> does not parse under <row>'s kind, if the written text exceeds StateCapacity.MaxTextValueLength, if <key> carries the reserved '$' prefix and is not '{WorldStateRow.SlotKey}' (draw and generator bookkeeping such as a cursor or the drawn masks lives in the row's own fields, never in a cell this command can reach), or, at whole-document revalidation, if the resulting value falls outside the row's declared envelope, a non-negative row's value would go negative, the write would grow the row past its capacity, or the acting principal lacks a Mutate/section:state or Edit/state:<row> hold admitting UpsertStateCell.",
+            forms: WorldStateCellSetForms,
             handler: (context, args) => {
                 if (!authority.TryResolveInstance(
                     context: context,
@@ -906,13 +899,11 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.state.cell.remove",
-            description: "Removes ONE cell from an already-declared row, leaving the row itself in place: world.state.cell.remove <row> <key>. Rejected if <row> names no state row, no cell inside it carries <key>, or the acting principal's Edit hold does not admit RemoveStateCell.",
+            description: $"Removes ONE cell from an already-declared row, leaving the row itself in place: {WorldStateCellRemoveForms.Spelling}. Rejected if <row> names no state row, no cell inside it carries <key>, or the acting principal's Edit hold does not admit RemoveStateCell.",
+            forms: WorldStateCellRemoveForms,
             handler: (context, args) => {
                 if (args.Count != 2) {
-                    return CommandResult.Usage(
-                        form: "<row> <key>",
-                        verb: "world.state.cell.remove"
-                    );
+                    return WorldStateCellRemoveForms.Refuse();
                 }
 
                 if (!authority.TryResolveLink(context: context, error: out var error, link: out var link, verb: "world.state.cell.remove")) {
@@ -930,7 +921,8 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.symmetry",
-            description: "Reads the symmetry lattice back for one node (Immediate): world.symmetry <node> [other]. Prints the node's ring, antipode, canonical ray, projected point and its thirty-step ring walk — the values a '$symmetry:' rule operand or a cycle trait's Node/ProjectionX/ProjectionY output would read — and, with a second node, the reflection through it, whether the two rays are orthogonal, and their exact inner product (-2..2; 1 marks a sixty-degree neighbour).",
+            description: $"Reads the symmetry lattice back for one node (Immediate): {WorldSymmetryForms.Spelling}. Prints the node's ring, antipode, canonical ray, projected point and its thirty-step ring walk — the values a '$symmetry:' rule operand or a cycle trait's Node/ProjectionX/ProjectionY output would read — and, with a second node, the reflection through it, whether the two rays are orthogonal, and their exact inner product (-2..2; 1 marks a sixty-degree neighbour).",
+            forms: WorldSymmetryForms,
             handler: (context, args) => {
                 if (
                     ((args.Count != 1) && (args.Count != 2)) ||
@@ -941,10 +933,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
                     (node < 0) ||
                     (node >= SymmetryLattice.NodeCount)
                 ) {
-                    return CommandResult.Usage(
-                        form: $"<node 0..{(SymmetryLattice.NodeCount - 1)}> [other 0..{(SymmetryLattice.NodeCount - 1)}]",
-                        verb: "world.symmetry"
-                    );
+                    return WorldSymmetryForms.Refuse();
                 }
 
                 var projected = SymmetryLattice.Project(node: node);
@@ -969,10 +958,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
                         (other < 0) ||
                         (other >= SymmetryLattice.NodeCount)
                     ) {
-                        return CommandResult.Usage(
-                            form: $"<node 0..{(SymmetryLattice.NodeCount - 1)}> [other 0..{(SymmetryLattice.NodeCount - 1)}]",
-                            verb: "world.symmetry"
-                        );
+                        return WorldSymmetryForms.Refuse();
                     }
 
                     line += $"{Environment.NewLine}[world.symmetry node={node} other={other} reflect={SymmetryLattice.Reflect(
@@ -996,7 +982,8 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.symmetry.word",
-            description: "Reads a word of reflections back (Immediate): world.symmetry.word <mirror>... [node:<n>]. Bakes the word a cycle trait would author as its generator (one to eight mirror nodes, applied first to last) and prints its derived order — the period a cycle carrying it loops in — and, given a node, that node's orbit under the word in step order, so an author can see the dial a word makes before authoring it.",
+            description: $"Reads a word of reflections back (Immediate): {WorldSymmetryWordForms.Spelling}. Bakes the word a cycle trait would author as its generator (one to eight mirror nodes, applied first to last) and prints its derived order — the period a cycle carrying it loops in — and, given a node, that node's orbit under the word in step order, so an author can see the dial a word makes before authoring it.",
+            forms: WorldSymmetryWordForms,
             handler: (context, args) => {
                 var usage = $"<mirror 0..{(SymmetryLattice.NodeCount - 1)}>... [node:<0..{(SymmetryLattice.NodeCount - 1)}>]";
                 var mirrors = new List<int>(capacity: SymmetryWord.MaximumLength);
@@ -1019,10 +1006,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
                         ) ||
                             (seed >= SymmetryLattice.NodeCount)
                         ) {
-                            return CommandResult.Usage(
-                                form: usage,
-                                verb: "world.symmetry.word"
-                            );
+                            return WorldSymmetryWordForms.Refuse();
                         }
 
                         continue;
@@ -1037,20 +1021,14 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
                         (mirror >= SymmetryLattice.NodeCount) ||
                         (mirrors.Count == SymmetryWord.MaximumLength)
                     ) {
-                        return CommandResult.Usage(
-                            form: usage,
-                            verb: "world.symmetry.word"
-                        );
+                        return WorldSymmetryWordForms.Refuse();
                     }
 
                     mirrors.Add(item: mirror);
                 }
 
                 if (mirrors.Count == 0) {
-                    return CommandResult.Usage(
-                        form: usage,
-                        verb: "world.symmetry.word"
-                    );
+                    return WorldSymmetryWordForms.Refuse();
                 }
 
                 var word = SymmetryWord.Create(mirrors: System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: mirrors));
@@ -1079,13 +1057,11 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.generate",
-            description: "Redraws a DRAW SITE — a state row declaring a \"draw\" facet: world.generate <row> [key ...]. The site owns its whole draw: the facet either names a declared source from the document's \"generators\" section (\"source\": <name>) or inlines one (\"generator\": {...}), and the drawn value lands in the site's own slot cell — or, on a KEYED site (a dice tray), one numeric sample per cell in cell order; naming keys redraws those cells alone and holds the rest. A markov source walks weighted transitions and writes TEXT — ending at a TERMINAL context (one declaring no alternatives) and REFUSING BY NAME rather than truncating if it reaches the source's declared bound first; under an exhausting mode (withoutReplacement / restartOnExhaustion) each alternative is drawn at most once per context, and the drawn mask persists across draws in THIS SITE's own bookkeeping (two sites sharing one source draw independently). The uniformRange, weightedNumeric, and streamDraw sources each write ONE numeric value. Refused by name if the site declares timing=boot (drawn once at first fill, never again). The drawn value and the site's advanced cursor land in the SAME candidate, so world.undo rewinds a draw exactly. Buffers and applies at the tick boundary; rejected loudly if <row> names no state row, names one declaring no draw, the site's source resolves to nothing or writes a kind the site cannot hold, the emission exceeds the text bound, or the acting principal lacks a Mutate/section:state or Edit/state:<row> hold admitting Generate.",
+            description: $"Redraws a DRAW SITE — a state row declaring a \"draw\" facet: {WorldGenerateForms.Spelling}. The site owns its whole draw: the facet either names a declared source from the document's \"generators\" section (\"source\": <name>) or inlines one (\"generator\": {{...}}), and the drawn value lands in the site's own slot cell — or, on a KEYED site (a dice tray), one numeric sample per cell in cell order; naming keys redraws those cells alone and holds the rest. A markov source walks weighted transitions and writes TEXT — ending at a TERMINAL context (one declaring no alternatives) and REFUSING BY NAME rather than truncating if it reaches the source's declared bound first; under an exhausting mode (withoutReplacement / restartOnExhaustion) each alternative is drawn at most once per context, and the drawn mask persists across draws in THIS SITE's own bookkeeping (two sites sharing one source draw independently). The uniformRange, weightedNumeric, and streamDraw sources each write ONE numeric value. Refused by name if the site declares timing=boot (drawn once at first fill, never again). The drawn value and the site's advanced cursor land in the SAME candidate, so world.undo rewinds a draw exactly. Buffers and applies at the tick boundary; rejected loudly if <row> names no state row, names one declaring no draw, the site's source resolves to nothing or writes a kind the site cannot hold, the emission exceeds the text bound, or the acting principal lacks a Mutate/section:state or Edit/state:<row> hold admitting Generate.",
+            forms: WorldGenerateForms,
             handler: (context, args) => {
                 if (args.Count < 1) {
-                    return CommandResult.Usage(
-                        form: "<row> [key ...]",
-                        verb: "world.generate"
-                    );
+                    return WorldGenerateForms.Refuse();
                 }
 
                 string[]? keys = null;
@@ -1113,7 +1089,8 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.state",
-            description: "Reads back the live state section at all three grains (Immediate): with no argument, every row's name/kind/shape (a one-value row shows its value, a keyed row its cell count against its capacity), plus each row's declared range and non-negative floor when it carries them; with a row name, that row's line followed by every cell it holds; with a row name and a cell key, that one cell alone; a row naming an enum spells each value by its member name — or a refusal naming why there is none: world.state [row] [key].",
+            description: $"Reads back the live state section at all three grains (Immediate): with no argument, every row's name/kind/shape (a one-value row shows its value, a keyed row its cell count against its capacity), plus each row's declared range and non-negative floor when it carries them; with a row name, that row's line followed by every cell it holds; with a row name and a cell key, that one cell alone; a row naming an enum spells each value by its member name — or a refusal naming why there is none: {WorldStateForms.Spelling}.",
+            forms: WorldStateForms,
             handler: (context, args) => {
                 if (!authority.TryResolveReadView(
                     context: context,
@@ -1134,7 +1111,8 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.state.similar",
-            description: "Ranks cells of a target vector row against a query vector by cosine similarity and dot product (Immediate): world.state.similar <row> <key> <table> [top]. Reads through the caller's visibility; never writes.",
+            description: $"Ranks cells of a target vector row against a query vector by cosine similarity and dot product (Immediate): {WorldStateSimilarForms.Spelling}. Reads through the caller's visibility; never writes.",
+            forms: WorldStateSimilarForms,
             handler: (context, args) => {
                 if (!authority.TryResolveReadView(
                     context: context,
@@ -1156,7 +1134,8 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             audience: CommandAudience.Operator,
             bindability: CommandBindability.Unbindable,
             name: "world.state.hash",
-            description: "Reads an operator-only live deterministic state hash (Immediate): world.state.hash [capture|pose|world|authoritative]. The default capture scope matches capture manifests; authoritative includes rule latches, body and identity action state, and field-lattice cells.",
+            description: $"Reads an operator-only live deterministic state hash (Immediate): {WorldStateHashForms.Spelling}. The default capture scope matches capture manifests; authoritative includes rule latches, body and identity action state, and field-lattice cells.",
+            forms: WorldStateHashForms,
             handler: (context, args) => authority.TryResolveServer(context: context, error: out var error, server: out var server, verb: "world.state.hash")
                 ? DescribeHash(server: server, args: args) : error,
             routing: CommandRouting.Immediate
@@ -1165,10 +1144,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
 
     private static CommandResult HandleStateSimilar(WorldStateReadView view, WireArgs args) {
         if ((args.Count != 3) && (args.Count != 4)) {
-            return CommandResult.Usage(
-                form: "<row> <key> <table> [top]",
-                verb: "world.state.similar"
-            );
+            return WorldStateSimilarForms.Refuse();
         }
 
         var queryRowName = args[0].ToString();

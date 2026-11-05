@@ -193,7 +193,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
             texels: Puck.SdfVm.SdfShadowResolutions.Texels(resolution: Puck.SdfVm.SdfShadowResolution.Full)
         ) + " for a 60-degree 16:9 view";
         var lattice = ((population.FieldRegions.Count > 0)
-            ? string.Join(separator: " | ", values: population.FieldRegions.Select(selector: region => ($"region {region.Name}: " + region.Lattice.DescribeCost(
+            ? string.Join(separator: Environment.NewLine, values: population.FieldRegions.Select(selector: region => ($"region {region.Name}: " + region.Lattice.DescribeCost(
                 activeBodyCount: population.ActiveCount(),
                 bodyCapacity: population.Capacity
             ))))
@@ -232,7 +232,29 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
 
         rules += $" | {population.InputCatalog.DescribeBudget(history: server.Definition.InputHistory)}";
 
-        return $"[world.budget: {render} | {stampPool} | {far} | {shadows} | {lattice} | {gravity} | {placements} | state {(server.Definition.State?.Count ?? 0)} row(s) | {rules} | {curves} | {navigation} | {population.DescribeFlockWork()} | {population.DescribeRigidWork()} | {server.DescribePatternBudget()} | {server.CostReport.Presentation.Describe()} | {DescribeLiveBudget()} | {(renderProbe?.DescribeInfinityBudget() ?? "infinity unavailable: no renderer")}]";
+        // One line per section, and per region, live instance and infinity root, so puck_exec's match and lines filters
+        // can narrow the answer; the render section stays first.
+        var sections = new[] {
+            render,
+            stampPool,
+            far,
+            shadows,
+            lattice,
+            gravity,
+            placements,
+            $"state {(server.Definition.State?.Count ?? 0)} row(s)",
+            rules,
+            curves,
+            navigation,
+            population.DescribeFlockWork(),
+            population.DescribeRigidWork(),
+            server.DescribePatternBudget(),
+            server.CostReport.Presentation.Describe(),
+            DescribeLiveBudget(),
+            (renderProbe?.DescribeInfinityBudget() ?? "infinity unavailable: no renderer"),
+        };
+
+        return $"[world.budget: {string.Join(separator: Environment.NewLine, values: sections)}]";
     }
     private static string DescribeDistribution(WorldDistribution distribution) {
         var region = distribution.Region switch {
@@ -459,7 +481,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.budget",
-            description: "Prints the immediate compose-time cost sheet: rendering (the live program's words, instances, step scale, the indirect volume's probes per level, bytes a probe, budget and lighting age, volumes, scoped clamps and segments), the creation-stamp pool's per-stamp shape ceiling and worst-case instance draw, far-distance, fields, gravity, placements (static instances, rows, and the offsets every dealt template reserves), state/rules, curves, bounded navigation, local flock perception work, and every views.graphs instance with its extent ceiling, rate and planned passes against the scheduler's pass-pixel budget, the live infinity plans with each root's count against its cap and named fallbacks, then the live budget: every instance the render graph runtime scheduled in its latest frame, with what it decided, its extent, frame divisor, passes and pass-pixels, and the passes, dispatches and draws its newest completed submission counted (counts, never timing). Rendering and the live budget read 'not built yet' under a headless host; authoritative costs remain available.",
+            description: "Prints the immediate compose-time cost sheet, one line per section (and per field region, live instance and infinity root, so the answer narrows by line): rendering (the live program's words, instances, step scale, the indirect volume's probes per level, bytes a probe, budget and lighting age, volumes, scoped clamps and segments), the creation-stamp pool's per-stamp shape ceiling and worst-case instance draw, far-distance, fields, gravity, placements (static instances, rows, and the offsets every dealt template reserves), state/rules, curves, bounded navigation, local flock perception work, and every views.graphs instance with its extent ceiling, rate and planned passes against the scheduler's pass-pixel budget, the live infinity plans with each root's count against its cap and named fallbacks, then the live budget: every instance the render graph runtime scheduled in its latest frame, with what it decided, its extent, frame divisor, passes and pass-pixels, and the passes, dispatches and draws its newest completed submission counted (counts, never timing). Rendering and the live budget read 'not built yet' under a headless host; authoritative costs remain available.",
             handler: (_, args) => ((CommandResult.RequireNoArguments(
                 args: args,
                 verb: "world.budget"
@@ -624,8 +646,8 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
             name: "world.input-holds",
             description: "Reports every active participant's authored, measured, and applied input hold plus the participant setting the equalized maximum.",
             handler: (_, args) => {
-                if (args.Count != 0) {
-                    return CommandResult.Error(output: "[world.input-holds: expected no values]");
+                if (CommandResult.RequireNoArguments(args: in args, verb: "world.input-holds") is { } refusal) {
+                    return refusal;
                 }
 
                 var result = default(CommandResult);

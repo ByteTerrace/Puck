@@ -275,7 +275,7 @@ public static class WorldSourceSave {
             }
             if ((old is JsonObject left) && (now is JsonObject right)) {
                 foreach (var name in left.Select(selector: static member => member.Key).Union(second: right.Select(selector: static member => member.Key), comparer: StringComparer.Ordinal).ToArray()) {
-                    var child = ((pointer + "/") + DocumentJsonPointer.Escape(value: name));
+                    var child = DocumentJsonPointer.Child(name: name, pointer: pointer);
 
                     if (!right.ContainsKey(propertyName: name)) {
                         if (!TryRemove(node: left[name], pointer: child, reason: out reason)) { return false; }
@@ -390,7 +390,7 @@ public static class WorldSourceSave {
             }
 
             // The composed tree carries the list, so the saved source holds objects, or nothing, on the way to it.
-            var segments = pointer.Split(options: StringSplitOptions.RemoveEmptyEntries, separator: '/').Select(selector: DocumentJsonPointer.Unescape).ToArray();
+            var segments = DocumentJsonPointer.Segments(pointer: pointer);
             JsonNode current = root.Document;
 
             for (var index = 0; (index < segments.Length); index++) {
@@ -409,8 +409,8 @@ public static class WorldSourceSave {
             var bare = WithoutNulls(node: row)!;
             JsonNode fragment = new JsonArray(bare.DeepClone());
 
-            foreach (var segment in pointer.Split(options: StringSplitOptions.RemoveEmptyEntries, separator: '/').Reverse()) {
-                fragment = new JsonObject { [DocumentJsonPointer.Unescape(value: segment)] = fragment };
+            foreach (var segment in DocumentJsonPointer.Segments(pointer: pointer).Reverse()) {
+                fragment = new JsonObject { [segment] = fragment };
             }
             fragment["schema"] = WorldDefinition.SchemaVersion;
             try {
@@ -432,7 +432,7 @@ public static class WorldSourceSave {
             string? place = null;
             var agree = true;
 
-            Walk(node: node, suffix: string.Empty, visit: (value, suffix) => {
+            DocumentJsonPointer.WalkValues(node: node, pointer: string.Empty, visit: (value, suffix) => {
                 if (!origins.TryGetOrigin(origin: out var origin, value: value)) {
                     return;
                 }
@@ -470,15 +470,6 @@ public static class WorldSourceSave {
             }
             sources[key] = source!;
             return true;
-        }
-        private static void Walk(JsonNode? node, string suffix, Action<JsonValue, string> visit) {
-            if (node is JsonValue value) {
-                visit(arg1: value, arg2: suffix);
-            } else if (node is JsonObject obj) {
-                foreach (var (name, child) in obj) { Walk(node: child, suffix: ((suffix + "/") + DocumentJsonPointer.Escape(value: name)), visit: visit); }
-            } else if (node is JsonArray array) {
-                for (var index = 0; (index < array.Count); index++) { Walk(node: array[index], suffix: ((suffix + "/") + index.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)), visit: visit); }
-            }
         }
         // A composed node's owner is a member or an element of its document, never the document itself.
         private static void Replace(JsonNode node, JsonNode? value) {

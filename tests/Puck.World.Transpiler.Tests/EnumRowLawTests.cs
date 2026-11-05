@@ -234,13 +234,14 @@ public sealed class EnumRowLawTests {
             condition: compilation.Diagnostics.HasErrors,
             userMessage: compilation.Diagnostics.FormatReport(source)
         );
-        Assert.True(
-            condition: WorldSemanticValidator.ValidateComposedWorld(
-                diagnostics: compilation.Diagnostics,
-                loweredJson: compilation.RequireJson(),
-                sourceMap: sourceMap,
-                sourcePath: path
-            ),
+        Assert.NotNull(@object: WorldSemanticValidator.ValidateComposedWorld(
+            diagnostics: compilation.Diagnostics,
+            loweredJson: compilation.RequireJson(),
+            sourceMap: sourceMap,
+            sourcePath: path
+        ));
+        Assert.False(
+            condition: compilation.Diagnostics.HasErrors,
             userMessage: compilation.Diagnostics.FormatReport(source)
         );
     }

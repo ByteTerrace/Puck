@@ -12,10 +12,15 @@ public sealed class WorldMachineCommandModule(IWorldConsoleAuthority authority) 
     /// <summary>The value <c>machine.content</c>'s <c>mounted</c> field and <c>screen.state</c> give a machine that runs
     /// with no content.</summary>
     public const string NoCartridge = "no cartridge";
+    private static readonly CommandForms MachineOperationForms = CommandForms.Of(verb: "machine.operation", "<instance> <generation> <operationId> <json>");
+    private static readonly CommandForms MachineStateForms = CommandForms.Of(verb: "machine.state", "[instance]");
+    private static readonly CommandForms MachineDefaultForms = CommandForms.Of(verb: "machine.default", "<instance> <name>|none");
+    private static readonly CommandForms MachineContentForms = CommandForms.Of(verb: "machine.content", "<instance>");
+    private static readonly CommandForms MachineSwapForms = CommandForms.Of(verb: "machine.swap", "<instance> <name>");
 
     private CommandResult Operation(CommandContext context, WireArgs args) {
         if (args.Count < 4) {
-            return CommandResult.Usage(form: "<instance> <generation> <operationId> <json>", verb: "machine.operation");
+            return MachineOperationForms.Refuse();
         }
         if (!authority.TryResolveLink(
             context: context,
@@ -37,7 +42,7 @@ public sealed class WorldMachineCommandModule(IWorldConsoleAuthority authority) 
             out var generation
         )
         ) {
-            return CommandResult.Error(output: "[machine.operation: expected a nonblank instance and unsigned decimal generation]");
+            return MachineOperationForms.Refuse();
         }
 
         var operationId = args[2].ToString();
@@ -84,10 +89,11 @@ public sealed class WorldMachineCommandModule(IWorldConsoleAuthority authority) 
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "machine.state",
-            description: "Reports named machine execution: machine.state [instance]. Includes generation, running state, hardware status, completed segments, backlog, and fault. Author declarations through world.row.set machines <json>.",
+            description: $"Reports named machine execution: {MachineStateForms.Spelling}. Includes generation, running state, hardware status, completed segments, backlog, and fault. Author declarations through world.row.set machines <json>.",
+            forms: MachineStateForms,
             handler: (context, args) => {
                 if (args.Count > 1) {
-                    return CommandResult.Error(output: "[machine.state: expected an optional instance name]");
+                    return MachineStateForms.Refuse(got: args[1].ToString());
                 }
                 if (!authority.TryResolveServer(
                     context: context,
@@ -171,31 +177,35 @@ public sealed class WorldMachineCommandModule(IWorldConsoleAuthority authority) 
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "machine.operation",
-            description: "Submits one generic provider operation through the ordered domain: machine.operation <instance> <generation> <operationId> <json>. The detached payload completes as Applied, Unsupported, Refused, or Faulted.",
+            description: $"Submits one generic provider operation through the ordered domain: {MachineOperationForms.Spelling}. The detached payload completes as Applied, Unsupported, Refused, or Faulted.",
+            forms: MachineOperationForms,
             handler: Operation
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "machine.content",
-            description: "Lists the content a named machine can swap to: machine.content <instance>. Echoes the content mounted now ('no cartridge' for none) and the mountable and refused file counts, one folder segment per authored contentFolders entry (its resolved path, whether it is present on this machine, and its file count; an absent folder is listed, never refused), and one segment per file in those folders naming its folder, whether it is mounted, and, for a file the machine's engine cannot mount, why. A query (always echoes).",
+            description: $"Lists the content a named machine can swap to: {MachineContentForms.Spelling}. Echoes the content mounted now ('no cartridge' for none) and the mountable and refused file counts, one folder segment per authored contentFolders entry (its resolved path, whether it is present on this machine, and its file count; an absent folder is listed, never refused), and one segment per file in those folders naming its folder, whether it is mounted, and, for a file the machine's engine cannot mount, why. A query (always echoes).",
+            forms: MachineContentForms,
             handler: Content
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "machine.swap",
-            description: "Mounts a file from a named machine's contentFolders: machine.swap <instance> <name>, where <name> is a file name machine.content lists, its folder and file name (<folder>/<file>) when two folders hold the name, or the part of a mountable file's name before its first '.' when only one has it. A name no file answers, one several answer, or one naming a file the engine cannot mount is refused by name. Submits the provider's content.insert at the machine's current generation, requiring Control over the machine; the machine restarts on the new content and keeps its authored configuration otherwise.",
+            description: $"Mounts a file from a named machine's contentFolders: {MachineSwapForms.Spelling}, where <name> is a file name machine.content lists, its folder and file name (<folder>/<file>) when two folders hold the name, or the part of a mountable file's name before its first '.' when only one has it. A name no file answers, one several answer, or one naming a file the engine cannot mount is refused by name. Submits the provider's content.insert at the machine's current generation, requiring Control over the machine; the machine restarts on the new content and keeps its authored configuration otherwise.",
+            forms: MachineSwapForms,
             handler: Swap
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "machine.default",
-            description: $"Sets the content a named machine boots from its contentFolders: machine.default <instance> <name>|none, where <name> names a mountable file as machine.swap takes it. Writes the {WorldMachineContentFolder.SettingsFile} of the file's folder naming it, and names none in the machine's other folders that name one; none names none in every folder. A machine whose row sets preferFolderDefault boots the default at the next boot or world.reload, and its authored content when no default is set or the default is absent or unmountable; machine.swap mounts a file now. Changes local files only, so it needs a local console or seat; the settings live beside the content and no document names the default.",
+            description: $"Sets the content a named machine boots from its contentFolders: {MachineDefaultForms.Spelling}, where <name> names a mountable file as machine.swap takes it. Writes the {WorldMachineContentFolder.SettingsFile} of the file's folder naming it, and names none in the machine's other folders that name one; none names none in every folder. A machine whose row sets preferFolderDefault boots the default at the next boot or world.reload, and its authored content when no default is set or the default is absent or unmountable; machine.swap mounts a file now. Changes local files only, so it needs a local console or seat; the settings live beside the content and no document names the default.",
+            forms: MachineDefaultForms,
             handler: Default
         );
     }
     private CommandResult Default(CommandContext context, WireArgs args) {
         if (args.Count != 2) {
-            return CommandResult.Usage(form: "<instance> <name>|none", verb: "machine.default");
+            return MachineDefaultForms.Refuse();
         }
         if (context.Principal.Kind is not (PrincipalKind.Console or PrincipalKind.Seat)) {
             return CommandResult.Error(output: "[machine.default: writing a folder's settings requires a local console or seat]");
@@ -262,7 +272,7 @@ public sealed class WorldMachineCommandModule(IWorldConsoleAuthority authority) 
     }
     private CommandResult Content(CommandContext context, WireArgs args) {
         if (args.Count != 1) {
-            return CommandResult.Usage(form: "<instance>", verb: "machine.content");
+            return MachineContentForms.Refuse();
         }
         if (!authority.TryResolveServer(
             context: context,
@@ -377,7 +387,7 @@ public sealed class WorldMachineCommandModule(IWorldConsoleAuthority authority) 
     }
     private CommandResult Swap(CommandContext context, WireArgs args) {
         if (args.Count != 2) {
-            return CommandResult.Usage(form: "<instance> <name>", verb: "machine.swap");
+            return MachineSwapForms.Refuse();
         }
         if (!authority.TryResolveServer(
             context: context,

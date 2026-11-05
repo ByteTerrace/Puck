@@ -1,5 +1,7 @@
+using System.Reflection;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization.Metadata;
 using Puck.Assets.Documents;
@@ -99,6 +101,12 @@ public sealed record WorldPayloadRefusal(string Path, string Pointer, DocumentVa
 
         return ((WorldModelShape.Of(type: type) is { Kind: JsonTypeInfoKind.Enumerable or JsonTypeInfoKind.Dictionary, ElementType: { } element }) ? element : null);
     }
+    // The arm of a polymorphic `shape` whose discriminator the object `node` carries; null when `node` names none.
+    private static Type? ArmOf(WorldModelType shape, Type type, JsonNode? node) =>
+        (((shape.Arms.Count > 0) && ((node as JsonObject)?["$type"] is JsonValue discriminator) && discriminator.TryGetValue(value: out string? name) &&
+            (shape.Arms.FirstOrDefault(predicate: arm => (arm.Discriminator == name)) is { } arm) && (arm.Type != type))
+            ? arm.Type
+            : null);
     // The member `step` names under a value of `type`, whose document node is `node`; null when the model does not say.
     private static Type? Descend(Type type, Step step, JsonNode? node) {
         type = (Nullable.GetUnderlyingType(nullableType: type) ?? type);
@@ -109,17 +117,17 @@ public sealed record WorldPayloadRefusal(string Path, string Pointer, DocumentVa
         if (WorldModelShape.Of(type: type) is not { } shape) {
             return null;
         }
-        if ((shape.Arms.Count > 0) && ((node as JsonObject)?["$type"] is JsonValue discriminator) && discriminator.TryGetValue(value: out string? name) &&
-            (shape.Arms.FirstOrDefault(predicate: arm => (arm.Discriminator == name)) is { } arm) && (arm.Type != type)) {
-            return Descend(node: node, step: step, type: arm.Type);
+        if (ArmOf(node: node, shape: shape, type: type) is { } armType) {
+            return Descend(node: node, step: step, type: armType);
         }
 
         var members = (shape.Described ? shape.Members : shape.Properties);
 
         return members.FirstOrDefault(predicate: member => (member.Name == step.Text))?.Type;
     }
-    // What the schema reads at the end of `steps`, found by following the model's own member and element types.
-    private static DocumentValueKind? ExpectedAt(Type root, List<Step> steps, JsonNode? document) {
+    // The model type the document reads at the end of `steps`, found by following the model's own member and element
+    // types; null when the model does not say.
+    private static Type? TypeAt(Type root, List<Step> steps, JsonNode? document) {
         var type = (Type?)root;
         var node = document;
 
@@ -132,6 +140,154 @@ public sealed record WorldPayloadRefusal(string Path, string Pointer, DocumentVa
                 return null;
             }
         }
+
+        return type;
+    }
+    // The required members of the object the document holds at the end of `steps` that it leaves out: the serializer
+    // refuses such an object by naming a CLR type, so the refusal names the members from the model's own shape.
+    private static List<string> MissingAt(Type root, List<Step> steps, JsonNode? document) {
+        if ((TypeAt(document: document, root: root, steps: steps) is not { } declared) ||
+            (DocumentJsonPointer.At(root: document, pointer: PointerOf(steps: steps)) is not JsonObject node)) {
+            return [];
+        }
+
+        var type = (Nullable.GetUnderlyingType(nullableType: declared) ?? declared);
+
+        if (WorldModelShape.Of(type: type) is not { } shape) {
+            return [];
+        }
+
+        type = (ArmOf(node: node, shape: shape, type: type) ?? type);
+
+        var members = (WorldModelShape.Of(type: type) ?? shape).Members;
+
+        // The serializer meets an unmapped member before it checks the required ones, so such an object was refused
+        // for the unmapped member and its words stand.
+        if (!members.Any(predicate: static member => ((member.Access & WorldModelAccess.ExtensionData) != 0)) &&
+            node.Any(predicate: pair => !members.Any(predicate: member => (member.Name == pair.Key)))) {
+            return [];
+        }
+
+        return [.. members
+            .Where(predicate: member => (((member.Access & WorldModelAccess.Required) != 0) && !node.ContainsKey(propertyName: member.Name)))
+            .Select(selector: static member => member.Name)];
+    }
+    // The refusal of a member the object at the end of `steps` does not have: the serializer names a CLR type for it, so
+    // the refusal is read from the model's own shape instead (the last step is the unmapped member, its parent the
+    // object that refused it). The words name the closest members the object does have, or all of them when none is
+    // close; null when the last step is a member of its parent (or the parent keeps unmapped members as data).
+    private static string? UnknownMemberWords(Type root, List<Step> steps, JsonNode? document) {
+        if (
+            (steps.Count == 0) || steps[^1].IsIndex ||
+            (TypeAt(document: document, root: root, steps: steps[..^1]) is not { } declared) ||
+            (DocumentJsonPointer.At(root: document, pointer: PointerOf(steps: steps[..^1])) is not JsonObject node) ||
+            !node.ContainsKey(propertyName: steps[^1].Text)
+        ) {
+            return null;
+        }
+
+        var type = (Nullable.GetUnderlyingType(nullableType: declared) ?? declared);
+
+        if (WorldModelShape.Of(type: type) is not { } shape) {
+            return null;
+        }
+
+        type = (ArmOf(node: node, shape: shape, type: type) ?? type);
+
+        var arm = (WorldModelShape.Of(type: type) ?? shape);
+        var members = arm.Members;
+
+        if (!arm.Described || (arm.Kind != JsonTypeInfoKind.Object) || members.Any(predicate: static member => ((member.Access & WorldModelAccess.ExtensionData) != 0)) ||
+            members.Any(predicate: member => (member.Name == steps[^1].Text))) {
+            return null;
+        }
+
+        var accepted = members
+            .Where(predicate: static member => ((member.Access & (WorldModelAccess.Write | WorldModelAccess.Ignored)) == WorldModelAccess.Write))
+            .Select(selector: static member => member.Name)
+            .ToArray();
+        var near = Nearest(name: steps[^1].Text, candidates: accepted);
+        var listed = ((near.Length > 0) ? near : ((accepted.Length <= MaxListedMembers) ? accepted : []));
+
+        return ((listed.Length == 0)
+            ? "unknown member"
+            : $"unknown member; {((near.Length > 0) ? "nearest" : "valid")} members: {string.Join(separator: ", ", values: listed.Select(selector: static name => $"'{name}'"))}");
+    }
+    private const int MaxListedMembers = 12;
+    private const int MaxNearMembers = 3;
+    // The candidates spelled within a third of the name's length (at least two edits) of it, closest first.
+    private static string[] Nearest(string name, string[] candidates) {
+        var limit = Math.Max(val1: 2, val2: (name.Length / 3));
+
+        return [.. candidates
+            .Select(selector: candidate => (Candidate: candidate, Distance: EditDistance(a: name.ToLowerInvariant(), b: candidate.ToLowerInvariant())))
+            .Where(predicate: pair => (pair.Distance <= limit))
+            .OrderBy(keySelector: static pair => pair.Distance)
+            .ThenBy(keySelector: static pair => pair.Candidate, comparer: StringComparer.Ordinal)
+            .Take(count: MaxNearMembers)
+            .Select(selector: static pair => pair.Candidate)];
+    }
+    // The Levenshtein distance between two names.
+    private static int EditDistance(string a, string b) {
+        var previous = new int[(b.Length + 1)];
+        var current = new int[(b.Length + 1)];
+
+        for (var j = 0; (j <= b.Length); j++) {
+            previous[j] = j;
+        }
+        for (var i = 1; (i <= a.Length); i++) {
+            current[0] = i;
+            for (var j = 1; (j <= b.Length); j++) {
+                current[j] = Math.Min(
+                    val1: Math.Min(val1: (previous[j] + 1), val2: (current[(j - 1)] + 1)),
+                    val2: (previous[(j - 1)] + ((a[(i - 1)] == b[(j - 1)]) ? 0 : 1))
+                );
+            }
+            (previous, current) = (current, previous);
+        }
+
+        return previous[b.Length];
+    }
+    // The refusal of a member read through the strict enum converter, which accepts exactly the declared names: the
+    // names it accepts against what the document holds, or null when the member is not read that way or holds a name.
+    private static string? EnumWords(Type root, List<Step> steps, JsonNode? document) {
+        if ((steps.Count == 0) || (TypeAt(document: document, root: root, steps: steps) is not { } declared)) {
+            return null;
+        }
+
+        var type = (Nullable.GetUnderlyingType(nullableType: declared) ?? declared);
+
+        if (!type.IsEnum || !IsStrictEnum(type: type)) {
+            return null;
+        }
+
+        var held = DocumentJsonPointer.At(root: document, pointer: PointerOf(steps: steps));
+        var text = ((held is JsonValue value) && value.TryGetValue(value: out string? name) ? name : null);
+        var names = Enum.GetNames(enumType: type);
+
+        if ((text is not null) && names.Contains(value: text, comparer: StringComparer.Ordinal)) {
+            return null;
+        }
+
+        var found = ((text is not null) ? $"'{text}'" : (DocumentValueKinds.Of(node: held)?.Words() ?? "nothing"));
+
+        return $"expected one of {string.Join(separator: ", ", values: names.Select(selector: static member => $"'{member}'"))}, found {found}";
+    }
+    // An enum declares the strict converter on itself, or the context lists it for an enum it does not own.
+    private static bool IsStrictEnum(Type type) =>
+        IsStrictConverter(converter: type.GetCustomAttribute<JsonConverterAttribute>()?.ConverterType) ||
+        WorldJsonContext.Default.Options.Converters.Any(predicate: converter => (IsStrictConverter(converter: converter.GetType()) && converter.CanConvert(typeToConvert: type)));
+    private static bool IsStrictConverter(Type? converter) =>
+        (converter is { IsGenericType: true }) && (converter.GetGenericTypeDefinition() == typeof(Puck.Abstractions.Documents.StrictEnumConverter<>));
+    private static string PointerOf(List<Step> steps) =>
+        string.Concat(values: steps.Select(selector: static step => ('/' + (step.IsIndex ? step.Text : DocumentJsonPointer.Escape(value: step.Text)))));
+    // The refusal's words for required members the document leaves out.
+    private static string MissingWords(List<string> missing) => ((missing.Count == 1)
+        ? $"missing required member '{missing[0]}'"
+        : $"missing required members {string.Join(separator: ", ", values: missing.Select(selector: static name => $"'{name}'"))}");
+    // What the schema reads at the end of `steps`, found by following the model's own member and element types.
+    private static DocumentValueKind? ExpectedAt(Type root, List<Step> steps, JsonNode? document) {
+        var type = TypeAt(document: document, root: root, steps: steps);
 
         if (type is null) {
             return null;
@@ -169,21 +325,29 @@ public sealed record WorldPayloadRefusal(string Path, string Pointer, DocumentVa
         ArgumentNullException.ThrowIfNull(argument: type);
 
         var steps = ((exception is JsonException { Path: { Length: > 0 } path }) ? Steps(path: path) : []);
-        var pointer = string.Concat(values: steps.Select(selector: static step => ('/' + (step.IsIndex ? step.Text : DocumentJsonPointer.Escape(value: step.Text)))));
+        var pointer = PointerOf(steps: steps);
+        var detail = Said(exception: exception);
         JsonNode? document = null;
         DocumentValueKind? expected = null;
 
-        if (steps.Count > 0) {
+        if (exception is JsonException { Path.Length: > 0 }) {
             try {
                 document = JsonNode.Parse(json: json);
-                expected = ExpectedAt(document: document, root: type, steps: steps);
+                expected = ((steps.Count > 0) ? ExpectedAt(document: document, root: type, steps: steps) : null);
+                if (UnknownMemberWords(document: document, root: type, steps: steps) is { } unknown) {
+                    detail = unknown;
+                } else if (MissingAt(document: document, root: type, steps: steps) is { Count: > 0 } missing) {
+                    detail = MissingWords(missing: missing);
+                } else if (EnumWords(document: document, root: type, steps: steps) is { } words) {
+                    detail = words;
+                }
             } catch (Exception failure) when (failure is JsonException or InvalidOperationException) {
                 // The text that failed to parse into a row fails to parse into a tree too, or the build has no model table.
             }
         }
 
         return new WorldPayloadRefusal(
-            Detail: Said(exception: exception),
+            Detail: detail,
             Expected: expected,
             Found: DocumentValueKinds.Of(node: DocumentJsonPointer.At(root: document, pointer: pointer)),
             Path: Spell(steps: steps),

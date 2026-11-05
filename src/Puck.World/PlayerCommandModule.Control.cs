@@ -9,6 +9,15 @@ using Puck.World.Server;
 namespace Puck.World;
 
 internal sealed partial class PlayerCommandModule {
+    private static readonly CommandForms BodyChannelsForms = CommandForms.Of(verb: "body.channels", ChannelsForm);
+    private static readonly CommandForms BodyPressForms = CommandForms.Of(verb: "body.press", PressForm);
+    private static readonly CommandForms BodyControlForms = CommandForms.Of(verb: "body.control", "[live|idle|producer:<name>] [body]");
+    private static readonly CommandForms PlayerMoveForms = CommandForms.Of(verb: MoveCommand, "<x> <y>");
+    private static readonly CommandForms PlayerMoveStrafeForms = CommandForms.Of(verb: MoveStrafeCommand, "<x> <y>");
+    private static readonly CommandForms PlayerLookForms = CommandForms.Of(verb: LookCommand, "<x> <y>");
+    private static readonly CommandForms PlayerLookSteerForms = CommandForms.Of(verb: LookSteerCommand, "<x> <y>");
+    private static readonly CommandForms SourcePointerOriginForms = CommandForms.Of(verb: SourcePointerCommands.Origin, "<x> <y> <z>");
+    private static readonly CommandForms SourcePointerDirectionForms = CommandForms.Of(verb: SourcePointerCommands.Direction, "<x> <y> <z>");
     /// <summary>The runtime command name for a logical action. Every possible logical handle is registered at boot,
     /// so destination discovery never mutates the command registry or its replay ids.</summary>
     /// <param name="ordinal">The logical action handle, independent of its current storage address.</param>
@@ -112,7 +121,7 @@ internal sealed partial class PlayerCommandModule {
     }
     private CommandResult ChannelsHandler(CommandContext context, WireArgs args) {
         if (args.Count > 1) {
-            return CommandResult.Error(output: "[body.channels: expected at most 1 value — an optional body index]");
+            return BodyChannelsForms.Refuse();
         }
 
         if (TryRoutedSeatQuery(
@@ -156,9 +165,9 @@ internal sealed partial class PlayerCommandModule {
 
         var (player, index, error) = ResolveModeTarget(
             args: in args,
-            choices: "live|idle|producer:<name>",
+
             hasMode: hasMode,
-            verb: "body.control"
+            forms: BodyControlForms
         );
 
         if (error is { } modeError) {
@@ -221,13 +230,13 @@ internal sealed partial class PlayerCommandModule {
 
         return CommandResult.None;
     }
-    private CommandResult LookRouter(CommandContext context, WireArgs args, SeatLookBehavior behavior, string verb) {
+    private CommandResult LookRouter(CommandContext context, WireArgs args, SeatLookBehavior behavior, CommandForms forms) {
         if (!TryStickValue(
             args: in args,
             context: context,
             error: out var error,
             value: out var value,
-            verb: verb
+            forms: forms
         )) {
             return error;
         }
@@ -243,13 +252,13 @@ internal sealed partial class PlayerCommandModule {
     // The quantization door (see CommandValueQuantization's own remarks) — the router seam where a physical stick
     // float first becomes command state. Everything below this call is fixed point; nothing downstream re-derives
     // a conversion.
-    private CommandResult MoveRouter(CommandContext context, WireArgs args, SeatMoveBehavior behavior, string verb) {
+    private CommandResult MoveRouter(CommandContext context, WireArgs args, SeatMoveBehavior behavior, CommandForms forms) {
         if (!TryStickValue(
             args: in args,
             context: context,
             error: out var error,
             value: out var value,
-            verb: verb
+            forms: forms
         )) {
             return error;
         }
@@ -270,7 +279,9 @@ internal sealed partial class PlayerCommandModule {
     // typed value is also sustained on the seat's lane, the path WorldPointerRayCapture holds the windowed ray on, so
     // every later tick re-dispatches it through the bound branch until a new aim replaces it or source.pointer.clear
     // ends it.
-    private CommandResult PointerRouter(CommandContext context, WireArgs args, Action<SeatController, FixedVector3> set, string verb) {
+    private CommandResult PointerRouter(CommandContext context, WireArgs args, Action<SeatController, FixedVector3> set, CommandForms forms) {
+        var verb = forms.Verb;
+
         Vector3 value;
 
         if (args.Count == 0) {
@@ -296,10 +307,10 @@ internal sealed partial class PlayerCommandModule {
                 z: z
             );
         } else {
-            return CommandResult.Error(output: $"[{verb}: expected three finite values — <x> <y> <z>]");
+            return forms.Refuse(args: in args);
         }
         if (!VectorFunctions.IsFinite(vector: value)) {
-            return CommandResult.Error(output: $"[{verb}: expected three finite values — <x> <y> <z>]");
+            return forms.Refuse(args: in args);
         }
         var quantized = CommandValueQuantization.QuantizeAxis3D(value: value);
 
@@ -362,7 +373,7 @@ internal sealed partial class PlayerCommandModule {
     }
     private CommandResult PressHandler(CommandContext context, WireArgs args) {
         if (args.Count is (< 1 or > 4)) {
-            return CommandResult.Error(output: "[body.press: expected a channel name — plus an optional value, hold time, and body index]");
+            return BodyPressForms.Refuse();
         }
 
         // Layout: <channel> [value] [holdSeconds] [body].
@@ -588,49 +599,53 @@ internal sealed partial class PlayerCommandModule {
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: MoveCommand,
-            description: "The left stick's movement pair (Axis2D, +Y forward / +X strafe right), CAMERA-framed and facing the way it moves — the seat rotates it by the rendered camera yaw and writes its direction to the FaceX/FaceZ roles before it reaches the wire, whatever frame the world declared on its channel rows (channels[].frame). Routed to the owning device's player each frame. A typed player.move <x> <y> injects one exact tick through this same router for automation and accessibility surfaces.",
+            forms: PlayerMoveForms,
+            description: $"{PlayerMoveForms.Spelling} — The left stick's movement pair (Axis2D, +Y forward / +X strafe right), CAMERA-framed and facing the way it moves — the seat rotates it by the rendered camera yaw and writes its direction to the FaceX/FaceZ roles before it reaches the wire, whatever frame the world declared on its channel rows (channels[].frame). Routed to the owning device's player each frame. A typed player.move <x> <y> injects one exact tick through this same router for automation and accessibility surfaces.",
             valueKind: CommandValueKind.Axis2D,
             handler: (context, args) => MoveRouter(
                 args: args,
                 behavior: SeatMoveBehavior.FaceTravel,
                 context: context,
-                verb: MoveCommand
+                forms: PlayerMoveForms
             )
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: MoveStrafeCommand,
-            description: "An action movement pair (Axis2D, +Y forward / +X strafe right) that preserves body heading and follows live camera yaw every tick, so lateral input is a true strafe and holding forward while looking turns the trajectory. A world's binding profile binds the left gamepad stick here (the Moth basis does); player.move remains available for latched movement-facing control.",
+            forms: PlayerMoveStrafeForms,
+            description: $"{PlayerMoveStrafeForms.Spelling} — An action movement pair (Axis2D, +Y forward / +X strafe right) that preserves body heading and follows live camera yaw every tick, so lateral input is a true strafe and holding forward while looking turns the trajectory. A world's binding profile binds the left gamepad stick here (the Moth basis does); player.move remains available for latched movement-facing control.",
             valueKind: CommandValueKind.Axis2D,
             handler: (context, args) => MoveRouter(
                 args: args,
                 behavior: SeatMoveBehavior.Strafe,
                 context: context,
-                verb: MoveStrafeCommand
+                forms: PlayerMoveStrafeForms
             )
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: LookCommand,
-            description: "A free-orbit look channel (Axis2D, +X looks right / +Y looks up) — camera only, routed to the owning device's player each frame. A typed player.look <x> <y> injects one exact tick through this same router.",
+            forms: PlayerLookForms,
+            description: $"{PlayerLookForms.Spelling} — A free-orbit look channel (Axis2D, +X looks right / +Y looks up) — camera only, routed to the owning device's player each frame. A typed player.look <x> <y> injects one exact tick through this same router.",
             valueKind: CommandValueKind.Axis2D,
             handler: (context, args) => LookRouter(
                 args: args,
                 behavior: SeatLookBehavior.Orbit,
                 context: context,
-                verb: LookCommand
+                forms: PlayerLookForms
             )
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: LookSteerCommand,
-            description: "An action look channel (Axis2D, +X turns/looks right / +Y looks up): orbits the camera and, while deflected, writes its planar yaw into FaceX/FaceZ so horizontal look turns the upright body. A world's binding profile binds the right gamepad stick here (the Moth basis does); player.look remains available for authored free orbit.",
+            forms: PlayerLookSteerForms,
+            description: $"{PlayerLookSteerForms.Spelling} — An action look channel (Axis2D, +X turns/looks right / +Y looks up): orbits the camera and, while deflected, writes its planar yaw into FaceX/FaceZ so horizontal look turns the upright body. A world's binding profile binds the right gamepad stick here (the Moth basis does); player.look remains available for authored free orbit.",
             valueKind: CommandValueKind.Axis2D,
             handler: (context, args) => LookRouter(
                 args: args,
                 behavior: SeatLookBehavior.FaceBody,
                 context: context,
-                verb: LookSteerCommand
+                forms: PlayerLookSteerForms
             )
         );
         yield return CommandDefinition.Verb(
@@ -699,25 +714,27 @@ internal sealed partial class PlayerCommandModule {
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: SourcePointerCommands.Origin,
-            description: "The seat's pointer-ray origin (Axis3D, world units), quantized once here and folded with source.pointer.direction into the seat's intent for this tick; the server maps the ray through each Simulation screen's row in fixed point for the $pointer: rule read. A typed source.pointer.origin <x> <y> <z> holds the origin on every tick until it is typed again or source.pointer.clear ends it, and echoes the quantized value.",
+            forms: SourcePointerOriginForms,
+            description: $"{SourcePointerOriginForms.Spelling} — The seat's pointer-ray origin (Axis3D, world units), quantized once here and folded with source.pointer.direction into the seat's intent for this tick; the server maps the ray through each Simulation screen's row in fixed point for the $pointer: rule read. A typed source.pointer.origin <x> <y> <z> holds the origin on every tick until it is typed again or source.pointer.clear ends it, and echoes the quantized value.",
             valueKind: CommandValueKind.Axis3D,
             handler: (context, args) => PointerRouter(
                 args: args,
                 context: context,
                 set: static (seat, value) => seat.SetPointerOrigin(origin: value),
-                verb: SourcePointerCommands.Origin
+                forms: SourcePointerOriginForms
             )
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: SourcePointerCommands.Direction,
-            description: "The seat's pointer-ray direction (Axis3D, need not be unit length), quantized once here and folded with source.pointer.origin into the seat's intent for this tick. A typed source.pointer.direction <x> <y> <z> holds the direction on every tick until it is typed again or source.pointer.clear ends it, and echoes the quantized value.",
+            forms: SourcePointerDirectionForms,
+            description: $"{SourcePointerDirectionForms.Spelling} — The seat's pointer-ray direction (Axis3D, need not be unit length), quantized once here and folded with source.pointer.origin into the seat's intent for this tick. A typed source.pointer.direction <x> <y> <z> holds the direction on every tick until it is typed again or source.pointer.clear ends it, and echoes the quantized value.",
             valueKind: CommandValueKind.Axis3D,
             handler: (context, args) => PointerRouter(
                 args: args,
                 context: context,
                 set: static (seat, value) => seat.SetPointerDirection(direction: value),
-                verb: SourcePointerCommands.Direction
+                forms: SourcePointerDirectionForms
             )
         );
         yield return CommandDefinition.Verb(
@@ -818,7 +835,7 @@ internal sealed partial class PlayerCommandModule {
 
         return false;
     }
-    private static bool TryStickValue(CommandContext context, in WireArgs args, string verb, out FixedVector2 value, out CommandResult error) {
+    private static bool TryStickValue(CommandContext context, in WireArgs args, CommandForms forms, out FixedVector2 value, out CommandResult error) {
         if (args.Count == 0) {
             value = CommandValueQuantization.QuantizeAxis(value: context.Value.AsAxis2D);
             error = default;
@@ -838,7 +855,7 @@ internal sealed partial class PlayerCommandModule {
             !float.IsFinite(f: y)
         ) {
             value = default;
-            error = CommandResult.Error(output: $"[{verb}: expected two finite values — <x> <y>]");
+            error = forms.Refuse(args: in args);
             return false;
         }
 

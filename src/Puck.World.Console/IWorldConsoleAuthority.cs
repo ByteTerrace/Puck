@@ -172,27 +172,27 @@ public static class WorldConsoleAuthorityExtensions {
             },
             name: name
         );
-    /// <summary>Creates an unbindable wire command that validates at most one argument (<paramref name="paramName"/>), resolves the server, and outputs the result of <paramref name="describe"/>.</summary>
+    /// <summary>Creates an unbindable wire command that validates at most one argument (its single declared form), resolves the server, and outputs the result of <paramref name="describe"/>.</summary>
     public static CommandDefinition CreateOptionalFilterCommand(
         this IWorldConsoleAuthority authority,
-        string name,
+        CommandForms forms,
         string description,
-        string paramName,
         Func<string?, WorldServer, string> describe
     ) =>
         CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             description: description,
+            forms: forms,
             handler: (context, args) => {
                 if (args.Count > 1) {
-                    return CommandResult.Error(output: $"[{name}: expected [{paramName}]]");
+                    return forms.Refuse(got: args[1].ToString());
                 }
 
                 if (!authority.TryResolveServer(
                     context: context,
                     error: out var error,
                     server: out var server,
-                    verb: name
+                    verb: forms.Verb
                 )) {
                     return error;
                 }
@@ -204,6 +204,6 @@ public static class WorldConsoleAuthorityExtensions {
                     server
                 ));
             },
-            name: name
+            name: forms.Verb
         );
 }

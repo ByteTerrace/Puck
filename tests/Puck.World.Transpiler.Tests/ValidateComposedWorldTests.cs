@@ -57,8 +57,8 @@ public sealed class ValidateComposedWorldTests : IDisposable {
         var compiled = WorldCompiler.Compile(source, sourcePath: path, cancellationToken: TestContext.Current.CancellationToken);
         var diagnostics = new DiagnosticBag();
 
-        Assert.True(condition: WorldSemanticValidator.ValidateComposedWorld(compiled.Json!, compiled.SourceMap, diagnostics, path),
-            userMessage: string.Join(separator: "\n", values: diagnostics));
+        Assert.NotNull(@object: WorldSemanticValidator.ValidateComposedWorld(compiled.Json!, compiled.SourceMap, diagnostics, path));
+        Assert.False(condition: diagnostics.HasErrors, userMessage: string.Join(separator: "\n", values: diagnostics));
         var diagnosed = WorldSourceDiagnostics.Diagnose(source, sourcePath: path, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.False(condition: diagnosed.HasErrors, userMessage: string.Join(separator: "\n", values: diagnosed));
@@ -80,7 +80,7 @@ public sealed class ValidateComposedWorldTests : IDisposable {
         var root = JsonNode.Parse(RootJson)!.AsObject();
         var diagnostics = new DiagnosticBag();
 
-        WorldSemanticValidator.ValidateComposedWorld(
+        _ = WorldSemanticValidator.ValidateComposedWorld(
             root,
             sourceMap: null,
             diagnostics: diagnostics,
@@ -111,7 +111,7 @@ public sealed class ValidateComposedWorldTests : IDisposable {
             sourcePath: rootPath
         );
 
-        Assert.True(condition: result);
+        Assert.Same(expected: root, actual: result);
         Assert.False(condition: diagnostics.HasErrors);
     }
     [Fact]

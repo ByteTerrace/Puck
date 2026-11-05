@@ -1661,28 +1661,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         }
 
         MeasureDisplayShares();
-        for (var index = (m_footprints.Count - 1); (index >= firstScreen); index--) {
-            var footprint = m_footprints[index];
-            if (!m_portals.Contains(item: footprint.Producer)) {
-                m_footprints[index] = footprint with { Refresh = ScreenRefresh(footprint: in footprint) };
-                continue;
-            }
-
-            var pixels = (m_displayShares.TryGetValue(key: footprint.Consumer, value: out var share)
-                ? (Width: share.Width * m_displayWidth, Height: share.Height * m_displayHeight)
-                : (Width: double.PositiveInfinity, Height: double.PositiveInfinity));
-            switch (PortalSightOf(consumer: footprint.Consumer, producer: footprint.Producer, pixels: pixels, coverage: out var coverage)) {
-                case PortalSight.Small when ViewScenes!.Bakes(view: footprint.Producer):
-                    m_footprints[index] = footprint with { Width = WorldPortalVisibility.BakingShare, Height = WorldPortalVisibility.BakingShare };
-                    break;
-                case PortalSight.Small:
-                    m_footprints.RemoveAt(index);
-                    break;
-                case PortalSight.Seen:
-                    m_footprints[index] = footprint with { Refresh = ViewRefresh(consumer: footprint.Consumer, coverage: coverage.Height, producer: footprint.Producer, glass: m_portalGlass) };
-                    break;
-            }
-        }
+        DecideScreenFootprints(firstScreen: firstScreen);
         RateEnvironmentReads();
         PublishRateReadings();
         MeasureDisplayShares();
@@ -1696,6 +1675,89 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             if (m_portals.Contains(item: root.Instance)) {
                 _ = m_visiblePortals.Add(item: root.Instance);
             }
+        }
+    }
+    // Decides the footprints from firstScreen on (a session's glass held, rendered at the baking share or rated; a
+    // source's screens rated), each only after the footprint that shows its consumer: a consumer whose own glass is held
+    // as too small renders nothing, so the footprints it would show are neither rated, counted nor listed by
+    // world.rates. The display shares were measured before this pruning: a consumer they reach that no kept footprint
+    // reaches keeps its footprints as they stood (never decided), and a consumer they never reach decides at once, as
+    // it does with no lever on, without demanding its producer.
+    private void DecideScreenFootprints(int firstScreen) {
+        m_pending.Clear();
+        m_pendingState.Clear();
+        for (var index = firstScreen; (index < m_footprints.Count); index++) {
+            m_pending.Add(item: m_footprints[index]);
+            m_pendingState.Add(item: FootprintState.Waiting);
+        }
+
+        m_footprints.RemoveRange(index: firstScreen, count: (m_footprints.Count - firstScreen));
+        m_demanded.Clear();
+        _ = m_demanded.Add(item: WorldViewGraphs.MainInstance);
+        foreach (var root in m_roots) {
+            _ = m_demanded.Add(item: root.Instance);
+        }
+        foreach (var footprint in m_footprints) {
+            _ = m_demanded.Add(item: footprint.Producer);
+        }
+
+        for (var progressed = true; progressed;) {
+            progressed = false;
+
+            for (var index = 0; (index < m_pending.Count); index++) {
+                var footprint = m_pending[index];
+
+                if (
+                    (m_pendingState[index] != FootprintState.Waiting) ||
+                    (m_displayShares.ContainsKey(key: footprint.Consumer) && !m_demanded.Contains(item: footprint.Consumer))
+                ) {
+                    continue;
+                }
+
+                var reached = m_demanded.Contains(item: footprint.Consumer);
+                var kept = DecideFootprint(footprint: ref footprint);
+
+                m_pending[index] = footprint;
+                m_pendingState[index] = (kept ? FootprintState.Kept : FootprintState.Dropped);
+                progressed = true;
+                if (kept && reached) {
+                    _ = m_demanded.Add(item: footprint.Producer);
+                }
+            }
+        }
+
+        for (var index = 0; (index < m_pending.Count); index++) {
+            if (m_pendingState[index] != FootprintState.Dropped) {
+                m_footprints.Add(item: m_pending[index]);
+            }
+        }
+    }
+    // One footprint's demand: a source's screens rated, a session's glass dropped (false) when too small to render, at
+    // its least share while it bakes, or rated by the views lever.
+    private bool DecideFootprint(ref RenderGraphFootprint footprint) {
+        if (!m_portals.Contains(item: footprint.Producer)) {
+            footprint = footprint with { Refresh = ScreenRefresh(footprint: in footprint) };
+
+            return true;
+        }
+
+        var pixels = (m_displayShares.TryGetValue(key: footprint.Consumer, value: out var share)
+            ? (Width: share.Width * m_displayWidth, Height: share.Height * m_displayHeight)
+            : (Width: double.PositiveInfinity, Height: double.PositiveInfinity));
+
+        switch (PortalSightOf(consumer: footprint.Consumer, producer: footprint.Producer, pixels: pixels, coverage: out var coverage)) {
+            case PortalSight.Small when ViewScenes!.Bakes(view: footprint.Producer):
+                footprint = footprint with { Width = WorldPortalVisibility.BakingShare, Height = WorldPortalVisibility.BakingShare };
+
+                return true;
+            case PortalSight.Small:
+                return false;
+            case PortalSight.Seen:
+                footprint = footprint with { Refresh = ViewRefresh(consumer: footprint.Consumer, coverage: coverage.Height, producer: footprint.Producer, glass: m_portalGlass) };
+
+                return true;
+            default:
+                return true;
         }
     }
     // Roots the views the running set roots on their own demand, then each view a root camera among them films: a

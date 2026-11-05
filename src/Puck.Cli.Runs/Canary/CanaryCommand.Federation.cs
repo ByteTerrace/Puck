@@ -446,6 +446,10 @@ public static partial class CanaryCommand {
             );
         }
 
+        // The authorities start together, so the leg is admitted once: a role admitted after another has started would find
+        // that role's own World holding the GPU.
+        WorldAdmission.Wait(cancellationToken: budget.Cancellation, device: (manifest.BootShape != CanaryBootShape.Headless), step: "canary");
+
         var tasks = new Dictionary<string, Task<CliProcessResult>>(comparer: StringComparer.Ordinal);
         // Every authority serves the others while any script is still running, so none is asked to quit until every
         // script has reached its runner-owned terminal wire.errors or its process has ended. Then all quit together.

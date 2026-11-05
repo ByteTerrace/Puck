@@ -15,6 +15,9 @@ public sealed partial class WorldEditorCommandModule {
     public const string PlaceCommand = "world.place";
     /// <summary>The verb that turns a placement by whole angle steps.</summary>
     public const string TurnCommand = "world.turn";
+    private static readonly CommandForms WorldNudgeForms = CommandForms.Of(verb: NudgeCommand, "[<placement>] x|y|z <steps>");
+    private static readonly CommandForms WorldPlaceForms = CommandForms.Of(verb: PlaceCommand, "[<creation>] [<id>]");
+    private static readonly CommandForms WorldTurnForms = CommandForms.Of(verb: TurnCommand, "[<placement>] <steps>");
 
     // A surface steeper than this (the normal's vertical component below it) is a wall, which a placement does not rest on.
     private const float RestingNormalY = 0.5f;
@@ -134,13 +137,13 @@ public sealed partial class WorldEditorCommandModule {
     }
     private CommandResult NudgeHandler(CommandContext context, WireArgs args) {
         if (args.Count is not (2 or 3)) {
-            return CommandResult.Usage(form: "[<placement>] x|y|z <steps>", verb: NudgeCommand);
+            return WorldNudgeForms.Refuse();
         }
 
         var at = (args.Count - 2);
 
         if ((AxisOf(token: args[at]) is not { } axis) || !args.TryInt(index: (at + 1), value: out var steps) || (steps == 0)) {
-            return CommandResult.Usage(form: "[<placement>] x|y|z <steps> (steps a non-zero integer)", verb: NudgeCommand);
+            return WorldNudgeForms.Refuse();
         }
 
         if (!TryEditWorld(context: context, refusal: out var editRefusal, verb: NudgeCommand, world: out var world)) {
@@ -194,7 +197,7 @@ public sealed partial class WorldEditorCommandModule {
     }
     private CommandResult PlaceHandler(CommandContext context, WireArgs args) {
         if (args.Count > 2) {
-            return CommandResult.Usage(form: "[<prototype>] [<id>]", verb: PlaceCommand);
+            return WorldPlaceForms.Refuse();
         }
 
         if (!TryEditWorld(context: context, refusal: out var editRefusal, verb: PlaceCommand, world: out var world)) {
@@ -286,28 +289,31 @@ public sealed partial class WorldEditorCommandModule {
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: PlaceCommand,
-            description: $"Puts a placement down where the acting seat aims: world.place [<creation>] [<id>]. It lands on the first solid surface the seat's pointer ray meets in the presentation's static field, or, with no pointer over the view, the ray through the middle of the view; else {AheadDistance} units ahead of the camera. With snapping on, the position snaps to the grid (or the captured reference's lattice) through GridSnap, and with surface snapping on it rests on the surface under the snapped column. With no creation it stamps another of the seat's current placement's creation; with no id it names the placement after its creation and the first free number. It copies the scale, yaw and solidity of the seat's current placement of that creation, else the first placement of it, else unit scale, no yaw and a solid of margin 0. Submits one placements upsert through world.row.set's section upsert under the issuing principal; the verdict arrives deferred, and world.undo takes it back. The placement becomes the seat's current one.",
+            description: $"Puts a placement down where the acting seat aims: {WorldPlaceForms.Spelling}. It lands on the first solid surface the seat's pointer ray meets in the presentation's static field, or, with no pointer over the view, the ray through the middle of the view; else {AheadDistance} units ahead of the camera. With snapping on, the position snaps to the grid (or the captured reference's lattice) through GridSnap, and with surface snapping on it rests on the surface under the snapped column. With no creation it stamps another of the seat's current placement's creation; with no id it names the placement after its creation and the first free number. It copies the scale, yaw and solidity of the seat's current placement of that creation, else the first placement of it, else unit scale, no yaw and a solid of margin 0. Submits one placements upsert through world.row.set's section upsert under the issuing principal; the verdict arrives deferred, and world.undo takes it back. The placement becomes the seat's current one.",
+            forms: WorldPlaceForms,
             handler: PlaceHandler,
             routing: CommandRouting.Simulation
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: NudgeCommand,
-            description: "Moves a placement by whole grid steps: world.nudge [<placement>] x|y|z <steps> (the seat's current placement when none is named). A step is the seat's grid pitch on that axis, along the world axes, or along the captured reference's own axes and lattice when the seat has one; with snapping on, the moved axis lands on the lattice. A placement positioned through another row (a parent, an attachment, a board) is refused by name. Submits one placements upsert through world.row.set's section upsert under the issuing principal; world.undo takes it back. The placement becomes the seat's current one.",
+            description: $"Moves a placement by whole grid steps: {WorldNudgeForms.Spelling} (the seat's current placement when none is named). A step is the seat's grid pitch on that axis, along the world axes, or along the captured reference's own axes and lattice when the seat has one; with snapping on, the moved axis lands on the lattice. A placement positioned through another row (a parent, an attachment, a board) is refused by name. Submits one placements upsert through world.row.set's section upsert under the issuing principal; world.undo takes it back. The placement becomes the seat's current one.",
+            forms: WorldNudgeForms,
             handler: NudgeHandler,
             routing: CommandRouting.Simulation
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: TurnCommand,
-            description: "Turns a placement about the vertical axis by whole angle steps: world.turn [<placement>] <steps> (the seat's current placement when none is named). A step is the seat's snapping angle; with snapping on, the yaw lands on a whole multiple of it. Submits one placements upsert through world.row.set's section upsert under the issuing principal; world.undo takes it back. The placement becomes the seat's current one.",
+            description: $"Turns a placement about the vertical axis by whole angle steps: {WorldTurnForms.Spelling} (the seat's current placement when none is named). A step is the seat's snapping angle; with snapping on, the yaw lands on a whole multiple of it. Submits one placements upsert through world.row.set's section upsert under the issuing principal; world.undo takes it back. The placement becomes the seat's current one.",
+            forms: WorldTurnForms,
             handler: TurnHandler,
             routing: CommandRouting.Simulation
         );
     }
     private CommandResult TurnHandler(CommandContext context, WireArgs args) {
         if ((args.Count is not (1 or 2)) || !args.TryInt(index: (args.Count - 1), value: out var steps) || (steps == 0)) {
-            return CommandResult.Usage(form: "[<placement>] <steps> (steps a non-zero integer)", verb: TurnCommand);
+            return WorldTurnForms.Refuse();
         }
 
         if (!TryEditWorld(context: context, refusal: out var editRefusal, verb: TurnCommand, world: out var world)) {

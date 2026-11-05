@@ -205,9 +205,13 @@ than writing a boot line:
   `puck lease gpu` takes, recorded under `holder`, admitted in rotation between
   `lane`s: the holder's first word, or the checkout's directory name when a start
   names neither) and holds it until the World exits, waiting for it as long as the CLI's lease wait
-  allows. `timeoutSeconds` (1–7200, default 900) bounds only the World's boot, until it
-  accepts an attachment; the build and each lease queue have their own limits, so a
-  deep queue never uses up the boot. The job continues between calls and across
+  allows. Every start, windowed or headless, then waits for the host admission
+  (`puck lease` and the gate wait on the same one): free memory, a commit charge under
+  its share of the commit limit, free disk and, for a windowed start, an idle GPU. The
+  wait is the start's `host-admission` stage, and a start the admission refuses
+  launches nothing and releases its leases. `timeoutSeconds` (1–7200, default 900)
+  bounds the whole admitted start: build, lease and admission waits and the World's
+  boot until it accepts an attachment. The job continues between calls and across
   activated adapter versions; a client's short call deadline does not bound
   a cold build. It runs from the build store, leaving the checkout free to rebuild.
   Worktree discovery runs Git with its own closed stdin, because Git for Windows
@@ -218,7 +222,10 @@ than writing a boot line:
   (1–120000, default 20000). Repeat this wait while `status` is `pending`;
   repeating the start would admit another World. A pending answer carries
   `stage` (`building` while the World build of the checkout's sources resolves,
-  `gpu-lease` while a windowed start waits for the lease, `booting` once the
+  `gpu-lease` while a windowed start waits for the lease, `host-admission` or
+  `waiting for <what holds it back>` (for example `waiting for memory headroom: commit
+  82% of limit`) while the host admission (`OperatorWorldLaunch.Admit`) holds the start
+  back, `booting` once the
   process exists, with its last stderr line in `output`) and `elapsedSeconds`
   since admission. `started` returns the World
   identity, `processId` and `stdoutLog`/`stderrLog` paths. `refused` returns

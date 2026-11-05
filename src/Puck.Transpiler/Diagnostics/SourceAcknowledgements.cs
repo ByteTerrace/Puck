@@ -10,11 +10,16 @@ public sealed class SourceAcknowledgements {
     private static readonly StringComparer PathComparer = (OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
 
     private readonly List<Range> m_ranges = [];
+    private readonly string? m_rootPath;
 
     private readonly record struct Range(string? Path, string Code, int Start, int End);
 
-    /// <summary>Gets whether no <c>allow</c> line was found.</summary>
-    public bool IsEmpty => (m_ranges.Count == 0);
+    private SourceAcknowledgements(string? rootPath) {
+        m_rootPath = rootPath;
+    }
+
+    /// <summary>Gets the acknowledgements of a source that did not parse: none.</summary>
+    public static SourceAcknowledgements None { get; } = new(rootPath: null);
 
     private static string? Normalize(string? path) => ((path is null) ? null : Path.GetFullPath(path: path).Replace(oldChar: '\\', newChar: '/'));
 
@@ -27,21 +32,12 @@ public sealed class SourceAcknowledgements {
     public static SourceAcknowledgements Of(DocumentNode document, string? sourcePath) {
         ArgumentNullException.ThrowIfNull(argument: document);
 
-        var acknowledgements = new SourceAcknowledgements();
-
-        acknowledgements.Add(document: document, sourcePath: sourcePath);
-
-        return acknowledgements;
-    }
-    /// <summary>Adds every <c>allow</c> line in another source's <paramref name="document"/>.</summary>
-    /// <param name="document">The parsed source.</param>
-    /// <param name="sourcePath">The file <paramref name="document"/> was parsed from.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="document"/> is <see langword="null"/>.</exception>
-    public void Add(DocumentNode document, string? sourcePath) {
-        ArgumentNullException.ThrowIfNull(argument: document);
-
+        var acknowledgements = new SourceAcknowledgements(rootPath: sourcePath);
         var root = Normalize(path: sourcePath);
 
+        // An import brings a library's lets and templates alone (ModuleResolver.CollectModules), each carrying the file
+        // that defines it; every other statement is the source's own. A document an import composes at load keeps its
+        // allow lines in its own compile, which WorldFindingLocator reads.
         foreach (var statement in document.Statements) {
             var path = (statement switch {
                 LetNode { DefinitionPath: { } defined } => Normalize(path: defined),
@@ -49,7 +45,21 @@ public sealed class SourceAcknowledgements {
                 _ => root,
             });
 
-            Walk(node: statement, path: path);
+            acknowledgements.Walk(node: statement, path: path);
+        }
+
+        return acknowledgements;
+    }
+    /// <summary>Removes from <paramref name="diagnostics"/> every diagnostic an <c>allow</c> line of this source, or of
+    /// a library it imported, acknowledges: the one step every reporter of a source's findings (its compile, its
+    /// lint, its semantic validation) runs before printing them.</summary>
+    /// <param name="diagnostics">The diagnostics to filter in place.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="diagnostics"/> is <see langword="null"/>.</exception>
+    public void Acknowledge(DiagnosticBag diagnostics) {
+        ArgumentNullException.ThrowIfNull(argument: diagnostics);
+
+        if (m_ranges.Count > 0) {
+            diagnostics.RemoveAll(match: Acknowledges);
         }
     }
     private void Walk(SyntaxNode node, string? path) {
@@ -64,18 +74,17 @@ public sealed class SourceAcknowledgements {
     }
     /// <summary>Returns whether an <c>allow</c> line acknowledges <paramref name="diagnostic"/>.</summary>
     /// <param name="diagnostic">The diagnostic, its span read in its <see cref="Diagnostic.SourcePath"/> or, when
-    /// that is <see langword="null"/>, in <paramref name="rootPath"/>.</param>
-    /// <param name="rootPath">The compiled source's own file, or <see langword="null"/> for a buffer.</param>
+    /// that is <see langword="null"/>, in the compiled source's own file.</param>
     /// <returns><see langword="true"/> for a warning or note, with a span, that an <c>allow</c> of its code covers.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="diagnostic"/> is <see langword="null"/>.</exception>
-    public bool Acknowledges(Diagnostic diagnostic, string? rootPath) {
+    public bool Acknowledges(Diagnostic diagnostic) {
         ArgumentNullException.ThrowIfNull(argument: diagnostic);
 
         if ((m_ranges.Count == 0) || (diagnostic.Severity == DiagnosticSeverity.Error) || (diagnostic.Span.Line <= 0)) {
             return false;
         }
 
-        var path = Normalize(path: (diagnostic.SourcePath ?? rootPath));
+        var path = Normalize(path: (diagnostic.SourcePath ?? m_rootPath));
         var offset = diagnostic.Span.Offset;
 
         foreach (var range in m_ranges) {
@@ -90,16 +99,5 @@ public sealed class SourceAcknowledgements {
         }
 
         return false;
-    }
-    /// <summary>Removes from <paramref name="diagnostics"/> every diagnostic an <c>allow</c> line acknowledges.</summary>
-    /// <param name="diagnostics">The diagnostics to filter in place.</param>
-    /// <param name="rootPath">The compiled source's own file, or <see langword="null"/> for a buffer.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="diagnostics"/> is <see langword="null"/>.</exception>
-    public void Apply(DiagnosticBag diagnostics, string? rootPath) {
-        ArgumentNullException.ThrowIfNull(argument: diagnostics);
-
-        if (m_ranges.Count > 0) {
-            diagnostics.RemoveAll(match: diagnostic => Acknowledges(diagnostic: diagnostic, rootPath: rootPath));
-        }
     }
 }

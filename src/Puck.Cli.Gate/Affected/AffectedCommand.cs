@@ -317,9 +317,7 @@ public static class AffectedCommand {
     // The caller holds CliLease for the heavy suite throughout this admission and execution. Sampling also
     // accounts for unleased heavy processes and memory/disk headroom; it is not mutual exclusion itself.
     internal static bool AdmitHeavySuite(string repositoryRoot, string suite, IReadOnlyDictionary<string, Func<Command>> gpuVerbGrammars) {
-        var probe = new HostProbe(checkoutRoot: repositoryRoot, gpuVerbGrammars: gpuVerbGrammars);
-
-        return HostAdmission.Wait(cancellationToken: CancellationToken.None, clock: TimeProvider.System, delay: Thread.Sleep, device: false, error: Console.Error, heavySuite: true, sample: () => probe.Sample(firstInterval: TimeSpan.FromSeconds(seconds: 1)), step: suite, thresholds: HostLoadThresholds.ThisMachine);
+        return HostAdmission.Wait(cancellationToken: CancellationToken.None, clock: TimeProvider.System, device: false, error: Console.Error, heavySuite: true, probe: new HostProbe(checkoutRoot: repositoryRoot, gpuVerbGrammars: gpuVerbGrammars), step: suite);
     }
 
     // Every other verb a run takes runs through the root that invoked this one.

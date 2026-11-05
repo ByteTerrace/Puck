@@ -200,9 +200,10 @@ patterns [
   {
     name: "solitaireKlondikeRun"
     kind: Int
-    value: solitaireKlondikeFace[$token] * (1 +
-      (solitaireKlondikeRank[$token] == solitaireKlondikeRank[$previous] - 1) * (solitaireKlondikeSuit[$token] % 2 !=
-        solitaireKlondikeSuit[$previous] % 2))
+    value: solitaireKlondikeFace[$token] *
+      (1 +
+        (solitaireKlondikeRank[$token] == solitaireKlondikeRank[$previous] - 1) *
+          (solitaireKlondikeSuit[$token] % 2 != solitaireKlondikeSuit[$previous] % 2))
     symbols [
       {
         name: "face"
@@ -242,7 +243,8 @@ patterns [
 // The door is idle on a request: the table is up, a request waits, and no deal, draw or move is under way.
 function klondikeIdle() = (solitaire.table == 1 and
   solitaireKlondike.request != solitaireKlondike.applied and
-  solitaireKlondike.stage == 0 and solitaireKlondike.busy == 0)
+  solitaireKlondike.stage == 0 and
+  solitaireKlondike.busy == 0)
 
 // The door is idle on a request for action `kind` in a game under way.
 function klondikeRequest(kind) = klondikeIdle() and solitaireKlondike.status == 1 and solitaireKlondike.action == kind

@@ -37,10 +37,6 @@ public sealed class OrbitRig : ISdfCameraRig {
     /// defaults to.</summary>
     public const float DefaultFieldOfViewRadians = (55f * (MathF.PI / 180f));
 
-    /// <summary>When set, the resolved eye locks head-on (<c>+Z</c> at zero pitch, ignoring <see cref="Yaw"/>/
-    /// <see cref="Pitch"/> for this resolve while leaving them stored for when this flips back off) — the "sprite
-    /// intent" framing, so the authored silhouette is exactly what a bake rasterizes.</summary>
-    public bool HeadOn { get; set; }
     /// <summary>The orbit tilt, radians (positive looks up). The caller owns any envelope clamp (this type applies
     /// none).</summary>
     public float Pitch { get; set; }
@@ -74,17 +70,10 @@ public sealed class OrbitRig : ISdfCameraRig {
     /// <inheritdoc/>
     public (Vector3 Eye, Vector3 Target, float FovRadians) Resolve(in SdfAnchor anchor, in SdfCameraClock clock) {
         var target = anchor.Position;
-        var offset = (HeadOn
-            ? new Vector3(
-                x: 0f,
-                y: 0f,
-                z: Distance
-            )
-            : Offset(
-                yaw: Yaw,
-                pitch: Pitch,
-                distance: Distance
-            )
+        var offset = Offset(
+            yaw: Yaw,
+            pitch: Pitch,
+            distance: Distance
         );
 
         return ((target + offset), target, FovRadians);

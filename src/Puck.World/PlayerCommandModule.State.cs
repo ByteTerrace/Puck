@@ -7,9 +7,11 @@ using Puck.Physics.Motion;
 namespace Puck.World;
 
 internal sealed partial class PlayerCommandModule {
+    private static readonly CommandForms BodyStateForms = CommandForms.Of(verb: "body.state", OptionalBodyForm);
+    private static readonly CommandForms BodyStateLoadForms = CommandForms.Of(verb: "body.state-load", "<name> <counter-value|timer-seconds> [body]");
     private CommandResult StateHandler(CommandContext context, WireArgs args) {
         if (args.Count > 1) {
-            return CommandResult.Error(output: "[body.state: expected at most 1 value — an optional body index]");
+            return BodyStateForms.Refuse();
         }
 
         if (TryRoutedSeatQuery(
@@ -44,7 +46,7 @@ internal sealed partial class PlayerCommandModule {
             (args.Count < 2) ||
             (args.Count > 3)
         ) {
-            return CommandResult.Usage(form: "<name> <counter-value|timer-seconds> [body]", verb: "body.state-load");
+            return BodyStateLoadForms.Refuse();
         }
         if (
             !args.TryFloat(

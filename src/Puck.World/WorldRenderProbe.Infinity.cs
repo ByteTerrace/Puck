@@ -29,6 +29,6 @@ public sealed partial class WorldRenderProbe {
     /// GPU allocations and completed dispatch counts remain in the ordinary live render budget.</summary>
     /// <returns>The current plans, or an explicit empty inventory before any plan is registered.</returns>
     public string DescribeInfinityBudget() => ((m_infinityPlans.Count == 0) ? "infinity views: none" :
-        string.Join(separator: " | ", values: m_infinityPlans.Values.OrderBy(entry => entry.Name, StringComparer.Ordinal)
+        string.Join(separator: Environment.NewLine, values: m_infinityPlans.Values.OrderBy(entry => entry.Name, StringComparer.Ordinal)
             .Select(selector: entry => $"{entry.Name}: {string.Join(separator: "; ", values: entry.Plan.Describe())}")));
 }
