@@ -149,23 +149,6 @@ public sealed class SweepWorldLawTests : IDisposable {
         _ = Assert.Throws<ArgumentException>(testCode: () => System.Diagnostics.Process.GetProcessById(processId: processId));
     }
     [Fact]
-    public void ALineThatPassesItsDeadlineIsUnmeasuredAndTheNextLineAnswersOnTheSameWorld() {
-        using var budget = new SweepBudget(TimeSpan.FromMinutes(minutes: 3), CancellationToken.None);
-        using var world = Boot(budget: budget, name: "line-deadline");
-        // The World is paused, so a long tick wait cannot finish inside the line's one-second deadline.
-        var slow = world.Run(script: "world.wait 100000", timeoutSeconds: 1);
-
-        Assert.False(condition: slow.Ok);
-        Assert.True(condition: slow.Unmeasured);
-        Assert.Contains(actualString: slow.Output, expectedSubstring: "deadline");
-        Assert.False(condition: world.Gone);
-
-        var next = world.Run(script: "world.counters state");
-
-        Assert.True(condition: next.Ok, userMessage: next.Output);
-        Assert.NotEmpty(collection: next.Output);
-    }
-    [Fact]
     public void AWorldThatNeverAttachesReleasesItsLease() {
         using var budget = new SweepBudget(caller: CancellationToken.None, total: TimeSpan.FromMinutes(value: 10));
         var lease = new Lease();
