@@ -191,6 +191,21 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
     /// <param name="instance">The rendered view instance.</param>
     /// <returns>The view's diagnostic sampler.</returns>
     public SdfWorldPicker DiagnosticPickerOf(string instance) => Refresh(instance: instance).DiagnosticPicker;
+    /// <summary>Returns completed evidence that a consumer's depth hides a whole portal slab. Unknown or changed
+    /// camera/slab observations retain demand; the result is presentation-only and arrives after its GPU fence.</summary>
+    /// <param name="instance">The consumer view.</param>
+    /// <param name="screen">The screen index in that consumer's world.</param>
+    /// <param name="camera">The consumer's current composed camera.</param>
+    /// <param name="center">The slab center.</param>
+    /// <param name="halfX">The slab's horizontal half axis.</param>
+    /// <param name="halfY">The slab's vertical half axis.</param>
+    /// <param name="halfZ">The slab's depth half axis.</param>
+    /// <returns>Whether a completed pyramid test hides the slab.</returns>
+    public bool PortalOccluded(string instance, int screen, in Puck.Abstractions.Cameras.CameraSnapshot camera,
+        System.Numerics.Vector3 center, System.Numerics.Vector3 halfX, System.Numerics.Vector3 halfY, System.Numerics.Vector3 halfZ) =>
+        Refresh(instance).PortalSight.Occluded(screen, new(camera, center, halfX, halfY, halfZ));
+
+    internal SdfPortalSight PortalSightOf(string instance) => Refresh(instance).PortalSight;
     /// <summary>Finds the picker of an instance whose SDF package the runtime has requested.</summary>
     /// <param name="instance">The rendered instance name.</param>
     /// <returns>The picker, or null when no SDF package is registered for the instance.</returns>
@@ -580,6 +595,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         entry.View = view;
         entry.Picker.Follow(view: view);
         entry.DiagnosticPicker.Follow(view: view);
+        entry.PortalSight.Follow(view);
 
         return entry;
     }
@@ -608,6 +624,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
     private sealed partial class Entry : IShaderPipelineStorageCounter, IShaderPipelineRenderExtent {
         public SdfWorldPicker Picker { get; } = new();
         public SdfWorldPicker DiagnosticPicker { get; } = new();
+        public SdfPortalSight PortalSight { get; } = new();
 
         private readonly Lock m_gate = new();
 

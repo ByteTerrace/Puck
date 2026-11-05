@@ -160,6 +160,25 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     id.x += id.y * (SDF_MESH_SELECTION_GROUP_SIZE * SDF_MESH_SELECTION_GROUPS_PER_ROW);
     uint step = (pushedIndex.index >> SDF_MESH_LEVEL_SHIFT);
 
+    // One workgroup tests the consumer's portal slabs with exactly the draw test and the same pyramid.
+    // Four rows per screen follow the selection controls; the count buffer's first four words remain draw counts.
+    if (step == 3u) {
+        uint rows;
+        uint stride;
+        sdfMeshOcclusionCandidates.GetDimensions(rows, stride);
+        uint screens = (rows - 14u) / 4u;
+        if (id.x < screens) {
+            uint row = 14u + id.x * 4u;
+            float4 center = asfloat(sdfMeshOcclusionCandidates[row]);
+            bool visible = center.w == 0.0 || sdfOcclusionMaySee(center.xyz,
+                asfloat(sdfMeshOcclusionCandidates[row + 1u].xyz),
+                asfloat(sdfMeshOcclusionCandidates[row + 2u].xyz),
+                asfloat(sdfMeshOcclusionCandidates[row + 3u].xyz), sdfMeshOcclusionCandidates[0].y);
+            sdfMeshOcclusionCountsRW[4u + id.x] = visible ? 1u : 0u;
+        }
+        return;
+    }
+
     if (step == SdfOcclusionDepth) {
         ViewportData view = worldView();
         uint2 dims = worldViewDims(view);

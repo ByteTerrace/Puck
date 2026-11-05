@@ -317,7 +317,8 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
                     );
                 }
             }
-            m_occlusion = new SdfMeshOcclusion(buffers: context.Services.BufferFactory, owner: context.Instance, part: context.Pass, slots: slots);
+            m_occlusion = new SdfMeshOcclusion(buffers: context.Services.BufferFactory, owner: context.Instance, part: context.Pass, slots: slots,
+                sight: m_part == SdfWorldPackage.Parts.Mesh ? owner.PortalSightOf(context.Instance) : null);
         } catch {
             foreach (var framebuffer in m_framebuffers) {
                 framebuffer?.Dispose();
@@ -613,6 +614,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         }
         m_pick?.Submitted(fence: fence, slot: slot);
         m_diagnosticPick?.Submitted(fence: fence, slot: slot);
+        m_occlusion?.Submitted(slot, fence);
     }
 
     private int InputIndexOf(string member) {
@@ -823,7 +825,9 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             SdfMeshOcclusion.Unbind(bound: m_meshSetOcclusion[meshSet], boundTarget: ref m_meshSetTargets[meshSet], first: 0, set: set, tables: tables);
 
             if (occlusion is not null) {
-                occlusion.Stage(tables: tables, count: count, height: recording.RenderHeight, width: recording.RenderWidth, slot: slot, cull: in cull, detail: in detail, held: tables.HoldsFrame, glass: IsGlass, occlude: twoPhase, splitExit: IsShadowCascade);
+                var frame = m_view.Residency.Frame!;
+                occlusion.Stage(tables: tables, count: count, height: recording.RenderHeight, width: recording.RenderWidth, slot: slot, cull: in cull, detail: in detail, held: tables.HoldsFrame, glass: IsGlass, occlude: twoPhase, splitExit: IsShadowCascade,
+                    camera: frame.Views[Math.Min(m_view.View, frame.Views.Count - 1)].Camera);
                 occlusion.BindDraws(tables: tables, set: set, bound: m_meshSetOcclusion[meshSet]);
                 for (var phase = 0; (phase < OcclusionSetsPerMesh); phase++) {
                     var index = ((meshSet * OcclusionSetsPerMesh) + phase);

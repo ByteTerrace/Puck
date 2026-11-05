@@ -598,16 +598,16 @@ stale product.
 over an existing pyramid, a specified result); a `specialist` for A2, since
 the layout change touches every Direct3D 12 transition.
 
-**A1 outcome.** `WorldViewGraphHost.PortalSightOf` reads, beside the frustum
-and size tests, a per-screen bit a one-workgroup kernel writes from the
-consumer's farthest-depth pyramid a frame earlier; a skipped view holds its
-last image. Invariant: a glass whose slab the pyramid says is wholly behind
-the consumer's depth demands nothing; enforced in the one decision that
-schedules a session view (`PortalSightOf`, the rendering skill's "one
-decision schedules a session view"). Check: from the forest pose,
-`world.budget`'s live frame line shows no hall session rendered; turning
-toward a painting in the hall shows it fresh on its first visible frame in a
-presented burst; GPU time at the pose against the current reading.
+**A1 implemented.** `WorldViewGraphHost.PortalSightOf` consumes `SdfPortalSight`:
+the mesh pass tests portal slabs through `sdfOcclusionMaySee` against its existing
+farthest-depth pyramid, in one additional workgroup. Frame-slot fences own the
+readback; a changed camera/slab or replaced view/program retains demand, as do
+unknown answers. A skipped view retains its published image. The invariant is
+enforced at `PortalSightOf` for both footprints and filmed roots: a wholly hidden
+slab demands no session render. The guarantee stops at the earlier completed
+frame's geometry; moving occluders carry the readback delay. Camera changes
+restore demand immediately. Settled captures and non-occlusion cull modes bypass
+the delayed test. Evidence belongs to the implementation commit.
 
 **A2 outcome.** `DirectXGpuRecorder.TransitionImageLayout` uses the caller's
 `oldLayout` as the before state (the callers already pass it) and the
