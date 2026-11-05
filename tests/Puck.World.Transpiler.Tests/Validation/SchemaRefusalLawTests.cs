@@ -44,12 +44,16 @@ public sealed class SchemaRefusalLawTests {
         Assert.Equal(expected: authored, actual: refusal.Authored);
         Assert.DoesNotContain(actualString: refusal.Authored, expectedSubstring: "WorldPlacement");
     }
-    [Fact]
-    public void AnUnmappedMemberKeepsTheSerializersWordsWhenRequiredMembersAreAlsoMissing() {
-        var refusal = Refuse(json: """{ "placements": { "rows": [ { "id": "a", "bogus": 1 } ] } }""");
+    [InlineData("""{ "placements": { "rows": [ { "id": "a", "yawDegree": 1 } ] } }""", "placements.rows[0].yawDegree: unknown member; nearest members: 'yawDegrees'")]
+    [InlineData("""{ "placements": { "rows": [ { "id": "a", "bogus": 1 } ] } }""", "placements.rows[0].bogus: unknown member")]
+    [Theory]
+    public void AnUnmappedMemberIsNamedWithTheNearestMembersTheObjectHasEvenWhenRequiredMembersAreAlsoMissing(string json, string authored) {
+        var refusal = Refuse(json: json);
 
-        Assert.Equal(expected: "/placements/rows/0/bogus", actual: refusal.Pointer);
+        Assert.StartsWith(actualString: refusal.Authored, expectedStartString: authored);
         Assert.DoesNotContain(actualString: refusal.Authored, expectedSubstring: "missing required");
+        Assert.DoesNotContain(actualString: refusal.Authored, expectedSubstring: "could not be mapped");
+        Assert.DoesNotContain(actualString: refusal.Authored, expectedSubstring: "WorldPlacement");
     }
     [InlineData("""{ "render": { "toon": { "band": "nonsense" } } }""", "'nonsense'")]
     [InlineData("""{ "render": { "toon": { "band": 3 } } }""", "a number")]
