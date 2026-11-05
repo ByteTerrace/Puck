@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using System.IO.Hashing;
+using Puck.Abstractions.Memory;
 
 namespace Puck.SdfVm;
 
@@ -34,20 +35,23 @@ public sealed class SdfMeshStore {
     private const ulong Magic = SdfMeshStoreCodec.Magic;
     // The most sets a store keeps, past any machine's builds many times over: its bytes bound it first.
     private const int MaxSets = 4_096;
+    private readonly IAllocator? m_allocator;
 
     /// <summary>Initializes a new instance of the <see cref="SdfMeshStore"/> class. Nothing is created until an entry is
     /// written.</summary>
     /// <param name="directory">The directory the entries are kept in, made absolute here.</param>
     /// <param name="capacityBytes">The bytes the entries hold at most.</param>
+    /// <param name="allocator">The host allocator for decode scratch, or null for managed offline decoding.</param>
     /// <exception cref="ArgumentException"><paramref name="directory"/> is <see langword="null"/>, empty or white
     /// space.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="capacityBytes"/> is not positive.</exception>
-    public SdfMeshStore(string directory, long capacityBytes = DefaultCapacityBytes) {
+    public SdfMeshStore(string directory, long capacityBytes = DefaultCapacityBytes, IAllocator? allocator = null) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: directory);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: capacityBytes);
 
         CapacityBytes = capacityBytes;
         Directory = Path.GetFullPath(path: directory);
+        m_allocator = allocator;
     }
 
     /// <summary>Gets the bytes the entries hold at most.</summary>
@@ -206,7 +210,7 @@ public sealed class SdfMeshStore {
         }
 
         var read = System.Diagnostics.Stopwatch.GetTimestamp();
-        var decoded = TryDecode(bytes: bytes, key: key, materials: out materials, mesh: out mesh, refusal: out var why);
+        var decoded = TryDecode(bytes: bytes, key: key, materials: out materials, mesh: out mesh, refusal: out var why, allocator: m_allocator);
 
         _ = Interlocked.Increment(location: ref m_reads);
         _ = Interlocked.Add(location1: ref m_readBytes, value: bytes.Length);
@@ -412,7 +416,7 @@ public sealed class SdfMeshStore {
     }
     private string PathOf(UInt128 identity, UInt128 key) => Path.Combine(path1: SetDirectoryOf(identity: identity), path2: (key.ToString(format: "x32", provider: null) + Extension));
     private static byte[] Encode(UInt128 key, SdfMesh? mesh, int[] materials) => SdfMeshStoreCodec.Encode(key: key, materials: materials, mesh: mesh);
-    private static bool TryDecode(byte[] bytes, UInt128 key, out SdfMesh? mesh, out int[] materials, [System.Diagnostics.CodeAnalysis.NotNullWhen(false)] out string? refusal) => SdfMeshStoreCodec.TryDecode(bytes: bytes, key: key, materials: out materials, mesh: out mesh, refusal: out refusal);
+    private static bool TryDecode(byte[] bytes, UInt128 key, out SdfMesh? mesh, out int[] materials, [System.Diagnostics.CodeAnalysis.NotNullWhen(false)] out string? refusal, IAllocator? allocator = null) => SdfMeshStoreCodec.TryDecode(bytes: bytes, key: key, materials: out materials, mesh: out mesh, refusal: out refusal, allocator: allocator);
     // Deletes a file the store owns, leaving one another World holds open for a later trim or refusal to remove.
     private static void Delete(string path) => _ = Quietly(action: () => File.Delete(path: path));
     // Runs a file-system action, answering whether the file system allowed it.
