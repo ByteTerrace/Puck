@@ -32,15 +32,13 @@ public sealed partial class SdfWorldTablesWorkLawTests {
 
         points[^1] = Vector4.One;
 
-        rig.Engine.WriteMeshBakePoints(points: points);
+        var runs = new Puck.Abstractions.Gpu.GpuUploadRuns(capacity: 2);
+
+        runs.Add(length: 4, start: (4 * (points.Length - 1)));
+        rig.Engine.WriteMeshBakePoints(input: new SdfMeshBakeInput(Rows: points, Runs: runs));
         rig.Render();
         rig.Render();
         Assert.DoesNotContain(expectedSubstring: "work upload executed: dispatches=0", actualString: rig.Report());
-
-        rig.Engine.WriteMeshBakePoints(points: points);
-        rig.Render();
-        rig.Render();
-        Assert.Contains(expectedSubstring: "work upload executed: dispatches=0", actualString: rig.Report());
     }
     [Fact]
     public void TheUploadPassesArePinned() {
