@@ -1081,14 +1081,15 @@ Next: what the water as a forcing workload showed
 the water strained, measured, and not yet fixed. The rendering capabilities
 the water lacks (a medium response on the glass pass, flow-driven shading,
 presentation particles, reflections of geometry on glass) are planned in
-[water rendering](water-rendering.md), whose ranked steps W2, W1 and W3 are
-the next lanes here; the items below are the system work beside them.
+[water rendering](water-rendering.md), whose W2 flow layer is in
+([as built](water-rendering.md#w2-as-built)) and whose W1, W3 and W2's field
+source are the next lanes here; the items below are the system work beside them.
 
 - [medium] Cold mesh residency still misses the one-minute target. Attribute the
   remaining large water meshes with `puck mesh audit --prototype` (now selects
   static and animated placements), and profile bake admission, landing and
-  illumination together. Stream strokes now paint one sheet per segment; they
-  no longer create fine geometric features or one animated group per stroke.
+  illumination together. The stream is eight placements of one still segment
+  and the falls still sheets, their motion the flow layer's shading.
   The sampled-field fix makes each changed height snapshot a new mesh identity;
   measure ordinary-rate field updates as well as a paused cold boot. Run costs
   and before/after evidence live in the water follow-up commits.
