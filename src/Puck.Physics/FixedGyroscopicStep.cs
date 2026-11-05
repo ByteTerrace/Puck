@@ -25,7 +25,7 @@ public enum GyroscopicStepOutcome {
 /// <remarks>
 /// <para><b>Scale.</b> <c>J⁻¹·f</c> is invariant under scaling the inertia by any constant, so the step reads only
 /// the ratios of the three body-local inverse moments: each principal moment is <c>min(a, b, c) / a_i</c> at
-/// <see cref="InertiaFractionBits"/> fraction bits, one rounding each, with the largest moment exactly
+/// <c>InertiaFractionBits</c> (24) fraction bits, one rounding each, with the largest moment exactly
 /// <c>2^InertiaFractionBits</c>. That makes the result independent of the inverse inertia's own placement and of the
 /// body's live scale.</para>
 /// <para><b>Rounding.</b> <c>h·ω_i</c> is an exact product at 32 fraction bits; each off-diagonal Jacobian entry and
@@ -35,10 +35,10 @@ public enum GyroscopicStepOutcome {
 /// correction that rounds to zero leaves the world angular velocity bit-identical.</para>
 /// </remarks>
 public static class FixedGyroscopicStep {
-    /// <summary>The fraction bits the normalized principal moments are carried at; the largest moment is exactly
-    /// <c>2^InertiaFractionBits</c>, which keeps the Jacobian's diagonal at the 3×3 solve's lossless preconditioning
-    /// target once it is placed at <see cref="FixedQ4816"/>'s sixteen fraction bits.</summary>
-    public const int InertiaFractionBits = 24;
+    // The fraction bits the normalized principal moments are carried at. The largest moment is exactly
+    // 2^InertiaFractionBits, which puts the Jacobian's diagonal at the 3×3 solve's lossless preconditioning target
+    // (bit 40) once it is placed at FixedQ4816's sixteen fraction bits.
+    private const int InertiaFractionBits = 24;
 
     // h·ω, the step's rotation in radians, carried exactly at the sum of its factors' fraction bits.
     private const int StepRotationFractionBits = 32;
