@@ -17,7 +17,7 @@ accumulated result for the current sample.
   Sweep and path candidates have a local distance cap; their spheres are kept
   only when the accumulated uniform scale is at least one, so the kernels'
   world-distance cap guard remains sound.
-- Sampled-region bounds cover a brick-backed carve cache.
+- Sampled-region bounds cover the field's whole box.
 - Screen-surface frames bound texture parameterization, not field influence.
 
 Bounds must include transform reach, smooth-blend radius, and scoped field
@@ -72,9 +72,8 @@ validation errors.
 sets. The analytic program and authored carve list remain authoritative. The
 cache is bounded, versioned by bake state, and safe to discard or rebuild.
 
-The stored field includes its conservative scale and boundary floor. A missing
-or unavailable brick must fall back to an uncarved conservative result, never a
-hole.
+The stored field includes its conservative scale and boundary floor. A kernel
+that does not sample fields answers the far distance, never a hole.
 
 Per-segment bounds for placed creations whose shapes compose through a scope
 or a blend other than Union remain an open priority, tracked nowhere: this

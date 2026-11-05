@@ -119,7 +119,7 @@ templates, parented paints and volumes, text and authored meshes.
 
 `SdfMeshLibrary` retains an age-ordered byte budget derived from available
 machine memory, evicting oldest geometries rather than clearing the library.
-Brick storage is allocated on its first bake/upload request. Measure draw/vertex
+Measure draw/vertex
 counts, actual transform rows, program/material bytes, region residency and
 bakes; the lead measures frame times and edit-to-running on a quiet machine.
 
@@ -759,6 +759,13 @@ wrong. The contracts that bite most often:
   any other authored mesh is drawn in both windings and does not enclose
   (`WorldPlacementStamper.MeshOf`, `SdfMesh.Encloses`). Probe facing with `SV_IsFrontFace` in the
   mesh fragment stage and `world.debug-view depth`, on both backends.
+- **A sampled field moves without a program rebuild.** `SdfProgramBuilder.SampledValues`
+  names an `SdfSampledField` by handle; the frame carries its snapshots (`SdfFrame.Sampled`),
+  the geometry hashes them, and a moved snapshot restarts only the groups that read it
+  (`SdfMeshBakeGroup.Refresh`). Each bake job writes the snapshots its groups sealed into
+  its own `sdfSampledValues` table, so a lattice never samples a newer publication; never
+  put sampled values back into program words or a shared GPU buffer
+  ([sampled fields](../../../docs/rendering/sdf/handbook/sampled-fields.md)).
 - **A mesh is a function of its geometry.** Groups are keyed by
   `SdfMeshGeometryBuilder`; anything the bake samples that the instructions do
   not hold leaves a stale mesh drawing after an edit until the builder hashes

@@ -342,7 +342,7 @@ A live edit can exceed the buffers the program was uploaded into:
 `UploadProgram` grows the program buffer, instance masks, culling bounds, and
 frame-grid buffers together after waiting for in-flight frames. It allocates
 replacements before changing descriptors and keeps persistent images,
-pipelines, screen bindings, and baked bricks intact. Growth happens only on a
+pipelines and screen bindings intact. Growth happens only on a
 program change, not on ordinary frames. The World admission check still
 measures the entire composed candidate before accepting it. Growable renderers
 enforce engine limits; a fixed-capacity consumer can still register a smaller

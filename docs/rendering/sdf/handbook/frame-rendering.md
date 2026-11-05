@@ -1458,8 +1458,9 @@ from its memory profile and the table's size, with a reader always in flight:
   from device memory; on unified memory they are the one pool.
 
 Every pass of every view reads the tables through one descriptor set, the
-`sdf.world` interface's World group at set 1: each ring slot's buffers, the
-brick pool, the glyph atlas and the samplers. The tables own
+`sdf.world` interface's World group at set 1: each ring slot's buffers, a
+filler at the sampled values a bake job binds its own of, the glyph atlas and
+the samplers. The tables own
 one such set per ring slot; a frame binds the slot its upload wrote. A slot's
 set is rewritten the first time a view binds it after what it binds moved (a
 region grows, or the glyph atlas changes), without waiting
@@ -1506,10 +1507,6 @@ The region starts with one draw record when the tables are built
 and grows to the need plus an eighth when a list outgrows it. The mesh pass reads its triangles,
 and the surface pass reads the winning draw's material.
 
-A host-baked brick reaches the brick pool through a staged region whose
-destination is the pool itself. Since the carve bake also writes the pool, each
-brick is copied whole.
-
 Every staged copy records `region-copy.comp`, the one region-copy pipeline each
 device has, which `Puck.Shaders` ships and every owner leases from the
 pass-pipeline cache (`GpuRegionCopyPass`). An owner records a frame's owed copies through
@@ -1525,7 +1522,7 @@ resolver integrates from each rate, keyed or literal, ride the pass blocks, whic
 view's node writes whole each frame it renders, and each medium's advection and
 pulse ride the volume table, which a frame writes only when the tick moves
 them. `world.counters gpu` reports the tables' written bytes as
-`uploads.host-visible` on its `upload` line, and a brick's on its `bricks` line.
+`uploads.host-visible` on its `upload` line.
 
 Nothing on the live path waits for its own submission: the upload and each
 view's passes are submitted and the fences do the pacing. A capture reads a
@@ -1554,18 +1551,15 @@ upload's passes, and each view's node counts the work each of its passes
 (`sdf.world$mask` through `sdf.world$composite`) records, with no arming and no
 effect on the image: dispatches, indirect dispatches, barriers, pipeline and
 descriptor-set binds, push-constant bytes, descriptor writes and host-visible
-upload bytes. The upload has four passes: `fillers`, the fillers' first
-transitions and clears, which only the first upload runs; `bricks`, a queued
-brick's staging copy and the carve bake's slices with the pool's barriers,
-which an upload runs only when it writes the pool; `upload`, the regions'
+upload bytes. The upload has three passes: `fillers`, the fillers' first
+transitions and clears, which only the first upload runs; `upload`, the regions'
 writes and copies; and `environment`, the CPU candidate projection that decides
 whether a procedural [map](#the-environment-map) needs refreshing. The separate
 `sdf.environment` graph node counts its map and coefficient dispatches, image
 bindings, and kernel counter copies. Its named layer rows grow through the same
 completed-slot retirement and memory accounting as other graph passes.
-The `bricks` and `upload` passes follow each device's
-residency policy, so they are per-backend deterministic, and `puck counters`
-does not hold the two backends to them.
+The `upload` pass follows each device's residency policy, so it is per-backend
+deterministic, and `puck counters` does not hold the two backends to it.
 
 Each view's passes also count their own work on the GPU: the march steps they
 take, one for each field evaluation of a march or a query and for each sample of

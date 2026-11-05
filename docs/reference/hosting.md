@@ -505,7 +505,7 @@ its HUD frames' leases into its node's list.
 `RenderGraphScheduler` decides which views render in a frame. Every view is a
 `RenderGraphInstance`: a name, a refresh (a frame divisor or a rate in hertz),
 the passes one render records, the instances it may read, and what its output
-carries: an image, or a buffer such as the world's SDF brick pool. Each read
+carries: an image, or a buffer such as a residency's sky environment map. Each read
 carries a kind too, the same `ShaderPipelineResourceKind` a graph version
 declares. `RenderGraphInstanceSet.TryCreate` validates a set and orders it so
 every producer renders before the consumers that read it in the same frame,

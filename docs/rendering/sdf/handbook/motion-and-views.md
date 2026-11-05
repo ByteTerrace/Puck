@@ -216,7 +216,7 @@ another world as a view instance (`WorldViewInstances`).
   registration, rendering a view of the world's own frame from the world's
   residency: the presentation's dress films the registration's camera into the
   frame after its own views (`WorldScreenBinder.FilmViews`), so the view shares
-  the program, transforms, clock, brick pool and tables, at the world's quality
+  the program, transforms, clock and tables, at the world's quality
   without ambient occlusion or soft shadows. Its camera comes from a rig posed
   against a live anchor; one whose anchor does not resolve keeps the camera it
   last filmed from. Its first frame uses the rig at the default anchor when

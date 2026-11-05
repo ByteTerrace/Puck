@@ -1,203 +1,109 @@
-# Bricks and baking
+# Sampled fields
 
-Puck caches a distance field only for settled, dense carve clusters where
-bounds cannot reduce the work. A brick stores a small 3D sample of the carve
-distance; the `√3` scale keeps trilinear interpolation safe to march. The
-settle → bake → swap → invalidate lifecycle keeps that cache current while the
-analytic program remains the source of truth. Puck has two kinds of baking:
-these bricks, and the frame's mesh bake, which samples each residency's program
-into the meshes every view draws ([the bake](frame-rendering.md#the-bake)).
+A **sampled field** is a small 3D photograph of distance: a cubic-voxel lattice
+over a box, one float per voxel, sampled by trilinear interpolation. It is the
+one place values the analytic program cannot express enter the field: a height
+field's columns (`WorldFieldEmitter`), or any producer whose surface is a
+function of data rather than of instructions. The `√3` scale keeps the
+interpolant safe to sample, and the values travel beside the program rather than
+in it, so they can change every few ticks without rebuilding the program. Puck
+has two kinds of baking: these fields, baked by their producer on the CPU, and
+the frame's mesh bake, which samples each residency's program into the meshes
+every view draws ([the bake](frame-rendering.md#the-bake)).
 
-## The problem: a cluster no bound can save
+## The field, the snapshot and the set
 
-Everywhere else in the engine, the answer to "too many instances" is bounds:
-an instance whose bound a sample lies outside costs that sample nothing. That
-works beautifully when content is *spread out*. It does nothing when content is
-*stacked*.
+Three types carry a sampled field, all in `Puck.SignedDistance`:
 
-Picture a wall the player has shot a thousand craters into, all overlapping in one
-spot. Each crater is a subtraction instance, and every bake sample in that region
-lies inside all thousand bounds, so it evaluates all thousand. That cost is real
-geometry cost, and no bound removes it—because the work genuinely *is* a
-thousand overlapping surfaces there.
+- `SdfSampledField` is the producer's cell. Its lattice dimensions are fixed for
+  its life; `Publish` replaces its current values with a new snapshot.
+- `SdfSampledSnapshot` is one immutable set of voxel values. A snapshot never
+  changes.
+- `SdfSampledSet` is the snapshots of a program's fields at one moment, by
+  handle. `SdfSampledSet.Capture` answers the previous set itself when no field
+  moved, so consumers compare sets by reference.
 
-The observation that unlocks the fix: once a cluster of carves has *settled*—the
-player stopped shooting, the damage is final—its combined distance field in that
-region is a fixed function of space. Computing it fresh a thousand-carves-deep,
-every sample, every frame, is paying analytic cost for an answer that no longer
-changes. So cache it.
+A producer emits the instruction with `SdfProgramBuilder.SampledValues`, naming
+the field. The program assigns each distinct field a **handle**
+(`SdfProgram.SampledFields`) and writes it into the instruction's Data1.z lane;
+no voxel enters the packed words. A field whose dimensions change is a new field,
+and so a new program.
 
-## What a brick is
+Each frame the composition captures the held program's fields into the frame's
+set (`SdfFrame.Sampled`) after every emitter's `PrepareFrame` has published its
+values. Publishing moves the set and no program word: the program, its analysis,
+its upload and the meshes of every group that reads no moved field stand.
 
-A **brick** is a small 3D photograph of distance. Take the axis-aligned box that
-bounds a settled cluster, lay a cubic-voxel lattice over it (up to 128³ voxels,
-one float per voxel), and at each voxel store the distance to the nearest carved
-surface. At render time, instead of evaluating a thousand carve instances, the
-kernel does one thing: read the eight voxels around the sample point and
-trilinearly interpolate. That is an **O(1)** field lookup—constant cost no
-matter how many carves went into the brick.
+## The mesh bake samples what it hashed
 
-Crucially, a brick stores the settled carves' **union distance field** —
-`min over carves of (|p − center| − radius)`—*not* the finished scene. The
-program then composes the brick into the scene as one ordinary **subtraction**
-instance: `max(accumulator, −brickSample)`. This is the crack-free formulation,
-and the choice is deliberate. Subtraction is local and far-neutral (the
-accumulator rule, [SDF program model](program-model.md)): outside the carve volumes the sampled candidate
-never wins and the accumulator returns *to the bit*. The subject the carves bite
-into—the wall, the terrain—stays fully analytic everywhere, inside the brick's
-box and out. Nothing is dual-represented, so there is no boundary to stitch and no
-seam to get wrong. The alternative—baking the subject *and* its carves into one
-replacement brick—would need the whole thing re-baked every time the subject
-changed (a relit screen, an edit) and a shell blend at the box faces to hide
-cracks. The subtraction brick needs neither.
+The mesh identity covers the values: `SdfMeshGeometryBuilder` hashes a sampled
+instruction's snapshot in place of its handle, as it hashes a side table's
+values in place of its packed offset, and keeps the snapshot beside the poses it
+keeps (`SdfMeshGeometryBuilder.Sampled`). A frame whose set differs from the one
+the bake planned at restarts only the groups whose geometry hashed a snapshot the
+set no longer holds (`SdfMeshBakeGroup.Refresh`); every other group, its mesh and
+any lattice in flight stand. A changed height therefore keys a new mesh for that
+field's group alone, and a revisited height keys a mesh the library or store
+already holds.
 
-In the ISA a brick is a single shape, `SampledRegion`, evaluated like any other
-primitive and composed through the existing subtraction blend tail. It gets a real
-bound (the box's circumscribed sphere) like any static instance. A thousand carve
-instances collapse to *one* brick instance, so a bake sample there evaluates one
-trilinear read instead of a thousand carves.
+The bake kernel is the only kernel that samples a field (it defines
+`SDF_SAMPLED_REGIONS`; every other kernel answers `SDF_FAR_DISTANCE`). It reads
+the values from `sdfSampledValues`, a table each bake job writes from the
+snapshots its groups sealed (`SdfMeshBakeGroup.SampledSnapshots`,
+`SdfMeshBakeBatch.WriteSampled`): a word per handle naming where its snapshot
+starts, then the snapshots. A batch carries one snapshot a handle, so a lattice
+samples exactly the values its mesh is keyed by, never a newer publication. The
+residency's tables bind a filler there, and the program upload carries none of
+it.
 
-## The √3 rule keeps sampled marching safe
+## The √3 rule keeps sampling safe
 
-Here is the subtlety that makes a sampled field safe to march. Sphere tracing is
-safe only if the field never overshoots—formally, if it's a valid lower bound on
-the distance to its own zero set, which any 1-Lipschitz field satisfies
-automatically. The *true* carve-union distance is exactly 1-Lipschitz, and each
-axis finite-difference of its samples is therefore at most 1. But the trilinear
-**interpolant** between samples has a gradient that can reach `√3`—all three
-axis slopes near 1 at once, at a crease where carves meet (the 2D `min(x, y)`
-corner is the intuition: its interpolated gradient reaches `√2`). A field whose
-gradient exceeds 1 can underestimate how fast a surface approaches, and an
-unclamped march could tunnel through it.
+The true distance to a surface is exactly 1-Lipschitz, and each axis
+finite-difference of its samples is therefore at most 1. But the trilinear
+**interpolant** between samples has a gradient that can reach `√3`: all three
+axis slopes near 1 at once, at a crease (the 2D `min(x, y)` corner is the
+intuition: its interpolated gradient reaches `√2`). A field whose gradient
+exceeds 1 can underestimate how fast a surface approaches.
 
-The fix costs nothing at runtime: **the bake divides every stored value by
-`λ = √3`.** The interpolant of `c/√3` is 1-Lipschitz by construction, so it is
-march-safe with *no* change to the program's `stepScale`, no runtime multiply, and
-an unchanged zero set (dividing by a positive constant doesn't move where the
-field is zero). The march simply approaches carved surfaces at `1/√3` speed —
-*inside the brick's cull bound only*, so there is no global step tax on the rest of
-the scene. This is the same `distanceScale`-channel discipline the rest of the
-engine uses: a value-level scale, never touching the step clamp. The only visible
-consequence is a slightly darker penumbra right at carved edges—the same
-accepted posture as the step-clamped warps.
+The fix costs nothing at runtime: **the producer divides every stored value by
+`λ = √3`.** The interpolant of `c/√3` is 1-Lipschitz by construction, so it needs
+no change to the program's `stepScale` and leaves the zero set where it was.
 
-Outside the box, the brick reports `distance-to-box + boundaryFloor` (a
-host-baked margin term), a valid positive lower bound that keeps the subtraction
-saturated and the accumulator exact. The brick's actual zero set is grown a margin
-*inside* the box by construction, so its surface never touches a face and no
-rendered seam can exist. Kernels that don't bind the brick pool at all fall back
-to `SDF_FAR_DISTANCE`—the subtraction never bites and the region renders as the
-uncarved hull: solid, never a hole. That is the same conservative-fallback
-precedent the glyph shape set, and it means a brick program stays honest even
-through a kernel that can't sample it.
+Outside the box, the field reports `distance-to-box + boundaryFloor` (a
+host-baked margin term), a valid positive lower bound. The producer keeps the
+zero set a margin inside the box, so its surface never touches a face and no
+seam can show.
 
-Sampling is a plain storage-buffer read with **manual trilinear interpolation** —
+Sampling is a plain storage-buffer read with **manual trilinear interpolation**:
 eight explicit loads followed by interpolation along x, y, then z. Each
 interpolation explicitly subtracts, multiplies and adds with floating-point
 contraction disabled on every intermediate, so the same voxel values and
 fractional coordinate produce the same result on both GPU backends. A `precise`
 result alone does not constrain the `lerp` intrinsic's SPIR-V `FMix` arithmetic.
-(Hardware 3D textures with sampler filtering were evaluated and
-rejected for now: their lerp precision is driver-variant, which would break
-cross-backend parity, and they'd need new abstraction seams where buffers already
-flow everywhere.)
 
-## Settle, bake, swap, and invalidate
+## Sampled fields are presentation
 
-The cache is kept honest by a four-stage lifecycle, all of it off the live edit
-path so a carve never waits on a bake.
-
-**Settle.** Settling is a producer's decision, never the engine's: a frame source
-proposes a bake through `ISdfBrickBakeService.RequestBrickBake` once the carves it
-binned into a brick-sized box have stopped changing and are enough to be worth a
-brick's fixed footprint (below a threshold, the analytic instances are simply
-cheaper). In-flight carves—a live meteor shower, a cluster mid-edit—stay fully
-analytic. Nothing is cached until it stops changing. No in-tree frame source plans
-carve bakes today: `WorldFieldEmitter.AdvanceBricks` is the one producer, and it
-uploads host-baked height-field bricks through `ISdfBrickBakeService.UploadBrick`.
-
-**Bake.** When a bin settles, a tiny standalone compute kernel writes its brick:
-one thread per voxel, each computing the closed-form min-of-spheres distance and
-storing it as `c/√3`. A worst-case brick is 128³ voxels against ~1000 carves —
-about 2 billion evaluations—so the bake is **sliced** across frames at ≤256K
-voxels per brick per produced frame, prepended to the frame's pass list
-*before* the counted passes so it doesn't charge the render budget. Slicing changes
-no values; each voxel is written once regardless of slice boundaries. A full
-worst-case brick finishes in a handful of frames, well inside the settle window.
-
-**Swap.** The handoff is two ordinary revision-bump rebuilds—the same machinery
-the spatial cull already uses, nothing new. First the planner requests the bake
-and *keeps emitting the analytic carves*: the frame is never wrong, merely still
-slow. Then, when the engine reports the slot `Ready` (its final slice and the
-state flip are ordered on the GPU queue, so `Ready` means the pool contents are
-complete), the planner bumps its revision and the next rebuild emits the single
-brick instance in place of that bin's carve instances. No callbacks, no
-cross-thread seams—the frame source polls a slot state each frame.
-
-**Invalidate.** A new or removed carve inside a baked bin re-emits that bin
-analytic in the *same* rebuild that adds the carve—atomic by construction, so
-the moment you edit a settled cluster it snaps instantly back to the exact
-analytic field, and the slot re-bakes on the next settle. Other bins' bricks are
-untouched: invalidation is per-region, not global.
-
-The payoff in counted work is the whole reason the tier exists. Once the
-clustered-carve scene bakes, a mesh-bake sample in the cluster trades O(1024)
-carve evaluations for one trilinear read. Every non-clustered scene is
-untouched: where nothing settles, the switch does nothing and the field is
-bit-identical to the analytic path.
-
-## Bricks are a cache, not the representation
-
-The engine flirts here with something it otherwise firmly rejects: a baked,
-discretized volume. That whole family (voxel DAGs, brickmaps, distance-field
-grids, the various GI caches) was surveyed and rejected *as a core-representation
-change*, with exactly one recorded reconsider-trigger—"if a baked grid is ever
-added as a distinct tier *alongside* the analytic VM." The brick tier is that
-trigger, and it is built to honor the rejection's substance, not evade it. The
-governing rules:
-
-- **The analytic program is the representation of record.** A brick is a compiled
-  *cache* of a bounded region's settled subtraction content. It can be rebuilt
-  from the analytic carve list at any time and is invalidated by any edit inside
-  its bounds. **Deleting every brick must always reproduce the identical scene**,
-  only slower. This is the key invariant—a brick is never the truth,
-  only a fast copy of it.
-
-- **Bricks are session-transient GPU state, never durable data.** They are never
-  written to world documents, creations, replays, or content-addressed storage. The
-  carve *list* is the durable data; the brick is derived. Reload the scene and the
-  bricks re-bake from scratch.
-
-- **Bricks are never used for simulation.** CPU physics queries and the
-  field evaluator ([Queries and determinism](queries-and-determinism.md)) never read a brick—they walk the analytic
-  program. The brick exists for the mesh bake's samples and nothing else.
-
-- **You never author *into* a brick.** No voxel editing, no CSG against sampled
-  data. Every edit goes to the analytic carve list; the brick is re-derived. And
-  the brick never holds the *subject*—only the subtraction content—which is
-  exactly what keeps the seam crack-free.
-
-The single sentence to remember: **the brick is a small photograph of a field the
-program already knows how to compute; the program is always the negative you can
-reprint from.** That discipline is what lets a discretized cache live inside a
-purely-analytic engine without quietly becoming the thing the engine promised not
-to be.
+- **Never simulation.** CPU physics queries and the field evaluator
+  ([Queries and determinism](queries-and-determinism.md)) never read a sampled
+  field; the evaluator refuses the shape by name. A height field's bodies and
+  media read the lattice's own fixed-point cells.
+- **Never durable.** Snapshots are derived from document state each frame; they
+  are never written to documents, replays or the store. The meshes baked from
+  them are caches keyed by their contents.
+- **Drawn heights move in authored steps.** A height field draws its columns at
+  whole `surfaceStep`s with hysteresis (`WorldFieldRow.SurfaceStep`), so a
+  continuously changing store publishes once a step, never once a lattice step.
 
 ---
 
 ## Related resources
 
-- API contracts for bake requests, pool layout, and sampled-region packing:
-  `BrickBakeRequest` and `BrickBakeStatus` (in `SdfBrickBake.cs`),
-  `SdfBrickPoolLayout`, and `SdfProgramBuilder.SampledRegion`
-  in [`src/Puck.SignedDistance`](../../../../src/Puck.SignedDistance/); the
-  interactive carve-pool planner, `SdfCarveBakePlanner`, stays in
-  [`src/Puck.SdfVm`](../../../../src/Puck.SdfVm/) (an engine behavior, not
-  field-as-data).
-- The `SampledRegion` shape, its lane layout, cull bound, and conservative
-  fallback: the `SampledRegion` sync-pair row in
-  [`.claude/skills/rendering/SKILL.md`](../../../../.claude/skills/rendering/SKILL.md)
-  and the enum doc in [`src/Puck.SignedDistance/SdfShapeType.cs`](../../../../src/Puck.SignedDistance/SdfShapeType.cs).
+- `SdfSampledField`, `SdfSampledSnapshot`, `SdfSampledSet` and
+  `SdfProgramBuilder.SampledValues` in
+  [`src/Puck.SignedDistance`](../../../../src/Puck.SignedDistance/), and the
+  enum doc in [`SdfShapeType.cs`](../../../../src/Puck.SignedDistance/SdfShapeType.cs).
+- The `SampledRegion` lane layout and the bake's table: the sampled rows in
+  [the sync pairs](../../../../.claude/skills/rendering/references/sync-pairs.md).
 - The frame's mesh bake: [the bake](frame-rendering.md#the-bake),
   `SdfMeshPathBake` in [`src/Puck.SdfVm`](../../../../src/Puck.SdfVm/), and
   its lattice and contouring, `SdfSampledLattice` and `SdfDualContouring`, in
