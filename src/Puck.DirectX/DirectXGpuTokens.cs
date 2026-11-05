@@ -248,16 +248,3 @@ public sealed class DirectXImageView {
     public nint ResourceHandle;
     public DXGI_FORMAT Format;
 }
-/// <summary>The textures created with <c>ALLOW_SIMULTANEOUS_ACCESS</c>, keyed by <c>ID3D12Resource*</c>: the compute
-/// recorder keeps these in the <c>COMMON</c> layout, the only one such a texture may hold under Enhanced Barriers.
-/// The creating image registers on construction and withdraws on dispose.</summary>
-public static class DirectXSimultaneousAccessResources {
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<nint, byte> Resources = new();
-
-    public static bool Contains(nint resourceHandle) => Resources.ContainsKey(key: resourceHandle);
-    public static void Register(nint resourceHandle) => Resources[resourceHandle] = 0;
-    public static void Withdraw(nint resourceHandle) => _ = Resources.TryRemove(
-        key: resourceHandle,
-        value: out _
-    );
-}
