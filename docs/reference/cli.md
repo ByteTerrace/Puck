@@ -4476,16 +4476,18 @@ that takes the same lease waits on a sibling, never on itself.
 `puck lease heavy` and `puck lease gpu` also pass the host admission once they hold their lease
 and before the command runs, the one `gate`, `affected` and the MCP server's World start wait on
 ([`puck host load`](#puck-host-loadadmission-lines-for-the-machine)'s thresholds): free memory
-over the capacity threshold, a commit charge under its share of the commit limit, free disk
+over the capacity threshold, a commit charge under its share of the commit limit, commit headroom that covers the start's expected peak
+(a windowed World 18 GB, a headless World 6 GB, a heavy suite 10 GB, a test-batch replica 9 GB, an ordinary step 2 GB, plus what
+admitted starts still running have left to grow), free disk
 over the pressure threshold, and, for `gpu`, an idle GPU (for `heavy`, no other process running a
 heavy test suite). The wait is bounded by what `--wait` has left, so `--wait 0` refuses at once
 (exit 2, lease released) when the machine has no headroom; wait lines go to standard error
 (`gate: waiting for host capacity before lease heavy <holder> (at most N minutes): no memory
-headroom: commit 82% of limit (admission needs under 75%).`) and a heartbeat repeats them
+headroom: commit headroom 16.0GB (admission needs at least 18.0GB (18.0GB expected peak of a windowed World plus 0.0GB still to grow in 0 admitted start(s))).`) and a heartbeat repeats them
 while it lasts. `lease build` and `lease quiet` take no admission of their own: a World build
 holds its own limits, and a quiet window settles on the same readings.
 
-Every verb that starts a `Puck.World` process passes the same admission itself, immediately before each process it starts, through `WorldAdmission` (installed once by the root): `puck test` before each worker process (so each replica of `--reproduce` and each `--workers` leg is admitted on its own reading, with the heavy-suite wait when it holds the heavy lease), `canary`, `sweep` (its budget stands still while it waits), `motion`, `counters`, `parity`, `qualify`, `docs citations`, `verbs`, `bench startup`, and the in-process World boots of `bench` and `determinism`. A World that opens a device (no `--headless`, not a `--test-batch` worker) also waits for an idle GPU. The wait is the same bounded, heartbeat-printing one, and a start the bound refuses fails with `HostAdmissionRefusedException`, which a verb reports as it reports any process that would not start.
+Every verb that starts a `Puck.World` process passes the same admission itself, immediately before each process it starts, through `WorldAdmission` (installed once by the root): `puck test` before each worker process (so each replica of `--reproduce` and each `--workers` leg is admitted on its own reading, with the heavy-suite wait when it holds the heavy lease), `canary`, `sweep` (its budget stands still while it waits), `motion`, `counters`, `parity`, `qualify`, `docs citations`, `verbs`, `bench startup`, and the in-process World boots of `bench` and `determinism`. A World that opens a device (no `--headless`, not a `--test-batch` worker) also waits for an idle GPU. Each start names its kind (`WorldDevices.StartKind` of the World's arguments: a windowed World, a headless World, or a `--test-batch` replica), which sets the commit the admission expects it to reach. The wait is the same bounded, heartbeat-printing one, and a start the bound refuses fails with `HostAdmissionRefusedException`, which a verb reports as it reports any process that would not start.
 
 ### `puck lease list`—who holds what and who waits
 
