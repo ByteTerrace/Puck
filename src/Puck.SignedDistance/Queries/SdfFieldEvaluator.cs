@@ -1600,19 +1600,19 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
         );
     }
     // One central-difference pair: d(p + offset) - d(p - offset). Both taps must answer.
-    private bool TryAxisDifference(FixedPosition position, FixedVector3 offset, out FixedQ4816 difference) {
+    private bool TryAxisDifference(FixedPosition position, FixedVector3 offset, in GradientReaches shared, out FixedQ4816 difference) {
         difference = FixedQ4816.Zero;
 
         if (
             !TryGradientTap(
             distance: out var positive,
-            material: out _,
-            position: (position + offset)
+            position: (position + offset),
+            shared: in shared
         ) ||
             !TryGradientTap(
             distance: out var negative,
-            material: out _,
-            position: (position + (-offset))
+            position: (position + (-offset)),
+            shared: in shared
         )
         ) {
             return false;
@@ -1622,10 +1622,40 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
 
         return true;
     }
-    private bool TryGradientTap(FixedPosition position, out FixedQ4816 distance, out int material) {
+    // One tap reads exactly what TryDistance reads at its position; over a shared prepass it skips only its own one.
+    private bool TryGradientTap(FixedPosition position, in GradientReaches shared, out FixedQ4816 distance) {
         SdfQueryWork.ProcessWork.Count(kind: SdfQueryWork.GradientTaps);
-        return TryDistance(distance: out distance, material: out material, position: position);
+
+        if (!shared.Filled) {
+            return TryDistance(distance: out distance, material: out _, position: position);
+        }
+
+        distance = FixedQ4816.Zero;
+
+        if (!TryWorldPoint(position: position, worldPosition: out var worldPosition)) {
+            return false;
+        }
+
+        (distance, _, _) = WalkPoint(candidate: shared.Candidate, reaches: PointReachScratch.AsSpan(start: 0, length: m_cullBounds.Length), worldPosition: worldPosition);
+
+        return true;
     }
+    // The reach prepass a gradient's six taps share: one at its point, lowered by GradientReachMargin. Unfilled when the
+    // point is outside the frame (each tap then runs its own) or the step is too wide for the margin to stay small.
+    private GradientReaches FillGradientReaches(FixedPosition position, FixedQ4816 step) {
+        if ((step.Value > MaxSharedGradientStep) || !TryWorldPoint(position: position, worldPosition: out var centre)) {
+            return default;
+        }
+
+        return new GradientReaches(Candidate: FillPointReaches(margin: GradientReachMargin(step: step), reaches: out _, worldPosition: centre), Filled: true);
+    }
+    // How far below the point's cheap reach a tap's can fall: a tap moves one axis by the step, which moves the largest
+    // axis distance from any centre by at most the step, plus a raw of slack.
+    private static long GradientReachMargin(FixedQ4816 step) => (Reach.CheapPointReachFall(move: step.Value) + 1L);
+    // The widest step whose margin a shared prepass absorbs: a metre, far past any gradient probe's span.
+    private static readonly long MaxSharedGradientStep = FixedQ4816.One.Value;
+
+    private readonly record struct GradientReaches(bool Filled, int Candidate);
     // === Elementwise FixedVector3 helpers (System.Numerics.Vector3 offers these as instance methods; FixedVector3
     // does not, so this file supplies the handful the interpreted op set needs) ==========================================
 
@@ -1712,10 +1742,12 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
             ? epsilon
             : GradientEpsilon
         );
+        var shared = FillGradientReaches(position: position, step: step);
 
         if (
             !TryAxisDifference(
             position: position,
+            shared: in shared,
             offset: new FixedVector3(
                 X: step,
                 Y: FixedQ4816.Zero,
@@ -1725,6 +1757,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
         ) ||
             !TryAxisDifference(
             position: position,
+            shared: in shared,
             offset: new FixedVector3(
                 X: FixedQ4816.Zero,
                 Y: step,
@@ -1734,6 +1767,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
         ) ||
             !TryAxisDifference(
             position: position,
+            shared: in shared,
             offset: new FixedVector3(
                 X: FixedQ4816.Zero,
                 Y: FixedQ4816.Zero,

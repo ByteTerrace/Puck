@@ -297,6 +297,18 @@ public sealed class SdfMeshIrradiance : IDisposable {
 
     private int m_sceneKey;
     private int m_buildingKey;
+    // The static-draw key as StaticKey last folded it, and what it read: the list and its journal, the journal serial and
+    // list revision, and per draw whether it was static and its own hash. A frame whose journal names only rows that are
+    // and were not static, or that hash as they did, keeps the key without reading the rest of the list.
+    private IReadOnlyList<SdfMeshDraw>? m_keyList;
+    private Puck.Abstractions.Gpu.GpuChangedRows? m_keyJournal;
+    private long m_keySerial;
+    private long m_keyRevision;
+    private int m_keyValue;
+    private int m_keyStatic;
+    private int[] m_drawKeys = [];
+    private bool[] m_drawStatic = [];
+    private readonly Puck.Abstractions.Gpu.GpuUploadRuns m_keyRuns = new(capacity: Puck.Abstractions.Gpu.GpuRegion.MaxCopyRuns);
     private Task? m_build;
     private Lighting? m_lighting;
     private int m_lightingKey;
@@ -996,18 +1008,8 @@ public sealed class SdfMeshIrradiance : IDisposable {
     // with none landed builds nothing: an empty scene would measure open sky where the walls have yet to land.
     // Returns the build to wait for before this frame can use its scene, or null when it is already installed.
     private Task? RefreshScene(SdfFrame frame, bool bakePending = false) {
-        var key = 17;
-        var draws = 0;
+        var (key, draws) = StaticKey(frame: frame);
 
-        var meshDraws = frame.MeshDraws;
-
-        for (var index = 0; (index < meshDraws.Count); index++) {
-            var draw = meshDraws[index];
-
-            if (!SdfMeshIrradianceScene.IsStatic(draw: in draw)) { continue; }
-            key = HashCode.Combine(value1: key, value2: System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(o: draw.Mesh), value3: draw.ObjectToWorld, value4: draw.Material);
-            draws++;
-        }
         // Even a frame matching the installed scene waits for an older build: that build could otherwise replace
         // the scene while this frame traces it. The lockstep caller resolves this frame again after it lands.
         if (m_build is { IsCompleted: false }) { return m_build; }
@@ -1017,6 +1019,76 @@ public sealed class SdfMeshIrradiance : IDisposable {
 
         return StartSceneBuild(draws: draws, frame: frame, key: key);
     }
+    // The key of the frame's static draws, in order, and their count. The key folds each static draw's own hash (its mesh,
+    // matrix and material), and it follows the producer's draw journal: when the list is the one last folded and the
+    // journal covers every change since, only the rows it names are hashed again, and a key whose rows all hash as they
+    // did, static as they were, is the key it was. Any other frame folds the whole list.
+    private (int Key, int Draws) StaticKey(SdfFrame frame) {
+        var meshDraws = frame.MeshDraws;
+        var journal = frame.MeshDrawChanges;
+
+        if (
+            ReferenceEquals(objA: meshDraws, objB: m_keyList) &&
+            (journal is not null) &&
+            ReferenceEquals(objA: journal, objB: m_keyJournal) &&
+            (meshDraws.Count == m_drawKeys.Length) &&
+            !((frame.MeshDrawsRevision != m_keyRevision) && (frame.MeshDrawChangesSerial <= m_keySerial)) &&
+            journal.TryCollect(since: m_keySerial, through: frame.MeshDrawChangesSerial, into: m_keyRuns) &&
+            JournalKeepsKey(meshDraws: meshDraws)
+        ) {
+            m_keySerial = frame.MeshDrawChangesSerial;
+            m_keyRevision = frame.MeshDrawsRevision;
+
+            return (m_keyValue, m_keyStatic);
+        }
+
+        var key = 17;
+        var draws = 0;
+
+        if (m_drawKeys.Length != meshDraws.Count) {
+            m_drawKeys = new int[meshDraws.Count];
+            m_drawStatic = new bool[meshDraws.Count];
+        }
+        for (var index = 0; (index < meshDraws.Count); index++) {
+            var draw = meshDraws[index];
+            var isStatic = SdfMeshIrradianceScene.IsStatic(draw: in draw);
+
+            m_drawStatic[index] = isStatic;
+            if (!isStatic) { continue; }
+            m_drawKeys[index] = DrawKey(draw: in draw);
+            key = HashCode.Combine(value1: key, value2: m_drawKeys[index]);
+            draws++;
+        }
+
+        m_keyList = meshDraws;
+        m_keyJournal = journal;
+        m_keySerial = frame.MeshDrawChangesSerial;
+        m_keyRevision = frame.MeshDrawsRevision;
+        m_keyValue = key;
+        m_keyStatic = draws;
+
+        return (key, draws);
+    }
+    // Whether every row the collected journal names leaves the static key as it was: not static now nor at the last
+    // fold, or static both times with the hash it had.
+    private bool JournalKeepsKey(IReadOnlyList<SdfMeshDraw> meshDraws) {
+        for (var run = 0; (run < m_keyRuns.Count); run++) {
+            var end = Math.Min(val1: meshDraws.Count, val2: (m_keyRuns.Start(index: run) + m_keyRuns.Length(index: run)));
+
+            for (var index = m_keyRuns.Start(index: run); (index < end); index++) {
+                var draw = meshDraws[index];
+                var isStatic = SdfMeshIrradianceScene.IsStatic(draw: in draw);
+
+                if ((isStatic != m_drawStatic[index]) || (isStatic && (DrawKey(draw: in draw) != m_drawKeys[index]))) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+    private static int DrawKey(in SdfMeshDraw draw) =>
+        HashCode.Combine(value1: System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(o: draw.Mesh), value2: draw.ObjectToWorld, value3: draw.Material);
     // Apart from RefreshScene, since the build's closure is made on entry to the method holding it, and nearly every frame
     // matches the installed scene.
     private Task StartSceneBuild(SdfFrame frame, int key, int draws) {
