@@ -567,6 +567,19 @@ The custom no-GC runtime port stays later work, on the
   Refresh Rate: confirm the 60 FPS bar and VRR pacing hold in front of and
   behind another window, and that `world.target display` reaches the display's
   top rate.
+- [medium · unconfirmed] Owner: rendering integration. Attribute the shared-batch
+  review's higher execute/signal counts against A2 with matched camera, validation
+  and device workloads. `DirectXSubmissionWork.Process`
+  (`src/Puck.DirectX/DirectXSubmissionWork.cs:6`) counts all devices, including
+  background work; a process total does not isolate a frame batch regression.
+  The review's paired headless counter deltas are unchanged; GPU readings and
+  capture paths are recorded in its evidence commit.
+- [medium · unconfirmed] Owner: rendering integration. In the painting wing,
+  `world.wait residency` can time out after `world.wait bakes` succeeds and
+  presented captures complete, on both backends. Trace `ArmBakes`' resident
+  predicate (`src/Puck.World.Console/WorldWaitCommandModule.cs:259`) to the
+  particular residency and upload fence; distinguish continuous new demand
+  from an upload completion that cannot retire before changing the predicate.
 
 ### Bake proportional to change
 
