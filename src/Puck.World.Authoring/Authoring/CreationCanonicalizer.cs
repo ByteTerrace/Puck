@@ -1467,8 +1467,12 @@ public static partial class CreationCanonicalizer {
             }
         }
     }
-    private static void ValidatePalette(CreationDocument document, List<DocumentValidationError> errors) {
-        if (document.Palette is not { Count: > 0 } palette) {
+    /// <summary>Validates surface materials and their optional shape-parented paints.</summary>
+    /// <param name="palette">The material entries.</param>
+    /// <param name="shapes">Available paint parents; empty for a field surface.</param>
+    /// <param name="errors">Receives validation errors.</param>
+    public static void ValidatePalette(IReadOnlyList<PaletteEntryDocument> palette, IReadOnlyList<ShapeDocument> shapes, List<DocumentValidationError> errors) {
+        if (palette.Count == 0) {
             return;
         }
 
@@ -1479,7 +1483,6 @@ public static partial class CreationCanonicalizer {
             ));
         }
 
-        var shapes = (document.Shapes ?? []);
         var lookup = new ShapeLookup(shapes: shapes);
 
         for (var i = 0; (i < palette.Count); i++) {
@@ -2589,7 +2592,8 @@ public static partial class CreationCanonicalizer {
         );
 
         ValidatePalette(
-            document: document,
+            palette: (document.Palette ?? []),
+            shapes: (document.Shapes ?? []),
             errors: errors
         );
         ValidateFrames(

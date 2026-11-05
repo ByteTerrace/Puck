@@ -87,6 +87,31 @@ public sealed class WorldFieldRowLawTests {
     );
 
     [Fact]
+    public void AFieldMaterialUsesThePaletteAndRegistersItsBoundColors() {
+        var fields = Fields();
+        var material = new PaletteEntryDocument(Color: "state.colors.body", Emissive: null, Specular: 0.5f,
+            Roughness: 0.16f, Coat: 0.3f, Fill: "state.colors.fill", Glass: new PaletteGlassDocument(Depth: 2f, Ior: 1.333f));
+        var definition = Fixtures.WithLattice(composite: fields with {
+            Fields = [fields.Fields[0], fields.Fields[1] with { Material = material }],
+        }, definition: Fixtures.BuildDocument());
+        definition = definition.WithWorldState(rows: [.. definition.AuthoredState, Colors(bump: "#3FAF6F")]);
+        var client = ClientFixtures.Client(definition: definition);
+        client.DeliverDefinition(definition: definition, version: default);
+        Assert.True(condition: client.StateMirror.SlotOf(conversion: WorldStateConversion.Color, token: "state.colors.fill") >= 0);
+        var emitter = new WorldFieldEmitter(client: client);
+        var builder = new SdfProgramBuilder();
+        var context = new SdfEmitContext(true, 0f, Vector3.Zero, Vector3.Zero, 0);
+        emitter.Emit(builder: builder, context: in context);
+        var program = builder.Build();
+        var actual = Assert.Single(collection: program.Materials);
+        Assert.Equal(expected: 0.16f, actual: actual.Roughness);
+        Assert.Equal(expected: 0.3f, actual: actual.Coat);
+        Assert.NotNull(@object: actual.Glass);
+        Assert.True(condition: program.HasGlass);
+        var range = Assert.Single(collection: program.Instances);
+        Assert.True(condition: program.IsGlassRange(first: range.First, end: range.End));
+    }
+    [Fact]
     public void AFieldRowReadsTheDeliveredCellsAndASnapshotMovingThemReadsItOnce() {
         var definition = Document();
         var view = new WorldDocumentStateView(definition: () => definition);

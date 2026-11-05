@@ -9,6 +9,14 @@
 
 // A turn about X by the angle whose cosine is `c` is the quaternion [±halfTurnSine(c), 0, 0, halfTurnCosine(c)], the sign
 // that of the angle's sine: half-angle identities, since the expression vocabulary has no inverse trigonometry.
+let waterMaterial = {
+  color: "#3FB8C4"
+  roughness: 0.16
+  specular: 0.5
+  coat: 0.3
+  glass { depth: 2, ior: 1.333 }
+}
+
 function halfTurnSine(c) = squareRoot((1 - c) / 2)
 function halfTurnCosine(c) = squareRoot((1 + c) / 2)
 // The cosine of the slope of a falls profile's j'th piece, the angle its length makes with the +Z axis.

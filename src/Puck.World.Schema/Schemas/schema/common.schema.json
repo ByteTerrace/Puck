@@ -2360,6 +2360,108 @@
       "additionalProperties": false,
       "title": "WorldRenderAirHeight"
     },
+    "ToonStyleDocument": {
+      "description": "A cel style on the wire (SdfToon): the world\u0027s default style (render.toon, which the live world.toon lever overrides) and a palette row\u0027s own (Toon) are this one shape, so a style authored once (the standard\u0027s styles.puck) serves both. The engine holds no look of its own: a style that bands authors every value, and one that says enabled: false needs none. Presentation only; no field enters simulation state or the bake.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "enabled": {
+          "description": "Whether the style bands; absent is on. False on a palette row keeps that material continuous whatever the world\u0027s default is; false on render.toon boots the world\u0027s default off until the lever turns it on, which a style with every value then bands with.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "threshold": {
+          "description": "Diffuse band threshold in [0, 1].",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "softness": {
+          "description": "Full terminator width in [0.001, 0.5].",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "shadowTint": {
+          "$ref": "#/$defs/DocumentVector3",
+          "description": "Shadow-band reflectance, three linear RGB values in [0, 1].",
+          "default": null
+        },
+        "outlineWidth": {
+          "description": "Close outline radius in output pixels, in [0, 4]; zero disables outlines.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "outlineDistance": {
+          "description": "Distance in metres at which the outline radius halves, in [0.1, 1000].",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "outlineNormal": {
+          "description": "Crease normal cosine in [0, 0.95].",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "outlineTint": {
+          "$ref": "#/$defs/DocumentVector3",
+          "description": "Outline multiplier, three linear RGB values in [0, 1].",
+          "default": null
+        },
+        "specularSize": {
+          "description": "Highlight size as one minus the half-vector cosine, in [0.001, 0.25].",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "exposure": {
+          "description": "Reflected-light exposure compensation in stops, in [-4, 4].",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "shoulder": {
+          "description": "Hue-preserving highlight compression in [0, 2]; zero disables it.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "band": {
+          "description": "How the band treats a light\u0027s shadow visibility: Visibility (the default) keeps the penumbra, Combined snaps it to the band\u0027s edge.",
+          "enum": [
+            "Visibility",
+            "Combined"
+          ],
+          "default": "Visibility",
+          "title": "SdfToonBand"
+        }
+      },
+      "additionalProperties": false,
+      "title": "ToonStyleDocument"
+    },
     "CameraBloom": {
       "type": [
         "object",
@@ -8605,6 +8707,24 @@
       ],
       "additionalProperties": false,
       "title": "ActionTrigger"
+    },
+    "DocumentQuaternion": {
+      "title": "DocumentQuaternion",
+      "anyOf": [
+        {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 4,
+          "maxItems": 4
+        },
+        {
+          "type": "string",
+          "minLength": 1,
+          "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+        }
+      ]
     },
     "WorldRowSelectorCase": {
       "description": "One case of a WorldRowSelector: the row a body\u0027s register value selects.",

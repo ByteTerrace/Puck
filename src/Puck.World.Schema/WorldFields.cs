@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using Puck.Assets.Documents;
+using Puck.World.Authoring;
 
 namespace Puck.World;
 
@@ -108,6 +109,7 @@ public sealed record WorldFieldsSection(
                 (field.Min != trait.Min) ||
                 (field.Max != trait.Max) ||
                 (field.HeightScale != trait.HeightScale) ||
+                (field.Material != trait.Material) ||
                 !string.Equals(
                 a: field.Color,
                 b: trait.Color,
@@ -285,6 +287,7 @@ public sealed record WorldFieldsSection(
             }
 
             rows.Add(item: new WorldFieldRow(
+                Material: trait.Material,
                 Color: trait.Color,
                 HeightScale: trait.HeightScale,
                 Initial: trait.Initial,
@@ -343,6 +346,7 @@ public sealed record WorldFieldsSection(
                     Kind: CellKind.Fixed,
                     Domain: new StateDomain.CellsOf(Topology: region.Name),
                     Field: new WorldStateFieldTrait(
+                        Material: row.Material,
                         Color: row.Color,
                         HeightScale: row.HeightScale,
                         Initial: row.Initial,
@@ -412,7 +416,8 @@ public sealed record WorldFieldTopology(
 /// that is not geometry.</param>
 /// <param name="Color">The color the row's surface shades with — a <c>#RRGGBB</c> literal or a
 /// <c>state.&lt;row&gt;[.&lt;key&gt;]</c> Text-cell binding (<see cref="WorldColor"/>'s shared grammar, resolved live
-/// at emit); required when <paramref name="HeightScale"/> is nonzero.</param>
+/// at emit); defaults to white when no material is supplied.</param>
+/// <param name="Material">Optional surface material using the creation palette vocabulary.</param>
 /// <param name="Paint">The initial fills, applied in order over <paramref name="Initial"/>.</param>
 /// <param name="Medium">Marks this field a fluid MEDIUM, or <see langword="null"/> for an ordinary field. A medium
 /// field's value times <paramref name="HeightScale"/> over the lattice origin is a free surface every active body
@@ -427,7 +432,8 @@ public sealed record WorldStateFieldTrait(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] float HeightScale = 0f,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Color = null,
     IReadOnlyList<WorldLatticeFill>? Paint = null,
-    WorldLatticeMedium? Medium = null
+    WorldLatticeMedium? Medium = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PaletteEntryDocument? Material = null
 ) {
     /// <summary>The initial fills, applied in order over <see cref="Initial"/>.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -472,7 +478,8 @@ public sealed record WorldFieldLatticeDefinition(
 /// field that is not geometry.</param>
 /// <param name="Color">The color the field's surface shades with — a <c>#RRGGBB</c> literal or a
 /// <c>state.&lt;row&gt;[.&lt;key&gt;]</c> Text-cell binding; required when <paramref name="HeightScale"/>
-/// is nonzero.</param>
+/// is nonzero, or omitted for a neutral white surface.</param>
+/// <param name="Material">Optional surface material using the creation palette vocabulary.</param>
 /// <param name="Medium">Whether this field is a fluid medium (see <see cref="WorldStateFieldTrait.Medium"/>).</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldFieldRow(
@@ -482,7 +489,8 @@ public sealed record WorldFieldRow(
     float Max = 1f,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] float HeightScale = 0f,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Color = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool Medium = false
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool Medium = false,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PaletteEntryDocument? Material = null
 );
 /// <summary>One initial fill of a lattice row, applied in order over the row's <c>initial</c>. Every kind decides
 /// per CELL with integer hashes and Q48.16 arithmetic only, so a fill is bit-identical on every machine and backend

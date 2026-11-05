@@ -360,12 +360,18 @@ public sealed class WorldFieldEmitter : ISdfSceneEmitter {
 
             // The brick holds only distances, so a state-bound colour is read through the mirror here, and its move
             // rebuilds the program (WriteRevision) with no re-bake.
-            var material = builder.AddMaterial(material: new SdfMaterial(Albedo: m_colors.Resolve(
-                fallback: Vector3.One,
-                value: row.Color
-            )));
+            var material = builder.AddMaterial(material: WorldSurfaceMaterials.Resolve(
+                entry: row.Material,
+                colors: m_colors,
+                albedo: m_colors.Resolve(fallback: Vector3.One, value: (row.Material?.Color ?? row.Color)),
+                paints: row.Material?.Paints?.Select(paint => paint.ToPaint(resolve: m_colors.LayerColor)).ToArray()
+            ));
 
-            _ = builder.ResetPoint().SampledRegion(
+            // Each surface owns a bake range: mixing it into the unowned world range would classify glass
+            // alongside opaque fields, and would bake a small lattice over the world's far-distance cube.
+            var extent = new Vector3(dimX, dimY, dimZ) * lattice.CellSize;
+            _ = builder.BeginInstance(boundCenter: (boxMin + extent * 0.5f), boundRadius: extent.Length() * 0.5f,
+                box: (boxMin, boxMin + extent)).ResetPoint().SampledRegion(
                 boxMin: boxMin,
                 cellSize: lattice.CellSize,
                 dimX: dimX,
@@ -375,7 +381,7 @@ public sealed class WorldFieldEmitter : ISdfSceneEmitter {
                 boundaryFloor: (lattice.CellSize * InverseLambda),
                 material: material,
                 blend: SdfBlendOp.Union
-            );
+            ).EndInstance();
         }
     }
     /// <inheritdoc/>
