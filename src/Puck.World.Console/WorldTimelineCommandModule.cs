@@ -17,6 +17,7 @@ namespace Puck.World;
 /// <param name="presentation">Resolves the addressed authority's presentation mirror, or returns
 /// <see langword="null"/> when that authority has no local presentation.</param>
 public sealed class WorldTimelineCommandModule(IWorldConsoleAuthority authority, Func<WorldServer, WorldStateMirror?>? presentation = null) : ICommandModule {
+    private static readonly CommandForms WorldTimelineForms = CommandForms.Of(verb: "world.timeline", "hold|run <clock>", "at <clock> <engine-tick>", "rate <clock> <rate>");
     private static string Number(double value) => value.ToString(
         format: "0.######",
         provider: CultureInfo.InvariantCulture
@@ -118,7 +119,8 @@ public sealed class WorldTimelineCommandModule(IWorldConsoleAuthority authority,
             name: "world.timeline",
             routing: CommandRouting.Immediate,
             bindability: CommandBindability.Bindable,
-            description: "world.timeline [hold|run <clock> | at <clock> <engine-tick> | rate <clock> <rate>] — reports authored clocks and their presentation readings. Hold and at freeze only the named presentation clock; run continues from it; rate is finite and nonnegative. Previews never change simulation state or save to source, which is why a binding may name it.",
+            description: $"{WorldTimelineForms.Spelling} — reports authored clocks and their presentation readings. Hold and at freeze only the named presentation clock; run continues from it; rate is finite and nonnegative. Previews never change simulation state or save to source, which is why a binding may name it.",
+            forms: WorldTimelineForms,
             handler: (context, args) => {
                 if (!authority.TryResolveServer(context: context, error: out var error, server: out var server, verb: "world.timeline")) { return error; }
                 var mirror = presentation?.Invoke(server);
@@ -129,7 +131,7 @@ public sealed class WorldTimelineCommandModule(IWorldConsoleAuthority authority,
                     var tick = 0UL;
                     var rate = 1d;
 
-                    if ((args.Count == 2) && args.Is(index: 0, value: "hold")) { operation = WorldTimelineOperation.Hold; } else if ((args.Count == 2) && args.Is(index: 0, value: "run")) { operation = WorldTimelineOperation.Run; } else if ((args.Count == 3) && args.Is(index: 0, value: "at") && ulong.TryParse(args[2], NumberStyles.None, CultureInfo.InvariantCulture, out tick)) { operation = WorldTimelineOperation.At; } else if ((args.Count == 3) && args.Is(index: 0, value: "rate") && double.TryParse(args[2], NumberStyles.Float, CultureInfo.InvariantCulture, out rate) && double.IsFinite(d: rate) && (rate >= 0d)) { operation = WorldTimelineOperation.Rate; } else { return CommandResult.Usage(form: "hold|run <clock> | at <clock> <engine-tick> | rate <clock> <rate>", verb: "world.timeline"); }
+                    if ((args.Count == 2) && args.Is(index: 0, value: "hold")) { operation = WorldTimelineOperation.Hold; } else if ((args.Count == 2) && args.Is(index: 0, value: "run")) { operation = WorldTimelineOperation.Run; } else if ((args.Count == 3) && args.Is(index: 0, value: "at") && ulong.TryParse(args[2], NumberStyles.None, CultureInfo.InvariantCulture, out tick)) { operation = WorldTimelineOperation.At; } else if ((args.Count == 3) && args.Is(index: 0, value: "rate") && double.TryParse(args[2], NumberStyles.Float, CultureInfo.InvariantCulture, out rate) && double.IsFinite(d: rate) && (rate >= 0d)) { operation = WorldTimelineOperation.Rate; } else { return WorldTimelineForms.Refuse(args: in args); }
                     if (!mirror.ControlClock(args[1].ToString(), operation, tick, rate, out var refusal)) { return CommandResult.Error(output: $"[world.timeline: {refusal}]"); }
                 }
                 var principal = context.Principal;

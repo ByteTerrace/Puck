@@ -5,6 +5,8 @@ namespace Puck.World;
 
 // replay.drive / replay.fork — the live-drive half of the replay surface, plus replay.cancel's drive arm.
 public sealed partial class WorldReplayCommandModule {
+    private static readonly CommandForms ReplayDriveForms = CommandForms.Of(verb: "replay.drive", "<name> [to <tick>]");
+    private static readonly CommandForms ReplayForkForms = CommandForms.Of(verb: "replay.fork", "<name> <tick> <new>");
     private CommandResult BeginDrive(string verb, string name, int? toTick, string? forkName) {
         try {
             if (!m_tape.TryBeginDrive(
@@ -46,7 +48,7 @@ public sealed partial class WorldReplayCommandModule {
             value: "to"
         ))
         ) {
-            return CommandResult.Usage(form: "<name> [to <tick>]", verb: "replay.drive");
+            return ReplayDriveForms.Refuse();
         }
 
         if (!TryName(
@@ -84,7 +86,7 @@ public sealed partial class WorldReplayCommandModule {
     }
     private CommandResult Fork(WireArgs args) {
         if (args.Count != 3) {
-            return CommandResult.Usage(form: "<name> <tick> <new>", verb: "replay.fork");
+            return ReplayForkForms.Refuse();
         }
 
         if (!TryName(

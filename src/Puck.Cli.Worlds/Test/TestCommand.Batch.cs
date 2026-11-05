@@ -10,7 +10,7 @@ public static partial class TestCommand {
     // A worker process stays alive across its legs and boots each scenario in a fresh native host. VerifyHash checks
     // every recorded tick's incremental authority hash against a full recompute during the authored run; the first
     // --workers count carries it, since every count runs the same writes, and --reproduce checks its replay instead.
-    private static bool RunBatch(IReadOnlyList<TestWorld> worlds, string artifact, string runDirectory, int chunk, int[] indices, bool reproduce, string? cacheDirectory, TestLeg leg, bool record, bool verifyHash) {
+    private static bool RunBatch(IReadOnlyList<TestWorld> worlds, string artifact, string runDirectory, int chunk, int[] indices, bool reproduce, string? cacheDirectory, TestLeg leg, bool record, bool verifyHash, bool heavy) {
         var legs = new List<object>();
 
         foreach (var index in indices) {
@@ -34,19 +34,31 @@ public static partial class TestCommand {
                 VerifyHash = verifyHash,
             });
         }
-        return RunWorker(artifact: artifact, batch: Path.Combine(path1: runDirectory, path2: $"batch-{chunk}-{leg.Name}.json"), legs: legs);
+        return RunWorker(artifact: artifact, batch: Path.Combine(path1: runDirectory, path2: $"batch-{chunk}-{leg.Name}.json"), heavy: heavy, legs: legs);
     }
     // Writes the legs to `batch` and runs them in one worker process, its streams beside the batch file. A worker that
-    // stops advancing (no leg begun or tick reported within the budgets) is cancelled.
-    private static bool RunWorker(string artifact, string batch, IReadOnlyList<object> legs) {
+    // stops advancing (no leg begun or tick reported within the budgets) is cancelled. Each worker process is admitted by
+    // the host before it starts, so the replicas of a --workers or --reproduce run never start into another lane's peak.
+    private static bool RunWorker(string artifact, string batch, bool heavy, IReadOnlyList<object> legs) {
         File.WriteAllText(path: batch, contents: JsonSerializer.Serialize(value: legs));
+        string[] arguments = [artifact, .. WorldDevices.NoneArguments, "--test-batch", batch];
+
+        // The wait comes before the watchdog starts: the watchdog bounds a started worker's progress, never the host's headroom.
+        try {
+            WorldAdmission.Wait(step: "test worker", worldArguments: arguments, heavySuite: heavy);
+        } catch (HostAdmissionRefusedException exception) {
+            Console.Error.WriteLine(value: $"ERROR: {exception.Message}");
+
+            return false;
+        }
+
         using var watchdog = new CancellationTokenSource(delay: StartupBudget);
         using var output = new StreamWriter(path: (batch + ".stdout.log"));
         using var error = new StreamWriter(path: (batch + ".stderr.log"));
 
         try {
             var process = CliProcess.RunCaptured(fileName: "dotnet",
-                arguments: [artifact, .. WorldDevices.NoneArguments, "--test-batch", batch],
+                arguments: arguments,
                 input: string.Empty, cancellationToken: watchdog.Token, timeout: Timeout.InfiniteTimeSpan,
                 retainOutput: false,
                 onOutput: line => {

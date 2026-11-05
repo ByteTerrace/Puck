@@ -72,56 +72,65 @@ let chessMoves = concat(
 // grid's corner in the table's frame and `band` how far above a square a piece still counts as standing on it.
 template chessBoardGrid(cellSize, origin, band) {
   lattices [
-    grid(band: band, cellSize: cellSize, depth: 8, directions: [
-      {
-        name: "N"
-        x: 0
-        y: -1
-        z: 0
-      }
-      {
-        name: "NE"
-        x: 1
-        y: -1
-        z: 0
-      }
-      {
-        name: "E"
-        x: 1
-        y: 0
-        z: 0
-      }
-      {
-        name: "SE"
-        x: 1
-        y: 1
-        z: 0
-      }
-      {
-        name: "S"
-        x: 0
-        y: 1
-        z: 0
-      }
-      {
-        name: "SW"
-        x: -1
-        y: 1
-        z: 0
-      }
-      {
-        name: "W"
-        x: -1
-        y: 0
-        z: 0
-      }
-      {
-        name: "NW"
-        x: -1
-        y: -1
-        z: 0
-      }
-    ], name: "chessBoard", origin: origin, width: 8, wrap: None)
+    grid(
+      band: band,
+      cellSize: cellSize,
+      depth: 8,
+      directions: [
+        {
+          name: "N"
+          x: 0
+          y: -1
+          z: 0
+        }
+        {
+          name: "NE"
+          x: 1
+          y: -1
+          z: 0
+        }
+        {
+          name: "E"
+          x: 1
+          y: 0
+          z: 0
+        }
+        {
+          name: "SE"
+          x: 1
+          y: 1
+          z: 0
+        }
+        {
+          name: "S"
+          x: 0
+          y: 1
+          z: 0
+        }
+        {
+          name: "SW"
+          x: -1
+          y: 1
+          z: 0
+        }
+        {
+          name: "W"
+          x: -1
+          y: 0
+          z: 0
+        }
+        {
+          name: "NW"
+          x: -1
+          y: -1
+          z: 0
+        }
+      ],
+      name: "chessBoard",
+      origin: origin,
+      width: 8,
+      wrap: None
+    )
   ]
 }
 

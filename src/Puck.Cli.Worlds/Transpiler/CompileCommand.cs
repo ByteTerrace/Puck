@@ -142,6 +142,7 @@ public static partial class CompileCommand {
             );
         }
 
+        SourceAcknowledgements.Of(document: effectiveAst, sourcePath: sourcePath).Acknowledge(diagnostics: diagnostics);
         PrintDiagnostics(
             diagnostics: diagnostics,
             filePath: sourcePath,

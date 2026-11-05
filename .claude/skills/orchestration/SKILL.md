@@ -356,6 +356,11 @@ direction: concurrent whole-solution builds exhaust a machine's memory.
   charge is under its share of the limit (`HostLoadThresholds.CommitCapacityPercent`)
   beside free memory and disk, and name what holds them
   ([admission](../../../docs/reference/cli.md#puck-host-loadadmission-lines-for-the-machine)).
+  Every verb that boots a World process (`puck test`, `canary`, `sweep`, `motion`,
+  `counters`, `parity`, `qualify`, `docs citations`, `verbs`, `bench startup`) waits
+  on the same admission before each process it starts, so a lane never wraps those
+  in a check of its own, and a run that boots several replicas in sequence (`puck
+  test --reproduce` or `--workers`) admits before every one of them.
   A windowed debug World grows past ten gigabytes, so a
   GPU lane closes its World between capture batches. A test run that holds
   gigabytes (the mesh-irradiance laws trace a whole hall and reached 9 GB
@@ -743,7 +748,12 @@ implementation whose brief says why Fable fits. Codex is part of the same
 lineup: Sol is a peer of `implementer` and takes the same briefs, and Astra,
 the frontier model, takes demanding implementation, diagnosis and review, the
 work of `specialist`. Spread implementer briefs across
-`implementer` and Sol, so both families' slots stay busy. Concept art and
+`implementer` and Sol, so both families' slots stay busy. The owner's
+direction: Codex gets specialist work whenever a Codex slot is free (a
+fresh-eyes area fix pass over another family's recent work, a diagnosis, an
+invariant-heavy implementation), not only the leftovers, and a feature that
+needs visual reference gets a Codex art lane beside it, its pack under
+`docs/game/art/` written before or while the feature lane builds. Concept art and
 other image generation go to Codex as the primary artist and judge (the
 owner's ruling): its built-in `image_generation` tool makes the images and its
 verdicts decide which to keep, and a Claude partner writes the brief and

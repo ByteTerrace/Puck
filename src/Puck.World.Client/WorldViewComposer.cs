@@ -27,10 +27,6 @@ public sealed class WorldViewComposer {
     public const string OperatorCameraName = "$operator";
 
     private const string BuiltinName = "builtin";
-    private const float BuiltinTransitionRenderScale = 0.5f;
-    // The built-in ladder's own transition envelope (with BuiltinTransitionRenderScale), used only when easing into or out
-    // of the built-in composition — an authored layout brings its own.
-    private const float BuiltinTransitionSeconds = 0.6f;
 
     private ViewTransition? m_transition;
     private float m_transitionRenderScale;
@@ -308,7 +304,9 @@ public sealed class WorldViewComposer {
 
         ResolveBuiltin(joinedCount: joinedCount);
 
-        return (BuiltinName, BuiltinName, BuiltinTransitionSeconds, BuiltinTransitionRenderScale);
+        var builtin = (views.BuiltinTransition ?? new WorldViewTransition());
+
+        return (BuiltinName, BuiltinName, builtin.Seconds, builtin.RenderScale);
     }
 
     /// <summary>Returns the authored layout name at a 1-based document ordinal from the most recent composition, or

@@ -7,7 +7,7 @@ public sealed partial class WorldBindingCommandModule {
         const string Verb = "player.binding-bar";
 
         if (args.Count is < 2 or > 3) {
-            return CommandResult.Usage(form: BindingBarForm, verb: Verb);
+            return PlayerBindingBarForms.Refuse();
         }
         var (slot, error) = SeatCommandArgs.ResolveJoinedSeat(m_roster, context, in args, 2, Verb);
         if (error is { } refusal) {
@@ -40,7 +40,7 @@ public sealed partial class WorldBindingCommandModule {
             }
             preferences = preferences with { Scale = scale };
         } else {
-            return CommandResult.Usage(form: BindingBarForm, got: args[0].ToString(), verb: Verb);
+            return PlayerBindingBarForms.Refuse(got: args[0].ToString());
         }
         m_seatBindings.SetSessionRebind(slot, session with { BindingBar = preferences });
         return SeatCommandArgs.Echo(slot, Verb, $"{args[0].ToString()}={value}");

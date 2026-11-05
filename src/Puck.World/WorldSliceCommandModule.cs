@@ -47,9 +47,10 @@ public sealed partial class WorldSliceCommandModule(WorldServer server, WorldRen
     public const string NearToken = "near";
 
     private const string SaveVerb = "world.slice.save";
-    private const string SaveForm = "<placement|near> <x|y|z> [offset <m>] [bands <m>] [res <n>]";
     private const string Verb = "world.slice";
-    private const string Form = "<x|y|z> <offset> <u> <v> <half> <path.png> | <placement> <x|y|z> <path.png> [offset <m>] — then [bands <m>] [res <n>]";
+    private const string SaveForm = "<placement|near> <x|y|z> [offset <m>] [bands <m>] [res <n>]";
+    private static readonly CommandForms WorldSliceForms = CommandForms.Of(verb: Verb, "<x|y|z> <offset> <u> <v> <half> <path.png> [bands <m>] [res <n>]", "<placement> <x|y|z> <path.png> [offset <m>] [bands <m>] [res <n>]");
+    private static readonly CommandForms WorldSliceSaveForms = CommandForms.Of(verb: SaveVerb, SaveForm);
 
     /// <summary>Parses a <c>world.slice</c> line's arguments: an explicit plane and square
     /// (<c>&lt;x|y|z&gt; &lt;offset&gt; &lt;u&gt; &lt;v&gt; &lt;half&gt; &lt;path.png&gt;</c>) or a placement's (<c>&lt;placement&gt;
@@ -67,7 +68,7 @@ public sealed partial class WorldSliceCommandModule(WorldServer server, WorldRen
 
         request = default;
         if (args.Count < 3) {
-            refusal = CommandResult.Usage(form: Form, verb: Verb);
+            refusal = WorldSliceForms.Refuse();
             return false;
         }
 
@@ -93,7 +94,7 @@ public sealed partial class WorldSliceCommandModule(WorldServer server, WorldRen
                 return false;
             }
             if (!TryAxis(token: args[1], axis: out axis)) {
-                refusal = CommandResult.Usage(form: Form, got: args[1], verb: Verb);
+                refusal = WorldSliceForms.Refuse(got: args[1]);
                 return false;
             }
 
@@ -127,7 +128,7 @@ public sealed partial class WorldSliceCommandModule(WorldServer server, WorldRen
             var key = args[next];
 
             if ((next + 1) >= args.Count) {
-                refusal = CommandResult.Error(output: $"[{Verb}: '{key}' expects a value — {Form}]");
+                refusal = CommandResult.Error(output: $"[{Verb}: '{key}' expects a value — {WorldSliceForms.Form}]");
                 return false;
             }
             if (string.Equals(a: key, b: "bands", comparisonType: StringComparison.OrdinalIgnoreCase) && TryNumber(token: args[(next + 1)], value: out var spacing) && (spacing > 0f)) {
@@ -170,7 +171,8 @@ public sealed partial class WorldSliceCommandModule(WorldServer server, WorldRen
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: Verb,
-            description: $"Cuts the World's field on an axis-aligned plane and writes the SDF distance diagnostic to a PNG: world.slice {Form}. The explicit form names the plane (x|y|z = offset) and the square on it by its centre (u, v) and half side, where (u, v) is (Z, Y) on an x cut, (X, Z) on a y cut and (X, Y) on a z cut; the placement form cuts through a placement's position (plus offset along the axis) over a square reaching {WorldSliceRequest.PlacementMargin} times its creation's reach. bands sets the iso-distance spacing in metres (default a tenth of the half side), res the samples a side ({SdfFieldSlice.MinResolution}..{SdfFieldSlice.MaxResolution}, default {WorldSliceRequest.DefaultResolution}). The mesh bake's sampler (the one field walk) reads the program at every sample with its tetrahedral gradient, one frame's bake share at a time, before any pending bake group. The image is two panels: on the left the distance, warm outside, cool inside, a thin line every band and a white surface line, so bands that bunch or spread show a field that is not the distance; on the right |grad d|, white within {(SdfFieldSlice.GradientTolerance * 100f)}% of one (exact), blue below (a bound underestimates), red above (an overestimate), the surface black; grey answers no shape. Where the answered field stops rising away from the surface (at least {(SdfFieldSlice.ClipShare * 100f)}% of the outside samples rise slower than {SdfFieldSlice.ClipGradient}), the samples from that ceiling up are clipped: dull magenta on both panels and left out of the statistics. Echoes the armed slice on stdout; the written file and the statistics (the field's range, the inside share, clipped= and its ceiling, world= the share the unowned segments answered, then |grad d| min, mean, max and the share off one, overall and near-surface within three pixels of the surface) land on stderr as [world.slice] ... -> <path>; world.wait bakes <seconds> holds a script until it lands. One slice at a time. Refused with no renderer.",
+            description: $"Cuts the World's field on an axis-aligned plane and writes the SDF distance diagnostic to a PNG: {WorldSliceForms.Spelling}. The explicit form names the plane (x|y|z = offset) and the square on it by its centre (u, v) and half side, where (u, v) is (Z, Y) on an x cut, (X, Z) on a y cut and (X, Y) on a z cut; the placement form cuts through a placement's position (plus offset along the axis) over a square reaching {WorldSliceRequest.PlacementMargin} times its creation's reach. bands sets the iso-distance spacing in metres (default a tenth of the half side), res the samples a side ({SdfFieldSlice.MinResolution}..{SdfFieldSlice.MaxResolution}, default {WorldSliceRequest.DefaultResolution}). The mesh bake's sampler (the one field walk) reads the program at every sample with its tetrahedral gradient, one frame's bake share at a time, before any pending bake group. The image is two panels: on the left the distance, warm outside, cool inside, a thin line every band and a white surface line, so bands that bunch or spread show a field that is not the distance; on the right |grad d|, white within {(SdfFieldSlice.GradientTolerance * 100f)}% of one (exact), blue below (a bound underestimates), red above (an overestimate), the surface black; grey answers no shape. Where the answered field stops rising away from the surface (at least {(SdfFieldSlice.ClipShare * 100f)}% of the outside samples rise slower than {SdfFieldSlice.ClipGradient}), the samples from that ceiling up are clipped: dull magenta on both panels and left out of the statistics. Echoes the armed slice on stdout; the written file and the statistics (the field's range, the inside share, clipped= and its ceiling, world= the share the unowned segments answered, then |grad d| min, mean, max and the share off one, overall and near-surface within three pixels of the surface) land on stderr as [world.slice] ... -> <path>; world.wait bakes <seconds> holds a script until it lands. One slice at a time. Refused with no renderer.",
+            forms: WorldSliceForms,
             handler: (_, args) => {
                 var tokens = new string[args.Count];
 
@@ -184,10 +186,11 @@ public sealed partial class WorldSliceCommandModule(WorldServer server, WorldRen
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Bindable,
             name: SaveVerb,
-            description: $"Slices the field through a placement into the booted package's own {FolderName} folder: {SaveVerb} {SaveForm}, as {Verb}'s placement form, writing <package>/{FolderName}/<placement>-<axis>.png. The caller names no path, so a binding row or an authored command (the debug world's gallery.slice) may call it; the placement id must be a file-safe token (letters, digits, '-', '_', '.').",
+            description: $"Slices the field through a placement into the booted package's own {FolderName} folder: {WorldSliceSaveForms.Spelling}, as {Verb}'s placement form, writing <package>/{FolderName}/<placement>-<axis>.png. The caller names no path, so a binding row or an authored command (the debug world's gallery.slice) may call it; the placement id must be a file-safe token (letters, digits, '-', '_', '.').",
+            forms: WorldSliceSaveForms,
             handler: (context, args) => {
                 if (args.Count < 2) {
-                    return CommandResult.Usage(form: SaveForm, verb: SaveVerb);
+                    return WorldSliceSaveForms.Refuse();
                 }
 
                 var placement = args[0].ToString();

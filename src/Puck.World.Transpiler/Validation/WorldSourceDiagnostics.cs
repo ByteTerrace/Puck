@@ -107,6 +107,7 @@ public static class WorldSourceDiagnostics {
                     arg2: sourcePath,
                     arg3: diagnostics
                 );
+                SourceAcknowledgements.Of(document: parsed, sourcePath: sourcePath).Acknowledge(diagnostics: diagnostics);
             }
 
             return new WorldSourceDiagnosis(
@@ -136,7 +137,7 @@ public static class WorldSourceDiagnostics {
                 document: compilation.Document,
                 library: !compilation.EmitsDocument
             );
-            SourceAcknowledgements.Acknowledge(diagnostics: diagnostics, document: compilation.Document, sourcePath: sourcePath);
+            compilation.Acknowledgements.Acknowledge(diagnostics: diagnostics);
         }
 
         return new WorldSourceDiagnosis(
@@ -181,23 +182,27 @@ public static class WorldSourceDiagnostics {
                 cancellationToken.ThrowIfCancellationRequested();
 
                 if (sourcePath is not null) {
-                    var worldOrigins = new WorldDocumentOrigins();
-
-                    if (WorldSemanticValidator.TryComposeWorld(output.Json, output.SourceMap, diagnostics, sourcePath, out var composedWorld, machines: machines, catalogFingerprint: catalogFingerprint, sourceCompilation: sourceCompilation, origins: worldOrigins)) {
-                        WorldSemanticValidator.ValidateWorld(composedWorld, output.SourceMap, diagnostics, machines: machines, catalogFingerprint: catalogFingerprint, source: output.Json, sourcePath: sourcePath, origins: worldOrigins);
+                    if (WorldSemanticValidator.ValidateComposedWorld(
+                        catalogFingerprint: catalogFingerprint,
+                        diagnostics: diagnostics,
+                        loweredJson: output.Json,
+                        machines: machines,
+                        sourceCompilation: sourceCompilation,
+                        sourceMap: output.SourceMap,
+                        sourcePath: sourcePath
+                    ) is { } composedWorld) {
                         PuckLinter.LintReferences(catalogFingerprint: catalogFingerprint, composed: composedWorld, diagnostics: diagnostics, document: output.Json, machines: machines, sourceMap: output.SourceMap, sourcePath: sourcePath);
                     }
                 } else if ((output.Json["basis"] is null) && (output.Json["imports"] is null)) {
                     WorldSemanticValidator.ValidateWorld(output.Json, output.SourceMap, diagnostics, machines: machines, catalogFingerprint: catalogFingerprint);
                 }
             }
-            return Acknowledged(diagnosis: diagnosis, diagnostics: diagnostics);
+            return Acknowledged(compilation: compilation, diagnostics: diagnostics);
         }
 
         var json = compilation.Json!;
         var sourceMap = compilation.SourceMap;
         var composes = ((json["basis"] is not null) || (json["imports"] is not null));
-        var origins = new WorldDocumentOrigins();
 
         if (sourcePath is null) {
             if (!composes && WorldSemanticValidator.IsRootDocument(loweredJson: json)) {
@@ -210,57 +215,38 @@ public static class WorldSourceDiagnostics {
                 );
             }
 
-            return Acknowledged(diagnosis: diagnosis, diagnostics: diagnostics);
+            return Acknowledged(compilation: compilation, diagnostics: diagnostics);
         }
 
         // The source composes once, and a refused composition is reported once (PUCK035); the validation and the
         // reference lint both read the one composed document.
-        if (!WorldSemanticValidator.TryComposeWorld(
+        if (WorldSemanticValidator.ValidateComposedWorld(
             catalogFingerprint: catalogFingerprint,
-            composed: out var composed,
             diagnostics: diagnostics,
             loweredJson: json,
             machines: machines,
-            origins: origins,
             sourceCompilation: sourceCompilation,
             sourceMap: sourceMap,
             sourcePath: sourcePath
-        )) {
-            return Acknowledged(diagnosis: diagnosis, diagnostics: diagnostics);
-        }
-
-        // Only a root composes to a whole world; validating a module as one reports as missing every field
-        // whichever root imports it supplies.
-        if (WorldSemanticValidator.IsRootDocument(loweredJson: json)) {
-            _ = WorldSemanticValidator.ValidateWorld(
+        ) is { } composed) {
+            cancellationToken.ThrowIfCancellationRequested();
+            PuckLinter.LintReferences(
                 catalogFingerprint: catalogFingerprint,
+                composed: composed,
                 diagnostics: diagnostics,
-                loweredJson: composed,
+                document: json,
                 machines: machines,
-                origins: origins,
-                source: json,
                 sourceMap: sourceMap,
                 sourcePath: sourcePath
             );
         }
 
-        cancellationToken.ThrowIfCancellationRequested();
-        PuckLinter.LintReferences(
-            catalogFingerprint: catalogFingerprint,
-            composed: composed,
-            diagnostics: diagnostics,
-            document: json,
-            machines: machines,
-            sourceMap: sourceMap,
-            sourcePath: sourcePath
-        );
-
-        return Acknowledged(diagnosis: diagnosis, diagnostics: diagnostics);
+        return Acknowledged(compilation: compilation, diagnostics: diagnostics);
     }
     // A finding the source itself, or a library it imports, acknowledges with an `allow` line is not reported; the
     // locator already dropped one a basis or an import document acknowledges.
-    private static DiagnosticBag Acknowledged(WorldSourceDiagnosis diagnosis, DiagnosticBag diagnostics) {
-        SourceAcknowledgements.Acknowledge(diagnostics: diagnostics, document: diagnosis.Document, sourcePath: diagnosis.SourcePath);
+    private static DiagnosticBag Acknowledged(WorldCompilation compilation, DiagnosticBag diagnostics) {
+        compilation.Acknowledgements.Acknowledge(diagnostics: diagnostics);
 
         return diagnostics;
     }

@@ -191,7 +191,7 @@ public static class WorldSourceEdits {
             }
             for (var index = 0; (index < before.Count); index++) {
                 var next = (preservesOrder ? matched[index] : ((index < after.Count) ? index : -1));
-                var oldPointer = ((pointer + "/") + index.ToString(provider: CultureInfo.InvariantCulture));
+                var oldPointer = Child(index: index, pointer: pointer);
 
                 if (m_entries.TryGetValue(key: oldPointer, value: out var existing) && Local(origin: existing, sourcePath: sourcePath)) {
                     var rowEnd = (existing.Span.Offset + existing.Span.Length);
@@ -280,7 +280,7 @@ public static class WorldSourceEdits {
             }
             for (var at = 0; (at < before.Count); at++) {
                 if (!JsonNode.DeepEquals(node1: before[at], node2: after[index])) { continue; }
-                var previous = ((pointer + "/") + at.ToString(provider: CultureInfo.InvariantCulture));
+                var previous = Child(index: at, pointer: pointer);
 
                 if (!TryEditable(pointer: previous, reason: out reason)) { return false; }
                 if (!m_entries.TryGetValue(key: previous, value: out var origin)) { break; }
@@ -294,7 +294,7 @@ public static class WorldSourceEdits {
                 reason = string.Empty;
                 return true;
             }
-            return TryReplacement(target: target, pointer: ((pointer + "/") + index.ToString(provider: CultureInfo.InvariantCulture)), text: out text, reason: out reason);
+            return TryReplacement(target: target, pointer: Child(index: index, pointer: pointer), text: out text, reason: out reason);
         }
         private bool TryEditable(string pointer, out string reason) {
             foreach (var (at, origin) in m_entries) {
@@ -368,7 +368,7 @@ public static class WorldSourceEdits {
         if (JsonNode.DeepEquals(node1: before, node2: after)) { yield break; }
         if ((before is JsonObject left) && (after is JsonObject right)) {
             foreach (var key in left.Select(selector: static member => member.Key).Union(second: right.Select(selector: static member => member.Key), comparer: StringComparer.Ordinal)) {
-                var child = ((pointer + "/") + Escape(value: key));
+                var child = Child(name: key, pointer: pointer);
 
                 if (left.ContainsKey(propertyName: key) != right.ContainsKey(propertyName: key)) { yield return child; } else { foreach (var changed in Changes(before: left[key], after: right[key], pointer: child)) { yield return changed; } }
             }

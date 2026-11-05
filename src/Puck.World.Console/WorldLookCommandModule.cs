@@ -17,6 +17,7 @@ namespace Puck.World;
 /// analyzer ceilings.
 /// </summary>
 public sealed class WorldLookCommandModule(IWorldConsoleAuthority authority) : ICommandModule {
+    private static readonly CommandForms WorldPopulationSpawnForms = CommandForms.Of(verb: "world.population.spawn", "disc <radius> <sampleCount>", "points <halfExtent> <id> [<id>…]");
     // The world.looks census: one row per look, mirroring world.population's per-kit echo. dyn= names the root
     // dynamics row when the look authors one; partDyn= is the authored part-follower count.
     private static string DescribeLooks(WorldPopulation population) {
@@ -127,13 +128,11 @@ public sealed class WorldLookCommandModule(IWorldConsoleAuthority authority) : I
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.population.spawn",
-            description: "Sets the simulated-peer spawn distribution (LIVE for future activations, standing bodies unmoved): world.population.spawn disc <radius> <sampleCount> | points <halfExtent> <id> [<id>…].",
+            description: $"Sets the simulated-peer spawn distribution (LIVE for future activations, standing bodies unmoved): {WorldPopulationSpawnForms.Spelling}.",
+            forms: WorldPopulationSpawnForms,
             handler: (context, args) => {
                 if (args.Count == 0) {
-                    return CommandResult.Usage(
-                        form: "disc <radius> <sampleCount> | points <halfExtent> <id> [<id>…]",
-                        verb: "world.population.spawn"
-                    );
+                    return WorldPopulationSpawnForms.Refuse(args: in args);
                 }
 
                 if (ParseDistribution(

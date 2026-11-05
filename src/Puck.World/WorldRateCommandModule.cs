@@ -27,6 +27,7 @@ namespace Puck.World;
 internal sealed class WorldRateCommandModule(WorldInstanceHost instances, WorldReplayTape replayTape, Puck.Launcher.HostFrameTimeline timeline) : ICommandModule {
     private readonly WorldInstanceHost m_instances = instances;
     private readonly WorldReplayTape m_replayTape = replayTape;
+    private static readonly CommandForms WorldRateForms = CommandForms.Of(verb: "world.rate", "[instance:<name>]", "shed", "pause [instance:<name>]", "resume [instance:<name>]");
 
     private string Describe(string name, WorldInstanceHost.WorldInstanceRateStatus status) {
         var state = (status.Stopped
@@ -148,7 +149,7 @@ internal sealed class WorldRateCommandModule(WorldInstanceHost instances, WorldR
 
         if (!WorldArgs.IsInstanceToken(token: args[tokenIndex])) {
             instanceName = string.Empty;
-            error = CommandResult.Usage(form: "[instance:<name>]", got: args[tokenIndex].ToString(), verb: verb);
+            error = WorldRateForms.Refuse(args: in args, got: args[tokenIndex].ToString());
 
             return false;
         }
@@ -165,7 +166,8 @@ internal sealed class WorldRateCommandModule(WorldInstanceHost instances, WorldR
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return WorldCommandDefinition.Simulation(
             name: "world.rate",
-            description: "Reads back or drives one instance's own schedule — the boot instance by default, or a named one via a trailing instance:<name> token. world.rate [instance:<name>]: reports declared rateHz (verbatim — never validated against a 'known rates' notion), effective state (running|paused|stopped — stopped is the document's own durable rateHz 0, paused is the live lever below, running is neither), step width in engine ticks (or 'stopped' when rateHz is 0), completed ticks, and the host-lifetime shed-step count. world.rate shed reports the same steps.shed counter without an instance lookup; a shed step is an owed catch-up step dropped after a burst spent its wall-time budget, not a paused tick or a capture hold. world.rate pause [instance:<name>]: arms the live pause lever, which stops stepping WITHOUT touching the authored rateHz; refuses an unknown instance and a rate-0 instance BY NAME (already stopped by the document itself — the lever would only duplicate that under a misleading name), naming which; pausing an already-paused instance is accepted and re-echoes the held state. world.rate resume [instance:<name>]: releases the lever, resuming on the EXACT schedule its accumulator already held (no skew); refuses only an unknown instance — resuming an instance that was never paused (or already resumed) is a NO-OP ECHO, never a refusal. A pause/resume that changes the BOOT instance's own lever state is recorded into an in-progress replay recording as an ordered rate-lever event. Simulation-routed, like the neighboring state-changing instance verbs (world.instance.start/stop) — a following read observes a preceding pause/resume through the ordinary console drain barrier.",
+            forms: WorldRateForms,
+            description: $"Reads back or drives one instance's own schedule — the boot instance by default, or a named one via a trailing instance:<name> token. {WorldRateForms.Spelling}. With no operation it reports declared rateHz (verbatim — never validated against a 'known rates' notion), effective state (running|paused|stopped — stopped is the document's own durable rateHz 0, paused is the live lever below, running is neither), step width in engine ticks (or 'stopped' when rateHz is 0), completed ticks, and the host-lifetime shed-step count. shed reports the same steps.shed counter without an instance lookup; a shed step is an owed catch-up step dropped after a burst spent its wall-time budget, not a paused tick or a capture hold. pause arms the live pause lever, which stops stepping WITHOUT touching the authored rateHz; refuses an unknown instance and a rate-0 instance BY NAME (already stopped by the document itself — the lever would only duplicate that under a misleading name), naming which; pausing an already-paused instance is accepted and re-echoes the held state. resume releases the lever, resuming on the EXACT schedule its accumulator already held (no skew); refuses only an unknown instance — resuming an instance that was never paused (or already resumed) is a NO-OP ECHO, never a refusal. A pause/resume that changes the BOOT instance's own lever state is recorded into an in-progress replay recording as an ordered rate-lever event. Simulation-routed, like the neighboring state-changing instance verbs (world.instance.start/stop) — a following read observes a preceding pause/resume through the ordinary console drain barrier.",
             handler: (_, args) => {
                 if ((args.Count == 1) && args.Is(index: 0, value: "shed")) {
                     return new CommandResult(Output: $"[world.rate: steps.shed={timeline.ShedSteps}]");
@@ -208,7 +210,7 @@ internal sealed class WorldRateCommandModule(WorldInstanceHost instances, WorldR
                     return Resume(name: name);
                 }
 
-                return CommandResult.Usage(form: "[instance:<name>] | shed | pause [instance:<name>] | resume [instance:<name>]", got: operation, verb: "world.rate");
+                return WorldRateForms.Refuse(args: in args, got: operation);
             }
         );
     }

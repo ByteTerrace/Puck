@@ -143,7 +143,7 @@ public sealed class OwnedWorldDisposalLawTests {
             Assert.Contains(
                 actualString: entry.Reason,
                 comparisonType: StringComparison.Ordinal,
-                expectedSubstring: "'motion' could not be mapped"
+                expectedSubstring: "views.seatRig.motion: unknown member"
             );
             Assert.True(
                 condition: File.Exists(path: entry.QuarantinePath),

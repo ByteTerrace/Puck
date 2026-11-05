@@ -275,7 +275,7 @@ public static class WorldSourceSave {
             }
             if ((old is JsonObject left) && (now is JsonObject right)) {
                 foreach (var name in left.Select(selector: static member => member.Key).Union(second: right.Select(selector: static member => member.Key), comparer: StringComparer.Ordinal).ToArray()) {
-                    var child = ((pointer + "/") + DocumentJsonPointer.Escape(value: name));
+                    var child = DocumentJsonPointer.Child(name: name, pointer: pointer);
 
                     if (!right.ContainsKey(propertyName: name)) {
                         if (!TryRemove(node: left[name], pointer: child, reason: out reason)) { return false; }

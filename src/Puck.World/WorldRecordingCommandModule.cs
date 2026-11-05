@@ -34,10 +34,11 @@ internal sealed class WorldRecordingCommandModule(
     private readonly RecordingSessionClock m_clock = clock;
     private readonly RecordingDocumentSource m_source = source;
     private readonly IOptions<NativeWindowOptions> m_window = window;
+    private static readonly CommandForms CaptureStartForms = CommandForms.Of(verb: "capture.start", "[<path>]");
 
     private CommandResult Start(WireArgs args) {
         if (args.Count > 1) {
-            return CommandResult.Usage(form: "[<path>]", got: args[1].ToString(), verb: "capture.start");
+            return CaptureStartForms.Refuse(got: args[1].ToString());
         }
 
         if (m_capture.IsArmed) {
@@ -152,7 +153,8 @@ internal sealed class WorldRecordingCommandModule(
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "capture.start",
-            description: "Starts a native recording (Immediate): loads the boot recording document (or the given output path), resolves the AV1->H.264 encoder ladder and mic+loopback audio against this machine, arms frame capture, and echoes the negotiated codec and any declines.",
+            description: $"Starts a native recording (Immediate): {CaptureStartForms.Spelling}. It loads the boot recording document (or the given output path), resolves the AV1->H.264 encoder ladder and mic+loopback audio against this machine, arms frame capture, and echoes the negotiated codec and any declines.",
+            forms: CaptureStartForms,
             handler: (_, args) => Start(args: args)
         );
         yield return CommandDefinition.WithWireArgs(

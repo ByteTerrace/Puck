@@ -1028,6 +1028,7 @@ public static partial class CanaryCommand {
 
         try {
             if (authorityExecutionWorld is { } authorityWorld) {
+                WorldAdmission.Wait(cancellationToken: budget.Cancellation, device: false, step: "canary");
                 budget.Tally.WorldStarted();
                 authority = AuthorityCompanion.Start(
                     quitInput: RunnerQuit,
@@ -1054,6 +1055,7 @@ public static partial class CanaryCommand {
                 }
             }
 
+            AdmitWorld(backend: backend, budget: budget, debugLayers: debugLayers, manifest: manifest);
             budget.Tally.WorldStarted();
             process = CliProcess.RunCaptured(
                 fileName: "dotnet",
@@ -1209,6 +1211,7 @@ public static partial class CanaryCommand {
             CliProcessResult second;
 
             try {
+                AdmitWorld(backend: backend, budget: budget, debugLayers: debugLayers, manifest: manifest);
                 budget.Tally.WorldStarted();
                 second = CliProcess.RunCaptured(
                     fileName: "dotnet",

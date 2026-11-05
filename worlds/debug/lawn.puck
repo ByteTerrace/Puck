@@ -65,7 +65,9 @@ let lawnGroups = [
 ]
 
 // Each group's members on a golden-angle spiral, with a seeded scale, yaw and variant.
-let lawnMembers = flatMap(lawnGroups, g => reduce(filter(lawnKinds, k => k.kind == g.kind), [],
+let lawnMembers = flatMap(lawnGroups, g => reduce(
+  filter(lawnKinds, k => k.kind == g.kind),
+  [],
   (none, k) => map(range(0, g.count), j => {
     prototype: $"lawn-{g.kind}-{(j + g.seed) % k.variants}"
     position [
@@ -96,17 +98,20 @@ let lawnEdgeSamples = map(lawnEdgeSteps, e => {
   dz: (1 - e.t) * (e.p.b[1] - e.p.a[1]) + e.t * (e.p.c[1] - e.p.b[1])
 })
 // The shared path mask drops a flower whose footprint reaches a neighbouring paving corridor.
-let lawnEdges = filter(map(lawnEdgeSamples, s => {
-  i: s.i
-  k: s.k
-  x: s.x
-  z: s.z
-  nx: -s.dz / squareRoot(s.dx * s.dx + s.dz * s.dz) * s.side
-  nz: s.dx / squareRoot(s.dx * s.dx + s.dz * s.dz) * s.side
-  tx: s.dx / squareRoot(s.dx * s.dx + s.dz * s.dz)
-  tz: s.dz / squareRoot(s.dx * s.dx + s.dz * s.dz)
-  d: s.d
-}), e => lawnPathClear(e.x + e.d * e.nx, e.z + e.d * e.nz, 0.6))
+let lawnEdges = filter(
+  map(lawnEdgeSamples, s => {
+    i: s.i
+    k: s.k
+    x: s.x
+    z: s.z
+    nx: -s.dz / squareRoot(s.dx * s.dx + s.dz * s.dz) * s.side
+    nz: s.dx / squareRoot(s.dx * s.dx + s.dz * s.dz) * s.side
+    tx: s.dx / squareRoot(s.dx * s.dx + s.dz * s.dz)
+    tz: s.dz / squareRoot(s.dx * s.dx + s.dz * s.dz)
+    d: s.d
+  }),
+  e => lawnPathClear(e.x + e.d * e.nx, e.z + e.d * e.nz, 0.6)
+)
 let lawnFlowers = map(lawnEdges, e => {
   prototype: $"lawn-flowers-{floor((e.k + e.i) % 3 / 2)}"
   position [e.x + e.d * e.nx, 0, e.z + e.d * e.nz]
@@ -150,7 +155,12 @@ prototypes {
   // The valley's floor (valley.puck), placed by the Moth basis: a disc running on under the walls to their outer feet,
   // so its rim never shows inside the ring.
   paintedGround(
-    id: "floor", radius: 740, turf: "#6C8A33", paving: "#BC7F58", paths: lawnPaths, pathWidth: lawnPathWidth,
+    id: "floor",
+    radius: 740,
+    turf: "#6C8A33",
+    paving: "#BC7F58",
+    paths: lawnPaths,
+    pathWidth: lawnPathWidth,
     holes: [poolHole]
   )
   broadleafTree(id: "lawn-oak-0")
@@ -173,7 +183,11 @@ prototypes {
   flowerCluster(id: "lawn-flowers-1", head: "#F1EDE0", accent: "#F2D257", count: 5)
   grassTuft(id: "lawn-tuft")
   for (tile, i) in lawnGrassTiles {
-    windMeadowTile(id: $"lawn-grass-{i}", tile: tile, origin: lawnGrassOrigin, fringe: [5.5, 6.7, 0.67, 0.67],
+    windMeadowTile(
+      id: $"lawn-grass-{i}",
+      tile: tile,
+      origin: lawnGrassOrigin,
+      fringe: [5.5, 6.7, 0.67, 0.67],
       clearing: [0, 0, 0]
     )
   }
@@ -185,13 +199,18 @@ prototypes {
 placements {
   for kind in lawnKinds {
     for v in range(0, kind.variants) {
-      sceneryScatter(id: $"lawn-{kind.kind}-{v}", prototype: $"lawn-{kind.kind}-{v}",
-        rows: filter(lawnMembers, m => m.prototype == $"lawn-{kind.kind}-{v}"), contact: kind.contact
+      sceneryScatter(
+        id: $"lawn-{kind.kind}-{v}",
+        prototype: $"lawn-{kind.kind}-{v}",
+        rows: filter(lawnMembers, m => m.prototype == $"lawn-{kind.kind}-{v}"),
+        contact: kind.contact
       )
     }
   }
   for v in range(0, 2) {
-    sceneryScatter(id: $"lawn-flowers-{v}", prototype: $"lawn-flowers-{v}",
+    sceneryScatter(
+      id: $"lawn-flowers-{v}",
+      prototype: $"lawn-flowers-{v}",
       rows: filter(lawnFlowers, f => f.prototype == $"lawn-flowers-{v}")
     )
   }

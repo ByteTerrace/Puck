@@ -101,7 +101,7 @@ internal sealed class WorldFindingLocator(JsonObject composed, JsonObject? sourc
             return null;
         }
 
-        var authored = new Authored(Acknowledgements: SourceAcknowledgements.Of(document: compilation.Document, sourcePath: path), Map: compilation.SourceMap, Text: text);
+        var authored = new Authored(Acknowledgements: compilation.Acknowledgements, Map: compilation.SourceMap, Text: text);
 
         lock (Gate) {
             AuthoredSources[path] = authored;
@@ -144,6 +144,6 @@ internal sealed class WorldFindingLocator(JsonObject composed, JsonObject? sourc
         var located = ((documentPointer.Length > 1) ? authored.Map.OriginOf(jsonPointer: documentPointer) : null);
         var placed = (diagnostic with { SourcePath = (located?.SourcePath ?? documentPath), Span = (located?.Span ?? SourceSpan.None) });
 
-        return (authored.Acknowledgements.Acknowledges(diagnostic: placed, rootPath: documentPath) ? null : placed);
+        return (authored.Acknowledgements.Acknowledges(diagnostic: placed) ? null : placed);
     }
 }

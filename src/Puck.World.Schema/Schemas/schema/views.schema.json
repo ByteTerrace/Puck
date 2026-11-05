@@ -521,6 +521,28 @@
       },
       "default": null
     },
+    "builtinTransition": {
+      "description": "The ease into or out of the built-in seat ladder (the composition no authored layout selects), or null for the neutral WorldViewTransition defaults (a cut). An authored layout brings its own envelope.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "seconds": {
+          "description": "How long the ease takes, in seconds; 0 is a cut. Default 0.",
+          "type": "number",
+          "default": 0
+        },
+        "renderScale": {
+          "description": "The render scale (0, 1] applied to every slot mid-transition; 1 is no dip. Default 1.",
+          "type": "number",
+          "default": 1
+        }
+      },
+      "additionalProperties": false,
+      "default": null,
+      "title": "WorldViewTransition"
+    },
     "layouts": {
       "description": "Gets the authored named layouts. The absence-coalesce lives in the accessor for the same reason Elements\u0027s does.",
       "type": [

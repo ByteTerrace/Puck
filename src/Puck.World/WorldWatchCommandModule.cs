@@ -4,6 +4,7 @@ namespace Puck.World;
 
 /// <summary>Opens the local builder's authenticated text ingress for watched source reloads.</summary>
 internal sealed class WorldWatchCommandModule(WorldSourceWatch watch, Func<TextCommandSource> source, Func<InputRouter> router) : ICommandModule, IDisposable {
+    private static readonly CommandForms WorldWatchForms = CommandForms.Of(verb: "world.watch", "on|off");
     private TextCommandSession? m_session;
 
     public void Dispose() {
@@ -15,10 +16,11 @@ internal sealed class WorldWatchCommandModule(WorldSourceWatch watch, Func<TextC
         yield return CommandDefinition.WithWireArgs(
             name: "world.watch",
             bindability: CommandBindability.Unbindable,
-            description: "Watches the current .puck source and every file fact its compile read: world.watch on|off. After 150 ms without another change, queues ordinary world.reload under the enabling local console or seat principal. Reload refusals retain the running world, show their diagnostic, and keep watching. A later world.load follows the new source. An already submitted reload may finish after off.",
+            description: $"Watches the current .puck source and every file fact its compile read: {WorldWatchForms.Spelling}. After 150 ms without another change, queues ordinary world.reload under the enabling local console or seat principal. Reload refusals retain the running world, show their diagnostic, and keep watching. A later world.load follows the new source. An already submitted reload may finish after off.",
+            forms: WorldWatchForms,
             handler: (context, args) => {
                 if ((args.Count != 1) || !(args.Is(index: 0, value: "on") || args.Is(index: 0, value: "off"))) {
-                    return CommandResult.Usage(form: "on|off", verb: "world.watch");
+                    return WorldWatchForms.Refuse();
                 }
                 if (context.Principal.Kind is not (PrincipalKind.Console or PrincipalKind.Seat)) {
                     return CommandResult.Error(output: "[world.watch: requires a local console or seat ingress]");
